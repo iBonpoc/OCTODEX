@@ -1,0 +1,403 @@
+<title>Daylight Glass Direction</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&family=Geist+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: bright blurred "showroom" scene; milky frosted panels; black pills + amber highlight carry hierarchy. Light-first. */
+:root{
+  --scene-a:#efe2cf; --scene-b:#d8b98f; --scene-c:#f7efe4; --scene-d:#b98b5c;
+  --bg:#ece3d7;
+  --fg:#15120e; --fg-2:rgba(21,18,14,.68); --fg-3:rgba(21,18,14,.45);
+  --panel:rgba(255,253,249,.55); --panel-2:rgba(255,255,255,.78); --edge:rgba(255,255,255,.9); --line:rgba(40,28,15,.10);
+  --inv-bg:#16130f; --inv-fg:#fbf7f1; --inv-2:rgba(251,247,241,.6);
+  --amber:#f4c430; --amber-ink:#1a1408; --track:rgba(40,28,15,.10);
+  --ok:#168a5a; --hot:#d9481a;
+  --shadow:0 18px 40px -22px rgba(90,60,25,.45);
+  --r-xl:30px; --r-lg:22px; --r-md:14px; --r-pill:999px;
+  --f-body:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --scene-a:#2b241c; --scene-b:#4a3826; --scene-c:#171410; --scene-d:#6b4c2c;
+  --bg:#13110e;
+  --fg:#f6f0e7; --fg-2:rgba(246,240,231,.7); --fg-3:rgba(246,240,231,.45);
+  --panel:rgba(40,33,26,.55); --panel-2:rgba(58,48,38,.8); --edge:rgba(255,255,255,.16); --line:rgba(255,240,220,.10);
+  --inv-bg:#f6f0e7; --inv-fg:#16130f; --inv-2:rgba(22,19,15,.6);
+  --amber:#f4c430; --amber-ink:#1a1408; --track:rgba(255,240,220,.12);
+  --ok:#3fcf8e; --hot:#ff6a3d;
+  --shadow:0 18px 40px -22px rgba(0,0,0,.7);
+  color-scheme:dark;
+}}
+:root[data-theme="dark"]{
+  --scene-a:#2b241c; --scene-b:#4a3826; --scene-c:#171410; --scene-d:#6b4c2c;
+  --bg:#13110e;
+  --fg:#f6f0e7; --fg-2:rgba(246,240,231,.7); --fg-3:rgba(246,240,231,.45);
+  --panel:rgba(40,33,26,.55); --panel-2:rgba(58,48,38,.8); --edge:rgba(255,255,255,.16); --line:rgba(255,240,220,.10);
+  --inv-bg:#f6f0e7; --inv-fg:#16130f; --inv-2:rgba(22,19,15,.6);
+  --amber:#f4c430; --amber-ink:#1a1408; --track:rgba(255,240,220,.12);
+  --ok:#3fcf8e; --hot:#ff6a3d;
+  --shadow:0 18px 40px -22px rgba(0,0,0,.7);
+  color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:14px;line-height:1.45;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1240px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:36px 72px;display:flex;flex-direction:column;gap:44px}
+h1,h2,h3,h4{margin:0;text-wrap:balance;font-weight:500}
+p{margin:0;max-width:66ch;color:var(--fg-2)}
+.eyebrow{font-size:11.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-3);font-weight:600}
+.lede{display:flex;flex-direction:column;gap:12px}
+.lede h1{font-size:clamp(36px,6vw,60px);font-weight:300;letter-spacing:-.02em;line-height:1}
+.num{font-weight:300;letter-spacing:-.03em;font-variant-numeric:tabular-nums}
+
+.scene{position:relative;border-radius:var(--r-xl);overflow:hidden;isolation:isolate;padding:18px;display:flex;flex-direction:column;gap:16px;
+  background:
+   radial-gradient(40% 35% at 12% 18%,var(--scene-d) 0%,transparent 70%),
+   radial-gradient(45% 40% at 88% 78%,var(--scene-b) 0%,transparent 70%),
+   radial-gradient(30% 30% at 55% 55%,var(--scene-c) 0%,transparent 70%),
+   radial-gradient(35% 35% at 20% 95%,var(--scene-b) 0%,transparent 70%),
+   linear-gradient(140deg,var(--scene-a),var(--scene-c));}
+.g{background:var(--panel);backdrop-filter:blur(30px) saturate(160%);-webkit-backdrop-filter:blur(30px) saturate(160%);
+  border:1px solid var(--edge);box-shadow:var(--shadow)}
+@media (prefers-reduced-transparency: reduce){.g{background:var(--panel-2);backdrop-filter:none;-webkit-backdrop-filter:none}}
+
+/* top bar */
+.top{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.logo{padding:8px 14px;border-radius:var(--r-pill);font-weight:600}
+.pills{display:flex;gap:2px;padding:4px;border-radius:var(--r-pill);flex-wrap:wrap;margin-left:auto}
+.pill-btn{border:0;background:none;color:var(--fg-2);font:inherit;font-size:13px;font-weight:500;padding:7px 13px;border-radius:var(--r-pill);cursor:pointer}
+.pill-btn:hover{color:var(--fg)}
+.pill-btn[aria-current="page"]{background:var(--inv-bg);color:var(--inv-fg)}
+.icon-btn{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;border:0;color:var(--fg);cursor:pointer}
+.ico{width:18px;height:18px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+button:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+.head{display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap}
+.head h2{font-size:28px;font-weight:400;letter-spacing:-.01em}
+.head p{font-size:13px;color:var(--fg-3)}
+.new{display:flex;align-items:center;gap:8px;border:0;cursor:pointer;font:inherit;font-weight:600;font-size:13px;padding:9px 16px 9px 9px;border-radius:var(--r-pill);background:var(--inv-bg);color:var(--inv-fg)}
+.new i{width:22px;height:22px;border-radius:50%;background:var(--amber);color:var(--amber-ink);display:grid;place-items:center;font-style:normal;font-weight:700}
+
+.strip{display:grid;grid-template-columns:minmax(0,3fr) auto;gap:20px;align-items:end}
+.bars{display:grid;grid-template-columns:1fr 1fr 2fr 1fr;gap:8px}
+.bars div{display:flex;flex-direction:column;gap:6px;min-width:0}
+.bars small{font-size:11.5px;color:var(--fg-3);white-space:nowrap}
+.seg{height:30px;border-radius:var(--r-pill);display:flex;align-items:center;padding:0 12px;font-size:12px;font-weight:600}
+.s-ink{background:var(--inv-bg);color:var(--inv-fg)}
+.s-amb{background:var(--amber);color:var(--amber-ink)}
+.s-hatch{background:repeating-linear-gradient(135deg,var(--track) 0 6px,transparent 6px 12px);border:1px solid var(--line)}
+.s-soft{background:var(--panel-2);border:1px solid var(--line)}
+.big3{display:flex;gap:26px;align-items:end;flex-wrap:wrap}
+.big3 div{display:flex;flex-direction:column}
+.big3 b{font-size:40px;line-height:1}
+.big3 small{font-size:11.5px;color:var(--fg-3)}
+
+.grid4{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px}
+.card{border-radius:var(--r-lg);padding:16px;display:flex;flex-direction:column;gap:12px;min-width:0}
+.card-h{display:flex;justify-content:space-between;align-items:start;gap:8px}
+.card-h h4{font-size:14px}
+.card-h small{display:block;font-size:11.5px;color:var(--fg-3)}
+.arrow{width:28px;height:28px;border-radius:50%;display:grid;place-items:center;background:var(--panel-2);border:1px solid var(--line);flex:none}
+.tag{font-size:11px;font-weight:600;padding:3px 8px;border-radius:var(--r-pill);white-space:nowrap}
+.t-ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 14%,transparent)}
+.t-amb{background:var(--amber);color:var(--amber-ink)}
+.t-ink{background:var(--inv-bg);color:var(--inv-fg)}
+
+/* funnel */
+.fun{display:flex;flex-direction:column;gap:9px}
+.fr{display:grid;grid-template-columns:minmax(0,1fr) 42px;gap:8px;align-items:center}
+.fr small{grid-column:1/-1;display:flex;justify-content:space-between;font-size:11.5px;color:var(--fg-2)}
+.ft{height:14px;border-radius:var(--r-pill);background:var(--track);overflow:hidden}
+.ft i{display:block;height:100%;border-radius:var(--r-pill);background:var(--inv-bg)}
+.ft i.a{background:var(--amber)}
+.fr span{font-size:11.5px;font-weight:600;text-align:right;font-variant-numeric:tabular-nums}
+
+/* donut */
+.donut{display:grid;grid-template-columns:110px minmax(0,1fr);gap:14px;align-items:center}
+.donut svg{width:110px;height:110px}
+.legend{display:flex;flex-direction:column;gap:7px;font-size:12px}
+.legend div{display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:8px;align-items:center}
+.legend i{width:10px;height:10px;border-radius:50%}
+.legend span{color:var(--fg-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.legend b{font-weight:600;font-variant-numeric:tabular-nums}
+.legend em{grid-column:2/-1;font-style:normal;font-size:11px;color:var(--fg-3);margin-top:-5px}
+
+/* dial */
+.dial{position:relative;width:132px;height:132px;margin:0 auto}
+.dial svg{width:100%;height:100%;transform:rotate(-90deg)}
+.dial div{position:absolute;inset:0;display:grid;place-content:center;text-align:center}
+.dial b{font-size:30px;line-height:1}
+.dial small{font-size:11px;color:var(--fg-3)}
+
+/* dark tasks */
+.inv{background:var(--inv-bg);color:var(--inv-fg);border:1px solid var(--inv-bg)}
+.inv .card-h small{color:var(--inv-2)}
+.task{display:grid;grid-template-columns:minmax(0,1fr) 20px;gap:8px;align-items:center;padding:8px 10px;border-radius:12px;background:color-mix(in srgb,var(--inv-fg) 7%,transparent)}
+.task b{font-weight:500;font-size:12.5px;display:block}
+.task small{font-size:11px;color:var(--inv-2)}
+.task.done b{text-decoration:line-through;color:var(--inv-2)}
+.chk{width:20px;height:20px;border-radius:50%;border:1.5px solid var(--inv-2);background:none;cursor:pointer;padding:0;display:grid;place-items:center;color:var(--amber-ink)}
+.done .chk{background:var(--amber);border-color:var(--amber)}
+
+/* kanban */
+.kan{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}
+.col{border-radius:var(--r-lg);padding:12px;display:flex;flex-direction:column;gap:10px;min-width:0;min-height:120px}
+.col-h{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;font-weight:600;padding:2px 4px}
+.col-h span{color:var(--fg-3);font-weight:500}
+.col-h .d{width:7px;height:7px;border-radius:50%;display:inline-block;margin-right:6px;background:var(--fg-3)}
+.deal{border-radius:16px;padding:12px;background:var(--panel-2);border:1px solid var(--line);display:flex;flex-direction:column;gap:8px}
+.deal .who{display:flex;gap:9px;align-items:center}
+.av{flex:none;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-size:11px;font-weight:700;background:var(--inv-bg);color:var(--inv-fg)}
+.deal b{font-weight:600;font-size:13px;display:block}
+.deal small{font-size:11px;color:var(--fg-3);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.prob{height:4px;border-radius:2px;background:var(--track);overflow:hidden}
+.prob i{display:block;height:100%;background:var(--amber)}
+.deal-f{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.deal-f .amt{font-size:16px;font-weight:500;font-variant-numeric:tabular-nums}
+.adv{border:0;cursor:pointer;font:inherit;font-size:11.5px;font-weight:600;padding:6px 11px;border-radius:var(--r-pill);background:var(--inv-bg);color:var(--inv-fg)}
+.deal.won{background:var(--inv-bg);color:var(--inv-fg);border-color:var(--inv-bg)}
+.deal.won small{color:var(--inv-2)}
+.deal.won .av{background:var(--amber);color:var(--amber-ink)}
+.deal.won .adv{background:var(--amber);color:var(--amber-ink)}
+
+/* phone */
+.duo{display:grid;grid-template-columns:minmax(0,340px) minmax(0,1fr);gap:32px;align-items:center}
+.phone{width:100%;max-width:340px;aspect-ratio:9/19;border-radius:44px;padding:10px;background:#0c0a08;box-shadow:0 30px 60px -30px rgba(0,0,0,.7)}
+.screen{height:100%;border-radius:36px;overflow:hidden;position:relative;isolation:isolate;display:flex;flex-direction:column;gap:10px;padding:0 12px 12px;
+  background:radial-gradient(60% 40% at 10% 10%,var(--scene-d),transparent 70%),radial-gradient(60% 40% at 100% 90%,var(--scene-b),transparent 70%),linear-gradient(160deg,var(--scene-a),var(--scene-c))}
+.status{display:flex;justify-content:space-between;padding:12px 10px 0;font-size:12px;font-weight:600}
+.m-head{display:flex;justify-content:space-between;align-items:center;padding:4px 4px 0}
+.m-head h3{font-size:24px;font-weight:300;letter-spacing:-.02em}
+.m-card{border-radius:20px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.m-tabs{position:absolute;left:12px;right:12px;bottom:14px;border-radius:var(--r-pill);padding:6px;display:flex;justify-content:space-between;align-items:center}
+.m-tabs button{border:0;background:none;font:inherit;font-size:11px;font-weight:600;color:var(--fg-2);padding:9px 12px;border-radius:var(--r-pill);cursor:pointer}
+.m-tabs button[aria-current="page"]{background:var(--inv-bg);color:var(--inv-fg)}
+.m-tabs .mic{width:44px;height:44px;padding:0;display:grid;place-items:center;background:var(--amber);color:var(--amber-ink)}
+.notes{display:flex;flex-direction:column;gap:14px}
+.notes ul{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;color:var(--fg-2)}
+.notes b{color:var(--fg)}
+.cmp{border-radius:var(--r-lg);overflow:hidden;border:1px solid var(--line)}
+.cmp table{width:100%;border-collapse:collapse;font-size:13px}
+.cmp th,.cmp td{padding:10px 12px;text-align:left;border-top:1px solid var(--line);vertical-align:top}
+.cmp th{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--fg-3);font-weight:600;border-top:0;background:var(--panel-2)}
+.themebar{display:flex;gap:6px}
+.tb{border:1px solid var(--line);background:var(--panel-2);color:var(--fg);font:inherit;font-size:13px;padding:7px 13px;border-radius:var(--r-pill);cursor:pointer}
+.tb[aria-pressed="true"]{background:var(--inv-bg);color:var(--inv-fg)}
+
+@media (max-width:1060px){.grid4{grid-template-columns:repeat(2,minmax(0,1fr))}.kan{grid-template-columns:repeat(2,minmax(0,1fr))}.strip{grid-template-columns:1fr}}
+@media (max-width:760px){.pills{margin-left:0}.duo{grid-template-columns:1fr}.phone{margin:0 auto}}
+@media (max-width:560px){.grid4,.kan{grid-template-columns:1fr}.bars{grid-template-columns:1fr 1fr}.scene{padding:12px}}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <section class="lede">
+    <span class="eyebrow">Дизайн-направление · вариант 2</span>
+    <h1>Daylight Glass</h1>
+    <p>Светлое молочное стекло поверх размытой тёплой «комнаты». Иерархию держат чёрные пилюли и янтарно-жёлтый акцент, крупные цифры набраны тонким шрифтом. Светлая основа хорошо читается на улице.</p>
+    <div class="themebar" role="group" aria-label="Тема">
+      <button class="tb" id="t-sys" aria-pressed="true">Как в системе</button>
+      <button class="tb" id="t-light" aria-pressed="false">Светлая</button>
+      <button class="tb" id="t-dark" aria-pressed="false">Тёмная</button>
+    </div>
+  </section>
+
+  <section class="scene" aria-label="Экран воронки продаж на десктопе">
+    <div class="top">
+      <span class="logo g">Bonpoc</span>
+      <nav class="pills g" id="topnav" aria-label="Разделы">
+        <button class="pill-btn">Сегодня</button>
+        <button class="pill-btn" aria-current="page">Воронка</button>
+        <button class="pill-btn">Клиенты</button>
+        <button class="pill-btn">Расписание</button>
+        <button class="pill-btn">Карта</button>
+        <button class="pill-btn">Деньги</button>
+        <button class="pill-btn">Отчёты</button>
+      </nav>
+      <button class="icon-btn g" aria-label="Уведомления"><svg class="ico" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 21h4"/></svg></button>
+      <button class="icon-btn g" aria-label="Профиль"><svg class="ico" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 4-6 8-6s8 2 8 6"/></svg></button>
+    </div>
+
+    <div class="head">
+      <div><h2>Доброе утро, Ibon</h2><p>Bonpoc Gutters · ноябрь · сезон чистки перед дождями</p></div>
+      <button class="new"><i>+</i>Новая смета</button>
+    </div>
+
+    <div class="strip">
+      <div class="bars">
+        <div><small>Новые лиды</small><span class="seg s-ink">24</span></div>
+        <div><small>Осмотры</small><span class="seg s-amb">11</span></div>
+        <div><small>Сметы отправлены · $48.2k</small><span class="seg s-hatch">29 смет</span></div>
+        <div><small>Подписано</small><span class="seg s-soft">17</span></div>
+      </div>
+      <div class="big3">
+        <div><b class="num">$31.7k</b><small>подписано за месяц</small></div>
+        <div><b class="num">27%</b><small>лид → подпись</small></div>
+        <div><b class="num">$1,864</b><small>средний чек</small></div>
+      </div>
+    </div>
+
+    <div class="grid4">
+      <article class="card g">
+        <div class="card-h"><div><h4>Воронка</h4><small>Ноябрь, все источники</small></div><span class="tag t-ok">+4.1%</span></div>
+        <div class="fun">
+          <div class="fr"><small><span>Лиды</span><span>64</span></small><div class="ft"><i style="width:100%"></i></div><span>100%</span></div>
+          <div class="fr"><small><span>Осмотр</span><span>38</span></small><div class="ft"><i class="a" style="width:59%"></i></div><span>59%</span></div>
+          <div class="fr"><small><span>Смета отправлена</span><span>29</span></small><div class="ft"><i style="width:45%"></i></div><span>45%</span></div>
+          <div class="fr"><small><span>Подписано</span><span>17</span></small><div class="ft"><i style="width:27%"></i></div><span>27%</span></div>
+          <div class="fr"><small><span>Оплачено</span><span>14</span></small><div class="ft"><i style="width:22%"></i></div><span>22%</span></div>
+        </div>
+      </article>
+
+      <article class="card g">
+        <div class="card-h"><div><h4>Выручка по источникам</h4><small>Сколько принёс каждый канал</small></div><span class="arrow"><svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="M7 17 17 7M9 7h8v8"/></svg></span></div>
+        <div class="donut">
+          <svg viewBox="0 0 100 100" aria-label="Доли выручки по источникам">
+            <circle cx="50" cy="50" r="40" fill="none" stroke="var(--track)" stroke-width="14"/>
+            <circle cx="50" cy="50" r="40" fill="none" stroke="var(--inv-bg)" stroke-width="14" stroke-dasharray="112.6 251.33" stroke-dashoffset="0" transform="rotate(-90 50 50)"/>
+            <circle cx="50" cy="50" r="40" fill="none" stroke="var(--amber)" stroke-width="14" stroke-dasharray="77.7 251.33" stroke-dashoffset="-112.6" transform="rotate(-90 50 50)"/>
+            <circle cx="50" cy="50" r="40" fill="none" stroke="var(--fg-3)" stroke-width="14" stroke-dasharray="48.3 251.33" stroke-dashoffset="-190.3" transform="rotate(-90 50 50)"/>
+            <circle cx="50" cy="50" r="40" fill="none" stroke="var(--hot)" stroke-width="14" stroke-dasharray="12.7 251.33" stroke-dashoffset="-238.6" transform="rotate(-90 50 50)"/>
+            <text x="50" y="48" text-anchor="middle" font-size="7" fill="var(--fg-3)" font-family="Geist, sans-serif">всего</text>
+            <text x="50" y="59" text-anchor="middle" font-size="12" fill="var(--fg)" font-family="Geist, sans-serif" font-weight="500">$31.7k</text>
+          </svg>
+          <div class="legend">
+            <div><i style="background:var(--inv-bg)"></i><span>Сарафан</span><b>$14.2k</b><em>лид $0</em></div>
+            <div><i style="background:var(--amber)"></i><span>Google</span><b>$9.8k</b><em>лид $50</em></div>
+            <div><i style="background:var(--fg-3)"></i><span>Thumbtack</span><b>$6.1k</b><em>лид $64</em></div>
+            <div><i style="background:var(--hot)"></i><span>Yelp</span><b>$1.6k</b><em>лид $75 · убыточен</em></div>
+          </div>
+        </div>
+      </article>
+
+      <article class="card g">
+        <div class="card-h"><div><h4>Скорость ответа на лид</h4><small>Среднее за неделю</small></div><span class="tag t-amb">цель 5 мин</span></div>
+        <div class="dial">
+          <svg viewBox="0 0 100 100" aria-hidden="true">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--track)" stroke-width="7"/>
+            <circle cx="50" cy="50" r="42" fill="none" stroke="var(--amber)" stroke-width="7" stroke-linecap="round" stroke-dasharray="137.2 263.9"/>
+          </svg>
+          <div><b class="num">2:35</b><small>мин до ответа</small></div>
+        </div>
+        <p style="font-size:12px;text-align:center">На Thumbtack первый ответивший получает работу в 3 раза чаще.</p>
+      </article>
+
+      <article class="card inv">
+        <div class="card-h"><div><h4>Сделать сегодня</h4><small>Подсказки, которые приносят деньги</small></div><span class="num" style="font-size:22px" id="taskcount">1/5</span></div>
+        <div style="display:flex;flex-direction:column;gap:6px" id="tasks">
+          <div class="task done"><div><b>Отправить заказ coil поставщику</b><small>Musket Brown .032 · 300′</small></div><button class="chk" aria-label="Готово">✓</button></div>
+          <div class="task"><div><b>Позвонить Sarah Kim</b><small>Открыла смету 3 раза · $3,400</small></div><button class="chk" aria-label="Отметить"></button></div>
+          <div class="task"><div><b>Попросить отзыв у Petrov</b><small>Оплатил вчера · Google</small></div><button class="chk" aria-label="Отметить"></button></div>
+          <div class="task"><div><b>Предложить guards 6 клиентам</b><small>Ставили гаттеры в 2025 без сеток</small></div><button class="chk" aria-label="Отметить"></button></div>
+          <div class="task"><div><b>Напомнить про чистку</b><small>18 клиентов · дожди с 15 ноября</small></div><button class="chk" aria-label="Отметить"></button></div>
+        </div>
+      </article>
+    </div>
+
+    <div class="kan" id="kan">
+      <section class="col g" data-stage="0"><div class="col-h"><div><span class="d"></span>Новый лид</div><span class="sum"></span></div></section>
+      <section class="col g" data-stage="1"><div class="col-h"><div><span class="d" style="background:var(--amber)"></span>Осмотр</div><span class="sum"></span></div></section>
+      <section class="col g" data-stage="2"><div class="col-h"><div><span class="d" style="background:var(--fg)"></span>Смета отправлена</div><span class="sum"></span></div></section>
+      <section class="col g" data-stage="3"><div class="col-h"><div><span class="d" style="background:var(--ok)"></span>Подписано</div><span class="sum"></span></div></section>
+    </div>
+  </section>
+
+  <section class="duo">
+    <div class="phone"><div class="screen">
+      <div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>
+      <div class="m-head"><h3>Сегодня</h3><span class="tag t-ink">4 работы</span></div>
+      <div class="m-card g">
+        <small class="eyebrow">заработано сегодня</small>
+        <b class="num" style="font-size:40px;line-height:1">$4,812</b>
+        <div style="display:flex;gap:6px"><span class="seg s-ink" style="height:24px;flex:3">Оплачено</span><span class="seg s-amb" style="height:24px;flex:2">Ждёт</span></div>
+      </div>
+      <div class="m-card g">
+        <div class="card-h"><div><h4>08:00 · Yuri Petrov</h4><small>Glendale · 148′ · 5 downspouts</small></div><span class="tag t-ok">В пути</span></div>
+      </div>
+      <div class="m-card inv">
+        <div class="card-h"><div><h4>Позвонить Sarah Kim</h4><small>Открыла смету 3 раза</small></div><span class="tag t-amb">$3,400</span></div>
+      </div>
+      <div class="m-tabs g">
+        <button aria-current="page">Сегодня</button><button>Воронка</button>
+        <button class="mic" aria-label="Голосовой помощник"><svg class="ico" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+        <button>План</button><button>Карта</button>
+      </div>
+    </div></div>
+
+    <div class="notes">
+      <span class="eyebrow">Сравнение направлений</span>
+      <h2 style="font-size:28px;font-weight:400">Copper Glass или Daylight Glass</h2>
+      <div class="cmp"><table>
+        <thead><tr><th></th><th>1 · Copper Glass</th><th>2 · Daylight Glass</th></tr></thead>
+        <tbody>
+          <tr><td>Основа</td><td>Тёмная, тёплая, «вечерняя»</td><td>Светлая, молочная, «дневная»</td></tr>
+          <tr><td>Акцент</td><td>Огненный оранжевый и медь</td><td>Чёрные пилюли и янтарный жёлтый</td></tr>
+          <tr><td>Навигация</td><td>Сайдбар, сворачивается в рейку</td><td>Пилюли сверху (можно и сайдбар)</td></tr>
+          <tr><td>На улице</td><td>Хорошо в тени и вечером</td><td>Лучше на солнце</td></tr>
+          <tr><td>Ощущение</td><td>Премиум, мастерская</td><td>Чисто, дорого, «шоурум»</td></tr>
+        </tbody>
+      </table></div>
+      <ul>
+        <li><b>Можно смешать:</b> светлая основа и стекло из варианта 2 со сворачиваемым сайдбаром и медно-оранжевым брендом из варианта 1.</li>
+        <li>Карточки в колонке «Подписано» двигаются: нажмите «Дальше» на любой сделке.</li>
+      </ul>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  var deals=[
+    {n:'Maria Lopez',i:'ML',s:'Burbank · Google LSA · tile roof',a:2200,p:35,st:0},
+    {n:'Daniel Cho',i:'DC',s:'Pasadena · Thumbtack · 2 этажа',a:3100,p:30,st:0},
+    {n:'Ken Adams',i:'KA',s:'Altadena · сарафан · guards',a:1450,p:55,st:1},
+    {n:'Sarah Kim',i:'SK',s:'Glendale · открыла 3 раза',a:3400,p:70,st:2},
+    {n:'Ana Ruiz',i:'AR',s:'Eagle Rock · 6″ K-style',a:2750,p:60,st:2},
+    {n:'Yuri Petrov',i:'YP',s:'Glendale · депозит получен',a:3400,p:100,st:3}
+  ];
+  var cols=[].slice.call(document.querySelectorAll('#kan .col'));
+  var labels=['Осмотр →','Смета →','Подписать →','Подписано'];
+  function fmt(v){return '$'+v.toLocaleString('en-US')}
+  function render(){
+    cols.forEach(function(c){c.querySelectorAll('.deal').forEach(function(d){d.remove()})});
+    var sums=[0,0,0,0];
+    deals.forEach(function(d,idx){
+      sums[d.st]+=d.a;
+      var el=document.createElement('article');
+      el.className='deal'+(d.st===3?' won':'');
+      el.innerHTML='<div class="who"><span class="av">'+d.i+'</span><div style="min-width:0"><b>'+d.n+'</b><small>'+d.s+'</small></div></div>'+
+        '<div class="prob"><i style="width:'+(d.st===3?100:d.p)+'%"></i></div>'+
+        '<div class="deal-f"><span class="amt">'+fmt(d.a)+'</span><button class="adv" data-i="'+idx+'">'+labels[d.st]+'</button></div>';
+      cols[d.st].appendChild(el);
+    });
+    cols.forEach(function(c,i){c.querySelector('.sum').textContent=fmt(sums[i])});
+  }
+  document.getElementById('kan').addEventListener('click',function(e){
+    var b=e.target.closest('.adv');if(!b)return;
+    var d=deals[+b.dataset.i];if(d.st<3){d.st++;d.p=Math.min(100,d.p+20);render();}
+  });
+  render();
+
+  var tasks=document.getElementById('tasks'),tc=document.getElementById('taskcount');
+  function count(){var all=tasks.querySelectorAll('.task').length,done=tasks.querySelectorAll('.task.done').length;tc.textContent=done+'/'+all}
+  tasks.addEventListener('click',function(e){
+    var b=e.target.closest('.chk');if(!b)return;
+    var t=b.closest('.task');var on=t.classList.toggle('done');b.textContent=on?'✓':'';count();
+  });
+  count();
+
+  document.getElementById('topnav').addEventListener('click',function(e){
+    var b=e.target.closest('.pill-btn');if(!b)return;
+    this.querySelectorAll('.pill-btn').forEach(function(x){x.removeAttribute('aria-current')});
+    b.setAttribute('aria-current','page');
+  });
+
+  var root=document.documentElement,ids={'t-sys':null,'t-light':'light','t-dark':'dark'};
+  Object.keys(ids).forEach(function(id){
+    document.getElementById(id).addEventListener('click',function(){
+      if(ids[id])root.setAttribute('data-theme',ids[id]);else root.removeAttribute('data-theme');
+      Object.keys(ids).forEach(function(k){document.getElementById(k).setAttribute('aria-pressed',k===id?'true':'false')});
+    });
+  });
+})();
+</script>
