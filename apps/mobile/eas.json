@@ -11,13 +11,15 @@
       },
       "android": {
         "buildType": "apk"
-      }
+      },
+      "channel": "preview"
     },
     "production": {
       "autoIncrement": true,
       "env": {
         "EXPO_PUBLIC_APP_ENV": "production"
-      }
+      },
+      "channel": "production"
     }
   },
   "submit": {
