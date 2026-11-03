@@ -1,6 +1,6 @@
 # 09. Инвойсы и платежи
 
-> Статус: черновик v0.1, ноябрь 2026. Сущности: `Invoice`, `InvoiceLineItem`, `Payment`, `Refund`, `EstimateVersion.deposit_rule`, `EstimateApproval.deposit_payment_id`, `ChangeOrder`, `RecurringPlan`, `Company.stripe_account_id`, `Company.tax_settings`, `StatusEvent`, `AuditLog`, `ExternalRef` (`../04-domain-model.md` §6, §9).
+> Статус: черновик v0.1, ноябрь 2026. Сущности: `Invoice`, `InvoiceLineItem`, `Payment`, `PaymentAttempt`, `Refund`, `TaxRate`, `WebhookEvent`, `EstimateVersion.deposit_rule`, `EstimateApproval.deposit_payment_id`, `ChangeOrder`, `RecurringPlan`, `Company.stripe_account_id`, `Company.tax_settings`, `StatusEvent`, `AuditLog`, `ExternalRef` (`../04-domain-model.md` §6, §9).
 > Связанные модули: `05-estimates.md` (депозит при одобрении), `07-jobs-schedule.md` (промпт финального инвойса), `10-expenses-job-costing.md` (billable расходы), `12-portal-public-page.md` (оплата клиентом), `13-communications-automations.md`, `16-offline-sync.md`.
 > **Юридические оговорки:** правила по надбавкам и скидкам в CA и раскрытие комиссий — проверить у юриста до запуска (см. §15).
 
@@ -46,24 +46,26 @@
 | INV-US-13 | Как owner, я хочу автосписание membership-плана с сохранённой карты/ACH | Позже |
 | INV-US-14 | Как owner вне CA, я хочу настроить надбавку за карту по правилам моего штата | Позже (заблокировано в MVP) |
 | INV-US-15 | Как owner, я хочу скидку за ACH/наличные, отображаемую клиенту | За фича-флагом, выключено до юридической проверки |
+| INV-US-16 | Как owner, я хочу на каждом инвойсе сам включать/выключать налог, выбирать ставку из своих `TaxRate` и отмечать `taxable` по строкам, чтобы налог никогда не появлялся «сам» | MVP |
 
 ## 5. Критерии приёмки
 - **INV-US-01.** Given у компании нет `stripe_account_id`, When owner нажал «Подключить платежи», Then открывается Stripe Connect onboarding (Express, hosted), по возврату статус `charges_enabled/payouts_enabled` виден в настройках; до `charges_enabled` кнопки онлайн-оплаты в портале скрыты, доступна запись ручных платежей.
 - **INV-US-02.** Given `deposit_rule = 40%` и итог выбранного варианта $3,000, When клиент подписал в портале, Then идемпотентно создаётся Invoice `kind=deposit` на $1,200 (`sent`), экран подписи переходит к оплате; при успешной оплате `EstimateApproval.deposit_payment_id` заполнен. Given клиент закрыл страницу, Then инвойс остаётся `sent/unpaid`, ссылка в письме-подтверждении.
-- **INV-US-03.** Given работа: вариант $3,000 + CO $250 + billable расход $120 (+15% = $138), депозит $1,200 оплачен, When «Создать финальный», Then инвойс `final` содержит строки сметы и CO, строку расхода $138 и строку «Депозит INV-0091 −$1,200»; итог к оплате $2,188 (+налог по правилам). Повторное нажатие не создаёт второй финальный (на Job ≤ 1 не-void `final`).
+- **INV-US-03.** Given работа: вариант $3,000 + CO $250 + billable расход $120 (+15% = $138), депозит $1,200 оплачен, When «Создать финальный», Then инвойс `final` содержит строки сметы и CO, строку расхода $138 и строку «Депозит INV-0091 −$1,200»; итог к оплате $2,188 (+налог, только если он включён на инвойсе). Повторное нажатие не создаёт второй финальный (на Job ≤ 1 не-void `final`).
 - **INV-US-05.** Given инвойс с балансом $2,188, When клиент выбирает ACH и вводит $1,000, Then создаётся Payment `pending` (ACH), `payment_status` остаётся `unpaid` до вебхука `succeeded` (ACH до 4 рабочих дней, в UI «Платёж в обработке»), затем `partially_paid`, баланс $1,188. Сумма > баланса не принимается.
 - **INV-US-06.** Given iPhone с Tap to Pay и сеть, When tech нажал «Принять $2,188», Then Stripe Terminal собирает карту, Payment с `method=tap_to_pay`; Given entitlement не получен или нет NFC, Then показывается QR на портал инвойса.
 - **INV-US-07.** Given инвойс $2,188, When записан чек #1043 на $2,188 с фото, Then Payment `method=check, status=succeeded, received_by=user, reference=1043`, инвойс `paid`; ошибочный ручной платёж аннулирует только owner/admin с причиной (`voided`), запись не удаляется.
 - **INV-US-08.** Given карточный Payment $1,200 succeeded, When admin делает refund $500 с причиной, Then создаётся Refund и Stripe refund с `idempotency_key`; Payment → `partially_refunded`; инвойс → `partially_paid` (баланс +$500); у роли office кнопка отсутствует, а API отвечает 403.
 - **INV-US-09.** Given платёж картой $1,000, Then в деталях: «Stripe $29.30 · Octo $5.00 · вам $965.70»; на дашборде «ACH сэкономил вам $X в этом месяце» = Σ(оценка карточной комиссии − фактическая ACH-комиссия) по ACH-платежам.
 - **INV-US-10.** Given `due_date` прошла, payment_status ≠ `paid`, напоминания включены, Then письма уходят в день +1, +7, +14 (настройка), каждое с ссылкой оплаты; при `paid` или ручной паузе цепочка останавливается; клиент получает не больше 1 напоминания в сутки по всем его инвойсам.
+- **INV-US-16.** Given финальный или депозитный инвойс из сметы, When создаётся, Then `tax_enabled`, `tax_rate_id` и флажки `taxable` строк берутся из одобренной версии сметы (снимок ставки `tax_rate_bps`); Given standalone или recurring, Then из `Company.tax_settings` (по умолчанию налог выкл.). Given `draft`, When owner/office переключает налог или ставку, Then итоги пересчитываются. Given инвойс `sent` без оплат, When меняется налог, Then создаётся новая ревизия (`revision + 1`, «обновлён», AuditLog), прежний PDF сохраняется; Given есть succeeded платёж, Then налог и строки заблокированы (исправление — новый standalone-инвойс или void после refund). Определения ставки по адресу/ZIP нет нигде.
 - **INV-US-11.** Given RecurringPlan `auto_invoice=true, per_visit`, When визит `completed`, Then создаётся инвойс `recurring` с ценой плана; отправляется автоматически, только если в плане включено «отправлять сразу», иначе черновик владельцу.
 
 ## 6. Экраны
 | Экран | Телефон | Планшет / веб |
 |---|---|---|
 | Список инвойсов | Фильтры-чипы: Черновики, Не оплачено, Просрочено, Оплачено; сумма дебиторки сверху | Таблица с колонками: №, клиент, работа, вид, статус документа, статус оплаты, срок, баланс |
-| Инвойс | Шапка (номер, клиент, два бейджа: документ / оплата), строки, итоги (subtotal, tax, total, paid, balance), лента платежей, одна огненная кнопка: «Отправить» / «Принять оплату» | + история событий, превью PDF |
+| Инвойс | Шапка (номер, клиент, два бейджа: документ / оплата), строки, переключатель «Налог вкл/выкл» и ставка (в `draft`), итоги (subtotal, tax, total, paid, balance), лента платежей, одна огненная кнопка: «Отправить» / «Принять оплату» | + история событий, превью PDF |
 | Принять оплату | Сумма (по умолчанию баланс, можно меньше), методы: ACH-ссылка, карта (портал/QR), Tap to Pay, наличные, чек, Zelle, другое; комиссия показывается до подтверждения | — |
 | Детали платежа | Метод, сумма, комиссии, статус, refund (owner/admin) | — |
 | Настройки платежей | Stripe-статус, депозит по умолчанию (%), сроки (Net 0/7/15/30), напоминания, налоги, «показывать ACH первым», сумма для ACH-рекомендации | — |
@@ -93,9 +95,9 @@ overdue (флаг) = sent ∧ balance > 0 ∧ today > due_date (в tz компа
 
 **Договор** = `totals` выбранного варианта из `approved_version_id` + выбранные optional. Строки копируются снимком из EstimateLineItem (только `client_visible`), BOM-строки не попадают.
 
-**Налог.** По `Company.tax_settings` на строки `taxable`. Что облагается в CA для монтажа гаттеров — открытый вопрос `04` §12 (бухгалтер). Депозит: налог распределяется пропорционально или берётся в финальном — настройка, дефолт «налог в финальном».
+**Налог (ручной, никогда не автоматический — решение основателя).** На инвойсе переключатель `tax_enabled` и выбор `tax_rate_id` (снимок `tax_rate_bps`); облагаются строки с `taxable = true`; `tax = tax_enabled ? round((Σ taxable − доля скидки) × rate) : 0` — те же формулы, что `05` §7.2. Значения по умолчанию: для deposit/progress/final — из одобренной версии сметы и CO; для standalone/recurring — `Company.tax_settings`. Что облагать для монтажа гаттеров в CA, решает подрядчик с бухгалтером (`00-decisions-for-founder.md`). Депозит: налог в финальном (по умолчанию, `deposit_tax_mode = in_final`) или пропорционально — настройка.
 
-**Редактирование после отправки.** `sent` и `payment_status=unpaid` → правка разрешена owner/admin/office, `AuditLog` + повторная отправка с пометкой «обновлён». Есть хотя бы один succeeded платёж → строки и итог заблокированы; исправление = новый standalone-инвойс или (позже) credit note. Void: owner/admin, только если `paid_net = 0` (иначе сначала refund); номер не переиспользуется.
+**Редактирование после отправки.** `sent` и `payment_status=unpaid` → правка разрешена owner/admin/office как **новая ревизия** инвойса (`revision + 1`, старый PDF сохраняется), `AuditLog` + повторная отправка с пометкой «обновлён». Есть хотя бы один succeeded платёж → строки и итог заблокированы; исправление = новый standalone-инвойс или (позже) credit note. Void: owner/admin, только если `paid_net = 0` (иначе сначала refund); номер не переиспользуется.
 
 **Нумерация.** `INV-xxxx` присваивается при создании по счётчику компании (multi-company: у каждой компании свой счётчик и свой Stripe-аккаунт). В режиме «Все компании» создание требует выбора компании.
 
@@ -165,8 +167,8 @@ AI не принимает оплату картой и не видит данн
 - **Мульти-компания:** инвойс компании A нельзя оплатить на Stripe компании B; платёж всегда на `stripe_account_id` компании документа.
 
 ## 12. MVP / позже
-**MVP:** все 5 видов инвойсов (recurring — per_visit), раздельные статусы, Stripe Connect Express (card + ACH), депозит при подписи, частичные оплаты, ручные платежи (cash/check/Zelle/other) с фото, refund owner/admin, idempotency + WebhookEvent, прозрачные комиссии и счётчик экономии ACH, ACH-first nudge, напоминания о просрочке (email; SMS при пакете), QR-оплата на месте, email-квитанции, aging, CSV-экспорт. **Tap to Pay** — MVP при своевременном одобрении Apple entitlement, иначе v1.1.
-**Позже:** Wisetack (отображение «от $X/мес» только с одобренными лендером раскрытиями — Reg Z trigger terms), membership-автосписания и сохранённые методы, скидка за ACH/наличные (после юриста), надбавки вне CA, credit notes, instant payouts, evidence-PDF для споров, QuickBooks sync, частичные инвойсы по этапам с графиком.
+**MVP:** все 5 видов инвойсов (recurring — per_visit), раздельные статусы, ручной налог на инвойсе (вкл/выкл, ставка `TaxRate`, `taxable` по строкам), Stripe Connect Express (card + ACH), депозит при подписи, частичные оплаты, ручные платежи (cash/check/Zelle/other) с фото, refund owner/admin, idempotency + WebhookEvent, прозрачные комиссии и счётчик экономии ACH, ACH-first nudge, напоминания о просрочке (email; SMS при пакете), QR-оплата на месте, email-квитанции, aging, CSV-экспорт. **Tap to Pay** — MVP при своевременном одобрении Apple entitlement, иначе v1.1.
+**Позже (не MVP):** Wisetack (отображение «от $X/мес» только с одобренными лендером раскрытиями — Reg Z trigger terms; своих расчётов не показываем), membership-автосписания и сохранённые методы, скидка за ACH/наличные (после юриста), надбавки вне CA, credit notes, instant payouts, evidence-PDF для споров, QuickBooks sync, частичные инвойсы по этапам с графиком.
 
 ## 13. Метрики
 | Метрика | Цель |
@@ -190,12 +192,17 @@ AI не принимает оплату картой и не видит данн
 | Company | `payment_settings` json: deposit_default_pct, terms_days, ach_recommend_threshold_cents, reminders, method_discount (флаг) | Настройки |
 | **WebhookEvent** (новая) | `provider`, `event_id` unique, `type`, `received_at`, `processed_at`, `status` | Идемпотентная обработка вебхуков |
 | **PaymentAttempt** (новая, или поле Payment) | `invoice_id`, `idempotency_key`, `amount_cents`, `stripe_payment_intent_id`, `expires_at` | Защита от двойного списания до создания Payment |
+| Invoice | `tax_enabled`, `tax_rate_id`, `tax_rate_bps`, `revision` | Ручной налог, ревизии отправленного инвойса |
+
+✅ Внесено в 04-domain-model v0.2 (все строки). Решения при слиянии: `PaymentAttempt` — отдельная сущность (не поле Payment); ACH return — статус `returned` (не Refund); `Payment.offline_created` сведён с PRD 16.
 
 ## 15. Открытые вопросы
+> Сводный список с рекомендациями — `00-decisions-for-founder.md`.
+
 1. **Юрист (CA):** допустима ли скидка за ACH (не только наличные) по §1748.1, формулировки для клиента; раскрытие platform fee в договоре с подрядчиком; соответствие SB 478.
 2. Размер platform fee: +0.5% к карте и ACH с cap $5? Возвращать ли его при refund (рекомендация: да, пропорционально)?
 3. Tap to Pay: подавать заявку на entitlement сразу (параллельная дорожка); комиссия Stripe для Tap to Pay в US — сверить.
-4. ACH return после settlement — моделировать через Refund `ach_return` или новый статус Payment `returned` (рекомендация: новый статус, state machine `succeeded → returned`)?
-5. Налог: облагаются только материалы или вся сумма (бухгалтер, `04` §12)?
+4. ✅ ACH return — новый статус Payment `returned` (`succeeded → returned`), внесено в модель v0.2.
+5. ✅ Налог — ручной (INV-US-16). Бухгалтеру остаётся: что отмечать `taxable` по умолчанию (материалы или вся сумма).
 6. Нужен ли «депозит без смет» (бронь чистки с предоплатой) в MVP?
-7. Какие данные финансирования храним у себя (`04` §12, вопрос 4).
+7. ✅ Финансирование не в MVP; когда появится — храним только статус, сумму, id лендера и снимок раскрытий (`04` §12.4).
