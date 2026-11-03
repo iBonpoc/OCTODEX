@@ -18,14 +18,23 @@ import { Card, Divider, Empty, Grid, RowView, Screen, SectionTitle } from "@/ui/
  * computed by @octo/estimating-engine. The photo drawing (ADR-004) feeds the same input in wave 3.
  */
 export default function NewEstimate() {
-  const { customerId, propertyId } = useLocalSearchParams<{ customerId?: string; propertyId?: string }>();
+  const params = useLocalSearchParams<{ customerId?: string; propertyId?: string; lengthFt?: string; out?: string; in?: string; ds?: string }>();
+  const { customerId, propertyId } = params;
   const { db, addEstimate, online } = useStore();
   const { t, money } = useI18n();
   const { c } = useTheme();
   const toast = useToast();
   const [f, setF] = useState<QuickGutterForm>(() => {
     const p = db.properties.find((x) => x.id === propertyId);
-    return { ...DEFAULT_FORM, stories: p?.stories ?? DEFAULT_FORM.stories };
+    const num = (v: string | undefined, d: number) => (v !== undefined && !Number.isNaN(Number(v)) ? Number(v) : d);
+    return {
+      ...DEFAULT_FORM,
+      stories: p?.stories ?? DEFAULT_FORM.stories,
+      lengthFt: num(params.lengthFt, DEFAULT_FORM.lengthFt),
+      outsideCorners: num(params.out, DEFAULT_FORM.outsideCorners),
+      insideCorners: num(params.in, DEFAULT_FORM.insideCorners),
+      downspouts: num(params.ds, DEFAULT_FORM.downspouts),
+    };
   });
   const [chosen, setChosen] = useState(1);
   const [open, setOpen] = useState<number | null>(null);
@@ -64,7 +73,18 @@ export default function NewEstimate() {
     >
       <Grid>
         <Card>
-          <T v="heading">{t("est.inputs")}</T>
+          <RowView style={{ justifyContent: "space-between" }}>
+            <T v="heading">{t("est.inputs")}</T>
+            <Button
+              label={t("draw.open")}
+              icon="ruler"
+              variant="secondary"
+              size="sm"
+              onPress={() =>
+                router.push(`/estimate/draw?${new URLSearchParams({ ...(customerId ? { customerId } : {}), ...(propertyId ? { propertyId } : {}) }).toString()}`)
+              }
+            />
+          </RowView>
           <T v="caption" tone="mut">
             {t("est.stories")}
           </T>
