@@ -52,7 +52,7 @@ export default function Plan() {
       }
     >
       <DndProvider>
-      {visits.length === 0 ? <Empty icon="calendar" title={t("visits.empty")} /> : null}
+      {visits.length === 0 ? <Empty icon="calendar" title={t("plan.empty")} /> : null}
       {canAssign && unassigned.length > 0 ? (
         <View style={{ gap: space[2] }}>
           <T v="heading" tone="warn">

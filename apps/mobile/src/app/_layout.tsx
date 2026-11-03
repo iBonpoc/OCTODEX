@@ -7,6 +7,7 @@ import { useFonts, Onest_400Regular, Onest_500Medium, Onest_600SemiBold, Onest_7
 import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { I18nProvider } from "@/i18n";
 import { StoreProvider } from "@/data/store";
+import { AuthProvider } from "@/cloud/auth";
 import { ToastProvider } from "@/ui/overlays";
 import { HintsProvider } from "@/ui/hints";
 
@@ -30,11 +31,13 @@ export default function RootLayout() {
       <SafeAreaProvider>
         <ThemeProvider>
           <I18nProvider>
-            <StoreProvider>
-              <HintsProvider>
-                <Shell />
-              </HintsProvider>
-            </StoreProvider>
+            <AuthProvider>
+              <StoreProvider>
+                <HintsProvider>
+                  <Shell />
+                </HintsProvider>
+              </StoreProvider>
+            </AuthProvider>
           </I18nProvider>
         </ThemeProvider>
       </SafeAreaProvider>

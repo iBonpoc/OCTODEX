@@ -328,6 +328,7 @@ export function TextField({
   icon,
   multiline,
   keyboardType,
+  secure,
 }: {
   value: string;
   onChangeText: (s: string) => void;
@@ -335,6 +336,7 @@ export function TextField({
   icon?: IconKey;
   multiline?: boolean;
   keyboardType?: "default" | "decimal-pad" | "phone-pad" | "email-address";
+  secure?: boolean;
 }) {
   const { c } = useTheme();
   const { wide } = useDevice();
@@ -362,6 +364,8 @@ export function TextField({
         placeholderTextColor={c.mut}
         multiline={multiline}
         keyboardType={keyboardType}
+        secureTextEntry={secure}
+        autoCapitalize={keyboardType === "email-address" || secure ? "none" : undefined}
         accessibilityLabel={placeholder}
         style={{
           flex: 1,
