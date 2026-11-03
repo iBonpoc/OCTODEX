@@ -1,5 +1,5 @@
 import { timing, type StatusName } from "@octo/design-tokens";
-import { daysSince, isToday, minutesSince, visitContext } from "@/data/store";
+import { daysSince, isToday, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID } from "@/data/types";
 import type { DictKey } from "@/i18n";
 

@@ -30,7 +30,8 @@
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
-    "typescript": "~6.0.3"
+    "typescript": "~6.0.3",
+    "vitest": "2.1.8"
   },
   "scripts": {
     "start": "expo start",
@@ -39,7 +40,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit",
     "export:web": "expo export --platform web",
-    "preview:web": "expo export --platform web && python3 scripts/prepare-web-preview.py dist ../../.preview-web"
+    "preview:web": "expo export --platform web && python3 scripts/prepare-web-preview.py dist ../../.preview-web",
+    "test": "vitest run"
   },
   "private": true
 }

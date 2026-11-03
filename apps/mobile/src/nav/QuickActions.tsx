@@ -1,5 +1,6 @@
 import { View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { router } from "expo-router";
 import { radius, space } from "@octo/design-tokens";
 import { isToday, useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
@@ -19,7 +20,7 @@ const ACTIONS: Action[] = [
   { key: "voice", label: "quick.voice", icon: "mic", wave: 6, hint: "quick.voiceHint" },
   { key: "photo", label: "quick.photo", icon: "camera" },
   { key: "lead", label: "quick.lead", icon: "user", wave: 2 },
-  { key: "estimate", label: "quick.estimate", icon: "invoice", wave: 3 },
+  { key: "estimate", label: "quick.estimate", icon: "invoice" },
   { key: "receipt", label: "quick.receipt", icon: "wallet", wave: 4 },
 ];
 
@@ -41,6 +42,14 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
     toast.show(t("toast.photo"), undo);
   };
 
+  const newEstimate = () => {
+    onClose();
+    const visit = db.visits.find((v) => v.techId === db.me && isToday(v.start) && v.step !== "paid");
+    const job = db.jobs.find((j) => j.id === visit?.jobId);
+    const prop = db.properties.find((p) => p.id === job?.propertyId);
+    router.push(prop ? `/estimate/new?customerId=${prop.customerId}&propertyId=${prop.id}` : "/estimate/new");
+  };
+
   return (
     <Sheet visible={visible} onClose={onClose} title={t("quick.title")}>
       <View style={{ gap: space[2] }}>
@@ -50,7 +59,7 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
             <Press
               key={a.key}
               disabled={disabled}
-              onPress={a.key === "photo" ? takePhoto : undefined}
+              onPress={a.key === "photo" ? takePhoto : a.key === "estimate" ? newEstimate : undefined}
               accessibilityRole="button"
               accessibilityLabel={t(a.label)}
               style={{

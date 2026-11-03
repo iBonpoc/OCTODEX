@@ -373,3 +373,50 @@ export function TextField({
     </View>
   );
 }
+
+/* ---------- Stepper: − value + (buttons 36, hit 44) ---------- */
+export function Stepper({
+  value,
+  onChange,
+  step = 1,
+  min = 0,
+  max = 9999,
+  label,
+  unit,
+}: {
+  value: number;
+  onChange: (v: number) => void;
+  step?: number;
+  min?: number;
+  max?: number;
+  label: string;
+  unit?: string;
+}) {
+  const { c } = useTheme();
+  const b = component.dockBtn;
+  const btn = (icon: IconKey, delta: number, a11y: string) => (
+    <Press
+      onPress={() => onChange(Math.min(max, Math.max(min, value + delta)))}
+      disabled={delta < 0 ? value <= min : value >= max}
+      visibleHeight={b}
+      accessibilityRole="button"
+      accessibilityLabel={a11y}
+      style={{ width: b, height: b, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}
+    >
+      <Icon name={icon} s={16} />
+    </Press>
+  );
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: 44 }} accessibilityLabel={label}>
+      <T v="body" style={{ flex: 1 }}>
+        {label}
+      </T>
+      {btn("minus", -step, `${label} −${step}`)}
+      <T v="heading" tabular style={{ minWidth: 56, textAlign: "center" }}>
+        {value}
+        {unit ? <T v="caption" tone="mut">{` ${unit}`}</T> : null}
+      </T>
+      {btn("plus", step, `${label} +${step}`)}
+    </View>
+  );
+}

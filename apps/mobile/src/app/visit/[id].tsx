@@ -74,6 +74,14 @@ export default function VisitScreen() {
           <IconButton icon="phone" label={t("visit.call")} onPress={() => tel && Linking.openURL(`tel:${tel}`)} />
           <IconButton icon="message" label={t("visit.message")} onPress={() => tel && Linking.openURL(`sms:${tel}`)} />
           <IconButton icon="navigate" label={t("visit.navigate")} onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${addr}`)} />
+          {customer && property ? (
+            <Button
+              label={t("quick.estimate")}
+              icon="invoice"
+              variant="secondary"
+              onPress={() => router.push(`/estimate/new?customerId=${customer.id}&propertyId=${property.id}`)}
+            />
+          ) : null}
         </RowView>
       </Card>
 

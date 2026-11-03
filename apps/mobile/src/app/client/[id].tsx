@@ -83,6 +83,13 @@ export default function ClientScreen() {
               <T v="caption" tone="mut">
                 {p.city} · {t("visit.stories", { n: p.stories })}
               </T>
+              <Button
+                label={t("est.new")}
+                icon="invoice"
+                variant="secondary"
+                size="sm"
+                onPress={() => router.push(`/estimate/new?customerId=${c.id}&propertyId=${p.id}`)}
+              />
               {jobs.length === 0 ? (
                 <T v="caption" tone="mut">
                   {t("client.noJobs")}
