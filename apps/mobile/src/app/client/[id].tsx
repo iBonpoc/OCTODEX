@@ -11,7 +11,7 @@ import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle } fr
 
 const jobSt: Record<JobStatus, { s: StatusName; l: DictKey }> = {
   lead: { s: "info", l: "st.new" },
-  estimate: { s: "info", l: "st.sent" },
+  estimate: { s: "info", l: "st.inspection" },
   scheduled: { s: "neutral", l: "st.scheduled" },
   in_progress: { s: "info", l: "st.working" },
   done: { s: "ok", l: "st.paid" },
@@ -122,7 +122,7 @@ export default function ClientScreen() {
             {estimates.map((e, i) => (
               <View key={e.id}>
                 {i > 0 ? <Divider /> : null}
-                <ListRow title={e.title} subtitle={money(e.totalCents)} right={<StatusChip status={estSt[e.status].s} label={t(estSt[e.status].l)} />} />
+                <ListRow title={e.title} subtitle={money(e.totalCents)} right={<StatusChip status={estSt[e.status].s} label={t(estSt[e.status].l)} />} onPress={() => router.push(`/estimate/${e.id}`)} />
               </View>
             ))}
           </Card>

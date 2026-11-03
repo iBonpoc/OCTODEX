@@ -39,6 +39,9 @@ interface StoreCtx {
   resetDemo: () => Undo;
   addLead: (l: Omit<Lead, "id" | "status" | "receivedAt">) => Undo;
   addEstimate: (e: Omit<Estimate, "id">) => Undo;
+  sendEstimate: (id: ID) => Undo;
+  signEstimate: (id: ID, path: string) => Undo;
+  payDeposit: (id: ID, method: PaymentMethod) => Undo;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -148,6 +151,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
                     paidCents: v.amountDueCents,
                     dueDate: now,
                     paidAt: now,
+                    method,
+                    kind: "final",
                   },
                 ]
               : next.invoices,
@@ -188,6 +193,34 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })),
       assignVisit: (visitId, techId) => mutate("visit.assign", (d) => patchVisit(d, visitId, (v) => ({ ...v, techId }))),
       addEstimate: (e) => mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id: uid("e") }] })),
+      sendEstimate: (id) =>
+        mutate("estimate.send", (d) => ({
+          ...d,
+          estimates: d.estimates.map((e) => (e.id === id ? { ...e, status: "sent", sentAt: new Date().toISOString() } : e)),
+        })),
+      signEstimate: (id, path) =>
+        mutate("estimate.sign", (d) => ({
+          ...d,
+          estimates: d.estimates.map((e) =>
+            e.id === id ? { ...e, status: "approved", signature: path, approvedAt: new Date().toISOString(), sentAt: e.sentAt ?? new Date().toISOString() } : e,
+          ),
+        })),
+      payDeposit: (id, method) =>
+        mutate("estimate.deposit", (d) => {
+          const e = d.estimates.find((x) => x.id === id);
+          if (!e || !e.depositCents) return d;
+          const now = new Date().toISOString();
+          const jid = uid("j");
+          return {
+            ...d,
+            estimates: d.estimates.map((x) => (x.id === id ? { ...x, depositPaidAt: now } : x)),
+            jobs: [...d.jobs, { id: jid, propertyId: e.propertyId, title: e.title, status: "scheduled", amountCents: e.totalCents }],
+            invoices: [
+              ...d.invoices,
+              { id: uid("i"), customerId: e.customerId, jobId: jid, totalCents: e.depositCents, paidCents: e.depositCents, dueDate: now, paidAt: now, method, kind: "deposit" },
+            ],
+          };
+        }),
       resetDemo: () => mutate("demo.reset", () => makeSeed()),
     }),
     [db, role, online, queue, mutate, setDb, setRole, setQueue],

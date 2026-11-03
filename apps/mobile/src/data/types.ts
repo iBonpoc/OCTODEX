@@ -98,6 +98,12 @@ export interface Estimate {
   status: EstimateStatus;
   sentAt?: string;
   approvedAt?: string;
+  /** client-visible lines of the chosen option (hidden BOM lines stay in the engine) */
+  lines?: { name: string; qty: string; totalCents: number; optional?: boolean }[];
+  depositCents?: number;
+  marginPct?: string | null;
+  signature?: string;
+  depositPaidAt?: string;
 }
 
 export interface Invoice {
@@ -108,6 +114,9 @@ export interface Invoice {
   paidCents: number;
   dueDate: string;
   paidAt?: string;
+  method?: PaymentMethod;
+  /** deposit invoice for an approved estimate */
+  kind?: "deposit" | "final";
 }
 
 export interface QueuedAction {

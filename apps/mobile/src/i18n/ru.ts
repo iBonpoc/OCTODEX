@@ -39,6 +39,7 @@ export const ru = {
   "st.approved": "Одобрена",
   "st.declined": "Отказ",
   "st.awaiting": "Ждёт оплаты",
+  "st.inspection": "Осмотр",
   "st.unassigned": "Не назначен",
   "st.late": "Опаздывает",
 
@@ -221,6 +222,19 @@ export const ru = {
   "lead.saved": "Лид добавлен: {name}",
   "lead.need": "Нужны имя и телефон",
   "toast.bookedTomorrow": "Осмотр завтра в 10:00, назначьте мастера: {name}",
+  "est.send": "Отправить клиенту",
+  "est.sentToast": "Смета отправлена: {name}",
+  "est.sendNote": "Ссылка для клиента заработает с порталом (волна 3). Сейчас клиент подписывает на вашем телефоне.",
+  "est.signOnSite": "Подпись клиента на месте",
+  "est.esign": "Клиент соглашается подписать электронно и получить копию по email (E-SIGN). Подрядчик подписывает договор следом.",
+  "est.rescission": "Право отказа: 3 рабочих дня (65+ лет — 5, аварийные работы — 7). Суббота считается рабочим днём.",
+  "est.signedToast": "Смета подписана: {name}",
+  "est.depositDue": "Депозит к оплате",
+  "est.recordDeposit": "Записать депозит",
+  "est.depositPaid": "Депозит получен",
+  "est.depositToast": "Депозит {amount} записан, работа создана",
+  "est.noLines": "Позиции не сохранены в этой смете",
+  "est.detail": "Смета",
 } as const;
 
 export type DictKey = keyof typeof ru;

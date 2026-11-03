@@ -45,9 +45,15 @@ export default function NewEstimate() {
       title: `${o.name}: ${f.lengthFt} LF, ${f.downspouts} DS`,
       totalCents: o.totals.total,
       status: "draft",
+      depositCents: o.deposit,
+      marginPct: o.totals.marginPct,
+      lines: o.lines
+        .map((l, i) => ({ l, total: o.totals.lineTotals[i] ?? 0 }))
+        .filter(({ l }) => l.clientVisible !== false)
+        .map(({ l, total }) => ({ name: l.name, qty: String(l.quantity), totalCents: total, optional: l.isOptional })),
     });
     toast.show(online ? t("est.saved", { name: customer.name }) : t("offline.queued"), undo);
-    back();
+    router.replace(`/client/${customer.id}`);
   };
 
   return (
