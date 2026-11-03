@@ -1,0 +1,47 @@
+{
+  "expo": {
+    "name": "Наряд",
+    "slug": "naryad",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.octo.naryad",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Фото до и после работы прикрепляются к выезду.",
+        "NSPhotoLibraryUsageDescription": "Фото работ прикрепляются к выезду."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.octo.naryad"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-font",
+      "expo-localization",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Фото работ прикрепляются к выезду.",
+          "cameraPermission": "Фото до и после работы прикрепляются к выезду."
+        }
+      ]
+    ],
+    "scheme": "naryad"
+  }
+}

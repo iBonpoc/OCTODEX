@@ -1,0 +1,18 @@
+/* Основы: типографика, отступы, размеры, движение, слои. Темы и цвета: theme.css, status.css */
+:root{
+ --font:'Onest',system-ui,sans-serif;
+ --fs-display:28px;--fs-title:20px;--fs-heading:15px;--fs-body:13px;--fs-caption:11.5px;--fs-micro:10.5px;
+ --lh-tight:1.15;--lh-body:1.45;
+ --fw-regular:400;--fw-medium:500;--fw-semibold:600;--fw-bold:700;
+ --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;
+ --radius-pill:999px;--radius-field:12px;--radius-chip:999px;
+ /* визуальная высота контролов; зона нажатия всегда не меньше --hit-min (HIG 44pt) */
+ --control-sm:28px;--control-md:32px;--field:34px;--hit-min:44px;
+ --control-md-phone:40px;--field-phone:42px;
+ --icon-sm:16px;--icon-md:20px;--icon-lg:24px;--icon-stroke:1.75;
+ --statusbar-h:44px;--tabbar-h:56px;--safe-bottom:34px;--fab:36px;--sheet-radius:24px;
+ --dur-fast:160ms;--dur-base:220ms;--dur-slow:350ms;--dur-chart:900ms;
+ --ease-out:cubic-bezier(.2,.8,.2,1);--ease-spring:cubic-bezier(.3,1.4,.5,1);
+ --z-nav:2;--z-fab:4;--z-scrim:5;--z-sheet:6;--z-modal:7;--z-toast:8;
+}
+@media (prefers-reduced-motion:reduce){:root{--dur-fast:0ms;--dur-base:0ms;--dur-slow:0ms;--dur-chart:0ms}}
