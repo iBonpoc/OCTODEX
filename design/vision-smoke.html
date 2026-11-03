@@ -607,3 +607,33 @@ h1{font-size:46px;font-weight:600;letter-spacing:-.02em;line-height:1}
   rail.forEach(r => r.addEventListener('click', () => rail.forEach(x => x.classList.toggle('on', x === r))));
 })();
 </script>
+
+<style>
+.octo-theme-fab{position:fixed;z-index:9999;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:rgba(18,18,20,.82);color:#fff;font:600 14px/1 system-ui,-apple-system,sans-serif;cursor:pointer;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 10px 30px -10px rgba(0,0,0,.6);transition:transform .45s cubic-bezier(.34,1.56,.64,1)}
+.octo-theme-fab:active{transform:scale(.92);transition-duration:.08s}
+.octo-theme-fab:focus-visible{outline:2px solid #fff;outline-offset:3px}
+</style>
+<button class="octo-theme-fab" type="button" id="octoThemeFab" aria-label="Переключить тему"></button>
+<script>
+(function(){
+  var fab=document.getElementById('octoThemeFab'),root=document.documentElement;
+  var map={light:['#m-light','#th-p','#t-light','[data-theme-btn="light"]'],dark:['#m-dark','#th-g','#t-dark','[data-theme-btn="dark"]']};
+  function byText(t){var all=document.querySelectorAll('button');for(var i=0;i<all.length;i++){if(all[i]!==fab&&all[i].textContent.replace(/\s+/g,' ').trim()===t)return all[i];}return null;}
+  function ctrl(mode){for(var i=0;i<map[mode].length;i++){var e=document.querySelector(map[mode][i]);if(e&&e!==fab)return e;}return byText(mode==='light'?'Светлая':'Тёмная');}
+  function current(){
+    var l=ctrl('light');if(l&&l.getAttribute('aria-pressed')==='true')return 'light';
+    var d=ctrl('dark');if(d&&d.getAttribute('aria-pressed')==='true')return 'dark';
+    var a=root.getAttribute('data-theme');if(a==='light'||a==='dark')return a;
+    return (window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+  }
+  function label(){var c=current();fab.textContent=c==='dark'?'☀ Светлая':'☾ Тёмная';}
+  fab.addEventListener('click',function(){
+    var target=current()==='dark'?'light':'dark',c=ctrl(target);
+    if(c)c.click();else root.setAttribute('data-theme',target);
+    setTimeout(label,30);
+  });
+  document.addEventListener('click',function(e){if(e.target!==fab)setTimeout(label,30);});
+  window.addEventListener('hashchange',function(){setTimeout(label,30);});
+  label();
+})();
+</script>
