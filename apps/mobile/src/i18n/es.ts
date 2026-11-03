@@ -148,6 +148,8 @@ export const es: Dict = {
   "more.light": "Claro",
   "more.language": "Idioma",
   "more.company": "Empresa",
+  "more.resetDemo": "Restablecer datos de prueba",
+  "more.resetDone": "Datos de prueba restablecidos",
   "more.version": "Versión {v} · datos de prueba",
 
   "common.undo": "Deshacer",

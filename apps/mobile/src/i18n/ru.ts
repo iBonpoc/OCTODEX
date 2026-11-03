@@ -147,6 +147,8 @@ export const ru = {
   "more.light": "Светлая",
   "more.language": "Язык",
   "more.company": "Компания",
+  "more.resetDemo": "Сбросить тестовые данные",
+  "more.resetDone": "Тестовые данные сброшены",
   "more.version": "Версия {v} · данные тестовые",
 
   "common.undo": "Отменить",

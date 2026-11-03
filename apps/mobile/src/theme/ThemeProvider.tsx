@@ -1,5 +1,6 @@
-import { createContext, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import { useColorScheme, useWindowDimensions } from "react-native";
+import { usePersistentState } from "@/data/persist";
 import { breakpoint, themes, type ThemeColors, type ThemeName } from "@octo/design-tokens";
 
 export type ThemePref = "system" | ThemeName;
@@ -17,7 +18,7 @@ const Ctx = createContext<ThemeCtx | null>(null);
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const system = useColorScheme();
-  const [pref, setPref] = useState<ThemePref>("system");
+  const [pref, setPref, ready] = usePersistentState<ThemePref>("octo.theme.v1", "system");
   const name: ThemeName = pref === "system" ? (system === "light" ? "light" : "dark") : pref;
   const value = useMemo<ThemeCtx>(
     () => ({
@@ -29,6 +30,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }),
     [name, pref],
   );
+  if (!ready) return null;
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 

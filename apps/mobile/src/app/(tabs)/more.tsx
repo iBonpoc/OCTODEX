@@ -7,7 +7,7 @@ import type { Role } from "@/data/types";
 import { languages, useI18n, type Lang } from "@/i18n";
 import { roleHome } from "@/nav/roles";
 import { useTheme, type ThemePref } from "@/theme/ThemeProvider";
-import { Segmented, Toggle } from "@/ui/controls";
+import { Button, Segmented, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, RowView, Screen } from "@/ui/surfaces";
@@ -15,7 +15,7 @@ import { Card, RowView, Screen } from "@/ui/surfaces";
 /** Settings for this device: role, theme, language, offline test switch. */
 export default function More() {
   const { t, lang, setLang } = useI18n();
-  const { role, setRole, online, setOnline } = useStore();
+  const { role, setRole, online, setOnline, resetDemo } = useStore();
   const { pref, setPref } = useTheme();
   const toast = useToast();
   const changeRole = (r: Role) => {
@@ -72,6 +72,7 @@ export default function More() {
             }}
           />
         </RowView>
+        <Button label={t("more.resetDemo")} icon="sync" variant="secondary" onPress={() => toast.show(t("more.resetDone"), resetDemo())} />
       </Card>
       <View style={{ paddingHorizontal: space[2] }}>
         <T v="caption" tone="mut">

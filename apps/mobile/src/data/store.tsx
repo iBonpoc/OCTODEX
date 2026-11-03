@@ -5,6 +5,7 @@
  */
 import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
 import { makeSeed } from "./seed";
+import { todayKey, usePersistentState } from "./persist";
 import {
   VISIT_STEPS,
   type DB,
@@ -33,6 +34,7 @@ interface StoreCtx {
   replyLead: (id: ID) => Undo;
   bookLead: (id: ID) => Undo;
   assignVisit: (visitId: ID, techId: ID) => Undo;
+  resetDemo: () => Undo;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -40,10 +42,17 @@ let seq = 0;
 const uid = (p: string) => `${p}-${Date.now().toString(36)}-${(seq++).toString(36)}`;
 
 export function StoreProvider({ children }: { children: ReactNode }) {
-  const [db, setDb] = useState<DB>(makeSeed);
-  const [role, setRole] = useState<Role>("tech");
+  // Test data is reseeded each new day (dates are relative to "today"); real data arrives with sync in wave 5.
+  const [saved, setSaved, dbReady] = usePersistentState<{ day: string; db: DB }>(
+    "octo.db.v1",
+    () => ({ day: todayKey(), db: makeSeed() }),
+    { validate: (v) => v?.day === todayKey() && Array.isArray(v?.db?.visits) },
+  );
+  const db = saved.db;
+  const setDb = useCallback((next: DB) => setSaved({ day: todayKey(), db: next }), [setSaved]);
+  const [role, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "tech");
   const [online, setOnlineState] = useState(true);
-  const [queue, setQueue] = useState<QueuedAction[]>([]);
+  const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
   const dbRef = useRef(db);
   dbRef.current = db;
   const onlineRef = useRef(online);
@@ -66,7 +75,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setDb(prev);
       if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
     };
-  }, []);
+  }, [setDb, setQueue]);
 
   const patchVisit = (d: DB, id: ID, fn: (v: Visit) => Visit): DB => ({
     ...d,
@@ -145,9 +154,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       bookLead: (id) =>
         mutate("lead.book", (d) => ({ ...d, leads: d.leads.map((l) => (l.id === id ? { ...l, status: "booked" } : l)) })),
       assignVisit: (visitId, techId) => mutate("visit.assign", (d) => patchVisit(d, visitId, (v) => ({ ...v, techId }))),
+      resetDemo: () => mutate("demo.reset", () => makeSeed()),
     }),
-    [db, role, online, queue, mutate],
+    [db, role, online, queue, mutate, setDb, setRole, setQueue],
   );
+
+  if (!dbReady || !roleReady || !queueReady) return null;
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

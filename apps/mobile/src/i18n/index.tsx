@@ -1,5 +1,6 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { getLocales } from "expo-localization";
+import { usePersistentState } from "@/data/persist";
 import { ru, type DictKey, type Dict } from "./ru";
 import { en } from "./en";
 import { es } from "./es";
@@ -35,7 +36,7 @@ const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD",
 const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
 
 export function I18nProvider({ children }: { children: ReactNode }) {
-  const [lang, setLang] = useState<Lang>(deviceLang);
+  const [lang, setLang, ready] = usePersistentState<Lang>("octo.lang.v1", deviceLang);
   const t = useCallback(
     (key: DictKey, params?: Params) => {
       let s = dicts[lang][key] ?? ru[key] ?? key;
@@ -57,6 +58,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       day: (iso) => dayFmt.format(new Date(iso)),
     };
   }, [lang, t]);
+  if (!ready) return null;
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
