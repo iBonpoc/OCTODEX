@@ -87,6 +87,7 @@ svg{display:block}
 /* ---------- layout ---------- */
 .wrap{padding:40px max(16px,env(safe-area-inset-right,0px)) 80px max(16px,env(safe-area-inset-left,0px));max-width:1320px;margin:0 auto}
 .intro{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin:0 0 26px 76px;color:var(--ink-2);font-size:13px;letter-spacing:.04em}
+.intro span{padding:6px 12px;border-radius:999px}
 .intro b{color:var(--ink);font-weight:600;font-size:15px;letter-spacing:.02em}
 .stage{position:relative;padding-left:76px}
 .rail{position:absolute;left:0;top:210px;display:flex;flex-direction:column;gap:6px;padding:8px;border-radius:32px}
@@ -162,7 +163,7 @@ h1{font-size:46px;font-weight:600;letter-spacing:-.02em;line-height:1}
 .track .ln{position:absolute;left:0;right:0;top:9px;height:2px;border-radius:2px;background:var(--stroke-2)}
 .track .ln i{display:block;height:100%;width:50%;border-radius:2px;background:var(--cream);transition:width .8s var(--spring)}
 .ms{position:absolute;top:0;transform:translateX(-50%);text-align:center;white-space:nowrap}
-.ms:first-of-type{transform:none;text-align:left}.ms:last-of-type{transform:translateX(-100%);text-align:right}
+.ms:nth-child(2){transform:none;text-align:left}.ms:last-child{transform:translateX(-100%);text-align:right}
 .ms .dot{width:20px;height:20px;border-radius:50%;background:var(--glass);border:2px solid var(--stroke-2);display:inline-grid;place-items:center;-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px)}
 .ms.done .dot{background:var(--cream);border-color:var(--cream);color:var(--cream-ink)}
 .ms.now .dot{border-color:var(--cream);box-shadow:0 0 0 5px var(--cream-soft)}
@@ -249,7 +250,7 @@ h1{font-size:46px;font-weight:600;letter-spacing:-.02em;line-height:1}
 .phead small{display:block;font-size:13px;color:var(--ink-2)}
 .pask{border-radius:999px;padding:6px 6px 6px 6px;display:flex;align-items:center;gap:10px;font-size:13px;color:var(--ink-3)}
 .pask .orb{width:30px;height:30px}
-.pask span{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pask span:not(.orb){flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .pgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .w{border-radius:26px;padding:14px}
 .w.wide{grid-column:span 2}
@@ -308,6 +309,8 @@ h1{font-size:46px;font-weight:600;letter-spacing:-.02em;line-height:1}
   .num{font-size:38px}
   .kpis{gap:18px 26px}
   .crew{display:none}
+  .track{height:60px}
+  .ms b{display:block}
   .jhead .rnd{margin-left:auto}
   .phone{width:100%;height:780px;border-width:8px}
   .pgrid{gap:8px}
@@ -343,7 +346,7 @@ h1{font-size:46px;font-weight:600;letter-spacing:-.02em;line-height:1}
 <div class="room" aria-hidden="true"><i class="panels"></i><i class="glow"></i><i class="win"></i><i class="curtain"></i><i class="shelf"></i><i class="lamp"></i><i class="rug"></i><i class="sofa"></i><i class="table"></i></div>
 
 <main class="wrap">
-  <div class="intro"><b>Vision Smoke</b><span>Octo CRM · прототип стиля · дымчатое стекло</span></div>
+  <div class="intro"><b>Vision Smoke</b><span class="glass">Octo CRM · прототип стиля · дымчатое стекло</span></div>
 
   <section class="stage" aria-label="Экран Деньги, десктоп">
     <nav class="rail glass" aria-label="Разделы">
@@ -414,7 +417,7 @@ h1{font-size:46px;font-weight:600;letter-spacing:-.02em;line-height:1}
             <div class="ms" style="left:100%"><span class="dot"></span><span><b>Финал</b> $6,140</span></div>
           </div>
           <div class="subs">
-            <div class="sub"><h4>Дата оплаты <em>ноябрь 2026</em></h4><div class="cal" id="cal"></div></div>
+            <div class="sub"><h4>Дата оплаты <em>ноябрь 2026</em></h4><div class="cal" id="days"></div></div>
             <div class="sub">
               <h4>График оплаты</h4>
               <div class="seg plan" data-seg id="plan"><i class="ind"></i><button>Депозит 10%</button><button class="on">По этапам</button><button>После работы</button></div>
@@ -539,7 +542,7 @@ h1{font-size:46px;font-weight:600;letter-spacing:-.02em;line-height:1}
   theme.addEventListener('pick', e => { root.dataset.theme = e.detail.dataset.t; });
 
   // calendar (Nov 2026 starts on Sunday; Monday-first grid)
-  const cal = document.getElementById('cal');
+  const cal = document.getElementById('days');
   const sDate = document.getElementById('sDate');
   let html = ['Пн','Вт','Ср','Чт','Пт','Сб','Вс'].map(d => `<span class="wd">${d}</span>`).join('') + '<span></span>'.repeat(6);
   for (let d = 1; d <= 30; d++) html += `<button class="${d === 18 ? 'on' : ''}${d === 9 ? ' paid' : ''}" aria-label="${d} ноября">${d}</button>`;
