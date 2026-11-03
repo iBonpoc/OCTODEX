@@ -1,0 +1,430 @@
+<title>Volt Night</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#08080A; --frame:#000; --screen:#111113; --surface:#1B1B1E; --surface-2:#242428; --line:#34343A; --line-soft:#26262B;
+  --text:#F5F5F0; --muted:#A3A3AA; --faint:#8A8A92;
+  --volt:#F2E94E; --volt-ink:#0B0B0C; --volt-dim:#C9C13A;
+  --c-blue:#4F7FF2; --c-teal:#2CB5A5; --c-grey:#7E8390; --c-orange:#F08A3C; --c-green:#3DC46C; --c-pink:#E8609F;
+  --ok:#62D98A; --warn:#F5A35B; --bad:#FF7A7A;
+  --r-lg:22px; --r-md:16px; --r-sm:10px;
+  --spring:cubic-bezier(.34,1.56,.64,1);
+  --font:"Sora","Manrope","Helvetica Neue",Arial,system-ui,sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{background:var(--bg)}
+body{background:var(--bg);color:var(--text);font-family:var(--font);-webkit-font-smoothing:antialiased;line-height:1.35}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
+button:focus-visible,[tabindex]:focus-visible{outline:2px solid var(--volt);outline-offset:2px}
+.wrap{max-width:1240px;margin:0 auto;padding:40px max(16px, env(safe-area-inset-right, 0px)) 56px max(16px, env(safe-area-inset-left, 0px))}
+.hero{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:32px}
+.brand{display:flex;align-items:center;gap:12px}
+.mark{width:44px;height:44px;border-radius:12px;background:var(--volt);color:var(--volt-ink);display:grid;place-items:center;font-weight:800;font-size:20px}
+h1{font-size:clamp(28px,5vw,44px);font-weight:800;letter-spacing:-.03em}
+h1 span{color:var(--volt)}
+.hero p{color:var(--muted);max-width:440px;font-size:14px}
+.phones{display:flex;flex-wrap:wrap;justify-content:center;gap:36px}
+/* phone */
+.phone{width:316px;flex:0 0 auto;max-width:100%}
+.cap{color:var(--faint);font-size:12px;letter-spacing:.08em;text-transform:uppercase;margin:0 0 12px 6px}
+.cap b{color:var(--volt);font-weight:700}
+.device{position:relative;border-radius:50px;padding:9px;background:var(--frame);box-shadow:0 0 0 2px #2A2A2E,0 0 0 4px #0A0A0B,0 30px 60px -20px rgba(0,0,0,.8)}
+.screen{position:relative;height:660px;border-radius:42px;background:var(--screen);overflow:hidden;display:flex;flex-direction:column}
+.island{position:absolute;top:10px;left:50%;transform:translateX(-50%);width:96px;height:28px;border-radius:20px;background:#000;z-index:5}
+.status{display:flex;justify-content:space-between;align-items:center;padding:16px 26px 0;font-size:13px;font-weight:600;height:44px;flex:0 0 auto}
+.status i{display:inline-flex;gap:4px;align-items:center}
+.bat{width:22px;height:11px;border:1.5px solid var(--text);border-radius:3px;position:relative}
+.bat::after{content:"";position:absolute;inset:1.5px 4px 1.5px 1.5px;background:var(--text);border-radius:1px}
+.body{flex:1;overflow-y:auto;overflow-x:hidden;padding:10px 18px 16px;scrollbar-width:none}
+.body::-webkit-scrollbar{display:none}
+/* tab bar */
+.tabs{flex:0 0 auto;display:grid;grid-template-columns:repeat(4,1fr);padding:8px 14px 22px;background:var(--screen);border-top:1px solid var(--line-soft)}
+.tab{display:flex;flex-direction:column;align-items:center;gap:4px;font-size:10px;color:var(--muted);padding:2px 0}
+.tab .ti{width:42px;height:42px;border-radius:12px;display:grid;place-items:center;transition:background .25s,transform .35s var(--spring)}
+.tab svg{width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.tab[aria-selected="true"]{color:var(--volt)}
+.tab[aria-selected="true"] .ti{background:var(--volt);color:var(--volt-ink);transform:scale(1.04)}
+.tab:active .ti{transform:scale(.88)}
+/* screen 1 */
+.top{display:flex;justify-content:space-between;align-items:flex-start;gap:10px}
+.hello small{display:block;color:var(--muted);font-size:12px}
+.hello strong{font-size:16px;font-weight:600;line-height:1.3}
+.bell{position:relative;width:38px;height:38px;border-radius:50%;background:var(--surface);display:grid;place-items:center;flex:0 0 auto}
+.bell svg{width:18px;height:18px;stroke:var(--text);fill:none;stroke-width:2}
+.bell::after{content:"";position:absolute;top:8px;right:9px;width:7px;height:7px;border-radius:50%;background:var(--volt);box-shadow:0 0 0 2px var(--surface)}
+.days{display:flex;gap:5px;margin:18px 0 20px}
+.day{flex:1;min-width:0;border-radius:20px;background:var(--surface);padding:8px 0 9px;text-align:center;font-size:10px;color:var(--muted);transition:transform .4s var(--spring),background .2s}
+.day b{display:block;font-size:14px;font-weight:600;color:var(--text);margin-top:2px}
+.day[aria-pressed="true"]{background:var(--volt);color:var(--volt-ink);transform:translateY(-3px) scale(1.06)}
+.day[aria-pressed="true"] b{color:var(--volt-ink)}
+.day:active{transform:scale(.9)}
+.sec{display:flex;justify-content:space-between;align-items:baseline;margin:0 0 10px}
+.sec h3{font-size:15px;font-weight:600}
+.sec a{font-size:11px;color:var(--muted);text-decoration:none}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:20px}
+.tile{position:relative;border-radius:var(--r-md);background:var(--surface);padding:12px;text-align:left;min-height:96px;display:flex;flex-direction:column;justify-content:flex-end;transition:transform .45s var(--spring)}
+.tile:active,.tile.pop{transform:scale(.94)}
+.tile .ic{position:absolute;top:11px;left:11px;width:28px;height:28px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center}
+.tile .ic svg{width:14px;height:14px;stroke:var(--text);fill:none;stroke-width:2.2;stroke-linecap:round}
+.tile small{font-size:10px;color:var(--muted)}
+.tile strong{font-size:20px;font-weight:700;letter-spacing:-.02em}
+.tile strong em{font-style:normal;font-size:11px;font-weight:500;margin-left:2px}
+.tile.big{grid-row:span 2;background:var(--volt);color:var(--volt-ink);min-height:200px}
+.tile.big .ic{background:rgba(11,11,12,.12)}
+.tile.big .ic svg{stroke:var(--volt-ink)}
+.tile.big small{color:#3A3A20}
+.tile.big strong{font-size:30px}
+.tile.wide{grid-column:span 2;min-height:auto;flex-direction:row;align-items:center;justify-content:space-between;padding:14px 12px 14px 50px}
+.tile.wide .ic{top:50%;transform:translateY(-50%)}
+.tile .chip{font-size:10px}
+.row{display:flex;align-items:center;gap:10px;background:var(--surface);border-radius:var(--r-md);padding:11px 12px;margin-bottom:8px}
+.row .av{width:34px;height:34px;border-radius:50%;background:var(--surface-2);display:grid;place-items:center;font-size:12px;font-weight:700;color:var(--volt);flex:0 0 auto}
+.row div{flex:1;min-width:0}
+.row b{font-size:13px;font-weight:600;display:block}
+.row span{font-size:11px;color:var(--muted)}
+.row .amt{font-size:13px;font-weight:700;text-align:right}
+.row .call{background:var(--volt);color:var(--volt-ink);border-radius:9px;padding:6px 9px;font-size:11px;font-weight:700;transition:transform .35s var(--spring)}
+.row .call:active{transform:scale(.9)}
+.chip{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:3px 8px;font-size:11px;font-weight:600;background:var(--surface-2);color:var(--text);white-space:nowrap}
+.chip::before{content:"";width:6px;height:6px;border-radius:50%;background:currentColor}
+.chip.ok{color:var(--ok)} .chip.warn{color:var(--warn)} .chip.bad{color:var(--bad)} .chip.volt{background:var(--volt);color:var(--volt-ink)} .chip.info{color:#8FB0FF}
+/* screen 2 timeline */
+.hdr{display:flex;align-items:center;gap:10px;margin-bottom:4px}
+.back{width:34px;height:34px;border-radius:11px;background:var(--surface);display:grid;place-items:center}
+.back svg{width:16px;height:16px;stroke:var(--text);fill:none;stroke-width:2.4}
+.hdr h2{font-size:16px;font-weight:700}
+.hdr small{display:block;font-size:11px;color:var(--muted);font-weight:400}
+.meta{display:flex;gap:6px;margin:12px 0 14px;flex-wrap:wrap}
+.tl{list-style:none;position:relative}
+.tl::before{content:"";position:absolute;left:61px;top:14px;bottom:14px;width:2px;background:var(--line)}
+.tl li{display:grid;grid-template-columns:38px 30px 1fr;gap:6px;align-items:start;margin-bottom:8px;position:relative}
+.tl time{font-size:11px;color:var(--muted);padding-top:13px;font-variant-numeric:tabular-nums}
+.dot{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;margin-top:6px;box-shadow:0 0 0 4px var(--screen);position:relative;z-index:1}
+.dot svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round}
+.dot.y svg{stroke:var(--volt-ink)}
+.card{border:1px solid var(--line);border-radius:12px;background:var(--surface);text-align:left;width:100%;padding:10px 8px 10px 12px;display:block;transition:border-color .2s,transform .4s var(--spring)}
+.card:active{transform:scale(.97)}
+.card[aria-expanded="true"]{border-color:#55555E}
+.card .t{display:flex;justify-content:space-between;gap:6px;align-items:flex-start}
+.card b{font-size:13px;font-weight:600;line-height:1.3}
+.card .d{display:block;font-size:11px;color:var(--muted);margin-top:2px}
+.kebab{width:20px;height:20px;flex:0 0 auto;display:grid;place-items:center;color:var(--muted)}
+.kebab svg{width:4px;height:14px;fill:currentColor}
+.more{display:grid;grid-template-rows:0fr;transition:grid-template-rows .4s var(--spring)}
+.more>div{overflow:hidden}
+.card[aria-expanded="true"] .more{grid-template-rows:1fr}
+.sub{display:flex;justify-content:space-between;font-size:11px;color:#D0D0D4;padding-top:7px;gap:8px}
+.sub span:last-child{color:var(--muted);white-space:nowrap}
+.sub:first-child{margin-top:6px;border-top:1px solid var(--line-soft)}
+.plus{color:var(--volt);font-weight:700}
+/* screen 3 map */
+.screen.map .status{position:absolute;top:0;left:0;right:0;z-index:4}
+.mapwrap{position:absolute;inset:0;bottom:0}
+.mapwrap svg{width:100%;height:100%;display:block}
+.place{position:absolute;top:50px;left:0;right:0;text-align:center;z-index:3;pointer-events:none}
+.place b{font-size:14px;font-weight:700;text-shadow:0 1px 6px #000}
+.place small{display:block;font-size:10px;color:var(--muted)}
+.route{stroke:var(--volt);stroke-width:7;fill:none;stroke-linecap:round;stroke-linejoin:round;stroke-dasharray:1;stroke-dashoffset:1;animation:draw 2.4s .3s cubic-bezier(.6,.05,.3,1) forwards}
+@keyframes draw{to{stroke-dashoffset:0}}
+.stop circle{fill:var(--volt);stroke:var(--volt-ink);stroke-width:2}
+.stop text{fill:var(--volt-ink);font:700 11px var(--font);text-anchor:middle;dominant-baseline:central}
+.stop.done circle{fill:#2B2B30;stroke:var(--volt)} .stop.done text{fill:var(--volt)}
+.me{animation:pulse 1.8s ease-out infinite;transform-origin:center;transform-box:fill-box}
+@keyframes pulse{0%{opacity:.6;transform:scale(1)}100%{opacity:0;transform:scale(2.6)}}
+.sheet{position:absolute;left:0;right:0;bottom:0;z-index:4;background:var(--screen);border-radius:26px 26px 0 0;padding:10px 14px 0;border-top:1px solid var(--line-soft)}
+.grab{width:40px;height:4px;border-radius:4px;background:var(--line);margin:0 auto 12px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:6px}
+.stat{border:1px solid var(--line);border-radius:12px;padding:8px 6px;text-align:center}
+.stat small{display:block;font-size:9.5px;color:var(--muted)}
+.stat b{font-size:15px;font-weight:700;font-variant-numeric:tabular-nums}
+.stat b em{font-style:normal;font-size:10px;font-weight:500;color:var(--muted)}
+.stat.next b{font-size:13px}
+.ctrl{display:flex;justify-content:center;align-items:center;gap:14px;margin:12px 0 4px}
+.ctrl .sm{width:36px;height:36px;border-radius:11px;background:var(--surface);display:grid;place-items:center}
+.ctrl .sm svg{width:16px;height:16px;stroke:var(--text);fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.go{height:50px;min-width:50px;padding:0 18px;border-radius:14px;background:var(--volt);color:var(--volt-ink);font-weight:700;font-size:13px;display:inline-flex;align-items:center;gap:8px;transition:transform .45s var(--spring)}
+.go:active{transform:scale(.9)}
+.go svg{width:18px;height:18px;fill:var(--volt-ink)}
+.screen.map .tabs{position:relative;z-index:4}
+/* desktop strip */
+.web{margin-top:56px;border:1px solid var(--line);border-radius:var(--r-lg);background:#111113;overflow:hidden}
+.wbar{display:flex;align-items:center;gap:14px;padding:12px 16px;border-bottom:1px solid var(--line-soft);flex-wrap:wrap}
+.wbar .mark{width:30px;height:30px;font-size:14px;border-radius:9px}
+.wnav{display:flex;gap:4px;flex-wrap:wrap}
+.wnav button{font-size:12px;padding:7px 12px;border-radius:9px;color:var(--muted)}
+.wnav button[aria-selected="true"]{background:var(--volt);color:var(--volt-ink);font-weight:700}
+.wkpi{display:flex;gap:18px;margin-left:auto;font-size:12px;color:var(--muted);flex-wrap:wrap}
+.wkpi b{color:var(--text);font-size:14px;margin-left:4px}
+.wkpi b.v{color:var(--volt)}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th{text-align:left;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);font-weight:600;padding:10px 16px;border-bottom:1px solid var(--line-soft)}
+td{padding:11px 16px;border-bottom:1px solid var(--line-soft);white-space:nowrap}
+tr:last-child td{border-bottom:0}
+tbody tr{transition:background .15s}
+tbody tr:hover{background:var(--surface)}
+td.id{font-weight:700;color:var(--volt);font-variant-numeric:tabular-nums}
+td.num{text-align:right;font-weight:600;font-variant-numeric:tabular-nums}
+th.num{text-align:right}
+td .mut{color:var(--muted)}
+.bar{display:inline-block;width:70px;height:6px;border-radius:6px;background:var(--surface-2);vertical-align:middle;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--volt);border-radius:6px}
+/* note */
+.note{margin-top:28px;display:grid;grid-template-columns:auto 1fr;gap:18px;align-items:start;border-radius:var(--r-lg);background:var(--volt);color:var(--volt-ink);padding:22px}
+.note .sun{width:46px;height:46px;border-radius:12px;background:var(--volt-ink);display:grid;place-items:center}
+.note .sun svg{width:24px;height:24px;stroke:var(--volt);fill:none;stroke-width:2;stroke-linecap:round}
+.note h3{font-size:18px;font-weight:800;margin-bottom:6px;letter-spacing:-.01em}
+.note ul{list-style:none;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:6px 22px;font-size:13px;font-weight:500}
+.note li::before{content:"■ ";font-size:9px;vertical-align:2px}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+@media (max-width:760px){.hide-m{display:none}td,th{padding:10px 10px}.wkpi{margin-left:0}}
+@media (max-width:420px){.phones{gap:28px}.note{grid-template-columns:1fr;padding:18px}}
+@media (prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
+  .route{stroke-dashoffset:0;animation:none}
+  .me{display:none}
+}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-home" viewBox="0 0 24 24"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/></symbol>
+  <symbol id="i-plan" viewBox="0 0 24 24"><rect x="4" y="5" width="16" height="15" rx="3"/><path d="M4 10h16M9 3v4M15 3v4"/></symbol>
+  <symbol id="i-map" viewBox="0 0 24 24"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></symbol>
+  <symbol id="i-money" viewBox="0 0 24 24"><path d="M5 20V12M10 20V6M15 20v-9M20 20V4"/></symbol>
+  <symbol id="i-kebab" viewBox="0 0 4 14"><circle cx="2" cy="2" r="1.6"/><circle cx="2" cy="7" r="1.6"/><circle cx="2" cy="12" r="1.6"/></symbol>
+</svg>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="brand">
+      <div class="mark" aria-hidden="true">O</div>
+      <div><h1>Volt <span>Night</span></h1></div>
+    </div>
+    <p>Octo · CRM для монтажников водостоков в LA. Почти чёрный интерфейс, один электрический жёлтый акцент, плотные карточки без стекла — читается на солнце и в перчатках.</p>
+  </header>
+
+  <section class="phones" aria-label="Мобильные экраны">
+    <!-- Screen 1 -->
+    <div class="phone">
+      <p class="cap"><b>01</b> · Сегодня</p>
+      <div class="device"><div class="screen">
+        <div class="island"></div>
+        <div class="status"><span>9:41</span><i aria-hidden="true">●●● <span class="bat"></span></i></div>
+        <div class="body">
+          <div class="top">
+            <div class="hello"><small>Привет, Ibon</small><strong>4 выезда сегодня</strong></div>
+            <button class="bell" aria-label="Уведомления"><svg viewBox="0 0 24 24"><path d="M6 16V11a6 6 0 0112 0v5l2 2H4z"/><path d="M10 20a2 2 0 004 0"/></svg></button>
+          </div>
+          <div class="days" role="group" aria-label="День недели">
+            <button class="day" aria-pressed="false">Пн<b>02</b></button>
+            <button class="day" aria-pressed="true">Вт<b>03</b></button>
+            <button class="day" aria-pressed="false">Ср<b>04</b></button>
+            <button class="day" aria-pressed="false">Чт<b>05</b></button>
+            <button class="day" aria-pressed="false">Пт<b>06</b></button>
+            <button class="day" aria-pressed="false">Сб<b>07</b></button>
+            <button class="day" aria-pressed="false">Вс<b>08</b></button>
+          </div>
+          <div class="sec"><h3>Обзор</h3><a href="#jobs">Подробнее ›</a></div>
+          <div class="grid">
+            <button class="tile big"><span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v18M16 7H10a3 3 0 000 6h4a3 3 0 010 6H7"/></svg></span><small>Заработано</small><strong>$4,812</strong></button>
+            <button class="tile"><span class="ic"><svg viewBox="0 0 24 24"><path d="M3 17h18M6 17V9M12 17V6M18 17v-5"/></svg></span><small>Футов поставлено</small><strong>148′</strong></button>
+            <button class="tile"><span class="ic"><svg viewBox="0 0 24 24"><path d="M4 12l16-8-6 16-3-7z"/></svg></span><small>Смет отправлено</small><strong>3</strong></button>
+            <button class="tile"><span class="ic"><svg viewBox="0 0 24 24"><circle cx="12" cy="13" r="8"/><path d="M12 9v4l3 2M9 2h6"/></svg></span><small>Ответ на лид</small><strong>2:35<em>мин</em></strong></button>
+            <button class="tile"><span class="ic"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18"/></svg></span><small>Ждут оплаты</small><strong>$6,150</strong></button>
+          </div>
+          <div class="sec"><h3>Последние</h3><a href="#jobs">Все ›</a></div>
+          <div class="row"><span class="av">P</span><div><b>Petrov · монтаж</b><span>148′ · K-style 6″</span></div><span class="amt">$3,400</span></div>
+          <div class="row"><span class="av">K</span><div><b>Kim · смета открыта 3×</b><span>горячий лид · 14 мин назад</span></div><button class="call">Позвонить</button></div>
+          <div class="row"><span class="av">L</span><div><b>Lopez · замер</b><span>11:30 · Echo Park</span></div><span class="chip warn">в пути</span></div>
+        </div>
+        <nav class="tabs" role="tablist" aria-label="Навигация">
+          <button class="tab" role="tab" aria-selected="true"><span class="ti"><svg><use href="#i-home"/></svg></span>Сегодня</button>
+          <button class="tab" role="tab" aria-selected="false"><span class="ti"><svg><use href="#i-plan"/></svg></span>План</button>
+          <button class="tab" role="tab" aria-selected="false"><span class="ti"><svg><use href="#i-map"/></svg></span>Карта</button>
+          <button class="tab" role="tab" aria-selected="false"><span class="ti"><svg><use href="#i-money"/></svg></span>Деньги</button>
+        </nav>
+      </div></div>
+    </div>
+
+    <!-- Screen 2 -->
+    <div class="phone">
+      <p class="cap"><b>02</b> · Таймлайн работы</p>
+      <div class="device"><div class="screen">
+        <div class="island"></div>
+        <div class="status"><span>12:31</span><i aria-hidden="true">●●● <span class="bat"></span></i></div>
+        <div class="body">
+          <div class="hdr">
+            <button class="back" aria-label="Назад"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+            <h2>Работа JOB-0210<small>Petrov · 2418 Silver Lake Blvd</small></h2>
+          </div>
+          <div class="meta"><span class="chip ok">оплачено</span><span class="chip">4 ч 45 мин</span><span class="chip volt">$3,060</span></div>
+          <ol class="tl">
+            <li><time>07:40</time><span class="dot" style="background:var(--c-blue)"><svg viewBox="0 0 24 24"><path d="M3 16V8h11v8M14 11h4l3 3v2h-7"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="17" r="2"/></svg></span>
+              <button class="card" aria-expanded="false"><span class="t"><span><b>Выехали</b><span class="d">из склада · Glendale</span></span><span class="kebab"><svg><use href="#i-kebab"/></svg></span></span>
+              <span class="more"><div><span class="sub"><span>Грузовик F-250 · Ibon, Marco</span><span>9.2 mi</span></span></div></span></button></li>
+            <li><time>08:05</time><span class="dot y" style="background:var(--volt)"><svg viewBox="0 0 24 24"><path d="M12 21s-7-6-7-11a7 7 0 0114 0c0 5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg></span>
+              <button class="card" aria-expanded="false"><span class="t"><span><b>На месте</b><span class="d">25 мин в пути</span></span><span class="kebab"><svg><use href="#i-kebab"/></svg></span></span>
+              <span class="more"><div><span class="sub"><span>Клиент уведомлён SMS</span><span>08:05</span></span></div></span></button></li>
+            <li><time>08:10</time><span class="dot" style="background:var(--c-teal)"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13.5" r="3.5"/><path d="M9 7l1.5-3h3L15 7"/></svg></span>
+              <button class="card" aria-expanded="false"><span class="t"><span><b>Фото «до»</b><span class="d">6 фото · 2 мин</span></span><span class="kebab"><svg><use href="#i-kebab"/></svg></span></span>
+              <span class="more"><div><span class="sub"><span>Фасад, угол NE, водосток</span><span>4 фото</span></span><span class="sub"><span>Гниль фасции</span><span>2 фото</span></span></div></span></button></li>
+            <li><time>08:30</time><span class="dot" style="background:var(--c-grey)"><svg viewBox="0 0 24 24"><path d="M14 4l6 6-9 9H5v-6z"/><path d="M11 7l6 6"/></svg></span>
+              <button class="card" aria-expanded="true"><span class="t"><span><b>Демонтаж старых 160′</b><span class="d">2 ч 10 мин</span></span><span class="kebab"><svg><use href="#i-kebab"/></svg></span></span>
+              <span class="more"><div>
+                <span class="sub"><span>Снять желоба 5″ alum</span><span>160′</span></span>
+                <span class="sub"><span>Водосточные трубы</span><span>4 шт</span></span>
+                <span class="sub"><span>Хомуты и крючки</span><span>58 шт</span></span>
+                <span class="sub"><span>Вывоз в контейнер</span><span>1 рейс</span></span>
+              </div></span></button></li>
+            <li><time>10:40</time><span class="dot" style="background:var(--c-orange)"><svg viewBox="0 0 24 24"><path d="M5 20h14M7 16l9-9 3 3-9 9H7z"/></svg></span>
+              <button class="card" aria-expanded="false"><span class="t"><span><b>Доп. работы CO-001 <span class="plus">+$216</span></b><span class="d">подписано клиентом</span></span><span class="kebab"><svg><use href="#i-kebab"/></svg></span></span>
+              <span class="more"><div><span class="sub"><span>Замена фасции 12′</span><span>$180</span></span><span class="sub"><span>Герметик, крепёж</span><span>$36</span></span></div></span></button></li>
+            <li><time>12:10</time><span class="dot" style="background:var(--c-teal)"><svg viewBox="0 0 24 24"><rect x="3" y="7" width="18" height="13" rx="2"/><circle cx="12" cy="13.5" r="3.5"/><path d="M9 7l1.5-3h3L15 7"/></svg></span>
+              <button class="card" aria-expanded="false"><span class="t"><span><b>Фото «после»</b><span class="d">8 фото · отправлено клиенту</span></span><span class="kebab"><svg><use href="#i-kebab"/></svg></span></span>
+              <span class="more"><div><span class="sub"><span>Новые 6″ K-style, 148′</span><span>8 фото</span></span></div></span></button></li>
+            <li><time>12:20</time><span class="dot" style="background:var(--c-green)"><svg viewBox="0 0 24 24"><path d="M5 12l5 5 9-10"/></svg></span>
+              <button class="card" aria-expanded="false"><span class="t"><span><b>Оплата ACH $3,060</b><span class="d">поступит за 1–2 дня</span></span><span class="kebab"><svg><use href="#i-kebab"/></svg></span></span>
+              <span class="more"><div><span class="sub"><span>Смета $2,844 + CO $216</span><span>$3,060</span></span><span class="sub"><span>Комиссия ACH</span><span>$5.00</span></span></div></span></button></li>
+            <li><time>12:25</time><span class="dot" style="background:var(--c-pink)"><svg viewBox="0 0 24 24"><path d="M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z"/></svg></span>
+              <button class="card" aria-expanded="false"><span class="t"><span><b>Запрос отзыва отправлен</b><span class="d">Google · SMS</span></span><span class="kebab"><svg><use href="#i-kebab"/></svg></span></span>
+              <span class="more"><div><span class="sub"><span>Напоминание через</span><span>2 дня</span></span></div></span></button></li>
+          </ol>
+        </div>
+        <nav class="tabs" role="tablist" aria-label="Навигация">
+          <button class="tab" role="tab" aria-selected="false"><span class="ti"><svg><use href="#i-home"/></svg></span>Сегодня</button>
+          <button class="tab" role="tab" aria-selected="true"><span class="ti"><svg><use href="#i-plan"/></svg></span>План</button>
+          <button class="tab" role="tab" aria-selected="false"><span class="ti"><svg><use href="#i-map"/></svg></span>Карта</button>
+          <button class="tab" role="tab" aria-selected="false"><span class="ti"><svg><use href="#i-money"/></svg></span>Деньги</button>
+        </nav>
+      </div></div>
+    </div>
+
+    <!-- Screen 3 -->
+    <div class="phone">
+      <p class="cap"><b>03</b> · Маршрут дня</p>
+      <div class="device"><div class="screen map">
+        <div class="island"></div>
+        <div class="status"><span>11:02</span><i aria-hidden="true">●●● <span class="bat"></span></i></div>
+        <div style="position:relative;flex:1">
+          <div class="mapwrap">
+            <svg viewBox="0 0 298 560" preserveAspectRatio="xMidYMin slice" role="img" aria-label="Карта маршрута: 4 остановки">
+              <rect width="298" height="560" fill="#141416"/>
+              <g fill="#1E1E22" stroke="#26262B" stroke-width="1" id="blocks"></g>
+              <g stroke="#2E2E34" stroke-width="2">
+                <path d="M0 180 L298 160" /><path d="M20 0 L80 560" /><path d="M200 0 L270 560"/>
+              </g>
+              <path d="M0 180 L298 160" stroke="#3A3A40" stroke-width="5"/>
+              <text x="226" y="157" fill="#8A8A92" font-size="8" font-family="Sora,sans-serif" transform="rotate(-4 226 157)">SUNSET BLVD</text>
+              <path class="route" pathLength="1" d="M52 370 L52 290 L132 290 L132 210 L222 210 L222 136 L120 136 L120 100"/>
+              <g class="stop done"><circle cx="52" cy="370" r="11"/><text x="52" y="370">1</text></g>
+              <g class="stop done"><circle cx="132" cy="290" r="11"/><text x="132" y="290">2</text></g>
+              <g class="stop"><circle cx="222" cy="136" r="11"/><text x="222" y="136">3</text></g>
+              <g class="stop"><circle cx="120" cy="100" r="11"/><text x="120" y="100">4</text></g>
+              <circle class="me" cx="177" cy="210" r="9" fill="#F2E94E"/>
+              <circle cx="177" cy="210" r="8" fill="#F5F5F0" stroke="#0B0B0C" stroke-width="3"/>
+              <path d="M177 204 l4 9 -4 -2 -4 2z" fill="#0B0B0C"/>
+            </svg>
+          </div>
+          <div class="place"><b>Echo Park</b><small>Sunset Blvd → Lopez, 1514 Lemoyne St</small></div>
+          <div class="sheet">
+            <div class="grab"></div>
+            <div class="stats">
+              <div class="stat"><small>Время</small><b>25:08</b></div>
+              <div class="stat"><small>Расстояние</small><b>18.6<em> mi</em></b></div>
+              <div class="stat next"><small>Следующий</small><b>Lopez 11:30</b></div>
+            </div>
+            <div class="ctrl">
+              <button class="sm" aria-label="Предыдущая остановка"><svg viewBox="0 0 24 24"><path d="M15 5l-7 7 7 7"/></svg></button>
+              <button class="go" id="goBtn" aria-label="Пауза"><svg viewBox="0 0 24 24" id="goIc"><rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/></svg><span id="goTx">Пауза</span></button>
+              <button class="sm" aria-label="Перерисовать маршрут" id="redraw"><svg viewBox="0 0 24 24"><path d="M4 12a8 8 0 0114-5l2 2M20 4v5h-5M20 12a8 8 0 01-14 5l-2-2M4 20v-5h5"/></svg></button>
+            </div>
+          </div>
+        </div>
+        <nav class="tabs" role="tablist" aria-label="Навигация">
+          <button class="tab" role="tab" aria-selected="false"><span class="ti"><svg><use href="#i-home"/></svg></span>Сегодня</button>
+          <button class="tab" role="tab" aria-selected="false"><span class="ti"><svg><use href="#i-plan"/></svg></span>План</button>
+          <button class="tab" role="tab" aria-selected="true"><span class="ti"><svg><use href="#i-map"/></svg></span>Карта</button>
+          <button class="tab" role="tab" aria-selected="false"><span class="ti"><svg><use href="#i-money"/></svg></span>Деньги</button>
+        </nav>
+      </div></div>
+    </div>
+  </section>
+
+  <!-- Desktop strip -->
+  <section class="web" id="jobs" aria-label="Веб-версия: работы">
+    <div class="wbar">
+      <div class="mark" aria-hidden="true">O</div>
+      <div class="wnav" role="tablist" aria-label="Разделы">
+        <button role="tab" aria-selected="true">Работы</button>
+        <button role="tab" aria-selected="false">Сметы</button>
+        <button role="tab" aria-selected="false">Лиды</button>
+        <button role="tab" aria-selected="false">Деньги</button>
+      </div>
+      <div class="wkpi"><span>Неделя<b class="v">$18,940</b></span><span>Футов<b>612′</b></span><span>Ждут<b>$6,150</b></span></div>
+    </div>
+    <div style="overflow-x:auto">
+    <table>
+      <thead><tr><th>Job</th><th>Клиент</th><th class="hide-m">Адрес</th><th class="hide-m">Футы</th><th class="hide-m">Прогресс</th><th>Статус</th><th class="num">Сумма</th></tr></thead>
+      <tbody>
+        <tr><td class="id">0210</td><td>Petrov</td><td class="hide-m"><span class="mut">Silver Lake</span></td><td class="hide-m">148′</td><td class="hide-m"><span class="bar"><i style="width:100%"></i></span></td><td><span class="chip ok">оплачено</span></td><td class="num">$3,060</td></tr>
+        <tr><td class="id">0211</td><td>Lopez</td><td class="hide-m"><span class="mut">Echo Park</span></td><td class="hide-m">92′</td><td class="hide-m"><span class="bar"><i style="width:35%"></i></span></td><td><span class="chip volt">в пути</span></td><td class="num">$2,180</td></tr>
+        <tr><td class="id">0212</td><td>Kim</td><td class="hide-m"><span class="mut">Koreatown</span></td><td class="hide-m">120′</td><td class="hide-m"><span class="bar"><i style="width:10%"></i></span></td><td><span class="chip info">смета 3×</span></td><td class="num">$2,640</td></tr>
+        <tr><td class="id">0207</td><td>Nguyen</td><td class="hide-m"><span class="mut">Pasadena</span></td><td class="hide-m">210′</td><td class="hide-m"><span class="bar"><i style="width:100%"></i></span></td><td><span class="chip warn">ждёт оплаты</span></td><td class="num">$4,320</td></tr>
+        <tr><td class="id">0204</td><td>Haddad</td><td class="hide-m"><span class="mut">Burbank</span></td><td class="hide-m">64′</td><td class="hide-m"><span class="bar"><i style="width:100%"></i></span></td><td><span class="chip bad">просрочено 9 дн</span></td><td class="num">$1,830</td></tr>
+      </tbody>
+    </table>
+    </div>
+  </section>
+
+  <aside class="note" aria-label="Почему этот стиль">
+    <div class="sun" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg></div>
+    <div>
+      <h3>Почему Volt Night работает на крыше</h3>
+      <ul>
+        <li>Жёлтый на почти чёрном ≈ 15:1 — читается под прямым солнцем LA.</li>
+        <li>Один акцент = одно действие: всё жёлтое можно нажать или это главная цифра.</li>
+        <li>Плотные карточки без стекла и размытия — нет «грязи» на бликующем экране.</li>
+        <li>Тёмный фон экономит батарею OLED на 8-часовой смене.</li>
+        <li>Крупные цели 42px+ — попадаешь в перчатках.</li>
+        <li>Цвет таймлайна дублирует иконку и текст — не зависит от восприятия цвета.</li>
+      </ul>
+    </div>
+  </aside>
+</div>
+
+<script>
+(function(){
+  // city blocks
+  var g=document.getElementById('blocks'), ns='http://www.w3.org/2000/svg', xs=[0,62,140,228], ws=[54,70,80,70], ys=[0,48,104,150,196,246,300,354,408,462,516], hs=[40,48,38,40,44,48,48,48,48,48,44];
+  xs.forEach(function(x,i){ys.forEach(function(y,j){
+    var n=(i+j)%3===0?2:1;
+    for(var k=0;k<n;k++){var r=document.createElementNS(ns,'rect');var w=n===2?(ws[i]-6)/2:ws[i];
+      r.setAttribute('x',x+(n===2?k*(w+6):0)+4);r.setAttribute('y',y+(i*7%11)+2);r.setAttribute('width',w);r.setAttribute('height',hs[j]-4);r.setAttribute('rx',3);g.appendChild(r);}
+  });});
+  // day chips
+  document.querySelectorAll('.days').forEach(function(grp){
+    grp.addEventListener('click',function(e){var b=e.target.closest('.day');if(!b)return;
+      grp.querySelectorAll('.day').forEach(function(d){d.setAttribute('aria-pressed',d===b?'true':'false');});});
+  });
+  // tile press spring
+  document.querySelectorAll('.tile').forEach(function(t){t.addEventListener('click',function(){t.classList.add('pop');setTimeout(function(){t.classList.remove('pop');},140);});});
+  // timeline expand
+  document.querySelectorAll('.card').forEach(function(c){c.addEventListener('click',function(){c.setAttribute('aria-expanded',c.getAttribute('aria-expanded')==='true'?'false':'true');});});
+  // tabs
+  document.querySelectorAll('[role=tablist]').forEach(function(list){
+    list.addEventListener('click',function(e){var b=e.target.closest('[role=tab]');if(!b)return;
+      list.querySelectorAll('[role=tab]').forEach(function(t){t.setAttribute('aria-selected',t===b?'true':'false');});});
+  });
+  // route redraw + pause/navigate
+  var route=document.querySelector('.route');
+  document.getElementById('redraw').addEventListener('click',function(){route.style.animation='none';void route.getBoundingClientRect();route.style.animation='';});
+  var go=document.getElementById('goBtn'),ic=document.getElementById('goIc'),tx=document.getElementById('goTx'),paused=false;
+  go.addEventListener('click',function(){paused=!paused;
+    ic.innerHTML=paused?'<path d="M7 4l13 8-13 8z"/>':'<rect x="6" y="5" width="4" height="14" rx="1"/><rect x="14" y="5" width="4" height="14" rx="1"/>';
+    tx.textContent=paused?'Навигация':'Пауза';go.setAttribute('aria-label',tx.textContent);});
+})();
+</script>
