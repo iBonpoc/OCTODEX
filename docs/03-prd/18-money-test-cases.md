@@ -176,6 +176,7 @@ INV-0096 $800.00, оплачено $800.00 картой, возврат $800.00 
 ---
 
 ## I. Изменения модели данных (внести в 04-domain-model v0.3)
+✅ Внесено в 04-domain-model v0.2 (досрочно). `needs_review` внесён как флаг Payment (PRD 09), а не как статус; `returned` — статус Payment.
 - `CustomerCredit`: `customer_id`, `amount_cents`, `source (overpayment / void_transfer / refund_alternative)`, `source_payment_id`, `status (open / applied / refunded)`.
 - `CreditApplication`: `credit_id`, `invoice_id`, `amount_cents`, `applied_at`.
 - `Payment.status`: добавить `returned`, `needs_review`; поле `return_reason`.

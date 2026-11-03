@@ -1,7 +1,7 @@
 # 04. Словарь сущностей (Domain Model)
 
 > Статус: черновик **v0.2**, ноябрь 2026. Источник правды для базы данных, API, типов приложения и инструментов AI-помощника.
-> v0.2: внесены предложения «Изменения модели данных» (раздел 14) из всех 17 PRD (`03-prd/01…17`), дубли сведены, решения основателя от 03.11.2026 отражены везде. Журнал изменений — §13. Открытые решения для основателя — `03-prd/00-decisions-for-founder.md`.
+> v0.2: внесены предложения «Изменения модели данных» из всех PRD (`03-prd/01…17`, раздел 14, и `18-money-test-cases.md` §I), дубли сведены, решения основателя от 03.11.2026 отражены везде. Журнал изменений — §13. Открытые решения для основателя — `03-prd/00-decisions-for-founder.md`.
 > Продукт: **Octo** (рабочее название). Кода пока нет, всё проектируется с нуля.
 > Термины: **сущность** — объект (Клиент, Смета); **поле** — его характеристика (имя, номер, сумма).
 
@@ -390,6 +390,7 @@
 | cost_breakdown | json, вычисляемое | План / факт по категориям: материалы, труд, субподряд, прочее, комиссии платежей |
 | attributed_source_id | → LeadSource, денормализация | Для быстрых отчётов ROI (пересчитывается при смене источника лида) |
 | completed_at, closed_at | timestamp | Метрики «до инвойса» |
+| cancel_reason, cancelled_at | text, timestamp | Отмена работы клиентом (PRD 18) |
 | checklist_template_id | → | |
 
 ### Visit — выезд (конкретное время в календаре)
@@ -479,6 +480,7 @@
 | reminders_paused, reminder_state | bool, json | Напоминания о просрочке |
 | source_estimate_version_id | → EstimateVersion | |
 | credits[] | → Invoice[] | Deposit/progress, зачтённые в финальном строками-кредитами |
+| void_reason, voided_by, voided_at | text, → User, timestamp | Void только при `paid_net = 0` (иначе сначала refund или перенос в кредит клиента) |
 
 ### InvoiceLineItem
 Как EstimateLineItem (снимок цены, `taxable`), плюс `source_type/source_id` (`estimate_line` / `change_order` / `expense` / `recurring_plan` / `credit`) — трассировка и защита от двойного выставления. BOM-строки в инвойс не попадают.
@@ -501,12 +503,17 @@
 | needs_review | bool | Переплата после офлайн-синхронизации |
 | dispute_status | `none`, `open`, `won`, `lost` | Chargeback |
 | offline_created | bool | Записан без сети (PRD 09, 16) |
+| return_reason | text | Причина ACH return / возврата чека банком (PRD 18) |
 
 ### PaymentAttempt — попытка оплаты (новая)
 `invoice_id`, `idempotency_key` (`hash(invoice_id, amount, attempt_no)`), `amount_cents`, `stripe_payment_intent_id`, `expires_at`. Создаётся при открытии экрана оплаты, до появления Payment; повтор возвращает тот же PaymentIntent.
 
 ### Refund
-`payment_id`, `amount_cents`, `reason`, `status`, `approved_by` (только owner/admin), `refund_application_fee bool`.
+`payment_id`, `amount_cents`, `reason`, `status`, `approved_by` (только owner/admin), `refund_application_fee bool`, `platform_fee_refunded_cents`, `allocation` (налог / без налога; по умолчанию пропорционально, PRD 18).
+
+### CustomerCredit / CreditApplication — кредит клиента (PRD 18)
+`CustomerCredit`: `customer_id`, `amount_cents` (> 0; долг всегда живёт в инвойсе), `source` (`overpayment` / `void_transfer` / `refund_alternative`), `source_payment_id`, `status (open / applied / refunded)`.
+`CreditApplication`: `credit_id`, `invoice_id`, `amount_cents`, `applied_at`. Зачёт уменьшает `balance` инвойса (`credits_applied`).
 
 ### Expense — расход
 | Поле | Тип | Описание |
@@ -529,6 +536,7 @@
 | paid_by | `company_card`, `cash`, `employee_reimburse` | |
 | reimbursed_at, reimbursed_by | timestamp, → User | Возмещение сотруднику |
 | idempotency_key, created_offline | text, bool | |
+| transferred_from_job_id | → Job | Перенос расхода с другой работы (PRD 18) |
 
 ### TaxRate — ставка налога (настраивается вручную)
 **Решение основателя:** налог **не считается автоматически**. Это настраиваемое поле, которое пользователь сам применяет или убирает. Никакого определения ставки по ZIP/адресу.
@@ -548,7 +556,15 @@
 - что именно облагается для монтажа в CA, решает пользователь со своим бухгалтером; Octo не даёт налоговых советов.
 
 ### PurchaseOrder — заказ поставщику
-`number (PO-0031)`, `supplier_id`, `job_id` (nullable: заказ на склад), `lines` (← PurchaseOrderLine[]), `status` (§9), `revision int`, `sent_via (email / pdf)`, `sent_at`, `sent_to_email`, `pdf_file_id`, `confirmed_at`, `delivery_date`, `fulfillment` (`delivery` / `pickup`), `branch`, `delivery_address`, `driver_notes`, `source_version_id` (→ EstimateVersion), `source_change_order_id`, `total_cost_cents`, `idempotency_key`. Генерируется из BOM одобренной сметы (уникальность автосозданных: `job_id + supplier_id + source_version_id`).
+`number (PO-0031)`, `supplier_id`, `job_id` (nullable: заказ на склад), `lines` (← PurchaseOrderLine[]), `status` (§9), `revision int`, `sent_via (email / pdf)`, `sent_at`, `sent_to_email`, `pdf_file_id`, `confirmed_at`, `delivery_date`, `fulfillment` (`delivery` / `pickup`), `branch`, `delivery_address`, `driver_notes`, `source_version_id` (→ EstimateVersion), `source_change_order_id`, `total_cost_cents`, `idempotency_key`, `option_id` (→ EstimateOption), `origin` (`draft_estimate` / `approved_estimate` / `manual`), `is_outdated bool`, `sent_before_approval bool`, `rfq_token`. Автоматически генерируется из BOM одобренной сметы (уникальность автосозданных: `job_id + supplier_id + source_version_id`); **вручную может создаваться из черновика сметы** (решение основателя 03.11, PRD 11 PO-US-20…25). До одобрения сметы не входит в committed cost.
+
+### SupplierQuote — ответ поставщика на запрос цены (RFQ), MVP
+`purchase_order_id`, `supplier_id`, `received_at`, `channel (email / upload)`, `raw_file_ids[]`, `status (received → parsed → needs_review → applied / rejected)`, `valid_until`, `delivery_fee_cents`, `total_cents`, `confidence`. Разбирается AI, числа проверяются детерминированно, применяется только по кнопке (PRD 11 PO-US-26…30).
+
+### SupplierQuoteLine
+`quote_id`, `po_line_id?`, `supplier_sku`, `name`, `unit`, `unit_cost_cents`, `qty_available`, `availability (in_stock / backorder / unavailable)`, `available_on`, `is_substitute`, `substitute_for_line_id`, `match_confidence`.
+
+`Supplier.verified_emails[]`: адреса, с которых принимаются ответы поставщика.
 
 ### PurchaseOrderLine — строка заказа (новая, вместо `lines[]` json)
 `po_id`, `supplier_item_id`, `catalog_item_id`, `description`, `attributes` (цвет, gauge, ширина), `bom_qty` (из BOM в единицах каталога), `qty` (в единицах поставщика = `ceil(bom_qty / pack_size)`), `unit`, `unit_cost_cents`, `line_cost_cents`, `received_qty`, `position`.
@@ -704,6 +720,7 @@ offered/accepted/in_progress → cancelled (owner/admin/office, с причин�
 
 ### PurchaseOrder
 ```
+draft → rfq_sent → draft (ответ получен) → sent → confirmed → partially_received → received
 draft → sent → confirmed → partially_received → received
   ↘ cancelled (из draft / sent / confirmed / partially_received)
 ```
@@ -837,4 +854,5 @@ erDiagram
 | 15 AI | AiAction (channel, locale, transcript, context, tier, plan, resolved_entities, assumptions, parent, idempotency, row_versions, undo_*, error_code, counted, pending_offline), Entitlement.limits.ai_daily_cap, Expense.ai_action_id | UsageCounter ai_today/ai_day — дубль с 01; EstimateLineItem — дубль с 05 |
 | 16 Офлайн | Поля синхронизации (§0), **SyncOperation**, **Device**, **SyncConflict**, EstimateApproval (offline, server_decision, rejection_reason), File.upload_status, Property.offline_imagery_ready_at | Payment.offline_created — дубль с 09 |
 | 17 Поддержка | §8a: PlatformRole, KbArticle, SupportTicket, SupportMessage, SupportAccessGrant; AuditLog.actor_type `support` | — |
+| 18 Проверочные примеры денег | CustomerCredit, CreditApplication, Payment.return_reason, Invoice (void_reason/by/at), Refund (allocation, platform_fee_refunded_cents), Job (cancel_reason, cancelled_at), Expense.transferred_from_job_id | Предлагалось в v0.3 — внесено сразу в v0.2. `needs_review` — флаг Payment (как в PRD 09), а не статус; `returned` — уже статус |
 | Решения основателя | TaxRate на документах (tax_enabled/tax_rate_id/снимок), Company.tax_settings; Subcontractor (tax_classification, tin, compliance), SubcontractorAssignment (полная структура), PortalAccess `audience = subcontractor`, Company.subcontractor_settings, роль `subcontractor` в MVP | — |
