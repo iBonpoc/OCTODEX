@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import Constants from "expo-constants";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
+import { useAuth } from "@/cloud/auth";
 import type { Role } from "@/data/types";
 import { languages, useI18n, type Lang } from "@/i18n";
 import { roleHome } from "@/nav/roles";
@@ -16,7 +17,8 @@ import { Card, ListRow, RowView, Screen } from "@/ui/surfaces";
 /** Settings for this device: role, theme, language, offline test switch. */
 export default function More() {
   const { t, lang, setLang } = useI18n();
-  const { role, setRole, online, setOnline, resetDemo } = useStore();
+  const { role, setRole, online, setOnline, resetDemo, mode, companyName, availableRoles, queue, syncError, refresh, loading } = useStore();
+  const auth = useAuth();
   const { pref, setPref } = useTheme();
   const toast = useToast();
   const hints = useHints();
@@ -26,6 +28,43 @@ export default function More() {
   };
   return (
     <Screen title={t("more.title")}>
+      <Card>
+        <T v="heading">{t("account.title")}</T>
+        {mode === "cloud" ? (
+          <>
+            <T v="body" w="semibold">
+              {companyName}
+            </T>
+            <T v="caption" tone="mut">
+              {auth.email}
+            </T>
+            <T v="caption" tone={syncError ? "bad" : queue.length ? "warn" : "ok"}>
+              {syncError ? t("account.error", { msg: syncError }) : queue.length ? t("account.pending", { n: queue.length }) : t("account.synced")}
+            </T>
+            <RowView style={{ flexWrap: "wrap" }}>
+              <Button label={t("account.refresh")} icon="sync" variant="secondary" disabled={loading} onPress={refresh} />
+              <Button label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
+            </RowView>
+          </>
+        ) : auth.session ? (
+          <>
+            <T v="caption" tone="mut">
+              {auth.email} · {t("account.noCompany")}
+            </T>
+            <RowView style={{ flexWrap: "wrap" }}>
+              <Button label={t("company.create")} icon="plus" onPress={() => router.push("/auth/company")} />
+              <Button label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
+            </RowView>
+          </>
+        ) : (
+          <>
+            <T v="caption" tone="mut">
+              {t("account.demo")}
+            </T>
+            <Button label={t("account.signIn")} icon="user" onPress={() => router.push("/auth/sign-in")} />
+          </>
+        )}
+      </Card>
       {role !== "tech" ? (
         <Card onPress={() => router.push("/money")} accessibilityLabel={t("more.money")}>
           <ListRow title={t("more.money")} left={<Icon name="wallet" />} />
@@ -37,11 +76,9 @@ export default function More() {
           full
           value={role}
           onChange={changeRole}
-          items={[
-            { key: "tech", label: t("role.tech") },
-            { key: "dispatcher", label: t("role.dispatcher") },
-            { key: "director", label: t("role.director") },
-          ]}
+          items={(["tech", "dispatcher", "director"] as Role[])
+            .filter((r) => availableRoles.includes(r))
+            .map((r) => ({ key: r, label: t(`role.${r}`) }))}
         />
         <T v="caption" tone="mut">
           {t("role.hint")}
@@ -80,7 +117,9 @@ export default function More() {
           />
         </RowView>
         <Button label={t("more.showHints")} icon="help" variant="secondary" onPress={hints.reset} />
-        <Button label={t("more.resetDemo")} icon="sync" variant="secondary" onPress={() => toast.show(t("more.resetDone"), resetDemo())} />
+        {mode === "demo" ? (
+          <Button label={t("more.resetDemo")} icon="sync" variant="secondary" onPress={() => toast.show(t("more.resetDone"), resetDemo())} />
+        ) : null}
       </Card>
       <View style={{ paddingHorizontal: space[2] }}>
         <T v="caption" tone="mut">
