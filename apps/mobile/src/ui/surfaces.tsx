@@ -42,9 +42,12 @@ export function Card({
   onPress,
   accessibilityLabel,
   inner,
+  containerStyle,
 }: {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  /** layout of the touch target when the card is pressable (flex in a row) */
+  containerStyle?: StyleProp<ViewStyle>;
   /** tints the left edge with a status color (color = status only) */
   status?: StatusName;
   onPress?: () => void;
@@ -71,7 +74,7 @@ export function Card({
     ) : null;
   if (onPress)
     return (
-      <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel} style={[base, style]}>
+      <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={accessibilityLabel} style={[base, style]} containerStyle={containerStyle}>
         {edge}
         {children}
       </Press>

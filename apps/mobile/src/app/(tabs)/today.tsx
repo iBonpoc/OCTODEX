@@ -15,7 +15,7 @@ function Kpi({ label, cents, icon, hint, onPress }: { label: string; cents: numb
   const { money } = useI18n();
   const { c } = useTheme();
   return (
-    <Card style={{ flex: 1, minWidth: 100, padding: space[3] }} onPress={onPress} accessibilityLabel={label}>
+    <Card style={{ padding: space[3], flex: 1 }} containerStyle={{ flex: 1, minWidth: 100 }} onPress={onPress} accessibilityLabel={label}>
       <RowView gap={space[1]}>
         <Icon name={icon} s={14} color={c.mut} />
         <T v="caption" tone="mut">
