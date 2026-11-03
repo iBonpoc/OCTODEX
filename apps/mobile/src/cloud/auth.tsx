@@ -1,6 +1,11 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
+import { Platform } from "react-native";
+import { WEB_APP_URL } from "@/config/backend";
 import { supabase } from "./client";
+
+/** Where email links (confirm / magic link) return. Must be in Supabase Auth → URL Configuration. */
+const redirectTo = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL);
 
 export type DbRole = "owner" | "admin" | "office" | "sales" | "tech" | "subcontractor";
 export interface Membership {
@@ -81,7 +86,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       memberships,
       company: memberships[0] ?? null,
       sendCode: async (email) => {
-        const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true } });
+        const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: true, emailRedirectTo: redirectTo() } });
         return error?.message ?? null;
       },
       verifyCode: async (email, code) => {
@@ -95,7 +100,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return error?.message ?? null;
       },
       signUpPassword: async (email, password, name) => {
-        const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name } } });
+        const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name }, emailRedirectTo: redirectTo() } });
         return error?.message ?? null;
       },
       createCompany: async (name) => {
