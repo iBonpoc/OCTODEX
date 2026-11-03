@@ -11,7 +11,11 @@
       "bundleIdentifier": "com.octodex.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Фото до и после работы прикрепляются к выезду.",
-        "NSPhotoLibraryUsageDescription": "Фото работ прикрепляются к выезду."
+        "NSPhotoLibraryUsageDescription": "Фото работ прикрепляются к выезду.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "config": {
+        "usesNonExemptEncryption": false
       }
     },
     "android": {
