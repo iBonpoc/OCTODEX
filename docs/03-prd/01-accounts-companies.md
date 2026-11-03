@@ -150,7 +150,7 @@
 | Функция | MVP | Запуск | Позже |
 |---|---|---|---|
 | Email-код, Sign in with Apple | ✅ | | Google sign-in (с Android) |
-| Онбординг 6 шагов + чек-лист | ✅ | | Импорт клиентов из Jobber/HCP/CSV (CSV → Запуск) |
+| Онбординг 6 шагов + чек-лист (включая шаг «Налоги» — пресет профиля, `19`) | ✅ | | Импорт клиентов из API Jobber/HCP (импорт CSV/XLSX — MVP, `04` §7.7) |
 | Роли owner/admin/office/tech/**subcontractor** + override | ✅ | | sales |
 | Entitlement, UsageCounter, мягкие лимиты, счётчики | ✅ | | |
 | Stripe Billing: тарифы, модули, пакеты, proration | | ✅ | IAP через RevenueCat (только если Apple заставит) |

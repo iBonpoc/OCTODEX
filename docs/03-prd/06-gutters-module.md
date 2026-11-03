@@ -2,6 +2,7 @@
 
 > Статус: черновик v0.1, ноябрь 2026. Флагманский модуль, срез 3 MVP. Сущности: `Property`, `Drawing`, `DrawingRun`, `DrawingPoint`, `Assembly`, `CatalogItem`, `EstimateVersion` (`../04-domain-model.md` §2–4). Связанные: `04-catalog-suppliers.md` (price book, формулы), `05-estimates.md` (итоги, версии), `11-purchase-orders.md` (PO из BOM).
 > Важно: это **ручной чертёж поверх снимка с известным масштабом**, а не автоизмерение. Автоконтур (Google Solar, AI) — позже (`inputs/gpt-brief-review.md`).
+> **Стандарты расчёта — решение основателя 03.11.2026 (второй пакет)**, все редактируются на уровне компании и на конкретной смете: отходы coil **5%** (можно любое значение, включая 0); hangers **каждые 2 ft**; **3 колена A** на один downspout; высоты этажей по умолчанию **1-й = 10 ft, 2-й = 20 ft, 3-й = 30 ft, 4-й = 40 ft** (таблица компании, переопределение на объекте, своя высота на каждом downspout для коммерческих и высоких зданий; этажи выше 4-го — через свою высоту). Длина downspout = высота + удлинение (настройка). Справочник колен (A/B, 2×3 / 3×4 / круглые) расширяемый: полный список основатель пришлёт позже (`04` §7.5).
 
 ## 1. Назначение
 Подрядчик за 3–5 минут обводит пальцем линии гаттеров на спутниковом снимке дома, ставит downspouts, жмёт «Рассчитать» и получает смету Good/Better/Best, внутренний BOM, cut list для seamless-машины и расход coil по цветам. Это то, что основатель сейчас делает на бумажке: линейные футы, inside/outside углы, downspouts, этажность, guards отдельно.
@@ -46,6 +47,11 @@
 | GUT-US-15 | Как sales, я хочу изменить чертёж после отправки и получить новую версию сметы с разницей |
 | GUT-US-16 | Как tech, я хочу видеть чертёж с размерами, цветами и cut list в карточке работы, в том числе офлайн |
 | GUT-US-17 | Как owner, я хочу, чтобы чертёж сохранялся на объекте и переиспользовался для следующих смет (чистка, guards) |
+| GUT-US-18 | Как owner, я хочу задать в настройках компании таблицу высот этажей (по умолчанию 10 / 20 / 30 / 40 ft) и удлинение downspout, чтобы длины downspouts считались по моей практике |
+| GUT-US-19 | Как sales, я хочу переопределить высоты этажей для конкретного объекта (дом на склоне, высокие потолки), чтобы не править каждый downspout |
+| GUT-US-20 | Как sales, я хочу задать downspout свою высоту (коммерческое здание, 5+ этажей), чтобы длина и палки считались точно |
+| GUT-US-21 | Как sales, я хочу менять на downspout состав колен (по умолчанию 3 × A; например 2 × A + 1 × B, круглые), выбирая из справочника колен |
+| GUT-US-22 | Как owner, я хочу менять константы (отходы, шаг hangers, колена) на конкретной смете, не меняя настройки компании |
 
 ## 5. Критерии приёмки
 **GUT-US-01**
@@ -80,10 +86,29 @@
 - Given сторона крыши определена неверно для всего run, When тап «перевернуть сторону крыши», Then все автоматические углы run инвертируются.
 
 **GUT-US-07**
-- Given режим «Downspout», When тапает рядом с run (≤ 3 ft), Then точка прилипает к run, высота = этаж × 10 ft (константа), размер из пресета варианта, outlet создаётся автоматически.
+- Given режим «Downspout», When тапает рядом с run (≤ 3 ft), Then точка прилипает к run, высота = высота этажа run по таблице (§7.6: объект → компания → 10/20/30/40 ft), длина = высота + `ds_extension_ft`, колена = `default_elbows` (3 × A размера downspout), размер из пресета варианта, outlet создаётся автоматически.
 - Given у свободного конца run нет соседнего run, When run завершён, Then автоматически ставится end cap; у закрытого контура end caps нет.
 - Given run без downspout, When «Рассчитать», Then предупреждение «R2 без водостока», расчёт не блокируется.
 - Given на run больше 40 LF на один downspout, When «Рассчитать», Then совет «добавьте downspout (рекомендуется ≤ 40 LF на один)».
+
+**GUT-US-18**
+- Given настройки компании «Gutters → Высоты этажей», When owner меняет 2-й этаж с 20 на 22 ft, Then новые расчёты используют 22 ft, отправленные сметы не меняются (снимок констант в `calc_inputs`); значение вне 4–80 ft → ошибка с диапазоном.
+- Given `ds_extension_ft = 1`, When downspout 2-го этажа, Then длина 20 + 1 = 21 ft.
+
+**GUT-US-19**
+- Given у объекта `story_heights_override_ft = {1: 12}`, When ставится downspout на run 1-го этажа, Then высота 12 ft (а не 10); в шапке чертежа «высоты этажей: свои для объекта»; 2-й этаж — из таблицы компании (20 ft).
+
+**GUT-US-20**
+- Given downspout, When sales включает «Своя высота» и вводит 46 ft, Then `height_mode = custom`, длина = 46 + `ds_extension_ft`; смена этажа run эту высоту не трогает; значок «своя высота» на точке.
+- Given run с этажом 5+ (нет в таблице), When ставится downspout, Then запрашивается своя высота (без неё «Рассчитать» недоступен для этого downspout).
+
+**GUT-US-21**
+- Given downspout 3×4, When открыть «Колена», Then по умолчанию «3 × A 3×4»; можно изменить количество и добавить другие варианты из справочника, подходящие по `ds_size` (A, B, круглые для round); 0 колен допустимо.
+- Given в каталоге нет колена нужного варианта (например, B для round 4″), When «Рассчитать», Then ошибка «нет позиции Elbow B round 4″» с кнопкой «создать позицию» (`04` §7.3).
+
+**GUT-US-22**
+- Given смета, When owner на вкладке «Расчёт» ставит отходы 0%, Then `calc_inputs.constants_override.coil_waste_pct = 0`, coil считается без запаса (пример D), настройки компании не меняются; значок «константы изменены для этой сметы».
+- Given отходы > 20%, When сохраняет, Then предупреждение «необычно высокие отходы», сохранить можно (допустимо 0–100%).
 
 **GUT-US-08**
 - Given точка fascia repair, When вводит длину 12 ft, Then в смету добавляется строка fascia repair 12 LF во все варианты.
@@ -110,7 +135,7 @@
 - Given `fire_zone` не задан, When открыт объект в MVP, Then поле заполняется вручную (выбор из 4 значений, подсказка со ссылкой на карту CAL FIRE).
 
 **GUT-US-14**
-- Given нет чертежа, When «Быстрый ввод», Then форма: LF по этажам (1/2/3), outside / inside углы, число downspouts, число отдельных runs (для end caps, по умолчанию 2), профиль, цвет, guards (да / LF), tear-off; результат — те же сборки и G/B/B.
+- Given нет чертежа, When «Быстрый ввод», Then форма: LF по этажам (1/2/3/4+), outside / inside углы, число downspouts, число отдельных runs (для end caps, по умолчанию 2), профиль, цвет, guards (да / LF), tear-off; результат — те же сборки и G/B/B.
 - Given быстрый ввод, When открыть cut list, Then доступен только итог coil, без кусков (нет геометрии).
 
 **GUT-US-15**
@@ -126,7 +151,9 @@
 | Экран | Телефон | iPad / веб |
 |---|---|---|
 | Чертёж | Снимок на весь экран, pinch-zoom, нижний тулбар: Run · Downspout · Точка · Выбор · Undo/Redo; верхняя полоса итогов: LF (1/2/3 этаж), углы in/out, downspouts; большая кнопка «Рассчитать» | Apple Pencil рисует, палец двигает карту; боковая панель атрибутов |
-| Атрибуты run (bottom sheet) | Этаж (1/2/3 крупные кнопки), профиль K5/K6/HR, gauge, цвет (свотчи coil компании), guards, tear-off, hanger type, длина и override, «перевернуть сторону крыши», фиксация атрибутов | Панель справа |
+| Атрибуты downspout (bottom sheet) | Размер (2×3 / 3×4 / round), высота: «по этажу (20 ft)» или «своя» (ввод ft-in), удлинение, колена (чипы «3 × A», «+ B», степперы), extension / splash block | Панель справа |
+| Настройки модуля (admin) | Высоты этажей (таблица 1–4 + «добавить этаж»), удлинение downspout, отходы, шаг hangers, колена по умолчанию | То же |
+| Атрибуты run (bottom sheet) | Этаж (1/2/3/4+ крупные кнопки), профиль K5/K6/HR, gauge, цвет (свотчи coil компании), guards, tear-off, hanger type, длина и override, «перевернуть сторону крыши», фиксация атрибутов | Панель справа |
 | Калибровка | Линия + ввод длины (ft / ft-in) | То же |
 | Быстрый ввод | Форма из GUT-US-14, крупные степперы | То же |
 | Результат | Вкладки: Смета G/B/B (переход в редактор `05`), BOM, Cut list, Coil | Три колонки |
@@ -156,44 +183,53 @@
 ### 7.4 End caps, outlets, downspouts
 - `end_caps` = число свободных концов runs (не joint, не закрытый контур), по профилю.
 - `outlets = downspouts` (размер outlet = размер downspout).
-- `downspout_len_i = height_override_i ?? story_i × story_height_ft + ds_extra_ft`.
-- `elbows = Σ elbows_i`, где `elbows_i = 3` по умолчанию (2 сверху для отвода к стене, 1 внизу), правится на точке.
+- Высота downspout (решение основателя): 
+  ```
+  story_height(s) = Property.story_heights_override_ft[s] ?? Company.gutter_settings.story_heights_ft[s] ?? модуль {1:10, 2:20, 3:30, 4:40}
+  height_i        = height_mode_i = custom ? custom_height_ft_i : story_height(story_i)      // этажа нет в таблице (по умолчанию 5+) → только custom
+  downspout_len_i = length_override_ft_i ?? height_i + ds_extension_ft
+  ```
+  Высота = расстояние от карниза данного этажа до земли (до точки слива). `length_override_ft` — значение рулетки, побеждает всё.
+- Колена: `elbows_i` — список `{style, qty}` по умолчанию из `default_elbows` = `[{style: A, qty: 3}]` (2 сверху для отвода к стене, 1 внизу), правится на точке; размер колена = размер downspout. Позиция колена выбирается селектором `component = elbow, elbow_style, ds_size` (`04` §7.5).
 
 ### 7.5 Нормализованные входы сборки (`calc_inputs`)
 ```
 runs[]:       id, label, story, profile, gauge, color, guards, tear_off, hanger_type,
               lf (после округления §7.6), segments_ft[], ends: [end_cap|joint|miter]
 miters[]:     run_id, kind (in/out), angle_deg
-downspouts[]: run_id, size (2x3/3x4), length_ft, elbows, extension
-fascia_lf, property: { stories, roof_type, fire_zone }
-constants:    из Assembly.constants (компания может переопределить)
+downspouts[]: run_id, size (2x3/3x4/round_3/round_4), height_mode (story/custom), height_ft, length_ft,
+              elbows: [{style, qty}], extension
+fascia_lf, property: { stories, roof_type, fire_zone, story_heights_override_ft }
+constants:    Assembly.constants → Company.gutter_settings → constants_override сметы (снимок итоговых значений)
 ```
 Совпадает с `Assembly.inputs` модели (`gutter_lf_by_story`, `downspouts[]`, `miters_in`, `miters_out`, `end_caps`, `guards`, `tear_off`): агрегаты считаются из этого JSON. Быстрый ввод (GUT-US-14) создаёт тот же JSON без `segments_ft`.
 
-### 7.6 Константы (по умолчанию, настраиваются компанией)
-| Константа | По умолч. | Диапазон |
+### 7.6 Константы (по умолчанию, настраиваются компанией и на смете)
+Порядок: значения модуля (`Assembly.constants`) → настройки компании (`Company.gutter_settings`) → переопределение на смете (`calc_inputs.constants_override`). В `calc_inputs` версии сохраняются итоговые значения, поэтому отправленная смета не меняется при правке настроек.
+| Константа | По умолч. (решение основателя 03.11.2026) | Диапазон |
 |---|---|---|
-| `hanger_spacing_ft` | 2.0 (24″) | 1.0–4.0 |
-| `story_height_ft` | 10 | 7–15 |
-| `ds_extra_ft` | 0 | 0–5 |
+| `hanger_spacing_ft` | **2.0** (24″) | 1.0–4.0 |
+| `story_heights_ft` | **{1: 10, 2: 20, 3: 30, 4: 40}** | каждое 4–80 ft, строго возрастают; можно добавить этажи 5+ в таблицу компании |
+| `ds_extension_ft` (было `ds_extra_ft`) | 0 | 0–10 |
 | `ds_stick_ft` | 10 | 10, 20 |
-| `elbows_per_ds` | 3 | 0–6 |
-| `coil_waste_pct` | 5% | 0–20% |
+| `default_elbows` | **[{style: A, qty: 3}]** на downspout | qty 0–10 по каждому стилю |
+| `coil_waste_pct` | **5%** | **0–100%** (0 допустим; > 20% — предупреждение) |
 | `lf_rounding_ft` | 0.5 (вверх, на run) | 0, 0.5, 1 |
 | `joints_per_sealant_tube` | 8 | 4–20 |
 | `lf_per_screw_box` | 150 | 50–500 |
 | `max_lf_per_ds` (совет) | 40 | 20–80 |
 | `min_turn_deg` | 20 | 10–45 |
 | `coil_width_in` | K5 → 11⅞″, K6 → 15″ | по профилю |
+`Property.story_heights_override_ft` переопределяет отдельные этажи для объекта; `custom_height_ft` на downspout — для коммерческих и высоких зданий и для этажей вне таблицы.
 
 ### 7.7 Формулы сборок (на вариант)
 ```
 run_lf_i        = ceil_to(lf_rounding_ft, Σ segments_i)            // 105.5 → 105.5; 148.625 → 149.0
 gutter_lf[p,g]  = Σ run_lf_i по (profile, gauge)                     → видимая строка gut.<p>.<g>
-story_fee_lf[s] = Σ run_lf_i где story = s (s ≥ 2)                    → fee.story2 / fee.story3
+story_fee_lf[s] = Σ run_lf_i где story = s (s ≥ 2)                    → fee.story2 / fee.story3 / fee.story4 (для 4 и выше)
 miters_out/in   = count(miters по kind)                              → miter.out / miter.in
-downspout_lf[z] = Σ length_ft по size z                              → ds.<z>
-elbows          = Σ elbows_i                                         → elbow.ab
+downspout_lf[z] = Σ downspout_len_i по size z (§7.4)                  → ds.<z>
+elbows[st,z]    = Σ qty колен стиля st на downspouts размера z         → elbow.<st>.<z> (селектор по атрибутам)
 tear_off_lf     = Σ run_lf_i где tear_off                             → rem.tearoff
 guards_lf       = Σ run_lf_i где guards (в Best: все runs)            → guard.*
 tile_lf         = Σ run_lf_i где hanger_type = strap_tile             → fee.tile
@@ -205,7 +241,7 @@ outlets[z]      = downspouts по size
 ds_sticks       = Σ ceil(length_ft_i / ds_stick_ft)
 sealant_tubes   = ceil((end_caps + miters_in + miters_out + outlets) / joints_per_sealant_tube)
 screw_boxes     = ceil(Σ gutter_lf / lf_per_screw_box)
-coil_lf[w,g,c]  = ceil(Σ cut_len_k × (1 + coil_waste_pct))  по (ширина, gauge, цвет), см. §7.8
+coil_lf[w,g,c]  = ceil(Σ cut_len_k × (1 + coil_waste_pct))  по (ширина, gauge, цвет), см. §7.8; при 0% = ceil(Σ cut_len_k)
 hr_sections     = Σ ceil(run_lf_i / 10)  для half-round (вместо coil)
 ```
 Пресеты G/B/B (системный `EstimateTemplate` модуля, правится admin):
@@ -223,6 +259,7 @@ hr_sections     = Σ ceil(run_lf_i / 10)  для half-round (вместо coil)
 - Учёт остатков coil на складе — позже.
 
 ### 7.9 Рабочие примеры (становятся тест-кейсами движка)
+> Стандарты основателя (03.11.2026) совпадают с прежними значениями для 1–2 этажей (10 / 20 ft, 2 ft hangers, 5% отходов, 3 колена на downspout), поэтому числа примеров A и B **не меняются**; колена в них — `elbow.a.2x3` / `elbow.a.3x4` (по $6.00, тестовые цены). Себестоимость с налогом при покупке — `18` TX2 (пример A: $859.30 → $898.02). Новые случаи — G8–G10 и примеры C, D.
 **Геометрия**
 | # | Вход | Ожидаемо |
 |---|---|---|
@@ -233,6 +270,9 @@ hr_sections     = Σ ceil(run_lf_i / 10)  для half-round (вместо coil)
 | G5 | Обход дома по часовой, roof_side = right | П-образный run (3 стороны) → 2 outside, 2 end caps; закрытый квадрат → 4 outside, 0 end caps; L-выемка (поворот влево, от крыши) → 1 inside |
 | G6 | Два run 1-го этажа, концы в 1.2 ft | joint: 1 угол, end caps 2 вместо 4 |
 | G7 | Run 148′ 7½″ (148.625) при `lf_rounding_ft = 0.5` | run_lf = 149.0 |
+| G8 | Объект с `story_heights_override_ft = {1: 12}`; downspout на run 1-го этажа; downspout на run 2-го этажа | 12 ft (2 палки по 10 ft) и 20 ft (таблица компании) |
+| G9 | Run 5-го этажа, downspout без своей высоты | Ошибка «задайте высоту downspout: этажа 5 нет в таблице», расчёт этого downspout недоступен |
+| G10 | Downspout 3×4, колена изменены на 2 × A + 1 × B | elbow.a.3x4 = 2, elbow.b.3x4 = 1 |
 
 **Пример A — ranch, 1 этаж, один вариант «как нарисовано» (K6 .032, 3×4, Musket Brown)**
 Входы: R1 прямой 60 ft; R2 L-образный 50 + 30 ft (1 outside); downspouts: 2 на R1, 2 на R2; без guards и tear-off; comp shingle.
@@ -251,6 +291,8 @@ hr_sections     = Σ ceil(run_lf_i / 10)  для half-round (вместо coil)
 | Cut list | R1-a 60′0″, R2-a 50′0″, R2-b 30′0″ | 3 куска |
 Смета (цены стартового price book): gutter 140 × $12.00 = $1,680.00; downspouts 40 × $11.00 = $440.00; outside miter 1 × $25.00 = $25.00; elbows 12 × $6.00 = $72.00. **Total $2,217.00.**
 Себестоимость: работа gutter 140 × $2.90 = $406.00; работа DS 40 × $1.80 = $72.00; miter $6.00; elbows $16.80; hangers 70 × $0.85 = $59.50; end caps $4.80; outlets $8.40; sealant $15.00; screws $9.00; coil 147 × $1.40 = $205.80; DS sticks 4 × $14.00 = $56.00. **Cost $859.30, margin $1,357.70 (61.2%).**
+
+**Пример A0 — как A, но отходы 0% на этой смете (`constants_override`)**: coil 15″ .032 Musket Brown = ceil(140 × 1.00) = **140 LF** (вместо 147); себестоимость −7 × $1.40 = −$9.80 → **$849.50**, total не меняется ($2,217.00).
 
 **Пример B — 2 этажа, tile roof, tear-off, fire zone very_high, G/B/B**
 Входы: R1 2-й этаж, U-образный 30 + 45.5 + 30 ft (2 outside), Musket Brown, 3 downspouts по 20 ft; R2 гараж 1-й этаж 24 ft, White, 1 downspout 10 ft; tear-off на всех; roof_type `tile_clay`; fire_zone `very_high`.
@@ -275,6 +317,19 @@ hr_sections     = Σ ceil(run_lf_i / 10)  для half-round (вместо coil)
 | Tile roof 129.5 LF × $1.50 | $194.25 | $194.25 | $194.25 |
 | Micro-mesh негорючие 129.5 LF × $14.00 | add-on +$1,813.00 | add-on +$1,813.00 | $1,813.00 |
 | **Total (без add-on)** | **$2,816.75** | **$3,215.75** | **$5,028.75** |
+
+**Пример C — коммерческое здание, 3 этажа + своя высота (K6 .032, 3×4, White), `ds_extension_ft = 1` в настройках компании**
+Входы: R1 3-й этаж, прямой 80 ft; downspouts: 2 по этажу (высота 30 ft из таблицы), 1 «своя высота» 46 ft (пристройка 5 этажей); колена по умолчанию 3 × A.
+| Величина | Расчёт | Итог |
+|---|---|---|
+| Gutter LF / story 3 | 80 | 80 |
+| Длины downspouts | 30 + 1, 30 + 1, 46 + 1 | 31 + 31 + 47 = **109 LF** |
+| DS sticks | ceil(31/10) × 2 + ceil(47/10) = 4 × 2 + 5 | **13** |
+| Колена elbow.a.3x4 | 3 × 3 | **9** |
+| End caps / outlets / hangers | 2 / 3 / ceil(80/2) | 2 / 3 / **40** |
+| Sealant / screws | ceil((2 + 3) / 8) / ceil(80/150) | 1 / 1 |
+| Coil 15″ .032 White | ceil(80 × 1.05) | **84 LF** |
+Смета: gutter 80 × $12.00 = $960.00; надбавка 3-го этажа 80 × $6.00 = $480.00; downspouts 109 × $11.00 = $1,199.00; колена 9 × $6.00 = $54.00. **Total $2,693.00.** Надбавка этажа считается по этажу run, своя высота downspout на надбавку не влияет (настройка «надбавка за высоту downspout» — открытый вопрос §15).
 
 ### 7.10 Специфика Лос-Анджелеса
 - **Tile roof:** strap hangers, надбавка за LF; tile — частый случай, поэтому `roof_type` спрашивается при первом чертеже, если не задан.
@@ -342,18 +397,23 @@ AI не меняет геометрию и количества молча и н
 | Drawing | + `calibration json` (p1, p2, known_ft), `zoom`, `image_w_px`, `image_h_px`, `imagery_date`, `provider_attribution`, `building_center (x,y)` | Масштаб, атрибуция, эвристика углов |
 | DrawingRun | + `label`, `roof_side` (`left`/`right`), `hanger_type` (`hidden`/`strap_tile`/`spike`), `closed bool`, `segment_overrides json` (override по сегментам), `locked_attrs text[]` | Углы, tile, override сегментов, пресеты |
 | DrawingPoint | + `is_auto bool`, `user_overridden bool`, `angle_deg`, `segment_index`; для downspout в `attributes`: `size`, `length_override_ft`, `elbows`, `extension` | Авто/ручные точки |
+| DrawingPoint (downspout, v0.3) | `attributes`: + `height_mode` (`story`/`custom`), `custom_height_ft`; `elbows` → список `[{style, qty}]` | Своя высота, состав колен |
+| Property (v0.3) | + `story_heights_override_ft json` ({этаж: ft}) | Высоты этажей объекта |
+| Company (v0.3) | + `gutter_settings json`: `story_heights_ft`, `ds_extension_ft`, `coil_waste_pct`, `hanger_spacing_ft`, `default_elbows`, прочие константы §7.6 | Стандарты компании |
+| EstimateVersion.calc_inputs (v0.3) | + `constants_override` и итоговые значения констант | Константы на смете |
+| CatalogItem.attributes (v0.3) | + `component`, `elbow_style`, `angle_deg`; `ds_size` + `round_3`, `round_4` | Справочник колен |
 | CatalogItem.attributes | стандартизировать ключи: `profile`, `gauge`, `color`, `coil_width_in`, `ds_size`, `noncombustible`, `hanger_type` | Селекторы сборок |
 | EstimateVersion | `calc_inputs`, `calc_outputs` (BOM, cut list, coil) — см. `05` §14 | Воспроизводимость, вид для бригады |
 | EstimateTemplate | системный шаблон «Gutters G/B/B» с `input_overrides` (см. `05` §14) | Пресеты |
 | Company / Assembly | константы §7.6 в `Assembly.constants` | Настройка |
 
-✅ Внесено в 04-domain-model v0.2 (Drawing, DrawingRun, DrawingPoint, ключи `CatalogItem.attributes`; `EstimateTemplate`, `calc_inputs/outputs` и `Assembly.constants` — общие с PRD 04/05).
+✅ Внесено в 04-domain-model v0.2 (Drawing, DrawingRun, DrawingPoint, ключи `CatalogItem.attributes`; `EstimateTemplate`, `calc_inputs/outputs` и `Assembly.constants` — общие с PRD 04/05). Строки v0.3 (стандарты основателя 03.11.2026) внесены в 04-domain-model v0.3.
 
 ## 15. Открытые вопросы
 > Сводный список с рекомендациями — `00-decisions-for-founder.md`.
 
 1. **Лицензия снимков:** допускают ли условия Google Maps Platform / Mapbox трассировку для замера, хранение снимка в объекте и офлайн-кэш? Если нет — Nearmap/другой провайдер или только «своё фото». Нужна юридическая проверка до среза 3.
-2. Реальные константы основателя: шаг hangers (24″ или 18″ для 6″?), высота этажа, waste coil, сколько elbows на downspout, нужен ли запас на концы в cut list.
+2. ✅ Константы основателя (03.11.2026): hangers каждые 2 ft, высоты этажей 10/20/30/40 ft, отходы 5% (любое значение, включая 0), 3 колена A на downspout. Остаётся: нужен ли запас на концы в cut list; полный список колен (основатель пришлёт); нужна ли надбавка за высоту downspout со своей высотой (пример C).
 3. Максимальная длина куска и expansion joints на длинных runs (> 40 ft): учитывать в cut list?
 4. Как основатель считает надбавку за этаж: за LF гаттера, за downspout LF или фиксом?
 5. Пресеты G/B/B: совпадают ли Good/Better/Best с тем, что он реально предлагает? Нужен ли вариант с guards screen (дешевле) вместо mesh?

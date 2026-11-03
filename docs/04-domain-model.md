@@ -1,6 +1,7 @@
 # 04. Словарь сущностей (Domain Model)
 
-> Статус: черновик **v0.2**, ноябрь 2026. Источник правды для базы данных, API, типов приложения и инструментов AI-помощника.
+> Статус: черновик **v0.3**, ноябрь 2026. Источник правды для базы данных, API, типов приложения и инструментов AI-помощника.
+> v0.3: решения основателя от 03.11.2026 (второй пакет) — тестовый price book, массовый импорт/экспорт (`ImportJob`, `ImportRow`, `ImportMapping` вместо `PriceListImport`), AI-скан прайса и ценника в MVP, цены поставщиков и каталога без налога, налог при покупке у поставщика, налоговые профили (`TaxProfile`, PRD `03-prd/19-taxes.md`), стандарты расчёта гаттеров (высоты этажей, колена, отходы). Журнал — §13.2.
 > v0.2: внесены предложения «Изменения модели данных» из всех PRD (`03-prd/01…17`, раздел 14, и `18-money-test-cases.md` §I), дубли сведены, решения основателя от 03.11.2026 отражены везде. Журнал изменений — §13. Открытые решения для основателя — `03-prd/00-decisions-for-founder.md`.
 > Продукт: **Octo** (рабочее название). Кода пока нет, всё проектируется с нуля.
 > Термины: **сущность** — объект (Клиент, Смета); **поле** — его характеристика (имя, номер, сумма).
@@ -17,6 +18,7 @@
 | Поля синхронизации | У всех синхронизируемых записей: `created_at_device` (время действия на телефоне), `synced_at` (когда принял сервер), `origin_device_id` → Device (PRD 16) |
 | Деньги | Целые **центы** (`amount_cents: int`) + `currency` (по умолчанию `USD`). Никаких float. Округление везде одно: **round half up** |
 | Проценты и ставки | Базисные пункты `*_bps` (950 = 9.50%) |
+| Цены и налог (v0.3) | Все цены и себестоимость в каталоге и у поставщиков хранятся **без налога**. Налог клиенту — по режиму `TaxProfile` документа, налог при покупке — по ставке поставщика (§6, PRD 19) |
 | Длины | Десятичные **футы** с точностью до 1/8″ (`length_ft: numeric(10,3)`). Отображение: 148′ 6″ |
 | Время | Хранится в UTC. У компании `timezone` (по умолчанию `America/Los_Angeles`) |
 | Номера документов | Человеческий номер на уровне компании: `EST-0148`, `INV-0093`, `JOB-0210`, `PO-0031`, `CO-0004`, `RCT-0001` (квитанция об оплате (из анализа внешней CRM)). Присваивает **только сервер** (офлайн — «черновик» без номера) |
@@ -58,7 +60,8 @@
 | trade_modules | ← Entitlement | | Включённые модули |
 | stripe_account_id | text | нет | Stripe Connect |
 | numbering | json | да | Префиксы и счётчики документов |
-| tax_settings | json | да | Налог по умолчанию (см. TaxRate, §6): `default_enabled` (выкл по умолчанию), `default_tax_rate_id`, `default_taxable_scope` (`all` / `materials_only` / `none` — какие новые позиции каталога помечаются `taxable`), `deposit_tax_mode` (`in_final` по умолчанию / `proportional`) |
+| tax_settings | json | да | (v0.3) `default_tax_profile_id` → TaxProfile (ровно один профиль по умолчанию), `default_purchase_tax_rate_id` → TaxRate (налог при покупке, если у поставщика не задан; заглушка «LA area 10.25% — проверить»). Поля v0.2 `default_enabled`, `default_tax_rate_id`, `default_taxable_scope`, `deposit_tax_mode` **переехали в TaxProfile** (§6) |
+| gutter_settings | json | | (v0.3) Стандарты компании для модуля Gutters, переопределяют `Assembly.constants`: `story_heights_ft` ({1:10, 2:20, 3:30, 4:40}, можно добавить 5+), `ds_extension_ft` (0), `coil_waste_pct` (5%, допустимо 0–100%), `hanger_spacing_ft` (2), `default_elbows` ([{style: A, qty: 3}]) и прочие константы PRD 06 §7.6 |
 | inbound_lead_address | text, unique | да | `leads-<slug>@in.octo.app` (пересылка писем маркетплейсов, PRD 02) |
 | lead_default_assignee_id | → User | нет | Кому назначать новые лиды (по умолчанию owner) |
 | lead_response_alert_min | int | | Порог «таймер красный», по умолчанию 5 |
@@ -170,6 +173,7 @@
 | geo | lat, lng | да (геокодинг) | Для карты и спутника |
 | geo_source | `geocoder`, `manual` | | Ручная правка пина не перезаписывается геокодером |
 | stories | int | нет | Этажность (влияет на смету) |
+| story_heights_override_ft | json | нет | (v0.3) Свои высоты этажей объекта `{этаж: ft}` (дом на склоне, высокие потолки); перекрывает `Company.gutter_settings.story_heights_ft` (PRD 06 §7.4) |
 | roof_type | `comp_shingle`, `tile_clay`, `tile_concrete`, `metal`, `flat`, `other` | нет | В LA часто tile |
 | fire_zone | `none`, `moderate`, `high`, `very_high` | нет | Из данных CAL FIRE (FHSZ) |
 | fire_zone_source, fire_zone_checked_at | `manual`/`calfire`, date | | MVP — вручную |
@@ -265,13 +269,15 @@
 | unit | `LF`, `SF`, `SQ` (кровельный сквер), `ea`, `hr`, `day`, `flat` | |
 | pricing_mode | `fixed`, `cost_plus` | |
 | markup_bps | int | Для `cost_plus`: цена = round_half_up(cost × (1 + markup)) |
-| unit_price_cents | int | Цена клиенту |
-| unit_cost_cents | int | Себестоимость (скрыта от tech и sub) |
-| taxable | bool | Значение по умолчанию для флажка `taxable` строки документа. **Сам по себе налог не включает** — налог считается, только если он включён на документе (§6 TaxRate). Для новых позиций ставится по `Company.tax_settings.default_taxable_scope` |
+| unit_price_cents | int | Цена клиенту, **без налога** |
+| unit_cost_cents | int | Себестоимость, **без налога** (скрыта от tech и sub) |
+| unit_material_cost_cents | int | (v0.3) Часть себестоимости, купленная у поставщика (≤ `unit_cost_cents`) — база налога при покупке. По умолчанию: `material` — вся себестоимость, `labor`/`fee` — 0, `service` — задаётся (PRD 19 §7.6) |
+| is_placeholder_price | bool | (v0.3) Тестовая цена стартового price book (бейдж «тестовая»); снимается при правке цены/себестоимости, импорте, скане или кнопке «Цена проверена» |
+| taxable | bool | Значение по умолчанию для флажка `taxable` строки документа. **Сам по себе налог не включает** — налог считается, только если режим профиля документа его предусматривает и он включён на документе (§6). Для новых позиций ставится по `default_taxable_scope` профиля по умолчанию |
 | category_id | → ServiceCategory | |
 | supplier_item_id | → SupplierItem | Основной поставщик материала |
 | module | `core`, `gutters`, `roofing`… | Какой модуль поставил позицию |
-| attributes | json | Стандартные ключи: `profile`, `gauge`, `color`, `coil_width_in`, `ds_size`, `noncombustible`, `hanger_type` (селекторы сборок, PRD 06) |
+| attributes | json | Стандартные ключи: `profile`, `gauge`, `color`, `coil_width_in`, `ds_size` (`2x3`, `3x4`, `round_3`, `round_4`…), `noncombustible`, `hanger_type`; (v0.3) справочник колен: `component` (`elbow`…), `elbow_style` (`A`, `B`…), `angle_deg` (селекторы сборок, PRD 06). Новые варианты колен добавляются позициями каталога (импорт), без изменения формул |
 | is_active | bool | Архив вместо удаления |
 | seed_key, seed_version, is_user_modified | text, int, bool | Обновление price book модуля без потери правок пользователя |
 
@@ -293,13 +299,36 @@
 `catalog_item_id` **или** `item_selector json` (выбор по атрибутам: `kind = gutter, profile = $profile, gauge = $gauge`; не нашёл → ошибка расчёта, без подстановки похожего), `quantity_formula` (безопасное выражение, например `ceil(gutter_lf / hanger_spacing_ft)`), `condition` (например `guards == true`), `client_visible` (видна клиенту или только во внутреннем BOM), `group` (раздел сметы), `position`. Формулы вычисляются **детерминированно** (decimal) одним движком на телефоне и на сервере, у движка есть `engine_version`. AI формулы не вычисляет и цены не придумывает.
 
 ### Supplier — поставщик
-`name`, `contact`, `email_for_orders`, `phone`, `account_number`, `branches[]` (структура: `name`, `address`, `phone`, `email`), `delivery_notes`, `payment_terms` (`cod`, `prepaid`, `net_15`, `net_30`, `net_60`, `custom`; печатается в PO) (из анализа внешней CRM), `is_active`.
+`name`, `contact`, `email_for_orders`, `phone`, `account_number`, `purchase_tax_rate_id` → TaxRate (v0.3: налог при покупке по умолчанию; новая запись — из `Company.tax_settings.default_purchase_tax_rate_id`, заглушка «LA area 10.25% — проверить»), `branches[]` (структура: `name`, `address`, `phone`, `email`, `purchase_tax_rate_id?` — своя ставка филиала, например Santa Monica), `delivery_notes`, `payment_terms` (`cod`, `prepaid`, `net_15`, `net_30`, `net_60`, `custom`; печатается в PO) (из анализа внешней CRM), `is_active`.
 
 ### SupplierItem — позиция в прайсе поставщика
-`supplier_id`, `supplier_sku` (уникален в рамках поставщика), `name`, `unit` (текст поставщика: roll, box, lb, stick), `cost_cents`, `pack_size` (сколько **единиц каталога** в одной единице поставщика: коробка 50 hangers → 50), `valid_from`, `valid_to` (текущая = `valid_to IS NULL`; смена цены = новая запись), `source_import_id`.
+`supplier_id`, `supplier_sku` (уникален в рамках поставщика), `name`, `unit` (текст поставщика: roll, box, lb, stick), `cost_cents` (**без налога**, v0.3), `pack_size` (сколько **единиц каталога** в одной единице поставщика: коробка 50 hangers → 50), `valid_from`, `valid_to` (текущая = `valid_to IS NULL`; смена цены = новая запись), `price_source` (v0.3: `manual`, `import_file`, `ai_scan`, `shelf_tag`, `rfq_quote`, `ai_command`), `import_job_id` → ImportJob (v0.3, вместо `source_import_id`).
 
-### PriceListImport — загрузка прайса (CSV/XLSX; AI-скан фото/PDF — после MVP)
-`supplier_id`, `file_id`, `file_kind` (`photo`/`pdf`/`csv`/`xlsx`), `status` (§9), `parsed_rows json` (по схеме: `supplier_sku, name, unit_text, cost, pack_size, confidence по полям, page, bbox, класс строки new/price_up/price_down/unchanged/unmatched/low_confidence`), `confidence`, `summary json` (N обновлено, M новых, позиции ниже порога маржи), `ai_action_id`, `applied_at`, `applied_by`. Пользователь проверяет распознанные строки перед применением; применение идемпотентно по `id`.
+### ImportJob — массовый импорт и обновление цен (v0.3, вместо PriceListImport)
+Один конвейер для всех источников: файл, AI-скан прайса, ценник, команда помощника, ответ поставщика на RFQ (PRD 04 §7.6–7.7).
+| Поле | Тип | Описание |
+|---|---|---|
+| target | `supplier_prices`, `catalog`, `customers`, `estimate_lines`, `estimates_archive` | Что импортируется |
+| source_kind | `csv`, `xlsx`, `xml`, `json`, `photo`, `pdf`, `screenshot`, `shelf_tag`, `rfq_quote`, `ai_command` | Откуда |
+| supplier_id | → Supplier, нет | Для `supplier_prices` |
+| estimate_version_id | → EstimateVersion, нет | Для `estimate_lines` (только черновик) |
+| file_id, file_sha256 | → File, text | Исходный файл; хэш — повторная загрузка того же файла |
+| mapping_id | → ImportMapping, нет | Шаблон сопоставления |
+| supplier_quote_id | → SupplierQuote, нет | Для `rfq_quote` |
+| status | §9 | |
+| counts | json | По классам: new / changed / unchanged / unmatched / error (для клиентов: new / update / duplicate / error) |
+| detected_tax | json | Итоги документа (`subtotal`, `tax`, `rate_bps`) и сравнение со ставкой поставщика (PRD 19 §7.10) |
+| summary | json | N обновлено, M новых, cost-plus с новой ценой, позиции ниже порога маржи, черновики с изменённой себестоимостью |
+| ai_action_id | → AiAction, нет | Если распознавал AI или запустил помощник |
+| applied_at, applied_by, undone_at, undone_by, undo_until | | Применение и отмена всего импорта (30 дней) |
+| idempotency_key | text | Применение идемпотентно по `id` |
+Лимиты: до 5,000 строк (`estimate_lines` — 500), 10 МБ для файлов данных, 25 МБ / 50 страниц для фото/PDF; один активный `applying` на компанию и цель.
+
+### ImportRow — строка импорта (v0.3)
+`job_id`, `row_no`, `raw json` (исходные ячейки / распознанный фрагмент: `page`, `bbox`), `parsed json` (по схеме цели; для прайса: `supplier_sku, name, unit_text, pack_size, cost_cents (без налога), price_includes_tax, confidence по полям`), `class` (`new` / `price_up` / `price_down` / `unchanged` / `unmatched` / `low_confidence` / `error`; для клиентов `update` / `duplicate`), `confidence`, `match_entity`, `match_id`, `selected bool`, `error`, `before json`, `after json` (что изменено при применении — для отмены).
+
+### ImportMapping — шаблон сопоставления колонок (v0.3)
+`company_id`, `supplier_id?` (шаблон поставщика; пусто — шаблон компании), `target`, `format`, `header_signature` (узнавание файла), `sheet` / `record_path` (лист XLSX / путь к повторяющемуся элементу XML/JSON), `columns json` (колонка → поле), `units json` (единица поставщика → `unit` + `pack_size`), `prices_include_tax bool`, `decimal_format`, `defaults json`, `sku_aliases json` (их SKU → наша позиция, копятся от ручных сопоставлений), `last_used_at`.
 
 ---
 
@@ -320,10 +349,10 @@
 | version | int | Чертёж версионируется вместе со сметой |
 
 ### DrawingRun — линия гаттера
-`drawing_id`, `label`, `points[] (x,y)`, `closed bool`, `length_ft` (вычисленная, можно переопределить рулеткой: `length_override_ft`), `segment_overrides json` (override длины по сегментам), `story`, `roof_side` (`left`/`right`), `profile` (K5, K6, HR5, HR6, box7), `material`, `gauge`, `color`, `hanger_type` (`hidden`/`strap_tile`/`spike`), `guards bool`, `tear_off bool`, `locked_attrs text[]` (атрибуты, которые пресеты G/B/B не меняют).
+`drawing_id`, `label`, `points[] (x,y)`, `closed bool`, `length_ft` (вычисленная, можно переопределить рулеткой: `length_override_ft`), `segment_overrides json` (override длины по сегментам), `story` (int ≥ 1; этажи вне таблицы высот — только со своей высотой downspout), `roof_side` (`left`/`right`), `profile` (K5, K6, HR5, HR6, box7), `material`, `gauge`, `color`, `hanger_type` (`hidden`/`strap_tile`/`spike`), `guards bool`, `tear_off bool`, `locked_attrs text[]` (атрибуты, которые пресеты G/B/B не меняют).
 
 ### DrawingPoint — точка на чертеже
-`drawing_id`, `kind` (`downspout`, `end_cap_left`, `end_cap_right`, `outlet`, `miter_inside`, `miter_outside`, `fascia_repair`, `tile_hanger_zone`, `note`), `x, y`, `run_id`, `segment_index`, `angle_deg`, `is_auto bool`, `user_overridden bool`, `attributes` (для downspout: `size` 2×3/3×4, высота, `length_override_ft`, `elbows`, `extension`).
+`drawing_id`, `kind` (`downspout`, `end_cap_left`, `end_cap_right`, `outlet`, `miter_inside`, `miter_outside`, `fascia_repair`, `tile_hanger_zone`, `note`), `x, y`, `run_id`, `segment_index`, `angle_deg`, `is_auto bool`, `user_overridden bool`, `attributes` (для downspout: `size` 2×3/3×4/round, высота, `length_override_ft`, `elbows`, `extension`; v0.3: `height_mode` (`story` / `custom`), `custom_height_ft`, `elbows` = список `[{style, qty}]`, по умолчанию `[{A, 3}]`; длина = `length_override_ft ?? (custom_height_ft | высота этажа) + ds_extension_ft`, PRD 06 §7.4).
 Углы вычисляются автоматически по поворотам линий, пользователь может их поправить.
 
 ### Estimate — смета (контейнер)
@@ -340,7 +369,7 @@
 | owner_user_id | → User | | Продавец (для комиссии) |
 | viewed_count, last_viewed_at | вычисляемые | | «Открыл 3 раза» (открытия сотрудниками не считаются) |
 | declined_reason | enum (`price`, `chose_competitor`, `postponed`, `other`) + текст | при `declined` | |
-| created_via | `manual`, `template`, `drawing`, `copy`, `ai`, `map_nearby`, `portal` | | Атрибуция (например, деньги из режима карты «Рядом», PRD 08) |
+| created_via | `manual`, `template`, `drawing`, `copy`, `ai`, `map_nearby`, `portal`, `import` | | Атрибуция (например, деньги из режима карты «Рядом», PRD 08). `import` (v0.3) — архив смет из файла: одна заблокированная версия, только чтение, без портала, не входит в выручку |
 
 ### EstimateVersion — версия сметы
 Отправленная версия **не редактируется**. Любое изменение создаёт новую версию.
@@ -353,13 +382,14 @@
 | deposit_rule | json | % или сумма, когда вносится; CA-лимит |
 | tax_enabled | bool | Налог вкл/выкл на документе (по умолчанию из `Company.tax_settings.default_enabled`) |
 | tax_rate_id, tax_rate_bps | → TaxRate, int (снимок) | Выбранная ставка; снимок ставки, чтобы изменение TaxRate не меняло отправленные сметы |
+| tax_profile_id, tax_mode, include_purchase_tax_in_cost | → TaxProfile, enum (снимок), bool (снимок) | (v0.3) Налоговый профиль документа; по умолчанию профиль компании, меняется на черновике (PRD 19) |
 | totals | json, вычисляемое | По каждому варианту: subtotal, discount, tax, total, cost, margin |
 | locked_at, sent_at | timestamp | Блокировка при отправке (проверка в API и триггер БД) |
 | content_hash | text | SHA-256 канонического JSON видимой клиенту части + PDF |
 | pdf_file_id | → File | |
 | engine_version | text | Версия движка расчёта |
-| calc_inputs, calc_outputs | json | Входы сборок; выходы: BOM, cut list, coil по цветам (вид для бригады) |
-| source | `scratch`, `template`, `drawing`, `ai`, `copy` | Происхождение версии |
+| calc_inputs, calc_outputs | json | Входы сборок (v0.3: + `constants_override` сметы и итоговые значения констант — высоты этажей, отходы, колена); выходы: BOM, cut list, coil по цветам (вид для бригады) |
+| source | `scratch`, `template`, `drawing`, `ai`, `copy`, `import` | Происхождение версии |
 | template_id, copied_from_version_id | → EstimateTemplate, → EstimateVersion | |
 | created_by_ai_action_id | → AiAction | нет | Если создана помощником |
 
@@ -381,12 +411,13 @@
 | is_override | bool | Количество/позиция изменены вручную или AI поверх сборки |
 | is_assumption | bool | Значение предположено AI (подсветка до ручной проверки) |
 | unit | enum | |
-| unit_price_cents, unit_cost_cents | int | Цена копируется в момент добавления (снимок), чтобы изменение каталога не меняло старые сметы |
+| unit_price_cents, unit_cost_cents | int | Цена копируется в момент добавления (снимок), чтобы изменение каталога не меняло старые сметы. Без налога; в режиме `tax_inclusive_display` `unit_price_cents` строки — цена **с налогом**, как видит клиент (PRD 19 §7.5) |
+| unit_material_cost_cents, purchase_tax_bps | int, int (снимки) | (v0.3) Материальная часть себестоимости и ставка налога при покупке поставщика на дату версии |
 | taxable | bool | Облагается ли строка, **если** налог включён на документе. По умолчанию из `CatalogItem.taxable` |
 | is_optional | bool | Клиент может отметить сам (add-on) |
 | client_visible | bool | Внутренние строки (BOM) не видны клиенту и всегда с ценой 0 |
 | line_total_cents | int, вычисляемое | `round(quantity × unit_price)` |
-| line_cost_cents | int, вычисляемое | `round(quantity × unit_cost)` |
+| line_cost_cents | int, вычисляемое | `round(quantity × (unit_cost + [include_purchase_tax_in_cost] × unit_material_cost × purchase_tax_bps / 10000))` (v0.3, PRD 19 §7.6) |
 
 ### EstimateTemplate — шаблон сметы (новая)
 `company_id` (null = системный шаблон модуля), `name` («Чистка гаттеров», «Guards only», «Gutters G/B/B»), `module`, `options[]` (`name`, `is_recommended`, `input_overrides json` — пресеты G/B/B для движка, `lines`), `intro/scope/terms/exclusions`, `deposit_rule`, `is_system`. Цены при создании сметы берутся из **текущего** каталога.
@@ -395,7 +426,7 @@
 `version_id`, `option_id` (выбранный вариант), `selected_optional_items[]`, `signer_name`, `signer_email`, `signature_file_id`, `signed_at`, `ip`, `user_agent`, `locale`, `channel (portal / in_person / ai_recorded / office_recorded)` (`office_recorded` — одобрение со слов клиента, без подписи: обязательна `office_note`, при сумме выше порога CA для home improvement — предупреждение «нужна подпись» (из анализа внешней CRM)), `signature_method (draw / type)` (из анализа внешней CRM), `document_hash` (= `content_hash` версии), `consent_text_version` (ESIGN/UETA), `rescission_ends_at` (CA: право отказа 3/5 рабочих дней), `deposit_payment_id`, `offline bool` (подпись на устройстве без сети — приходит как заявка), `server_decision` (`accepted`/`rejected`), `rejection_reason`.
 
 ### ChangeOrder — доп. работы во время выполнения
-`job_id`, `number` (CO-0004), `reason`, `lines[]` (как LineItem, тот же движок), `tax_enabled`, `tax_rate_id`, `tax_rate_bps` (по умолчанию как в одобренной версии сметы), `status (draft → sent → approved / declined)`, `approval` (как EstimateApproval), `amount_cents` (может быть < 0), `cost_cents` (→ плановая себестоимость работы), `invoice_id` (в какой инвойс вошёл). После одобрения добавляется к финальному инвойсу работы.
+`job_id`, `number` (CO-0004), `reason`, `lines[]` (как LineItem, тот же движок), `tax_enabled`, `tax_rate_id`, `tax_rate_bps`, `tax_profile_id`, `tax_mode`, `include_purchase_tax_in_cost` (по умолчанию как в одобренной версии сметы), `status (draft → sent → approved / declined)`, `approval` (как EstimateApproval), `amount_cents` (может быть < 0), `cost_cents` (→ плановая себестоимость работы), `invoice_id` (в какой инвойс вошёл). После одобрения добавляется к финальному инвойсу работы.
 
 ---
 
@@ -500,8 +531,9 @@
 | payment_status | `unpaid`, `partially_paid`, `paid`, `refunded` (вычисляемый из платежей) | Отдельно от статуса документа; `overdue` — вычисляемый флаг |
 | due_date | date | |
 | lines | ← InvoiceLineItem[] | Как LineItem сметы |
-| tax_enabled, tax_rate_id, tax_rate_bps | bool, → TaxRate, int (снимок) | Налог вручную на документе; для deposit/final — по умолчанию из одобренной версии сметы, для standalone/recurring — из настроек компании |
-| totals | subtotal, tax, total, paid, balance | |
+| tax_enabled, tax_rate_id, tax_rate_bps | bool, → TaxRate, int (снимок) | Налог вручную на документе; для deposit/final — по умолчанию из одобренной версии сметы, для standalone/recurring — из профиля компании по умолчанию |
+| tax_profile_id, tax_mode, include_purchase_tax_in_cost | → TaxProfile, enum, bool (снимки) | (v0.3) Режим налога документа (PRD 19) |
+| totals | subtotal, tax, total, paid, balance; `net_ex_tax` (v0.3, для `tax_inclusive_display`) | |
 | revision | int | Правка отправленного неоплаченного инвойса = новая ревизия (старый PDF сохраняется) |
 | sent_at, viewed_at | timestamp | |
 | reminders_paused, reminder_state | bool, json | Напоминания о просрочке |
@@ -538,7 +570,7 @@
 `invoice_id`, `idempotency_key` (`hash(invoice_id, amount, attempt_no)`), `amount_cents`, `stripe_payment_intent_id`, `expires_at`. Создаётся при открытии экрана оплаты, до появления Payment; повтор возвращает тот же PaymentIntent.
 
 ### Refund
-`payment_id`, `amount_cents`, `reason`, `status`, `approved_by` (только owner/admin), `refund_application_fee bool`, `platform_fee_refunded_cents`, `allocation` (налог / без налога; по умолчанию пропорционально, PRD 18).
+`payment_id`, `amount_cents`, `reason`, `status`, `approved_by` (только owner/admin), `refund_application_fee bool`, `platform_fee_refunded_cents`, `allocation` (налог / без налога; v0.3: `method` `proportional` / `by_line` / `manual`, `tax_cents`, `net_cents`; по умолчанию — по режиму документа: пропорционально для `added_on_top` и `tax_inclusive_display`, налоговая часть 0 для `included_in_price` и `exempt`; PRD 18 §K, PRD 19 §7.9).
 
 ### CustomerCredit / CreditApplication — кредит клиента (PRD 18)
 `CustomerCredit`: `customer_id`, `amount_cents` (> 0; долг всегда живёт в инвойсе), `source` (`overpayment` / `void_transfer` / `refund_alternative`), `source_payment_id`, `status (open / applied / refunded)`.
@@ -551,7 +583,7 @@
 | vendor | text | Home Depot, ABC Supply |
 | document_number | text | Номер чека/счёта поставщика: поиск дублей и сверка с PO (из анализа внешней CRM) |
 | supplier_id | → Supplier, нет | Если это счёт известного поставщика |
-| amount_cents, tax_cents | int | `amount` включает sales tax чека; может быть < 0 (возврат в магазин) |
+| amount_cents, tax_cents | int | `amount` включает налог чека; может быть < 0 (возврат в магазин). `tax_cents` хранится всегда отдельно: при `include_purchase_tax_in_cost = false` факт материалов = `amount − tax_cents` (PRD 10, 19) |
 | category | `materials`, `fuel`, `tools`, `dump_fee`, `subcontractor`, `marketing`, `other` | `subcontractor` — только для разового исполнителя **без** наряда (иначе затраты берутся из SubcontractorAssignment, без двойного счёта) |
 | job_id, customer_id | → | нет | «Это на Петра Ивановича» |
 | purchase_order_id | → PurchaseOrder | нет | Счёт поставщика по PO: PO уходит из обязательств в факт (PRD 10, 11) |
@@ -568,25 +600,43 @@
 | idempotency_key, created_offline | text, bool | |
 | transferred_from_job_id | → Job | Перенос расхода с другой работы (PRD 18) |
 
-### TaxRate — ставка налога (настраивается вручную)
-**Решение основателя:** налог **не считается автоматически**. Это настраиваемое поле, которое пользователь сам применяет или убирает. Никакого определения ставки по ZIP/адресу.
+### TaxProfile — налоговый профиль (v0.3, PRD 19)
+**Решение основателя:** налог **не считается автоматически** и не определяется по адресу. Профиль — набор настроек, который пользователь выбирает для компании (один по умолчанию) и при необходимости меняет на документе.
 | Поле | Тип | Описание |
 |---|---|---|
-| name | text | «LA County 9.5%», «Materials only» |
-| rate_bp | int | Ставка в базисных пунктах (950 = 9.50%) |
-| is_default | bool | Подставляется в новые документы, если в настройках включено «налог по умолчанию» |
-| active | bool | |
+| name | text | «California contractor (lump sum)», «Retail materials sale» |
+| mode | `included_in_price`, `added_on_top`, `tax_inclusive_display`, `exempt` | Как налог клиенту появляется на документе (PRD 19 §7.2) |
+| default_sales_rate_id | → TaxRate | Ставка продаж по умолчанию (для `added_on_top`, `tax_inclusive_display`) |
+| default_enabled | bool | Включать налог на новых документах; по умолчанию **false**, меняет только пользователь |
+| default_taxable_scope | `all` / `materials_only` / `none` | Флажок `taxable` новых позиций каталога |
+| deposit_tax_mode | `in_final` (по умолчанию) / `proportional` | Налог в депозите (PRD 19 §7.8) |
+| include_purchase_tax_in_cost | bool | «Учитывать налог при покупке в себестоимости», по умолчанию **true** |
+| is_default, is_active | bool | Ровно один `is_default` на компанию (частичный уникальный индекс); архив вместо удаления |
+| preset_key | text, нет | `ca_contractor_lump_sum`, `retail_materials`, `texas`, `mexico_iva_incl`, `no_tax` |
 
-Как применяется:
-- на уровне **документа** (версия сметы и при необходимости отдельный вариант, инвойс, change order): переключатель «Налог вкл/выкл» (`tax_enabled`) и выбор ставки `tax_rate_id`; ставка копируется снимком `tax_rate_bps`;
-- на уровне **позиции**: флажок `taxable` (например, облагать только материалы, не работу);
-- `tax_cents = round((Σ line_total(taxable) − доля скидки на облагаемую часть) × rate)`, считается **только если налог включён на документе**; иначе 0, даже если строки помечены `taxable`;
+### TaxRate — ставка налога (настраивается вручную; расширена в v0.3)
+| Поле | Тип | Описание |
+|---|---|---|
+| name | text | «LA County 9.75%», «LA area 10.25% (purchase)», «IVA 16%» |
+| rate_bps | int | Ставка в базисных пунктах (950 = 9.50%). В v0.2 называлось `rate_bp` |
+| kind | `sales` / `purchase` / `both` | Для налога клиенту, для налога при покупке или для обоих |
+| country, state, county, city, district_note | text | Регион — справочно; ставку по адресу Octo не подбирает |
+| effective_from, effective_to | date | Даты действия; изменение ставки = новая запись |
+| is_placeholder | bool | Тестовая ставка «проверить» (все ставки пресетов) |
+| source_note | text | Откуда ставка (ссылка, «от CPA») |
+| is_default, active | bool | `is_default` v0.2 заменён на `TaxProfile.default_sales_rate_id`; `active` — архив |
+
+Как применяется (PRD 19 §7):
+- на уровне **документа** (версия сметы и при необходимости вариант, инвойс, change order): профиль `tax_profile_id` (снимок `tax_mode`), переключатель «Налог вкл/выкл» (`tax_enabled`, только для режимов с налогом клиенту) и выбор ставки `tax_rate_id`; ставка копируется снимком `tax_rate_bps`;
+- на уровне **позиции**: флажок `taxable` (например, облагать только материалы, не работу); хранится всегда, даже когда режим его не использует;
+- налог: `added_on_top` — `round((Σ taxable − доля скидки) × rate)`; `tax_inclusive_display` — `round((Σ taxable − доля скидки) × rate / (1 + rate))` из цены с налогом; `included_in_price`, `exempt` — 0; считается **только если налог включён на документе**; округление — один раз на вариант;
+- **налог при покупке**: ставка филиала / поставщика (`Supplier.purchase_tax_rate_id`) → `Company.tax_settings.default_purchase_tax_rate_id`; входит в `line_cost` по `unit_material_cost_cents`, если `include_purchase_tax_in_cost`;
 - в инвойсе налог можно изменить, пока он `draft`; после отправки — только новой ревизией (пока нет оплат) или void;
-- в настройках компании (`Company.tax_settings`): «налог по умолчанию: выкл / вкл со ставкой X» и «что облагается по умолчанию: всё / только материалы / ничего»;
-- что именно облагается для монтажа в CA, решает пользователь со своим бухгалтером; Octo не даёт налоговых советов.
+- смена профиля компании не меняет отправленные документы; черновики — по кнопке с diff;
+- что именно облагается для монтажа в CA, решает пользователь со своим CPA (исследование — `docs/legal/`); Octo не даёт налоговых советов.
 
 ### PurchaseOrder — заказ поставщику
-`number (PO-0031)`, `supplier_id`, `job_id` (nullable: заказ на склад), `lines` (← PurchaseOrderLine[]), `status` (§9), `revision int`, `sent_via (email / pdf)`, `sent_at`, `sent_to_email`, `pdf_file_id`, `confirmed_at`, `delivery_date`, `fulfillment` (`delivery` / `pickup`), `branch`, `delivery_address`, `driver_notes`, `source_version_id` (→ EstimateVersion), `source_change_order_id`, `total_cost_cents`, `tax_cents` и `delivery_fee_cents` (налог и доставка поставщика — часть себестоимости работы) (из анализа внешней CRM), `supplier_reference` (номер заказа у поставщика, спрашивают при самовывозе) (из анализа внешней CRM), `idempotency_key`, `option_id` (→ EstimateOption), `origin` (`draft_estimate` / `approved_estimate` / `manual`), `is_outdated bool`, `sent_before_approval bool`, `rfq_token`. Автоматически генерируется из BOM одобренной сметы (уникальность автосозданных: `job_id + supplier_id + source_version_id`); **вручную может создаваться из черновика сметы** (решение основателя 03.11, PRD 11 PO-US-20…25). До одобрения сметы не входит в committed cost.
+`number (PO-0031)`, `supplier_id`, `job_id` (nullable: заказ на склад), `lines` (← PurchaseOrderLine[]), `status` (§9), `revision int`, `sent_via (email / pdf)`, `sent_at`, `sent_to_email`, `pdf_file_id`, `confirmed_at`, `delivery_date`, `fulfillment` (`delivery` / `pickup`), `branch`, `delivery_address`, `driver_notes`, `source_version_id` (→ EstimateVersion), `source_change_order_id`, `total_cost_cents` (без налога), `tax_cents` и `delivery_fee_cents` (налог и доставка поставщика — часть себестоимости работы; v0.3: `tax_cents` по умолчанию = `round(total × purchase_tax_bps)` филиала/поставщика, правится по счёту; в обязательства — если `include_purchase_tax_in_cost`) (из анализа внешней CRM), `supplier_reference` (номер заказа у поставщика, спрашивают при самовывозе) (из анализа внешней CRM), `idempotency_key`, `option_id` (→ EstimateOption), `origin` (`draft_estimate` / `approved_estimate` / `manual`), `is_outdated bool`, `sent_before_approval bool`, `rfq_token`. Автоматически генерируется из BOM одобренной сметы (уникальность автосозданных: `job_id + supplier_id + source_version_id`); **вручную может создаваться из черновика сметы** (решение основателя 03.11, PRD 11 PO-US-20…25). До одобрения сметы не входит в committed cost.
 
 ### SupplierQuote — ответ поставщика на запрос цены (RFQ), MVP
 `purchase_order_id`, `supplier_id`, `received_at`, `channel (email / upload)`, `raw_file_ids[]`, `status (received → parsed → needs_review → applied / rejected)`, `valid_until`, `delivery_fee_cents`, `total_cents`, `confidence`. Разбирается AI, числа проверяются детерминированно, применяется только по кнопке (PRD 11 PO-US-26…30).
@@ -672,7 +722,7 @@
 `UsageCounter`: `company_id`, `period`, `ai_actions_used`, `ai_actions_today` + `ai_day` (суточный потолок), `sms_segments_used`, `sms_segments_inbound` (себестоимость), `emails_sent`, `ai_cost_cents`.
 
 ### DataExport (новая)
-`company_id`, `requested_by`, `scope` (сущности), `status (queued → building → ready / failed / expired)`, `file_id`, `expires_at` (7 дней; после отмены подписки экспорт доступен 90 дней).
+`company_id`, `requested_by`, `scope` (сущности), `format` (v0.3: `csv` / `xlsx` / `pdf_zip` / `zip`), `filter json` (v0.3), `status (queued → building → ready / failed / expired)`, `file_id`, `expires_at` (7 дней; после отмены подписки экспорт доступен 90 дней). До 5,000 строк / 500 PDF — сразу, больше — фоновой задачей (PRD 04 §7.7.6).
 
 ### File
 `storage_key`, `mime`, `size`, `kind (photo / receipt / signature / drawing / document)`, `subject_type/id`, `job_id`, `visit_id`, `stage` (`before` / `during` / `after` / `other`), `client_visible bool` (по умолчанию true для before/after), `public_gallery bool` (публикация в витрине разрешена владельцем), `taken_at`, `geo`, `uploaded_offline bool`, `upload_status` (`local` / `uploading` / `uploaded` / `failed`).
@@ -762,8 +812,10 @@ draft → sent → confirmed → partially_received → received
 ```
 - Ревизия (`revision + 1`) не меняет статус; `confirmed` после ревизии возвращается в `sent`. `received` отменить нельзя.
 
-### PriceListImport
-`uploaded → parsing → review → applied` / `failed` / `cancelled` (CSV/XLSX сразу в `review`).
+### ImportJob (v0.3, вместо PriceListImport)
+`uploaded → parsing → mapping → review → applying → applied → undone` / `failed` / `cancelled`.
+- Файлы данных (CSV/XLSX/XML/JSON) — без AI: `uploaded → mapping` (шаблон узнан → сразу `review`); фото/PDF/скриншот/ценник/RFQ — через `parsing` (AI).
+- `applied → undone` — отмена всего импорта (≤ 30 дней; записи, изменённые после импорта, — по выбору пользователя). Документы со снимками цен не меняются.
 
 ### Referral
 `lead_created → reward_due → reward_paid` / `void` (лид lost, дубль, уже был клиентом).
@@ -792,6 +844,13 @@ erDiagram
   CompanyGroupMember }o--|| Company : member
   Company ||--o{ Customer : owns
   Company ||--o{ TaxRate : defines
+  Company ||--o{ TaxProfile : defines
+  TaxProfile }o--o| TaxRate : default_rate
+  Supplier }o--o| TaxRate : purchase_tax
+  Company ||--o{ ImportJob : imports
+  ImportJob ||--o{ ImportRow : rows
+  ImportJob }o--o| ImportMapping : mapped_by
+  Supplier ||--o{ ImportMapping : templates
   Customer ||--o{ Contact : has
   Customer ||--o{ Property : owns
   Property ||--o{ PropertyContact : has
@@ -805,6 +864,8 @@ erDiagram
   Property ||--o{ Estimate : "N смет"
   Estimate ||--o{ EstimateVersion : versions
   EstimateVersion }o--o| TaxRate : taxed_by
+  EstimateVersion }o--o| TaxProfile : tax_profile
+  Invoice }o--o| TaxProfile : tax_profile
   EstimateVersion ||--o{ EstimateOption : options
   EstimateOption ||--o{ EstimateLineItem : lines
   EstimateVersion ||--o| EstimateApproval : approved_by
@@ -858,6 +919,8 @@ erDiagram
 | Навигация по приложению (текстом и тапом, словарь команд) | ✅ на устройстве, без сети и без лимита |
 | Голосовая навигация | MVP в сети; офлайн — только где iOS распознаёт речь на устройстве для языка, иначе позже |
 | Отправка клиенту, оплата картой, сложные команды AI | требуют сети (ставятся в очередь или недоступны) |
+| Налоговые профили, ставки, ставки поставщиков | чтение (движок считает налог и себестоимость офлайн) |
+| Импорт/экспорт, AI-скан прайса и ценника | только онлайн; фото прайса/ценника без сети сохраняется и распознаётся при появлении сети |
 | Ссылка наряда для субподрядчика без входа | только онлайн (веб) |
 
 Конфликты: поля без конфликта сливаются автоматически. Документы с деньгами (отправленные сметы, инвойсы, платежи) меняются только на сервере. При конфликте в черновике показываем обе версии и предлагаем выбрать (`SyncConflict`).
@@ -865,7 +928,7 @@ erDiagram
 ---
 
 ## 12. Открытые вопросы
-1. ✅ Налог: ручной, настраиваемый (TaxRate + переключатель на документе + `taxable` на позиции). Какую ставку и базу использовать, решает пользователь со своим бухгалтером.
+1. ✅ Налог: ручной, настраиваемый (TaxRate + переключатель на документе + `taxable` на позиции). v0.3: налоговые профили с 4 режимами, налог при покупке в себестоимости, цены без налога (PRD 19). Какой профиль, ставку и базу использовать, решает пользователь со своим CPA (исследование — `docs/legal/`).
 2. ✅ Субподрядчики: нужны в MVP (Subcontractor, SubcontractorAssignment, SubcontractorPayment, ссылка наряда через PortalAccess).
 3. ✅ Несколько объектов у клиента и несколько работ на объекте: часто. «Объекты» — отдельный раздел.
 4. ✅ Финансирование: **не в MVP**. Когда появится — у нас храним только статус заявки, сумму, id лендера и показанные раскрытия (снимок), без кредитных данных клиента; «от $X/мес» — только из ответа лендера.
@@ -873,7 +936,20 @@ erDiagram
 
 ---
 
-## 13. Журнал изменений v0.2 (что внесено из PRD)
+## 13. Журнал изменений
+
+### 13.2 v0.3 — решения основателя 03.11.2026 (второй пакет)
+| Решение / PRD | Внесено | Не внесено / как решено |
+|---|---|---|
+| 1. Тестовые цены (PRD 04 §7.5) | `CatalogItem.is_placeholder_price`; предупреждение при отправке сметы с тестовыми ценами (PRD 05) | Реальный прайс основателя (Г1) больше не блокирует MVP |
+| 2. Массовый импорт/экспорт — MVP (PRD 04 §7.7) | **ImportJob** (вместо `PriceListImport`: цели `supplier_prices` / `catalog` / `customers` / `estimate_lines` / `estimates_archive`, источники CSV/XLSX/XML/JSON/фото/PDF/скриншот/ценник/RFQ/AI-команда, отмена), **ImportRow** (diff, before/after), **ImportMapping** (шаблоны поставщика, `sku_aliases`); статусы ImportJob §9; `DataExport.format/filter`; `Estimate.created_via` и `EstimateVersion.source` + `import`; `SupplierItem.import_job_id` (вместо `source_import_id`) | Автоимпорт по расписанию, API Jobber/HCP — позже |
+| 3. AI-скан прайса и ценника — MVP (PRD 04 §7.6, PRD 15) | `ImportJob.source_kind` (`photo`, `pdf`, `screenshot`, `shelf_tag`, `ai_command`, `rfq_quote`), `ImportJob.ai_action_id`, `SupplierItem.price_source`; ответы RFQ (PRD 11) идут в тот же diff (`ImportJob.supplier_quote_id`) | Batch API — только по выбору для > 20 страниц (интерактивный скан синхронный) |
+| 4. Цены без налога, налог при покупке у поставщика (PRD 19 §7.6, §7.10) | §0 правило; `Supplier.purchase_tax_rate_id`, `branches[].purchase_tax_rate_id`; `CatalogItem.unit_material_cost_cents`; `EstimateLineItem.unit_material_cost_cents`, `purchase_tax_bps` (снимки), формула `line_cost`; `ImportJob.detected_tax`; `PurchaseOrder.tax_cents` по ставке поставщика | — |
+| 5. Налоговые профили (PRD 19) | **TaxProfile** (4 режима, пресеты, `include_purchase_tax_in_cost`, `deposit_tax_mode`, `default_taxable_scope`, `default_enabled`); TaxRate (+ `kind`, регион, `effective_from/to`, `is_placeholder`, `source_note`; `rate_bp` → `rate_bps`); `Company.tax_settings` → `default_tax_profile_id`, `default_purchase_tax_rate_id`; снимки `tax_profile_id`, `tax_mode`, `include_purchase_tax_in_cost` на EstimateVersion, ChangeOrder, Invoice; `Invoice.totals.net_ex_tax`; `Refund.allocation.method/tax_cents/net_cents` | Несколько ставок на одном документе, валюта MXN, CFDI — позже |
+| 6. Стандарты гаттеров (PRD 06 §7.4, §7.6) | `Company.gutter_settings` (высоты этажей 10/20/30/40, удлинение, отходы 5% с диапазоном 0–100%, hangers 2 ft, колена 3 × A); `Property.story_heights_override_ft`; DrawingPoint downspout: `height_mode`, `custom_height_ft`, `elbows[{style, qty}]`; `calc_inputs.constants_override`; ключи `CatalogItem.attributes` `component`, `elbow_style`, `angle_deg`, `ds_size` round | Полный список колен — от основателя (Г8), структура уже принимает любые варианты |
+| 7. Письма лидов | Без изменений | Г3 остаётся |
+
+### 13.1 v0.2 (что внесено из PRD)
 
 | PRD | Внесено | Не внесено / как решено |
 |---|---|---|
