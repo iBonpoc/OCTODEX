@@ -77,7 +77,7 @@ export default function ClientScreen() {
               <RowView gap={space[1]}>
                 <Icon name="home2" s={16} color={col.mut} />
                 <T v="heading" style={{ flex: 1 }} numberOfLines={1}>
-                  {p.address}
+                  {p.address || p.city}
                 </T>
               </RowView>
               <T v="caption" tone="mut">
