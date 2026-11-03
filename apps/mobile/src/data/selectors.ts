@@ -21,3 +21,8 @@ export function minutesSince(iso: string): number {
 export function daysSince(iso: string): number {
   return Math.max(0, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000));
 }
+
+/** What the customer owes now = unpaid part of their invoices (balance is derived, never stored). */
+export function customerBalance(db: DB, customerId: string): number {
+  return db.invoices.filter((i) => i.customerId === customerId).reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0);
+}

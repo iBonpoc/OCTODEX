@@ -40,6 +40,7 @@ interface StoreCtx {
   addLead: (l: Omit<Lead, "id" | "status" | "receivedAt">) => Undo;
   addEstimate: (e: Omit<Estimate, "id">) => Undo;
   sendEstimate: (id: ID) => Undo;
+  payInvoice: (id: ID, method: PaymentMethod) => Undo;
   signEstimate: (id: ID, path: string) => Undo;
   payDeposit: (id: ID, method: PaymentMethod) => Undo;
 }
@@ -193,6 +194,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })),
       assignVisit: (visitId, techId) => mutate("visit.assign", (d) => patchVisit(d, visitId, (v) => ({ ...v, techId }))),
       addEstimate: (e) => mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id: uid("e") }] })),
+      payInvoice: (id, method) =>
+        mutate("invoice.pay", (d) => ({
+          ...d,
+          invoices: d.invoices.map((i) => (i.id === id ? { ...i, paidCents: i.totalCents, paidAt: new Date().toISOString(), method } : i)),
+        })),
       sendEstimate: (id) =>
         mutate("estimate.send", (d) => ({
           ...d,
@@ -237,4 +243,4 @@ export function useStore(): StoreCtx {
   return v;
 }
 
-export { isToday, visitContext, minutesSince, daysSince } from "./selectors";
+export { isToday, visitContext, minutesSince, daysSince, customerBalance } from "./selectors";

@@ -1,7 +1,7 @@
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, type StatusName } from "@octo/design-tokens";
-import { useStore } from "@/data/store";
+import { customerBalance, useStore } from "@/data/store";
 import type { EstimateStatus, JobStatus } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -49,8 +49,8 @@ export default function ClientScreen() {
             <T v="caption" tone="mut">
               {t("client.balance")}
             </T>
-            <T v="title" tabular tone={c.balanceCents > 0 ? "warn" : "ink"}>
-              {money(c.balanceCents)}
+            <T v="title" tabular tone={customerBalance(db, c.id) > 0 ? "warn" : "ink"}>
+              {money(customerBalance(db, c.id))}
             </T>
           </View>
           <View style={{ alignItems: "flex-end" }}>

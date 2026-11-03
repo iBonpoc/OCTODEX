@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { useStore } from "@/data/store";
+import { customerBalance, useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { Avatar, StatusChip, TextField } from "@/ui/controls";
 import { Card, Divider, Empty, ListRow, Screen } from "@/ui/surfaces";
@@ -42,7 +42,7 @@ export default function Clients() {
                   title={c.name}
                   subtitle={`${props[0]?.address ?? ""}${props.length > 1 ? ` · ${t("clients.properties", { n: props.length })}` : ""}`}
                   left={<Avatar initials={initials(c.name)} />}
-                  right={c.balanceCents > 0 ? <StatusChip status="warn" label={money(c.balanceCents)} /> : undefined}
+                  right={customerBalance(db, c.id) > 0 ? <StatusChip status="warn" label={money(customerBalance(db, c.id))} /> : undefined}
                   onPress={() => router.push(`/client/${c.id}`)}
                 />
               </View>

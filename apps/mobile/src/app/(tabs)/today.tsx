@@ -11,11 +11,11 @@ import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T, type IconKey } from "@/ui/primitives";
 import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
-function Kpi({ label, cents, icon, hint }: { label: string; cents: number; icon: IconKey; hint?: string }) {
+function Kpi({ label, cents, icon, hint, onPress }: { label: string; cents: number; icon: IconKey; hint?: string; onPress?: () => void }) {
   const { money } = useI18n();
   const { c } = useTheme();
   return (
-    <Card style={{ flex: 1, minWidth: 140 }}>
+    <Card style={{ flex: 1, minWidth: 140 }} onPress={onPress} accessibilityLabel={label}>
       <RowView gap={space[1]}>
         <Icon name={icon} s={14} color={c.mut} />
         <T v="caption" tone="mut">
@@ -48,8 +48,8 @@ export default function Today() {
     <Screen title={t("today.title")} help={t("help.today")} subtitle={day(new Date().toISOString())}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[3] }}>
         <Kpi label={t("today.signed")} cents={signed} icon="signature" />
-        <Kpi label={t("today.received")} cents={received} icon="wallet" />
-        <Kpi label={t("today.awaiting")} cents={awaiting} icon="invoice" />
+        <Kpi label={t("today.received")} cents={received} icon="wallet" onPress={() => router.push("/money")} />
+        <Kpi label={t("today.awaiting")} cents={awaiting} icon="invoice" onPress={() => router.push("/money")} />
       </View>
       <Grid>
         <View style={{ gap: space[2] }}>
@@ -67,7 +67,7 @@ export default function Today() {
                     title={it.name}
                     subtitle={t(it.label, it.params)}
                     right={<StatusChip status={it.status} label={t(it.chip, it.params)} />}
-                    onPress={() => router.navigate(it.kind === "lead" ? "/inbox" : "/triage")}
+                    onPress={() => router.navigate(it.kind === "lead" ? "/inbox" : it.kind === "overdue" ? "/money" : "/triage")}
                   />
                 </View>
               ))

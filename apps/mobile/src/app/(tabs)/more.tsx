@@ -8,9 +8,9 @@ import { languages, useI18n, type Lang } from "@/i18n";
 import { roleHome } from "@/nav/roles";
 import { useTheme, type ThemePref } from "@/theme/ThemeProvider";
 import { Button, Segmented, Toggle } from "@/ui/controls";
-import { T } from "@/ui/primitives";
+import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, RowView, Screen } from "@/ui/surfaces";
+import { Card, ListRow, RowView, Screen } from "@/ui/surfaces";
 
 /** Settings for this device: role, theme, language, offline test switch. */
 export default function More() {
@@ -24,6 +24,11 @@ export default function More() {
   };
   return (
     <Screen title={t("more.title")}>
+      {role !== "tech" ? (
+        <Card onPress={() => router.push("/money")} accessibilityLabel={t("more.money")}>
+          <ListRow title={t("more.money")} left={<Icon name="wallet" />} />
+        </Card>
+      ) : null}
       <Card>
         <T v="heading">{t("more.role")}</T>
         <Segmented<Role>

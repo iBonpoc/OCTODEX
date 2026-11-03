@@ -235,6 +235,18 @@ export const ru = {
   "est.depositToast": "Депозит {amount} записан, работа создана",
   "est.noLines": "Позиции не сохранены в этой смете",
   "est.detail": "Смета",
+  "money.title": "Деньги",
+  "money.overdue": "Просрочено",
+  "money.awaiting": "Ждёт оплаты",
+  "money.paid": "Оплачено",
+  "money.receive": "Принять оплату",
+  "money.remind": "Напомнить",
+  "money.due": "Срок {date}",
+  "money.paidOn": "Оплачено {date}",
+  "money.deposit": "Депозит",
+  "money.empty": "Счетов нет",
+  "help.money": "Все счета: просроченные сверху. Примите оплату в один шаг или отправьте напоминание. Карта через Stripe появится в волне 4.",
+  "more.money": "Деньги и счета",
 } as const;
 
 export type DictKey = keyof typeof ru;
