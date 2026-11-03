@@ -63,7 +63,7 @@ export default function Plan() {
                   {m.name}
                 </T>
                 <T v="caption" tone="mut">
-                  {vs.length ? t("visits.count", { n: vs.length }) : t("plan.free")}
+                  {vs.length ? t("plan.visits", { n: vs.length }) : t("plan.free")}
                 </T>
               </RowView>
               {vs.length === 0 ? (

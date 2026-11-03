@@ -108,6 +108,7 @@ export const ru = {
   "plan.assign": "Назначить",
   "plan.assignTo": "Кому назначить",
   "plan.sub": "субподрядчик",
+  "plan.visits": "Выездов: {n}",
   "plan.free": "Свободен",
 
   "today.title": "Сегодня",
@@ -209,6 +210,17 @@ export const ru = {
   "est.empty": "Укажите длину гаттеров",
   "est.new": "Новая смета",
   "est.ft": "фт",
+  "lead.title": "Новый лид",
+  "lead.name": "Имя",
+  "lead.phone": "Телефон",
+  "lead.address": "Адрес",
+  "lead.city": "Город",
+  "lead.source": "Откуда пришёл",
+  "lead.message": "Что нужно клиенту",
+  "lead.save": "Сохранить лид",
+  "lead.saved": "Лид добавлен: {name}",
+  "lead.need": "Нужны имя и телефон",
+  "toast.bookedTomorrow": "Осмотр завтра в 10:00, назначьте мастера: {name}",
 } as const;
 
 export type DictKey = keyof typeof ru;

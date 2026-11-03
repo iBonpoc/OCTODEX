@@ -81,6 +81,7 @@ export interface Lead {
   name: string;
   phone: string;
   city: string;
+  address?: string;
   source: LeadSource;
   receivedAt: string;
   message: string;

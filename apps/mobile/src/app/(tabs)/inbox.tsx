@@ -53,7 +53,7 @@ export default function Inbox() {
               label={t("inbox.book")}
               icon="calendar"
               variant={l.status === "new" ? "secondary" : "primary"}
-              onPress={() => toast.show(online ? t("toast.booked", { name: l.name }) : t("offline.queued"), bookLead(l.id))}
+              onPress={() => toast.show(online ? t("toast.bookedTomorrow", { name: l.name }) : t("offline.queued"), bookLead(l.id))}
             />
           </RowView>
         ) : null}

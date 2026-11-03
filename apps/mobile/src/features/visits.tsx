@@ -55,7 +55,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
       <RowView gap={space[1]}>
         <Icon name="pin" s={14} color={c.mut} />
         <T v="body" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
-          {property?.address}, {property?.city.split(",")[0]}
+          {[property?.address, property?.city.split(",")[0]].filter(Boolean).join(", ")}
         </T>
       </RowView>
       <RowView style={{ justifyContent: "space-between" }}>

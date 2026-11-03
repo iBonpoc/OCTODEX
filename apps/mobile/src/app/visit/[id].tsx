@@ -67,7 +67,7 @@ export default function VisitScreen() {
         <RowView gap={space[1]}>
           <Icon name="pin" s={14} color={c.mut} />
           <T v="body" tone="mut" style={{ flex: 1 }}>
-            {property?.address}, {property?.city} · {t("visit.stories", { n: property?.stories ?? 1 })}
+            {[property?.address, property?.city].filter(Boolean).join(", ")} · {t("visit.stories", { n: property?.stories ?? 1 })}
           </T>
         </RowView>
         <RowView>

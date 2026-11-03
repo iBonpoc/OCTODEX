@@ -10,6 +10,7 @@ import {
   VISIT_STEPS,
   type DB,
   type Estimate,
+  type Lead,
   type ID,
   type PaymentMethod,
   type QueuedAction,
@@ -36,6 +37,7 @@ interface StoreCtx {
   bookLead: (id: ID) => Undo;
   assignVisit: (visitId: ID, techId: ID) => Undo;
   resetDemo: () => Undo;
+  addLead: (l: Omit<Lead, "id" | "status" | "receivedAt">) => Undo;
   addEstimate: (e: Omit<Estimate, "id">) => Undo;
 }
 
@@ -154,7 +156,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       replyLead: (id) =>
         mutate("lead.reply", (d) => ({ ...d, leads: d.leads.map((l) => (l.id === id ? { ...l, status: "replied" } : l)) })),
       bookLead: (id) =>
-        mutate("lead.book", (d) => ({ ...d, leads: d.leads.map((l) => (l.id === id ? { ...l, status: "booked" } : l)) })),
+        mutate("lead.book", (d) => {
+          const l = d.leads.find((x) => x.id === id);
+          if (!l) return d;
+          // Lead → customer → property → job "Estimate visit" → unassigned visit tomorrow 10:00 (dispatcher assigns).
+          const cid = uid("c");
+          const pid = uid("p");
+          const jid = uid("j");
+          const start = new Date();
+          start.setDate(start.getDate() + 1);
+          start.setHours(10, 0, 0, 0);
+          return {
+            ...d,
+            leads: d.leads.map((x) => (x.id === id ? { ...x, status: "booked" } : x)),
+            customers: [...d.customers, { id: cid, name: l.name, phone: l.phone, source: l.source, balanceCents: 0 }],
+            properties: [...d.properties, { id: pid, customerId: cid, address: l.address ?? "", city: l.city, stories: 1 }],
+            jobs: [...d.jobs, { id: jid, propertyId: pid, title: "Estimate visit", status: "estimate", amountCents: 0 }],
+            visits: [
+              ...d.visits,
+              {
+                id: uid("v"), jobId: jid, techId: null, start: start.toISOString(), durationMin: 45, step: "scheduled",
+                scope: [l.message], checklist: [], photos: [], amountDueCents: 0,
+              },
+            ],
+          };
+        }),
+      addLead: (lead) =>
+        mutate("lead.add", (d) => ({
+          ...d,
+          leads: [{ ...lead, id: uid("l"), status: "new", receivedAt: new Date().toISOString() }, ...d.leads],
+        })),
       assignVisit: (visitId, techId) => mutate("visit.assign", (d) => patchVisit(d, visitId, (v) => ({ ...v, techId }))),
       addEstimate: (e) => mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id: uid("e") }] })),
       resetDemo: () => mutate("demo.reset", () => makeSeed()),

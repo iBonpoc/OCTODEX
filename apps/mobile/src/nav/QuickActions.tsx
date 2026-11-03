@@ -19,7 +19,7 @@ interface Action {
 const ACTIONS: Action[] = [
   { key: "voice", label: "quick.voice", icon: "mic", wave: 6, hint: "quick.voiceHint" },
   { key: "photo", label: "quick.photo", icon: "camera" },
-  { key: "lead", label: "quick.lead", icon: "user", wave: 2 },
+  { key: "lead", label: "quick.lead", icon: "user" },
   { key: "estimate", label: "quick.estimate", icon: "invoice" },
   { key: "receipt", label: "quick.receipt", icon: "wallet", wave: 4 },
 ];
@@ -59,7 +59,7 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
             <Press
               key={a.key}
               disabled={disabled}
-              onPress={a.key === "photo" ? takePhoto : a.key === "estimate" ? newEstimate : undefined}
+              onPress={a.key === "photo" ? takePhoto : a.key === "estimate" ? newEstimate : a.key === "lead" ? () => { onClose(); router.push("/lead/new"); } : undefined}
               accessibilityRole="button"
               accessibilityLabel={t(a.label)}
               style={{

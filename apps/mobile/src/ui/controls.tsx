@@ -420,3 +420,47 @@ export function Stepper({
     </View>
   );
 }
+
+/* ---------- ChoiceChips: wrapping single choice (when a segmented control would overflow) ---------- */
+export function ChoiceChips<K extends string>({
+  items,
+  value,
+  onChange,
+}: {
+  items: { key: K; label: string }[];
+  value: K;
+  onChange: (k: K) => void;
+}) {
+  const { c } = useTheme();
+  const h = component.button.sm;
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }} accessibilityRole="radiogroup">
+      {items.map((it) => {
+        const sel = it.key === value;
+        return (
+          <Press
+            key={it.key}
+            onPress={() => onChange(it.key)}
+            visibleHeight={h}
+            accessibilityRole="radio"
+            accessibilityState={{ selected: sel }}
+            accessibilityLabel={it.label}
+            style={{
+              height: h,
+              paddingHorizontal: space[3],
+              borderRadius: radius.pill,
+              justifyContent: "center",
+              backgroundColor: sel ? c.acc : c.surf2,
+              borderWidth: sel ? 0 : 1,
+              borderColor: c.bd,
+            }}
+          >
+            <T v="button" style={{ color: sel ? c.onAcc : c.ink }}>
+              {it.label}
+            </T>
+          </Press>
+        );
+      })}
+    </View>
+  );
+}

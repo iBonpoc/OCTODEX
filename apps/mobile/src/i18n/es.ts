@@ -109,6 +109,7 @@ export const es: Dict = {
   "plan.assign": "Asignar",
   "plan.assignTo": "Asignar a",
   "plan.sub": "subcontratista",
+  "plan.visits": "Visitas: {n}",
   "plan.free": "Disponible",
 
   "today.title": "Hoy",
@@ -210,4 +211,15 @@ export const es: Dict = {
   "est.empty": "Ingrese el largo",
   "est.new": "Nuevo presupuesto",
   "est.ft": "pies",
+  "lead.title": "Nuevo cliente potencial",
+  "lead.name": "Nombre",
+  "lead.phone": "Teléfono",
+  "lead.address": "Dirección",
+  "lead.city": "Ciudad",
+  "lead.source": "Origen",
+  "lead.message": "Qué necesita el cliente",
+  "lead.save": "Guardar",
+  "lead.saved": "Agregado: {name}",
+  "lead.need": "Nombre y teléfono son obligatorios",
+  "toast.bookedTomorrow": "Visita mañana 10:00, asigne técnico: {name}",
 };
