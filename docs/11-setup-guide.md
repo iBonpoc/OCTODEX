@@ -3,7 +3,7 @@
 ## Ссылки
 | Что | Ссылка |
 |---|---|
-| Сайт приложения сейчас (Vercel) | https://octodex-mobile.vercel.app |
+| Сайт приложения (Cloudflare) | https://octodex.uoboxx.workers.dev |
 | Код (GitHub) | https://github.com/iBonpoc/OCTODEX |
 | База данных (Supabase) | https://supabase.com/dashboard/project/kgiaxygsjkyiquhjbxdg |
 | Сборки iPhone/Android (Expo) | https://expo.dev/accounts/octodex-team/projects/octodex |
