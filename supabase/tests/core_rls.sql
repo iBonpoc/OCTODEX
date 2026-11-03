@@ -108,7 +108,7 @@ insert into public.memberships (company_id, user_id, role, status) values
   ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000004', 'tech',   'active');
 
 insert into public.lead_sources (id, company_id, name, kind) values
-  ('1a000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Thumbtack', 'paid_per_lead');
+  ('1a000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Thumbtack (test)', 'paid_per_lead');
 
 insert into public.customers (id, company_id, display_name, lead_source_id) values
   ('c1a00000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Yuri Petrov', '1a000000-0000-0000-0000-000000000001'),
@@ -159,7 +159,7 @@ update public.invoices set status = 'sent', sent_at = now() where id = '01a00000
 -- Компания B
 :as_owner_b
 insert into public.lead_sources (id, company_id, name, kind) values
-  ('1b000000-0000-0000-0000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'Yelp', 'paid_ads');
+  ('1b000000-0000-0000-0000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'Yelp (test)', 'paid_ads');
 insert into public.customers (id, company_id, display_name) values
   ('c1b00000-0000-0000-0000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'B Customer');
 insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
@@ -480,6 +480,27 @@ do $$ begin
   perform tst.ok(tst.cnt('select 1 from public.customers') = 0, 'suspended member sees no customers');
 end $$;
 \echo 'T6 estimate lock + roles ok'
+
+-- ---------------------------------------------------------------- T7: app fields
+:as_owner_a
+do $$ begin
+  perform tst.ok(tst.cnt($q$select 1 from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and is_system$q$) = 6,
+                 'new company gets 6 standard lead sources');
+  insert into public.expenses (company_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'Home Depot', 21240, 'materials');
+end $$;
+:as_owner_b
+do $$ begin
+  perform tst.ok(tst.cnt('select 1 from public.expenses') = 0, 'company B does not see company A expenses');
+end $$;
+:as_tech_a
+do $$ begin
+  perform tst.ok(tst.cnt('select 1 from public.expenses') = 0, 'tech does not see expenses of others');
+  insert into public.expenses (company_id, vendor, amount_cents, category)
+  values ('ca000000-0000-0000-0000-000000000000', 'Chevron', 7850, 'fuel');
+  perform tst.ok(tst.cnt('select 1 from public.expenses') = 1, 'tech sees own expense');
+end $$;
+\echo 'T7 expenses, files, seeded sources ok'
 
 :as_super
 \echo 'ALL TESTS PASSED'
