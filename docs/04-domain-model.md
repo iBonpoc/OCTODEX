@@ -19,7 +19,7 @@
 | Проценты и ставки | Базисные пункты `*_bps` (950 = 9.50%) |
 | Длины | Десятичные **футы** с точностью до 1/8″ (`length_ft: numeric(10,3)`). Отображение: 148′ 6″ |
 | Время | Хранится в UTC. У компании `timezone` (по умолчанию `America/Los_Angeles`) |
-| Номера документов | Человеческий номер на уровне компании: `EST-0148`, `INV-0093`, `JOB-0210`, `PO-0031`, `CO-0004`. Присваивает **только сервер** (офлайн — «черновик» без номера) |
+| Номера документов | Человеческий номер на уровне компании: `EST-0148`, `INV-0093`, `JOB-0210`, `PO-0031`, `CO-0004`, `RCT-0001` (квитанция об оплате (из анализа внешней CRM)). Присваивает **только сервер** (офлайн — «черновик» без номера) |
 | Статусы | Только через разрешённые переходы (state machine, §9). Каждый переход пишется в `StatusEvent` |
 | Идемпотентность | Операции «создать платёж», «смета → работа», «отправить клиенту», «отправить PO», операции outbox принимают `idempotency_key`. Повтор не создаёт дубль |
 | Аудит | Значимые изменения пишутся в `AuditLog`: кто (человек, AI по команде человека, клиент, поддержка, система), что, когда, было → стало |
@@ -53,6 +53,7 @@
 | service_area | json: города, ZIP[] | нет | Зона работ (онбординг, онлайн-запись, SEO) |
 | onboarding_state | json | | Шаги онбординга и чек-лист «Настройка» |
 | brand | json: logo, цвета, подпись | нет | Для документов и портала |
+| default_client_locale | `en` / `es` | да | Язык документов и сообщений клиентам по умолчанию (`en`); отдельно от языка интерфейса `User.locale` (владелец работает на русском, клиенты читают на английском). `Contact.preferred_language` перекрывает (из анализа внешней CRM) |
 | public_slug | text, unique | да | Адрес публичной страницы `octo.app/p/bonpoc-gutters` |
 | trade_modules | ← Entitlement | | Включённые модули |
 | stripe_account_id | text | нет | Stripe Connect |
@@ -66,7 +67,7 @@
 | a2p_brand_status, a2p_campaign_status | `not_started`/`pending`/`approved`/`rejected` | | 10DLC |
 | referral_reward | json | | Награда рефереру / скидка новому (по умолчанию $50 / $25) |
 | estimate_settings | json | | `default_expiry_days` (30), `min_margin_bps` (3500), `margin_override_role`, `ca_deposit_cap` (вкл. для CA), `followup_days[]` (PRD 04, 05) |
-| payment_settings | json | | `deposit_default_pct`, `terms_days`, `ach_recommend_threshold_cents` ($1,000), напоминания, `method_discount` (флаг, выкл.) (PRD 09) |
+| payment_settings | json | | `deposit_default_pct`, `terms_days`, `ach_recommend_threshold_cents` ($1,000), напоминания, `method_discount` (флаг, выкл.) (PRD 09). Реквизиты ручной оплаты для инвойса и портала (из анализа внешней CRM): `manual_methods[]` (`zelle`, `check`, `cash`, `bank_transfer`), `zelle_handle`, `check_payable_to`, `check_mail_address`, `bank_transfer_instructions` |
 | costing_settings | json | | `default_markup_pct` (billable), `target_margin_pct`, `default_labor_rate_cents`, `expense_alert_threshold_cents` (PRD 10) |
 | scheduling_settings | json | | Окна прибытия, длительности по типам визитов, рабочие часы, «время по бригаде» (PRD 07) |
 | subcontractor_settings | json | | `coi_warning_days` (30), `block_on_expired_coi` (выкл.: предупреждение + подтверждение), `form_1099_threshold_cents` (PRD 07, 14) |
@@ -140,6 +141,8 @@
 | anonymized_at | timestamp | нет | CCPA-удаление персональных данных |
 | referral_code | text, unique в компании | нет | Личная реферальная ссылка `?ref=` (PRD 12, 13) |
 | referral_link_clicks | int | | Клики по ссылке |
+| review_status | `not_asked`, `asked`, `left`, `do_not_ask` | | (из анализа внешней CRM) `left` — уже оставил отзыв, `do_not_ask` — клиент сам попросил не писать; автоматизация отзывов таких пропускает. Ставится по факту или по просьбе клиента, **никогда** по оценке удовлетворённости (не review gating) |
+| review_status_at | timestamp | | Когда изменён `review_status` |
 
 ### Contact — контактное лицо
 | Поле | Тип | Описание |
@@ -155,12 +158,15 @@
 | sms_opted_out_at, email_unsubscribed_at | timestamp | STOP / отписка (блок на сервере) |
 | email_opt_in | bool + дата | |
 | sms_undeliverable | bool | Стационарный/неверный номер |
+| email_bounced_at, email_bounce_kind | timestamp, `hard` / `soft` / `complaint` | (из анализа внешней CRM) Из вебхуков почтового провайдера. `hard` и `complaint` блокируют email на сервере (защита репутации домена); `soft` — после 3 подряд |
 
 ### Property — объект (дом, адрес, где делается работа)
 | Поле | Тип | Обяз. | Описание |
 |---|---|---|---|
 | customer_id | → Customer | да | Владелец-плательщик (может смениться) |
 | address | Address | да | Улица, город, ZIP, штат, unit |
+| label | text | нет | Человеческое имя объекта: «Дом», «Rental on 5th» (у клиента часто несколько домов) (из анализа внешней CRM) |
+| kind | `single_family`, `multi_family`, `commercial`, `hoa_common` | нет | Тип объекта для фильтров и шаблонов смет (из анализа внешней CRM) |
 | geo | lat, lng | да (геокодинг) | Для карты и спутника |
 | geo_source | `geocoder`, `manual` | | Ручная правка пина не перезаписывается геокодером |
 | stories | int | нет | Этажность (влияет на смету) |
@@ -190,11 +196,15 @@
 | source_ref | text | нет | Внешний id (Thumbtack lead id, Angi id) |
 | customer_id, property_id | → | нет | Привязываются при квалификации (лид может быть до клиента). Если у клиента несколько объектов — выбирается по адресу лида или создаётся новый |
 | contact_name, phone, email, address_text | text | | Сырые данные из обращения |
-| geo, geo_status | lat/lng, `ok`/`failed`/`manual` | | Лид на карте до создания Property |
+| phone_is_relay | bool | | Маскированный номер площадки (Thumbtack relay): не участвует в поиске дублей и `match_key`, маркетинговые SMS на него не идут (из анализа внешней CRM) |
+| geo, geo_status | lat/lng, `ok`/`failed`/`manual`/`approx` | | Лид на карте до создания Property. `approx` — известен только ZIP/город, пин в центре зоны, в маршрут не ставится (из анализа внешней CRM) |
 | service_requested | text + → ServiceCategory | | «Seamless gutters 2 story» |
 | cost_cents | int | нет | Сколько стоил этот лид (Thumbtack списал $45). Сохраняется и у lost/duplicate |
+| cost_origin | `provider`, `manual`, `source_default` | | Откуда взята стоимость (из анализа внешней CRM) |
+| cost_refunded_cents, cost_refund_status | int, `none`/`requested`/`approved`/`denied` | | Возврат площадки за плохой лид. Чистая стоимость лида в ROI = `cost_cents − cost_refunded_cents` (из анализа внешней CRM) |
 | first_response_at | timestamp | | Для метрики скорости ответа |
 | first_response_kind | `call`, `sms`, `email`, `marketplace`, `manual` | | |
+| last_inbound_at, last_outbound_at | timestamp | | Последнее сообщение/звонок от клиента и от нас. Ставит сервер, значения только растут (защита от гонок вебхуков). «Чей ход»: `last_inbound_at > last_outbound_at` → ждём нашего ответа (из анализа внешней CRM) |
 | assigned_to | → User | | |
 | lost_reason | enum: `price_too_high`, `no_response`, `chose_competitor`, `not_ready_timing`, `out_of_service_area`, `service_not_offered`, `junk_spam`, `duplicate`, `other` + текст | при `lost` | Для `other` текст обязателен |
 | duplicate_of_lead_id | → Lead | нет | Слияние дублей |
@@ -230,6 +240,21 @@
 ---
 
 ## 3. Каталог, поставщики, движок смет
+
+### ServiceCategory — направление и вид работ (из анализа внешней CRM)
+Раньше только упоминалась (Lead, CatalogItem, PublicProfile, PRD 02/12), теперь определена.
+| Поле | Тип | Описание |
+|---|---|---|
+| name | text | «Gutters», «Seamless gutter install», «Gutter cleaning», «Roofing › Repair» |
+| parent_id | → ServiceCategory, нет | Два уровня: направление → вид работ. Пусто = направление |
+| module | `core`, `gutters`, `roofing`… | Какой модуль создал категорию |
+| color | text | Цвет в календаре и отчётах |
+| show_on_public_page | bool | Показывать на витрине и в онлайн-записи (PRD 12) |
+| price_from_cents | int, нет | Цена «от» на витрине |
+| position, is_active | int, bool | Порядок; архив вместо удаления |
+| seed_key, is_user_modified | text, bool | Как у CatalogItem |
+
+Категория ставится на Lead и наследуется в Estimate → Job (`service_category_id`), чтобы выручка, маржа и ROI считались по направлениям.
 
 ### CatalogItem — позиция каталога
 | Поле | Тип | Описание |
@@ -268,7 +293,7 @@
 `catalog_item_id` **или** `item_selector json` (выбор по атрибутам: `kind = gutter, profile = $profile, gauge = $gauge`; не нашёл → ошибка расчёта, без подстановки похожего), `quantity_formula` (безопасное выражение, например `ceil(gutter_lf / hanger_spacing_ft)`), `condition` (например `guards == true`), `client_visible` (видна клиенту или только во внутреннем BOM), `group` (раздел сметы), `position`. Формулы вычисляются **детерминированно** (decimal) одним движком на телефоне и на сервере, у движка есть `engine_version`. AI формулы не вычисляет и цены не придумывает.
 
 ### Supplier — поставщик
-`name`, `contact`, `email_for_orders`, `phone`, `account_number`, `branches[]` (структура: `name`, `address`, `phone`, `email`), `delivery_notes`, `is_active`.
+`name`, `contact`, `email_for_orders`, `phone`, `account_number`, `branches[]` (структура: `name`, `address`, `phone`, `email`), `delivery_notes`, `payment_terms` (`cod`, `prepaid`, `net_15`, `net_30`, `net_60`, `custom`; печатается в PO) (из анализа внешней CRM), `is_active`.
 
 ### SupplierItem — позиция в прайсе поставщика
 `supplier_id`, `supplier_sku` (уникален в рамках поставщика), `name`, `unit` (текст поставщика: roll, box, lb, stick), `cost_cents`, `pack_size` (сколько **единиц каталога** в одной единице поставщика: коробка 50 hangers → 50), `valid_from`, `valid_to` (текущая = `valid_to IS NULL`; смена цены = новая запись), `source_import_id`.
@@ -307,6 +332,7 @@
 | number | text | да | EST-0148 |
 | customer_id, property_id | → | да | Смета без объекта невозможна. На одном объекте может быть несколько открытых смет одновременно |
 | lead_id | → Lead | нет | Для воронки и ROI |
+| service_category_id | → ServiceCategory | нет | Направление (из лида или выбирается); переходит в Job (из анализа внешней CRM) |
 | status | см. §9 | да | |
 | current_version_id | → EstimateVersion | да | |
 | sent_version_id | → EstimateVersion | нет | Что видит клиент |
@@ -366,7 +392,7 @@
 `company_id` (null = системный шаблон модуля), `name` («Чистка гаттеров», «Guards only», «Gutters G/B/B»), `module`, `options[]` (`name`, `is_recommended`, `input_overrides json` — пресеты G/B/B для движка, `lines`), `intro/scope/terms/exclusions`, `deposit_rule`, `is_system`. Цены при создании сметы берутся из **текущего** каталога.
 
 ### EstimateApproval — решение клиента
-`version_id`, `option_id` (выбранный вариант), `selected_optional_items[]`, `signer_name`, `signer_email`, `signature_file_id`, `signed_at`, `ip`, `user_agent`, `locale`, `channel (portal / in_person / ai_recorded)`, `document_hash` (= `content_hash` версии), `consent_text_version` (ESIGN/UETA), `rescission_ends_at` (CA: право отказа 3/5 рабочих дней), `deposit_payment_id`, `offline bool` (подпись на устройстве без сети — приходит как заявка), `server_decision` (`accepted`/`rejected`), `rejection_reason`.
+`version_id`, `option_id` (выбранный вариант), `selected_optional_items[]`, `signer_name`, `signer_email`, `signature_file_id`, `signed_at`, `ip`, `user_agent`, `locale`, `channel (portal / in_person / ai_recorded / office_recorded)` (`office_recorded` — одобрение со слов клиента, без подписи: обязательна `office_note`, при сумме выше порога CA для home improvement — предупреждение «нужна подпись» (из анализа внешней CRM)), `signature_method (draw / type)` (из анализа внешней CRM), `document_hash` (= `content_hash` версии), `consent_text_version` (ESIGN/UETA), `rescission_ends_at` (CA: право отказа 3/5 рабочих дней), `deposit_payment_id`, `offline bool` (подпись на устройстве без сети — приходит как заявка), `server_decision` (`accepted`/`rejected`), `rejection_reason`.
 
 ### ChangeOrder — доп. работы во время выполнения
 `job_id`, `number` (CO-0004), `reason`, `lines[]` (как LineItem, тот же движок), `tax_enabled`, `tax_rate_id`, `tax_rate_bps` (по умолчанию как в одобренной версии сметы), `status (draft → sent → approved / declined)`, `approval` (как EstimateApproval), `amount_cents` (может быть < 0), `cost_cents` (→ плановая себестоимость работы), `invoice_id` (в какой инвойс вошёл). После одобрения добавляется к финальному инвойсу работы.
@@ -383,6 +409,7 @@
 | estimate_id, approved_version_id, option_id | → | Из какой сметы (создаётся без повторного ввода). **Уникальный индекс `estimate_id`** — идемпотентная конверсия |
 | status | см. §9 | |
 | type | `install`, `repair`, `cleaning`, `inspection`, `warranty` | |
+| service_category_id | → ServiceCategory | Из сметы; для отчётов по направлениям (из анализа внешней CRM) |
 | recurring_plan_id, occurrence_date | → RecurringPlan, date | unique(`recurring_plan_id`, `occurrence_date`) — без дублей генерации |
 | estimated_duration_min | int | Длительность по умолчанию для новых визитов |
 | planned_cost_cents, actual_cost_cents | int, вычисляемые | Job costing (PRD 10) |
@@ -481,6 +508,7 @@
 | source_estimate_version_id | → EstimateVersion | |
 | credits[] | → Invoice[] | Deposit/progress, зачтённые в финальном строками-кредитами |
 | void_reason, voided_by, voided_at | text, → User, timestamp | Void только при `paid_net = 0` (иначе сначала refund или перенос в кредит клиента) |
+| customer_payment_claim | json, нет | «Я оплатил» от клиента в портале (из анализа внешней CRM): `method` (zelle/check/cash/bank_transfer/other), `amount_cents`, `claimed_at`, `note`, `status (open / recorded / rejected)`. **Не платёж**: создаёт Task офису «проверить и записать», ставит напоминания о просрочке на паузу до решения; запись Payment закрывает заявление |
 
 ### InvoiceLineItem
 Как EstimateLineItem (снимок цены, `taxable`), плюс `source_type/source_id` (`estimate_line` / `change_order` / `expense` / `recurring_plan` / `credit`) — трассировка и защита от двойного выставления. BOM-строки в инвойс не попадают.
@@ -504,6 +532,7 @@
 | dispute_status | `none`, `open`, `won`, `lost` | Chargeback |
 | offline_created | bool | Записан без сети (PRD 09, 16) |
 | return_reason | text | Причина ACH return / возврата чека банком (PRD 18) |
+| receipt_number, receipt_file_id, receipt_sent_at | text, → File, timestamp | Квитанция об оплате: номер `RCT-0001` присваивает сервер при `succeeded`, PDF — неизменяемый снимок; email-квитанция клиенту (PRD 09) (из анализа внешней CRM) |
 
 ### PaymentAttempt — попытка оплаты (новая)
 `invoice_id`, `idempotency_key` (`hash(invoice_id, amount, attempt_no)`), `amount_cents`, `stripe_payment_intent_id`, `expires_at`. Создаётся при открытии экрана оплаты, до появления Payment; повтор возвращает тот же PaymentIntent.
@@ -520,6 +549,7 @@
 |---|---|---|
 | date | date | |
 | vendor | text | Home Depot, ABC Supply |
+| document_number | text | Номер чека/счёта поставщика: поиск дублей и сверка с PO (из анализа внешней CRM) |
 | supplier_id | → Supplier, нет | Если это счёт известного поставщика |
 | amount_cents, tax_cents | int | `amount` включает sales tax чека; может быть < 0 (возврат в магазин) |
 | category | `materials`, `fuel`, `tools`, `dump_fee`, `subcontractor`, `marketing`, `other` | `subcontractor` — только для разового исполнителя **без** наряда (иначе затраты берутся из SubcontractorAssignment, без двойного счёта) |
@@ -556,7 +586,7 @@
 - что именно облагается для монтажа в CA, решает пользователь со своим бухгалтером; Octo не даёт налоговых советов.
 
 ### PurchaseOrder — заказ поставщику
-`number (PO-0031)`, `supplier_id`, `job_id` (nullable: заказ на склад), `lines` (← PurchaseOrderLine[]), `status` (§9), `revision int`, `sent_via (email / pdf)`, `sent_at`, `sent_to_email`, `pdf_file_id`, `confirmed_at`, `delivery_date`, `fulfillment` (`delivery` / `pickup`), `branch`, `delivery_address`, `driver_notes`, `source_version_id` (→ EstimateVersion), `source_change_order_id`, `total_cost_cents`, `idempotency_key`, `option_id` (→ EstimateOption), `origin` (`draft_estimate` / `approved_estimate` / `manual`), `is_outdated bool`, `sent_before_approval bool`, `rfq_token`. Автоматически генерируется из BOM одобренной сметы (уникальность автосозданных: `job_id + supplier_id + source_version_id`); **вручную может создаваться из черновика сметы** (решение основателя 03.11, PRD 11 PO-US-20…25). До одобрения сметы не входит в committed cost.
+`number (PO-0031)`, `supplier_id`, `job_id` (nullable: заказ на склад), `lines` (← PurchaseOrderLine[]), `status` (§9), `revision int`, `sent_via (email / pdf)`, `sent_at`, `sent_to_email`, `pdf_file_id`, `confirmed_at`, `delivery_date`, `fulfillment` (`delivery` / `pickup`), `branch`, `delivery_address`, `driver_notes`, `source_version_id` (→ EstimateVersion), `source_change_order_id`, `total_cost_cents`, `tax_cents` и `delivery_fee_cents` (налог и доставка поставщика — часть себестоимости работы) (из анализа внешней CRM), `supplier_reference` (номер заказа у поставщика, спрашивают при самовывозе) (из анализа внешней CRM), `idempotency_key`, `option_id` (→ EstimateOption), `origin` (`draft_estimate` / `approved_estimate` / `manual`), `is_outdated bool`, `sent_before_approval bool`, `rfq_token`. Автоматически генерируется из BOM одобренной сметы (уникальность автосозданных: `job_id + supplier_id + source_version_id`); **вручную может создаваться из черновика сметы** (решение основателя 03.11, PRD 11 PO-US-20…25). До одобрения сметы не входит в committed cost.
 
 ### SupplierQuote — ответ поставщика на запрос цены (RFQ), MVP
 `purchase_order_id`, `supplier_id`, `received_at`, `channel (email / upload)`, `raw_file_ids[]`, `status (received → parsed → needs_review → applied / rejected)`, `valid_until`, `delivery_fee_cents`, `total_cents`, `confidence`. Разбирается AI, числа проверяются детерминированно, применяется только по кнопке (PRD 11 PO-US-26…30).
@@ -602,6 +632,12 @@
 
 ### ScheduledMessage (новая)
 `company_id`, `automation_key`, `subject_type/id`, `step`, `scheduled_at`, `status` (§9), `cancel_reason`, `message_id`; unique(`automation_key`, `subject_id`, `step`) — один шаг не уходит дважды.
+
+### Notification — уведомление сотруднику (из анализа внешней CRM)
+`company_id`, `user_id`, `kind` (`lead.new`, `lead.unanswered`, `estimate.hot`, `message.inbound`, `work_order.accepted`, `coi.expiring`…), `title`, `body`, `subject_type/id`, `route` (deep link), `dedup_key` (unique в окне: «горячая смета» не чаще 1 раза в 24 ч, PRD 13 COMM-US-08), `push_status` (`pending` / `sent` / `suppressed_quiet_hours` / `failed`), `pushed_at`, `read_at`, `archived_at`. Лента «Уведомления» в приложении и источник push; отметка `dedup_key` ставится **до** отправки, повтор cron дубль не шлёт.
+
+### NotificationPreference (из анализа внешней CRM)
+`membership_id` (unique), `channels json` (по `kind`: push / email / in_app вкл/выкл), `quiet_hours` (начало, конец; по умолчанию из `Company.business_hours`), `critical_bypass bool` (новый лид пробивает quiet hours, по умолчанию вкл). Субподрядчику — только уведомления по своим нарядам.
 
 ### Campaign (новая, Запуск)
 `company_id`, `name`, `segment json`, `channels`, `template_keys`, `status (draft → sending → sent)`, `recipients_count`, `sent_at`.
@@ -801,6 +837,10 @@ erDiagram
   Subcontractor ||--o{ PortalAccess : work_order_link
   User ||--o{ AiAction : commands
   User ||--o{ Device : uses
+  User ||--o{ Notification : receives
+  ServiceCategory ||--o{ Lead : categorizes
+  ServiceCategory ||--o{ Estimate : categorizes
+  ServiceCategory ||--o{ Job : categorizes
 ```
 
 ---
@@ -855,4 +895,5 @@ erDiagram
 | 16 Офлайн | Поля синхронизации (§0), **SyncOperation**, **Device**, **SyncConflict**, EstimateApproval (offline, server_decision, rejection_reason), File.upload_status, Property.offline_imagery_ready_at | Payment.offline_created — дубль с 09 |
 | 17 Поддержка | §8a: PlatformRole, KbArticle, SupportTicket, SupportMessage, SupportAccessGrant; AuditLog.actor_type `support` | — |
 | 18 Проверочные примеры денег | CustomerCredit, CreditApplication, Payment.return_reason, Invoice (void_reason/by/at), Refund (allocation, platform_fee_refunded_cents), Job (cancel_reason, cancelled_at), Expense.transferred_from_job_id | Предлагалось в v0.3 — внесено сразу в v0.2. `needs_review` — флаг Payment (как в PRD 09), а не статус; `returned` — уже статус |
+| Анализ внешней CRM (`inputs/external-crm-entities-gap-analysis.md`) | **ServiceCategory** (определена) + `service_category_id` у Estimate/Job, **Notification**, **NotificationPreference**, Company (`default_client_locale`, реквизиты ручной оплаты в `payment_settings`), Customer.review_status, Contact.email_bounce_*, Property (label, kind), Lead (cost_origin, cost_refunded_*, last_inbound/outbound_at, phone_is_relay, geo_status `approx`), EstimateApproval (`office_recorded`, signature_method), Invoice.customer_payment_claim, Payment.receipt_* + префикс `RCT`, Expense.document_number, PO (tax, delivery_fee, supplier_reference), Supplier.payment_terms | Отпуска, эскалация лида по ступеням, Credential, write-off, подпись подрядчика, coil-склад и др. — «позже» в файле анализа |
 | Решения основателя | TaxRate на документах (tax_enabled/tax_rate_id/снимок), Company.tax_settings; Subcontractor (tax_classification, tin, compliance), SubcontractorAssignment (полная структура), PortalAccess `audience = subcontractor`, Company.subcontractor_settings, роль `subcontractor` в MVP | — |
