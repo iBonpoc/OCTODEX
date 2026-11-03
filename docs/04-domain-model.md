@@ -1,6 +1,7 @@
 # 04. Словарь сущностей (Domain Model)
 
-> Статус: черновик **v0.3**, ноябрь 2026. Источник правды для базы данных, API, типов приложения и инструментов AI-помощника.
+> Статус: черновик **v0.3.1**, ноябрь 2026. Источник правды для базы данных, API, типов приложения и инструментов AI-помощника.
+> v0.3.1: требования юридического исследования `legal/legal-research.md` (LEG-01…LEG-22): тип договора CA, подпись подрядчика (countersign), согласие E-SIGN (`ESignConsent`), правила срока отказа как данные (`ContractRuleSet`), CA-шаблон договора (`ContractTemplate`), собственник 65+, ремонт после ЧС, бумажная Notice of Cancellation, график платежей, журнал SMS-согласий (`ConsentRecord`, `ConsentText`), поля лицензии/WC/AB5 субподрядчика, пороги 1099-NEC по годам, плата за возвращённый чек. Журнал — §13.3.
 > v0.3: решения основателя от 03.11.2026 (второй пакет) — тестовый price book, массовый импорт/экспорт (`ImportJob`, `ImportRow`, `ImportMapping` вместо `PriceListImport`), AI-скан прайса и ценника в MVP, цены поставщиков и каталога без налога, налог при покупке у поставщика, налоговые профили (`TaxProfile`, PRD `03-prd/19-taxes.md`), стандарты расчёта гаттеров (высоты этажей, колена, отходы). Журнал — §13.2.
 > v0.2: внесены предложения «Изменения модели данных» из всех PRD (`03-prd/01…17`, раздел 14, и `18-money-test-cases.md` §I), дубли сведены, решения основателя от 03.11.2026 отражены везде. Журнал изменений — §13. Открытые решения для основателя — `03-prd/00-decisions-for-founder.md`.
 > Продукт: **Octo** (рабочее название). Кода пока нет, всё проектируется с нуля.
@@ -47,7 +48,9 @@
 |---|---|---|---|
 | name, legal_name | text | да | |
 | phone, email | text | да | Для документов, reply-to писем (PRD 01) |
-| license_number | text | нет | Лицензия CSLB (CA). Пустая → предупреждение при отправке сметы |
+| license_number | text | нет | Лицензия CSLB (CA). Пустая → предупреждение при отправке сметы; для CA-договора — блок отправки (v0.3.1, LEG-07). Печатается на сметах, договорах, инвойсах, PDF, `PublicProfile`, подписи email, в HELP-ответе и первом SMS кампании (B&P §7030.5) |
+| license_class, license_expires_on | text[], date | нет | (v0.3.1) Класс(ы) CSLB (C-61/D-24, C-39…) и срок; обязательны для CA-договора |
+| contract_settings | json | | (v0.3.1, LEG-05, LEG-07) `cgl` {insurer, phone, none}, `workers_comp` {kind `policy`/`exemption`, insurer, policy_no, expires_on}, `cancellation_email`, `cancellation_address`, `cancellation_help_phone`, `paper_notice_of_cancellation` (**вкл.** до ответа юриста Б1), `auto_countersign` {enabled (выкл.), signer_membership_id, signature_file_id, attested_at}, `require_attorney_reviewed_template` (вкл. для CA), `default_contract_type`, `jurisdiction` (`US-CA` → `ContractRuleSet`) |
 | ein | text, зашифровано | нет | |
 | timezone, currency | text | да | |
 | address | Address (встроенный) | да | |
@@ -69,11 +72,11 @@
 | sms_number | text | нет | Номер Twilio (PRD 13) |
 | a2p_brand_status, a2p_campaign_status | `not_started`/`pending`/`approved`/`rejected` | | 10DLC |
 | referral_reward | json | | Награда рефереру / скидка новому (по умолчанию $50 / $25) |
-| estimate_settings | json | | `default_expiry_days` (30), `min_margin_bps` (3500), `margin_override_role`, `ca_deposit_cap` (вкл. для CA), `followup_days[]` (PRD 04, 05) |
-| payment_settings | json | | `deposit_default_pct`, `terms_days`, `ach_recommend_threshold_cents` ($1,000), напоминания, `method_discount` (флаг, выкл.) (PRD 09). Реквизиты ручной оплаты для инвойса и портала (из анализа внешней CRM): `manual_methods[]` (`zelle`, `check`, `cash`, `bank_transfer`), `zelle_handle`, `check_payable_to`, `check_mail_address`, `bank_transfer_instructions` |
+| estimate_settings | json | | `default_expiry_days` (30), `min_margin_bps` (3500), `margin_override_role`, `ca_deposit_cap` (вкл. для CA; v0.3.1: для всех жилых HIC, не только от $500), `followup_days[]` (PRD 04, 05) |
+| payment_settings | json | | `deposit_default_pct`, `terms_days`, `ach_recommend_threshold_cents` ($1,000), напоминания, `method_discount` (флаг, выкл.) (PRD 09). Реквизиты ручной оплаты для инвойса и портала (из анализа внешней CRM): `manual_methods[]` (`zelle`, `check`, `cash`, `bank_transfer`), `zelle_handle`, `check_payable_to`, `check_mail_address`, `bank_transfer_instructions`. (v0.3.1, LEG-17) `returned_check_fee` {`enabled` (false), `first_cents` ≤ 2500, `subsequent_cents` ≤ 3500; только `method=check`}, `method_discount.legal_review_confirmed_at` |
 | costing_settings | json | | `default_markup_pct` (billable), `target_margin_pct`, `default_labor_rate_cents`, `expense_alert_threshold_cents` (PRD 10) |
 | scheduling_settings | json | | Окна прибытия, длительности по типам визитов, рабочие часы, «время по бригаде» (PRD 07) |
-| subcontractor_settings | json | | `coi_warning_days` (30), `block_on_expired_coi` (выкл.: предупреждение + подтверждение), `form_1099_threshold_cents` (PRD 07, 14) |
+| subcontractor_settings | json | | `coi_warning_days` (30), `block_on_expired_coi` (выкл.: предупреждение + подтверждение), `form_1099_thresholds` {год: центы} (v0.3.1 вместо `form_1099_threshold_cents`: 2025 — 60000, 2026 — **200000**, 2027+ — индексация IRS), `unlicensed_work_threshold_cents` (v0.3.1: **100000**, AB 2622 — вместо $500), `block_unlicensed_over_threshold` (выкл.), `trade_license_classes` (trade → классы CSLB) (PRD 07, 14) |
 
 ### CompanyGroup — объединение компаний одного владельца
 | Поле | Тип | Описание |
@@ -96,7 +99,10 @@
 | invited_by, invite_token_hash, invite_expires_at | → User, text, timestamp | Приглашение (7 дней, одноразовое) |
 | suspended_at | timestamp | Отключение: отзыв сессий, стирание кэша на устройстве |
 | home_base | Address + geo, nullable | Старт маршрута дня (PRD 08) |
-| share_location | bool | Согласие на передачу геопозиции (PRD 08). Для `subcontractor` всегда false |
+| share_location | bool | Согласие на передачу геопозиции (PRD 08). Для `subcontractor` всегда false. (v0.3.1, LEG-19) Передача только между clock-in и clock-out или во время визита; `location_notice_ack_at` — подтверждение уведомления сотрудником; история 90 дней; требования AB 1331 (Ch. 851, 2026) — проверить у адвоката |
+| his_registration_number | text | (v0.3.1, LEG-08) Регистрация Home Improvement Salesperson в CSLB; печатается в CA-договоре; пусто у отправителя договора → предупреждение (исключения: officer / qualifier из записи лицензии — `his_exempt_reason`) |
+| can_sign_contracts | bool | (v0.3.1, LEG-03) Право `sign_contracts`: countersign договоров от имени компании. По умолчанию true только у owner |
+| countersign_signature_file_id | → File | (v0.3.1) Загруженная подпись для автоподписи компании (`Company.contract_settings.auto_countersign`) |
 
 У человека с ролью `subcontractor` есть связанная запись `Subcontractor.user_id` (§5). Субподрядчик без входа в Octo Membership не имеет и работает по защищённой ссылке.
 
@@ -155,9 +161,11 @@
 | role | `owner`, `tenant`, `property_manager`, `spouse`, `other` | |
 | is_primary, is_active | bool | Один primary на клиента |
 | preferred_language | `en` / `es` | |
-| sms_opt_in, sms_marketing_opt_in | bool + дата согласия | Транзакционные / маркетинговые SMS (TCPA) |
-| consent_source | `web_form`, `portal`, `verbal_recorded_by_user`, `customer_texted_first`, `import` | |
-| consent_text_version, consent_ip | text | Доказательство согласия |
+| sms_opt_in, sms_marketing_opt_in | bool + дата согласия | Транзакционные / маркетинговые SMS (TCPA). (v0.3.1) **Вычисляемые** из последней `ConsentRecord` по категории (§8) |
+| sms_consent_status | `unknown` / `opted_in` / `opted_out` / `pending_revocation_review` | (v0.3.1) Импорт всегда даёт `unknown` |
+| consent_source | `web_form`, `portal`, `estimate_sign`, `verbal_recorded_by_user`, `customer_texted_first`, `paper_form_photo`, `attestation` | (v0.3.1) `import` **удалён**: импорт никогда не создаёт согласие (LEG-10); источник последней записи `ConsentRecord` |
+| consent_text_version, consent_ip | text | Доказательство согласия (денормализация последней `ConsentRecord`) |
+| is_team_member | bool | (v0.3.1, LEG-12) Член команды или родственник — не получает запрос отзыва |
 | sms_opted_out_at, email_unsubscribed_at | timestamp | STOP / отписка (блок на сервере) |
 | email_opt_in | bool + дата | |
 | sms_undeliverable | bool | Стационарный/неверный номер |
@@ -339,7 +347,7 @@
 |---|---|---|
 | property_id | → Property | Чертёж живёт на объекте и переиспользуется |
 | base_image | → File | Спутниковый снимок или своё фото |
-| image_source | `satellite_google`, `satellite_mapbox`, `upload` | Провайдер — решение ADR Фазы 3 (лицензия) |
+| image_source | `upload`, `esri`, `nearmap`, `eagleview_report`, `hover_report` | (v0.3.1, ADR-004, LEG-18) `satellite_google` и `satellite_mapbox` **удалены** — их условия запрещают обводку. MVP — `upload` (своё фото + калибровка); срез 3–4 — импорт отчётов EagleView/Hover по аккаунту подрядчика (`imagery_ref` {provider, report_id, capture_date, attribution}); `esri` — только после письменного подтверждения Esri; `nearmap` — позже |
 | scale_ft_per_px | numeric | Из спутника автоматически или по калибровке «эта линия = 20 ft» |
 | calibration | json: p1, p2, known_ft | Ручная калибровка |
 | zoom, image_w_px, image_h_px | int | |
@@ -362,7 +370,7 @@
 | customer_id, property_id | → | да | Смета без объекта невозможна. На одном объекте может быть несколько открытых смет одновременно |
 | lead_id | → Lead | нет | Для воронки и ROI |
 | service_category_id | → ServiceCategory | нет | Направление (из лида или выбирается); переходит в Job (из анализа внешней CRM) |
-| status | см. §9 | да | |
+| status | см. §9 | да | (v0.3.1) + `awaiting_countersign`, `cancelled_by_customer` |
 | current_version_id | → EstimateVersion | да | |
 | sent_version_id | → EstimateVersion | нет | Что видит клиент |
 | expires_at | date | нет | |
@@ -379,7 +387,16 @@
 | version_no | int | 1, 2, 3 |
 | drawing_id + drawing_version | → | Из какого чертежа посчитано |
 | intro_text, scope_text, terms_text, exclusions_text | text | |
-| deposit_rule | json | % или сумма, когда вносится; CA-лимит |
+| deposit_rule | json | % или сумма, когда вносится; CA-лимит (для `ca_service_repair` всегда 0) |
+| contract_type | `ca_home_improvement` / `ca_service_repair` / `non_hic` | (v0.3.1, LEG-01) Тип договора; определяет депозит, срок отказа, countersign, шаблон (PRD 05 §7.7.1) |
+| contract_template_id, contract_template_version | → ContractTemplate, text (снимок) | (v0.3.1, LEG-02) |
+| contract_rule_set_version | text (снимок) | (v0.3.1) Версия `ContractRuleSet` на дату версии |
+| payment_schedule | json[]: `label`, `amount_cents`, `work_milestone` (`materials_delivered` / `install_complete` / `final_walkthrough` / `custom`) | (v0.3.1, LEG-06) График прогресс-платежей CA HIC; deposit + Σ = total |
+| bond_attestation | json: тип, номер, файл, кто, когда | (v0.3.1) Снятие лимита депозита (B&P §7159.5(a)(8)) |
+| disaster_emergency_repair, emergency_declaration_ref | bool, text | (v0.3.1, LEG-04) Ремонт после объявленной ЧС → 7 рабочих дней отказа + предупреждение о price gouging |
+| negotiated_at_contractor_office | bool | (v0.3.1) Договор обсуждён и подписан в офисе подрядчика (attestation) |
+| customer_initiated, service_request_scope | bool, text | (v0.3.1) Условия Service & Repair: клиент сам обратился; исходный запрос |
+| start_date_approx, completion_date_approx, substantial_commencement_text | date, date, text | (v0.3.1) Обязательные поля CA-договора |
 | tax_enabled | bool | Налог вкл/выкл на документе (по умолчанию из `Company.tax_settings.default_enabled`) |
 | tax_rate_id, tax_rate_bps | → TaxRate, int (снимок) | Выбранная ставка; снимок ставки, чтобы изменение TaxRate не меняло отправленные сметы |
 | tax_profile_id, tax_mode, include_purchase_tax_in_cost | → TaxProfile, enum (снимок), bool (снимок) | (v0.3) Налоговый профиль документа; по умолчанию профиль компании, меняется на черновике (PRD 19) |
@@ -423,7 +440,17 @@
 `company_id` (null = системный шаблон модуля), `name` («Чистка гаттеров», «Guards only», «Gutters G/B/B»), `module`, `options[]` (`name`, `is_recommended`, `input_overrides json` — пресеты G/B/B для движка, `lines`), `intro/scope/terms/exclusions`, `deposit_rule`, `is_system`. Цены при создании сметы берутся из **текущего** каталога.
 
 ### EstimateApproval — решение клиента
-`version_id`, `option_id` (выбранный вариант), `selected_optional_items[]`, `signer_name`, `signer_email`, `signature_file_id`, `signed_at`, `ip`, `user_agent`, `locale`, `channel (portal / in_person / ai_recorded / office_recorded)` (`office_recorded` — одобрение со слов клиента, без подписи: обязательна `office_note`, при сумме выше порога CA для home improvement — предупреждение «нужна подпись» (из анализа внешней CRM)), `signature_method (draw / type)` (из анализа внешней CRM), `document_hash` (= `content_hash` версии), `consent_text_version` (ESIGN/UETA), `rescission_ends_at` (CA: право отказа 3/5 рабочих дней), `deposit_payment_id`, `offline bool` (подпись на устройстве без сети — приходит как заявка), `server_decision` (`accepted`/`rejected`), `rejection_reason`.
+`version_id`, `option_id` (выбранный вариант), `selected_optional_items[]`, `signer_name`, `signer_email`, `signature_file_id`, `signed_at`, `ip`, `user_agent`, `locale`, `channel (portal / in_person / ai_recorded / office_recorded)` (`office_recorded` — одобрение со слов клиента, без подписи: обязательна `office_note`, при сумме выше порога CA для home improvement — предупреждение «нужна подпись» (из анализа внешней CRM)), `signature_method (draw / type)` (из анализа внешней CRM), `document_hash` (= `content_hash` версии), `consent_text_version` (ESIGN/UETA), `rescission_ends_at` (CA: право отказа 3/5/7 рабочих дней; v0.3.1 — **от `executed_copy_delivered_at`**, а не от подписи клиента), `deposit_payment_id`, `offline bool` (подпись на устройстве без сети — приходит как заявка), `server_decision` (`accepted`/`rejected`), `rejection_reason`.
+(v0.3.1, LEG-03…LEG-05) `esign_consent_id` → ESignConsent; `owner_65_plus` (`yes` / `no` / `unknown` — без ответа считается как 65+); `rescission_initials_file_id`; countersign: `countersigned_by` → Membership, `countersigned_at`, `countersign_method` (`manual` / `auto_company`), `countersign_signature_file_id`; исполненный договор: `executed_pdf_file_id`, `executed_copy_delivered_at`, `executed_copy_delivery` (`email` / `portal` / `paper` / `device`); срок отказа: `rescission_days` (3/5/7), `rescission_rule_version`; бумажная Notice of Cancellation: `paper_notice_delivered_at`, `paper_notice_photo_file_id`, `paper_notice_delivered_by`; отказ клиента: `cancellation_received_at`, `cancellation_method` (`portal` / `email` / `mail` / `fax` / `in_person`), `cancellation_file_id`. Хранение — 10 лет после завершения работы (LEG-21).
+
+### ESignConsent — согласие потребителя на электронные документы (v0.3.1, LEG-05)
+`company_id`, `contact_id`, `text_version`, `locale` (`en`/`es`), `scope` (договор + change orders + уведомления по нему), раскрытия E-SIGN §7001(c) (снимок текста: право на бумагу, отзыв, требования к устройству, обновление email), `consented_at`, `ip`, `user_agent`, `access_check` (`test_pdf_opened` + время), `declined_at` (выбрал бумагу), `withdrawn_at`, `withdrawal_method`. Хранение — как у договора (10 лет).
+
+### ContractRuleSet — правила договоров по юрисдикции (v0.3.1, LEG-04; платформенные данные Octo, вне RLS компании)
+`jurisdiction` (`US-CA`), `version` (`US-CA 2026.1`), `effective_from`, `effective_to`, `base_rescission_days` (3), `senior_rescission_days` (5), `emergency_rescission_days` (7), `unknown_senior_policy` (`senior`), `saturday_is_business_day` (true), `holidays` {год: [даты]} (9 праздников Civ. §1689.5), `refund_days` (10), `hic_min_cents` (50000), `service_repair_max_cents` (75000), `deposit_cap` {pct_bps 1000, max_cents 100000}, `source_note`, `approved_by_attorney_at`. Изменение = новая версия; на договоре — снимок версии. Нет праздников на год → CA-договоры не отправляются.
+
+### ContractTemplate — шаблон договора (v0.3.1, LEG-02)
+`company_id` (null = системный), `jurisdiction`, `contract_type`, `locale`, `version`, `blocks[]` (`key`, `locked bool`, `text`, `font` 10/12 pt, `bold`), `editable_fields[]`, `required_fields[]` (`field`, `severity` `block`/`warn`), `based_on` («CSLB Sample HIC 2025»), `attorney_reviewed_by`, `attorney_reviewed_at`, `is_active`. Статутные блоки системного шаблона компания не правит; свои условия — отдельные незаблокированные блоки.
 
 ### ChangeOrder — доп. работы во время выполнения
 `job_id`, `number` (CO-0004), `reason`, `lines[]` (как LineItem, тот же движок), `tax_enabled`, `tax_rate_id`, `tax_rate_bps`, `tax_profile_id`, `tax_mode`, `include_purchase_tax_in_cost` (по умолчанию как в одобренной версии сметы), `status (draft → sent → approved / declined)`, `approval` (как EstimateApproval), `amount_cents` (может быть < 0), `cost_cents` (→ плановая себестоимость работы), `invoice_id` (в какой инвойс вошёл). После одобрения добавляется к финальному инвойсу работы.
@@ -448,7 +475,8 @@
 | cost_breakdown | json, вычисляемое | План / факт по категориям: материалы, труд, субподряд, прочее, комиссии платежей |
 | attributed_source_id | → LeadSource, денормализация | Для быстрых отчётов ROI (пересчитывается при смене источника лида) |
 | completed_at, closed_at | timestamp | Метрики «до инвойса» |
-| cancel_reason, cancelled_at | text, timestamp | Отмена работы клиентом (PRD 18) |
+| cancel_reason, cancelled_at | text, timestamp | Отмена работы клиентом (PRD 18); (v0.3.1) `cancel_reason = rescission` — отказ в срок отказа |
+| requires_permit, permit_number | bool, text | (v0.3.1, LEG-15) Работа с permit → лицензия субподрядчика обязательна при любой сумме |
 | checklist_template_id | → | |
 
 ### Visit — выезд (конкретное время в календаре)
@@ -475,7 +503,13 @@
 | name, contact_name, phone, email | text | |
 | preferred_language | `en` / `es` | Язык наряда и сообщений |
 | trades | text[] | gutters, roofing, electrical, painting… |
-| license_number, license_expires_on | text, date | CSLB. Пусто или истекла → предупреждение при назначении |
+| license_number, license_expires_on | text, date | CSLB. Пусто или истекла → предупреждение при назначении; (v0.3.1) обязательна, если наряд ≥ `unlicensed_work_threshold_cents` ($1,000, AB 2622) или `Job.requires_permit` |
+| license_class, license_status, license_checked_at, license_lookup_url | text[], `active`/`expired`/`suspended`/`unknown`, timestamp, text | (v0.3.1) Проверка по CSLB License Lookup |
+| wc_status, wc_policy_file_id, wc_expires_on | `policy`/`exemption`/`unknown`, → File, date | (v0.3.1) Workers' comp; для C-39 — полис обязателен всегда |
+| business_license_number, place_of_business | text, Address | (v0.3.1) Условия Labor Code §2781 (c), (d) |
+| subcontract_agreement_file_id | → File | (v0.3.1) Письменный договор субподряда (§2781 (a)); шаблон — позже |
+| ab5_checklist, ab5_status, ab5_checked_by/at | json (a–g: `met`, `evidence_file_id`, `note`), `all_met`/`incomplete`/`not_checked`, → User, timestamp | (v0.3.1, LEG-15) Чек-лист §2781 — не юридический вывод |
+| sms_consent_record_id | → ConsentRecord | (v0.3.1) Согласие на служебные SMS по нарядам |
 | insurance_coi_file_id, insurance_expires_on | → File, date | Сертификат страховки (COI). Предупреждение за `coi_warning_days` и при истечении |
 | w9_file_id | → File | Для 1099 в конце года |
 | tax_classification | `individual`, `sole_prop`, `llc`, `partnership`, `s_corp`, `c_corp` | Из W-9: корпорации обычно не получают 1099-NEC (уточнить у бухгалтера) |
@@ -509,7 +543,7 @@
 - Субподрядчику никогда не уходят цены клиента, баланс, маржа (фильтр на сервере и в шаблонах сообщений).
 
 ### SubcontractorPayment
-`subcontractor_id`, `assignment_ids[]`, `amount_cents`, `method (check / ach / zelle / cash / other)`, `reference` (номер чека), `paid_at`, `note`, `recorded_by`. Итог за календарный год нужен для 1099-NEC (порог — `Company.subcontractor_settings.form_1099_threshold_cents`, подтвердить у бухгалтера).
+`subcontractor_id`, `assignment_ids[]`, `amount_cents`, `method (check / ach / zelle / cash / other / card / payment_network)` (v0.3.1: `card`, `payment_network` — Stripe, PayPal и т.п.), `reference` (номер чека), `paid_at`, `note`, `recorded_by`, `w9_missing_override_reason` (v0.3.1). Итог за календарный год нужен для 1099-NEC: `counts_for_1099_nec` (вычисляемое) = false для `card` и `payment_network` (они в 1099-K у процессора); порог — `Company.subcontractor_settings.form_1099_thresholds[год]` ($2,000 за 2026, подтвердить у CPA).
 
 ### TimeEntry
 `user_id`, `job_id`, `visit_id`, `started_at`, `ended_at`, `kind (travel / work)`, `source` (`status_auto` / `manual` / `ai`), `edited_by`. Для фактических трудозатрат своих сотрудников (у субподрядчиков время не учитываем — они работают за сумму наряда).
@@ -543,7 +577,7 @@
 | customer_payment_claim | json, нет | «Я оплатил» от клиента в портале (из анализа внешней CRM): `method` (zelle/check/cash/bank_transfer/other), `amount_cents`, `claimed_at`, `note`, `status (open / recorded / rejected)`. **Не платёж**: создаёт Task офису «проверить и записать», ставит напоминания о просрочке на паузу до решения; запись Payment закрывает заявление |
 
 ### InvoiceLineItem
-Как EstimateLineItem (снимок цены, `taxable`), плюс `source_type/source_id` (`estimate_line` / `change_order` / `expense` / `recurring_plan` / `credit`) — трассировка и защита от двойного выставления. BOM-строки в инвойс не попадают.
+Как EstimateLineItem (снимок цены, `taxable`), плюс `source_type/source_id` (`estimate_line` / `change_order` / `expense` / `recurring_plan` / `credit`) — трассировка и защита от двойного выставления. BOM-строки в инвойс не попадают. (v0.3.1) `kind` + `returned_check_fee` (≤ $25 / $35, только после `Payment.returned` с `method=check`). У Invoice (v0.3.1): `payment_schedule_item_id` (progress по этапу), `work_performed_attestation` (кто, когда — если этап не отмечен выполненным); для `contract_type = ca_service_repair` deposit/progress запрещены.
 
 ### Payment — платёж
 | Поле | Тип | Описание |
@@ -570,7 +604,7 @@
 `invoice_id`, `idempotency_key` (`hash(invoice_id, amount, attempt_no)`), `amount_cents`, `stripe_payment_intent_id`, `expires_at`. Создаётся при открытии экрана оплаты, до появления Payment; повтор возвращает тот же PaymentIntent.
 
 ### Refund
-`payment_id`, `amount_cents`, `reason`, `status`, `approved_by` (только owner/admin), `refund_application_fee bool`, `platform_fee_refunded_cents`, `allocation` (налог / без налога; v0.3: `method` `proportional` / `by_line` / `manual`, `tax_cents`, `net_cents`; по умолчанию — по режиму документа: пропорционально для `added_on_top` и `tax_inclusive_display`, налоговая часть 0 для `included_in_price` и `exempt`; PRD 18 §K, PRD 19 §7.9).
+`payment_id`, `amount_cents`, `reason`, `reason_kind` (v0.3.1: `rescission` / `cancellation` / `goodwill` / `other`), `due_by` (v0.3.1, LEG-09: при отказе = `cancellation_received_at` + `ContractRuleSet.refund_days`), `status`, `approved_by` (только owner/admin), `refund_application_fee bool`, `platform_fee_refunded_cents`, `allocation` (налог / без налога; v0.3: `method` `proportional` / `by_line` / `manual`, `tax_cents`, `net_cents`; по умолчанию — по режиму документа: пропорционально для `added_on_top` и `tax_inclusive_display`, налоговая часть 0 для `included_in_price` и `exempt`; PRD 18 §K, PRD 19 §7.9).
 
 ### CustomerCredit / CreditApplication — кредит клиента (PRD 18)
 `CustomerCredit`: `customer_id`, `amount_cents` (> 0; долг всегда живёт в инвойсе), `source` (`overpayment` / `void_transfer` / `refund_alternative`), `source_payment_id`, `status (open / applied / refunded)`.
@@ -633,7 +667,7 @@
 - **налог при покупке**: ставка филиала / поставщика (`Supplier.purchase_tax_rate_id`) → `Company.tax_settings.default_purchase_tax_rate_id`; входит в `line_cost` по `unit_material_cost_cents`, если `include_purchase_tax_in_cost`;
 - в инвойсе налог можно изменить, пока он `draft`; после отправки — только новой ревизией (пока нет оплат) или void;
 - смена профиля компании не меняет отправленные документы; черновики — по кнопке с diff;
-- что именно облагается для монтажа в CA, решает пользователь со своим CPA (исследование — `docs/legal/`); Octo не даёт налоговых советов.
+- что именно облагается для монтажа в CA, решает пользователь со своим CPA (исследование — `docs/legal/`); Octo не даёт налоговых советов. (v0.3.1, LEG-16) Рекомендованный пресет CA — `included_in_price`; включение налога клиенту на CA lump-sum документе — с предупреждением об excess tax reimbursement; ставки LA с 01.10.2026 (County & City of LA 10.25%, Santa Monica 11.25%) — датированные заглушки (`effective_from`, `is_placeholder`, `source_note = "CDTFA L-1037"`).
 
 ### PurchaseOrder — заказ поставщику
 `number (PO-0031)`, `supplier_id`, `job_id` (nullable: заказ на склад), `lines` (← PurchaseOrderLine[]), `status` (§9), `revision int`, `sent_via (email / pdf)`, `sent_at`, `sent_to_email`, `pdf_file_id`, `confirmed_at`, `delivery_date`, `fulfillment` (`delivery` / `pickup`), `branch`, `delivery_address`, `driver_notes`, `source_version_id` (→ EstimateVersion), `source_change_order_id`, `total_cost_cents` (без налога), `tax_cents` и `delivery_fee_cents` (налог и доставка поставщика — часть себестоимости работы; v0.3: `tax_cents` по умолчанию = `round(total × purchase_tax_bps)` филиала/поставщика, правится по счёту; в обязательства — если `include_purchase_tax_in_cost`) (из анализа внешней CRM), `supplier_reference` (номер заказа у поставщика, спрашивают при самовывозе) (из анализа внешней CRM), `idempotency_key`, `option_id` (→ EstimateOption), `origin` (`draft_estimate` / `approved_estimate` / `manual`), `is_outdated bool`, `sent_before_approval bool`, `rfq_token`. Автоматически генерируется из BOM одобренной сметы (уникальность автосозданных: `job_id + supplier_id + source_version_id`); **вручную может создаваться из черновика сметы** (решение основателя 03.11, PRD 11 PO-US-20…25). До одобрения сметы не входит в committed cost.
@@ -664,7 +698,7 @@
 `BookingRequest`: `kind` (`inspection` / `service_request`), `service`, `slot`, `preferred_week`, `contact`, `address`, `customer_id` (nullable), `property_id` (nullable — «Записаться снова» на конкретный объект), `lead_id`, `visit_id`, `referral_code`, `locale`, `hold_expires_at`, `status (requested → confirmed / declined)`. Создаёт Lead с источником «Портал» или «Сайт».
 
 ### ReviewRequest и Referral
-`ReviewRequest`: `job_id`, `invoice_id`, `channel`, `sent_at`, `reminder_sent_at`, `clicked_at`, `platform` (MVP только `google`; Yelp не запрашиваем). Запрос уходит **всем** клиентам, без фильтра недовольных (правила FTC и Google).
+`ReviewRequest`: `job_id`, `invoice_id`, `channel`, `sent_at`, `reminder_sent_at`, `clicked_at`, `platform` (MVP только `google`; Yelp не запрашиваем). Запрос уходит **всем** клиентам, без фильтра недовольных (правила FTC и Google); (v0.3.1, LEG-12) без реферального предложения и промо в том же сообщении, не уходит контактам с `is_team_member`. Реферальное предложение — отдельная автоматизация `referral_offer` (маркетинг, `sms_marketing_opt_in`).
 `Referral` — одна запись на каждого приведённого: `referrer_customer_id`, `code` (= `Customer.referral_code` реферера), `new_lead_id`, `status` (§9), `reward` (cents / gift), `reward_due_cents`, `reward_paid_at`, `reward_method` (скидка на следующую работу / gift card / наличные). Ссылка и клики живут на клиенте (`Customer.referral_code`, `referral_link_clicks`).
 
 ---
@@ -672,13 +706,37 @@
 ## 8. Коммуникации, AI, платформа
 
 ### MessageThread / Message
-Переписка с клиентом (и субподрядчиком по наряду): `channel (sms / email / portal)`, `direction`, `body`, `status (queued → sent → delivered / failed)`, `provider_id`, `segments`, `cost_cents`, `template_key`, `automation_key`, `idempotency_key`, `sent_via` (`octo` / `own_phone` — «с моего телефона», не подтверждено). Без сети сообщение ставится в очередь (outbox) с TTL.
+Переписка с клиентом (и субподрядчиком по наряду): `channel (sms / email / portal)`, `direction`, `body`, `status (queued → sent → delivered / failed)`, `provider_id`, `segments`, `cost_cents`, `template_key`, `automation_key`, `idempotency_key`, `sent_via` (`octo` / `own_phone` — «с моего телефона», не подтверждено). Без сети сообщение ставится в очередь (outbox) с TTL. (v0.3.1, LEG-11) `category` (`transactional` / `marketing` / `conversational`), `recipient_timezone`, `tz_source` (`property` / `customer_address` / `area_code` / `fallback`) — quiet hours по времени получателя (8–21 информационные, 9–20 маркетинг).
+
+### ConsentRecord — журнал SMS/email-согласий (v0.3.1, LEG-10; PRD 13 COMM-US-04)
+Только добавление (append-only); флаги `Contact.sms_opt_in` / `sms_marketing_opt_in` вычисляются из последней записи по категории.
+| Поле | Тип | Описание |
+|---|---|---|
+| company_id, contact_id | → | Согласие — на компанию-отправителя (10DLC brand подрядчика) |
+| subcontractor_id | → Subcontractor, нет | Для служебных SMS по нарядам |
+| phone_e164 / email | text | Номер или адрес, на который дано согласие |
+| channel | `sms` / `email` | |
+| category | `transactional` / `marketing` | Отзыв маркетинга прекращает весь маркетинг; отзыв ключевым словом — все категории |
+| action | `grant` / `revoke` | |
+| consent_text_id, text_version, locale | → ConsentText, text, `en`/`es` | **Точный текст**, который видел клиент |
+| source | `web_form` / `portal` / `estimate_sign` / `verbal_recorded_by_user` / `customer_texted_first` / `paper_form_photo` / `attestation` | `import` не бывает |
+| form_url, form_screenshot_file_id | text, → File | Версия формы (для 10DLC vetting) |
+| ip, user_agent | text | |
+| recorded_by | → User, нет | Для устного согласия и attestation (+ AuditLog) |
+| confirmation_message_sid | text | Подтверждающее SMS (текст C/D) |
+| revocation_method, revocation_raw_text | `keyword` / `free_text` / `phone` / `email` / `portal` / `unsubscribe_link`, text | Для `revoke` |
+| revocation_received_at, revocation_honored_at | timestamp | Исполнение: сразу (закон — ≤ 10 рабочих дней) |
+| created_at | timestamp (UTC) | |
+Хранение — 5 лет после последнего сообщения или отзыва (TCPA, 4 года + запас).
+
+### ConsentText — версии текстов согласий и служебных ответов (v0.3.1, LEG-10)
+`company_id` (null = системный), `key` (`sms_transactional_checkbox`, `sms_marketing_checkbox`, `optin_confirm`, `marketing_confirm`, `help`, `stop`, `verbal_script`), `locale`, `version`, `body`, `required_elements[]` (проверка при правке), `attorney_approved_by`, `attorney_approved_at`, `is_active`. Системные тексты — `legal/legal-research.md` §3.6 (черновики для адвоката).
 
 ### MessageTemplate (новая)
 `company_id` (null = системный), `key` (`estimate.followup.1`, `work_order.offer`…), `audience` (`customer` / `subcontractor`), `channel (sms/email)`, `locale (en/es)`, `subject`, `body`, `is_system`, `updated_by`. В шаблонах для субподрядчика переменные с ценами клиента (`{total}`, `{balance}`, `{invoice_link}`) запрещены.
 
 ### AutomationSetting (новая)
-`company_id`, `automation_key` (`lead_instant_reply`, `estimate_followup`, `visit_reminders`, `invoice_reminders`, `review_referral`, `subcontractor_work_order`), `enabled`, `params json` (тайминги, каналы, N минут).
+`company_id`, `automation_key` (`lead_instant_reply`, `estimate_followup`, `visit_reminders`, `invoice_reminders`, `review_referral` (v0.3.1: только запрос отзыва), `referral_offer` (v0.3.1: отдельное маркетинговое сообщение, выкл. по умолчанию), `subcontractor_work_order`), `enabled`, `params json` (тайминги, каналы, N минут; `review_request_sms`).
 
 ### ScheduledMessage (новая)
 `company_id`, `automation_key`, `subject_type/id`, `step`, `scheduled_at`, `status` (§9), `cancel_reason`, `message_id`; unique(`automation_key`, `subject_id`, `step`) — один шаг не уходит дважды.
@@ -768,10 +826,12 @@ new → contacted → qualified → inspection_scheduled → estimate_sent → w
 
 ### Estimate
 ```
-draft → sent → viewed → approved
+draft → sent → viewed → [awaiting_countersign] → approved → [cancelled_by_customer]
           ↘ declined   ↘ expired
 draft/sent/viewed → revised (новая версия, снова draft)
 ```
+- (v0.3.1, LEG-03) `awaiting_countersign` — клиент подписал, ждём подпись подрядчика (при автоподписи проходится мгновенно); `approved` = договор исполнен обеими сторонами; Job и депозитный инвойс создаются только после `approved`.
+- (v0.3.1, LEG-04) `approved → cancelled_by_customer` — только до `EstimateApproval.rescission_ends_at` (CA HIC) или до начала работы (S&R); Job → `cancelled` (`cancel_reason = rescission`), возврат ≤ 10 дней (`Refund.due_by`).
 - `revised` — событие, а не конечное состояние.
 - `approved` → **идемпотентно** создаётся Job (+ депозитный инвойс, если есть правило депозита), PO-черновики из BOM, задача «запланировать».
 - После `approved` смета не редактируется. Изменения оформляются через ChangeOrder.
@@ -937,6 +997,25 @@ erDiagram
 ---
 
 ## 13. Журнал изменений
+
+### 13.3 v0.3.1 — юридическое исследование 03.11.2026 (`legal/legal-research.md`, LEG-01…LEG-22)
+| Требование / PRD | Внесено | Не внесено / как решено |
+|---|---|---|
+| LEG-01 тип договора (PRD 05) | `EstimateVersion.contract_type`, `customer_initiated`, `service_request_scope`, `negotiated_at_contractor_office`; запрет deposit/progress для `ca_service_repair` | Определение «чистка — не HIC» — подсказка, не автоматический вывод (адвокат §11.1 п. 6) |
+| LEG-02 CA-шаблон (PRD 05) | **ContractTemplate** (заблокированные блоки, `required_fields`, проверка юристом); `EstimateVersion.contract_template_id/version`, `start/completion_date_approx`, `substantial_commencement_text` | ES-шаблон — после перевода и утверждения (Б6) |
+| LEG-03 countersign (PRD 05, 07) | `EstimateApproval.countersigned_*`, `countersign_method`, `executed_pdf_file_id`, `executed_copy_delivered_at/_delivery`; статус Estimate `awaiting_countersign`; `Membership.can_sign_contracts`, `countersign_signature_file_id`; `Company.contract_settings.auto_countersign` | Допустимость автоподписи — адвокат (§11.1 п. 3) |
+| LEG-04 срок отказа (PRD 05, 07, 18) | **ContractRuleSet** (3/5/7, суббота, праздники, `unknown_senior_policy`, `refund_days`, пороги S&R/HIC, лимит депозита); `EstimateApproval.owner_65_plus`, `rescission_days`, `rescission_rule_version`, `cancellation_*`; `EstimateVersion.disaster_emergency_repair`, `emergency_declaration_ref`; статус `cancelled_by_customer` | Отказ от права отказа (Civ. §1689.15) — не строим |
+| LEG-05 E-SIGN и бумажная форма (PRD 05) | **ESignConsent**; `EstimateApproval.esign_consent_id`, `paper_notice_*`; `Company.contract_settings.paper_notice_of_cancellation` (вкл.) | — |
+| LEG-06 депозит и этапы (PRD 05, 09) | `EstimateVersion.payment_schedule`, `bond_attestation`; `Invoice.payment_schedule_item_id`, `work_performed_attestation`; `ca_deposit_cap` для всех жилых HIC | Лимит для ≤ $500 — адвокат (§11.1 п. 5) |
+| LEG-07, LEG-08 реквизиты (PRD 01, 05) | `Company.license_class`, `license_expires_on`, `contract_settings` (CGL, WC, email/адрес для отказа); `Membership.his_registration_number` | — |
+| LEG-09 возврат при отказе (PRD 09, 18) | `Refund.due_by`, `reason_kind`; `Job.cancel_reason = rescission` | — |
+| LEG-10…LEG-13 SMS (PRD 13) | **ConsentRecord**, **ConsentText**; `Contact.sms_consent_status`, `is_team_member`, `consent_source` без `import` (флаги — вычисляемые); `Message.category`, `recipient_timezone`, `tz_source`; `AutomationSetting` `referral_offer` | Reassigned Numbers Database — позже |
+| LEG-15 субподрядчики (PRD 07) | `Subcontractor.license_class/status/checked_at/lookup_url`, `wc_*`, `business_license_number`, `place_of_business`, `subcontract_agreement_file_id`, `ab5_checklist/status/checked_*`, `sms_consent_record_id`; `SubcontractorPayment.method` + `card`, `payment_network`, `counts_for_1099_nec`, `w9_missing_override_reason`; `subcontractor_settings.form_1099_thresholds` (вместо `form_1099_threshold_cents`), `unlicensed_work_threshold_cents` ($1,000), `trade_license_classes`; `Job.requires_permit`, `permit_number` | AB5 — чек-лист, не вывод; CPA — Zelle и S-corp |
+| LEG-16 налоги (PRD 19) | Ставки LA с 01.10.2026 — датированные заглушки; рекомендованный пресет CA `included_in_price` + предупреждение | Новых полей не нужно (`effective_from/to` уже есть с v0.3) |
+| LEG-17 платежи (PRD 09) | `Company.payment_settings.returned_check_fee`, `method_discount.legal_review_confirmed_at`; `InvoiceLineItem.kind` `returned_check_fee` | ACH-скидка — за флагом до ответа адвоката |
+| LEG-18 снимки (ADR-004) | Флаги провайдера адаптера; `Drawing.imagery_ref.provider` + `eagleview` / `hover`, `report_id` | Esri — после письменного подтверждения |
+| LEG-19 геопозиция (PRD 07, 08) | `Membership.location_notice_ack_at`; передача только в смену | AB 1331 — проверить у адвоката |
+| LEG-21 хранение | Сроки в описаниях `EstimateApproval`, `ESignConsent` (10 лет), `ConsentRecord` (5 лет) | Legal hold и полная таблица — `08-security` (позже) |
 
 ### 13.2 v0.3 — решения основателя 03.11.2026 (второй пакет)
 | Решение / PRD | Внесено | Не внесено / как решено |
