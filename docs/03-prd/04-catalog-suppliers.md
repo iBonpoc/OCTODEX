@@ -130,30 +130,32 @@
 ### 7.5 Стартовый LA price book модуля Gutters
 Цены и себестоимость ниже — **заглушки**, ориентир по рынку LA (`01-competitor-analysis.md` §6, ~$10–20/LF seamless, ~$12–25/LF guards). До бета-запуска заменяются реальными данными основателя. На экране и в сиде помечены «стартовые цены, проверьте».
 
-| seed_key | Позиция | kind | unit | Цена | Себест. | Видна клиенту |
+| seed_key | Позиция | kind | unit | Цена | Себест. (что входит) | Видна клиенту |
 |---|---|---|---|---|---|---|
-| gut.k5.027 | Seamless gutter 5″ K-style .027 | service | LF | $10.00 | $3.60 | да |
-| gut.k6.032 | Seamless gutter 6″ K-style .032 | service | LF | $12.00 | $4.40 | да |
-| gut.hr6 | Half-round 6″ (секции 10 ft) | service | LF | $22.00 | $9.50 | да |
-| ds.2x3 | Downspout 2×3 | service | LF | $9.00 | $2.80 | да |
-| ds.3x4 | Downspout 3×4 | service | LF | $11.00 | $3.60 | да |
-| miter.out / miter.in | Outside / inside miter | service | ea | $25.00 | $6.00 | да |
-| elbow.ab | Elbow A/B | service | ea | $6.00 | $1.40 | да |
-| fee.story2 / fee.story3 | Надбавка 2-й / 3-й этаж | fee | LF | $3.00 / $6.00 | $1.50 / $3.00 | да |
-| fee.tile | Работа с tile roof (strap hangers) | fee | LF | $1.50 | $0.70 | да |
-| rem.tearoff | Демонтаж и вывоз старых гаттеров | service | LF | $2.00 | $0.80 | да |
-| guard.mesh | Micro-mesh guards, нержавейка (негорючие) | service | LF | $14.00 | $5.50 | да |
-| guard.screen | Алюминиевая сетка (негорючая) | service | LF | $8.00 | $2.60 | да |
-| fascia.repair | Ремонт fascia | service | LF | $18.00 | $7.00 | да |
-| ds.ext | Удлинитель / splash block | service | ea | $15.00 | $4.00 | да |
+| gut.k5.027 | Seamless gutter 5″ K-style .027 | service | LF | $10.00 | $2.50 (работа) | да |
+| gut.k6.032 | Seamless gutter 6″ K-style .032 | service | LF | $12.00 | $2.90 (работа) | да |
+| gut.hr6 | Half-round 6″ (секции 10 ft) | service | LF | $22.00 | $4.00 (работа) | да |
+| ds.2x3 | Downspout 2×3 | service | LF | $9.00 | $1.50 (работа) | да |
+| ds.3x4 | Downspout 3×4 | service | LF | $11.00 | $1.80 (работа) | да |
+| miter.out / miter.in | Outside / inside miter | service | ea | $25.00 | $6.00 (материал + работа) | да |
+| elbow.ab | Elbow A/B | service | ea | $6.00 | $1.40 (материал) | да |
+| fee.story2 / fee.story3 | Надбавка 2-й / 3-й этаж | fee | LF | $3.00 / $6.00 | $1.50 / $3.00 (работа) | да |
+| fee.tile | Работа с tile roof (strap hangers) | fee | LF | $1.50 | $0.70 (работа) | да |
+| rem.tearoff | Демонтаж и вывоз старых гаттеров | service | LF | $2.00 | $0.80 (работа + dump fee) | да |
+| guard.mesh | Micro-mesh guards, нержавейка (негорючие) | service | LF | $14.00 | $5.50 (материал + работа) | да |
+| guard.screen | Алюминиевая сетка (негорючая) | service | LF | $8.00 | $2.60 (материал + работа) | да |
+| fascia.repair | Ремонт fascia | service | LF | $18.00 | $7.00 (материал + работа) | да |
+| ds.ext | Удлинитель / splash block | service | ea | $15.00 | $4.00 (материал + работа) | да |
 | bom.hanger.hidden | Hidden hanger | material | ea | $0 | $0.85 | нет (BOM) |
 | bom.hanger.tile | Strap hanger для tile | material | ea | $0 | $1.60 | нет |
 | bom.endcap.k5 / .k6 | End cap | material | ea | $0 | $1.20 | нет |
 | bom.outlet.2x3 / .3x4 | Outlet (drop) | material | ea | $0 | $2.10 | нет |
 | bom.sealant | Sealant, туба | material | ea | $0 | $7.50 | нет |
 | bom.screws | Саморезы, коробка | material | ea | $0 | $9.00 | нет |
-| bom.coil.<width>.<gauge>.<color> | Coil (по цветам) | material | LF | $0 | $1.10–1.60 | нет |
+| bom.coil.<width>.<gauge>.<color> | Coil 11⅞″ .027 / 15″ .032 (по цветам) | material | LF | $0 | $1.10 / $1.40 | нет |
 | bom.ds.stick | Downspout, палка 10 ft | material | ea | $0 | $14.00 | нет |
+
+**Себестоимость каждой вещи учитывается ровно один раз.** Если материал есть во внутреннем BOM (coil, hangers, end caps, outlets, палки downspout), видимая строка несёт только себестоимость работы. Если BOM-строки нет (miters, elbows, guards), видимая строка несёт материал + работу.
 
 Сборки сида: `gutters.install` (runs → гаттер, miters, end caps, hangers, sealant, coil), `gutters.downspouts`, `gutters.guards`, `gutters.tear_off`. Формулы — в `06-gutters-module.md` §7. Правило: **внутренние BOM-строки всегда с ценой 0**, всё, за что платит клиент, видно в смете (честная цена, `05-estimates.md` §7).
 
