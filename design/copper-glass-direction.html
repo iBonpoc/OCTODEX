@@ -1,0 +1,473 @@
+<title>Copper Glass Direction</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<style>
+/* Layout: warm "room" scene behind frosted-glass chrome; content sits on calmer, more opaque surfaces. Dark-first. */
+:root{
+  --scene-1:#2a1f19; --scene-2:#5b3a24; --scene-3:#a8673a; --scene-4:#1b1715;
+  --bg:#141110;
+  --fg:#f6efe8; --fg-2:rgba(246,239,232,.72); --fg-3:rgba(246,239,232,.48);
+  --glass:rgba(255,248,240,.09); --glass-strong:rgba(255,248,240,.16);
+  --glass-edge:rgba(255,255,255,.22); --glass-edge-2:rgba(255,255,255,.06);
+  --surface:rgba(28,22,19,.72); --surface-line:rgba(255,240,225,.10);
+  --copper:#d0864c; --ember:#f2622e; --ember-ink:#fff;
+  --ok:#3ccf91; --warn:#f5b54a; --info:#9b8cff;
+  --shadow:0 20px 50px -20px rgba(0,0,0,.65);
+  --r-xl:32px; --r-lg:22px; --r-md:14px; --r-pill:999px;
+  --f-body:"Geist",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+  --f-display:"Barlow Condensed","Arial Narrow",ui-sans-serif,sans-serif;
+  --f-mono:"Geist Mono",ui-monospace,"SF Mono",Menlo,monospace;
+  color-scheme:dark;
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  --scene-1:#efe4d8; --scene-2:#d9b48f; --scene-3:#c98a55; --scene-4:#f6efe7;
+  --bg:#efe7de;
+  --fg:#22180f; --fg-2:rgba(34,24,15,.72); --fg-3:rgba(34,24,15,.5);
+  --glass:rgba(255,255,255,.42); --glass-strong:rgba(255,255,255,.62);
+  --glass-edge:rgba(255,255,255,.85); --glass-edge-2:rgba(80,50,20,.10);
+  --surface:rgba(255,252,248,.82); --surface-line:rgba(60,35,15,.10);
+  --copper:#a85e27; --ember:#d9481a; --ember-ink:#fff;
+  --ok:#14915f; --warn:#b7790f; --info:#5b49d6;
+  --shadow:0 20px 50px -24px rgba(80,45,15,.35);
+  color-scheme:light;
+}}
+:root[data-theme="light"]{
+  --scene-1:#efe4d8; --scene-2:#d9b48f; --scene-3:#c98a55; --scene-4:#f6efe7;
+  --bg:#efe7de;
+  --fg:#22180f; --fg-2:rgba(34,24,15,.72); --fg-3:rgba(34,24,15,.5);
+  --glass:rgba(255,255,255,.42); --glass-strong:rgba(255,255,255,.62);
+  --glass-edge:rgba(255,255,255,.85); --glass-edge-2:rgba(80,50,20,.10);
+  --surface:rgba(255,252,248,.82); --surface-line:rgba(60,35,15,.10);
+  --copper:#a85e27; --ember:#d9481a; --ember-ink:#fff;
+  --ok:#14915f; --warn:#b7790f; --info:#5b49d6;
+  --shadow:0 20px 50px -24px rgba(80,45,15,.35);
+  color-scheme:light;
+}
+
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:var(--f-body);font-size:15px;line-height:1.5;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1180px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:40px 80px;display:flex;flex-direction:column;gap:56px}
+h1,h2,h3{margin:0;text-wrap:balance}
+h1{font-family:var(--f-display);font-weight:600;font-size:clamp(40px,7vw,72px);line-height:.95;letter-spacing:.01em;text-transform:uppercase}
+h2{font-family:var(--f-display);font-weight:600;font-size:30px;letter-spacing:.02em;text-transform:uppercase}
+p{margin:0;max-width:64ch;color:var(--fg-2)}
+.eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--copper);font-weight:600}
+.lede{display:flex;flex-direction:column;gap:14px}
+.sec{display:flex;flex-direction:column;gap:20px}
+.sec>header{display:flex;flex-direction:column;gap:6px}
+
+/* ---------- scene ---------- */
+.scene{position:relative;border-radius:var(--r-xl);overflow:hidden;isolation:isolate;padding:28px;
+  background:
+   radial-gradient(60% 50% at 18% 85%,var(--scene-3) 0%,transparent 70%),
+   radial-gradient(45% 40% at 85% 20%,var(--scene-2) 0%,transparent 70%),
+   radial-gradient(35% 30% at 70% 90%,var(--scene-2) 0%,transparent 70%),
+   linear-gradient(160deg,var(--scene-1),var(--scene-4));}
+.scene::after{content:"";position:absolute;inset:0;z-index:-1;opacity:.35;
+  background:repeating-linear-gradient(90deg,transparent 0 140px,var(--glass-edge-2) 140px 141px)}
+.glass{background:var(--glass);backdrop-filter:blur(26px) saturate(170%);-webkit-backdrop-filter:blur(26px) saturate(170%);
+  border:1px solid var(--glass-edge-2);box-shadow:inset 0 1px 0 var(--glass-edge),inset 0 -1px 0 var(--glass-edge-2),var(--shadow)}
+@media (prefers-reduced-transparency: reduce){.glass{background:var(--surface);backdrop-filter:none;-webkit-backdrop-filter:none}}
+
+/* ---------- desktop shell ---------- */
+.shell{display:grid;grid-template-columns:auto 1fr;gap:24px;align-items:start;min-height:620px}
+.side{width:280px;border-radius:30px;padding:14px;display:flex;flex-direction:column;gap:6px;transition:width .35s cubic-bezier(.2,.8,.2,1)}
+.side.mini{width:76px}
+.brand{display:flex;align-items:center;gap:12px;padding:6px 6px 10px;position:relative}
+.logo{flex:none;width:44px;height:44px;border-radius:50%;display:grid;place-items:center;font-family:var(--f-display);font-weight:700;font-size:24px;color:var(--ember-ink);
+  background:radial-gradient(circle at 35% 30%,#ff9a6a,var(--ember) 60%,#b9381a);box-shadow:0 6px 18px -6px var(--ember)}
+.brand-txt{display:flex;flex-direction:column;min-width:0;line-height:1.2}
+.brand-txt b{font-weight:600}
+.brand-txt span{font-size:12.5px;color:var(--fg-3);white-space:nowrap}
+.co-switch{display:flex;align-items:center;gap:6px;border:0;background:none;color:inherit;font:inherit;padding:0;cursor:pointer;text-align:left}
+.collapse{position:absolute;right:-6px;top:10px;width:30px;height:30px;border-radius:50%;border:0;cursor:pointer;display:grid;place-items:center;
+  background:var(--glass-strong);color:var(--fg);box-shadow:inset 0 1px 0 var(--glass-edge),var(--shadow)}
+.side.mini .collapse{right:-20px;top:16px}
+.side.mini .collapse svg{transform:rotate(180deg)}
+.search{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:var(--r-pill);background:var(--glass);color:var(--fg-3);box-shadow:inset 0 1px 0 var(--glass-edge-2)}
+.search kbd{margin-left:auto;font-family:var(--f-mono);font-size:11px;padding:2px 6px;border-radius:6px;background:var(--glass-strong);color:var(--fg-2)}
+.grp{font-size:11px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-3);padding:14px 12px 4px;font-weight:600}
+.nav{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+.nav button{position:relative;width:100%;display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:var(--r-pill);border:1px solid transparent;
+  background:none;color:var(--fg);font:inherit;font-weight:500;cursor:pointer;text-align:left}
+.nav button:hover{background:var(--glass)}
+.nav button[aria-current="page"]{background:linear-gradient(180deg,var(--glass-strong),var(--glass));border-color:var(--glass-edge);
+  box-shadow:inset 0 1px 0 var(--glass-edge),0 8px 22px -10px rgba(0,0,0,.6)}
+.nav button:focus-visible,.btn:focus-visible,.collapse:focus-visible,.tab:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+.nav svg,.ico{flex:none;width:20px;height:20px;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round;stroke-linejoin:round}
+.count{margin-left:auto;font-size:12px;font-weight:600;min-width:26px;height:22px;padding:0 7px;border-radius:var(--r-pill);display:grid;place-items:center;background:var(--glass-strong)}
+.count.hot{background:var(--ember);color:var(--ember-ink);box-shadow:0 4px 12px -4px var(--ember)}
+.dot{margin-left:auto;width:8px;height:8px;border-radius:50%;background:var(--ember)}
+.ai-btn{margin-top:10px;display:flex;align-items:center;gap:10px;padding:12px;border-radius:var(--r-pill);border:0;cursor:pointer;font:inherit;font-weight:600;color:var(--ember-ink);
+  background:linear-gradient(180deg,#ff8a55,var(--ember));box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 10px 24px -10px var(--ember)}
+.me{display:flex;align-items:center;gap:10px;padding:10px 6px 4px;border-top:1px solid var(--glass-edge-2);margin-top:8px}
+.ava{flex:none;width:38px;height:38px;border-radius:50%;display:grid;place-items:center;font-weight:600;background:var(--glass-strong);position:relative}
+.ava::after{content:"";position:absolute;right:-1px;bottom:-1px;width:11px;height:11px;border-radius:50%;background:var(--ok);border:2px solid var(--scene-1)}
+.side.mini .hide-mini{display:none}
+.side.mini .nav button,.side.mini .ai-btn,.side.mini .search{justify-content:center;padding:11px 0}
+.side.mini .count,.side.mini .dot{position:absolute;top:4px;right:10px;min-width:0;width:9px;height:9px;padding:0;font-size:0;margin:0}
+.side.mini .brand{justify-content:center}
+.side.mini .me{justify-content:center}
+.side.mini .nav button[data-tip]:hover::after{content:attr(data-tip);position:absolute;left:calc(100% + 14px);top:50%;transform:translateY(-50%);white-space:nowrap;
+  padding:6px 12px;border-radius:var(--r-pill);background:var(--glass-strong);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);color:var(--fg);font-size:13px;box-shadow:var(--shadow);z-index:5}
+
+/* content area */
+.main{display:flex;flex-direction:column;gap:18px;min-width:0}
+.topline{display:flex;flex-wrap:wrap;align-items:end;justify-content:space-between;gap:12px}
+.topline h3{font-family:var(--f-display);font-size:38px;font-weight:600;text-transform:uppercase;line-height:1}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{padding:7px 14px;border-radius:var(--r-pill);font-size:13px;font-weight:500}
+.kpis{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px}
+.kpi{padding:16px 18px;border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--surface-line);display:flex;flex-direction:column;gap:2px}
+.kpi small{color:var(--fg-3);font-size:12.5px}
+.kpi b{font-family:var(--f-display);font-size:34px;font-weight:600;line-height:1.1;font-variant-numeric:tabular-nums}
+.kpi em{font-style:normal;font-size:12.5px;color:var(--ok)}
+.list{border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--surface-line);overflow:hidden}
+.row{display:grid;grid-template-columns:64px minmax(0,1fr) auto;gap:14px;align-items:center;padding:14px 18px;border-top:1px solid var(--surface-line)}
+.row:first-child{border-top:0}
+.time{font-family:var(--f-mono);font-size:13px;color:var(--fg-2);font-variant-numeric:tabular-nums}
+.row b{font-weight:600}
+.row span{display:block;font-size:13px;color:var(--fg-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.pill{font-size:12px;font-weight:600;padding:4px 10px;border-radius:var(--r-pill);white-space:nowrap}
+.p-ok{color:var(--ok);background:color-mix(in srgb,var(--ok) 16%,transparent)}
+.p-warn{color:var(--warn);background:color-mix(in srgb,var(--warn) 16%,transparent)}
+.p-info{color:var(--info);background:color-mix(in srgb,var(--info) 16%,transparent)}
+.p-hot{color:var(--ember);background:color-mix(in srgb,var(--ember) 16%,transparent)}
+
+/* ---------- mobile row ---------- */
+.trio{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:24px;align-items:start}
+.phone{position:relative;width:100%;max-width:340px;aspect-ratio:9/19;margin:0 auto;border-radius:44px;padding:10px;background:#0b0908;box-shadow:0 30px 60px -30px rgba(0,0,0,.8)}
+.screen{position:relative;height:100%;border-radius:36px;overflow:hidden;isolation:isolate;display:flex;flex-direction:column;
+  background:radial-gradient(70% 40% at 20% 100%,var(--scene-3),transparent 70%),radial-gradient(60% 40% at 100% 0%,var(--scene-2),transparent 70%),linear-gradient(170deg,var(--scene-1),var(--scene-4))}
+.status{display:flex;justify-content:space-between;padding:12px 22px 4px;font-size:12px;font-weight:600}
+.sbar{margin:6px 12px 0;padding:10px 14px;border-radius:var(--r-pill);display:flex;align-items:center;justify-content:space-between;gap:8px}
+.sbar b{font-weight:600}
+.scroll{flex:1;overflow:hidden;padding:12px;display:flex;flex-direction:column;gap:10px}
+.card{border-radius:20px;padding:14px;background:var(--surface);border:1px solid var(--surface-line);display:flex;flex-direction:column;gap:6px}
+.card .t{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.card small{color:var(--fg-3);font-size:12px}
+.big{font-family:var(--f-display);font-size:30px;font-weight:600;line-height:1;font-variant-numeric:tabular-nums}
+.tabbar{position:absolute;left:12px;right:12px;bottom:14px;border-radius:30px;padding:8px 10px;display:flex;align-items:center;justify-content:space-between}
+.tab{border:0;background:none;color:var(--fg-2);display:flex;flex-direction:column;align-items:center;gap:2px;font:inherit;font-size:10.5px;padding:4px 6px;cursor:pointer;border-radius:16px}
+.tab[aria-current="page"]{color:var(--fg);background:var(--glass-strong)}
+.mic{width:54px;height:54px;margin-top:-26px;border-radius:50%;border:0;display:grid;place-items:center;color:#fff;cursor:pointer;
+  background:radial-gradient(circle at 35% 30%,#ff9a6a,var(--ember) 60%,#b9381a);box-shadow:0 0 0 6px color-mix(in srgb,var(--ember) 22%,transparent),0 12px 24px -8px var(--ember)}
+
+/* gutter drawing */
+.sat{position:relative;flex:1;margin:10px 12px 0;border-radius:22px;overflow:hidden;background:#3b3a33}
+.sat svg{width:100%;height:100%;display:block}
+.tool{position:absolute;left:10px;right:10px;bottom:10px;border-radius:22px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}
+.tool .sum{display:flex;justify-content:space-between;font-size:12.5px;color:var(--fg-2)}
+.tool .sum b{color:var(--fg);font-family:var(--f-mono);font-weight:500}
+.tools{display:flex;gap:6px;flex-wrap:wrap}
+.tbtn{font-size:11.5px;font-weight:600;padding:6px 10px;border-radius:var(--r-pill);background:var(--glass);color:var(--fg)}
+.tbtn.on{background:var(--ember);color:var(--ember-ink)}
+
+/* estimate gbb */
+.opt{border-radius:18px;padding:12px 14px;background:var(--surface);border:1px solid var(--surface-line);display:flex;flex-direction:column;gap:4px}
+.opt.pick{border-color:var(--copper);box-shadow:0 0 0 1px var(--copper) inset,0 12px 26px -16px var(--copper)}
+.opt .t{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.opt h4{margin:0;font-size:13px;letter-spacing:.12em;text-transform:uppercase;color:var(--copper)}
+.opt .price{font-family:var(--f-display);font-size:28px;font-weight:600;font-variant-numeric:tabular-nums}
+.opt p{font-size:12.5px;color:var(--fg-3)}
+.opt .mo{font-size:12px;color:var(--fg-2)}
+.cta{margin-top:auto;border:0;border-radius:var(--r-pill);padding:13px;font:inherit;font-weight:600;color:var(--ember-ink);cursor:pointer;
+  background:linear-gradient(180deg,#ff8a55,var(--ember));box-shadow:inset 0 1px 0 rgba(255,255,255,.45),0 10px 24px -10px var(--ember)}
+.caption{text-align:center;font-size:13px;color:var(--fg-3);margin-top:12px}
+
+/* ---------- tokens ---------- */
+.tok{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}
+.panel{border-radius:var(--r-lg);background:var(--surface);border:1px solid var(--surface-line);padding:20px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.panel h3{font-size:13px;letter-spacing:.14em;text-transform:uppercase;color:var(--fg-3);font-weight:600}
+.sw{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.sw div{display:flex;flex-direction:column;gap:6px;font-size:12px;color:var(--fg-2)}
+.sw i{display:block;height:54px;border-radius:14px;border:1px solid var(--surface-line)}
+.type{display:flex;flex-direction:column;gap:10px}
+.type div{display:flex;align-items:baseline;justify-content:space-between;gap:12px;border-top:1px solid var(--surface-line);padding-top:8px}
+.type small{font-family:var(--f-mono);font-size:11.5px;color:var(--fg-3);white-space:nowrap}
+.rules{margin:0;padding-left:18px;display:flex;flex-direction:column;gap:8px;color:var(--fg-2)}
+.rules b{color:var(--fg)}
+.radii{display:flex;gap:12px;flex-wrap:wrap;align-items:end}
+.radii div{width:64px;height:64px;background:var(--glass-strong);border:1px solid var(--glass-edge);display:grid;place-items:end center;padding-bottom:6px;font-size:11px;font-family:var(--f-mono);color:var(--fg-2)}
+
+.themebar{display:flex;gap:6px;align-self:flex-start}
+.btn{border:1px solid var(--glass-edge-2);background:var(--glass);color:var(--fg);font:inherit;font-size:13px;font-weight:500;padding:8px 14px;border-radius:var(--r-pill);cursor:pointer}
+.btn[aria-pressed="true"]{background:var(--fg);color:var(--bg)}
+
+@media (max-width:980px){
+  .trio{grid-template-columns:1fr}
+  .tok{grid-template-columns:1fr}
+}
+@media (max-width:760px){
+  .shell{grid-template-columns:1fr}
+  .side{width:100%}
+  .side.mini{width:76px}
+  .kpis{grid-template-columns:1fr}
+  .scene{padding:14px}
+  .sw{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <section class="lede">
+    <span class="eyebrow">Дизайн-направление · вариант 1</span>
+    <h1>Copper Glass</h1>
+    <p>Стеклянная навигация поверх тёплой «сцены», медный и огненно-оранжевый акценты. Стекло используется только для управления: меню, панели, нижний бар, плавающие инструменты. Рабочие данные (сметы, списки, суммы) лежат на плотных поверхностях, чтобы читались на солнце и на лестнице.</p>
+    <div class="themebar" role="group" aria-label="Тема">
+      <button class="btn" id="t-sys" aria-pressed="true">Как в системе</button>
+      <button class="btn" id="t-dark" aria-pressed="false">Тёмная</button>
+      <button class="btn" id="t-light" aria-pressed="false">Светлая</button>
+    </div>
+  </section>
+
+  <section class="sec">
+    <header><span class="eyebrow">Веб · десктоп и планшет</span><h2>Рабочий стол</h2>
+      <p>Нажмите стрелку у логотипа: меню сворачивается в узкую панель с подсказками, как в вашем референсе.</p></header>
+    <div class="scene">
+      <div class="shell">
+        <nav class="side glass" id="side" aria-label="Главное меню">
+          <div class="brand">
+            <div class="logo" aria-hidden="true">B</div>
+            <div class="brand-txt hide-mini">
+              <button class="co-switch" type="button"><b>Bonpoc Gutters</b>
+                <svg class="ico" style="width:14px;height:14px" viewBox="0 0 24 24"><path d="m7 10 5 5 5-5"/></svg></button>
+              <span>+ Bonpoc Roofing · все компании</span>
+            </div>
+            <button class="collapse" id="collapse" type="button" aria-label="Свернуть меню"><svg class="ico" style="width:16px;height:16px" viewBox="0 0 24 24"><path d="m15 6-6 6 6 6"/></svg></button>
+          </div>
+          <div class="search"><svg class="ico" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><span class="hide-mini">Клиент, смета, адрес…</span><kbd class="hide-mini">⌘K</kbd></div>
+
+          <div class="grp hide-mini">Работа</div>
+          <ul class="nav" id="nav">
+            <li><button data-tip="Сегодня" aria-current="page"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg><span class="hide-mini">Сегодня</span></button></li>
+            <li><button data-tip="Лиды"><svg viewBox="0 0 24 24"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg><span class="hide-mini">Лиды</span><span class="count hot">4</span></button></li>
+            <li><button data-tip="Клиенты"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/><path d="M16 4a4 4 0 0 1 0 8M22 21c0-3-2-5-4-5.6"/></svg><span class="hide-mini">Клиенты</span></button></li>
+            <li><button data-tip="Сметы"><svg viewBox="0 0 24 24"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6M9 13h8M9 17h5"/></svg><span class="hide-mini">Сметы</span><span class="count">12</span></button></li>
+            <li><button data-tip="Расписание"><svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg><span class="hide-mini">Расписание</span><span class="dot"></span></button></li>
+            <li><button data-tip="Карта"><svg viewBox="0 0 24 24"><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg><span class="hide-mini">Карта</span></button></li>
+          </ul>
+          <div class="grp hide-mini">Деньги</div>
+          <ul class="nav">
+            <li><button data-tip="Инвойсы"><svg viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="3"/><path d="M3 10h18M7 15h4"/></svg><span class="hide-mini">Инвойсы</span><span class="count hot">3</span></button></li>
+            <li><button data-tip="Отчёты"><svg viewBox="0 0 24 24"><path d="M4 20h16M7 16V9M12 16V5M17 16v-4"/></svg><span class="hide-mini">Отчёты и ROI</span></button></li>
+          </ul>
+          <div class="grp hide-mini">Модули</div>
+          <ul class="nav">
+            <li><button data-tip="Gutters"><svg viewBox="0 0 24 24"><path d="M3 8h18l-2 4H5z"/><path d="M17 12v8M15 20h4"/></svg><span class="hide-mini">Gutters</span></button></li>
+          </ul>
+          <button class="ai-btn" type="button" aria-label="AI-помощник"><svg class="ico" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg><span class="hide-mini">Спросить помощника</span></button>
+          <div class="me"><div class="ava">ИБ</div><div class="brand-txt hide-mini"><b>Ibon</b><span>Владелец</span></div></div>
+        </nav>
+
+        <div class="main">
+          <div class="topline">
+            <h3>Вторник, 3 ноября</h3>
+            <div class="chips"><span class="chip glass">Все компании</span><span class="chip glass">Неделя</span></div>
+          </div>
+          <div class="kpis">
+            <div class="kpi"><small>Подписано смет за неделю</small><b>$18,420</b><em>+22% к прошлой</em></div>
+            <div class="kpi"><small>Ждут оплаты</small><b>$6,150</b><em style="color:var(--warn)">3 инвойса</em></div>
+            <div class="kpi"><small>Стоимость лида, Thumbtack</small><b>$64</b><em style="color:var(--ember)">выше Google на 38%</em></div>
+          </div>
+          <div class="list">
+            <div class="row"><span class="time">08:00</span><div><b>Yuri Petrov · установка</b><span>1424 N Kenwood St, Glendale · 148′ K-style 6″, Musket Brown</span></div><span class="pill p-ok">Бригада в пути</span></div>
+            <div class="row"><span class="time">11:30</span><div><b>Maria Lopez · осмотр</b><span>Burbank · лид из Google LSA · черепичная крыша</span></div><span class="pill p-info">Осмотр</span></div>
+            <div class="row"><span class="time">14:00</span><div><b>Ken Adams · чистка</b><span>Pasadena · план 2 раза в год · 3-й визит</span></div><span class="pill p-warn">Повтор</span></div>
+            <div class="row"><span class="time">16:30</span><div><b>Sarah Kim · смета открыта 3 раза</b><span>Better $3,400 · не подписана 4 дня</span></div><span class="pill p-hot">Позвонить</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <header><span class="eyebrow">iPhone</span><h2>Телефон в поле</h2>
+      <p>Нижний бар из стекла с огненной кнопкой помощника по центру. Чертёж гаттеров рисуется пальцем поверх спутника, размеры в футах и дюймах.</p></header>
+    <div class="trio">
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>
+          <div class="sbar glass"><b>Сегодня</b><span class="pill p-hot">4 лида</span></div>
+          <div class="scroll">
+            <div class="card"><div class="t"><small>Сегодня заработано</small><span class="pill p-ok">+$2,960</span></div><div class="big">$4,812</div></div>
+            <div class="card"><div class="t"><b>08:00 · Yuri Petrov</b><span class="pill p-ok">В пути</span></div><small>Glendale · 148′ · 5 downspouts</small></div>
+            <div class="card"><div class="t"><b>11:30 · Maria Lopez</b><span class="pill p-info">Осмотр</span></div><small>Burbank · tile roof</small></div>
+            <div class="card"><div class="t"><b>Sarah Kim</b><span class="pill p-hot">Позвонить</span></div><small>Открыла смету 3 раза</small></div>
+          </div>
+          <div class="tabbar glass">
+            <button class="tab" aria-current="page"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="2"/><rect x="14" y="3" width="7" height="7" rx="2"/><rect x="3" y="14" width="7" height="7" rx="2"/><rect x="14" y="14" width="7" height="7" rx="2"/></svg>Сегодня</button>
+            <button class="tab"><svg class="ico" viewBox="0 0 24 24"><circle cx="9" cy="8" r="4"/><path d="M2 21c0-4 3-6 7-6s7 2 7 6"/></svg>Клиенты</button>
+            <button class="mic" aria-label="Голосовой помощник"><svg class="ico" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+            <button class="tab"><svg class="ico" viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="3"/><path d="M8 3v4M16 3v4M3 10h18"/></svg>План</button>
+            <button class="tab"><svg class="ico" viewBox="0 0 24 24"><path d="m9 4-6 2v14l6-2 6 2 6-2V4l-6 2z"/></svg>Карта</button>
+          </div>
+        </div></div>
+        <p class="caption">Главный экран дня</p>
+      </div>
+
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>
+          <div class="sbar glass"><b>Чертёж · Petrov</b><span class="time">1:240</span></div>
+          <div class="sat">
+            <svg viewBox="0 0 300 420" preserveAspectRatio="xMidYMid slice" aria-label="Схема крыши со спутника с линиями гаттеров">
+              <rect width="300" height="420" fill="#3d4136"/>
+              <rect x="0" y="300" width="300" height="40" fill="#55574e"/>
+              <circle cx="40" cy="60" r="34" fill="#2f3a2a"/><circle cx="262" cy="110" r="28" fill="#2f3a2a"/><circle cx="250" cy="380" r="30" fill="#2f3a2a"/>
+              <polygon points="60,80 230,80 230,170 190,170 190,250 60,250" fill="#8a6a52"/>
+              <polygon points="60,80 145,140 230,80" fill="#9a7860"/>
+              <polygon points="60,250 145,140 190,190 190,250" fill="#7b5d47"/>
+              <line x1="145" y1="140" x2="190" y2="190" stroke="#6c513e" stroke-width="2"/>
+              <g fill="none" stroke="#f2622e" stroke-width="5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="60,80 230,80"/>
+                <polyline points="230,170 190,170 190,250 60,250"/>
+              </g>
+              <g fill="#fff" stroke="#f2622e" stroke-width="3">
+                <circle cx="60" cy="80" r="6"/><circle cx="230" cy="80" r="6"/><circle cx="60" cy="250" r="6"/><circle cx="230" cy="170" r="6"/>
+              </g>
+              <g font-family="Geist Mono, monospace" font-size="13" fill="#fff" text-anchor="middle">
+                <rect x="112" y="54" width="68" height="20" rx="10" fill="rgba(0,0,0,.55)"/><text x="146" y="68">52′ 6″</text>
+                <rect x="96" y="256" width="62" height="20" rx="10" fill="rgba(0,0,0,.55)"/><text x="127" y="270">40′ 0″</text>
+                <rect x="194" y="200" width="56" height="20" rx="10" fill="rgba(0,0,0,.55)"/><text x="222" y="214">24′ 6″</text>
+              </g>
+              <g font-family="Geist, sans-serif" font-size="11" font-weight="600" fill="#fff">
+                <rect x="34" y="86" width="52" height="18" rx="9" fill="#9b8cff"/><text x="41" y="99">DS 10′</text>
+                <rect x="34" y="232" width="52" height="18" rx="9" fill="#9b8cff"/><text x="41" y="245">DS 10′</text>
+              </g>
+            </svg>
+            <div class="tool glass">
+              <div class="sum"><span>Гаттеры <b>148′</b></span><span>Углы <b>2 out · 1 in</b></span><span>DS <b>5</b></span></div>
+              <div class="tools"><span class="tbtn on">Линия</span><span class="tbtn">Downspout</span><span class="tbtn">End cap</span><span class="tbtn">Этаж 2</span></div>
+            </div>
+          </div>
+          <div style="height:86px"></div>
+          <div class="tabbar glass">
+            <button class="tab">Отмена</button>
+            <button class="mic" aria-label="Голосовой помощник"><svg class="ico" viewBox="0 0 24 24"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg></button>
+            <button class="tab" aria-current="page">Рассчитать</button>
+          </div>
+        </div></div>
+        <p class="caption">Gutters: чертёж на спутнике</p>
+      </div>
+
+      <div>
+        <div class="phone"><div class="screen">
+          <div class="status"><span>9:41</span><span>5G ▮▮▮</span></div>
+          <div class="sbar glass"><b>Смета EST-0148</b><span class="pill p-info">Портал</span></div>
+          <div class="scroll">
+            <small style="color:var(--fg-3);font-size:12px">Bonpoc Gutters для Yuri Petrov · 148′ seamless</small>
+            <div class="opt"><div class="t"><h4>Good</h4><span class="price">$2,850</span></div><p>5″ K-style .027, 5 downspouts</p><span class="mo">от $89/мес</span></div>
+            <div class="opt pick"><div class="t"><h4>Better</h4><span class="price">$3,400</span></div><p>6″ K-style .032, 5 downspouts 3×4</p><span class="mo">от $106/мес · выбирают чаще</span></div>
+            <div class="opt"><div class="t"><h4>Best</h4><span class="price">$5,100</span></div><p>6″ .032 + micro-mesh guards, негорючие + чистка раз в год</p><span class="mo">от $159/мес</span></div>
+            <button class="cta">Подписать и внести депозит</button>
+          </div>
+        </div></div>
+        <p class="caption">Смета Good / Better / Best у клиента</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="sec">
+    <header><span class="eyebrow">Основа системы</span><h2>Токены и правила</h2></header>
+    <div class="tok">
+      <div class="panel">
+        <h3>Цвета</h3>
+        <div class="sw">
+          <div><i style="background:var(--ember)"></i>Ember · действие</div>
+          <div><i style="background:var(--copper)"></i>Copper · акцент</div>
+          <div><i style="background:var(--scene-2)"></i>Walnut · сцена</div>
+          <div><i style="background:var(--glass-strong)"></i>Glass · стекло</div>
+          <div><i style="background:var(--ok)"></i>Оплачено</div>
+          <div><i style="background:var(--warn)"></i>Ожидает</div>
+          <div><i style="background:var(--info)"></i>Осмотр</div>
+          <div><i style="background:var(--surface)"></i>Surface · данные</div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Шрифты</h3>
+        <div class="type">
+          <div><span style="font-family:var(--f-display);font-size:34px;font-weight:600;text-transform:uppercase">$3,400</span><small>Display · суммы, заголовки</small></div>
+          <div><span style="font-weight:600;font-size:17px">Yuri Petrov · установка</span><small>Body 600 · 17</small></div>
+          <div><span style="font-size:15px;color:var(--fg-2)">1424 N Kenwood St, Glendale</span><small>Body 400 · 15</small></div>
+          <div><span style="font-family:var(--f-mono);font-size:14px">148′ 0″ · 6″ · .032</span><small>Mono · размеры</small></div>
+        </div>
+      </div>
+      <div class="panel">
+        <h3>Форма</h3>
+        <div class="radii">
+          <div style="border-radius:var(--r-md)">14</div>
+          <div style="border-radius:var(--r-lg)">22</div>
+          <div style="border-radius:var(--r-xl)">32</div>
+          <div style="border-radius:var(--r-pill)">pill</div>
+        </div>
+        <p>Активный пункт меню, поиск, чипы и кнопки сделаны «пилюлями». Карточки скруглены на 20–22, крупные панели на 30–32.</p>
+      </div>
+      <div class="panel">
+        <h3>Правила стекла</h3>
+        <ul class="rules">
+          <li><b>Стекло только для навигации и инструментов:</b> меню, верхний и нижний бар, плавающие панели, подсказки.</li>
+          <li><b>Данные на плотной поверхности:</b> суммы, списки и сметы не просвечивают, контраст не ниже 4.5:1.</li>
+          <li><b>Режим «уменьшить прозрачность»</b> в iOS превращает стекло в сплошную плиту, ничего не ломается.</li>
+          <li><b>Огненный оранжевый только для главного действия</b> на экране и срочных отметок. Медный для акцентов и выбранного.</li>
+          <li><b>Кнопки в поле не меньше 48 pt</b>, чтобы попадать в перчатках.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script>
+(function(){
+  var side=document.getElementById('side'),btn=document.getElementById('collapse');
+  btn.addEventListener('click',function(){
+    var mini=side.classList.toggle('mini');
+    btn.setAttribute('aria-label',mini?'Развернуть меню':'Свернуть меню');
+  });
+  document.querySelectorAll('.nav button').forEach(function(b){
+    b.addEventListener('click',function(){
+      document.querySelectorAll('.nav button').forEach(function(x){x.removeAttribute('aria-current')});
+      b.setAttribute('aria-current','page');
+    });
+  });
+  var root=document.documentElement,ids={'t-sys':null,'t-dark':'dark','t-light':'light'};
+  Object.keys(ids).forEach(function(id){
+    document.getElementById(id).addEventListener('click',function(){
+      if(ids[id])root.setAttribute('data-theme',ids[id]);else root.removeAttribute('data-theme');
+      Object.keys(ids).forEach(function(k){document.getElementById(k).setAttribute('aria-pressed',k===id?'true':'false')});
+    });
+  });
+})();
+</script>
+
+<style>
+.octo-theme-fab{position:fixed;z-index:9999;right:calc(16px + env(safe-area-inset-right,0px));bottom:calc(16px + env(safe-area-inset-bottom,0px));display:flex;align-items:center;gap:8px;padding:10px 16px;border-radius:999px;border:1px solid rgba(255,255,255,.25);background:rgba(18,18,20,.82);color:#fff;font:600 14px/1 system-ui,-apple-system,sans-serif;cursor:pointer;-webkit-backdrop-filter:blur(14px);backdrop-filter:blur(14px);box-shadow:0 10px 30px -10px rgba(0,0,0,.6);transition:transform .45s cubic-bezier(.34,1.56,.64,1)}
+.octo-theme-fab:active{transform:scale(.92);transition-duration:.08s}
+.octo-theme-fab:focus-visible{outline:2px solid #fff;outline-offset:3px}
+</style>
+<button class="octo-theme-fab" type="button" id="octoThemeFab" aria-label="Переключить тему"></button>
+<script>
+(function(){
+  var fab=document.getElementById('octoThemeFab'),root=document.documentElement;
+  var map={light:['#m-light','#th-p','#t-light','[data-theme-btn="light"]'],dark:['#m-dark','#th-g','#t-dark','[data-theme-btn="dark"]']};
+  function byText(t){var all=document.querySelectorAll('button');for(var i=0;i<all.length;i++){if(all[i]!==fab&&all[i].textContent.replace(/\s+/g,' ').trim()===t)return all[i];}return null;}
+  function ctrl(mode){for(var i=0;i<map[mode].length;i++){var e=document.querySelector(map[mode][i]);if(e&&e!==fab)return e;}return byText(mode==='light'?'Светлая':'Тёмная');}
+  function current(){
+    var l=ctrl('light');if(l&&l.getAttribute('aria-pressed')==='true')return 'light';
+    var d=ctrl('dark');if(d&&d.getAttribute('aria-pressed')==='true')return 'dark';
+    var a=root.getAttribute('data-theme');if(a==='light'||a==='dark')return a;
+    return (window.matchMedia&&matchMedia('(prefers-color-scheme: dark)').matches)?'dark':'light';
+  }
+  function label(){var c=current();fab.textContent=c==='dark'?'☀ Светлая':'☾ Тёмная';}
+  fab.addEventListener('click',function(){
+    var target=current()==='dark'?'light':'dark',c=ctrl(target);
+    if(c)c.click();else root.setAttribute('data-theme',target);
+    setTimeout(label,30);
+  });
+  document.addEventListener('click',function(e){if(e.target!==fab)setTimeout(label,30);});
+  window.addEventListener('hashchange',function(){setTimeout(label,30);});
+  label();
+})();
+</script>

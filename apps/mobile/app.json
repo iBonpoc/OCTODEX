@@ -1,0 +1,60 @@
+{
+  "expo": {
+    "name": "OCTODEX",
+    "slug": "octodex",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.octodex.app",
+      "infoPlist": {
+        "NSCameraUsageDescription": "Фото до и после работы прикрепляются к выезду.",
+        "NSPhotoLibraryUsageDescription": "Фото работ прикрепляются к выезду.",
+        "ITSAppUsesNonExemptEncryption": false
+      },
+      "config": {
+        "usesNonExemptEncryption": false
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#E6F4FE",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false,
+      "package": "com.octodex.app"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-font",
+      "expo-localization",
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Фото работ прикрепляются к выезду.",
+          "cameraPermission": "Фото до и после работы прикрепляются к выезду."
+        }
+      ]
+    ],
+    "scheme": "octodex",
+    "owner": "octodex-team",
+    "extra": {
+      "eas": {
+        "projectId": "49d009d4-a05b-4911-b7da-1e47c4e10fba"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
+  }
+}
