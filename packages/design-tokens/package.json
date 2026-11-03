@@ -5,5 +5,12 @@
   "description": "Naryad design tokens as TypeScript (single source for RN, web and PDF). Mirrors design/naryad-ds/tokens/*.css.",
   "main": "src/index.ts",
   "types": "src/index.ts",
-  "scripts": { "typecheck": "tsc --noEmit" }
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  },
+  "devDependencies": {
+    "vitest": "2.1.8",
+    "typescript": "5.6.3"
+  }
 }
