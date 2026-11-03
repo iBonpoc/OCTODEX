@@ -1,0 +1,391 @@
+<title>Satin Copper</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Red+Hat+Display:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  color-scheme:dark;
+  --page:#16171a; --panel:#2a2c31; --wave-a:rgba(255,255,255,.035); --wave-b:rgba(255,255,255,.055);
+  --slab:#222327; --slab-hover:#26272c; --line:rgba(255,255,255,.09); --chip-line:rgba(236,232,227,.28);
+  --text:#ece8e3; --muted:#a29e98; --faint:#8d8983; --accent:#e6ad80; --dot:#e6ad80;
+  --copper-1:#f2cda8; --copper-2:#dba57a; --copper-3:#c4865a; --on-copper:#2b1a10; --on-copper-2:#3f2617;
+  --copper-field:rgba(255,255,255,.22); --copper-chip:rgba(43,26,16,.38);
+  --qr-bg:#f6f1ea; --qr-ink:#1e1f22; --icon-tile:#1d1e22;
+  --shadow:0 30px 60px -20px rgba(0,0,0,.55),0 10px 24px -12px rgba(0,0,0,.4);
+  --card-shadow:0 28px 50px -18px rgba(0,0,0,.6),0 8px 18px -8px rgba(90,45,15,.35);
+  --phone-frame:#0d0d0f; --spring:cubic-bezier(.34,1.56,.64,1); --ease:cubic-bezier(.2,.7,.2,1);
+}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){
+  color-scheme:light;
+  --page:#f1ede6; --panel:#d9d5ce; --wave-a:rgba(255,255,255,.32); --wave-b:rgba(255,255,255,.5);
+  --slab:#e8e4de; --slab-hover:#eeebe6; --line:rgba(40,36,32,.12); --chip-line:rgba(40,36,32,.34);
+  --text:#26272b; --muted:#59544d; --faint:#5f5a53; --accent:#84481f; --dot:#b5703d;
+  --qr-bg:#fbf8f3; --qr-ink:#1e1f22; --icon-tile:#cfcac2;
+  --shadow:0 30px 60px -24px rgba(70,55,40,.35),0 8px 20px -12px rgba(70,55,40,.2);
+  --card-shadow:0 28px 50px -18px rgba(110,60,25,.45),0 8px 18px -8px rgba(110,60,25,.25);
+  --phone-frame:#2a2a2d;
+}}
+:root[data-theme="light"]{
+  color-scheme:light;
+  --page:#f1ede6; --panel:#d9d5ce; --wave-a:rgba(255,255,255,.32); --wave-b:rgba(255,255,255,.5);
+  --slab:#e8e4de; --slab-hover:#eeebe6; --line:rgba(40,36,32,.12); --chip-line:rgba(40,36,32,.34);
+  --text:#26272b; --muted:#59544d; --faint:#5f5a53; --accent:#84481f; --dot:#b5703d;
+  --qr-bg:#fbf8f3; --qr-ink:#1e1f22; --icon-tile:#cfcac2;
+  --shadow:0 30px 60px -24px rgba(70,55,40,.35),0 8px 20px -12px rgba(70,55,40,.2);
+  --card-shadow:0 28px 50px -18px rgba(110,60,25,.45),0 8px 18px -8px rgba(110,60,25,.25);
+  --phone-frame:#2a2a2d;
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{background:var(--page);color:var(--text);font-family:"Red Hat Display","Avenir Next","Segoe UI",system-ui,sans-serif;font-weight:400;-webkit-font-smoothing:antialiased;transition:background .4s,color .4s}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+svg{display:block}
+.wrap{max-width:1240px;margin:0 auto;padding:24px max(16px, env(safe-area-inset-right, 0px)) 64px max(16px, env(safe-area-inset-left, 0px))}
+.top{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:64px;flex-wrap:wrap}
+.top h1{font-weight:300;font-size:15px;letter-spacing:.14em;text-transform:uppercase;margin:0;color:var(--muted)}
+.top h1 b{font-weight:500;color:var(--text)}
+.seg{display:inline-flex;border:1px solid var(--chip-line);border-radius:999px;padding:3px}
+.seg button{padding:7px 16px;border-radius:999px;font-size:13px;color:var(--muted);transition:background .3s,color .3s}
+.seg button[aria-pressed="true"]{background:var(--text);color:var(--page)}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* panel */
+.panel{position:relative;background:var(--panel);border-radius:34px;box-shadow:var(--shadow);display:grid;
+  grid-template-columns:260px minmax(0,1fr) 300px;grid-template-areas:"left card right" "left table table";
+  column-gap:44px;row-gap:40px;padding:44px 44px 40px;transition:background .4s}
+.waves{position:absolute;inset:0;border-radius:inherit;overflow:hidden;pointer-events:none}
+.waves svg{width:100%;height:100%}
+.panel>*:not(.waves){position:relative}
+.left{grid-area:left;display:flex;flex-direction:column;gap:46px}
+.brand{display:flex;align-items:center;gap:16px}
+.brand .name{font-size:24px;font-weight:300;letter-spacing:.01em}
+.brand .name small{display:block;font-size:13px;color:var(--muted);margin-top:2px}
+.sect{display:grid;grid-template-columns:18px 1fr;gap:20px;align-items:start}
+.vlabel{writing-mode:vertical-rl;transform:rotate(180deg);font-size:11px;letter-spacing:.12em;color:var(--faint);justify-self:center;padding-top:2px}
+.cap{font-size:13px;color:var(--muted)}
+.big{font-size:52px;font-weight:300;letter-spacing:-.02em;line-height:1.05;margin:6px 0 4px}
+.acc{color:var(--accent)}
+.link{text-decoration:none;color:var(--accent);font-size:20px;font-weight:400;display:inline-flex;gap:6px;align-items:center;margin-top:6px}
+.link:hover{text-decoration:underline;text-underline-offset:4px}
+.news h3{font-size:17px;font-weight:500;margin:6px 0 0;line-height:1.35}
+.logout{margin-top:auto;display:flex;gap:10px;align-items:center;color:var(--muted);font-size:14px}
+
+/* copper card */
+.card{grid-area:card;margin-top:-92px;align-self:start;border-radius:26px;padding:30px 30px 26px;color:var(--on-copper);
+  background:linear-gradient(160deg,var(--copper-1) 0%,var(--copper-2) 52%,var(--copper-3) 100%);box-shadow:var(--card-shadow);
+  transition:transform .5s var(--spring),box-shadow .5s var(--ease);max-width:420px;width:100%;justify-self:center;overflow:hidden}
+.card::before{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:radial-gradient(120% 60% at 20% 0%,rgba(255,255,255,.35),transparent 60%)}
+.card:hover{transform:translateY(-6px);box-shadow:0 40px 64px -20px rgba(0,0,0,.55),0 14px 26px -10px rgba(90,45,15,.4)}
+.card h2,.right h2{font-size:19px;font-weight:500;margin:0 0 22px;display:flex;align-items:center;gap:10px}
+.field{display:flex;align-items:center;justify-content:space-between;gap:10px;background:var(--copper-field);border-radius:14px;padding:16px 18px;font-size:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.3)}
+.row{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:18px 0;border-bottom:1px solid rgba(43,26,16,.2)}
+.row .val{font-size:22px;font-weight:500;margin-right:auto}
+.row .unit{font-size:13px;color:var(--on-copper-2);font-weight:500}
+.chip{border:1px solid var(--copper-chip);border-radius:10px;padding:6px 11px;font-size:13px;transition:transform .45s var(--spring),background .25s,color .25s}
+.chip:active{transform:scale(.9)}
+.chip[aria-pressed="true"]{background:var(--on-copper);color:var(--copper-1);border-color:var(--on-copper);transform:scale(1.06)}
+.foot{display:flex;align-items:center;gap:18px;margin-top:22px}
+.next{background:rgba(255,255,255,.28);border-radius:14px;padding:15px 40px;font-weight:600;font-size:15px;box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 6px 14px -8px rgba(60,30,10,.5);transition:transform .45s var(--spring),background .2s}
+.next:hover{background:rgba(255,255,255,.38)}
+.next:active,.next.pop{transform:scale(.93)}
+.foot small{font-size:12px;color:var(--on-copper-2);line-height:1.4}
+.foot small b{display:block;font-size:13px;color:var(--on-copper)}
+
+/* right */
+.right{grid-area:right;padding-top:12px}
+.lbl{font-size:13px;color:var(--muted);margin-bottom:10px}
+.addr{display:flex;align-items:center;gap:12px;position:relative}
+.tile{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;flex:none}
+.tile.copper{background:linear-gradient(150deg,var(--copper-1),var(--copper-3));color:var(--on-copper)}
+.tile.dark{background:var(--icon-tile);width:46px}
+.addr code{font-family:inherit;font-size:14px;letter-spacing:.02em;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dots{width:28px;height:32px;display:grid;place-items:center;color:var(--muted);border-radius:8px}
+.dots:hover{background:var(--line)}
+.copied{position:absolute;right:0;top:-22px;font-size:12px;color:var(--accent);opacity:0;transition:opacity .25s}
+.copied.on{opacity:1}
+.qr{display:grid;grid-template-columns:96px 1fr;gap:18px;align-items:center;margin:26px 0 24px}
+.qr .q{background:var(--qr-bg);border-radius:16px;padding:10px;box-shadow:0 10px 24px -14px rgba(0,0,0,.5)}
+.qr p{margin:0 0 10px;font-size:13px;color:var(--muted);line-height:1.45}
+.qr p b{color:var(--text);font-weight:500}
+.qr a{color:var(--accent);font-size:14px;text-decoration:none}
+.qr a:hover{text-decoration:underline}
+.hr{height:1px;background:linear-gradient(90deg,var(--accent) 0 18%,var(--line) 18%);margin-bottom:22px}
+.send{display:flex;align-items:center;gap:14px;font-size:13px;color:var(--muted)}
+.send b{display:block;color:var(--text);font-weight:500}
+
+/* table */
+.table{grid-area:table;min-width:0}
+.thead{display:flex;justify-content:space-between;align-items:baseline;gap:12px;flex-wrap:wrap;margin-bottom:16px}
+.thead h2{font-size:20px;font-weight:500;margin:0}
+.thead span{font-size:13px;color:var(--muted)}
+.thead b{color:var(--text);font-weight:500}
+.scroll{overflow-x:auto;padding-bottom:4px}
+.grid{min-width:620px}
+.cols,.tr>button{display:grid;grid-template-columns:110px 100px 170px 1fr 32px;align-items:center;gap:12px;padding:0 10px 0 20px}
+.cols{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);padding-bottom:10px}
+.tr{background:var(--slab);border-radius:12px;margin-bottom:8px;transition:background .25s}
+.tr:hover{background:var(--slab-hover)}
+.tr>button{width:100%;text-align:left;min-height:58px;font-size:14px}
+.tr .amt{font-weight:500}
+.tr .muted{color:var(--muted)}
+.st{display:inline-flex;align-items:center;gap:6px}
+.st i{width:7px;height:7px;border-radius:50%;background:var(--dot);box-shadow:0 0 0 3px color-mix(in srgb,var(--dot) 25%,transparent)}
+.more{display:grid;grid-template-rows:0fr;transition:grid-template-rows .45s var(--ease)}
+.tr.open .more{grid-template-rows:1fr}
+.more>div{overflow:hidden}
+.more dl{display:grid;grid-template-columns:repeat(4,auto);justify-content:start;column-gap:36px;row-gap:4px;margin:0;padding:4px 20px 18px;font-size:13px}
+.more dt{color:var(--faint);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+.more dd{margin:0}
+.chev{transition:transform .4s var(--spring)}
+.tr.open .chev{transform:rotate(90deg)}
+
+/* phone */
+.below{display:flex;gap:56px;align-items:center;margin-top:80px;flex-wrap:wrap;justify-content:center}
+.below .copy{max-width:380px}
+.below .copy h2{font-weight:300;font-size:34px;margin:0 0 12px;letter-spacing:-.01em}
+.below .copy p{color:var(--muted);line-height:1.6;margin:0}
+.phone{width:360px;max-width:100%;border-radius:52px;padding:12px;background:var(--phone-frame);box-shadow:var(--shadow)}
+.screen{position:relative;border-radius:42px;background:var(--panel);overflow:hidden;padding:18px 22px 26px;min-height:720px;transition:background .4s}
+.screen>*:not(.waves){position:relative}
+.sbar{display:flex;justify-content:space-between;font-size:13px;font-weight:600;padding:2px 10px 0}
+.island{width:110px;height:30px;border-radius:20px;background:#000;margin:-22px auto 26px}
+.pbal{padding:0 4px}
+.pbal .big{font-size:44px}
+.pcard{margin:26px 0 22px;border-radius:24px;padding:22px;color:var(--on-copper);background:linear-gradient(160deg,var(--copper-1),var(--copper-2) 55%,var(--copper-3));box-shadow:var(--card-shadow);transition:transform .5s var(--spring)}
+.pcard:hover{transform:translateY(-4px)}
+.pcard small{font-size:12px;color:var(--on-copper-2);font-weight:500;letter-spacing:.06em;text-transform:uppercase}
+.pcard h3{margin:8px 0 2px;font-size:26px;font-weight:500}
+.pcard p{margin:0 0 16px;color:var(--on-copper-2);font-size:14px}
+.pcard .next{padding:11px 22px;font-size:14px}
+.plist{display:flex;flex-direction:column;gap:8px}
+.pi{display:flex;justify-content:space-between;align-items:center;background:var(--slab);border-radius:14px;padding:14px 16px;font-size:14px}
+.pi span{color:var(--muted);font-size:12px;display:block;margin-top:2px}
+.pi b{font-weight:500}
+.tabs{display:flex;justify-content:space-around;margin-top:22px;color:var(--muted);font-size:11px}
+.tabs div{display:flex;flex-direction:column;align-items:center;gap:4px}
+.tabs .on{color:var(--accent)}
+
+@media (max-width:1100px){
+  .panel{grid-template-columns:minmax(0,1fr) minmax(0,1fr);grid-template-areas:"card card" "left right" "table table"}
+  .card{margin-top:-80px}
+}
+@media (max-width:720px){
+  .panel{grid-template-columns:minmax(0,1fr);grid-template-areas:"card" "left" "right" "table";padding:28px 20px;border-radius:26px;column-gap:0}
+  .card{margin-top:-56px;padding:24px 20px}
+  .left{gap:34px}
+  .big{font-size:44px}
+  .top{margin-bottom:48px}
+  .below{margin-top:56px}
+  .phone{border-radius:44px;padding:9px}
+  .screen{border-radius:36px;padding:16px 16px 22px}
+}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{transition-duration:.01ms!important;animation:none!important}
+  .card:hover,.pcard:hover{transform:none}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <h1><b>Octo</b> · Satin Copper</h1>
+    <div class="seg" role="group" aria-label="Тема">
+      <button type="button" data-set="light" aria-pressed="false">Светлая</button>
+      <button type="button" data-set="dark" aria-pressed="false">Тёмная</button>
+    </div>
+  </header>
+
+  <section class="panel" aria-label="Панель Octo">
+    <div class="waves" aria-hidden="true"><svg viewBox="0 0 1200 760" preserveAspectRatio="none">
+      <path fill="var(--wave-a)" d="M0 0h520C430 120 380 260 250 330 150 385 60 380 0 420z"/>
+      <path fill="var(--wave-b)" d="M0 560c160-90 300-60 430-150 150-105 220-260 420-300 140-28 260 10 350 70v580H0z" opacity=".55"/>
+      <path fill="var(--wave-a)" d="M760 0h440v260c-120-40-200-10-290-70C840 140 800 70 760 0z"/>
+    </svg></div>
+
+    <div class="left">
+      <div class="brand">
+        <svg width="46" height="46" viewBox="0 0 46 46" fill="none" stroke="var(--text)" stroke-width="1.3" stroke-linejoin="round" aria-hidden="true">
+          <path d="M23 5 36 12.5v15L23 35 10 27.5v-15z"/><path d="M23 5v30M10 12.5l26 15M36 12.5l-26 15" opacity=".45"/>
+          <path d="M14 30c-2 5-1 9 1 11M19 33c-1 4 0 7 1 9M27 33c1 4 0 7-1 9M32 30c2 5 1 9-1 11" stroke="var(--accent)"/>
+        </svg>
+        <div class="name">octo<small>· gutters</small></div>
+      </div>
+      <div class="sect"><span class="vlabel">баланс</span><div>
+        <div class="cap">Получено в ноябре</div>
+        <div class="big">$25,550</div>
+        <div class="acc" style="font-size:16px">ждут оплаты $6,150</div>
+      </div></div>
+      <div class="sect"><span class="vlabel">сезон</span><div>
+        <div class="cap">Чистка перед дождями</div>
+        <a class="link" href="#" onclick="return false">Запустить кампанию <span aria-hidden="true">›</span></a>
+        <div class="cap" style="margin-top:4px">18 клиентов</div>
+      </div></div>
+      <div class="sect news"><span class="vlabel" aria-hidden="true">⋮</span><div>
+        <div class="cap">3 дня назад</div>
+        <h3>Отчёт: Thumbtack дороже Google на 28%</h3>
+      </div></div>
+      <button class="logout" type="button">Выйти
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.3" aria-hidden="true"><rect x="3" y="3" width="14" height="14" rx="4"/><path d="M12 10H6m2.5-2.5L6 10l2.5 2.5"/></svg>
+      </button>
+    </div>
+
+    <article class="card" aria-label="Быстрая смета">
+      <h2><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 13 13 3M6 3h7v7"/></svg>Быстрая смета</h2>
+      <div class="field"><span>1424 N Kenwood St, Glendale</span>
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><path d="M10 18s6-5.2 6-10a6 6 0 1 0-12 0c0 4.8 6 10 6 10z"/><circle cx="10" cy="8" r="2.2"/></svg></div>
+      <div class="row" data-group="len">
+        <span class="val" id="len">150 ft</span>
+        <button class="chip" type="button" data-v="100 ft">100′</button>
+        <button class="chip" type="button" data-v="150 ft" aria-pressed="true">150′</button>
+        <button class="chip" type="button" data-v="200 ft">200′</button>
+        <button class="chip" type="button" data-v="по чертежу">Чертёж</button>
+      </div>
+      <div class="row" data-group="prof">
+        <span class="val" id="price">$3,400 <span class="unit">· Better</span></span>
+        <span class="unit">профиль</span>
+        <button class="chip" type="button" data-v="5" aria-pressed="true">5″</button>
+        <button class="chip" type="button" data-v="6">6″</button>
+      </div>
+      <div class="foot">
+        <button class="next" type="button" id="next">Далее</button>
+        <small>Депозит CA<b id="dep">$340</b></small>
+      </div>
+    </article>
+
+    <div class="right">
+      <h2><svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M13 3 3 13M10 13H3V6"/></svg>Принять оплату</h2>
+      <div class="lbl">Ссылка для клиента</div>
+      <div class="addr">
+        <button class="tile copper" type="button" id="copy" aria-label="Скопировать ссылку">
+          <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="5" width="8.5" height="8.5" rx="2"/><path d="M10.5 2.5H4.5a2 2 0 0 0-2 2v6"/></svg>
+        </button>
+        <code>octo.app/pay/EST-0148</code>
+        <span class="copied" id="copied" role="status">Скопировано</span>
+        <button class="dots" type="button" aria-label="Ещё"><svg width="4" height="16" viewBox="0 0 4 16" fill="currentColor"><circle cx="2" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/></svg></button>
+      </div>
+      <div class="qr">
+        <div class="q"><svg id="qr" viewBox="0 0 25 25" width="76" height="76" shape-rendering="crispEdges" role="img" aria-label="QR-код ссылки на оплату"></svg></div>
+        <div><p><b>Клиент сканирует</b> — открывается смета и оплата</p><a href="#" onclick="return false">Как это работает ›</a></div>
+      </div>
+      <div class="hr"></div>
+      <div class="send">
+        <span class="tile dark"><svg width="20" height="16" viewBox="0 0 20 16" fill="none" stroke="var(--text)" stroke-width="1.3" aria-hidden="true"><rect x="1.5" y="1.5" width="17" height="13" rx="3"/><path d="m2.5 3 7.5 6 7.5-6"/></svg></span>
+        <span>Отправить ссылку<b>по SMS / email</b></span>
+      </div>
+    </div>
+
+    <div class="table">
+      <div class="thead"><h2>Платежи</h2><span>Неделя <b>$18,940</b> · Сделок <b>7</b></span></div>
+      <div class="scroll"><div class="grid">
+        <div class="cols" aria-hidden="true"><span>Сумма</span><span>Дата</span><span>Тип</span><span>Клиент · документ</span><span></span></div>
+        <div id="rows"></div>
+      </div></div>
+    </div>
+  </section>
+
+  <section class="below">
+    <div class="copy">
+      <h2>В кармане у бригадира</h2>
+      <p>Тот же графит и та же медная карточка: следующий выезд всегда сверху, баланс — тонкой крупной цифрой, всё остальное — тёмные плитки списка.</p>
+    </div>
+    <div class="phone"><div class="screen">
+      <div class="waves" aria-hidden="true"><svg viewBox="0 0 360 760" preserveAspectRatio="none">
+        <path fill="var(--wave-a)" d="M0 0h260c-40 90-90 140-170 160C40 172 15 200 0 230z"/>
+        <path fill="var(--wave-b)" d="M0 600c80-60 160-30 230-110 50-56 90-90 130-96v366H0z" opacity=".55"/></svg></div>
+      <div class="sbar"><span>9:41</span><span>5G ▮▮▮</span></div>
+      <div class="island"></div>
+      <div class="pbal">
+        <div class="cap">Получено в ноябре</div>
+        <div class="big">$25,550</div>
+        <div class="acc" style="font-size:14px">ждут оплаты $6,150</div>
+      </div>
+      <div class="pcard">
+        <small>Следующий выезд</small>
+        <h3>Petrov · 08:00</h3>
+        <p>148′ · 6″ K-style · Pasadena</p>
+        <button class="next" type="button">Маршрут</button>
+      </div>
+      <div class="plist">
+        <div class="pi"><div><b>Kim</b><span>Депозит · INV-0101</span></div><b class="acc">$340</b></div>
+        <div class="pi"><div><b>Adams</b><span>Чек · INV-0093</span></div><b>$289</b></div>
+        <div class="pi"><div><b>Garcia</b><span>Смета · EST-0148</span></div><b>$3,400</b></div>
+      </div>
+      <nav class="tabs" aria-label="Разделы"><div class="on">●<span>Сегодня</span></div><div>○<span>Сметы</span></div><div>○<span>Оплаты</span></div><div>○<span>Клиенты</span></div></nav>
+    </div></div>
+  </section>
+</div>
+
+<script>
+(function(){
+  var root=document.documentElement, mq=matchMedia('(prefers-color-scheme: light)');
+  function get(){try{return localStorage.getItem('octo-satin-theme')}catch(e){return null}}
+  function apply(t){
+    if(t)root.setAttribute('data-theme',t);else root.removeAttribute('data-theme');
+    var cur=t||(mq.matches?'light':'dark');
+    document.querySelectorAll('.seg button').forEach(function(b){b.setAttribute('aria-pressed',String(b.dataset.set===cur))});
+  }
+  apply(get());
+  mq.addEventListener&&mq.addEventListener('change',function(){apply(get())});
+  document.querySelectorAll('.seg button').forEach(function(b){b.addEventListener('click',function(){
+    try{localStorage.setItem('octo-satin-theme',b.dataset.set)}catch(e){}
+    apply(b.dataset.set);
+  })});
+
+  // estimate chips
+  var state={len:'150 ft',prof:'5'};
+  var base={'100 ft':2300,'150 ft':3400,'200 ft':4450,'по чертежу':3400};
+  function fmt(n){return '$'+n.toLocaleString('en-US')}
+  function recalc(){
+    var p=Math.round(base[state.len]*(state.prof==='6'?1.15:1)/10)*10;
+    document.getElementById('len').textContent=state.len;
+    document.getElementById('price').innerHTML=fmt(p)+' <span class="unit">· Better</span>';
+    document.getElementById('dep').textContent=fmt(Math.min(1000,Math.round(p*0.1/10)*10));
+  }
+  document.querySelectorAll('[data-group]').forEach(function(g){
+    g.querySelectorAll('.chip').forEach(function(c){c.addEventListener('click',function(){
+      g.querySelectorAll('.chip').forEach(function(x){x.setAttribute('aria-pressed','false')});
+      c.setAttribute('aria-pressed','true');state[g.dataset.group]=c.dataset.v;recalc();
+    })});
+  });
+  var nx=document.getElementById('next');
+  nx.addEventListener('click',function(){nx.classList.add('pop');setTimeout(function(){nx.classList.remove('pop')},160)});
+
+  // copy
+  var cp=document.getElementById('copied'),t;
+  document.getElementById('copy').addEventListener('click',function(){
+    try{navigator.clipboard&&navigator.clipboard.writeText('https://octo.app/pay/EST-0148').catch(function(){})}catch(e){}
+    cp.classList.add('on');clearTimeout(t);t=setTimeout(function(){cp.classList.remove('on')},1600);
+  });
+
+  // QR-like pattern
+  var s='',N=25,seed=148;
+  function rnd(){seed=(seed*9301+49297)%233280;return seed/233280}
+  function finder(x,y){s+='<rect x="'+x+'" y="'+y+'" width="7" height="7"/><rect x="'+(x+1)+'" y="'+(y+1)+'" width="5" height="5" fill="var(--qr-bg)"/><rect x="'+(x+2)+'" y="'+(y+2)+'" width="3" height="3"/>'}
+  for(var y=0;y<N;y++)for(var x=0;x<N;x++){
+    var inF=(x<8&&y<8)||(x>16&&y<8)||(x<8&&y>16);
+    if(!inF&&rnd()>.52)s+='<rect x="'+x+'" y="'+y+'" width="1" height="1"/>';
+  }
+  finder(0,0);finder(18,0);finder(0,18);
+  s+='<rect x="16" y="16" width="5" height="5"/><rect x="17" y="17" width="3" height="3" fill="var(--qr-bg)"/><rect x="18" y="18" width="1" height="1"/>';
+  var q=document.getElementById('qr');q.setAttribute('fill','var(--qr-ink)');q.innerHTML=s;
+
+  // payments
+  var rows=[
+    {a:'$3,060',d:'03.11',type:'Получено ACH',c:'Petrov',doc:'INV-0102',x:['Банк','Chase ••4417','Работа','150′ 6″ K-style','Комиссия','$24.48']},
+    {a:'$340',d:'28.10',type:'Депозит',dot:'в обработке',c:'Kim',doc:'INV-0101',x:['Метод','Карта Visa ••2290','Работа','Чистка + guards','Зачисление','~30.10']},
+    {a:'$289',d:'21.10',type:'Получено чек',c:'Adams',doc:'INV-0093',x:['Чек','#5521','Работа','Ремонт downspout','Внесён','22.10']}
+  ];
+  var dots='<svg width="4" height="16" viewBox="0 0 4 16" fill="currentColor" aria-hidden="true"><circle cx="2" cy="2" r="1.5"/><circle cx="2" cy="8" r="1.5"/><circle cx="2" cy="14" r="1.5"/></svg>';
+  document.getElementById('rows').innerHTML=rows.map(function(r,i){
+    var dl='';for(var k=0;k<r.x.length;k+=2)dl+='<div><dt>'+r.x[k]+'</dt><dd>'+r.x[k+1]+'</dd></div>';
+    return '<div class="tr"><button type="button" aria-expanded="false" aria-controls="m'+i+'">'+
+      '<span class="amt">'+r.a+'</span><span class="muted">'+r.d+'</span>'+
+      '<span>'+(r.dot?'<span class="st">'+r.type+' <i></i><span class="acc" style="font-size:12px">'+r.dot+'</span></span>':r.type)+'</span>'+
+      '<span>'+r.c+' <span class="muted">· '+r.doc+'</span></span><span class="dots chev">'+dots+'</span></button>'+
+      '<div class="more" id="m'+i+'"><div><dl>'+dl+'<div><dt>Клиент</dt><dd>'+r.c+'</dd></div></dl></div></div></div>';
+  }).join('');
+  document.querySelectorAll('.tr>button').forEach(function(b){b.addEventListener('click',function(){
+    var o=b.parentNode.classList.toggle('open');b.setAttribute('aria-expanded',String(o));
+  })});
+})();
+</script>
