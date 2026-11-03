@@ -96,7 +96,7 @@ VERBOSE=1 supabase/tests/run.sh   # плюс текст каждой ожида�
 
 
 ## Облачный проект (03.11.2026)
-- Проект **Naryad**, id `kgiaxygsjkyiquhjbxdg`, регион `us-west-1`, организация Estixa. Отдельно от проекта Estixa (там живые данные другого приложения — не трогать).
+- Проект OCTODEX (в панели Supabase пока называется «Naryad», переименовать в Settings → General), id `kgiaxygsjkyiquhjbxdg`, регион `us-west-1`, организация Estixa. Отдельно от проекта Estixa (там живые данные другого приложения — не трогать).
 - Миграция применена четырьмя частями (`core_01_foundation` … `core_04_rls_grants`) — та же схема без комментариев, локальные тесты на ней проходят.
 - Советник безопасности: только INFO по `app.company_numbering` и `app.status_transitions` (RLS без политик — так и задумано: доступ только через SECURITY DEFINER функции).
 - URL и публичный ключ: `apps/mobile/src/config/backend.ts`.

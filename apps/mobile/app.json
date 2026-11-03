@@ -1,14 +1,14 @@
 {
   "expo": {
-    "name": "Наряд",
-    "slug": "naryad",
+    "name": "OCTODEX",
+    "slug": "octodex",
     "version": "1.0.0",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.octo.naryad",
+      "bundleIdentifier": "com.octodex.app",
       "infoPlist": {
         "NSCameraUsageDescription": "Фото до и после работы прикрепляются к выезду.",
         "NSPhotoLibraryUsageDescription": "Фото работ прикрепляются к выезду."
@@ -22,7 +22,7 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.octo.naryad"
+      "package": "com.octodex.app"
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -42,6 +42,6 @@
         }
       ]
     ],
-    "scheme": "naryad"
+    "scheme": "octodex"
   }
 }

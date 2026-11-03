@@ -45,7 +45,7 @@ for name in os.listdir(web):
 dist_index = open(os.path.join(src, "index.html"), encoding="utf-8").read()
 scripts = re.findall(r'src="/_expo/(static/js/web/[^"]+)"', dist_index)
 tags = "\n".join(f'<script src="./app-js/{s}" defer></script>' for s in scripts)
-open(os.path.join(out, "index.html"), "w", encoding="utf-8").write(f"""<title>Наряд</title>
+open(os.path.join(out, "index.html"), "w", encoding="utf-8").write(f"""<title>OCTODEX</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <style>
 :root{{--page:#EFEBE5;color-scheme:light}}

@@ -1,5 +1,5 @@
 /**
- * Naryad design tokens — single source of truth for the app (iOS, Android, tablet, web).
+ * OCTODEX design tokens (from the founder's "Naryad" design system) — single source of truth for the app (iOS, Android, tablet, web).
  * Mirrors design/naryad-ds/tokens/{foundation,components,theme,status}.css one to one.
  * Rule: no component may use a value that is not here. Change a token → it changes everywhere.
  */
