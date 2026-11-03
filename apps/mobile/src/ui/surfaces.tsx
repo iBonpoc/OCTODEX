@@ -88,12 +88,21 @@ export function RowView({ children, style, gap = space[2] }: { children: ReactNo
   return <View style={[{ flexDirection: "row", alignItems: "center", gap }, style]}>{children}</View>;
 }
 
-export function Grid({ children }: { children: ReactNode[] | ReactNode }) {
+export function Grid({ children, raise }: { children: ReactNode[] | ReactNode; /** index of the item to draw above siblings (drag) */ raise?: number }) {
   const { device } = useDevice();
   const [w, setW] = useState(0);
   const cols = layout.gridCols[device];
   const arr = (Array.isArray(children) ? children : [children]).filter(Boolean);
-  if (cols === 1) return <View style={{ gap: space[3] }}>{arr}</View>;
+  if (cols === 1)
+    return (
+      <View style={{ gap: space[3] }}>
+        {arr.map((ch, i) => (
+          <View key={i} style={{ zIndex: raise === i ? 10 : 0 }}>
+            {ch}
+          </View>
+        ))}
+      </View>
+    );
   const itemW = w ? (w - space[3] * (cols - 1)) / cols : undefined;
   return (
     <View
@@ -101,7 +110,7 @@ export function Grid({ children }: { children: ReactNode[] | ReactNode }) {
       style={{ flexDirection: "row", flexWrap: "wrap", gap: space[3], alignItems: "flex-start" }}
     >
       {arr.map((ch, i) => (
-        <View key={i} style={{ width: itemW ?? `${Math.floor(100 / cols) - 2}%` }}>
+        <View key={i} style={{ width: itemW ?? `${Math.floor(100 / cols) - 2}%`, zIndex: raise === i ? 10 : 0 }}>
           {ch}
         </View>
       ))}

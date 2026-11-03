@@ -8,6 +8,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
+import { wasJustDragged } from "./dnd";
 
 /** Visit status → DS status color (4+1) and word. */
 export function visitStatus(v: Visit): { status: StatusName; label: DictKey } {
@@ -40,7 +41,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
   return (
     <Card
       status={st.status}
-      onPress={() => router.push(`/visit/${v.id}`)}
+      onPress={() => !wasJustDragged() && router.push(`/visit/${v.id}`)}
       accessibilityLabel={`${customer?.name ?? ""}, ${time(v.start)}`}
     >
       <RowView style={{ justifyContent: "space-between" }}>
