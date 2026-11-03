@@ -15,7 +15,7 @@ function Kpi({ label, cents, icon, hint, onPress }: { label: string; cents: numb
   const { money } = useI18n();
   const { c } = useTheme();
   return (
-    <Card style={{ flex: 1, minWidth: 140 }} onPress={onPress} accessibilityLabel={label}>
+    <Card style={{ flex: 1, minWidth: 100, padding: space[3] }} onPress={onPress} accessibilityLabel={label}>
       <RowView gap={space[1]}>
         <Icon name={icon} s={14} color={c.mut} />
         <T v="caption" tone="mut">
@@ -45,7 +45,7 @@ export default function Today() {
   const attention = buildAttention(db);
   const techs = db.members.filter((m) => m.roles.includes("tech"));
   return (
-    <Screen title={t("today.title")} help={t("help.today")} subtitle={day(new Date().toISOString())}>
+    <Screen title={t("today.title")} help={t("help.today")} hintKey="today" subtitle={day(new Date().toISOString())}>
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[3] }}>
         <Kpi label={t("today.signed")} cents={signed} icon="signature" />
         <Kpi label={t("today.received")} cents={received} icon="wallet" onPress={() => router.push("/money")} />

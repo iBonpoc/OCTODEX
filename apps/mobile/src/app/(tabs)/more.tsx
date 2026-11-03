@@ -10,6 +10,7 @@ import { useTheme, type ThemePref } from "@/theme/ThemeProvider";
 import { Button, Segmented, Toggle } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
+import { useHints } from "@/ui/hints";
 import { Card, ListRow, RowView, Screen } from "@/ui/surfaces";
 
 /** Settings for this device: role, theme, language, offline test switch. */
@@ -18,6 +19,7 @@ export default function More() {
   const { role, setRole, online, setOnline, resetDemo } = useStore();
   const { pref, setPref } = useTheme();
   const toast = useToast();
+  const hints = useHints();
   const changeRole = (r: Role) => {
     setRole(r);
     router.navigate(`/${roleHome[r]}`);
@@ -77,6 +79,7 @@ export default function More() {
             }}
           />
         </RowView>
+        <Button label={t("more.showHints")} icon="help" variant="secondary" onPress={hints.reset} />
         <Button label={t("more.resetDemo")} icon="sync" variant="secondary" onPress={() => toast.show(t("more.resetDone"), resetDemo())} />
       </Card>
       <View style={{ paddingHorizontal: space[2] }}>

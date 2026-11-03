@@ -150,6 +150,7 @@ export const es: Dict = {
   "more.light": "Claro",
   "more.language": "Idioma",
   "more.company": "Empresa",
+  "more.showHints": "Mostrar consejos de nuevo",
   "more.resetDemo": "Restablecer datos de prueba",
   "more.resetDone": "Datos de prueba restablecidos",
   "more.version": "Versión {v} · datos de prueba",
@@ -160,6 +161,7 @@ export const es: Dict = {
   "common.help": "Ayuda",
   "common.whereToSet": "Dónde configurar: Más → {where}",
   "common.min": "min",
+  "common.gotIt": "Entendido",
   "common.today": "Hoy",
   "common.tomorrow": "Mañana",
 

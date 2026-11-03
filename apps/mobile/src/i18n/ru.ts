@@ -149,6 +149,7 @@ export const ru = {
   "more.light": "Светлая",
   "more.language": "Язык",
   "more.company": "Компания",
+  "more.showHints": "Показать подсказки снова",
   "more.resetDemo": "Сбросить тестовые данные",
   "more.resetDone": "Тестовые данные сброшены",
   "more.version": "Версия {v} · данные тестовые",
@@ -159,6 +160,7 @@ export const ru = {
   "common.help": "Справка",
   "common.whereToSet": "Где настроить: Ещё → {where}",
   "common.min": "мин",
+  "common.gotIt": "Понятно",
   "common.today": "Сегодня",
   "common.tomorrow": "Завтра",
 

@@ -27,7 +27,7 @@ export default function Clients() {
     })
     .sort((a, b) => a.name.localeCompare(b.name));
   return (
-    <Screen title={t("clients.title")} help={t("help.clients")} subtitle={t("clients.count", { n: db.customers.length })}>
+    <Screen title={t("clients.title")} help={t("help.clients")} hintKey="clients" subtitle={t("clients.count", { n: db.customers.length })}>
       <TextField value={q} onChangeText={setQ} placeholder={t("clients.search")} icon="search" />
       {list.length === 0 ? (
         <Empty icon="search" title={t("clients.empty")} hint={t("clients.emptyHint")} />

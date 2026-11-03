@@ -8,6 +8,7 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { HelpButton } from "./overlays";
+import { useHints } from "./hints";
 
 /* ---------- Background: --bg + three soft glows (theme.css --glow) ---------- */
 export function Background() {
@@ -250,6 +251,7 @@ export function Screen({
   scroll = true,
   back,
   subtitle,
+  hintKey,
 }: {
   title: string;
   help?: string;
@@ -258,8 +260,11 @@ export function Screen({
   scroll?: boolean;
   back?: () => void;
   subtitle?: string;
+  /** stable id for the first-visit hint (shown once when `help` is set) */
+  hintKey?: string;
 }) {
   const nav = useNavInsets();
+  const hints = useHints();
   const { c } = useTheme();
   const { t } = useI18n();
   const header = (
@@ -286,6 +291,25 @@ export function Screen({
         </T>
       ) : null}
       <OfflineBadge />
+      {help && hintKey && !hints.seen(hintKey) ? (
+        <Card style={{ borderColor: c.acc }}>
+          <RowView style={{ alignItems: "flex-start" }}>
+            <Icon name="help" s={18} />
+            <T v="body" style={{ flex: 1 }}>
+              {help}
+            </T>
+          </RowView>
+          <Press
+            onPress={() => hints.dismiss(hintKey)}
+            visibleHeight={component.button.sm}
+            accessibilityRole="button"
+            accessibilityLabel={t("common.gotIt")}
+            style={{ alignSelf: "flex-end", height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: c.surf2, justifyContent: "center" }}
+          >
+            <T v="button">{t("common.gotIt")}</T>
+          </Press>
+        </Card>
+      ) : null}
     </View>
   );
   const content = (

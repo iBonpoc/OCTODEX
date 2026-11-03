@@ -8,6 +8,7 @@ import { ThemeProvider, useTheme } from "@/theme/ThemeProvider";
 import { I18nProvider } from "@/i18n";
 import { StoreProvider } from "@/data/store";
 import { ToastProvider } from "@/ui/overlays";
+import { HintsProvider } from "@/ui/hints";
 
 function Shell() {
   const { c, name } = useTheme();
@@ -30,7 +31,9 @@ export default function RootLayout() {
         <ThemeProvider>
           <I18nProvider>
             <StoreProvider>
-              <Shell />
+              <HintsProvider>
+                <Shell />
+              </HintsProvider>
             </StoreProvider>
           </I18nProvider>
         </ThemeProvider>

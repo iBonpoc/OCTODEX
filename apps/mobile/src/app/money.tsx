@@ -53,7 +53,7 @@ export default function Money() {
     ) : null;
 
   return (
-    <Screen title={t("money.title")} help={t("help.money")} back={back}>
+    <Screen title={t("money.title")} help={t("help.money")} hintKey="money" back={back}>
       {db.invoices.length === 0 ? <Empty icon="invoice" title={t("money.empty")} /> : null}
       {section(t("money.overdue"), overdue, "bad")}
       {section(t("money.awaiting"), awaiting, "warn")}

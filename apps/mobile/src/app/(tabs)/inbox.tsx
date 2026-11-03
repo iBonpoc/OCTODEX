@@ -61,7 +61,7 @@ export default function Inbox() {
     );
   };
   return (
-    <Screen title={t("inbox.title")} help={t("help.inbox")}>
+    <Screen title={t("inbox.title")} help={t("help.inbox")} hintKey="inbox">
       {leads.length === 0 ? <Empty icon="inbox" title={t("inbox.empty")} hint={t("inbox.emptyHint")} /> : <Grid>{leads.map(card)}</Grid>}
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />
     </Screen>

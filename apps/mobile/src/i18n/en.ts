@@ -150,6 +150,7 @@ export const en: Dict = {
   "more.light": "Light",
   "more.language": "Language",
   "more.company": "Company",
+  "more.showHints": "Show tips again",
   "more.resetDemo": "Reset test data",
   "more.resetDone": "Test data reset",
   "more.version": "Version {v} · test data",
@@ -160,6 +161,7 @@ export const en: Dict = {
   "common.help": "Help",
   "common.whereToSet": "Where to set: More → {where}",
   "common.min": "min",
+  "common.gotIt": "Got it",
   "common.today": "Today",
   "common.tomorrow": "Tomorrow",
 

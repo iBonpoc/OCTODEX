@@ -44,7 +44,7 @@ export default function Triage() {
   };
 
   return (
-    <Screen title={t("triage.title")} help={t("help.triage")}>
+    <Screen title={t("triage.title")} help={t("help.triage")} hintKey="triage">
       {!cur ? (
         <Empty icon="check" title={t("triage.done")} hint={t("triage.doneHint")} />
       ) : (

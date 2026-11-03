@@ -12,7 +12,7 @@ export default function Visits() {
   now.setHours(23, 59, 59, 999);
   const later = db.visits.filter((v) => v.techId === db.me && new Date(v.start) > now).sort(sortByStart);
   return (
-    <Screen title={t("visits.title")} help={t("help.visits")} subtitle={`${day(new Date().toISOString())} · ${t("visits.count", { n: today.length })}`}>
+    <Screen title={t("visits.title")} help={t("help.visits")} hintKey="visits" subtitle={`${day(new Date().toISOString())} · ${t("visits.count", { n: today.length })}`}>
       {today.length === 0 ? (
         <Empty icon="calendar" title={t("visits.empty")} hint={t("visits.emptyHint")} />
       ) : (

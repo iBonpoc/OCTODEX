@@ -39,7 +39,7 @@ export default function Plan() {
   return (
     <Screen
       title={t("plan.title")}
-      help={t("help.plan")}
+      help={t("help.plan")} hintKey="plan"
       right={
         <Segmented
           value={dayKey}
