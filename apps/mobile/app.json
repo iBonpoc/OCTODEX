@@ -46,6 +46,15 @@
         }
       ]
     ],
-    "scheme": "octodex"
+    "scheme": "octodex",
+    "owner": "octodex-team",
+    "extra": {
+      "eas": {
+        "projectId": "49d009d4-a05b-4911-b7da-1e47c4e10fba"
+      }
+    },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    }
   }
 }
