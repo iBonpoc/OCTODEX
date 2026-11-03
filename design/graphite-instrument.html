@@ -52,7 +52,33 @@ button:focus-visible{outline:1px solid var(--ink);outline-offset:3px}
 .sec{display:flex;flex-direction:column;gap:28px}
 .sec>header{display:flex;justify-content:space-between;align-items:end;gap:16px;flex-wrap:wrap}
 .sec h2{margin:0;font-weight:200;font-size:34px;letter-spacing:.01em}
-.phones{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:28px}
+.phones{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:24px}
+/* client card */
+.cl-head{display:flex;flex-direction:column;align-items:center;gap:6px;margin:4px 0 12px}
+.cl-av{width:58px;height:58px;border-radius:50%;border:1px solid var(--ink-3);display:grid;place-items:center;font-size:15px;letter-spacing:.16em}
+.cl-name{font-size:17px;font-weight:400;letter-spacing:.2em;text-transform:uppercase}
+.cl-sub{font-size:11px;color:var(--ink-3);letter-spacing:.12em;text-transform:uppercase}
+.cl-stats{display:grid;grid-template-columns:repeat(3,1fr);border-top:1px solid var(--line);border-bottom:1px solid var(--line);margin:12px 0 4px}
+.cl-stats div{padding:9px 0;text-align:center;display:flex;flex-direction:column;gap:1px}
+.cl-stats div+div{border-left:1px solid var(--line)}
+.cl-stats b{font-size:17px;font-weight:200}
+.cl-stats span{font-size:9px;letter-spacing:.2em;text-transform:uppercase;color:var(--ink-3)}
+.seg2{display:flex;gap:6px;margin:10px 0 2px}
+.seg2 button{flex:1;border:1px solid var(--line);background:none;border-radius:999px;padding:6px 0;font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink-2);cursor:pointer;transition:border-color .25s,color .25s}
+.seg2 button[aria-pressed="true"]{border-color:var(--ink);color:var(--ink)}
+.cl-pane{display:flex;flex-direction:column;overflow:hidden;flex:1}
+.cl-pane[hidden]{display:none}
+.tl{position:relative;padding-left:16px;margin-top:6px}
+.tl::before{content:"";position:absolute;left:3px;top:6px;bottom:6px;width:1px;background:var(--line)}
+.tl div{position:relative;padding:5px 0;font-size:12px;color:var(--ink-2);display:flex;justify-content:space-between;gap:8px}
+.tl div::before{content:"";position:absolute;left:-16px;top:10px;width:7px;height:7px;border-radius:50%;border:1px solid var(--ink-2);background:var(--slab)}
+.tl div.hot::before{background:var(--ink);border-color:var(--ink)}
+.tl div span:last-child{color:var(--ink-3);white-space:nowrap}
+.prop{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:12.5px}
+.prop b{font-weight:400;letter-spacing:.14em;text-transform:uppercase;font-size:11.5px;display:block}
+.prop small{color:var(--ink-3);font-size:11px}
+.gate{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-top:1px solid var(--line);font-size:12px;color:var(--ink-2)}
+.gate button{border:0;background:none;color:var(--ink);font-size:10px;letter-spacing:.2em;cursor:pointer}
 .pw{display:flex;flex-direction:column;align-items:center;gap:14px}
 .phone{width:100%;max-width:320px;aspect-ratio:9/19;background:var(--frame);border-radius:46px;padding:9px;box-shadow:var(--shadow)}
 .screen{position:relative;height:100%;border-radius:38px;background:var(--slab);overflow:hidden;display:flex;flex-direction:column;padding:16px 20px 18px}
@@ -138,6 +164,7 @@ button:focus-visible{outline:1px solid var(--ink);outline-offset:3px}
 .notes div{display:flex;flex-direction:column;gap:8px}
 .notes p{margin:0;color:var(--ink-2);font-size:14px}
 
+@media (max-width:1180px){.phones{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media (max-width:980px){.hero{grid-template-columns:1fr}.tilt{min-height:440px}.phones{grid-template-columns:1fr}.desk{grid-template-columns:60px minmax(0,1fr)}.side{display:none}.notes{grid-template-columns:1fr}}
 @media (max-width:640px){.desk{grid-template-columns:1fr}.rail{flex-direction:row;border-right:0;border-bottom:1px solid var(--line);padding:12px;justify-content:center;flex-wrap:wrap}.rail .sp{display:none}.dmain{padding:20px}.dmain .row2{grid-template-columns:1fr}.kpis{grid-template-columns:1fr}.lg{grid-template-columns:90px minmax(0,1fr) 48px}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
@@ -167,7 +194,7 @@ button:focus-visible{outline:1px solid var(--ink);outline-offset:3px}
   </section>
 
   <section class="sec">
-    <header><div><span class="cap">iPhone</span><h2>Три экрана</h2></div><span class="caption">Всё нажимается</span></header>
+    <header><div><span class="cap">iPhone</span><h2>Четыре экрана</h2></div><span class="caption">Всё нажимается</span></header>
     <div class="phones">
       <div class="pw">
         <div class="phone"><div class="screen">
@@ -230,6 +257,56 @@ button:focus-visible{outline:1px solid var(--ink);outline-offset:3px}
           </div>
         </div></div>
         <span class="caption">Gutters · рисуйте пальцем</span>
+      </div>
+
+      <div class="pw">
+        <div class="phone"><div class="screen">
+          <div class="stat"><span>9:41</span><span>5G</span></div>
+          <div class="sh"><span class="cap">← Назад</span><span class="cap">Лид $45</span></div>
+          <div class="cl-head">
+            <div class="cl-av">YP</div>
+            <div class="cl-name">Yuri Petrov</div>
+            <div class="cl-sub">Клиент с 2025 · EN · 2 объекта</div>
+          </div>
+          <div class="circs" style="justify-content:center">
+            <button class="circ sm" aria-label="Позвонить"><svg viewBox="0 0 24 24"><path d="M5 3h4l2 5-3 2a12 12 0 0 0 6 6l2-3 5 2v4a2 2 0 0 1-2 2A17 17 0 0 1 3 5a2 2 0 0 1 2-2"/></svg></button>
+            <button class="circ sm" aria-label="SMS"><svg viewBox="0 0 24 24"><path d="M4 5h16v11H9l-5 4z"/></svg></button>
+            <button class="circ sm" aria-label="Маршрут"><svg viewBox="0 0 24 24"><path d="m3 11 18-8-8 18-2-8z"/></svg></button>
+            <button class="circ sm on" aria-label="Новая смета"><svg viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></button>
+          </div>
+          <div class="cl-stats">
+            <div><b class="num">$3,800</b><span>Оплачено</span></div>
+            <div><b class="num">$3,060</b><span>Долг</span></div>
+            <div><b class="num">2</b><span>Работы</span></div>
+          </div>
+          <div class="seg2" role="group" aria-label="Раздел карточки">
+            <button data-pane="tl" aria-pressed="true">Лента</button>
+            <button data-pane="pr" aria-pressed="false">Объекты</button>
+            <button data-pane="info" aria-pressed="false">Инфо</button>
+          </div>
+          <div class="cl-pane" data-p="tl">
+            <div class="tl">
+              <div class="hot"><span>Работа JOB-0210 · в пути</span><span>сегодня</span></div>
+              <div class="hot"><span>Депозит $340 · карта</span><span>28 окт</span></div>
+              <div><span>Подписал EST-0148 · Better</span><span>27 окт</span></div>
+              <div><span>Открыл смету · 3 раза</span><span>26 окт</span></div>
+              <div><span>Осмотр · 148′ · 5 DS</span><span>24 окт</span></div>
+              <div><span>Лид · Thumbtack</span><span>23 окт</span></div>
+            </div>
+          </div>
+          <div class="cl-pane" data-p="pr" hidden>
+            <div class="prop"><div><b>Основной дом</b><small>1424 N Kenwood St, Glendale · 1 эт · comp</small></div><span class="dot full"></span></div>
+            <div class="prop"><div><b>Сдаёт в аренду</b><small>Burbank · 2 эт · tile · fire zone</small></div><span class="dot"></span></div>
+            <div class="prop"><div><b>+ Добавить объект</b><small>адрес, этажность, крыша</small></div><span></span></div>
+          </div>
+          <div class="cl-pane" data-p="info" hidden>
+            <div class="prop"><div><b>Телефон</b><small>(818) 555-0142 · SMS ✓ согласие 24.10</small></div><span></span></div>
+            <div class="prop"><div><b>Email</b><small>yuri.p@example.com</small></div><span></span></div>
+            <div class="gate"><span>Код ворот · ••••</span><button type="button" id="gateBtn">ПОКАЗАТЬ</button></div>
+            <div class="prop"><div><b>Теги</b><small>гаттеры · чистка 2×/год · реферал</small></div><span></span></div>
+          </div>
+        </div></div>
+        <span class="caption">Карточка клиента</span>
       </div>
     </div>
   </section>
@@ -368,6 +445,11 @@ document.getElementById('undo').addEventListener('click',function(){if(tool==='d
 document.getElementById('clear').addEventListener('click',function(){pts=[];dss=[];render()});
 pts=[[40,90],[240,90],[240,200],[150,200],[150,300]];dss=[[40,100]];render();
 
+/* Client card */
+document.querySelectorAll('.seg2 button').forEach(function(b){b.addEventListener('click',function(){
+ var box=b.closest('.screen');box.querySelectorAll('.seg2 button').forEach(function(x){x.setAttribute('aria-pressed',x===b)});
+ box.querySelectorAll('.cl-pane').forEach(function(p){p.hidden=p.dataset.p!==b.dataset.pane})})});
+var gb=document.getElementById('gateBtn');gb.addEventListener('click',function(){var s=gb.previousElementSibling;var on=s.textContent.indexOf('4721')>-1;s.textContent=on?'Код ворот · ••••':'Код ворот · 4721 (показ записан в журнал)';gb.textContent=on?'ПОКАЗАТЬ':'СКРЫТЬ'});
 /* Mic */
 document.querySelectorAll('.mic').forEach(function(m){m.addEventListener('click',function(){m.classList.toggle('rec')})});
 /* Rail */
