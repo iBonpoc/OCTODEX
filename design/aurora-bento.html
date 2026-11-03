@@ -89,7 +89,7 @@ svg{display:block}
 .cur svg{width:16px;height:16px}
 .cur-o{color:var(--orange)}.cur-o b{background:var(--orange)}
 .cur-b{color:var(--blue)}.cur-b b{background:var(--blue)}
-.nav .cur{right:-26px;bottom:-30px}
+.nav .cur{right:-44px;bottom:-26px}
 /* list */
 .list{padding:14px;border-radius:30px}
 .lhead{display:flex;align-items:center;gap:10px;padding:4px 4px 14px}
@@ -109,7 +109,7 @@ svg{display:block}
 .row.lifted .grip{cursor:grabbing}
 .row.settle{transition:transform .6s var(--spring),box-shadow .4s}
 .row.demo{z-index:5;transform:translate(34px,-4px) rotate(-2.2deg) scale(1.03);box-shadow:var(--sh-lift)}
-.row .cur{right:-56px;bottom:-30px}
+.row .cur{right:6px;bottom:-30px}
 .rows.dragging .row:not(.lifted){opacity:.9}
 .hide-done .row.done{display:none}
 .chk{width:24px;height:24px;flex:none;border-radius:50%;display:grid;place-items:center;box-shadow:inset 0 0 0 2px var(--faint);transition:box-shadow .25s,background .25s}
@@ -123,7 +123,7 @@ svg{display:block}
 .ring .tr{stroke:var(--ring-track)}
 .ring .pr{stroke:var(--orange);stroke-linecap:round;transform:rotate(-90deg);transform-origin:center;transition:stroke-dashoffset .6s var(--spring)}
 .lfoot .cbtn{margin-left:auto}
-.menu{position:absolute;z-index:8;right:-196px;bottom:6px;width:224px;padding:8px;border-radius:20px;transform-origin:0 100%;transition:transform .45s var(--spring),opacity .2s;transform:scale(.8);opacity:0;pointer-events:none}
+.menu{position:absolute;z-index:8;left:calc(100% + 26px);top:322px;width:250px;padding:8px;border-radius:20px;transform-origin:0 100%;transition:transform .45s var(--spring),opacity .2s;transform:scale(.8);opacity:0;pointer-events:none}
 .menu.open{transform:none;opacity:1;pointer-events:auto}
 .menu button,.menu label{display:flex;align-items:center;justify-content:space-between;width:100%;padding:11px 12px;border-radius:12px;font-weight:700;font-size:13.5px;color:var(--muted);cursor:pointer;transition:background .2s,color .2s}
 .menu button:hover,.menu label:hover{color:var(--text);background:linear-gradient(180deg,var(--row),var(--row-b));box-shadow:var(--sh-row)}
@@ -135,7 +135,7 @@ input:checked+.sw::after{transform:translateX(16px);background:#fff}
 .vh{position:absolute;opacity:0;width:1px;height:1px}
 input:focus-visible+.sw,button:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
 /* picker */
-.side{margin-top:110px;margin-right:-34px}
+.side{margin-top:14px;margin-right:-34px}
 .picker{padding:16px}
 .lab{font-size:11px;font-weight:800;letter-spacing:.14em;color:var(--faint);text-transform:uppercase;margin:0 2px 10px}
 .icons{display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:16px}
@@ -148,7 +148,7 @@ input:focus-visible+.sw,button:focus-visible{outline:2px solid var(--blue);outli
 .name{display:flex;align-items:center;gap:10px;padding:8px 12px 8px 8px;font-weight:700}
 .name .badge{width:30px;height:30px;border-radius:50%}
 /* row 2 */
-.row2{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:40px;align-items:start;margin:46px auto 0;max-width:1000px}
+.row2{display:grid;grid-template-columns:minmax(0,1fr) 320px;gap:40px;align-items:start;margin:120px auto 0;max-width:1000px}
 .empty{padding:14px;border-radius:30px;margin-top:40px}
 .qbar{display:flex;gap:10px}
 .qbar .search{flex:1;color:var(--text)}
@@ -186,18 +186,20 @@ input:focus-visible+.sw,button:focus-visible{outline:2px solid var(--blue);outli
   .cluster{grid-template-columns:250px minmax(0,1fr);margin-top:-270px}
   .side{grid-column:1/-1;margin:0;max-width:560px;justify-self:center;width:100%}
   .nav,.side{margin-left:0;margin-right:0}
-  .menu{right:12px;bottom:62px;transform-origin:100% 100%}
+  .menu{left:auto;top:auto;right:12px;bottom:62px;width:236px;transform-origin:100% 100%}
 }
 @media (max-width:760px){
   .hero{min-height:0;padding:44px 18px 40px}
   .cluster{grid-template-columns:minmax(0,1fr);margin-top:-14px;gap:18px}
   .nav{margin:0}.nav .cur{right:14px;bottom:-24px}
   .row .cur{right:-6px}
+  .nav .cur{right:14px}
   .row.demo{transform:translate(14px,-4px) rotate(-1.8deg) scale(1.02)}
   .row2{grid-template-columns:minmax(0,1fr);gap:28px;margin-top:28px}
   .empty{margin-top:0}
   .orb{left:-60px;top:40px;width:96px;height:96px}
-  .aur-hero{inset:-10px -10px 50% 30%}
+  .aur-hero{inset:-10px 0 50% 30%;transform:none}
+  .aur-phone{inset:12% 0 20% 0}
   .phone{width:min(300px,100%)}
 }
 @media (prefers-reduced-motion:reduce){
