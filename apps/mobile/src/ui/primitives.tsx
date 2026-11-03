@@ -87,10 +87,13 @@ export function Press({
   style,
   visibleHeight,
   disabled,
+  containerStyle,
   ...rest
 }: Omit<PressableProps, "style" | "children"> & {
   children: ReactNode;
   style?: StyleProp<ViewStyle>;
+  /** layout style for the outer touch target (flex, alignSelf) */
+  containerStyle?: StyleProp<ViewStyle>;
   /** visible height of the control; hit area is extended to 44 */
   visibleHeight?: number;
 }) {
@@ -101,6 +104,7 @@ export function Press({
     <Pressable
       {...rest}
       disabled={disabled}
+      style={containerStyle}
       hitSlop={visibleHeight ? hitSlopFor(visibleHeight) : undefined}
       onPressIn={(e) => {
         if (!reduce) s.value = withTiming(motion.pressScale, { duration: 80 });

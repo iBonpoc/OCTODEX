@@ -36,6 +36,11 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   const [layouts, setLayouts] = useState<Record<string, { x: number; w: number }>>({});
   const left = useSharedValue(0);
   const width = useSharedValue(0);
+  // Items move when the role changes: forget old measurements so the fill jumps to the right place.
+  useEffect(() => {
+    setLayouts({});
+    width.value = 0;
+  }, [role, wide, width]);
   useEffect(() => {
     const l = current ? layouts[current] : undefined;
     if (!l) {
@@ -66,6 +71,7 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
         accessibilityRole="tab"
         accessibilityState={{ selected: sel }}
         accessibilityLabel={t(it.label)}
+        containerStyle={wide ? undefined : { flex: 1 }}
         onLayout={(e: LayoutChangeEvent) => {
           const { x, width: w } = e.nativeEvent.layout;
           setLayouts((p) => (p[it.route]?.x === x && p[it.route]?.w === w ? p : { ...p, [it.route]: { x, w } }));
@@ -99,7 +105,8 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
       visibleHeight={component.fab}
       accessibilityRole="button"
       accessibilityLabel={t("tab.add")}
-      style={{ flex: wide ? undefined : 1, alignItems: "center", justifyContent: "center", height: itemH }}
+      containerStyle={wide ? undefined : { flex: 1 }}
+      style={{ alignItems: "center", justifyContent: "center", height: itemH }}
     >
       <View
         style={{
@@ -144,7 +151,7 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
             maxWidth: wide ? undefined : 480,
           }}
         >
-          <View style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
+          <View key={`${role}-${wide}`} style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
             <Animated.View
               pointerEvents="none"
               style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill, backgroundColor: c.acc }, pill]}

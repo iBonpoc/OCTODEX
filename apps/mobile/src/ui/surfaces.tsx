@@ -1,4 +1,4 @@
-import { type ReactNode } from "react";
+import { useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
@@ -90,13 +90,18 @@ export function RowView({ children, style, gap = space[2] }: { children: ReactNo
 
 export function Grid({ children }: { children: ReactNode[] | ReactNode }) {
   const { device } = useDevice();
+  const [w, setW] = useState(0);
   const cols = layout.gridCols[device];
   const arr = (Array.isArray(children) ? children : [children]).filter(Boolean);
   if (cols === 1) return <View style={{ gap: space[3] }}>{arr}</View>;
+  const itemW = w ? (w - space[3] * (cols - 1)) / cols : undefined;
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[3] }}>
+    <View
+      onLayout={(e) => setW(e.nativeEvent.layout.width)}
+      style={{ flexDirection: "row", flexWrap: "wrap", gap: space[3], alignItems: "flex-start" }}
+    >
       {arr.map((ch, i) => (
-        <View key={i} style={{ flexBasis: `${100 / cols - 2}%`, flexGrow: 1 }}>
+        <View key={i} style={{ width: itemW ?? `${Math.floor(100 / cols) - 2}%` }}>
           {ch}
         </View>
       ))}
