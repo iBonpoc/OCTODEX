@@ -93,3 +93,10 @@ VERBOSE=1 supabase/tests/run.sh   # плюс текст каждой ожида�
 7. **Supabase и `FORCE RLS`.** Definer-функции рассчитывают на то, что у роли `postgres` в Supabase есть `BYPASSRLS`. Проверить на staging-проекте (локальные тесты идут под суперпользователем).
 8. **Лиды для tech.** Сейчас tech лиды не видит и не создаёт (в лиде есть `cost_cents`). Для лида «сосед» от мастера нужен спутник `lead_costs` или RPC.
 9. **Субподрядчик.** Ему пока закрыто всё; доступ появится через проекцию `work_order_for_sub` вместе с `SubcontractorAssignment`.
+
+
+## Облачный проект (03.11.2026)
+- Проект **Naryad**, id `kgiaxygsjkyiquhjbxdg`, регион `us-west-1`, организация Estixa. Отдельно от проекта Estixa (там живые данные другого приложения — не трогать).
+- Миграция применена четырьмя частями (`core_01_foundation` … `core_04_rls_grants`) — та же схема без комментариев, локальные тесты на ней проходят.
+- Советник безопасности: только INFO по `app.company_numbering` и `app.status_transitions` (RLS без политик — так и задумано: доступ только через SECURITY DEFINER функции).
+- URL и публичный ключ: `apps/mobile/src/config/backend.ts`.
