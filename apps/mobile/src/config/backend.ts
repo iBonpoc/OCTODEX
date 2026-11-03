@@ -5,3 +5,6 @@
 export const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL ?? "https://kgiaxygsjkyiquhjbxdg.supabase.co";
 export const SUPABASE_PUBLISHABLE_KEY =
   process.env.EXPO_PUBLIC_SUPABASE_KEY ?? "sb_publishable_-DZJwLnp1quJvRDDSv1ABw_JR4P_dUi";
+
+/** Public web app (Vercel, auto-deploys from main). Used as Supabase Site URL for email links. */
+export const WEB_APP_URL = "https://octodex-mobile.vercel.app";

@@ -68,7 +68,7 @@
 
 ## 7. Статус сборки (обновлено 04.11.2026, ночная сессия)
 
-Ветка `feat/app-foundation`. Живая веб-сборка для телефона: https://claude.ai/artifact/PPyEow5B9ir6GMRUVB1uHc (приватная ссылка основателя).
+Рабочая ветка `main` (сливаю сам через PR). **Сайт (Vercel, обновляется с каждым изменением `main`): https://octodex-mobile.vercel.app** — работает с базой OCTODEX после входа. Демо-ссылка: https://claude.ai/artifact/PPyEow5B9ir6GMRUVB1uHc. Сборки iOS/Android: Expo `octodex-team/octodex`, профили `preview` (APK) и `production`.
 
 | Волна | Статус | Что сделано |
 |---|---|---|
