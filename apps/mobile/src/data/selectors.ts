@@ -26,3 +26,11 @@ export function daysSince(iso: string): number {
 export function customerBalance(db: DB, customerId: string): number {
   return db.invoices.filter((i) => i.customerId === customerId).reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0);
 }
+
+/** Job profit = revenue (job amount) − expenses linked to the job. Labor cost arrives with time tracking. */
+export function jobProfit(db: DB, jobId: string) {
+  const job = db.jobs.find((j) => j.id === jobId);
+  const expenses = (db.expenses ?? []).filter((e) => e.jobId === jobId).reduce((s, e) => s + e.amountCents, 0);
+  const revenue = job?.amountCents ?? 0;
+  return { revenue, expenses, profit: revenue - expenses, marginPct: revenue ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null };
+}

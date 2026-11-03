@@ -114,6 +114,11 @@ export function makeSeed(): DB {
       { id: "e4", customerId: "c3", propertyId: "p3", title: "Full replacement option", totalCents: 264000, status: "sent", sentAt: daysAgo(6) },
       { id: "e5", customerId: "c1", propertyId: "p1", title: "Seamless 6″, 148 LF", totalCents: 342000, status: "approved", sentAt: daysAgo(12), approvedAt: daysAgo(8) },
     ],
+    expenses: [
+      { id: "x1", jobId: "j5", vendor: "Home Depot", category: "materials", amountCents: 41260, at: minutesAgo(300), memberId: "m-ivan" },
+      { id: "x2", jobId: "j1", vendor: "ABC Supply", category: "materials", amountCents: 88400, at: daysAgo(1), memberId: "m-alex" },
+      { id: "x3", jobId: null, vendor: "Chevron", category: "fuel", amountCents: 7850, at: minutesAgo(200), memberId: "m-alex" },
+    ],
     invoices: [
       { id: "i1", customerId: "c2", jobId: "j2", totalCents: 184000, paidCents: 0, dueDate: daysAgo(9) },
       { id: "i2", customerId: "c4", jobId: "j4", totalCents: 96000, paidCents: 0, dueDate: daysAgo(-3) },

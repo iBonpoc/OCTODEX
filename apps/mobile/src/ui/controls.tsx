@@ -327,12 +327,14 @@ export function TextField({
   placeholder,
   icon,
   multiline,
+  keyboardType,
 }: {
   value: string;
   onChangeText: (s: string) => void;
   placeholder?: string;
   icon?: IconKey;
   multiline?: boolean;
+  keyboardType?: "default" | "decimal-pad" | "phone-pad" | "email-address";
 }) {
   const { c } = useTheme();
   const { wide } = useDevice();
@@ -359,6 +361,7 @@ export function TextField({
         placeholder={placeholder}
         placeholderTextColor={c.mut}
         multiline={multiline}
+        keyboardType={keyboardType}
         accessibilityLabel={placeholder}
         style={{
           flex: 1,

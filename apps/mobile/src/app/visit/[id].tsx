@@ -3,7 +3,7 @@ import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { space } from "@octo/design-tokens";
-import { useStore, visitContext } from "@/data/store";
+import { jobProfit, useStore, visitContext } from "@/data/store";
 import type { PaymentMethod } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -248,6 +248,22 @@ export default function VisitScreen() {
           <T v="body" tone="mut">
             {t("visit.completedHint")}
           </T>
+          {job ? (() => {
+            const p = jobProfit(db, job.id);
+            return (
+              <View style={{ gap: space[1] }}>
+                <RowView style={{ justifyContent: "space-between" }}>
+                  <T v="body" tone="mut">{t("job.profit")}</T>
+                  <T v="heading" tabular tone={p.profit >= 0 ? "ok" : "bad"}>
+                    {money(p.profit)}{p.marginPct !== null ? ` · ${p.marginPct}%` : ""}
+                  </T>
+                </RowView>
+                <T v="caption" tone="mut">
+                  {t("job.revenue")} {money(p.revenue)} − {t("job.expenses")} {money(p.expenses)}. {t("job.laborNote")}
+                </T>
+              </View>
+            );
+          })() : null}
           {v.payment ? (
             <T v="body" tabular>
               {money(v.payment.amountCents)} · {t(`visit.pay${v.payment.method[0].toUpperCase()}${v.payment.method.slice(1)}` as "visit.payCard")}

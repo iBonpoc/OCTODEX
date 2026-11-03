@@ -119,6 +119,19 @@ export interface Invoice {
   kind?: "deposit" | "final";
 }
 
+export type ExpenseCategory = "materials" | "fuel" | "dump" | "tools" | "other";
+export interface Expense {
+  id: ID;
+  jobId: ID | null;
+  vendor: string;
+  category: ExpenseCategory;
+  amountCents: number;
+  at: string;
+  receiptUri?: string;
+  /** who paid; reimbursements later */
+  memberId: ID;
+}
+
 export interface QueuedAction {
   id: ID;
   label: string;
@@ -135,4 +148,5 @@ export interface DB {
   leads: Lead[];
   estimates: Estimate[];
   invoices: Invoice[];
+  expenses: Expense[];
 }

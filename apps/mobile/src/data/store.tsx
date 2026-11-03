@@ -10,6 +10,7 @@ import {
   VISIT_STEPS,
   type DB,
   type Estimate,
+  type Expense,
   type Lead,
   type ID,
   type PaymentMethod,
@@ -41,6 +42,7 @@ interface StoreCtx {
   addEstimate: (e: Omit<Estimate, "id">) => Undo;
   sendEstimate: (id: ID) => Undo;
   payInvoice: (id: ID, method: PaymentMethod) => Undo;
+  addExpense: (x: Omit<Expense, "id" | "at" | "memberId">) => Undo;
   signEstimate: (id: ID, path: string) => Undo;
   payDeposit: (id: ID, method: PaymentMethod) => Undo;
 }
@@ -54,7 +56,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [saved, setSaved, dbReady] = usePersistentState<{ day: string; db: DB }>(
     "octo.db.v1",
     () => ({ day: todayKey(), db: makeSeed() }),
-    { validate: (v) => v?.day === todayKey() && Array.isArray(v?.db?.visits) },
+    { validate: (v) => v?.day === todayKey() && Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) },
   );
   const db = saved.db;
   const setDb = useCallback((next: DB) => setSaved({ day: todayKey(), db: next }), [setSaved]);
@@ -194,6 +196,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         })),
       assignVisit: (visitId, techId) => mutate("visit.assign", (d) => patchVisit(d, visitId, (v) => ({ ...v, techId }))),
       addEstimate: (e) => mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id: uid("e") }] })),
+      addExpense: (x) =>
+        mutate("expense.add", (d) => ({
+          ...d,
+          expenses: [{ ...x, id: uid("x"), at: new Date().toISOString(), memberId: d.me }, ...(d.expenses ?? [])],
+        })),
       payInvoice: (id, method) =>
         mutate("invoice.pay", (d) => ({
           ...d,
@@ -243,4 +250,4 @@ export function useStore(): StoreCtx {
   return v;
 }
 
-export { isToday, visitContext, minutesSince, daysSince, customerBalance } from "./selectors";
+export { isToday, visitContext, minutesSince, daysSince, customerBalance, jobProfit } from "./selectors";

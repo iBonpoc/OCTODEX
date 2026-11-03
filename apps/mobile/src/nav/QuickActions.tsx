@@ -21,7 +21,7 @@ const ACTIONS: Action[] = [
   { key: "photo", label: "quick.photo", icon: "camera" },
   { key: "lead", label: "quick.lead", icon: "user" },
   { key: "estimate", label: "quick.estimate", icon: "invoice" },
-  { key: "receipt", label: "quick.receipt", icon: "wallet", wave: 4 },
+  { key: "receipt", label: "quick.receipt", icon: "wallet" },
 ];
 
 /** Center "＋": voice note, lead, estimate, photo, receipt (docs/10-build-plan.md §3). */
@@ -59,7 +59,7 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
             <Press
               key={a.key}
               disabled={disabled}
-              onPress={a.key === "photo" ? takePhoto : a.key === "estimate" ? newEstimate : a.key === "lead" ? () => { onClose(); router.push("/lead/new"); } : undefined}
+              onPress={a.key === "photo" ? takePhoto : a.key === "estimate" ? newEstimate : a.key === "receipt" ? () => { onClose(); router.push("/expense/new"); } : a.key === "lead" ? () => { onClose(); router.push("/lead/new"); } : undefined}
               accessibilityRole="button"
               accessibilityLabel={t(a.label)}
               style={{

@@ -58,6 +58,23 @@ export default function Money() {
       {section(t("money.overdue"), overdue, "bad")}
       {section(t("money.awaiting"), awaiting, "warn")}
       {section(t("money.paid"), paid, "ok")}
+      {db.expenses.length ? (
+        <View style={{ gap: space[2] }}>
+          <SectionTitle title={`${t("money.expenses")} · ${money(db.expenses.reduce((s, x) => s + x.amountCents, 0))}`} />
+          <Card>
+            {db.expenses.map((x, n) => (
+              <View key={x.id}>
+                {n > 0 ? <Divider /> : null}
+                <ListRow
+                  title={x.vendor}
+                  subtitle={`${t(`exp.cat.${x.category}`)} · ${day(x.at)}${x.jobId ? ` · ${db.jobs.find((j) => j.id === x.jobId)?.title ?? ""}` : ""}`}
+                  right={<T v="body" w="semibold" tabular>{money(x.amountCents)}</T>}
+                />
+              </View>
+            ))}
+          </Card>
+        </View>
+      ) : null}
       <Sheet visible={!!paying} onClose={() => setPaying(null)} title={paying ? `${t("money.receive")}: ${name(paying)}` : ""}>
         {paying ? (
           <View style={{ gap: space[3] }}>
