@@ -15,6 +15,8 @@ export function useNoticeText() {
       ? t("notice.approved", { name: n.customer, total: money(n.totalCents ?? 0) }) + " " + t("notice.pickDate")
       : n.kind === "deposit.paid"
         ? t("notice.deposit", { name: n.customer, amount: money(n.depositCents ?? 0) })
+        : n.kind === "invoice.paid"
+          ? t("notice.invoicePaid", { name: n.customer, amount: money(n.totalCents ?? 0) })
         : t("notice.viewed", { name: n.customer });
 }
 
@@ -58,7 +60,7 @@ export function NoticesCard() {
               right={
                 <StatusChip
                   status={n.kind === "estimate.viewed" ? "info" : "ok"}
-                  label={n.kind === "estimate.viewed" ? t("notice.viewedChip") : n.kind === "deposit.paid" ? t("money.paid") : t("st.approved")}
+                  label={n.kind === "estimate.viewed" ? t("notice.viewedChip") : n.kind === "deposit.paid" || n.kind === "invoice.paid" ? t("money.paid") : t("st.approved")}
                 />
               }
               onPress={n.estimateId ? () => router.push(`/estimate/${n.estimateId}`) : undefined}

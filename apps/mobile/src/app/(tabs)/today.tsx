@@ -9,7 +9,7 @@ import { todayVisits, visitStatus } from "@/features/visits";
 import { useTick } from "@/features/sheets";
 import { NoticesCard } from "@/features/notices";
 import { CompanySetupCard, FirstStepsCard } from "@/features/SetupCards";
-import { Avatar, StatusChip } from "@/ui/controls";
+import { Avatar, Button, StatusChip } from "@/ui/controls";
 import { Icon, T, type IconKey } from "@/ui/primitives";
 import { Card, CardList, Divider, Grid, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
@@ -95,7 +95,7 @@ export default function Today() {
           </CardList>
         </View>
         <View style={{ gap: space[2] }}>
-          <SectionTitle title={t("today.crew")} />
+          <SectionTitle title={t("today.crew")} right={<Button label={t("plan.title")} icon="calendar" size="sm" variant="ghost" onPress={() => router.push("/plan")} />} />
           <CardList>
             {techs.map((m, i) => {
               const vs = todayVisits(db, m.id);

@@ -120,7 +120,7 @@ export default function InvoiceScreen() {
             <View key={p.id}>
               <ItemCard
                 title={`${money(p.amountCents)} · ${t(`pay.${p.method}` as DictKey)}`}
-                subtitle={`${p.receiptNumber ?? t("rcpt.pendingNumber")} · ${day(p.at)}${p.reference ? ` · ${p.reference}` : ""}`}
+                subtitle={`${p.receiptNumber ?? t("rcpt.pendingNumber")} · ${day(p.at)}${p.reference ? ` · ${p.reference === "stripe-simulated" ? t("pay.testMode") : p.reference}` : ""}`}
                 onPress={() => router.push(`/receipt/${p.id}`)}
               />
             </View>

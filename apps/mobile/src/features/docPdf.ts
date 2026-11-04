@@ -89,7 +89,7 @@ export function receiptHtml(db: DB, p: Payment, company: PortalData["company"], 
 <table style="margin-top:10pt">
 <tr><td>${esc(t("rcpt.receivedFrom"))}</td><td class="r">${esc(cust?.name ?? "")}</td></tr>
 <tr><td>${esc(t("rcpt.date"))}</td><td class="r">${day(p.at)}</td></tr>
-<tr><td>${esc(t("rcpt.method"))}</td><td class="r">${esc(t(`pay.${p.method}` as DictKey))}${p.reference ? ` · ${esc(p.reference)}` : ""}</td></tr>
+<tr><td>${esc(t("rcpt.method"))}</td><td class="r">${esc(t(`pay.${p.method}` as DictKey))}${p.reference ? ` · ${esc(p.reference === "stripe-simulated" ? t("pay.testMode") : p.reference)}` : ""}</td></tr>
 ${inv ? `<tr><td>${esc(t("rcpt.forInvoice"))}</td><td class="r">${esc([inv.number, inv.title].filter(Boolean).join(" · "))}</td></tr>` : ""}
 <tr class="tot"><td>${esc(t("rcpt.amount"))}</td><td class="r">${money(p.amountCents)}</td></tr>
 ${inv ? `<tr><td>${esc(t("rcpt.balanceAfter"))}</td><td class="r">${money(balance)}</td></tr>` : ""}
