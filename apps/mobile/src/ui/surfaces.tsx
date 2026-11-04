@@ -1,3 +1,4 @@
+import { VersionBadge } from "@/features/version";
 import { useState, type ReactNode } from "react";
 import { ScrollView, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -272,6 +273,7 @@ export function Screen({
   const { t } = useI18n();
   const header = (
     <View style={{ gap: space[2], marginBottom: space[3] }}>
+      <VersionBadge />
       <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
         <RowView style={{ flex: 1, gap: space[1] }}>
           {back ? (

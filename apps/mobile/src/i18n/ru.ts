@@ -153,7 +153,6 @@ export const ru = {
   "more.showHints": "Показать подсказки снова",
   "more.resetDemo": "Сбросить тестовые данные",
   "more.resetDone": "Тестовые данные сброшены",
-  "more.version": "Версия {v} · данные тестовые",
 
   "common.undo": "Отменить",
   "common.cancel": "Отмена",

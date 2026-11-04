@@ -154,7 +154,6 @@ export const en: Dict = {
   "more.showHints": "Show tips again",
   "more.resetDemo": "Reset test data",
   "more.resetDone": "Test data reset",
-  "more.version": "Version {v} · test data",
 
   "common.undo": "Undo",
   "common.cancel": "Cancel",

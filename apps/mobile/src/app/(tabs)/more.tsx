@@ -1,6 +1,5 @@
 import { View } from "react-native";
 import { router } from "expo-router";
-import Constants from "expo-constants";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useAuth } from "@/cloud/auth";
@@ -12,6 +11,7 @@ import { Button, Segmented, Toggle } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
+import { useVersionLabel } from "@/features/version";
 import { Card, ListRow, RowView, Screen } from "@/ui/surfaces";
 
 /** Settings for this device: role, theme, language, offline test switch. */
@@ -22,6 +22,7 @@ export default function More() {
   const { pref, setPref } = useTheme();
   const toast = useToast();
   const hints = useHints();
+  const versionLabel = useVersionLabel();
   const changeRole = (r: Role) => {
     setRole(r);
     router.navigate(`/${roleHome[r]}`);
@@ -126,7 +127,7 @@ export default function More() {
       </Card>
       <View style={{ paddingHorizontal: space[2] }}>
         <T v="caption" tone="mut">
-          {t("more.version", { v: Constants.expoConfig?.version ?? "1.0.0" })}
+          {versionLabel}
         </T>
       </View>
     </Screen>

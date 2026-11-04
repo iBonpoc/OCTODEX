@@ -154,7 +154,6 @@ export const es: Dict = {
   "more.showHints": "Mostrar consejos de nuevo",
   "more.resetDemo": "Restablecer datos de prueba",
   "more.resetDone": "Datos de prueba restablecidos",
-  "more.version": "Versión {v} · datos de prueba",
 
   "common.undo": "Deshacer",
   "common.cancel": "Cancelar",
