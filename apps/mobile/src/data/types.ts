@@ -35,7 +35,8 @@ export interface Property {
   stories: number;
 }
 
-export type JobStatus = "lead" | "estimate" | "scheduled" | "in_progress" | "done";
+/** unscheduled: client signed, the contractor has not picked a date yet (not in the plan) */
+export type JobStatus = "lead" | "estimate" | "unscheduled" | "scheduled" | "in_progress" | "done";
 export interface Job {
   id: ID;
   propertyId: ID;
@@ -162,6 +163,7 @@ export interface Notice {
   id: ID;
   kind: NoticeKind;
   estimateId?: ID;
+  jobId?: ID;
   customer: string;
   totalCents?: number;
   depositCents?: number;

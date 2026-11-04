@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { View } from "react-native";
+import { ScrollView, View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
@@ -7,13 +7,13 @@ import { VisitCard, sortByStart } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
 import { DndProvider, Draggable, DropZone, useDragFrom } from "@/features/dnd";
 import { useToast } from "@/ui/overlays";
-import { Avatar, Button, Segmented } from "@/ui/controls";
+import { Avatar, Button, ChoiceChips } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, Grid, RowView, Screen } from "@/ui/surfaces";
 
 /** Day schedule grouped by person; unassigned first. Drag & drop between people comes with the tablet calendar (wave 2). */
 export default function Plan() {
-  const { t } = useI18n();
+  const { t, day } = useI18n();
   const { db, role, assignVisit, online } = useStore();
   const canAssign = role !== "tech";
   const toast = useToast();
@@ -29,10 +29,18 @@ export default function Plan() {
     ) : (
       <View key={v.id}>{card}</View>
     );
-  const [dayKey, setDayKey] = useState<"today" | "tomorrow">("today");
+  const [dayKey, setDayKey] = useState<string>("0");
   const [assign, setAssign] = useState<string | null>(null);
   const target = new Date();
-  if (dayKey === "tomorrow") target.setDate(target.getDate() + 1);
+  target.setDate(target.getDate() + Number(dayKey));
+  /** next 14 days; days with visits get a count */
+  const dayItems = Array.from({ length: 14 }, (_, i) => {
+    const d = new Date();
+    d.setDate(d.getDate() + i);
+    const n = db.visits.filter((v) => new Date(v.start).toDateString() === d.toDateString()).length;
+    const name = i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : day(d.toISOString());
+    return { key: String(i), label: n ? `${name} · ${n}` : name };
+  });
   const visits = db.visits.filter((v) => new Date(v.start).toDateString() === target.toDateString()).sort(sortByStart);
   const unassigned = visits.filter((v) => !v.techId);
   const people = db.members.filter((m) => m.roles.includes("tech") && (role !== "tech" || m.id === db.me));
@@ -40,17 +48,10 @@ export default function Plan() {
     <Screen
       title={t("plan.title")}
       help={t("help.plan")} hintKey="plan"
-      right={
-        <Segmented
-          value={dayKey}
-          onChange={setDayKey}
-          items={[
-            { key: "today", label: t("common.today") },
-            { key: "tomorrow", label: t("common.tomorrow") },
-          ]}
-        />
-      }
     >
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
+        <ChoiceChips value={dayKey} onChange={setDayKey} items={dayItems} nowrap />
+      </ScrollView>
       <DndProvider>
       {visits.length === 0 ? <Empty icon="calendar" title={t("plan.empty")} /> : null}
       {canAssign && unassigned.length > 0 ? (

@@ -36,3 +36,14 @@ describe("universal estimate (app helpers)", () => {
     expect(JSON.stringify(doc)).toContain("unitCostCents");
   });
 });
+
+import { buildAttention } from "../src/features/attention";
+describe("signed estimate waits for a date", () => {
+  it("unscheduled job without visits is in 'needs attention'; disappears once a visit exists", () => {
+    const db = makeSeed();
+    db.jobs.push({ id: "jx", propertyId: "p3", title: "Handyman", status: "unscheduled", amountCents: 77236, estimateId: "e6" });
+    expect(buildAttention(db).find((a) => a.kind === "schedule")?.refId).toBe("jx");
+    db.visits.push({ id: "vx", jobId: "jx", techId: null, start: new Date().toISOString(), durationMin: 60, step: "scheduled", scope: [], checklist: [], photos: [], amountDueCents: 0 });
+    expect(buildAttention(db).some((a) => a.kind === "schedule")).toBe(false);
+  });
+});

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { router } from "expo-router";
 import { Linking } from "react-native";
 import { useStore, visitContext } from "@/data/store";
 import { useI18n } from "@/i18n";
@@ -31,6 +32,8 @@ export default function Triage() {
     switch (it.kind) {
       case "lead":
         return <Button label={t("inbox.reply")} icon="send" onPress={() => setReply(it.refId)} />;
+      case "schedule":
+        return <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${it.refId}`)} />;
       case "unassigned":
         return <Button label={t("triage.assign")} icon="user" onPress={() => setAssign(it.refId)} />;
       case "late": {

@@ -12,7 +12,7 @@ export function useNoticeText() {
   const { t, money } = useI18n();
   return (n: Notice) =>
     n.kind === "estimate.approved"
-      ? t("notice.approved", { name: n.customer, total: money(n.totalCents ?? 0) })
+      ? t("notice.approved", { name: n.customer, total: money(n.totalCents ?? 0) }) + " " + t("notice.pickDate")
       : n.kind === "deposit.paid"
         ? t("notice.deposit", { name: n.customer, amount: money(n.depositCents ?? 0) })
         : t("notice.viewed", { name: n.customer });
@@ -64,6 +64,9 @@ export function NoticesCard() {
               }
               onPress={n.estimateId ? () => router.push(`/estimate/${n.estimateId}`) : undefined}
             />
+            {n.kind === "estimate.approved" && n.jobId && !db.visits.some((v) => v.jobId === n.jobId) ? (
+              <Button label={t("sch.title")} icon="calendar" size="sm" onPress={() => router.push(`/job/schedule?jobId=${n.jobId}`)} />
+            ) : null}
           </View>
         ))}
       </Card>

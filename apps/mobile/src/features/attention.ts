@@ -3,7 +3,7 @@ import { daysSince, isToday, minutesSince, visitContext } from "@/data/selectors
 import type { DB, ID } from "@/data/types";
 import type { DictKey } from "@/i18n";
 
-export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late";
+export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -38,6 +38,12 @@ export function buildAttention(db: DB): AttentionItem[] {
       out.push({ id: `un-${v.id}`, kind: "unassigned", refId: v.id, name: customer?.name ?? "", label: "att.unassigned", params: { name: customer?.name ?? "" }, chip: "st.unassigned", status: "warn", score: 900 });
     else if (v.late && (v.step === "scheduled" || v.step === "en_route"))
       out.push({ id: `late-${v.id}`, kind: "late", refId: v.id, name: tech?.name ?? "", label: "att.late", params: { name: `${tech?.name ?? ""} → ${customer?.name ?? ""}` }, chip: "st.late", status: "warn", score: 850 });
+  }
+  for (const j of db.jobs) {
+    if (j.status !== "unscheduled" || db.visits.some((v) => v.jobId === j.id)) continue;
+    const p = db.properties.find((x) => x.id === j.propertyId);
+    const c = db.customers.find((x) => x.id === p?.customerId);
+    out.push({ id: `sch-${j.id}`, kind: "schedule", refId: j.id, name: c?.name ?? "", label: "att.toSchedule", params: { name: c?.name ?? "" }, chip: "st.toSchedule", status: "warn", amountCents: j.amountCents, score: 950 });
   }
   for (const i of db.invoices) {
     if (i.paidCents >= i.totalCents) continue;

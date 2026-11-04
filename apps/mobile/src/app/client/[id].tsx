@@ -12,6 +12,7 @@ import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle } fr
 const jobSt: Record<JobStatus, { s: StatusName; l: DictKey }> = {
   lead: { s: "info", l: "st.new" },
   estimate: { s: "info", l: "st.inspection" },
+  unscheduled: { s: "warn", l: "st.toSchedule" },
   scheduled: { s: "neutral", l: "st.scheduled" },
   in_progress: { s: "info", l: "st.working" },
   done: { s: "ok", l: "st.paid" },
