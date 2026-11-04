@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<title>Браузерный тест: Наряд</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+body{margin:0;padding:20px;font:13px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif;background:#181A1E;color:#F2F3F5}
+h1{font-size:20px;margin:0 0 4px}p{color:#CDD1DA;max-width:860px;margin:4px 0 12px}
+button{font:inherit;padding:8px 16px;border-radius:999px;border:0;background:#FBFF00;color:#0B0C0F;font-weight:600;cursor:pointer}
+button:disabled{opacity:.5}
+#sum{margin:14px 0;padding:12px 14px;border-radius:12px;background:#24272D;white-space:pre-wrap}
+table{border-collapse:collapse;width:100%}th,td{border-bottom:1px solid #3a3d45;padding:6px 8px;text-align:left;vertical-align:top}th{color:#CDD1DA;font-weight:500}
+.ok{color:#9CF0A8}.bad{color:#FFAAAA;font-weight:600}.warn{color:#FFB47E}
+iframe{position:absolute;left:-12000px;top:0;border:0;background:#fff}
+code{background:#24272D;padding:1px 6px;border-radius:6px}
+</style>
+</head>
+<body>
+<div id="root">
+<h1>Браузерный тест экранов</h1>
+<p>Открывает прототип и дизайн-систему в скрытых окнах трёх размеров (телефон 390, планшет 820, десктоп 1280), проходит по всем экранам прототипа в тёмной и светлой темах и проверяет: ошибки скриптов, неразобранные <code>{{ }}</code>, горизонтальную прокрутку, язык, текст мельче 10.5, кнопки и поля без подписи, контраст текста по реальному фону (с учётом полупрозрачных панелей) и размер нажимаемых элементов на телефоне. Запуск автоматический, повторить кнопкой. <code>?quick=1</code> проверяет только первый экран.</p>
+<button id="run">Запустить снова</button>
+<div id="sum">Идёт проверка…</div>
+<table><thead><tr><th>Страница</th><th>Экран</th><th>Размер</th><th>Тема</th><th>Итог</th><th>Замечания</th></tr></thead><tbody id="rows"></tbody></table>
+</div>
+<script>
+const FILES = [['Прототип', encodeURI('../Наряд CRM.dc.html'), true], ['Дизайн-система', encodeURI('../Наряд Design System.dc.html'), false]];
+const SIZES = [['телефон', 390, 844], ['планшет', 820, 1180], ['десктоп', 1280, 800]];
+const QUICK = /quick=1/.test(location.search);
+const DESK_NAV = ['Dashboard', 'Лиды', 'Клиенты', 'Календарь', 'Отчёты', 'Ещё'];
+const MOB_NAV = ['Сегодня', 'Лиды', 'Клиенты', 'График', 'Ещё'];
+const MORE = ['Вход и ошибки', 'Уведомления', 'Карта диспетчера', 'Прайс-лист', 'Команда', 'Импорт данных', 'Тариф и данные', 'Настройки', 'Схемы', 'Счета и оплаты', 'Отчёты'];
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+const parse = (c) => { const m = c && c.match(/rgba?\(([^)]+)\)/); if (!m) return null; const p = m[1].split(/[ ,\/]+/).filter(Boolean).map(Number); return { r: p[0], g: p[1], b: p[2], a: p[3] === undefined ? 1 : p[3] }; };
+const over = (t, b) => ({ r: t.r * t.a + b.r * (1 - t.a), g: t.g * t.a + b.g * (1 - t.a), b: t.b * t.a + b.b * (1 - t.a), a: 1 });
+const lum = (c) => { const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); };
+const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); };
+
+const hexRgb = (s) => { s = (s || '').trim(); if (/^#/.test(s)) { s = s.replace('#', ''); if (s.length === 3) s = s.split('').map((c) => c + c).join(''); return { r: parseInt(s.slice(0, 2), 16), g: parseInt(s.slice(2, 4), 16), b: parseInt(s.slice(4, 6), 16), a: 1 }; } return parse(s); };
+function audit(win, doc, o) {
+  o.scope = o.scope || doc.body; { const rt = doc.querySelector('[style*="--acc"]'); o.acc = rt ? hexRgb(win.getComputedStyle(rt).getPropertyValue('--acc')) : null; }
+  const fails = [], warns = [];
+  const vis = (el) => { const r = el.getBoundingClientRect(); if (r.width < 1 || r.height < 1) return false; for (let n = el, op = 1; n && n.nodeType === 1; n = n.parentElement) { const s = win.getComputedStyle(n); if (s.display === 'none' || s.visibility === 'hidden') return false; op *= parseFloat(s.opacity); if (op < 0.5) return false; } return true; };
+  const reach = (el) => { const r = el.getBoundingClientRect(); const x = Math.min(Math.max(r.left + r.width / 2, 1), win.innerWidth - 1), y = r.top + r.height / 2; if (y < 0 || y >= win.innerHeight) return false; const t = doc.elementFromPoint(x, y); return !!t && (t === el || el.contains(t) || t.contains(el)); };
+  if (/\{\{|\}\}/.test(o.scope.innerText)) fails.push('в тексте остались {{ }}');
+  const ov = Math.max(doc.documentElement.scrollWidth - win.innerWidth, o.scope !== doc.body && win.getComputedStyle(o.scope).overflowX !== 'hidden' ? o.scope.scrollWidth - o.scope.clientWidth : 0); if (ov > 1) fails.push('горизонтальная прокрутка +' + ov + 'px');
+  if (doc.documentElement.lang !== 'ru') fails.push('lang не ru');
+  const text = [...o.scope.querySelectorAll('*')].filter((el) => [...el.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim()) && !['SCRIPT', 'STYLE'].includes(el.tagName));
+  const tiny = text.filter((el) => vis(el) && parseFloat(win.getComputedStyle(el).fontSize) < 10.5);
+  if (tiny.length) fails.push('текст мельче 10.5: ' + tiny.length + ' (' + tiny.slice(0, 2).map((e) => e.textContent.trim().slice(0, 20)).join(', ') + ')');
+  const nobtn = [...o.scope.querySelectorAll('button')].filter((b) => vis(b) && !b.textContent.trim() && !b.getAttribute('aria-label'));
+  if (nobtn.length) fails.push('кнопок без подписи: ' + nobtn.length);
+  const nofld = [...o.scope.querySelectorAll('input,textarea,select')].filter((i) => vis(i) && i.type !== 'range' && !i.getAttribute('aria-label') && !(i.labels && i.labels.length));
+  if (nofld.length) fails.push('полей без подписи: ' + nofld.length);
+  // контраст
+  const bad = []; let n = 0;
+  for (const el of text) {
+    if (!vis(el) || el.disabled || el.closest('[disabled]') || el.closest('[role=tooltip]') || !reach(el)) continue;
+    { let skip = false; for (let p = el, i = 0; p && i < 4; p = p.parentElement, i++) { const ps = win.getComputedStyle(p); if (ps.pointerEvents === 'none' && ps.position === 'absolute') { skip = true; break; } } if (skip) continue; }
+    const s = win.getComputedStyle(el); let fg = parse(s.color); if (!fg) continue;
+    const layers = []; for (let p = el; p; p = p.parentElement) { const c = parse(win.getComputedStyle(p).backgroundColor); if (c && c.a > 0) { layers.push(c); if (c.a >= 1) break; } }
+    let bg = layers.length && layers[layers.length - 1].a >= 1 ? layers.pop() : { r: 255, g: 255, b: 255, a: 1 };
+    if (el.closest('[style*="--on: 1"]') && o.acc) bg = o.acc;
+    if (!el.closest('[style*="--on:"]')) { const er = el.getBoundingClientRect(), cx = er.left + er.width / 2, cy = er.top + er.height / 2; let found = null; for (let p = el, i = 0; p && p.parentElement && i < 5 && !found; p = p.parentElement, i++) { for (const sib of p.parentElement.children) { if (sib === p) continue; const cs = win.getComputedStyle(sib); if (cs.position !== 'absolute' || cs.pointerEvents === 'none' || !vis(sib)) continue; const c = parse(cs.backgroundColor); if (c && c.a >= 0.9) { const r = sib.getBoundingClientRect(); if (cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom) { found = c; break; } } } } if (found) bg = found; }
+    while (layers.length) bg = over(layers.pop(), bg);
+    fg = over(fg, bg); n++;
+    const fs = parseFloat(s.fontSize), large = fs >= 24 || (fs >= 18.66 && parseInt(s.fontWeight) >= 700);
+    const r = ratio(fg, bg); if (r < (large ? 3 : 4.5)) bad.push((el.textContent.trim().slice(0, 22) || '?') + ' ' + r.toFixed(2));
+  }
+  if (bad.length) fails.push('контраст ниже порога: ' + bad.length + ' из ' + n + ' (' + bad.slice(0, 3).join('; ') + ')');
+  // нажимаемые элементы на телефоне
+  if (o.phone && o.proto) {
+    const zm = parseFloat(o.scope.style && o.scope.style.zoom) || 1;
+    const small = [...o.scope.querySelectorAll('button,[role=button]')].filter((b) => vis(b) && reach(b)).filter((b) => { const r = b.getBoundingClientRect(); return r.height / zm < 35.5 || r.width / zm < 35.5; });
+    if (small.length) warns.push('нажимаемых меньше 36: ' + small.length + ' (' + small.slice(0, 3).map((b) => (b.getAttribute('aria-label') || b.textContent.trim()).slice(0, 14) + ' ' + Math.round(b.getBoundingClientRect().width / zm) + '×' + Math.round(b.getBoundingClientRect().height / zm)).join(', ') + ')');
+  }
+  return { fails, warns };
+}
+
+const findBtn = (doc, label) => [...doc.querySelectorAll('button,[role=button]')].find((b) => { const r = b.getBoundingClientRect(); return r.width > 0 && r.height > 0 && b.textContent.replace(/\s+/g, ' ').trim().replace(/^\d+\s*/, '') === label; });
+const isDark = (win, doc) => { const el = doc.querySelector('[style*="--ink"]'); return el ? win.getComputedStyle(el).getPropertyValue('--ink').trim().toLowerCase() === '#f2f3f5' : null; };
+
+async function toggleTheme(win, doc) {
+  const before = isDark(win, doc);
+  const b = [...doc.querySelectorAll('button')].find((x) => { const r = x.getBoundingClientRect(); return r.width > 0 && (x.getAttribute('aria-label') === 'Сменить тему'); });
+  if (!b) return false;
+  b.click(); await sleep(900);
+  return isDark(win, doc) !== before;
+}
+
+const rowsEl = document.getElementById('rows'), sumEl = document.getElementById('sum');
+const results = { done: false, total: 0, fails: 0, warns: 0, rows: [] };
+window.__audit = results;
+function addRow(page, screen, size, theme, r) {
+  results.total++; if (r.fails.length) results.fails++; if (r.warns.length) results.warns++;
+  results.rows.push({ page, screen, size, theme, fails: r.fails, warns: r.warns });
+  const tr = document.createElement('tr');
+  const cls = r.fails.length ? 'bad' : r.warns.length ? 'warn' : 'ok';
+  tr.innerHTML = `<td>${page}</td><td>${screen}</td><td>${size}</td><td>${theme}</td><td class="${cls}">${r.fails.length ? 'ошибка' : r.warns.length ? 'замечание' : 'ок'}</td><td>${[...r.fails, ...r.warns].join('<br>')}</td>`;
+  rowsEl.appendChild(tr);
+  sumEl.textContent = `Проверено: ${results.total} · с ошибками: ${results.fails} · с замечаниями: ${results.warns}${results.done ? ' · ГОТОВО' : ' · идёт…'}`;
+}
+
+async function runPage([name, url, proto], [sn, w, h]) {
+  const fr = document.createElement('iframe'); fr.width = w; fr.height = proto ? h : 30000; document.body.appendChild(fr);
+  const errs = [];
+  await new Promise((res) => { fr.onload = res; fr.src = url; });
+  const win = fr.contentWindow, doc = fr.contentDocument;
+  win.addEventListener('error', (e) => errs.push(e.message)); win.addEventListener('unhandledrejection', (e) => errs.push(String(e.reason)));
+  await sleep(2600);
+  { const st = doc.createElement('style'); st.textContent = '*,*::before,*::after{transition:none!important;animation:none!important}'; doc.head.appendChild(st); try { doc.startViewTransition = undefined; } catch (e) {} }
+  const devLabel = { 'телефон': 'Телефон', 'планшет': 'Планшет', 'десктоп': 'Десктоп' }[sn];
+  if (proto) { const db = findBtn(doc, devLabel); if (db) { db.click(); await sleep(900); } else addRow(name, 'выбор устройства', sn, '—', { fails: ['нет кнопки «' + devLabel + '» в прототипе'], warns: [] }); }
+  const scopeEl = () => (proto ? (doc.querySelector('[style*="zoom:"]') || doc.body) : doc.body);
+  const screens = proto ? (sn === 'телефон' ? MOB_NAV : DESK_NAV) : ['вся страница'];
+  const walk = async (theme) => {
+    for (const sc of (QUICK && proto ? screens.slice(0, 1) : screens)) {
+      if (proto) { const b = findBtn(doc, sc); if (!b) { addRow(name, sc, sn, theme, { fails: ['нет пункта меню «' + sc + '»'], warns: [] }); continue; } b.click(); await sleep(550); }
+      const r = audit(win, doc, { phone: sn === 'телефон', proto, scope: scopeEl() }); if (errs.length) { r.fails.push('ошибки скрипта: ' + errs.slice(0, 2).join(' | ')); errs.length = 0; }
+      addRow(name, sc, sn, theme, r);
+      if (proto && sc === 'Ещё' && !QUICK) {
+        for (const row of MORE) {
+          const rb = findBtn(doc, row) || [...doc.querySelectorAll('[role=button]')].find((e) => e.textContent.includes(row) && e.getBoundingClientRect().width > 0);
+          if (!rb) { addRow(name, 'Ещё → ' + row, sn, theme, { fails: ['нет строки «' + row + '» в меню «Ещё»'], warns: [] }); continue; }
+          rb.click(); await sleep(550);
+          const r2 = audit(win, doc, { phone: sn === 'телефон', proto, scope: scopeEl() }); if (errs.length) { r2.fails.push('ошибки скрипта: ' + errs.slice(0, 2).join(' | ')); errs.length = 0; }
+          addRow(name, 'Ещё → ' + row, sn, theme, r2);
+          const back = findBtn(doc, 'Ещё'); if (back) { back.click(); await sleep(350); }
+        }
+      }
+    }
+  };
+  const t0 = isDark(win, doc) === false ? 'светлая' : 'тёмная';
+  await walk(t0);
+  const sw = await toggleTheme(win, doc);
+  if (!sw) addRow(name, 'смена темы', sn, t0, { fails: ['тема не переключилась'], warns: [] }); else { if (proto) { const first = findBtn(doc, screens[0]); if (first) { first.click(); await sleep(400); } } await walk(t0 === 'тёмная' ? 'светлая' : 'тёмная'); }
+  fr.remove();
+}
+
+async function main() {
+  rowsEl.innerHTML = ''; Object.assign(results, { done: false, total: 0, fails: 0, warns: 0, rows: [] }); sumEl.textContent = 'Идёт проверка…';
+  document.getElementById('run').disabled = true;
+  for (const f of FILES) for (const s of SIZES) { try { await runPage(f, s); } catch (e) { addRow(f[0], '—', s[0], '—', { fails: ['тест не смог открыть страницу: ' + e.message], warns: [] }); } }
+  results.done = true; sumEl.textContent = `ГОТОВО. Проверено: ${results.total} · с ошибками: ${results.fails} · с замечаниями: ${results.warns}`;
+  document.getElementById('run').disabled = false;
+}
+document.getElementById('run').onclick = main;
+main();
+</script>
+</body>
+</html>

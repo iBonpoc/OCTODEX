@@ -136,7 +136,7 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
         alignSelf: "flex-start",
       }}
     >
-      <Icon name={statusIcon[status]} s={sizes.iconXs} color={fg} />
+      <Icon name={statusIcon[status]} s={sizes.iconSm} color={fg} />
       <T v="caption" w="semibold" style={{ color: fg }} numberOfLines={1}>
         {label}
       </T>

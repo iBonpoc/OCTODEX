@@ -7,12 +7,17 @@
  --space-1:4px;--space-2:8px;--space-3:12px;--space-4:16px;--space-5:20px;--space-6:24px;--space-8:32px;
  --radius-pill:999px;--radius-field:12px;--radius-chip:999px;
  /* визуальная высота контролов; зона нажатия всегда не меньше --hit-min (HIG 44pt) */
- --control-sm:28px;--control-md:32px;--field:34px;--hit-min:44px;
- --control-md-phone:40px;--field-phone:42px;
- --icon-xs:14px;--icon-sm:16px;--icon-md:20px;--icon-lg:24px;--icon-stroke:1.75;
+ --control-sm:28px;--control-md:32px;--control-lg:36px;--field:34px;--hit-min:44px;
+ --control-md-phone:36px;--field-phone:44px;
+ --icon-sm:16px;--icon-md:20px;--icon-lg:24px;--icon-stroke:1.75;
  --statusbar-h:44px;--tabbar-h:56px;--safe-bottom:34px;--fab:36px;--sheet-radius:24px;
  --dur-fast:160ms;--dur-base:220ms;--dur-slow:350ms;--dur-chart:900ms;
- --ease-out:cubic-bezier(.2,.8,.2,1);--ease-spring:cubic-bezier(.3,1.4,.5,1);
+ --ease-out:cubic-bezier(.2,.8,.2,1);--ease-spring:cubic-bezier(.3,1.25,.5,1);
+ --scrim:rgba(0,0,0,.42);--scrim-strong:rgba(0,0,0,.5);--shadow-pop:0 20px 60px rgba(0,0,0,.45);--shadow-fab:0 8px 20px rgba(0,0,0,.35);--shadow-sheet:0 -10px 40px rgba(0,0,0,.4);
+ --draw-water:#8FA2FF;--draw-power:#FFA03C;--draw-drain:#A9AEBA;--draw-note:#FF6B6B;--st-neu:#C9CDD6;
+ --shadow-sm:0 2px 8px rgba(0,0,0,.25);--shadow-md:0 6px 16px rgba(0,0,0,.35);--shadow-lg:0 30px 80px rgba(0,0,0,.35);--scrim-crop:rgba(0,0,0,.55);--veil:rgba(0,0,0,.18);--veil-strong:rgba(0,0,0,.3);--crop-line:rgba(255,255,255,.35);
+ --on-fill-btn-bg:rgba(255,255,255,.35);--on-fill-btn-bd:rgba(0,0,0,.35);
+ --shadow-knob:0 2px 6px rgba(0,0,0,.25);--shadow-thumb:0 4px 10px rgba(0,0,0,.3);--shadow-drop:0 6px 10px rgba(0,0,0,.35);--pulse-a:rgba(255,107,107,.55);--pulse-b:rgba(255,107,107,0);--on-scrim:#FFFFFF;
  --z-nav:2;--z-fab:4;--z-scrim:5;--z-sheet:6;--z-modal:7;--z-toast:8;
 }
 @media (prefers-reduced-motion:reduce){:root{--dur-fast:0ms;--dur-base:0ms;--dur-slow:0ms;--dur-chart:0ms}}

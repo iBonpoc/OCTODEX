@@ -1,0 +1,15 @@
+{
+  "name": "naryad-design-system",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node tests/contrast.test.mjs && node tests/tokens.test.mjs && node tests/source.test.mjs",
+    "test:screens": "playwright test tests/screens.spec.mjs",
+    "test:browser": "открыть tests/browser-audit.html в браузере (через локальный сервер)",
+    "test:all": "npm test && npm run test:screens"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.48.0",
+    "@axe-core/playwright": "^4.10.0"
+  }
+}

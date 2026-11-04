@@ -16,5 +16,4 @@ export const extraIcons = {
   help: "M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.2h.01",
   home2: "M4 21V10l8-6 8 6v11zM9 21v-6h6v6",
   minus: "M5 12h14",
-  undo: "M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3",
 } as const;

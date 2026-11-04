@@ -1,0 +1,103 @@
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { describe, expect, it } from "vitest";
+import { component, font, icons, motion, radius, size, space, themes } from "../src/index";
+
+/**
+ * The founder's design system (design/naryad-ds/tokens/*.css, icons.json) is the source of truth.
+ * This test fails as soon as a value in the app tokens differs from it — e.g. after a new DS export is dropped in.
+ */
+const DS = join(__dirname, "../../../design/naryad-ds/tokens");
+const css = ["foundation.css", "components.css", "theme.css", "status.css"].map((f) => readFileSync(join(DS, f), "utf8")).join("\n");
+
+/** var value in a block: ":root" or [data-theme="dark|light"] (theme blocks fall back to :root) */
+function block(sel: string): string {
+  const out: string[] = [];
+  const re = sel === ":root" ? /:root\{([^}]*)\}/g : new RegExp(`\\[data-theme="${sel}"\\]\\{([^}]*)\\}`, "g");
+  for (const m of css.matchAll(re)) out.push(m[1]!);
+  return out.join(";");
+}
+function v(name: string, sel = ":root"): string {
+  const find = (b: string) => b.match(new RegExp(`--${name}:([^;]+)`))?.[1]?.trim();
+  const r = find(block(sel)) ?? find(block(":root"));
+  if (r === undefined) throw new Error(`--${name} not in DS css`);
+  const ref = r.match(/^var\(--([\w-]+)\)$/);
+  return ref ? v(ref[1]!, sel) : r;
+}
+const px = (name: string) => parseFloat(v(name));
+const norm = (c: string) => c.replace(/\s+/g, "").replace(/(\d)\.0+\b/g, "$1").replace(/,0\./g, ",.").toLowerCase();
+
+describe("app tokens mirror the founder's DS css", () => {
+  it("type scale and weights", () => {
+    expect(font.size).toMatchObject({ display: px("fs-display"), title: px("fs-title"), heading: px("fs-heading"), body: px("fs-body"), caption: px("fs-caption"), micro: px("fs-micro") });
+    expect(font.lineHeight).toEqual({ tight: px("lh-tight"), body: px("lh-body") });
+  });
+  it("spacing scale", () => {
+    for (const k of [1, 2, 3, 4, 5, 6, 8] as const) expect(space[k], `space-${k}`).toBe(px(`space-${k}`));
+  });
+  it("radii", () => {
+    expect(radius.pill).toBe(px("radius-pill"));
+    expect(radius.field).toBe(px("radius-field"));
+    expect(radius.card).toBe(px("r"));
+    expect(radius.inner).toBe(px("ri"));
+    expect(radius.sheet).toBe(px("sheet-radius"));
+  });
+  it("controls and hit area (no button above 36, hit 44)", () => {
+    expect(size.controlSm).toBe(px("control-sm"));
+    expect(size.controlMd).toBe(px("control-md"));
+    expect(size.controlLg).toBe(px("control-lg"));
+    expect(size.controlMdPhone).toBe(px("control-md-phone"));
+    expect(size.field).toBe(px("field"));
+    expect(size.fieldPhone).toBe(px("field-phone"));
+    expect(size.hitMin).toBe(px("hit-min"));
+    expect(component.button).toEqual({ sm: px("btn-sm"), md: px("btn-md"), phone: px("btn-phone-visible"), hit: px("hit-min") });
+    expect(component.field).toEqual({ h: px("field-h"), phone: px("field-phone") });
+    expect(component.chip).toEqual({ h: px("chip-h"), px: px("chip-px") });
+    expect(component.segmented).toEqual({ h: px("seg-h"), pad: px("seg-pad") });
+    expect(component.tab.h).toBe(px("tab-h"));
+    expect(component.switch).toEqual({ w: px("switch-w"), h: px("switch-h"), knob: px("switch-knob") });
+    expect(component.help).toEqual({ visible: px("help-visible"), icon: px("help-icon") });
+    expect(component.tip).toEqual({ fs: px("tip-fs"), px: px("tip-px"), py: px("tip-py"), radius: px("tip-radius"), max: px("tip-max"), gap: px("tip-gap") });
+    expect(component.fab).toBe(px("fab"));
+    expect(component.dockBtn).toBe(px("dock-btn"));
+    expect([component.modalW, component.panelW, component.paletteW]).toEqual([px("modal-w"), px("panel-w"), px("palette-w")]);
+    for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 36).toBe(true);
+  });
+  it("icon sizes, bars and safe areas", () => {
+    expect([size.iconSm, size.iconMd, size.iconLg, size.iconStroke]).toEqual([px("icon-sm"), px("icon-md"), px("icon-lg"), px("icon-stroke")]);
+    expect([size.statusbarH, size.tabbarH, size.safeBottom, size.fab]).toEqual([px("statusbar-h"), px("tabbar-h"), px("safe-bottom"), px("fab")]);
+  });
+  it("motion", () => {
+    expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart")]);
+    const bez = (n: string) => v(n).match(/cubic-bezier\(([^)]+)\)/)![1]!.split(",").map(Number);
+    expect([...motion.easeOut]).toEqual(bez("ease-out"));
+    expect([...motion.easeSpring]).toEqual(bez("ease-spring"));
+    expect([...motion.easeLiquid]).toEqual(bez("ease-liquid"));
+    expect([motion.liquidStretch, motion.liquidSettle]).toEqual([px("liquid-stretch"), px("liquid-settle")]);
+  });
+  describe.each(["dark", "light"] as const)("%s theme colours", (t) => {
+    const c = themes[t];
+    it("surfaces, ink, accent", () => {
+      for (const k of ["page", "bg", "ink", "mut", "surf", "surf2", "in", "bd", "track", "ov"] as const) expect(norm(c[k]), k).toBe(norm(v(k, t)));
+      expect(norm(c.acc)).toBe(norm(v("acc", t)));
+      expect(norm(c.onAcc)).toBe(norm(v("on-acc", t)));
+      expect(radius.card).toBe(px("r"));
+      expect([c.blur, c.blurOverlay]).toEqual([px("blur"), px("blurov")]);
+    });
+    it("status fill and text colours", () => {
+      for (const k of ["ok", "info", "warn", "bad"] as const) {
+        expect(norm(c.status[k].fill), `${k} fill`).toBe(norm(v(`st-${k}`, t)));
+        expect(norm(c.status[k].text), `${k} text`).toBe(norm(v(`st-${k}-text`, t)));
+        expect(norm(c.status[k].on)).toBe(norm(v("st-on", t)));
+      }
+    });
+    it("background glow spots (opacity per theme)", () => {
+      const ops = [...v("glow", t).matchAll(/rgba\([^)]*,\s*([\d.]+)\)/g)].map((m) => Number(m[1]));
+      expect(c.glow.map((g) => g.opacity)).toEqual(ops);
+    });
+  });
+  it("icons are exactly the DS icon set", () => {
+    const ds = JSON.parse(readFileSync(join(DS, "icons.json"), "utf8")).icons as Record<string, string>;
+    expect(icons).toEqual(ds);
+  });
+});
