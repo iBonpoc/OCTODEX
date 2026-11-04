@@ -173,6 +173,36 @@ export function ListRow({
   );
 }
 
+/**
+ * Lists of objects (clients, leads, estimates, invoices, receipts, catalog items, attention items):
+ * every object is its own card (founder's rule, 04.11). Rows inside one card are only for details of ONE object.
+ */
+export function CardList({ children }: { children: ReactNode }) {
+  return <View style={{ gap: space[2] }}>{children}</View>;
+}
+
+export function ItemCard({
+  title,
+  subtitle,
+  left,
+  right,
+  onPress,
+  status,
+}: {
+  title: string;
+  subtitle?: string;
+  left?: ReactNode;
+  right?: ReactNode;
+  onPress?: () => void;
+  status?: StatusName;
+}) {
+  return (
+    <Card status={status} style={{ paddingVertical: space[1] }}>
+      <ListRow title={title} subtitle={subtitle} left={left} right={right} onPress={onPress} />
+    </Card>
+  );
+}
+
 export function Divider() {
   const { c } = useTheme();
   return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.bd }} />;

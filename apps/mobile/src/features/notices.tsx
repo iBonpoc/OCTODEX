@@ -6,7 +6,7 @@ import type { Notice } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Button, StatusChip } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
-import { Card, Divider, ListRow, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Divider, ItemCard, ListRow, SectionTitle } from "@/ui/surfaces";
 
 export function useNoticeText() {
   const { t, money } = useI18n();
@@ -49,11 +49,10 @@ export function NoticesCard() {
   return (
     <View>
       <SectionTitle title={t("notice.title")} right={<Button label={t("common.gotIt")} variant="ghost" size="sm" onPress={readNotices} />} />
-      <Card>
+      <CardList>
         {unread.map((n, i) => (
           <View key={n.id}>
-            {i > 0 ? <Divider /> : null}
-            <ListRow
+            <ItemCard
               title={text(n)}
               subtitle={day(n.at)}
               right={
@@ -69,7 +68,7 @@ export function NoticesCard() {
             ) : null}
           </View>
         ))}
-      </Card>
+      </CardList>
     </View>
   );
 }

@@ -2,13 +2,13 @@ import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
-import { useStore } from "@/data/store";
+import { isOverdue, useStore } from "@/data/store";
 import type { Invoice, PaymentMethod } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, Empty, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Divider, Empty, ItemCard, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
 
 /** Owner's money view: overdue → awaiting → paid. Manual payments now, Stripe in wave 4. */
 export default function Money() {
@@ -19,8 +19,8 @@ export default function Money() {
   const [method, setMethod] = useState<PaymentMethod>("card");
   const now = Date.now();
   const open = db.invoices.filter((i) => i.paidCents < i.totalCents);
-  const overdue = open.filter((i) => new Date(i.dueDate).getTime() < now).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const awaiting = open.filter((i) => new Date(i.dueDate).getTime() >= now);
+  const overdue = open.filter((i) => isOverdue(i.dueDate, now)).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+  const awaiting = open.filter((i) => !isOverdue(i.dueDate, now));
   const paid = db.invoices.filter((i) => i.paidCents >= i.totalCents).sort((a, b) => (b.paidAt ?? "").localeCompare(a.paidAt ?? ""));
   const name = (i: Invoice) => db.customers.find((c) => c.id === i.customerId)?.name ?? "";
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
@@ -29,13 +29,14 @@ export default function Money() {
     list.length ? (
       <View style={{ gap: space[2] }}>
         <SectionTitle title={`${title} · ${money(list.reduce((s, i) => s + (kind === "ok" ? i.paidCents : i.totalCents - i.paidCents), 0))}`} />
-        <Card>
+        <CardList>
           {list.map((i, n) => (
             <View key={i.id}>
-              {n > 0 ? <Divider /> : null}
-              <ListRow
+              <ItemCard
+                status={kind}
                 title={name(i)}
-                subtitle={`${i.kind === "deposit" ? `${t("money.deposit")} · ` : ""}${
+                onPress={() => router.push(`/invoice/${i.id}`)}
+                subtitle={`${i.number ? `${i.number} · ` : ""}${i.title ? `${i.title} · ` : i.kind === "deposit" ? `${t("money.deposit")} · ` : ""}${
                   kind === "ok" && i.paidAt ? t("money.paidOn", { date: day(i.paidAt) }) : t("money.due", { date: day(i.dueDate) })
                 }`}
                 right={
@@ -48,7 +49,7 @@ export default function Money() {
               />
             </View>
           ))}
-        </Card>
+        </CardList>
       </View>
     ) : null;
 
@@ -61,18 +62,17 @@ export default function Money() {
       {db.expenses.length ? (
         <View style={{ gap: space[2] }}>
           <SectionTitle title={`${t("money.expenses")} · ${money(db.expenses.reduce((s, x) => s + x.amountCents, 0))}`} />
-          <Card>
+          <CardList>
             {db.expenses.map((x, n) => (
               <View key={x.id}>
-                {n > 0 ? <Divider /> : null}
-                <ListRow
+                <ItemCard
                   title={x.vendor}
                   subtitle={`${t(`exp.cat.${x.category}`)} · ${day(x.at)}${x.jobId ? ` · ${db.jobs.find((j) => j.id === x.jobId)?.title ?? ""}` : ""}`}
                   right={<T v="body" w="semibold" tabular>{money(x.amountCents)}</T>}
                 />
               </View>
             ))}
-          </Card>
+          </CardList>
         </View>
       ) : null}
       <Sheet visible={!!paying} onClose={() => setPaying(null)} title={paying ? `${t("money.receive")}: ${name(paying)}` : ""}>

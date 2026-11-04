@@ -1,5 +1,5 @@
 import { timing, type StatusName } from "@octo/design-tokens";
-import { daysSince, isToday, minutesSince, visitContext } from "@/data/selectors";
+import { daysSince, isOverdue, isToday, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID } from "@/data/types";
 import { LEAD_CLOSE_DAYS, LEAD_FOLLOW_UP_DAYS, leadIdleDays } from "./leads";
 import type { DictKey } from "@/i18n";
@@ -60,7 +60,7 @@ export function buildAttention(db: DB): AttentionItem[] {
   for (const i of db.invoices) {
     if (i.paidCents >= i.totalCents) continue;
     const d = daysSince(i.dueDate);
-    if (new Date(i.dueDate).getTime() > Date.now()) continue;
+    if (!isOverdue(i.dueDate)) continue;
     const c = db.customers.find((x) => x.id === i.customerId);
     out.push({ id: `inv-${i.id}`, kind: "overdue", refId: i.id, name: c?.name ?? "", label: "att.overdue", params: { name: c?.name ?? "" }, chip: "st.overdue", status: "bad", amountCents: i.totalCents - i.paidCents, score: 800 + d });
   }

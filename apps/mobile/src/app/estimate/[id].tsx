@@ -12,6 +12,7 @@ import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad } from "@/features/SignaturePad";
 import { isUniversal, mainOption, newToken } from "@/features/estimateDoc";
 import { hasValidCslb } from "@/features/companySetup";
+import { ContractStatement } from "@/features/ContractStatement";
 import { estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
 import { clientLink, copyText, openEmail, openSms } from "@/features/sendEstimate";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
@@ -115,7 +116,9 @@ export default function EstimateScreen() {
         <LegacyBody e={e} />
       )}
 
-      {e.status === "approved" && e.depositCents ? (
+      {job && e.status === "approved" ? <ContractStatement jobId={job.id} /> : null}
+
+      {!job && e.status === "approved" && e.depositCents ? (
         <Card status={e.depositPaidAt ? "ok" : "warn"}>
           <T v="caption" tone="mut">
             {e.depositPaidAt ? t("est.depositPaid") : t("est.depositDue")}

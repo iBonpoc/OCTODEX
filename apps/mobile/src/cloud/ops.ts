@@ -74,7 +74,10 @@ export type Op =
       svg: string;
       channel: "on_site" | "portal";
       jobId: string;
+      invoiceId?: string;
     }
+  | { k: "payment.record"; id: string; invoiceId: string; customerId: string; amountCents: number; method: PaymentMethod; reference?: string }
+  | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number }
   | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; scope: string[] }
   | { k: "company.save"; company: Company; einChanged: boolean }
   | { k: "license.save"; license: CompanyLicense }
@@ -278,7 +281,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       await applyOp({ k: "estimate.send", id: op.id, token: op.token }, c, userId);
       const { error } = await supabase.rpc("portal_accept", {
         p_token: op.token, p_option_id: op.optionId, p_addon_ids: op.addonIds, p_signer: op.signer, p_svg: op.svg, p_consent: true,
-        p_channel: op.channel, p_job_id: op.jobId, p_visit_id: null,
+        p_channel: op.channel, p_job_id: op.jobId, p_visit_id: null, p_invoice_id: op.invoiceId ?? null,
       });
       return run(Promise.resolve({ error }));
     }
@@ -306,6 +309,20 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "contact.remove":
       return run(supabase.from("company_contacts").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
+    case "payment.record":
+      return run(
+        ins("payments", {
+          id: op.id, company_id: c, invoice_id: op.invoiceId, customer_id: op.customerId, method: op.method, amount_cents: op.amountCents,
+          status: "succeeded", idempotency_key: op.id, received_by: userId, reference: op.reference ?? null,
+        }),
+      );
+    case "invoice.issue":
+      return run(
+        ins("invoices", {
+          id: op.id, company_id: c, number: "", customer_id: op.customerId, job_id: op.jobId, kind: op.kind, status: "sent", title: op.title,
+          subtotal_cents: op.totalCents, total_cents: op.totalCents, due_date: new Date().toISOString().slice(0, 10), sent_at: new Date().toISOString(),
+        }),
+      );
     case "lead.prospect": {
       await createCustomer(c, op, "prospect");
       return run(supabase.from("leads").update({ customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));
@@ -403,7 +420,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         }),
       );
       // The job stays "waiting for a date" until the contractor schedules it (job.schedule).
-      await run(
+      // A deposit invoice may already exist (created when the client signed): pay it instead of creating another.
+      const { data: depInv } = await supabase.from("invoices").select("id").eq("job_id", jobId).eq("kind", "deposit").neq("status", "void").maybeSingle();
+      const invoiceId = (depInv?.id as string | undefined) ?? op.invoiceId;
+      if (!depInv) await run(
         ins("invoices", {
           id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: jobId, kind: "deposit", status: "sent",
           subtotal_cents: op.depositCents, total_cents: op.depositCents, due_date: new Date().toISOString().slice(0, 10), sent_at: new Date().toISOString(),
@@ -411,7 +431,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       );
       return run(
         ins("payments", {
-          id: op.paymentId, company_id: c, invoice_id: op.invoiceId, customer_id: op.customerId, method: op.method,
+          id: op.paymentId, company_id: c, invoice_id: invoiceId, customer_id: op.customerId, method: op.method,
           amount_cents: op.depositCents, status: "succeeded", idempotency_key: op.paymentId, received_by: userId,
         }),
       );

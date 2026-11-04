@@ -34,3 +34,10 @@ export function jobProfit(db: DB, jobId: string) {
   const revenue = job?.amountCents ?? 0;
   return { revenue, expenses, profit: revenue - expenses, marginPct: revenue ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null };
 }
+
+/** An invoice is overdue only after its due day has ended (due "today" is not overdue yet). */
+export function isOverdue(dueDate: string, now = Date.now()): boolean {
+  const end = new Date(dueDate);
+  end.setHours(23, 59, 59, 999);
+  return end.getTime() < now;
+}

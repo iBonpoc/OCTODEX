@@ -14,6 +14,7 @@ import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { applyOp, PermanentError, type Op, type OutboxItem } from "@/cloud/ops";
 import { makeSeed } from "./seed";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
+import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
 import {
   VISIT_STEPS,
@@ -29,6 +30,7 @@ import {
   type Lead,
   type LostReason,
   type Note,
+  type Payment,
   type ID,
   type PaymentMethod,
   type QueuedAction,
@@ -70,6 +72,10 @@ interface StoreCtx {
   signEstimate: (id: ID, path: string) => Undo;
   /** fromClient: paid on the client page → unread notice for the office */
   payDeposit: (id: ID, method: PaymentMethod, fromClient?: boolean) => Undo;
+  /** any amount up to the invoice balance; every payment is a receipt */
+  recordPayment: (invoiceId: ID, amountCents: number, method: PaymentMethod, reference?: string) => Undo;
+  /** progress (by stage) or final balance invoice for a job */
+  issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo;
   /** create or update a universal estimate (draft) */
   saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID }) => Undo;
   /** client + property for an estimate from a lead (creates a prospect card the first time) */
@@ -101,14 +107,36 @@ const Ctx = createContext<StoreCtx | null>(null);
 const uid = (_p?: string) => Crypto.randomUUID();
 const emptyDB = (me: string): DB => ({
   me, members: [], customers: [], properties: [], jobs: [], visits: [], leads: [], estimates: [], invoices: [], expenses: [], catalog: [], notices: [],
-  company: null, notes: [],
+  company: null, notes: [], payments: [],
 });
 const upsert = <T extends { id: string }>(list: T[], it: T): T[] => (list.some((x) => x.id === it.id) ? list.map((x) => (x.id === it.id ? it : x)) : [...list, it]);
+/** Next local receipt number (demo); in the cloud the server assigns RCT-… */
+const nextReceipt = (d: DB): string => {
+  const max = d.payments.reduce((m, p) => Math.max(m, Number(p.receiptNumber?.replace(/\D/g, "") ?? 0)), 100);
+  return `RCT-${String(max + 1).padStart(4, "0")}`;
+};
+const nextInvoiceNumber = (d: DB): string => {
+  const max = d.invoices.reduce((m, i) => Math.max(m, Number(i.number?.replace(/\D/g, "") ?? 0)), 100);
+  return `INV-${String(max + 1).padStart(4, "0")}`;
+};
+/** Add a payment to the data and update the invoice (paid, paidAt). */
+function withPayment(d: DB, p: Payment, demo: boolean): DB {
+  const pay = demo ? { ...p, receiptNumber: p.receiptNumber ?? nextReceipt(d) } : p;
+  return {
+    ...d,
+    payments: [pay, ...d.payments],
+    invoices: d.invoices.map((i) =>
+      i.id === p.invoiceId
+        ? { ...i, paidCents: i.paidCents + p.amountCents, method: p.method, paidAt: i.paidCents + p.amountCents >= i.totalCents ? p.at : i.paidAt }
+        : i,
+    ),
+  };
+}
 /** Older saved data has no catalog / notices yet. */
 const normalize = (d: DB): DB =>
-  d.catalog && d.notices && d.notes && d.company !== undefined
+  d.catalog && d.notices && d.notes && d.payments && d.company !== undefined
     ? d
-    : { ...d, catalog: d.catalog ?? [], notices: d.notices ?? [], notes: d.notes ?? [], company: d.company ?? null };
+    : { ...d, catalog: d.catalog ?? [], notices: d.notices ?? [], notes: d.notes ?? [], payments: d.payments ?? [], company: d.company ?? null };
 /** Fresh ids for options/lines when a sent estimate is edited (the sent version stays immutable in the database). */
 const reId = (doc: EstimateDoc): EstimateDoc => ({
   ...doc,
@@ -121,7 +149,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const company = auth.session ? auth.company : null;
   const mode: Mode = company && auth.userId ? "cloud" : "demo";
-  const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v4";
+  const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v5";
 
   // Demo data is reseeded each new day (dates are relative to "today"). Cloud data is a cache of the server.
   const [saved, setSaved, dbReady] = usePersistentState<{ day: string; db: DB }>(
@@ -255,6 +283,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const customerOfJob = (d: DB, jobId: ID) => {
     const job = d.jobs.find((j) => j.id === jobId);
     return d.properties.find((p) => p.id === job?.propertyId)?.customerId ?? "";
+  };
+
+  /** Payment on an invoice (capped at its balance by the engine). Deposit invoice paid → estimate deposit paid. */
+  const recordPayment = (invoiceId: ID, amountCents: number, method: PaymentMethod, reference?: string, fromClient?: boolean): Undo => {
+    const d0 = dbRef.current;
+    const inv = d0.invoices.find((i) => i.id === invoiceId);
+    if (!inv) return () => {};
+    const amount = acceptPayment(inv, amountCents);
+    if (amount <= 0) return () => {};
+    const now = new Date().toISOString();
+    const payment: Payment = { id: uid(), invoiceId, customerId: inv.customerId, amountCents: amount, method, at: now, reference: reference?.trim() || undefined };
+    const job = d0.jobs.find((j) => j.id === inv.jobId);
+    const est = inv.kind === "deposit" && job?.estimateId ? d0.estimates.find((e) => e.id === job.estimateId) : undefined;
+    const fullyPaid = inv.paidCents + amount >= inv.totalCents;
+    return mutate(
+      "payment.record",
+      (d) => {
+        let next = withPayment(d, payment, modeRef.current === "demo");
+        if (est && fullyPaid) {
+          next = {
+            ...next,
+            estimates: next.estimates.map((e) => (e.id === est.id ? { ...e, depositPaidAt: now } : e)),
+            notices: [
+              { id: uid(), kind: "deposit.paid", estimateId: est.id, customer: d.customers.find((c) => c.id === est.customerId)?.name ?? "", depositCents: inv.totalCents, at: now, read: !fromClient },
+              ...next.notices,
+            ],
+          };
+        }
+        return next;
+      },
+      { k: "payment.record", id: payment.id, invoiceId, customerId: inv.customerId, amountCents: amount, method, reference: payment.reference },
+    );
   };
 
   const pendingQueue: QueuedAction[] =
@@ -397,13 +457,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       payInvoice: (id, method) => {
         const inv = dbRef.current.invoices.find((i) => i.id === id);
+        return inv ? recordPayment(id, inv.totalCents - inv.paidCents, method) : () => {};
+      },
+      recordPayment: (invoiceId, amountCents, method, reference) => recordPayment(invoiceId, amountCents, method, reference),
+      issueInvoice: (jobId, kind, amountCents, title) => {
+        const d0 = dbRef.current;
+        const job = d0.jobs.find((j) => j.id === jobId);
+        const customerId = job ? d0.properties.find((p) => p.id === job.propertyId)?.customerId : undefined;
+        if (!job || !customerId || amountCents <= 0) return () => {};
+        const id = uid();
+        const now = new Date().toISOString();
         return mutate(
-          "invoice.pay",
+          "invoice.issue",
           (d) => ({
             ...d,
-            invoices: d.invoices.map((i) => (i.id === id ? { ...i, paidCents: i.totalCents, paidAt: new Date().toISOString(), method } : i)),
+            invoices: [
+              ...d.invoices,
+              { id, customerId, jobId, kind, title, totalCents: amountCents, paidCents: 0, dueDate: now, sentAt: now, number: modeRef.current === "demo" ? nextInvoiceNumber(d) : undefined },
+            ],
           }),
-          inv ? { k: "invoice.pay", invoiceId: id, paymentId: uid(), customerId: inv.customerId, amountCents: inv.totalCents - inv.paidCents, method } : undefined,
+          { k: "invoice.issue", id, jobId, customerId, kind, title, totalCents: amountCents },
         );
       },
       sendEstimate: (id, tk) => {
@@ -452,6 +525,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const approval: EstimateApproval = { ...a, at: now, totalCents: sum.totalCents, depositCents: sum.depositCents };
         const existingJob = dbRef.current.jobs.find((j) => j.estimateId === id);
         const jobId = existingJob?.id ?? uid();
+        const depositInvoiceId = uid();
+        const needDepositInvoice = (sum.depositCents ?? 0) > 0 && !dbRef.current.invoices.some((i) => i.jobId === jobId && i.kind === "deposit");
         const customer = dbRef.current.customers.find((c) => c.id === e.customerId);
         return mutate(
           "estimate.approve",
@@ -469,12 +544,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               ? d.leads.map((l) => (l.id === e.leadId && l.status !== "won" && l.status !== "lost" ? { ...l, status: "won", wonVia: "approval", lastActivityAt: now } : l))
               : d.leads,
             customers: d.customers.map((c) => (c.id === e.customerId && c.status === "prospect" ? { ...c, status: "active" } : c)),
+            invoices: needDepositInvoice
+              ? [
+                  ...d.invoices,
+                  {
+                    id: depositInvoiceId, customerId: e.customerId, jobId, kind: "deposit", title: "Deposit", totalCents: sum.depositCents ?? 0, paidCents: 0,
+                    dueDate: now, sentAt: now, number: modeRef.current === "demo" ? nextInvoiceNumber(d) : undefined,
+                  },
+                ]
+              : d.invoices,
             notices: [
               { id: uid(), kind: "estimate.approved", estimateId: id, jobId, customer: customer?.name ?? a.signerName, totalCents: sum.totalCents, depositCents: sum.depositCents, at: now, read: a.channel === "on_site" },
               ...d.notices,
             ],
           }),
-          { k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId },
+          { k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId, invoiceId: depositInvoiceId },
         );
       },
       leadEstimateTarget: (leadId) => {
@@ -636,10 +720,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       payDeposit: (id, method, fromClient) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
         if (!e || !e.depositCents) return () => {};
+        const job0 = dbRef.current.jobs.find((j) => j.estimateId === id);
+        const depInv = job0 ? dbRef.current.invoices.find((i) => i.jobId === job0.id && i.kind === "deposit") : undefined;
+        if (depInv) return recordPayment(depInv.id, depInv.totalCents - depInv.paidCents, method, undefined, fromClient);
         const now = new Date().toISOString();
         const existingJob = dbRef.current.jobs.find((j) => j.estimateId === id);
         const jobId = existingJob?.id ?? uid();
         const invoiceId = uid();
+        const paymentId = uid();
         return mutate(
           "estimate.deposit",
           (d) => ({
@@ -652,11 +740,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: id }],
             invoices: [
               ...d.invoices,
-              { id: invoiceId, customerId: e.customerId, jobId, totalCents: e.depositCents!, paidCents: e.depositCents!, dueDate: now, paidAt: now, method, kind: "deposit" },
+              { id: invoiceId, customerId: e.customerId, jobId, totalCents: e.depositCents!, paidCents: e.depositCents!, dueDate: now, paidAt: now, method, kind: "deposit", title: "Deposit" },
+            ],
+            payments: [
+              { id: paymentId, invoiceId, customerId: e.customerId, amountCents: e.depositCents!, method, at: now, receiptNumber: modeRef.current === "demo" ? nextReceipt(d) : undefined },
+              ...d.payments,
             ],
           }),
           {
-            k: "estimate.deposit", id, jobId, invoiceId, paymentId: uid(), method, customerId: e.customerId, propertyId: e.propertyId,
+            k: "estimate.deposit", id, jobId, invoiceId, paymentId, method, customerId: e.customerId, propertyId: e.propertyId,
             title: e.title, totalCents: e.totalCents, depositCents: e.depositCents,
           },
         );
@@ -678,4 +770,4 @@ export function useStore(): StoreCtx {
   return v;
 }
 
-export { isToday, visitContext, minutesSince, daysSince, customerBalance, jobProfit } from "./selectors";
+export { isToday, isOverdue, visitContext, minutesSince, daysSince, customerBalance, jobProfit } from "./selectors";

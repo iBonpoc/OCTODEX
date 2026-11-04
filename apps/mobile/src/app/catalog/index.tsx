@@ -6,7 +6,7 @@ import type { CatalogKind } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { itemPrice, kindLabel } from "@/features/estimatePickers";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
-import { Card, Divider, Empty, ListRow, Screen } from "@/ui/surfaces";
+import { Card, CardList, Divider, Empty, ItemCard, ListRow, Screen } from "@/ui/surfaces";
 
 const KINDS: (CatalogKind | "all")[] = ["all", "service", "labor", "material", "kit"];
 
@@ -39,18 +39,17 @@ export default function Catalog() {
       {items.length === 0 ? (
         <Empty icon="note" title={t("cat.empty")} />
       ) : (
-        <Card>
+        <CardList>
           {items.map((it, i) => (
             <View key={it.id}>
-              {i > 0 ? <Divider /> : null}
-              <ListRow
+              <ItemCard
                 title={it.name}
                 subtitle={`${t(kindLabel(it.kind))} · ${money(itemPrice(it, db.catalog))} / ${it.unit}${it.vendor ? ` · ${it.vendor}` : ""}${it.placeholder ? ` · ${t("cat.placeholder")}` : ""}`}
                 onPress={canEdit ? () => router.push(`/catalog/${it.id}`) : undefined}
               />
             </View>
           ))}
-        </Card>
+        </CardList>
       )}
     </Screen>
   );

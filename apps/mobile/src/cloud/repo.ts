@@ -3,7 +3,7 @@
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
 import { companyFromDb } from "./companyMap";
-import type { CatalogItem, DB, Note, Estimate, EstimateDoc, Notice, EstimateStatus, Expense, ExpenseCategory, Invoice, Job, JobStatus, Lead, LeadSource, LeadStatus, Member, Role, Visit, VisitStep } from "@/data/types";
+import type { CatalogItem, DB, Note, Payment, Estimate, EstimateDoc, Notice, EstimateStatus, Expense, ExpenseCategory, Invoice, Job, JobStatus, Lead, LeadSource, LeadStatus, Member, Role, Visit, VisitStep } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -217,7 +217,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       dueDate: s(i.due_date) || s(i.created_at),
       paidAt: n(i.paid_cents) >= n(i.total_cents) && lastPayment.get(s(i.id)) ? s(lastPayment.get(s(i.id))?.received_at) : undefined,
       method: (lastPayment.get(s(i.id))?.method as Invoice["method"]) ?? undefined,
-      kind: i.kind === "deposit" ? "deposit" : "final",
+      kind: i.kind === "deposit" ? "deposit" : i.kind === "progress" ? "progress" : "final",
+      number: s(i.number) || undefined,
+      title: (i.title as string | null) ?? undefined,
+      sentAt: (i.sent_at as string | null) ?? undefined,
     }));
 
   const mappedLeads: Lead[] = leads.map((l) => ({
@@ -282,6 +285,14 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     estimates: mappedEstimates,
     invoices: mappedInvoices,
     expenses: mappedExpenses,
+    payments: payments
+      .filter((p) => p.invoice_id && ["succeeded", "partially_refunded", "refunded"].includes(s(p.status)))
+      .map((p) => ({
+        id: s(p.id), invoiceId: s(p.invoice_id), customerId: s(p.customer_id), amountCents: n(p.amount_cents) - n(p.refunded_cents),
+        method: (["card", "cash", "check", "zelle"].includes(s(p.method)) ? s(p.method) : "card") as Payment["method"],
+        at: s(p.received_at), receiptNumber: (p.receipt_number as string | null) ?? undefined, reference: (p.reference as string | null) ?? undefined,
+      }))
+      .sort((a, b) => b.at.localeCompare(a.at)),
     company: companyRows[0] ? companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows) : null,
     notes: noteRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Note["subjectType"], subjectId: s(r.subject_id), body: s(r.body),
