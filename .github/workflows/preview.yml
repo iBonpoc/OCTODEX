@@ -42,8 +42,12 @@ jobs:
         working-directory: apps/mobile
         run: npx expo export --platform web
       - name: Deploy the web copy (octodex--pr-N.expo.app)
+        id: web
         working-directory: apps/mobile
-        run: npx eas-cli@latest deploy --alias "pr-$PR" --non-interactive
+        run: |
+          npx eas-cli@latest deploy --alias "pr-$PR" --non-interactive | tee deploy.log
+          # the alias can take a while to start answering; the deployment's own URL works at once
+          echo "url=$(grep -o 'https://[a-z0-9-]*\.expo\.app' deploy.log | grep -v -- "--pr-" | head -1)" >> "$GITHUB_OUTPUT"
       - name: Does the PR change the database?
         id: mig
         run: |
@@ -52,12 +56,14 @@ jobs:
         uses: actions/github-script@v7
         env:
           HAS_MIG: ${{ steps.mig.outputs.has }}
+          WEB_URL: ${{ steps.web.outputs.url }}
         with:
           script: |
             const pr = context.payload.pull_request.number;
             const sha = context.payload.pull_request.head.sha.slice(0, 7);
             const expoGo = `exp://u.expo.dev/49d009d4-a05b-4911-b7da-1e47c4e10fba?runtime-version=exposdk%3A58.0.0&channel-name=pr-${pr}`;
-            const web = `https://octodex--pr-${pr}.expo.app`;
+            const alias = `https://octodex--pr-${pr}.expo.app`;
+            const web = process.env.WEB_URL ? `${process.env.WEB_URL} (постоянный адрес этого PR: ${alias})` : alias;
             const mig = process.env.HAS_MIG === "1"
               ? "\n\n⚠ В этом PR есть изменения базы. В предпросмотре они ещё не применены: проверяйте экраны в демо-режиме, облачные данные заработают после слияния."
               : "";
