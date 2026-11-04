@@ -2,6 +2,8 @@
  * End-to-end runs in a real browser (demo mode): node e2e/run.cjs [--no-build] [spec ...]
  * Builds the web app (expo export), serves dist/ with SPA fallback, runs every spec in a fresh context,
  * fails on any page error / console error, writes screenshots to e2e/out/.
+ * Width and theme (CLAUDE.md rule 4): --width=390|820|1280 --theme=dark|light, or E2E_WIDTH / E2E_THEME.
+ * --all-layouts runs every spec at all 3 widths × 2 themes (CI runs them as 6 parallel jobs instead).
  */
 const { execSync } = require("node:child_process");
 const http = require("node:http");
@@ -14,6 +16,12 @@ const DIST = path.join(APP, "dist");
 const OUT = path.join(__dirname, "out");
 const args = process.argv.slice(2);
 const only = args.filter((a) => !a.startsWith("--"));
+const opt = (k) => args.find((a) => a.startsWith(`--${k}=`))?.split("=")[1];
+const WIDTHS = [390, 820, 1280];
+const THEMES = ["dark", "light"];
+const layouts = args.includes("--all-layouts")
+  ? THEMES.flatMap((theme) => WIDTHS.map((width) => ({ width, theme })))
+  : [{ width: Number(opt("width") || process.env.E2E_WIDTH || 390), theme: opt("theme") || process.env.E2E_THEME || "dark" }];
 if (!args.includes("--no-build")) execSync("npx expo export --platform web", { cwd: APP, stdio: "inherit" });
 fs.mkdirSync(OUT, { recursive: true });
 
@@ -31,36 +39,43 @@ const server = http.createServer((req, res) => {
   const browser = await chromium.launch();
   const specs = fs.readdirSync(path.join(__dirname, "specs")).filter((f) => f.endsWith(".cjs") && (!only.length || only.some((o) => f.includes(o)))).sort();
   let failed = 0;
+  let runs = 0;
+  for (const layout of layouts)
   for (const file of specs) {
+    // a spec that loops over widths/themes itself (08-layouts) runs once
+    if (require(path.join(__dirname, "specs", file)).ownLayouts && layout !== layouts[0]) continue;
+    runs++;
+    const tag = `${file} @${layout.width} ${layout.theme}`;
     const spec = require(path.join(__dirname, "specs", file));
     const t0 = Date.now();
     const errors = [];
-    const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "en-US" });
+    const ctx = await browser.newContext({ viewport: { width: layout.width, height: layout.width === 390 ? 844 : 900 }, locale: "en-US" });
     await ctx.addInitScript((o) => {
       if (localStorage.getItem("octo.lang.v1")) return;
       localStorage.setItem("octo.lang.v1", JSON.stringify(o.lang));
       localStorage.setItem("octo.role.v1", JSON.stringify(o.role));
       localStorage.setItem("octo.theme.v1", JSON.stringify(o.theme));
       localStorage.setItem("octo.hints.v1", JSON.stringify(["today", "company", "clients", "estimate-builder", "inbox", "triage", "money", "jobs", "team", "catalog", "plan", "visits"]));
-    }, { lang: "ru", role: "director", theme: "dark", ...(spec.init || {}) });
+    }, { lang: "ru", role: "director", theme: layout.theme, ...(spec.init || {}) });
     const page = await ctx.newPage();
     page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
     page.on("console", (m) => m.type() === "error" && errors.push(`console: ${m.text()}`));
-    const h = helpers(page, BASE, file.replace(/\.cjs$/, ""));
+    const h = helpers(page, BASE, `${file.replace(/\.cjs$/, "")}-${layout.width}-${layout.theme}`);
+    h.layout = layout;
     try {
-      await spec.run(h, { browser, BASE });
+      await spec.run(h, { browser, BASE, layout, layouts });
       if (errors.length) throw new Error(errors.join("\n"));
-      console.log(`✓ ${file} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
+      console.log(`✓ ${tag} (${((Date.now() - t0) / 1000).toFixed(1)}s)`);
     } catch (e) {
       failed++;
-      await page.screenshot({ path: path.join(OUT, `${file}-FAIL.png`) }).catch(() => {});
-      console.log(`✗ ${file}\n  ${String(e.message || e).split("\n").slice(0, 6).join("\n  ")}`);
+      await page.screenshot({ path: path.join(OUT, `${file}-${layout.width}-${layout.theme}-FAIL.png`) }).catch(() => {});
+      console.log(`✗ ${tag}\n  ${String(e.message || e).split("\n").slice(0, 6).join("\n  ")}`);
     }
     await ctx.close();
   }
   await browser.close();
   server.close();
-  console.log(failed ? `\n${failed} of ${specs.length} specs FAILED` : `\nALL ${specs.length} E2E SPECS PASSED`);
+  console.log(failed ? `\n${failed} of ${runs} spec runs FAILED` : `\nALL ${runs} E2E SPEC RUNS PASSED (${layouts.map((l) => `${l.width} ${l.theme}`).join(", ")})`);
   process.exit(failed ? 1 : 0);
 })();
 
