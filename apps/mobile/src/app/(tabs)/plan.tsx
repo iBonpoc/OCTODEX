@@ -1,22 +1,98 @@
 import { useState, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { router } from "expo-router";
+import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
+import type { Visit } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { VisitCard, sortByStart } from "@/features/visits";
+import { usePersistentState } from "@/data/persist";
+import { addDays, addMonths, fromDayKey, isoDayKey, monthGrid, todayKey, weekDays, type DayKey } from "@/features/calendar";
+import { VisitCard, sortByStart, visitStatus } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
 import { DndProvider, Draggable, DropZone, useDragFrom } from "@/features/dnd";
 import { useToast } from "@/ui/overlays";
-import { Avatar, Button, ChoiceChips } from "@/ui/controls";
-import { T } from "@/ui/primitives";
-import { Card, Empty, Grid, RowView, Screen } from "@/ui/surfaces";
+import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip } from "@/ui/controls";
+import { Press, T } from "@/ui/primitives";
+import { useTheme } from "@/theme/ThemeProvider";
+import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
-/** Day schedule grouped by person; unassigned first. Drag & drop between people comes with the tablet calendar (wave 2). */
+type Mode = "day" | "week" | "month";
+
+/**
+ * Plan: Day (by person, drag & drop between people), Week (7 days, each visit a card), Month (calendar with
+ * visit counts; tap a day → Day). Arrows move by day / week / month; "Today" jumps back.
+ */
 export default function Plan() {
-  const { t, day } = useI18n();
+  const { t, day, lang } = useI18n();
+  const { db, role } = useStore();
+  const [mode, setMode] = usePersistentState<Mode>("octo.planMode.v1", "day");
+  const [date, setDate] = useState<DayKey>(todayKey());
+  const mine = (v: Visit) => role !== "tech" || v.techId === db.me;
+  const visitsOn = (k: DayKey) => db.visits.filter((v) => isoDayKey(v.start) === k && mine(v)).sort(sortByStart);
+  const step = (n: number) => setDate(mode === "day" ? addDays(date, n) : mode === "week" ? addDays(date, 7 * n) : addMonths(date, n));
+  const week = weekDays(date);
+  const monthName = new Intl.DateTimeFormat(lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU", { month: "long", year: "numeric" }).format(fromDayKey(date));
+  const label =
+    mode === "day" ? day(fromDayKey(date).toISOString()) : mode === "week" ? `${day(fromDayKey(week[0]!).toISOString())} – ${day(fromDayKey(week[6]!).toISOString())}` : monthName;
+
+  return (
+    <Screen
+      title={t("plan.title")}
+      help={t("help.plan")}
+      hintKey="plan"
+      right={
+        <Segmented
+          value={mode}
+          onChange={setMode}
+          items={[
+            { key: "day", label: t("plan.day") },
+            { key: "week", label: t("plan.week") },
+            { key: "month", label: t("plan.month") },
+          ]}
+        />
+      }
+    >
+      <RowView style={{ justifyContent: "space-between" }}>
+        <IconButton icon="chevronLeft" label={t("plan.prev")} onPress={() => step(-1)} />
+        <T v="heading" style={{ flex: 1, textAlign: "center" }} numberOfLines={1}>
+          {label}
+        </T>
+        {date !== todayKey() ? <Button label={t("common.today")} size="sm" variant="secondary" onPress={() => setDate(todayKey())} /> : null}
+        <IconButton icon="chevronRight" label={t("plan.next")} onPress={() => step(1)} />
+      </RowView>
+
+      {mode === "day" ? (
+        <>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
+            <ChoiceChips
+              value={date}
+              onChange={setDate}
+              nowrap
+              items={week.map((k) => {
+                const n = visitsOn(k).length;
+                const name = k === todayKey() ? t("common.today") : day(fromDayKey(k).toISOString());
+                return { key: k, label: n ? `${name} · ${n}` : name };
+              })}
+            />
+          </ScrollView>
+          <DayView date={date} visits={visitsOn(date)} />
+        </>
+      ) : mode === "week" ? (
+        <WeekView days={week} visitsOn={visitsOn} openDay={(k) => { setDate(k); setMode("day"); }} />
+      ) : (
+        <MonthView date={date} visitsOn={visitsOn} openDay={(k) => { setDate(k); setMode("day"); }} />
+      )}
+    </Screen>
+  );
+}
+
+/** One day by person; unassigned first; drag a card onto another person to reassign. */
+function DayView({ date, visits }: { date: DayKey; visits: Visit[] }) {
+  const { t } = useI18n();
   const { db, role, assignVisit, online } = useStore();
-  const canAssign = role !== "tech";
   const toast = useToast();
+  const [assign, setAssign] = useState<string | null>(null);
+  const canAssign = role !== "tech";
   const drop = (visitId: string, techId: string) => {
     const m = db.members.find((x) => x.id === techId);
     toast.show(online ? t("toast.assigned", { name: m?.name ?? "" }) : t("offline.queued"), assignVisit(visitId, techId));
@@ -29,30 +105,10 @@ export default function Plan() {
     ) : (
       <View key={v.id}>{card}</View>
     );
-  const [dayKey, setDayKey] = useState<string>("0");
-  const [assign, setAssign] = useState<string | null>(null);
-  const target = new Date();
-  target.setDate(target.getDate() + Number(dayKey));
-  /** next 14 days; days with visits get a count */
-  const dayItems = Array.from({ length: 14 }, (_, i) => {
-    const d = new Date();
-    d.setDate(d.getDate() + i);
-    const n = db.visits.filter((v) => new Date(v.start).toDateString() === d.toDateString()).length;
-    const name = i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : day(d.toISOString());
-    return { key: String(i), label: n ? `${name} · ${n}` : name };
-  });
-  const visits = db.visits.filter((v) => new Date(v.start).toDateString() === target.toDateString()).sort(sortByStart);
   const unassigned = visits.filter((v) => !v.techId);
-  const people = db.members.filter((m) => m.roles.includes("tech") && (role !== "tech" || m.id === db.me));
+  const people = db.members.filter((m) => m.roles.includes("tech") && !m.pending && (role !== "tech" || m.id === db.me));
   return (
-    <Screen
-      title={t("plan.title")}
-      help={t("help.plan")} hintKey="plan"
-    >
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
-        <ChoiceChips value={dayKey} onChange={setDayKey} items={dayItems} nowrap />
-      </ScrollView>
-      <DndProvider>
+    <DndProvider key={date}>
       {visits.length === 0 ? <Empty icon="calendar" title={t("plan.empty")} /> : null}
       {canAssign && unassigned.length > 0 ? (
         <View style={{ gap: space[2] }}>
@@ -75,7 +131,7 @@ export default function Plan() {
           return (
             <DropZone key={m.id} id={m.id} style={{ gap: space[2] }}>
               <RowView>
-                <Avatar initials={m.initials} s={28} sub={m.kind === "sub"} />
+                <Avatar initials={m.initials} s={component.avatar.sm} sub={m.kind === "sub"} />
                 <T v="heading" style={{ flex: 1 }} numberOfLines={1}>
                   {m.name}
                 </T>
@@ -96,9 +152,107 @@ export default function Plan() {
           );
         })}
       </RaisedGrid>
-      </DndProvider>
       <AssignSheet visitId={assign} onClose={() => setAssign(null)} />
-    </Screen>
+    </DndProvider>
+  );
+}
+
+/** 7 days; each visit is a card (time · client · tech); tap the day title to open the Day view. */
+function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: DayKey) => Visit[]; openDay: (k: DayKey) => void }) {
+  const { t, day, time } = useI18n();
+  const { db } = useStore();
+  return (
+    <Grid>
+      {days.map((k) => {
+        const vs = visitsOn(k);
+        const today = k === todayKey();
+        return (
+          <View key={k} style={{ gap: space[2] }}>
+            <SectionTitle
+              title={`${today ? `${t("common.today")} · ` : ""}${day(fromDayKey(k).toISOString())}`}
+              right={<Button label={vs.length ? t("plan.visits", { n: vs.length }) : t("plan.free")} size="sm" variant="ghost" onPress={() => openDay(k)} />}
+            />
+            {vs.length ? (
+              <CardList>
+                {vs.map((v) => {
+                  const job = db.jobs.find((j) => j.id === v.jobId);
+                  const p = db.properties.find((x) => x.id === job?.propertyId);
+                  const c = db.customers.find((x) => x.id === p?.customerId);
+                  const tech = db.members.find((m) => m.id === v.techId);
+                  const st = visitStatus(v);
+                  return (
+                    <ItemCard
+                      key={v.id}
+                      status={tech ? st.status : "warn"}
+                      title={`${time(v.start)} · ${c?.name ?? "—"}`}
+                      subtitle={[job?.title, tech?.name ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
+                      right={<StatusChip status={tech ? st.status : "warn"} label={tech ? t(st.label) : t("st.unassigned")} />}
+                      onPress={() => router.push(`/visit/${v.id}`)}
+                    />
+                  );
+                })}
+              </CardList>
+            ) : null}
+          </View>
+        );
+      })}
+    </Grid>
+  );
+}
+
+/** Month calendar: weekday header, 6 weeks × 7 days, number of visits per day; unassigned visits mark the day. */
+function MonthView({ date, visitsOn, openDay }: { date: DayKey; visitsOn: (k: DayKey) => Visit[]; openDay: (k: DayKey) => void }) {
+  const { lang } = useI18n();
+  const { c } = useTheme();
+  const cells = monthGrid(date);
+  const weeks = [0, 1, 2, 3, 4, 5].map((w) => cells.slice(w * 7, w * 7 + 7));
+  const wd = new Intl.DateTimeFormat(lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU", { weekday: "short" });
+  return (
+    <Card>
+      <View style={{ flexDirection: "row", gap: space[1] }}>
+        {weeks[0]!.map((x) => (
+          <T key={x.key} v="micro" tone="mut" center style={{ flex: 1 }}>
+            {wd.format(fromDayKey(x.key))}
+          </T>
+        ))}
+      </View>
+      {weeks.map((row) => (
+        <View key={row[0]!.key} style={{ flexDirection: "row", gap: space[1] }}>
+          {row.map((x) => {
+            const vs = visitsOn(x.key);
+            const unassigned = vs.some((v) => !v.techId);
+            const today = x.key === todayKey();
+            const selected = x.key === date;
+            return (
+              <Press
+                key={x.key}
+                onPress={() => openDay(x.key)}
+                visibleHeight={component.rowCompact}
+                accessibilityRole="button"
+                accessibilityLabel={`${x.key}: ${vs.length}`}
+                containerStyle={{ flex: 1, minWidth: 0 }}
+                style={{
+                  minHeight: component.rowCompact + space[4],
+                  borderRadius: component.checkbox.radius,
+                  borderWidth: selected ? component.selectedBorder : component.hairline,
+                  borderColor: selected ? c.acc : c.bd,
+                  backgroundColor: today ? c.surf2 : c.in,
+                  opacity: x.inMonth ? 1 : component.dimOpacity,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: space[1],
+                }}
+              >
+                <T v="caption" w={today ? "bold" : "regular"} tabular>
+                  {Number(x.key.slice(8))}
+                </T>
+                {vs.length ? <StatusChip status={unassigned ? "warn" : "info"} label={String(vs.length)} soft /> : null}
+              </Press>
+            );
+          })}
+        </View>
+      ))}
+    </Card>
   );
 }
 

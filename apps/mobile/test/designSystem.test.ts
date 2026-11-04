@@ -25,6 +25,7 @@ const STYLE_KEYS =
 const rules: { name: string; re: RegExp }[] = [
   { name: "raw color", re: /(color|Color|fill|stroke|background)\s*[:=]\s*["'`](#[0-9a-fA-F]{3,8}|rgba?\()/ },
   { name: "raw number in style", re: new RegExp(`\\b(${STYLE_KEYS}):\\s*-?(?!0\\b|1\\b)\\d+(\\.\\d+)?(?![%\\w.])`) },
+  { name: "raw opacity", re: /opacity:\s*0?\.\d/ },
   { name: "raw fontWeight", re: /fontWeight:\s*["']?\d/ },
   { name: "raw fontFamily", re: /fontFamily:\s*["']/ },
 ];
