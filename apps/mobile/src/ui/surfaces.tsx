@@ -254,7 +254,7 @@ export function OfflineBadge() {
         gap: space[1],
       }}
     >
-      <Icon name="wifiOff" s={size.iconXs} color={c.status.warn.on} />
+      <Icon name="wifiOff" s={size.iconSm} color={c.status.warn.on} />
       <T v="caption" w="semibold" style={{ color: c.status.warn.on }}>
         {t("offline.badge", { n: queue.length })}
       </T>

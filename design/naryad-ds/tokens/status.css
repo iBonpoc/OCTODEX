@@ -6,5 +6,5 @@
   --st-bad:#FF6B6B;  /* ✕ просрочено, отказ, проблема */
   --st-on:#0B0C0F;
 }
-[data-theme="dark"]{--st-ok-text:#7CE08A;--st-info-text:#AAB8FF;--st-warn-text:#FF9A55;--st-bad-text:#FF8F8F}
+[data-theme="dark"]{--st-ok-text:#9CF0A8;--st-info-text:#C2CCFF;--st-warn-text:#FFB47E;--st-bad-text:#FFAAAA}
 [data-theme="light"]{--st-ok-text:#176428;--st-info-text:#3647C4;--st-warn-text:#944600;--st-bad-text:#B4232A}

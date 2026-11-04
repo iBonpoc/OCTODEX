@@ -26,7 +26,7 @@ function Kpi({ label, cents, icon, hint, onPress, width }: { label: string; cent
     <Card style={{ padding: space[3], flex: 1 }} containerStyle={{ flex: 1 }} onPress={onPress} accessibilityLabel={label}>
       <RowView gap={space[1]} style={{ alignItems: "flex-start" }}>
         <View style={{ flexShrink: 0 }}>
-          <Icon name={icon} s={size.iconXs} color={c.mut} />
+          <Icon name={icon} s={size.iconSm} color={c.mut} />
         </View>
         <T v="caption" tone="mut" style={{ flex: 1 }}>
           {label}

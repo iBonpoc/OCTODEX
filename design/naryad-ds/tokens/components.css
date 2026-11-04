@@ -1,12 +1,15 @@
-/* Токены компонентов. Все размеры видимые; зона нажатия на телефоне всегда --hit-min. Кнопок выше 36 в системе нет. */
+/* Токены компонентов. Только псевдонимы на tokens/foundation.css: размеры определены один раз там.
+   Зона нажатия на телефоне всегда --hit-min (44), видимая высота кнопки --control-lg (36). Кнопок выше 36 в системе нет. */
 :root{
- --btn-sm:28px;--btn-md:32px;--btn-phone-visible:36px;--hit-min:44px;
- --field-h:34px;--field-phone:44px;--chip-h:24px;--chip-px:10px;
- --seg-h:32px;--seg-pad:4px;--tab-h:30px;
+ --btn-sm:var(--control-sm);--btn-md:var(--control-md);--btn-phone-visible:var(--control-lg);
+ --btn-icon:var(--control-md);--btn-icon-phone:var(--control-lg);--btn-icon-glyph:18px;
+ --field-h:var(--field);
+ --chip-h:24px;--chip-px:10px;
+ --seg-h:var(--control-md);--seg-pad:4px;--tab-h:30px;
  --switch-w:42px;--switch-h:24px;--switch-knob:16px;
  --help-visible:18px;--help-icon:11px;
- --tip-fs:11px;--tip-px:8px;--tip-py:4px;--tip-radius:8px;--tip-max:220px;--tip-gap:6px;
- --fab:36px;--dock-btn:36px;--sheet-radius:24px;--modal-w:380px;--panel-w:360px;--palette-w:560px;
- --ease-spring:cubic-bezier(.3,1.25,.5,1);--ease-liquid:cubic-bezier(.3,1.35,.5,1);
+ --tip-fs:var(--fs-caption);--tip-px:8px;--tip-py:4px;--tip-radius:8px;--tip-max:220px;--tip-gap:6px;
+ --dock-btn:var(--control-lg);--modal-w:380px;--panel-w:360px;--palette-w:560px;
+ --ease-liquid:cubic-bezier(.3,1.35,.5,1);
  --liquid-stretch:160ms;--liquid-settle:420ms;
 }

@@ -76,7 +76,7 @@ export default function Clients() {
                     <T v="heading">{c.name}</T>
                     {props[0] ? (
                       <RowView gap={space[1]}>
-                        <Icon name="pin" s={size.iconXs} />
+                        <Icon name="pin" s={size.iconSm} />
                         <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
                           {props[0].address}, {props[0].city}
                           {props.length > 1 ? ` · ${t("clients.properties", { n: props.length })}` : ""}
@@ -85,7 +85,7 @@ export default function Clients() {
                     ) : null}
                     {c.phone ? (
                       <RowView gap={space[1]}>
-                        <Icon name="phone" s={size.iconXs} />
+                        <Icon name="phone" s={size.iconSm} />
                         <T v="caption" tone="mut" tabular>
                           {c.phone}
                         </T>
