@@ -9,7 +9,8 @@ on:
     branches: [main]
     paths: ["supabase/migrations/**", ".github/workflows/db-migrate.yml"]
   workflow_dispatch:
-# The CLI reads SUPABASE_DB_PASSWORD from the environment for every --linked command.
+# The CLI reads SUPABASE_DB_PASSWORD from the environment. "--yes": the founder approved applying migrations automatically
+# (production confirmation cannot be answered in CI).
 
 concurrency:
   group: db-migrate
@@ -34,18 +35,18 @@ jobs:
             echo "::error::Add SUPABASE_ACCESS_TOKEN and SUPABASE_DB_PASSWORD in Settings → Secrets and variables → Actions"; exit 1
           fi
       - name: Link the project
-        run: supabase link --project-ref "$PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+        run: supabase link --project-ref "$PROJECT_REF"
       # The first migrations were applied by hand (MCP) under other version numbers. Map them once to the file versions
       # so "db push" applies only what is really new. Repeating this is harmless.
       - name: Align migration history (one time)
         run: |
           supabase migration repair --status reverted 20261103143735 20261103150008 20261103150114 20261103150223 20261103155332 \
             20261104010504 20261104015223 20261104021206 20261104023804 20261104031314 20261104032502 20261104033959 20261104035003 20261104181835 \
-            --linked || true
+            --remote --yes || true
           supabase migration repair --status applied 20261104000000 20261104010000 20261104020000 20261104030000 20261104040000 \
             20261104050000 20261104060000 20261104070000 20261104080000 20261104090000 20261104100000 \
-            --linked
+            --remote --yes
       - name: Show pending
-        run: supabase migration list --linked
+        run: supabase migration list --remote
       - name: Apply new migrations
-        run: supabase db push --linked
+        run: supabase db push --remote --yes
