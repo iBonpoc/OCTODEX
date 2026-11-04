@@ -34,7 +34,7 @@ export default function EstimateBuilder() {
   const [estimateId] = useState(() => existing?.id ?? uid());
   const [customerId, setCustomerId] = useState(existing?.customerId ?? params.customerId);
   const [propertyId, setPropertyId] = useState(existing?.propertyId ?? params.propertyId);
-  const [doc, setDoc] = useState<EstimateDoc>(() => (existing?.doc ? structuredClone(existing.doc) : newDoc()));
+  const [doc, setDoc] = useState<EstimateDoc>(() => (existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : newDoc()));
   const [title, setTitle] = useState(existing?.doc ? existing.title : "");
   const [cur, setCur] = useState(() => Math.max(0, doc.options.findIndex((o) => o.recommended)));
   const [editing, setEditing] = useState<CustomLine | null | "new">(null);
