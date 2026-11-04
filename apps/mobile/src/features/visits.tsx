@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { router } from "expo-router";
-import { component, space, type StatusName } from "@octo/design-tokens";
+import { component, size, space, type StatusName } from "@octo/design-tokens";
 import { visitContext, useStore } from "@/data/store";
 import type { DB, Visit, VisitStep } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
@@ -54,7 +54,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
         {customer?.name}
       </T>
       <RowView gap={space[1]}>
-        <Icon name="pin" s={14} color={c.mut} />
+        <Icon name="pin" s={size.iconXs} color={c.mut} />
         <T v="body" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
           {[property?.address, property?.city.split(",")[0]].filter(Boolean).join(", ")}
         </T>

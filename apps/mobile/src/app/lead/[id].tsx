@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { space } from "@octo/design-tokens";
+import { size, space } from "@octo/design-tokens";
 import { daysSince, minutesSince, useStore } from "@/data/store";
 import { LEAD_FUNNEL, type LostReason } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
@@ -76,20 +76,20 @@ export default function LeadScreen() {
       <Card>
         {l.message ? <T v="body">{l.message}</T> : null}
         <RowView gap={space[1]}>
-          <Icon name="phone" s={16} />
+          <Icon name="phone" s={size.iconSm} />
           <T v="body" tabular>
             {l.phone}
           </T>
         </RowView>
         {l.email ? (
           <RowView gap={space[1]}>
-            <Icon name="message" s={16} />
+            <Icon name="message" s={size.iconSm} />
             <T v="body">{l.email}</T>
           </RowView>
         ) : null}
         {l.address || l.city ? (
           <RowView gap={space[1]}>
-            <Icon name="pin" s={16} />
+            <Icon name="pin" s={size.iconSm} />
             <T v="body">{[l.address, l.city].filter(Boolean).join(", ")}</T>
           </RowView>
         ) : null}

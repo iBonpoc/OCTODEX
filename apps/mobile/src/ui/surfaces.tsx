@@ -161,7 +161,7 @@ export function ListRow({
         ) : null}
       </View>
       {right}
-      {onPress ? <Icon name="chevronRight" s={16} color={c.mut} /> : null}
+      {onPress ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
     </RowView>
   );
   return onPress ? (
@@ -222,7 +222,7 @@ export function Empty({ icon, title, hint, action }: { icon: IconKey; title: str
           justifyContent: "center",
         }}
       >
-        <Icon name={icon} s={24} />
+        <Icon name={icon} s={size.iconLg} />
       </View>
       <T v="heading" center>
         {title}
@@ -254,7 +254,7 @@ export function OfflineBadge() {
         gap: space[1],
       }}
     >
-      <Icon name="wifiOff" s={12} color={c.status.warn.on} />
+      <Icon name="wifiOff" s={size.iconXs} color={c.status.warn.on} />
       <T v="caption" w="semibold" style={{ color: c.status.warn.on }}>
         {t("offline.badge", { n: queue.length })}
       </T>
@@ -329,7 +329,7 @@ export function Screen({
       {help && hintKey && !hints.seen(hintKey) ? (
         <Card style={{ borderColor: c.acc }}>
           <RowView style={{ alignItems: "flex-start" }}>
-            <Icon name="help" s={18} />
+            <Icon name="help" s={size.iconMd} />
             <T v="body" style={{ flex: 1 }}>
               {help}
             </T>

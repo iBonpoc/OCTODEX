@@ -65,7 +65,7 @@ export default function VisitScreen() {
         </RowView>
         <Steps labels={STEP_LABELS.map((k) => t(k))} current={idx} />
         <RowView gap={space[1]}>
-          <Icon name="pin" s={14} color={c.mut} />
+          <Icon name="pin" s={size.iconXs} color={c.mut} />
           <T v="body" tone="mut" style={{ flex: 1 }}>
             {[property?.address, property?.city].filter(Boolean).join(", ")} · {t("visit.stories", { n: property?.stories ?? 1 })}
           </T>
@@ -166,7 +166,7 @@ export default function VisitScreen() {
                       justifyContent: "center",
                     }}
                   >
-                    {item.done ? <Icon name="check" s={14} color={c.status.ok.on} /> : null}
+                    {item.done ? <Icon name="check" s={size.iconXs} color={c.status.ok.on} /> : null}
                   </View>
                   <T v="body" tone={item.done ? "mut" : "ink"} style={{ flex: 1, textDecorationLine: item.done ? "line-through" : "none" }}>
                     {item.label}

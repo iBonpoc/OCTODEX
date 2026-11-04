@@ -9,7 +9,7 @@
  /* визуальная высота контролов; зона нажатия всегда не меньше --hit-min (HIG 44pt) */
  --control-sm:28px;--control-md:32px;--field:34px;--hit-min:44px;
  --control-md-phone:40px;--field-phone:42px;
- --icon-sm:16px;--icon-md:20px;--icon-lg:24px;--icon-stroke:1.75;
+ --icon-xs:14px;--icon-sm:16px;--icon-md:20px;--icon-lg:24px;--icon-stroke:1.75;
  --statusbar-h:44px;--tabbar-h:56px;--safe-bottom:34px;--fab:36px;--sheet-radius:24px;
  --dur-fast:160ms;--dur-base:220ms;--dur-slow:350ms;--dur-chart:900ms;
  --ease-out:cubic-bezier(.2,.8,.2,1);--ease-spring:cubic-bezier(.3,1.4,.5,1);

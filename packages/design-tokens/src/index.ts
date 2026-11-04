@@ -43,6 +43,7 @@ export const size = {
   hitMin: 44,
   controlMdPhone: 40,
   fieldPhone: 44,
+  iconXs: 14,
   iconSm: 16,
   iconMd: 20,
   iconLg: 24,

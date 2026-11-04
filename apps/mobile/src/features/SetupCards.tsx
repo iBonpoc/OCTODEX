@@ -47,7 +47,7 @@ export function FirstStepsCard() {
       <View style={{ gap: space[1] }}>
         {steps.map((s, i) => (
           <RowView key={i} style={{ minHeight: size.controlMdPhone }}>
-            <Icon name={s.done ? "check" : "chevronRight"} s={16} />
+            <Icon name={s.done ? "check" : "chevronRight"} s={size.iconSm} />
             <T v="body" tone={s.done ? "mut" : "ink"} style={{ flex: 1 }}>
               {i + 1}. {s.label}
             </T>

@@ -84,7 +84,7 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
                   justifyContent: "center",
                 }}
               >
-                <Icon name={a.icon} s={18} color={disabled ? c.ink : c.onAcc} />
+                <Icon name={a.icon} s={size.iconMd} color={disabled ? c.ink : c.onAcc} />
               </View>
               <View style={{ flex: 1 }}>
                 <T v="body" w="semibold">
