@@ -561,10 +561,10 @@ end $$;
 reset role;
 do $$ begin
   perform tst.ok((select count(*) from public.estimate_approvals where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 1, 'one approval');
-  perform tst.ok((select status from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 'scheduled', 'job scheduled');
+  perform tst.ok((select status from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 'draft', 'job waits for a date');
   perform tst.ok((select contract_total_cents from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 48910, 'job total');
   perform tst.ok((select count(*) from public.visits v join public.jobs j on j.id = v.job_id
-                   where j.estimate_id = '0e1a0000-0000-0000-0000-000000000010' and v.starts_at > now()) = 1, 'visit in plan');
+                   where j.estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 0, 'no automatic visit: contractor schedules');
   perform tst.ok((select count(*) from public.notifications where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 2, 'viewed + approved notifications');
 end $$;
 :as_tech_a

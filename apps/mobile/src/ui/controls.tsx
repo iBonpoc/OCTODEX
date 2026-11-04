@@ -433,15 +433,18 @@ export function ChoiceChips<K extends string>({
   items,
   value,
   onChange,
+  nowrap,
 }: {
   items: { key: K; label: string }[];
   value: K;
   onChange: (k: K) => void;
+  /** one line (put inside a horizontal ScrollView) */
+  nowrap?: boolean;
 }) {
   const { c } = useTheme();
   const h = component.button.sm;
   return (
-    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }} accessibilityRole="radiogroup">
+    <View style={{ flexDirection: "row", flexWrap: nowrap ? "nowrap" : "wrap", gap: space[2] }} accessibilityRole="radiogroup">
       {items.map((it) => {
         const sel = it.key === value;
         return (

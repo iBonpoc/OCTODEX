@@ -105,7 +105,7 @@ export default function EstimateScreen() {
             <Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={pdf} />
           </RowView>
           {e.status === "approved" && e.approval ? (
-            <ApprovedCard e={e} jobInPlan={!!job} />
+            <ApprovedCard e={e} jobId={job?.id} />
           ) : (
             <OnSiteSign e={e} />
           )}
@@ -153,8 +153,10 @@ export default function EstimateScreen() {
   );
 }
 
-function ApprovedCard({ e, jobInPlan }: { e: Estimate; jobInPlan: boolean }) {
-  const { t, day } = useI18n();
+function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
+  const { t, day, time } = useI18n();
+  const { db } = useStore();
+  const visits = jobId ? db.visits.filter((v) => v.jobId === jobId).sort((x, y) => x.start.localeCompare(y.start)) : [];
   const a = e.approval!;
   const doc = e.doc!;
   return (
@@ -162,12 +164,23 @@ function ApprovedCard({ e, jobInPlan }: { e: Estimate; jobInPlan: boolean }) {
       <Card status="ok">
         <StatusChip status="ok" label={t("portal.approved")} />
         <T v="body">{t("ue.approvedBy", { name: a.signerName, date: day(a.at) })}</T>
-        {jobInPlan ? (
-          <T v="caption" tone="mut">
-            {t("ue.jobCreated")}
-          </T>
+        {jobId && visits.length === 0 ? (
+          <>
+            <StatusChip status="warn" label={t("st.toSchedule")} />
+            <T v="caption" tone="mut">
+              {t("ue.toSchedule")}
+            </T>
+            <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} />
+          </>
         ) : null}
-        {jobInPlan ? <Button label={t("plan.title")} icon="calendar" variant="secondary" size="sm" onPress={() => router.navigate("/plan")} /> : null}
+        {visits.map((v) => (
+          <T key={v.id} v="body" tabular>
+            {t("ue.scheduledOn", { date: day(v.start), time: time(v.start) })}
+          </T>
+        ))}
+        {jobId && visits.length ? (
+          <Button label={t("sch.another")} icon="plus" variant="ghost" size="sm" onPress={() => router.push(`/job/schedule?jobId=${jobId}`)} />
+        ) : null}
       </Card>
       <EstimateView doc={doc} optionId={a.optionId} addonIds={a.addonIds} readOnly />
     </>

@@ -224,7 +224,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     id: s(j.id),
     propertyId: s(j.property_id),
     title: s(j.title) || s(j.number),
-    status: jobStatus[s(j.status)] ?? "scheduled",
+    status: j.status === "draft" && j.estimate_id ? "unscheduled" : jobStatus[s(j.status)] ?? "scheduled",
     amountCents: n(j.contract_total_cents),
     estimateId: (j.estimate_id as string | null) ?? undefined,
   }));
@@ -281,7 +281,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     notices: notifications.map((r) => {
       const p = (r.payload ?? {}) as { customer?: string; total?: number; deposit?: number };
       return {
-        id: s(r.id), kind: s(r.kind) as Notice["kind"], estimateId: (r.estimate_id as string | null) ?? undefined, customer: p.customer ?? "",
+        id: s(r.id), kind: s(r.kind) as Notice["kind"], estimateId: (r.estimate_id as string | null) ?? undefined, jobId: (r.job_id as string | null) ?? undefined, customer: p.customer ?? "",
         totalCents: p.total, depositCents: p.deposit, at: s(r.created_at), read: !!r.read_at,
       };
     }),

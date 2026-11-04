@@ -72,8 +72,8 @@ export type Op =
       svg: string;
       channel: "on_site" | "portal";
       jobId: string;
-      visitId: string;
     }
+  | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; scope: string[] }
   | { k: "catalog.save"; item: CatalogItem }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
@@ -256,9 +256,14 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       await applyOp({ k: "estimate.send", id: op.id, token: op.token }, c, userId);
       const { error } = await supabase.rpc("portal_accept", {
         p_token: op.token, p_option_id: op.optionId, p_addon_ids: op.addonIds, p_signer: op.signer, p_svg: op.svg, p_consent: true,
-        p_channel: op.channel, p_job_id: op.jobId, p_visit_id: op.visitId,
+        p_channel: op.channel, p_job_id: op.jobId, p_visit_id: null,
       });
       return run(Promise.resolve({ error }));
+    }
+    case "job.schedule": {
+      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, scope: op.scope }));
+      if (op.techId) await run(ins("visit_assignees", { company_id: c, visit_id: op.visitId, user_id: op.techId }));
+      return advanceJob(op.jobId, "scheduled");
     }
     case "catalog.save": {
       const it = op.item;
@@ -308,7 +313,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           approved_version_id: data?.current_version_id ?? null, title: op.title, contract_total_cents: op.totalCents, number: "",
         }),
       );
-      await advanceJob(jobId, "scheduled");
+      // The job stays "waiting for a date" until the contractor schedules it (job.schedule).
       await run(
         ins("invoices", {
           id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: jobId, kind: "deposit", status: "sent",

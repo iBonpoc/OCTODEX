@@ -72,6 +72,8 @@ interface StoreCtx {
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   readNotices: () => void;
+  /** contractor picks date, time, duration and (optionally) the tech → a visit appears in the plan */
+  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null }) => Undo;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -418,12 +420,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const approval: EstimateApproval = { ...a, at: now, totalCents: sum.totalCents, depositCents: sum.depositCents };
         const existingJob = dbRef.current.jobs.find((j) => j.estimateId === id);
         const jobId = existingJob?.id ?? uid();
-        const visitId = uid();
-        const start = new Date();
-        start.setDate(start.getDate() + 1);
-        start.setHours(9, 0, 0, 0);
         const customer = dbRef.current.customers.find((c) => c.id === e.customerId);
-        const option = e.doc.options.find((o) => o.id === a.optionId);
         return mutate(
           "estimate.approve",
           (d) => ({
@@ -435,23 +432,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ),
             jobs: existingJob
               ? d.jobs
-              : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "scheduled", amountCents: sum.totalCents, estimateId: id }],
-            visits: existingJob
-              ? d.visits
-              : [
-                  ...d.visits,
-                  {
-                    id: visitId, jobId, techId: null, start: start.toISOString(), durationMin: 120, step: "scheduled",
-                    scope: (option ? option.lines.filter((l) => !l.optional || a.addonIds.includes(l.id)).map((l) => l.name) : []).filter(Boolean),
-                    checklist: [], photos: [], amountDueCents: sum.totalCents - (sum.depositCents ?? 0),
-                  },
-                ],
+              : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: sum.totalCents, estimateId: id }],
             notices: [
-              { id: uid(), kind: "estimate.approved", estimateId: id, customer: customer?.name ?? a.signerName, totalCents: sum.totalCents, depositCents: sum.depositCents, at: now, read: a.channel === "on_site" },
+              { id: uid(), kind: "estimate.approved", estimateId: id, jobId, customer: customer?.name ?? a.signerName, totalCents: sum.totalCents, depositCents: sum.depositCents, at: now, read: a.channel === "on_site" },
               ...d.notices,
             ],
           }),
-          { k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId, visitId },
+          { k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId },
         );
       },
       saveCatalogItem: (it) =>
@@ -461,6 +448,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { k: "catalog.save", item: it },
         ),
       removeCatalogItem: (id) => mutate("catalog.remove", (d) => ({ ...d, catalog: d.catalog.filter((x) => x.id !== id) }), { k: "catalog.remove", id }),
+      scheduleJob: (jobId, sch) => {
+        const d0 = dbRef.current;
+        const job = d0.jobs.find((j) => j.id === jobId);
+        if (!job) return () => {};
+        const e = job.estimateId ? d0.estimates.find((x) => x.id === job.estimateId) : undefined;
+        const visitId = uid();
+        const opt = e?.doc && e.approval ? e.doc.options.find((o) => o.id === e.approval!.optionId) : undefined;
+        const scope = opt ? opt.lines.filter((l) => l.name.trim() && (!l.optional || e!.approval!.addonIds.includes(l.id))).map((l) => l.name) : [job.title];
+        const paidDeposit = e?.depositPaidAt ? e.depositCents ?? 0 : 0;
+        const due = Math.max(0, job.amountCents - paidDeposit);
+        const end = new Date(new Date(sch.start).getTime() + sch.durationMin * 60_000).toISOString();
+        return mutate(
+          "job.schedule",
+          (d) => ({
+            ...d,
+            jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: "scheduled" } : j)),
+            visits: [
+              ...d.visits,
+              { id: visitId, jobId, techId: sch.techId, start: sch.start, durationMin: sch.durationMin, step: "scheduled", scope, checklist: [], photos: [], amountDueCents: due },
+            ],
+            notices: d.notices.map((n) => (n.jobId === jobId ? { ...n, read: true } : n)),
+          }),
+          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: sch.techId, scope },
+        );
+      },
       readNotices: () => {
         const ids = dbRef.current.notices.filter((n) => !n.read).map((n) => n.id);
         if (!ids.length) return;
@@ -493,7 +505,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               { id: uid(), kind: "deposit.paid", estimateId: id, customer: d.customers.find((c) => c.id === e.customerId)?.name ?? "", depositCents: e.depositCents, at: now, read: !fromClient },
               ...d.notices,
             ],
-            jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "scheduled", amountCents: e.totalCents, estimateId: id }],
+            jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: id }],
             invoices: [
               ...d.invoices,
               { id: invoiceId, customerId: e.customerId, jobId, totalCents: e.depositCents!, paidCents: e.depositCents!, dueDate: now, paidAt: now, method, kind: "deposit" },
