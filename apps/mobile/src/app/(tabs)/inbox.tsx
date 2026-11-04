@@ -2,21 +2,18 @@ import { useEffect, useState } from "react";
 import { timing, type StatusName } from "@octo/design-tokens";
 import { minutesSince, useStore } from "@/data/store";
 import type { Lead, LeadStatus } from "@/data/types";
-import { isOpenLead, leadStatusView as statusOf } from "@/features/leads";
+import { filterLeads, leadStatusView as statusOf, needsNextStep, openTasks, sourceName, waitingMinutes, waitStatus, type LeadFilter } from "@/features/leads";
 import { EstimatesBoard, InvoicesBoard } from "@/features/boards";
 import { usePersistentState } from "@/data/persist";
 import { router, useLocalSearchParams } from "expo-router";
-import { useI18n } from "@/i18n";
+import { useI18n, type DictKey } from "@/i18n";
 import { ReplySheet, useTick } from "@/features/sheets";
-import { Button, ChoiceChips, Segmented, StatusChip } from "@/ui/controls";
+import { Button, ChoiceChips, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, Grid, RowView, Screen } from "@/ui/surfaces";
 
 
-function waitStatus(m: number): StatusName {
-  return m >= timing.leadReplyBadMin ? "bad" : m >= timing.leadReplyWarnMin ? "warn" : "info";
-}
 
 /** All requests in one place, with a "waiting N min" timer: whoever replies first wins the job. */
 /** "Sales" tab: leads → estimates → invoices, each list as cards with filters. */
@@ -60,59 +57,63 @@ export default function Sales() {
 
 function LeadsBoard() {
   useTick();
-  const { t } = useI18n();
-  const { db, bookLead, online } = useStore();
-  const toast = useToast();
+  const { t, day } = useI18n();
+  const { db, role } = useStore();
   const [reply, setReply] = useState<string | null>(null);
-  const [f, setF] = useState<"open" | "won" | "lost">("open");
-  const order: LeadStatus[] = ["new", "replied", "booked", "estimate_sent", "won", "lost"];
-  const leads = [...db.leads].filter((l) => (f === "open" ? isOpenLead(l) : l.status === f)).sort(
-    (a, b) => order.indexOf(a.status) - order.indexOf(b.status) || new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime(),
-  );
+  const [f, setF] = usePersistentState<LeadFilter>("octo.leadFilter.v1", "open");
+  const [src, setSrc] = useState("");
+  const [q, setQ] = useState("");
+  const leads = filterLeads(db, role, { filter: f, sourceId: src || undefined, q });
+  const count = (x: LeadFilter) => filterLeads(db, role, { filter: x }).length;
+  const usedSources = db.sources.filter((s) => db.leads.some((l) => l.sourceId === s.id));
   const card = (l: Lead) => {
-    const m = minutesSince(l.receivedAt);
-    const s = l.status === "new" ? { status: waitStatus(m), label: t("inbox.waiting", { m }) } : { status: statusOf[l.status].status, label: t(statusOf[l.status].label) };
+    const w = waitingMinutes(l);
+    const sv = statusOf[l.status];
+    const s = w !== null ? { status: waitStatus(w), label: t("inbox.waiting", { m: w }) } : { status: sv.status, label: t(sv.label) };
+    const task = openTasks(db, l.id)[0];
+    const warn = needsNextStep(db, l);
     return (
       <Card key={l.id} status={s.status} onPress={() => router.push(`/lead/${l.id}`)} accessibilityLabel={l.name}>
         <RowView style={{ justifyContent: "space-between" }}>
-          <T v="caption" tone="mut">
-            {l.source} · {l.city}
+          <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
+            {[sourceName(db, l.sourceId), l.city].filter(Boolean).join(" · ")}
           </T>
           <StatusChip status={s.status} label={s.label} />
         </RowView>
         <T v="heading">{l.name}</T>
-        <T v="body" tone="mut" numberOfLines={3}>
-          {l.message}
-        </T>
-        {l.status === "new" || l.status === "replied" || l.status === "booked" ? (
+        {l.service || l.message ? (
+          <T v="body" tone="mut" numberOfLines={2}>
+            {l.service ?? l.message}
+          </T>
+        ) : null}
+        {task ? (
+          <T v="caption" tone="mut">
+            {t("lead.next")}: {task.title}{task.dueAt ? ` · ${day(task.dueAt)}` : ""}
+          </T>
+        ) : warn ? (
+          <T v="caption" tone="warn">
+            ⚠ {t("lead.noNextStep")}
+          </T>
+        ) : null}
+        {l.status === "new" ? (
           <RowView style={{ flexWrap: "wrap" }}>
-            {l.status === "new" ? <Button label={t("inbox.reply")} icon="send" onPress={() => setReply(l.id)} /> : null}
-            {l.status !== "booked" ? (
-              <Button
-                label={t("inbox.book")}
-                icon="calendar"
-                variant="secondary"
-                onPress={() => toast.show(online ? t("toast.bookedTomorrow", { name: l.name }) : t("offline.queued"), bookLead(l.id))}
-              />
-            ) : null}
-            <Button label={t("lead.makeEstimateShort")} icon="invoice" variant={l.status === "new" ? "secondary" : "primary"} onPress={() => router.push(`/lead/${l.id}`)} />
+            <Button label={t("inbox.reply")} icon="send" size="sm" onPress={() => setReply(l.id)} />
           </RowView>
         ) : null}
       </Card>
     );
   };
-  const n = (s: "won" | "lost") => db.leads.filter((l) => l.status === s).length;
   return (
     <>
-      <ChoiceChips
+      <TextField type="search" value={q} onChangeText={setQ} placeholder={t("lead.search")} icon="search" />
+      <ChoiceChips<LeadFilter>
         value={f}
         onChange={setF}
-        items={[
-          { key: "open", label: `${t("board.open")} · ${db.leads.filter(isOpenLead).length}` },
-          { key: "won", label: `${t("board.won")} · ${n("won")}` },
-          { key: "lost", label: `${t("board.lost")} · ${n("lost")}` },
-        ]}
+        items={(["open", "mine", "waiting", "won", "closed"] as const).map((k) => ({ key: k, label: `${t(`lead.f.${k}` as DictKey)} · ${count(k)}` }))}
       />
+      {usedSources.length > 1 ? (
+        <ChoiceChips<string> value={src} onChange={setSrc} items={[{ key: "", label: t("lead.allSources") }, ...usedSources.map((x) => ({ key: x.id, label: x.name }))]} />
+      ) : null}
       {leads.length === 0 ? <Empty icon="inbox" title={t("inbox.empty")} hint={t("inbox.emptyHint")} /> : <Grid>{leads.map(card)}</Grid>}
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />
     </>

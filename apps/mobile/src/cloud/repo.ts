@@ -3,7 +3,7 @@
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
 import { companyFromDb } from "./companyMap";
-import type { CatalogItem, DB, Note, Payment, Estimate, EstimateDoc, Notice, EstimateStatus, Expense, ExpenseCategory, Invoice, Job, JobStatus, Lead, LeadSource, LeadStatus, Member, Role, Visit, VisitStep } from "@/data/types";
+import type { CatalogItem, DB, Note, Payment, Estimate, EstimateDoc, Notice, EstimateStatus, Expense, ExpenseCategory, Invoice, Job, JobStatus, Lead, LeadStatus, Source, Task, Activity, Member, Role, Visit, VisitStep } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -42,6 +42,7 @@ const leadStatus: Record<string, LeadStatus> = {
   estimate_sent: "estimate_sent",
   won: "won",
   lost: "lost",
+  declined: "declined",
   archived: "lost",
 };
 const estimateStatus: Record<string, EstimateStatus> = {
@@ -75,7 +76,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const [mems, sources, customers, contacts, properties, jobs, visits, assignees, leads, estimates, versions, options, lines, approvals, invoices, payments, files, expenses, catalogRows, lineCosts, notifications] =
     await Promise.all([
       q<Row>(supabase.from("memberships").select("user_id, role, status, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).eq("status", "active")),
-      live<Row>("lead_sources", "id, name"),
+      live<Row>("lead_sources", "id, name, kind, phone, email, customer_id, note, is_active, is_system, position"),
       live<Row>("customers"),
       live<Row>("contacts", "id, customer_id, phone, email, is_primary"),
       live<Row>("properties"),
@@ -97,14 +98,26 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       q<Row>(supabase.from("estimate_line_costs").select("line_item_id, unit_cost_cents").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
       q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
     ]);
-  const [companyRows, secrets, licenseRows, contactRows, noteRows] = await Promise.all([
+  const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows] = await Promise.all([
     q<Row>(supabase.from("companies").select("*").eq("id", companyId)),
     // EIN: owner/admin only — others get nothing
     q<Row>(supabase.from("company_secrets").select("ein").eq("company_id", companyId)).catch(() => [] as Row[]),
     live<Row>("company_licenses"),
     live<Row>("company_contacts"),
     live<Row>("notes"),
+    // lead cost: owner/admin/office only — others get nothing
+    live<Row>("lead_costs", "lead_id, cost_cents").catch(() => [] as Row[]),
+    live<Row>("lead_contacts", "id, lead_id, name, role, phone, email").catch(() => [] as Row[]),
+    live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at").catch(() => [] as Row[]),
+    q<Row>(supabase.from("activities").select("id, subject_type, subject_id, kind, body, meta, at, actor_id").eq("company_id", companyId).is("deleted_at", null).order("at", { ascending: false }).limit(2000)).catch(() => [] as Row[]),
   ]);
+  const costOfLead = new Map(leadCosts.map((r) => [s(r.lead_id), n(r.cost_cents)]));
+  const contactsOfLead = new Map<string, Lead["contacts"]>();
+  for (const r of leadContacts) {
+    const list = contactsOfLead.get(s(r.lead_id)) ?? [];
+    list.push({ id: s(r.id), name: s(r.name), role: s(r.role) as NonNullable<Lead["contacts"]>[number]["role"], phone: (r.phone as string | null) ?? undefined, email: (r.email as string | null) ?? undefined });
+    contactsOfLead.set(s(r.lead_id), list);
+  }
   const costOf = new Map(lineCosts.map((r) => [s(r.line_item_id), n(r.unit_cost_cents)]));
   const withCosts = (doc: unknown): EstimateDoc | undefined => {
     const d = doc as EstimateDoc | null;
@@ -228,9 +241,26 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     name: s(l.contact_name) || "—",
     phone: s(l.phone),
     email: (l.email as string | null) ?? undefined,
-    city: s(l.address_text).split(",").slice(-1)[0]?.trim() || "",
-    address: s(l.address_text) || undefined,
-    source: (sourceName.get(s(l.source_id)) as LeadSource) ?? "Website",
+    phone2: (l.phone2 as string | null) ?? undefined,
+    phone2Label: (l.phone2_label as Lead["phone2Label"] | null) ?? undefined,
+    preferredContact: (l.preferred_contact as Lead["preferredContact"] | null) ?? undefined,
+    language: (l.language as Lead["language"] | null) ?? undefined,
+    city: s(l.address_city) || s(l.address_text).split(",").slice(-1)[0]?.trim() || "",
+    address: s(l.address_line1) || s(l.address_text) || undefined,
+    state: (l.address_state as string | null) ?? undefined,
+    zip: (l.address_zip as string | null) ?? undefined,
+    sourceId: s(l.source_id),
+    serviceItemId: (l.service_item_id as string | null) ?? undefined,
+    service: (l.service_requested as string | null) ?? undefined,
+    timeframe: (l.timeframe as Lead["timeframe"] | null) ?? undefined,
+    timeframeDate: (l.timeframe_date as string | null) ?? undefined,
+    budgetCents: l.budget_cents == null ? undefined : n(l.budget_cents),
+    costCents: costOfLead.get(s(l.id)),
+    assigneeId: (l.assigned_to as string | null) ?? undefined,
+    createdBy: (l.created_by as string | null) ?? undefined,
+    firstResponseAt: (l.first_response_at as string | null) ?? undefined,
+    contacts: contactsOfLead.get(s(l.id)) ?? [],
+    lostReasonText: (l.lost_reason_text as string | null) ?? undefined,
     receivedAt: s(l.received_at),
     message: s(l.message),
     status: leadStatus[s(l.status)] ?? "new",
@@ -263,12 +293,27 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   return {
     me: userId,
     members,
+    sources: sources
+      .map((r) => ({
+        id: s(r.id), name: s(r.name), kind: (["marketplace", "ads", "person", "own"].includes(s(r.kind)) ? s(r.kind) : "own") as Source["kind"],
+        phone: (r.phone as string | null) ?? undefined, email: (r.email as string | null) ?? undefined, customerId: (r.customer_id as string | null) ?? undefined,
+        note: (r.note as string | null) ?? undefined, active: r.is_active !== false, system: !!r.is_system, position: n(r.position),
+      }))
+      .sort((a, b) => (a.position ?? 0) - (b.position ?? 0) || a.name.localeCompare(b.name)),
+    tasks: taskRows.map((r) => ({
+      id: s(r.id), subjectType: s(r.subject_type) as Task["subjectType"], subjectId: s(r.subject_id), title: s(r.title),
+      dueAt: (r.due_at as string | null) ?? undefined, assigneeId: (r.assignee_id as string | null) ?? undefined, doneAt: (r.done_at as string | null) ?? undefined,
+    })),
+    activities: activityRows.map((r) => ({
+      id: s(r.id), subjectType: s(r.subject_type) as Activity["subjectType"], subjectId: s(r.subject_id), kind: s(r.kind) as Activity["kind"],
+      body: (r.body as string | null) ?? undefined, meta: (r.meta as Record<string, string> | null) ?? undefined, at: s(r.at), actorId: s(r.actor_id),
+    })),
     customers: customers.map((c) => ({
       id: s(c.id),
       name: s(c.display_name),
       phone: primaryPhone.get(s(c.id)) ?? "",
       email: primaryEmail.get(s(c.id)) || undefined,
-      source: (sourceName.get(s(c.lead_source_id)) as LeadSource) ?? "Website",
+      sourceId: s(c.lead_source_id),
       balanceCents: 0,
       status: c.status === "prospect" ? ("prospect" as const) : ("active" as const),
     })),

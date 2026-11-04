@@ -2,7 +2,7 @@
  * Test data (placeholder prices — founder rule: real prices are never typed into seeds).
  * All times are relative to "now" so the demo always looks like a live day in Los Angeles.
  */
-import type { DB, ChecklistItem, CatalogItem, Company, EstimateDoc } from "./types";
+import type { DB, ChecklistItem, CatalogItem, Company, EstimateDoc, Source } from "./types";
 import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
 
 /** Test catalog for several trades. All prices are PLACEHOLDERS (badge "test price"). */
@@ -73,6 +73,23 @@ function minutesAgo(m: number): string {
 function daysAgo(d: number): string {
   return new Date(Date.now() - d * 86_400_000).toISOString();
 }
+function hoursFromNow(h: number): string {
+  return new Date(Date.now() + h * 3_600_000).toISOString();
+}
+/** Standard lead sources of a new company (the same list the server seeds); the company edits it. */
+export const SEED_SOURCES: Source[] = [
+  { id: "src-thumbtack", name: "Thumbtack", kind: "marketplace", active: true, system: true, position: 1 },
+  { id: "src-yelp", name: "Yelp", kind: "marketplace", active: true, system: true, position: 2 },
+  { id: "src-google", name: "Google", kind: "marketplace", active: true, system: true, position: 3 },
+  { id: "src-angi", name: "Angi", kind: "marketplace", active: true, system: true, position: 4 },
+  { id: "src-nextdoor", name: "Nextdoor", kind: "marketplace", active: true, system: true, position: 5 },
+  { id: "src-facebook", name: "Facebook", kind: "ads", active: true, system: true, position: 6 },
+  { id: "src-website", name: "Website", kind: "own", active: true, system: true, position: 7 },
+  { id: "src-referral", name: "Referral", kind: "own", active: true, system: true, position: 8 },
+  { id: "src-repeat", name: "Repeat", kind: "own", active: true, system: true, position: 9 },
+  { id: "src-other", name: "Other", kind: "own", active: true, system: true, position: 10 },
+  { id: "src-kolya", name: "Kolya (contractor)", kind: "person", phone: "(818) 555-0101", active: true, position: 11 },
+];
 /** Generic job checklist (company templates come later; trade modules add their own). */
 const jobChecklist = (prefix: string): ChecklistItem[] =>
   [
@@ -107,6 +124,14 @@ export const DEMO_COMPANY: Company = {
 export function makeSeed(): DB {
   return {
     me: "m-alex",
+    sources: SEED_SOURCES,
+    tasks: [
+      { id: "t1", subjectType: "lead", subjectId: "l3", title: "Send the painting estimate", dueAt: hoursFromNow(20), assigneeId: "m-alex" },
+    ],
+    activities: [
+      { id: "a1", subjectType: "lead", subjectId: "l3", kind: "call", at: minutesAgo(80), actorId: "m-alex" },
+      { id: "a2", subjectType: "lead", subjectId: "l3", kind: "status", meta: { from: "new", to: "replied" }, at: minutesAgo(80), actorId: "m-alex" },
+    ],
     members: [
       { id: "m-alex", name: "Alex Petrov", initials: "AP", kind: "employee", roles: ["director", "dispatcher", "tech"] },
       { id: "m-ivan", name: "Ivan Sokolov", initials: "IS", kind: "employee", roles: ["tech"] },
@@ -114,13 +139,13 @@ export function makeSeed(): DB {
       { id: "m-sub", name: "Valley Electric LLC", initials: "VE", kind: "sub", roles: ["tech"] },
     ],
     customers: [
-      { id: "c1", name: "Sarah Mitchell", phone: "(626) 555-0142", email: "sarah.m@example.com", source: "Google", balanceCents: 0 },
-      { id: "c2", name: "David Kim", phone: "(818) 555-0187", source: "Thumbtack", balanceCents: 184000 },
-      { id: "c3", name: "Linda Alvarez", phone: "(310) 555-0110", email: "lalvarez@example.com", source: "Referral", balanceCents: 0 },
-      { id: "c4", name: "Robert Chen", phone: "(323) 555-0166", source: "Yelp", balanceCents: 96000 },
-      { id: "c5", name: "Maria Gonzalez", phone: "(562) 555-0133", source: "Website", balanceCents: 0 },
-      { id: "c6", name: "James O'Connor", phone: "(424) 555-0199", source: "Google", balanceCents: 0 },
-      { id: "c7", name: "Emily Park", phone: "(213) 555-0121", source: "Thumbtack", balanceCents: 0 },
+      { id: "c1", name: "Sarah Mitchell", phone: "(626) 555-0142", email: "sarah.m@example.com", sourceId: "src-google", balanceCents: 0 },
+      { id: "c2", name: "David Kim", phone: "(818) 555-0187", sourceId: "src-thumbtack", balanceCents: 184000 },
+      { id: "c3", name: "Linda Alvarez", phone: "(310) 555-0110", email: "lalvarez@example.com", sourceId: "src-referral", balanceCents: 0 },
+      { id: "c4", name: "Robert Chen", phone: "(323) 555-0166", sourceId: "src-yelp", balanceCents: 96000 },
+      { id: "c5", name: "Maria Gonzalez", phone: "(562) 555-0133", sourceId: "src-website", balanceCents: 0 },
+      { id: "c6", name: "James O'Connor", phone: "(424) 555-0199", sourceId: "src-google", balanceCents: 0 },
+      { id: "c7", name: "Emily Park", phone: "(213) 555-0121", sourceId: "src-thumbtack", balanceCents: 0 },
     ],
     properties: [
       { id: "p1", customerId: "c1", address: "1420 Oak Grove Ave", city: "Pasadena, CA 91103", stories: 2 },
@@ -176,16 +201,17 @@ export function makeSeed(): DB {
       },
     ],
     leads: [
-      { id: "l1", name: "Kevin Brooks", phone: "(818) 555-0170", city: "Encino", source: "Thumbtack", receivedAt: minutesAgo(4), status: "new",
+      { id: "l1", assigneeId: "m-alex", name: "Kevin Brooks", phone: "(818) 555-0170", city: "Encino", sourceId: "src-thumbtack", receivedAt: minutesAgo(4), status: "new", costCents: 4500, service: "Water heater replacement", timeframe: "asap",
         message: "Water heater is leaking, need a replacement quote. 40 gal gas." },
-      { id: "l2", name: "Angela Rossi", phone: "(310) 555-0155", city: "Torrance", source: "Google", receivedAt: minutesAgo(22), status: "new",
+      { id: "l2", assigneeId: "m-alex", name: "Angela Rossi", phone: "(310) 555-0155", city: "Torrance", sourceId: "src-google", receivedAt: minutesAgo(22), status: "new",
         message: "Need a handyman for a few small things: shelves, a door that sticks, a light fixture." },
-      { id: "l3", name: "Tom Becker", phone: "(626) 555-0108", city: "Arcadia", source: "Yelp", receivedAt: minutesAgo(95), status: "replied",
+      { id: "l3", assigneeId: "m-alex", name: "Tom Becker", phone: "(626) 555-0108", city: "Arcadia", sourceId: "src-yelp", receivedAt: minutesAgo(95), status: "replied", firstResponseAt: minutesAgo(80),
+        service: "Interior painting", timeframe: "this_month", budgetCents: 150000, preferredContact: "sms",
         message: "Quote for painting the living room and hallway?" },
-      { id: "l4", name: "Nina Patel", phone: "(213) 555-0191", city: "Los Angeles", source: "Website", receivedAt: daysAgo(1), status: "booked",
+      { id: "l4", assigneeId: "m-alex", name: "Nina Patel", phone: "(213) 555-0191", city: "Los Angeles", sourceId: "src-website", receivedAt: daysAgo(1), status: "booked",
         message: "Two outlets in the kitchen stopped working." },
-      { id: "l5", name: "Linda Alvarez", phone: "(310) 555-0110", email: "lalvarez@example.com", city: "Santa Monica, CA 90405", address: "2207 Ocean Park Blvd",
-        source: "Referral", receivedAt: daysAgo(17), lastActivityAt: daysAgo(16), status: "estimate_sent", customerId: "c3", propertyId: "p3",
+      { id: "l5", assigneeId: "m-alex", name: "Linda Alvarez", phone: "(310) 555-0110", email: "lalvarez@example.com", city: "Santa Monica, CA 90405", address: "2207 Ocean Park Blvd",
+        sourceId: "src-referral", receivedAt: daysAgo(17), lastActivityAt: daysAgo(16), status: "estimate_sent", customerId: "c3", propertyId: "p3",
         message: "Carpet removal, stair railing, a light fixture and haul-away after renovation." },
     ],
     estimates: [

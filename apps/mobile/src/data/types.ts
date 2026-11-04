@@ -19,14 +19,32 @@ export interface Member {
   pending?: boolean;
 }
 
-export type LeadSource = "Thumbtack" | "Yelp" | "Google" | "Website" | "Referral";
+/**
+ * Where leads come from — the company's own list (founder 04.11): a marketplace (Thumbtack, Yelp…), ads, a person
+ * (friend, contractor Kolya…) or own channels (website, repeat client, referral). Hidden, never deleted, once it has leads.
+ */
+export type SourceKind = "marketplace" | "ads" | "person" | "own";
+export const SOURCE_KINDS: SourceKind[] = ["marketplace", "ads", "person", "own"];
+export interface Source {
+  id: ID;
+  name: string;
+  kind: SourceKind;
+  /** a person source: how to reach them; optionally an existing client */
+  phone?: string;
+  email?: string;
+  customerId?: ID;
+  note?: string;
+  active: boolean;
+  system?: boolean;
+  position?: number;
+}
 
 export interface Customer {
   id: ID;
   name: string;
   phone: string;
   email?: string;
-  source: LeadSource;
+  sourceId: ID;
   /** positive = customer owes us */
   balanceCents: number;
   /** prospect: has an estimate but has not signed yet (not in the main client list) */
@@ -85,30 +103,94 @@ export interface Visit {
   late?: boolean;
 }
 
-/** Funnel: new → replied → booked (inspection) → estimate_sent → won | lost */
-export type LeadStatus = "new" | "replied" | "booked" | "estimate_sent" | "won" | "lost";
+/**
+ * Funnel: new → replied ("in touch") → booked (estimate visit) → estimate_sent → won (client).
+ * Closed: lost (the client decided) or declined (we decided) — always with a reason; both can be reopened.
+ */
+export type LeadStatus = "new" | "replied" | "booked" | "estimate_sent" | "won" | "lost" | "declined";
 export const LEAD_FUNNEL: LeadStatus[] = ["new", "replied", "booked", "estimate_sent", "won"];
-export type LostReason =
-  | "price_too_high" | "no_response" | "chose_competitor" | "not_ready_timing" | "out_of_service_area"
-  | "service_not_offered" | "junk_spam" | "duplicate" | "other";
+/** the client decided */
+export const LOST_REASONS = ["no_response", "chose_competitor", "price_too_high", "not_ready_timing", "other"] as const;
+/** we decided */
+export const DECLINE_REASONS = ["not_profitable", "service_not_offered", "out_of_service_area", "junk_spam", "duplicate", "other"] as const;
+export type LostReason = (typeof LOST_REASONS)[number] | (typeof DECLINE_REASONS)[number];
+export type PhoneLabel = "mobile" | "home" | "work" | "other";
+export type ContactWay = "call" | "sms" | "email";
+export type Timeframe = "asap" | "this_week" | "this_month" | "flexible" | "date";
+export type ContactRole = "spouse" | "tenant" | "property_manager" | "owner" | "other";
+export interface LeadContact {
+  id: ID;
+  name: string;
+  role: ContactRole;
+  phone?: string;
+  email?: string;
+}
 export interface Lead {
   id: ID;
   name: string;
   phone: string;
+  phone2?: string;
+  phone2Label?: PhoneLabel;
   email?: string;
-  city: string;
+  preferredContact?: ContactWay;
+  /** client documents and messages in this language */
+  language?: "en" | "es";
+  /** job address */
   address?: string;
-  source: LeadSource;
+  city: string;
+  state?: string;
+  zip?: string;
+  sourceId: ID;
+  /** what the client asked for: a service from the catalog and/or own words */
+  serviceItemId?: ID;
+  service?: string;
+  timeframe?: Timeframe;
+  timeframeDate?: string;
+  budgetCents?: number;
+  /** what this lead cost (0 by default; Thumbtack later via webhook). Never shown to techs. */
+  costCents?: number;
   receivedAt: string;
   message: string;
   status: LeadStatus;
+  /** who works the lead (owner by default) */
+  assigneeId?: ID;
+  createdBy?: ID;
+  /** first call / SMS / email / "I replied" — stops the reply timer */
+  firstResponseAt?: string;
+  contacts?: LeadContact[];
   /** set when a prospect card / client exists for this lead */
   customerId?: ID;
   propertyId?: ID;
   wonVia?: "approval" | "deposit" | "manual";
   lostReason?: LostReason;
+  lostReasonText?: string;
   /** last change by the contractor (for "no movement 14 / 30 days") */
   lastActivityAt?: string;
+}
+
+/** A to-do with a date on a lead, client, job or estimate ("next step"). */
+export interface Task {
+  id: ID;
+  subjectType: "lead" | "customer" | "job" | "estimate";
+  subjectId: ID;
+  title: string;
+  dueAt?: string;
+  assigneeId?: ID;
+  doneAt?: string;
+}
+
+/** History line: contact attempts, status changes, assignment, edits. Notes, estimates and visits join the timeline from their own tables. */
+export type ActivityKind = "call" | "sms" | "email" | "marketplace" | "reply" | "status" | "assigned" | "edited";
+export interface Activity {
+  id: ID;
+  subjectType: "lead" | "customer" | "job" | "estimate";
+  subjectId: ID;
+  kind: ActivityKind;
+  body?: string;
+  /** status change: from → to; assignment: member id */
+  meta?: Record<string, string>;
+  at: string;
+  actorId: ID;
 }
 
 export type EstimateStatus = "draft" | "sent" | "approved" | "declined";
@@ -311,6 +393,9 @@ export interface QueuedAction {
 export interface DB {
   me: ID;
   members: Member[];
+  sources: Source[];
+  tasks: Task[];
+  activities: Activity[];
   customers: Customer[];
   properties: Property[];
   jobs: Job[];

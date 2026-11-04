@@ -4,6 +4,7 @@ import { size, space, type StatusName } from "@octo/design-tokens";
 import { NotesBlock } from "@/features/NotesBlock";
 import { invoiceChip } from "@/features/ContractStatement";
 import { customerBalance, useStore } from "@/data/store";
+import { sourceName } from "@/features/leads";
 import type { EstimateStatus, JobStatus } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -74,7 +75,7 @@ export default function ClientScreen() {
               {t("client.source")}
             </T>
             <T v="body" w="semibold">
-              {c.source}
+              {sourceName(db, c.sourceId)}
             </T>
           </View>
         </RowView>
