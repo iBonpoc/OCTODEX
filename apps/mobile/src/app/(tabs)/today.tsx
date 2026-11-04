@@ -1,6 +1,6 @@
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import { router } from "expo-router";
-import { space } from "@octo/design-tokens";
+import { font, layout, space } from "@octo/design-tokens";
 import { isToday, useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -12,19 +12,25 @@ import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T, type IconKey } from "@/ui/primitives";
 import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
-function Kpi({ label, cents, icon, hint, onPress }: { label: string; cents: number; icon: IconKey; hint?: string; onPress?: () => void }) {
+function Kpi({ label, cents, icon, hint, onPress, width }: { label: string; cents: number; icon: IconKey; hint?: string; onPress?: () => void; width: number }) {
   const { moneyWhole } = useI18n();
   const { c } = useTheme();
+  const value = moneyWhole(cents);
+  /** three equal tiles; long amounts on narrow phones use the smaller title size so they never wrap or cut */
+  const small = value.length * font.size.title * 0.65 > width - space[3] * 2;
   return (
-    <Card style={{ padding: space[3], flex: 1 }} containerStyle={{ flex: 1, minWidth: 100 }} onPress={onPress} accessibilityLabel={label}>
-      <RowView gap={space[1]}>
-        <Icon name={icon} s={14} color={c.mut} />
-        <T v="caption" tone="mut">
+    <View style={{ width }}>
+    <Card style={{ padding: space[3], flex: 1 }} containerStyle={{ flex: 1 }} onPress={onPress} accessibilityLabel={label}>
+      <RowView gap={space[1]} style={{ alignItems: "flex-start" }}>
+        <View style={{ flexShrink: 0 }}>
+          <Icon name={icon} s={14} color={c.mut} />
+        </View>
+        <T v="caption" tone="mut" style={{ flex: 1 }}>
           {label}
         </T>
       </RowView>
-      <T v="title" tabular numberOfLines={1}>
-        {moneyWhole(cents)}
+      <T v={small ? "heading" : "title"} tabular numberOfLines={1}>
+        {value}
       </T>
       {hint ? (
         <T v="micro" tone="mut">
@@ -32,6 +38,7 @@ function Kpi({ label, cents, icon, hint, onPress }: { label: string; cents: numb
         </T>
       ) : null}
     </Card>
+    </View>
   );
 }
 
@@ -45,12 +52,14 @@ export default function Today() {
   const awaiting = db.invoices.reduce((s, i) => s + (i.totalCents - i.paidCents), 0);
   const attention = buildAttention(db);
   const techs = db.members.filter((m) => m.roles.includes("tech"));
+  const { width: screenW } = useWindowDimensions();
+  const tileW = Math.floor((Math.min(screenW, layout.contentMax) - space[4] * 2 - space[2] * 2) / 3);
   return (
     <Screen title={t("today.title")} help={t("help.today")} hintKey="today" subtitle={day(new Date().toISOString())}>
-      <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[3] }}>
-        <Kpi label={t("today.signed")} cents={signed} icon="signature" />
-        <Kpi label={t("today.received")} cents={received} icon="wallet" onPress={() => router.push("/money")} />
-        <Kpi label={t("today.awaiting")} cents={awaiting} icon="invoice" onPress={() => router.push("/money")} />
+      <View style={{ flexDirection: "row", gap: space[2] }}>
+        <Kpi label={t("today.signed")} cents={signed} icon="signature"  width={tileW} />
+        <Kpi label={t("today.received")} cents={received} icon="wallet" onPress={() => router.push("/money")}  width={tileW} />
+        <Kpi label={t("today.awaiting")} cents={awaiting} icon="invoice" onPress={() => router.push("/money")}  width={tileW} />
       </View>
       <NoticesCard />
       <Grid>
