@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { router } from "expo-router";
-import { space, type StatusName } from "@octo/design-tokens";
+import { component, space, type StatusName } from "@octo/design-tokens";
 import { visitContext, useStore } from "@/data/store";
 import type { DB, Visit, VisitStep } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
@@ -71,7 +71,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
       </RowView>
       {showTech ? (
         <RowView>
-          {tech ? <Avatar initials={tech.initials} s={28} sub={tech.kind === "sub"} /> : null}
+          {tech ? <Avatar initials={tech.initials} s={component.avatar.sm} sub={tech.kind === "sub"} /> : null}
           <T v="caption" tone="mut">
             {tech ? tech.name : t("plan.unassigned")}
           </T>

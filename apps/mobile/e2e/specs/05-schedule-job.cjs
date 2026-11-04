@@ -14,6 +14,7 @@ exports.run = async (h) => {
   h.expect(v && v.techId === "m-ivan", "visit with the tech");
   h.expect(db.jobs.find((j) => j.id === job.id).status === "scheduled", "job scheduled");
   await h.go("/plan");
-  await h.page.getByRole("radiogroup").first().getByRole("radio").nth(3).click(); await h.page.waitForTimeout(400);
+  for (let i = 0; i < 3; i++) await h.page.getByRole("button", { name: "Вперёд" }).last().click();
+  await h.page.waitForTimeout(400);
   await h.expectText(/Carpet, railing, bulb, haul-away/, "on the plan that day");
 };

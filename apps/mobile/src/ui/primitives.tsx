@@ -115,7 +115,7 @@ export function Press({
         rest.onPressOut?.(e);
       }}
     >
-      <Animated.View style={[a, style, disabled ? { opacity: 0.45 } : null]}>{children}</Animated.View>
+      <Animated.View style={[a, style, disabled ? { opacity: component.dimOpacity } : null]}>{children}</Animated.View>
     </Pressable>
   );
 }
