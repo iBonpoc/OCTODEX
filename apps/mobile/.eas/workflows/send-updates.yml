@@ -11,3 +11,9 @@ jobs:
     type: update
     params:
       channel: preview
+
+  deploy_web:
+    name: Deploy web app (Expo Hosting, production)
+    type: deploy
+    params:
+      prod: true
