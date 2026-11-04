@@ -72,7 +72,6 @@ export default function More() {
         {role === "director" ? <ItemCard title={t("plan.title")} subtitle={t("menu.planHint")} left={<Icon name="calendar" />} onPress={() => router.push("/plan")} /> : null}
         {role === "tech" ? <ItemCard title={t("sales.estimates")} left={<Icon name="invoice" />} onPress={() => router.push("/estimates")} /> : null}
         {role !== "tech" ? <ItemCard title={t("more.money")} subtitle={t("menu.moneyHint")} left={<Icon name="wallet" />} onPress={() => router.push("/money")} /> : null}
-        <ItemCard title={t("menu.expense")} left={<Icon name="dollar" />} onPress={() => router.push("/expense/new")} />
         <ItemCard title={t("more.catalog")} left={<Icon name="note" />} onPress={() => router.push("/catalog")} />
       </MenuSection>
       {role === "director" ? (
