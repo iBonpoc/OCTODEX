@@ -166,9 +166,31 @@ export interface Lead {
   wonVia?: "approval" | "deposit" | "manual";
   lostReason?: LostReason;
   lostReasonText?: string;
-  /** last change by the contractor (for "no movement 14 / 30 days") */
+  /** last change by the contractor */
   lastActivityAt?: string;
+  /** L-0001 — the server assigns it; a new lead made offline gets a provisional one */
+  number?: string;
+  /** owner's gut feeling after talking (docs/14 Р9) */
+  interest?: LeadInterest;
+  /** "call me in 3 months": hidden from open lists until this date; not a status (Р10) */
+  snoozedUntil?: string;
+  snoozeReason?: string;
+  /** unanswered calls in a row — reset by a real conversation (Р13) */
+  callAttempts?: number;
+  /** our last call / SMS / email / marketplace reply */
+  lastOutboundAt?: string;
+  /** the client's last message (filled once inbound messages arrive) */
+  lastInboundAt?: string;
+  /** "Remind" was sent — starts the "lost or wait?" countdown */
+  remindedAt?: string;
+  /** "wait more" answer to "lost or wait?" — ask again after this date */
+  askAgainAt?: string;
+  archivedAt?: string;
 }
+export const LEAD_INTERESTS = ["hot", "warm", "cold"] as const;
+export type LeadInterest = (typeof LEAD_INTERESTS)[number];
+/** what happened on a call from the lead card */
+export type CallOutcome = "answered" | "no_answer" | "voicemail";
 
 /** A to-do with a date on a lead, client, job or estimate ("next step"). */
 export interface Task {
@@ -324,6 +346,8 @@ export interface Company {
   insurance: { cglCarrier?: string; cglPolicy?: string; wcCarrier?: string; wcPolicy?: string; wcExempt?: boolean };
   /** where the client sends a cancellation (CA 3-day right) */
   cancelEmail?: string;
+  /** lead thresholds set by the company (features/leadSettings.ts fills the gaps with defaults) */
+  leadSettings?: Partial<import("@/features/leadSettings").LeadSettings>;
   estimate: { validDays: number; depositBps: number | null; terms?: string };
   payment: { zelle?: string; checkPayableTo?: string };
   licenses: CompanyLicense[];

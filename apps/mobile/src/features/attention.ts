@@ -1,10 +1,11 @@
 import { timing, type StatusName } from "@octo/design-tokens";
 import { daysSince, isOverdue, isToday, minutesSince, visitContext } from "@/data/selectors";
-import type { DB, ID } from "@/data/types";
-import { LEAD_CLOSE_DAYS, LEAD_FOLLOW_UP_DAYS, leadIdleDays } from "./leads";
+import type { DB, ID, Role } from "@/data/types";
+import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
+import { leadSettingsOf } from "./leadSettings";
 import type { DictKey } from "@/i18n";
 
-export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle";
+export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -21,27 +22,30 @@ export interface AttentionItem {
 }
 
 /** "Требует внимания" / triage queue: everything that needs a human decision now, most urgent first. */
-export function buildAttention(db: DB): AttentionItem[] {
+export function buildAttention(db: DB, role: Role = "director"): AttentionItem[] {
   const out: AttentionItem[] = [];
+  // Leads by "whose turn" (docs/14-leads-spec.md §3.2, §7.4): reply · remind · lost or wait? · no step · back from snooze.
+  const st = leadSettingsOf(db.company);
   for (const l of db.leads) {
-    if (l.status !== "new") continue;
-    const m = minutesSince(l.receivedAt);
-    out.push({
-      id: `lead-${l.id}`, kind: "lead", refId: l.id, name: l.name, label: "att.lead", params: { m, name: l.name, d: 0 }, chip: "inbox.waiting",
-      status: m >= timing.leadReplyBadMin ? "bad" : m >= timing.leadReplyWarnMin ? "warn" : "info",
-      score: 1000 + m,
-    });
-  }
-  // Open lead without movement: 14 days → follow up, 30 days → offer to close (docs/13 §3).
-  for (const l of db.leads) {
-    if (l.status === "new" || l.status === "won" || l.status === "lost") continue;
-    const d = leadIdleDays(l);
-    if (d < LEAD_FOLLOW_UP_DAYS) continue;
-    const close = d >= LEAD_CLOSE_DAYS;
-    out.push({
-      id: `idle-${l.id}`, kind: "leadIdle", refId: l.id, name: l.name, label: close ? "att.leadClose" : "att.leadIdle", params: { d, name: l.name },
-      chip: "att.noReplyDays", status: close ? "bad" : "warn", score: 600 + d,
-    });
+    if (!canSeeLead(role, db.me, l)) continue;
+    const turn = leadTurn(db, l, st);
+    if (turn.kind === "reply") {
+      const m = turn.minutes;
+      out.push({
+        id: `lead-${l.id}`, kind: "lead", refId: l.id, name: l.name, label: "att.lead", params: { m, name: l.name, d: 0 }, chip: "inbox.waiting",
+        status: turn.status, score: 1000 + m,
+      });
+    } else if (turn.kind === "wait" && turn.action !== "none") {
+      const lost = turn.action === "lostOrWait";
+      out.push({
+        id: `idle-${l.id}`, kind: "leadIdle", refId: l.id, name: l.name, label: lost ? "att.leadLostOrWait" : "att.leadRemind", params: { d: turn.days, name: l.name },
+        chip: "att.noReplyDays", status: turn.status, score: (lost ? 640 : 620) + turn.days,
+      });
+    } else if (turn.kind === "noStep") {
+      out.push({ id: `nostep-${l.id}`, kind: "leadNoStep", refId: l.id, name: l.name, label: "att.leadNoStep", params: { name: l.name }, chip: "lead.noNextStepShort", status: "warn", score: 610 });
+    } else if (isBackFromSnooze(l)) {
+      out.push({ id: `back-${l.id}`, kind: "leadBack", refId: l.id, name: l.name, label: "att.leadBack", params: { name: l.name }, chip: "lead.backChip", status: "info", score: 630 });
+    }
   }
   for (const v of db.visits) {
     if (!isToday(v.start)) continue;

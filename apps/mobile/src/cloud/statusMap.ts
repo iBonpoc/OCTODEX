@@ -5,6 +5,17 @@
  */
 import type { EstimateStatus, JobStatus, LeadStatus } from "@/data/types";
 
+/** app lead status → public.leads.status (what the app writes) */
+export const leadStatusToDb: Record<LeadStatus, string> = {
+  new: "new",
+  replied: "contacted",
+  booked: "inspection_scheduled",
+  estimate_sent: "estimate_sent",
+  won: "won",
+  lost: "lost",
+  declined: "declined",
+};
+
 export const jobStatus: Record<string, JobStatus> = {
   draft: "estimate",
   scheduled: "scheduled",

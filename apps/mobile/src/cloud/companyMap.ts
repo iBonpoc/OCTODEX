@@ -30,6 +30,7 @@ export function companyFromDb(r: Row, ein: string | undefined, licenses: Row[], 
     brand: { logo: brand.logo, color: brand.color },
     insurance: contract.insurance ?? {},
     cancelEmail: contract.cancel_email,
+    leadSettings: (r.lead_settings as Company["leadSettings"] | null) ?? undefined,
     estimate: { validDays: est.valid_days ?? 30, depositBps: est.deposit_bps === undefined ? 1000 : est.deposit_bps, terms: est.terms },
     payment: { zelle: pay.zelle, checkPayableTo: pay.check_payable_to },
     licenses: licenses.map(licenseFromDb),
@@ -67,6 +68,7 @@ export function companyToDb(c: Company, stored: Row) {
     estimate_settings: { ...((stored.estimate_settings as Row) ?? {}), valid_days: c.estimate.validDays, deposit_bps: c.estimate.depositBps, terms: n(c.estimate.terms) },
     payment_settings: { ...((stored.payment_settings as Row) ?? {}), zelle: n(c.payment.zelle), check_payable_to: n(c.payment.checkPayableTo) },
     onboarding_state: { ...((stored.onboarding_state as Row) ?? {}), skipped: c.skipped },
+    lead_settings: { ...((stored.lead_settings as Row) ?? {}), ...(c.leadSettings ?? {}) },
   };
 }
 

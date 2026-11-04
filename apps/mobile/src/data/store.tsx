@@ -13,10 +13,10 @@ import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { applyOp, PermanentError, type Op, type OutboxItem } from "@/cloud/ops";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
+import { leadStatusToDb } from "@/cloud/statusMap";
 
 /** app lead status → public.leads.status */
-const dbStatus = (s: LeadStatus): string =>
-  ({ new: "new", replied: "contacted", booked: "inspection_scheduled", estimate_sent: "estimate_sent", won: "won", lost: "lost", declined: "declined" })[s];
+const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
@@ -47,6 +47,8 @@ import {
   type Task,
   type Source,
   type LeadStatus,
+  type CallOutcome,
+  type LeadInterest,
 } from "./types";
 
 type Undo = () => void;
@@ -77,6 +79,16 @@ interface StoreCtx {
   replyLead: (id: ID) => Undo;
   /** call / SMS / email / marketplace from the card: history line + first response + new → in touch */
   touchLead: (id: ID, kind: "call" | "sms" | "email" | "marketplace" | "reply") => Undo;
+  /** after a call from the card: answered = in touch; no answer / voicemail = one more attempt, the reply timer keeps going */
+  callResult: (id: ID, outcome: CallOutcome) => Undo;
+  setLeadInterest: (id: ID, interest: LeadInterest | undefined) => Undo;
+  /** "call me in 3 months": hidden until the date, keeps its funnel status */
+  snoozeLead: (id: ID, until: string, reason?: string) => Undo;
+  unsnoozeLead: (id: ID) => Undo;
+  /** a reminder went to the client: starts the "lost or wait?" countdown */
+  markReminded: (id: ID) => Undo;
+  /** answer "wait" to "lost or wait?": ask again in N days */
+  waitMore: (id: ID, days: number) => Undo;
   updateLead: (id: ID, patch: LeadPatch) => Undo;
   /** lost = the client decided, declined = we decided; reason required ("other" needs text) */
   closeLead: (id: ID, close: "lost" | "declined", reason: LostReason, text?: string) => Undo;
@@ -354,27 +366,40 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? outbox.map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
-  const touchLead = (id: ID, kind: "call" | "sms" | "email" | "marketplace" | "reply"): Undo => {
+  const touchLead = (id: ID, kind: "call" | "sms" | "email" | "marketplace" | "reply", outcome?: CallOutcome): Undo => {
     const activityId = uid();
     const at = new Date().toISOString();
+    const missed = kind === "call" && (outcome === "no_answer" || outcome === "voicemail");
     return mutate(
       "lead.touch",
       (d) => {
         const l = d.leads.find((x) => x.id === id);
-        const toReplied = l?.status === "new";
+        const toReplied = l?.status === "new" && !missed;
         return {
           ...d,
           leads: d.leads.map((x) =>
-            x.id === id ? { ...x, firstResponseAt: x.firstResponseAt ?? at, status: toReplied ? "replied" : x.status, lastActivityAt: at } : x,
+            x.id !== id ? x
+            : missed ? { ...x, callAttempts: (x.callAttempts ?? 0) + 1, lastOutboundAt: at, lastActivityAt: at }
+            : { ...x, firstResponseAt: x.firstResponseAt ?? at, status: toReplied ? "replied" : x.status, callAttempts: 0, lastOutboundAt: at, lastActivityAt: at },
           ),
           activities: [
-            { id: activityId, subjectType: "lead", subjectId: id, kind, at, actorId: d.me },
+            { id: activityId, subjectType: "lead", subjectId: id, kind, at, actorId: d.me, ...(outcome ? { meta: { outcome } } : {}) },
             ...(toReplied ? [{ id: uid(), subjectType: "lead" as const, subjectId: id, kind: "status" as const, meta: { from: "new", to: "replied" }, at, actorId: d.me }] : []),
             ...d.activities,
           ],
         };
       },
-      { k: "lead.touch", activityId, leadId: id, kind, at },
+      { k: "lead.touch", activityId, leadId: id, kind, at, ...(outcome ? { outcome } : {}) },
+    );
+  };
+
+  /** a plain field change on a lead (same path as "edit lead") */
+  const patchLead = (id: ID, patch: LeadPatch): Undo => {
+    const l0 = dbRef.current.leads.find((x) => x.id === id);
+    return mutate(
+      "lead.update",
+      (d) => ({ ...d, leads: d.leads.map((x) => (x.id === id ? { ...x, ...patch, lastActivityAt: new Date().toISOString() } : x)) }),
+      { k: "lead.update", id, cols: leadCols(patch, l0) },
     );
   };
 
@@ -465,6 +490,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       replyLead: (id) => touchLead(id, "reply"),
       touchLead: (id, kind) => touchLead(id, kind),
+      callResult: (id, outcome) => touchLead(id, "call", outcome),
+      setLeadInterest: (id, interest) => patchLead(id, { interest }),
+      snoozeLead: (id, until, reason) => patchLead(id, { snoozedUntil: until, snoozeReason: reason?.trim() || undefined }),
+      unsnoozeLead: (id) => patchLead(id, { snoozedUntil: undefined, snoozeReason: undefined }),
+      markReminded: (id) => patchLead(id, { remindedAt: new Date().toISOString(), askAgainAt: undefined }),
+      waitMore: (id, days) => patchLead(id, { askAgainAt: new Date(Date.now() + days * 86_400_000).toISOString(), remindedAt: new Date().toISOString() }),
       updateLead: (id, patch) => {
         const l0 = dbRef.current.leads.find((x) => x.id === id);
         return mutate(
@@ -589,8 +620,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const d0 = dbRef.current;
         // new leads go to the owner by default (founder 04.11); the creator is remembered (a tech keeps seeing his lead)
         const owner = d0.members.find((m) => m.roles.includes("director"))?.id ?? d0.me;
-        const full: Lead = { assigneeId: owner, createdBy: d0.me, ...lead, id, status: "new", receivedAt: new Date().toISOString() };
-        const { name: _n, phone: _p, city: _c, address: _a, sourceId: _s, message: _m, ...rest } = full;
+        // provisional number for the screen; the server assigns the real one (it ignores what the app sends)
+        const last = Math.max(0, ...d0.leads.map((x) => Number(/^L-(\d+)$/.exec(x.number ?? "")?.[1] ?? 0)));
+        const number = `L-${String(last + 1).padStart(4, "0")}`;
+        const full: Lead = { assigneeId: owner, createdBy: d0.me, ...lead, id, number, status: "new", receivedAt: new Date().toISOString() };
+        const { name: _n, phone: _p, city: _c, address: _a, sourceId: _s, message: _m, number: _no, ...rest } = full;
         const undo = mutate("lead.add", (d) => ({ ...d, leads: [full, ...d.leads] }), {
           k: "lead.add", id, name: full.name, phone: full.phone, city: full.city, address: full.address, sourceId: full.sourceId, message: full.message,
           costCents: full.costCents, cols: leadCols(rest as LeadPatch, full),

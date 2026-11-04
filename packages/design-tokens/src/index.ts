@@ -265,7 +265,8 @@ export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close
 };
 
 /** Business timing rules from HANDOFF: estimate without reply 2–4 days → warn, 5+ → bad. */
-export const timing = { estimateWarnDays: 2, estimateBadDays: 5, leadReplyWarnMin: 5, leadReplyBadMin: 15 } as const;
+/** Estimate follow-up thresholds. Lead thresholds are company settings (apps/mobile/src/features/leadSettings.ts), not tokens. */
+export const timing = { estimateWarnDays: 2, estimateBadDays: 5 } as const;
 
 export const tokens = { font, space, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print } as const;
 export type Tokens = typeof tokens;

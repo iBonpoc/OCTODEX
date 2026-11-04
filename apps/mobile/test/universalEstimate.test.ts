@@ -49,13 +49,16 @@ describe("signed estimate waits for a date", () => {
 });
 
 describe("lead funnel", () => {
-  it("open lead idle ≥ 14 days asks to follow up; ≥ 30 days asks to close", () => {
+  it("lead attention follows whose turn: no step → remind → lost or wait; closed leads leave", () => {
     const db = makeSeed();
-    const idle = buildAttention(db).find((a) => a.kind === "leadIdle" && a.refId === "l5");
-    expect(idle?.status).toBe("warn");
     const l5 = db.leads.find((l) => l.id === "l5")!;
-    l5.lastActivityAt = new Date(Date.now() - 31 * 86_400_000).toISOString();
-    expect(buildAttention(db).find((a) => a.refId === "l5")?.status).toBe("bad");
+    l5.status = "estimate_sent";
+    db.tasks = db.tasks.filter((t) => t.subjectId !== "l5");
+    db.estimates = db.estimates.map((e) => (e.leadId === "l5" ? { ...e, sentAt: new Date(Date.now() - 4 * 86_400_000).toISOString() } : e));
+    l5.lastOutboundAt = new Date(Date.now() - 4 * 86_400_000).toISOString();
+    expect(buildAttention(db).find((a) => a.refId === "l5")?.label).toBe("att.leadRemind");
+    l5.remindedAt = new Date(Date.now() - 15 * 86_400_000).toISOString();
+    expect(buildAttention(db).find((a) => a.refId === "l5")?.label).toBe("att.leadLostOrWait");
     l5.status = "won";
     expect(buildAttention(db).some((a) => a.refId === "l5")).toBe(false);
   });
