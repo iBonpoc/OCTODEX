@@ -1,9 +1,15 @@
 {
   "name": "octo",
   "private": true,
-  "workspaces": ["apps/*", "packages/*"],
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
     "test": "npm test --workspaces --if-present",
-    "typecheck": "npm run typecheck --workspaces --if-present"
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "check": "npm run typecheck && npm test && bash supabase/tests/run.sh",
+    "check:e2e": "cd apps/mobile && node e2e/run.cjs",
+    "check:all": "npm run check && npm run check:e2e"
   }
 }

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { space } from "@octo/design-tokens";
+import { space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import type { EstimateDoc } from "@/data/types";
@@ -129,7 +129,7 @@ export default function EstimateBuilder() {
             <Card>
               <Segmented full value={option.id} onChange={(id) => setCur(doc.options.findIndex((o) => o.id === id))} items={doc.options.map((o) => ({ key: o.id, label: o.name || "—" }))} />
               <TextField value={option.name} onChangeText={(v) => setOption((o) => ({ ...o, name: v }))} placeholder={t("ue.optionName")} />
-              <RowView style={{ minHeight: 44 }}>
+              <RowView style={{ minHeight: size.hitMin }}>
                 <T v="body" style={{ flex: 1 }}>
                   {t("ue.recommended")}
                 </T>
@@ -176,7 +176,7 @@ export default function EstimateBuilder() {
             <Divider />
             <SumRow label={t("ue.tax")} value={totals.tax ? `${money(totals.tax)} · ${taxValue}` : taxValue} onPress={() => setSetting("tax")} />
             <Divider />
-            <RowView style={{ justifyContent: "space-between", minHeight: 44 }}>
+            <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
               <T v="title">{t("ue.total")}</T>
               <T v="display" tabular>
                 {money(totals.total)}
@@ -251,7 +251,7 @@ export default function EstimateBuilder() {
           ) : null}
           {setting === "tax" ? (
             <>
-              <RowView style={{ minHeight: 44 }}>
+              <RowView style={{ minHeight: size.hitMin }}>
                 <T v="body" style={{ flex: 1 }}>
                   {t("ue.taxOn")}
                 </T>
@@ -266,7 +266,7 @@ export default function EstimateBuilder() {
                     <PctField bps={s.tax.rateBps} onChange={(b) => setSettings({ tax: { ...s.tax, rateBps: Math.min(b, 10000) } })} />
                   </Labeled>
                   {LINE_GROUPS.map((g: LineGroup) => (
-                    <RowView key={g} style={{ minHeight: 44 }}>
+                    <RowView key={g} style={{ minHeight: size.hitMin }}>
                       <T v="body" style={{ flex: 1 }}>
                         {t(`ue.group.${g}` as DictKey)}
                       </T>
@@ -324,7 +324,7 @@ export default function EstimateBuilder() {
 
 function SumRow({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) {
   const row = (
-    <RowView style={{ justifyContent: "space-between", minHeight: 44 }}>
+    <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
       <T v="body" tone="mut">
         {label}
       </T>

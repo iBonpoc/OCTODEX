@@ -3,7 +3,7 @@
  * option cards (when > 1, with "Recommended"), lines by group, add-on switches, totals with tax line and deposit.
  */
 import { View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { space, component, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, type CustomOption } from "@octo/estimating-engine";
 import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
@@ -50,7 +50,7 @@ export function EstimateView({
                 key={o.id}
                 onPress={readOnly || !onOption ? undefined : () => onOption(o.id)}
                 accessibilityLabel={o.name}
-                style={sel ? { borderColor: c.acc, borderWidth: 2 } : undefined}
+                style={sel ? { borderColor: c.acc, borderWidth: component.selectedBorder } : undefined}
               >
                 <RowView style={{ justifyContent: "space-between" }}>
                   <T v="heading" style={{ flex: 1 }}>
@@ -87,7 +87,7 @@ export function EstimateView({
               {idx.map((i) => {
                 const l = act[i]!;
                 return (
-                  <RowView key={l.id} style={{ justifyContent: "space-between", alignItems: "flex-start", minHeight: 32 }}>
+                  <RowView key={l.id} style={{ justifyContent: "space-between", alignItems: "flex-start", minHeight: component.rowCompact }}>
                     <View style={{ flex: 1 }}>
                       <T v="body">{l.name}</T>
                       <T v="caption" tone="mut" tabular>
@@ -112,7 +112,7 @@ export function EstimateView({
             </T>
             {act.map((l, i) =>
               l.optional ? (
-                <RowView key={l.id} style={{ minHeight: 44 }}>
+                <RowView key={l.id} style={{ minHeight: size.hitMin }}>
                   <View style={{ flex: 1 }}>
                     <T v="body">{l.name}</T>
                     <T v="caption" tone="mut" tabular>

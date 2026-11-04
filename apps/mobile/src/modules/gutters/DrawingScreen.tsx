@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState, type ComponentRef } from "react";
-import { Image, Pressable, View, type GestureResponderEvent, type LayoutChangeEvent } from "react-native";
+import { Image, Pressable, View, type GestureResponderEvent, type LayoutChangeEvent } from "react-native"; // ds-allow: full-canvas tap area for the drawing
 import { router, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as Haptics from "expo-haptics";

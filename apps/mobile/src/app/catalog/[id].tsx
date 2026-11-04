@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { space } from "@octo/design-tokens";
+import { space, component } from "@octo/design-tokens";
 import { catalogCost, catalogPrice } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import type { CatalogItem, CatalogKind } from "@/data/types";
@@ -105,7 +105,7 @@ export default function CatalogItemScreen() {
                   <T v="body" style={{ flex: 1 }} numberOfLines={2}>
                     {sub?.name ?? "—"}
                   </T>
-                  <View style={{ width: 72 }}>
+                  <View style={{ width: component.qtyFieldW }}>
                     <QtyField qty={c.qty} onChange={(q) => set({ components: comps.map((x, j) => (j === i ? { ...x, qty: q } : x)) })} />
                   </View>
                   <IconButton icon="trash" label={t("ue.removeLine")} onPress={() => set({ components: comps.filter((_, j) => j !== i) })} />

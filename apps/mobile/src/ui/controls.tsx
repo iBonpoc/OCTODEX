@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
-import { component, font, motion, radius, space, statusIcon, type StatusName } from "@octo/design-tokens";
+import { component, font, motion, radius, space, statusIcon, type StatusName, size } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T, type IconKey } from "./primitives";
 
@@ -304,7 +304,7 @@ export function Steps({ labels, current }: { labels: string[]; current: number }
           <View key={l} style={{ flex: 1, gap: space[1] }}>
             <View
               style={{
-                height: 4,
+                height: component.stepBar,
                 borderRadius: radius.pill,
                 backgroundColor: done ? c.status.ok.fill : now ? c.acc : c.track,
               }}
@@ -414,12 +414,12 @@ export function Stepper({
     </Press>
   );
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: 44 }} accessibilityLabel={label}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: size.hitMin }} accessibilityLabel={label}>
       <T v="body" style={{ flex: 1 }}>
         {label}
       </T>
       {btn("minus", -step, `${label} −${step}`)}
-      <T v="heading" tabular style={{ minWidth: 56, textAlign: "center" }}>
+      <T v="heading" tabular style={{ minWidth: component.stepperValueW, textAlign: "center" }}>
         {value}
         {unit ? <T v="caption" tone="mut">{` ${unit}`}</T> : null}
       </T>

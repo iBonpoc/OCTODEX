@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { space } from "@octo/design-tokens";
+import { space, component, size } from "@octo/design-tokens";
 import { jobProfit, useStore, visitContext } from "@/data/store";
 import type { PaymentMethod } from "@/data/types";
 import { useI18n } from "@/i18n";
@@ -152,14 +152,14 @@ export default function VisitScreen() {
                   accessibilityRole="checkbox"
                   accessibilityState={{ checked: item.done }}
                   accessibilityLabel={item.label}
-                  style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: 44 }}
+                  style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: size.hitMin }}
                 >
                   <View
                     style={{
-                      width: 22,
-                      height: 22,
-                      borderRadius: 7,
-                      borderWidth: 1.5,
+                      width: component.checkbox.size,
+                      height: component.checkbox.size,
+                      borderRadius: component.checkbox.radius,
+                      borderWidth: component.checkbox.border,
                       borderColor: item.done ? c.status.ok.fill : c.bd,
                       backgroundColor: item.done ? c.status.ok.fill : "transparent",
                       alignItems: "center",

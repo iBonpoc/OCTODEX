@@ -3,7 +3,7 @@ import { View, type StyleProp, type ViewStyle } from "react-native";
 import { GestureDetector, usePanGesture } from "react-native-gesture-handler";
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
-import { motion, radius } from "@octo/design-tokens";
+import { motion, radius, component } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 
 /**
@@ -93,7 +93,7 @@ export function DropZone({ id, children, style }: { id: string; children: ReactN
     <View
       ref={(r) => register(id, r)}
       style={[
-        { borderRadius: radius.card, borderWidth: 2, borderStyle: "dashed", borderColor: "transparent", padding: 2 },
+        { borderRadius: radius.card, borderWidth: component.selectedBorder, borderStyle: "dashed", borderColor: "transparent", padding: component.selectedBorder },
         dragging ? { borderColor: c.bd } : null,
         active ? { borderColor: c.acc, backgroundColor: c.surf } : null,
         { zIndex: dragFrom === id ? 2 : 1 },
@@ -163,11 +163,11 @@ export function Draggable({ id, from, onDrop, children }: { id: string; from: st
     ],
     zIndex: lift.value > 0.01 ? 100 : 0,
     shadowOpacity: 0.35 * lift.value,
-    shadowRadius: 24,
-    shadowOffset: { width: 0, height: 16 },
-    shadowColor: "#000",
+    shadowRadius: c.shadow.radius,
+    shadowOffset: { width: 0, height: component.dragHandle },
+    shadowColor: c.shadow.color,
     borderRadius: radius.card,
-    borderWidth: 2,
+    borderWidth: component.selectedBorder,
     borderColor: lift.value > 0.01 ? c.acc : "transparent",
     // glass is translucent: a lifted card gets the solid page colour so it reads above other cards
     backgroundColor: lift.value > 0.01 ? c.bg : "transparent",

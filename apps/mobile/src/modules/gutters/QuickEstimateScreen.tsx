@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { space } from "@octo/design-tokens";
+import { space, component, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { DEMO_PRICE_BOOK } from "./priceBook";
 import { useI18n } from "@/i18n";
@@ -100,13 +100,13 @@ export default function NewEstimate() {
           <Stepper label={t("est.outCorners")} value={f.outsideCorners} max={40} onChange={(v) => set("outsideCorners", v)} />
           <Stepper label={t("est.inCorners")} value={f.insideCorners} max={40} onChange={(v) => set("insideCorners", v)} />
           <Divider />
-          <RowView style={{ minHeight: 44 }}>
+          <RowView style={{ minHeight: size.hitMin }}>
             <T v="body" style={{ flex: 1 }}>
               {t("est.tearOff")}
             </T>
             <Toggle label={t("est.tearOff")} on={f.tearOff} onChange={(v) => set("tearOff", v)} />
           </RowView>
-          <RowView style={{ minHeight: 44 }}>
+          <RowView style={{ minHeight: size.hitMin }}>
             <T v="body" style={{ flex: 1 }}>
               {t("est.tile")}
             </T>
@@ -122,7 +122,7 @@ export default function NewEstimate() {
               const sel = i === chosen;
               const visible = o.lines.filter((l) => l.clientVisible !== false);
               return (
-                <Card key={o.name} onPress={() => setChosen(i)} accessibilityLabel={o.name} style={sel ? { borderColor: c.acc, borderWidth: 2 } : undefined}>
+                <Card key={o.name} onPress={() => setChosen(i)} accessibilityLabel={o.name} style={sel ? { borderColor: c.acc, borderWidth: component.selectedBorder } : undefined}>
                   <RowView style={{ justifyContent: "space-between" }}>
                     <T v="heading">{o.name}</T>
                     {sel ? <StatusChip status="ok" label={t("est.chosen")} /> : null}

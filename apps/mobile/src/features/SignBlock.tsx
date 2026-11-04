@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { space, size } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { SignaturePad } from "./SignaturePad";
 import { TextField, Toggle } from "@/ui/controls";
@@ -16,7 +16,7 @@ export function SignBlock({ onSign, defaultName = "", busy }: { onSign: (name: s
   return (
     <View style={{ gap: space[3] }}>
       <TextField value={name} onChangeText={setName} placeholder={t("portal.name")} icon="user" />
-      <RowView style={{ minHeight: 44, alignItems: "center" }}>
+      <RowView style={{ minHeight: size.hitMin, alignItems: "center" }}>
         <T v="caption" style={{ flex: 1 }}>
           {t("portal.consent")}
         </T>

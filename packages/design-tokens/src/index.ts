@@ -95,6 +95,36 @@ export const component = {
   /** company logo preview (settings, client page, PDF) */
   logo: 96,
   stepDot: 10,
+  /* ---- app-only tokens (not in the DS css yet; same style, keep here so components never use raw numbers) ---- */
+  /** company logo stored size, px (image processing) */
+  logoPx: 256,
+  /** compact row (lines of an estimate, small lists) */
+  rowCompact: 32,
+  /** signature pad, receipt photo */
+  mediaH: 160,
+  /** scroll area inside a bottom sheet: list / form */
+  sheetListMax: 380,
+  sheetFormMax: 560,
+  /** narrow numeric field (qty in a kit) */
+  qtyFieldW: 72,
+  /** value column of a stepper */
+  stepperValueW: 56,
+  /** sheet grabber */
+  grabber: { w: 36, h: 4 },
+  /** progress bar of Steps */
+  stepBar: 4,
+  /** colored status edge on cards */
+  statusEdge: 3,
+  /** selected card / drop target border */
+  selectedBorder: 2,
+  /** hairline border */
+  hairline: 1,
+  /** drag preview handle */
+  dragHandle: 16,
+  /** checklist checkbox */
+  checkbox: { size: 22, radius: 7, border: 1.5 },
+  /** gap between photo thumbnails */
+  photoGap: 2,
 } as const;
 
 /* ---------- breakpoints (HANDOFF: 390 / 820 / 1280) ---------- */

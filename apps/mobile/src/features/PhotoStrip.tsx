@@ -1,6 +1,6 @@
 import { Image, ScrollView, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { radius, space } from "@octo/design-tokens";
+import { radius, space, component } from "@octo/design-tokens";
 import type { Photo } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -37,7 +37,7 @@ export function PhotoStrip({ photos, onAdd }: { photos: Photo[]; onAdd: (uri?: s
           backgroundColor: c.in,
           alignItems: "center",
           justifyContent: "center",
-          gap: 2,
+          gap: component.photoGap,
         }}
       >
         <Icon name="camera" s={20} />

@@ -71,7 +71,7 @@ export function Card({
   };
   const edge =
     status && status !== "neutral" ? (
-      <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: 3, backgroundColor: c.status[status].fill }} />
+      <View style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: component.statusEdge, backgroundColor: c.status[status].fill }} />
     ) : null;
   if (onPress)
     return (

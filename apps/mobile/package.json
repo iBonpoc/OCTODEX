@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.3.0",
+    "playwright": "1.63.0",
     "typescript": "~6.0.3",
     "vitest": "2.1.8"
   },
@@ -50,7 +51,8 @@
     "export:web": "expo export --platform web",
     "preview:web": "expo export --platform web && python3 scripts/prepare-web-preview.py dist ../../.preview-web",
     "test": "vitest run",
-    "publish:expo-go": "npx eas-cli@latest update --channel preview --non-interactive --message"
+    "publish:expo-go": "npx eas-cli@latest update --channel preview --non-interactive --message",
+    "e2e": "node e2e/run.cjs"
   },
   "private": true
 }

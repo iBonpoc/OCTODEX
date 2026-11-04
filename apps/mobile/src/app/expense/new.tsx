@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Image, View } from "react-native";
 import { router } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
-import { radius, space } from "@octo/design-tokens";
+import { radius, space, component } from "@octo/design-tokens";
 import { isToday, useStore, visitContext } from "@/data/store";
 import type { ExpenseCategory } from "@/data/types";
 import { useI18n } from "@/i18n";
@@ -41,7 +41,7 @@ export default function NewExpense() {
       <Card>
         <View style={{ gap: space[3] }}>
           <Button label={t("exp.photo")} icon="camera" variant="secondary" onPress={pick} />
-          {photo ? <Image source={{ uri: photo }} style={{ width: "100%", height: 160, borderRadius: radius.inner }} resizeMode="cover" /> : null}
+          {photo ? <Image source={{ uri: photo }} style={{ width: "100%", height: component.mediaH, borderRadius: radius.inner }} resizeMode="cover" /> : null}
           <T v="caption" tone="mut">
             {t("exp.aiNote")}
           </T>
