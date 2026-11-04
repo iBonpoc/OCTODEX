@@ -2,11 +2,13 @@ import { useState } from "react";
 import { timing, type StatusName } from "@octo/design-tokens";
 import { minutesSince, useStore } from "@/data/store";
 import type { Lead, LeadStatus } from "@/data/types";
-import { leadStatusView as statusOf } from "@/features/leads";
+import { isOpenLead, leadStatusView as statusOf } from "@/features/leads";
+import { EstimatesBoard, InvoicesBoard } from "@/features/boards";
+import { usePersistentState } from "@/data/persist";
 import { router } from "expo-router";
 import { useI18n } from "@/i18n";
 import { ReplySheet, useTick } from "@/features/sheets";
-import { Button, StatusChip } from "@/ui/controls";
+import { Button, ChoiceChips, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, Grid, RowView, Screen } from "@/ui/surfaces";
@@ -17,14 +19,49 @@ function waitStatus(m: number): StatusName {
 }
 
 /** All requests in one place, with a "waiting N min" timer: whoever replies first wins the job. */
-export default function Inbox() {
+/** "Sales" tab: leads → estimates → invoices, each list as cards with filters. */
+export default function Sales() {
+  const { t } = useI18n();
+  const [tab, setTab] = usePersistentState<"leads" | "estimates" | "invoices">("octo.salesTab.v1", "leads");
+  const { db } = useStore();
+  const newLeads = db.leads.filter((l) => l.status === "new").length;
+  return (
+    <Screen
+      title={t("sales.title")}
+      help={t("help.inbox")}
+      hintKey="inbox"
+      right={
+        tab === "leads" ? (
+          <Button label={t("quick.lead")} icon="plus" size="sm" onPress={() => router.push("/lead/new")} />
+        ) : tab === "estimates" ? (
+          <Button label={t("est.new")} icon="plus" size="sm" onPress={() => router.push("/estimate/new")} />
+        ) : undefined
+      }
+    >
+      <Segmented
+        full
+        value={tab}
+        onChange={setTab}
+        items={[
+          { key: "leads", label: newLeads ? `${t("sales.leads")} · ${newLeads}` : t("sales.leads") },
+          { key: "estimates", label: t("sales.estimates") },
+          { key: "invoices", label: t("sales.invoices") },
+        ]}
+      />
+      {tab === "leads" ? <LeadsBoard /> : tab === "estimates" ? <EstimatesBoard /> : <InvoicesBoard />}
+    </Screen>
+  );
+}
+
+function LeadsBoard() {
   useTick();
   const { t } = useI18n();
   const { db, bookLead, online } = useStore();
   const toast = useToast();
   const [reply, setReply] = useState<string | null>(null);
+  const [f, setF] = useState<"open" | "won" | "lost">("open");
   const order: LeadStatus[] = ["new", "replied", "booked", "estimate_sent", "won", "lost"];
-  const leads = [...db.leads].sort(
+  const leads = [...db.leads].filter((l) => (f === "open" ? isOpenLead(l) : l.status === f)).sort(
     (a, b) => order.indexOf(a.status) - order.indexOf(b.status) || new Date(a.receivedAt).getTime() - new Date(b.receivedAt).getTime(),
   );
   const card = (l: Lead) => {
@@ -59,10 +96,20 @@ export default function Inbox() {
       </Card>
     );
   };
+  const n = (s: "won" | "lost") => db.leads.filter((l) => l.status === s).length;
   return (
-    <Screen title={t("inbox.title")} help={t("help.inbox")} hintKey="inbox">
+    <>
+      <ChoiceChips
+        value={f}
+        onChange={setF}
+        items={[
+          { key: "open", label: `${t("board.open")} · ${db.leads.filter(isOpenLead).length}` },
+          { key: "won", label: `${t("board.won")} · ${n("won")}` },
+          { key: "lost", label: `${t("board.lost")} · ${n("lost")}` },
+        ]}
+      />
       {leads.length === 0 ? <Empty icon="inbox" title={t("inbox.empty")} hint={t("inbox.emptyHint")} /> : <Grid>{leads.map(card)}</Grid>}
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />
-    </Screen>
+    </>
   );
 }

@@ -701,5 +701,26 @@ begin
 end $$;
 \echo 'T11 contract → invoices → receipts ok'
 
+-- ---------------------------------------------------------------- T12: simulated card payment on the client page
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb; v_inv uuid;
+begin
+  r := public.portal_estimate('tok_inv_0123456789abcdef');
+  perform tst.ok(jsonb_array_length(r -> 'invoices') = 2, 'client page lists the job invoices');
+  select (x ->> 'id')::uuid into v_inv from jsonb_array_elements(r -> 'invoices') x where x ->> 'kind' = 'final';
+  r := public.portal_pay_simulated('tok_inv_0123456789abcdef', v_inv);
+  perform tst.ok((select (x ->> 'paid')::bigint from jsonb_array_elements(r -> 'invoices') x where x ->> 'kind' = 'final') = 306000, 'final invoice paid by simulated card');
+  -- paying again does nothing (balance 0)
+  r := public.portal_pay_simulated('tok_inv_0123456789abcdef', v_inv);
+  perform tst.fails($q$select public.portal_pay_simulated('tok_lead_0123456789abcdef', '00000000-0000-0000-0000-000000000000')$q$, 'foreign invoice');
+end $$;
+reset role;
+do $$ begin
+  perform tst.ok((select count(*) from public.payments where reference = 'stripe-simulated') = 1, 'one simulated payment');
+  perform tst.ok((select receipt_number from public.payments where reference = 'stripe-simulated') like 'RCT-%', 'simulated payment has a receipt');
+end $$;
+\echo 'T12 simulated card payment ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

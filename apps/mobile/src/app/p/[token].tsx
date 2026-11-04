@@ -4,7 +4,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { acceptPortal, fetchPortal, licenseLine, localPortal, type PortalData } from "@/cloud/portal";
+import { acceptPortal, fetchPortal, licenseLine, localPortal, paySimulated, type PortalData } from "@/cloud/portal";
+import { SimulatedCheckout } from "@/features/SimulatedCheckout";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { mainOption, optionTotals, withAddons } from "@/features/estimateDoc";
@@ -12,7 +13,7 @@ import { estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 /**
  * Client page: opened from the SMS / email link in a phone browser, no app and no sign-in.
@@ -28,6 +29,7 @@ export default function ClientEstimatePage() {
   const [remote, setRemote] = useState<PortalData | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [paying, setPaying] = useState<string | null>(null);
   useEffect(() => {
     if (local || !token) return;
     fetchPortal(token)
@@ -74,6 +76,19 @@ export default function ClientEstimatePage() {
       setBusy(false);
     }
   };
+  const payingInv = data.invoices.find((i) => i.id === paying);
+  const paySim = async () => {
+    if (!payingInv) return;
+    try {
+      if (data.source === "local") {
+        store.recordPayment(payingInv.id, payingInv.totalCents - payingInv.paidCents, "card", "stripe-simulated", true);
+      } else {
+        setRemote(await paySimulated(token!, payingInv.id));
+      }
+    } catch (e) {
+      toast.show(t("portal.error", { msg: String((e as Error)?.message ?? e) }));
+    }
+  };
   const pdf = () =>
     saveEstimatePdf(estimateHtml(data, { t, money, day }), `Estimate ${data.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
 
@@ -113,28 +128,38 @@ export default function ClientEstimatePage() {
               <T v="body" tone="mut">
                 {t("portal.thanks", { company: data.company.name || "OCTODEX" })}
               </T>
-              {deposit > 0 ? (
-                data.depositPaid ? (
-                  <StatusChip status="ok" label={t("portal.depositPaid")} />
-                ) : (
-                  <View style={{ gap: space[2] }}>
-                    <T v="caption" tone="mut">
-                      {t("portal.depositDue")}
-                    </T>
-                    <T v="title" tabular>
-                      {money(deposit)}
-                    </T>
-                    {data.source === "local" && data.estimateId ? (
-                      <Button label={t("portal.payTest")} icon="dollar" full onPress={() => store.payDeposit(data.estimateId!, "card", true)} />
-                    ) : (
-                      <T v="caption" tone="mut">
-                        {t("portal.payLater")}
-                      </T>
-                    )}
-                  </View>
-                )
-              ) : null}
             </Card>
+          ) : null}
+          {approved && data.invoices.length ? (
+            <>
+              <SectionTitle title={t("portal.invoices")} />
+              <CardList>
+                {data.invoices.map((inv) => {
+                  const bal = Math.max(0, inv.totalCents - inv.paidCents);
+                  return (
+                    <Card key={inv.id} status={bal === 0 ? "ok" : "warn"}>
+                      <RowView style={{ justifyContent: "space-between" }}>
+                        <T v="body" w="semibold" style={{ flex: 1 }}>
+                          {[inv.number, inv.title].filter(Boolean).join(" · ")}
+                        </T>
+                        <StatusChip status={bal === 0 ? "ok" : "warn"} label={bal === 0 ? t("money.paid") : t("money.awaiting")} />
+                      </RowView>
+                      <T v="title" tabular>
+                        {money(bal === 0 ? inv.totalCents : bal)}
+                      </T>
+                      {bal > 0 ? <Button label={t("pay.payByCard")} icon="wallet" full onPress={() => setPaying(inv.id)} /> : null}
+                    </Card>
+                  );
+                })}
+              </CardList>
+            </>
+          ) : approved && deposit > 0 && !data.depositPaid ? (
+            <T v="caption" tone="mut">
+              {t("portal.payLater")}
+            </T>
+          ) : null}
+          {approved ? (
+            <></>
           ) : (
             <>
               <SectionTitle title={t("portal.sign")} />
@@ -151,6 +176,13 @@ export default function ClientEstimatePage() {
         </T>
       ) : null}
       <Button label={t("portal.pdf")} icon="invoice" variant="secondary" full onPress={pdf} />
+      <SimulatedCheckout
+        visible={!!payingInv}
+        amountCents={payingInv ? payingInv.totalCents - payingInv.paidCents : 0}
+        title={payingInv ? [payingInv.number, payingInv.title].filter(Boolean).join(" · ") : ""}
+        onClose={() => setPaying(null)}
+        onPaid={paySim}
+      />
       {data.company.phone ? (
         <T v="caption" tone="mut">
           {data.company.name} · {data.company.phone}

@@ -73,7 +73,7 @@ interface StoreCtx {
   /** fromClient: paid on the client page → unread notice for the office */
   payDeposit: (id: ID, method: PaymentMethod, fromClient?: boolean) => Undo;
   /** any amount up to the invoice balance; every payment is a receipt */
-  recordPayment: (invoiceId: ID, amountCents: number, method: PaymentMethod, reference?: string) => Undo;
+  recordPayment: (invoiceId: ID, amountCents: number, method: PaymentMethod, reference?: string, fromClient?: boolean) => Undo;
   /** progress (by stage) or final balance invoice for a job */
   issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo;
   /** create or update a universal estimate (draft) */
@@ -92,6 +92,8 @@ interface StoreCtx {
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   readNotices: () => void;
+  /** invite a person (demo: added as pending; cloud: email invites come with the email service) */
+  inviteMember: (m: { name: string; email?: string; phone?: string; roles: Role[]; kind: "employee" | "sub" }) => Undo;
   /** company profile (owner/admin in the cloud) */
   saveCompany: (patch: Partial<Omit<Company, "id" | "licenses" | "contacts">>) => Undo;
   saveLicense: (l: CompanyLicense) => Undo;
@@ -301,6 +303,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       "payment.record",
       (d) => {
         let next = withPayment(d, payment, modeRef.current === "demo");
+        if (fromClient && !est) {
+          next = {
+            ...next,
+            notices: [
+              { id: uid(), kind: "invoice.paid", customer: d.customers.find((c) => c.id === inv.customerId)?.name ?? "", depositCents: amount, totalCents: amount, at: now },
+              ...next.notices,
+            ],
+          };
+        }
         if (est && fullyPaid) {
           next = {
             ...next,
@@ -459,7 +470,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const inv = dbRef.current.invoices.find((i) => i.id === id);
         return inv ? recordPayment(id, inv.totalCents - inv.paidCents, method) : () => {};
       },
-      recordPayment: (invoiceId, amountCents, method, reference) => recordPayment(invoiceId, amountCents, method, reference),
+      recordPayment: (invoiceId, amountCents, method, reference, fromClient) => recordPayment(invoiceId, amountCents, method, reference, fromClient),
       issueInvoice: (jobId, kind, amountCents, title) => {
         const d0 = dbRef.current;
         const job = d0.jobs.find((j) => j.id === jobId);
@@ -701,6 +712,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => (d.company ? { ...d, company: { ...d.company, contacts: d.company.contacts.filter((x) => x.id !== id) } } : d),
           { k: "contact.remove", id },
         ),
+      inviteMember: (m) => {
+        if (modeRef.current !== "demo") return () => {};
+        const initials = m.name.split(/\s+/).map((x) => x[0]).slice(0, 2).join("").toUpperCase() || "?";
+        return mutate("member.invite", (d) => ({ ...d, members: [...d.members, { id: uid(), ...m, initials, pending: true }] }));
+      },
       readNotices: () => {
         const ids = dbRef.current.notices.filter((n) => !n.read).map((n) => n.id);
         if (!ids.length) return;

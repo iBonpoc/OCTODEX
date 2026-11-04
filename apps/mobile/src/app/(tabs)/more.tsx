@@ -12,12 +12,13 @@ import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
 import { useVersionLabel } from "@/features/version";
-import { Card, ListRow, RowView, Screen } from "@/ui/surfaces";
+import { Card, CardList, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 /** Settings for this device: role, theme, language, offline test switch. */
 export default function More() {
   const { t, lang, setLang } = useI18n();
-  const { role, setRole, online, setOnline, resetDemo, mode, companyName, availableRoles, queue, syncError, refresh, loading } = useStore();
+  const { db, role, setRole, online, setOnline, resetDemo, mode, companyName, availableRoles, queue, syncError, refresh, loading } = useStore();
+  const unscheduled = db.jobs.filter((j) => j.status === "unscheduled").length;
   const auth = useAuth();
   const { pref, setPref } = useTheme();
   const toast = useToast();
@@ -66,19 +67,21 @@ export default function More() {
           </>
         )}
       </Card>
-      {role !== "tech" ? (
-        <Card onPress={() => router.push("/money")} accessibilityLabel={t("more.money")}>
-          <ListRow title={t("more.money")} left={<Icon name="wallet" />} />
-        </Card>
-      ) : null}
+      <MenuSection title={t("menu.work")}>
+        <ItemCard title={t("jobs.title")} subtitle={unscheduled ? t("menu.jobsWaiting", { n: unscheduled }) : t("menu.jobsHint")} left={<Icon name="wrench" />} onPress={() => router.push("/jobs")} />
+        {role === "director" ? <ItemCard title={t("plan.title")} subtitle={t("menu.planHint")} left={<Icon name="calendar" />} onPress={() => router.push("/plan")} /> : null}
+        {role === "tech" ? <ItemCard title={t("sales.estimates")} left={<Icon name="invoice" />} onPress={() => router.push("/estimates")} /> : null}
+        {role !== "tech" ? <ItemCard title={t("more.money")} subtitle={t("menu.moneyHint")} left={<Icon name="wallet" />} onPress={() => router.push("/money")} /> : null}
+        <ItemCard title={t("menu.expense")} left={<Icon name="dollar" />} onPress={() => router.push("/expense/new")} />
+        <ItemCard title={t("more.catalog")} left={<Icon name="note" />} onPress={() => router.push("/catalog")} />
+      </MenuSection>
       {role === "director" ? (
-        <Card onPress={() => router.push("/company")} accessibilityLabel={t("co.title")}>
-          <ListRow title={t("co.title")} subtitle={t("co.moreHint")} left={<Icon name="home2" />} />
-        </Card>
+        <MenuSection title={t("menu.company")}>
+          <ItemCard title={t("co.title")} subtitle={t("co.moreHint")} left={<Icon name="home2" />} onPress={() => router.push("/company")} />
+          <ItemCard title={t("team.title")} subtitle={t("menu.teamHint", { n: db.members.length })} left={<Icon name="users" />} onPress={() => router.push("/team")} />
+        </MenuSection>
       ) : null}
-      <Card onPress={() => router.push("/catalog")} accessibilityLabel={t("more.catalog")}>
-        <ListRow title={t("more.catalog")} left={<Icon name="note" />} />
-      </Card>
+      <SectionTitle title={t("menu.app")} />
       <Card>
         <T v="heading">{t("more.role")}</T>
         <Segmented<Role>
@@ -110,6 +113,7 @@ export default function More() {
         <T v="heading">{t("more.language")}</T>
         <Segmented<Lang> full value={lang} onChange={setLang} items={languages.map((l) => ({ key: l.id, label: l.label }))} />
       </Card>
+      <SectionTitle title={t("menu.data")} />
       <Card>
         <T v="heading">{t("more.data")}</T>
         <RowView style={{ justifyContent: "space-between" }}>
@@ -136,5 +140,14 @@ export default function More() {
         </T>
       </View>
     </Screen>
+  );
+}
+
+function MenuSection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <View style={{ gap: space[2] }}>
+      <SectionTitle title={title} />
+      <CardList>{children}</CardList>
+    </View>
   );
 }

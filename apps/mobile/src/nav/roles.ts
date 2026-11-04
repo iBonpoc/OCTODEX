@@ -19,13 +19,13 @@ export const roleNav: Record<Role, NavItem[]> = {
   ],
   dispatcher: [
     { route: "triage", label: "tab.triage", icon: "check" },
-    { route: "inbox", label: "tab.inbox", icon: "inbox" },
+    { route: "inbox", label: "tab.sales", icon: "inbox" },
     { route: "plan", label: "tab.plan", icon: "calendar" },
     { route: "more", label: "tab.more", icon: "more" },
   ],
   director: [
     { route: "today", label: "tab.today", icon: "home" },
-    { route: "inbox", label: "tab.inbox", icon: "inbox" },
+    { route: "inbox", label: "tab.sales", icon: "inbox" },
     { route: "clients", label: "tab.clients", icon: "users" },
     { route: "more", label: "tab.more", icon: "more" },
   ],

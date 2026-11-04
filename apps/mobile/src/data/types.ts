@@ -13,6 +13,10 @@ export interface Member {
   initials: string;
   kind: "employee" | "sub";
   roles: Role[];
+  email?: string;
+  phone?: string;
+  /** invited, has not joined yet */
+  pending?: boolean;
 }
 
 export type LeadSource = "Thumbtack" | "Yelp" | "Google" | "Website" | "Referral";
@@ -175,7 +179,7 @@ export interface CatalogItem {
   placeholder?: boolean;
 }
 
-export type NoticeKind = "estimate.viewed" | "estimate.approved" | "deposit.paid";
+export type NoticeKind = "estimate.viewed" | "estimate.approved" | "deposit.paid" | "invoice.paid";
 export interface Notice {
   id: ID;
   kind: NoticeKind;
