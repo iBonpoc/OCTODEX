@@ -29,9 +29,10 @@ export const SEED_CATALOG: CatalogItem[] = [
   MAT("cat-paint-gal", "Interior paint, 1 gal", "gal", 3800, "Sherwin-Williams", 950, 1500),
   S("cat-faucet", "Replace kitchen faucet", "ea", 18000, "labor"),
   S("cat-outlet", "Replace outlet / switch", "ea", 8500, "labor"),
-  // gutters
-  S("cat-gclean", "Gutter cleaning, 1 story", "LF", 150),
-  MAT("cat-gfilter", "Gutter filter / strainer", "ea", 1000, "ABC Supply", 1025, 1000),
+  S("cat-drywall", "Drywall patch, up to 2×2 ft", "ea", 18000, "labor"),
+  S("cat-tvmount", "TV wall mount install", "ea", 15000, "labor"),
+  MAT("cat-gfci", "GFCI outlet 20A", "ea", 2200, "Home Depot", 1025, 1500),
+  S("cat-service-call", "Service call / trip fee", "flat", 8900),
 ];
 
 function demoDoc(): EstimateDoc {
@@ -72,14 +73,15 @@ function minutesAgo(m: number): string {
 function daysAgo(d: number): string {
   return new Date(Date.now() - d * 86_400_000).toISOString();
 }
-const gutterChecklist = (prefix: string): ChecklistItem[] =>
+/** Generic job checklist (company templates come later; trade modules add their own). */
+const jobChecklist = (prefix: string): ChecklistItem[] =>
   [
-    "Inspect fascia for rot",
-    "Slope 1/4″ per 10 ft",
-    "Seal corners and end caps",
-    "Hangers every 2 ft",
-    "Water test downspouts",
-    "Haul away old gutters",
+    "Protect floors and furniture",
+    "Confirm scope with the client",
+    "Photos before work",
+    "Clean up the work area",
+    "Photos after work",
+    "Walk through with the client",
   ].map((label, i) => ({ id: `${prefix}-c${i}`, label, done: false }));
 
 export function makeSeed(): DB {
@@ -89,7 +91,7 @@ export function makeSeed(): DB {
       { id: "m-alex", name: "Alex Petrov", initials: "AP", kind: "employee", roles: ["director", "dispatcher", "tech"] },
       { id: "m-ivan", name: "Ivan Sokolov", initials: "IS", kind: "employee", roles: ["tech"] },
       { id: "m-dima", name: "Dmitry Orlov", initials: "DO", kind: "employee", roles: ["tech"] },
-      { id: "m-sub", name: "Valley Gutters LLC", initials: "VG", kind: "sub", roles: ["tech"] },
+      { id: "m-sub", name: "Valley Electric LLC", initials: "VE", kind: "sub", roles: ["tech"] },
     ],
     customers: [
       { id: "c1", name: "Sarah Mitchell", phone: "(626) 555-0142", email: "sarah.m@example.com", source: "Google", balanceCents: 0 },
@@ -111,42 +113,42 @@ export function makeSeed(): DB {
       { id: "p7", customerId: "c7", address: "520 W Olive Ave", city: "Burbank, CA 91506", stories: 2 },
     ],
     jobs: [
-      { id: "j1", propertyId: "p1", title: "Seamless 6″ K-style, 148 LF", status: "scheduled", amountCents: 342000 },
-      { id: "j2", propertyId: "p2", title: "Gutter cleaning + guards", status: "scheduled", amountCents: 68000 },
-      { id: "j3", propertyId: "p3", title: "Downspout repair (2)", status: "scheduled", amountCents: 42000 },
-      { id: "j4", propertyId: "p4", title: "Seamless 5″ K-style, 96 LF", status: "done", amountCents: 96000 },
-      { id: "j5", propertyId: "p5", title: "Gutter guards, 120 LF", status: "scheduled", amountCents: 156000 },
-      { id: "j6", propertyId: "p6", title: "Box gutter replacement, 3 stories", status: "scheduled", amountCents: 518000 },
+      { id: "j1", propertyId: "p1", title: "Bathroom remodel: vanity, toilet, tile", status: "scheduled", amountCents: 342000 },
+      { id: "j2", propertyId: "p2", title: "Kitchen faucet + garbage disposal", status: "scheduled", amountCents: 68000 },
+      { id: "j3", propertyId: "p3", title: "Drywall patch + paint touch-up", status: "scheduled", amountCents: 42000 },
+      { id: "j4", propertyId: "p4", title: "Interior painting, 2 bedrooms", status: "done", amountCents: 96000 },
+      { id: "j5", propertyId: "p5", title: "Deep clean after move-out", status: "scheduled", amountCents: 156000 },
+      { id: "j6", propertyId: "p6", title: "Panel upgrade 200A", status: "scheduled", amountCents: 518000 },
       { id: "j7", propertyId: "p7", title: "Estimate visit", status: "estimate", amountCents: 0 },
-      { id: "j8", propertyId: "p1b", title: "Seasonal cleaning", status: "done", amountCents: 24000 },
+      { id: "j8", propertyId: "p1b", title: "TV mount + shelves", status: "done", amountCents: 24000 },
     ],
     visits: [
       {
         id: "v1", jobId: "j1", techId: "m-alex", start: at(0, 8, 30), durationMin: 240, step: "scheduled",
-        scope: ["Remove 148 LF old aluminum gutters", "Install 6″ seamless K-style, white", "4 downspouts 3×4″, 12 A-elbows"],
-        checklist: gutterChecklist("v1"), photos: [], amountDueCents: 342000,
+        scope: ["Remove old vanity and toilet", "Install new vanity, faucet and toilet", "Tile backsplash, 24 sq ft"],
+        checklist: jobChecklist("v1"), photos: [], amountDueCents: 342000,
       },
       {
         id: "v2", jobId: "j2", techId: "m-alex", start: at(0, 13, 30), durationMin: 120, step: "scheduled",
-        scope: ["Clean 160 LF gutters and flush downspouts", "Install mesh guards on rear side, 80 LF"],
-        checklist: gutterChecklist("v2").slice(0, 4), photos: [], amountDueCents: 68000,
+        scope: ["Replace kitchen faucet", "Install 3/4 HP garbage disposal"],
+        checklist: jobChecklist("v2").slice(0, 4), photos: [], amountDueCents: 68000,
       },
       {
         id: "v3", jobId: "j3", techId: "m-alex", start: at(0, 16, 0), durationMin: 60, step: "scheduled",
-        scope: ["Replace 2 damaged downspouts", "Re-seal outlet"],
-        checklist: gutterChecklist("v3").slice(1, 4), photos: [], amountDueCents: 42000,
+        scope: ["Patch 2 drywall holes in hallway", "Prime and paint touch-up"],
+        checklist: jobChecklist("v3").slice(1, 4), photos: [], amountDueCents: 42000,
       },
       {
         id: "v4", jobId: "j5", techId: "m-ivan", start: at(0, 9, 0), durationMin: 180, step: "working",
-        scope: ["Gutter guards 120 LF"], checklist: gutterChecklist("v4"), photos: [{ id: "ph1", kind: "before" }], amountDueCents: 156000,
+        scope: ["Deep clean 3-bedroom house after move-out"], checklist: jobChecklist("v4"), photos: [{ id: "ph1", kind: "before" }], amountDueCents: 156000,
       },
       {
         id: "v5", jobId: "j6", techId: "m-sub", start: at(0, 10, 0), durationMin: 360, step: "en_route", late: true,
-        scope: ["Box gutter replacement"], checklist: gutterChecklist("v5"), photos: [], amountDueCents: 518000,
+        scope: ["Replace 100A panel with 200A", "Permit and inspection"], checklist: jobChecklist("v5"), photos: [], amountDueCents: 518000,
       },
       {
         id: "v6", jobId: "j7", techId: null, start: at(0, 15, 0), durationMin: 45, step: "scheduled",
-        scope: ["Free estimate: front and back gutters, 2 stories"], checklist: [], photos: [], amountDueCents: 0,
+        scope: ["Free estimate: fence repair and gate"], checklist: [], photos: [], amountDueCents: 0,
       },
       {
         id: "v7", jobId: "j1", techId: "m-alex", start: at(1, 9, 0), durationMin: 90, step: "scheduled",
@@ -155,20 +157,20 @@ export function makeSeed(): DB {
     ],
     leads: [
       { id: "l1", name: "Kevin Brooks", phone: "(818) 555-0170", city: "Encino", source: "Thumbtack", receivedAt: minutesAgo(4), status: "new",
-        message: "Need gutters replaced on a 2-story house, about 150 ft. Old ones are leaking at the corners." },
+        message: "Water heater is leaking, need a replacement quote. 40 gal gas." },
       { id: "l2", name: "Angela Rossi", phone: "(310) 555-0155", city: "Torrance", source: "Google", receivedAt: minutesAgo(22), status: "new",
-        message: "Gutter cleaning before the rainy season. Single story." },
+        message: "Need a handyman for a few small things: shelves, a door that sticks, a light fixture." },
       { id: "l3", name: "Tom Becker", phone: "(626) 555-0108", city: "Arcadia", source: "Yelp", receivedAt: minutesAgo(95), status: "replied",
-        message: "Quote for gutter guards?" },
+        message: "Quote for painting the living room and hallway?" },
       { id: "l4", name: "Nina Patel", phone: "(213) 555-0191", city: "Los Angeles", source: "Website", receivedAt: daysAgo(1), status: "booked",
-        message: "Downspout is detached and water pools by the foundation." },
+        message: "Two outlets in the kitchen stopped working." },
     ],
     estimates: [
-      { id: "e1", customerId: "c6", propertyId: "p6", title: "Box gutters, 3 stories", totalCents: 518000, status: "approved", sentAt: daysAgo(6), approvedAt: minutesAgo(180) },
-      { id: "e2", customerId: "c7", propertyId: "p7", title: "Seamless 6″, 130 LF", totalCents: 298000, status: "sent", sentAt: daysAgo(3) },
-      { id: "e3", customerId: "c5", propertyId: "p5", title: "Gutter guards", totalCents: 156000, status: "approved", sentAt: daysAgo(9), approvedAt: daysAgo(4) },
-      { id: "e4", customerId: "c3", propertyId: "p3", title: "Full replacement option", totalCents: 264000, status: "sent", sentAt: daysAgo(6) },
-      { id: "e5", customerId: "c1", propertyId: "p1", title: "Seamless 6″, 148 LF", totalCents: 342000, status: "approved", sentAt: daysAgo(12), approvedAt: daysAgo(8) },
+      { id: "e1", customerId: "c6", propertyId: "p6", title: "Panel upgrade 200A", totalCents: 518000, status: "approved", sentAt: daysAgo(6), approvedAt: minutesAgo(180) },
+      { id: "e2", customerId: "c7", propertyId: "p7", title: "Fence repair + new gate", totalCents: 298000, status: "sent", sentAt: daysAgo(3) },
+      { id: "e3", customerId: "c5", propertyId: "p5", title: "Deep clean after move-out", totalCents: 156000, status: "approved", sentAt: daysAgo(9), approvedAt: daysAgo(4) },
+      { id: "e4", customerId: "c3", propertyId: "p3", title: "Kitchen backsplash tile", totalCents: 264000, status: "sent", sentAt: daysAgo(6) },
+      { id: "e5", customerId: "c1", propertyId: "p1", title: "Bathroom remodel", totalCents: 342000, status: "approved", sentAt: daysAgo(12), approvedAt: daysAgo(8) },
       (() => {
         const doc = demoDoc();
         return {

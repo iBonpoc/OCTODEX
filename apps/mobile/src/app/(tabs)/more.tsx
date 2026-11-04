@@ -12,7 +12,6 @@ import { Button, Segmented, Toggle } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
-import { useModules } from "@/features/modules";
 import { Card, ListRow, RowView, Screen } from "@/ui/surfaces";
 
 /** Settings for this device: role, theme, language, offline test switch. */
@@ -23,7 +22,6 @@ export default function More() {
   const { pref, setPref } = useTheme();
   const toast = useToast();
   const hints = useHints();
-  const modules = useModules();
   const changeRole = (r: Role) => {
     setRole(r);
     router.navigate(`/${roleHome[r]}`);
@@ -74,19 +72,6 @@ export default function More() {
       ) : null}
       <Card onPress={() => router.push("/catalog")} accessibilityLabel={t("more.catalog")}>
         <ListRow title={t("more.catalog")} left={<Icon name="note" />} />
-      </Card>
-      <Card>
-        <RowView style={{ justifyContent: "space-between" }}>
-          <View style={{ flex: 1 }}>
-            <T v="body" w="semibold">
-              {t("more.gutters")}
-            </T>
-            <T v="caption" tone="mut">
-              {t("more.guttersHint")}
-            </T>
-          </View>
-          <Toggle label={t("more.gutters")} on={modules.gutters} onChange={(on) => modules.set({ gutters: on })} />
-        </RowView>
       </Card>
       <Card>
         <T v="heading">{t("more.role")}</T>

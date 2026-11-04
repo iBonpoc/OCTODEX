@@ -5,21 +5,24 @@ import * as Haptics from "expo-haptics";
 import { space } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
-import type { CatalogItem, EstimateDoc } from "@/data/types";
+import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { useModules } from "@/features/modules";
-import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, hasContent, linesFromCatalog, newDoc, newLine, optionTotals, uid } from "@/features/estimateDoc";
-import { CatalogPicker, ClientPicker } from "@/features/estimatePickers";
-import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
-import { Button, IconButton, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
-import { Press, T } from "@/ui/primitives";
-import { useToast } from "@/ui/overlays";
+import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, hasContent, newDoc, optionTotals, uid } from "@/features/estimateDoc";
+import { ClientPicker } from "@/features/estimatePickers";
+import { LineSheet } from "@/features/LineSheet";
+import { Labeled, MoneyField, PctField } from "@/features/fields";
+import { Avatar, Button, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
+import { Icon, Press, T } from "@/ui/primitives";
+import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Grid, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
+type SettingKind = "discount" | "tax" | "deposit" | null;
+const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
+
 /**
- * Universal estimate builder (core, any trade). Lines typed by hand or taken from the catalog,
- * in three groups (services / labor / materials); 1 option by default, up to 3; add-ons; discount;
- * sales tax per group (off by default, separate line); deposit as % or $. Math: @octo/estimating-engine.
+ * Estimate builder for any trade, laid out like Jobber / Housecall Pro quotes:
+ * client → title → one list of line items (catalog or custom) → totals with discount, tax, deposit → message → send.
+ * Type of a line (service / labor / material) only drives which lines are taxed.
  */
 export default function EstimateBuilder() {
   const params = useLocalSearchParams<{ id?: string; customerId?: string; propertyId?: string }>();
@@ -27,7 +30,6 @@ export default function EstimateBuilder() {
   const { db } = store;
   const { t, money } = useI18n();
   const toast = useToast();
-  const modules = useModules();
   const existing = params.id ? db.estimates.find((e) => e.id === params.id) : undefined;
   const [estimateId] = useState(() => existing?.id ?? uid());
   const [customerId, setCustomerId] = useState(existing?.customerId ?? params.customerId);
@@ -35,8 +37,8 @@ export default function EstimateBuilder() {
   const [doc, setDoc] = useState<EstimateDoc>(() => (existing?.doc ? structuredClone(existing.doc) : newDoc()));
   const [title, setTitle] = useState(existing?.doc ? existing.title : "");
   const [cur, setCur] = useState(() => Math.max(0, doc.options.findIndex((o) => o.recommended)));
-  const [open, setOpen] = useState<string | null>(null);
-  const [picker, setPicker] = useState(false);
+  const [editing, setEditing] = useState<CustomLine | null | "new">(null);
+  const [setting, setSetting] = useState<SettingKind>(null);
   const [clientPicker, setClientPicker] = useState(!customerId);
 
   const customer = db.customers.find((c) => c.id === customerId);
@@ -46,25 +48,19 @@ export default function EstimateBuilder() {
   const s = doc.settings;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
-  /* ---------- doc edits ---------- */
   const setOption = (fn: (o: CustomOption) => CustomOption) =>
     setDoc((d) => ({ ...d, options: d.options.map((o) => (o.id === option.id ? fn(o) : o)) }));
-  const setLine = (id: string, patch: Partial<CustomLine>) => setOption((o) => ({ ...o, lines: o.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
-  const addLine = (g: LineGroup) => {
-    const l = newLine(g);
-    setOption((o) => ({ ...o, lines: [...o.lines, l] }));
-    setOpen(l.id);
-  };
+  const setSettings = (patch: Partial<EstimateDoc["settings"]>) => setDoc((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
+  const saveLines = (lines: CustomLine[]) =>
+    setOption((o) => {
+      const idx = o.lines.findIndex((l) => l.id === lines[0]?.id);
+      if (idx >= 0) return { ...o, lines: o.lines.map((l) => (l.id === lines[0]!.id ? lines[0]! : l)) };
+      return { ...o, lines: [...o.lines, ...lines] };
+    });
   const removeLine = (id: string) => {
     const prev = doc;
     setOption((o) => ({ ...o, lines: o.lines.filter((l) => l.id !== id) }));
-    setOpen(null);
     toast.show(t("ue.lineRemoved"), () => setDoc(prev));
-  };
-  const addFromCatalog = (it: CatalogItem) => {
-    const lines = linesFromCatalog(it, db.catalog);
-    setOption((o) => ({ ...o, lines: [...o.lines, ...lines] }));
-    toast.show(t("ue.added", { name: it.name }));
   };
   const addOption = () => {
     if (doc.options.length >= MAX_OPTIONS) return;
@@ -80,9 +76,7 @@ export default function EstimateBuilder() {
     toast.show(t("ue.optionRemoved"), () => setDoc(prev));
   };
   const setRecommended = (on: boolean) =>
-    setDoc((d) => ({ ...d, options: d.options.map((o) => ({ ...o, recommended: on ? o.id === option.id : o.id === option.id ? false : o.recommended })) }));
-  const setSettings = (patch: Partial<EstimateDoc["settings"]>) => setDoc((d) => ({ ...d, settings: { ...d.settings, ...patch } }));
-  const setTaxGroup = (g: LineGroup, on: boolean) => setSettings({ tax: { ...s.tax, groups: { ...s.tax.groups, [g]: on } } });
+    setDoc((d) => ({ ...d, options: d.options.map((o) => ({ ...o, recommended: o.id === option.id ? on : on ? false : o.recommended })) }));
 
   const ok = !!customer && !!property && hasContent(doc);
   const save = (send: boolean) => {
@@ -97,23 +91,15 @@ export default function EstimateBuilder() {
     router.replace(`/estimate/${estimateId}${send ? "?send=1" : ""}`);
   };
 
-  /* ---------- UI ---------- */
-  const groupLines = (g: LineGroup) => option.lines.filter((l) => l.group === g);
-  const depositKind = s.deposit.kind;
-  const lineTotal = (l: CustomLine) => {
-    const i = activeLines(option.lines).indexOf(l);
-    return i >= 0 ? totals.lineTotals[i] ?? 0 : 0;
-  };
+  const act = activeLines(option.lines);
+  const lineTotal = (l: CustomLine) => totals.lineTotals[act.indexOf(l)] ?? 0;
+  const taxGroups = LINE_GROUPS.filter((g) => s.tax.groups[g]);
+  const taxValue = !s.tax.enabled || !taxGroups.length ? t("ue.off") : `${s.tax.rateBps / 100}% · ${taxGroups.map((g) => t(`ue.group.${g}` as DictKey).toLowerCase()).join(", ")}`;
+  const discValue = !s.discount ? t("ue.add") : s.discount.kind === "pct" ? `${Number(s.discount.value) * 100}%` : money(s.discount.cents);
+  const depValue = s.deposit.kind === "none" ? t("ue.none") : s.deposit.kind === "pct" ? `${s.deposit.bps / 100}% · ${money(totals.deposit)}` : money(totals.deposit);
 
   return (
-    <Screen
-      title={existing ? t("ue.title") : t("ue.newTitle")}
-      back={back}
-      help={t("ue.help")}
-      hintKey="estimate-builder"
-      subtitle={customer ? `${customer.name}${property ? ` · ${property.address}` : ""}` : t("est.noClient")}
-      right={<Button label={t("est.for")} icon="user" variant="ghost" size="sm" onPress={() => setClientPicker(true)} />}
-    >
+    <Screen title={existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder">
       {existing && existing.status !== "draft" ? (
         <T v="caption" tone="warn">
           {t("ue.editSentNote")}
@@ -121,180 +107,88 @@ export default function EstimateBuilder() {
       ) : null}
       <Grid>
         <View style={{ gap: space[3] }}>
-          <Card>
-            <TextField value={title} onChangeText={setTitle} placeholder={t("ue.jobTitle")} icon="note" />
-            <RowView style={{ flexWrap: "wrap" }}>
-              <Button label={t("ue.fromCatalog")} icon="search" variant="secondary" size="sm" onPress={() => setPicker(true)} />
-              {modules.gutters && customer ? (
-                <Button
-                  label={t("ue.gutters")}
-                  icon="ruler"
-                  variant="ghost"
-                  size="sm"
-                  onPress={() => router.push(`/estimate/gutters?customerId=${customer.id}${property ? `&propertyId=${property.id}` : ""}`)}
-                />
-              ) : null}
-            </RowView>
-          </Card>
-
-          {/* options */}
-          <Card>
-            <RowView style={{ justifyContent: "space-between" }}>
-              <T v="heading">{t("ue.options")}</T>
-              {doc.options.length < MAX_OPTIONS ? <Button label={t("ue.addOption")} icon="plus" variant="ghost" size="sm" onPress={addOption} /> : null}
-            </RowView>
-            {doc.options.length > 1 ? (
-              <>
-                <Segmented full value={option.id} onChange={(id) => setCur(doc.options.findIndex((o) => o.id === id))} items={doc.options.map((o) => ({ key: o.id, label: o.name || "—" }))} />
-                <TextField value={option.name} onChangeText={(v) => setOption((o) => ({ ...o, name: v }))} placeholder={t("ue.optionName")} />
-                <RowView style={{ minHeight: 44 }}>
-                  <T v="body" style={{ flex: 1 }}>
-                    {t("ue.recommended")}
+          <Card onPress={() => setClientPicker(true)} accessibilityLabel={t("est.for")}>
+            <RowView>
+              {customer ? <Avatar initials={initials(customer.name)} /> : <Icon name="user" />}
+              <View style={{ flex: 1 }}>
+                <T v="body" w="semibold">
+                  {customer?.name ?? t("ue.pickClient")}
+                </T>
+                {property ? (
+                  <T v="caption" tone="mut">
+                    {property.address}, {property.city}
                   </T>
-                  <Toggle label={t("ue.recommended")} on={!!option.recommended} onChange={setRecommended} />
-                </RowView>
-                <Button label={t("ue.removeOption")} icon="trash" variant="ghost" size="sm" onPress={removeOption} />
-              </>
-            ) : (
-              <T v="caption" tone="mut">
-                {t("ue.optionsHint")}
-              </T>
-            )}
-          </Card>
-
-          {LINE_GROUPS.map((g) => {
-            const lines = groupLines(g);
-            return (
-              <View key={g} style={{ gap: space[2] }}>
-                <SectionTitle
-                  title={t(`ue.group.${g}` as DictKey)}
-                  right={totals.groupSubtotals[g] ? <T v="body" tabular>{money(totals.groupSubtotals[g])}</T> : undefined}
-                />
-                <Card>
-                  {lines.map((l, i) => (
-                    <View key={l.id} style={{ gap: space[2] }}>
-                      {i > 0 ? <Divider /> : null}
-                      {open === l.id ? (
-                        <LineEditor line={l} onChange={(p) => setLine(l.id, p)} onDone={() => setOpen(null)} onRemove={() => removeLine(l.id)} />
-                      ) : (
-                        <Press onPress={() => setOpen(l.id)} accessibilityRole="button" accessibilityLabel={l.name || t("ue.lineName")}>
-                          <RowView style={{ minHeight: 44, alignItems: "center" }}>
-                            <View style={{ flex: 1 }}>
-                              <T v="body" tone={l.name ? "ink" : "mut"} numberOfLines={2}>
-                                {l.name || t("ue.lineName")}
-                              </T>
-                              <T v="caption" tone="mut" tabular>
-                                {String(l.quantity)} {l.unit} × {money(l.unitPriceCents)}
-                                {l.optional ? ` · ${t("ue.addonChip")}` : ""}
-                              </T>
-                            </View>
-                            <T v="body" tabular tone={l.optional ? "mut" : "ink"}>
-                              {money(lineTotal(l))}
-                            </T>
-                          </RowView>
-                        </Press>
-                      )}
-                    </View>
-                  ))}
-                  <Button label={t("ue.addLine")} icon="plus" variant="ghost" size="sm" onPress={() => addLine(g)} />
-                </Card>
+                ) : null}
               </View>
-            );
-          })}
-          <TextField value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} multiline />
+              <Icon name="chevronRight" s={16} />
+            </RowView>
+          </Card>
+          <TextField value={title} onChangeText={setTitle} placeholder={t("ue.jobTitle")} icon="note" />
+
+          {doc.options.length > 1 ? (
+            <Card>
+              <Segmented full value={option.id} onChange={(id) => setCur(doc.options.findIndex((o) => o.id === id))} items={doc.options.map((o) => ({ key: o.id, label: o.name || "—" }))} />
+              <TextField value={option.name} onChangeText={(v) => setOption((o) => ({ ...o, name: v }))} placeholder={t("ue.optionName")} />
+              <RowView style={{ minHeight: 44 }}>
+                <T v="body" style={{ flex: 1 }}>
+                  {t("ue.recommended")}
+                </T>
+                <Toggle label={t("ue.recommended")} on={!!option.recommended} onChange={setRecommended} />
+              </RowView>
+              <Button label={t("ue.removeOption")} icon="trash" variant="ghost" size="sm" onPress={removeOption} />
+            </Card>
+          ) : null}
+
+          <SectionTitle title={t("ue.items")} right={act.length ? <T v="caption" tone="mut">{act.length}</T> : undefined} />
+          {option.lines.map((l) => (
+            <Card key={l.id} onPress={() => setEditing(l)} accessibilityLabel={l.name}>
+              <RowView style={{ alignItems: "flex-start" }}>
+                <View style={{ flex: 1, gap: space[1] }}>
+                  <T v="body" w="semibold">
+                    {l.name}
+                  </T>
+                  {l.description ? (
+                    <T v="caption" tone="mut" numberOfLines={2}>
+                      {l.description}
+                    </T>
+                  ) : null}
+                  <T v="caption" tone="mut" tabular>
+                    {String(l.quantity)} {l.unit} × {money(l.unitPriceCents)} · {t(`ue.group.${l.group}` as DictKey)}
+                  </T>
+                </View>
+                <View style={{ alignItems: "flex-end", gap: space[1] }}>
+                  <T v="body" tabular tone={l.optional ? "mut" : "ink"}>
+                    {money(lineTotal(l))}
+                  </T>
+                  {l.optional ? <StatusChip status="neutral" label={t("ue.addonChip")} /> : null}
+                </View>
+              </RowView>
+            </Card>
+          ))}
+          <Button label={t("ue.addItem")} icon="plus" variant="secondary" full onPress={() => setEditing("new")} />
         </View>
 
         <View style={{ gap: space[3] }}>
-          {/* discount */}
           <Card>
-            <T v="heading">{t("ue.discount")}</T>
-            <Segmented
-              full
-              value={s.discount ? s.discount.kind : "none"}
-              onChange={(k) => setSettings({ discount: k === "none" ? null : k === "pct" ? { kind: "pct", value: "0.05" } : { kind: "fixed", cents: 0 } })}
-              items={[
-                { key: "none", label: t("ue.none") },
-                { key: "pct", label: "%" },
-                { key: "fixed", label: "$" },
-              ]}
-            />
-            {s.discount?.kind === "pct" ? (
-              <PctField bps={Math.round(Number(s.discount.value) * 10000)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} />
-            ) : s.discount?.kind === "fixed" ? (
-              <MoneyField cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} />
-            ) : null}
-          </Card>
-
-          {/* tax */}
-          <Card>
-            <RowView style={{ minHeight: 44 }}>
-              <T v="heading" style={{ flex: 1 }}>
-                {t("ue.tax")}
-              </T>
-              <Toggle label={t("ue.tax")} on={s.tax.enabled} onChange={(on) => setSettings({ tax: { ...s.tax, enabled: on } })} />
-            </RowView>
-            <T v="caption" tone="mut">
-              {t("ue.taxHint")}
-            </T>
-            {s.tax.enabled ? (
-              <>
-                <Labeled label={t("ue.taxRate")}>
-                  <PctField bps={s.tax.rateBps} onChange={(b) => setSettings({ tax: { ...s.tax, rateBps: Math.min(b, 10000) } })} />
-                </Labeled>
-                {LINE_GROUPS.map((g) => (
-                  <RowView key={g} style={{ minHeight: 44 }}>
-                    <T v="body" style={{ flex: 1 }}>
-                      {t(`ue.group.${g}` as DictKey)}
-                    </T>
-                    <Toggle label={`${t("ue.tax")}: ${t(`ue.group.${g}` as DictKey)}`} on={s.tax.groups[g]} onChange={(on) => setTaxGroup(g, on)} />
-                  </RowView>
-                ))}
-              </>
-            ) : null}
-          </Card>
-
-          {/* deposit */}
-          <Card>
-            <T v="heading">{t("ue.deposit")}</T>
-            <Segmented
-              full
-              value={depositKind}
-              onChange={(k) => setSettings({ deposit: (k === "pct" ? { kind: "pct", bps: 1000 } : k === "fixed" ? { kind: "fixed", cents: 0 } : { kind: "none" }) as DepositSetting })}
-              items={[
-                { key: "pct", label: t("ue.depositPct") },
-                { key: "fixed", label: t("ue.depositUsd") },
-                { key: "none", label: t("ue.none") },
-              ]}
-            />
-            {s.deposit.kind === "pct" ? (
-              <PctField bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} />
-            ) : s.deposit.kind === "fixed" ? (
-              <MoneyField cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} />
-            ) : null}
-            {totals.depositOverCaLimit ? (
-              <T v="caption" tone="warn">
-                {t("ue.caWarn", { limit: money(totals.caDepositLimit) })}
-              </T>
-            ) : null}
-          </Card>
-
-          {/* totals */}
-          <Card>
-            <RowView style={{ justifyContent: "space-between" }}>
-              <T v="heading">{option.name}</T>
-              {option.recommended && doc.options.length > 1 ? <StatusChip status="ok" label={t("ue.recommended")} /> : null}
-            </RowView>
-            <Sum label={t("ue.subtotal")} v={money(totals.subtotal)} />
-            {totals.discount ? <Sum label={t("ue.discount")} v={`−${money(totals.discount)}`} /> : null}
-            {totals.tax ? <Sum label={t("ue.taxLine", { rate: s.tax.rateBps / 100 })} v={money(totals.tax)} /> : null}
+            <SumRow label={t("ue.subtotal")} value={money(totals.subtotal)} />
             <Divider />
-            <RowView style={{ justifyContent: "space-between" }}>
+            <SumRow label={t("ue.discount")} value={totals.discount ? `−${money(totals.discount)}` : discValue} onPress={() => setSetting("discount")} />
+            <Divider />
+            <SumRow label={t("ue.tax")} value={totals.tax ? `${money(totals.tax)} · ${taxValue}` : taxValue} onPress={() => setSetting("tax")} />
+            <Divider />
+            <RowView style={{ justifyContent: "space-between", minHeight: 44 }}>
               <T v="title">{t("ue.total")}</T>
               <T v="display" tabular>
                 {money(totals.total)}
               </T>
             </RowView>
-            {totals.deposit ? <Sum label={t("ue.deposit")} v={money(totals.deposit)} /> : null}
+            <Divider />
+            <SumRow label={t("ue.deposit")} value={depValue} onPress={() => setSetting("deposit")} />
+            {totals.depositOverCaLimit ? (
+              <T v="caption" tone="warn">
+                {t("ue.caWarn", { limit: money(totals.caDepositLimit) })}
+              </T>
+            ) : null}
             {totals.cost > 0 && store.role !== "tech" ? (
               <T v="caption" tone="mut">
                 {costComplete(option) ? t("ue.margin", { p: totals.marginPct ?? "0", cost: money(totals.cost) }) : t("ue.costPartial", { cost: money(totals.cost) })}
@@ -306,9 +200,20 @@ export default function EstimateBuilder() {
               </T>
             ) : null}
           </Card>
+          {doc.options.length < MAX_OPTIONS ? (
+            <View style={{ gap: space[1] }}>
+              <Button label={t("ue.addOption")} icon="plus" variant="ghost" size="sm" onPress={addOption} />
+              {doc.options.length === 1 ? (
+                <T v="caption" tone="mut">
+                  {t("ue.optionsHint")}
+                </T>
+              ) : null}
+            </View>
+          ) : null}
+          <TextField value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} multiline />
           {!ok ? (
             <T v="caption" tone="mut">
-              {customer ? t("ue.empty") : t("est.noClient")}
+              {customer ? t("ue.empty") : t("ue.pickClient")}
             </T>
           ) : null}
           <Button label={t("ue.saveSend")} icon="send" full disabled={!ok} onPress={() => save(true)} />
@@ -316,7 +221,94 @@ export default function EstimateBuilder() {
         </View>
       </Grid>
 
-      <CatalogPicker visible={picker} onClose={() => setPicker(false)} onPick={addFromCatalog} />
+      <LineSheet
+        visible={editing !== null}
+        line={editing === "new" ? null : editing}
+        onClose={() => setEditing(null)}
+        onSave={saveLines}
+        onRemove={editing && editing !== "new" ? () => removeLine(editing.id) : undefined}
+      />
+      <Sheet visible={setting !== null} onClose={() => setSetting(null)} title={setting ? t(`ue.${setting}` as DictKey) : undefined}>
+        <View style={{ gap: space[3] }}>
+          {setting === "discount" ? (
+            <>
+              <Segmented
+                full
+                value={s.discount ? s.discount.kind : "none"}
+                onChange={(k) => setSettings({ discount: k === "none" ? null : k === "pct" ? { kind: "pct", value: "0.05" } : { kind: "fixed", cents: 0 } })}
+                items={[
+                  { key: "none", label: t("ue.none") },
+                  { key: "pct", label: "%" },
+                  { key: "fixed", label: "$" },
+                ]}
+              />
+              {s.discount?.kind === "pct" ? (
+                <PctField bps={Math.round(Number(s.discount.value) * 10000)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} />
+              ) : s.discount?.kind === "fixed" ? (
+                <MoneyField cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} />
+              ) : null}
+            </>
+          ) : null}
+          {setting === "tax" ? (
+            <>
+              <RowView style={{ minHeight: 44 }}>
+                <T v="body" style={{ flex: 1 }}>
+                  {t("ue.taxOn")}
+                </T>
+                <Toggle label={t("ue.tax")} on={s.tax.enabled} onChange={(on) => setSettings({ tax: { ...s.tax, enabled: on } })} />
+              </RowView>
+              <T v="caption" tone="mut">
+                {t("ue.taxHint")}
+              </T>
+              {s.tax.enabled ? (
+                <>
+                  <Labeled label={t("ue.taxRate")}>
+                    <PctField bps={s.tax.rateBps} onChange={(b) => setSettings({ tax: { ...s.tax, rateBps: Math.min(b, 10000) } })} />
+                  </Labeled>
+                  {LINE_GROUPS.map((g: LineGroup) => (
+                    <RowView key={g} style={{ minHeight: 44 }}>
+                      <T v="body" style={{ flex: 1 }}>
+                        {t(`ue.group.${g}` as DictKey)}
+                      </T>
+                      <Toggle
+                        label={`${t("ue.tax")}: ${t(`ue.group.${g}` as DictKey)}`}
+                        on={s.tax.groups[g]}
+                        onChange={(on) => setSettings({ tax: { ...s.tax, groups: { ...s.tax.groups, [g]: on } } })}
+                      />
+                    </RowView>
+                  ))}
+                </>
+              ) : null}
+            </>
+          ) : null}
+          {setting === "deposit" ? (
+            <>
+              <Segmented
+                full
+                value={s.deposit.kind}
+                onChange={(k) => setSettings({ deposit: (k === "pct" ? { kind: "pct", bps: 1000 } : k === "fixed" ? { kind: "fixed", cents: 0 } : { kind: "none" }) as DepositSetting })}
+                items={[
+                  { key: "pct", label: t("ue.depositPct") },
+                  { key: "fixed", label: t("ue.depositUsd") },
+                  { key: "none", label: t("ue.none") },
+                ]}
+              />
+              {s.deposit.kind === "pct" ? (
+                <PctField bps={s.deposit.bps} onChange={(b) => setSettings({ deposit: { kind: "pct", bps: Math.min(b, 10000) } })} />
+              ) : s.deposit.kind === "fixed" ? (
+                <MoneyField cents={s.deposit.cents} onChange={(c) => setSettings({ deposit: { kind: "fixed", cents: c } })} />
+              ) : null}
+              <SumRow label={t("ue.deposit")} value={money(totals.deposit)} />
+              {totals.depositOverCaLimit ? (
+                <T v="caption" tone="warn">
+                  {t("ue.caWarn", { limit: money(totals.caDepositLimit) })}
+                </T>
+              ) : null}
+            </>
+          ) : null}
+          <Button label={t("common.gotIt")} icon="check" full onPress={() => setSetting(null)} />
+        </View>
+      </Sheet>
       <ClientPicker
         visible={clientPicker}
         onClose={() => setClientPicker(false)}
@@ -330,45 +322,26 @@ export default function EstimateBuilder() {
   );
 }
 
-function Sum({ label, v }: { label: string; v: string }) {
-  return (
-    <RowView style={{ justifyContent: "space-between" }}>
+function SumRow({ label, value, onPress }: { label: string; value: string; onPress?: () => void }) {
+  const row = (
+    <RowView style={{ justifyContent: "space-between", minHeight: 44 }}>
       <T v="body" tone="mut">
         {label}
       </T>
-      <T v="body" tabular>
-        {v}
-      </T>
+      <RowView gap={space[1]}>
+        <T v="body" tabular>
+          {value}
+        </T>
+        {onPress ? <Icon name="chevronRight" s={16} /> : null}
+      </RowView>
     </RowView>
+  );
+  return onPress ? (
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={label}>
+      {row}
+    </Press>
+  ) : (
+    row
   );
 }
 
-function LineEditor({ line, onChange, onDone, onRemove }: { line: CustomLine; onChange: (p: Partial<CustomLine>) => void; onDone: () => void; onRemove: () => void }) {
-  const { t } = useI18n();
-  return (
-    <View style={{ gap: space[2], paddingVertical: space[1] }}>
-      <TextField value={line.name} onChangeText={(v) => onChange({ name: v })} placeholder={t("ue.lineName")} />
-      <RowView style={{ alignItems: "flex-end" }}>
-        <Labeled label={t("ue.qty")}>
-          <QtyField qty={String(line.quantity)} onChange={(q) => onChange({ quantity: q })} />
-        </Labeled>
-        <Labeled label={t("ue.unit")}>
-          <TextField value={line.unit} onChangeText={(v) => onChange({ unit: v })} placeholder="ea" />
-        </Labeled>
-        <Labeled label={t("ue.price")} flex={1.4}>
-          <MoneyField cents={line.unitPriceCents} onChange={(c) => onChange({ unitPriceCents: c })} />
-        </Labeled>
-      </RowView>
-      <RowView style={{ minHeight: 44 }}>
-        <T v="body" style={{ flex: 1 }}>
-          {t("ue.addon")}
-        </T>
-        <Toggle label={t("ue.addon")} on={!!line.optional} onChange={(on) => onChange({ optional: on })} />
-      </RowView>
-      <RowView style={{ justifyContent: "space-between" }}>
-        <IconButton icon="trash" label={t("ue.removeLine")} onPress={onRemove} />
-        <Button label={t("ue.doneLine")} icon="check" variant="secondary" size="sm" onPress={onDone} />
-      </RowView>
-    </View>
-  );
-}
