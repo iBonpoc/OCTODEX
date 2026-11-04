@@ -825,8 +825,13 @@ begin
   update public.leads set call_attempts = call_attempts + 1 where id = v_a;
   perform tst.ok((select call_attempts from public.leads where id = v_a) = 2, 'two unanswered calls');
   perform tst.fails(format($q$update public.leads set call_attempts = -1 where id = %L$q$, v_a), 'negative attempts refused');
-  update public.leads set first_response_at = now(), first_response_kind = 'call', status = 'contacted' where id = v_a;
-  perform tst.ok((select call_attempts from public.leads where id = v_a) = 0, 'answered call resets the attempts');
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_a, 'call', 'out');
+  perform tst.ok((select call_attempts = 0 and status = 'contacted' from public.leads where id = v_a), 'answered call (old activity, no outcome) resets the attempts');
+  -- attempts after the first answer are reset again by the next real contact (not only the first one)
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction, meta) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_a, 'call', 'out', '{"outcome":"no_answer"}');
+  perform tst.ok((select call_attempts from public.leads where id = v_a) = 1, 'missed call after contact counts');
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_a, 'sms', 'out');
+  perform tst.ok((select call_attempts from public.leads where id = v_a) = 0, 'any real contact resets the attempts, like the app');
   -- snooze keeps the funnel status; closing the lead clears the snooze
   update public.leads set snoozed_until = now() + interval '90 days', snooze_reason = 'call in spring' where id = v_a;
   perform tst.ok((select status from public.leads where id = v_a) = 'contacted', 'snooze is not a status');

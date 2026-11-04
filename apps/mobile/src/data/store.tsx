@@ -495,7 +495,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       snoozeLead: (id, until, reason) => patchLead(id, { snoozedUntil: until, snoozeReason: reason?.trim() || undefined }),
       unsnoozeLead: (id) => patchLead(id, { snoozedUntil: undefined, snoozeReason: undefined }),
       markReminded: (id) => patchLead(id, { remindedAt: new Date().toISOString(), askAgainAt: undefined }),
-      waitMore: (id, days) => patchLead(id, { askAgainAt: new Date(Date.now() + days * 86_400_000).toISOString(), remindedAt: new Date().toISOString() }),
+      waitMore: (id, days) => patchLead(id, { askAgainAt: new Date(Date.now() + days * 86_400_000).toISOString() }),
       updateLead: (id, patch) => {
         const l0 = dbRef.current.leads.find((x) => x.id === id);
         return mutate(

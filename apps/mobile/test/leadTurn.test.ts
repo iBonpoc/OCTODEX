@@ -83,6 +83,47 @@ describe("whose turn", () => {
   });
 });
 
+describe("review findings of wave L1", () => {
+  const act = (kind: "call" | "sms", at: string) => ({ id: `a-${kind}-${at}`, subjectType: "lead" as const, subjectId: "L", kind, at, actorId: "m-alex" });
+  it("'wait 7 more days' asks again after 7 days, not 14", () => {
+    const { d, l } = db({ status: "estimate_sent", lastOutboundAt: days(30), remindedAt: days(21), askAgainAt: days(0.1) });
+    expect(leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW)).toMatchObject({ kind: "wait", action: "lostOrWait" });
+  });
+  it("silence is not counted while the lead was snoozed; it comes back as 'back from snooze'", () => {
+    const { d, l } = db({ status: "estimate_sent", lastOutboundAt: days(100), snoozedUntil: days(1), lastActivityAt: days(100) });
+    expect(leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW)).toMatchObject({ kind: "wait", days: 1, action: "none" });
+    expect(buildAttention(d).find((a) => a.refId === "L")?.kind).toBe("leadBack");
+  });
+  it("a revised estimate after a reminder starts the wait over instead of asking 'lost or wait?'", () => {
+    const est = { id: "e", customerId: "c", propertyId: "p", title: "Revised", totalCents: 1, status: "sent" as const, leadId: "L", sentAt: min(30) };
+    const { d, l } = db({ status: "estimate_sent", lastOutboundAt: min(30), remindedAt: days(20) }, { estimates: [est] });
+    expect(leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW)).toMatchObject({ kind: "wait", action: "none", days: 0 });
+    expect(leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW + 3 * 86_400_000)).toMatchObject({ action: "remind" });
+  });
+  it("booked: a past estimate visit with no estimate becomes overdue; a future one is calm", () => {
+    const d0 = makeSeed();
+    const job = { id: "jx", propertyId: "px", title: "Estimate visit", status: "estimate" as const, amountCents: 0 };
+    const visit = (start: string) => ({ ...d0.visits[0]!, id: "vx", jobId: "jx", start });
+    const r = (start: string) => {
+      const { d, l } = db({ status: "booked", propertyId: "px" }, { jobs: [job], visits: [visit(start)] });
+      return leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW);
+    };
+    expect(r(days(10))).toMatchObject({ kind: "step", status: "bad" });
+    expect(r(min(120))).toMatchObject({ kind: "step", status: "warn" });
+    expect(r(new Date(NOW + 2 * 86_400_000).toISOString())).toMatchObject({ kind: "step", status: "neutral" });
+  });
+  it("in touch: after an SMS we wait for the client; after a real conversation we need a step", () => {
+    const sms = db({ status: "replied", lastOutboundAt: min(60) }, { activities: [act("sms", min(60))] });
+    expect(leadTurn(sms.d, sms.l, LEAD_SETTINGS_DEFAULT, NOW).kind).toBe("wait");
+    const call = db({ status: "replied", lastOutboundAt: min(60) }, { activities: [act("call", min(60))] });
+    expect(leadTurn(call.d, call.l, LEAD_SETTINGS_DEFAULT, NOW).kind).toBe("noStep");
+  });
+  it("a task due earlier today is overdue", () => {
+    const { d, l } = db({ status: "replied" }, { tasks: [{ id: "t", subjectType: "lead", subjectId: "L", title: "Call at 9", dueAt: min(120) }] });
+    expect(leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW)).toMatchObject({ kind: "step", status: "bad" });
+  });
+});
+
 describe("snooze (not a status)", () => {
   it("hidden from open lists until the date, shown under 'Snoozed', keeps its funnel status", () => {
     const until = new Date(NOW + 90 * 86_400_000).toISOString();

@@ -8,7 +8,9 @@ alter table app.company_numbering add constraint company_numbering_doc_type_chec
 
 alter table public.leads add column if not exists number text;
 
--- existing leads get numbers in the order they arrived
+-- existing leads get numbers in the order they arrived. Triggers are off for this one update so it does not
+-- stamp updated_at (the app reads it as "last activity") or bump row_version on every old lead.
+alter table public.leads disable trigger user;
 do $$
 declare r record;
 begin
@@ -16,6 +18,7 @@ begin
     update public.leads set number = app.next_document_number(r.company_id, 'lead', 'L') where id = r.id;
   end loop;
 end $$;
+alter table public.leads enable trigger user;
 
 drop trigger if exists t20_number on public.leads;
 create trigger t20_number before insert or update on public.leads
@@ -33,17 +36,13 @@ alter table public.leads
   add column if not exists ask_again_at   timestamptz,
   add column if not exists archived_at    timestamptz;
 
--- a lead is snoozed only while it is open
+-- a lead is snoozed only while it is open (unanswered-call attempts are reset by tg_lead_first_response below)
 create or replace function app.tg_lead_snooze_open()
 returns trigger language plpgsql set search_path = '' as $$
 begin
   if new.status in ('won', 'lost', 'declined', 'archived') then
     new.snoozed_until := null;
     new.snooze_reason := null;
-  end if;
-  -- a real conversation resets the run of unanswered calls
-  if new.first_response_at is not null and old.first_response_at is null then
-    new.call_attempts := 0;
   end if;
   return new;
 end;
@@ -72,6 +71,7 @@ begin
          set first_response_at = coalesce(first_response_at, new.at),
              first_response_kind = coalesce(first_response_kind, case when new.kind = 'reply' then 'manual' else new.kind end),
              last_outbound_at = greatest(coalesce(last_outbound_at, new.at), new.at),
+             call_attempts = 0,
              status = case when status = 'new' then 'contacted' else status end
        where id = new.subject_id and company_id = new.company_id;
     end if;

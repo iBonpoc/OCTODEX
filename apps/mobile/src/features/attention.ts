@@ -29,7 +29,9 @@ export function buildAttention(db: DB, role: Role = "director"): AttentionItem[]
   for (const l of db.leads) {
     if (!canSeeLead(role, db.me, l)) continue;
     const turn = leadTurn(db, l, st);
-    if (turn.kind === "reply") {
+    if (isBackFromSnooze(l) && turn.kind !== "reply") {
+      out.push({ id: `back-${l.id}`, kind: "leadBack", refId: l.id, name: l.name, label: "att.leadBack", params: { name: l.name }, chip: "lead.backChip", status: "info", score: 630 });
+    } else if (turn.kind === "reply") {
       const m = turn.minutes;
       out.push({
         id: `lead-${l.id}`, kind: "lead", refId: l.id, name: l.name, label: "att.lead", params: { m, name: l.name, d: 0 }, chip: "inbox.waiting",
@@ -43,8 +45,6 @@ export function buildAttention(db: DB, role: Role = "director"): AttentionItem[]
       });
     } else if (turn.kind === "noStep") {
       out.push({ id: `nostep-${l.id}`, kind: "leadNoStep", refId: l.id, name: l.name, label: "att.leadNoStep", params: { name: l.name }, chip: "lead.noNextStepShort", status: "warn", score: 610 });
-    } else if (isBackFromSnooze(l)) {
-      out.push({ id: `back-${l.id}`, kind: "leadBack", refId: l.id, name: l.name, label: "att.leadBack", params: { name: l.name }, chip: "lead.backChip", status: "info", score: 630 });
     }
   }
   for (const v of db.visits) {

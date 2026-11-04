@@ -57,6 +57,8 @@ describe("lead funnel", () => {
     db.estimates = db.estimates.map((e) => (e.leadId === "l5" ? { ...e, sentAt: new Date(Date.now() - 4 * 86_400_000).toISOString() } : e));
     l5.lastOutboundAt = new Date(Date.now() - 4 * 86_400_000).toISOString();
     expect(buildAttention(db).find((a) => a.refId === "l5")?.label).toBe("att.leadRemind");
+    // the estimate went out 20 days ago, the reminder 15 days ago
+    db.estimates = db.estimates.map((e) => (e.leadId === "l5" ? { ...e, sentAt: new Date(Date.now() - 20 * 86_400_000).toISOString() } : e));
     l5.remindedAt = new Date(Date.now() - 15 * 86_400_000).toISOString();
     expect(buildAttention(db).find((a) => a.refId === "l5")?.label).toBe("att.leadLostOrWait");
     l5.status = "won";

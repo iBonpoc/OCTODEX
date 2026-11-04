@@ -125,6 +125,8 @@ export type LeadTurn =
 export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAULT, now = Date.now()): LeadTurn {
   if (!isOpenLead(l)) return { kind: "done", status: leadStatusView[l.status].status };
   if (isSnoozed(l, now)) return { kind: "snoozed", until: l.snoozedUntil!, status: "neutral" };
+  // silence is not counted while the lead was snoozed: clocks start again from the return date
+  const after = (t: string | undefined) => (t && l.snoozedUntil && l.snoozedUntil > t ? l.snoozedUntil : t);
   const clientWroteLast = !!l.lastInboundAt && (!l.lastOutboundAt || l.lastInboundAt > l.lastOutboundAt);
   if (l.status === "new" || clientWroteLast) {
     const since = l.status === "new" ? l.receivedAt : l.lastInboundAt!;
@@ -135,17 +137,36 @@ export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAU
   if (task) {
     const due = task.dueAt ? new Date(task.dueAt).getTime() : null;
     const today = due !== null && new Date(due).toDateString() === new Date(now).toDateString();
-    return { kind: "step", dueAt: task.dueAt, title: task.title, status: due === null ? "neutral" : due < now && !today ? "bad" : today ? "info" : "neutral" };
+    return { kind: "step", dueAt: task.dueAt, title: task.title, status: due === null ? "neutral" : due < now ? "bad" : today ? "info" : "neutral" };
   }
-  if (l.status === "booked") return { kind: "step", status: "info" };
+  if (l.status === "booked") {
+    // the estimate visit is the step; once it has passed with no estimate, it is overdue (a day of grace)
+    const visit = l.propertyId
+      ? db.visits
+          .filter((v) => db.jobs.find((j) => j.id === v.jobId && j.propertyId === l.propertyId && j.status === "estimate"))
+          .sort((a, b) => b.start.localeCompare(a.start))[0]
+      : undefined;
+    if (!visit) return { kind: "step", status: "info" };
+    const start = new Date(visit.start).getTime();
+    if (start > now) return { kind: "step", dueAt: visit.start, status: new Date(start).toDateString() === new Date(now).toDateString() ? "info" : "neutral" };
+    return { kind: "step", dueAt: visit.start, status: now - start >= DAY ? "bad" : "warn" };
+  }
   const sentAt = db.estimates.filter((e) => e.leadId === l.id && e.status === "sent" && e.sentAt).map((e) => e.sentAt!).sort().pop();
-  const weWroteLast = !!l.lastOutboundAt && !!l.lastInboundAt && l.lastOutboundAt > l.lastInboundAt;
-  if (l.status === "estimate_sent" || sentAt || weWroteLast) {
-    const from = [sentAt, l.lastOutboundAt].filter((x): x is string => !!x).sort().pop() ?? l.lastActivityAt ?? l.receivedAt;
+  // we wrote last: the last thing we did was a message (SMS / email / marketplace / "I replied"), not a conversation
+  const lastOut = db.activities
+    .filter((a) => a.subjectType === "lead" && a.subjectId === l.id && ["call", "sms", "email", "marketplace", "reply"].includes(a.kind))
+    .sort((a, b) => b.at.localeCompare(a.at))[0];
+  const wroteLast = !!lastOut && lastOut.kind !== "call" && (!l.lastInboundAt || lastOut.at > l.lastInboundAt);
+  if (l.status === "estimate_sent" || sentAt || wroteLast) {
+    const from = after([sentAt, wroteLast ? lastOut!.at : undefined].filter((x): x is string => !!x).sort().pop() ?? l.lastOutboundAt ?? l.lastActivityAt ?? l.receivedAt)!;
     const days = Math.max(0, daysBetween(from, now));
-    if (l.askAgainAt && new Date(l.askAgainAt).getTime() > now) return { kind: "wait", days, action: "none", status: "neutral" };
-    if (l.remindedAt && daysBetween(l.remindedAt, now) >= st.lostOrWaitDays) return { kind: "wait", days, action: "lostOrWait", status: "warn" };
-    if (!l.remindedAt && days >= st.remindDays) return { kind: "wait", days, action: "remind", status: "warn" };
+    // a reminder counts only for what is waiting now: a newer estimate or message starts over
+    const reminded = l.remindedAt && (!sentAt || l.remindedAt >= sentAt) ? after(l.remindedAt)! : undefined;
+    if (reminded && l.askAgainAt) {
+      return new Date(l.askAgainAt).getTime() > now ? { kind: "wait", days, action: "none", status: "neutral" } : { kind: "wait", days, action: "lostOrWait", status: "warn" };
+    }
+    if (reminded) return daysBetween(reminded, now) >= st.lostOrWaitDays ? { kind: "wait", days, action: "lostOrWait", status: "warn" } : { kind: "wait", days, action: "none", status: "neutral" };
+    if (days >= st.remindDays) return { kind: "wait", days, action: "remind", status: "warn" };
     return { kind: "wait", days, action: "none", status: "neutral" };
   }
   return { kind: "noStep", status: "warn" };
