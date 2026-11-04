@@ -1,7 +1,7 @@
 -- Leads wave L1 (docs/14-leads-spec.md §2.1, §3.2, §13 Р9–Р15): lead number, interest, snooze, call attempts,
 -- reminder and archive marks. No new lead status: "snoozed" and "archived" are fields, so the funnel stays honest.
 
--- 1. Lead number L-0001: assigned by the server, its own counter per company (like EST/INV).
+-- 1. Lead number LEA-0001 (three letters, like EST / INV / RCT / JOB / CLT): assigned by the server, its own counter per company (like EST/INV).
 alter table app.company_numbering drop constraint if exists company_numbering_doc_type_check;
 alter table app.company_numbering add constraint company_numbering_doc_type_check
   check (doc_type in ('estimate', 'job', 'invoice', 'receipt', 'purchase_order', 'change_order', 'lead'));
@@ -15,14 +15,14 @@ do $$
 declare r record;
 begin
   for r in select id, company_id from public.leads where number is null order by company_id, received_at, created_at loop
-    update public.leads set number = app.next_document_number(r.company_id, 'lead', 'L') where id = r.id;
+    update public.leads set number = app.next_document_number(r.company_id, 'lead', 'LEA') where id = r.id;
   end loop;
 end $$;
 alter table public.leads enable trigger user;
 
 drop trigger if exists t20_number on public.leads;
 create trigger t20_number before insert or update on public.leads
-  for each row execute function app.tg_assign_number('lead', 'L');
+  for each row execute function app.tg_assign_number('lead', 'LEA');
 
 create unique index if not exists leads_company_number_uq on public.leads (company_id, number) where number is not null;
 

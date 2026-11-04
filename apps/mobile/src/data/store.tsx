@@ -621,8 +621,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // new leads go to the owner by default (founder 04.11); the creator is remembered (a tech keeps seeing his lead)
         const owner = d0.members.find((m) => m.roles.includes("director"))?.id ?? d0.me;
         // provisional number for the screen; the server assigns the real one (it ignores what the app sends)
-        const last = Math.max(0, ...d0.leads.map((x) => Number(/^L-(\d+)$/.exec(x.number ?? "")?.[1] ?? 0)));
-        const number = `L-${String(last + 1).padStart(4, "0")}`;
+        const last = Math.max(0, ...d0.leads.map((x) => Number(/^[A-Z]+-(\d+)$/.exec(x.number ?? "")?.[1] ?? 0)));
+        const number = `LEA-${String(last + 1).padStart(4, "0")}`;
         const full: Lead = { assigneeId: owner, createdBy: d0.me, ...lead, id, number, status: "new", receivedAt: new Date().toISOString() };
         const { name: _n, phone: _p, city: _c, address: _a, sourceId: _s, message: _m, number: _no, ...rest } = full;
         const undo = mutate("lead.add", (d) => ({ ...d, leads: [full, ...d.leads] }), {

@@ -168,7 +168,7 @@ export interface Lead {
   lostReasonText?: string;
   /** last change by the contractor */
   lastActivityAt?: string;
-  /** L-0001 — the server assigns it; a new lead made offline gets a provisional one */
+  /** LEA-0001 — the server assigns it; a new lead made offline gets a provisional one */
   number?: string;
   /** owner's gut feeling after talking (docs/14 Р9) */
   interest?: LeadInterest;

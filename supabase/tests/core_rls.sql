@@ -806,10 +806,10 @@ declare v_src uuid; v_a uuid; v_b uuid; n_a text; n_b text;
 begin
   select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
   insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', v_src, 'Number one', '(818) 555-0190') returning id, number into v_a, n_a;
-  insert into public.leads (company_id, source_id, contact_name, phone, number) values ('ca000000-0000-0000-0000-000000000000', v_src, 'Number two', '(818) 555-0191', 'L-9999') returning id, number into v_b, n_b;
-  perform tst.ok(n_a ~ '^L-\d{4,}$', 'lead gets a server number L-0001');
-  perform tst.ok(n_b <> 'L-9999' and n_b > n_a, 'the client cannot pick the number; numbers grow');
-  update public.leads set number = 'L-0000' where id = v_a;
+  insert into public.leads (company_id, source_id, contact_name, phone, number) values ('ca000000-0000-0000-0000-000000000000', v_src, 'Number two', '(818) 555-0191', 'LEA-9999') returning id, number into v_b, n_b;
+  perform tst.ok(n_a ~ '^LEA-\d{4,}$', 'lead gets a server number LEA-0001');
+  perform tst.ok(n_b <> 'LEA-9999' and n_b > n_a, 'the client cannot pick the number; numbers grow');
+  update public.leads set number = 'LEA-0000' where id = v_a;
   perform tst.ok((select number from public.leads where id = v_a) = n_a, 'the number never changes');
   perform tst.ok((select count(*) from public.leads where company_id = 'ca000000-0000-0000-0000-000000000000' and number is null) = 0, 'every lead has a number (old ones numbered by the migration)');
   -- interest: only hot / warm / cold
@@ -845,7 +845,7 @@ do $$ declare v_src uuid; n text;
 begin
   select id into v_src from public.lead_sources where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1;
   insert into public.leads (company_id, source_id, contact_name, phone) values ('cb000000-0000-0000-0000-000000000000', v_src, 'B first', '(818) 555-0192') returning number into n;
-  perform tst.ok(n = 'L-0001', 'each company has its own lead counter');
+  perform tst.ok(n = 'LEA-0001', 'each company has its own lead counter');
   perform tst.ok((select count(*) from public.leads where contact_name = 'Number one') = 0, 'leads isolated');
 end $$;
 \echo 'T15 leads L1 ok'
