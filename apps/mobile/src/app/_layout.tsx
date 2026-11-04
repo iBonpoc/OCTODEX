@@ -10,6 +10,7 @@ import { StoreProvider } from "@/data/store";
 import { AuthProvider } from "@/cloud/auth";
 import { ToastProvider } from "@/ui/overlays";
 import { HintsProvider } from "@/ui/hints";
+import { NoticeWatcher } from "@/features/notices";
 
 function Shell() {
   const { c, name } = useTheme();
@@ -17,6 +18,7 @@ function Shell() {
     <View style={{ flex: 1, backgroundColor: c.page }}>
       <StatusBar style={name === "dark" ? "light" : "dark"} />
       <ToastProvider>
+        <NoticeWatcher />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }} />
       </ToastProvider>
     </View>

@@ -9,7 +9,7 @@ import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
 
 /** Finger signature. Output is SVG path data (stored with the visit; PDF in wave 3). */
-export function SignaturePad({ onConfirm }: { onConfirm: (path: string) => void }) {
+export function SignaturePad({ onConfirm, disabled, confirmLabel }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const [d, setD] = useState("");
@@ -68,7 +68,7 @@ export function SignaturePad({ onConfirm }: { onConfirm: (path: string) => void 
       </T>
       <RowView>
         <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
-        <Button label={t("visit.confirmSign")} icon="check" onPress={() => onConfirm(d)} disabled={d.length < 20} />
+        <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" onPress={() => onConfirm(d)} disabled={disabled || d.length < 20} />
       </RowView>
     </View>
   );

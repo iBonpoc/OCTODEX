@@ -2,7 +2,7 @@
  * Read the company's data from the OCTODEX database and map it to the app's view model (src/data/types.ts).
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
-import type { DB, Estimate, EstimateStatus, Expense, ExpenseCategory, Invoice, Job, JobStatus, Lead, LeadSource, LeadStatus, Member, Role, Visit, VisitStep } from "@/data/types";
+import type { CatalogItem, DB, Estimate, EstimateDoc, Notice, EstimateStatus, Expense, ExpenseCategory, Invoice, Job, JobStatus, Lead, LeadSource, LeadStatus, Member, Role, Visit, VisitStep } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -71,7 +71,7 @@ async function q<T = Row>(p: PromiseLike<{ data: unknown; error: { message: stri
 
 export async function loadCompanyDB(companyId: string, userId: string): Promise<DB> {
   const live = <T,>(table: string, cols = "*") => q<T>(supabase.from(table).select(cols).eq("company_id", companyId).is("deleted_at", null));
-  const [mems, sources, customers, contacts, properties, jobs, visits, assignees, leads, estimates, versions, options, lines, approvals, invoices, payments, files, expenses] =
+  const [mems, sources, customers, contacts, properties, jobs, visits, assignees, leads, estimates, versions, options, lines, approvals, invoices, payments, files, expenses, catalogRows, lineCosts, notifications] =
     await Promise.all([
       q<Row>(supabase.from("memberships").select("user_id, role, status, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).eq("status", "active")),
       live<Row>("lead_sources", "id, name"),
@@ -83,15 +83,25 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("visit_assignees", "visit_id, user_id"),
       live<Row>("leads"),
       live<Row>("estimates"),
-      live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at"),
+      live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs"),
       live<Row>("estimate_options", "id, version_id, name"),
       live<Row>("estimate_line_items", "id, option_id, name, quantity, line_total_cents, is_optional, client_visible, position"),
-      q<Row>(supabase.from("estimate_approvals").select("estimate_id, signature_svg, signed_at").eq("company_id", companyId)),
+      q<Row>(supabase.from("estimate_approvals").select("estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at").eq("company_id", companyId)),
       live<Row>("invoices"),
       live<Row>("payments"),
       live<Row>("files", "id, visit_id, stage, storage_key, kind"),
       live<Row>("expenses"),
+      live<Row>("catalog_items"),
+      // Costs are visible only to owner/admin/office: for others the query returns nothing.
+      q<Row>(supabase.from("estimate_line_costs").select("line_item_id, unit_cost_cents").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
+      q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
     ]);
+  const costOf = new Map(lineCosts.map((r) => [s(r.line_item_id), n(r.unit_cost_cents)]));
+  const withCosts = (doc: unknown): EstimateDoc | undefined => {
+    const d = doc as EstimateDoc | null;
+    if (!d || !Array.isArray(d.options) || !d.settings) return undefined;
+    return { ...d, options: d.options.map((o) => ({ ...o, lines: o.lines.map((l) => (costOf.has(l.id) ? { ...l, unitCostCents: costOf.get(l.id) } : l)) })) };
+  };
 
   const sourceName = new Map(sources.map((r) => [s(r.id), s(r.name)]));
   const members: Member[] = mems.map((m) => {
@@ -147,7 +157,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     const ver = versionOf.get(s(e.current_version_id));
     const totals = (ver?.totals ?? {}) as { total?: number; deposit?: number; marginPct?: string | null };
     const opt = options.find((o) => o.version_id === e.current_version_id);
-    const appr = approvals.find((a) => a.estimate_id === e.id);
+    const appr = approvals.filter((a) => a.estimate_id === e.id).sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
+    const sel = (appr?.selection ?? null) as { addon_ids?: string[]; total?: number; deposit?: number } | null;
     const depositJob = jobs.find((j) => j.estimate_id === e.id);
     const depInv = depositJob ? invoices.find((i) => i.job_id === depositJob.id && i.kind === "deposit") : undefined;
     return {
@@ -155,13 +166,24 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       customerId: s(e.customer_id),
       propertyId: s(e.property_id),
       title: s(e.title) || s(e.number),
-      totalCents: n(totals.total),
+      totalCents: sel?.total !== undefined ? n(sel.total) : n(totals.total),
       status: estimateStatus[s(e.status)] ?? "draft",
       sentAt: (ver?.sent_at as string | null) ?? undefined,
       approvedAt: (appr?.signed_at as string | null) ?? undefined,
-      depositCents: totals.deposit,
+      depositCents: sel?.deposit !== undefined ? n(sel.deposit) : totals.deposit,
       marginPct: totals.marginPct ?? null,
       signature: (appr?.signature_svg as string | null) ?? undefined,
+      doc: withCosts(ver?.calc_inputs),
+      token: (e.public_token as string | null) ?? undefined,
+      number: s(e.number) || undefined,
+      viewedAt: (e.last_viewed_at as string | null) ?? undefined,
+      approval:
+        appr && appr.option_id
+          ? {
+              optionId: s(appr.option_id), addonIds: sel?.addon_ids ?? [], signerName: s(appr.signer_name), signature: s(appr.signature_svg),
+              at: s(appr.signed_at), channel: appr.channel === "portal" ? "portal" : "on_site", totalCents: n(sel?.total ?? totals.total), depositCents: n(sel?.deposit ?? totals.deposit),
+            }
+          : undefined,
       depositPaidAt: depInv && n(depInv.paid_cents) > 0 ? s(depInv.updated_at) : undefined,
       lines: lines
         .filter((l) => opt && l.option_id === opt.id && l.client_visible !== false)
@@ -204,6 +226,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     title: s(j.title) || s(j.number),
     status: jobStatus[s(j.status)] ?? "scheduled",
     amountCents: n(j.contract_total_cents),
+    estimateId: (j.estimate_id as string | null) ?? undefined,
   }));
 
   const mappedExpenses: Expense[] = expenses.map((x) => ({
@@ -239,5 +262,28 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     estimates: mappedEstimates,
     invoices: mappedInvoices,
     expenses: mappedExpenses,
+    catalog: catalogRows
+      .filter((r) => r.is_active !== false)
+      .map((r) => ({
+        id: s(r.id),
+        kind: s(r.kind) as CatalogItem["kind"],
+        name: s(r.name),
+        description: (r.description as string | null) ?? undefined,
+        unit: s(r.unit) || "ea",
+        priceCents: n(r.unit_price_cents),
+        costCents: r.unit_cost_cents === null || r.unit_cost_cents === undefined ? undefined : n(r.unit_cost_cents),
+        vendor: (r.vendor as string | null) ?? undefined,
+        vendorTaxBps: r.vendor_tax_bps === null || r.vendor_tax_bps === undefined ? undefined : n(r.vendor_tax_bps),
+        markupBps: r.markup_bps === null || r.markup_bps === undefined ? undefined : n(r.markup_bps),
+        components: ((r.components as { item_id: string; qty: string }[] | null) ?? []).map((x) => ({ itemId: x.item_id, qty: String(x.qty) })),
+        placeholder: !!r.is_placeholder_price,
+      })),
+    notices: notifications.map((r) => {
+      const p = (r.payload ?? {}) as { customer?: string; total?: number; deposit?: number };
+      return {
+        id: s(r.id), kind: s(r.kind) as Notice["kind"], estimateId: (r.estimate_id as string | null) ?? undefined, customer: p.customer ?? "",
+        totalCents: p.total, depositCents: p.deposit, at: s(r.created_at), read: !!r.read_at,
+      };
+    }),
   };
 }

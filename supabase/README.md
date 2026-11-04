@@ -82,6 +82,13 @@ VERBOSE=1 supabase/tests/run.sh   # плюс текст каждой ожида�
 - `gate_code` в `properties` не включён: нужно шифрование и RPC `get_gate_code()` (`08` §5.4).
 - Ссылки на сущности вне этой миграции (File, Device, Crew, TaxRate, ServiceCategory, CatalogItem и др.) пока хранятся как `uuid` без FK.
 
+## Универсальная смета, каталог, страница клиента (`20261104020000_universal_estimate.sql`, 04.11.2026)
+- `catalog_items` — услуги / работа / материалы / комплекты (`components` = `[{item_id, qty}]`). Материал: `unit_cost_cents` (закупка без налога) × (1 + `vendor_tax_bps`) × (1 + `markup_bps`) = цена в смете.
+- Смета из приложения: документ без себестоимости — в `estimate_versions.calc_inputs`; варианты и строки зеркалируются в `estimate_options` / `estimate_line_items` (те же id, `line_group` = service/labor/material, `taxable` по группе); себестоимость строк — в `estimate_line_costs`.
+- `estimates.public_token` (≥ 20 символов, приложение даёт 40) — ссылка `/p/<token>`. `public.portal_estimate` и `public.portal_accept` — `security definer`, доступны `anon` намеренно (предупреждение Supabase advisor ожидаемое): видно только клиентское, итог и депозит пересчитывает сервер по строкам; одобрение создаёт работу `scheduled` и выезд без мастера на завтра 09:00 по `companies.timezone`, пишет `notifications`.
+- **Упрощения:** себестоимость в `catalog_items` видна всем участникам компании (включая tech); клиент пока не платит депозит онлайн (нужен Stripe) — депозит отмечает подрядчик; SMS/email уходят с телефона подрядчика (`sms:` / `mailto:`), автоматическая отправка — после подключения сервиса.
+- Тест: `supabase/tests/core_rls.sql` T8.
+
 ## Открытые вопросы
 
 1. **Запись через API или напрямую.** По `06` §4.2 деньги и статусы должны идти только через API/RPC (`/sync/ops`). Сейчас прямые `update` разрешены под RLS и защищены триггерами. Закрыть ли прямой `update` у `status`, `invoices` и `payments`, когда появятся RPC?

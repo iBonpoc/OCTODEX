@@ -2,7 +2,63 @@
  * Test data (placeholder prices — founder rule: real prices are never typed into seeds).
  * All times are relative to "now" so the demo always looks like a live day in Los Angeles.
  */
-import type { DB, ChecklistItem } from "./types";
+import type { DB, ChecklistItem, CatalogItem, EstimateDoc } from "./types";
+import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
+
+/** Test catalog for several trades. All prices are PLACEHOLDERS (badge "test price"). */
+const S = (id: string, name: string, unit: string, priceCents: number, kind: "service" | "labor" = "service"): CatalogItem => ({
+  id, kind, name, unit, priceCents, placeholder: true,
+});
+const MAT = (id: string, name: string, unit: string, costCents: number, vendor: string, vendorTaxBps: number, markupBps: number): CatalogItem => ({
+  id, kind: "material", name, unit, priceCents: 0, costCents, vendor, vendorTaxBps, markupBps, placeholder: true,
+});
+export const SEED_CATALOG: CatalogItem[] = [
+  // handyman
+  S("cat-haul", "Debris haul-away (pickup load)", "flat", 15000),
+  S("cat-carpet", "Carpet removal", "sq ft", 150, "labor"),
+  S("cat-railing", "Install stair railing", "ea", 25000, "labor"),
+  S("cat-bulb", "Replace light bulb / fixture lamp", "ea", 2500, "labor"),
+  S("cat-hour", "Handyman labor", "hr", 9500, "labor"),
+  MAT("cat-bracket", "Railing bracket", "ea", 1000, "Home Depot", 1025, 1000),
+  MAT("cat-led", "LED bulb A19", "ea", 600, "Home Depot", 1025, 1000),
+  { id: "kit-railing", kind: "kit", name: "Stair railing kit (install + 12 brackets)", unit: "kit", priceCents: 0, placeholder: true,
+    components: [{ itemId: "cat-railing", qty: "1" }, { itemId: "cat-bracket", qty: "12" }] },
+  // cleaning, painting, plumbing, electrical
+  S("cat-deepclean", "Deep clean, per room", "room", 9000),
+  S("cat-paint-room", "Interior painting, per room", "room", 45000, "labor"),
+  MAT("cat-paint-gal", "Interior paint, 1 gal", "gal", 3800, "Sherwin-Williams", 950, 1500),
+  S("cat-faucet", "Replace kitchen faucet", "ea", 18000, "labor"),
+  S("cat-outlet", "Replace outlet / switch", "ea", 8500, "labor"),
+  // gutters
+  S("cat-gclean", "Gutter cleaning, 1 story", "LF", 150),
+  MAT("cat-gfilter", "Gutter filter / strainer", "ea", 1000, "ABC Supply", 1025, 1000),
+];
+
+function demoDoc(): EstimateDoc {
+  const L = (id: string, group: "service" | "labor" | "material", name: string, quantity: string, unit: string, unitPriceCents: number, extra: object = {}) => ({
+    id, group, name, quantity, unit, unitPriceCents, ...extra,
+  });
+  return {
+    settings: { ...DEFAULT_SETTINGS, tax: { enabled: true, rateBps: 950, groups: { service: false, labor: false, material: true } } },
+    note: "Work in 1 day. Debris hauled away the same day.",
+    options: [
+      {
+        id: "o-e6-1",
+        name: "Standard",
+        recommended: true,
+        lines: [
+          L("l-e6-1", "service", "Debris haul-away (pickup load)", "1", "flat", 15000, { catalogItemId: "cat-haul" }),
+          L("l-e6-2", "labor", "Carpet removal", "120", "sq ft", 150, { catalogItemId: "cat-carpet" }),
+          L("l-e6-3", "labor", "Install stair railing", "1", "ea", 25000, { catalogItemId: "cat-railing" }),
+          L("l-e6-4", "labor", "Replace light bulb / fixture lamp", "1", "ea", 2500, { catalogItemId: "cat-bulb" }),
+          L("l-e6-5", "material", "Railing bracket", "12", "ea", 1213, { catalogItemId: "cat-bracket", unitCostCents: 1103 }),
+          L("l-e6-6", "material", "LED bulb A19", "1", "ea", 728, { catalogItemId: "cat-led", unitCostCents: 662 }),
+          L("l-e6-7", "service", "Deep clean after work", "1", "room", 9000, { optional: true }),
+        ],
+      },
+    ],
+  };
+}
 
 function at(dayOffset: number, hour: number, minute = 0): string {
   const d = new Date();
@@ -113,7 +169,16 @@ export function makeSeed(): DB {
       { id: "e3", customerId: "c5", propertyId: "p5", title: "Gutter guards", totalCents: 156000, status: "approved", sentAt: daysAgo(9), approvedAt: daysAgo(4) },
       { id: "e4", customerId: "c3", propertyId: "p3", title: "Full replacement option", totalCents: 264000, status: "sent", sentAt: daysAgo(6) },
       { id: "e5", customerId: "c1", propertyId: "p1", title: "Seamless 6″, 148 LF", totalCents: 342000, status: "approved", sentAt: daysAgo(12), approvedAt: daysAgo(8) },
+      (() => {
+        const doc = demoDoc();
+        return {
+          id: "e6", customerId: "c3", propertyId: "p3", number: "EST-0006", title: "Carpet, railing, bulb, haul-away", status: "sent" as const,
+          sentAt: daysAgo(1), token: "demo0handyman0estimate0000000001", doc, ...summarize(doc),
+        };
+      })(),
     ],
+    catalog: SEED_CATALOG,
+    notices: [],
     expenses: [
       { id: "x1", jobId: "j5", vendor: "Home Depot", category: "materials", amountCents: 41260, at: minutesAgo(300), memberId: "m-ivan" },
       { id: "x2", jobId: "j1", vendor: "ABC Supply", category: "materials", amountCents: 88400, at: daysAgo(1), memberId: "m-alex" },

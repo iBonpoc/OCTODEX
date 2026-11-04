@@ -13,11 +13,15 @@ import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { applyOp, PermanentError, type Op, type OutboxItem } from "@/cloud/ops";
 import { makeSeed } from "./seed";
+import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { todayKey, usePersistentState } from "./persist";
 import {
   VISIT_STEPS,
+  type CatalogItem,
   type DB,
   type Estimate,
+  type EstimateApproval,
+  type EstimateDoc,
   type Expense,
   type Lead,
   type ID,
@@ -55,17 +59,36 @@ interface StoreCtx {
   resetDemo: () => Undo;
   addLead: (l: Omit<Lead, "id" | "status" | "receivedAt">) => Undo;
   addEstimate: (e: Omit<Estimate, "id">) => Undo;
-  sendEstimate: (id: ID) => Undo;
+  sendEstimate: (id: ID, token?: string) => Undo;
   payInvoice: (id: ID, method: PaymentMethod) => Undo;
   addExpense: (x: Omit<Expense, "id" | "at" | "memberId">) => Undo;
   signEstimate: (id: ID, path: string) => Undo;
-  payDeposit: (id: ID, method: PaymentMethod) => Undo;
+  /** fromClient: paid on the client page → unread notice for the office */
+  payDeposit: (id: ID, method: PaymentMethod, fromClient?: boolean) => Undo;
+  /** create or update a universal estimate (draft) */
+  saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc }) => Undo;
+  /** client's choice + signature (on site or on the client page): job + visit in the plan + notice */
+  approveEstimate: (id: ID, a: Omit<EstimateApproval, "at" | "totalCents" | "depositCents">) => Undo;
+  saveCatalogItem: (it: CatalogItem) => Undo;
+  removeCatalogItem: (id: ID) => Undo;
+  readNotices: () => void;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
 /** UUIDs everywhere: the same id is used on the phone and in the database (offline-created rows). */
 const uid = (_p?: string) => Crypto.randomUUID();
-const emptyDB = (me: string): DB => ({ me, members: [], customers: [], properties: [], jobs: [], visits: [], leads: [], estimates: [], invoices: [], expenses: [] });
+const emptyDB = (me: string): DB => ({
+  me, members: [], customers: [], properties: [], jobs: [], visits: [], leads: [], estimates: [], invoices: [], expenses: [], catalog: [], notices: [],
+});
+/** Older saved data has no catalog / notices yet. */
+const normalize = (d: DB): DB => (d.catalog && d.notices ? d : { ...d, catalog: d.catalog ?? [], notices: d.notices ?? [] });
+/** Fresh ids for options/lines when a sent estimate is edited (the sent version stays immutable in the database). */
+const reId = (doc: EstimateDoc): EstimateDoc => ({
+  ...doc,
+  options: doc.options.map((o) => ({ ...o, id: uid(), lines: o.lines.map((l) => ({ ...l, id: uid() })) })),
+});
+const costsOf = (doc: EstimateDoc): Record<string, number> =>
+  Object.fromEntries(doc.options.flatMap((o) => o.lines.filter((l) => l.unitCostCents !== undefined).map((l) => [l.id, l.unitCostCents!])));
 
 export function StoreProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
@@ -82,7 +105,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
     },
   );
-  const db = saved.db;
+  const db = useMemo(() => normalize(saved.db), [saved.db]);
   const setDb = useCallback((next: DB) => setSaved({ day: mode === "cloud" ? "cloud" : todayKey(), db: next }), [setSaved, mode]);
   const [role, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "tech");
   const [online, setOnlineState] = useState(true);
@@ -356,12 +379,93 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           inv ? { k: "invoice.pay", invoiceId: id, paymentId: uid(), customerId: inv.customerId, amountCents: inv.totalCents - inv.paidCents, method } : undefined,
         );
       },
-      sendEstimate: (id) =>
-        mutate(
+      sendEstimate: (id, tk) => {
+        const token = dbRef.current.estimates.find((e) => e.id === id)?.token ?? tk ?? newToken();
+        return mutate(
           "estimate.send",
-          (d) => ({ ...d, estimates: d.estimates.map((e) => (e.id === id ? { ...e, status: "sent", sentAt: new Date().toISOString() } : e)) }),
-          { k: "estimate.send", id },
+          (d) => ({
+            ...d,
+            estimates: d.estimates.map((e) => (e.id === id ? { ...e, token, status: e.status === "draft" ? "sent" : e.status, sentAt: e.sentAt ?? new Date().toISOString() } : e)),
+          }),
+          { k: "estimate.send", id, token },
+        );
+      },
+      saveEstimate: ({ id, customerId, propertyId, title, doc: doc0 }) => {
+        const prev = dbRef.current.estimates.find((e) => e.id === id);
+        if (prev?.status === "approved") return () => {};
+        const doc = prev && prev.status !== "draft" ? reId(doc0) : doc0;
+        const sum = summarize(doc);
+        const versionId = uid();
+        return mutate(
+          "estimate.save",
+          (d) => {
+            const next: Estimate = {
+              ...(prev ?? {}),
+              id, customerId, propertyId, title, doc, status: "draft", ...sum,
+              sentAt: prev?.status === "draft" ? prev.sentAt : undefined,
+            };
+            return { ...d, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
+          },
+          { k: "estimate.save", id, versionId, customerId, propertyId, title, doc: clientDoc(doc), costs: costsOf(doc), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
+        );
+      },
+      approveEstimate: (id, a) => {
+        const e = dbRef.current.estimates.find((x) => x.id === id);
+        if (!e?.doc || e.status === "approved") return () => {};
+        const token = e.token ?? newToken();
+        const now = new Date().toISOString();
+        const sum = summarize(e.doc, a);
+        const approval: EstimateApproval = { ...a, at: now, totalCents: sum.totalCents, depositCents: sum.depositCents };
+        const existingJob = dbRef.current.jobs.find((j) => j.estimateId === id);
+        const jobId = existingJob?.id ?? uid();
+        const visitId = uid();
+        const start = new Date();
+        start.setDate(start.getDate() + 1);
+        start.setHours(9, 0, 0, 0);
+        const customer = dbRef.current.customers.find((c) => c.id === e.customerId);
+        const option = e.doc.options.find((o) => o.id === a.optionId);
+        return mutate(
+          "estimate.approve",
+          (d) => ({
+            ...d,
+            estimates: d.estimates.map((x) =>
+              x.id === id
+                ? { ...x, ...sum, token, status: "approved", approval, signature: a.signature, approvedAt: now, sentAt: x.sentAt ?? now }
+                : x,
+            ),
+            jobs: existingJob
+              ? d.jobs
+              : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "scheduled", amountCents: sum.totalCents, estimateId: id }],
+            visits: existingJob
+              ? d.visits
+              : [
+                  ...d.visits,
+                  {
+                    id: visitId, jobId, techId: null, start: start.toISOString(), durationMin: 120, step: "scheduled",
+                    scope: (option ? option.lines.filter((l) => !l.optional || a.addonIds.includes(l.id)).map((l) => l.name) : []).filter(Boolean),
+                    checklist: [], photos: [], amountDueCents: sum.totalCents - (sum.depositCents ?? 0),
+                  },
+                ],
+            notices: [
+              { id: uid(), kind: "estimate.approved", estimateId: id, customer: customer?.name ?? a.signerName, totalCents: sum.totalCents, depositCents: sum.depositCents, at: now, read: a.channel === "on_site" },
+              ...d.notices,
+            ],
+          }),
+          { k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId, visitId },
+        );
+      },
+      saveCatalogItem: (it) =>
+        mutate(
+          "catalog.save",
+          (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it] }),
+          { k: "catalog.save", item: it },
         ),
+      removeCatalogItem: (id) => mutate("catalog.remove", (d) => ({ ...d, catalog: d.catalog.filter((x) => x.id !== id) }), { k: "catalog.remove", id }),
+      readNotices: () => {
+        const ids = dbRef.current.notices.filter((n) => !n.read).map((n) => n.id);
+        if (!ids.length) return;
+        mutate("notice.read", (d) => ({ ...d, notices: d.notices.map((n) => ({ ...n, read: true })) }), { k: "notice.read", ids });
+      },
       signEstimate: (id, path) =>
         mutate(
           "estimate.sign",
@@ -373,18 +477,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }),
           { k: "estimate.sign", id, svg: path },
         ),
-      payDeposit: (id, method) => {
+      payDeposit: (id, method, fromClient) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
         if (!e || !e.depositCents) return () => {};
         const now = new Date().toISOString();
-        const jobId = uid();
+        const existingJob = dbRef.current.jobs.find((j) => j.estimateId === id);
+        const jobId = existingJob?.id ?? uid();
         const invoiceId = uid();
         return mutate(
           "estimate.deposit",
           (d) => ({
             ...d,
             estimates: d.estimates.map((x) => (x.id === id ? { ...x, depositPaidAt: now } : x)),
-            jobs: [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "scheduled", amountCents: e.totalCents }],
+            notices: [
+              { id: uid(), kind: "deposit.paid", estimateId: id, customer: d.customers.find((c) => c.id === e.customerId)?.name ?? "", depositCents: e.depositCents, at: now, read: !fromClient },
+              ...d.notices,
+            ],
+            jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "scheduled", amountCents: e.totalCents, estimateId: id }],
             invoices: [
               ...d.invoices,
               { id: invoiceId, customerId: e.customerId, jobId, totalCents: e.depositCents!, paidCents: e.depositCents!, dueDate: now, paidAt: now, method, kind: "deposit" },

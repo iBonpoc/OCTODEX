@@ -204,6 +204,17 @@ export const themes: Record<ThemeName, ThemeColors> = {
   },
 };
 
+/** Printed documents (estimate PDF): white paper, light-theme ink. Paper never follows the dark theme. */
+export const print = {
+  paper: "#FFFFFF",
+  ink: "#15161A",
+  mut: "#575C68",
+  rule: "rgba(20,22,30,0.14)",
+  okText: "#176428",
+  pagePadMm: 14,
+  fontPt: { title: 18, heading: 11, body: 9.5, small: 8 },
+} as const;
+
 /** Status glyph (DS: always icon + word). Maps to icons.ts names. */
 export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close" | "note"> = {
   ok: "check",
@@ -216,5 +227,5 @@ export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close
 /** Business timing rules from HANDOFF: estimate without reply 2–4 days → warn, 5+ → bad. */
 export const timing = { estimateWarnDays: 2, estimateBadDays: 5, leadReplyWarnMin: 5, leadReplyBadMin: 15 } as const;
 
-export const tokens = { font, space, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing } as const;
+export const tokens = { font, space, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print } as const;
 export type Tokens = typeof tokens;
