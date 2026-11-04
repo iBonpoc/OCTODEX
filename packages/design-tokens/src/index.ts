@@ -129,6 +129,13 @@ export const component = {
   photoGap: 2,
   /** photo thumbnail side */
   photoThumb: 72,
+  /** bottom sheet: share of the screen height before it is pulled up to full height */
+  sheetHeightRatio: 0.88,
+  /** bottom sheet: drag down this far (pt) or this fast (pt/ms) to close */
+  sheetDismissDrag: 120,
+  sheetDismissVelocity: 0.8,
+  /** width of the countdown ring around the toast Undo button */
+  toastRing: 2,
   /** widest "‹ Parent" back button in a header */
   backMax: 220,
   /** dimmed element: disabled control, day outside the shown month */
