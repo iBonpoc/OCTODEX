@@ -11,7 +11,7 @@ import { ReplySheet } from "@/features/sheets";
 import { Button, ChoiceChips, StatusChip, Steps, TextField } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Divider, Empty, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 /**
  * Lead card: funnel (new → replied → inspection → estimate sent → client), actions,
@@ -127,11 +127,10 @@ export default function LeadScreen() {
       {estimates.length ? (
         <>
           <SectionTitle title={t("client.estimates")} />
-          <Card>
+          <CardList>
             {estimates.map((e, i) => (
               <View key={e.id}>
-                {i > 0 ? <Divider /> : null}
-                <ListRow
+                <ItemCard
                   title={e.title}
                   subtitle={`${money(e.totalCents)}${e.sentAt ? ` · ${t("st.sent")} ${day(e.sentAt)}` : ""}${e.viewedAt ? ` · ${t("ue.viewed", { date: day(e.viewedAt) })}` : ""}`}
                   right={
@@ -144,7 +143,7 @@ export default function LeadScreen() {
                 />
               </View>
             ))}
-          </Card>
+          </CardList>
         </>
       ) : null}
 

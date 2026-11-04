@@ -264,8 +264,25 @@ export interface Invoice {
   dueDate: string;
   paidAt?: string;
   method?: PaymentMethod;
-  /** deposit invoice for an approved estimate */
-  kind?: "deposit" | "final";
+  /** deposit → progress (by stage) → final balance; each takes partial payments */
+  kind?: "deposit" | "progress" | "final";
+  number?: string;
+  /** what the client sees: "Deposit", "Progress: rough-in", "Final balance" */
+  title?: string;
+  sentAt?: string;
+}
+
+/** One payment = one receipt (number RCT-… assigned by the server; locally in demo). */
+export interface Payment {
+  id: ID;
+  invoiceId: ID;
+  customerId: ID;
+  amountCents: number;
+  method: PaymentMethod;
+  at: string;
+  receiptNumber?: string;
+  /** check number, Zelle confirmation… */
+  reference?: string;
 }
 
 export type ExpenseCategory = "materials" | "fuel" | "dump" | "tools" | "other";
@@ -302,4 +319,5 @@ export interface DB {
   notices: Notice[];
   company: Company | null;
   notes: Note[];
+  payments: Payment[];
 }

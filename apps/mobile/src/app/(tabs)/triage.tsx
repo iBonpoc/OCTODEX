@@ -8,7 +8,7 @@ import { AssignSheet, ReplySheet, useTick } from "@/features/sheets";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, Empty, RowView, Screen, SectionTitle, ListRow, Divider } from "@/ui/surfaces";
+import { Card, CardList, Divider, Empty, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { View } from "react-native";
 
 /** Dispatcher home: one item at a time, most urgent first; resolve with one tap or snooze. */
@@ -78,18 +78,17 @@ export default function Triage() {
       {all.length > 1 ? (
         <>
           <SectionTitle title={t("today.attention")} />
-          <Card>
+          <CardList>
             {all.slice(1).map((it, i) => (
               <View key={it.id}>
-                {i > 0 ? <Divider /> : null}
-                <ListRow
+                <ItemCard
                   title={it.name}
                   subtitle={t(it.label, it.params)}
                   right={<StatusChip status={it.status} label={t(it.chip, it.params)} soft />}
                 />
               </View>
             ))}
-          </Card>
+          </CardList>
         </>
       ) : null}
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />

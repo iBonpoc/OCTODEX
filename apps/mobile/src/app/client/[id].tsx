@@ -2,13 +2,14 @@ import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, type StatusName } from "@octo/design-tokens";
 import { NotesBlock } from "@/features/NotesBlock";
+import { invoiceChip } from "@/features/ContractStatement";
 import { customerBalance, useStore } from "@/data/store";
 import type { EstimateStatus, JobStatus } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
-import { Card, Divider, Empty, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Divider, Empty, Grid, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 const jobSt: Record<JobStatus, { s: StatusName; l: DictKey }> = {
   lead: { s: "info", l: "st.new" },
@@ -133,41 +134,34 @@ export default function ClientScreen() {
       {estimates.length > 0 ? (
         <>
           <SectionTitle title={t("client.estimates")} />
-          <Card>
+          <CardList>
             {estimates.map((e, i) => (
               <View key={e.id}>
-                {i > 0 ? <Divider /> : null}
-                <ListRow title={e.title} subtitle={money(e.totalCents)} right={<StatusChip status={estSt[e.status].s} label={t(estSt[e.status].l)} />} onPress={() => router.push(`/estimate/${e.id}`)} />
+                <ItemCard title={e.title} subtitle={money(e.totalCents)} right={<StatusChip status={estSt[e.status].s} label={t(estSt[e.status].l)} />} onPress={() => router.push(`/estimate/${e.id}`)} />
               </View>
             ))}
-          </Card>
+          </CardList>
         </>
       ) : null}
 
       {invoices.length > 0 ? (
         <>
           <SectionTitle title={t("client.invoices")} />
-          <Card>
+          <CardList>
             {invoices.map((inv, i) => {
-              const paid = inv.paidCents >= inv.totalCents;
-              const overdue = !paid && new Date(inv.dueDate).getTime() < Date.now();
+              const chip = invoiceChip(inv);
               return (
                 <View key={inv.id}>
-                  {i > 0 ? <Divider /> : null}
-                  <ListRow
-                    title={money(inv.totalCents)}
-                    subtitle={db.jobs.find((j) => j.id === inv.jobId)?.title}
-                    right={
-                      <StatusChip
-                        status={paid ? "ok" : overdue ? "bad" : "warn"}
-                        label={t(paid ? "st.paid" : overdue ? "st.overdue" : "st.awaiting")}
-                      />
-                    }
+                  <ItemCard
+                    title={`${money(inv.totalCents)}${inv.number ? ` · ${inv.number}` : ""}`}
+                    subtitle={[inv.title, db.jobs.find((j) => j.id === inv.jobId)?.title].filter(Boolean).join(" · ")}
+                    right={<StatusChip status={chip.s} label={t(chip.l)} />}
+                    onPress={() => router.push(`/invoice/${inv.id}`)}
                   />
                 </View>
               );
             })}
-          </Card>
+          </CardList>
         </>
       ) : null}
       <NotesBlock subjectType="customer" subjectId={c.id} extraSubjects={db.leads.filter((l) => l.customerId === c.id).map((l) => ({ type: "lead" as const, id: l.id }))} />

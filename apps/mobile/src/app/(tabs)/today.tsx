@@ -11,7 +11,7 @@ import { NoticesCard } from "@/features/notices";
 import { CompanySetupCard, FirstStepsCard } from "@/features/SetupCards";
 import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T, type IconKey } from "@/ui/primitives";
-import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Divider, Grid, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 function Kpi({ label, cents, icon, hint, onPress, width }: { label: string; cents: number; icon: IconKey; hint?: string; onPress?: () => void; width: number }) {
   const { moneyWhole } = useI18n();
@@ -68,7 +68,7 @@ export default function Today() {
       <Grid>
         <View style={{ gap: space[2] }}>
           <SectionTitle title={t("today.attention")} right={<T v="caption" tone="mut">{attention.length}</T>} />
-          <Card>
+          <CardList>
             {attention.length === 0 ? (
               <T v="body" tone="ok">
                 ✓ {t("today.allClear")}
@@ -76,8 +76,8 @@ export default function Today() {
             ) : (
               attention.slice(0, 6).map((it, i) => (
                 <View key={it.id}>
-                  {i > 0 ? <Divider /> : null}
-                  <ListRow
+                  <ItemCard
+                    status={it.status}
                     title={it.name}
                     subtitle={t(it.label, it.params)}
                     right={<StatusChip status={it.status} label={t(it.chip, it.params)} />}
@@ -92,19 +92,18 @@ export default function Today() {
                 </View>
               ))
             )}
-          </Card>
+          </CardList>
         </View>
         <View style={{ gap: space[2] }}>
           <SectionTitle title={t("today.crew")} />
-          <Card>
+          <CardList>
             {techs.map((m, i) => {
               const vs = todayVisits(db, m.id);
               const active = vs.find((v) => v.step !== "scheduled" && v.step !== "paid") ?? vs.find((v) => v.step === "scheduled");
               const st = active ? visitStatus(active) : null;
               return (
                 <View key={m.id}>
-                  {i > 0 ? <Divider /> : null}
-                  <ListRow
+                  <ItemCard
                     title={m.name}
                     subtitle={t("visits.count", { n: vs.length })}
                     left={<Avatar initials={m.initials} sub={m.kind === "sub"} />}
@@ -114,7 +113,7 @@ export default function Today() {
                 </View>
               );
             })}
-          </Card>
+          </CardList>
         </View>
       </Grid>
     </Screen>

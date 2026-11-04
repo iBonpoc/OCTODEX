@@ -650,5 +650,56 @@ do $$ begin
 end $$;
 \echo 'T10 lead → estimate → client ok'
 
+-- ---------------------------------------------------------------- T11: contract → invoices → receipts
+reset role;
+do $$
+declare v_job uuid; v_inv uuid; v_fin uuid; v_rct text;
+begin
+  -- T8 estimate had a 10% deposit: the deposit invoice must exist only if signed after this migration;
+  -- sign a fresh estimate with a deposit
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title, public_token) values
+    ('0e1a0000-0000-0000-0000-000000000088', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001',
+     'd1a00000-0000-0000-0000-000000000001', 'Bathroom', 'tok_inv_0123456789abcdef');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+    ('0e2a0000-0000-0000-0000-000000000088', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000088', 1, '{"kind":"pct","bps":1000}');
+  update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000088' where id = '0e1a0000-0000-0000-0000-000000000088';
+  insert into public.estimate_options (id, company_id, version_id, name) values
+    ('0e3a0000-0000-0000-0000-000000000088', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000088', 'Standard');
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+    ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000088', 'labor', 'Remodel', 1, 340000, false);
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000088';
+  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000088' where id = '0e1a0000-0000-0000-0000-000000000088';
+end $$;
+set role anon;
+select public.portal_accept('tok_inv_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000088', null, 'Client', 'M0 0 L5 5', true) is not null as signed;
+reset role;
+:as_owner_a
+do $$
+declare v_job uuid; v_inv uuid; v_fin uuid;
+begin
+  select id into v_job from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000088';
+  select id into v_inv from public.invoices where job_id = v_job and kind = 'deposit';
+  perform tst.ok(v_inv is not null, 'deposit invoice created at signing');
+  perform tst.ok((select total_cents from public.invoices where id = v_inv) = 34000, 'deposit invoice = 10% of $3,400');
+  perform tst.ok((select status from public.invoices where id = v_inv) = 'sent', 'deposit invoice is sent');
+  perform tst.ok((select number from public.invoices where id = v_inv) like 'INV-%', 'invoice number from server');
+  -- partial payment → receipt number, partially paid
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', v_inv, 'c1a00000-0000-0000-0000-000000000001', 'zelle', 10000, 'succeeded', 't11-p1');
+  perform tst.ok((select payment_status from public.invoices where id = v_inv) = 'partially_paid', 'partially paid');
+  perform tst.ok((select receipt_number from public.payments where idempotency_key = 't11-p1') like 'RCT-%', 'receipt number on payment');
+  insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+  values ('ca000000-0000-0000-0000-000000000000', v_inv, 'c1a00000-0000-0000-0000-000000000001', 'cash', 24000, 'succeeded', 't11-p2');
+  perform tst.ok((select payment_status from public.invoices where id = v_inv) = 'paid', 'deposit paid in two parts');
+  perform tst.fails($q$update public.payments set amount_cents = 1 where idempotency_key = 't11-p2'$q$, 'payment amount immutable');
+  -- final balance invoice; a second final invoice for the job is refused
+  insert into public.invoices (company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents)
+  values ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', v_job, 'final', 'sent', 'Final balance', 306000, 306000)
+  returning id into v_fin;
+  perform tst.fails(format($q$insert into public.invoices (company_id, number, customer_id, job_id, kind, status, subtotal_cents, total_cents)
+                     values ('ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', %L, 'final', 'sent', 1, 1)$q$, v_job), 'second final invoice');
+end $$;
+\echo 'T11 contract → invoices → receipts ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

@@ -133,7 +133,7 @@ export function makeSeed(): DB {
       { id: "p7", customerId: "c7", address: "520 W Olive Ave", city: "Burbank, CA 91506", stories: 2 },
     ],
     jobs: [
-      { id: "j1", propertyId: "p1", title: "Bathroom remodel: vanity, toilet, tile", status: "scheduled", amountCents: 342000 },
+      { id: "j1", propertyId: "p1", title: "Bathroom remodel: vanity, toilet, tile", status: "scheduled", amountCents: 342000, estimateId: "e5" },
       { id: "j2", propertyId: "p2", title: "Kitchen faucet + garbage disposal", status: "scheduled", amountCents: 68000 },
       { id: "j3", propertyId: "p3", title: "Drywall patch + paint touch-up", status: "scheduled", amountCents: 42000 },
       { id: "j4", propertyId: "p4", title: "Interior painting, 2 bedrooms", status: "done", amountCents: 96000 },
@@ -193,7 +193,7 @@ export function makeSeed(): DB {
       { id: "e2", customerId: "c7", propertyId: "p7", title: "Fence repair + new gate", totalCents: 298000, status: "sent", sentAt: daysAgo(3) },
       { id: "e3", customerId: "c5", propertyId: "p5", title: "Deep clean after move-out", totalCents: 156000, status: "approved", sentAt: daysAgo(9), approvedAt: daysAgo(4) },
       { id: "e4", customerId: "c3", propertyId: "p3", title: "Kitchen backsplash tile", totalCents: 264000, status: "sent", sentAt: daysAgo(6) },
-      { id: "e5", customerId: "c1", propertyId: "p1", title: "Bathroom remodel", totalCents: 342000, status: "approved", sentAt: daysAgo(12), approvedAt: daysAgo(8) },
+      { id: "e5", customerId: "c1", propertyId: "p1", title: "Bathroom remodel", totalCents: 342000, status: "approved", sentAt: daysAgo(12), approvedAt: daysAgo(8), depositCents: 34200, depositPaidAt: daysAgo(8) },
       (() => {
         const doc = demoDoc();
         return {
@@ -215,10 +215,17 @@ export function makeSeed(): DB {
       { id: "x3", jobId: null, vendor: "Chevron", category: "fuel", amountCents: 7850, at: minutesAgo(200), memberId: "m-alex" },
     ],
     invoices: [
-      { id: "i1", customerId: "c2", jobId: "j2", totalCents: 184000, paidCents: 0, dueDate: daysAgo(9) },
-      { id: "i2", customerId: "c4", jobId: "j4", totalCents: 96000, paidCents: 0, dueDate: daysAgo(-3) },
-      { id: "i3", customerId: "c1", jobId: "j8", totalCents: 24000, paidCents: 24000, dueDate: daysAgo(2), paidAt: minutesAgo(140) },
-      { id: "i4", customerId: "c5", jobId: "j5", totalCents: 78000, paidCents: 78000, dueDate: daysAgo(0), paidAt: minutesAgo(60) },
+      { id: "i1", number: "INV-0101", title: "Final balance", kind: "final", customerId: "c2", jobId: "j2", totalCents: 184000, paidCents: 0, dueDate: daysAgo(9), sentAt: daysAgo(12) },
+      { id: "i2", number: "INV-0102", title: "Final balance", kind: "final", customerId: "c4", jobId: "j4", totalCents: 96000, paidCents: 0, dueDate: daysAgo(-3), sentAt: daysAgo(1) },
+      { id: "i3", number: "INV-0103", title: "Final balance", kind: "final", customerId: "c1", jobId: "j8", totalCents: 24000, paidCents: 24000, dueDate: daysAgo(2), paidAt: minutesAgo(140), method: "zelle", sentAt: daysAgo(3) },
+      { id: "i4", number: "INV-0104", title: "Final balance", kind: "final", customerId: "c5", jobId: "j5", totalCents: 78000, paidCents: 78000, dueDate: daysAgo(0), paidAt: minutesAgo(60), method: "check", sentAt: daysAgo(1) },
+      // contract EST "Bathroom remodel" $3,420: deposit invoiced and paid
+      { id: "i5", number: "INV-0105", title: "Deposit", kind: "deposit", customerId: "c1", jobId: "j1", totalCents: 34200, paidCents: 34200, dueDate: daysAgo(8), paidAt: daysAgo(8), method: "card", sentAt: daysAgo(8) },
+    ],
+    payments: [
+      { id: "pay3", invoiceId: "i3", customerId: "c1", amountCents: 24000, method: "zelle", at: minutesAgo(140), receiptNumber: "RCT-0103" },
+      { id: "pay4", invoiceId: "i4", customerId: "c5", amountCents: 78000, method: "check", at: minutesAgo(60), receiptNumber: "RCT-0104", reference: "Check #1042" },
+      { id: "pay5", invoiceId: "i5", customerId: "c1", amountCents: 34200, method: "card", at: daysAgo(8), receiptNumber: "RCT-0102" },
     ],
   };
 }
