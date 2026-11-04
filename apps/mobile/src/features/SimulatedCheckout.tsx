@@ -48,17 +48,17 @@ export function SimulatedCheckout({
           </T>
         </RowView>
         <Labeled label={t("pay.cardNumber")}>
-          <TextField value={card} onChangeText={setCard} placeholder="4242 4242 4242 4242" keyboardType="phone-pad" icon="wallet" />
+          <TextField type="cardNumber" value={card} onChangeText={setCard} placeholder="4242 4242 4242 4242" icon="wallet" />
         </Labeled>
         <RowView>
           <Labeled label={t("pay.exp")}>
-            <TextField value={exp} onChangeText={setExp} placeholder="MM/YY" keyboardType="phone-pad" />
+            <TextField type="cardExp" value={exp} onChangeText={setExp} placeholder="MM/YY" />
           </Labeled>
           <Labeled label="CVC">
-            <TextField value={cvc} onChangeText={setCvc} placeholder="123" keyboardType="phone-pad" />
+            <TextField type="cardCvc" value={cvc} onChangeText={setCvc} placeholder="123" />
           </Labeled>
           <Labeled label="ZIP">
-            <TextField value={zip} onChangeText={setZip} placeholder="ZIP" keyboardType="phone-pad" />
+            <TextField type="zip" value={zip} onChangeText={setZip} placeholder="ZIP" />
           </Labeled>
         </RowView>
         <Button

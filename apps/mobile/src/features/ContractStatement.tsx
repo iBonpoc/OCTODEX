@@ -108,7 +108,7 @@ export function ContractStatement({ jobId }: { jobId: string }) {
             ]}
           />
           {mode === "pct" ? <PctField bps={bps} onChange={(b) => setBps(Math.min(b, 10000))} /> : <MoneyField cents={cents} onChange={setCents} />}
-          <TextField value={title} onChangeText={setTitle} placeholder={t("inv.progressTitle")} />
+          <TextField type="title" value={title} onChangeText={setTitle} placeholder={t("inv.progressTitle")} />
           <RowView style={{ justifyContent: "space-between" }}>
             <T v="body" tone="mut">
               {t("inv.amount")}

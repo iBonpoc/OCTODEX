@@ -39,15 +39,15 @@ function useSynced<T>(value: T, toText: (v: T) => string, parse: (s: string) => 
 
 export function MoneyField({ cents, onChange, placeholder }: { cents: number; onChange: (c: number) => void; placeholder?: string }) {
   const f = useSynced(cents, centsToText, (s) => (s.trim() === "" ? 0 : parseMoneyToCents(s)), onChange);
-  return <TextField value={f.text} onChangeText={f.set} placeholder={placeholder ?? "0"} keyboardType="decimal-pad" />;
+  return <TextField type="money" value={f.text} onChangeText={f.set} placeholder={placeholder ?? "0"} />;
 }
 
 export function PctField({ bps, onChange, placeholder }: { bps: number; onChange: (b: number) => void; placeholder?: string }) {
   const f = useSynced(bps, bpsToText, (s) => (s.trim() === "" ? 0 : parsePctToBps(s)), onChange);
-  return <TextField value={f.text} onChangeText={f.set} placeholder={placeholder ?? "0"} keyboardType="decimal-pad" />;
+  return <TextField type="percent" value={f.text} onChangeText={f.set} placeholder={placeholder ?? "0"} />;
 }
 
 export function QtyField({ qty, onChange }: { qty: string; onChange: (q: string) => void }) {
   const f = useSynced(qty, (q) => q, (s) => parseQty(s), onChange);
-  return <TextField value={f.text} onChangeText={f.set} placeholder="1" keyboardType="decimal-pad" />;
+  return <TextField type="number" value={f.text} onChangeText={f.set} placeholder="1" />;
 }

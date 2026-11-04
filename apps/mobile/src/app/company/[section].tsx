@@ -74,27 +74,27 @@ export default function CompanySection() {
       {step === "profile" ? (
         <Card>
           <Labeled label={t("co.name")}>
-            <TextField value={draft.name} onChangeText={(v) => set({ name: v })} placeholder="Acme Home Services" />
+            <TextField type="company" value={draft.name} onChangeText={(v) => set({ name: v })} placeholder="Acme Home Services" />
           </Labeled>
           <Labeled label={t("co.legalName")}>
-            <TextField value={draft.legalName ?? ""} onChangeText={(v) => set({ legalName: v })} placeholder="Acme Home Services LLC" />
+            <TextField type="company" value={draft.legalName ?? ""} onChangeText={(v) => set({ legalName: v })} placeholder="Acme Home Services LLC" />
           </Labeled>
           <Labeled label={t("co.entity")}>
             <ChoiceChips value={draft.entityType ?? ("" as EntityType)} onChange={(v) => set({ entityType: v })} items={ENTITY.map((e) => ({ key: e, label: t(`co.entity.${e}` as DictKey) }))} />
           </Labeled>
           {store.role === "director" ? (
             <Labeled label={t("co.ein")}>
-              <TextField value={draft.ein ?? ""} onChangeText={(v) => set({ ein: v })} placeholder="12-3456789" keyboardType="phone-pad" />
+              <TextField type="ein" value={draft.ein ?? ""} onChangeText={(v) => set({ ein: v })} placeholder="12-3456789" />
             </Labeled>
           ) : null}
           <Labeled label={t("co.phone")}>
-            <TextField value={draft.phone ?? ""} onChangeText={(v) => set({ phone: v })} placeholder="(555) 555-0100" keyboardType="phone-pad" icon="phone" />
+            <TextField type="phone" value={draft.phone ?? ""} onChangeText={(v) => set({ phone: v })} placeholder="(555) 555-0100" icon="phone" />
           </Labeled>
           <Labeled label={t("co.email")}>
-            <TextField value={draft.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder="office@company.com" keyboardType="email-address" icon="message" />
+            <TextField type="email" value={draft.email ?? ""} onChangeText={(v) => set({ email: v })} placeholder="office@company.com" icon="message" />
           </Labeled>
           <Labeled label={t("co.website")}>
-            <TextField value={draft.website ?? ""} onChangeText={(v) => set({ website: v })} placeholder="https://" keyboardType="email-address" icon="globe" />
+            <TextField type="url" value={draft.website ?? ""} onChangeText={(v) => set({ website: v })} placeholder="https://" icon="globe" />
           </Labeled>
         </Card>
       ) : null}
@@ -128,8 +128,8 @@ export default function CompanySection() {
         <>
           <Card>
             <T v="heading">{t("co.cgl")}</T>
-            <TextField value={draft.insurance.cglCarrier ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, cglCarrier: v } })} placeholder={t("co.carrier")} />
-            <TextField value={draft.insurance.cglPolicy ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, cglPolicy: v } })} placeholder={t("co.policy")} />
+            <TextField type="company" value={draft.insurance.cglCarrier ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, cglCarrier: v } })} placeholder={t("co.carrier")} />
+            <TextField type="identifier" value={draft.insurance.cglPolicy ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, cglPolicy: v } })} placeholder={t("co.policy")} />
           </Card>
           <Card>
             <T v="heading">{t("co.wc")}</T>
@@ -141,14 +141,14 @@ export default function CompanySection() {
             </RowView>
             {!draft.insurance.wcExempt ? (
               <>
-                <TextField value={draft.insurance.wcCarrier ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, wcCarrier: v } })} placeholder={t("co.carrier")} />
-                <TextField value={draft.insurance.wcPolicy ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, wcPolicy: v } })} placeholder={t("co.policy")} />
+                <TextField type="company" value={draft.insurance.wcCarrier ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, wcCarrier: v } })} placeholder={t("co.carrier")} />
+                <TextField type="identifier" value={draft.insurance.wcPolicy ?? ""} onChangeText={(v) => set({ insurance: { ...draft.insurance, wcPolicy: v } })} placeholder={t("co.policy")} />
               </>
             ) : null}
           </Card>
           <Card>
             <Labeled label={t("co.cancelEmail")}>
-              <TextField value={draft.cancelEmail ?? ""} onChangeText={(v) => set({ cancelEmail: v })} placeholder="office@company.com" keyboardType="email-address" />
+              <TextField type="email" value={draft.cancelEmail ?? ""} onChangeText={(v) => set({ cancelEmail: v })} placeholder="office@company.com" />
             </Labeled>
           </Card>
         </>
@@ -182,12 +182,12 @@ export default function CompanySection() {
             {draft.estimate.depositBps !== null ? (
               <PctField bps={draft.estimate.depositBps} onChange={(b) => set({ estimate: { ...draft.estimate, depositBps: Math.min(b, 10000) } })} />
             ) : null}
-            <TextField value={draft.estimate.terms ?? ""} onChangeText={(v) => set({ estimate: { ...draft.estimate, terms: v } })} placeholder={t("co.terms")} multiline />
+            <TextField type="note" value={draft.estimate.terms ?? ""} onChangeText={(v) => set({ estimate: { ...draft.estimate, terms: v } })} placeholder={t("co.terms")} />
           </Card>
           <Card>
             <T v="heading">{t("co.payment")}</T>
-            <TextField value={draft.payment.zelle ?? ""} onChangeText={(v) => set({ payment: { ...draft.payment, zelle: v } })} placeholder={t("co.zelle")} />
-            <TextField value={draft.payment.checkPayableTo ?? ""} onChangeText={(v) => set({ payment: { ...draft.payment, checkPayableTo: v } })} placeholder={t("co.checkTo")} />
+            <TextField type="email" value={draft.payment.zelle ?? ""} onChangeText={(v) => set({ payment: { ...draft.payment, zelle: v } })} placeholder={t("co.zelle")} />
+            <TextField type="company" value={draft.payment.checkPayableTo ?? ""} onChangeText={(v) => set({ payment: { ...draft.payment, checkPayableTo: v } })} placeholder={t("co.checkTo")} />
           </Card>
         </>
       ) : null}
@@ -209,14 +209,14 @@ function AddressFields({ value, onChange }: { value: Address; onChange: (a: Addr
   const set = (p: Partial<Address>) => onChange({ ...value, ...p });
   return (
     <View style={{ gap: space[2] }}>
-      <TextField value={value.line1} onChangeText={(v) => set({ line1: v })} placeholder={t("co.street")} icon="pin" />
-      <TextField value={value.city} onChangeText={(v) => set({ city: v })} placeholder={t("co.city")} />
+      <TextField type="street" value={value.line1} onChangeText={(v) => set({ line1: v })} placeholder={t("co.street")} icon="pin" />
+      <TextField type="city" value={value.city} onChangeText={(v) => set({ city: v })} placeholder={t("co.city")} />
       <RowView>
         <View style={{ flex: 1 }}>
-          <TextField value={value.state} onChangeText={(v) => set({ state: v.toUpperCase().slice(0, 2) })} placeholder="CA" />
+          <TextField type="state" value={value.state} onChangeText={(v) => set({ state: v.toUpperCase().slice(0, 2) })} placeholder="CA" />
         </View>
         <View style={{ flex: 2 }}>
-          <TextField value={value.zip} onChangeText={(v) => set({ zip: v.replace(/[^\d-]/g, "").slice(0, 10) })} placeholder="ZIP" keyboardType="phone-pad" />
+          <TextField type="zip" value={value.zip} onChangeText={(v) => set({ zip: v.replace(/[^\d-]/g, "").slice(0, 10) })} placeholder="ZIP" />
         </View>
       </RowView>
     </View>
@@ -253,10 +253,10 @@ function ContactsEditor() {
       )}
       {edit ? (
         <Card>
-          <TextField value={edit.name} onChangeText={(v) => setEdit({ ...edit, name: v })} placeholder={t("co.personName")} icon="user" />
-          <TextField value={edit.title ?? ""} onChangeText={(v) => setEdit({ ...edit, title: v })} placeholder={t("co.personTitle")} />
-          <TextField value={edit.phone ?? ""} onChangeText={(v) => setEdit({ ...edit, phone: v })} placeholder={t("co.phone")} keyboardType="phone-pad" icon="phone" />
-          <TextField value={edit.email ?? ""} onChangeText={(v) => setEdit({ ...edit, email: v })} placeholder={t("co.email")} keyboardType="email-address" icon="message" />
+          <TextField type="name" value={edit.name} onChangeText={(v) => setEdit({ ...edit, name: v })} placeholder={t("co.personName")} icon="user" />
+          <TextField type="jobTitle" value={edit.title ?? ""} onChangeText={(v) => setEdit({ ...edit, title: v })} placeholder={t("co.personTitle")} />
+          <TextField type="phone" value={edit.phone ?? ""} onChangeText={(v) => setEdit({ ...edit, phone: v })} placeholder={t("co.phone")} icon="phone" />
+          <TextField type="email" value={edit.email ?? ""} onChangeText={(v) => setEdit({ ...edit, email: v })} placeholder={t("co.email")} icon="message" />
           <RowView style={{ minHeight: size.hitMin }}>
             <T v="body" style={{ flex: 1 }}>
               {t("co.primary")}
@@ -339,9 +339,9 @@ function LicensesEditor() {
       {edit ? (
         <Card>
           <ChoiceChips value={edit.kind} onChange={(k) => setEdit({ ...edit, kind: k })} items={LIC.map((k) => ({ key: k, label: t(`co.lic.${k}` as DictKey) }))} />
-          <TextField value={edit.number} onChangeText={(v) => setEdit({ ...edit, number: v })} placeholder={t("co.licNumber")} />
-          <TextField value={edit.cls} onChangeText={(v) => setEdit({ ...edit, cls: v })} placeholder={t("co.classesHint")} />
-          <TextField value={edit.exp} onChangeText={(v) => setEdit({ ...edit, exp: v })} placeholder={t("co.expiresHint")} keyboardType="phone-pad" />
+          <TextField type="identifier" value={edit.number} onChangeText={(v) => setEdit({ ...edit, number: v })} placeholder={t("co.licNumber")} />
+          <TextField type="identifier" value={edit.cls} onChangeText={(v) => setEdit({ ...edit, cls: v })} placeholder={t("co.classesHint")} />
+          <TextField type="date" value={edit.exp} onChangeText={(v) => setEdit({ ...edit, exp: v })} placeholder={t("co.expiresHint")} />
           {edit.exp && !fromUs(edit.exp) ? (
             <T v="caption" tone="warn">
               {t("co.dateFormat")}
@@ -437,7 +437,7 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
         <T v="heading">{t("co.color")}</T>
         <RowView>
           <View style={{ flex: 1 }}>
-            <TextField value={hex} onChangeText={(v) => set({ brand: { ...draft.brand, color: v.trim() || undefined } })} placeholder="#1E6FD9" />
+            <TextField type="color" value={hex} onChangeText={(v) => set({ brand: { ...draft.brand, color: v.trim() || undefined } })} placeholder="#1E6FD9" />
           </View>
           {validHex ? (
             <View style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: hex }} accessibilityLabel={hex} />

@@ -60,7 +60,7 @@ export function ReplySheet({ leadId, onClose }: { leadId: ID | null; onClose: ()
           <T v="body" tone="mut">
             “{lead.message}”
           </T>
-          <TextField value={text} onChangeText={setText} multiline />
+          <TextField type="note" value={text} onChangeText={setText} />
           <Button
             label={t("inbox.send")}
             icon="send"

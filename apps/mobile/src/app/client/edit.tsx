@@ -54,22 +54,22 @@ export default function EditClient() {
     <Screen title={creating ? t("clients.new") : t("client.editTitle")} back={back}>
       <Card>
         <Labeled label={t("lead.name")}>
-          <TextField value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" />
+          <TextField type="name" value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" />
         </Labeled>
         <Labeled label={t("co.phone")}>
-          <TextField value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" keyboardType="phone-pad" icon="phone" />
+          <TextField type="phone" value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" icon="phone" />
         </Labeled>
         <Labeled label={t("co.email")}>
-          <TextField value={email} onChangeText={setEmail} placeholder="client@example.com" keyboardType="email-address" icon="message" />
+          <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
         </Labeled>
       </Card>
       {p || creating ? (
         <Card>
           <Labeled label={t("co.street")}>
-            <TextField value={address} onChangeText={setAddress} placeholder={t("co.street")} icon="pin" />
+            <TextField type="street" value={address} onChangeText={setAddress} placeholder={t("co.street")} icon="pin" />
           </Labeled>
           <Labeled label={t("co.city")}>
-            <TextField value={city} onChangeText={setCity} placeholder="Pasadena, CA 91103" />
+            <TextField type="city" value={city} onChangeText={setCity} placeholder="Pasadena, CA 91103" />
           </Labeled>
         </Card>
       ) : null}

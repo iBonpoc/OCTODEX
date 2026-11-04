@@ -143,7 +143,7 @@ export default function InvoiceScreen() {
             </T>
           ) : null}
           <ChoiceChips value={method} onChange={setMethod} items={METHODS.map((m) => ({ key: m, label: t(`pay.${m}` as DictKey) }))} />
-          <TextField value={ref} onChangeText={setRef} placeholder={t("inv.reference")} />
+          <TextField type="identifier" value={ref} onChangeText={setRef} placeholder={t("inv.reference")} />
           <Button
             label={t("inv.record", { amount: money(Math.min(amount, balance)) })}
             icon="check"

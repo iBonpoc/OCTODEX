@@ -49,6 +49,24 @@ describe("design system: components", () => {
     );
     expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
   });
+  it("text fields only through <TextField> (no raw TextInput outside src/ui)", () => {
+    const hits = outsideUi.filter((f) =>
+      readFileSync(f, "utf8")
+        .split("\n")
+        .some((l) => /from "react-native"/.test(l) && /\bTextInput\b/.test(l) && !l.includes("ds-allow")),
+    );
+    expect(hits.map((f) => relative(ROOT, f))).toEqual([]);
+  });
+  it("every <TextField> says what it holds (type= → keyboard, autofill, formatting)", () => {
+    const hits: string[] = [];
+    for (const f of code.filter((x) => x.endsWith(".tsx"))) {
+      const src = readFileSync(f, "utf8");
+      for (const m of src.matchAll(/<TextField\b[\s\S]*?\/>/g)) {
+        if (!/\stype=/.test(m[0])) hits.push(`${relative(ROOT, f)}:${src.slice(0, m.index).split("\n").length}  ${m[0].slice(0, 90)}`);
+      }
+    }
+    expect(hits, hits.join("\n")).toEqual([]);
+  });
   it("no hardcoded UI text in JSX (all strings via i18n RU/EN/ES)", () => {
     const hits: string[] = [];
     for (const f of outsideUi.filter((x) => x.endsWith(".tsx"))) {

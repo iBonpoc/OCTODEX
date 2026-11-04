@@ -10,6 +10,7 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Glass } from "@/ui/overlays";
 import { useNavInsets } from "@/ui/surfaces";
+import { useKeyboardHeight } from "@/ui/keyboard";
 import { roleNav, type TabRoute } from "./roles";
 import { QuickActions } from "./QuickActions";
 
@@ -26,6 +27,8 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   const nav = useNavInsets();
   const reduce = useReducedMotion();
   const [quick, setQuick] = useState(false);
+  /** on a phone the floating bar would sit on top of the keyboard and cover the field: hide it while typing */
+  const kb = useKeyboardHeight();
   const items = roleNav[role];
   const current = state.routes[state.index]?.name as TabRoute | undefined;
   const go = (route: TabRoute) => {
@@ -124,6 +127,8 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   );
 
   const ordered = wide ? [...items.map(renderItem), plus] : [...items.slice(0, 2).map(renderItem), plus, ...items.slice(2).map(renderItem)];
+
+  if (kb > 0 && !wide) return null;
 
   return (
     <>

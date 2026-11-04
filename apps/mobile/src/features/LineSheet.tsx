@@ -66,7 +66,7 @@ export function LineSheet({
     <Sheet visible={visible} onClose={onClose} title={line ? t("ue.editLine") : t("ue.addItem")}>
       {!draft ? (
         <View style={{ gap: space[3] }}>
-          <TextField value={q} onChangeText={setQ} placeholder={t("ue.searchOrType")} icon="search" />
+          <TextField type="search" value={q} onChangeText={setQ} placeholder={t("ue.searchOrType")} icon="search" />
           <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
             <ListRow
               title={q.trim() ? t("ue.customNamed", { name: q.trim() }) : t("ue.custom")}
@@ -88,14 +88,14 @@ export function LineSheet({
         </View>
       ) : (
         <ScrollView style={{ maxHeight: component.sheetFormMax }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space[3] }}>
-          <TextField value={draft.name} onChangeText={(v) => set({ name: v })} placeholder={t("ue.lineName")} />
-          <TextField value={draft.description ?? ""} onChangeText={(v) => set({ description: v || undefined })} placeholder={t("ue.lineDesc")} multiline />
+          <TextField type="title" value={draft.name} onChangeText={(v) => set({ name: v })} placeholder={t("ue.lineName")} />
+          <TextField type="note" value={draft.description ?? ""} onChangeText={(v) => set({ description: v || undefined })} placeholder={t("ue.lineDesc")} />
           <RowView style={{ alignItems: "flex-end" }}>
             <Labeled label={t("ue.qty")}>
               <QtyField qty={String(draft.quantity)} onChange={(v) => set({ quantity: v })} />
             </Labeled>
             <Labeled label={t("ue.unit")}>
-              <TextField value={draft.unit} onChangeText={(v) => set({ unit: v })} placeholder="ea" />
+              <TextField type="unit" value={draft.unit} onChangeText={(v) => set({ unit: v })} placeholder="ea" />
             </Labeled>
             <Labeled label={t("ue.price")} flex={1.4}>
               <MoneyField cents={draft.unitPriceCents} onChange={(c) => set({ unitPriceCents: c })} />
