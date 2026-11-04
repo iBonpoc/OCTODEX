@@ -59,6 +59,9 @@ interface StoreCtx {
   advanceVisit: (id: ID) => Undo;
   addPhoto: (visitId: ID, kind: "before" | "after", uri?: string) => Undo;
   toggleCheck: (visitId: ID, itemId: ID) => Undo;
+  removePhoto: (visitId: ID, photoId: ID) => Undo;
+  /** extra checklist item added on site by the tech */
+  addCheckItem: (visitId: ID, label: string) => Undo;
   signVisit: (visitId: ID, path: string) => Undo;
   payVisit: (visitId: ID, method: PaymentMethod) => Undo;
   replyLead: (id: ID) => Undo;
@@ -381,6 +384,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const v = dbRef.current.visits.find((x) => x.id === visitId);
         const checklist = (v?.checklist ?? []).map((c) => (c.id === itemId ? { ...c, done: !c.done } : c));
         return mutate("check.toggle", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist })), { k: "visit.checklist", visitId, checklist });
+      },
+      removePhoto: (visitId, photoId) =>
+        mutate("photo.remove", (d) => patchVisit(d, visitId, (x) => ({ ...x, photos: x.photos.filter((p) => p.id !== photoId) })), { k: "photo.remove", id: photoId }),
+      addCheckItem: (visitId, label) => {
+        const v = dbRef.current.visits.find((x) => x.id === visitId);
+        const checklist = [...(v?.checklist ?? []), { id: uid(), label, done: false }];
+        return mutate("check.add", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist })), { k: "visit.checklist", visitId, checklist });
       },
       signVisit: (visitId, path) =>
         mutate("visit.sign", (d) => patchVisit(d, visitId, (v) => ({ ...v, signature: path, step: "signed" })), { k: "visit.sign", visitId, svg: path }),

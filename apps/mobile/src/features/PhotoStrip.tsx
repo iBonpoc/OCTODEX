@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Image, ScrollView, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { component, radius, size, space } from "@octo/design-tokens";
@@ -5,13 +6,16 @@ import type { Photo } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
+import { Button } from "@/ui/controls";
+import { Sheet } from "@/ui/overlays";
 
-const THUMB = 72;
+const THUMB = component.photoThumb;
 
-/** Before/after photos. Camera on a phone; library/file picker on web. */
-export function PhotoStrip({ photos, onAdd }: { photos: Photo[]; onAdd: (uri?: string) => void }) {
+/** Before/after photos. Camera on a phone; library/file picker on web. Tap a photo to view it or delete it. */
+export function PhotoStrip({ photos, onAdd, onRemove }: { photos: Photo[]; onAdd: (uri?: string) => void; onRemove?: (id: string) => void }) {
   const { c } = useTheme();
   const { t } = useI18n();
+  const [open, setOpen] = useState<Photo | null>(null);
   const pick = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
     const res =
@@ -45,14 +49,38 @@ export function PhotoStrip({ photos, onAdd }: { photos: Photo[]; onAdd: (uri?: s
           {t("visit.addPhoto")}
         </T>
       </Press>
-      {photos.map((p) => (
-        <View
+      {photos.map((p, i) => (
+        <Press
           key={p.id}
+          onPress={() => setOpen(p)}
+          accessibilityRole="button"
+          accessibilityLabel={t("photo.open", { n: i + 1 })}
           style={{ width: THUMB, height: THUMB, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
         >
           {p.uri ? <Image source={{ uri: p.uri }} style={{ width: THUMB, height: THUMB }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
-        </View>
+        </Press>
       ))}
+      <Sheet visible={!!open} onClose={() => setOpen(null)} title={open?.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore")}>
+        <View style={{ height: component.mediaH * 2, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+          {open?.uri ? (
+            <Image source={{ uri: open.uri }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />
+          ) : (
+            <Icon name="image" s={size.iconLg} color={c.mut} />
+          )}
+        </View>
+        {onRemove && open ? (
+          <Button
+            label={t("photo.delete")}
+            icon="trash"
+            variant="secondary"
+            full
+            onPress={() => {
+              onRemove(open.id);
+              setOpen(null);
+            }}
+          />
+        ) : null}
+      </Sheet>
     </ScrollView>
   );
 }

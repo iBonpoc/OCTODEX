@@ -10,7 +10,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
 import { PhotoStrip } from "@/features/PhotoStrip";
-import { Button, IconButton, Segmented, StatusChip, Steps } from "@/ui/controls";
+import { Button, IconButton, Segmented, StatusChip, Steps, TextField } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -26,6 +26,7 @@ export default function VisitScreen() {
   const { c } = useTheme();
   const toast = useToast();
   const [method, setMethod] = useState<PaymentMethod>("card");
+  const [extra, setExtra] = useState("");
   const v = db.visits.find((x) => x.id === id);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
@@ -48,6 +49,13 @@ export default function VisitScreen() {
     haptic();
     const undo = store.advanceVisit(v.id);
     toast.show(queuedHint() ?? msg, undo);
+  };
+  const removePhoto = (photoId: string) => toast.show(queuedHint() ?? t("photo.deleted"), store.removePhoto(v.id, photoId));
+  const addItem = () => {
+    const label = extra.trim();
+    if (!label) return;
+    toast.show(queuedHint() ?? t("check.added"), store.addCheckItem(v.id, label));
+    setExtra("");
   };
   const tel = customer?.phone.replace(/[^\d+]/g, "");
   const addr = property ? encodeURIComponent(`${property.address}, ${property.city}`) : "";
@@ -99,6 +107,22 @@ export default function VisitScreen() {
         ))}
       </Card>
 
+      {v.checklist.length > 0 && (v.step === "scheduled" || v.step === "en_route" || v.step === "on_site") ? (
+        <Card>
+          <RowView style={{ justifyContent: "space-between" }}>
+            <T v="heading">{t("visit.checklist")}</T>
+            <T v="caption" tone="mut">
+              {t("check.preview", { n: v.checklist.length })}
+            </T>
+          </RowView>
+          {v.checklist.map((item) => (
+            <T key={item.id} v="body" tone="mut">
+              ○ {item.label}
+            </T>
+          ))}
+        </Card>
+      ) : null}
+
       {/* Step actions */}
       {v.step === "scheduled" ? (
         <Button label={t("step.en_route")} icon="navigate" full onPress={() => advance(t("visit.etaSent"))} />
@@ -113,6 +137,7 @@ export default function VisitScreen() {
           <PhotoStrip
             photos={before}
             onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "before", uri))}
+            onRemove={removePhoto}
           />
           {v.step === "on_site" ? (
             <>
@@ -134,7 +159,6 @@ export default function VisitScreen() {
 
       {v.step === "working" ? (
         <>
-          {v.checklist.length > 0 ? (
             <Card>
               <RowView style={{ justifyContent: "space-between" }}>
                 <T v="heading">{t("visit.checklist")}</T>
@@ -173,11 +197,16 @@ export default function VisitScreen() {
                   </T>
                 </Press>
               ))}
+              <RowView>
+                <View style={{ flex: 1 }}>
+                  <TextField value={extra} onChangeText={setExtra} placeholder={t("check.addPlaceholder")} icon="plus" />
+                </View>
+                <Button label={t("check.add")} size="sm" variant="secondary" disabled={!extra.trim()} onPress={addItem} />
+              </RowView>
             </Card>
-          ) : null}
           <Card>
             <T v="heading">{t("visit.photosAfter")}</T>
-            <PhotoStrip photos={after} onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "after", uri))} />
+            <PhotoStrip photos={after} onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "after", uri))} onRemove={removePhoto} />
           </Card>
           {left > 0 ? (
             <T v="caption" tone="warn">

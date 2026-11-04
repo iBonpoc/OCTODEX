@@ -12,6 +12,7 @@ import { expenseCategoryToDb } from "./repo";
 export type Op =
   | { k: "visit.step"; visitId: string; to: VisitStep }
   | { k: "photo.add"; id: string; visitId: string; jobId: string; stage: "before" | "after"; uri?: string }
+  | { k: "photo.remove"; id: string }
   | { k: "visit.checklist"; visitId: string; checklist: { id: string; label: string; done: boolean }[] }
   | { k: "visit.sign"; visitId: string; svg: string }
   | { k: "visit.pay"; visitId: string; jobId: string; customerId: string; invoiceId: string; paymentId: string; amountCents: number; method: PaymentMethod }
@@ -194,6 +195,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (op.uri) await uploadPhoto(c, op.id, op.uri);
       return;
     }
+    case "photo.remove":
+      return run(supabase.from("files").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "visit.checklist":
       return run(supabase.from("visits").update({ checklist: op.checklist }).eq("id", op.visitId));
     case "visit.sign":

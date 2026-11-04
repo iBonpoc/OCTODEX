@@ -69,6 +69,18 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
           </T>
         ) : null}
       </RowView>
+      {v.checklist.length || v.photos.length ? (
+        <RowView style={{ flexWrap: "wrap" }}>
+          {v.checklist.length ? (
+            <StatusChip
+              status={v.checklist.every((x) => x.done) ? "ok" : "neutral"}
+              label={t("vcard.checks", { done: v.checklist.filter((x) => x.done).length, n: v.checklist.length })}
+              soft
+            />
+          ) : null}
+          {v.photos.length ? <StatusChip status="neutral" label={t("vcard.photos", { n: v.photos.length })} soft /> : null}
+        </RowView>
+      ) : null}
       {showTech ? (
         <RowView>
           {tech ? <Avatar initials={tech.initials} s={component.avatar.sm} sub={tech.kind === "sub"} /> : null}
