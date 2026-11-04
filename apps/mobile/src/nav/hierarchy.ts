@@ -8,6 +8,7 @@
  */
 import type { DB, Role } from "@/data/types";
 import type { DictKey } from "@/i18n";
+import { roleNav } from "./roles";
 
 export type Label = { key: DictKey } | { text: string };
 export interface NavContext {
@@ -103,6 +104,14 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
     case "money":
     case "team":
       return { section: "tab.more", up: moreRoot };
+    case "today":
+    case "inbox":
+    case "clients":
+    case "plan":
+    case "visits":
+    case "triage":
+      // a tab root; if this role has no such tab at the bottom it was opened from "More" → back to "More"
+      return roleNav[role].some((n) => n.route === a) ? {} : { section: "tab.more", up: moreRoot };
     default:
       // tab roots (today, inbox, clients, plan, visits, triage, more), client page /p, auth: no "up"
       return {};

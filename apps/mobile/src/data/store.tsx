@@ -18,6 +18,7 @@ import { leadCols, type LeadPatch } from "@/cloud/leadCols";
 const dbStatus = (s: LeadStatus): string =>
   ({ new: "new", replied: "contacted", booked: "inspection_scheduled", estimate_sent: "estimate_sent", won: "won", lost: "lost", declined: "declined" })[s];
 import { makeSeed } from "./seed";
+import { normalizeDB } from "./normalize";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
@@ -161,11 +162,6 @@ function withPayment(d: DB, p: Payment, demo: boolean): DB {
     ),
   };
 }
-/** Older saved data has no catalog / notices yet. */
-const normalize = (d: DB): DB =>
-  d.catalog && d.notices && d.notes && d.payments && d.company !== undefined
-    ? d
-    : { ...d, catalog: d.catalog ?? [], notices: d.notices ?? [], notes: d.notes ?? [], payments: d.payments ?? [], company: d.company ?? null };
 /** Fresh ids for options/lines when a sent estimate is edited (the sent version stays immutable in the database). */
 const reId = (doc: EstimateDoc): EstimateDoc => ({
   ...doc,
@@ -189,7 +185,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
     },
   );
-  const db = useMemo(() => normalize(saved.db), [saved.db]);
+  const db = useMemo(() => normalizeDB(saved.db, mode), [saved.db, mode]);
   const setDb = useCallback((next: DB) => setSaved({ day: mode === "cloud" ? "cloud" : todayKey(), db: next }), [setSaved, mode]);
   const [role, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "tech");
   const [online, setOnlineState] = useState(true);

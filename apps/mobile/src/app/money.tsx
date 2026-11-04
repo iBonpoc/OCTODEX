@@ -18,7 +18,13 @@ export default function Money() {
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   return (
-    <Screen title={t("money.title")} help={t("help.money")} hintKey="money" back={back}>
+    <Screen
+      title={t("money.title")}
+      help={t("help.money")}
+      hintKey="money"
+      back={back}
+      right={<Button label={t("money.addExpense")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/expense/new")} />}
+    >
       <InvoicesBoard />
       {db.expenses.length ? (
         <View style={{ gap: space[2] }}>

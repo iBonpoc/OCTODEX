@@ -6,8 +6,12 @@ const db = makeSeed();
 const label = (c: ReturnType<typeof navContext>) => (c.up ? ("key" in c.up.label ? c.up.label.key : c.up.label.text) : null);
 
 describe("navigation hierarchy: back = one level up", () => {
-  it("tab roots have no back", () => {
-    for (const p of ["/today", "/inbox", "/clients", "/plan", "/visits", "/triage", "/more"]) expect(navContext(p, {}, db, "director").up).toBeUndefined();
+  it("tab roots of the role have no back; a tab the role opens from More goes back to More", () => {
+    for (const p of ["/today", "/inbox", "/clients", "/more"]) expect(navContext(p, {}, db, "director").up).toBeUndefined();
+    for (const p of ["/plan", "/visits", "/triage"]) expect(navContext(p, {}, db, "director")).toMatchObject({ section: "tab.more", up: { href: "/more" } });
+    expect(navContext("/plan", {}, db, "dispatcher").up).toBeUndefined();
+    expect(navContext("/visits", {}, db, "tech").up).toBeUndefined();
+    expect(navContext("/inbox", {}, db, "tech").up?.href).toBe("/more");
   });
   it("Sales: Leads → Lead → Estimate → Invoice → Receipt", () => {
     const lead = db.leads[0]!;

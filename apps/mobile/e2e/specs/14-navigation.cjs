@@ -36,6 +36,21 @@ exports.run = async (h) => {
   h.expect((await p.getByRole("button", { name: /^Назад/ }).count()) === 0, "no back on a tab root");
   await h.shot("clients-root");
 
+  // director opens Plan from More (not in his bottom bar) → "‹ Ещё"
+  await h.go("/plan");
+  await back("Ещё").click();
+  await p.waitForTimeout(500);
+  h.expect(p.url().endsWith("/more"), `plan (from More) → more: ${p.url()}`);
+  // Money and invoices: one name, the expense button lives here
+  await h.go("/money");
+  await h.expectText(/Деньги и счета/, "same name as in the menu");
+  await p.getByRole("button", { name: "Расход", exact: true }).last().click();
+  await p.waitForTimeout(500);
+  h.expect(p.url().includes("/expense/new"), "expense from Money");
+  await back("Деньги и счета").click();
+  await p.waitForTimeout(500);
+  h.expect(p.url().endsWith("/money"), `expense → money: ${p.url()}`);
+
   // More → Catalog → item
   await h.go("/catalog");
   await back("Ещё").click();
