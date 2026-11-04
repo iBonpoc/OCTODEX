@@ -1,14 +1,13 @@
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
-import type { LeadSource } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Labeled } from "@/features/fields";
+import { SourceField } from "@/features/lead/SourcePicker";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, Screen } from "@/ui/surfaces";
 
-const SOURCES: LeadSource[] = ["Referral", "Google", "Website", "Thumbtack", "Yelp"];
 
 /**
  * Client contact details and main property address.
@@ -27,7 +26,7 @@ export default function EditClient() {
   const [email, setEmail] = useState(c?.email ?? "");
   const [address, setAddress] = useState(p?.address ?? "");
   const [city, setCity] = useState(p?.city ?? "");
-  const [source, setSource] = useState<LeadSource>("Referral");
+  const [sourceId, setSourceId] = useState(store.db.sources.find((x) => x.active && x.name === "Referral")?.id ?? store.db.sources[0]?.id ?? "");
   const back = () => (router.canGoBack() ? router.back() : router.replace(id ? `/client/${id}` : "/clients"));
   if (!creating && !c) {
     return (
@@ -40,7 +39,7 @@ export default function EditClient() {
   const ok = name.trim().length >= 2 && (!creating || (phoneOk && (address.trim() || city.trim())));
   const save = () => {
     if (creating) {
-      const r = store.addCustomer({ name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, source, address: address.trim(), city: city.trim() });
+      const r = store.addCustomer({ name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, sourceId, address: address.trim(), city: city.trim() });
       toast.show(store.online ? t("clients.created", { name: name.trim() }) : t("offline.queued"), r.undo);
       router.replace(`/client/${r.id}`);
       return;
@@ -75,9 +74,7 @@ export default function EditClient() {
       ) : null}
       {creating ? (
         <Card>
-          <Labeled label={t("lead.source")}>
-            <ChoiceChips<LeadSource> value={source} onChange={setSource} items={SOURCES.map((s) => ({ key: s, label: s }))} />
-          </Labeled>
+          <SourceField value={sourceId} onChange={setSourceId} />
         </Card>
       ) : null}
       <Button label={creating ? t("clients.create") : t("ue.save")} icon="check" full disabled={!ok} onPress={save} />

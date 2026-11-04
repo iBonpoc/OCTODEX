@@ -14,7 +14,8 @@ exports.run = async (h) => {
   await p.getByPlaceholder("(555) 555-0100").last().fill("(626) 555-0199");
   await p.getByPlaceholder("Улица, дом, офис").last().fill("77 Lake Ave");
   await p.getByPlaceholder("Pasadena, CA 91103").last().fill("Pasadena, CA 91101");
-  await h.clickText("Google");
+  await h.page.getByRole("button", { name: /Referral|Выберите источник/ }).last().click(); await h.page.waitForTimeout(300);
+  await h.sheet().getByText("Google", { exact: true }).click(); await h.page.waitForTimeout(300);
   await create.click();
   await p.waitForTimeout(500);
   await h.expectText(/Tom Becker/, "client page opened");
@@ -22,7 +23,7 @@ exports.run = async (h) => {
 
   const db = await h.db();
   const c = db.customers.find((x) => x.name === "Tom Becker");
-  h.expect(c && c.status === "active" && c.source === "Google" && c.phone === "(626) 555-0199", "client saved as active with source");
+  h.expect(c && c.status === "active" && c.sourceId === "src-google" && c.phone === "(626) 555-0199", "client saved as active with source");
   const prop = db.properties.find((x) => x.customerId === c.id);
   h.expect(prop && prop.address === "77 Lake Ave" && prop.city === "Pasadena, CA 91101", "property saved");
 

@@ -27,13 +27,13 @@ export type Op =
       visitId: string;
       name: string;
       phone: string;
-      source: string;
+      sourceId: string;
       address: string;
       city: string;
       message: string;
       start: string;
     }
-  | { k: "lead.add"; id: string; name: string; phone: string; city: string; address?: string; source: string; message: string }
+  | { k: "lead.add"; id: string; name: string; phone: string; city: string; address?: string; sourceId: string; message: string; costCents?: number; cols?: Record<string, unknown> }
   | { k: "visit.assign"; visitId: string; userId: string }
   | {
       k: "estimate.add";
@@ -88,18 +88,29 @@ export type Op =
   | {
       k: "lead.prospect";
       leadId: string; customerId: string; contactId: string; propertyId: string;
-      name: string; phone: string; email?: string; source: string; address: string; city: string;
+      name: string; phone: string; email?: string; sourceId: string; address: string; city: string;
     }
   | {
       k: "lead.convert";
       leadId: string; needCustomer: boolean; customerId: string; contactId: string; propertyId: string; noteId: string;
-      name: string; phone: string; email?: string; source: string; address: string; city: string; note: string;
+      name: string; phone: string; email?: string; sourceId: string; address: string; city: string; note: string;
     }
   | { k: "lead.lose"; leadId: string; reason: string }
+  /** columns of public.leads already in DB names (mapped by the store) */
+  | { k: "lead.update"; id: string; cols: Record<string, unknown> }
+  | { k: "lead.touch"; activityId: string; leadId: string; kind: "call" | "sms" | "email" | "marketplace" | "reply"; at: string }
+  | { k: "lead.close"; leadId: string; status: "lost" | "declined"; reason: string; text?: string; activityId: string; from: string }
+  | { k: "lead.reopen"; leadId: string; activityId: string; from: string }
+  | { k: "lead.assign"; leadId: string; userId: string; activityId: string }
+  | { k: "lead.cost"; leadId: string; cents: number }
+  | { k: "lead.contactSave"; leadId: string; contact: { id: string; name: string; role: string; phone?: string; email?: string } }
+  | { k: "lead.contactRemove"; id: string }
+  | { k: "task.save"; task: { id: string; subjectType: string; subjectId: string; title: string; dueAt?: string; assigneeId?: string; doneAt?: string } }
+  | { k: "source.save"; source: { id: string; name: string; kind: string; phone?: string; email?: string; customerId?: string; note?: string; active: boolean; position?: number } }
   | {
       k: "customer.create";
       customerId: string; contactId: string; propertyId: string;
-      name: string; phone: string; email?: string; source: string; address: string; city: string;
+      name: string; phone: string; email?: string; sourceId: string; address: string; city: string;
     }
   | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string }
   | { k: "property.update"; id: string; address?: string; city?: string }
@@ -162,10 +173,15 @@ async function advanceJob(jobId: string, to: "scheduled" | "in_progress" | "comp
   }
 }
 
-async function sourceId(companyId: string, name: string): Promise<string> {
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+/** Source id of the company. Ops queued by older builds carried the source name ("Thumbtack") — resolve those by name. */
+async function sourceRef(companyId: string, op: { sourceId?: string; source?: string }): Promise<string> {
+  const v = op.sourceId ?? op.source ?? "";
+  if (UUID.test(v)) return v;
   const { data } = await supabase.from("lead_sources").select("id, name").eq("company_id", companyId);
   const rows = (data ?? []) as { id: string; name: string }[];
-  return (rows.find((r) => r.name === name) ?? rows.find((r) => r.name === "Website") ?? rows[0])?.id ?? "";
+  const name = v.replace(/^src-/, "").toLowerCase();
+  return (rows.find((r) => r.name.toLowerCase() === name) ?? rows.find((r) => r.name === "Website") ?? rows[0])?.id ?? "";
 }
 
 async function uploadPhoto(companyId: string, fileId: string, uri: string) {
@@ -220,11 +236,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return;
     }
     case "lead.reply":
-      return run(
-        supabase.from("leads").update({ status: "contacted", first_response_at: new Date().toISOString(), first_response_kind: "sms" }).eq("id", op.leadId).eq("status", "new"),
-      );
+      // older queued op: "I replied" — the activity trigger records the first response
+      return run(ins("activities", { company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "reply", direction: "out" }));
     case "lead.book": {
-      const src = await sourceId(c, op.source);
+      const src = await sourceRef(c, op);
       await run(ins("customers", { id: op.customerId, company_id: c, display_name: op.name, lead_source_id: src || null }));
       await run(ins("contacts", { id: op.contactId, company_id: c, customer_id: op.customerId, name: op.name, phone: op.phone, is_primary: true }));
       await run(supabase.from("customers").update({ primary_contact_id: op.contactId }).eq("id", op.customerId));
@@ -243,14 +258,62 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.from("leads").update({ status: "inspection_scheduled", customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));
     }
     case "lead.add": {
-      const src = await sourceId(c, op.source);
-      return run(
+      const src = await sourceRef(c, op);
+      await run(
         ins("leads", {
           id: op.id, company_id: c, source_id: src, contact_name: op.name, phone: op.phone,
-          address_text: [op.address, op.city].filter(Boolean).join(", "), message: op.message, cost_origin: "manual",
+          address_text: [op.address, op.city].filter(Boolean).join(", "), message: op.message,
+          ...(op.cols ?? {}),
         }),
       );
+      if (op.costCents) await run(supabase.from("lead_costs").upsert({ lead_id: op.id, company_id: c, cost_cents: op.costCents }, { onConflict: "lead_id" }));
+      return;
     }
+    case "lead.update":
+      return run(supabase.from("leads").update(op.cols).eq("id", op.id));
+    case "lead.touch":
+      // the server sets first_response_at and moves new → contacted (trigger on activities)
+      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: op.kind, direction: "out", at: op.at }));
+    case "lead.close":
+      await run(supabase.from("leads").update({ status: op.status, lost_reason: op.reason, lost_reason_text: op.text ?? null }).eq("id", op.leadId));
+      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "status", meta: { from: op.from, to: op.status, reason: op.reason } }));
+    case "lead.reopen":
+      await run(supabase.from("leads").update({ status: "contacted", lost_reason: null, lost_reason_text: null }).eq("id", op.leadId));
+      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "status", meta: { from: op.from, to: "replied" } }));
+    case "lead.assign":
+      await run(supabase.from("leads").update({ assigned_to: op.userId }).eq("id", op.leadId));
+      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "assigned", meta: { to: op.userId } }));
+    case "lead.cost":
+      return run(supabase.from("lead_costs").upsert({ lead_id: op.leadId, company_id: c, cost_cents: op.cents }, { onConflict: "lead_id" }));
+    case "lead.contactSave":
+      return run(
+        supabase.from("lead_contacts").upsert(
+          { id: op.contact.id, company_id: c, lead_id: op.leadId, name: op.contact.name, role: op.contact.role, phone: op.contact.phone ?? null, email: op.contact.email ?? null },
+          { onConflict: "id" },
+        ),
+      );
+    case "lead.contactRemove":
+      return run(supabase.from("lead_contacts").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
+    case "task.save":
+      return run(
+        supabase.from("tasks").upsert(
+          {
+            id: op.task.id, company_id: c, subject_type: op.task.subjectType, subject_id: op.task.subjectId, title: op.task.title,
+            due_at: op.task.dueAt ?? null, assignee_id: op.task.assigneeId ?? null, done_at: op.task.doneAt ?? null, done_by: op.task.doneAt ? userId : null,
+          },
+          { onConflict: "id" },
+        ),
+      );
+    case "source.save":
+      return run(
+        supabase.from("lead_sources").upsert(
+          {
+            id: op.source.id, company_id: c, name: op.source.name, kind: op.source.kind, phone: op.source.phone ?? null, email: op.source.email ?? null,
+            customer_id: op.source.customerId ?? null, note: op.source.note ?? null, is_active: op.source.active, position: op.source.position ?? 100,
+          },
+          { onConflict: "id" },
+        ),
+      );
     case "visit.assign": {
       await run(supabase.from("visit_assignees").delete().eq("visit_id", op.visitId));
       return run(supabase.from("visit_assignees").insert({ company_id: c, visit_id: op.visitId, user_id: op.userId }));
@@ -541,10 +604,10 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
 /** Customer + primary contact + property (lead → prospect / client). */
 async function createCustomer(
   c: string,
-  op: { customerId: string; contactId: string; propertyId: string; name: string; phone: string; email?: string; source: string; address: string; city: string },
+  op: { customerId: string; contactId: string; propertyId: string; name: string; phone: string; email?: string; sourceId: string; address: string; city: string },
   status: "prospect" | "active",
 ) {
-  const src = await sourceId(c, op.source);
+  const src = await sourceRef(c, op);
   await run(ins("customers", { id: op.customerId, company_id: c, display_name: op.name, lead_source_id: src || null, status }));
   await run(ins("contacts", { id: op.contactId, company_id: c, customer_id: op.customerId, name: op.name, phone: op.phone, email: op.email ?? null, is_primary: true }));
   await run(supabase.from("customers").update({ primary_contact_id: op.contactId }).eq("id", op.customerId));

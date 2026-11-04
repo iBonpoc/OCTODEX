@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { Linking, View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { isToday, useStore } from "@/data/store";
+import { sourceName } from "@/features/leads";
+import { smsWithBody } from "@/features/sms";
 import type { ID } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Avatar, Button, TextField } from "@/ui/controls";
@@ -44,7 +46,7 @@ export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose:
 
 /** Reply to a lead with an editable template (auto-reply text from settings later). */
 export function ReplySheet({ leadId, onClose }: { leadId: ID | null; onClose: () => void }) {
-  const { db, replyLead, online } = useStore();
+  const { db, touchLead, online } = useStore();
   const { t } = useI18n();
   const toast = useToast();
   const lead = db.leads.find((l) => l.id === leadId);
@@ -55,7 +57,7 @@ export function ReplySheet({ leadId, onClose }: { leadId: ID | null; onClose: ()
       {lead ? (
         <View style={{ gap: space[3] }}>
           <T v="caption" tone="mut">
-            {lead.source} · {lead.phone}
+            {sourceName(db, lead.sourceId)} · {lead.phone}
           </T>
           <T v="body" tone="mut">
             “{lead.message}”
@@ -67,7 +69,9 @@ export function ReplySheet({ leadId, onClose }: { leadId: ID | null; onClose: ()
             full
             disabled={!text.trim()}
             onPress={() => {
-              const undo = replyLead(lead.id);
+              // opens Messages with the text; the history gets "SMS" and the reply timer stops
+              Linking.openURL(smsWithBody(lead.phone, text)).catch(() => {});
+              const undo = touchLead(lead.id, "sms");
               onClose();
               toast.show(online ? t("toast.replied", { name: lead.name }) : t("offline.queued"), undo);
             }}

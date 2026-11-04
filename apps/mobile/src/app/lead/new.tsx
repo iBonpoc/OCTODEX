@@ -1,63 +1,101 @@
 import { useState } from "react";
+import { View } from "react-native";
 import { router } from "expo-router";
+import * as Clipboard from "expo-clipboard";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import type { LeadSource } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { Button, ChoiceChips, TextField } from "@/ui/controls";
+import { Labeled } from "@/features/fields";
+import { findDuplicates, phoneKey } from "@/features/leads";
+import { SourceField } from "@/features/lead/SourcePicker";
+import { Button, TextField } from "@/ui/controls";
+import { formatPhoneUS } from "@/ui/inputFormat";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, Screen } from "@/ui/surfaces";
-import { View } from "react-native";
+import { Card, CardList, ItemCard, RowView, Screen } from "@/ui/surfaces";
 
-const SOURCES: LeadSource[] = ["Google", "Thumbtack", "Yelp", "Website", "Referral"];
-
-/** Manual lead (phone call, neighbor, yard sign). Email/platform leads arrive in Inbox automatically (wave 5). */
+/**
+ * New lead in ~10 seconds, during the call: phone (paste), name, address, source, what they need.
+ * Everything else is filled later on the lead card. Same phone / email → "already your client / open lead" before saving.
+ */
 export default function NewLead() {
-  const { t } = useI18n();
-  const { addLead, online } = useStore();
+  const { t, day } = useI18n();
+  const store = useStore();
+  const { db } = store;
   const toast = useToast();
-  const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [city, setCity] = useState("");
-  const [source, setSource] = useState<LeadSource>("Google");
+  const [sourceId, setSourceId] = useState(db.sources.find((s) => s.active && s.name === "Thumbtack")?.id ?? db.sources.find((s) => s.active)?.id ?? "");
   const [message, setMessage] = useState("");
-  const ok = name.trim().length > 1 && phone.replace(/\D/g, "").length >= 7;
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  const dup = phoneKey(phone).length === 10 ? findDuplicates(db, { phone }) : { customers: [], leads: [] };
+  const ok = name.trim().length > 1 && phoneKey(phone).length === 10 && !!sourceId;
+  const paste = async () => {
+    const s = await Clipboard.getStringAsync().catch(() => "");
+    if (s) setPhone(formatPhoneUS(s));
+  };
   const save = () => {
-    const undo = addLead({
+    const r = store.addLead({
       name: name.trim(),
       phone: phone.trim(),
       address: address.trim() || undefined,
-      city: city.trim() || "Los Angeles",
-      source,
+      city: city.trim(),
+      sourceId,
       message: message.trim(),
+      service: undefined,
     });
-    toast.show(online ? t("lead.saved", { name: name.trim() }) : t("offline.queued"), undo);
-    router.replace("/inbox");
+    toast.show(store.online ? t("lead.saved", { name: name.trim() }) : t("offline.queued"), r.undo);
+    router.replace(`/lead/${r.id}`);
   };
   return (
-    <Screen title={t("lead.title")} back={back}>
+    <Screen title={t("lead.title")}>
       <Card>
-        <View style={{ gap: space[3] }}>
+        <Labeled label={t("lead.phone")}>
+          <RowView>
+            <View style={{ flex: 1 }}>
+              <TextField type="phone" value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" label={t("lead.phone")} icon="phone" />
+            </View>
+            <Button label={t("lead.paste")} icon="copy" size="sm" variant="secondary" onPress={paste} />
+          </RowView>
+        </Labeled>
+        <Labeled label={t("lead.name")}>
           <TextField type="name" value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" />
-          <TextField type="phone" value={phone} onChangeText={setPhone} placeholder={t("lead.phone")} icon="phone" />
-          <TextField type="street" value={address} onChangeText={setAddress} placeholder={t("lead.address")} icon="pin" />
-          <TextField type="city" value={city} onChangeText={setCity} placeholder={t("lead.city")} icon="globe" />
-          <T v="caption" tone="mut">
-            {t("lead.source")}
-          </T>
-          <ChoiceChips<LeadSource> value={source} onChange={setSource} items={SOURCES.map((s) => ({ key: s, label: s }))} />
-          <TextField type="note" value={message} onChangeText={setMessage} placeholder={t("lead.message")} />
-        </View>
+        </Labeled>
+        <Labeled label={t("co.street")}>
+          <TextField type="street" value={address} onChangeText={setAddress} placeholder={t("co.street")} icon="pin" />
+        </Labeled>
+        <Labeled label={t("co.city")}>
+          <TextField type="city" value={city} onChangeText={setCity} placeholder="Pasadena" />
+        </Labeled>
+        <SourceField value={sourceId} onChange={setSourceId} />
+        <Labeled label={t("lead.need")}>
+          <TextField type="note" value={message} onChangeText={setMessage} placeholder={t("lead.messagePh")} />
+        </Labeled>
       </Card>
+
+      {dup.customers.length || dup.leads.length ? (
+        <View style={{ gap: space[2] }}>
+          <T v="heading" tone="warn">
+            ⚠ {t("lead.dupTitle")}
+          </T>
+          <CardList>
+            {dup.customers.map((c) => (
+              <ItemCard key={c.id} status="warn" title={c.name} subtitle={t("lead.dupClient")} onPress={() => router.push(`/client/${c.id}`)} />
+            ))}
+            {dup.leads.map((l) => (
+              <ItemCard key={l.id} status="warn" title={l.name} subtitle={t("lead.dupLead", { date: day(l.receivedAt) })} onPress={() => router.push(`/lead/${l.id}`)} />
+            ))}
+          </CardList>
+        </View>
+      ) : null}
+
+      <Button label={t("lead.save")} icon="check" full disabled={!ok} onPress={save} />
       {!ok ? (
         <T v="caption" tone="mut">
-          {t("lead.need")}
+          {t("lead.needFields")}
         </T>
       ) : null}
-      <Button label={t("lead.save")} icon="check" full disabled={!ok} onPress={save} />
     </Screen>
   );
 }

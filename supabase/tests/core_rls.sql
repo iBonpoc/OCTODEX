@@ -108,7 +108,7 @@ insert into public.memberships (company_id, user_id, role, status) values
   ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000004', 'tech',   'active');
 
 insert into public.lead_sources (id, company_id, name, kind) values
-  ('1a000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Thumbtack (test)', 'paid_per_lead');
+  ('1a000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Thumbtack (test)', 'marketplace');
 
 insert into public.customers (id, company_id, display_name, lead_source_id) values
   ('c1a00000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Yuri Petrov', '1a000000-0000-0000-0000-000000000001'),
@@ -159,7 +159,7 @@ update public.invoices set status = 'sent', sent_at = now() where id = '01a00000
 -- Компания B
 :as_owner_b
 insert into public.lead_sources (id, company_id, name, kind) values
-  ('1b000000-0000-0000-0000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'Yelp (test)', 'paid_ads');
+  ('1b000000-0000-0000-0000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'Yelp (test)', 'marketplace');
 insert into public.customers (id, company_id, display_name) values
   ('c1b00000-0000-0000-0000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'B Customer');
 insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
@@ -484,8 +484,8 @@ end $$;
 -- ---------------------------------------------------------------- T7: app fields
 :as_owner_a
 do $$ begin
-  perform tst.ok(tst.cnt($q$select 1 from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and is_system$q$) = 6,
-                 'new company gets 6 standard lead sources');
+  perform tst.ok(tst.cnt($q$select 1 from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and is_system$q$) = 10,
+                 'new company gets 10 standard lead sources');
   insert into public.expenses (company_id, vendor, amount_cents, category)
   values ('ca000000-0000-0000-0000-000000000000', 'Home Depot', 21240, 'materials');
 end $$;
@@ -734,6 +734,70 @@ begin
                     'payment on a fully paid invoice');
 end $$;
 \echo 'T13 no overpayment ok'
+
+-- ---------------------------------------------------------------- T14: full lead (sources, declined, contacts, tasks, activities, cost)
+:as_owner_a
+do $$
+declare v_src uuid; v_person uuid; v_lead uuid; v_lead2 uuid;
+begin
+  perform tst.ok((select count(*) from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and kind = 'marketplace') >= 3, 'standard marketplaces seeded');
+  -- custom source: a person
+  insert into public.lead_sources (company_id, name, kind, phone) values ('ca000000-0000-0000-0000-000000000000', 'Kolya (contractor)', 'person', '(818) 555-0101') returning id into v_person;
+  perform tst.fails($q$insert into public.lead_sources (company_id, name, kind) values ('ca000000-0000-0000-0000-000000000000', 'X', 'paid_per_lead')$q$, 'old source kind refused');
+  insert into public.leads (company_id, source_id, contact_name, phone, address_line1, address_city, timeframe, budget_cents)
+  values ('ca000000-0000-0000-0000-000000000000', v_person, 'Neighbor Joe', '(818) 555-0177', '12 Elm St', 'Glendale', 'this_week', 50000) returning id into v_lead;
+  -- the source with a lead cannot be deleted, only hidden
+  perform tst.fails(format($q$update public.lead_sources set deleted_at = now() where id = %L$q$, v_person), 'source with leads cannot be deleted');
+  update public.lead_sources set is_active = false where id = v_person;
+  -- first outgoing call: first response time + new → contacted (server)
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_lead, 'call', 'out');
+  perform tst.ok((select status from public.leads where id = v_lead) = 'contacted', 'first call moves new → contacted');
+  perform tst.ok((select first_response_at is not null and first_response_kind = 'call' from public.leads where id = v_lead), 'first response recorded');
+  -- extra contact, task, cost
+  insert into public.lead_contacts (company_id, lead_id, name, role, phone) values ('ca000000-0000-0000-0000-000000000000', v_lead, 'Mary Joe', 'spouse', '(818) 555-0178');
+  insert into public.tasks (company_id, subject_type, subject_id, title, due_at, assignee_id)
+  values ('ca000000-0000-0000-0000-000000000000', 'lead', v_lead, 'Call back', now() + interval '1 day', 'a0000000-0000-0000-0000-000000000001');
+  insert into public.lead_costs (lead_id, company_id, cost_cents) values (v_lead, 'ca000000-0000-0000-0000-000000000000', 4500);
+  -- declined needs a contractor reason; lost needs a client reason; "other" needs text
+  perform tst.fails(format($q$update public.leads set status = 'declined', lost_reason = 'no_response' where id = %L$q$, v_lead), 'declined with a client reason');
+  perform tst.fails(format($q$update public.leads set status = 'declined', lost_reason = 'other' where id = %L$q$, v_lead), 'other without text');
+  update public.leads set status = 'declined', lost_reason = 'not_profitable' where id = v_lead;
+  update public.leads set status = 'contacted', lost_reason = null where id = v_lead;     -- back to work
+  perform tst.fails(format($q$update public.leads set status = 'lost', lost_reason = 'junk_spam' where id = %L$q$, v_lead), 'lost with a contractor reason');
+  update public.leads set status = 'lost', lost_reason = 'chose_competitor' where id = v_lead;
+  -- a lead assigned to tech A
+  insert into public.leads (company_id, source_id, contact_name, phone, assigned_to)
+  values ('ca000000-0000-0000-0000-000000000000', v_person, 'For tech', '(818) 555-0179', 'a0000000-0000-0000-0000-000000000003') returning id into v_lead2;
+  insert into public.lead_costs (lead_id, company_id, cost_cents) values (v_lead2, 'ca000000-0000-0000-0000-000000000000', 3000);
+end $$;
+-- tech A: sees only own / assigned leads, never the cost
+:as_tech_a
+do $$
+declare v_mine uuid;
+begin
+  perform tst.ok((select count(*) from public.leads where contact_name = 'For tech') = 1, 'tech sees the lead assigned to him');
+  perform tst.ok((select count(*) from public.leads where contact_name = 'Neighbor Joe') = 0, 'tech does not see other leads');
+  perform tst.ok((select count(*) from public.lead_costs) = 0, 'tech never sees lead cost');
+  perform tst.fails($q$insert into public.lead_costs (lead_id, company_id, cost_cents) select id, company_id, 1 from public.leads where contact_name = 'For tech'$q$, 'tech cannot set cost');
+  -- lead from a neighbor on site: tech creates it and keeps seeing it
+  insert into public.leads (company_id, source_id, contact_name, phone)
+  select 'ca000000-0000-0000-0000-000000000000', id, 'Neighbor of job', '(818) 555-0180' from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'
+  returning id into v_mine;
+  perform tst.ok((select count(*) from public.leads where id = v_mine) = 1, 'tech sees the lead he created');
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_mine, 'sms', 'out');
+end $$;
+:as_tech2_a
+do $$ begin
+  perform tst.ok((select count(*) from public.leads where contact_name in ('For tech', 'Neighbor of job')) = 0, 'another tech sees neither');
+  perform tst.ok((select count(*) from public.activities where subject_type = 'lead') = 0, 'nor their activities');
+end $$;
+:as_owner_b
+do $$ begin
+  perform tst.ok((select count(*) from public.lead_sources where name = 'Kolya (contractor)') = 0, 'sources isolated between companies');
+  perform tst.ok((select count(*) from public.tasks) = 0, 'tasks isolated');
+  perform tst.ok((select count(*) from public.lead_costs) = 0, 'costs isolated');
+end $$;
+\echo 'T14 full lead ok'
 
 :as_super
 \echo 'ALL TESTS PASSED'
