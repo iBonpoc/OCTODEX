@@ -7,12 +7,13 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { buildAttention } from "@/features/attention";
 import { todayVisits, visitStatus } from "@/features/visits";
 import { useTick } from "@/features/sheets";
+import { NoticesCard } from "@/features/notices";
 import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T, type IconKey } from "@/ui/primitives";
 import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 function Kpi({ label, cents, icon, hint, onPress }: { label: string; cents: number; icon: IconKey; hint?: string; onPress?: () => void }) {
-  const { money } = useI18n();
+  const { moneyWhole } = useI18n();
   const { c } = useTheme();
   return (
     <Card style={{ padding: space[3], flex: 1 }} containerStyle={{ flex: 1, minWidth: 100 }} onPress={onPress} accessibilityLabel={label}>
@@ -22,8 +23,8 @@ function Kpi({ label, cents, icon, hint, onPress }: { label: string; cents: numb
           {label}
         </T>
       </RowView>
-      <T v="title" tabular>
-        {money(cents)}
+      <T v="title" tabular numberOfLines={1}>
+        {moneyWhole(cents)}
       </T>
       {hint ? (
         <T v="micro" tone="mut">
@@ -51,6 +52,7 @@ export default function Today() {
         <Kpi label={t("today.received")} cents={received} icon="wallet" onPress={() => router.push("/money")} />
         <Kpi label={t("today.awaiting")} cents={awaiting} icon="invoice" onPress={() => router.push("/money")} />
       </View>
+      <NoticesCard />
       <Grid>
         <View style={{ gap: space[2] }}>
           <SectionTitle title={t("today.attention")} right={<T v="caption" tone="mut">{attention.length}</T>} />

@@ -44,7 +44,8 @@
           "photosPermission": "Фото работ прикрепляются к выезду.",
           "cameraPermission": "Фото до и после работы прикрепляются к выезду."
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "scheme": "octodex",
     "owner": "octodex-team",

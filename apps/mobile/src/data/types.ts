@@ -1,3 +1,5 @@
+import type { CustomOption, CustomSettings, LineGroup } from "@octo/estimating-engine";
+
 /**
  * Local domain types (subset of docs/04-domain-model.md v0.3.1).
  * Same shape the Supabase/PowerSync layer will provide in wave 5. Money is integer cents.
@@ -40,6 +42,7 @@ export interface Job {
   title: string;
   status: JobStatus;
   amountCents: number;
+  estimateId?: ID;
 }
 
 export type VisitStep = "scheduled" | "en_route" | "on_site" | "working" | "signed" | "paid";
@@ -89,6 +92,26 @@ export interface Lead {
 }
 
 export type EstimateStatus = "draft" | "sent" | "approved" | "declined";
+
+/** Universal estimate content (trade-agnostic): options → lines in groups, add-ons, discount, tax, deposit. */
+export interface EstimateDoc {
+  options: CustomOption[];
+  settings: CustomSettings;
+  /** note to the client (scope, terms) */
+  note?: string;
+}
+
+/** What the client chose and signed (on site or on the client page). */
+export interface EstimateApproval {
+  optionId: string;
+  addonIds: string[];
+  signerName: string;
+  signature: string;
+  at: string;
+  channel: "on_site" | "portal";
+  totalCents: number;
+  depositCents: number;
+}
 export interface Estimate {
   id: ID;
   customerId: ID;
@@ -104,6 +127,46 @@ export interface Estimate {
   marginPct?: string | null;
   signature?: string;
   depositPaidAt?: string;
+  /** universal estimate content; absent in old quick estimates */
+  doc?: EstimateDoc;
+  /** secret part of the client link /p/<token> */
+  token?: string;
+  number?: string;
+  viewedAt?: string;
+  approval?: EstimateApproval;
+}
+
+/** Company catalog: services, labor, materials and kits (docs/04-domain-model.md CatalogItem). */
+export type CatalogKind = LineGroup | "kit";
+export interface CatalogItem {
+  id: ID;
+  kind: CatalogKind;
+  name: string;
+  description?: string;
+  unit: string;
+  /** client price per unit (service/labor: typed; material: cost × (1 + vendor tax) × (1 + markup)) */
+  priceCents: number;
+  /** purchase price per unit without supplier tax */
+  costCents?: number;
+  vendor?: string;
+  vendorTaxBps?: number;
+  markupBps?: number;
+  /** kit: items with quantities */
+  components?: { itemId: ID; qty: string }[];
+  /** test price (founder rule: real prices never in code) */
+  placeholder?: boolean;
+}
+
+export type NoticeKind = "estimate.viewed" | "estimate.approved" | "deposit.paid";
+export interface Notice {
+  id: ID;
+  kind: NoticeKind;
+  estimateId?: ID;
+  customer: string;
+  totalCents?: number;
+  depositCents?: number;
+  at: string;
+  read?: boolean;
 }
 
 export interface Invoice {
@@ -149,4 +212,6 @@ export interface DB {
   estimates: Estimate[];
   invoices: Invoice[];
   expenses: Expense[];
+  catalog: CatalogItem[];
+  notices: Notice[];
 }

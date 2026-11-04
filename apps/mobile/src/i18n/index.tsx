@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react";
 import { getLocales } from "expo-localization";
+import { dec, roundCents } from "@octo/estimating-engine";
 import { usePersistentState } from "@/data/persist";
 import { ru, type DictKey, type Dict } from "./ru";
 import { en } from "./en";
@@ -25,6 +26,8 @@ interface I18nCtx {
   setLang: (l: Lang) => void;
   t: (key: DictKey, params?: Params) => string;
   money: (cents: number) => string;
+  /** whole dollars for tight places (KPI tiles) */
+  moneyWhole: (cents: number) => string;
   time: (iso: string) => string;
   day: (iso: string) => string;
 }
@@ -54,6 +57,7 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       setLang,
       t,
       money: (cents) => (cents % 100 === 0 ? usd.format(cents / 100) : usdCents.format(cents / 100)),
+      moneyWhole: (cents) => usd.format(roundCents(dec(cents).div(100))),
       time: (iso) => timeFmt.format(new Date(iso)),
       day: (iso) => dayFmt.format(new Date(iso)),
     };

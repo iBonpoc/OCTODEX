@@ -502,5 +502,80 @@ do $$ begin
 end $$;
 \echo 'T7 expenses, files, seeded sources ok'
 
+-- ---------------------------------------------------------------- T8: universal estimate, catalog, client page
+:as_owner_a
+do $$ begin
+  insert into public.catalog_items (company_id, kind, name, unit, unit_price_cents, unit_cost_cents, vendor_tax_bps, markup_bps, is_placeholder_price)
+  values ('ca000000-0000-0000-0000-000000000000', 'material', 'Railing bracket (test)', 'ea', 1213, 1000, 1025, 1000, true);
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title, public_token) values
+    ('0e1a0000-0000-0000-0000-000000000010', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001',
+     'd1a00000-0000-0000-0000-000000000001', 'Handyman visit', 'tok_test_0123456789abcdef');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, deposit_rule, calc_inputs) values
+    ('0e2a0000-0000-0000-0000-000000000010', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000010', 1,
+     true, 950, '{"kind":"pct","bps":1000}', '{"options":[]}');
+  update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000010' where id = '0e1a0000-0000-0000-0000-000000000010';
+  insert into public.estimate_options (id, company_id, version_id, name, is_recommended, discount_mode, discount_value) values
+    ('0e3a0000-0000-0000-0000-000000000010', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000010', 'Standard', true, 'fixed', 1000);
+  insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents, taxable, is_optional) values
+    ('0e4a0000-0000-0000-0000-000000000011', 'ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000010', 'labor', 'Install railing', 1, 25000, false, false),
+    ('0e4a0000-0000-0000-0000-000000000012', 'ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000010', 'material', 'Bracket', 12, 1213, true, false),
+    ('0e4a0000-0000-0000-0000-000000000013', 'ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000010', 'service', 'Deep clean', 1, 9000, false, true);
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000010';
+  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000010' where id = '0e1a0000-0000-0000-0000-000000000010';
+  -- сотрудник открывает ссылку — статус не меняется
+  perform tst.ok((public.portal_estimate('tok_test_0123456789abcdef') ->> 'status') = 'sent', 'member preview keeps status sent');
+end $$;
+:as_tech_a
+do $$ begin
+  perform tst.ok(tst.cnt('select 1 from public.catalog_items') = 1, 'tech reads catalog');
+  perform tst.fails($q$insert into public.catalog_items (company_id, kind, name) values ('ca000000-0000-0000-0000-000000000000', 'labor', 'x')$q$, 'tech edits catalog');
+end $$;
+:as_owner_b
+do $$ begin
+  perform tst.ok(tst.cnt('select 1 from public.catalog_items') = 0, 'company B does not see A catalog');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb;
+begin
+  perform tst.fails('select 1 from public.estimates', 'anon reads estimates table');
+  perform tst.fails('select 1 from public.catalog_items', 'anon reads catalog');
+  perform tst.ok(public.portal_estimate('no-such-token-000000000') is null, 'unknown token → null');
+  r := public.portal_estimate('tok_test_0123456789abcdef');
+  perform tst.ok(r ->> 'status' = 'viewed', 'client view: sent → viewed');
+  perform tst.ok(r -> 'customer' ->> 'name' = 'Yuri Petrov', 'portal shows customer');
+  perform tst.ok(r::text not like '%cost%', 'portal has no cost fields');
+  perform tst.fails($q$select public.portal_accept('tok_test_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000010', null, 'Yuri', 'M0 0', false)$q$, 'accept without consent');
+  perform tst.fails($q$select public.portal_accept('tok_test_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000001', null, 'Yuri', 'M0 0', true)$q$, 'accept foreign option');
+  perform tst.fails($q$select public.portal_accept('tok_test_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000010', null, 'Yuri', 'M0 0', true, 'on_site')$q$, 'anon on-site');
+  -- 25000 + 12×1213 = 39556; +addon 9000 = 48556; discount 1000 → taxable share round(1000×14556/48556)=300;
+  -- tax round((14556−300)×9.5%) = 1354; total 48556 − 1000 + 1354 = 48910; deposit 10% = 4891
+  r := public.portal_accept('tok_test_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000010',
+                            array['0e4a0000-0000-0000-0000-000000000013']::uuid[], 'Yuri Petrov', 'M0 0 L10 10', true);
+  perform tst.ok(r ->> 'status' = 'approved', 'client approved');
+  perform tst.ok((r -> 'approval' -> 'selection' ->> 'total')::bigint = 48910, 'server total with add-on, discount and tax');
+  perform tst.ok((r -> 'approval' -> 'selection' ->> 'deposit')::bigint = 4891, 'server deposit 10%');
+  r := public.portal_accept('tok_test_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000010', null, 'Yuri Petrov', 'M0 0', true);
+  perform tst.ok(r ->> 'status' = 'approved', 'repeat accept is idempotent');
+end $$;
+reset role;
+do $$ begin
+  perform tst.ok((select count(*) from public.estimate_approvals where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 1, 'one approval');
+  perform tst.ok((select status from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 'scheduled', 'job scheduled');
+  perform tst.ok((select contract_total_cents from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 48910, 'job total');
+  perform tst.ok((select count(*) from public.visits v join public.jobs j on j.id = v.job_id
+                   where j.estimate_id = '0e1a0000-0000-0000-0000-000000000010' and v.starts_at > now()) = 1, 'visit in plan');
+  perform tst.ok((select count(*) from public.notifications where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 2, 'viewed + approved notifications');
+end $$;
+:as_tech_a
+do $$ begin
+  perform tst.ok(tst.cnt('select 1 from public.notifications') = 0, 'tech sees no notifications');
+end $$;
+:as_owner_a
+do $$ begin
+  perform tst.ok(tst.cnt('select 1 from public.notifications') = 2, 'owner sees notifications');
+end $$;
+\echo 'T8 universal estimate, catalog, client page ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

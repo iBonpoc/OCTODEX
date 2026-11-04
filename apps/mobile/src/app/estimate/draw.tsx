@@ -68,7 +68,7 @@ export default function DrawScreen() {
     q.set("out", String(sum.outside));
     q.set("in", String(sum.inside));
     q.set("ds", String(sum.downspouts));
-    router.replace(`/estimate/new?${q.toString()}`);
+    router.replace(`/estimate/gutters?${q.toString()}`);
   };
 
   const hint = mode === "calib" ? t("draw.hintCalib") : mode === "gutter" ? t("draw.hintGutter") : t("draw.hintDs");

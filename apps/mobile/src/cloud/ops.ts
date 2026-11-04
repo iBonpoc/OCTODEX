@@ -3,7 +3,8 @@
  * then sent to the OCTODEX database when online (offline-first, docs/06-architecture, ADR-003).
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
-import type { ExpenseCategory, PaymentMethod, VisitStep } from "@/data/types";
+import { ENGINE_VERSION } from "@octo/estimating-engine";
+import type { CatalogItem, EstimateDoc, ExpenseCategory, PaymentMethod, VisitStep } from "@/data/types";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
 
@@ -45,7 +46,37 @@ export type Op =
       marginPct?: string | null;
       lines: { name: string; qty: string; totalCents: number; optional?: boolean }[];
     }
-  | { k: "estimate.send"; id: string }
+  | { k: "estimate.send"; id: string; token?: string }
+  | {
+      k: "estimate.save";
+      id: string;
+      versionId: string;
+      customerId: string;
+      propertyId: string;
+      title: string;
+      /** client-visible content (no costs) */
+      doc: EstimateDoc;
+      /** line id → unit cost incl. supplier tax (estimate_line_costs, hidden from tech) */
+      costs: Record<string, number>;
+      totalCents: number;
+      depositCents: number;
+      marginPct: string | null;
+    }
+  | {
+      k: "estimate.approve";
+      id: string;
+      token: string;
+      optionId: string;
+      addonIds: string[];
+      signer: string;
+      svg: string;
+      channel: "on_site" | "portal";
+      jobId: string;
+      visitId: string;
+    }
+  | { k: "catalog.save"; item: CatalogItem }
+  | { k: "catalog.remove"; id: string }
+  | { k: "notice.read"; ids: string[] }
   | { k: "estimate.sign"; id: string; svg: string }
   | {
       k: "estimate.deposit";
@@ -219,7 +250,36 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       }
       return run(supabase.from("estimates").update({ current_version_id: op.versionId }).eq("id", op.id));
     }
+    case "estimate.save":
+      return saveEstimate(op, c);
+    case "estimate.approve": {
+      await applyOp({ k: "estimate.send", id: op.id, token: op.token }, c, userId);
+      const { error } = await supabase.rpc("portal_accept", {
+        p_token: op.token, p_option_id: op.optionId, p_addon_ids: op.addonIds, p_signer: op.signer, p_svg: op.svg, p_consent: true,
+        p_channel: op.channel, p_job_id: op.jobId, p_visit_id: op.visitId,
+      });
+      return run(Promise.resolve({ error }));
+    }
+    case "catalog.save": {
+      const it = op.item;
+      return run(
+        supabase.from("catalog_items").upsert(
+          {
+            id: it.id, company_id: c, kind: it.kind, name: it.name, description: it.description ?? null, unit: it.unit,
+            unit_price_cents: it.priceCents, unit_cost_cents: it.costCents ?? null, vendor: it.vendor ?? null,
+            vendor_tax_bps: it.vendorTaxBps ?? null, markup_bps: it.markupBps ?? null,
+            components: (it.components ?? []).map((x) => ({ item_id: x.itemId, qty: x.qty })), is_placeholder_price: !!it.placeholder,
+          },
+          { onConflict: "id" },
+        ),
+      );
+    }
+    case "catalog.remove":
+      return run(supabase.from("catalog_items").update({ deleted_at: new Date().toISOString(), is_active: false }).eq("id", op.id));
+    case "notice.read":
+      return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", op.ids));
     case "estimate.send": {
+      if (op.token) await run(supabase.from("estimates").update({ public_token: op.token }).eq("id", op.id).is("public_token", null));
       const { data } = await supabase.from("estimates").select("current_version_id, status").eq("id", op.id).maybeSingle();
       if (!data || data.status !== "draft") return;
       const now = new Date().toISOString();
@@ -239,16 +299,19 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "estimate.deposit": {
       const { data } = await supabase.from("estimates").select("current_version_id").eq("id", op.id).maybeSingle();
+      // The job may already exist (created when the client approved): reuse it.
+      const { data: existing } = await supabase.from("jobs").select("id").eq("estimate_id", op.id).maybeSingle();
+      const jobId = (existing?.id as string | undefined) ?? op.jobId;
       await run(
         ins("jobs", {
-          id: op.jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, estimate_id: op.id,
+          id: jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, estimate_id: op.id,
           approved_version_id: data?.current_version_id ?? null, title: op.title, contract_total_cents: op.totalCents, number: "",
         }),
       );
-      await advanceJob(op.jobId, "scheduled");
+      await advanceJob(jobId, "scheduled");
       await run(
         ins("invoices", {
-          id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: op.jobId, kind: "deposit", status: "sent",
+          id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: jobId, kind: "deposit", status: "sent",
           subtotal_cents: op.depositCents, total_cents: op.depositCents, due_date: new Date().toISOString().slice(0, 10), sent_at: new Date().toISOString(),
         }),
       );
@@ -273,5 +336,80 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           amount_cents: op.amountCents, idempotency_key: op.id,
         }),
       );
+  }
+}
+
+/**
+ * Draft estimate → database: estimate row, an unlocked version (a new one if the current is already sent),
+ * options and line items mirrored from the doc (same ids), costs in the restricted side table.
+ * The doc without costs is kept in estimate_versions.calc_inputs for the app and the client page.
+ */
+async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) {
+  await run(
+    ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, title: op.title, created_via: "manual", number: "" }),
+  );
+  const { data: est } = await supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle();
+  if (!est) throw new PermanentError("estimate is not visible");
+  if (!["draft", "sent", "viewed"].includes(est.status as string)) return;
+  if (est.status !== "draft") await run(supabase.from("estimates").update({ status: "draft" }).eq("id", op.id));
+  let versionId = est.current_version_id as string | null;
+  if (versionId) {
+    const { data: v } = await supabase.from("estimate_versions").select("locked_at, version_no").eq("id", versionId).maybeSingle();
+    if (v?.locked_at) {
+      const { data: last } = await supabase.from("estimate_versions").select("version_no").eq("estimate_id", op.id).order("version_no", { ascending: false }).limit(1).maybeSingle();
+      await run(ins("estimate_versions", { id: op.versionId, company_id: c, estimate_id: op.id, version_no: Number(last?.version_no ?? 1) + 1 }));
+      versionId = op.versionId;
+    }
+  } else {
+    await run(ins("estimate_versions", { id: op.versionId, company_id: c, estimate_id: op.id, version_no: 1 }));
+    versionId = op.versionId;
+  }
+  const s = op.doc.settings;
+  const taxOn = s.tax.enabled && Object.values(s.tax.groups).some(Boolean);
+  await run(
+    supabase
+      .from("estimate_versions")
+      .update({
+        calc_inputs: op.doc, engine_version: ENGINE_VERSION, source: "scratch", intro_text: op.doc.note ?? null,
+        totals: { total: op.totalCents, deposit: op.depositCents, marginPct: op.marginPct },
+        tax_enabled: taxOn, tax_rate_bps: s.tax.rateBps, tax_mode: "added_on_top", deposit_rule: s.deposit,
+        contract_type: s.caHic ? "ca_home_improvement" : "non_hic",
+      })
+      .eq("id", versionId),
+  );
+  await run(supabase.from("estimates").update({ title: op.title, current_version_id: versionId }).eq("id", op.id));
+
+  // Replace options and lines of this (unlocked) version.
+  const { data: oldOpts } = await supabase.from("estimate_options").select("id").eq("version_id", versionId);
+  const oldIds = ((oldOpts ?? []) as { id: string }[]).map((o) => o.id);
+  if (oldIds.length) {
+    await run(supabase.from("estimate_line_items").delete().in("option_id", oldIds));
+    await run(supabase.from("estimate_options").delete().in("id", oldIds));
+  }
+  if (!op.doc.options.length) return;
+  await run(
+    supabase.from("estimate_options").insert(
+      op.doc.options.map((o, i) => ({
+        id: o.id, company_id: c, version_id: versionId, name: o.name, position: i, is_recommended: !!o.recommended,
+        discount_mode: s.discount ? s.discount.kind : null,
+        discount_value: s.discount ? (s.discount.kind === "pct" ? Math.round(Number(s.discount.value) * 10000) : s.discount.cents) : null,
+      })),
+    ),
+  );
+  const lines = op.doc.options.flatMap((o) =>
+    o.lines
+      .filter((l) => l.name.trim() !== "" || l.unitPriceCents !== 0)
+      .map((l, i) => ({
+        id: l.id, company_id: c, option_id: o.id, position: i, line_group: l.group, catalog_item_id: null,
+        origin: l.catalogItemId ? "catalog" : "manual", name: l.name.trim() || "—", description: l.description ?? null,
+        quantity: Number(l.quantity), unit: l.unit || "ea", unit_price_cents: l.unitPriceCents,
+        taxable: taxOn && !!s.tax.groups[l.group], is_optional: !!l.optional,
+      })),
+  );
+  if (lines.length) await run(supabase.from("estimate_line_items").insert(lines));
+  const costRows = lines.filter((l) => op.costs[l.id] !== undefined).map((l) => ({ line_item_id: l.id, company_id: c, unit_cost_cents: op.costs[l.id] }));
+  if (costRows.length) {
+    // Tech without "view costs" cannot write costs; the estimate itself is still saved.
+    await supabase.from("estimate_line_costs").upsert(costRows, { onConflict: "line_item_id" });
   }
 }
