@@ -9,6 +9,11 @@
 | Сборки iPhone/Android (Expo) | https://expo.dev/accounts/octodex-team/projects/octodex |
 | Хостинг (Cloudflare) | https://dash.cloudflare.com |
 
+## 0. Приложение на iPhone через Expo Go (работает)
+- Каждое изменение в `main` само публикуется в Expo Go (EAS Workflow «Publish to Expo Go», канал `preview`).
+- Открыть: вставить в Safari `exp://u.expo.dev/49d009d4-a05b-4911-b7da-1e47c4e10fba?runtime-version=exposdk%3A58.0.0&channel-name=preview`, или войти в Expo Go под аккаунтом Expo — проект будет в списке.
+- Новая версия: закрыть и снова открыть OCTODEX в Expo Go.
+
 ## 1. Cloudflare Pages: сайт приложения
 1. Регистрация/вход: https://dash.cloudflare.com/sign-up
 2. Слева **Workers & Pages** → **Create** → вкладка **Pages** → **Connect to Git** → GitHub → репозиторий **OCTODEX** → **Begin setup**.
