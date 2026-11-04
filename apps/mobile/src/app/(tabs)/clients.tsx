@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { router } from "expo-router";
 import { customerBalance, useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { Avatar, StatusChip, TextField } from "@/ui/controls";
+import { Avatar, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
 import { Icon, T } from "@/ui/primitives";
 import { space } from "@octo/design-tokens";
@@ -15,9 +15,12 @@ export default function Clients() {
   const { t, money } = useI18n();
   const { db } = useStore();
   const [q, setQ] = useState("");
+  const [tab, setTab] = useState<"active" | "prospect">("active");
+  const prospects = db.customers.filter((c) => c.status === "prospect").length;
   const needle = q.trim().toLowerCase();
   const digits = needle.replace(/\D/g, "");
   const list = db.customers
+    .filter((c) => (tab === "prospect" ? c.status === "prospect" : c.status !== "prospect"))
     .filter((c) => {
       if (!needle) return true;
       const props = db.properties.filter((p) => p.customerId === c.id);
@@ -31,6 +34,16 @@ export default function Clients() {
   return (
     <Screen title={t("clients.title")} help={t("help.clients")} hintKey="clients" subtitle={t("clients.count", { n: db.customers.length })}>
       <TextField value={q} onChangeText={setQ} placeholder={t("clients.search")} icon="search" />
+      {prospects > 0 ? (
+        <ChoiceChips
+          value={tab}
+          onChange={setTab}
+          items={[
+            { key: "active", label: t("clients.title") },
+            { key: "prospect", label: `${t("clients.prospects")} · ${prospects}` },
+          ]}
+        />
+      ) : null}
       {list.length === 0 ? (
         <Empty icon="search" title={t("clients.empty")} hint={t("clients.emptyHint")} />
       ) : (

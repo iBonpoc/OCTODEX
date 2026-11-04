@@ -32,6 +32,8 @@ export default function Triage() {
     switch (it.kind) {
       case "lead":
         return <Button label={t("inbox.reply")} icon="send" onPress={() => setReply(it.refId)} />;
+      case "leadIdle":
+        return <Button label={t("lead.open")} icon="chevronRight" onPress={() => router.push(`/lead/${it.refId}`)} />;
       case "schedule":
         return <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${it.refId}`)} />;
       case "unassigned":

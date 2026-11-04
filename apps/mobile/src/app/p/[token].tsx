@@ -81,7 +81,7 @@ export default function ClientEstimatePage() {
     <Screen
       title={data.company.name || "OCTODEX"}
       back={back}
-      subtitle={`${t("portal.estimate")} ${data.number ?? ""} · ${data.sentAt ? day(data.sentAt) : ""}`}
+      subtitle={[`${t("portal.estimate")}${data.number ? ` ${data.number}` : ""}`, data.sentAt ? day(data.sentAt) : ""].filter(Boolean).join(" · ")}
     >
       {data.source === "local" && back ? (
         <T v="caption" tone="mut">

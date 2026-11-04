@@ -81,7 +81,13 @@ export default function Today() {
                     title={it.name}
                     subtitle={t(it.label, it.params)}
                     right={<StatusChip status={it.status} label={t(it.chip, it.params)} />}
-                    onPress={() => (it.kind === "schedule" ? router.push(`/job/schedule?jobId=${it.refId}`) : router.navigate(it.kind === "lead" ? "/inbox" : it.kind === "overdue" ? "/money" : "/triage"))}
+                    onPress={() =>
+                      it.kind === "schedule"
+                        ? router.push(`/job/schedule?jobId=${it.refId}`)
+                        : it.kind === "leadIdle" || it.kind === "lead"
+                          ? router.push(`/lead/${it.refId}`)
+                          : router.navigate(it.kind === "overdue" ? "/money" : "/triage")
+                    }
                   />
                 </View>
               ))

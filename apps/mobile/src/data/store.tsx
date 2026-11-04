@@ -27,6 +27,8 @@ import {
   type EstimateDoc,
   type Expense,
   type Lead,
+  type LostReason,
+  type Note,
   type ID,
   type PaymentMethod,
   type QueuedAction,
@@ -69,7 +71,16 @@ interface StoreCtx {
   /** fromClient: paid on the client page → unread notice for the office */
   payDeposit: (id: ID, method: PaymentMethod, fromClient?: boolean) => Undo;
   /** create or update a universal estimate (draft) */
-  saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc }) => Undo;
+  saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID }) => Undo;
+  /** client + property for an estimate from a lead (creates a prospect card the first time) */
+  leadEstimateTarget: (leadId: ID) => { customerId: ID; propertyId: ID; undo: Undo } | null;
+  /** manual "make a client" with a reason (paper contract, verbal, paid…) */
+  convertLead: (leadId: ID, reasonText: string) => Undo;
+  loseLead: (leadId: ID, reason: LostReason) => Undo;
+  updateCustomer: (id: ID, patch: { name?: string; phone?: string; email?: string }) => Undo;
+  updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
+  addNote: (n: Omit<Note, "id" | "at" | "authorId" | "pinned">) => Undo;
+  updateNote: (id: ID, patch: { pinned?: boolean; body?: string; deleted?: boolean }) => Undo;
   /** client's choice + signature (on site or on the client page): job + visit in the plan + notice */
   approveEstimate: (id: ID, a: Omit<EstimateApproval, "at" | "totalCents" | "depositCents">) => Undo;
   saveCatalogItem: (it: CatalogItem) => Undo;
@@ -110,7 +121,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const company = auth.session ? auth.company : null;
   const mode: Mode = company && auth.userId ? "cloud" : "demo";
-  const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v3";
+  const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v4";
 
   // Demo data is reseeded each new day (dates are relative to "today"). Cloud data is a cache of the server.
   const [saved, setSaved, dbReady] = usePersistentState<{ day: string; db: DB }>(
@@ -328,7 +339,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
       },
       replyLead: (id) =>
-        mutate("lead.reply", (d) => ({ ...d, leads: d.leads.map((l) => (l.id === id ? { ...l, status: "replied" } : l)) }), { k: "lead.reply", leadId: id }),
+        mutate("lead.reply", (d) => ({ ...d, leads: d.leads.map((l) => (l.id === id ? { ...l, status: l.status === "new" ? "replied" : l.status, lastActivityAt: new Date().toISOString() } : l)) }), { k: "lead.reply", leadId: id }),
       bookLead: (id) => {
         const l = dbRef.current.leads.find((x) => x.id === id);
         if (!l) return () => {};
@@ -341,7 +352,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           "lead.book",
           (d) => ({
             ...d,
-            leads: d.leads.map((x) => (x.id === id ? { ...x, status: "booked" } : x)),
+            leads: d.leads.map((x) => (x.id === id ? { ...x, status: "booked", customerId: ids.customerId, propertyId: ids.propertyId, lastActivityAt: new Date().toISOString() } : x)),
             customers: [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, source: l.source, balanceCents: 0 }],
             properties: [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: l.address ?? "", city: l.city, stories: 1 }],
             jobs: [...d.jobs, { id: ids.jobId, propertyId: ids.propertyId, title: "Estimate visit", status: "estimate", amountCents: 0 }],
@@ -399,14 +410,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const token = dbRef.current.estimates.find((e) => e.id === id)?.token ?? tk ?? newToken();
         return mutate(
           "estimate.send",
-          (d) => ({
-            ...d,
-            estimates: d.estimates.map((e) => (e.id === id ? { ...e, token, status: e.status === "draft" ? "sent" : e.status, sentAt: e.sentAt ?? new Date().toISOString() } : e)),
-          }),
+          (d) => {
+            const est = d.estimates.find((e) => e.id === id);
+            const now = new Date().toISOString();
+            return {
+              ...d,
+              estimates: d.estimates.map((e) => (e.id === id ? { ...e, token, status: e.status === "draft" ? "sent" : e.status, sentAt: e.sentAt ?? now } : e)),
+              leads: est?.leadId
+                ? d.leads.map((l) => (l.id === est.leadId && (l.status === "new" || l.status === "replied" || l.status === "booked") ? { ...l, status: "estimate_sent", lastActivityAt: now } : l))
+                : d.leads,
+            };
+          },
           { k: "estimate.send", id, token },
         );
       },
-      saveEstimate: ({ id, customerId, propertyId, title, doc: doc0 }) => {
+      saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
         if (prev?.status === "approved") return () => {};
         const doc = prev && prev.status !== "draft" ? reId(doc0) : doc0;
@@ -417,12 +435,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => {
             const next: Estimate = {
               ...(prev ?? {}),
-              id, customerId, propertyId, title, doc, status: "draft", ...sum,
+              id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
               sentAt: prev?.status === "draft" ? prev.sentAt : undefined,
             };
             return { ...d, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
-          { k: "estimate.save", id, versionId, customerId, propertyId, title, doc: clientDoc(doc), costs: costsOf(doc), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
+          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, title, doc: clientDoc(doc), costs: costsOf(doc), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
         );
       },
       approveEstimate: (id, a) => {
@@ -447,6 +465,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             jobs: existingJob
               ? d.jobs
               : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: sum.totalCents, estimateId: id }],
+            leads: e.leadId
+              ? d.leads.map((l) => (l.id === e.leadId && l.status !== "won" && l.status !== "lost" ? { ...l, status: "won", wonVia: "approval", lastActivityAt: now } : l))
+              : d.leads,
+            customers: d.customers.map((c) => (c.id === e.customerId && c.status === "prospect" ? { ...c, status: "active" } : c)),
             notices: [
               { id: uid(), kind: "estimate.approved", estimateId: id, jobId, customer: customer?.name ?? a.signerName, totalCents: sum.totalCents, depositCents: sum.depositCents, at: now, read: a.channel === "on_site" },
               ...d.notices,
@@ -455,6 +477,75 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId },
         );
       },
+      leadEstimateTarget: (leadId) => {
+        const d0 = dbRef.current;
+        const l = d0.leads.find((x) => x.id === leadId);
+        if (!l) return null;
+        if (l.customerId) {
+          const propertyId = l.propertyId ?? d0.properties.find((p) => p.customerId === l.customerId)?.id;
+          if (propertyId) return { customerId: l.customerId, propertyId, undo: () => {} };
+        }
+        const ids = { customerId: uid(), contactId: uid(), propertyId: uid() };
+        const now = new Date().toISOString();
+        const undo = mutate(
+          "lead.prospect",
+          (d) => ({
+            ...d,
+            customers: [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, source: l.source, balanceCents: 0, status: "prospect" }],
+            properties: [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: l.address ?? "", city: l.city, stories: 1 }],
+            leads: d.leads.map((x) => (x.id === leadId ? { ...x, customerId: ids.customerId, propertyId: ids.propertyId, lastActivityAt: now } : x)),
+          }),
+          { k: "lead.prospect", leadId, ...ids, name: l.name, phone: l.phone, email: l.email, source: l.source, address: l.address ?? "", city: l.city },
+        );
+        return { customerId: ids.customerId, propertyId: ids.propertyId, undo };
+      },
+      convertLead: (leadId, reasonText) => {
+        const d0 = dbRef.current;
+        const l = d0.leads.find((x) => x.id === leadId);
+        if (!l || l.status === "won") return () => {};
+        const ids = { customerId: l.customerId ?? uid(), contactId: uid(), propertyId: l.propertyId ?? uid(), noteId: uid() };
+        const needCustomer = !l.customerId;
+        const now = new Date().toISOString();
+        return mutate(
+          "lead.convert",
+          (d) => ({
+            ...d,
+            customers: needCustomer
+              ? [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, source: l.source, balanceCents: 0, status: "active" }]
+              : d.customers.map((c) => (c.id === ids.customerId ? { ...c, status: "active" } : c)),
+            properties: needCustomer ? [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: l.address ?? "", city: l.city, stories: 1 }] : d.properties,
+            leads: d.leads.map((x) => (x.id === leadId ? { ...x, status: "won", wonVia: "manual", customerId: ids.customerId, propertyId: ids.propertyId, lastActivityAt: now } : x)),
+            notes: [{ id: ids.noteId, subjectType: "customer", subjectId: ids.customerId, body: reasonText, visibility: "team", pinned: false, authorId: d.me, at: now }, ...d.notes],
+          }),
+          {
+            k: "lead.convert", leadId, needCustomer, ...ids, name: l.name, phone: l.phone, email: l.email, source: l.source, address: l.address ?? "", city: l.city, note: reasonText,
+          },
+        );
+      },
+      loseLead: (leadId, reason) =>
+        mutate(
+          "lead.lose",
+          (d) => ({ ...d, leads: d.leads.map((x) => (x.id === leadId ? { ...x, status: "lost", lostReason: reason, lastActivityAt: new Date().toISOString() } : x)) }),
+          { k: "lead.lose", leadId, reason },
+        ),
+      updateCustomer: (id, patch) =>
+        mutate("customer.update", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, ...patch } : c)) }), { k: "customer.update", id, ...patch }),
+      updateProperty: (id, patch) =>
+        mutate("property.update", (d) => ({ ...d, properties: d.properties.map((p) => (p.id === id ? { ...p, ...patch } : p)) }), { k: "property.update", id, ...patch }),
+      addNote: (n) => {
+        const id = uid();
+        const at = new Date().toISOString();
+        return mutate("note.add", (d) => ({ ...d, notes: [{ ...n, id, at, authorId: d.me, pinned: false }, ...d.notes] }), { k: "note.add", id, ...n });
+      },
+      updateNote: (id, patch) =>
+        mutate(
+          "note.update",
+          (d) => ({
+            ...d,
+            notes: patch.deleted ? d.notes.filter((x) => x.id !== id) : d.notes.map((x) => (x.id === id ? { ...x, ...(patch.pinned !== undefined ? { pinned: patch.pinned } : {}), ...(patch.body !== undefined ? { body: patch.body } : {}) } : x)),
+          }),
+          { k: "note.update", id, ...patch },
+        ),
       saveCatalogItem: (it) =>
         mutate(
           "catalog.save",

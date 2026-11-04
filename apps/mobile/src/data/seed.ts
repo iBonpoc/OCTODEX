@@ -184,6 +184,9 @@ export function makeSeed(): DB {
         message: "Quote for painting the living room and hallway?" },
       { id: "l4", name: "Nina Patel", phone: "(213) 555-0191", city: "Los Angeles", source: "Website", receivedAt: daysAgo(1), status: "booked",
         message: "Two outlets in the kitchen stopped working." },
+      { id: "l5", name: "Linda Alvarez", phone: "(310) 555-0110", email: "lalvarez@example.com", city: "Santa Monica, CA 90405", address: "2207 Ocean Park Blvd",
+        source: "Referral", receivedAt: daysAgo(17), lastActivityAt: daysAgo(16), status: "estimate_sent", customerId: "c3", propertyId: "p3",
+        message: "Carpet removal, stair railing, a light fixture and haul-away after renovation." },
     ],
     estimates: [
       { id: "e1", customerId: "c6", propertyId: "p6", title: "Panel upgrade 200A", totalCents: 518000, status: "approved", sentAt: daysAgo(6), approvedAt: minutesAgo(180) },
@@ -194,7 +197,7 @@ export function makeSeed(): DB {
       (() => {
         const doc = demoDoc();
         return {
-          id: "e6", customerId: "c3", propertyId: "p3", number: "EST-0006", title: "Carpet, railing, bulb, haul-away", status: "sent" as const,
+          id: "e6", customerId: "c3", propertyId: "p3", leadId: "l5", number: "EST-0006", title: "Carpet, railing, bulb, haul-away", status: "sent" as const,
           sentAt: daysAgo(1), token: "demo0handyman0estimate0000000001", doc, ...summarize(doc),
         };
       })(),
@@ -202,7 +205,10 @@ export function makeSeed(): DB {
     catalog: SEED_CATALOG,
     notices: [],
     company: DEMO_COMPANY,
-    notes: [],
+    notes: [
+      { id: "n1", subjectType: "customer", subjectId: "c1", body: "Gate code 4512. Small dog in the backyard — call before entering.", visibility: "team", pinned: true, authorId: "m-alex", at: daysAgo(10) },
+      { id: "n2", subjectType: "customer", subjectId: "c1", body: "Pays fast, asks for a discount every time.", visibility: "private", pinned: false, authorId: "m-alex", at: daysAgo(5) },
+    ],
     expenses: [
       { id: "x1", jobId: "j5", vendor: "Home Depot", category: "materials", amountCents: 41260, at: minutesAgo(300), memberId: "m-ivan" },
       { id: "x2", jobId: "j1", vendor: "ABC Supply", category: "materials", amountCents: 88400, at: daysAgo(1), memberId: "m-alex" },

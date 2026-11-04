@@ -25,7 +25,7 @@ const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join
  * Type of a line (service / labor / material) only drives which lines are taxed.
  */
 export default function EstimateBuilder() {
-  const params = useLocalSearchParams<{ id?: string; customerId?: string; propertyId?: string }>();
+  const params = useLocalSearchParams<{ id?: string; customerId?: string; propertyId?: string; leadId?: string }>();
   const store = useStore();
   const { db } = store;
   const { t, money } = useI18n();
@@ -84,7 +84,7 @@ export default function EstimateBuilder() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     const clean: EstimateDoc = { ...doc, options: doc.options.map((o) => ({ ...o, lines: activeLines(o.lines) })) };
     const undo = store.saveEstimate({
-      id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean,
+      id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId,
       title: title.trim() || estimateTitle(clean, t("ue.title")),
     });
     toast.show(store.online ? t("ue.saved", { name: customer.name }) : t("offline.queued"), undo);

@@ -25,6 +25,8 @@ export interface Customer {
   source: LeadSource;
   /** positive = customer owes us */
   balanceCents: number;
+  /** prospect: has an estimate but has not signed yet (not in the main client list) */
+  status?: "prospect" | "active";
 }
 
 export interface Property {
@@ -79,17 +81,30 @@ export interface Visit {
   late?: boolean;
 }
 
-export type LeadStatus = "new" | "replied" | "booked" | "lost";
+/** Funnel: new → replied → booked (inspection) → estimate_sent → won | lost */
+export type LeadStatus = "new" | "replied" | "booked" | "estimate_sent" | "won" | "lost";
+export const LEAD_FUNNEL: LeadStatus[] = ["new", "replied", "booked", "estimate_sent", "won"];
+export type LostReason =
+  | "price_too_high" | "no_response" | "chose_competitor" | "not_ready_timing" | "out_of_service_area"
+  | "service_not_offered" | "junk_spam" | "duplicate" | "other";
 export interface Lead {
   id: ID;
   name: string;
   phone: string;
+  email?: string;
   city: string;
   address?: string;
   source: LeadSource;
   receivedAt: string;
   message: string;
   status: LeadStatus;
+  /** set when a prospect card / client exists for this lead */
+  customerId?: ID;
+  propertyId?: ID;
+  wonVia?: "approval" | "deposit" | "manual";
+  lostReason?: LostReason;
+  /** last change by the contractor (for "no movement 14 / 30 days") */
+  lastActivityAt?: string;
 }
 
 export type EstimateStatus = "draft" | "sent" | "approved" | "declined";
@@ -128,6 +143,8 @@ export interface Estimate {
   marginPct?: string | null;
   signature?: string;
   depositPaidAt?: string;
+  /** the lead this estimate was made from */
+  leadId?: ID;
   /** universal estimate content; absent in old quick estimates */
   doc?: EstimateDoc;
   /** secret part of the client link /p/<token> */

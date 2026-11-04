@@ -39,8 +39,8 @@ const leadStatus: Record<string, LeadStatus> = {
   contacted: "replied",
   qualified: "replied",
   inspection_scheduled: "booked",
-  estimate_sent: "booked",
-  won: "booked",
+  estimate_sent: "estimate_sent",
+  won: "won",
   lost: "lost",
   archived: "lost",
 };
@@ -119,7 +119,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     return { id: s(m.user_id), name, initials: initials(name), kind: m.role === "subcontractor" ? "sub" : "employee", roles: appRoles(m.role as DbRole) };
   });
   const primaryPhone = new Map<string, string>();
+  const primaryEmail = new Map<string, string>();
   for (const c of contacts) if (c.is_primary || !primaryPhone.has(s(c.customer_id))) primaryPhone.set(s(c.customer_id), s(c.phone));
+  for (const c of contacts) if (c.email && (c.is_primary || !primaryEmail.has(s(c.customer_id)))) primaryEmail.set(s(c.customer_id), s(c.email));
 
   const jobById = new Map(jobs.map((j) => [s(j.id), j]));
   const paidVisit = new Map<string, Row>();
@@ -175,6 +177,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       customerId: s(e.customer_id),
       propertyId: s(e.property_id),
       title: s(e.title) || s(e.number),
+      leadId: (e.lead_id as string | null) ?? undefined,
       totalCents: sel?.total !== undefined ? n(sel.total) : n(totals.total),
       status: estimateStatus[s(e.status)] ?? "draft",
       sentAt: (ver?.sent_at as string | null) ?? undefined,
@@ -221,12 +224,18 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     id: s(l.id),
     name: s(l.contact_name) || "—",
     phone: s(l.phone),
+    email: (l.email as string | null) ?? undefined,
     city: s(l.address_text).split(",").slice(-1)[0]?.trim() || "",
     address: s(l.address_text) || undefined,
     source: (sourceName.get(s(l.source_id)) as LeadSource) ?? "Website",
     receivedAt: s(l.received_at),
     message: s(l.message),
     status: leadStatus[s(l.status)] ?? "new",
+    customerId: (l.customer_id as string | null) ?? undefined,
+    propertyId: (l.property_id as string | null) ?? undefined,
+    wonVia: (l.won_via as Lead["wonVia"] | null) ?? undefined,
+    lostReason: (l.lost_reason as Lead["lostReason"] | null) ?? undefined,
+    lastActivityAt: s(l.updated_at) || undefined,
   }));
 
   const mappedJobs: Job[] = jobs.map((j) => ({
@@ -255,8 +264,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       id: s(c.id),
       name: s(c.display_name),
       phone: primaryPhone.get(s(c.id)) ?? "",
+      email: primaryEmail.get(s(c.id)) || undefined,
       source: (sourceName.get(s(c.lead_source_id)) as LeadSource) ?? "Website",
       balanceCents: 0,
+      status: c.status === "prospect" ? ("prospect" as const) : ("active" as const),
     })),
     properties: properties.map((p) => ({
       id: s(p.id),
