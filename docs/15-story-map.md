@@ -81,52 +81,57 @@
 
 ## 4. Стыки
 
-У каждого стыка: **кто запускает**, **что меняется с обеих сторон**, **что передаётся**, **что при офлайне**, **тест**.
-Тест: `e2e:` — сквозная спека `apps/mobile/e2e/specs/`, `db:` — `supabase/tests/`, `unit:` — `apps/mobile/test/` или пакет. ✚ — теста ещё нет.
+У каждого стыка: **кто запускает**, **что меняется с обеих сторон**, **что передаётся**, **тест**.
+Колонка «Тест» читается машиной (`apps/mobile/test/storyMap.test.ts`): `e2e:<файл>` — `apps/mobile/e2e/specs/<файл>.cjs`, `unit:<файл>` — `apps/mobile/test/<файл>.test.ts`, `db:T<n>` — тест в `supabase/tests/core_rls.sql`, `engine:<файл>` — `packages/estimating-engine/test/<файл>.test.ts`. Каждая ссылка обязана существовать.
+Колонка «Покрытие»: **✅** — обе стороны стыка проверены; **◐** — частично (чего нет — в «Пробел»); **✚** — теста нет. Сверка 04.11 — `docs/16-audit-2026-11-04.md`.
 
-| ID | Стык | Запускает | Было → стало | Передаётся | Тест |
-|---|---|---|---|---|---|
-| S0 | Компания → документы | Д в настройках | — → шапка смет/счетов, PDF, `/p/` | название, лицензии, телефон, логотип, префиксы и номера | e2e:06-company-setup |
-| S1 | Заявка → Лид | человек / приём лидов | — → `Lead.new` | контакт, адрес, запрос, источник, цена, атрибуция | e2e:15-lead-full; ✚db: повтор события приёма, дубль |
-| S2 | Первый ответ | человек | `new` → `replied` | `firstResponseAt`, `lastOutboundAt`, Activity | e2e:04-lead-funnel; ✚unit: leadTurn |
-| S3 | Лид → потенциальный клиент | система при осмотре или смете | `Lead.customerId` пусто → есть; — → `Customer.prospect`, `Property`, `Contact` | имя, телефоны, email, язык, адрес, источник клиента = источник лида | ✚e2e: без дублей при повторе; ✚db: идемпотентность `lead_to_client` |
-| S4 | Лид → осмотр | человек | `replied` → `booked`; — → `Job(estimate)`, `Visit` | объект, дата, время, мастер | ✚e2e: выбор даты и мастера |
-| S5 | Лид/Клиент → смета | человек | — → `Estimate.draft (leadId, propertyId)` | клиент, объект, услуга, ответы модуля | e2e:01-estimate-builder |
-| S6 | Смета отправлена | человек | `draft` → `sent`; лид → `estimate_sent` | ссылка `/p/<token>` | e2e:04-lead-funnel |
-| S7 | Клиент открыл | К | `viewedAt`, счётчик | — | e2e:02-sign-deposit-card |
-| S8 | Подпись / депозит | К | смета `approved`; лид `won (approval/deposit)`; клиент `active`; работа `unscheduled`; счёт на депозит | суммы из движка, подпись, способ оплаты | e2e:02-sign-deposit-card; db: portal_accept |
-| S8a | Ручная победа | Д | лид `won (manual)`; клиент `active` | причина | e2e:15-lead-full |
-| S9 | Работа → расписание | Д/Дп | `unscheduled` → `scheduled`; — → `Visit` | дата, время, длительность, мастер | e2e:05-schedule-job, 09-plan-modes |
-| S10 | Визит выполнен | М | `scheduled` → `en_route` → `on_site` → `working` → `signed`; работа `in_progress` → `done` | фото, чек-лист, подпись | e2e:12-tech-day |
-| S11 | Работа → счёт | Д / система | — → `Invoice (progress/final)` | остаток по договору из движка | e2e:03-invoices-partial |
-| S12 | Оплата → квитанция | К / Д | баланс счёта ↓; — → `Payment`, квитанция | сумма ≤ баланса, способ | e2e:03-invoices-partial; db: payment_not_above_balance |
-| S13 | Закрытие лида | человек | открыт → `lost`/`declined`; «открыть снова» → `replied` | причина | e2e:15-lead-full |
-| S14 | Всё → отчёт | система (чтение) | — | источник первого лида клиента, цены лидов, затраты, выручка, себестоимость | ✚db: lead_source_money на тестовых данных |
-| S15 | Всё → «Сегодня» / «Разбор» | система (чтение) | — | пункты «Требует внимания» | unit:attention; e2e:11-today-funnel |
+| ID | Стык | Запускает | Было → стало | Тест | Покрытие | Пробел |
+|---|---|---|---|---|---|---|
+| S0 | Компания → документы | Д в настройках | — → шапка смет/счетов, PDF, `/p/` | e2e:06-company-setup, db:T9, db:T1 | ◐ | шапка сметы/счёта, PDF, телефон, логотип, префиксы |
+| S1 | Заявка → Лид | человек / приём лидов | — → `Lead.new` | e2e:15-lead-full, unit:leads | ◐ | цена и атрибуция; приём извне, повтор события, дубль в базе |
+| S2 | Первый ответ | человек | `new` → `replied` | e2e:15-lead-full, db:T14 | ◐ | `lastOutboundAt`; модульный тест «чей ход» |
+| S3 | Лид → потенциальный клиент | система при осмотре или смете | — → `Customer.prospect`, `Property`, `Contact` | e2e:04-lead-funnel | ◐ | объект, контакт, источник клиента, повтор без дублей; db T10 создаёт клиента вручную |
+| S4 | Лид → осмотр | человек | `replied` → `booked`; — → `Job(estimate)`, `Visit` | — | ✚ | весь стык |
+| S5 | Лид/Клиент → смета | человек | — → `Estimate.draft (leadId, propertyId)` | e2e:01-estimate-builder, e2e:04-lead-funnel | ◐ | сохранённые `leadId`/`propertyId` у черновика |
+| S6 | Смета отправлена | человек | смета `draft` → `sent`; лид → `estimate_sent` | e2e:04-lead-funnel, db:T8 | ◐ | статус сметы и ссылка в e2e |
+| S7 | Клиент открыл | К | смета `sent` → `viewed` (в базе), счётчик | db:T8 | ◐ | счётчик «открыл N раз» на экране |
+| S8 | Подпись / депозит | К | смета `approved`; лид `won (approval)`; клиент `active`; работа «назначить дату»; счёт на депозит | e2e:02-sign-deposit-card, e2e:04-lead-funnel, db:T8, db:T10, db:T11 | ◐ | ни один тест не проверяет все стороны сразу; `wonVia` |
+| S8a | Ручная победа | Д | лид `won (manual)`; клиент `active` | e2e:04-lead-funnel, db:T10 | ◐ | клиент `active` |
+| S9 | Работа → расписание | Д/Дп | `unscheduled` → `scheduled`; — → `Visit` | e2e:05-schedule-job | ✅ | время и длительность |
+| S10 | Визит выполнен | М | шаги визита; работа `in_progress` → `done` | e2e:12-tech-day, db:T4 | ◐ | работа → `done` |
+| S11 | Работа → счёт | Д / система | — → `Invoice (progress/final)` | e2e:03-invoices-partial, engine:contract | ◐ | счёт за этап на экране |
+| S12 | Оплата → квитанция | К / Д | баланс ↓; — → `Payment`, квитанция | e2e:03-invoices-partial, db:T13, db:T11, db:T12, db:T5 | ✅ | — |
+| S13 | Закрытие лида | человек | открыт → `lost`/`declined`; «открыть снова» → `replied` | e2e:15-lead-full, e2e:04-lead-funnel, db:T14 | ✅ | — |
+| S14 | Всё → отчёт | система (чтение) | — | — | ✚ | весь стык |
+| S15 | Всё → «Сегодня» / «Разбор» | система (чтение) | — | unit:attention, unit:universalEstimate, e2e:11-today-funnel | ✅ | — |
 
 Правила стыков:
 - Переход через стык делает **одна функция** (в сторе и на сервере одинаково), вызывается повторно без вреда.
 - Ничего не удаляется на стыке: старое состояние остаётся в ленте.
 - Каждый стык работает офлайн, если в нём не участвует клиент (S7, S8, S12 картой — только при сети).
 - Деньги на стыке считает только `@octo/estimating-engine`.
+- Цель: все стыки ✅. Пробел закрывается в волне своего шага; новый стык не появляется без теста.
 
 ---
 
 ## 5. Статусы всех сущностей (единый список)
 
-| Сущность | Статусы | Кто меняет | Источник правды |
-|---|---|---|---|
-| Lead | `new → replied → booked → estimate_sent → won`; `lost`, `declined`; архив = `archivedAt` | человек + авто (S2, S4, S6, S8) | `types.ts LeadStatus`, `14-leads-spec.md §3` |
-| Lead «чей ход» | ответить / шаг / нет шага / ждём клиента (вычисляется) | — | `14-leads-spec.md §3.2` |
-| Customer | `prospect → active` | авто (S3, S8) | `types.ts Customer.status` |
-| Estimate | `draft → sent → approved` / `declined` | человек, клиент | `types.ts EstimateStatus` |
-| Job | `lead → estimate → unscheduled → scheduled → in_progress → done` | авто + человек | `types.ts JobStatus` |
-| Visit | `scheduled → en_route → on_site → working → signed → paid` | монтажник | `types.ts VisitStep` |
-| Invoice | вычисляется: черновик / выставлен / частично / оплачен / просрочен | — | баланс из движка |
-| Payment | запись (не меняется; отмена — отдельная запись) | человек, клиент | `types.ts Payment` |
-| Task | открыта / выполнена (`doneAt`) | человек | `types.ts Task` |
+База хранит полный список из `04-domain-model.md`, приложение показывает короче. Перевод «база → приложение» — `apps/mobile/src/cloud/statusMap.ts`; тест проверяет, что у каждого статуса из миграций есть перевод.
+Строки ниже читает тест: в колонке «Приложение» перечислены все статусы приложения в `` `обратных кавычках` ``.
 
-Правило: новый статус появляется сначала здесь, потом в базе (check-constraint), типах, i18n, тестах.
+| Сущность | Приложение | База | Кто меняет |
+|---|---|---|---|
+| Lead | `new` `replied` `booked` `estimate_sent` `won` `lost` `declined`; архив — `archivedAt` | new, contacted, qualified, inspection_scheduled, estimate_sent, won, lost, declined, archived | человек + авто (S2, S4, S6, S8) |
+| Customer | `prospect` `active` | prospect, active, archived, do_not_service | авто (S3, S8) |
+| Estimate | `draft` `sent` `approved` `declined` | draft, sent, viewed, awaiting_countersign, approved, declined, expired, cancelled_by_customer | человек, клиент |
+| Job | `lead` `estimate` `unscheduled` `scheduled` `in_progress` `done` | draft, scheduled, in_progress, on_hold, completed, closed, cancelled | авто + человек |
+| Visit | `scheduled` `en_route` `on_site` `working` `signed` `paid` | scheduled, en_route, on_site, completed, cancelled, no_show | монтажник |
+| Invoice | вычисляется из баланса движка | status: draft, sent, void; payment_status: unpaid, partially_paid, paid, refunded | — |
+| Payment | запись (отмена — отдельная запись) | pending, succeeded, failed, partially_refunded, refunded, returned, voided | человек, клиент |
+| Task | открыта / выполнена (`doneAt`) | — | человек |
+| «Чей ход» лида | вычисляется: ответить / шаг / ждём клиента | — | `14-leads-spec.md §3.2` |
+
+Правило: новый статус появляется сначала здесь, потом в базе (check-constraint), `statusMap.ts`, типах, i18n, тестах.
 
 ---
 

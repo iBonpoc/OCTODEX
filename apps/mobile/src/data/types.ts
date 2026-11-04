@@ -60,7 +60,8 @@ export interface Property {
 }
 
 /** unscheduled: client signed, the contractor has not picked a date yet (not in the plan) */
-export type JobStatus = "lead" | "estimate" | "unscheduled" | "scheduled" | "in_progress" | "done";
+export const JOB_STATUSES = ["lead", "estimate", "unscheduled", "scheduled", "in_progress", "done"] as const;
+export type JobStatus = (typeof JOB_STATUSES)[number];
 export interface Job {
   id: ID;
   propertyId: ID;
@@ -107,7 +108,8 @@ export interface Visit {
  * Funnel: new → replied ("in touch") → booked (estimate visit) → estimate_sent → won (client).
  * Closed: lost (the client decided) or declined (we decided) — always with a reason; both can be reopened.
  */
-export type LeadStatus = "new" | "replied" | "booked" | "estimate_sent" | "won" | "lost" | "declined";
+export const LEAD_STATUSES = ["new", "replied", "booked", "estimate_sent", "won", "lost", "declined"] as const;
+export type LeadStatus = (typeof LEAD_STATUSES)[number];
 export const LEAD_FUNNEL: LeadStatus[] = ["new", "replied", "booked", "estimate_sent", "won"];
 /** the client decided */
 export const LOST_REASONS = ["no_response", "chose_competitor", "price_too_high", "not_ready_timing", "other"] as const;
@@ -193,7 +195,8 @@ export interface Activity {
   actorId: ID;
 }
 
-export type EstimateStatus = "draft" | "sent" | "approved" | "declined";
+export const ESTIMATE_STATUSES = ["draft", "sent", "approved", "declined"] as const;
+export type EstimateStatus = (typeof ESTIMATE_STATUSES)[number];
 
 /** Universal estimate content (trade-agnostic): options → lines in groups, add-ons, discount, tax, deposit. */
 export interface EstimateDoc {
