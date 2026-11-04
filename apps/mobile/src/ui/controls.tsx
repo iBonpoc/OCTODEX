@@ -9,7 +9,7 @@ import Animated, {
   withTiming,
   Easing,
 } from "react-native-reanimated";
-import { component, font, motion, radius, space, statusIcon, type StatusName, size } from "@octo/design-tokens";
+import { component, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T, type IconKey } from "./primitives";
 
@@ -66,7 +66,7 @@ export function Button({
         style,
       ]}
     >
-      {icon ? <Icon name={icon} s={16} color={fg} /> : null}
+      {icon ? <Icon name={icon} s={sizes.iconSm} color={fg} /> : null}
       <T v="button" style={{ color: fg }} numberOfLines={1}>
         {label}
       </T>
@@ -107,7 +107,7 @@ export function IconButton({
         borderColor: c.bd,
       }}
     >
-      <Icon name={icon} s={18} color={filled ? c.onAcc : c.ink} />
+      <Icon name={icon} s={sizes.iconMd} color={filled ? c.onAcc : c.ink} />
     </Press>
   );
 }
@@ -136,7 +136,7 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
         alignSelf: "flex-start",
       }}
     >
-      <Icon name={statusIcon[status]} s={12} color={fg} />
+      <Icon name={statusIcon[status]} s={sizes.iconXs} color={fg} />
       <T v="caption" w="semibold" style={{ color: fg }} numberOfLines={1}>
         {label}
       </T>
@@ -356,7 +356,7 @@ export function TextField({
         gap: space[2],
       }}
     >
-      {icon ? <Icon name={icon} s={16} color={c.mut} /> : null}
+      {icon ? <Icon name={icon} s={sizes.iconSm} color={c.mut} /> : null}
       <TextInput
         value={value}
         onChangeText={onChangeText}
@@ -410,11 +410,11 @@ export function Stepper({
       accessibilityLabel={a11y}
       style={{ width: b, height: b, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}
     >
-      <Icon name={icon} s={16} />
+      <Icon name={icon} s={sizes.iconSm} />
     </Press>
   );
   return (
-    <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: size.hitMin }} accessibilityLabel={label}>
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: sizes.hitMin }} accessibilityLabel={label}>
       <T v="body" style={{ flex: 1 }}>
         {label}
       </T>

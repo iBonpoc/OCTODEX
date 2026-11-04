@@ -1,6 +1,6 @@
 import { Image, ScrollView, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
-import { radius, space, component } from "@octo/design-tokens";
+import { component, radius, size, space } from "@octo/design-tokens";
 import type { Photo } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -40,7 +40,7 @@ export function PhotoStrip({ photos, onAdd }: { photos: Photo[]; onAdd: (uri?: s
           gap: component.photoGap,
         }}
       >
-        <Icon name="camera" s={20} />
+        <Icon name="camera" s={size.iconMd} />
         <T v="micro" tone="mut">
           {t("visit.addPhoto")}
         </T>
@@ -50,7 +50,7 @@ export function PhotoStrip({ photos, onAdd }: { photos: Photo[]; onAdd: (uri?: s
           key={p.id}
           style={{ width: THUMB, height: THUMB, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
         >
-          {p.uri ? <Image source={{ uri: p.uri }} style={{ width: THUMB, height: THUMB }} /> : <Icon name="image" s={22} color={c.mut} />}
+          {p.uri ? <Image source={{ uri: p.uri }} style={{ width: THUMB, height: THUMB }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
         </View>
       ))}
     </ScrollView>

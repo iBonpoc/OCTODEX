@@ -1,7 +1,9 @@
 import { useWindowDimensions, View } from "react-native";
 import { router } from "expo-router";
-import { font, layout, space } from "@octo/design-tokens";
-import { isToday, useStore } from "@/data/store";
+import { component, font, layout, size, space } from "@octo/design-tokens";
+import { useStore } from "@/data/store";
+import { usePersistentState } from "@/data/persist";
+import { periodNumbers, type Period } from "@/features/metrics";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { buildAttention } from "@/features/attention";
@@ -9,7 +11,7 @@ import { todayVisits, visitStatus } from "@/features/visits";
 import { useTick } from "@/features/sheets";
 import { NoticesCard } from "@/features/notices";
 import { CompanySetupCard, FirstStepsCard } from "@/features/SetupCards";
-import { Avatar, Button, StatusChip } from "@/ui/controls";
+import { Avatar, Button, Segmented, StatusChip } from "@/ui/controls";
 import { Icon, T, type IconKey } from "@/ui/primitives";
 import { Card, CardList, Divider, Grid, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
@@ -24,7 +26,7 @@ function Kpi({ label, cents, icon, hint, onPress, width }: { label: string; cent
     <Card style={{ padding: space[3], flex: 1 }} containerStyle={{ flex: 1 }} onPress={onPress} accessibilityLabel={label}>
       <RowView gap={space[1]} style={{ alignItems: "flex-start" }}>
         <View style={{ flexShrink: 0 }}>
-          <Icon name={icon} s={14} color={c.mut} />
+          <Icon name={icon} s={size.iconXs} color={c.mut} />
         </View>
         <T v="caption" tone="mut" style={{ flex: 1 }}>
           {label}
@@ -43,25 +45,60 @@ function Kpi({ label, cents, icon, hint, onPress, width }: { label: string; cent
   );
 }
 
-/** Owner home: today's money and what needs a decision. */
+/** One step of the sales funnel: count (and money), share of the previous step. */
+function FunnelRow({ icon, label, value, share, onPress }: { icon: IconKey; label: string; value: string; share?: number; onPress?: () => void }) {
+  const { t } = useI18n();
+  return (
+    <ListRow
+      title={label}
+      left={<Icon name={icon} />}
+      right={
+        <RowView gap={space[2]}>
+          {share !== undefined ? <StatusChip status="neutral" label={t("today.share", { n: share })} soft /> : null}
+          <T v="body" w="semibold" tabular>
+            {value}
+          </T>
+        </RowView>
+      }
+      onPress={onPress}
+    />
+  );
+}
+
+/** Owner home: money for today / week / month, the sales funnel and what needs a decision. */
 export default function Today() {
   useTick();
-  const { t, day } = useI18n();
+  const { t, day, moneyWhole } = useI18n();
   const { db } = useStore();
-  const signed = db.estimates.filter((e) => e.status === "approved" && e.approvedAt && isToday(e.approvedAt)).reduce((s, e) => s + e.totalCents, 0);
-  const received = db.invoices.filter((i) => i.paidAt && isToday(i.paidAt)).reduce((s, i) => s + i.paidCents, 0);
-  const awaiting = db.invoices.reduce((s, i) => s + (i.totalCents - i.paidCents), 0);
+  const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
+  const n = periodNumbers(db, period);
   const attention = buildAttention(db);
   const techs = db.members.filter((m) => m.roles.includes("tech"));
   const { width: screenW } = useWindowDimensions();
   const tileW = Math.floor((Math.min(screenW, layout.contentMax) - space[4] * 2 - space[2] * 2) / 3);
   return (
     <Screen title={t("today.title")} help={t("help.today")} hintKey="today" subtitle={day(new Date().toISOString())}>
+      <Segmented<Period>
+        value={period}
+        onChange={setPeriod}
+        items={[
+          { key: "today", label: t("today.title") },
+          { key: "week", label: t("plan.week") },
+          { key: "month", label: t("plan.month") },
+        ]}
+      />
       <View style={{ flexDirection: "row", gap: space[2] }}>
-        <Kpi label={t("today.signed")} cents={signed} icon="signature"  width={tileW} />
-        <Kpi label={t("today.received")} cents={received} icon="wallet" onPress={() => router.push("/money")}  width={tileW} />
-        <Kpi label={t("today.awaiting")} cents={awaiting} icon="invoice" onPress={() => router.push("/money")}  width={tileW} />
+        <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} width={tileW} />
+        <Kpi label={t("today.received")} cents={n.receivedCents} icon="wallet" hint={t("today.nPayments", { n: n.payments })} onPress={() => router.push("/money")} width={tileW} />
+        <Kpi label={t("today.awaiting")} cents={n.awaitingCents} icon="invoice" hint={t("today.allTime")} onPress={() => router.push("/money")} width={tileW} />
       </View>
+      <Card>
+        <SectionTitle title={t("today.funnel")} />
+        <FunnelRow icon="inbox" label={t("today.f.leads")} value={String(n.leads)} onPress={() => router.navigate("/inbox")} />
+        <FunnelRow icon="send" label={t("today.f.sent")} value={String(n.sent)} share={n.leads ? n.leadToSentPct : undefined} onPress={() => router.navigate("/inbox")} />
+        <FunnelRow icon="signature" label={t("today.f.signed")} value={`${n.signed} · ${moneyWhole(n.signedCents)}`} share={n.sent ? n.sentToSignedPct : undefined} />
+        <FunnelRow icon="wallet" label={t("today.f.paid")} value={moneyWhole(n.receivedCents)} onPress={() => router.push("/money")} />
+      </Card>
       <CompanySetupCard />
       <FirstStepsCard />
       <NoticesCard />

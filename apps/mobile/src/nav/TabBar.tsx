@@ -118,7 +118,7 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
           justifyContent: "center",
         }}
       >
-        <Icon name="plus" s={20} color={c.onAcc} />
+        <Icon name="plus" s={size.iconMd} color={c.onAcc} />
       </View>
     </Press>
   );

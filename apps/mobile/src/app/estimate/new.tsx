@@ -120,7 +120,7 @@ export default function EstimateBuilder() {
                   </T>
                 ) : null}
               </View>
-              <Icon name="chevronRight" s={16} />
+              <Icon name="chevronRight" s={size.iconSm} />
             </RowView>
           </Card>
           <TextField value={title} onChangeText={setTitle} placeholder={t("ue.jobTitle")} icon="note" />
@@ -332,7 +332,7 @@ function SumRow({ label, value, onPress }: { label: string; value: string; onPre
         <T v="body" tabular>
           {value}
         </T>
-        {onPress ? <Icon name="chevronRight" s={16} /> : null}
+        {onPress ? <Icon name="chevronRight" s={size.iconSm} /> : null}
       </RowView>
     </RowView>
   );

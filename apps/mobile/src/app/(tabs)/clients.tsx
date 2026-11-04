@@ -6,7 +6,7 @@ import { useI18n } from "@/i18n";
 import { Avatar, Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { Card, CardList, Empty, RowView, Screen } from "@/ui/surfaces";
 import { Icon, T } from "@/ui/primitives";
-import { space } from "@octo/design-tokens";
+import { size, space } from "@octo/design-tokens";
 
 type Filter = "all" | "owes" | "estimate" | "prospect";
 
@@ -76,7 +76,7 @@ export default function Clients() {
                     <T v="heading">{c.name}</T>
                     {props[0] ? (
                       <RowView gap={space[1]}>
-                        <Icon name="pin" s={14} />
+                        <Icon name="pin" s={size.iconXs} />
                         <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
                           {props[0].address}, {props[0].city}
                           {props.length > 1 ? ` · ${t("clients.properties", { n: props.length })}` : ""}
@@ -85,7 +85,7 @@ export default function Clients() {
                     ) : null}
                     {c.phone ? (
                       <RowView gap={space[1]}>
-                        <Icon name="phone" s={14} />
+                        <Icon name="phone" s={size.iconXs} />
                         <T v="caption" tone="mut" tabular>
                           {c.phone}
                         </T>
@@ -98,7 +98,7 @@ export default function Clients() {
                       </RowView>
                     ) : null}
                   </View>
-                  <Icon name="chevronRight" s={16} />
+                  <Icon name="chevronRight" s={size.iconSm} />
                 </RowView>
               </Card>
             );

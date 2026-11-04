@@ -1,6 +1,6 @@
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { space, type StatusName } from "@octo/design-tokens";
+import { size, space, type StatusName } from "@octo/design-tokens";
 import { NotesBlock } from "@/features/NotesBlock";
 import { invoiceChip } from "@/features/ContractStatement";
 import { customerBalance, useStore } from "@/data/store";
@@ -91,7 +91,7 @@ export default function ClientScreen() {
           return (
             <Card key={p.id}>
               <RowView gap={space[1]}>
-                <Icon name="home2" s={16} color={col.mut} />
+                <Icon name="home2" s={size.iconSm} color={col.mut} />
                 <T v="heading" style={{ flex: 1 }} numberOfLines={1}>
                   {p.address || p.city}
                 </T>

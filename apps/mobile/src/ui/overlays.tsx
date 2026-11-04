@@ -85,7 +85,7 @@ export function Sheet({
                       justifyContent: "center",
                     }}
                   >
-                    <Icon name="close" s={16} />
+                    <Icon name="close" s={size.iconSm} />
                   </View>
                 </Press>
               </View>
