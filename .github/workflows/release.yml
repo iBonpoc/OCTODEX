@@ -26,7 +26,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: supabase/setup-cli@v1
         with:
-          version: latest
+          # exact version: "latest" asks the GitHub API and fails on its rate limit
+          version: 3.0.0
       - name: Secrets are set
         run: |
           if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ]; then
@@ -34,16 +35,6 @@ jobs:
           fi
       - name: Link the project
         run: supabase link --project-ref "$PROJECT_REF"
-      # The first migrations were applied by hand (MCP) under other version numbers. Map them once to the file versions
-      # so "db push" applies only what is really new. Repeating this is harmless.
-      - name: Align migration history (one time)
-        run: |
-          supabase migration repair --status reverted 20261103143735 20261103150008 20261103150114 20261103150223 20261103155332 \
-            20261104010504 20261104015223 20261104021206 20261104023804 20261104031314 20261104032502 20261104033959 20261104035003 20261104181835 \
-            --remote --yes || true
-          supabase migration repair --status applied 20261104000000 20261104010000 20261104020000 20261104030000 20261104040000 \
-            20261104050000 20261104060000 20261104070000 20261104080000 20261104090000 20261104100000 \
-            --remote --yes
       - name: Show pending
         run: supabase migration list --remote
       - name: Apply new migrations
