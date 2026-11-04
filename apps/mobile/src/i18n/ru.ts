@@ -947,6 +947,11 @@ export const ru = {
   "tl.notePrivate": "Личная заметка",
   "tl.received": "Лид пришёл: {source}",
   "tl.visit": "Выезд на оценку",
+  "sheet.grabber": "Шторка",
+  "sheet.grabberHint": "Потяните вниз, чтобы закрыть, или вверх, чтобы развернуть",
+  "sheet.unsavedTitle": "Сохранить изменения?",
+  "sheet.unsavedText": "Вы что-то изменили в этом окне.",
+  "sheet.discard": "Не сохранять",
 } as const;
 
 export type DictKey = keyof typeof ru;

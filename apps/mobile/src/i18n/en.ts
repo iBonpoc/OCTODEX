@@ -948,4 +948,9 @@ export const en: Dict = {
   "tl.notePrivate": "Private note",
   "tl.received": "Lead came in: {source}",
   "tl.visit": "Estimate visit",
+  "sheet.grabber": "Sheet",
+  "sheet.grabberHint": "Drag down to close, up to expand",
+  "sheet.unsavedTitle": "Save changes?",
+  "sheet.unsavedText": "You changed something in this window.",
+  "sheet.discard": "Don't save",
 };

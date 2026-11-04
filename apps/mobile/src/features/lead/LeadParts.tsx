@@ -192,9 +192,14 @@ function ContactSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
   const saved = useSaved();
   const [d, setD] = useState({ name: l.name, phone: l.phone, phone2: l.phone2 ?? "", phone2Label: l.phone2Label ?? ("home" as PhoneLabel), email: l.email ?? "", preferredContact: l.preferredContact, language: l.language });
   const set = (p: Partial<typeof d>) => setD((x) => ({ ...x, ...p }));
+  const [d0] = useState(d);
   const ok = d.name.trim().length > 1 && d.phone.replace(/\D/g, "").length >= 10;
+  const save = () => {
+    saved(store.updateLead(l.id, { ...d, name: d.name.trim(), phone2: d.phone2 || undefined, phone2Label: d.phone2 ? d.phone2Label : undefined, email: d.email.trim() || undefined }));
+    onClose();
+  };
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("lead.sec.contact")}>
+    <Sheet visible={visible} onClose={onClose} title={t("lead.sec.contact")} dirty={JSON.stringify(d) !== JSON.stringify(d0)} onSave={ok ? save : undefined}>
       <Labeled label={t("lead.name")}>
         <TextField type="name" value={d.name} onChangeText={(v) => set({ name: v })} placeholder={t("lead.name")} icon="user" />
       </Labeled>
@@ -229,10 +234,7 @@ function ContactSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
         icon="check"
         full
         disabled={!ok}
-        onPress={() => {
-          saved(store.updateLead(l.id, { ...d, name: d.name.trim(), phone2: d.phone2 || undefined, phone2Label: d.phone2 ? d.phone2Label : undefined, email: d.email.trim() || undefined }));
-          onClose();
-        }}
+        onPress={save}
       />
     </Sheet>
   );
@@ -244,8 +246,13 @@ function AddressSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
   const saved = useSaved();
   const [d, setD] = useState({ address: l.address ?? "", city: l.city, state: l.state ?? "CA", zip: l.zip ?? "" });
   const set = (p: Partial<typeof d>) => setD((x) => ({ ...x, ...p }));
+  const [d0] = useState(d);
+  const save = () => {
+    saved(store.updateLead(l.id, { address: d.address.trim() || undefined, city: d.city.trim(), state: d.state || undefined, zip: d.zip || undefined }));
+    onClose();
+  };
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("lead.sec.address")}>
+    <Sheet visible={visible} onClose={onClose} title={t("lead.sec.address")} dirty={JSON.stringify(d) !== JSON.stringify(d0)} onSave={save}>
       <Labeled label={t("co.street")}>
         <TextField type="street" value={d.address} onChangeText={(v) => set({ address: v })} placeholder={t("co.street")} icon="pin" />
       </Labeled>
@@ -264,10 +271,7 @@ function AddressSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
         label={t("ue.save")}
         icon="check"
         full
-        onPress={() => {
-          saved(store.updateLead(l.id, { address: d.address.trim() || undefined, city: d.city.trim(), state: d.state || undefined, zip: d.zip || undefined }));
-          onClose();
-        }}
+        onPress={save}
       />
     </Sheet>
   );
@@ -283,8 +287,18 @@ function RequestSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
   const set = (p: Partial<typeof d>) => setD((x) => ({ ...x, ...p }));
   const item = store.db.catalog.find((x) => x.id === d.serviceItemId);
   const dateOk = d.timeframe !== "date" || /^\d{2}\/\d{2}\/\d{4}$/.test(d.timeframeDate);
+  const [d0] = useState(d);
+  const save = () => {
+    saved(
+      store.updateLead(l.id, {
+        serviceItemId: d.serviceItemId, service: d.service.trim() || undefined, timeframe: d.timeframe,
+        timeframeDate: d.timeframe === "date" ? usToIso(d.timeframeDate) : undefined, budgetCents: d.budgetCents || undefined, message: d.message.trim(),
+      }),
+    );
+    onClose();
+  };
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("lead.sec.request")}>
+    <Sheet visible={visible} onClose={onClose} title={t("lead.sec.request")} dirty={JSON.stringify(d) !== JSON.stringify(d0)} onSave={dateOk ? save : undefined}>
       <Labeled label={t("lead.service")}>
         <ListRow
           title={item?.name ?? t("lead.fromCatalog")}
@@ -318,15 +332,7 @@ function RequestSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
         icon="check"
         full
         disabled={!dateOk}
-        onPress={() => {
-          saved(
-            store.updateLead(l.id, {
-              serviceItemId: d.serviceItemId, service: d.service.trim() || undefined, timeframe: d.timeframe,
-              timeframeDate: d.timeframe === "date" ? usToIso(d.timeframeDate) : undefined, budgetCents: d.budgetCents || undefined, message: d.message.trim(),
-            }),
-          );
-          onClose();
-        }}
+        onPress={save}
       />
       <CatalogPicker visible={pick} onClose={() => setPick(false)} exclude={["material"]} onPick={(it) => { set({ serviceItemId: it.id }); setPick(false); }} />
     </Sheet>
@@ -386,11 +392,18 @@ function PersonSheet({ leadId, value, onClose }: { leadId: string; value: LeadCo
   const { t } = useI18n();
   const saved = useSaved();
   const [d, setD] = useState<LeadContact | null>(value);
+  const [d0] = useState(value);
   if (!value || !d) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
   const set = (p: Partial<LeadContact>) => setD((x) => (x ? { ...x, ...p } : x));
   const exists = (store.db.leads.find((x) => x.id === leadId)?.contacts ?? []).some((c) => c.id === d.id);
   return (
-    <Sheet visible onClose={onClose} title={exists ? t("lead.editPerson") : t("lead.addPerson")}>
+    <Sheet
+      visible
+      onClose={onClose}
+      title={exists ? t("lead.editPerson") : t("lead.addPerson")}
+      dirty={JSON.stringify(d) !== JSON.stringify(d0)}
+      onSave={d.name.trim().length >= 2 ? () => { saved(store.saveLeadContact(leadId, { ...d, name: d.name.trim() })); onClose(); } : undefined}
+    >
       <Labeled label={t("lead.name")}>
         <TextField type="name" value={d.name} onChangeText={(v) => set({ name: v })} placeholder={t("lead.name")} icon="user" />
       </Labeled>
@@ -515,11 +528,18 @@ function TaskSheet({ value, onClose }: { value: (Omit<Task, "id"> & { id?: strin
   const { t, day, time } = useI18n();
   const saved = useSaved();
   const [d, setD] = useState(value);
+  const [d0] = useState(value);
   if (!value || !d) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
   const set = (p: Partial<Task>) => setD((x) => (x ? { ...x, ...p } : x));
   const people = store.db.members.filter((m) => !m.pending);
   return (
-    <Sheet visible onClose={onClose} title={d.id ? t("task.edit") : t("task.new")}>
+    <Sheet
+      visible
+      onClose={onClose}
+      title={d.id ? t("task.edit") : t("task.new")}
+      dirty={JSON.stringify(d) !== JSON.stringify(d0)}
+      onSave={d.title.trim().length >= 2 ? () => { saved(store.saveTask({ ...d, title: d.title.trim() }).undo, t("task.saved")); onClose(); } : undefined}
+    >
       <Labeled label={t("task.what")}>
         <TextField type="title" value={d.title} onChangeText={(v) => set({ title: v })} placeholder={t("task.whatPh")} />
       </Labeled>

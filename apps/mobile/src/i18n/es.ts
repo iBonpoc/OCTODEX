@@ -948,4 +948,9 @@ export const es: Dict = {
   "tl.notePrivate": "Nota privada",
   "tl.received": "Llegó: {source}",
   "tl.visit": "Visita de evaluación",
+  "sheet.grabber": "Panel",
+  "sheet.grabberHint": "Deslice hacia abajo para cerrar o hacia arriba para ampliar",
+  "sheet.unsavedTitle": "¿Guardar cambios?",
+  "sheet.unsavedText": "Cambió algo en esta ventana.",
+  "sheet.discard": "No guardar",
 };
