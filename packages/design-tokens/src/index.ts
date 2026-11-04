@@ -92,6 +92,8 @@ export const component = {
   panelW: 360,
   paletteW: 560,
   avatar: { sm: 28, md: 36 },
+  /** company logo preview (settings, client page, PDF) */
+  logo: 96,
   stepDot: 10,
 } as const;
 

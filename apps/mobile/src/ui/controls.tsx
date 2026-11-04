@@ -474,3 +474,48 @@ export function ChoiceChips<K extends string>({
     </View>
   );
 }
+
+/* ---------- MultiChips: wrapping multi choice (same look as ChoiceChips) ---------- */
+export function MultiChips<K extends string>({
+  items,
+  value,
+  onChange,
+}: {
+  items: { key: K; label: string }[];
+  value: K[];
+  onChange: (v: K[]) => void;
+}) {
+  const { c } = useTheme();
+  const h = component.button.sm;
+  return (
+    <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+      {items.map((it) => {
+        const sel = value.includes(it.key);
+        return (
+          <Press
+            key={it.key}
+            onPress={() => onChange(sel ? value.filter((x) => x !== it.key) : [...value, it.key])}
+            visibleHeight={h}
+            accessibilityRole="checkbox"
+            accessibilityState={{ checked: sel }}
+            accessibilityLabel={it.label}
+            style={{
+              height: h,
+              paddingHorizontal: space[3],
+              borderRadius: radius.pill,
+              justifyContent: "center",
+              backgroundColor: sel ? c.acc : c.surf2,
+              borderWidth: sel ? 0 : 1,
+              borderColor: c.bd,
+            }}
+          >
+            <T v="button" style={{ color: sel ? c.onAcc : c.ink }}>
+              {sel ? "✓ " : ""}
+              {it.label}
+            </T>
+          </Press>
+        );
+      })}
+    </View>
+  );
+}

@@ -15,7 +15,18 @@ export interface PortalData {
   status: "draft" | "sent" | "viewed" | "approved" | "declined" | "expired" | string;
   sentAt?: string;
   doc: EstimateDoc | null;
-  company: { name: string; phone?: string; email?: string; license?: string };
+  company: {
+    name: string;
+    phone?: string;
+    email?: string;
+    website?: string;
+    address?: string;
+    logo?: string;
+    color?: string;
+    terms?: string;
+    licenses: { kind: string; number: string; classes: string[] }[];
+    contacts: { name: string; title?: string; phone?: string; email?: string }[];
+  };
   customer: { name: string };
   property: { address: string; city?: string };
   approval: { optionId: string; addonIds: string[]; signerName: string; signedAt: string; signature?: string; totalCents?: number; depositCents?: number } | null;
@@ -24,7 +35,11 @@ export interface PortalData {
 
 type Raw = {
   number?: string; title?: string; status: string; sent_at?: string; doc?: EstimateDoc | null;
-  company?: { name?: string; phone?: string; email?: string; license?: string };
+  company?: {
+    name?: string; phone?: string; email?: string; website?: string; address?: string; logo?: string; color?: string; terms?: string; license?: string;
+    licenses?: { kind: string; number: string; classes?: string[] }[];
+    contacts?: { name: string; title?: string; phone?: string; email?: string }[];
+  };
   customer?: { name?: string }; property?: { address?: string; city?: string; state?: string; zip?: string };
   approval?: { option_id: string; signer_name: string; signed_at: string; signature_svg?: string; selection?: { addon_ids?: string[]; total?: number; deposit?: number } } | null;
   deposit_paid?: boolean;
@@ -39,7 +54,12 @@ function fromRaw(r: Raw): PortalData {
     status: r.status,
     sentAt: r.sent_at,
     doc: r.doc && Array.isArray(r.doc.options) ? r.doc : null,
-    company: { name: r.company?.name ?? "", phone: r.company?.phone, email: r.company?.email, license: r.company?.license },
+    company: {
+      name: r.company?.name ?? "", phone: r.company?.phone, email: r.company?.email, website: r.company?.website,
+      address: r.company?.address || undefined, logo: r.company?.logo, color: r.company?.color, terms: r.company?.terms,
+      licenses: (r.company?.licenses ?? []).map((l) => ({ kind: l.kind, number: l.number, classes: l.classes ?? [] })),
+      contacts: r.company?.contacts ?? [],
+    },
     customer: { name: r.customer?.name ?? "" },
     property: { address: p.address ?? "", city: [p.city, [p.state, p.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") },
     approval: r.approval
@@ -68,7 +88,7 @@ export function portalFromEstimate(db: DB, e: Estimate, companyName: string): Po
     status: e.status,
     sentAt: e.sentAt,
     doc: e.doc ? clientDoc(e.doc) : null,
-    company: { name: companyName },
+    company: companyForPortal(db, companyName),
     customer: { name: cust?.name ?? "" },
     property: { address: prop?.address ?? "", city: prop?.city },
     approval: e.approval
@@ -91,3 +111,28 @@ export async function acceptPortal(token: string, a: { optionId: string; addonId
   if (error) throw new Error(error.message);
   return data ? fromRaw(data as Raw) : null;
 }
+
+/** Company header for the client page / PDF from the profile on this device. */
+export function companyForPortal(db: DB, fallbackName: string): PortalData["company"] {
+  const c = db.company;
+  if (!c) return { name: fallbackName, licenses: [], contacts: [] };
+  const a = c.address;
+  const contacts = c.contacts.filter((x) => x.onDocuments).sort((x, y) => Number(y.isPrimary) - Number(x.isPrimary));
+  return {
+    name: c.dba || c.name || fallbackName,
+    phone: contacts[0]?.phone ?? c.phone,
+    email: c.email,
+    website: c.website,
+    address: a.line1 ? `${a.line1}, ${a.city}, ${a.state} ${a.zip}`.trim() : undefined,
+    logo: c.brand.logo,
+    color: c.brand.color,
+    terms: c.estimate.terms,
+    licenses: c.licenses.filter((l) => l.onDocuments).map((l) => ({ kind: l.kind, number: l.number, classes: l.classes })),
+    contacts: contacts.map((x) => ({ name: x.name, title: x.title, phone: x.phone, email: x.email })),
+  };
+}
+
+const LIC_LABEL: Record<string, string> = { cslb: "CSLB Lic.", city_business: "City Lic.", his: "HIS", other: "Lic." };
+/** "CSLB Lic. #1234567 (B, C-10)" — US documents are in English regardless of the app language. */
+export const licenseLine = (l: { kind: string; number: string; classes: string[] }) =>
+  `${LIC_LABEL[l.kind] ?? "Lic."} #${l.number}${l.classes.length ? ` (${l.classes.join(", ")})` : ""}`;

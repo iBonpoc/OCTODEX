@@ -71,6 +71,11 @@ export default function More() {
           <ListRow title={t("more.money")} left={<Icon name="wallet" />} />
         </Card>
       ) : null}
+      {role === "director" ? (
+        <Card onPress={() => router.push("/company")} accessibilityLabel={t("co.title")}>
+          <ListRow title={t("co.title")} subtitle={t("co.moreHint")} left={<Icon name="home2" />} />
+        </Card>
+      ) : null}
       <Card onPress={() => router.push("/catalog")} accessibilityLabel={t("more.catalog")}>
         <ListRow title={t("more.catalog")} left={<Icon name="note" />} />
       </Card>

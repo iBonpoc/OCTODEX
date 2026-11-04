@@ -11,6 +11,7 @@ import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad } from "@/features/SignaturePad";
 import { isUniversal, mainOption, newToken } from "@/features/estimateDoc";
+import { hasValidCslb } from "@/features/companySetup";
 import { estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
 import { clientLink, copyText, openEmail, openSms } from "@/features/sendEstimate";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
@@ -250,6 +251,11 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
         <T v="caption" tone="mut">
           {t("ue.sendNote")}
         </T>
+        {!hasValidCslb(store.db.company) ? (
+          <T v="caption" tone="warn">
+            {t("ue.noCslb")}
+          </T>
+        ) : null}
         {store.mode === "demo" ? (
           <T v="caption" tone="warn">
             {t("ue.demoLink")}

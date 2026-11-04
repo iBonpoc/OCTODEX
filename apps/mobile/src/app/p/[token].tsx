@@ -1,10 +1,10 @@
 import { useEffect, useState } from "react";
-import { View } from "react-native";
+import { Image, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import { space } from "@octo/design-tokens";
+import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { acceptPortal, fetchPortal, localPortal, type PortalData } from "@/cloud/portal";
+import { acceptPortal, fetchPortal, licenseLine, localPortal, type PortalData } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { mainOption, optionTotals, withAddons } from "@/features/estimateDoc";
@@ -12,7 +12,7 @@ import { estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, Empty, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 /**
  * Client page: opened from the SMS / email link in a phone browser, no app and no sign-in.
@@ -88,6 +88,7 @@ export default function ClientEstimatePage() {
           {t("portal.preview")}
         </T>
       ) : null}
+      <CompanyHeader company={data.company} />
       <Card>
         <T v="caption" tone="mut">
           {t("portal.for")}
@@ -144,6 +145,11 @@ export default function ClientEstimatePage() {
           )}
         </>
       )}
+      {data.company.terms ? (
+        <T v="caption" tone="mut">
+          {data.company.terms}
+        </T>
+      ) : null}
       <Button label={t("portal.pdf")} icon="invoice" variant="secondary" full onPress={pdf} />
       {data.company.phone ? (
         <T v="caption" tone="mut">
@@ -151,5 +157,33 @@ export default function ClientEstimatePage() {
         </T>
       ) : null}
     </Screen>
+  );
+}
+
+function CompanyHeader({ company }: { company: PortalData["company"] }) {
+  const lines = [
+    company.address,
+    ...company.contacts.map((x) => [[x.name, x.title].filter(Boolean).join(", "), x.phone].filter(Boolean).join(" · ")),
+    company.contacts.length ? undefined : company.phone,
+    company.email,
+    company.website,
+    ...company.licenses.map(licenseLine),
+  ].filter(Boolean) as string[];
+  if (!company.logo && !lines.length) return null;
+  return (
+    <Card>
+      <RowView style={{ alignItems: "flex-start" }}>
+        {company.logo ? (
+          <Image source={{ uri: company.logo }} style={{ width: component.logo / 2, height: component.logo / 2, borderRadius: radius.tip }} accessibilityLabel={company.name} />
+        ) : null}
+        <View style={{ flex: 1, gap: space[1] }}>
+          {lines.map((l, i) => (
+            <T key={i} v="caption" tone="mut">
+              {l}
+            </T>
+          ))}
+        </View>
+      </RowView>
+    </Card>
   );
 }

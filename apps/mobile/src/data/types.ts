@@ -171,6 +171,73 @@ export interface Notice {
   read?: boolean;
 }
 
+/* ---------- Company profile (wave 7, docs/13 §2) ---------- */
+export type EntityType = "llc" | "corporation" | "sole_proprietor" | "partnership" | "other";
+export type LicenseKind = "cslb" | "city_business" | "his" | "other";
+export interface CompanyLicense {
+  id: ID;
+  kind: LicenseKind;
+  number: string;
+  classes: string[];
+  expiresOn?: string; // YYYY-MM-DD
+  onDocuments: boolean;
+}
+/** People the client sees on documents (not app users; one person can be both). */
+export interface CompanyContact {
+  id: ID;
+  name: string;
+  title?: string;
+  phone?: string;
+  email?: string;
+  isPrimary: boolean;
+  onDocuments: boolean;
+}
+export interface Address {
+  line1: string;
+  city: string;
+  state: string;
+  zip: string;
+}
+export interface Company {
+  id: ID;
+  /** name on file (legal) is legalName; name = what the app and clients see */
+  name: string;
+  dba?: string;
+  legalName?: string;
+  entityType?: EntityType;
+  /** only owner/admin read it */
+  ein?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  address: Address;
+  mailingAddress?: Address;
+  timezone: string;
+  trades: string[];
+  brand: { logo?: string; color?: string };
+  insurance: { cglCarrier?: string; cglPolicy?: string; wcCarrier?: string; wcPolicy?: string; wcExempt?: boolean };
+  /** where the client sends a cancellation (CA 3-day right) */
+  cancelEmail?: string;
+  estimate: { validDays: number; depositBps: number | null; terms?: string };
+  payment: { zelle?: string; checkPayableTo?: string };
+  licenses: CompanyLicense[];
+  contacts: CompanyContact[];
+  /** onboarding steps the owner chose to skip */
+  skipped: string[];
+}
+
+export type NoteSubject = "lead" | "customer" | "property" | "job" | "estimate";
+export interface Note {
+  id: ID;
+  subjectType: NoteSubject;
+  subjectId: ID;
+  body: string;
+  visibility: "team" | "private";
+  pinned: boolean;
+  authorId: ID;
+  at: string;
+}
+
 export interface Invoice {
   id: ID;
   customerId: ID;
@@ -216,4 +283,6 @@ export interface DB {
   expenses: Expense[];
   catalog: CatalogItem[];
   notices: Notice[];
+  company: Company | null;
+  notes: Note[];
 }

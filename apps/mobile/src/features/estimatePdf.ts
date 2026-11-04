@@ -10,7 +10,7 @@ import * as Sharing from "expo-sharing";
 import { LINE_GROUPS, activeLines } from "@octo/estimating-engine";
 import { print as P } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
-import type { PortalData } from "@/cloud/portal";
+import { licenseLine, type PortalData } from "@/cloud/portal";
 import { optionTotals, withAddons } from "./estimateDoc";
 
 const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
@@ -78,14 +78,21 @@ table { width: 100%; border-collapse: collapse; }
 .sig { margin-top: 16pt; }
 .ok { color: ${P.okText}; font-weight: 600; }
 </style></head><body>
-<div class="head"><div><h1>${esc(p.company.name || "OCTODEX")}</h1>${p.company.phone ? `<div class="mut">${esc(p.company.phone)}</div>` : ""}${
-    p.company.email ? `<div class="mut">${esc(p.company.email)}</div>` : ""
-  }${p.company.license ? `<div class="mut">Lic. ${esc(p.company.license)}</div>` : ""}</div>
+<div class="head"${p.company.color ? ` style="border-bottom: 2px solid ${esc(p.company.color)}"` : ""}><div style="display:flex;gap:10pt;align-items:flex-start">${
+    p.company.logo && p.company.logo.startsWith("data:image/") ? `<img src="${esc(p.company.logo)}" style="width:48pt;height:48pt;object-fit:contain" alt="">` : ""
+  }<div><h1>${esc(p.company.name || "OCTODEX")}</h1>${p.company.address ? `<div class="mut">${esc(p.company.address)}</div>` : ""}${
+    p.company.contacts.length
+      ? p.company.contacts.map((x) => `<div class="mut">${esc([x.name, x.title].filter(Boolean).join(", "))}${x.phone ? ` · ${esc(x.phone)}` : ""}</div>`).join("")
+      : p.company.phone ? `<div class="mut">${esc(p.company.phone)}</div>` : ""
+  }${p.company.email ? `<div class="mut">${esc(p.company.email)}</div>` : ""}${p.company.website ? `<div class="mut">${esc(p.company.website)}</div>` : ""}${p.company.licenses
+    .map((l) => `<div class="mut">${esc(licenseLine(l))}</div>`)
+    .join("")}</div></div>
 <div style="text-align:right"><h1>${esc(t("portal.estimate"))} ${esc(p.number ?? "")}</h1><div class="mut">${esc(t("portal.date"))}: ${day(p.sentAt ?? new Date().toISOString())}</div></div></div>
 <p><b>${esc(t("portal.for"))}:</b> ${esc(p.customer.name)}<br>${esc(p.property.address)}${p.property.city ? `, ${esc(p.property.city)}` : ""}</p>
 ${p.title ? `<p><b>${esc(p.title)}</b></p>` : ""}
 ${blocks}
 ${doc?.note ? `<div class="note">${esc(doc.note)}</div>` : ""}
+${p.company.terms ? `<div class="note mut">${esc(p.company.terms)}</div>` : ""}
 <p class="mut">${esc(t("est.rescission"))}</p>
 ${signed}
 </body></html>`;
