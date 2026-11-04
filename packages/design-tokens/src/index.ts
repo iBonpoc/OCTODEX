@@ -129,6 +129,8 @@ export const component = {
   photoGap: 2,
   /** photo thumbnail side */
   photoThumb: 72,
+  /** widest "‹ Parent" back button in a header */
+  backMax: 220,
   /** dimmed element: disabled control, day outside the shown month */
   dimOpacity: 0.45,
 } as const;

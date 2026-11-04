@@ -59,7 +59,11 @@ export default function EstimateScreen() {
   };
 
   return (
-    <Screen title={customer?.name ?? t("est.detail")} back={back} subtitle={[property?.address, property?.city].filter(Boolean).join(", ")}>
+    <Screen
+      title={[e.number, e.title].filter(Boolean).join(" · ") || t("est.detail")}
+      back={back}
+      subtitle={[customer?.name, [property?.address, property?.city].filter(Boolean).join(", ")].filter(Boolean).join(" · ")}
+    >
       <Card status={st.s}>
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="heading" style={{ flex: 1 }} numberOfLines={2}>

@@ -1,5 +1,7 @@
 import { VersionBadge } from "@/features/version";
 import { useState, type ReactNode } from "react";
+import { router, useGlobalSearchParams, usePathname, type Href } from "expo-router";
+import { navContext } from "@/nav/hierarchy";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -298,30 +300,71 @@ export function Screen({
   /** stable id for the first-visit hint (shown once when `help` is set) */
   hintKey?: string;
 }) {
-  const nav = useNavInsets();
+  const navInsets = useNavInsets();
   const kb = useKeyboardHeight();
   const hints = useHints();
   const { c } = useTheme();
   const { t } = useI18n();
+  const store = useStore();
+  const pathname = usePathname();
+  const params = useGlobalSearchParams();
+  const nav = navContext(pathname, params, store.db, store.role);
+  const up = nav.up;
+  const hasUp = !!(up || back);
+  const upLabel = up ? ("key" in up.label ? t(up.label.key) : up.label.text) : undefined;
+  /** one level up; if the parent is already below us in the stack we pop to it, otherwise it replaces this screen */
+  const goUp = () => {
+    if (!up) return back?.();
+    if (router.canDismiss()) router.dismissTo(up.href as Href);
+    else router.replace(up.href as Href);
+  };
   const header = (
     <View style={{ gap: space[2], marginBottom: space[3] }}>
       <VersionBadge />
-      <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
-        <RowView style={{ flex: 1, gap: space[1] }}>
-          {back ? (
-            <Press onPress={back} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
-              <View style={{ width: component.dockBtn, height: component.dockBtn, alignItems: "center", justifyContent: "center" }}>
+      {hasUp ? (
+        <>
+          {/* detail screen: "‹ Parent" + actions, then the section, then the title */}
+          <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
+            <Press
+              onPress={goUp}
+              visibleHeight={component.dockBtn}
+              accessibilityRole="button"
+              accessibilityLabel={upLabel ? t("nav.backTo", { to: upLabel }) : t("common.back")}
+              containerStyle={{ flexShrink: 1 }}
+            >
+              <RowView gap={space[1]} style={{ height: component.dockBtn, paddingRight: space[2], maxWidth: component.backMax }}>
                 <Icon name="chevronLeft" color={c.ink} />
-              </View>
+                <T v="body" w="medium" numberOfLines={1} style={{ flexShrink: 1 }}>
+                  {upLabel ?? t("common.back")}
+                </T>
+              </RowView>
             </Press>
+            {right}
+          </RowView>
+          {nav.section ? (
+            <T v="micro" tone="mut" w="semibold">
+              {[t(nav.section), nav.kind ? t(nav.kind) : null].filter(Boolean).join(" · ")}
+            </T>
           ) : null}
-          <T v={back ? "title" : "display"} numberOfLines={1} style={{ flexShrink: 1 }}>
-            {title}
-          </T>
-          {help ? <HelpButton title={title} text={help} /> : null}
+          <RowView style={{ gap: space[1] }}>
+            <T v="title" numberOfLines={2} style={{ flexShrink: 1 }}>
+              {title}
+            </T>
+            {help ? <HelpButton title={title} text={help} /> : null}
+          </RowView>
+        </>
+      ) : (
+        /* tab root: the big title is where you are */
+        <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
+          <RowView style={{ flex: 1, gap: space[1] }}>
+            <T v="display" numberOfLines={1} style={{ flexShrink: 1 }}>
+              {title}
+            </T>
+            {help ? <HelpButton title={title} text={help} /> : null}
+          </RowView>
+          {right}
         </RowView>
-        {right}
-      </RowView>
+      )}
       {subtitle ? (
         <T v="body" tone="mut">
           {subtitle}
@@ -361,7 +404,7 @@ export function Screen({
       {scroll ? (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
           <ScrollView
-            contentContainerStyle={{ paddingTop: nav.top, paddingBottom: kb ? space[6] : nav.bottom, paddingHorizontal: space[4] }}
+            contentContainerStyle={{ paddingTop: navInsets.top, paddingBottom: kb ? space[6] : navInsets.bottom, paddingHorizontal: space[4] }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             automaticallyAdjustKeyboardInsets
@@ -370,7 +413,7 @@ export function Screen({
           </ScrollView>
         </KeyboardAvoidingView>
       ) : (
-        <View style={{ flex: 1, paddingTop: nav.top, paddingBottom: nav.bottom, paddingHorizontal: space[4] }}>{content}</View>
+        <View style={{ flex: 1, paddingTop: navInsets.top, paddingBottom: navInsets.bottom, paddingHorizontal: space[4] }}>{content}</View>
       )}
     </View>
   );

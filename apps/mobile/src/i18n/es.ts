@@ -14,6 +14,12 @@ export const es: Dict = {
   "tab.inbox": "Entrada",
   "tab.today": "Hoy",
   "tab.add": "Crear",
+  "lead.card": "Cliente potencial",
+  "client.card": "Cliente",
+  "job.card": "Trabajo",
+  "cat.item": "Artículo del catálogo",
+  "common.back": "Atrás",
+  "nav.backTo": "Volver a {to}",
 
   "quick.title": "Acciones rápidas",
   "quick.voice": "Nota de voz",

@@ -13,6 +13,12 @@ export const ru = {
   "tab.inbox": "Входящие",
   "tab.today": "Сегодня",
   "tab.add": "Создать",
+  "lead.card": "Лид",
+  "client.card": "Клиент",
+  "job.card": "Работа",
+  "cat.item": "Позиция каталога",
+  "common.back": "Назад",
+  "nav.backTo": "Назад: {to}",
 
   "quick.title": "Быстрые действия",
   "quick.voice": "Голосовая заметка",

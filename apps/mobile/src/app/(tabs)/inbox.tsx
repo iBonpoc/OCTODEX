@@ -1,11 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { timing, type StatusName } from "@octo/design-tokens";
 import { minutesSince, useStore } from "@/data/store";
 import type { Lead, LeadStatus } from "@/data/types";
 import { isOpenLead, leadStatusView as statusOf } from "@/features/leads";
 import { EstimatesBoard, InvoicesBoard } from "@/features/boards";
 import { usePersistentState } from "@/data/persist";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useI18n } from "@/i18n";
 import { ReplySheet, useTick } from "@/features/sheets";
 import { Button, ChoiceChips, Segmented, StatusChip } from "@/ui/controls";
@@ -23,6 +23,11 @@ function waitStatus(m: number): StatusName {
 export default function Sales() {
   const { t } = useI18n();
   const [tab, setTab] = usePersistentState<"leads" | "estimates" | "invoices">("octo.salesTab.v1", "leads");
+  // "‹ Leads" / "‹ Estimates" from a card opens Sales on that list
+  const want = useLocalSearchParams<{ tab?: string }>().tab;
+  useEffect(() => {
+    if (want === "leads" || want === "estimates" || want === "invoices") setTab(want);
+  }, [want]);
   const { db } = useStore();
   const newLeads = db.leads.filter((l) => l.status === "new").length;
   return (
