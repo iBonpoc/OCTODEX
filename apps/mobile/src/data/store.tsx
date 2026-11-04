@@ -37,6 +37,7 @@ import {
   type Role,
   type Visit,
   type VisitStep,
+  type LeadSource,
 } from "./types";
 
 type Undo = () => void;
@@ -83,6 +84,8 @@ interface StoreCtx {
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
   convertLead: (leadId: ID, reasonText: string) => Undo;
   loseLead: (leadId: ID, reason: LostReason) => Undo;
+  /** New client entered by hand (not from a lead): active client with one property. */
+  addCustomer: (c: { name: string; phone: string; email?: string; source: LeadSource; address: string; city: string }) => { id: ID; undo: Undo };
   updateCustomer: (id: ID, patch: { name?: string; phone?: string; email?: string }) => Undo;
   updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
   addNote: (n: Omit<Note, "id" | "at" | "authorId" | "pinned">) => Undo;
@@ -623,6 +626,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => ({ ...d, leads: d.leads.map((x) => (x.id === leadId ? { ...x, status: "lost", lostReason: reason, lastActivityAt: new Date().toISOString() } : x)) }),
           { k: "lead.lose", leadId, reason },
         ),
+      addCustomer: (x) => {
+        const ids = { customerId: uid(), contactId: uid(), propertyId: uid() };
+        const undo = mutate(
+          "customer.create",
+          (d) => ({
+            ...d,
+            customers: [...d.customers, { id: ids.customerId, name: x.name, phone: x.phone, email: x.email, source: x.source, balanceCents: 0, status: "active" }],
+            properties: [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: x.address, city: x.city, stories: 1 }],
+          }),
+          { k: "customer.create", ...ids, ...x },
+        );
+        return { id: ids.customerId, undo };
+      },
       updateCustomer: (id, patch) =>
         mutate("customer.update", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, ...patch } : c)) }), { k: "customer.update", id, ...patch }),
       updateProperty: (id, patch) =>

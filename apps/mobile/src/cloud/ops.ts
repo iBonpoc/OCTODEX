@@ -95,6 +95,11 @@ export type Op =
       name: string; phone: string; email?: string; source: string; address: string; city: string; note: string;
     }
   | { k: "lead.lose"; leadId: string; reason: string }
+  | {
+      k: "customer.create";
+      customerId: string; contactId: string; propertyId: string;
+      name: string; phone: string; email?: string; source: string; address: string; city: string;
+    }
   | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string }
   | { k: "property.update"; id: string; address?: string; city?: string }
   | { k: "note.add"; id: string; subjectType: string; subjectId: string; body: string; visibility: "team" | "private" }
@@ -337,6 +342,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "lead.lose":
       return run(supabase.from("leads").update({ status: "lost", lost_reason: op.reason }).eq("id", op.leadId));
+    case "customer.create":
+      return createCustomer(c, op, "active");
     case "customer.update": {
       if (op.name !== undefined) await run(supabase.from("customers").update({ display_name: op.name }).eq("id", op.id));
       if (op.phone !== undefined || op.email !== undefined) {
