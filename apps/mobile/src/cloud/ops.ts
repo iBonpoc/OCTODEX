@@ -54,6 +54,7 @@ export type Op =
       versionId: string;
       customerId: string;
       propertyId: string;
+      leadId?: string;
       title: string;
       /** client-visible content (no costs) */
       doc: EstimateDoc;
@@ -80,6 +81,21 @@ export type Op =
   | { k: "license.remove"; id: string }
   | { k: "contact.save"; contact: CompanyContact }
   | { k: "contact.remove"; id: string }
+  | {
+      k: "lead.prospect";
+      leadId: string; customerId: string; contactId: string; propertyId: string;
+      name: string; phone: string; email?: string; source: string; address: string; city: string;
+    }
+  | {
+      k: "lead.convert";
+      leadId: string; needCustomer: boolean; customerId: string; contactId: string; propertyId: string; noteId: string;
+      name: string; phone: string; email?: string; source: string; address: string; city: string; note: string;
+    }
+  | { k: "lead.lose"; leadId: string; reason: string }
+  | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string }
+  | { k: "property.update"; id: string; address?: string; city?: string }
+  | { k: "note.add"; id: string; subjectType: string; subjectId: string; body: string; visibility: "team" | "private" }
+  | { k: "note.update"; id: string; pinned?: boolean; body?: string; deleted?: boolean }
   | { k: "catalog.save"; item: CatalogItem }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
@@ -290,6 +306,47 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "contact.remove":
       return run(supabase.from("company_contacts").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
+    case "lead.prospect": {
+      await createCustomer(c, op, "prospect");
+      return run(supabase.from("leads").update({ customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));
+    }
+    case "lead.convert": {
+      if (op.needCustomer) await createCustomer(c, op, "active");
+      else await run(supabase.from("customers").update({ status: "active" }).eq("id", op.customerId).eq("status", "prospect"));
+      await run(
+        supabase.from("leads").update({ status: "won", won_via: "manual", customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId).not("status", "in", "(won,lost,archived)"),
+      );
+      return run(ins("notes", { id: op.noteId, company_id: c, subject_type: "customer", subject_id: op.customerId, body: op.note, visibility: "team" }));
+    }
+    case "lead.lose":
+      return run(supabase.from("leads").update({ status: "lost", lost_reason: op.reason }).eq("id", op.leadId));
+    case "customer.update": {
+      if (op.name !== undefined) await run(supabase.from("customers").update({ display_name: op.name }).eq("id", op.id));
+      if (op.phone !== undefined || op.email !== undefined) {
+        const patch: Record<string, string | null> = {};
+        if (op.phone !== undefined) patch.phone = op.phone || null;
+        if (op.email !== undefined) patch.email = op.email || null;
+        const { data: primary } = await supabase.from("contacts").select("id").eq("customer_id", op.id).eq("is_primary", true).maybeSingle();
+        if (primary?.id) await run(supabase.from("contacts").update(patch).eq("id", primary.id));
+        else await run(supabase.from("contacts").insert({ company_id: c, customer_id: op.id, name: op.name ?? "—", is_primary: true, ...patch }));
+      }
+      return;
+    }
+    case "property.update": {
+      const patch: Record<string, string> = {};
+      if (op.address !== undefined) patch.address_line1 = op.address || "—";
+      if (op.city !== undefined) patch.address_city = op.city || "—";
+      return run(supabase.from("properties").update(patch).eq("id", op.id));
+    }
+    case "note.add":
+      return run(ins("notes", { id: op.id, company_id: c, subject_type: op.subjectType, subject_id: op.subjectId, body: op.body, visibility: op.visibility }));
+    case "note.update": {
+      const patch: Record<string, unknown> = {};
+      if (op.pinned !== undefined) patch.pinned = op.pinned;
+      if (op.body !== undefined) patch.body = op.body;
+      if (op.deleted) patch.deleted_at = new Date().toISOString();
+      return run(supabase.from("notes").update(patch).eq("id", op.id));
+    }
     case "catalog.save": {
       const it = op.item;
       return run(
@@ -314,7 +371,14 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (!data || data.status !== "draft") return;
       const now = new Date().toISOString();
       await run(supabase.from("estimate_versions").update({ locked_at: now, sent_at: now }).eq("id", data.current_version_id));
-      return run(supabase.from("estimates").update({ status: "sent", sent_version_id: data.current_version_id }).eq("id", op.id));
+      await run(supabase.from("estimates").update({ status: "sent", sent_version_id: data.current_version_id }).eq("id", op.id));
+      const { data: est } = await supabase.from("estimates").select("lead_id").eq("id", op.id).maybeSingle();
+      if (est?.lead_id) {
+        await run(
+          supabase.from("leads").update({ status: "estimate_sent" }).eq("id", est.lead_id).in("status", ["new", "contacted", "qualified", "inspection_scheduled"]),
+        );
+      }
+      return;
     }
     case "estimate.sign": {
       await applyOp({ k: "estimate.send", id: op.id }, c, userId);
@@ -376,7 +440,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
  */
 async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) {
   await run(
-    ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, title: op.title, created_via: "manual", number: "" }),
+    ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, lead_id: op.leadId ?? null, title: op.title, created_via: "manual", number: "" }),
   );
   const { data: est } = await supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle();
   if (!est) throw new PermanentError("estimate is not visible");
@@ -442,4 +506,17 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
     // Tech without "view costs" cannot write costs; the estimate itself is still saved.
     await supabase.from("estimate_line_costs").upsert(costRows, { onConflict: "line_item_id" });
   }
+}
+
+/** Customer + primary contact + property (lead → prospect / client). */
+async function createCustomer(
+  c: string,
+  op: { customerId: string; contactId: string; propertyId: string; name: string; phone: string; email?: string; source: string; address: string; city: string },
+  status: "prospect" | "active",
+) {
+  const src = await sourceId(c, op.source);
+  await run(ins("customers", { id: op.customerId, company_id: c, display_name: op.name, lead_source_id: src || null, status }));
+  await run(ins("contacts", { id: op.contactId, company_id: c, customer_id: op.customerId, name: op.name, phone: op.phone, email: op.email ?? null, is_primary: true }));
+  await run(supabase.from("customers").update({ primary_contact_id: op.contactId }).eq("id", op.customerId));
+  await run(ins("properties", { id: op.propertyId, company_id: c, customer_id: op.customerId, address_line1: op.address || op.city || "—", address_city: op.city || "—", stories: 1 }));
 }

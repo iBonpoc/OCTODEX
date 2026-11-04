@@ -1,9 +1,10 @@
 import { timing, type StatusName } from "@octo/design-tokens";
 import { daysSince, isToday, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID } from "@/data/types";
+import { LEAD_CLOSE_DAYS, LEAD_FOLLOW_UP_DAYS, leadIdleDays } from "./leads";
 import type { DictKey } from "@/i18n";
 
-export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule";
+export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -29,6 +30,17 @@ export function buildAttention(db: DB): AttentionItem[] {
       id: `lead-${l.id}`, kind: "lead", refId: l.id, name: l.name, label: "att.lead", params: { m, name: l.name, d: 0 }, chip: "inbox.waiting",
       status: m >= timing.leadReplyBadMin ? "bad" : m >= timing.leadReplyWarnMin ? "warn" : "info",
       score: 1000 + m,
+    });
+  }
+  // Open lead without movement: 14 days → follow up, 30 days → offer to close (docs/13 §3).
+  for (const l of db.leads) {
+    if (l.status === "new" || l.status === "won" || l.status === "lost") continue;
+    const d = leadIdleDays(l);
+    if (d < LEAD_FOLLOW_UP_DAYS) continue;
+    const close = d >= LEAD_CLOSE_DAYS;
+    out.push({
+      id: `idle-${l.id}`, kind: "leadIdle", refId: l.id, name: l.name, label: close ? "att.leadClose" : "att.leadIdle", params: { d, name: l.name },
+      chip: "att.noReplyDays", status: close ? "bad" : "warn", score: 600 + d,
     });
   }
   for (const v of db.visits) {

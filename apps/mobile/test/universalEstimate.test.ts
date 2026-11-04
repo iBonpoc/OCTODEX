@@ -47,3 +47,16 @@ describe("signed estimate waits for a date", () => {
     expect(buildAttention(db).some((a) => a.kind === "schedule")).toBe(false);
   });
 });
+
+describe("lead funnel", () => {
+  it("open lead idle ≥ 14 days asks to follow up; ≥ 30 days asks to close", () => {
+    const db = makeSeed();
+    const idle = buildAttention(db).find((a) => a.kind === "leadIdle" && a.refId === "l5");
+    expect(idle?.status).toBe("warn");
+    const l5 = db.leads.find((l) => l.id === "l5")!;
+    l5.lastActivityAt = new Date(Date.now() - 31 * 86_400_000).toISOString();
+    expect(buildAttention(db).find((a) => a.refId === "l5")?.status).toBe("bad");
+    l5.status = "won";
+    expect(buildAttention(db).some((a) => a.refId === "l5")).toBe(false);
+  });
+});

@@ -384,7 +384,7 @@ do $$ begin
   perform tst.fails($q$update public.jobs set status = 'closed' where id = 'e1a00000-0000-0000-0000-000000000002'$q$, 'job scheduled -> closed');
   update public.jobs set status = 'in_progress' where id = 'e1a00000-0000-0000-0000-000000000002';
   perform tst.fails($q$update public.estimates set status = 'approved' where id = '0e1a0000-0000-0000-0000-000000000002'$q$, 'estimate draft -> approved');
-  perform tst.fails($q$update public.leads set status = 'won' where true$q$, 'lead new -> won');
+  -- lead new -> won: разрешено с волны 8 (ручной перевод в клиенты, won_via = manual) — см. T10
   update public.leads set status = 'inspection_scheduled' where true;
   perform tst.fails($q$update public.leads set status = 'lost' where true$q$, 'lead lost without reason');
   update public.leads set status = 'lost', lost_reason = 'price_too_high' where true;
@@ -609,6 +609,46 @@ do $$ begin
   perform tst.ok(tst.cnt('select 1 from public.notes') = 0, 'company B does not see A notes');
 end $$;
 \echo 'T9 company profile, licenses, people, EIN, notes ok'
+
+-- ---------------------------------------------------------------- T10: lead → estimate → client
+:as_owner_a
+do $$
+declare v_lead uuid;
+begin
+  insert into public.leads (company_id, source_id, contact_name, phone) values
+    ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'Lead to client', '+13235550177') returning id into v_lead;
+  insert into public.customers (id, company_id, display_name, status) values
+    ('c1a00000-0000-0000-0000-000000000077', 'ca000000-0000-0000-0000-000000000000', 'Lead to client', 'prospect');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d1a00000-0000-0000-0000-000000000077', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000077', '7 Pine St', 'Pasadena');
+  update public.leads set customer_id = 'c1a00000-0000-0000-0000-000000000077', property_id = 'd1a00000-0000-0000-0000-000000000077', status = 'estimate_sent' where id = v_lead;
+  insert into public.estimates (id, company_id, number, customer_id, property_id, lead_id, title, public_token) values
+    ('0e1a0000-0000-0000-0000-000000000077', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000077',
+     'd1a00000-0000-0000-0000-000000000077', v_lead, 'From lead', 'tok_lead_0123456789abcdef');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+    ('0e2a0000-0000-0000-0000-000000000077', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000077', 1, '{"kind":"none"}');
+  update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000077' where id = '0e1a0000-0000-0000-0000-000000000077';
+  insert into public.estimate_options (id, company_id, version_id, name) values
+    ('0e3a0000-0000-0000-0000-000000000077', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000077', 'Standard');
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+    ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000077', 'labor', 'Fix door', 1, 15000, false);
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000077';
+  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000077' where id = '0e1a0000-0000-0000-0000-000000000077';
+  -- manual conversion from an open status is allowed now
+  insert into public.leads (company_id, source_id, contact_name, phone, status) values
+    ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'Paper contract', '+13235550178', 'contacted') returning id into v_lead;
+  update public.leads set status = 'won', won_via = 'manual' where id = v_lead;
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_accept('tok_lead_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000077', null, 'Lead Person', 'M0 0 L5 5', true);
+reset role;
+do $$ begin
+  perform tst.ok((select status || '/' || won_via from public.leads where contact_name = 'Lead to client') = 'won/approval', 'signature: lead won via approval');
+  perform tst.ok((select status from public.customers where id = 'c1a00000-0000-0000-0000-000000000077') = 'active', 'prospect became active client');
+  perform tst.ok((select won_via from public.leads where contact_name = 'Paper contract') = 'manual', 'manual conversion recorded');
+  perform tst.fails($q$update public.leads set status = 'new' where contact_name = 'Paper contract'$q$, 'won lead cannot go back to new');
+end $$;
+\echo 'T10 lead → estimate → client ok'
 
 :as_super
 \echo 'ALL TESTS PASSED'

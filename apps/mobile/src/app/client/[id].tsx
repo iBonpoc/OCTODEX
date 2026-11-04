@@ -1,6 +1,7 @@
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, type StatusName } from "@octo/design-tokens";
+import { NotesBlock } from "@/features/NotesBlock";
 import { customerBalance, useStore } from "@/data/store";
 import type { EstimateStatus, JobStatus } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
@@ -43,7 +44,20 @@ export default function ClientScreen() {
   const invoices = db.invoices.filter((i) => i.customerId === c.id);
   const tel = c.phone.replace(/[^\d+]/g, "");
   return (
-    <Screen title={c.name} back={back} subtitle={`${c.phone}${c.email ? ` · ${c.email}` : ""}`}>
+    <Screen
+      title={c.name}
+      back={back}
+      subtitle={`${c.phone}${c.email ? ` · ${c.email}` : ""}`}
+      right={<Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${c.id}`)} />}
+    >
+      {c.status === "prospect" ? (
+        <Card status="info">
+          <StatusChip status="info" label={t("clients.prospect")} />
+          <T v="caption" tone="mut">
+            {t("clients.prospectHint")}
+          </T>
+        </Card>
+      ) : null}
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <View>
@@ -156,6 +170,7 @@ export default function ClientScreen() {
           </Card>
         </>
       ) : null}
+      <NotesBlock subjectType="customer" subjectId={c.id} extraSubjects={db.leads.filter((l) => l.customerId === c.id).map((l) => ({ type: "lead" as const, id: l.id }))} />
     </Screen>
   );
 }
