@@ -4,7 +4,9 @@ import { router } from "expo-router";
 import { customerBalance, useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { Avatar, StatusChip, TextField } from "@/ui/controls";
-import { Card, Divider, Empty, ListRow, Screen } from "@/ui/surfaces";
+import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
+import { Icon, T } from "@/ui/primitives";
+import { space } from "@octo/design-tokens";
 
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
@@ -32,23 +34,47 @@ export default function Clients() {
       {list.length === 0 ? (
         <Empty icon="search" title={t("clients.empty")} hint={t("clients.emptyHint")} />
       ) : (
-        <Card>
-          {list.map((c, i) => {
+        <View style={{ gap: space[2] }}>
+          {list.map((c) => {
             const props = db.properties.filter((p) => p.customerId === c.id);
+            const balance = customerBalance(db, c.id);
+            const open = db.estimates.filter((e) => e.customerId === c.id && e.status === "sent").length;
             return (
-              <View key={c.id}>
-                {i > 0 ? <Divider /> : null}
-                <ListRow
-                  title={c.name}
-                  subtitle={`${props[0]?.address ?? ""}${props.length > 1 ? ` · ${t("clients.properties", { n: props.length })}` : ""}`}
-                  left={<Avatar initials={initials(c.name)} />}
-                  right={customerBalance(db, c.id) > 0 ? <StatusChip status="warn" label={money(customerBalance(db, c.id))} /> : undefined}
-                  onPress={() => router.push(`/client/${c.id}`)}
-                />
-              </View>
+              <Card key={c.id} onPress={() => router.push(`/client/${c.id}`)} accessibilityLabel={c.name}>
+                <RowView style={{ alignItems: "flex-start" }}>
+                  <Avatar initials={initials(c.name)} />
+                  <View style={{ flex: 1, gap: space[1] }}>
+                    <T v="heading">{c.name}</T>
+                    {props[0] ? (
+                      <RowView gap={space[1]}>
+                        <Icon name="pin" s={14} />
+                        <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
+                          {props[0].address}, {props[0].city}
+                          {props.length > 1 ? ` · ${t("clients.properties", { n: props.length })}` : ""}
+                        </T>
+                      </RowView>
+                    ) : null}
+                    {c.phone ? (
+                      <RowView gap={space[1]}>
+                        <Icon name="phone" s={14} />
+                        <T v="caption" tone="mut" tabular>
+                          {c.phone}
+                        </T>
+                      </RowView>
+                    ) : null}
+                    {balance > 0 || open > 0 ? (
+                      <RowView style={{ flexWrap: "wrap" }}>
+                        {balance > 0 ? <StatusChip status="warn" label={`${t("money.awaiting")} ${money(balance)}`} /> : null}
+                        {open > 0 ? <StatusChip status="info" label={`${t("st.sent")} · ${open}`} /> : null}
+                      </RowView>
+                    ) : null}
+                  </View>
+                  <Icon name="chevronRight" s={16} />
+                </RowView>
+              </Card>
             );
           })}
-        </Card>
+        </View>
       )}
     </Screen>
   );

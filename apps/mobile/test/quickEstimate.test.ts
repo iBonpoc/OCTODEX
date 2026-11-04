@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_FORM, formToInput, quickOptions } from "../src/features/quickEstimate";
-import { DEMO_PRICE_BOOK } from "../src/data/priceBook";
+import { DEFAULT_FORM, formToInput, quickOptions } from "../src/modules/gutters/quickEstimate";
+import { DEMO_PRICE_BOOK } from "../src/modules/gutters/priceBook";
 
 describe("quick gutter estimate", () => {
   it("maps the paper form to engine input", () => {

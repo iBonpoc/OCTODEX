@@ -8,7 +8,7 @@ import { font, radius, space } from "@octo/design-tokens";
 import type { Pt } from "@octo/estimating-engine";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { summarize, type Calibration } from "@/features/drawing";
+import { summarize, type Calibration } from "./drawing";
 import { Button, Segmented, Stepper } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, RowView, Screen } from "@/ui/surfaces";

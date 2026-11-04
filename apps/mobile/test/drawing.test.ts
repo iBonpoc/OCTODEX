@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { summarize } from "../src/features/drawing";
+import { summarize } from "../src/modules/gutters/drawing";
 
 describe("photo drawing summary", () => {
   // calibration: 0.2 units = 16 ft (garage door) → 80 ft per unit
