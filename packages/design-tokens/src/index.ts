@@ -126,6 +126,8 @@ export const component = {
   checkbox: { size: 22, radius: 7, border: 1.5 },
   /** gap between photo thumbnails */
   photoGap: 2,
+  /** photo thumbnail side */
+  photoThumb: 72,
   /** dimmed element: disabled control, day outside the shown month */
   dimOpacity: 0.45,
 } as const;
