@@ -36,7 +36,8 @@ jobs:
       - run: npm ci
       - name: Publish the Expo Go update (channel pr-N)
         working-directory: apps/mobile
-        run: npx eas-cli@latest update --channel "pr-$PR" --platform all --non-interactive --message "PR #$PR @ ${GITHUB_SHA::7}"
+        run: |
+          npx eas-cli@latest update --channel "pr-$PR" --platform all --non-interactive --message "PR $PR @ ${GITHUB_SHA::7}"
       - name: Build the web app
         working-directory: apps/mobile
         run: npx expo export --platform web
