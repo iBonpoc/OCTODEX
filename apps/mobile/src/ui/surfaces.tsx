@@ -1,6 +1,7 @@
 import { VersionBadge } from "@/features/version";
 import { useState, type ReactNode } from "react";
-import { ScrollView, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
+import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
 import { component, layout, radius, size, space, type StatusName } from "@octo/design-tokens";
@@ -298,6 +299,7 @@ export function Screen({
   hintKey?: string;
 }) {
   const nav = useNavInsets();
+  const kb = useKeyboardHeight();
   const hints = useHints();
   const { c } = useTheme();
   const { t } = useI18n();
@@ -357,12 +359,16 @@ export function Screen({
     <View style={{ flex: 1 }}>
       <Background />
       {scroll ? (
-        <ScrollView
-          contentContainerStyle={{ paddingTop: nav.top, paddingBottom: nav.bottom, paddingHorizontal: space[4] }}
-          keyboardShouldPersistTaps="handled"
-        >
-          {content}
-        </ScrollView>
+        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
+          <ScrollView
+            contentContainerStyle={{ paddingTop: nav.top, paddingBottom: kb ? space[6] : nav.bottom, paddingHorizontal: space[4] }}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+            automaticallyAdjustKeyboardInsets
+          >
+            {content}
+          </ScrollView>
+        </KeyboardAvoidingView>
       ) : (
         <View style={{ flex: 1, paddingTop: nav.top, paddingBottom: nav.bottom, paddingHorizontal: space[4] }}>{content}</View>
       )}

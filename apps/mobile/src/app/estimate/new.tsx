@@ -123,12 +123,12 @@ export default function EstimateBuilder() {
               <Icon name="chevronRight" s={size.iconSm} />
             </RowView>
           </Card>
-          <TextField value={title} onChangeText={setTitle} placeholder={t("ue.jobTitle")} icon="note" />
+          <TextField type="title" value={title} onChangeText={setTitle} placeholder={t("ue.jobTitle")} icon="note" />
 
           {doc.options.length > 1 ? (
             <Card>
               <Segmented full value={option.id} onChange={(id) => setCur(doc.options.findIndex((o) => o.id === id))} items={doc.options.map((o) => ({ key: o.id, label: o.name || "—" }))} />
-              <TextField value={option.name} onChangeText={(v) => setOption((o) => ({ ...o, name: v }))} placeholder={t("ue.optionName")} />
+              <TextField type="title" value={option.name} onChangeText={(v) => setOption((o) => ({ ...o, name: v }))} placeholder={t("ue.optionName")} />
               <RowView style={{ minHeight: size.hitMin }}>
                 <T v="body" style={{ flex: 1 }}>
                   {t("ue.recommended")}
@@ -210,7 +210,7 @@ export default function EstimateBuilder() {
               ) : null}
             </View>
           ) : null}
-          <TextField value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} multiline />
+          <TextField type="note" value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} />
           {!ok ? (
             <T v="caption" tone="mut">
               {customer ? t("ue.empty") : t("ue.pickClient")}

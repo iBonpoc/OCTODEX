@@ -34,7 +34,7 @@ export default function Catalog() {
       hintKey="catalog"
       right={canEdit ? <Button label={t("cat.new")} icon="plus" size="sm" onPress={() => router.push(`/catalog/new${kind !== "all" ? `?kind=${kind}` : ""}`)} /> : undefined}
     >
-      <TextField value={q} onChangeText={setQ} placeholder={t("ue.catalogSearch")} icon="search" />
+      <TextField type="search" value={q} onChangeText={setQ} placeholder={t("ue.catalogSearch")} icon="search" />
       <ChoiceChips value={kind} onChange={setKind} items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
       {items.length === 0 ? (
         <Empty icon="note" title={t("cat.empty")} />

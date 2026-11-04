@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
-import { Modal, Pressable, StyleSheet, View } from "react-native";
+import { KeyboardAvoidingView, Modal, Pressable, ScrollView, StyleSheet, View } from "react-native";
+import { avoidBehavior } from "./keyboard";
 import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, useReducedMotion } from "react-native-reanimated";
@@ -38,7 +39,10 @@ export function Sheet({
   const { t } = useI18n();
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
-      <View style={{ flex: 1, justifyContent: wide ? "center" : "flex-end", alignItems: "center" }}>
+      <KeyboardAvoidingView
+        behavior={avoidBehavior}
+        style={{ flex: 1, justifyContent: wide ? "center" : "flex-end", alignItems: "center", paddingTop: insets.top + space[2] }}
+      >
         <Animated.View
           entering={reduce ? undefined : FadeIn.duration(motion.durBase)}
           exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
@@ -54,12 +58,13 @@ export function Sheet({
         <Animated.View
           entering={reduce ? undefined : SlideInDown.duration(motion.durSlow)}
           exiting={reduce ? undefined : SlideOutDown.duration(motion.durBase)}
-          style={{ width: wide ? component.modalW + space[8] * 2 : "100%", maxWidth: "100%" }}
+          style={{ width: wide ? component.modalW + space[8] * 2 : "100%", maxWidth: "100%", maxHeight: "100%" }}
           accessibilityViewIsModal
         >
           <Glass
             strong
             style={{
+              flexShrink: 1,
               borderRadius: component.sheetRadius,
               borderBottomLeftRadius: wide ? component.sheetRadius : 0,
               borderBottomRightRadius: wide ? component.sheetRadius : 0,
@@ -90,10 +95,13 @@ export function Sheet({
                 </Press>
               </View>
             ) : null}
-            {children}
+            {/* The form scrolls when the keyboard leaves less room than the sheet needs. */}
+            <ScrollView style={{ flexGrow: 0 }} contentContainerStyle={{ gap: space[3] }} keyboardShouldPersistTaps="handled" bounces={false}>
+              {children}
+            </ScrollView>
           </Glass>
         </Animated.View>
-      </View>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

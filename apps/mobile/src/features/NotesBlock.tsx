@@ -53,7 +53,7 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
         );
       })}
       <Card>
-        <TextField value={body} onChangeText={setBody} placeholder={t("notes.placeholder")} multiline />
+        <TextField type="note" value={body} onChangeText={setBody} placeholder={t("notes.placeholder")} />
         <Segmented
           full
           value={vis}

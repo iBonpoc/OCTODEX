@@ -57,8 +57,8 @@ export default function CatalogItemScreen() {
     <Screen title={found ? t("cat.edit") : t("cat.new")} back={back}>
       <Card>
         <ChoiceChips value={it.kind} onChange={(k) => set({ kind: k })} items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
-        <TextField value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} />
-        <TextField value={it.unit} onChangeText={(v) => set({ unit: v })} placeholder={t("cat.unit")} />
+        <TextField type="title" value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} />
+        <TextField type="unit" value={it.unit} onChangeText={(v) => set({ unit: v })} placeholder={t("cat.unit")} />
         {found?.placeholder ? <StatusChip status="warn" label={t("cat.placeholder")} /> : null}
       </Card>
 
@@ -72,7 +72,7 @@ export default function CatalogItemScreen() {
 
       {isMat ? (
         <Card>
-          <TextField value={it.vendor ?? ""} onChangeText={(v) => set({ vendor: v })} placeholder={t("cat.vendor")} />
+          <TextField type="company" value={it.vendor ?? ""} onChangeText={(v) => set({ vendor: v })} placeholder={t("cat.vendor")} />
           <RowView style={{ alignItems: "flex-end" }}>
             <Labeled label={t("cat.cost")}>
               <MoneyField cents={it.costCents ?? 0} onChange={(c) => set({ costCents: c })} />

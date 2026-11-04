@@ -41,15 +41,15 @@ export default function NewLead() {
     <Screen title={t("lead.title")} back={back}>
       <Card>
         <View style={{ gap: space[3] }}>
-          <TextField value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" />
-          <TextField value={phone} onChangeText={setPhone} placeholder={t("lead.phone")} icon="phone" />
-          <TextField value={address} onChangeText={setAddress} placeholder={t("lead.address")} icon="pin" />
-          <TextField value={city} onChangeText={setCity} placeholder={t("lead.city")} icon="globe" />
+          <TextField type="name" value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" />
+          <TextField type="phone" value={phone} onChangeText={setPhone} placeholder={t("lead.phone")} icon="phone" />
+          <TextField type="street" value={address} onChangeText={setAddress} placeholder={t("lead.address")} icon="pin" />
+          <TextField type="city" value={city} onChangeText={setCity} placeholder={t("lead.city")} icon="globe" />
           <T v="caption" tone="mut">
             {t("lead.source")}
           </T>
           <ChoiceChips<LeadSource> value={source} onChange={setSource} items={SOURCES.map((s) => ({ key: s, label: s }))} />
-          <TextField value={message} onChangeText={setMessage} placeholder={t("lead.message")} multiline />
+          <TextField type="note" value={message} onChangeText={setMessage} placeholder={t("lead.message")} />
         </View>
       </Card>
       {!ok ? (

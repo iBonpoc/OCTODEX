@@ -199,7 +199,7 @@ export default function VisitScreen() {
               ))}
               <RowView>
                 <View style={{ flex: 1 }}>
-                  <TextField value={extra} onChangeText={setExtra} placeholder={t("check.addPlaceholder")} icon="plus" />
+                  <TextField type="text" value={extra} onChangeText={setExtra} placeholder={t("check.addPlaceholder")} icon="plus" />
                 </View>
                 <Button label={t("check.add")} size="sm" variant="secondary" disabled={!extra.trim()} onPress={addItem} />
               </RowView>

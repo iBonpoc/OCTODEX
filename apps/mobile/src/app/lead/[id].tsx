@@ -158,7 +158,7 @@ export default function LeadScreen() {
                 {t("lead.makeClientHint")}
               </T>
               <ChoiceChips value={winReason} onChange={setWinReason} items={MANUAL_WIN_REASONS.map((r) => ({ key: r, label: t(`lead.win.${r}` as DictKey) }))} />
-              <TextField value={winText} onChangeText={setWinText} placeholder={t("lead.winComment")} multiline />
+              <TextField type="note" value={winText} onChangeText={setWinText} placeholder={t("lead.winComment")} />
               <Button
                 label={t("lead.makeClient")}
                 icon="check"

@@ -45,7 +45,7 @@ export default function NewExpense() {
           <T v="caption" tone="mut">
             {t("exp.aiNote")}
           </T>
-          <TextField value={amount} onChangeText={setAmount} placeholder={t("exp.amount")} icon="dollar" keyboardType="decimal-pad" />
+          <TextField type="money" value={amount} onChangeText={setAmount} placeholder={t("exp.amount")} icon="dollar" />
           <T v="caption" tone="mut">{t("exp.vendor")}</T>
           <ChoiceChips value={vendor} onChange={setVendor} items={VENDORS.map((v) => ({ key: v, label: v }))} />
           <T v="caption" tone="mut">{t("exp.category")}</T>

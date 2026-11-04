@@ -40,7 +40,7 @@ export default function SignIn() {
     <Screen title={t("auth.title")} back={back}>
       <Card>
         <View style={{ gap: space[3] }}>
-          <TextField value={email} onChangeText={setEmail} placeholder={t("auth.email")} icon="message" keyboardType="email-address" />
+          <TextField type="email" value={email} onChangeText={setEmail} placeholder={t("auth.email")} icon="message" />
           {mode === "code" ? (
             <>
               {!sent ? (
@@ -50,7 +50,7 @@ export default function SignIn() {
                   <T v="caption" tone="mut">
                     {t("auth.codeSent", { email: email.trim() })}
                   </T>
-                  <TextField value={code} onChangeText={setCode} placeholder={t("auth.code")} keyboardType="phone-pad" />
+                  <TextField type="code" value={code} onChangeText={setCode} placeholder={t("auth.code")} />
                   <Button label={t("auth.signIn")} icon="check" full disabled={code.trim().length < 6 || busy} onPress={() => act(() => auth.verifyCode(email.trim(), code.trim()), done)} />
                 </>
               )}
@@ -58,8 +58,8 @@ export default function SignIn() {
           ) : null}
           {mode !== "code" ? (
             <>
-              {mode === "signup" ? <TextField value={name} onChangeText={setName} placeholder={t("auth.name")} icon="user" /> : null}
-              <TextField value={password} onChangeText={setPassword} placeholder={t("auth.password")} secure />
+              {mode === "signup" ? <TextField type="name" value={name} onChangeText={setName} placeholder={t("auth.name")} icon="user" /> : null}
+              <TextField type={mode === "signup" ? "newPassword" : "password"} value={password} onChangeText={setPassword} placeholder={t("auth.password")} />
               {mode === "password" ? (
                 <Button label={t("auth.signIn")} icon="check" full disabled={!okEmail || password.length < 6 || busy} onPress={() => act(() => auth.signInPassword(email.trim(), password), done)} />
               ) : (

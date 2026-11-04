@@ -19,7 +19,7 @@ export default function CompanySetup() {
   return (
     <Screen title={t("company.title")} back={() => router.replace("/")}>
       <Card>
-        <TextField value={name} onChangeText={setName} placeholder={t("company.name")} icon="home2" />
+        <TextField type="company" value={name} onChangeText={setName} placeholder={t("company.name")} icon="home2" />
         <T v="caption" tone="mut">
           {t("company.hint")}
         </T>

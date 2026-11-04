@@ -12,6 +12,8 @@ import Animated, {
 import { component, font, motion, radius, space, statusIcon, type StatusName, size as sizes } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T, type IconKey } from "./primitives";
+import { FIELD, type FieldType } from "./fieldTypes";
+export { fieldSpec, type FieldType } from "./fieldTypes";
 
 /* ---------- Button (DS: visible ≤ 36, hit 44) ---------- */
 type BtnVariant = "primary" | "secondary" | "ghost" | "danger";
@@ -321,25 +323,33 @@ export function Steps({ labels, current }: { labels: string[]; current: number }
 
 
 /* ---------- TextField (phone 44, wide 34) ---------- */
+
 export function TextField({
   value,
   onChangeText,
+  type,
   placeholder,
+  label,
   icon,
   multiline,
-  keyboardType,
-  secure,
+  onSubmit,
 }: {
   value: string;
   onChangeText: (s: string) => void;
+  /** what the field holds: keyboard, autofill and formatting follow from it */
+  type: FieldType;
   placeholder?: string;
+  /** screen-reader name when the placeholder is an example ("(555) 555-0100") */
+  label?: string;
   icon?: IconKey;
   multiline?: boolean;
-  keyboardType?: "default" | "decimal-pad" | "phone-pad" | "email-address";
-  secure?: boolean;
+  /** return key on the keyboard */
+  onSubmit?: () => void;
 }) {
   const { c } = useTheme();
   const { wide } = useDevice();
+  const f = FIELD[type];
+  const multi = multiline ?? f.multiline ?? false;
   const h = wide ? component.field.h : component.field.phone;
   return (
     <View
@@ -350,30 +360,39 @@ export function TextField({
         borderColor: c.bd,
         backgroundColor: c.in,
         flexDirection: "row",
-        alignItems: multiline ? "flex-start" : "center",
+        alignItems: multi ? "flex-start" : "center",
         paddingHorizontal: space[3],
-        paddingVertical: multiline ? space[2] : 0,
+        paddingVertical: multi ? space[2] : 0,
         gap: space[2],
       }}
     >
       {icon ? <Icon name={icon} s={sizes.iconSm} color={c.mut} /> : null}
       <TextInput
         value={value}
-        onChangeText={onChangeText}
+        onChangeText={(v) => onChangeText(f.fmt ? f.fmt(v) : v)}
         placeholder={placeholder}
         placeholderTextColor={c.mut}
-        multiline={multiline}
-        keyboardType={keyboardType}
-        secureTextEntry={secure}
-        autoCapitalize={keyboardType === "email-address" || secure ? "none" : undefined}
-        accessibilityLabel={placeholder}
+        multiline={multi}
+        keyboardType={f.kb ?? "default"}
+        inputMode={f.kb === "decimal-pad" ? "decimal" : f.kb === "number-pad" ? "numeric" : f.kb === "phone-pad" ? "tel" : f.kb === "email-address" ? "email" : f.kb === "url" ? "url" : type === "search" ? "search" : "text"}
+        autoComplete={f.ac}
+        textContentType={f.tc ?? "none"}
+        autoCapitalize={f.cap}
+        autoCorrect={f.correct ?? true}
+        spellCheck={f.correct ?? true}
+        secureTextEntry={f.secure}
+        maxLength={f.max}
+        returnKeyType={multi ? "default" : f.ret ?? (onSubmit ? "done" : "next")}
+        onSubmitEditing={onSubmit}
+        submitBehavior={multi ? "newline" : "blurAndSubmit"}
+        accessibilityLabel={label ?? placeholder}
         style={{
           flex: 1,
-          minHeight: multiline ? h * 2 : h,
+          minHeight: multi ? h * 2 : h,
           color: c.ink,
           fontFamily: font.families.regular,
           fontSize: font.size.body + 2,
-          textAlignVertical: multiline ? "top" : "center",
+          textAlignVertical: multi ? "top" : "center",
           outlineStyle: "none",
         } as object}
       />

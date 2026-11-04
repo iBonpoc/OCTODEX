@@ -55,9 +55,9 @@ export default function Team() {
       </CardList>
       <Sheet visible={open} onClose={() => setOpen(false)} title={t("team.invite")}>
         <View style={{ gap: space[3] }}>
-          <TextField value={name} onChangeText={setName} placeholder={t("co.personName")} icon="user" />
-          <TextField value={email} onChangeText={setEmail} placeholder={t("co.email")} keyboardType="email-address" icon="message" />
-          <TextField value={phone} onChangeText={setPhone} placeholder={t("co.phone")} keyboardType="phone-pad" icon="phone" />
+          <TextField type="name" value={name} onChangeText={setName} placeholder={t("co.personName")} icon="user" />
+          <TextField type="email" value={email} onChangeText={setEmail} placeholder={t("co.email")} icon="message" />
+          <TextField type="phone" value={phone} onChangeText={setPhone} placeholder={t("co.phone")} icon="phone" />
           <T v="caption" tone="mut">
             {t("team.roles")}
           </T>

@@ -15,7 +15,7 @@ export function SignBlock({ onSign, defaultName = "", busy }: { onSign: (name: s
   const ready = name.trim().length > 1 && consent && !busy;
   return (
     <View style={{ gap: space[3] }}>
-      <TextField value={name} onChangeText={setName} placeholder={t("portal.name")} icon="user" />
+      <TextField type="name" value={name} onChangeText={setName} placeholder={t("portal.name")} icon="user" />
       <RowView style={{ minHeight: size.hitMin, alignItems: "center" }}>
         <T v="caption" style={{ flex: 1 }}>
           {t("portal.consent")}

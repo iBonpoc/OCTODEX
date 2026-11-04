@@ -35,7 +35,7 @@ export function CatalogPicker({ visible, onClose, onPick, exclude }: { visible: 
   return (
     <Sheet visible={visible} onClose={onClose} title={t("ue.fromCatalog")}>
       <View style={{ gap: space[3] }}>
-        <TextField value={q} onChangeText={setQ} placeholder={t("ue.catalogSearch")} icon="search" />
+        <TextField type="search" value={q} onChangeText={setQ} placeholder={t("ue.catalogSearch")} icon="search" />
         <ChoiceChips value={kind} onChange={setKind} items={KINDS.filter((k) => k === "all" || !exclude?.includes(k)).map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
         <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
           {items.length === 0 ? (
@@ -71,7 +71,7 @@ export function ClientPicker({ visible, onClose, onPick }: { visible: boolean; o
   return (
     <Sheet visible={visible} onClose={onClose} title={t("est.for")}>
       <View style={{ gap: space[3] }}>
-        <TextField value={q} onChangeText={setQ} placeholder={t("clients.title")} icon="search" />
+        <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.title")} icon="search" />
         <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
           {rows.length === 0 ? <StatusChip status="neutral" label={t("clients.empty")} /> : null}
           {rows.map(({ p, c }, i) => (

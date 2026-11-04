@@ -49,7 +49,7 @@ export default function Clients() {
       subtitle={t("clients.count", { n: count("all") })}
       right={<Button label={t("clients.new")} icon="plus" size="sm" onPress={() => router.push("/client/edit")} />}
     >
-      <TextField value={q} onChangeText={setQ} placeholder={t("clients.search")} icon="search" />
+      <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.search")} icon="search" />
       <ChoiceChips<Filter>
         value={tab}
         onChange={setTab}
