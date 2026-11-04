@@ -1,6 +1,6 @@
 import { View } from "react-native";
 import { router } from "expo-router";
-import { space } from "@octo/design-tokens";
+import { space, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { setupProgress, stepTitle } from "./companySetup";
@@ -46,7 +46,7 @@ export function FirstStepsCard() {
       <T v="heading">{t("first.title")}</T>
       <View style={{ gap: space[1] }}>
         {steps.map((s, i) => (
-          <RowView key={i} style={{ minHeight: 40 }}>
+          <RowView key={i} style={{ minHeight: size.controlMdPhone }}>
             <Icon name={s.done ? "check" : "chevronRight"} s={16} />
             <T v="body" tone={s.done ? "mut" : "ink"} style={{ flex: 1 }}>
               {i + 1}. {s.label}

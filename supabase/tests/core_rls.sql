@@ -722,5 +722,18 @@ do $$ begin
 end $$;
 \echo 'T12 simulated card payment ok'
 
+-- ---------------------------------------------------------------- T13: no overpayment on the server
+:as_owner_a
+do $$
+declare v_fin uuid;
+begin
+  select i.id into v_fin from public.invoices i join public.jobs j on j.id = i.job_id
+   where j.estimate_id = '0e1a0000-0000-0000-0000-000000000088' and i.kind = 'deposit';
+  perform tst.fails(format($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key)
+                     values ('ca000000-0000-0000-0000-000000000000', %L, 'c1a00000-0000-0000-0000-000000000001', 'cash', 1, 'succeeded', 't13-over')$q$, v_fin),
+                    'payment on a fully paid invoice');
+end $$;
+\echo 'T13 no overpayment ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

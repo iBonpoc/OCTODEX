@@ -69,7 +69,7 @@ export function Sheet({
             }}
           >
             {!wide ? (
-              <View style={{ alignSelf: "center", width: 36, height: 4, borderRadius: radius.pill, backgroundColor: c.track }} />
+              <View style={{ alignSelf: "center", width: component.grabber.w, height: component.grabber.h, borderRadius: radius.pill, backgroundColor: c.track }} />
             ) : null}
             {title ? (
               <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between" }}>

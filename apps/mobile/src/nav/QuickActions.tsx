@@ -1,7 +1,7 @@
 import { View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
-import { radius, space } from "@octo/design-tokens";
+import { radius, space, component, size } from "@octo/design-tokens";
 import { isToday, useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -66,7 +66,7 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
                 flexDirection: "row",
                 alignItems: "center",
                 gap: space[3],
-                minHeight: 52,
+                minHeight: size.rowMax,
                 paddingHorizontal: space[3],
                 borderRadius: radius.inner,
                 backgroundColor: c.in,
@@ -76,8 +76,8 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
             >
               <View
                 style={{
-                  width: 36,
-                  height: 36,
+                  width: component.dockBtn,
+                  height: component.dockBtn,
                   borderRadius: radius.pill,
                   backgroundColor: disabled ? c.surf2 : c.acc,
                   alignItems: "center",

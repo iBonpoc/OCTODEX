@@ -3,7 +3,7 @@ import { Image, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as ImagePicker from "expo-image-picker";
 import * as ImageManipulator from "expo-image-manipulator";
-import { component, radius, space } from "@octo/design-tokens";
+import { component, radius, space, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Address, Company, CompanyContact, CompanyLicense, EntityType, LicenseKind } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
@@ -106,7 +106,7 @@ export default function CompanySection() {
             <AddressFields value={draft.address} onChange={(a) => set({ address: a })} />
           </Card>
           <Card>
-            <RowView style={{ minHeight: 44 }}>
+            <RowView style={{ minHeight: size.hitMin }}>
               <T v="body" style={{ flex: 1 }}>
                 {t("co.mailingDifferent")}
               </T>
@@ -133,7 +133,7 @@ export default function CompanySection() {
           </Card>
           <Card>
             <T v="heading">{t("co.wc")}</T>
-            <RowView style={{ minHeight: 44 }}>
+            <RowView style={{ minHeight: size.hitMin }}>
               <T v="body" style={{ flex: 1 }}>
                 {t("co.wcExempt")}
               </T>
@@ -257,13 +257,13 @@ function ContactsEditor() {
           <TextField value={edit.title ?? ""} onChangeText={(v) => setEdit({ ...edit, title: v })} placeholder={t("co.personTitle")} />
           <TextField value={edit.phone ?? ""} onChangeText={(v) => setEdit({ ...edit, phone: v })} placeholder={t("co.phone")} keyboardType="phone-pad" icon="phone" />
           <TextField value={edit.email ?? ""} onChangeText={(v) => setEdit({ ...edit, email: v })} placeholder={t("co.email")} keyboardType="email-address" icon="message" />
-          <RowView style={{ minHeight: 44 }}>
+          <RowView style={{ minHeight: size.hitMin }}>
             <T v="body" style={{ flex: 1 }}>
               {t("co.primary")}
             </T>
             <Toggle label={t("co.primary")} on={edit.isPrimary} onChange={(on) => setEdit({ ...edit, isPrimary: on })} />
           </RowView>
-          <RowView style={{ minHeight: 44 }}>
+          <RowView style={{ minHeight: size.hitMin }}>
             <T v="body" style={{ flex: 1 }}>
               {t("co.onDocsLong")}
             </T>
@@ -347,7 +347,7 @@ function LicensesEditor() {
               {t("co.dateFormat")}
             </T>
           ) : null}
-          <RowView style={{ minHeight: 44 }}>
+          <RowView style={{ minHeight: size.hitMin }}>
             <T v="body" style={{ flex: 1 }}>
               {t("co.onDocsLong")}
             </T>
@@ -405,7 +405,7 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
     if (!uri) return;
     try {
       // small square logo kept as a data URI in the company profile (shows on the client page and in PDFs)
-      const out = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: 256, height: 256 } }], {
+      const out = await ImageManipulator.manipulateAsync(uri, [{ resize: { width: component.logoPx, height: component.logoPx } }], {
         compress: 0.8,
         format: ImageManipulator.SaveFormat.PNG,
         base64: true,

@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { PanResponder, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Path } from "react-native-svg";
-import { radius, space } from "@octo/design-tokens";
+import { radius, space, component } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/ui/controls";
@@ -41,7 +41,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel }: { onConfirm:
       <View
         onLayout={(e: LayoutChangeEvent) => setH(e.nativeEvent.layout.height)}
         style={{
-          height: 160,
+          height: component.mediaH,
           borderRadius: radius.inner,
           borderWidth: 1,
           borderStyle: "dashed",

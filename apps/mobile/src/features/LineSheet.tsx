@@ -4,7 +4,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { ScrollView, View } from "react-native";
-import { space } from "@octo/design-tokens";
+import { space, component, size } from "@octo/design-tokens";
 import { lineTotal, type CustomLine, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import type { CatalogItem } from "@/data/types";
@@ -67,7 +67,7 @@ export function LineSheet({
       {!draft ? (
         <View style={{ gap: space[3] }}>
           <TextField value={q} onChangeText={setQ} placeholder={t("ue.searchOrType")} icon="search" />
-          <ScrollView style={{ maxHeight: 380 }} keyboardShouldPersistTaps="handled">
+          <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
             <ListRow
               title={q.trim() ? t("ue.customNamed", { name: q.trim() }) : t("ue.custom")}
               subtitle={t("ue.customHint")}
@@ -87,7 +87,7 @@ export function LineSheet({
           </ScrollView>
         </View>
       ) : (
-        <ScrollView style={{ maxHeight: 560 }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space[3] }}>
+        <ScrollView style={{ maxHeight: component.sheetFormMax }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space[3] }}>
           <TextField value={draft.name} onChangeText={(v) => set({ name: v })} placeholder={t("ue.lineName")} />
           <TextField value={draft.description ?? ""} onChangeText={(v) => set({ description: v || undefined })} placeholder={t("ue.lineDesc")} multiline />
           <RowView style={{ alignItems: "flex-end" }}>
@@ -112,7 +112,7 @@ export function LineSheet({
           <Labeled label={t("ue.type")}>
             <ChoiceChips value={draft.group} onChange={(g) => set({ group: g })} items={GROUPS.map((g) => ({ key: g, label: t(`ue.group.${g}` as DictKey) }))} />
           </Labeled>
-          <RowView style={{ minHeight: 44 }}>
+          <RowView style={{ minHeight: size.hitMin }}>
             <T v="body" style={{ flex: 1 }}>
               {t("ue.addon")}
             </T>

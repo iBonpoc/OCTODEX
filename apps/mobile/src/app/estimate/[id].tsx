@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { space, type StatusName } from "@octo/design-tokens";
+import { space, type StatusName, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Estimate, EstimateStatus, PaymentMethod } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
@@ -284,7 +284,7 @@ function LegacyBody({ e }: { e: Estimate }) {
           e.lines.map((l, i) => (
             <View key={`${l.name}-${i}`}>
               {i > 0 ? <Divider /> : null}
-              <RowView style={{ justifyContent: "space-between", minHeight: 40 }}>
+              <RowView style={{ justifyContent: "space-between", minHeight: size.controlMdPhone }}>
                 <T v="body" tone={l.optional ? "mut" : "ink"} style={{ flex: 1 }}>
                   {l.name} × {l.qty}
                   {l.optional ? ` (${t("est.optional")})` : ""}
