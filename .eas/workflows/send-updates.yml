@@ -1,4 +1,4 @@
-# Publishes the app for Expo Go (EAS Update, channel "preview") on every push to main.
+# Publishes the app for Expo Go (EAS Update, channel "preview") and the web app (Expo Hosting) on every push to main.
 # Monorepo: dependencies install at the repo root (npm workspaces), the app lives in apps/mobile.
 # Runs on Expo servers through the linked GitHub repo — no tokens in the repo or the chat.
 name: Publish to Expo Go
@@ -16,3 +16,15 @@ jobs:
       - name: Publish EAS Update
         working_directory: ./apps/mobile
         run: npx eas-cli@latest update --channel preview --platform all --non-interactive --message "main @ $(git rev-parse --short HEAD)"
+
+  deploy_web:
+    name: Deploy web app (Expo Hosting, production)
+    steps:
+      - uses: eas/checkout
+      - uses: eas/install_node_modules
+      - name: Export web build
+        working_directory: ./apps/mobile
+        run: npx expo export --platform web
+      - name: Deploy to Expo Hosting
+        working_directory: ./apps/mobile
+        run: npx eas-cli@latest deploy --prod --non-interactive
