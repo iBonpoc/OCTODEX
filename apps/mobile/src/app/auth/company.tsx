@@ -14,8 +14,8 @@ export default function CompanySetup() {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   useEffect(() => {
-    if (auth.company) router.replace("/");
-  }, [auth.company]);
+    if (auth.company && !busy) router.replace("/");
+  }, [auth.company, busy]);
   return (
     <Screen title={t("company.title")} back={() => router.replace("/")}>
       <Card>
@@ -38,7 +38,7 @@ export default function CompanySetup() {
             const e = await auth.createCompany(name.trim());
             setBusy(false);
             if (e) setErr(e);
-            else router.replace("/");
+            else router.replace("/company/profile?wizard=1");
           }}
         />
       </Card>

@@ -577,5 +577,38 @@ do $$ begin
 end $$;
 \echo 'T8 universal estimate, catalog, client page ok'
 
+-- ---------------------------------------------------------------- T9: company profile, licenses, people, EIN, notes
+:as_owner_a
+do $$ begin
+  update public.companies set dba = 'A-Team Handyman', website = 'https://example.com', trades = array['handyman', 'plumbing']
+   where id = 'ca000000-0000-0000-0000-000000000000';
+  insert into public.company_secrets (company_id, ein) values ('ca000000-0000-0000-0000-000000000000', '12-3456789');
+  insert into public.company_licenses (company_id, kind, number, classes) values ('ca000000-0000-0000-0000-000000000000', 'cslb', '1234567', array['B']);
+  perform tst.fails($q$insert into public.company_licenses (company_id, kind, number) values ('ca000000-0000-0000-0000-000000000000', 'cslb', ' 1234567 ')$q$, 'duplicate license');
+  insert into public.company_contacts (company_id, name, title, phone, is_primary) values ('ca000000-0000-0000-0000-000000000000', 'Alex', 'Owner', '+13235550100', true);
+  perform tst.fails($q$insert into public.company_contacts (company_id, name, is_primary) values ('ca000000-0000-0000-0000-000000000000', 'Bob', true)$q$, 'two primary contacts');
+  insert into public.notes (company_id, subject_type, subject_id, body, visibility) values
+    ('ca000000-0000-0000-0000-000000000000', 'customer', 'c1a00000-0000-0000-0000-000000000001', 'Gate code 1234', 'team'),
+    ('ca000000-0000-0000-0000-000000000000', 'customer', 'c1a00000-0000-0000-0000-000000000001', 'Owner only: tough negotiator', 'private');
+  update public.customers set status = 'prospect' where id = 'c1a00000-0000-0000-0000-000000000002';
+  perform tst.ok((public.portal_estimate('tok_test_0123456789abcdef') -> 'company' ->> 'name') = 'A-Team Handyman', 'portal shows DBA');
+  perform tst.ok(jsonb_array_length(public.portal_estimate('tok_test_0123456789abcdef') -> 'company' -> 'licenses') = 1, 'portal shows license');
+  perform tst.ok((public.portal_estimate('tok_test_0123456789abcdef'))::text not like '%3456789%', 'portal has no EIN');
+end $$;
+:as_tech_a
+do $$ begin
+  perform tst.ok(tst.cnt('select 1 from public.company_secrets') = 0, 'tech does not see EIN');
+  perform tst.ok(tst.cnt('select 1 from public.company_licenses') = 1, 'tech sees licenses');
+  perform tst.ok(tst.cnt('select 1 from public.notes') = 1, 'tech sees team note only');
+  perform tst.blocked($q$update public.company_licenses set number = '999' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'tech edits license');
+  perform tst.fails($q$insert into public.company_contacts (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'X')$q$, 'tech adds company contact');
+end $$;
+:as_owner_b
+do $$ begin
+  perform tst.ok(tst.cnt('select 1 from public.company_licenses') = 0, 'company B does not see A licenses');
+  perform tst.ok(tst.cnt('select 1 from public.notes') = 0, 'company B does not see A notes');
+end $$;
+\echo 'T9 company profile, licenses, people, EIN, notes ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

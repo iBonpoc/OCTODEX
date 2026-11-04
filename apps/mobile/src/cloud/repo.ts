@@ -2,7 +2,8 @@
  * Read the company's data from the OCTODEX database and map it to the app's view model (src/data/types.ts).
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
-import type { CatalogItem, DB, Estimate, EstimateDoc, Notice, EstimateStatus, Expense, ExpenseCategory, Invoice, Job, JobStatus, Lead, LeadSource, LeadStatus, Member, Role, Visit, VisitStep } from "@/data/types";
+import { companyFromDb } from "./companyMap";
+import type { CatalogItem, DB, Note, Estimate, EstimateDoc, Notice, EstimateStatus, Expense, ExpenseCategory, Invoice, Job, JobStatus, Lead, LeadSource, LeadStatus, Member, Role, Visit, VisitStep } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -96,6 +97,14 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       q<Row>(supabase.from("estimate_line_costs").select("line_item_id, unit_cost_cents").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
       q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
     ]);
+  const [companyRows, secrets, licenseRows, contactRows, noteRows] = await Promise.all([
+    q<Row>(supabase.from("companies").select("*").eq("id", companyId)),
+    // EIN: owner/admin only — others get nothing
+    q<Row>(supabase.from("company_secrets").select("ein").eq("company_id", companyId)).catch(() => [] as Row[]),
+    live<Row>("company_licenses"),
+    live<Row>("company_contacts"),
+    live<Row>("notes"),
+  ]);
   const costOf = new Map(lineCosts.map((r) => [s(r.line_item_id), n(r.unit_cost_cents)]));
   const withCosts = (doc: unknown): EstimateDoc | undefined => {
     const d = doc as EstimateDoc | null;
@@ -262,6 +271,11 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     estimates: mappedEstimates,
     invoices: mappedInvoices,
     expenses: mappedExpenses,
+    company: companyRows[0] ? companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows) : null,
+    notes: noteRows.map((r) => ({
+      id: s(r.id), subjectType: s(r.subject_type) as Note["subjectType"], subjectId: s(r.subject_id), body: s(r.body),
+      visibility: r.visibility === "private" ? "private" : "team", pinned: !!r.pinned, authorId: s(r.created_by), at: s(r.created_at),
+    })),
     catalog: catalogRows
       .filter((r) => r.is_active !== false)
       .map((r) => ({

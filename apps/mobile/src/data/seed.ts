@@ -2,7 +2,7 @@
  * Test data (placeholder prices — founder rule: real prices are never typed into seeds).
  * All times are relative to "now" so the demo always looks like a live day in Los Angeles.
  */
-import type { DB, ChecklistItem, CatalogItem, EstimateDoc } from "./types";
+import type { DB, ChecklistItem, CatalogItem, Company, EstimateDoc } from "./types";
 import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
 
 /** Test catalog for several trades. All prices are PLACEHOLDERS (badge "test price"). */
@@ -83,6 +83,26 @@ const jobChecklist = (prefix: string): ChecklistItem[] =>
     "Photos after work",
     "Walk through with the client",
   ].map((label, i) => ({ id: `${prefix}-c${i}`, label, done: false }));
+
+/** Demo company: partly filled so the setup checklist shows what is left. Test license number. */
+export const DEMO_COMPANY: Company = {
+  id: "demo-company",
+  name: "OCTODEX Demo Home Services",
+  legalName: "OCTODEX Demo Home Services LLC",
+  entityType: "llc",
+  phone: "(626) 555-0100",
+  email: "office@example.com",
+  address: { line1: "100 E Colorado Blvd", city: "Pasadena", state: "CA", zip: "91105" },
+  timezone: "America/Los_Angeles",
+  trades: ["handyman", "plumbing", "electrical", "painting"],
+  brand: {},
+  insurance: {},
+  estimate: { validDays: 30, depositBps: 1000 },
+  payment: {},
+  licenses: [{ id: "lic-demo", kind: "cslb", number: "TEST-000000", classes: ["B"], onDocuments: true }],
+  contacts: [{ id: "cc-demo", name: "Alex Petrov", title: "Owner", phone: "(626) 555-0100", email: "office@example.com", isPrimary: true, onDocuments: true }],
+  skipped: [],
+};
 
 export function makeSeed(): DB {
   return {
@@ -181,6 +201,8 @@ export function makeSeed(): DB {
     ],
     catalog: SEED_CATALOG,
     notices: [],
+    company: DEMO_COMPANY,
+    notes: [],
     expenses: [
       { id: "x1", jobId: "j5", vendor: "Home Depot", category: "materials", amountCents: 41260, at: minutesAgo(300), memberId: "m-ivan" },
       { id: "x2", jobId: "j1", vendor: "ABC Supply", category: "materials", amountCents: 88400, at: daysAgo(1), memberId: "m-alex" },

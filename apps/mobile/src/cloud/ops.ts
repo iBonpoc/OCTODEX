@@ -4,7 +4,8 @@
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
 import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { CatalogItem, EstimateDoc, ExpenseCategory, PaymentMethod, VisitStep } from "@/data/types";
+import type { CatalogItem, Company, CompanyContact, CompanyLicense, EstimateDoc, ExpenseCategory, PaymentMethod, VisitStep } from "@/data/types";
+import { companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
 
@@ -74,6 +75,11 @@ export type Op =
       jobId: string;
     }
   | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; scope: string[] }
+  | { k: "company.save"; company: Company; einChanged: boolean }
+  | { k: "license.save"; license: CompanyLicense }
+  | { k: "license.remove"; id: string }
+  | { k: "contact.save"; contact: CompanyContact }
+  | { k: "contact.remove"; id: string }
   | { k: "catalog.save"; item: CatalogItem }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
@@ -265,6 +271,25 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (op.techId) await run(ins("visit_assignees", { company_id: c, visit_id: op.visitId, user_id: op.techId }));
       return advanceJob(op.jobId, "scheduled");
     }
+    case "company.save": {
+      const { data: stored } = await supabase.from("companies").select("brand, contract_settings, estimate_settings, payment_settings, onboarding_state").eq("id", c).maybeSingle();
+      await run(supabase.from("companies").update(companyToDb(op.company, (stored ?? {}) as Record<string, unknown>)).eq("id", c));
+      if (op.einChanged) {
+        const ein = op.company.ein?.trim() || null;
+        await run(supabase.from("company_secrets").upsert({ company_id: c, ein }, { onConflict: "company_id" }));
+      }
+      return;
+    }
+    case "license.save":
+      return run(supabase.from("company_licenses").upsert(licenseToDb(op.license, c), { onConflict: "id" }));
+    case "license.remove":
+      return run(supabase.from("company_licenses").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
+    case "contact.save": {
+      if (op.contact.isPrimary) await run(supabase.from("company_contacts").update({ is_primary: false }).eq("company_id", c).neq("id", op.contact.id));
+      return run(supabase.from("company_contacts").upsert(contactToDb(op.contact, c, 0), { onConflict: "id" }));
+    }
+    case "contact.remove":
+      return run(supabase.from("company_contacts").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "catalog.save": {
       const it = op.item;
       return run(

@@ -8,6 +8,7 @@ import { buildAttention } from "@/features/attention";
 import { todayVisits, visitStatus } from "@/features/visits";
 import { useTick } from "@/features/sheets";
 import { NoticesCard } from "@/features/notices";
+import { CompanySetupCard, FirstStepsCard } from "@/features/SetupCards";
 import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T, type IconKey } from "@/ui/primitives";
 import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -61,6 +62,8 @@ export default function Today() {
         <Kpi label={t("today.received")} cents={received} icon="wallet" onPress={() => router.push("/money")}  width={tileW} />
         <Kpi label={t("today.awaiting")} cents={awaiting} icon="invoice" onPress={() => router.push("/money")}  width={tileW} />
       </View>
+      <CompanySetupCard />
+      <FirstStepsCard />
       <NoticesCard />
       <Grid>
         <View style={{ gap: space[2] }}>

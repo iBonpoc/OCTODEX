@@ -43,8 +43,10 @@ export const newLine = (group: LineGroup, over: Partial<CustomLine> = {}): Custo
 
 export const newOption = (i: number, lines: CustomLine[] = []): CustomOption => ({ id: uid(), name: OPTION_NAMES[i] ?? `Option ${i + 1}`, lines });
 
-export function newDoc(): EstimateDoc {
-  return { options: [newOption(0)], settings: DEFAULT_SETTINGS };
+/** New estimate; the company's default deposit applies (Company → Documents). */
+export function newDoc(defaultDepositBps?: number | null): EstimateDoc {
+  const deposit = defaultDepositBps === undefined ? DEFAULT_SETTINGS.deposit : defaultDepositBps === null ? ({ kind: "none" } as const) : ({ kind: "pct", bps: defaultDepositBps } as const);
+  return { options: [newOption(0)], settings: { ...DEFAULT_SETTINGS, deposit } };
 }
 
 /** A copy of an option with fresh ids (for "add option"). */

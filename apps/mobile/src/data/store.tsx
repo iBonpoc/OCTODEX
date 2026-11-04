@@ -18,6 +18,9 @@ import { todayKey, usePersistentState } from "./persist";
 import {
   VISIT_STEPS,
   type CatalogItem,
+  type Company,
+  type CompanyContact,
+  type CompanyLicense,
   type DB,
   type Estimate,
   type EstimateApproval,
@@ -72,6 +75,12 @@ interface StoreCtx {
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   readNotices: () => void;
+  /** company profile (owner/admin in the cloud) */
+  saveCompany: (patch: Partial<Omit<Company, "id" | "licenses" | "contacts">>) => Undo;
+  saveLicense: (l: CompanyLicense) => Undo;
+  removeLicense: (id: ID) => Undo;
+  saveContact: (c: CompanyContact) => Undo;
+  removeContact: (id: ID) => Undo;
   /** contractor picks date, time, duration and (optionally) the tech → a visit appears in the plan */
   scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null }) => Undo;
 }
@@ -81,9 +90,14 @@ const Ctx = createContext<StoreCtx | null>(null);
 const uid = (_p?: string) => Crypto.randomUUID();
 const emptyDB = (me: string): DB => ({
   me, members: [], customers: [], properties: [], jobs: [], visits: [], leads: [], estimates: [], invoices: [], expenses: [], catalog: [], notices: [],
+  company: null, notes: [],
 });
+const upsert = <T extends { id: string }>(list: T[], it: T): T[] => (list.some((x) => x.id === it.id) ? list.map((x) => (x.id === it.id ? it : x)) : [...list, it]);
 /** Older saved data has no catalog / notices yet. */
-const normalize = (d: DB): DB => (d.catalog && d.notices ? d : { ...d, catalog: d.catalog ?? [], notices: d.notices ?? [] });
+const normalize = (d: DB): DB =>
+  d.catalog && d.notices && d.notes && d.company !== undefined
+    ? d
+    : { ...d, catalog: d.catalog ?? [], notices: d.notices ?? [], notes: d.notes ?? [], company: d.company ?? null };
 /** Fresh ids for options/lines when a sent estimate is edited (the sent version stays immutable in the database). */
 const reId = (doc: EstimateDoc): EstimateDoc => ({
   ...doc,
@@ -96,7 +110,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const auth = useAuth();
   const company = auth.session ? auth.company : null;
   const mode: Mode = company && auth.userId ? "cloud" : "demo";
-  const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v2";
+  const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v3";
 
   // Demo data is reseeded each new day (dates are relative to "today"). Cloud data is a cache of the server.
   const [saved, setSaved, dbReady] = usePersistentState<{ day: string; db: DB }>(
@@ -473,6 +487,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: sch.techId, scope },
         );
       },
+      saveCompany: (patch) => {
+        const cur = dbRef.current.company;
+        if (!cur) return () => {};
+        const next = { ...cur, ...patch };
+        return mutate("company.save", (d) => ({ ...d, company: next }), { k: "company.save", company: next, einChanged: patch.ein !== undefined });
+      },
+      saveLicense: (l) =>
+        mutate(
+          "license.save",
+          (d) => (d.company ? { ...d, company: { ...d.company, licenses: upsert(d.company.licenses, l) } } : d),
+          { k: "license.save", license: l },
+        ),
+      removeLicense: (id) =>
+        mutate(
+          "license.remove",
+          (d) => (d.company ? { ...d, company: { ...d.company, licenses: d.company.licenses.filter((x) => x.id !== id) } } : d),
+          { k: "license.remove", id },
+        ),
+      saveContact: (c) =>
+        mutate(
+          "contact.save",
+          (d) =>
+            d.company
+              ? {
+                  ...d,
+                  company: {
+                    ...d.company,
+                    contacts: upsert(d.company.contacts.map((x) => (c.isPrimary && x.id !== c.id ? { ...x, isPrimary: false } : x)), c),
+                  },
+                }
+              : d,
+          { k: "contact.save", contact: c },
+        ),
+      removeContact: (id) =>
+        mutate(
+          "contact.remove",
+          (d) => (d.company ? { ...d, company: { ...d.company, contacts: d.company.contacts.filter((x) => x.id !== id) } } : d),
+          { k: "contact.remove", id },
+        ),
       readNotices: () => {
         const ids = dbRef.current.notices.filter((n) => !n.read).map((n) => n.id);
         if (!ids.length) return;
