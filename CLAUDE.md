@@ -13,6 +13,18 @@ CRM/FSM для подрядчиков США **любых направлений
 - `design/naryad-ds/` — дизайн-система основателя (источник правды по виду). Прочитать её `CLAUDE.md`, `HANDOFF.md`, `CHECKLIST.md`.
 - `docs/` — продукт, PRD, модель данных, архитектура, ADR, юр. исследование; план сборки `docs/10-build-plan.md`.
 
+## Кто за что отвечает (два чата, решение основателя 05.11.2026)
+Над проектом работают два чата Claude. У каждого своё направление; чужие файлы не правим.
+
+| Направление | Чат | Файлы |
+|---|---|---|
+| **Лиды** (L1–L4), **Осмотр и План** (`docs/specs/03-visit-and-plan.md`), карта шагов `docs/15-story-map.md`, превью PR (`.github/workflows/preview.yml`) | «Leads tab implementation» | `src/app/lead/**`, `src/features/lead/**`, `src/features/leads.ts`, `src/cloud/leadCols.ts`, `src/app/(tabs)/inbox.tsx`, `(tabs)/plan.tsx`, `(tabs)/triage.tsx`, `src/app/visit/**`, `src/features/calendar.ts`, `visits.tsx` |
+| **Клиенты и объекты** (`docs/specs/04-…`), **меню «Ещё», настройки, вид «Люди / Документы»** (`docs/specs/05-…`), общий UI и дизайн-система, выпуск сборок (`.github/workflows/release.yml`) | «dazzling-hamilton» | `src/app/client/**`, `(tabs)/clients.tsx`, `(tabs)/more.tsx`, `(tabs)/today.tsx`, `src/app/settings/**`, `src/app/company/**`, `src/ui/**`, `packages/design-tokens`, `design/naryad-ds` |
+
+**Общие файлы** — менять только после сообщения другому чату (через `send_message`) и в отдельном небольшом PR: `src/data/store.tsx`, `src/data/types.ts`, `src/data/normalize.ts`, `src/cloud/ops.ts`, `src/nav/*` (`hierarchy.ts`, `roles.ts`), `src/features/attention.ts`, `src/i18n/*`, `.github/workflows/checks.yml`, `CLAUDE.md`, `docs/10-build-plan.md`.
+
+Порядок: каждый работает в своей ветке; `main` один на двоих. Перед PR — `git merge origin/main`. Номер сборки `BUILD` = номер своего PR (номера PR общие, поэтому идут с пропусками). Публикует в Expo Go (канал `preview`) только `release.yml` после слияния в `main`. Миграции базы — новым файлом с уникальным временем, слитые миграции не правим.
+
 ## Правила (не нарушать)
 1. **Только токены.** Ни одного «своего» цвета, размера, радиуса, шрифта, длительности в компонентах. Нет токена — сначала добавить в `packages/design-tokens`. Новая выгрузка дизайн-системы кладётся в `design/naryad-ds/`, затем значения переносятся в `packages/design-tokens`, пока не позеленеет `mirror.test.ts`.
 2. **Цвет только для статуса** (ok / info / warn / bad / neutral), всегда значок + слово. Один акцент `acc` для главного действия.
