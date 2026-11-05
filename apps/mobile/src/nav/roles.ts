@@ -23,6 +23,13 @@ export const roleNav: Record<Role, NavItem[]> = {
     { route: "plan", label: "tab.plan", icon: "calendar" },
     { route: "more", label: "tab.more", icon: "more" },
   ],
+  // the office without planning: the Plan is to look at only (canPlan is false)
+  sales: [
+    { route: "inbox", label: "tab.sales", icon: "inbox" },
+    { route: "clients", label: "tab.clients", icon: "users" },
+    { route: "plan", label: "tab.plan", icon: "calendar" },
+    { route: "more", label: "tab.more", icon: "more" },
+  ],
   director: [
     { route: "today", label: "tab.today", icon: "home" },
     { route: "inbox", label: "tab.sales", icon: "inbox" },
@@ -35,4 +42,4 @@ export const roleNav: Record<Role, NavItem[]> = {
 const TAB_SCREENS = new Set<string>(["index", "visits", "triage", "today", "inbox", "plan", "clients", "more"]);
 export const isTabScreen = (routeName: string) => TAB_SCREENS.has(routeName);
 
-export const roleHome: Record<Role, TabRoute> = { tech: "visits", dispatcher: "triage", director: "today" };
+export const roleHome: Record<Role, TabRoute> = { tech: "visits", dispatcher: "triage", director: "today", sales: "inbox" };

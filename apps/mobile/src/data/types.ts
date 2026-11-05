@@ -4,7 +4,8 @@ import type { CustomOption, CustomSettings, LineGroup } from "@octo/estimating-e
  * Local domain types (subset of docs/04-domain-model.md v0.3.1).
  * Same shape the Supabase/PowerSync layer will provide in wave 5. Money is integer cents.
  */
-export type Role = "tech" | "dispatcher" | "director";
+/** sales (wave П3a security check): the office without planning — leads, estimates, clients; does not move, assign or cancel visits */
+export type Role = "tech" | "dispatcher" | "director" | "sales";
 export type ID = string;
 
 export interface Member {

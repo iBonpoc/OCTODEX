@@ -15,7 +15,9 @@ const n = (v: unknown) => (v == null ? 0 : Number(v));
 
 export function appRoles(r: DbRole): Role[] {
   if (r === "owner" || r === "admin") return ["director", "dispatcher", "tech"];
-  if (r === "office" || r === "sales") return ["dispatcher"];
+  if (r === "office") return ["dispatcher"];
+  // sales works leads, estimates and clients but does not plan (the server refuses it: cancel_visit, assign_visit)
+  if (r === "sales") return ["sales"];
   return ["tech"];
 }
 const initials = (name: string) =>
