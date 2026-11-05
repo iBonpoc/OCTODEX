@@ -1,4 +1,4 @@
-/** Header shows where you are (section · kind) and "‹ Parent" goes one level up, even when the screen was opened directly. */
+/** Header shows where you are (the trail "⌂ › … › Parent › Kind", e2e 24) and "‹ Parent" goes one level up, even when the screen was opened directly. */
 exports.run = async (h) => {
   const p = h.page;
   const db0 = await (async () => { await h.go("/today"); return h.db(); })();
@@ -8,14 +8,14 @@ exports.run = async (h) => {
 
   // opened directly (deep link / notification): the parent is still known
   await h.go(`/estimate/${est.id}`);
-  await h.expectText(/ПРОДАЖИ · СМЕТА|Продажи · Смета/i, "section and kind above the title");
+  await h.expectText(/Смета/, "kind at the end of the trail");
   const parentName = lead ? lead.name : db0.customers.find((c) => c.id === est.customerId).name;
   await back(parentName).click();
   await p.waitForTimeout(700);
   h.expect(p.url().includes(lead ? `/lead/${lead.id}` : `/client/${est.customerId}`), `up from the estimate goes to its owner: ${p.url()}`);
 
   if (lead) {
-    await h.expectText(/Продажи · Лид/i, "lead section");
+    await h.expectText(/Карточка лида|Лид/, "lead kind");
     await back("Лиды").click();
     await p.waitForTimeout(700);
     h.expect(p.url().includes("/inbox"), `up from the lead goes to Leads: ${p.url()}`);
