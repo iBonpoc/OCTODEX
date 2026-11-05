@@ -2470,5 +2470,41 @@ select tst.fails($q$select public.assign_visit('f3500000-0000-4000-8000-00000000
 select tst.fails($q$insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3500000-0000-4000-8000-000000000002', 'a3500000-0000-4000-8000-000000000001')$q$, 'a direct insert of a deleted member is refused (the visit is still scheduled)');
 \echo 'T35 several people on a visit ok'
 
+-- T35 (security check of #105): taken off a visit, a tech loses everything that came with it, not only the visit
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c3500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T35 Gate Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3500000-0000-4000-8000-000000000002', '35 Gate St', 'Pasadena');
+  insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', 'd3500000-0000-4000-8000-000000000002', '#3535');
+  insert into public.notes (company_id, subject_type, subject_id, body, visibility) values
+    ('ca000000-0000-0000-0000-000000000000', 'property', 'd3500000-0000-4000-8000-000000000002', 'T35 dog in the yard', 'team'),
+    ('ca000000-0000-0000-0000-000000000000', 'customer', 'c3500000-0000-4000-8000-000000000002', 'T35 call before', 'team');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e3500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T35 gate job', 'c3500000-0000-4000-8000-000000000002', 'd3500000-0000-4000-8000-000000000002', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values ('f3500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e3500000-0000-4000-8000-000000000002', now() + interval '1 day');
+end $$;
+:as_office_a
+select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000003', array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added')::int = 1, 'the tech is on the gate visit');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd3500000-0000-4000-8000-000000000002'$q$) = 1, 'on the visit: the tech sees the property');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c3500000-0000-4000-8000-000000000002'$q$) = 1, 'on the visit: … the client');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T35 %'$q$) = 2, 'on the visit: … the notes of the property and the client');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd3500000-0000-4000-8000-000000000002'$q$) = 1, 'on the visit (tomorrow): … the gate code');
+-- (b) a tech does not put himself on a visit
+select tst.fails($q$insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3500000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000003')$q$, 'a tech does not assign himself (direct insert)');
+-- (c) another company does not write an assignment on our visit
+:as_owner_b
+select tst.fails($q$insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3500000-0000-4000-8000-000000000002', 'b0000000-0000-0000-0000-000000000002')$q$, 'the owner of B does not assign on a visit of A');
+select tst.fails($q$insert into public.visit_assignees (company_id, visit_id, user_id) values ('cb000000-0000-0000-0000-000000000000', 'f3500000-0000-4000-8000-000000000002', 'b0000000-0000-0000-0000-000000000002')$q$, '… not under his own company id either');
+-- (a) taken off: nothing of it is left
+:as_office_a
+select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000003', '{}') ->> 'removed')::int = 1, 'the tech is taken off');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'f3500000-0000-4000-8000-000000000003'$q$) = 0, 'taken off: no visit');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd3500000-0000-4000-8000-000000000002'$q$) = 0, 'taken off: no property');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c3500000-0000-4000-8000-000000000002'$q$) = 0, 'taken off: no client');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T35 %'$q$) = 0, 'taken off: no notes');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd3500000-0000-4000-8000-000000000002'$q$) = 0, 'taken off: no gate code');
+\echo 'T35 taken off loses everything ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

@@ -4,6 +4,7 @@ export const es: Dict = {
   "role.tech": "Técnico",
   "role.dispatcher": "Despachador",
   "role.director": "Dueño",
+  "role.sales": "Ventas",
   "role.hint": "Una persona puede tener varios roles. La pantalla principal cambia.",
 
   "tab.visits": "Visitas",

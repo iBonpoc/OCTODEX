@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Linking, View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { assigneesOf, dayVisits } from "@/features/schedule";
+import { assigneesOf, canPlan, dayVisits } from "@/features/schedule";
 import { sourceName } from "@/features/leads";
 import { smsWithBody } from "@/features/sms";
 import type { ID } from "@/data/types";
@@ -14,10 +14,11 @@ import { Divider, ListRow } from "@/ui/surfaces";
 
 /** «Назначить»: everyone on a visit (wave П3a). Each person's load on the visit's day, several ticks, «Снять всех». */
 export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose: () => void }) {
-  const { db, assignVisit, online } = useStore();
+  const { db, assignVisit, online, role } = useStore();
   const { t } = useI18n();
   const toast = useToast();
-  const v = db.visits.find((x) => x.id === visitId);
+  // only the office assigns (owner / admin / office ↔ director / dispatcher); sales and techs never see the sheet
+  const v = canPlan([role]) ? db.visits.find((x) => x.id === visitId) : undefined;
   const [picked, setPicked] = useState<ID[]>([]);
   useEffect(() => setPicked(v ? assigneesOf(v) : []), [visitId]); // eslint-disable-line react-hooks/exhaustive-deps
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
@@ -31,7 +32,7 @@ export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose:
     toast.show(online ? (ids.length ? t("toast.assigned", { name: names }) : t("toast.unassigned")) : t("offline.queued"), undo);
   };
   return (
-    <Sheet visible={!!visitId} onClose={onClose} title={t("plan.assignTo")}>
+    <Sheet visible={!!v} onClose={onClose} title={t("plan.assignTo")}>
       <View>
         {techs.map((m, i) => {
           const load = dayVisits(db, m.id, day, visitId ?? undefined).length;
