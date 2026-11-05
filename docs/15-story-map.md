@@ -90,7 +90,7 @@
 | S0 | Компания → документы | Д в настройках | — → шапка смет/счетов, PDF, `/p/` | e2e:06-company-setup, db:T9, db:T1 | ◐ | шапка сметы/счёта, PDF, телефон, логотип, префиксы |
 | S1 | Заявка → Лид | человек / приём лидов | — → `Lead.new` | e2e:15-lead-full, unit:leads | ◐ | цена и атрибуция; приём извне, повтор события, дубль в базе |
 | S2 | Первый ответ | человек | `new` → `replied` (только если дозвонились) | e2e:15-lead-full, db:T14, db:T15, unit:leadTurn | ✅ | — |
-| S3 | Лид → потенциальный клиент | система при осмотре или смете | — → `Customer.prospect`, `Property`, `Contact` | e2e:18-handoffs-lead-to-deposit, e2e:04-lead-funnel | ◐ | контакт, источник клиента; серверной функции `lead_to_client` нет (клиента создаёт приложение) — db-теста быть не может до L1 |
+| S3 | Лид → потенциальный клиент | система при осмотре или смете | — → `Customer.prospect`, `Property`, `Contact` | e2e:18-handoffs-lead-to-deposit, e2e:04-lead-funnel, e2e:24-lead-people, unit:leadPeople, db:T17 | ◐ | люди лида со всеми телефонами переходят клиенту (совпал телефон или email — сливаются, без дублей; триггер `app.move_lead_people`, то же правило в приложении `mergePeople`); клиента пока создаёт приложение, серверной функции `lead_to_client` нет |
 | S4 | Лид → осмотр | человек | `replied` → `booked`; — → `Job(estimate)`, `Visit` | — | ✚ | весь стык |
 | S5 | Лид/Клиент → смета | человек | — → `Estimate.draft (leadId, propertyId)` | e2e:18-handoffs-lead-to-deposit, e2e:01-estimate-builder | ✅ | — |
 | S6 | Смета отправлена | человек | смета `draft` → `sent`; лид → `estimate_sent` | e2e:18-handoffs-lead-to-deposit, db:T8 | ✅ | — |

@@ -41,26 +41,26 @@ exports.run = async (h) => {
   }
 
   // unsaved changes: close asks; "Don't save" keeps the old value
-  await h.sheet().getByPlaceholder("client@example.com").fill("kb@example.com");
+  await h.sheet().getByPlaceholder("Имя", { exact: true }).fill("Kevin Brooks Jr");
   await h.sheet().getByRole("button", { name: "Закрыть" }).last().click();
   await p.waitForTimeout(300);
   await h.expectText(/Сохранить изменения\?/, "unsaved question on close");
   await h.sheet().getByRole("button", { name: "Не сохранять" }).click();
   await p.waitForTimeout(500);
   let l = (await h.db()).leads.find((x) => x.id === "l1");
-  h.expect(!l.email, "not saved");
+  h.expect(l.name === "Kevin Brooks", "not saved");
 
   // drag with changes → question → Save
   await p.getByRole("button", { name: "Изменить: Контакт" }).click();
   await p.waitForTimeout(400);
-  await h.sheet().getByPlaceholder("client@example.com").fill("kb@example.com");
+  await h.sheet().getByPlaceholder("Имя", { exact: true }).fill("Kevin Brooks Jr");
   if (wide) await closeBtn();
   else await dragDown(220);
   await h.expectText(/Сохранить изменения\?/, "unsaved question on drag / close");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(500);
   l = (await h.db()).leads.find((x) => x.id === "l1");
-  h.expect(l.email === "kb@example.com", "saved from the question");
+  h.expect(l.name === "Kevin Brooks Jr", "saved from the question");
 
   // toast Undo has the countdown ring
   const undo = p.getByRole("button", { name: "Отменить" }).last();

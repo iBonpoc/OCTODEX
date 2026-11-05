@@ -950,5 +950,82 @@ begin
 end $$;
 \echo 'T16 clients C1 ok'
 
+-- ---------------------------------------------------------------- T17: lead people (L2 part 2), people move to the client (S3)
+:as_owner_a
+do $$
+declare v_src uuid; v_l uuid; v_l2 uuid; v_main uuid; v_pat uuid := 'a1700000-0000-4000-8000-000000000001'; v_c text;
+begin
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.leads (company_id, source_id, contact_name, phone, phone2, phone2_label, email)
+  values ('ca000000-0000-0000-0000-000000000000', v_src, 'People Lead', '(818) 555-0601', '(818) 555-0602', 'work', 'people@example.com') returning id into v_l;
+  select id into v_main from public.contacts where lead_id = v_l and customer_id is null and is_primary and deleted_at is null;
+  perform tst.ok(v_main is not null, 'a new lead gets its main person');
+  perform tst.ok((select count(*) from public.contact_phones where contact_id = v_main and deleted_at is null) = 2, 'main person has both phones of the lead');
+  perform tst.ok((select count(*) from public.contact_emails where contact_id = v_main and is_primary) = 1, 'main person has the lead email');
+  update public.leads set contact_name = 'People Lead Renamed' where id = v_l;
+  perform tst.ok((select name from public.contacts where id = v_main) = 'People Lead Renamed', 'renaming the lead renames its main person');
+  -- all people in one call: main (2 phones, the second primary), spouse Pat
+  perform public.save_lead_people(v_l, jsonb_build_array(
+    jsonb_build_object('id', v_main, 'name', 'ignored', 'role', 'main',
+      'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0611', 'label', 'home'), jsonb_build_object('number', '(818) 555-0612', 'label', 'mobile', 'primary', true)),
+      'emails', '[]'::jsonb),
+    jsonb_build_object('id', v_pat, 'name', 'Pat People', 'role', 'spouse',
+      'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0613', 'label', 'mobile', 'primary', true)), 'emails', '[]'::jsonb)));
+  perform tst.ok((select count(*) from public.contacts where lead_id = v_l and customer_id is null and deleted_at is null) = 2, 'lead has two people');
+  perform tst.ok((select name from public.contacts where id = v_main) = 'People Lead Renamed', 'the main person keeps the lead name');
+  perform tst.ok((select phone = '(818) 555-0612' and email is null and phone2 is null from public.leads where id = v_l), 'lead caches the main primary phone; email cleared; phone2 retired');
+  perform tst.fails(format($q$select public.save_lead_people(%L, '[{"id":"%s","name":"x","phones":[],"emails":[{"address":"bad"}]}]'::jsonb)$q$, v_l, v_main), 'invalid email refused');
+  perform tst.ok((select count(*) from public.contact_phones p join public.contacts c on c.id = p.contact_id where c.lead_id = v_l and p.deleted_at is null) = 3, 'refused save changed nothing');
+  insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', v_src, 'Other Lead', '(818) 555-0620') returning id into v_l2;
+  perform tst.fails(format($q$select public.save_lead_people(%L, '[{"id":"%s","name":"Thief","phones":[],"emails":[]}]'::jsonb)$q$, v_l2, v_pat), 'person of another lead refused');
+  perform tst.fails($q$insert into public.contacts (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'Nobody')$q$, 'a person belongs to a client or a lead');
+end $$;
+-- another company sees nothing and cannot write
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.contacts where lead_id = (select id from public.leads where contact_name = 'People Lead Renamed')$q$) = 0, 'other company: no lead people');
+select tst.ok(tst.cnt($q$select 1 from public.contacts c join public.leads l on l.id = c.lead_id where l.company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'other company: no lead people at all');
+-- a tech sees the people of a lead only when the lead is theirs, and then edits them
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.contacts c join public.contact_phones p on p.contact_id = c.id where c.name = 'Pat People'$q$) = 0, 'tech: not their lead, no people');
+:as_owner_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where contact_name = 'People Lead Renamed';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.contacts where name = 'Pat People' and deleted_at is null$q$) = 1, 'tech: their lead, sees its people');
+select tst.ok(tst.cnt($q$select 1 from public.contact_phones p join public.contacts c on c.id = p.contact_id where c.name = 'Pat People' and p.deleted_at is null$q$) = 1, 'tech: sees their phones');
+select public.save_lead_people((select id from public.leads where contact_name = 'People Lead Renamed'), jsonb_build_array(
+  jsonb_build_object('id', (select id from public.contacts where name = 'People Lead Renamed' and deleted_at is null), 'role', 'main',
+    'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0611', 'label', 'home'), jsonb_build_object('number', '(818) 555-0612', 'label', 'mobile', 'primary', true)),
+    'emails', jsonb_build_array(jsonb_build_object('address', 'people@example.com', 'primary', true))),
+  jsonb_build_object('id', 'a1700000-0000-4000-8000-000000000001', 'name', 'Pat People', 'role', 'spouse',
+    'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0613', 'label', 'mobile', 'primary', true)), 'emails', '[]'::jsonb)));
+select tst.ok((select email from public.leads where contact_name = 'People Lead Renamed') = 'people@example.com', 'tech saved the people of their lead');
+-- lead → client (S3): the client made from the lead has the lead phone (as the app makes it); people merge, the spouse moves
+:as_owner_a
+do $$
+declare v_l uuid; v_cust uuid; v_cp uuid; v_c text; v_l3 uuid; v_cust3 uuid;
+begin
+  select id into v_l from public.leads where contact_name = 'People Lead Renamed';
+  insert into public.customers (company_id, display_name, status) values ('ca000000-0000-0000-0000-000000000000', 'People Lead Renamed', 'prospect') returning id into v_cust;
+  insert into public.contacts (company_id, customer_id, name, phone, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_cust, 'People Lead Renamed', '818.555.0612', true) returning id into v_cp;
+  update public.customers set primary_contact_id = v_cp where id = v_cust;
+  update public.leads set customer_id = v_cust where id = v_l;
+  perform tst.ok((select count(*) from public.contacts where lead_id = v_l and customer_id is null and deleted_at is null) = 0, 'S3: the lead keeps no people of its own');
+  perform tst.ok((select count(*) from public.contacts where customer_id = v_cust and deleted_at is null) = 2, 'S3: client has the merged main person and the spouse');
+  select string_agg(number || ':' || is_primary, ',' order by position) into v_c from public.contact_phones where contact_id = v_cp and deleted_at is null;
+  perform tst.ok(v_c = '818.555.0612:true,(818) 555-0611:false', format('S3: client person gets the missing phone, no duplicate (%s)', v_c));
+  perform tst.ok((select count(*) from public.contact_emails where contact_id = v_cp and address = 'people@example.com' and is_primary) = 1, 'S3: and the email');
+  perform tst.ok((select role = 'spouse' and not is_primary from public.contacts where name = 'Pat People' and customer_id = v_cust), 'S3: spouse moved, not primary');
+  perform tst.ok((select primary_contact_id from public.customers where id = v_cust) = v_cp, 'S3: the client keeps its main person');
+  perform tst.fails(format($q$select public.save_lead_people(%L, '[]'::jsonb)$q$, v_l), 'a lead with a client: edit the client''s people');
+  -- a client without people (made elsewhere): the lead's main person becomes its main person
+  insert into public.leads (company_id, source_id, contact_name, phone)
+  select 'ca000000-0000-0000-0000-000000000000', id, 'Fresh Lead', '(818) 555-0630' from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'
+  returning id into v_l3;
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'Fresh Lead') returning id into v_cust3;
+  update public.leads set customer_id = v_cust3 where id = v_l3;
+  perform tst.ok((select c.name = 'Fresh Lead' and c.is_primary and c.role = 'main' from public.customers u join public.contacts c on c.id = u.primary_contact_id where u.id = v_cust3), 'S3: lead main person is the new client main person');
+end $$;
+\echo 'T17 lead people ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'
