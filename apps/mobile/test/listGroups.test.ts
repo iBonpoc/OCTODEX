@@ -1,7 +1,7 @@
 /** Estimate list groups: the contractor's turn first (spec 06, PR4). */
 import { describe, expect, it } from "vitest";
 import { timing } from "@octo/design-tokens";
-import { estimateGroup, inEstimateFilter } from "@/features/listGroups";
+import { estimateGroup, inEstimateFilter, inListFilter, invoiceGroup } from "@/features/listGroups";
 
 const NOW = new Date("2026-11-05T15:00:00").getTime();
 const ago = (d: number) => new Date(NOW - d * 86_400_000).toISOString();
@@ -25,5 +25,26 @@ describe("estimate groups", () => {
     expect(inEstimateFilter("done", "closed")).toBe(true);
     expect(inEstimateFilter("waiting", "closed")).toBe(false);
     expect(inEstimateFilter("waiting", "all") && inEstimateFilter("done", "all")).toBe(true);
+  });
+});
+
+describe("invoice groups", () => {
+  const day = (offset: number) => {
+    const d = new Date(NOW);
+    d.setDate(d.getDate() + offset);
+    return d.toISOString().slice(0, 10) + "T12:00:00";
+  };
+  it("overdue or due today / tomorrow → needs action", () => {
+    expect(invoiceGroup({ totalCents: 100, paidCents: 0, dueDate: day(-3) }, NOW)).toBe("action");
+    expect(invoiceGroup({ totalCents: 100, paidCents: 50, dueDate: day(1) }, NOW)).toBe("action");
+  });
+  it("owes, due later → waiting; paid (or overpaid) → done", () => {
+    expect(invoiceGroup({ totalCents: 100, paidCents: 0, dueDate: day(10) }, NOW)).toBe("waiting");
+    expect(invoiceGroup({ totalCents: 100, paidCents: 100, dueDate: day(-30) }, NOW)).toBe("done");
+    expect(invoiceGroup({ totalCents: 100, paidCents: 150, dueDate: day(-30) }, NOW)).toBe("done");
+  });
+  it("filters work the same for invoices", () => {
+    expect(inListFilter("action", "open") && inListFilter("waiting", "open") && !inListFilter("done", "open")).toBe(true);
+    expect(inListFilter("done", "closed")).toBe(true);
   });
 });

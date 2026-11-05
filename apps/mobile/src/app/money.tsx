@@ -4,18 +4,48 @@ import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { InvoicesBoard } from "@/features/boards";
-import type { Invoice, PaymentMethod } from "@/data/types";
+import type { Expense, Invoice, PaymentMethod } from "@/data/types";
+import { CardGrid, ListCard } from "@/ui/listCard";
+import type { FactKey } from "@/ui/listCardLayout";
+import { useDevice } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ItemCard, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
 
+/** desktop row columns for expenses */
+const EXP_COLUMNS: FactKey[] = ["work", "by"];
+const monthFmt = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" });
+
 /** Owner's money view: overdue → awaiting → paid. Manual payments now, Stripe in wave 4. */
 export default function Money() {
   const { t, money, day } = useI18n();
   const { db } = useStore();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
+
+  const { device } = useDevice();
+  // expenses by month, newest first; dates in US format (rule 7)
+  const months = [...db.expenses.slice().sort((a, b) => b.at.localeCompare(a.at)).reduce((m, x) => m.set(x.at.slice(0, 7), [...(m.get(x.at.slice(0, 7)) ?? []), x]), new Map<string, Expense[]>())];
+  /** an expense has no screen to open yet: the card has no tap and no contact buttons, nothing is written from it */
+  const expenseCard = (x: Expense) => {
+    const job = x.jobId ? db.jobs.find((j) => j.id === x.jobId) : undefined;
+    const client = job ? db.customers.find((c) => c.id === db.properties.find((p) => p.id === job.propertyId)?.customerId) : undefined;
+    return (
+      <ListCard
+        key={x.id}
+        title={x.vendor}
+        when={day(x.at)}
+        lead={{ kind: "icon", icon: x.receiptUri ? "camera" : "dollar" }}
+        value={`−${money(x.amountCents)}`}
+        // category first, «no receipt» as a grey tag: not a status (map §5 has no expense status)
+        tags={[t(`exp.cat.${x.category}`), ...(x.receiptUri ? [] : [t("card.tag.noReceipt")])]}
+        facts={{ work: job ? [job.title, client?.name].filter(Boolean).join(" · ") : t("card.noJob"), by: db.members.find((m) => m.id === x.memberId)?.name }}
+        density={device === "desktop" ? "row" : "rich"}
+        columns={EXP_COLUMNS}
+      />
+    );
+  };
 
   return (
     <Screen
@@ -27,19 +57,14 @@ export default function Money() {
     >
       <InvoicesBoard />
       {db.expenses.length ? (
-        <View style={{ gap: space[2] }}>
+        <View style={{ gap: space[3] }}>
           <SectionTitle title={`${t("money.expenses")} · ${money(db.expenses.reduce((s, x) => s + x.amountCents, 0))}`} />
-          <CardList>
-            {db.expenses.map((x, n) => (
-              <View key={x.id}>
-                <ItemCard
-                  title={x.vendor}
-                  subtitle={`${t(`exp.cat.${x.category}`)} · ${day(x.at)}${x.jobId ? ` · ${db.jobs.find((j) => j.id === x.jobId)?.title ?? ""}` : ""}`}
-                  right={<T v="body" w="semibold" tabular>{money(x.amountCents)}</T>}
-                />
-              </View>
-            ))}
-          </CardList>
+          {months.map(([m, xs]) => (
+            <View key={m} style={{ gap: space[2] }}>
+              <T v="caption" w="semibold" tone="mut">{`${monthFmt.format(new Date(xs[0]!.at))} · ${money(xs.reduce((s, x) => s + x.amountCents, 0))}`}</T>
+              {device === "tablet" ? <CardGrid>{xs.map(expenseCard)}</CardGrid> : <CardList>{xs.map(expenseCard)}</CardList>}
+            </View>
+          ))}
         </View>
       ) : null}
     </Screen>

@@ -2,8 +2,9 @@
  * Groups of list cards (docs/specs/06-list-cards.md): what needs the contractor first, then drafts, then waiting, then done.
  * Pure functions, unit-tested in test/listGroups.test.ts.
  */
-import type { Estimate } from "@/data/types";
-import { estimateSigns } from "./listSigns";
+import type { Estimate, Invoice } from "@/data/types";
+import { estimateSigns, invoiceSigns } from "./listSigns";
+import { invoiceState } from "./invoiceStatus";
 
 export type EstimateGroup = "action" | "drafts" | "waiting" | "done";
 export const ESTIMATE_GROUPS: readonly EstimateGroup[] = ["action", "drafts", "waiting", "done"];
@@ -22,3 +23,13 @@ export function estimateGroup(e: Pick<Estimate, "status" | "sentAt">, now = Date
 /** filter chips: open = everything still in work (action, drafts, waiting); closed = done */
 export type EstimateFilter = "open" | "closed" | "all";
 export const inEstimateFilter = (g: EstimateGroup, f: EstimateFilter) => f === "all" || (f === "closed" ? g === "done" : g !== "done");
+
+/** invoices: action — a sign (overdue N days, due today / tomorrow); waiting — owes, not urgent; done — paid */
+export type InvoiceGroup = "action" | "waiting" | "done";
+export const INVOICE_GROUPS: readonly InvoiceGroup[] = ["action", "waiting", "done"];
+export function invoiceGroup(i: Pick<Invoice, "totalCents" | "paidCents" | "dueDate">, now = Date.now()): InvoiceGroup {
+  if (invoiceState(i) === "paid") return "done";
+  return invoiceSigns(i, now).length ? "action" : "waiting";
+}
+/** same chips as estimates: open = not done */
+export const inListFilter = (g: string, f: EstimateFilter) => f === "all" || (f === "closed" ? g === "done" : g !== "done");
