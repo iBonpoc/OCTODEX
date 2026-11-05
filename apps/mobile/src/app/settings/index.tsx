@@ -109,7 +109,7 @@ export default function Settings() {
                 full
                 value={role}
                 onChange={changeRole}
-                items={(["tech", "dispatcher", "director"] as Role[]).filter((r) => availableRoles.includes(r)).map((r) => ({ key: r, label: t(`role.${r}`) }))}
+                items={(["tech", "dispatcher", "director", "sales"] as Role[]).filter((r) => availableRoles.includes(r)).map((r) => ({ key: r, label: t(`role.${r}`) }))}
               />
               <T v="caption" tone="mut">
                 {t("role.hint")}

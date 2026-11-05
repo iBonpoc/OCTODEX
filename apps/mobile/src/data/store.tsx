@@ -22,7 +22,7 @@ import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { inheritCategory } from "@/features/serviceCategories";
-import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, nextStep } from "@/features/schedule";
+import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, nextStep, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
@@ -70,8 +70,12 @@ export interface BookAt {
   start: string;
   durationMin: number;
   techId: ID | null;
+  /** everyone on the visit (wave П3a); without it — [techId] */
+  assigneeIds?: ID[];
   note?: string;
 }
+/** the people of a new visit: the list, or the one tech of old callers */
+const peopleOf = (at: { techId: ID | null; assigneeIds?: ID[] }): ID[] => [...new Set(at.assigneeIds ?? (at.techId ? [at.techId] : []))];
 const isOpenLeadStatus = (s: LeadStatus) => s !== "won" && s !== "lost" && s !== "declined";
 
 interface StoreCtx {
@@ -133,7 +137,8 @@ interface StoreCtx {
   addInspection: (propertyId: ID, at: BookAt) => { id: ID; undo: Undo };
   /** the office sent the client the time (an SMS / email app was opened with the text, or it was copied) */
   markNotified: (visitId: ID) => Undo;
-  assignVisit: (visitId: ID, techId: ID) => Undo;
+  /** the whole list of people on a visit ([] = «Снять всех»); only before the tech is on site */
+  assignVisit: (visitId: ID, userIds: ID[]) => Undo;
   resetDemo: () => Undo;
   addLead: (l: Omit<Lead, "id" | "status" | "receivedAt">) => { id: ID; undo: Undo };
   addEstimate: (e: Omit<Estimate, "id">) => Undo;
@@ -203,7 +208,7 @@ interface StoreCtx {
   saveContact: (c: CompanyContact) => Undo;
   removeContact: (id: ID) => Undo;
   /** contractor picks date, time, duration and (optionally) the tech → a visit appears in the plan */
-  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null; visitId?: ID; note?: string }) => Undo;
+  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null; assigneeIds?: ID[]; visitId?: ID; note?: string }) => Undo;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -289,7 +294,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const modeRef = useRef(mode);
   modeRef.current = mode;
 
-  const availableRoles: Role[] = mode === "cloud" ? appRoles(company!.role) : ["tech", "dispatcher", "director"];
+  const availableRoles: Role[] = mode === "cloud" ? appRoles(company!.role) : ["tech", "dispatcher", "director", "sales"];
   useEffect(() => {
     if (!availableRoles.includes(role)) setRole(availableRoles[0]!);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -722,14 +727,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             visits: [
               ...d.visits,
               {
-                id: ids.visitId, leadId: id, propertyId: target.propertyId, kind: "inspection", techId: at.techId, start: at.start, durationMin: at.durationMin, step: "scheduled",
-                scope: [at.note?.trim(), l.message].filter((x): x is string => !!x), checklist: [], photos: [], amountDueCents: 0,
+                id: ids.visitId, leadId: id, propertyId: target.propertyId, kind: "inspection", techId: peopleOf(at)[0] ?? null, assigneeIds: peopleOf(at), start: at.start, durationMin: at.durationMin, step: "scheduled",
+                // the note for the tech is its own field (visits.notes, wave П3b); the lead's message stays the scope
+                note: at.note?.trim() || undefined, scope: [l.message].filter((x): x is string => !!x), checklist: [], photos: [], amountDueCents: 0,
               },
             ],
           }),
           {
             k: "visit.inspection", leadId: id, propertyId: target.propertyId, visitId: ids.visitId, start: at.start, durationMin: at.durationMin,
-            techId: at.techId, scope: [at.note?.trim(), l.message].filter((x): x is string => !!x),
+            techId: peopleOf(at)[0] ?? null, assigneeIds: peopleOf(at), note: at.note?.trim() || undefined, scope: [l.message].filter((x): x is string => !!x),
           },
         );
         return () => {
@@ -758,14 +764,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       addInspection: (propertyId, at) => {
         const id = at.visitId ?? uid();
-        const scope = [at.note?.trim()].filter((x): x is string => !!x);
+        const people = peopleOf(at);
+        const scope: string[] = [];
+        const note = at.note?.trim() || undefined;
         const undo = mutate(
           "visit.inspection",
           (d) => ({
             ...d,
-            visits: [...d.visits, { id, propertyId, kind: "inspection", techId: at.techId, start: at.start, durationMin: at.durationMin, step: "scheduled", scope, checklist: [], photos: [], amountDueCents: 0 }],
+            visits: [...d.visits, { id, propertyId, kind: "inspection", techId: people[0] ?? null, assigneeIds: people, start: at.start, durationMin: at.durationMin, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: 0 }],
           }),
-          { k: "visit.inspection", propertyId, visitId: id, start: at.start, durationMin: at.durationMin, techId: at.techId, scope },
+          { k: "visit.inspection", propertyId, visitId: id, start: at.start, durationMin: at.durationMin, techId: people[0] ?? null, assigneeIds: people, note, scope },
         );
         return { id, undo };
       },
@@ -794,8 +802,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         return { id, undo };
       },
-      assignVisit: (visitId, techId) =>
-        mutate("visit.assign", (d) => patchVisit(d, visitId, (v) => ({ ...v, techId })), { k: "visit.assign", visitId, userId: techId }),
+      assignVisit: (visitId, userIds) => {
+        const v = dbRef.current.visits.find((x) => x.id === visitId);
+        // people change only before the tech is on site (§4.1; the server refuses the same, public.assign_visit)
+        if (!v || !canReschedule(v)) return () => {};
+        const list = [...new Set(userIds)];
+        return mutate("visit.assign", (d) => patchVisit(d, visitId, (x) => withAssignees(x, list)), { k: "visit.assign", visitId, userIds: list });
+      },
       addEstimate: (e) => {
         const id = uid();
         const serviceCategoryId = inheritCategory(dbRef.current, { kind: "estimate", leadId: e.leadId, customerId: e.customerId }, e.serviceCategoryId);
@@ -1092,8 +1105,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const visitId = sch.visitId ?? uid();
         const opt = e?.doc && e.approval ? e.doc.options.find((o) => o.id === e.approval!.optionId) : undefined;
         const scope0 = opt ? opt.lines.filter((l) => l.name.trim() && (!l.optional || e!.approval!.addonIds.includes(l.id))).map((l) => l.name) : [job.title];
-        // a note for the tech goes first (the visit form, docs/specs/03 §7.1)
-        const scope = sch.note?.trim() ? [sch.note.trim(), ...scope0] : scope0;
+        // the note for the tech is its own field (visits.notes, wave П3b)
+        const scope = scope0;
+        const note = sch.note?.trim() || undefined;
         const paidDeposit = e?.depositPaidAt ? e.depositCents ?? 0 : 0;
         const due = Math.max(0, job.amountCents - paidDeposit);
         const end = new Date(new Date(sch.start).getTime() + sch.durationMin * 60_000).toISOString();
@@ -1104,11 +1118,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: "scheduled" } : j)),
             visits: [
               ...d.visits,
-              { id: visitId, jobId, techId: sch.techId, start: sch.start, durationMin: sch.durationMin, step: "scheduled", scope, checklist: [], photos: [], amountDueCents: due },
+              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },
             ],
             notices: d.notices.map((n) => (n.jobId === jobId ? { ...n, read: true } : n)),
           }),
-          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: sch.techId, scope },
+          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope },
         );
       },
       saveCompany: (patch) => {

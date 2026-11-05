@@ -10,19 +10,22 @@ import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { docLanguageFor } from "@/data/people";
-import { visitContext } from "@/data/selectors";
+import { visitContext, visitPropertyId } from "@/data/selectors";
 import type { CancelReason, ID, Visit } from "@/data/types";
 import { CANCEL_REASONS } from "@/data/types";
 import { tFor } from "@/i18n/translate";
 import { useI18n, type DictKey } from "@/i18n";
-import { atMinute, canReschedule, dayVisits, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { assigneesOf, atMinute, canPlan, canReschedule, dayVisits, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { AssignSheet } from "@/features/sheets";
+import { DatePick, dayOffsetOf } from "@/features/DatePick";
+import { dayKeyOf } from "@/features/calendar";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 
-export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; note: string };
+export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string };
 
 const startOfDay = (offset: number) => {
   const d = new Date();
@@ -44,42 +47,53 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** state of the form: day (0 = today), start minute, length, person, note; derived start and warnings */
-export function useVisitForm(init: { durationMin: number; techId?: ID | null; start?: string; exceptId?: ID }) {
-  const { db } = useStore();
+export function useVisitForm(init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID }) {
+  const { db, role } = useStore();
   const initStart = init.start ? new Date(init.start) : null;
   const initDay = initStart ? Math.max(0, Math.round((new Date(initStart).setHours(0, 0, 0, 0) - startOfDay(0).getTime()) / 86_400_000)) : 1;
   const [dayOffset, setDayOffset] = useState(initDay);
   const [duration, setDuration] = useState(init.durationMin);
-  const [techId, setTechId] = useState<ID | null>(init.techId ?? null);
+  // sales books without people: the office assigns (canPlan); a form for a visit that has people keeps them
+  const initTechs = init.techIds ?? (init.techId && canPlan([role]) ? [init.techId] : []);
+  // several people on a visit (wave П3a): the first one is techId; none = «Назначит диспетчер»
+  const [techIds, setTechIds] = useState<ID[]>(initTechs);
+  const techId = techIds[0] ?? null;
+  const setTechId = (id: ID | null) => { setTechIds(id ? [id] : []); setTouched(true); };
+  // the default person (the lead's owner, Р3) is only a preselection: the first person the user ticks replaces it;
+  // after that ticks add and untick (several people). People of an existing visit (techIds, «Перенести») are real: ticks add.
+  const [touched, setTouched] = useState(init.techIds !== undefined);
+  const toggleTech = (id: ID) => {
+    setTechIds((p) => (!touched && !p.includes(id) ? [id] : p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+    setTouched(true);
+  };
   const [note, setNote] = useState("");
   const day = startOfDay(dayOffset);
-  const slots = freeSlots(db, techId, day, duration, { exceptId: init.exceptId });
+  const slots = freeSlots(db, techIds, day, duration, { exceptId: init.exceptId });
   const [minute, setMinute] = useState<number | null>(initStart ? initStart.getHours() * 60 + initStart.getMinutes() : null);
   const startMin = minute ?? slots[0] ?? SCHEDULE_DEFAULTS.dayStartMin;
   const start = atMinute(day, startMin);
-  const warnings = formWarnings(db, { techId, start, durationMin: duration, exceptId: init.exceptId });
-  const value: VisitFormValue = { start, durationMin: duration, techId, note };
+  const warnings = formWarnings(db, { techId: techIds, start, durationMin: duration, exceptId: init.exceptId });
+  const value: VisitFormValue = { start, durationMin: duration, techId, assigneeIds: techIds, note };
   return {
-    value, day, dayOffset, setDayOffset, duration, setDuration, techId, setTechId, note, setNote, slots, startMin,
+    value, day, dayOffset, setDayOffset, duration, setDuration, techId, techIds, setTechId, toggleTech, note, setNote, slots, startMin,
     setMinute, warnings, past: warnings.some((w) => w.key === "past"), exceptId: init.exceptId,
-    dirty: dayOffset !== initDay || duration !== init.durationMin || techId !== (init.techId ?? null) || note.trim().length > 0 || (minute !== null && !initStart),
+    dirty: dayOffset !== initDay || duration !== init.durationMin || techIds.join() !== initTechs.join() || note.trim().length > 0 || (minute !== null && !initStart),
   };
 }
 
 /** the fields, top to bottom as in §7.1: date → person (with the day's load) → time (free slots) → length → note → warnings → summary */
 export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof useVisitForm>; noteLabel?: boolean }) {
-  const { db } = useStore();
+  const { db, role } = useStore();
+  const planner = canPlan([role]);
   const { t, day, time } = useI18n();
-  const [moreDays, setMoreDays] = useState(false);
+  const [calendar, setCalendar] = useState(false);
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
-  const days = useMemo(
-    () =>
-      Array.from({ length: moreDays ? SCHEDULE_DEFAULTS.formDays * 2 : SCHEDULE_DEFAULTS.formDays }, (_, i) => ({
-        key: String(i),
-        label: i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : day(startOfDay(i).toISOString()),
-      })),
-    [t, day, moreDays],
-  );
+  const days = useMemo(() => {
+    const label = (i: number) => (i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : day(startOfDay(i).toISOString()));
+    const list = Array.from({ length: SCHEDULE_DEFAULTS.formDays }, (_, i) => ({ key: String(i), label: label(i) }));
+    // a day picked in «Другая дата» beyond the chips gets its own chip, so the choice is visible
+    return f.dayOffset >= SCHEDULE_DEFAULTS.formDays ? [...list, { key: String(f.dayOffset), label: label(f.dayOffset) }] : list;
+  }, [t, day, f.dayOffset]);
   const range = (v: Visit) => `${time(v.start)}–${time(new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString())}`;
   const load = (id: ID) => {
     const vs = dayVisits(db, id, f.day, f.exceptId);
@@ -89,15 +103,23 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
     <View style={{ gap: space[3] }}>
       <Field label={t("sch.date")}>
         <ChoiceChips value={String(f.dayOffset)} onChange={(k) => { f.setDayOffset(Number(k)); f.setMinute(null); }} items={days} />
-        {!moreDays ? <Button label={t("vf.moreDays")} size="sm" variant="ghost" onPress={() => setMoreDays(true)} /> : null}
+        <Button label={t("vf.otherDate")} icon="calendar" size="sm" variant="ghost" onPress={() => setCalendar((x) => !x)} />
+        {calendar ? (
+          <DatePick
+            value={dayKeyOf(f.day)}
+            onPick={(k) => { f.setDayOffset(dayOffsetOf(k)); f.setMinute(null); setCalendar(false); }}
+          />
+        ) : null}
       </Field>
       <Field label={t("sch.tech")}>
-        <View>
-          <ListRow title={`${f.techId === null ? "✓ " : ""}${t("vf.dispatcherAssigns")}`} onPress={() => f.setTechId(null)} />
+        {/* sales books, the office assigns (the server refuses sales: public.assign_visit) */}
+        {!planner ? <T v="body" tone="mut">{t("vf.dispatcherAssigns")}</T> : <T v="caption" tone="mut">{t("vf.techsHint")}</T>}
+        {planner ? <View>
+          <ListRow title={`${f.techIds.length === 0 ? "✓ " : ""}${t("vf.dispatcherAssigns")}`} onPress={() => f.setTechId(null)} />
           {techs.map((m) => (
-            <ListRow key={m.id} title={`${f.techId === m.id ? "✓ " : ""}${m.name}`} subtitle={load(m.id)} onPress={() => { f.setTechId(m.id); f.setMinute(null); }} />
+            <ListRow key={m.id} title={`${f.techIds.includes(m.id) ? "✓ " : ""}${m.name}`} subtitle={load(m.id)} onPress={() => { f.toggleTech(m.id); f.setMinute(null); }} />
           ))}
-        </View>
+        </View> : null}
       </Field>
       <Field label={t("sch.start")}>
         {f.slots.length ? (
@@ -131,9 +153,25 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
           date: day(f.value.start),
           from: time(f.value.start),
           to: time(new Date(new Date(f.value.start).getTime() + f.duration * 60_000).toISOString()),
-          who: f.techId ? techs.find((m) => m.id === f.techId)?.name ?? "" : t("vf.dispatcherAssigns"),
+          who: f.techIds.length ? f.techIds.map((id) => techs.find((m) => m.id === id)?.name ?? "").filter(Boolean).join(", ") : t("vf.dispatcherAssigns"),
         })}
       </T>
+    </View>
+  );
+}
+
+/** The head of the form (§7.1 п. 1): the address of the place; for a job — how many visits it has already */
+export function VisitFormHead({ propertyId, jobId, exceptId }: { propertyId?: ID; jobId?: ID; exceptId?: ID }) {
+  const { db } = useStore();
+  const { t } = useI18n();
+  const job = jobId ? db.jobs.find((j) => j.id === jobId) : undefined;
+  const p = db.properties.find((x) => x.id === (propertyId ?? job?.propertyId));
+  if (!p && !job) return null;
+  const n = job ? db.visits.filter((v) => v.jobId === job.id && v.id !== exceptId).length : 0;
+  return (
+    <View style={{ gap: space[1] }}>
+      {p ? <T v="body" tone="mut">{[p.address, p.city].filter(Boolean).join(", ")}</T> : null}
+      {job && n ? <T v="caption" tone="mut">{t("vf.visitsSoFar", { n })}</T> : null}
     </View>
   );
 }
@@ -143,7 +181,7 @@ export function VisitFormSheet({
   visible, onClose, title, saveLabel, init, onSave, withNote = true,
 }: {
   visible: boolean; onClose: () => void; title: string; saveLabel: string;
-  init: { durationMin: number; techId?: ID | null; start?: string; exceptId?: ID };
+  init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID; propertyId?: ID; jobId?: ID };
   onSave: (v: VisitFormValue) => ID | null; withNote?: boolean;
 }) {
   const f = useVisitForm(init);
@@ -157,6 +195,7 @@ export function VisitFormSheet({
   return (
     <>
       <Sheet visible={visible && !notifyId} onClose={onClose} title={title} dirty={f.dirty} onSave={f.past ? undefined : save}>
+        <VisitFormHead propertyId={init.propertyId} jobId={init.jobId} exceptId={init.exceptId} />
         <VisitFormFields f={f} noteLabel={withNote} />
         <Button label={saveLabel} icon="calendar" variant="primary" full disabled={f.past} onPress={save} />
       </Sheet>
@@ -254,11 +293,12 @@ export function WhenWho({ visitId }: { visitId: ID }) {
   const { db } = store;
   const { t, day, time } = useI18n();
   const toast = useToast();
-  const [sheet, setSheet] = useState<"move" | "cancel" | "notify" | null>(null);
+  const [sheet, setSheet] = useState<"move" | "cancel" | "notify" | "assign" | null>(null);
   const v = db.visits.find((x) => x.id === visitId);
   if (!v) return null;
   const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
-  const who = v.techId ? db.members.find((m) => m.id === v.techId)?.name ?? "" : t("vf.dispatcherAssigns");
+  const people = assigneesOf(v);
+  const who = people.length ? people.map((id) => db.members.find((m) => m.id === id)?.name ?? "").filter(Boolean).join(", ") : t("vf.dispatcherAssigns");
   const open = canReschedule(v);
   return (
     <Card>
@@ -272,6 +312,7 @@ export function WhenWho({ visitId }: { visitId: ID }) {
       {open ? (
         <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
           <Button label={t("vw.reschedule")} icon="calendar" variant="secondary" size="sm" onPress={() => setSheet("move")} />
+          <Button label={t("plan.assign")} icon="user" variant="secondary" size="sm" onPress={() => setSheet("assign")} />
           <Button label={t("vc.title")} icon="close" variant="secondary" size="sm" onPress={() => setSheet("cancel")} />
         </RowView>
       ) : null}
@@ -282,10 +323,10 @@ export function WhenWho({ visitId }: { visitId: ID }) {
           title={t("vw.reschedule")}
           saveLabel={t("vw.reschedule")}
           withNote={false}
-          init={{ durationMin: v.durationMin, techId: v.techId, start: v.start, exceptId: v.id }}
+          init={{ durationMin: v.durationMin, techIds: people, start: v.start, exceptId: v.id, propertyId: visitPropertyId(db, v), jobId: v.jobId }}
           onSave={(f) => {
             const undoMove = store.rescheduleVisit(v.id, f.start, f.durationMin);
-            const undoTech = f.techId && f.techId !== v.techId ? store.assignVisit(v.id, f.techId) : () => {};
+            const undoTech = f.assigneeIds.join() !== people.join() ? store.assignVisit(v.id, f.assigneeIds) : () => {};
             toast.show(t("vf.rescheduled", { date: day(f.start), time: time(f.start) }), () => { undoTech(); undoMove(); });
             // the client was told the old time: offer to tell the new one (§5.2)
             return v.customerNotifiedAt ? v.id : null;
@@ -295,6 +336,7 @@ export function WhenWho({ visitId }: { visitId: ID }) {
       {/* a cancelled visit leaves the screens: back to where the office came from (the toast keeps «Отменить») */}
       <CancelVisitSheet visitId={sheet === "cancel" ? v.id : null} onClose={() => setSheet(null)} onDone={() => (router.canGoBack() ? router.back() : router.replace("/plan"))} />
       <NotifySheet visitId={sheet === "notify" ? v.id : null} onClose={() => setSheet(null)} />
+      <AssignSheet visitId={sheet === "assign" ? v.id : null} onClose={() => setSheet(null)} />
     </Card>
   );
 }

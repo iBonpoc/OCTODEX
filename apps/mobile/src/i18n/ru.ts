@@ -3,6 +3,7 @@ export const ru = {
   "role.tech": "Мастер",
   "role.dispatcher": "Диспетчер",
   "role.director": "Директор",
+  "role.sales": "Продажи",
   "role.hint": "Один человек может совмещать роли. Главный экран меняется.",
 
   "tab.visits": "Выезды",
@@ -1392,6 +1393,7 @@ export const ru = {
   "card.morePeople": "Ещё людей: {n}",
   "card.moreReasons": "ещё причин: {n}",
   "card.val.paid": "оплачен",
+  "card.val.deposit": "депозит",
   "prop.h.visit": "Визит",
   "prop.h.estimate": "Смета",
   "prop.h.note": "Заметка",
@@ -1400,6 +1402,31 @@ export const ru = {
   "prop.noFiles": "Фото с визитов появятся здесь",
   "prop.photoBefore": "До работы",
   "prop.photoAfter": "После работы",
+  // П3a: several people on a visit (Лиды и клиенты)
+  "plan.assignSave": "Сохранить",
+  "plan.unassignAll": "Снять всех",
+  "plan.dayLoad": "Выездов в этот день: {n}",
+  "plan.onVisit": "На выезде",
+  "toast.unassigned": "Мастера сняты с выезда",
+  "vf.techsHint": "Можно отметить нескольких",
+  // П3b: the Plan tab (Лиды и клиенты)
+  "plan.waiting": "Ждут даты · {n}",
+  "plan.signedAgo": "подписал {n} дн назад",
+  "plan.signedToday": "подписал сегодня",
+  "plan.schedule": "Запланировать",
+  "plan.showAll": "Показать все",
+  "plan.who.all": "Все",
+  "plan.who.me": "Я",
+  "plan.add": "Записать в план",
+  "plan.addTitle": "Что записать",
+  "plan.addInspection": "Осмотр — выберите объект",
+  "plan.addJob": "Работа из «Ждут даты»",
+  "plan.search": "Имя или адрес",
+  "plan.emptyBook": "Записать осмотр",
+  "plan.kind.inspection": "Осмотр",
+  "plan.kind.job": "Работа",
+  "vf.otherDate": "Другая дата",
+  "vf.visitsSoFar": "Уже выездов: {n}",
 } as const;
 
 export type DictKey = keyof typeof ru;

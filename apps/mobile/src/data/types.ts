@@ -4,7 +4,8 @@ import type { CustomOption, CustomSettings, LineGroup } from "@octo/estimating-e
  * Local domain types (subset of docs/04-domain-model.md v0.3.1).
  * Same shape the Supabase/PowerSync layer will provide in wave 5. Money is integer cents.
  */
-export type Role = "tech" | "dispatcher" | "director";
+/** sales (wave П3a security check): the office without planning — leads, estimates, clients; does not move, assign or cancel visits */
+export type Role = "tech" | "dispatcher" | "director" | "sales";
 export type ID = string;
 
 export interface Member {
@@ -168,7 +169,12 @@ export interface Visit {
   id: ID;
   /** the job of the visit; an inspection has none (docs/specs/03 §3.1) */
   jobId?: ID;
+  /** the first person on the visit (kept for the screens that show one name); always assigneeIds[0] ?? null */
   techId: ID | null;
+  /** everyone on the visit (docs/specs/03 §7.4, wave П3a; server: visit_assignees). Missing in old saved data → [techId] */
+  assigneeIds?: ID[];
+  /** the note for the tech from the visit form (server: visits.notes, wave П3b) */
+  note?: string;
   start: string; // ISO
   durationMin: number;
   step: VisitStep;

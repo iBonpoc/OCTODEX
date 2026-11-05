@@ -10,12 +10,15 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { buildAttention } from "@/features/attention";
 import { AttentionPeople } from "@/features/AttentionCards";
 import { todayVisits, visitStatus } from "@/features/visits";
+import { crewNow } from "@/features/crewList";
+import { visitContext } from "@/data/selectors";
+import { ListCard } from "@/ui/listCard";
 import { useTick } from "@/features/sheets";
 import { NoticesCard } from "@/features/notices";
 import { CompanySetupCard, FirstStepsCard } from "@/features/SetupCards";
-import { Avatar, Button, Segmented, StatusChip } from "@/ui/controls";
+import { Button, Segmented } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
-import { Card, CardList, Divider, Grid, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Grid, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 function Kpi({ label, cents, icon, hint, onPress, width }: { label: string; cents: number; icon: IconKey; hint?: string; onPress?: () => void; width: number }) {
   const { moneyWhole } = useI18n();
@@ -77,7 +80,7 @@ function FunnelRow({ icon, label, value, share, onPress }: { icon: IconKey; labe
 /** Owner home: money for today / week / month, the sales funnel and what needs a decision. */
 export default function Today() {
   useTick();
-  const { t, day, moneyWhole } = useI18n();
+  const { t, day, time, moneyWhole } = useI18n();
   const { db, role } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
   const n = periodNumbers(db, period);
@@ -128,24 +131,40 @@ export default function Today() {
         </View>
         <View style={{ gap: space[2] }}>
           <SectionTitle title={t("today.crew")} right={<Button label={t("plan.title")} icon="calendar" size="sm" variant="ghost" onPress={() => router.push("/plan")} />} />
-          <CardList>
-            {techs.map((m, i) => {
+          {/* one list card per tech (spec 06, PR10a): where now, what next, call / SMS; a column like «Требует внимания» */}
+          <View style={{ gap: space[2] }}>
+            {techs.map((m) => {
               const vs = todayVisits(db, m.id);
-              const active = vs.find((v) => v.step !== "scheduled" && isOpenVisit(v)) ?? vs.find((v) => v.step === "scheduled");
-              const st = active ? visitStatus(active) : null;
+              const { current, next } = crewNow(vs);
+              const st = current ? visitStatus(current) : next ? visitStatus(next) : null;
+              const where = (v: typeof current) => {
+                if (!v) return undefined;
+                const { customer, property } = visitContext(db, v);
+                return [customer?.name, property ? `${property.address}, ${property.city}` : undefined].filter(Boolean).join(" · ");
+              };
               return (
-                <View key={m.id}>
-                  <ItemCard
-                    title={m.name}
-                    subtitle={t("visits.count", { n: vs.length })}
-                    left={<Avatar initials={m.initials} sub={m.kind === "sub"} />}
-                    right={st ? <StatusChip status={st.status} label={t(st.label)} /> : <StatusChip status="neutral" label={t("plan.free")} />}
-                    onPress={active ? () => router.push(`/visit/${active.id}`) : undefined}
-                  />
-                </View>
+                <ListCard
+                  key={m.id}
+                  testID="crew-card"
+                  title={m.name}
+                  when={t("visits.count", { n: vs.length })}
+                  lead={{ kind: "initials", text: m.initials, dashed: m.kind === "sub" }}
+                  // read only: the visit's own status (its steps move on the visit screen)
+                  status={st ? { tone: st.status, label: t(st.label) } : { tone: "neutral", label: t("plan.free") }}
+                  facts={{
+                    phone: m.phone,
+                    now: where(current),
+                    next: next ? [time(next.start), visitContext(db, next).customer?.name].filter(Boolean).join(" · ") : undefined,
+                  }}
+                  // a tech: call / SMS only (his address is not a place to go)
+                  contact={{ phone: m.phone }}
+                  edge={null}
+                  density="rich"
+                  onPress={() => router.push(current ? `/visit/${current.id}` : "/plan")}
+                />
               );
             })}
-          </CardList>
+          </View>
         </View>
       </Grid>
     </Screen>
