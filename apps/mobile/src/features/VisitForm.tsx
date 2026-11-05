@@ -10,13 +10,15 @@ import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { docLanguageFor } from "@/data/people";
-import { visitContext } from "@/data/selectors";
+import { visitContext, visitPropertyId } from "@/data/selectors";
 import type { CancelReason, ID, Visit } from "@/data/types";
 import { CANCEL_REASONS } from "@/data/types";
 import { tFor } from "@/i18n/translate";
 import { useI18n, type DictKey } from "@/i18n";
 import { assigneesOf, atMinute, canPlan, canReschedule, dayVisits, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { AssignSheet } from "@/features/sheets";
+import { DatePick, dayOffsetOf } from "@/features/DatePick";
+import { dayKeyOf } from "@/features/calendar";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -84,16 +86,14 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
   const { db, role } = useStore();
   const planner = canPlan([role]);
   const { t, day, time } = useI18n();
-  const [moreDays, setMoreDays] = useState(false);
+  const [calendar, setCalendar] = useState(false);
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
-  const days = useMemo(
-    () =>
-      Array.from({ length: moreDays ? SCHEDULE_DEFAULTS.formDays * 2 : SCHEDULE_DEFAULTS.formDays }, (_, i) => ({
-        key: String(i),
-        label: i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : day(startOfDay(i).toISOString()),
-      })),
-    [t, day, moreDays],
-  );
+  const days = useMemo(() => {
+    const label = (i: number) => (i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : day(startOfDay(i).toISOString()));
+    const list = Array.from({ length: SCHEDULE_DEFAULTS.formDays }, (_, i) => ({ key: String(i), label: label(i) }));
+    // a day picked in «Другая дата» beyond the chips gets its own chip, so the choice is visible
+    return f.dayOffset >= SCHEDULE_DEFAULTS.formDays ? [...list, { key: String(f.dayOffset), label: label(f.dayOffset) }] : list;
+  }, [t, day, f.dayOffset]);
   const range = (v: Visit) => `${time(v.start)}–${time(new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString())}`;
   const load = (id: ID) => {
     const vs = dayVisits(db, id, f.day, f.exceptId);
@@ -103,7 +103,13 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
     <View style={{ gap: space[3] }}>
       <Field label={t("sch.date")}>
         <ChoiceChips value={String(f.dayOffset)} onChange={(k) => { f.setDayOffset(Number(k)); f.setMinute(null); }} items={days} />
-        {!moreDays ? <Button label={t("vf.moreDays")} size="sm" variant="ghost" onPress={() => setMoreDays(true)} /> : null}
+        <Button label={t("vf.otherDate")} icon="calendar" size="sm" variant="ghost" onPress={() => setCalendar((x) => !x)} />
+        {calendar ? (
+          <DatePick
+            value={dayKeyOf(f.day)}
+            onPick={(k) => { f.setDayOffset(dayOffsetOf(k)); f.setMinute(null); setCalendar(false); }}
+          />
+        ) : null}
       </Field>
       <Field label={t("sch.tech")}>
         {/* sales books, the office assigns (the server refuses sales: public.assign_visit) */}
@@ -154,12 +160,28 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
   );
 }
 
+/** The head of the form (§7.1 п. 1): the address of the place; for a job — how many visits it has already */
+export function VisitFormHead({ propertyId, jobId, exceptId }: { propertyId?: ID; jobId?: ID; exceptId?: ID }) {
+  const { db } = useStore();
+  const { t } = useI18n();
+  const job = jobId ? db.jobs.find((j) => j.id === jobId) : undefined;
+  const p = db.properties.find((x) => x.id === (propertyId ?? job?.propertyId));
+  if (!p && !job) return null;
+  const n = job ? db.visits.filter((v) => v.jobId === job.id && v.id !== exceptId).length : 0;
+  return (
+    <View style={{ gap: space[1] }}>
+      {p ? <T v="body" tone="mut">{[p.address, p.city].filter(Boolean).join(", ")}</T> : null}
+      {job && n ? <T v="caption" tone="mut">{t("vf.visitsSoFar", { n })}</T> : null}
+    </View>
+  );
+}
+
 /** «Записать осмотр» / «+ Осмотр» / «Перенести» as one sheet; `onSave` returns the visit id (for «Сообщить клиенту?») */
 export function VisitFormSheet({
   visible, onClose, title, saveLabel, init, onSave, withNote = true,
 }: {
   visible: boolean; onClose: () => void; title: string; saveLabel: string;
-  init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID };
+  init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID; propertyId?: ID; jobId?: ID };
   onSave: (v: VisitFormValue) => ID | null; withNote?: boolean;
 }) {
   const f = useVisitForm(init);
@@ -173,6 +195,7 @@ export function VisitFormSheet({
   return (
     <>
       <Sheet visible={visible && !notifyId} onClose={onClose} title={title} dirty={f.dirty} onSave={f.past ? undefined : save}>
+        <VisitFormHead propertyId={init.propertyId} jobId={init.jobId} exceptId={init.exceptId} />
         <VisitFormFields f={f} noteLabel={withNote} />
         <Button label={saveLabel} icon="calendar" variant="primary" full disabled={f.past} onPress={save} />
       </Sheet>
@@ -300,7 +323,7 @@ export function WhenWho({ visitId }: { visitId: ID }) {
           title={t("vw.reschedule")}
           saveLabel={t("vw.reschedule")}
           withNote={false}
-          init={{ durationMin: v.durationMin, techIds: people, start: v.start, exceptId: v.id }}
+          init={{ durationMin: v.durationMin, techIds: people, start: v.start, exceptId: v.id, propertyId: visitPropertyId(db, v), jobId: v.jobId }}
           onSave={(f) => {
             const undoMove = store.rescheduleVisit(v.id, f.start, f.durationMin);
             const undoTech = f.assigneeIds.join() !== people.join() ? store.assignVisit(v.id, f.assigneeIds) : () => {};

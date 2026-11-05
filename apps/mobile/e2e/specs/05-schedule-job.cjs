@@ -33,9 +33,11 @@ exports.run = async (h) => {
   h.expect(v && v.techId === "m-ivan", "visit with the tech");
   h.expect(new Date(v.start).getHours() === 13 && new Date(v.start).getMinutes() === 0, `the picked slot: ${v.start}`);
   h.expect(v.durationMin === 135, `length of the job (120 + 15): ${v.durationMin}`);
-  h.expect(v.scope[0] === "Gate code at the office", "note for the tech first");
+  h.expect(v.note === "Gate code at the office" && !v.scope.includes("Gate code at the office"), "note for the tech: its own field (wave П3b)");
   h.expect(!v.customerNotifiedAt, "«Не сейчас»: the client is not marked as told");
   h.expect(db.jobs.find((j) => j.id === job.id).status === "scheduled", "job scheduled");
+  await h.go(`/visit/${v.id}`);
+  await h.expectText(/Заметка мастеру[\s\S]*Gate code at the office/, "the note is on the visit card");
   await h.go("/plan");
   for (let i = 0; i < 3; i++) await h.page.getByRole("button", { name: "Вперёд" }).last().click();
   await h.page.waitForTimeout(400);
