@@ -12,6 +12,7 @@ import { CardList, Empty, ItemCard, SectionTitle } from "@/ui/surfaces";
 const estView: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
   draft: { s: "neutral", l: "st.draft" },
   sent: { s: "info", l: "st.sent" },
+  awaiting_countersign: { s: "warn", l: "est.awaitingCountersign" },
   approved: { s: "ok", l: "st.approved" },
   declined: { s: "bad", l: "st.declined" },
 };

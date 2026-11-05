@@ -21,7 +21,9 @@ import {
   type HistoryKind,
 } from "@/features/clients";
 import { PeopleSheet, StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
-import type { CustomerStatus, EstimateStatus, JobStatus, Person } from "@/data/types";
+import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
+import { propertyTitle } from "@/features/properties";
+import type { CustomerStatus, EstimateStatus, JobStatus, Person, Property } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { Button, ChoiceChips, IconButton, Segmented, StatusChip, TagChip, TextField } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
@@ -42,6 +44,7 @@ const jobSt: Record<JobStatus, { s: StatusName; l: DictKey }> = {
 const estSt: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
   draft: { s: "neutral", l: "st.draft" },
   sent: { s: "info", l: "st.sent" },
+  awaiting_countersign: { s: "warn", l: "est.awaitingCountersign" },
   approved: { s: "ok", l: "st.approved" },
   declined: { s: "bad", l: "st.declined" },
 };
@@ -63,6 +66,7 @@ export default function ClientScreen() {
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   const statusRef = useRef<React.ComponentRef<typeof View>>(null);
   const [hist, setHist] = useState<"all" | HistoryKind>("all");
+  const [newProp, setNewProp] = useState<Property | null>(null);
   const [taskTitle, setTaskTitle] = useState("");
   const back = () => (router.canGoBack() ? router.back() : router.replace("/clients"));
   const c = visibleClients(db, role).find((x) => x.id === id);
@@ -148,10 +152,10 @@ export default function ClientScreen() {
         {props.map((p) => (
           <ListRow
             key={p.id}
-            title={p.address || p.city}
+            title={propertyTitle(p)}
             subtitle={p.address ? p.city : undefined}
             left={<Icon name="pin" />}
-            onPress={() => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(`${p.address}, ${p.city}`)}`)}
+            onPress={() => router.push(`/property/${p.id}`)}
           />
         ))}
         {office && c.sourceId ? (
@@ -205,28 +209,31 @@ export default function ClientScreen() {
     </>
   );
 
-  const properties =
-    props.length === 0 ? (
-      <Empty icon="home2" title={t("client.empty.properties")} hint={t("client.empty.propertiesHint")} />
-    ) : (
-      <CardList>
-        {props.map((p) => {
-          const pj = jobs.filter((j) => j.propertyId === p.id && j.status !== "done");
-          return (
-            <Card key={p.id}>
-              <T v="heading">{p.address || p.city}</T>
-              <T v="caption" tone="mut">
-                {p.city}
-              </T>
-              {pj.map((j) => (
-                <ListRow key={j.id} title={j.title} right={<StatusChip status={jobSt[j.status].s} label={t(jobSt[j.status].l)} />} onPress={() => router.push(`/job/${j.id}`)} />
-              ))}
-              {office ? <Button label={t("est.new")} icon="invoice" variant="secondary" size="sm" onPress={() => router.push(`/estimate/new?customerId=${c.id}&propertyId=${p.id}`)} /> : null}
-            </Card>
-          );
-        })}
-      </CardList>
-    );
+  // C2: one card per property; the card opens the property (address, now, access, people)
+  const properties = (
+    <>
+      {office ? <Button label={t("prop.add")} icon="plus" variant="secondary" onPress={() => setNewProp(newProperty(c.id))} /> : null}
+      {props.length === 0 ? (
+        <Empty icon="home2" title={t("client.empty.properties")} hint={t("client.empty.propertiesHint")} />
+      ) : (
+        <CardList>
+          {props.map((p) => {
+            const open = jobs.filter((j) => j.propertyId === p.id && j.status !== "done").length;
+            return (
+              <ItemCard
+                key={p.id}
+                title={propertyTitle(p)}
+                subtitle={[p.city, p.label].filter(Boolean).join(" · ")}
+                left={<Icon name="pin" />}
+                right={open ? <StatusChip status="info" label={t("prop.openJobs", { n: open })} /> : undefined}
+                onPress={() => router.push(`/property/${p.id}`)}
+              />
+            );
+          })}
+        </CardList>
+      )}
+    </>
+  );
 
   const historyTab = (
     <>
@@ -442,6 +449,7 @@ export default function ClientScreen() {
         items={statusOptions.map((s) => ({ key: s, label: t(clientStatusChip[s].l), selected: s === status, destructive: s === "do_not_service" }))}
       />
       <PeopleSheet visible={sheet === "people"} customer={c} onClose={() => setSheet(null)} />
+      <PropertySheet value={newProp} onClose={() => setNewProp(null)} />
       <TagsSheet visible={sheet === "tags"} customer={c} onClose={() => setSheet(null)} />
       <StatusSheet visible={sheet === "status"} customer={c} preset="do_not_service" onClose={() => setSheet(null)} />
     </Screen>

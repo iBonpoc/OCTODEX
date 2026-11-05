@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { themes, type ThemeName } from "../src/index";
+import { print, themes, type ThemeName } from "../src/index";
 
 /** WCAG 2.x contrast. Translucent colours are composited over the solid background first. */
 type RGBA = [number, number, number, number];
@@ -50,5 +50,12 @@ describe.each(names)("%s theme contrast (DS rule: text ≥ 4.5:1)", (name) => {
     for (const st of ["ok", "info", "warn", "bad"] as const) {
       expect(ratio(parse(c.status[st].on), parse(c.status[st].fill)), st).toBeGreaterThanOrEqual(4.5);
     }
+  });
+});
+
+describe("print contrast on paper (documents for the client: text ≥ 4.5:1)", () => {
+  const paper = parse(print.paper);
+  it.each([["ink", print.ink], ["mut", print.mut], ["okText", print.okText]])("%s on paper", (_n, c) => {
+    expect(ratio(parse(c), paper)).toBeGreaterThanOrEqual(4.5);
   });
 });

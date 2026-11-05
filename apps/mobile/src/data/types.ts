@@ -78,7 +78,7 @@ export interface Person {
   role: PersonRole;
   phones: PersonPhone[];
   emails: PersonEmail[];
-  language?: "en" | "es";
+  language?: import("@/i18n/translate").DocLang;
 }
 
 /** Company tag on clients (VIP, Regular…): neutral, never coloured (colour is only for statuses). */
@@ -90,12 +90,27 @@ export interface Tag {
   system?: boolean;
 }
 
+export const PROPERTY_KINDS = ["single_family", "multi_family", "commercial", "hoa_common"] as const;
+export type PropertyKind = (typeof PROPERTY_KINDS)[number];
 export interface Property {
   id: ID;
   customerId: ID;
+  /** street line (line1) */
   address: string;
+  /** shown line: "City, ST zip" (built from place when it is known) */
   city: string;
   stories: number;
+  /** C2 (docs/specs/04 §3): apartment / suite, the city / state / zip apart, a label ("Home", "Rental"), the kind */
+  unit?: string;
+  place?: { city: string; state?: string; zip?: string };
+  label?: string;
+  kind?: PropertyKind;
+  /** dog, side gate, parking — whoever sees the property sees these */
+  accessNotes?: string;
+  /** office always; a tech only on the day of their visit and the day before (server: app.can_see_gate_code) */
+  gateCode?: string;
+  /** people of the property: links to the client's people (tenant, property manager) */
+  contactIds?: ID[];
 }
 
 /** unscheduled: client signed, the contractor has not picked a date yet (not in the plan) */
@@ -141,6 +156,8 @@ export interface Visit {
   signature?: string; // SVG path data
   payment?: { method: PaymentMethod; amountCents: number; at: string };
   late?: boolean;
+  /** the visit ended without the client's payment step: completed or no-show on the server (cancelled visits are not loaded) */
+  closed?: boolean;
 }
 
 /**
@@ -176,7 +193,7 @@ export interface Lead {
   email?: string;
   preferredContact?: ContactWay;
   /** client documents and messages in this language */
-  language?: "en" | "es";
+  language?: import("@/i18n/translate").DocLang;
   /** job address */
   address?: string;
   city: string;
@@ -261,7 +278,8 @@ export interface Activity {
   actorId: ID;
 }
 
-export const ESTIMATE_STATUSES = ["draft", "sent", "approved", "declined"] as const;
+/** awaiting_countersign: the client signed remotely, an employee has not signed for the company yet (docs/specs/07 §4, S8b) */
+export const ESTIMATE_STATUSES = ["draft", "sent", "awaiting_countersign", "approved", "declined"] as const;
 export type EstimateStatus = (typeof ESTIMATE_STATUSES)[number];
 
 /** Universal estimate content (trade-agnostic): options → lines in groups, add-ons, discount, tax, deposit. */
@@ -385,6 +403,8 @@ export interface Company {
   address: Address;
   mailingAddress?: Address;
   timezone: string;
+  /** language of what goes to clients when the client's own is not known (en in the US); docLanguageFor decides */
+  docLanguage?: import("@/i18n/translate").DocLang;
   trades: string[];
   brand: { logo?: string; color?: string };
   insurance: { cglCarrier?: string; cglPolicy?: string; wcCarrier?: string; wcPolicy?: string; wcExempt?: boolean };
