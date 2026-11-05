@@ -24,8 +24,12 @@ exports.run = async (h) => {
   for (const s of [nameOf(job), job.title, "Запланирован"]) h.expect(txt.includes(s), `job card shows «${s}»: ${txt.slice(0, 200)}`);
   h.expect(/\$[\d,]+/.test(txt), "office sees the amount");
   const visit = db.visits.filter((v) => v.jobId === job.id).sort((a, b) => a.start.localeCompare(b.start)).find((v) => v.step !== "paid" && v.step !== "done");
-  const tech = visit?.techId && db.members.find((m) => m.id === visit.techId);
-  if (tech) h.expect(txt.includes(tech.name), `the next visit's tech «${tech.name}» on the card`);
+  // everyone assigned to the next visit (assigneeIds, else techId)
+  const ids = visit ? (visit.assigneeIds?.length ? visit.assigneeIds : visit.techId ? [visit.techId] : []) : [];
+  for (const id of ids) {
+    const m = db.members.find((x) => x.id === id);
+    if (m) h.expect(txt.includes(m.name), `assigned «${m.name}» on the card`);
+  }
   h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…» on the screen");
   await p.evaluate(() => window.scrollTo(0, 0));
   await checkCardAlignment(h, { reference: (pg) => pg.getByRole("radiogroup").first(), min: 1 });
@@ -45,5 +49,5 @@ exports.run = async (h) => {
   h.expect(cards.length > 0, "the tech sees the jobs");
   for (const c of cards) h.expect(!/\$[\d,]+/.test(c), `tech sees no amount: ${c.slice(0, 160)}`);
   await h.shot("tech");
-  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("owner")));
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 };

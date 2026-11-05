@@ -19,8 +19,12 @@ describe("nextVisitOf", () => {
 });
 
 describe("visitPeople", () => {
-  const members = [{ id: "m1", name: "Carlos" }] as DB["members"];
-  it("the assigned tech", () => expect(visitPeople({ members }, v("a", "x", "scheduled", "m1")).map((m) => m.name)).toEqual(["Carlos"]));
+  const members = [{ id: "m1", name: "Carlos" }, { id: "m2", name: "Dana" }] as DB["members"];
+  it("an old visit with only techId: that tech", () => expect(visitPeople({ members }, v("a", "x", "scheduled", "m1")).map((m) => m.name)).toEqual(["Carlos"]));
+  it("everyone in assigneeIds, in their order (after #105)", () => {
+    const visit = { ...v("a", "x", "scheduled", "m1"), assigneeIds: ["m2", "m1"] } as Visit;
+    expect(visitPeople({ members }, visit).map((m) => m.name)).toEqual(["Dana", "Carlos"]);
+  });
   it("nobody assigned or no visit → empty", () => {
     expect(visitPeople({ members }, v("a", "x", "scheduled"))).toEqual([]);
     expect(visitPeople({ members }, undefined)).toEqual([]);

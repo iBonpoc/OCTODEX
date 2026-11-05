@@ -4,6 +4,8 @@
  */
 import type { DB } from "@/data/types";
 import { addDays, addMonths, isoDayKey, todayKey, weekStart, type DayKey } from "./calendar";
+import { estimateListAmount } from "./estimateDoc";
+import { invoiceBalance } from "./invoiceStatus";
 
 export type Period = "today" | "week" | "month";
 
@@ -51,10 +53,11 @@ export function periodNumbers(db: DB, p: Period, today?: DayKey): PeriodNumbers 
     leads,
     sent,
     signed: signedList.length,
-    signedCents: signedList.reduce((s, e) => s + e.totalCents, 0),
+    // the same amounts as the lists (agreed with the list-cards chat): what the client signed, not the estimate total
+    signedCents: signedList.reduce((s, e) => s + estimateListAmount(e).cents, 0),
     receivedCents: pays.reduce((s, x) => s + x.amountCents, 0),
     payments: pays.length,
-    awaitingCents: db.invoices.reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0),
+    awaitingCents: db.invoices.reduce((s, i) => s + invoiceBalance(i).owesCents, 0),
     leadToSentPct: pct(sent, leads),
     sentToSignedPct: pct(signedList.length, sent),
   };
@@ -83,6 +86,6 @@ export function figureItems(db: DB, f: Figure, p: Period, today?: DayKey): Figur
     case "received":
       return { ...none, payments: db.payments.filter((x) => inRange(x.at, r)).sort(newest((x) => x.at)) };
     case "awaiting":
-      return { ...none, invoices: db.invoices.filter((i) => i.totalCents - i.paidCents > 0).sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "")) };
+      return { ...none, invoices: db.invoices.filter((i) => invoiceBalance(i).owesCents > 0).sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "")) };
   }
 }

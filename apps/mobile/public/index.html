@@ -1,0 +1,50 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- viewport-fit=cover: the app draws under the home indicator (and the notch in landscape); safe-area insets keep content clear. -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>OCTODEX</title>
+    <!-- Home Screen icon opens as an app: no Safari address bar or toolbar. -->
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-title" content="OCTODEX" />
+    <!-- "default": iOS draws the status bar itself, so the clock stays readable in the light theme too
+         ("black-translucent" = white clock over our light bg). Read once when the icon is added. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+    <!-- Colors = theme bg tokens (packages/design-tokens: dark.bg / light.bg), checked by test/pwa.test.ts. -->
+    <meta name="theme-color" content="#24272D" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#EFEBE5" media="(prefers-color-scheme: light)" />
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      html,
+      body {
+        height: 100%;
+        background-color: #24272D;
+      }
+      @media (prefers-color-scheme: light) {
+        html,
+        body {
+          background-color: #EFEBE5;
+        }
+      }
+      body {
+        overflow: hidden;
+        overscroll-behavior: none;
+      }
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript> You need to enable JavaScript to run this app. </noscript>
+    <div id="root"></div>
+  </body>
+</html>
