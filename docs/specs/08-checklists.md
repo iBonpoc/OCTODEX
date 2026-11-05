@@ -148,11 +148,56 @@
 
 ## 10. Волны и вопросы основателю
 
-Кто строит: экраны выезда (`app/visit/*`), карточки работ и настройки — не мои файлы. Код по этой спецификации — после решения, какой чат его ведёт (я — только стартовые шаблоны модуля Gutters, `src/modules/gutters/**`).
+Кто строит (договорились с чатом «Leads tab implementation» 05.11): **шаблоны** — экран настройки, данные, база, тесты, `checklistFor`, `checklistGate` — чат «Сметы и Gutters»; **показ и отметка пунктов на экране выезда** (`app/visit/**`) — чат «Leads tab implementation» в волне «Осмотр и План», по интерфейсу §10.1.
+
+### 10.1 Интерфейс для экрана выезда
+
+Экран выезда только **читает** и **вызывает мутации**; правила считают чистые функции из `src/features/checklist.ts` (мой файл).
+
+Что читает:
+```ts
+// src/data/types.ts (изменение — моим маленьким PR после сообщения ведущему чату)
+type ChecklistItemKind = "check" | "photo";
+type NaReason = "not_on_site" | "client_refused" | "unsafe" | "other";
+interface ChecklistItem {
+  id: ID; label: string; done: boolean;           // как сейчас
+  kind: ChecklistItemKind;                         // старые пункты читаются как "check"
+  required: boolean;                               // старые пункты читаются как true (как ведёт себя код сейчас)
+  hint?: string; templateId?: ID; templateName?: string;
+  doneBy?: ID; doneAt?: string;
+  na?: { reason: NaReason; text?: string; by: ID; at: string };
+  photoIds?: ID[];                                 // id из visit.photos (пункт-фото)
+}
+// Visit.checklist: ChecklistItem[] — без изменений по имени
+
+// src/features/checklist.ts
+function checklistGate(visit: Visit, settings: VisitSettings): {
+  canStartWork: boolean;                           // on_site → working
+  canSign: boolean;                                // working → signed
+  missing: { items: ID[]; photosBefore: number; photosAfter: number };
+};
+function itemClosed(item: ChecklistItem): boolean; // done || na
+function visitSettings(db: DB): VisitSettings;     // настройки компании с умолчаниями
+```
+
+Какие мутации стора вызывает (`store.tsx`, все возвращают `undo`, работают офлайн):
+```ts
+checkItem(visitId: ID, itemId: ID, done: boolean): Undo;
+markItemNa(visitId: ID, itemId: ID, reason: NaReason, text?: string): Undo;
+attachItemPhoto(visitId: ID, itemId: ID, uri: string): Undo; // кладёт фото в visit.photos (kind по шагу визита) и id в item.photoIds
+// офис/директор, до начала выезда:
+addVisitItem(visitId: ID, label: string, required: boolean): Undo;
+removeVisitItem(visitId: ID, itemId: ID): Undo;              // обязательный — только director
+addVisitTemplate(visitId: ID, templateId: ID): Undo;         // «Добавить из шаблона», без дублей
+```
+
+Что экран выезда показывает (§7.3): счётчик «Осталось обязательных: N» из `missing.items.length`; подсказку из `missing` у кнопки шага; «Не применимо» — шторка с `NaReason`. Существующие `toggleCheck` и `before.length === 0` на экране заменяются на `checkItem` и `checklistGate`. Ключи i18n — блок `chk.`.
+
+Порядок: мой PR с типами, `checklist.ts`, мутациями и тестами (unit:checklistGate) — первым; экран выезда подключается после его слияния.
 
 | Волна | Что |
 |---|---|
-| **CH1** | `ChecklistItem` с `required/kind/na`, `checklistGate`, экран выезда, настройки фото, миграция `visit_checklist_items` + `visit_settings` |
+| **CH1** | `ChecklistItem` с `required/kind/na`, `checklistGate`, мутации §10.1, настройки фото, миграция `visit_checklist_items` + `visit_settings` (мой PR); экран выезда — ведущий чат |
 | **CH2** | Шаблоны: список, редактор, привязка к услугам, `checklistFor` при S4/S9, «Каждый выезд» по умолчанию; тестовый `jobChecklist` из `seed.ts` убирается |
 | **CH3** | Правка пунктов у работы офисом; стартовые шаблоны Gutters (в волне модуля) |
 
