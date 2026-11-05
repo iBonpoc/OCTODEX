@@ -64,7 +64,7 @@ countersign_estimate → app.execute_estimate → insert email_outbox (kind 'sig
 `email_outbox` (она же журнал), поля:
 - `id`, `company_id`, `estimate_id`, `kind` (`signed_copy`);
 - `to_email` — заполняется функцией в момент отправки;
-- `lang`, `status` (`queued` | `sent` | `failed` | `skipped_no_email` | `skipped_off` | `not_configured`);
+- `lang`, `status` (`queued` | `sending` | `sent` | `failed` | `skipped_no_email` | `skipped_off` | `not_configured` | `rate_limited` | `expired`);
 - `attempts`, `provider_id`, `error`, `created_at`, `sent_at`, `requested_by` (для повторов).
 
 Ограничения:
@@ -107,7 +107,17 @@ countersign_estimate → app.execute_estimate → insert email_outbox (kind 'sig
 ## 7. План PR (новый чат смет)
 
 1. **П1a, база:** `email_outbox`, вставка в `execute_estimate`, `resend_signed_copy`, тесты базы.
-2. **П1b, функция:** `send-email`, `_shared/mailer.ts`, `_shared/emailText.ts`, Deno-тесты, runbook оператора, вебхук (настройка — в runbook).
+   Сделано (миграция `20261105350000_email_outbox.sql`, тест базы T37):
+   - `public.email_outbox` (очередь и журнал), чтение — owner, admin, office; запись — только функции;
+   - `app.enqueue_signed_copy` из `app.execute_estimate`: одна автоматическая строка на договор (`on conflict do nothing`), ошибки очереди перехватываются, подпись не откатывается;
+   - первый статус ставит база: выкл в настройках → `skipped_off`; нет email → `skipped_no_email`; лимит → `rate_limited`; иначе `queued`;
+   - лимиты: 3 повтора на смету, не чаще раза в 10 минут; 20 в сутки на компанию; 90 в сутки на площадку; `skipped_*` и `rate_limited` в лимит не входят;
+   - `public.resend_signed_copy` (owner, admin, office): «Отправить ещё раз» — отдельная строка, ручной повтор не зависит от автокопии;
+   - для функции П1b: `public.email_claim` (забрать строку один раз, адрес читается из карточки клиента в момент отправки, строка старше суток → `expired`) и `public.email_finish` (`sent` / `failed` / `not_configured`, `p_final` после 4xx) — только `service_role`;
+   - `app.clean_email` (один ASCII-адрес ≤ 254, без `\r\n , ; ? <>`), `app.email_outbox_purge` (адреса старше 2 лет);
+   - `public.reissue_estimate_link` (§9.7): новая ссылка подписанной сметы, старый токен — в `revoked_link_tokens`.
+   **Перенесено в П1b** (решение руководителя 05.11): триггер `after insert` через `pg_net`, секрет вебхука в Vault, `pg_cron` повторов и ежедневной очистки. Функции отправки ещё нет, а в локальной базе тестов нет `pg_net`, `pg_cron` и Vault. До П1b строки копятся в `queued`, наружу ничего не уходит.
+2. **П1b, функция:** `send-email`, `_shared/mailer.ts`, `_shared/emailText.ts`, Deno-тесты, runbook оператора, триггер `pg_net` + Vault + `pg_cron` (из П1a).
 3. **П1c, приложение:** статус в карточке сметы, «Отправить ещё раз», переключатель (по согласованию), e2e. Общие файлы — отдельным маленьким PR.
 
 ## 8. Вопросы основателю
@@ -156,6 +166,27 @@ countersign_estimate → app.execute_estimate → insert email_outbox (kind 'sig
     - миграция проходит на чистой и текущей базе, `pg_net` и Vault есть локально.
 
 **Вопрос основателю В4.** Resend хранит адрес и текст письма со ссылкой на договор у себя, в США. Это допустимо (`docs/security/…` п. 5)? Если нет — нужен другой путь отправки.
+
+## 9a. Второй аудит security-check (П1a, код) — что сделано и что осталось
+
+Сделано в П1a:
+- лимиты считаются под одной блокировкой (`pg_advisory_xact_lock`), параллельные подписи лимит не обходят;
+- `email_claim` перепроверяет смету в момент отправки: удалена, не `approved` или без ссылки → `expired`; автокопию выключили после постановки → `skipped_off`;
+- мусор в `autoSendSignedCopy` (не `true`) читается как «выкл» и не роняет очередь; тест: очередь сломана → подпись и работа на месте;
+- `error` — только символы кода (`[a-z0-9_.:-]`, ≤ 64); `app.clean_email` без `%` и `!`, локальная часть ≤ 64; берётся первый чистый адрес клиента;
+- `rate_limited` не съедает ручной повтор и не запускает окно 10 минут;
+- строка очереди связана со сметой своей компании (`(company_id, estimate_id)`).
+
+Осталось (П1b или решение):
+- **Вопрос руководителю.** Лимит площадки 90 в сутки может съесть одна-две компании. Тогда копии остальных компаний получат `rate_limited`, а это статус конечный. Варианты: а) меньший лимит для новых компаний; б) `pg_cron` досылает `rate_limited` моложе суток на следующий день; в) оператору приходит оповещение при 80 % лимита. Рекомендую б + в в П1b.
+- `pg_cron` в П1b:
+  - строку, зависшую в `sending` дольше 15 минут, переводить в `failed`;
+  - проходить и `queued`: строки, созданные до П1b, уйдут в `expired`.
+- Токен ссылки для письма читать в момент отправки (после `reissue_estimate_link`).
+- Предупреждение `email_outbox: signed copy not queued` в логе базы — завести оповещение (П1b).
+- «Кто менял email» (§9.7) берётся из `updated_by` строки адреса — это приблизительно: любая правка строки адреса меняет `updated_by`. Отдельное поле — если понадобится.
+- `cleanEmail` в приложении (`contactLinks.ts`) сверить с `app.clean_email` (`%`, `!`, локальная часть ≤ 64) — в П1c.
+- Статусы письма внести в `docs/15-story-map.md` §5 (общий файл, через руководителя).
 
 ## 10. Решения основателя (05.11.2026)
 
