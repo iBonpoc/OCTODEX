@@ -1,14 +1,14 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { component, font, icons, motion, radius, size, space, themes } from "../src/index";
+import { component, font, icons, motion, print, radius, size, space, themes } from "../src/index";
 
 /**
  * The founder's design system (design/naryad-ds/tokens/*.css, icons.json) is the source of truth.
  * This test fails as soon as a value in the app tokens differs from it — e.g. after a new DS export is dropped in.
  */
 const DS = join(__dirname, "../../../design/naryad-ds/tokens");
-const css = ["foundation.css", "components.css", "theme.css", "status.css"].map((f) => readFileSync(join(DS, f), "utf8")).join("\n");
+const css = ["foundation.css", "components.css", "theme.css", "status.css", "print.css"].map((f) => readFileSync(join(DS, f), "utf8")).join("\n");
 
 /** var value in a block: ":root" or [data-theme="dark|light"] (theme blocks fall back to :root) */
 function block(sel: string): string {
@@ -99,5 +99,32 @@ describe("app tokens mirror the founder's DS css", () => {
   it("icons are exactly the DS icon set", () => {
     const ds = JSON.parse(readFileSync(join(DS, "icons.json"), "utf8")).icons as Record<string, string>;
     expect(icons).toEqual(ds);
+  });
+});
+
+describe("print tokens mirror print.css (docs/specs/07 §2.2 В, §3.4)", () => {
+  it("paper, ink, page and base type", () => {
+    expect(norm(print.paper)).toBe(norm(v("print-paper")));
+    expect(norm(print.ink)).toBe(norm(v("print-ink")));
+    expect(norm(print.mut)).toBe(norm(v("print-mut")));
+    expect(norm(print.rule)).toBe(norm(v("print-rule")));
+    expect(norm(print.okText)).toBe(norm(v("print-ok-text")));
+    expect(print.pagePadMm).toBe(px("print-page-pad-mm"));
+    expect(print.fontPt).toEqual({ title: px("print-fs-title"), heading: px("print-fs-heading"), body: px("print-fs-body"), small: px("print-fs-small") });
+  });
+  it.each(["classic", "modern", "compact"] as const)("%s style", (name) => {
+    const s = print.styles[name];
+    const k = (x: string) => `print-${name}-${x}`;
+    expect(s.fontPt).toEqual({ title: px(k("fs-title")), heading: px(k("fs-heading")), body: px(k("fs-body")), small: px(k("fs-small")) });
+    expect(s.rowPadPt).toBe(px(k("row-pad")));
+    expect(s.headRulePx).toBe(px(k("head-rule")));
+    expect(s.brandBandPt).toBe(px(k("brand-band")));
+    expect(s.logoPt).toBe(px(k("logo")));
+    expect(s.logoSide).toBe(v(k("logo-side")));
+    expect(s.sectionGapPt).toBe(px(k("section-gap")));
+  });
+  it("the default style is the base print type (classic)", () => expect(print.styles.classic.fontPt).toEqual(print.fontPt));
+  it("no colours in the styles: the brand band colour is a company setting", () => {
+    expect(JSON.stringify(print.styles)).not.toMatch(/#[0-9a-f]{3,8}|rgba?\(/i);
   });
 });
