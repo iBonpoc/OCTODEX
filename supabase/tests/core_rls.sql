@@ -850,5 +850,356 @@ begin
 end $$;
 \echo 'T15 leads L1 ok'
 
+-- ---------------------------------------------------------------- T16: clients C1 (number, people phones/emails, tags)
+:as_owner_a
+do $$
+declare v_c uuid; v_c2 uuid; n1 text; n2 text; v_p uuid; v_tag uuid; v_tag2 uuid;
+begin
+  insert into public.customers (company_id, display_name, number) values ('ca000000-0000-0000-0000-000000000000', 'Client numbered', 'CLT-9999') returning id, number into v_c, n1;
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'Client numbered 2') returning id, number into v_c2, n2;
+  perform tst.ok(n1 ~ '^CLT-\d{4,}$' and n1 <> 'CLT-9999', 'client gets a server number CLT-0001; the app cannot pick it');
+  perform tst.ok(n2 > n1, 'client numbers grow');
+  update public.customers set number = 'CLT-0000' where id = v_c;
+  perform tst.ok((select number from public.customers where id = v_c) = n1, 'the client number never changes');
+  perform tst.ok((select count(*) from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000' and number is null) = 0, 'every client has a number (old ones numbered by the migration)');
+  -- a person with two phones and an email; one primary of each
+  insert into public.contacts (company_id, customer_id, name, role, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_c, 'Anna Cee', 'main', true) returning id into v_p;
+  insert into public.contact_phones (company_id, contact_id, number, label, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_p, '(818) 555-0101', 'mobile', true);
+  insert into public.contact_phones (company_id, contact_id, number, label) values ('ca000000-0000-0000-0000-000000000000', v_p, '(818) 555-0102', 'work');
+  insert into public.contact_emails (company_id, contact_id, address, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_p, 'anna@example.com', true);
+  perform tst.ok((select count(*) from public.contact_phones where contact_id = v_p) = 2, 'two phones on one person');
+  perform tst.fails(format($q$insert into public.contact_phones (company_id, contact_id, number, is_primary) values ('ca000000-0000-0000-0000-000000000000', %L, '(818) 555-0103', true)$q$, v_p), 'only one primary phone per person');
+  perform tst.fails(format($q$insert into public.contact_phones (company_id, contact_id, number, label) values ('ca000000-0000-0000-0000-000000000000', %L, '1', 'fax')$q$, v_p), 'unknown phone label refused');
+  perform tst.fails(format($q$insert into public.contact_emails (company_id, contact_id, address) values ('ca000000-0000-0000-0000-000000000000', %L, 'not-an-email')$q$, v_p), 'email without @ refused');
+  perform tst.fails(format($q$insert into public.contacts (company_id, customer_id, name, role) values ('ca000000-0000-0000-0000-000000000000', %L, 'X', 'cousin')$q$, v_c), 'unknown person role refused');
+  insert into public.contacts (company_id, customer_id, name, role) values ('ca000000-0000-0000-0000-000000000000', v_c, 'Bob Cee', 'assistant');
+  -- tags: default list seeded; set on the client; no duplicates by name
+  perform tst.ok((select count(*) from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and is_system) = 4, 'four default tags');
+  select id into v_tag from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'VIP';
+  insert into public.tags (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'Pool owner') returning id into v_tag2;
+  perform tst.fails($q$insert into public.tags (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'vip')$q$, 'tag names are unique (any case)');
+  insert into public.customer_tags (company_id, customer_id, tag_id) values ('ca000000-0000-0000-0000-000000000000', v_c, v_tag), ('ca000000-0000-0000-0000-000000000000', v_c, v_tag2);
+  perform tst.ok((select count(*) from public.customer_tags where customer_id = v_c) = 2, 'client has two tags');
+  delete from public.customer_tags where customer_id = v_c and tag_id = v_tag2;
+  perform tst.ok((select count(*) from public.customer_tags where customer_id = v_c) = 1, 'tag removed from the client');
+  update public.tags set is_active = false where id = v_tag2;
+end $$;
+-- one-transaction writes (RPC), deleted rows, system and hidden tags
+:as_owner_a
+do $$
+declare v_c uuid; v_p uuid; v_tc uuid; v_tp uuid; v_vip uuid; v_off uuid; v_q uuid := 'a1600000-0000-4000-8000-000000000001';
+begin
+  select id into v_c from public.customers where display_name = 'Client numbered';
+  select id into v_vip from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'VIP';
+  select id into v_off from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Pool owner';
+  -- people saved in one call: Anna (2 phones) stays main, Bob removed, Quinn added
+  perform public.save_customer_people(v_c, jsonb_build_array(
+    jsonb_build_object('id', (select id from public.contacts where customer_id = v_c and name = 'Anna Cee'), 'name', 'Anna Cee', 'role', 'main',
+      'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0111', 'label', 'mobile', 'primary', true), jsonb_build_object('number', '(818) 555-0112', 'label', 'home')),
+      'emails', jsonb_build_array(jsonb_build_object('address', 'anna@example.com', 'primary', true))),
+    jsonb_build_object('id', v_q, 'name', 'Quinn Cee', 'role', 'tenant', 'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0113', 'label', 'mobile', 'primary', true)), 'emails', '[]'::jsonb)));
+  perform tst.ok((select count(*) from public.contacts where customer_id = v_c and deleted_at is null) = 2, 'people replaced: Bob removed, Quinn added');
+  perform tst.ok((select name from public.contacts where id = (select primary_contact_id from public.customers where id = v_c)) = 'Anna Cee', 'first person is the main one');
+  perform tst.ok((select phone from public.contacts where name = 'Anna Cee' and customer_id = v_c) = '(818) 555-0111', 'contact keeps the main phone for search');
+  perform tst.ok((select count(*) from public.contact_phones p join public.contacts c on c.id = p.contact_id where c.customer_id = v_c and p.deleted_at is null) = 3, 'live phones: 2 + 1; old ones soft-deleted');
+  perform tst.ok((select count(*) from public.contact_phones p join public.contacts c on c.id = p.contact_id where c.name = 'Bob Cee' and p.deleted_at is null) = 0, 'removed person has no live phones');
+  -- a refused email rolls the whole call back: nothing lost
+  perform tst.fails(format($q$select public.save_customer_people(%L, '[{"id":"%s","name":"Quinn Cee","role":"tenant","phones":[],"emails":[{"address":"bad"}]}]'::jsonb)$q$, v_c, v_q), 'invalid email refused');
+  perform tst.ok((select count(*) from public.contact_phones p join public.contacts c on c.id = p.contact_id where c.customer_id = v_c and p.deleted_at is null) = 3, 'refused save changed nothing');
+  -- a person of another client cannot be taken over
+  select id into v_tc from public.customers where display_name = 'Client numbered 2';
+  perform tst.fails(format($q$select public.save_customer_people(%L, '[{"id":"%s","name":"Thief","role":"main","phones":[],"emails":[]}]'::jsonb)$q$, v_tc, v_q), 'person of another client refused');
+  -- tags in one call; hidden tag cannot be put on a client; standard tag keeps its name
+  perform public.set_customer_tags(v_c, array[v_vip, v_vip]);
+  perform tst.ok((select count(*) from public.customer_tags where customer_id = v_c) = 1, 'tags set in one call (duplicates folded)');
+  perform tst.fails(format($q$select public.set_customer_tags(%L, array[%L]::uuid[])$q$, v_c, v_off), 'hidden tag refused');
+  perform tst.ok((select count(*) from public.customer_tags where customer_id = v_c) = 1, 'refused tags changed nothing');
+  perform tst.fails(format($q$update public.tags set name = 'Very important' where id = %L$q$, v_vip), 'standard tag keeps its name');
+  perform tst.fails($q$insert into public.tags (company_id, name, is_system) values ('ca000000-0000-0000-0000-000000000000', 'Fake system', true)$q$, 'nobody makes a system tag by hand');
+  perform tst.fails(format($q$insert into public.customer_tags (company_id, customer_id, tag_id, created_by) values ('ca000000-0000-0000-0000-000000000000', %L, %L, 'a0000000-0000-0000-0000-000000000003')$q$, v_c, v_vip), 'author of a client tag cannot be faked');
+  -- the tech's own client: a live and a deleted phone
+  select distinct j.customer_id into v_tc from public.jobs j join public.visits v on v.job_id = j.id join public.visit_assignees a on a.visit_id = v.id
+   where a.user_id = 'a0000000-0000-0000-0000-000000000003' and j.company_id = 'ca000000-0000-0000-0000-000000000000' limit 1;
+  select id into v_tp from public.contacts where customer_id = v_tc and deleted_at is null limit 1;
+  insert into public.contact_phones (company_id, contact_id, number, label) values ('ca000000-0000-0000-0000-000000000000', v_tp, 'LIVE-1', 'mobile');
+  insert into public.contact_phones (company_id, contact_id, number, label, deleted_at) values ('ca000000-0000-0000-0000-000000000000', v_tp, 'DELETED-OLD', 'mobile', now());
+end $$;
+-- tech: sees live phones only of clients of own visits, cannot write phones or tags
+:as_tech_a
+do $$ begin
+  perform tst.ok(tst.cnt($q$select 1 from public.contact_phones where number = 'LIVE-1'$q$) = 1, 'tech sees the phone of own client');
+  perform tst.ok(tst.cnt($q$select 1 from public.contact_phones where number = 'DELETED-OLD'$q$) = 0, 'tech does not see a deleted phone');
+  perform tst.ok(tst.cnt($q$select 1 from public.contact_phones where number = '(818) 555-0111'$q$) = 0, 'tech does not see phones of other clients');
+  perform tst.ok(tst.cnt('select 1 from public.tags') >= 4, 'tech reads the tag list');
+  perform tst.fails($q$insert into public.tags (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'Tech tag')$q$, 'tech cannot add tags');
+  perform tst.fails($q$insert into public.contact_phones (company_id, contact_id, number) select company_id, contact_id, 'X' from public.contact_phones where number = 'LIVE-1'$q$, 'tech cannot add phones');
+  perform tst.fails($q$select public.set_customer_tags((select id from public.customers limit 1), '{}')$q$, 'tech cannot set client tags');
+  perform tst.ok(tst.cnt($q$select 1 from public.customer_tags ct join public.customers c on c.id = ct.customer_id where c.display_name = 'Client numbered'$q$) = 0, 'tech does not see tags of other clients');
+end $$;
+:as_owner_b
+do $$ declare n text;
+begin
+  insert into public.customers (company_id, display_name) values ('cb000000-0000-0000-0000-000000000000', 'B client') returning number into n;
+  perform tst.ok(n ~ '^CLT-\d{4,}$', 'company B numbers its own clients');
+  perform tst.ok((select count(*) from public.contact_phones where number = '(818) 555-0101') = 0, 'phones isolated between companies');
+  perform tst.ok((select count(*) from public.tags where name = 'Pool owner') = 0, 'tags isolated between companies');
+  perform tst.ok((select count(*) from public.tags where company_id = 'cb000000-0000-0000-0000-000000000000') = 4, 'company B has its own default tags');
+  perform tst.ok((select count(*) from public.contact_emails where address = 'anna@example.com') = 0, 'emails isolated between companies');
+  perform tst.ok((select count(*) from public.customer_tags) = 0, 'client tags isolated between companies');
+  perform tst.fails($q$insert into public.contact_phones (company_id, contact_id, number) select 'cb000000-0000-0000-0000-000000000000', id, 'X' from public.contacts where false union all select 'cb000000-0000-0000-0000-000000000000', 'ca000000-0000-0000-0000-0000000000ff'::uuid, 'X'$q$, 'company B cannot add a phone to a contact it cannot see');
+end $$;
+\echo 'T16 clients C1 ok'
+
+-- ---------------------------------------------------------------- T17: lead people (L2 part 2), people move to the client (S3)
+:as_owner_a
+do $$
+declare v_src uuid; v_l uuid; v_l2 uuid; v_main uuid; v_pat uuid := 'a1700000-0000-4000-8000-000000000001'; v_c text;
+begin
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.leads (company_id, source_id, contact_name, phone, phone2, phone2_label, email)
+  values ('ca000000-0000-0000-0000-000000000000', v_src, 'People Lead', '(818) 555-0601', '(818) 555-0602', 'work', 'people@example.com') returning id into v_l;
+  select id into v_main from public.contacts where lead_id = v_l and customer_id is null and is_primary and deleted_at is null;
+  perform tst.ok(v_main is not null, 'a new lead gets its main person');
+  perform tst.ok((select count(*) from public.contact_phones where contact_id = v_main and deleted_at is null) = 2, 'main person has both phones of the lead');
+  perform tst.ok((select count(*) from public.contact_emails where contact_id = v_main and is_primary) = 1, 'main person has the lead email');
+  update public.leads set contact_name = 'People Lead Renamed' where id = v_l;
+  perform tst.ok((select name from public.contacts where id = v_main) = 'People Lead Renamed', 'renaming the lead renames its main person');
+  -- all people in one call: main (2 phones, the second primary), spouse Pat
+  perform public.save_lead_people(v_l, jsonb_build_array(
+    jsonb_build_object('id', v_main, 'name', 'ignored', 'role', 'main',
+      'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0611', 'label', 'home'), jsonb_build_object('number', '(818) 555-0612', 'label', 'mobile', 'primary', true)),
+      'emails', '[]'::jsonb),
+    jsonb_build_object('id', v_pat, 'name', 'Pat People', 'role', 'spouse',
+      'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0613', 'label', 'mobile', 'primary', true)), 'emails', '[]'::jsonb)));
+  perform tst.ok((select count(*) from public.contacts where lead_id = v_l and customer_id is null and deleted_at is null) = 2, 'lead has two people');
+  perform tst.ok((select name from public.contacts where id = v_main) = 'People Lead Renamed', 'the main person keeps the lead name');
+  perform tst.ok((select phone = '(818) 555-0612' and email is null and phone2 is null from public.leads where id = v_l), 'lead caches the main primary phone; email cleared; phone2 retired');
+  perform tst.fails(format($q$select public.save_lead_people(%L, '[{"id":"%s","name":"x","phones":[],"emails":[{"address":"bad"}]}]'::jsonb)$q$, v_l, v_main), 'invalid email refused');
+  perform tst.ok((select count(*) from public.contact_phones p join public.contacts c on c.id = p.contact_id where c.lead_id = v_l and p.deleted_at is null) = 3, 'refused save changed nothing');
+  insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', v_src, 'Other Lead', '(818) 555-0620') returning id into v_l2;
+  perform tst.fails(format($q$select public.save_lead_people(%L, '[{"id":"%s","name":"Thief","phones":[],"emails":[]}]'::jsonb)$q$, v_l2, v_pat), 'person of another lead refused');
+  perform tst.fails($q$insert into public.contacts (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'Nobody')$q$, 'a person belongs to a client or a lead');
+end $$;
+-- another company sees nothing and cannot write
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.contacts where lead_id = (select id from public.leads where contact_name = 'People Lead Renamed')$q$) = 0, 'other company: no lead people');
+select tst.ok(tst.cnt($q$select 1 from public.contacts c join public.leads l on l.id = c.lead_id where l.company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'other company: no lead people at all');
+-- a tech sees the people of a lead only when the lead is theirs, and then edits them
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.contacts c join public.contact_phones p on p.contact_id = c.id where c.name = 'Pat People'$q$) = 0, 'tech: not their lead, no people');
+:as_owner_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where contact_name = 'People Lead Renamed';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.contacts where name = 'Pat People' and deleted_at is null$q$) = 1, 'tech: their lead, sees its people');
+select tst.ok(tst.cnt($q$select 1 from public.contact_phones p join public.contacts c on c.id = p.contact_id where c.name = 'Pat People' and p.deleted_at is null$q$) = 1, 'tech: sees their phones');
+select public.save_lead_people((select id from public.leads where contact_name = 'People Lead Renamed'), jsonb_build_array(
+  jsonb_build_object('id', (select id from public.contacts where name = 'People Lead Renamed' and deleted_at is null), 'role', 'main',
+    'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0611', 'label', 'home'), jsonb_build_object('number', '(818) 555-0612', 'label', 'mobile', 'primary', true)),
+    'emails', jsonb_build_array(jsonb_build_object('address', 'people@example.com', 'primary', true))),
+  jsonb_build_object('id', 'a1700000-0000-4000-8000-000000000001', 'name', 'Pat People', 'role', 'spouse',
+    'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0613', 'label', 'mobile', 'primary', true)), 'emails', '[]'::jsonb)));
+select tst.ok((select email from public.leads where contact_name = 'People Lead Renamed') = 'people@example.com', 'tech saved the people of their lead');
+-- lead → client (S3): the client made from the lead has the lead phone (as the app makes it); people merge, the spouse moves
+:as_owner_a
+do $$
+declare v_l uuid; v_cust uuid; v_cp uuid; v_c text; v_l3 uuid; v_cust3 uuid;
+begin
+  select id into v_l from public.leads where contact_name = 'People Lead Renamed';
+  insert into public.customers (company_id, display_name, status) values ('ca000000-0000-0000-0000-000000000000', 'People Lead Renamed', 'prospect') returning id into v_cust;
+  insert into public.contacts (company_id, customer_id, name, phone, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_cust, 'People Lead Renamed', '818.555.0612', true) returning id into v_cp;
+  update public.customers set primary_contact_id = v_cp where id = v_cust;
+  update public.leads set customer_id = v_cust where id = v_l;
+  perform tst.ok((select count(*) from public.contacts where lead_id = v_l and customer_id is null and deleted_at is null) = 0, 'S3: the lead keeps no people of its own');
+  perform tst.ok((select count(*) from public.contacts where customer_id = v_cust and deleted_at is null) = 2, 'S3: client has the merged main person and the spouse');
+  select string_agg(number || ':' || is_primary, ',' order by position) into v_c from public.contact_phones where contact_id = v_cp and deleted_at is null;
+  perform tst.ok(v_c = '818.555.0612:true,(818) 555-0611:false', format('S3: client person gets the missing phone, no duplicate (%s)', v_c));
+  perform tst.ok((select count(*) from public.contact_emails where contact_id = v_cp and address = 'people@example.com' and is_primary) = 1, 'S3: and the email');
+  perform tst.ok((select role = 'spouse' and not is_primary from public.contacts where name = 'Pat People' and customer_id = v_cust), 'S3: spouse moved, not primary');
+  perform tst.ok((select primary_contact_id from public.customers where id = v_cust) = v_cp, 'S3: the client keeps its main person');
+  perform tst.fails(format($q$select public.save_lead_people(%L, '[]'::jsonb)$q$, v_l), 'a lead with a client: edit the client''s people');
+  -- a client without people (made elsewhere): the lead's main person becomes its main person
+  insert into public.leads (company_id, source_id, contact_name, phone)
+  select 'ca000000-0000-0000-0000-000000000000', id, 'Fresh Lead', '(818) 555-0630' from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'
+  returning id into v_l3;
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'Fresh Lead') returning id into v_cust3;
+  update public.leads set customer_id = v_cust3 where id = v_l3;
+  perform tst.ok((select c.name = 'Fresh Lead' and c.is_primary and c.role = 'main' from public.customers u join public.contacts c on c.id = u.primary_contact_id where u.id = v_cust3), 'S3: lead main person is the new client main person');
+end $$;
+\echo 'T17 lead people ok'
+
+-- ---------------------------------------------------------------- T17b: client language (company default for documents)
+:as_owner_a
+select tst.ok((select doc_language from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'en', 'documents to clients are in English by default');
+update public.companies set doc_language = 'es' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select doc_language from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'es', 'owner sets Spanish for client documents');
+update public.companies set doc_language = 'ru' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.fails($q$update public.companies set doc_language = 'fr' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'client documents: English, Spanish or Russian only');
+select tst.ok((select count(*) from pg_constraint where conname in ('contacts_preferred_language_check', 'leads_language_check') and pg_get_constraintdef(oid) like '%ru%') = 2, 'a person and a lead can read Russian too');
+update public.contacts set preferred_language = 'ru' where name = 'Pat People';
+select tst.fails($q$update public.contacts set preferred_language = 'fr' where name = 'Pat People'$q$, 'unknown person language refused');
+update public.companies set doc_language = 'en' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.blocked($q$update public.companies set doc_language = 'es' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'tech cannot change the company document language');
+:as_owner_a
+select tst.ok((select doc_language from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'en', 'still English after the tech tried');
+\echo 'T17b client language ok'
+
+-- ---------------------------------------------------------------- T20: properties C2 — people of a property, gate code by the day
+:as_owner_a
+do $$
+declare v_c uuid := 'c2000000-0000-4000-8000-000000000001'; k int; v_p uuid; v_j uuid; v_v uuid;
+  -- property → visit offset in days for tech 3 (null: no visit), status
+  plan text[][] := array[['0','scheduled'], ['1','scheduled'], ['3','scheduled'], ['-1','scheduled'], ['0','cancelled']];
+begin
+  insert into public.customers (id, company_id, display_name) values (v_c, 'ca000000-0000-0000-0000-000000000000', 'Gate Client');
+  for k in 1..5 loop
+    v_p := ('d2000000-0000-4000-8000-00000000000' || k)::uuid;
+    v_j := ('e2000000-0000-4000-8000-00000000000' || k)::uuid;
+    v_v := ('f2000000-0000-4000-8000-00000000000' || k)::uuid;
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Gate St', 'Pasadena', 1);
+    insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#' || k || '42');
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Gate job ' || k, v_c, v_p, 'scheduled');
+    insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j, now() + (plan[k][1] || ' days')::interval);
+    if plan[k][2] <> 'scheduled' then update public.visits set status = plan[k][2] where id = v_v; end if;
+    insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
+  end loop;
+  perform tst.ok((select count(*) from public.property_secrets where property_id::text like 'd2000000%') = 5, 'office sees every gate code');
+  -- people of a property: links to the client's people
+  update public.properties set contact_ids = array['a1700000-0000-4000-8000-000000000001'::uuid], access_notes = 'Dog in the yard' where id = 'd2000000-0000-4000-8000-000000000001';
+  perform tst.ok((select cardinality(contact_ids) from public.properties where id = 'd2000000-0000-4000-8000-000000000001') = 1, 'a property keeps its people');
+  perform tst.fails($q$insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', 'd2000000-0000-4000-8000-000000000001', 'again')$q$, 'one gate code per property');
+end $$;
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd2000000%'$q$) = 5, 'office role sees every gate code');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 1, 'tech: visit today → sees the code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000002'$q$) = 1, 'tech: visit tomorrow → sees the code the day before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 0, 'tech: visit in 3 days → no code yet');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000004'$q$) = 0, 'tech: visit was yesterday → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000005'$q$) = 0, 'tech: cancelled visit today → no code');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000001' and access_notes = 'Dog in the yard'$q$) = 1, 'tech sees access notes of their property');
+select tst.blocked($q$update public.property_secrets set gate_code = 'tech' where property_id = 'd2000000-0000-4000-8000-000000000001'$q$, 'tech cannot change a gate code');
+select tst.fails($q$insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', 'd2000000-0000-4000-8000-000000000003', 'x')$q$, 'tech cannot set a gate code');
+:as_tech2_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 0, 'another tech, not on the visit → no code');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd2000000%'$q$) = 0, 'other company sees no gate codes');
+select tst.fails($q$insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', 'd2000000-0000-4000-8000-000000000003', 'x')$q$, 'other company cannot set a gate code');
+:as_owner_a
+select tst.ok((select gate_code from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001') = '#142', 'gate code unchanged by others');
+
+-- T20 (security review): every way the code could leak
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a0000000-0000-0000-0000-000000000005', 'sales@a.test', '{"full_name":"Sam Sales"}'),
+  ('b0000000-0000-0000-0000-000000000002', 'tech@b.test', '{"full_name":"Rival Tech"}');
+:as_owner_a
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000005', 'sales', 'active');
+:as_owner_b
+insert into public.memberships (company_id, user_id, role, status) values ('cb000000-0000-0000-0000-000000000000', 'b0000000-0000-0000-0000-000000000002', 'tech', 'active');
+:as_owner_a
+do $$
+declare k int; v_p uuid; v_j uuid; v_v uuid; v_c uuid := 'c2000000-0000-4000-8000-000000000001';
+begin
+  -- 6: +2 days, 7: completed today, 8: no_show today, 9: tech removed from today's visit, 10: deleted visit today,
+  -- 11: deleted job, 12: cancelled job, 13: deleted code, 14: 00:30 company time today (time zone check)
+  for k in 6..14 loop
+    v_p := ('d2000000-0000-4000-8000-0000000000' || lpad(k::text, 2, '0'))::uuid;
+    v_j := ('e2000000-0000-4000-8000-0000000000' || lpad(k::text, 2, '0'))::uuid;
+    v_v := ('f2000000-0000-4000-8000-0000000000' || lpad(k::text, 2, '0'))::uuid;
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Gate St', 'Pasadena', 1);
+    insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#' || k || '42');
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Gate job ' || k, v_c, v_p, 'scheduled');
+    insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j, case when k = 6 then now() + interval '2 days' else now() end);
+    insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
+  end loop;
+  update public.visits set status = 'en_route' where id = 'f2000000-0000-4000-8000-000000000007';
+  update public.visits set status = 'on_site' where id = 'f2000000-0000-4000-8000-000000000007';
+  update public.visits set status = 'completed' where id = 'f2000000-0000-4000-8000-000000000007';
+  update public.visits set status = 'no_show' where id = 'f2000000-0000-4000-8000-000000000008';
+  update public.visit_assignees set deleted_at = now() where visit_id = 'f2000000-0000-4000-8000-000000000009';
+  update public.visits set deleted_at = now() where id = 'f2000000-0000-4000-8000-000000000010';
+  update public.jobs set deleted_at = now() where id = 'e2000000-0000-4000-8000-000000000011';
+  update public.jobs set status = 'cancelled' where id = 'e2000000-0000-4000-8000-000000000012';
+  update public.property_secrets set deleted_at = now() where property_id = 'd2000000-0000-4000-8000-000000000013';
+end $$;
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000006'$q$) = 0, 'tech: visit in 2 days → no code yet');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000007'$q$) = 0, 'tech: completed visit → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000008'$q$) = 0, 'tech: no-show visit → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000009'$q$) = 0, 'tech taken off the visit → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000010'$q$) = 0, 'deleted visit → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000011'$q$) = 0, 'deleted job → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000012'$q$) = 0, 'cancelled job → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000013'$q$) = 0, 'deleted code → nothing to see');
+-- the bypass from the review: a tech cannot move their visit to today, or onto another job
+select tst.fails($q$update public.visits set starts_at = now() where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot move a visit to today');
+select tst.fails($q$update public.visits set job_id = 'e2000000-0000-4000-8000-000000000001' where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot point a visit at another job');
+select tst.fails($q$update public.visits set deleted_at = now() where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot delete a visit');
+select tst.fails($q$update public.visits set arrival_window_start = now() where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot change the arrival window');
+select tst.fails($q$update public.visits set sequence_in_route = 1 where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot change the route order');
+select tst.fails($q$update public.visits set notify_customer = false where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot switch off the client notice');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 0, 'after the attempts: still no code in 3 days');
+select tst.ok((select count(*) from public.visits where id = 'f2000000-0000-4000-8000-000000000001') = 1, 'tech still moves their visit through its steps');
+update public.visits set status = 'en_route' where id = 'f2000000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.visits where id = 'f2000000-0000-4000-8000-000000000001') = 'en_route', 'tech: "on my way" still works');
+-- a server job (no user) may move a visit: the guard is only for people
+:as_super
+update public.visits set starts_at = starts_at + interval '1 hour' where id = 'f2000000-0000-4000-8000-000000000003';
+select tst.ok((select count(*) from public.visits where id = 'f2000000-0000-4000-8000-000000000003' and starts_at > now() + interval '3 days') = 1, 'no user (server, cron): the visit moves');
+-- sales is office staff (app.is_staff): sees the code like the dispatcher
+reset role; set request.jwt.claim.sub = 'a0000000-0000-0000-0000-000000000005'; set role authenticated;
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 1, 'sales (office staff) sees the gate code');
+-- a tech of another company sees nothing; another company cannot change a code
+reset role; set request.jwt.claim.sub = 'b0000000-0000-0000-0000-000000000002'; set role authenticated;
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd2000000%'$q$) = 0, 'tech of another company: no codes');
+:as_owner_b
+select tst.blocked($q$update public.property_secrets set gate_code = 'stolen' where property_id = 'd2000000-0000-4000-8000-000000000001'$q$, 'other company cannot change a gate code');
+-- time zone: 00:30 today in a company far ahead of UTC is today for the company (yesterday in UTC)
+:as_owner_a
+update public.companies set timezone = 'Pacific/Kiritimati' where id = 'ca000000-0000-0000-0000-000000000000';
+update public.visits set starts_at = (date_trunc('day', now() at time zone 'Pacific/Kiritimati') + interval '30 minutes') at time zone 'Pacific/Kiritimati'
+ where id = 'f2000000-0000-4000-8000-000000000014';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000014'$q$) = 1, 'visit at 00:30 company time today → code (company time zone, not UTC)');
+:as_owner_a
+-- 2 days ahead by the company's calendar (not by UTC) → no code
+update public.visits set starts_at = (date_trunc('day', now() at time zone 'Pacific/Kiritimati') + interval '2 days 30 minutes') at time zone 'Pacific/Kiritimati'
+ where id = 'f2000000-0000-4000-8000-000000000014';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000014'$q$) = 0, 'visit at 00:30 company time in 2 days → no code yet');
+:as_owner_a
+update public.companies set timezone = 'America/Los_Angeles' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select gate_code from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001') = '#142', 'no one else changed a code');
+\echo 'T20 properties C2 ok'
+-- ---------------------------------------------------------------- T18: estimate status (docs/specs/07 §4, S8b, edit after send)
+:as_owner_a
+do $$
+declare e uuid; e2 uuid;
+begin
+  insert into public.estimates (company_id, customer_id, property_id, title)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T18 status')
+  returning id into e;
+  update public.estimates set status = 'sent' where id = e;
+  update public.estimates set status = 'awaiting_countersign' where id = e;
+  perform tst.ok((select status from public.estimates where id = e) = 'awaiting_countersign', 'client signed: awaiting our signature');
+  perform tst.fails(format($q$update public.estimates set status = 'sent' where id = %L$q$, e), 'awaiting_countersign -> sent (a new version goes through draft)');
+  update public.estimates set status = 'draft' where id = e;
+  perform tst.ok((select status from public.estimates where id = e) = 'draft', '"don''t sign — change it": back to draft');
+  update public.estimates set status = 'sent' where id = e;
+  update public.estimates set status = 'draft' where id = e;
+  perform tst.ok((select status from public.estimates where id = e) = 'draft', 'edit after send: back to draft');
+  update public.estimates set status = 'sent' where id = e;
+  update public.estimates set status = 'awaiting_countersign' where id = e;
+  update public.estimates set status = 'approved' where id = e;
+  perform tst.ok((select status from public.estimates where id = e) = 'approved', 'employee signed for the company: approved');
+  perform tst.fails(format($q$update public.estimates set status = 'draft' where id = %L$q$, e), 'approved -> draft (signed by both: no edits)');
+  insert into public.estimates (company_id, customer_id, property_id, title)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T18 draft')
+  returning id into e2;
+  perform tst.fails(format($q$update public.estimates set status = 'awaiting_countersign' where id = %L$q$, e2), 'draft -> awaiting_countersign (client signs a sent version)');
+end $$;
+\echo 'T18 estimate status ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

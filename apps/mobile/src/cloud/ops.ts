@@ -4,7 +4,7 @@
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
 import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, EstimateDoc, ExpenseCategory, PaymentMethod, VisitStep } from "@/data/types";
+import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, Property, Tag, VisitStep } from "@/data/types";
 import { companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -32,6 +32,19 @@ export type Op =
       city: string;
       message: string;
       start: string;
+    }
+  /** estimate visit for a lead whose client and property already exist (lead.prospect or earlier); replaces lead.book */
+  | {
+      k: "lead.visit";
+      leadId: string;
+      customerId: string;
+      propertyId: string;
+      jobId: string;
+      visitId: string;
+      start: string;
+      durationMin: number;
+      techId: string | null;
+      scope: string[];
     }
   | { k: "lead.add"; id: string; name: string; phone: string; city: string; address?: string; sourceId: string; message: string; costCents?: number; cols?: Record<string, unknown> }
   | { k: "visit.assign"; visitId: string; userId: string }
@@ -112,7 +125,14 @@ export type Op =
       name: string; phone: string; email?: string; sourceId: string; address: string; city: string;
     }
   | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string }
+  | { k: "customer.people"; id: string; people: Person[] }
+  | { k: "lead.people"; id: string; people: Person[] }
+  | { k: "customer.tags"; id: string; tagIds: string[] }
+  | { k: "customer.status"; id: string; status: CustomerStatus; reason?: string }
+  | { k: "tag.save"; tag: Tag }
   | { k: "property.update"; id: string; address?: string; city?: string }
+  | { k: "property.save"; property: Omit<Property, "gateCode"> }
+  | { k: "property.gate"; id: string; code: string }
   | { k: "note.add"; id: string; subjectType: string; subjectId: string; body: string; visibility: "team" | "private" }
   | { k: "note.update"; id: string; pinned?: boolean; body?: string; deleted?: boolean }
   | { k: "catalog.save"; item: CatalogItem }
@@ -256,6 +276,19 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       );
       return run(supabase.from("leads").update({ status: "inspection_scheduled", customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));
     }
+    case "lead.visit": {
+      await run(
+        ins("jobs", { id: op.jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, title: "Estimate visit", type: "inspection", number: "" }),
+      );
+      const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
+      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, lead_id: op.leadId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
+      // upsert: a replay after a partial failure must not die on unique (visit_id, user_id)
+      if (op.techId) await run(supabase.from("visit_assignees").upsert({ company_id: c, visit_id: op.visitId, user_id: op.techId }, { onConflict: "visit_id,user_id", ignoreDuplicates: true }));
+      // booking a visit is an answer to the client (same as the app); only the first one counts
+      await run(supabase.from("leads").update({ first_response_at: op.start < new Date().toISOString() ? op.start : new Date().toISOString(), first_response_kind: "manual" }).eq("id", op.leadId).is("first_response_at", null));
+      // only an open lead before "estimate sent" moves to "inspection scheduled"
+      return run(supabase.from("leads").update({ status: "inspection_scheduled" }).eq("id", op.leadId).in("status", ["new", "contacted", "qualified"]));
+    }
     case "lead.add": {
       const src = await sourceRef(c, op);
       await run(
@@ -285,6 +318,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "assigned", meta: { to: op.userId } }));
     case "lead.cost":
       return run(supabase.from("lead_costs").upsert({ lead_id: op.leadId, company_id: c, cost_cents: op.cents }, { onConflict: "lead_id" }));
+    case "lead.people":
+      // all people of a lead in one transaction (migration 20261105120000); the lead caches the main phone / email
+      return run(supabase.rpc("save_lead_people", { p_lead_id: op.id, p_people: op.people }));
+    // older queued ops (before L2 part 2): the migration copied lead_contacts once, so these still land somewhere readable
     case "lead.contactSave":
       return run(
         supabase.from("lead_contacts").upsert(
@@ -420,6 +457,37 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       }
       return;
     }
+    // one transaction each on the server: a refused phone or tag never leaves the client half-saved
+    case "customer.people":
+      return run(supabase.rpc("save_customer_people", { p_customer_id: op.id, p_people: op.people }));
+    case "customer.tags":
+      return run(supabase.rpc("set_customer_tags", { p_customer_id: op.id, p_tag_ids: op.tagIds }));
+    case "customer.status":
+      return run(supabase.from("customers").update({ status: op.status, do_not_service_reason: op.status === "do_not_service" ? op.reason || "—" : null }).eq("id", op.id));
+    case "tag.save":
+      return run(
+        supabase.from("tags").upsert(
+          { id: op.tag.id, company_id: c, name: op.tag.name, is_active: op.tag.active, position: op.tag.position },
+          { onConflict: "id" },
+        ),
+      );
+    case "property.save": {
+      const p = op.property;
+      const place = p.place ?? { city: p.city };
+      return run(
+        supabase.from("properties").upsert(
+          {
+            id: p.id, company_id: c, customer_id: p.customerId, address_line1: p.address || "—", address_unit: p.unit ?? null,
+            address_city: place.city || "—", address_state: place.state || "CA", address_zip: place.zip || null,
+            label: p.label ?? null, kind: p.kind ?? null, access_notes: p.accessNotes ?? null, contact_ids: p.contactIds ?? [], stories: p.stories || 1,
+          },
+          { onConflict: "id" },
+        ),
+      );
+    }
+    case "property.gate":
+      // kept apart from the property (migration 20261105160000): the office writes it, a tech reads it only on the visit days
+      return run(supabase.from("property_secrets").upsert({ property_id: op.id, company_id: c, gate_code: op.code || null, deleted_at: null }, { onConflict: "property_id" }));
     case "property.update": {
       const patch: Record<string, string> = {};
       if (op.address !== undefined) patch.address_line1 = op.address || "—";

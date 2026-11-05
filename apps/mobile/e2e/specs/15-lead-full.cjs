@@ -29,21 +29,34 @@ exports.run = async (h) => {
   h.expect(src && src.kind === "person" && src.phone === "(310) 555-0123", "person source created");
   let l = db.leads.find((x) => x.id === id);
   h.expect(l && l.sourceId === src.id && l.assigneeId === "m-alex" && l.status === "new" && l.phone === "(626) 555-0111", `lead saved: ${JSON.stringify(l)}`);
-  await h.expectText(/Без ответа/, "reply timer");
+  await h.expectText(/Ответить · \d+ мин/, "reply timer (whose turn)");
+  await h.expectText(/LEA-\d{4}/, "lead number in the header");
   await h.shot("card-new");
 
-  // call from the card → first response, "in touch", history line
+  // call from the card → "did you get through?": no answer keeps the timer; yes → in touch, then "what next?"
   await p.getByRole("button", { name: "Позвонить" }).first().click();
+  await p.waitForTimeout(400);
+  await h.sheet().getByRole("button", { name: "Не ответил" }).click();
+  await p.waitForTimeout(400);
+  l = await lead(id);
+  h.expect(l.status === "new" && !l.firstResponseAt && l.callAttempts === 1, "no answer = attempt, timer keeps going");
+  await h.expectText(/попыток: 1/, "attempts on the card");
+  await p.getByRole("button", { name: "Позвонить" }).first().click();
+  await p.waitForTimeout(400);
+  await h.sheet().getByRole("button", { name: "Да, поговорили" }).click();
   await p.waitForTimeout(500);
+  await h.expectText(/Что дальше\?/, "what next? after a real conversation");
+  await h.sheet().getByRole("button", { name: "Позже" }).click();
+  await p.waitForTimeout(400);
   l = await lead(id);
   h.expect(l.status === "replied" && !!l.firstResponseAt, "call → in touch, timer stopped");
-  await h.clickText("История");
+  await h.clickText("Переписка");
   await h.expectText(/Звонок клиенту/, "call in the history");
   await h.expectText(/Лид пришёл: Angela & Natasha/, "received line with the source");
 
   // no next step → add a task for tomorrow, then mark it done
   await h.clickText("Обзор");
-  await h.expectText(/Нет следующего шага/, "next step warning");
+  await h.expectText(/Нет шага/, "no next step (whose turn)");
   await h.clickText("Задачи");
   await h.click("Новая задача");
   await h.sheet().getByPlaceholder(/перезвонить/).fill("Call back about the date");
@@ -53,24 +66,26 @@ exports.run = async (h) => {
   db = await h.db();
   const task = db.tasks.find((x) => x.subjectId === id);
   h.expect(task && task.title === "Call back about the date" && task.dueAt && !task.doneAt, "task saved");
-  h.expect((await p.getByText(/Нет следующего шага/).count()) === 0, "warning gone with a task");
+  h.expect((await p.getByText(/Нет шага/).count()) === 0, "no-step gone with a task");
   await p.getByRole("button", { name: "Отметить выполненной" }).first().click();
   await p.waitForTimeout(300);
   h.expect(!!(await h.db()).tasks.find((x) => x.id === task.id).doneAt, "task done");
 
-  // edit the contact: email + second phone
+  // edit the contact: email + second phone (people sheet, L2 part 2)
   await h.clickText("Обзор");
-  await p.getByRole("button", { name: "Изменить: Контакт" }).click();
-  await p.waitForTimeout(300);
-  await h.sheet().getByPlaceholder("client@example.com").fill("maria@example.com");
-  await h.sheet().getByPlaceholder("(555) 555-0100").nth(1).pressSequentially("6265550112");
+  await h.click("Телефоны, email и люди");
+  await h.sheet().getByRole("button", { name: "Email", exact: true }).first().click();
+  await h.sheet().getByPlaceholder("Email", { exact: true }).first().fill("maria@example.com");
+  await h.sheet().getByRole("button", { name: "Телефон", exact: true }).first().click();
+  await h.sheet().getByPlaceholder("Телефон", { exact: true }).nth(1).pressSequentially("6265550112");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(300);
   l = await lead(id);
-  h.expect(l.email === "maria@example.com" && l.phone2 === "(626) 555-0112", "contact edited");
+  h.expect(l.email === "maria@example.com" && l.people && l.people[0].phones[1].number === "(626) 555-0112", "contact edited");
 
   // declined (we decided) with a reason, then back to work
-  await h.click("Закрыть лид");
+  await p.getByRole("button", { name: /^Статус:/ }).first().click(); await p.waitForTimeout(300);
+  await h.sheet().getByRole("button", { name: "Закрыть лид" }).click(); await p.waitForTimeout(300);
   await h.sheet().getByText("Отклонён", { exact: true }).click();
   await h.sheet().getByRole("radio", { name: "Невыгодно" }).click();
   await h.sheet().getByRole("button", { name: "Отклонить лид" }).click();
@@ -102,7 +117,7 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).click();
   await p.waitForTimeout(400);
   h.expect((await lead("l2")).assigneeId === "m-ivan", "assigned to Ivan");
-  await h.clickText("История");
+  await h.clickText("Переписка");
   await h.expectText(/Лид передан: Ivan Sokolov/, "assignment in the history");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/lead/l2");

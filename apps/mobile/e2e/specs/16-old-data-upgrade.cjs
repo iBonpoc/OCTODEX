@@ -19,7 +19,7 @@ exports.run = async (h) => {
   await h.expectText(/Thumbtack/, "source name resolved from the old text value");
   await p.getByText("Kevin Brooks", { exact: true }).first().click();
   await p.waitForTimeout(600);
-  await h.expectText(/Продажи · Лид/, "lead card opens");
-  await h.clickText("История");
+  h.expect((await p.getByRole("button", { name: "Назад: Лиды" }).count()) > 0, "lead card opens (trail ⌂ › Лиды › Лид)");
+  await h.clickText("Переписка");
   await h.expectText(/Лид пришёл: Thumbtack/, "history works");
 };

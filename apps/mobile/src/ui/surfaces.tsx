@@ -1,8 +1,9 @@
 import { VersionBadge } from "@/features/version";
-import { useState, type ReactNode } from "react";
-import { router, useGlobalSearchParams, usePathname, type Href } from "expo-router";
-import { navContext } from "@/nav/hierarchy";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
+import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { router, useLocalSearchParams, useRoute, type Href } from "expo-router";
+import { screenPath } from "./screenPath";
+import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
@@ -11,7 +12,7 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T, type IconKey } from "./primitives";
-import { HelpButton } from "./overlays";
+import { HelpButton, Menu } from "./overlays";
 import { useHints } from "./hints";
 
 /* ---------- Background: --bg + three soft glows (theme.css --glow) ---------- */
@@ -279,6 +280,86 @@ export function useNavInsets() {
   };
 }
 
+/* ---------- Breadcrumbs: "⌂ Today › Clients › Client card" — like an address bar, every level is a link ----------
+ * Phone: more than 3 levels fold into "⌂ › … › Parent"; "…" opens the hidden levels as a menu.
+ * The parent keeps the "Back to …" name (screen readers, the e2e runs).
+ */
+function Breadcrumbs({ trail, current, go }: { trail: Crumb[]; current?: string; go: (href: string) => void }) {
+  const { c } = useTheme();
+  const { t } = useI18n();
+  const { wide } = useDevice();
+  const moreRef = useRef<ComponentRef<typeof View>>(null);
+  const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  const text = (l: Label) => ("key" in l ? t(l.key) : l.text);
+  const { shown, hidden, at } = collapseCrumbs(trail, wide ? trail.length : 3);
+  const parent = trail[trail.length - 1]!;
+  const sep = <Icon name="chevronRight" s={size.iconSm} color={c.mut} />;
+  const crumb = (cr: Crumb) => {
+    const name = text(cr.label);
+    const isParent = cr === parent;
+    return (
+      <Press
+        key={cr.href}
+        onPress={() => go(cr.href)}
+        visibleHeight={component.dockBtn}
+        accessibilityRole="button"
+        accessibilityLabel={isParent ? t("nav.backTo", { to: name }) : t("nav.goTo", { to: name })}
+        containerStyle={{ flexShrink: 1, minWidth: 0 }}
+      >
+        <RowView gap={space[1]} style={{ height: component.dockBtn, maxWidth: component.crumbMax }}>
+          {cr.home ? <Icon name="home" s={size.iconSm} color={c.ink} /> : null}
+          {cr.home && !wide && trail.length > 1 ? null : (
+            <T v="caption" w={isParent ? "semibold" : "medium"} numberOfLines={1} style={{ flexShrink: 1 }}>
+              {name}
+            </T>
+          )}
+        </RowView>
+      </Press>
+    );
+  };
+  const items: ReactNode[] = [];
+  shown.forEach((cr, i) => {
+    if (i === at)
+      items.push(
+        <View key="more" ref={moreRef} collapsable={false}>
+          <Press
+            onPress={() => moreRef.current?.measureInWindow((x: number, y: number, w: number, h: number) => setMenu({ x, y, w, h }))}
+            visibleHeight={component.dockBtn}
+            accessibilityRole="button"
+            accessibilityLabel={t("nav.hiddenLevels")}
+          >
+            <RowView style={{ height: component.dockBtn }}>
+              <Icon name="more" s={size.iconSm} color={c.ink} />
+            </RowView>
+          </Press>
+        </View>,
+        <View key="sep-more">{sep}</View>,
+      );
+    items.push(crumb(cr));
+    if (i < shown.length - 1 || current) items.push(<View key={`sep-${cr.href}`}>{sep}</View>);
+  });
+  return (
+    <View accessibilityRole="toolbar" accessibilityLabel={t("nav.trail")} style={{ flex: 1, minWidth: 0 }}>
+      <RowView gap={space[1]} style={{ minHeight: size.hitMin }}>
+        {items}
+        {current ? (
+          <T v="caption" tone="mut" numberOfLines={1} style={{ flexShrink: 2 }}>
+            {current}
+          </T>
+        ) : null}
+      </RowView>
+      <Menu
+        visible={!!menu}
+        anchor={menu}
+        title={t("nav.hiddenLevels")}
+        items={hidden.map((cr) => ({ key: cr.href, label: text(cr.label) }))}
+        onSelect={(href) => go(href)}
+        onClose={() => setMenu(null)}
+      />
+    </View>
+  );
+}
+
 /* ---------- Screen: background, header with title + "?" + offline badge, scroll ---------- */
 export function Screen({
   title,
@@ -289,6 +370,9 @@ export function Screen({
   back,
   subtitle,
   hintKey,
+  tabs,
+  tabKey,
+  below,
 }: {
   title: string;
   help?: string;
@@ -299,6 +383,14 @@ export function Screen({
   subtitle?: string;
   /** stable id for the first-visit hint (shown once when `help` is set) */
   hintKey?: string;
+  /**
+   * Tabs that stick to the top while scrolling (like the App Store), with `below` = the tab's content.
+   * When `tabKey` changes and the page is scrolled past the tabs, it glides back so the tabs sit at the top;
+   * the content area is at least one screen tall, so switching tabs never makes the page jump.
+   */
+  tabs?: ReactNode;
+  tabKey?: string;
+  below?: ReactNode;
 }) {
   const navInsets = useNavInsets();
   const kb = useKeyboardHeight();
@@ -306,46 +398,49 @@ export function Screen({
   const { c } = useTheme();
   const { t } = useI18n();
   const store = useStore();
-  const pathname = usePathname();
-  const params = useGlobalSearchParams();
+  // This screen's own address, not the app's: during «back» the app's address still points at the card
+  // for a moment, and the list under it drew the card's header (screenPath.ts).
+  const params = useLocalSearchParams();
+  const pathname = screenPath(useRoute().name, params);
   const nav = navContext(pathname, params, store.db, store.role);
   const up = nav.up;
   const hasUp = !!(up || back);
   const upLabel = up ? ("key" in up.label ? t(up.label.key) : up.label.text) : undefined;
-  /** one level up; if the parent is already below us in the stack we pop to it, otherwise it replaces this screen */
-  const goUp = () => {
-    if (!up) return back?.();
-    if (router.canDismiss()) router.dismissTo(up.href as Href);
-    else router.replace(up.href as Href);
+  const trail = up ? breadcrumbs(pathname, params, store.db, store.role) : [];
+  /** to a screen above: if it is already below us in the stack we pop to it, otherwise it replaces this screen */
+  const go = (href: string) => {
+    if (router.canDismiss()) router.dismissTo(href as Href);
+    else router.replace(href as Href);
   };
+  const goUp = () => (up ? go(up.href) : back?.());
   const header = (
     <View style={{ gap: space[2], marginBottom: space[3] }}>
       <VersionBadge />
       {hasUp ? (
         <>
-          {/* detail screen: "‹ Parent" + actions, then the section, then the title */}
-          <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
-            <Press
-              onPress={goUp}
-              visibleHeight={component.dockBtn}
-              accessibilityRole="button"
-              accessibilityLabel={upLabel ? t("nav.backTo", { to: upLabel }) : t("common.back")}
-              containerStyle={{ flexShrink: 1 }}
-            >
-              <RowView gap={space[1]} style={{ height: component.dockBtn, paddingRight: space[2], maxWidth: component.backMax }}>
-                <Icon name="chevronLeft" color={c.ink} />
-                <T v="body" w="medium" numberOfLines={1} style={{ flexShrink: 1 }}>
-                  {upLabel ?? t("common.back")}
-                </T>
-              </RowView>
-            </Press>
+          {/* detail screen: the trail "Home › … › Parent › This", actions on the right, then the title.
+              Back is a swipe (iOS) / system back (Android); on the trail the parent is the "back" button. */}
+          <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, gap: space[2] }}>
+            {trail.length ? (
+              <Breadcrumbs trail={trail} current={nav.kind ? t(nav.kind) : undefined} go={go} />
+            ) : (
+              <Press
+                onPress={goUp}
+                visibleHeight={component.dockBtn}
+                accessibilityRole="button"
+                accessibilityLabel={upLabel ? t("nav.backTo", { to: upLabel }) : t("common.back")}
+                containerStyle={{ flexShrink: 1 }}
+              >
+                <RowView gap={space[1]} style={{ height: component.dockBtn, paddingRight: space[2], maxWidth: component.backMax }}>
+                  <Icon name="chevronLeft" color={c.ink} />
+                  <T v="body" w="medium" numberOfLines={1} style={{ flexShrink: 1 }}>
+                    {upLabel ?? t("common.back")}
+                  </T>
+                </RowView>
+              </Press>
+            )}
             {right}
           </RowView>
-          {nav.section ? (
-            <T v="micro" tone="mut" w="semibold">
-              {[t(nav.section), nav.kind ? t(nav.kind) : null].filter(Boolean).join(" · ")}
-            </T>
-          ) : null}
           <RowView style={{ gap: space[1] }}>
             <T v="title" numberOfLines={2} style={{ flexShrink: 1 }}>
               {title}
@@ -398,18 +493,39 @@ export function Screen({
       {children}
     </View>
   );
+  const { height: winH } = useWindowDimensions();
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const tabsY = useRef(0);
+  const offset = useRef(0);
+  useEffect(() => {
+    if (tabs && offset.current > tabsY.current) scrollRef.current?.scrollTo({ y: tabsY.current, animated: true });
+  }, [tabKey, tabs]);
+  const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
   return (
     <View style={{ flex: 1 }}>
       <Background />
       {scroll ? (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
           <ScrollView
+            ref={scrollRef}
             contentContainerStyle={{ paddingTop: navInsets.top, paddingBottom: kb ? space[6] : navInsets.bottom, paddingHorizontal: space[4] }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             automaticallyAdjustKeyboardInsets
+            stickyHeaderIndices={tabs ? [1] : undefined}
+            scrollEventThrottle={16}
+            onScroll={tabs ? (e) => (offset.current = e.nativeEvent.contentOffset.y) : undefined}
           >
             {content}
+            {tabs ? (
+              <View
+                onLayout={(e) => (tabsY.current = e.nativeEvent.layout.y)}
+                style={{ backgroundColor: c.bg, paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
+              >
+                <View style={column}>{tabs}</View>
+              </View>
+            ) : null}
+            {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - navInsets.top - navInsets.bottom }]}>{below}</View> : null}
           </ScrollView>
         </KeyboardAvoidingView>
       ) : (

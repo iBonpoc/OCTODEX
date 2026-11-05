@@ -8,7 +8,7 @@
  */
 import type { DB, Role } from "@/data/types";
 import type { DictKey } from "@/i18n";
-import { roleNav } from "./roles";
+import { roleHome, roleNav } from "./roles";
 
 export type Label = { key: DictKey } | { text: string };
 export interface NavContext {
@@ -81,6 +81,11 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
         return { section: "tab.clients", kind: cid ? "client.editTitle" : "clients.new", up: cid ? toClient(cid) : { href: "/clients", label: K("tab.clients") } };
       }
       return { section: "tab.clients", kind: "client.card", up: { href: "/clients", label: K("tab.clients") } };
+    case "property": {
+      // C2: a property lives only inside its client
+      const cid = db.properties.find((p) => p.id === id)?.customerId;
+      return { section: "tab.clients", kind: "prop.card", up: cid ? toClient(cid) : { href: "/clients", label: K("tab.clients") } };
+    }
     case "job":
       if (id === "schedule") {
         const jid = one(params.jobId);
@@ -100,9 +105,13 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       const jid = one(params.jobId);
       return { section: "tab.more", kind: "exp.title", up: jid ? toJob(jid) : { href: "/money", label: K("money.title") } };
     }
+    case "figures":
+      // a number opened from "Today": back goes to Today, whatever tab the role has
+      return { section: "tab.today", up: { href: "/today", label: K("today.title") } };
     case "jobs":
     case "money":
     case "team":
+    case "settings":
       return { section: "tab.more", up: moreRoot };
     case "today":
     case "inbox":
@@ -116,4 +125,50 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       // tab roots (today, inbox, clients, plan, visits, triage, more), client page /p, auth: no "up"
       return {};
   }
+}
+
+/* ---------- Breadcrumbs: "Today › Clients › Client card" (founder, 05.11.2026) ----------
+ * The trail is the chain of `up` links, so it can never disagree with the back button.
+ * It always starts at the role's home (the first tab: Today / Triage / Visits).
+ */
+export interface Crumb {
+  href: string;
+  label: Label;
+  /** the role's home screen (drawn with the house icon) */
+  home?: boolean;
+}
+
+function split(href: string): { path: string; params: P } {
+  const [path = "", query = ""] = href.split("?");
+  const params: P = {};
+  for (const [k, v] of new URLSearchParams(query)) params[k] = v;
+  return { path, params };
+}
+const routeOf = (href: string) => split(href).path.split("/").filter(Boolean)[0] ?? "";
+
+/** Ancestors of the screen, home first, parent last. Empty on a tab root of the role (the big title is where you are). */
+export function breadcrumbs(pathname: string, params: P, db: DB, role: Role): Crumb[] {
+  const trail: Crumb[] = [];
+  let ctx = navContext(pathname, params, db, role);
+  const seen = new Set<string>([split(pathname).path]);
+  while (ctx.up && !seen.has(ctx.up.href) && trail.length < 8) {
+    trail.unshift({ href: ctx.up.href, label: ctx.up.label });
+    seen.add(ctx.up.href);
+    const next = split(ctx.up.href);
+    ctx = navContext(next.path, next.params, db, role);
+  }
+  if (!trail.length) return trail;
+  const home = roleNav[role].find((n) => n.route === roleHome[role])!;
+  if (routeOf(trail[0]!.href) === home.route) trail[0]!.home = true;
+  else trail.unshift({ href: `/${home.route}`, label: K(home.label), home: true });
+  return trail;
+}
+
+/**
+ * Which crumbs are shown on a narrow screen: home, "…" (the hidden middle, opened as a menu), and the parent.
+ * Up to `max` crumbs fit as they are.
+ */
+export function collapseCrumbs<C>(trail: C[], max: number): { shown: C[]; hidden: C[]; at: number } {
+  if (trail.length <= max) return { shown: trail, hidden: [], at: -1 };
+  return { shown: [trail[0]!, trail[trail.length - 1]!], hidden: trail.slice(1, -1), at: 1 };
 }

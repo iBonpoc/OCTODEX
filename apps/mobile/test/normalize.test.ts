@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import { normalizeDB } from "../src/data/normalize";
+import { peopleOf } from "../src/data/people";
 import { filterLeads, leadTimeline, sourceGroups } from "../src/features/leads";
 import type { DB } from "../src/data/types";
 
@@ -33,6 +34,26 @@ describe("old saved data after an app update", () => {
     const db = normalizeDB(build32(), "cloud");
     expect(db.sources).toEqual([]);
     expect(() => filterLeads(db, "director", { filter: "open" })).not.toThrow();
+  });
+  it("build 45 data (no tags, clients without people / numbers): demo gets tags, numbers, tags and people of test clients", () => {
+    const d = makeSeed() as unknown as Record<string, unknown>;
+    delete d.tags;
+    d.customers = [
+      ...(d.customers as Record<string, unknown>[]).map(({ people: _p, tagIds: _t, number: _n, ...c }) => c),
+      { id: "mine", name: "Added by hand", phone: "(818) 555-0000", sourceId: "src-other", balanceCents: 0 },
+    ];
+    const db = normalizeDB(d as unknown as DB, "demo");
+    expect(db.tags.map((t) => t.name)).toEqual(["VIP", "Regular", "Favorite", "No calls after 6 pm"]);
+    const sarah = db.customers.find((c) => c.id === "c1")!;
+    expect(sarah.number).toBe("CLT-0001");
+    expect(sarah.tagIds).toEqual(["tag-vip", "tag-regular"]);
+    expect(peopleOf(sarah).map((p) => p.name)).toEqual(["Sarah Mitchell", "Tom Mitchell"]);
+    expect(db.customers.find((c) => c.id === "mine")!.number).toBe("CLT-0008");
+    // the cloud keeps what the server sends: no demo tags, no invented numbers
+    const cloud = normalizeDB(d as unknown as DB, "cloud");
+    expect(cloud.tags).toEqual([]);
+    expect(cloud.customers.find((c) => c.id === "c1")!.number).toBeUndefined();
+    expect(peopleOf(cloud.customers.find((c) => c.id === "c1")!)).toHaveLength(1);
   });
   it("today's data is left as is", () => {
     const d = makeSeed();

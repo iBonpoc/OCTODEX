@@ -12,6 +12,7 @@ exports.run = async (h) => {
   h.expect(lead0 && !["won", "lost", "declined"].includes(lead0.status), "Kevin is an open lead");
 
   // S5: estimate from the lead (S3: prospect client + property are created for it)
+  await h.clickText("Сметы");
   await h.click("Смета");
   await h.page.getByRole("button", { name: "Добавить позицию" }).first().click(); await h.page.waitForTimeout(300);
   await h.sheet().getByPlaceholder(/Начните писать/).fill("Replace water heater");

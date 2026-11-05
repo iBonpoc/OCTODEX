@@ -138,8 +138,12 @@ export const component = {
   toastRing: 2,
   /** widest "‹ Parent" back button in a header */
   backMax: 220,
+  /** widest crumb in the header trail ("Today › Clients › …"); longer names end with "…" */
+  crumbMax: 160,
   /** dimmed element: disabled control, day outside the shown month */
   dimOpacity: 0.45,
+  /** iOS-style menu that opens at the control (status, quick choices) */
+  menuW: 240,
 } as const;
 
 /* ---------- breakpoints (HANDOFF: 390 / 820 / 1280) ---------- */
@@ -251,7 +255,29 @@ export const themes: Record<ThemeName, ThemeColors> = {
   },
 };
 
-/** Printed documents (estimate PDF): white paper, light-theme ink. Paper never follows the dark theme. */
+/** Printed documents (estimate, invoice, receipt PDF): white paper, light-theme ink. Paper never follows the dark theme.
+ *  Mirror of design/naryad-ds/tokens/print.css. Three document styles (docs/specs/07 §2.2 В, §3.4);
+ *  the brand band colour is the company's setting (brand.color), tokens hold only sizes and positions. */
+export type PrintStyleName = "classic" | "modern" | "compact";
+export interface PrintStyle {
+  fontPt: { title: number; heading: number; body: number; small: number };
+  /** table row padding, pt */
+  rowPadPt: number;
+  /** line under the header, px (0 = none) */
+  headRulePx: number;
+  /** brand colour band under the header, pt (0 = none) */
+  brandBandPt: number;
+  /** logo box, pt */
+  logoPt: number;
+  logoSide: "left" | "right";
+  /** space before a section heading, pt */
+  sectionGapPt: number;
+}
+const printStyles: Record<PrintStyleName, PrintStyle> = {
+  classic: { fontPt: { title: 18, heading: 11, body: 9.5, small: 8 }, rowPadPt: 4, headRulePx: 1, brandBandPt: 2, logoPt: 48, logoSide: "left", sectionGapPt: 14 },
+  modern: { fontPt: { title: 20, heading: 12, body: 10, small: 8 }, rowPadPt: 6, headRulePx: 0, brandBandPt: 6, logoPt: 56, logoSide: "left", sectionGapPt: 18 },
+  compact: { fontPt: { title: 14, heading: 10, body: 8.5, small: 7.5 }, rowPadPt: 2, headRulePx: 1, brandBandPt: 0, logoPt: 32, logoSide: "right", sectionGapPt: 8 },
+};
 export const print = {
   paper: "#FFFFFF",
   ink: "#15161A",
@@ -260,6 +286,7 @@ export const print = {
   okText: "#176428",
   pagePadMm: 14,
   fontPt: { title: 18, heading: 11, body: 9.5, small: 8 },
+  styles: printStyles,
 } as const;
 
 /** Status glyph (DS: always icon + word). Maps to icons.ts names. */

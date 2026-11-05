@@ -7,8 +7,9 @@
  */
 import type { StatusName } from "@octo/design-tokens";
 import { LEAD_SETTINGS_DEFAULT, type LeadSettings } from "./leadSettings";
-import { DECLINE_REASONS, LOST_REASONS, type Customer, type DB, type Lead, type LeadStatus, type LostReason, type Role, type Source, type SourceKind, type Task } from "@/data/types";
+import { DECLINE_REASONS, LOST_REASONS, type Customer, type DB, type Lead, type LeadStatus, type Person, type LostReason, type Role, type Source, type SourceKind, type Task } from "@/data/types";
 import type { DictKey } from "@/i18n";
+import { leadPeopleOf, peopleOf, phonesOfPeople } from "@/data/people";
 
 export const leadStatusView: Record<LeadStatus, { status: StatusName; label: DictKey }> = {
   new: { status: "info", label: "st.new" },
@@ -73,15 +74,15 @@ export interface Duplicates {
   leads: Lead[];
 }
 /** Same phone (either of the lead's numbers) or email: an existing client, or another lead from the last 30 days / still open. */
-export function findDuplicates(db: DB, q: { phone?: string; phone2?: string; email?: string }, exceptLeadId?: string, now = Date.now()): Duplicates {
-  const phones = [phoneKey(q.phone), phoneKey(q.phone2)].filter((p) => p.length === 10);
-  const email = emailKey(q.email);
-  const hit = (p: string | undefined, e?: string) => (phones.length > 0 && phones.includes(phoneKey(p))) || (!!email && emailKey(e) === email);
-  const customers = db.customers.filter((c) => hit(c.phone, c.email));
+export function findDuplicates(db: DB, q: { phone?: string; phones?: string[]; email?: string; emails?: string[] }, exceptLeadId?: string, now = Date.now()): Duplicates {
+  const phones = [q.phone, ...(q.phones ?? [])].map(phoneKey).filter((p) => p.length === 10);
+  const emails = [q.email, ...(q.emails ?? [])].map(emailKey).filter(Boolean);
+  // every phone and email of every person counts (L2 part 2), not only the main one
+  const hit = (people: Person[]) =>
+    people.some((p) => p.phones.some((x) => phones.includes(phoneKey(x.number))) || p.emails.some((x) => emails.includes(emailKey(x.address))));
+  const customers = db.customers.filter((c) => hit(peopleOf(c)));
   const recent = now - 30 * 86_400_000;
-  const leads = db.leads.filter(
-    (l) => l.id !== exceptLeadId && (hit(l.phone, l.email) || (!!l.phone2 && phones.includes(phoneKey(l.phone2)))) && (isOpenLead(l) || new Date(l.receivedAt).getTime() >= recent),
-  );
+  const leads = db.leads.filter((l) => l.id !== exceptLeadId && hit(leadPeopleOf(l)) && (isOpenLead(l) || new Date(l.receivedAt).getTime() >= recent));
   return { customers, leads };
 }
 
@@ -139,17 +140,18 @@ export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAU
     const today = due !== null && new Date(due).toDateString() === new Date(now).toDateString();
     return { kind: "step", dueAt: task.dueAt, title: task.title, status: due === null ? "neutral" : due < now ? "bad" : today ? "info" : "neutral" };
   }
+  // the estimate visit is the step: a planned one for any open lead (also a second visit after the estimate went out);
+  // once it has passed with no estimate yet ("booked"), it is overdue after a day of grace
+  const visit = l.propertyId
+    ? db.visits
+        .filter((v) => db.jobs.find((j) => j.id === v.jobId && j.propertyId === l.propertyId && j.status === "estimate"))
+        .sort((a, b) => b.start.localeCompare(a.start))[0]
+    : undefined;
+  const vStart = visit ? new Date(visit.start).getTime() : null;
+  if (visit && vStart! > now) return { kind: "step", dueAt: visit.start, status: new Date(vStart!).toDateString() === new Date(now).toDateString() ? "info" : "neutral" };
   if (l.status === "booked") {
-    // the estimate visit is the step; once it has passed with no estimate, it is overdue (a day of grace)
-    const visit = l.propertyId
-      ? db.visits
-          .filter((v) => db.jobs.find((j) => j.id === v.jobId && j.propertyId === l.propertyId && j.status === "estimate"))
-          .sort((a, b) => b.start.localeCompare(a.start))[0]
-      : undefined;
     if (!visit) return { kind: "step", status: "info" };
-    const start = new Date(visit.start).getTime();
-    if (start > now) return { kind: "step", dueAt: visit.start, status: new Date(start).toDateString() === new Date(now).toDateString() ? "info" : "neutral" };
-    return { kind: "step", dueAt: visit.start, status: now - start >= DAY ? "bad" : "warn" };
+    return { kind: "step", dueAt: visit.start, status: now - vStart! >= DAY ? "bad" : "warn" };
   }
   const sentAt = db.estimates.filter((e) => e.leadId === l.id && e.status === "sent" && e.sentAt).map((e) => e.sentAt!).sort().pop();
   // we wrote last: the last thing we did was a message (SMS / email / marketplace / "I replied"), not a conversation
@@ -212,7 +214,7 @@ export function filterLeads(db: DB, role: Role, f: { filter: LeadFilter; sourceI
       if (!needle) return true;
       return (
         l.name.toLowerCase().includes(needle) ||
-        (digits.length >= 3 && (phoneKey(l.phone).includes(digits) || phoneKey(l.phone2).includes(digits))) ||
+        (digits.length >= 3 && phonesOfPeople(leadPeopleOf(l)).some((x) => phoneKey(x).includes(digits))) ||
         `${l.address ?? ""} ${l.city} ${l.zip ?? ""}`.toLowerCase().includes(needle) ||
         (l.service ?? "").toLowerCase().includes(needle)
       );

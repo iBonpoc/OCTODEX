@@ -39,24 +39,78 @@ export interface Source {
   position?: number;
 }
 
+/** prospect: has an estimate but has not signed yet (not in the main client list); archived / do_not_service: closed */
+export const CUSTOMER_STATUSES = ["prospect", "active", "archived", "do_not_service"] as const;
+export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number];
 export interface Customer {
   id: ID;
+  /** CLT-0001, assigned by the server (demo: by the app) */
+  number?: string;
   name: string;
+  /** cached main phone / email of the main person (search, duplicates, quick call) */
   phone: string;
   email?: string;
   sourceId: ID;
   /** positive = customer owes us */
   balanceCents: number;
-  /** prospect: has an estimate but has not signed yet (not in the main client list) */
-  status?: "prospect" | "active";
+  status?: CustomerStatus;
+  /** why the client is "do not service" */
+  statusReason?: string;
+  /** people of the client, each with several phones and emails (docs/specs/04 §3.2) */
+  people?: Person[];
+  tagIds?: ID[];
 }
 
+/** A person of a client or a lead: one shape for both (agreed with the leads chat, 05.11.2026). */
+export type PersonRole = "main" | "spouse" | "assistant" | "tenant" | "property_manager" | "accountant" | "other";
+export interface PersonPhone {
+  number: string;
+  label: PhoneLabel;
+  primary?: boolean;
+}
+export interface PersonEmail {
+  address: string;
+  primary?: boolean;
+}
+export interface Person {
+  id: ID;
+  name: string;
+  role: PersonRole;
+  phones: PersonPhone[];
+  emails: PersonEmail[];
+  language?: import("@/i18n/translate").DocLang;
+}
+
+/** Company tag on clients (VIP, Regular…): neutral, never coloured (colour is only for statuses). */
+export interface Tag {
+  id: ID;
+  name: string;
+  active: boolean;
+  position: number;
+  system?: boolean;
+}
+
+export const PROPERTY_KINDS = ["single_family", "multi_family", "commercial", "hoa_common"] as const;
+export type PropertyKind = (typeof PROPERTY_KINDS)[number];
 export interface Property {
   id: ID;
   customerId: ID;
+  /** street line (line1) */
   address: string;
+  /** shown line: "City, ST zip" (built from place when it is known) */
   city: string;
   stories: number;
+  /** C2 (docs/specs/04 §3): apartment / suite, the city / state / zip apart, a label ("Home", "Rental"), the kind */
+  unit?: string;
+  place?: { city: string; state?: string; zip?: string };
+  label?: string;
+  kind?: PropertyKind;
+  /** dog, side gate, parking — whoever sees the property sees these */
+  accessNotes?: string;
+  /** office always; a tech only on the day of their visit and the day before (server: app.can_see_gate_code) */
+  gateCode?: string;
+  /** people of the property: links to the client's people (tenant, property manager) */
+  contactIds?: ID[];
 }
 
 /** unscheduled: client signed, the contractor has not picked a date yet (not in the plan) */
@@ -102,6 +156,8 @@ export interface Visit {
   signature?: string; // SVG path data
   payment?: { method: PaymentMethod; amountCents: number; at: string };
   late?: boolean;
+  /** the visit ended without the client's payment step: completed or no-show on the server (cancelled visits are not loaded) */
+  closed?: boolean;
 }
 
 /**
@@ -131,12 +187,13 @@ export interface Lead {
   id: ID;
   name: string;
   phone: string;
+  /** before wave L2 part 2 (read only; now a phone of the main person) */
   phone2?: string;
   phone2Label?: PhoneLabel;
   email?: string;
   preferredContact?: ContactWay;
   /** client documents and messages in this language */
-  language?: "en" | "es";
+  language?: import("@/i18n/translate").DocLang;
   /** job address */
   address?: string;
   city: string;
@@ -159,7 +216,11 @@ export interface Lead {
   createdBy?: ID;
   /** first call / SMS / email / "I replied" — stops the reply timer */
   firstResponseAt?: string;
+  /** before wave L2 part 2: extra people with one phone / email (read only; now in `people`) */
   contacts?: LeadContact[];
+  /** people of the lead, each with several phones and emails (docs/14 §2, Р12); the first is the lead itself.
+   *  `phone` / `email` above are the main person's primary ones, kept for search and lists. */
+  people?: Person[];
   /** set when a prospect card / client exists for this lead */
   customerId?: ID;
   propertyId?: ID;
@@ -217,7 +278,8 @@ export interface Activity {
   actorId: ID;
 }
 
-export const ESTIMATE_STATUSES = ["draft", "sent", "approved", "declined"] as const;
+/** awaiting_countersign: the client signed remotely, an employee has not signed for the company yet (docs/specs/07 §4, S8b) */
+export const ESTIMATE_STATUSES = ["draft", "sent", "awaiting_countersign", "approved", "declined"] as const;
 export type EstimateStatus = (typeof ESTIMATE_STATUSES)[number];
 
 /** Universal estimate content (trade-agnostic): options → lines in groups, add-ons, discount, tax, deposit. */
@@ -341,6 +403,8 @@ export interface Company {
   address: Address;
   mailingAddress?: Address;
   timezone: string;
+  /** language of what goes to clients when the client's own is not known (en in the US); docLanguageFor decides */
+  docLanguage?: import("@/i18n/translate").DocLang;
   trades: string[];
   brand: { logo?: string; color?: string };
   insurance: { cglCarrier?: string; cglPolicy?: string; wcCarrier?: string; wcPolicy?: string; wcExempt?: boolean };
@@ -421,6 +485,7 @@ export interface DB {
   me: ID;
   members: Member[];
   sources: Source[];
+  tags: Tag[];
   tasks: Task[];
   activities: Activity[];
   customers: Customer[];
