@@ -47,3 +47,13 @@ export function progressAmount(contractCents: number, alreadyInvoiced: number, b
 /** A payment can't exceed the invoice balance; returns the accepted amount (0 if nothing is due). */
 export const acceptPayment = (invoice: InvoiceLike, amountCents: number): number =>
   Math.max(0, Math.min(amountCents, invoice.totalCents - invoice.paidCents));
+
+/**
+ * Client money on the client card (docs/specs/04 §2): "owes" = unpaid part of the client's live invoices;
+ * "paid total" = all payments (net of refunds) over the client's lifetime. Integer cents, never negative.
+ */
+export function clientMoney(invoices: InvoiceLike[], paymentsNetCents: number[]): { owesCents: number; paidTotalCents: number } {
+  const owesCents = invoices.filter((i) => !i.void).reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0);
+  const paidTotalCents = Math.max(0, paymentsNetCents.reduce((s, p) => s + p, 0));
+  return { owesCents, paidTotalCents };
+}

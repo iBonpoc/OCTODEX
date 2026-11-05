@@ -7,6 +7,7 @@ import { SourceField } from "@/features/lead/SourcePicker";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, Screen } from "@/ui/surfaces";
+import { T } from "@/ui/primitives";
 
 
 /**
@@ -44,7 +45,8 @@ export default function EditClient() {
       router.replace(`/client/${r.id}`);
       return;
     }
-    const undos = [store.updateCustomer(c!.id, { name: name.trim(), phone: phone.trim(), email: email.trim() })];
+    // phones and emails of an existing client are edited in the card ("People": several per person)
+    const undos = [store.updateCustomer(c!.id, { name: name.trim() })];
     if (p && (address !== p.address || city !== p.city)) undos.push(store.updateProperty(p.id, { address: address.trim(), city: city.trim() }));
     toast.show(store.online ? t("co.saved") : t("offline.queued"), () => undos.reverse().forEach((u) => u()));
     back();
@@ -55,12 +57,20 @@ export default function EditClient() {
         <Labeled label={t("lead.name")}>
           <TextField type="name" value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" />
         </Labeled>
-        <Labeled label={t("co.phone")}>
-          <TextField type="phone" value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" icon="phone" />
-        </Labeled>
-        <Labeled label={t("co.email")}>
-          <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
-        </Labeled>
+        {creating ? (
+          <>
+            <Labeled label={t("co.phone")}>
+              <TextField type="phone" value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" icon="phone" />
+            </Labeled>
+            <Labeled label={t("co.email")}>
+              <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
+            </Labeled>
+          </>
+        ) : (
+          <T v="caption" tone="mut">
+            {t("client.phonesInCard")}
+          </T>
+        )}
       </Card>
       {p || creating ? (
         <Card>
