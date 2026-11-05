@@ -22,6 +22,7 @@ import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
+import { canCountersign, clientSigned, companySigned, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
 import {
@@ -154,8 +155,13 @@ interface StoreCtx {
   setGateCode: (propertyId: ID, code: string) => Undo;
   addNote: (n: Omit<Note, "id" | "at" | "authorId" | "pinned">) => Undo;
   updateNote: (id: ID, patch: { pinned?: boolean; body?: string; deleted?: boolean }) => Undo;
-  /** client's choice + signature (on site or on the client page): job + visit in the plan + notice */
+  /** client's choice + signature (on site or on the client page) → awaiting the company's signature (S8, docs/specs/07 §4) */
   approveEstimate: (id: ID, a: Omit<EstimateApproval, "at" | "totalCents" | "depositCents">) => Undo;
+  /* ---- wave E2a: the company signs (docs/specs/07 §2.2 А) ---- */
+  /** an employee signs for the company in their own name (S8b): approved, lead won, client active, job, deposit invoice */
+  countersignEstimate: (id: ID, signature: string) => Undo;
+  /** director / office: the client link stops working; the next send makes a new one */
+  revokeEstimateLink: (id: ID) => Undo;
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   readNotices: () => void;
@@ -764,7 +770,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const now = new Date().toISOString();
             return {
               ...d,
-              estimates: d.estimates.map((e) => (e.id === id ? { ...e, token, status: e.status === "draft" ? "sent" : e.status, sentAt: e.sentAt ?? now } : e)),
+              estimates: d.estimates.map((e) =>
+                e.id === id
+                  ? {
+                      ...e, token, status: e.status === "draft" ? "sent" : e.status, sentAt: e.sentAt ?? now,
+                      // E2a: every send of a new version gets a fresh "valid until"; a revoked link is replaced by the new token
+                      validUntil: e.status === "draft" ? validUntilFor(d.company, new Date(now)) : e.validUntil, linkRevokedAt: undefined,
+                    }
+                  : e,
+              ),
               leads: est?.leadId
                 ? d.leads.map((l) => (l.id === est.leadId && (l.status === "new" || l.status === "replied" || l.status === "booked") ? { ...l, status: "estimate_sent", lastActivityAt: now } : l))
                 : d.leads,
@@ -794,48 +808,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       approveEstimate: (id, a) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e?.doc || e.status === "approved") return () => {};
+        if (!e?.doc || e.status === "approved" || e.status === "awaiting_countersign") return () => {};
         const token = e.token ?? newToken();
+        const ids = { jobId: dbRef.current.jobs.find((j) => j.estimateId === id)?.id ?? uid(), invoiceId: uid() };
         const now = new Date().toISOString();
-        const sum = summarize(e.doc, a);
-        const approval: EstimateApproval = { ...a, at: now, totalCents: sum.totalCents, depositCents: sum.depositCents };
-        const existingJob = dbRef.current.jobs.find((j) => j.estimateId === id);
-        const jobId = existingJob?.id ?? uid();
-        const depositInvoiceId = uid();
-        const needDepositInvoice = (sum.depositCents ?? 0) > 0 && !dbRef.current.invoices.some((i) => i.jobId === jobId && i.kind === "deposit");
-        const customer = dbRef.current.customers.find((c) => c.id === e.customerId);
+        return mutate("estimate.approve", (d) => clientSigned(d, id, a, ids, now, token), {
+          k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId: ids.jobId, invoiceId: ids.invoiceId,
+        });
+      },
+      countersignEstimate: (id, signature) => {
+        const d0 = dbRef.current;
+        const e = d0.estimates.find((x) => x.id === id);
+        if (!e || e.status !== "awaiting_countersign" || !canCountersign(d0, d0.me)) return () => {};
+        const now = new Date().toISOString();
         return mutate(
-          "estimate.approve",
-          (d) => ({
-            ...d,
-            estimates: d.estimates.map((x) =>
-              x.id === id
-                ? { ...x, ...sum, token, status: "approved", approval, signature: a.signature, approvedAt: now, sentAt: x.sentAt ?? now }
-                : x,
-            ),
-            jobs: existingJob
-              ? d.jobs
-              : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: sum.totalCents, estimateId: id }],
-            leads: e.leadId
-              ? d.leads.map((l) => (l.id === e.leadId && l.status !== "won" && l.status !== "lost" ? { ...l, status: "won", wonVia: "approval", lastActivityAt: now } : l))
-              : d.leads,
-            customers: d.customers.map((c) => (c.id === e.customerId && c.status === "prospect" ? { ...c, status: "active" } : c)),
-            invoices: needDepositInvoice
-              ? [
-                  ...d.invoices,
-                  {
-                    id: depositInvoiceId, customerId: e.customerId, jobId, kind: "deposit", title: "Deposit", totalCents: sum.depositCents ?? 0, paidCents: 0,
-                    dueDate: now, sentAt: now, number: modeRef.current === "demo" ? nextInvoiceNumber(d) : undefined,
-                  },
-                ]
-              : d.invoices,
-            notices: [
-              { id: uid(), kind: "estimate.approved", estimateId: id, jobId, customer: customer?.name ?? a.signerName, totalCents: sum.totalCents, depositCents: sum.depositCents, at: now, read: a.channel === "on_site" },
-              ...d.notices,
-            ],
-          }),
-          { k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId, invoiceId: depositInvoiceId },
+          "estimate.countersign",
+          (d) => companySigned(d, id, { userId: d.me, signature, method: "drawn" }, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined)),
+          { k: "estimate.countersign", id, svg: signature, jobId: e.approval?.jobId, invoiceId: e.approval?.invoiceId },
         );
+      },
+      revokeEstimateLink: (id) => {
+        const e = dbRef.current.estimates.find((x) => x.id === id);
+        if (!e?.token) return () => {};
+        const now = new Date().toISOString();
+        return mutate("estimate.revoke", (d) => ({ ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, token: undefined, linkRevokedAt: now } : x)) }), {
+          k: "estimate.revoke", id,
+        });
       },
       leadEstimateTarget: (leadId) => leadTarget(leadId),
       convertLead: (leadId, reasonText) => {
@@ -1023,7 +1021,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => ({
             ...d,
             estimates: d.estimates.map((e) =>
-              e.id === id ? { ...e, status: "approved", signature: path, approvedAt: new Date().toISOString(), sentAt: e.sentAt ?? new Date().toISOString() } : e,
+              // E2a: the client's signature waits for the company's (S8 → S8b), also for a legacy quick estimate
+              e.id === id && e.status !== "approved" ? { ...e, status: "awaiting_countersign", signature: path, sentAt: e.sentAt ?? new Date().toISOString() } : e,
             ),
           }),
           { k: "estimate.sign", id, svg: path },

@@ -6,6 +6,7 @@
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
 import { clientDoc } from "@/features/estimateDoc";
 import { docLanguageFor } from "@/data/people";
+import { linkOpen } from "@/features/estimateSign";
 import type { DocLang } from "@/i18n/translate";
 import { supabase } from "./client";
 
@@ -29,7 +30,7 @@ export interface PortalData {
     licenses: { kind: string; number: string; classes: string[] }[];
     contacts: { name: string; title?: string; phone?: string; email?: string }[];
   };
-  customer: { name: string };
+  customer: { name: string; phone?: string; email?: string };
   property: { address: string; city?: string };
   approval: { optionId: string; addonIds: string[]; signerName: string; signedAt: string; signature?: string; totalCents?: number; depositCents?: number } | null;
   depositPaid: boolean;
@@ -37,6 +38,11 @@ export interface PortalData {
   invoices: { id: string; number?: string; title?: string; kind: string; totalCents: number; paidCents: number; dueDate?: string }[];
   /** the client's language for this page and its PDF (rule 7); from the server: portal_estimate.doc_language */
   lang: DocLang;
+  /* ---- wave E2a (docs/specs/07 §2.2) ---- */
+  /** YYYY-MM-DD: the link works until this day while unsigned */
+  validUntil?: string;
+  /** the company's signature: an employee in their own name */
+  countersign: { signerName: string; signerTitle?: string; his?: string; signedAt: string; signature?: string } | null;
 }
 
 type Raw = {
@@ -46,11 +52,13 @@ type Raw = {
     licenses?: { kind: string; number: string; classes?: string[] }[];
     contacts?: { name: string; title?: string; phone?: string; email?: string }[];
   };
-  customer?: { name?: string }; property?: { address?: string; city?: string; state?: string; zip?: string };
+  customer?: { name?: string; phone?: string | null; email?: string | null }; property?: { address?: string; city?: string; state?: string; zip?: string };
   approval?: { option_id: string; signer_name: string; signed_at: string; signature_svg?: string; selection?: { addon_ids?: string[]; total?: number; deposit?: number } } | null;
   deposit_paid?: boolean;
   invoices?: { id: string; number?: string; title?: string; kind: string; total: number; paid: number; due_date?: string }[];
   doc_language?: string;
+  valid_until?: string | null;
+  countersign?: { signer_name: string; signer_title?: string | null; his?: string | null; signed_at: string; signature_svg?: string } | null;
 };
 
 function fromRaw(r: Raw): PortalData {
@@ -68,7 +76,11 @@ function fromRaw(r: Raw): PortalData {
       licenses: (r.company?.licenses ?? []).map((l) => ({ kind: l.kind, number: l.number, classes: l.classes ?? [] })),
       contacts: r.company?.contacts ?? [],
     },
-    customer: { name: r.customer?.name ?? "" },
+    customer: { name: r.customer?.name ?? "", phone: r.customer?.phone ?? undefined, email: r.customer?.email ?? undefined },
+    validUntil: r.valid_until ?? undefined,
+    countersign: r.countersign
+      ? { signerName: r.countersign.signer_name, signerTitle: r.countersign.signer_title ?? undefined, his: r.countersign.his ?? undefined, signedAt: r.countersign.signed_at, signature: r.countersign.signature_svg }
+      : null,
     property: { address: p.address ?? "", city: [p.city, [p.state, p.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ") },
     approval: r.approval
       ? {
@@ -84,7 +96,8 @@ function fromRaw(r: Raw): PortalData {
 
 export function localPortal(db: DB, token: string, companyName: string): PortalData | null {
   const e = db.estimates.find((x) => x.token === token);
-  return e ? portalFromEstimate(db, e, companyName) : null;
+  // the same rule as the server (founder 05.11): past "valid until" (unsigned) or revoked → the page does not open
+  return e && linkOpen(e, new Date()) ? portalFromEstimate(db, e, companyName) : null;
 }
 
 export function portalFromEstimate(db: DB, e: Estimate, companyName: string): PortalData {
@@ -99,7 +112,11 @@ export function portalFromEstimate(db: DB, e: Estimate, companyName: string): Po
     sentAt: e.sentAt,
     doc: e.doc ? clientDoc(e.doc) : null,
     company: companyForPortal(db, companyName),
-    customer: { name: cust?.name ?? "" },
+    customer: { name: cust?.name ?? "", phone: cust?.phone || undefined, email: cust?.email || undefined },
+    validUntil: e.validUntil,
+    countersign: e.countersign
+      ? { signerName: e.countersign.signerName, signerTitle: e.countersign.signerTitle, his: e.countersign.his, signedAt: e.countersign.at, signature: e.countersign.signature }
+      : null,
     property: { address: prop?.address ?? "", city: prop?.city },
     approval: e.approval
       ? { optionId: e.approval.optionId, addonIds: e.approval.addonIds, signerName: e.approval.signerName, signedAt: e.approval.at, signature: e.approval.signature, totalCents: e.approval.totalCents, depositCents: e.approval.depositCents }

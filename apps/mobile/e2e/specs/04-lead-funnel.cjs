@@ -1,4 +1,16 @@
 /** Lead → estimate from lead → sent → signed → client; lost with reason; manual conversion; notes. */
+/** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
+async function countersign(h, estimateId) {
+  await h.go(`/estimate/${estimateId}`);
+  const pad = h.page.getByLabel(/расписывается|signs here/i).last();
+  await pad.scrollIntoViewIfNeeded(); await h.page.waitForTimeout(250);
+  const bb = await pad.boundingBox();
+  await h.page.mouse.move(bb.x + 30, bb.y + 90); await h.page.mouse.down();
+  for (let i = 0; i < 20; i++) await h.page.mouse.move(bb.x + 30 + i * 12, bb.y + 90 - Math.sin(i / 2) * 40);
+  await h.page.mouse.up();
+  await h.page.getByRole("button", { name: "Подписать договор" }).last().click(); await h.page.waitForTimeout(700);
+}
+
 exports.run = async (h) => {
   await h.go("/inbox");
   await h.page.getByText("Kevin Brooks", { exact: true }).first().click(); await h.page.waitForTimeout(700);
@@ -18,6 +30,9 @@ exports.run = async (h) => {
   const est = db.estimates.find((e) => e.leadId === kevin.id);
   await h.go(`/p/${est.token}`);
   await h.sign("Kevin Brooks");
+  db = await h.db();
+  h.expect(db.leads.find((l) => l.id === kevin.id).status === "estimate_sent", "client signed: not won until the company signs");
+  await countersign(h, est.id);
   db = await h.db();
   h.expect(db.leads.find((l) => l.id === kevin.id).status === "won", "signed → client");
   h.expect(db.customers.find((c) => c.id === kevin.customerId).status === "active", "prospect → active");

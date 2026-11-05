@@ -139,6 +139,9 @@ export type Op =
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
   | { k: "estimate.sign"; id: string; svg: string }
+  /* ---- wave E2a: the company signs; the client link can be revoked (docs/specs/07 §2.2 А, Б) ---- */
+  | { k: "estimate.countersign"; id: string; svg: string; jobId?: string; invoiceId?: string }
+  | { k: "estimate.revoke"; id: string }
   | {
       k: "estimate.deposit";
       id: string;
@@ -545,7 +548,18 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           company_id: c, estimate_id: op.id, version_id: data?.current_version_id ?? null, signature_svg: op.svg, esign_consent: true, channel: "on_site",
         }),
       );
-      return run(supabase.from("estimates").update({ status: "approved" }).eq("id", op.id));
+      // E2a: the client's signature waits for the company's; the server refuses a direct "approved"
+      return run(supabase.from("estimates").update({ status: "awaiting_countersign" }).eq("id", op.id).in("status", ["sent", "viewed"]));
+    }
+    case "estimate.countersign": {
+      const { error } = await supabase.rpc("countersign_estimate", {
+        p_estimate_id: op.id, p_svg: op.svg, p_member_signature_id: null, p_job_id: op.jobId ?? null, p_invoice_id: op.invoiceId ?? null,
+      });
+      return run(Promise.resolve({ error }));
+    }
+    case "estimate.revoke": {
+      const { error } = await supabase.rpc("revoke_estimate_link", { p_estimate_id: op.id });
+      return run(Promise.resolve({ error }));
     }
     case "estimate.deposit": {
       const { data } = await supabase.from("estimates").select("current_version_id").eq("id", op.id).maybeSingle();

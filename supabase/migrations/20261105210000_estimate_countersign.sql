@@ -139,11 +139,12 @@ drop trigger if exists t25_estimate_send_and_guard on public.estimates;
 create trigger t25_estimate_send_and_guard before update on public.estimates
   for each row execute function app.tg_estimate_send_and_guard();
 
--- the client page and its link are open: not revoked, and (signed by both, or not past "valid until" in the company's day)
+-- the client page and its link are open: not revoked, and (signed by the client or both, or not past "valid until" in the company's day).
+-- The founder's limit is for an UNSIGNED estimate; once the client signed they keep their page.
 create or replace function app.estimate_link_open(e public.estimates)
 returns boolean language sql stable security definer set search_path = '' as $$
   select e.link_revoked_at is null
-     and (e.status = 'approved' or e.expires_at is null
+     and (e.status in ('awaiting_countersign', 'approved') or e.expires_at is null
           or e.expires_at >= (select (now() at time zone c.timezone)::date from public.companies c where c.id = e.company_id));
 $$;
 revoke all on function app.estimate_link_open(public.estimates) from public, anon, authenticated;

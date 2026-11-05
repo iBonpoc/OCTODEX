@@ -1488,6 +1488,10 @@ begin
   update public.companies set estimate_settings = estimate_settings - 'valid_days' where id = 'ca000000-0000-0000-0000-000000000000';
 end $$;
 :as_super
+insert into public.estimates (company_id, customer_id, property_id, title, public_token, status)
+values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T24 client signed', 'tok_await_0123456789abcd', 'draft');
+update public.estimates set status = 'sent' where public_token = 'tok_await_0123456789abcd';
+update public.estimates set status = 'awaiting_countersign', expires_at = current_date - 2 where public_token = 'tok_await_0123456789abcd';
 update public.estimates set expires_at = current_date - 2 where public_token = 'tok_exp_0123456789abcdef';
 update public.estimates set expires_at = current_date - 2 where id = '0e1a0000-0000-0000-0000-000000000023';
 reset role; reset request.jwt.claim.sub; set role anon;
@@ -1495,6 +1499,7 @@ do $$ begin
   perform tst.ok(public.portal_estimate('tok_exp_0123456789abcdef') is null, 'past valid until: the link does not open');
   perform tst.fails($q$select public.portal_accept('tok_exp_0123456789abcdef', gen_random_uuid(), null, 'X', 'M0 0', true)$q$, 'past valid until: cannot sign');
   perform tst.ok(public.portal_estimate('tok_sign_0123456789abcdef') is not null, 'signed by both: opens always, even past the date');
+  perform tst.ok(public.portal_estimate('tok_await_0123456789abcd') is not null, 'signed by the client (awaiting the company): the client keeps the page past the date');
 end $$;
 :as_tech_a
 do $$ begin

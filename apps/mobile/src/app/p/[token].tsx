@@ -67,7 +67,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
   const [optionId, setOptionId] = useState<string | null>(null);
   const [addonIds, setAddonIds] = useState<string[]>([]);
 
-  const approved = data.status === "approved" && data.approval;
+  const approved = (data.status === "approved" || data.status === "awaiting_countersign") && data.approval; // E2a: the client has signed
   const chosen = approved ? data.approval!.optionId : optionId ?? mainOption(doc).id;
   const addons = approved ? data.approval!.addonIds : addonIds;
   const base = doc.options.find((o) => o.id === chosen) ?? mainOption(doc);
