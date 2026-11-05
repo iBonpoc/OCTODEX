@@ -2154,7 +2154,7 @@ end $$;
 \echo 'T30 client page answers, two signers ok'
 
 :as_super
--- ---------------------------------------------------------------- T23, security-check #98 (migration 20261105270000):
+-- ---------------------------------------------------------------- T23, security-check #98 (migration 20261105290000):
 -- the title on the contract is the profile's (owner / admin set it), not the one typed with the employee's own signature
 :as_owner_a
 do $$
