@@ -4,7 +4,7 @@ import { space, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { setupProgress, stepTitle } from "./companySetup";
-import { Button, StatusChip } from "@/ui/controls";
+import { Button, ProgressBar } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 
@@ -18,14 +18,14 @@ export function CompanySetupCard() {
     <Card status="warn" onPress={() => router.push("/company")} accessibilityLabel={t("co.setupTitle")}>
       <RowView style={{ justifyContent: "space-between" }}>
         <T v="heading">{t("co.setupTitle")}</T>
-        <StatusChip status="warn" label={t("co.progress", { done: p.done, total: p.total })} />
       </RowView>
+      <ProgressBar value={p.done} max={p.total} label={t("co.progress", { done: p.done, total: p.total })} />
       {p.next ? (
         <T v="caption" tone="mut">
           {t("co.nextStep", { step: t(stepTitle(p.next)) })}
         </T>
       ) : null}
-      {p.next ? <Button label={t("co.continue")} icon="chevronRight" size="sm" onPress={() => router.push(`/company/${p.next}?wizard=1`)} /> : null}
+      {p.next ? <Button label={t("co.continue")} icon="chevronRight" size="sm" variant="secondary" onPress={() => router.push(`/company/${p.next}?wizard=1`)} /> : null}
     </Card>
   );
 }

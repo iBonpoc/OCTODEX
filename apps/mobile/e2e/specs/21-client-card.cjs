@@ -1,3 +1,4 @@
+const { expectOneAccent } = require("../accent.cjs");
 /**
  * Client card C1 (docs/specs/04 §7.2): number, tags, owes / paid total, tabs, people with several phones,
  * tags and status sheets, search by a second phone, tech rights. Same steps at every width (sheets are a dialog
@@ -9,11 +10,12 @@ exports.run = async (h) => {
   const save = async () => { await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500); };
 
   await h.go("/client/c1");
+  await expectOneAccent(h, "client card");
   await h.expectText(/CLT-0001/, "client number in the header");
   await h.expectText(/VIP[\s\S]*Постоянный/, "tags, translated, in order");
   await h.expectText(/Должен[\s\S]*\$0[\s\S]*Оплатил всего[\s\S]*\$582\b/, "owes / paid total");
   await h.expectText(/Контакты[\s\S]*\(626\) 555-0142[\s\S]*Дополнительные контакты[\s\S]*Tom Mitchell[\s\S]*Супруг\(а\)/, "contacts first, then the spouse");
-  await h.expectText(/Выставлено всего[\s\S]*Работ/, "invoiced total and jobs");
+  await h.expectText(/Выставлено всего/, "invoiced total (jobs live in the tabs)");
   await h.expectText(/\(626\) 555-0143/, "second phone of the main person");
 
   await tab("История");
@@ -36,7 +38,7 @@ exports.run = async (h) => {
   await tab("Обзор");
 
   // People: + Phone is a button; the new phone of the spouse is saved and shown
-  await p.getByRole("button", { name: "Изменить", exact: true }).last().click();
+  await p.getByRole("button", { name: "Люди", exact: true }).last().click();
   await p.waitForTimeout(500);
   await h.sheet().getByRole("button", { name: "Телефон", exact: true }).last().click();
   await h.sheet().getByPlaceholder("Телефон").last().fill("6265550199");

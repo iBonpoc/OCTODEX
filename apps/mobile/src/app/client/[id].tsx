@@ -146,7 +146,8 @@ export default function ClientScreen() {
   /* ---------- tab contents ---------- */
   const overview = (
     <>
-      <SectionTitle title={t("client.contacts")} right={office ? <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => setSheet("people")} /> : undefined} />
+      {/* one «Изменить» per screen (the client, in the header); here the action names what it opens (unslop 05.11) */}
+      <SectionTitle title={t("client.contacts")} right={office ? <Button label={t("client.people")} icon="users" variant="ghost" size="sm" onPress={() => setSheet("people")} /> : undefined} />
       <Card>
         {main ? personRows(main) : null}
         {props.map((p) => (
@@ -428,17 +429,17 @@ export default function ClientScreen() {
       </RowView>
 
       {canSeeClientMoney(role) ? (
+        // money only, three equal tiles on one line (jobs live in the tabs) — unslop 05.11
         <Card>
-          <RowView style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
+          <RowView style={{ alignItems: "flex-start" }}>
             <MoneyCell label={t("client.owes")} value={moneyWhole(m.owesCents)} tone={m.owesCents > 0 ? "warn" : "ink"} />
-            <MoneyCell label={t("client.paidTotal")} value={moneyWhole(m.paidTotalCents)} end />
-          </RowView>
-          <RowView style={{ justifyContent: "space-between", alignItems: "flex-start" }}>
-            <MoneyCell label={t("client.invoiced")} value={moneyWhole(m.invoicedCents)} small />
-            <MoneyCell label={t("client.jobs")} value={String(jobs.length)} small end />
+            <MoneyCell label={t("client.paidTotal")} value={moneyWhole(m.paidTotalCents)} />
+            <MoneyCell label={t("client.invoiced")} value={moneyWhole(m.invoicedCents)} />
           </RowView>
         </Card>
       ) : null}
+      {/* breathing room between the header block and the sticky tabs */}
+      <View style={{ height: space[3] }} />
 
       <Menu
         visible={!!menu}
@@ -456,13 +457,13 @@ export default function ClientScreen() {
   );
 }
 
-function MoneyCell({ label, value, tone = "ink", end, small }: { label: string; value: string; tone?: "ink" | "warn"; end?: boolean; small?: boolean }) {
+function MoneyCell({ label, value, tone = "ink" }: { label: string; value: string; tone?: "ink" | "warn" }) {
   return (
-    <View style={{ alignItems: end ? "flex-end" : "flex-start", flex: 1 }}>
+    <View style={{ alignItems: "flex-start", flex: 1 }}>
       <T v="caption" tone="mut">
         {label}
       </T>
-      <T v={small ? "heading" : "title"} tabular tone={tone}>
+      <T v="heading" tabular tone={tone}>
         {value}
       </T>
     </View>
