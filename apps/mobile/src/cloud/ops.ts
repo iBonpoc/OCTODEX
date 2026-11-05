@@ -33,6 +33,19 @@ export type Op =
       message: string;
       start: string;
     }
+  /** estimate visit for a lead whose client and property already exist (lead.prospect or earlier); replaces lead.book */
+  | {
+      k: "lead.visit";
+      leadId: string;
+      customerId: string;
+      propertyId: string;
+      jobId: string;
+      visitId: string;
+      start: string;
+      durationMin: number;
+      techId: string | null;
+      scope: string[];
+    }
   | { k: "lead.add"; id: string; name: string; phone: string; city: string; address?: string; sourceId: string; message: string; costCents?: number; cols?: Record<string, unknown> }
   | { k: "visit.assign"; visitId: string; userId: string }
   | {
@@ -259,6 +272,19 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         }),
       );
       return run(supabase.from("leads").update({ status: "inspection_scheduled", customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));
+    }
+    case "lead.visit": {
+      await run(
+        ins("jobs", { id: op.jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, title: "Estimate visit", type: "inspection", number: "" }),
+      );
+      const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
+      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, lead_id: op.leadId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
+      // upsert: a replay after a partial failure must not die on unique (visit_id, user_id)
+      if (op.techId) await run(supabase.from("visit_assignees").upsert({ company_id: c, visit_id: op.visitId, user_id: op.techId }, { onConflict: "visit_id,user_id", ignoreDuplicates: true }));
+      // booking a visit is an answer to the client (same as the app); only the first one counts
+      await run(supabase.from("leads").update({ first_response_at: op.start < new Date().toISOString() ? op.start : new Date().toISOString(), first_response_kind: "manual" }).eq("id", op.leadId).is("first_response_at", null));
+      // only an open lead before "estimate sent" moves to "inspection scheduled"
+      return run(supabase.from("leads").update({ status: "inspection_scheduled" }).eq("id", op.leadId).in("status", ["new", "contacted", "qualified"]));
     }
     case "lead.add": {
       const src = await sourceRef(c, op);

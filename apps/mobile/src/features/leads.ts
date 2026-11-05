@@ -139,17 +139,18 @@ export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAU
     const today = due !== null && new Date(due).toDateString() === new Date(now).toDateString();
     return { kind: "step", dueAt: task.dueAt, title: task.title, status: due === null ? "neutral" : due < now ? "bad" : today ? "info" : "neutral" };
   }
+  // the estimate visit is the step: a planned one for any open lead (also a second visit after the estimate went out);
+  // once it has passed with no estimate yet ("booked"), it is overdue after a day of grace
+  const visit = l.propertyId
+    ? db.visits
+        .filter((v) => db.jobs.find((j) => j.id === v.jobId && j.propertyId === l.propertyId && j.status === "estimate"))
+        .sort((a, b) => b.start.localeCompare(a.start))[0]
+    : undefined;
+  const vStart = visit ? new Date(visit.start).getTime() : null;
+  if (visit && vStart! > now) return { kind: "step", dueAt: visit.start, status: new Date(vStart!).toDateString() === new Date(now).toDateString() ? "info" : "neutral" };
   if (l.status === "booked") {
-    // the estimate visit is the step; once it has passed with no estimate, it is overdue (a day of grace)
-    const visit = l.propertyId
-      ? db.visits
-          .filter((v) => db.jobs.find((j) => j.id === v.jobId && j.propertyId === l.propertyId && j.status === "estimate"))
-          .sort((a, b) => b.start.localeCompare(a.start))[0]
-      : undefined;
     if (!visit) return { kind: "step", status: "info" };
-    const start = new Date(visit.start).getTime();
-    if (start > now) return { kind: "step", dueAt: visit.start, status: new Date(start).toDateString() === new Date(now).toDateString() ? "info" : "neutral" };
-    return { kind: "step", dueAt: visit.start, status: now - start >= DAY ? "bad" : "warn" };
+    return { kind: "step", dueAt: visit.start, status: now - vStart! >= DAY ? "bad" : "warn" };
   }
   const sentAt = db.estimates.filter((e) => e.leadId === l.id && e.status === "sent" && e.sentAt).map((e) => e.sentAt!).sort().pop();
   // we wrote last: the last thing we did was a message (SMS / email / marketplace / "I replied"), not a conversation
