@@ -5,8 +5,9 @@ import { filterLeads, isOpenLead, leadStatusView as statusOf, needsNextStep, ope
 import { leadSigns } from "@/features/listSigns";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { CallResultSheet } from "@/features/lead/LeadSheets";
-import { CardGrid, ListCard, ListCardHeader, StatusPicker, openContact, type CardSign } from "@/ui/listCard";
-import type { ContactAction, FactKey } from "@/ui/listCardLayout";
+import { CardGrid, ListCardHeader, StatusPicker, openContact } from "@/ui/listCard";
+import { LEAD_COLUMNS, LeadListCard, leadCardSign } from "@/features/listCards";
+import type { ContactAction } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
@@ -22,9 +23,7 @@ import { CardList, Empty, Screen } from "@/ui/surfaces";
 
 
 
-const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
-/** desktop row columns (docs/specs/06-list-cards.md, leads) */
-const COLUMNS: FactKey[] = ["phone", "src", "svc", "next"];
+const COLUMNS = LEAD_COLUMNS;
 
 /** All requests in one place, with a "waiting N min" timer: whoever replies first wins the job. */
 /** "Sales" tab: leads → estimates → invoices, each list as cards with filters. */
@@ -98,52 +97,19 @@ function LeadsBoard() {
     if (move.how === "form") return router.push(`/lead/${l.id}`);
     toast.show(`${l.name}: ${t(statusOf[s as LeadStatus].label)}`, store.reopenLead(l.id));
   };
-  /** one sign per card, most urgent first: waiting for a reply → no answer ×N → no next step */
-  const signOf = (l: Lead): CardSign | undefined => {
-    const w = waitingMinutes(l);
-    if (w !== null) {
-      const tone = waitStatus(w);
-      if (tone === "warn" || tone === "bad") return { tone, label: t("inbox.waiting", { m: w }) };
-    }
-    const missed = leadSigns(l)[0];
-    if (missed) return { tone: missed.tone, label: t(missed.key, missed.params) };
-    if (needsNextStep(db, l)) return { tone: "warn", label: t("card.sign.noNextStep") };
-    return undefined;
-  };
-  const card = (l: Lead) => {
-    const sv = statusOf[l.status];
-    const sign = signOf(l);
-    const task = openTasks(db, l.id)[0];
-    const addr = [l.address, [l.city, [l.state, l.zip].filter(Boolean).join(" ")].filter(Boolean).join(", ")].filter(Boolean).join(", ");
-    const cost = office && (l.costCents ?? 0) > 0 ? ` — ${money(l.costCents ?? 0)}` : "";
-    const waiting = waitingMinutes(l) !== null;
-    return (
-      <ListCard
-        key={l.id}
-        title={l.name}
-        when={waiting ? undefined : day(l.receivedAt)}
-        lead={{ kind: "initials", text: initials(l.name) }}
-        status={{ tone: sv.status, label: t(sv.label), onPress: office && canChangeStatus("lead", l.status) ? () => setPicking(l) : undefined }}
-        signs={sign ? [sign] : undefined}
-        facts={{
-          num: l.number,
-          phone: l.phone,
-          email: l.phone ? undefined : l.email,
-          addr,
-          src: `${sourceName(db, l.sourceId)}${cost}`,
-          svc: l.service ?? l.message,
-          resp: team ? db.members.find((m) => m.id === l.assigneeId)?.name : undefined,
-          next: task ? [task.title, task.dueAt ? day(task.dueAt) : ""].filter(Boolean).join(" · ") : undefined,
-        }}
-        contact={{ phone: l.phone, email: l.email, addr }}
-        onContact={contact(l)}
-        action={l.status === "new" ? { label: t("inbox.reply"), onPress: () => setReply(l.id) } : undefined}
-        density={device === "desktop" ? "row" : "rich"}
-        columns={COLUMNS}
-        onPress={() => router.push(`/lead/${l.id}`)}
-      />
-    );
-  };
+  // the one lead card (features/listCards.tsx), shared with the «Today» figures; this list adds its own actions
+  const signOf = (l: Lead) => leadCardSign(db, l, t);
+  const card = (l: Lead) => (
+    <LeadListCard
+      key={l.id}
+      l={l}
+      density={device === "desktop" ? "row" : "rich"}
+      showResp={team}
+      onStatus={office && canChangeStatus("lead", l.status) ? () => setPicking(l) : undefined}
+      onContact={contact(l)}
+      onReply={() => setReply(l.id)}
+    />
+  );
   // urgent first (a sign or a new lead), then the rest in work
   const urgent = leads.filter((l) => signOf(l) || l.status === "new");
   const rest = leads.filter((l) => !urgent.includes(l));
