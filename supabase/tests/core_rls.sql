@@ -1027,5 +1027,34 @@ begin
 end $$;
 \echo 'T17 lead people ok'
 
+-- ---------------------------------------------------------------- T18: estimate status (docs/specs/07 §4, S8b, edit after send)
+:as_owner_a
+do $$
+declare e uuid; e2 uuid;
+begin
+  insert into public.estimates (company_id, customer_id, property_id, title)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T18 status')
+  returning id into e;
+  update public.estimates set status = 'sent' where id = e;
+  update public.estimates set status = 'awaiting_countersign' where id = e;
+  perform tst.ok((select status from public.estimates where id = e) = 'awaiting_countersign', 'client signed: awaiting our signature');
+  perform tst.fails(format($q$update public.estimates set status = 'sent' where id = %L$q$, e), 'awaiting_countersign -> sent (a new version goes through draft)');
+  update public.estimates set status = 'draft' where id = e;
+  perform tst.ok((select status from public.estimates where id = e) = 'draft', '"don''t sign — change it": back to draft');
+  update public.estimates set status = 'sent' where id = e;
+  update public.estimates set status = 'draft' where id = e;
+  perform tst.ok((select status from public.estimates where id = e) = 'draft', 'edit after send: back to draft');
+  update public.estimates set status = 'sent' where id = e;
+  update public.estimates set status = 'awaiting_countersign' where id = e;
+  update public.estimates set status = 'approved' where id = e;
+  perform tst.ok((select status from public.estimates where id = e) = 'approved', 'employee signed for the company: approved');
+  perform tst.fails(format($q$update public.estimates set status = 'draft' where id = %L$q$, e), 'approved -> draft (signed by both: no edits)');
+  insert into public.estimates (company_id, customer_id, property_id, title)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T18 draft')
+  returning id into e2;
+  perform tst.fails(format($q$update public.estimates set status = 'awaiting_countersign' where id = %L$q$, e2), 'draft -> awaiting_countersign (client signs a sent version)');
+end $$;
+\echo 'T18 estimate status ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'
