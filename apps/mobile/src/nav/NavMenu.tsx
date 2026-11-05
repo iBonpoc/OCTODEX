@@ -1,0 +1,208 @@
+import { createContext, useCallback, useContext, useMemo, useRef, useState, type ReactNode } from "react";
+import { Modal, Platform, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
+import Animated, { FadeIn, FadeOut, SlideInLeft, SlideOutLeft, useReducedMotion } from "react-native-reanimated";
+import { usePathname, useGlobalSearchParams } from "expo-router";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { component, motion, radius, size, space } from "@octo/design-tokens";
+import { useStore } from "@/data/store";
+import { useAuth } from "@/cloud/auth";
+import { useI18n, type DictKey } from "@/i18n";
+import { useTheme } from "@/theme/ThemeProvider";
+import { Glass } from "@/ui/overlays";
+import { Avatar } from "@/ui/controls";
+import { Icon, Press, T, type IconKey } from "@/ui/primitives";
+import { activeSection } from "./hierarchy";
+import { menuGroups, sectionHref, type MenuGroup, type SectionId } from "./sections";
+import { QuickActions } from "./QuickActions";
+import { goTo } from "./go";
+
+/**
+ * ☰ — the app menu (docs/specs/13 §2.3, 13а §3): slides in from the left, groups split by a line, items by rights.
+ * One provider for the whole app (root _layout): any screen opens it with useNavMenu().open(); the old /more opens it too.
+ * «＋ Создать» on top opens the quick actions (the per-screen «＋» comes with wave 2c).
+ */
+interface NavMenuCtx {
+  open: () => void;
+  close: () => void;
+  isOpen: boolean;
+}
+const Ctx = createContext<NavMenuCtx>({ open: () => {}, close: () => {}, isOpen: false });
+export const useNavMenu = () => useContext(Ctx);
+
+export function NavMenuProvider({ children }: { children: ReactNode }) {
+  const [isOpen, setOpen] = useState(false);
+  const [quick, setQuick] = useState(false);
+  /** web: the control that opened the menu gets the focus back when it closes */
+  const opener = useRef<HTMLElement | null>(null);
+  const open = useCallback(() => {
+    if (Platform.OS === "web" && typeof document !== "undefined") opener.current = document.activeElement as HTMLElement | null;
+    setOpen(true);
+  }, []);
+  const close = useCallback(() => {
+    setOpen(false);
+    const el = opener.current;
+    opener.current = null;
+    if (el && Platform.OS === "web") requestAnimationFrame(() => el.isConnected && el.focus?.());
+  }, []);
+  const value = useMemo(() => ({ open, close, isOpen }), [open, close, isOpen]);
+  return (
+    <Ctx.Provider value={value}>
+      {children}
+      <Drawer
+        visible={isOpen}
+        onClose={close}
+        onCreate={() => {
+          setOpen(false);
+          setQuick(true);
+        }}
+      />
+      <QuickActions visible={quick} onClose={() => setQuick(false)} />
+    </Ctx.Provider>
+  );
+}
+
+/** ☰ in the header of a tab or menu root (phone; 36 visible, 44 to tap). */
+export function MenuButton() {
+  const { t } = useI18n();
+  const { c } = useTheme();
+  const menu = useNavMenu();
+  return (
+    <Press
+      onPress={menu.open}
+      visibleHeight={component.dockBtn}
+      accessibilityRole="button"
+      accessibilityLabel={t("nav.menu")}
+      aria-haspopup="dialog"
+      style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
+    >
+      <Icon name="menu" s={size.iconMd} color={c.ink} />
+    </Press>
+  );
+}
+
+const GROUP_TITLE: Partial<Record<MenuGroup, DictKey>> = { work: "nav.group.work", docs: "nav.group.docs", money: "nav.group.money" };
+
+function Drawer({ visible, onClose, onCreate }: { visible: boolean; onClose: () => void; onCreate: () => void }) {
+  const { t } = useI18n();
+  const { c } = useTheme();
+  const insets = useSafeAreaInsets();
+  const reduce = useReducedMotion();
+  const { width: winW } = useWindowDimensions();
+  const store = useStore();
+  const { db, role, mode, companyName } = store;
+  const auth = useAuth();
+  const pathname = usePathname();
+  const params = useGlobalSearchParams();
+  const current = activeSection(pathname, params, db, role);
+  const me = db.members.find((m) => m.id === db.me);
+  const go = (id: SectionId) => {
+    onClose();
+    goTo(sectionHref(id, role));
+  };
+  const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
+  return (
+    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <Animated.View entering={reduce ? undefined : FadeIn.duration(motion.durBase)} exiting={reduce ? undefined : FadeOut.duration(motion.durFast)} style={StyleSheet.absoluteFill}>
+        {/* a tap outside closes it; for the keyboard and screen readers: «Закрыть» in the menu and Esc */}
+        <View testID="menu-scrim" style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} onTouchEnd={onClose} accessible={false} />
+      </Animated.View>
+      <Animated.View
+        entering={reduce ? undefined : SlideInLeft.duration(motion.durSlow)}
+        exiting={reduce ? undefined : SlideOutLeft.duration(motion.durBase)}
+        accessibilityViewIsModal
+        aria-modal
+        role="dialog"
+        aria-label={t("nav.menu")}
+        style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: Math.min(component.panelW, winW - space[8]) }}
+      >
+        <Glass strong style={{ flex: 1, borderTopRightRadius: component.sheetRadius, borderBottomRightRadius: component.sheetRadius, paddingTop: insets.top + space[3], paddingBottom: insets.bottom + space[3] }}>
+          <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space[4], minHeight: size.hitMin }}>
+            <T v="title">{t("nav.menu")}</T>
+            <Press onPress={onClose} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
+              <View style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+                <Icon name="close" s={size.iconSm} />
+              </View>
+            </Press>
+          </View>
+          <ScrollView contentContainerStyle={{ paddingHorizontal: space[3], paddingVertical: space[2], gap: space[1] }}>
+            <MenuRow icon="plus" label={t("nav.create")} onPress={onCreate} accent />
+            {menuGroups(role).map((g) => (
+              <View key={g.group} style={{ gap: space[1] }}>
+                {g.group !== "top" ? <View style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[2], marginHorizontal: space[2] }} /> : null}
+                {GROUP_TITLE[g.group] ? (
+                  <T v="caption" w="semibold" tone="mut" style={{ paddingHorizontal: space[3], paddingTop: space[1] }}>
+                    {t(GROUP_TITLE[g.group]!)}
+                  </T>
+                ) : null}
+                {g.items.map((s) => (
+                  <MenuRow key={s.id} icon={s.icon} label={t(s.label)} selected={s.id === current} onPress={() => go(s.id)} testID={`menu-${s.id}`} />
+                ))}
+              </View>
+            ))}
+            {/* profile: name, role (or company) — opens My settings, where the role is switched when there are several */}
+            <View style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[2], marginHorizontal: space[2] }} />
+            <Press
+              onPress={() => go("settings")}
+              visibleHeight={size.rowMax}
+              accessibilityRole="button"
+              accessibilityLabel={`${me?.name ?? auth.email ?? ""} · ${who}`}
+              style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: size.rowMax, paddingHorizontal: space[3], borderRadius: radius.inner }}
+            >
+              <Avatar initials={me?.initials ?? "··"} />
+              <View style={{ flex: 1 }}>
+                <T v="body" w="semibold" numberOfLines={1}>
+                  {me?.name ?? auth.email ?? t("settings.title")}
+                </T>
+                <T v="caption" tone="mut" numberOfLines={1}>
+                  {store.availableRoles.length > 1 ? `${who} · ${t("nav.switchRole")}` : who}
+                </T>
+              </View>
+            </Press>
+          </ScrollView>
+        </Glass>
+      </Animated.View>
+    </Modal>
+  );
+}
+
+function MenuRow({ icon, label, onPress, selected, accent, testID }: { icon: IconKey; label: string; onPress: () => void; selected?: boolean; accent?: boolean; testID?: string }) {
+  const { c } = useTheme();
+  return (
+    <Press
+      testID={testID}
+      onPress={onPress}
+      visibleHeight={component.button.md}
+      accessibilityRole="button"
+      accessibilityLabel={label}
+      accessibilityState={{ selected: !!selected }}
+      aria-current={selected ? "page" : undefined}
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: space[3],
+        minHeight: size.hitMin,
+        paddingHorizontal: space[3],
+        borderRadius: radius.pill,
+        backgroundColor: selected ? c.surf2 : undefined,
+        borderWidth: component.hairline,
+        borderColor: selected ? c.ink : "transparent",
+      }}
+    >
+      <View
+        style={{
+          width: component.dockBtn,
+          height: component.dockBtn,
+          borderRadius: radius.pill,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: accent ? c.acc : undefined,
+        }}
+      >
+        <Icon name={icon} s={size.iconMd} color={accent ? c.onAcc : c.ink} />
+      </View>
+      <T v="body" w={selected || accent ? "semibold" : "medium"} numberOfLines={1} style={{ flex: 1 }}>
+        {label}
+      </T>
+    </Press>
+  );
+}

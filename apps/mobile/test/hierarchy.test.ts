@@ -6,16 +6,18 @@ const db = makeSeed();
 const label = (c: ReturnType<typeof navContext>) => (c.up ? ("key" in c.up.label ? c.up.label.key : c.up.label.text) : null);
 
 describe("navigation hierarchy: back = one level up", () => {
-  it("tab roots of the role have no back; a tab the role opens from More goes back to More", () => {
-    for (const p of ["/today", "/inbox", "/clients", "/more"]) expect(navContext(p, {}, db, "director").up).toBeUndefined();
-    for (const p of ["/plan", "/visits", "/triage"]) expect(navContext(p, {}, db, "director")).toMatchObject({ section: "tab.more", up: { href: "/more" } });
+  it("the 5 tabs and the role's home have no back; another home screen or Leads from ☰ goes back to this role's home", () => {
+    for (const p of ["/today", "/plan", "/messages", "/calls", "/clients"]) expect(navContext(p, {}, db, "director").up, p).toBeUndefined();
+    for (const p of ["/visits", "/triage"]) expect(navContext(p, {}, db, "director"), p).toMatchObject({ up: { href: "/today" } });
+    expect(navContext("/leads", {}, db, "director")).toEqual({ section: "leads" });
+    expect(navContext("/triage", {}, db, "director").section).toBe("home");
     expect(navContext("/plan", {}, db, "dispatcher").up).toBeUndefined();
     expect(navContext("/visits", {}, db, "tech").up).toBeUndefined();
-    expect(navContext("/inbox", {}, db, "tech").up?.href).toBe("/more");
+    expect(navContext("/leads", {}, db, "sales").up).toBeUndefined();
   });
-  it("Sales: Leads → Lead → Estimate → Invoice → Receipt", () => {
+  it("Leads: Leads → Lead → Estimate → Invoice → Receipt", () => {
     const lead = db.leads[0]!;
-    expect(navContext(`/lead/${lead.id}`, {}, db, "director")).toMatchObject({ section: "tab.sales", kind: "lead.card", up: { href: "/inbox?tab=leads" } });
+    expect(navContext(`/lead/${lead.id}`, {}, db, "director")).toMatchObject({ section: "leads", kind: "lead.card", up: { href: "/leads?tab=leads" } });
     const est = db.estimates.find((e) => e.leadId && db.leads.some((l) => l.id === e.leadId));
     if (est) expect(navContext(`/estimate/${est.id}`, {}, db, "director").up?.href).toBe(`/lead/${est.leadId}`);
     const estNoLead = db.estimates.find((e) => !e.leadId)!;
@@ -38,20 +40,26 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext("/client/edit", {}, db, "director")).toMatchObject({ kind: "clients.new", up: { href: "/clients" } });
     const v = db.visits.find((x) => x.jobId === job.id)!;
     expect(navContext(`/visit/${v.id}`, {}, db, "dispatcher").up?.href).toBe(`/job/${job.id}`);
-    expect(navContext(`/visit/${v.id}`, {}, db, "tech")).toMatchObject({ section: "tab.visits", up: { href: "/visits" } });
+    expect(navContext(`/visit/${v.id}`, {}, db, "tech")).toMatchObject({ section: "home", up: { href: "/visits" } });
   });
   it("new estimate goes back to the lead or client it was started from", () => {
     const lead = db.leads[0]!;
     expect(navContext("/estimate/new", { leadId: lead.id }, db, "director").up?.href).toBe(`/lead/${lead.id}`);
     expect(navContext("/estimate/new", { customerId: db.customers[0]!.id }, db, "director").up?.href).toBe(`/client/${db.customers[0]!.id}`);
   });
-  it("More: Jobs, Money, Team, Catalog → item, Company → section", () => {
-    for (const p of ["/jobs", "/money", "/team", "/catalog", "/company", "/settings"]) expect(navContext(p, {}, db, "director").up?.href).toBe("/more");
+  it("☰ roots (Jobs, Money, Team, Catalog, Company, Settings, Estimates) have ☰, not «back»; Catalog → item, Company → section", () => {
+    for (const p of ["/jobs", "/money", "/team", "/catalog", "/company", "/settings", "/estimates"]) {
+      const c = navContext(p, {}, db, "director");
+      expect(c.up, p).toBeUndefined();
+      expect(c.section, p).toBe(p.slice(1));
+    }
+    // the technician has no Sales lists: his estimates fall back to /estimates
+    expect(navContext("/estimate/new", {}, db, "tech").up?.href).toBe("/estimates");
     expect(navContext("/catalog/x", {}, db, "director").up?.href).toBe("/catalog");
     expect(navContext("/company/profile", {}, db, "director").up?.href).toBe("/company");
   });
   it("every route with a parent has a section label", () => {
-    for (const p of ["/lead/x", "/estimate/x", "/invoice/x", "/receipt/x", "/client/x", "/job/x", "/visit/x", "/catalog/x", "/jobs"]) {
+    for (const p of ["/lead/x", "/estimate/x", "/invoice/x", "/receipt/x", "/client/x", "/job/x", "/visit/x", "/catalog/x", "/company/address"]) {
       const c = navContext(p, {}, db, "director");
       expect(c.up, p).toBeDefined();
       expect(c.section, p).toBeDefined();

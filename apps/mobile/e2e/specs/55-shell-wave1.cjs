@@ -8,6 +8,14 @@
  */
 const setRole = (h, role) => h.page.evaluate((r) => localStorage.setItem("octo.role.v1", JSON.stringify(r)), role);
 
+/** the visible ☰ (the tab navigator keeps visited tabs mounted, hidden, with their own ☰) */
+const menuButton = async (p) => {
+  const all = p.getByRole("button", { name: "Меню", exact: true });
+  // a screen opened by a tab may still be rendering: wait up to 3 s
+  for (let t = 0; t < 15; t++, await p.waitForTimeout(200))
+    for (let i = (await all.count()) - 1; i >= 0; i--) if (await all.nth(i).isVisible()) return all.nth(i);
+  throw new Error("no visible ☰");
+};
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/more");
@@ -41,9 +49,11 @@ exports.run = async (h) => {
   body = await h.text();
   h.expect(!/Прибыль/.test(body), "tech: no «Прибыль» on the job card");
 
-  // «＋»: only what works, no «wave N»
+  // «＋ Создать» (first in ☰ since wave 2a): only what works, no «wave N»
   await h.go("/visits");
-  await h.click("Создать");
+  await (await menuButton(p)).click();
+  await p.getByRole("dialog", { name: "Меню" }).getByRole("button", { name: "Создать", exact: true }).click();
+  await p.waitForTimeout(400);
   await h.expectText(/Быстрые действия/, "the «＋» sheet is open");
   body = await h.text();
   h.expect(!/Голосовая заметка/.test(body), "no «Голосовая заметка» until it works");

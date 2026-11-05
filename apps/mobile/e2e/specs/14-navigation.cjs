@@ -18,7 +18,7 @@ exports.run = async (h) => {
     await h.expectText(/Карточка лида|Лид/, "lead kind");
     await back("Лиды").click();
     await p.waitForTimeout(700);
-    h.expect(p.url().includes("/inbox"), `up from the lead goes to Leads: ${p.url()}`);
+    h.expect(p.url().includes("/leads"), `up from the lead goes to Leads: ${p.url()}`);
     await h.expectText(/Лиды/, "Sales opened on Leads");
   }
 
@@ -36,11 +36,13 @@ exports.run = async (h) => {
   h.expect((await p.getByRole("button", { name: /^Назад/ }).count()) === 0, "no back on a tab root");
   await h.shot("clients-root");
 
-  // director opens Plan from More (not in his bottom bar) → "‹ Ещё"
+  // Plan is a tab for every role now (13 §2.1): no back; another role's home (Triage) sits under the director's Home
   await h.go("/plan");
-  await back("Ещё").click();
+  h.expect((await p.getByRole("toolbar", { name: "Где вы" }).count()) === 0 && (await p.getByRole("button", { name: /^Назад: Ещё/ }).count()) === 0, "no trail and no «‹ Ещё» on the Plan tab");
+  await h.go("/triage");
+  await back("Главная").click();
   await p.waitForTimeout(500);
-  h.expect(p.url().endsWith("/more"), `plan (from More) → more: ${p.url()}`);
+  h.expect(p.url().endsWith("/today"), `triage → home: ${p.url()}`);
   // Money and invoices: one name, the expense button lives here
   await h.go("/money");
   await h.expectText(/Деньги и счета/, "same name as in the menu");
@@ -51,9 +53,8 @@ exports.run = async (h) => {
   await p.waitForTimeout(500);
   h.expect(p.url().endsWith("/money"), `expense → money: ${p.url()}`);
 
-  // More → Catalog → item
+  // ☰ roots (13а §3): Catalog has ☰, no «back» and no trail; its item goes up to Catalog
   await h.go("/catalog");
-  await back("Ещё").click();
-  await p.waitForTimeout(500);
-  h.expect(p.url().endsWith("/more"), `catalog → more: ${p.url()}`);
+  h.expect((await p.getByRole("button", { name: /^Назад/ }).count()) === 0 && (await p.getByRole("toolbar", { name: "Где вы" }).count()) === 0, "catalog is a ☰ root");
+  h.expect((await p.getByRole("button", { name: "Меню", exact: true }).count()) >= 1, "☰ on Catalog");
 };
