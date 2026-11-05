@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
-import { useGlobalSearchParams, usePathname, useSegments } from "expo-router";
+import { useGlobalSearchParams, usePathname } from "expo-router";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import { component, motion, radius, size, space } from "@octo/design-tokens";
@@ -32,20 +32,18 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
 }
 
 /**
- * Tablet/desktop: the same top pill above inner screens (client, job, estimate…), so another section is one tap away.
- * The section the screen belongs to is highlighted (spec 10, Н1). Phone: inner screens have no bar (iOS), nothing here.
+ * Tablet/desktop: the same top pill on inner screens (client, job, estimate…), so another section is one tap away;
+ * the section the screen belongs to is highlighted (spec 10, Н1). Drawn by Screen inside its pinned header, so on
+ * iPad it slides with its screen (push, swipe back) and comes first in the keyboard order. Phone: none (iOS).
  */
 export function StackNavPill() {
-  const { wide } = useDevice();
   const store = useStore();
   const pathname = usePathname();
   const params = useGlobalSearchParams();
-  const segments = useSegments();
-  if (!wide || segments[0] === "(tabs)" || !segments.length || segments[0] === "p" || segments[0] === "auth") return null;
-  return <NavPill current={sectionTab(pathname, params, store.db, store.role)} onGo={(route) => goTo(`/${route}`)} />;
+  return <NavPill inline current={sectionTab(pathname, params, store.db, store.role)} onGo={(route) => goTo(`/${route}`)} />;
 }
 
-function NavPill({ current, onGo: go }: { current: TabRoute | undefined; onGo: (route: TabRoute) => void }) {
+function NavPill({ current, onGo: go, inline }: { current: TabRoute | undefined; onGo: (route: TabRoute) => void; inline?: boolean }) {
   const { role } = useStore();
   const { t } = useI18n();
   const { c } = useTheme();
@@ -157,10 +155,7 @@ function NavPill({ current, onGo: go }: { current: TabRoute | undefined; onGo: (
       <View
         pointerEvents="box-none"
         style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          ...(wide ? { top: nav.safeTop + space[3] } : { bottom: nav.tabBottom }),
+          ...(inline ? {} : { position: "absolute", left: 0, right: 0, ...(wide ? { top: nav.safeTop + space[3] } : { bottom: nav.tabBottom }) }),
           alignItems: "center",
           paddingHorizontal: space[4],
         }}
