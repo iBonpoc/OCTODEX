@@ -20,6 +20,9 @@ export const es: Dict = {
   "cat.item": "Artículo del catálogo",
   "common.back": "Atrás",
   "nav.backTo": "Volver a {to}",
+  "nav.goTo": "Ir a {to}",
+  "nav.trail": "Usted está aquí",
+  "nav.hiddenLevels": "Niveles ocultos",
 
   "quick.title": "Acciones rápidas",
   "quick.voice": "Nota de voz",
