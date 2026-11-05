@@ -39,16 +39,55 @@ export interface Source {
   position?: number;
 }
 
+/** prospect: has an estimate but has not signed yet (not in the main client list); archived / do_not_service: closed */
+export const CUSTOMER_STATUSES = ["prospect", "active", "archived", "do_not_service"] as const;
+export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number];
 export interface Customer {
   id: ID;
+  /** CLT-0001, assigned by the server (demo: by the app) */
+  number?: string;
   name: string;
+  /** cached main phone / email of the main person (search, duplicates, quick call) */
   phone: string;
   email?: string;
   sourceId: ID;
   /** positive = customer owes us */
   balanceCents: number;
-  /** prospect: has an estimate but has not signed yet (not in the main client list) */
-  status?: "prospect" | "active";
+  status?: CustomerStatus;
+  /** why the client is "do not service" */
+  statusReason?: string;
+  /** people of the client, each with several phones and emails (docs/specs/04 §3.2) */
+  people?: Person[];
+  tagIds?: ID[];
+}
+
+/** A person of a client or a lead: one shape for both (agreed with the leads chat, 05.11.2026). */
+export type PersonRole = "main" | "spouse" | "assistant" | "tenant" | "property_manager" | "accountant" | "other";
+export interface PersonPhone {
+  number: string;
+  label: PhoneLabel;
+  primary?: boolean;
+}
+export interface PersonEmail {
+  address: string;
+  primary?: boolean;
+}
+export interface Person {
+  id: ID;
+  name: string;
+  role: PersonRole;
+  phones: PersonPhone[];
+  emails: PersonEmail[];
+  language?: "en" | "es";
+}
+
+/** Company tag on clients (VIP, Regular…): neutral, never coloured (colour is only for statuses). */
+export interface Tag {
+  id: ID;
+  name: string;
+  active: boolean;
+  position: number;
+  system?: boolean;
 }
 
 export interface Property {
@@ -421,6 +460,7 @@ export interface DB {
   me: ID;
   members: Member[];
   sources: Source[];
+  tags: Tag[];
   tasks: Task[];
   activities: Activity[];
   customers: Customer[];

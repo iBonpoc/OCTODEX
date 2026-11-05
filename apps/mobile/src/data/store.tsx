@@ -19,6 +19,7 @@ import { leadStatusToDb } from "@/cloud/statusMap";
 const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
+import { cleanPeople, nextClientNumber } from "./people";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
@@ -49,6 +50,9 @@ import {
   type LeadStatus,
   type CallOutcome,
   type LeadInterest,
+  type CustomerStatus,
+  type Person,
+  type Tag,
 } from "./types";
 
 type Undo = () => void;
@@ -124,6 +128,12 @@ interface StoreCtx {
   /** New client entered by hand (not from a lead): active client with one property. */
   addCustomer: (c: { name: string; phone: string; email?: string; sourceId: ID; address: string; city: string }) => { id: ID; undo: Undo };
   updateCustomer: (id: ID, patch: { name?: string; phone?: string; email?: string }) => Undo;
+  /** people of a client (several phones / emails each); the first person is the main one */
+  saveCustomerPeople: (id: ID, people: Person[]) => Undo;
+  setCustomerTags: (id: ID, tagIds: ID[]) => Undo;
+  setCustomerStatus: (id: ID, status: CustomerStatus, reason?: string) => Undo;
+  /** add or edit a company tag (hiding = active: false; a tag is never deleted) */
+  saveTag: (t: Omit<Tag, "id" | "position"> & { id?: ID; position?: number }) => { id: ID; undo: Undo };
   updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
   addNote: (n: Omit<Note, "id" | "at" | "authorId" | "pinned">) => Undo;
   updateNote: (id: ID, patch: { pinned?: boolean; body?: string; deleted?: boolean }) => Undo;
@@ -148,7 +158,7 @@ const Ctx = createContext<StoreCtx | null>(null);
 /** UUIDs everywhere: the same id is used on the phone and in the database (offline-created rows). */
 const uid = (_p?: string) => Crypto.randomUUID();
 const emptyDB = (me: string): DB => ({
-  me, members: [], sources: [], tasks: [], activities: [], customers: [], properties: [], jobs: [], visits: [], leads: [], estimates: [], invoices: [], expenses: [], catalog: [], notices: [],
+  me, members: [], sources: [], tags: [], tasks: [], activities: [], customers: [], properties: [], jobs: [], visits: [], leads: [], estimates: [], invoices: [], expenses: [], catalog: [], notices: [],
   company: null, notes: [], payments: [],
 });
 const upsert = <T extends { id: string }>(list: T[], it: T): T[] => (list.some((x) => x.id === it.id) ? list.map((x) => (x.id === it.id ? it : x)) : [...list, it]);
@@ -805,12 +815,45 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           "customer.create",
           (d) => ({
             ...d,
-            customers: [...d.customers, { id: ids.customerId, name: x.name, phone: x.phone, email: x.email, sourceId: x.sourceId, balanceCents: 0, status: "active" }],
+            customers: [
+              ...d.customers,
+              { id: ids.customerId, number: modeRef.current === "demo" ? nextClientNumber(d) : undefined, name: x.name, phone: x.phone, email: x.email, sourceId: x.sourceId, balanceCents: 0, status: "active" },
+            ],
             properties: [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: x.address, city: x.city, stories: 1 }],
           }),
           { k: "customer.create", ...ids, ...x },
         );
         return { id: ids.customerId, undo };
+      },
+      saveCustomerPeople: (id, people) => {
+        const clean = cleanPeople(people, uid);
+        const main = clean[0];
+        const phone = main?.phones.find((p) => p.primary)?.number ?? main?.phones[0]?.number ?? "";
+        const email = main?.emails.find((e) => e.primary)?.address ?? main?.emails[0]?.address;
+        return mutate(
+          "customer.people",
+          (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, people: clean, phone, email } : c)) }),
+          { k: "customer.people", id, people: clean },
+        );
+      },
+      setCustomerTags: (id, tagIds) =>
+        mutate("customer.tags", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, tagIds } : c)) }), { k: "customer.tags", id, tagIds }),
+      setCustomerStatus: (id, status, reason) =>
+        mutate(
+          "customer.status",
+          (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, status, statusReason: status === "do_not_service" ? reason : undefined } : c)) }),
+          { k: "customer.status", id, status, reason: status === "do_not_service" ? reason : undefined },
+        ),
+      saveTag: (tg) => {
+        const id = tg.id ?? uid();
+        const position = tg.position ?? Math.max(0, ...dbRef.current.tags.map((x) => x.position)) + 1;
+        const tag: Tag = { ...tg, id, position };
+        const undo = mutate(
+          "tag.save",
+          (d) => ({ ...d, tags: d.tags.some((x) => x.id === id) ? d.tags.map((x) => (x.id === id ? tag : x)) : [...d.tags, tag] }),
+          { k: "tag.save", tag },
+        );
+        return { id, undo };
       },
       updateCustomer: (id, patch) =>
         mutate("customer.update", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, ...patch } : c)) }), { k: "customer.update", id, ...patch }),

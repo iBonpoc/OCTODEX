@@ -4,7 +4,7 @@
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
 import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, EstimateDoc, ExpenseCategory, PaymentMethod, VisitStep } from "@/data/types";
+import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, Tag, VisitStep } from "@/data/types";
 import { companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -112,6 +112,10 @@ export type Op =
       name: string; phone: string; email?: string; sourceId: string; address: string; city: string;
     }
   | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string }
+  | { k: "customer.people"; id: string; people: Person[] }
+  | { k: "customer.tags"; id: string; tagIds: string[] }
+  | { k: "customer.status"; id: string; status: CustomerStatus; reason?: string }
+  | { k: "tag.save"; tag: Tag }
   | { k: "property.update"; id: string; address?: string; city?: string }
   | { k: "note.add"; id: string; subjectType: string; subjectId: string; body: string; visibility: "team" | "private" }
   | { k: "note.update"; id: string; pinned?: boolean; body?: string; deleted?: boolean }
@@ -420,6 +424,20 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       }
       return;
     }
+    // one transaction each on the server: a refused phone or tag never leaves the client half-saved
+    case "customer.people":
+      return run(supabase.rpc("save_customer_people", { p_customer_id: op.id, p_people: op.people }));
+    case "customer.tags":
+      return run(supabase.rpc("set_customer_tags", { p_customer_id: op.id, p_tag_ids: op.tagIds }));
+    case "customer.status":
+      return run(supabase.from("customers").update({ status: op.status, do_not_service_reason: op.status === "do_not_service" ? op.reason || "—" : null }).eq("id", op.id));
+    case "tag.save":
+      return run(
+        supabase.from("tags").upsert(
+          { id: op.tag.id, company_id: c, name: op.tag.name, is_active: op.tag.active, position: op.tag.position },
+          { onConflict: "id" },
+        ),
+      );
     case "property.update": {
       const patch: Record<string, string> = {};
       if (op.address !== undefined) patch.address_line1 = op.address || "—";

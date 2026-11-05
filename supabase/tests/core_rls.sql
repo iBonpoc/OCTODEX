@@ -850,5 +850,105 @@ begin
 end $$;
 \echo 'T15 leads L1 ok'
 
+-- ---------------------------------------------------------------- T16: clients C1 (number, people phones/emails, tags)
+:as_owner_a
+do $$
+declare v_c uuid; v_c2 uuid; n1 text; n2 text; v_p uuid; v_tag uuid; v_tag2 uuid;
+begin
+  insert into public.customers (company_id, display_name, number) values ('ca000000-0000-0000-0000-000000000000', 'Client numbered', 'CLT-9999') returning id, number into v_c, n1;
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'Client numbered 2') returning id, number into v_c2, n2;
+  perform tst.ok(n1 ~ '^CLT-\d{4,}$' and n1 <> 'CLT-9999', 'client gets a server number CLT-0001; the app cannot pick it');
+  perform tst.ok(n2 > n1, 'client numbers grow');
+  update public.customers set number = 'CLT-0000' where id = v_c;
+  perform tst.ok((select number from public.customers where id = v_c) = n1, 'the client number never changes');
+  perform tst.ok((select count(*) from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000' and number is null) = 0, 'every client has a number (old ones numbered by the migration)');
+  -- a person with two phones and an email; one primary of each
+  insert into public.contacts (company_id, customer_id, name, role, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_c, 'Anna Cee', 'main', true) returning id into v_p;
+  insert into public.contact_phones (company_id, contact_id, number, label, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_p, '(818) 555-0101', 'mobile', true);
+  insert into public.contact_phones (company_id, contact_id, number, label) values ('ca000000-0000-0000-0000-000000000000', v_p, '(818) 555-0102', 'work');
+  insert into public.contact_emails (company_id, contact_id, address, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_p, 'anna@example.com', true);
+  perform tst.ok((select count(*) from public.contact_phones where contact_id = v_p) = 2, 'two phones on one person');
+  perform tst.fails(format($q$insert into public.contact_phones (company_id, contact_id, number, is_primary) values ('ca000000-0000-0000-0000-000000000000', %L, '(818) 555-0103', true)$q$, v_p), 'only one primary phone per person');
+  perform tst.fails(format($q$insert into public.contact_phones (company_id, contact_id, number, label) values ('ca000000-0000-0000-0000-000000000000', %L, '1', 'fax')$q$, v_p), 'unknown phone label refused');
+  perform tst.fails(format($q$insert into public.contact_emails (company_id, contact_id, address) values ('ca000000-0000-0000-0000-000000000000', %L, 'not-an-email')$q$, v_p), 'email without @ refused');
+  perform tst.fails(format($q$insert into public.contacts (company_id, customer_id, name, role) values ('ca000000-0000-0000-0000-000000000000', %L, 'X', 'cousin')$q$, v_c), 'unknown person role refused');
+  insert into public.contacts (company_id, customer_id, name, role) values ('ca000000-0000-0000-0000-000000000000', v_c, 'Bob Cee', 'assistant');
+  -- tags: default list seeded; set on the client; no duplicates by name
+  perform tst.ok((select count(*) from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and is_system) = 4, 'four default tags');
+  select id into v_tag from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'VIP';
+  insert into public.tags (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'Pool owner') returning id into v_tag2;
+  perform tst.fails($q$insert into public.tags (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'vip')$q$, 'tag names are unique (any case)');
+  insert into public.customer_tags (company_id, customer_id, tag_id) values ('ca000000-0000-0000-0000-000000000000', v_c, v_tag), ('ca000000-0000-0000-0000-000000000000', v_c, v_tag2);
+  perform tst.ok((select count(*) from public.customer_tags where customer_id = v_c) = 2, 'client has two tags');
+  delete from public.customer_tags where customer_id = v_c and tag_id = v_tag2;
+  perform tst.ok((select count(*) from public.customer_tags where customer_id = v_c) = 1, 'tag removed from the client');
+  update public.tags set is_active = false where id = v_tag2;
+end $$;
+-- one-transaction writes (RPC), deleted rows, system and hidden tags
+:as_owner_a
+do $$
+declare v_c uuid; v_p uuid; v_tc uuid; v_tp uuid; v_vip uuid; v_off uuid; v_q uuid := 'a1600000-0000-4000-8000-000000000001';
+begin
+  select id into v_c from public.customers where display_name = 'Client numbered';
+  select id into v_vip from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'VIP';
+  select id into v_off from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Pool owner';
+  -- people saved in one call: Anna (2 phones) stays main, Bob removed, Quinn added
+  perform public.save_customer_people(v_c, jsonb_build_array(
+    jsonb_build_object('id', (select id from public.contacts where customer_id = v_c and name = 'Anna Cee'), 'name', 'Anna Cee', 'role', 'main',
+      'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0111', 'label', 'mobile', 'primary', true), jsonb_build_object('number', '(818) 555-0112', 'label', 'home')),
+      'emails', jsonb_build_array(jsonb_build_object('address', 'anna@example.com', 'primary', true))),
+    jsonb_build_object('id', v_q, 'name', 'Quinn Cee', 'role', 'tenant', 'phones', jsonb_build_array(jsonb_build_object('number', '(818) 555-0113', 'label', 'mobile', 'primary', true)), 'emails', '[]'::jsonb)));
+  perform tst.ok((select count(*) from public.contacts where customer_id = v_c and deleted_at is null) = 2, 'people replaced: Bob removed, Quinn added');
+  perform tst.ok((select name from public.contacts where id = (select primary_contact_id from public.customers where id = v_c)) = 'Anna Cee', 'first person is the main one');
+  perform tst.ok((select phone from public.contacts where name = 'Anna Cee' and customer_id = v_c) = '(818) 555-0111', 'contact keeps the main phone for search');
+  perform tst.ok((select count(*) from public.contact_phones p join public.contacts c on c.id = p.contact_id where c.customer_id = v_c and p.deleted_at is null) = 3, 'live phones: 2 + 1; old ones soft-deleted');
+  perform tst.ok((select count(*) from public.contact_phones p join public.contacts c on c.id = p.contact_id where c.name = 'Bob Cee' and p.deleted_at is null) = 0, 'removed person has no live phones');
+  -- a refused email rolls the whole call back: nothing lost
+  perform tst.fails(format($q$select public.save_customer_people(%L, '[{"id":"%s","name":"Quinn Cee","role":"tenant","phones":[],"emails":[{"address":"bad"}]}]'::jsonb)$q$, v_c, v_q), 'invalid email refused');
+  perform tst.ok((select count(*) from public.contact_phones p join public.contacts c on c.id = p.contact_id where c.customer_id = v_c and p.deleted_at is null) = 3, 'refused save changed nothing');
+  -- a person of another client cannot be taken over
+  select id into v_tc from public.customers where display_name = 'Client numbered 2';
+  perform tst.fails(format($q$select public.save_customer_people(%L, '[{"id":"%s","name":"Thief","role":"main","phones":[],"emails":[]}]'::jsonb)$q$, v_tc, v_q), 'person of another client refused');
+  -- tags in one call; hidden tag cannot be put on a client; standard tag keeps its name
+  perform public.set_customer_tags(v_c, array[v_vip, v_vip]);
+  perform tst.ok((select count(*) from public.customer_tags where customer_id = v_c) = 1, 'tags set in one call (duplicates folded)');
+  perform tst.fails(format($q$select public.set_customer_tags(%L, array[%L]::uuid[])$q$, v_c, v_off), 'hidden tag refused');
+  perform tst.ok((select count(*) from public.customer_tags where customer_id = v_c) = 1, 'refused tags changed nothing');
+  perform tst.fails(format($q$update public.tags set name = 'Very important' where id = %L$q$, v_vip), 'standard tag keeps its name');
+  perform tst.fails($q$insert into public.tags (company_id, name, is_system) values ('ca000000-0000-0000-0000-000000000000', 'Fake system', true)$q$, 'nobody makes a system tag by hand');
+  perform tst.fails(format($q$insert into public.customer_tags (company_id, customer_id, tag_id, created_by) values ('ca000000-0000-0000-0000-000000000000', %L, %L, 'a0000000-0000-0000-0000-000000000003')$q$, v_c, v_vip), 'author of a client tag cannot be faked');
+  -- the tech's own client: a live and a deleted phone
+  select distinct j.customer_id into v_tc from public.jobs j join public.visits v on v.job_id = j.id join public.visit_assignees a on a.visit_id = v.id
+   where a.user_id = 'a0000000-0000-0000-0000-000000000003' and j.company_id = 'ca000000-0000-0000-0000-000000000000' limit 1;
+  select id into v_tp from public.contacts where customer_id = v_tc and deleted_at is null limit 1;
+  insert into public.contact_phones (company_id, contact_id, number, label) values ('ca000000-0000-0000-0000-000000000000', v_tp, 'LIVE-1', 'mobile');
+  insert into public.contact_phones (company_id, contact_id, number, label, deleted_at) values ('ca000000-0000-0000-0000-000000000000', v_tp, 'DELETED-OLD', 'mobile', now());
+end $$;
+-- tech: sees live phones only of clients of own visits, cannot write phones or tags
+:as_tech_a
+do $$ begin
+  perform tst.ok(tst.cnt($q$select 1 from public.contact_phones where number = 'LIVE-1'$q$) = 1, 'tech sees the phone of own client');
+  perform tst.ok(tst.cnt($q$select 1 from public.contact_phones where number = 'DELETED-OLD'$q$) = 0, 'tech does not see a deleted phone');
+  perform tst.ok(tst.cnt($q$select 1 from public.contact_phones where number = '(818) 555-0111'$q$) = 0, 'tech does not see phones of other clients');
+  perform tst.ok(tst.cnt('select 1 from public.tags') >= 4, 'tech reads the tag list');
+  perform tst.fails($q$insert into public.tags (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'Tech tag')$q$, 'tech cannot add tags');
+  perform tst.fails($q$insert into public.contact_phones (company_id, contact_id, number) select company_id, contact_id, 'X' from public.contact_phones where number = 'LIVE-1'$q$, 'tech cannot add phones');
+  perform tst.fails($q$select public.set_customer_tags((select id from public.customers limit 1), '{}')$q$, 'tech cannot set client tags');
+  perform tst.ok(tst.cnt($q$select 1 from public.customer_tags ct join public.customers c on c.id = ct.customer_id where c.display_name = 'Client numbered'$q$) = 0, 'tech does not see tags of other clients');
+end $$;
+:as_owner_b
+do $$ declare n text;
+begin
+  insert into public.customers (company_id, display_name) values ('cb000000-0000-0000-0000-000000000000', 'B client') returning number into n;
+  perform tst.ok(n ~ '^CLT-\d{4,}$', 'company B numbers its own clients');
+  perform tst.ok((select count(*) from public.contact_phones where number = '(818) 555-0101') = 0, 'phones isolated between companies');
+  perform tst.ok((select count(*) from public.tags where name = 'Pool owner') = 0, 'tags isolated between companies');
+  perform tst.ok((select count(*) from public.tags where company_id = 'cb000000-0000-0000-0000-000000000000') = 4, 'company B has its own default tags');
+  perform tst.ok((select count(*) from public.contact_emails where address = 'anna@example.com') = 0, 'emails isolated between companies');
+  perform tst.ok((select count(*) from public.customer_tags) = 0, 'client tags isolated between companies');
+  perform tst.fails($q$insert into public.contact_phones (company_id, contact_id, number) select 'cb000000-0000-0000-0000-000000000000', id, 'X' from public.contacts where false union all select 'cb000000-0000-0000-0000-000000000000', 'ca000000-0000-0000-0000-0000000000ff'::uuid, 'X'$q$, 'company B cannot add a phone to a contact it cannot see');
+end $$;
+\echo 'T16 clients C1 ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

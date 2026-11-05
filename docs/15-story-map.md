@@ -122,7 +122,7 @@
 | Сущность | Приложение | База | Кто меняет |
 |---|---|---|---|
 | Lead | `new` `replied` `booked` `estimate_sent` `won` `lost` `declined`; архив — `archivedAt` | new, contacted, qualified, inspection_scheduled, estimate_sent, won, lost, declined, archived | человек + авто (S2, S4, S6, S8) |
-| Customer | `prospect` `active` | prospect, active, archived, do_not_service | авто (S3, S8) |
+| Customer | `prospect` `active` `archived` `do_not_service` | prospect, active, archived, do_not_service | авто (S3, S8); архив и «не обслуживаем» — человек (`docs/specs/04` §4) |
 | Estimate | `draft` `sent` `approved` `declined` | draft, sent, viewed, awaiting_countersign, approved, declined, expired, cancelled_by_customer | человек, клиент |
 | Job | `lead` `estimate` `unscheduled` `scheduled` `in_progress` `done` | draft, scheduled, in_progress, on_hold, completed, closed, cancelled | авто + человек |
 | Visit | `scheduled` `en_route` `on_site` `working` `signed` `paid` | scheduled, en_route, on_site, completed, cancelled, no_show | монтажник |

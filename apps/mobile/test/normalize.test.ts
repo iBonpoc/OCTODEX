@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import { normalizeDB } from "../src/data/normalize";
+import { peopleOf } from "../src/data/people";
 import { filterLeads, leadTimeline, sourceGroups } from "../src/features/leads";
 import type { DB } from "../src/data/types";
 
@@ -33,6 +34,18 @@ describe("old saved data after an app update", () => {
     const db = normalizeDB(build32(), "cloud");
     expect(db.sources).toEqual([]);
     expect(() => filterLeads(db, "director", { filter: "open" })).not.toThrow();
+  });
+  it("build 45 data (no tags, clients without people / numbers): demo gets default tags, clients read as one main person", () => {
+    const d = makeSeed() as unknown as Record<string, unknown>;
+    delete d.tags;
+    d.customers = (d.customers as Record<string, unknown>[]).map(({ people: _p, tagIds: _t, number: _n, ...c }) => c);
+    const db = normalizeDB(d as unknown as DB, "demo");
+    expect(db.tags.map((t) => t.name)).toEqual(["VIP", "Regular", "Favorite", "No calls after 6 pm"]);
+    const sarah = db.customers.find((c) => c.id === "c1")!;
+    expect(peopleOf(sarah)).toHaveLength(1);
+    expect(peopleOf(sarah)[0]!.phones[0]!.number).toBe("(626) 555-0142");
+    expect(sarah.tagIds ?? []).toEqual([]);
+    expect(normalizeDB(d as unknown as DB, "cloud").tags).toEqual([]);
   });
   it("today's data is left as is", () => {
     const d = makeSeed();
