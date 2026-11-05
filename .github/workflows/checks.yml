@@ -1,6 +1,9 @@
 # Every PR and push to main: types, unit tests (engine money scenarios, design-system guard, tokens contrast, story map),
 # database tests (RLS, money safety, client page), then the end-to-end browser runs at 3 widths × 2 themes in parallel
 # (CLAUDE.md rule 4). The job "checks" is green only when all of them are — that is the one branch protection requires.
+# Docs-only changes (every changed file is under docs/ or ends in .md) skip the browser runs: they cannot change the app
+# (founder 05.11.2026, saves GitHub minutes and the queue). Types, unit and database tests still run — the story-map test
+# reads docs/15-story-map.md.
 name: Checks
 
 on:
@@ -9,6 +12,24 @@ on:
     branches: [main]
 
 jobs:
+  changes:
+    name: What changed
+    runs-on: ubuntu-24.04
+    outputs:
+      app: ${{ steps.diff.outputs.app }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: diff
+        name: App files changed?
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then base="${{ github.event.pull_request.base.sha }}"; else base="${{ github.event.before }}"; fi
+          if [ -z "$base" ] || ! git cat-file -e "$base^{commit}" 2>/dev/null; then echo "app=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          files="$(git diff --name-only "$base" "${{ github.sha }}")"
+          echo "$files"
+          if [ -n "$files" ] && ! echo "$files" | grep -qvE '^docs/|\.md$'; then echo "app=false" >> "$GITHUB_OUTPUT"; else echo "app=true" >> "$GITHUB_OUTPUT"; fi
+
   fast:
     name: Types, unit and database tests
     runs-on: ubuntu-24.04
@@ -29,6 +50,8 @@ jobs:
 
   e2e:
     name: End-to-end ${{ matrix.width }} ${{ matrix.theme }}
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     strategy:
@@ -56,10 +79,13 @@ jobs:
 
   checks:
     name: checks
-    needs: [fast, e2e]
+    needs: [changes, fast, e2e]
     if: always()
     runs-on: ubuntu-24.04
     steps:
       - name: All checks green
         run: |
-          [ "${{ needs.fast.result }}" = "success" ] && [ "${{ needs.e2e.result }}" = "success" ] || { echo "::error::fast=${{ needs.fast.result }} e2e=${{ needs.e2e.result }}"; exit 1; }
+          # e2e may be skipped only when the change is docs-only
+          e2e="${{ needs.e2e.result }}"
+          if [ "${{ needs.changes.result }}" = "success" ] && [ "${{ needs.changes.outputs.app }}" = "false" ] && [ "$e2e" = "skipped" ]; then e2e=success; fi
+          [ "${{ needs.fast.result }}" = "success" ] && [ "$e2e" = "success" ] || { echo "::error::changes=${{ needs.changes.result }} fast=${{ needs.fast.result }} e2e=${{ needs.e2e.result }}"; exit 1; }
