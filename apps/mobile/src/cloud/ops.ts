@@ -248,7 +248,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
   const c = companyId;
   switch (op.k) {
     case "visit.step": {
-      // «on the way» carries the phone time; an op queued by an older build has none — the server notes now() (migration 20261105340000)
+      // «on the way» carries the phone time; an op queued by an older build has none — the server notes now() (migration 20261105360000)
       if (op.to === "en_route") return run(supabase.from("visits").update(op.at ? { status: op.to, en_route_at: op.at } : { status: op.to }).eq("id", op.visitId));
       if (op.to === "on_site") return run(supabase.from("visits").update({ status: op.to }).eq("id", op.visitId));
       if (op.to === "working") return run(supabase.from("visits").update({ work_started_at: new Date().toISOString() }).eq("id", op.visitId));

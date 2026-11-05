@@ -2592,7 +2592,7 @@ begin
 end $$;
 \echo 'T23 contract title from the profile ok'
 
--- ---------------------------------------------------------------- T36: when the tech left — visits.en_route_at (П3c, migration 20261105340000)
+-- ---------------------------------------------------------------- T36: when the tech left — visits.en_route_at (П3c, migration 20261105360000)
 :as_owner_a
 do $$ begin
   insert into public.customers (id, company_id, display_name) values ('c3600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T36 Client');
