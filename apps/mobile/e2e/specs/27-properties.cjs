@@ -55,6 +55,23 @@ exports.run = async (h) => {
   await h.expectText(/Tom Mitchell/, "person on the card");
   await h.shot("property-card");
 
+  // tabs (C2b): a task and a note of the property; empty documents and files say so
+  await h.clickText("Задачи");
+  await h.click("Новая задача");
+  await h.sheet().getByPlaceholder(/перезвонить/).fill("Fix the side gate latch");
+  await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
+  await p.waitForTimeout(400);
+  db = await h.db();
+  h.expect(db.tasks.some((x) => x.subjectType === "property" && x.subjectId === pr.id && x.title === "Fix the side gate latch"), "task of the property saved");
+  await h.expectText(/Fix the side gate latch/, "task on the tab");
+  await h.clickText("Документы");
+  await h.expectText(/Смет и счетов по объекту нет/, "no documents yet");
+  await h.clickText("Файлы");
+  await h.expectText(/Фото с визитов появятся здесь/, "no photos yet");
+  await h.clickText("История");
+  await h.expectText(/Здесь пока ничего не было|Заметка/, "history tab opens");
+  await h.clickText("Обзор");
+
   // a tech with no visit here today or tomorrow does not see the code, but sees the notes
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go(`/property/${pr.id}`);
