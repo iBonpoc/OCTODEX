@@ -1269,6 +1269,192 @@ reset role; set role anon;
 select tst.fails($q$select 1 from public.tasks$q$, 'anon cannot read tasks');
 \echo 'T21 property tasks ok'
 
+-- ---------------------------------------------------------------- T22: what a tech sees (security review of #67)
+-- docs/specs/04 §8: a tech sees properties of their visits today, in the future and in the last 14 days, never
+-- through a cancelled or no-show visit; team notes only of subjects they see (no office note with a gate code)
+:as_owner_a
+do $$
+declare k int; v_p uuid; v_j uuid; v_v uuid; v_c uuid := 'c2000000-0000-4000-8000-000000000001';
+begin
+  -- 15: 15 days ago, 16: cancelled tomorrow, 17: tomorrow, 18: completed 10 days ago, 19: no-show tomorrow
+  for k in 15..19 loop
+    v_p := ('d2000000-0000-4000-8000-0000000000' || k)::uuid;
+    v_j := ('e2000000-0000-4000-8000-0000000000' || k)::uuid;
+    v_v := ('f2000000-0000-4000-8000-0000000000' || k)::uuid;
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Window St', 'Pasadena', 1);
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Window job ' || k, v_c, v_p, 'scheduled');
+    insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j,
+      case k when 15 then now() - interval '15 days' when 18 then now() - interval '10 days' else now() + interval '1 day' end);
+    insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
+  end loop;
+  update public.visits set status = 'cancelled' where id = 'f2000000-0000-4000-8000-000000000016';
+  update public.visits set status = 'en_route' where id = 'f2000000-0000-4000-8000-000000000018';
+  update public.visits set status = 'on_site' where id = 'f2000000-0000-4000-8000-000000000018';
+  update public.visits set status = 'completed' where id = 'f2000000-0000-4000-8000-000000000018';
+  update public.visits set status = 'no_show' where id = 'f2000000-0000-4000-8000-000000000019';
+  -- a client the tech has never been sent to; the office writes the gate code in team notes
+  insert into public.customers (id, company_id, display_name) values ('c2200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T22 Other Client');
+end $$;
+:as_office_a
+insert into public.notes (company_id, subject_type, subject_id, body) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2200000-0000-4000-8000-000000000001', 'T22 gate code #9911 (other client)'),
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000015', 'T22 gate code #9915 (old visit)'),
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000016', 'T22 note of a cancelled visit'),
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000017', 'T22 dog in the yard (tomorrow)'),
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e2000000-0000-4000-8000-000000000015', 'T22 note of an old job'),
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e2000000-0000-4000-8000-000000000017', 'T22 note of tomorrow''s job'),
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2000000-0000-4000-8000-000000000001', 'T22 note of their client');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000015'$q$) = 0, 'tech: visit 15 days ago → property not visible');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000016'$q$) = 0, 'tech: cancelled visit → property not visible');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000019'$q$) = 0, 'tech: no-show visit → property not visible');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000017'$q$) = 1, 'tech: visit tomorrow → property visible');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000018'$q$) = 1, 'tech: completed visit 10 days ago → property visible');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000001'$q$) = 1, 'tech: visit today → property visible');
+select tst.ok(not app.can_see_property('d2000000-0000-4000-8000-000000000015', 'ca000000-0000-0000-0000-000000000000'), 'can_see_property follows the window');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T22 gate code%'$q$) = 0, 'tech: office gate-code notes of a client or old property are hidden');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 note of a cancelled visit'$q$) = 0, 'tech: note of a property of a cancelled visit hidden');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 note of an old job'$q$) = 0, 'tech: note of an old job hidden');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 dog in the yard (tomorrow)'$q$) = 1, 'tech: note of their property visible');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 note of tomorrow''s job'$q$) = 1, 'tech: note of their job visible');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 note of their client'$q$) = 1, 'tech: note of the client of their visit visible');
+insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000017', 'T22 tech own note');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 tech own note'$q$) = 1, 'tech: sees their own note');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T22%'$q$) = 8, 'office sees every team note');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T22%'$q$) = 0, 'other company: no notes');
+reset role; set role anon;
+select tst.fails($q$select 1 from public.notes$q$, 'anon cannot read notes');
+select tst.fails($q$select app.tech_visit_counts(gen_random_uuid())$q$, 'anon cannot call the visit window helper');
+-- T22 (security-check of #72): edges of the window, the job's status, undated visits, crew changes, lead and estimate
+-- notes, private office notes, estimates and tasks of a property outside the window
+:as_owner_a
+do $$
+declare k int; v_p uuid; v_j uuid; v_v uuid; v_c uuid := 'c2000000-0000-4000-8000-000000000001';
+begin
+  -- 20: window edge in a far time zone, 21: cancelled job with a live visit, 22: closed job, 23: undated visit made today,
+  -- 24: undated visit made 20 days ago, 25: tech taken off a visit tomorrow
+  for k in 20..25 loop
+    v_p := ('d2000000-0000-4000-8000-0000000000' || k)::uuid;
+    v_j := ('e2000000-0000-4000-8000-0000000000' || k)::uuid;
+    v_v := ('f2000000-0000-4000-8000-0000000000' || k)::uuid;
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Edge St', 'Pasadena', 1);
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Edge job ' || k, v_c, v_p, 'scheduled');
+    insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j,
+      case when k in (23, 24) then null else now() + interval '1 day' end);
+    insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
+  end loop;
+  update public.jobs set status = 'cancelled' where id = 'e2000000-0000-4000-8000-000000000021';
+  update public.jobs set status = 'in_progress' where id = 'e2000000-0000-4000-8000-000000000022';
+  update public.jobs set status = 'completed' where id = 'e2000000-0000-4000-8000-000000000022';
+  update public.jobs set status = 'closed' where id = 'e2000000-0000-4000-8000-000000000022';
+  update public.visit_assignees set deleted_at = now() where visit_id = 'f2000000-0000-4000-8000-000000000025';
+  -- lead of the tech and a lead of nobody; estimates inside and outside the window; a task outside the window
+  insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to)
+  select 'b2200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', id, 'T22 Lead Mine', '(818) 555-0221', 'a0000000-0000-0000-0000-000000000003'
+    from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.leads (id, company_id, source_id, contact_name, phone)
+  select 'b2200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', id, 'T22 Lead Other', '(818) 555-0222'
+    from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.estimates (id, company_id, customer_id, property_id, title) values
+    ('0e220000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', v_c, 'd2000000-0000-4000-8000-000000000001', 'T22 estimate today'),
+    ('0e220000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', v_c, 'd2000000-0000-4000-8000-000000000015', 'T22 estimate old');
+  insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000015', 'T22 task of an old property');
+end $$;
+:as_super
+-- created_at is kept by the standard trigger; an old row is made by hand
+alter table public.visits disable trigger user;
+update public.visits set created_at = now() - interval '20 days' where id = 'f2000000-0000-4000-8000-000000000024';
+alter table public.visits enable trigger user;
+:as_office_a
+insert into public.notes (company_id, subject_type, subject_id, body, visibility) values
+  ('ca000000-0000-0000-0000-000000000000', 'lead', 'b2200000-0000-4000-8000-000000000001', 'T22b lead note mine', 'team'),
+  ('ca000000-0000-0000-0000-000000000000', 'lead', 'b2200000-0000-4000-8000-000000000002', 'T22b lead note other', 'team'),
+  ('ca000000-0000-0000-0000-000000000000', 'estimate', '0e220000-0000-4000-8000-000000000001', 'T22b estimate note today', 'team'),
+  ('ca000000-0000-0000-0000-000000000000', 'estimate', '0e220000-0000-4000-8000-000000000002', 'T22b estimate note old', 'team'),
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000017', 'T22b private office note', 'private');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000021'$q$) = 0, 'tech: cancelled job, live visit → property not visible');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000022'$q$) = 0, 'tech: closed job → property not visible');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000023'$q$) = 1, 'tech: undated visit made today → property visible');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000024'$q$) = 0, 'tech: undated visit made 20 days ago → property not visible');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000025'$q$) = 0, 'tech taken off the visit → property not visible');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000009'$q$) = 0, 'tech taken off today''s visit → property not visible');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22b lead note mine'$q$) = 1, 'tech: note of their lead visible');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22b lead note other'$q$) = 0, 'tech: note of someone else''s lead hidden');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22b estimate note today'$q$) = 1, 'tech: note of an estimate of today''s property visible');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22b estimate note old'$q$) = 0, 'tech: note of an estimate outside the window hidden');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22b private office note'$q$) = 0, 'tech: private office note hidden');
+select tst.ok(tst.cnt($q$select 1 from public.estimates where id = '0e220000-0000-4000-8000-000000000001'$q$) = 1, 'tech: estimate of today''s property visible');
+select tst.ok(tst.cnt($q$select 1 from public.estimates where id = '0e220000-0000-4000-8000-000000000002'$q$) = 0, 'tech: estimate of a property outside the window hidden');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'T22 task of an old property'$q$) = 0, 'tech: task of a property outside the window hidden');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property' and subject_id = 'd2000000-0000-4000-8000-000000000001'$q$) >= 1, 'tech: tasks of today''s property visible');
+-- the edge by the company's calendar (far from LA): 14 days ago at 00:30 counts, 15 days ago at 23:30 does not
+:as_owner_a
+update public.companies set timezone = 'Pacific/Kiritimati' where id = 'ca000000-0000-0000-0000-000000000000';
+update public.visits set starts_at = (date_trunc('day', now() at time zone 'Pacific/Kiritimati') - interval '14 days' + interval '30 minutes') at time zone 'Pacific/Kiritimati'
+ where id = 'f2000000-0000-4000-8000-000000000020';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000020'$q$) = 1, 'visit 14 days ago at 00:30 company time → visible');
+:as_owner_a
+update public.visits set starts_at = (date_trunc('day', now() at time zone 'Pacific/Kiritimati') - interval '14 days' - interval '30 minutes') at time zone 'Pacific/Kiritimati'
+ where id = 'f2000000-0000-4000-8000-000000000020';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000020'$q$) = 0, 'visit 15 days ago at 23:30 company time → not visible');
+:as_owner_a
+update public.companies set timezone = 'America/Los_Angeles' where id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T22 tech visibility ok'
+
+-- ---------------------------------------------------------------- T26: a tech's clients and notes they write (security review of #67)
+-- docs/specs/04 §8: clients (and their people) of visits today, in the future, last 14 days; no cancelled / no-show;
+-- outside the office a note goes only on a subject the member sees
+:as_owner_a
+do $$
+declare k int; v_c uuid; v_p uuid; v_j uuid; v_v uuid;
+begin
+  -- 1: only a visit 15 days ago, 2: only a cancelled visit tomorrow, 3: only a no-show, 4: visit tomorrow
+  for k in 1..4 loop
+    v_c := ('c2600000-0000-4000-8000-00000000000' || k)::uuid;
+    v_p := ('d2600000-0000-4000-8000-00000000000' || k)::uuid;
+    v_j := ('e2600000-0000-4000-8000-00000000000' || k)::uuid;
+    v_v := ('f2600000-0000-4000-8000-00000000000' || k)::uuid;
+    insert into public.customers (id, company_id, display_name) values (v_c, 'ca000000-0000-0000-0000-000000000000', 'T26 Client ' || k);
+    insert into public.contacts (company_id, customer_id, name, role, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_c, 'T26 Person ' || k, 'main', true);
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' T26 St', 'Pasadena', 1);
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'T26 job ' || k, v_c, v_p, 'scheduled');
+    insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j,
+      case k when 1 then now() - interval '15 days' else now() + interval '1 day' end);
+    insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
+  end loop;
+  update public.visits set status = 'cancelled' where id = 'f2600000-0000-4000-8000-000000000002';
+  update public.visits set status = 'no_show' where id = 'f2600000-0000-4000-8000-000000000003';
+end $$;
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c2600000-0000-4000-8000-000000000001'$q$) = 0, 'tech: client of a visit 15 days ago not visible');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c2600000-0000-4000-8000-000000000002'$q$) = 0, 'tech: client of a cancelled visit not visible');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c2600000-0000-4000-8000-000000000003'$q$) = 0, 'tech: client of a no-show visit not visible');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c2600000-0000-4000-8000-000000000004'$q$) = 1, 'tech: client of a visit tomorrow visible');
+select tst.ok(tst.cnt($q$select 1 from public.contacts where name in ('T26 Person 1', 'T26 Person 2', 'T26 Person 3')$q$) = 0, 'tech: people of those clients not visible');
+select tst.ok(tst.cnt($q$select 1 from public.contacts where name = 'T26 Person 4'$q$) = 1, 'tech: people of their client visible');
+-- notes: only on subjects the tech sees
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2600000-0000-4000-8000-000000000001', 'T26 x')$q$, 'tech cannot note an old client');
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2600000-0000-4000-8000-000000000002', 'T26 x')$q$, 'tech cannot note a property of a cancelled visit');
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e2600000-0000-4000-8000-000000000003', 'T26 x')$q$, 'tech cannot note a job of a no-show');
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'lead', gen_random_uuid(), 'T26 x')$q$, 'tech cannot note an unknown lead');
+insert into public.notes (company_id, subject_type, subject_id, body) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2600000-0000-4000-8000-000000000004', 'T26 client note'),
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2600000-0000-4000-8000-000000000004', 'T26 property note'),
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e2600000-0000-4000-8000-000000000004', 'T26 job note');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T26%'$q$) = 3, 'tech notes their client, property and job');
+:as_office_a
+insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2600000-0000-4000-8000-000000000001', 'T26 office note');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T26%'$q$) = 4, 'office notes any client and sees all');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id::text like 'c2600000%'$q$) = 4, 'office sees every client');
+:as_owner_b
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2600000-0000-4000-8000-000000000004', 'T26 x')$q$, 'other company cannot note our client');
+\echo 'T26 tech clients and notes ok'
+
 -- ---------------------------------------------------------------- T19: client page language (rule 7, docs/specs/07 §2.1)
 -- order: client's main person → lead's main person → lead → company → en; only doc_language is added
 :as_owner_a

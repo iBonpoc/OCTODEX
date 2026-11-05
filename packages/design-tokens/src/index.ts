@@ -17,13 +17,15 @@ export const font = {
     bold: "Onest_700Bold",
   },
   size: { display: 28, title: 20, heading: 15, body: 13, button: 12.5, caption: 11.5, micro: 10.5 },
-  lineHeight: { tight: 1.15, body: 1.45 },
+  lineHeight: { tight: 1.15, body: 1.45, snug: 1.35 },
   weight: { regular: "400", medium: "500", semibold: "600", bold: "700" },
   /** Minimum readable text size (DS rule 6). */
   minSize: 11,
 } as const;
 
 export const space = { 1: 4, 2: 8, 3: 12, 4: 16, 5: 20, 6: 24, 8: 32 } as const;
+/** half steps (foundation.css --space-hair / --space-tight): label↔value inside a tile, gap in a chip */
+export const spaceHalf = { hair: 2, tight: 6 } as const;
 
 export const radius = {
   pill: 999,
@@ -41,10 +43,13 @@ export const size = {
   controlMd: 32,
   field: 34,
   hitMin: 44,
+  /** Android touch target (Google Play / Material 48 dp) */
+  hitMinAndroid: 48,
   /** visible button on a phone (--control-lg / --control-md-phone) */
   controlLg: 36,
   controlMdPhone: 36,
   fieldPhone: 44,
+  iconXs: 12,
   iconSm: 16,
   iconMd: 20,
   iconLg: 24,
@@ -144,6 +149,9 @@ export const component = {
   dimOpacity: 0.45,
   /** iOS-style menu that opens at the control (status, quick choices) */
   menuW: 240,
+  /** list cards (docs/specs/06-list-cards.md): option row in a picker sheet; narrowest figure tile */
+  rowOption: 48,
+  tileMin: 78,
 } as const;
 
 /* ---------- breakpoints (HANDOFF: 390 / 820 / 1280) ---------- */
@@ -302,5 +310,5 @@ export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close
 /** Estimate follow-up thresholds. Lead thresholds are company settings (apps/mobile/src/features/leadSettings.ts), not tokens. */
 export const timing = { estimateWarnDays: 2, estimateBadDays: 5 } as const;
 
-export const tokens = { font, space, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print } as const;
+export const tokens = { font, space, spaceHalf, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print } as const;
 export type Tokens = typeof tokens;

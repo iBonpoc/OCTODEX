@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { component, font, icons, motion, print, radius, size, space, themes } from "../src/index";
+import { component, font, icons, motion, print, radius, size, space, spaceHalf, themes } from "../src/index";
 
 /**
  * The founder's design system (design/naryad-ds/tokens/*.css, icons.json) is the source of truth.
@@ -30,10 +30,12 @@ const norm = (c: string) => c.replace(/\s+/g, "").replace(/(\d)\.0+\b/g, "$1").r
 describe("app tokens mirror the founder's DS css", () => {
   it("type scale and weights", () => {
     expect(font.size).toMatchObject({ display: px("fs-display"), title: px("fs-title"), heading: px("fs-heading"), body: px("fs-body"), caption: px("fs-caption"), micro: px("fs-micro") });
-    expect(font.lineHeight).toEqual({ tight: px("lh-tight"), body: px("lh-body") });
+    expect(font.lineHeight).toEqual({ tight: px("lh-tight"), body: px("lh-body"), snug: px("lh-snug") });
+    expect(font.size.button).toBe(px("fs-btn"));
   });
   it("spacing scale", () => {
     for (const k of [1, 2, 3, 4, 5, 6, 8] as const) expect(space[k], `space-${k}`).toBe(px(`space-${k}`));
+    expect(spaceHalf).toEqual({ hair: px("space-hair"), tight: px("space-tight") });
   });
   it("radii", () => {
     expect(radius.pill).toBe(px("radius-pill"));
@@ -50,6 +52,8 @@ describe("app tokens mirror the founder's DS css", () => {
     expect(size.field).toBe(px("field"));
     expect(size.fieldPhone).toBe(px("field-phone"));
     expect(size.hitMin).toBe(px("hit-min"));
+    expect(size.hitMinAndroid).toBe(px("hit-min-android"));
+    expect([component.rowOption, component.tileMin]).toEqual([px("row-option"), px("tile-min")]);
     expect(component.button).toEqual({ sm: px("btn-sm"), md: px("btn-md"), phone: px("btn-phone-visible"), hit: px("hit-min") });
     expect(component.field).toEqual({ h: px("field-h"), phone: px("field-phone") });
     expect(component.chip).toEqual({ h: px("chip-h"), px: px("chip-px") });
@@ -64,7 +68,7 @@ describe("app tokens mirror the founder's DS css", () => {
     for (const k of Object.values(component.button)) expect(k === px("hit-min") || k <= 36).toBe(true);
   });
   it("icon sizes, bars and safe areas", () => {
-    expect([size.iconSm, size.iconMd, size.iconLg, size.iconStroke]).toEqual([px("icon-sm"), px("icon-md"), px("icon-lg"), px("icon-stroke")]);
+    expect([size.iconXs, size.iconSm, size.iconMd, size.iconLg, size.iconStroke]).toEqual([px("icon-xs"), px("icon-sm"), px("icon-md"), px("icon-lg"), px("icon-stroke")]);
     expect([size.statusbarH, size.tabbarH, size.safeBottom, size.fab]).toEqual([px("statusbar-h"), px("tabbar-h"), px("safe-bottom"), px("fab")]);
   });
   it("motion", () => {
