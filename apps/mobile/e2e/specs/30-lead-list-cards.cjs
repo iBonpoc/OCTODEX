@@ -3,7 +3,7 @@
  * - card: number + phone, source with the lead's price (office only), request; no «…»; edges aligned;
  * - a call / SMS from the CARD writes exactly what the LEAD PAGE writes (touchLead / call result): same lead fields, same history;
  * - «No answer» twice → the counter grows and the card shows «Не дозвонились ×2»;
- * - a technician never sees the lead's price.
+ * - a technician never sees the lead's price: «Продажи» send him to his visits, and neither they nor «Клиенты» show it.
  */
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 
@@ -75,9 +75,16 @@ exports.run = async (h) => {
   const lastCall = async (id) => (await h.db()).activities.find((a) => a.subjectId === id && a.kind === "call")?.meta?.outcome;
   h.expect((await lastCall("l3")) === "answered" && (await lastCall("l5")) === "answered", "answered call is in the history, card and page alike");
 
-  // technician: no lead price anywhere on the list
+  // technician: «Продажи» are closed (route guard) — he lands on his visits; the inspection cards there (leads) show no lead price
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/inbox?tab=leads");
-  const body = await p.locator("body").innerText();
-  h.expect(!body.includes("$45"), "tech does not see the lead price");
+  await p.waitForTimeout(500);
+  h.expect(new URL(p.url()).pathname === "/visits", `tech /inbox → /visits (got ${p.url()})`);
+  h.expect((await p.locator('[data-testid="list-card"]').count()) > 0, "the tech sees his visit cards");
+  // the lead price is shown as «Source — $X» (the office card above)
+  for (const path of ["/visits", "/clients"]) {
+    if (path !== "/visits") await h.go(path);
+    const body = await p.locator("body").innerText();
+    h.expect(!/— \$\d/.test(body), `tech sees no lead price on ${path}`);
+  }
 };
