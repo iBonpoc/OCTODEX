@@ -4,6 +4,7 @@ export const en: Dict = {
   "role.tech": "Technician",
   "role.dispatcher": "Dispatcher",
   "role.director": "Owner",
+  "role.sales": "Sales",
   "role.hint": "One person can hold several roles. The home screen changes.",
 
   "tab.visits": "Visits",
@@ -1372,4 +1373,11 @@ export const en: Dict = {
   "prop.noFiles": "Photos from visits will show here",
   "prop.photoBefore": "Before",
   "prop.photoAfter": "After",
+  // П3a: several people on a visit (Лиды и клиенты)
+  "plan.assignSave": "Save",
+  "plan.unassignAll": "Remove all",
+  "plan.dayLoad": "Visits that day: {n}",
+  "plan.onVisit": "On the visit",
+  "toast.unassigned": "Everyone removed from the visit",
+  "vf.techsHint": "You can pick several",
 };

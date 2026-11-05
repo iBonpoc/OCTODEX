@@ -9,6 +9,7 @@ import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 import { wasJustDragged } from "./dnd";
+import { isAssigned } from "@/features/schedule";
 
 /** Visit status → DS status color (4+1) and word. */
 export function visitStatus(v: Visit): { status: StatusName; label: DictKey } {
@@ -104,7 +105,7 @@ export function todayVisits(db: DB, techId?: string) {
   return db.visits
     .filter((v) => {
       const d = new Date(v.start);
-      return d.toDateString() === n.toDateString() && (techId === undefined || v.techId === techId);
+      return d.toDateString() === n.toDateString() && (techId === undefined || isAssigned(v, techId));
     })
     .sort(sortByStart);
 }

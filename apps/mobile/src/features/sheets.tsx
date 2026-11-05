@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { Linking, View } from "react-native";
 import { space } from "@octo/design-tokens";
-import { isToday, useStore } from "@/data/store";
+import { useStore } from "@/data/store";
+import { assigneesOf, canPlan, dayVisits } from "@/features/schedule";
 import { sourceName } from "@/features/leads";
 import { smsWithBody } from "@/features/sms";
 import type { ID } from "@/data/types";
@@ -11,34 +12,47 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
 
-/** Assign a visit to an employee or a subcontractor. Shows each person's load today. */
+/** «Назначить»: everyone on a visit (wave П3a). Each person's load on the visit's day, several ticks, «Снять всех». */
 export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose: () => void }) {
-  const { db, assignVisit, online } = useStore();
+  const { db, assignVisit, online, role } = useStore();
   const { t } = useI18n();
   const toast = useToast();
-  const techs = db.members.filter((m) => m.roles.includes("tech"));
+  // only the office assigns (owner / admin / office ↔ director / dispatcher); sales and techs never see the sheet
+  const v = canPlan([role]) ? db.visits.find((x) => x.id === visitId) : undefined;
+  const [picked, setPicked] = useState<ID[]>([]);
+  useEffect(() => setPicked(v ? assigneesOf(v) : []), [visitId]); // eslint-disable-line react-hooks/exhaustive-deps
+  const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
+  const day = v ? new Date(v.start) : new Date();
+  const toggle = (id: ID) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const save = (ids: ID[]) => {
+    if (!visitId) return;
+    const undo = assignVisit(visitId, ids);
+    onClose();
+    const names = ids.map((id) => db.members.find((m) => m.id === id)?.name ?? "").filter(Boolean).join(", ");
+    toast.show(online ? (ids.length ? t("toast.assigned", { name: names }) : t("toast.unassigned")) : t("offline.queued"), undo);
+  };
   return (
-    <Sheet visible={!!visitId} onClose={onClose} title={t("plan.assignTo")}>
+    <Sheet visible={!!v} onClose={onClose} title={t("plan.assignTo")}>
       <View>
         {techs.map((m, i) => {
-          const load = db.visits.filter((v) => v.techId === m.id && isToday(v.start)).length;
+          const load = dayVisits(db, m.id, day, visitId ?? undefined).length;
+          const on = picked.includes(m.id);
           return (
             <View key={m.id}>
               {i > 0 ? <Divider /> : null}
               <ListRow
-                title={m.name}
-                subtitle={`${m.kind === "sub" ? `${t("plan.sub")} · ` : ""}${load ? t("visits.count", { n: load }) : t("plan.free")}`}
+                title={`${on ? "✓ " : ""}${m.name}`}
+                subtitle={`${m.kind === "sub" ? `${t("plan.sub")} · ` : ""}${load ? t("plan.dayLoad", { n: load }) : t("plan.free")}`}
                 left={<Avatar initials={m.initials} sub={m.kind === "sub"} />}
-                onPress={() => {
-                  if (!visitId) return;
-                  const undo = assignVisit(visitId, m.id);
-                  onClose();
-                  toast.show(online ? t("toast.assigned", { name: m.name }) : t("offline.queued"), undo);
-                }}
+                onPress={() => toggle(m.id)}
               />
             </View>
           );
         })}
+      </View>
+      <View style={{ gap: space[2] }}>
+        <Button label={t("plan.assignSave")} icon="user" variant="primary" full disabled={!v} onPress={() => save(picked)} />
+        {v && assigneesOf(v).length ? <Button label={t("plan.unassignAll")} variant="ghost" full onPress={() => save([])} /> : null}
       </View>
     </Sheet>
   );

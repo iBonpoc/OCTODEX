@@ -3,6 +3,7 @@ export const ru = {
   "role.tech": "Мастер",
   "role.dispatcher": "Диспетчер",
   "role.director": "Директор",
+  "role.sales": "Продажи",
   "role.hint": "Один человек может совмещать роли. Главный экран меняется.",
 
   "tab.visits": "Выезды",
@@ -1371,6 +1372,13 @@ export const ru = {
   "prop.noFiles": "Фото с визитов появятся здесь",
   "prop.photoBefore": "До работы",
   "prop.photoAfter": "После работы",
+  // П3a: several people on a visit (Лиды и клиенты)
+  "plan.assignSave": "Сохранить",
+  "plan.unassignAll": "Снять всех",
+  "plan.dayLoad": "Выездов в этот день: {n}",
+  "plan.onVisit": "На выезде",
+  "toast.unassigned": "Мастера сняты с выезда",
+  "vf.techsHint": "Можно отметить нескольких",
 } as const;
 
 export type DictKey = keyof typeof ru;
