@@ -5,7 +5,7 @@ const SCREENS = [
   "/estimate/new?id=e6", "/estimate/e5", "/estimates", "/p/demo0handyman0estimate0000000001",
   "/jobs", "/job/j1", "/job/schedule?jobId=j1", "/visit/v1",
   "/money", "/invoice/i5", "/receipt/pay5", "/expense/new",
-  "/catalog", "/catalog/cat-haul", "/company", "/company/profile", "/company/licenses", "/team",
+  "/catalog", "/catalog/cat-haul", "/company", "/company/profile", "/company/licenses", "/team", "/settings",
 ];
 /** loops over all requested layouts itself (one browser context per layout) */
 exports.ownLayouts = true;

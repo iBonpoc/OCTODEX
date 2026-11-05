@@ -46,7 +46,7 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext("/estimate/new", { customerId: db.customers[0]!.id }, db, "director").up?.href).toBe(`/client/${db.customers[0]!.id}`);
   });
   it("More: Jobs, Money, Team, Catalog → item, Company → section", () => {
-    for (const p of ["/jobs", "/money", "/team", "/catalog", "/company"]) expect(navContext(p, {}, db, "director").up?.href).toBe("/more");
+    for (const p of ["/jobs", "/money", "/team", "/catalog", "/company", "/settings"]) expect(navContext(p, {}, db, "director").up?.href).toBe("/more");
     expect(navContext("/catalog/x", {}, db, "director").up?.href).toBe("/catalog");
     expect(navContext("/company/profile", {}, db, "director").up?.href).toBe("/company");
   });
