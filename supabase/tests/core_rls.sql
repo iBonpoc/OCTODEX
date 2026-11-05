@@ -2363,6 +2363,30 @@ do $$ begin
   perform tst.fails($q$select public.cancel_visit('f3400000-0000-4000-8000-000000000005', 'we_cancelled')$q$, 'a visit on site is not cancelled');
 end $$;
 \echo 'T34 cancel visit ok'
+-- T34 (security check of П2): refusals leave everything as it was; sales does not plan; en_route; an inspection
+-- without a lead; «told the client» is the office's and the server's time
+:as_owner_a
+do $$ begin
+  insert into public.visits (id, company_id, property_id, kind, starts_at) values ('f3400000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'd3400000-0000-4000-8000-000000000001', 'inspection', now() + interval '1 day');
+  insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3400000-0000-4000-8000-000000000006', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+:as_tech_a
+select tst.fails($q$select public.cancel_visit('f3400000-0000-4000-8000-000000000006', 'we_cancelled')$q$, 'tech cannot cancel the inspection without a lead');
+select tst.fails($q$update public.visits set customer_notified_at = now() where id = 'f3400000-0000-4000-8000-000000000006'$q$, 'tech cannot mark the client as told');
+:as_sales_a
+select tst.fails($q$select public.cancel_visit('f3400000-0000-4000-8000-000000000006', 'we_cancelled')$q$, 'sales does not cancel visits (owner, admin, office only)');
+:as_owner_b
+select tst.fails($q$select public.cancel_visit(gen_random_uuid(), 'we_cancelled')$q$, 'an unknown visit gives the same refusal as a foreign one');
+:as_owner_a
+select tst.ok((select status = 'scheduled' and customer_notified_at is null from public.visits where id = 'f3400000-0000-4000-8000-000000000006'), 'after the refusals the visit is untouched');
+-- the office marks «told»: the server's time, not the sent one
+update public.visits set customer_notified_at = '2020-01-01' where id = 'f3400000-0000-4000-8000-000000000006';
+select tst.ok((select customer_notified_at > now() - interval '1 minute' from public.visits where id = 'f3400000-0000-4000-8000-000000000006'), '«told the client» is stamped by the server');
+-- en_route is still cancellable; an inspection without a lead rolls nothing back
+update public.visits set status = 'en_route' where id = 'f3400000-0000-4000-8000-000000000006';
+select (public.cancel_visit('f3400000-0000-4000-8000-000000000006', 'we_cancelled') ->> 'lead_back') is null as no_lead_back;
+select tst.ok((select status from public.visits where id = 'f3400000-0000-4000-8000-000000000006') = 'cancelled', 'en_route → cancelled through the function');
+\echo 'T34 refusals and notified ok'
 
 :as_super
 \echo 'ALL TESTS PASSED'

@@ -740,8 +740,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           "visit.cancel",
           (d) => ({
             ...d,
-            // a cancelled visit leaves the screens (the server keeps it with its reason; history comes with wave П2)
+            // a cancelled visit leaves the Plan and the day; it stays in the lead's feed with its reason (§5.2)
             visits: d.visits.filter((x) => x.id !== id),
+            cancelledVisits: [...(d.cancelledVisits ?? []), { ...v, cancelReason: reason, cancelText: text?.trim() || undefined, cancelledAt: new Date().toISOString() }],
             leads: leadBack ? d.leads.map((l) => (l.id === leadBack ? { ...l, status: "replied" } : l)) : d.leads,
             jobs: jobBack ? d.jobs.map((j) => (j.id === jobBack ? { ...j, status: "unscheduled" } : j)) : d.jobs,
           }),

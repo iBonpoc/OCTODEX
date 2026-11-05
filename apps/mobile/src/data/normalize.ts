@@ -28,6 +28,7 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     sources,
     tags: Array.isArray(d.tags) && d.tags.length ? d.tags : mode === "demo" ? SEED_TAGS : [],
     serviceCategories: serviceCategoriesOf(d, mode),
+    cancelledVisits: Array.isArray(d.cancelledVisits) ? d.cancelledVisits : [],
     ...inspectionsWithoutJobs(d),
     tasks: Array.isArray(d.tasks) ? d.tasks : [],
     activities: Array.isArray(d.activities) ? d.activities : [],

@@ -24,7 +24,6 @@ import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
 
 export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; note: string };
 
-const FORM_DAYS = 7;
 const startOfDay = (offset: number) => {
   const d = new Date();
   d.setHours(0, 0, 0, 0);
@@ -63,7 +62,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
   const days = useMemo(
     () =>
-      Array.from({ length: moreDays ? FORM_DAYS * 2 : FORM_DAYS }, (_, i) => ({
+      Array.from({ length: moreDays ? SCHEDULE_DEFAULTS.formDays * 2 : SCHEDULE_DEFAULTS.formDays }, (_, i) => ({
         key: String(i),
         label: i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : day(startOfDay(i).toISOString()),
       })),
@@ -99,12 +98,12 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
           <T v="caption" tone="mut">{t("vf.noSlots")}</T>
         )}
         <RowView style={{ justifyContent: "space-between" }}>
-          <IconButton icon="minus" label={`${t("vf.otherTime")} −30`} onPress={() => f.setMinute(Math.max(6 * 60, f.startMin - 30))} />
+          <IconButton icon="minus" label={`${t("vf.otherTime")} −${SCHEDULE_DEFAULTS.stepMin}`} onPress={() => f.setMinute(Math.max(SCHEDULE_DEFAULTS.earliestMin, f.startMin - SCHEDULE_DEFAULTS.stepMin))} />
           <T v="title" tabular>{time(f.value.start)}</T>
-          <IconButton icon="plus" label={`${t("vf.otherTime")} +30`} onPress={() => f.setMinute(Math.min(20 * 60, f.startMin + 30))} />
+          <IconButton icon="plus" label={`${t("vf.otherTime")} +${SCHEDULE_DEFAULTS.stepMin}`} onPress={() => f.setMinute(Math.min(SCHEDULE_DEFAULTS.latestMin, f.startMin + SCHEDULE_DEFAULTS.stepMin))} />
         </RowView>
       </Labeled>
-      <Stepper label={t("sch.duration")} unit={t("sch.min")} value={f.duration} step={15} min={15} max={12 * 60} onChange={f.setDuration} />
+      <Stepper label={t("sch.duration")} unit={t("sch.min")} value={f.duration} step={SCHEDULE_DEFAULTS.durationStepMin} min={SCHEDULE_DEFAULTS.durationStepMin} max={SCHEDULE_DEFAULTS.maxDurationMin} onChange={f.setDuration} />
       {noteLabel ? (
         <Labeled label={t("lead.book.note")}>
           <TextField type="note" value={f.note} onChangeText={f.setNote} placeholder={t("lead.book.notePh")} />
@@ -179,8 +178,10 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
   const name = (ctx.customer?.name ?? lead?.name ?? "").split(" ")[0] ?? "";
   const company = db.company?.name ?? "";
   const text = ct(v.kind === "inspection" ? "vf.msg.inspection" : "vf.msg.job", { name, company, date, time: at });
-  const phone = ctx.customer?.phone ?? lead?.phone ?? "";
-  const email = ctx.customer?.email ?? lead?.email ?? "";
+  // numbers and addresses may come from outside (a web form): only digits and + for SMS; an address that looks like one, encoded
+  const phone = (ctx.customer?.phone ?? lead?.phone ?? "").replace(/[^\d+]/g, "");
+  const rawEmail = (ctx.customer?.email ?? lead?.email ?? "").trim();
+  const email = /^[^\s@?&]+@[^\s@?&]+\.[^\s@?&]+$/.test(rawEmail) ? rawEmail : "";
   const done = () => {
     store.markNotified(v.id);
     onClose();
@@ -189,7 +190,7 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
     <Sheet visible onClose={onClose} title={t("vf.notify.title")}>
       <T v="body">{text}</T>
       {phone ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => { Linking.openURL(`sms:${phone}?body=${encodeURIComponent(text)}`).catch(() => {}); done(); }} /> : null}
-      {email ? <Button label={t("vf.notify.email")} icon="mail" variant="secondary" full onPress={() => { Linking.openURL(`mailto:${email}?subject=${encodeURIComponent(company)}&body=${encodeURIComponent(text)}`).catch(() => {}); done(); }} /> : null}
+      {email ? <Button label={t("vf.notify.email")} icon="mail" variant="secondary" full onPress={() => { Linking.openURL(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(company)}&body=${encodeURIComponent(text)}`).catch(() => {}); done(); }} /> : null}
       <Button label={t("vf.notify.copy")} icon="copy" variant="secondary" full onPress={() => { Clipboard.setStringAsync(text).catch(() => {}); toast.show(t("vf.notify.copied")); done(); }} />
       <Button label={t("vf.notify.later")} variant="ghost" full onPress={onClose} />
     </Sheet>

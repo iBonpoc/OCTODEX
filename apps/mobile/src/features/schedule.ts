@@ -92,7 +92,11 @@ export { visitPropertyId };
 /* ---------- the visit form (docs/specs/03 §7.1, wave П2) ---------- */
 
 /** defaults until "More → Company → Schedule" (wave П4) replaces them with the company's settings */
-export const SCHEDULE_DEFAULTS = { dayStartMin: 8 * 60, dayEndMin: 18 * 60, stepMin: 30, inspectionMin: 45, jobMin: 120 } as const;
+export const SCHEDULE_DEFAULTS = {
+  dayStartMin: 8 * 60, dayEndMin: 18 * 60, stepMin: 30, inspectionMin: 45, jobMin: 120,
+  /** the form: days shown as chips (twice that with «Ещё неделя»), the range of «Другое время», length step and max */
+  formDays: 7, earliestMin: 6 * 60, latestMin: 20 * 60, durationStepMin: 15, maxDurationMin: 12 * 60,
+} as const;
 type Hours = Pick<typeof SCHEDULE_DEFAULTS, "dayStartMin" | "dayEndMin" | "stepMin">;
 
 const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();

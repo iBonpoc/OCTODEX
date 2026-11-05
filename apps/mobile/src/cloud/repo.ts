@@ -5,7 +5,7 @@
 import { companyFromDb } from "./companyMap";
 import { customerStatus, estimateStatus, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep } from "@/data/types";
+import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -145,10 +145,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     return "scheduled";
   };
 
-  const mappedVisits: Visit[] = visits
-    // cancelled and no-show ("the client was not home" is a cancel reason) leave the screens, as after a local cancel
-    .filter((v) => visitDbStatus[s(v.status)] !== "cancelled" && (v.job_id || v.property_id))
-    .map((v) => {
+  const toVisit = (v: Row): Visit => {
       const job = jobById.get(s(v.job_id));
       const pay = paidVisit.get(s(v.id));
       const start = s(v.starts_at) || s(v.created_at);
@@ -175,7 +172,19 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         closed: v.status === "completed" || v.status === "no_show" || undefined,
         payment: pay ? { method: s(pay.method) as Visit["payment"] extends infer P ? P extends { method: infer M } ? M : never : never, amountCents: n(pay.amount_cents), at: s(pay.received_at) } : undefined,
       };
-    });
+  };
+  const placed = visits.filter((v) => v.job_id || v.property_id);
+  // cancelled and no-show ("the client was not home" is a cancel reason) leave the Plan and the day,
+  // and stay in the lead's feed with the reason (docs/specs/03 §5.2), as after a local cancel
+  const mappedVisits: Visit[] = placed.filter((v) => visitDbStatus[s(v.status)] !== "cancelled").map(toVisit);
+  const cancelledVisits: CancelledVisit[] = placed
+    .filter((v) => visitDbStatus[s(v.status)] === "cancelled")
+    .map((v) => ({
+      ...toVisit(v),
+      cancelReason: ((v.cancel_reason as CancelReason | null) ?? (v.status === "no_show" ? "no_show" : "other")),
+      cancelText: (v.cancel_reason_text as string | null) ?? undefined,
+      cancelledAt: s(v.cancelled_at) || s(v.updated_at),
+    }));
 
   const versionOf = new Map(versions.map((v) => [s(v.id), v]));
   const mappedEstimates: Estimate[] = estimates.map((e) => {
@@ -373,6 +382,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     })),
     jobs: mappedJobs,
     visits: mappedVisits,
+    cancelledVisits,
     leads: mappedLeads,
     estimates: mappedEstimates,
     invoices: mappedInvoices,
