@@ -389,7 +389,8 @@ function ListCardRow(p: ListCardProps) {
       <Lead lead={p.lead} small />
       <View style={{ flex: 1.3, minWidth: 0, gap: spaceHalf.hair }}>
         <Txt w="semibold" color={c.ink}>{p.title}</Txt>
-        {p.when ? <Txt v="caption" color={c.mut}>{p.when}</Txt> : null}
+        {/* the document number is not a column: it sits under the name, with "when" */}
+        {p.facts?.num || p.when ? <Txt v="caption" color={c.mut}>{[p.facts?.num, p.when].filter(Boolean).join(" · ")}</Txt> : null}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1], marginTop: space[1] }}>
           {p.status ? <Chip tone={p.status.tone} label={p.status.label} soft onPress={p.status.onPress} a11y={t("card.changeStatus", { s: p.status.label })} /> : null}
           {(p.signs ?? []).map((s, i) => <Chip key={i} tone={s.tone} label={s.label} soft />)}
