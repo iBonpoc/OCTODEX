@@ -26,7 +26,7 @@ describe("cleanPeople (before save)", () => {
   const raw: Person[] = [
     { id: "c9-main", name: "  Anna  ", role: "main", phones: [{ number: " (818) 555-0101 ", label: "mobile" }, { number: "  ", label: "work" }, { number: "(818) 555-0102", label: "work", primary: true }], emails: [{ address: "", primary: true }] },
     { id: "11111111-1111-4111-8111-111111111111", name: "", role: "other", phones: [], emails: [] },
-    { id: "22222222-2222-4222-8222-222222222222", name: "Bob", role: "assistant", phones: [{ number: "1", label: "mobile" }, { number: "2", label: "home" }], emails: [{ address: "b@x.com" }, { address: "c@x.com" }] },
+    { id: "22222222-2222-4222-8222-222222222222", name: "Bob", role: "assistant", phones: [{ number: "1", label: "mobile" }, { number: "2", label: "home" }], emails: [{ address: "b@x.com" }, { address: "not-an-email" }, { address: "c@x.com" }] },
   ];
   const out = cleanPeople(raw, newId);
   it("a derived person gets a real id; real ids are kept", () => {
@@ -38,6 +38,7 @@ describe("cleanPeople (before save)", () => {
     expect(out.map((p) => p.name)).toEqual(["Anna", "Bob"]);
     expect(out[0]!.phones.map((p) => p.number)).toEqual(["(818) 555-0101", "(818) 555-0102"]);
     expect(out[0]!.emails).toEqual([]);
+    expect(out[1]!.emails.map((e) => e.address)).toEqual(["b@x.com", "c@x.com"]);
   });
   it("exactly one primary phone and email per person (the marked one, else the first)", () => {
     expect(out[0]!.phones.map((p) => !!p.primary)).toEqual([false, true]);

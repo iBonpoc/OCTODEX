@@ -26,7 +26,7 @@ export function peopleOf(c: Customer): Person[] {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * People as the database keeps them: real ids (a person derived from an old client gets a new one), names and numbers
- * trimmed, empty phones / emails dropped, exactly one primary phone and email per person when there are any.
+ * trimmed, empty phones and emails without "@" dropped (the database refuses them), exactly one primary phone and email per person when there are any.
  */
 export function cleanPeople(people: Person[], newId: () => string): Person[] {
   const one = <T extends { primary?: boolean }>(xs: T[]): T[] => {
@@ -39,7 +39,7 @@ export function cleanPeople(people: Person[], newId: () => string): Person[] {
       id: UUID.test(p.id) ? p.id : newId(),
       name: p.name.trim(),
       phones: one(p.phones.map((x) => ({ ...x, number: x.number.trim() })).filter((x) => x.number)),
-      emails: one(p.emails.map((x) => ({ ...x, address: x.address.trim() })).filter((x) => x.address)),
+      emails: one(p.emails.map((x) => ({ ...x, address: x.address.trim() })).filter((x) => x.address.indexOf("@") > 0)),
     }))
     .filter((p) => p.name || p.phones.length || p.emails.length);
 }
