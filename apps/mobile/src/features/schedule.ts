@@ -161,3 +161,33 @@ export function formWarnings(
   if (!startAllowed(f.start, opts.now)) out.push({ key: "past" });
   return out;
 }
+
+/* ---------- the Plan tab (docs/specs/03 §7.2, wave П3b) ---------- */
+
+/** «Ждут даты»: jobs without a date — status "unscheduled" and no open visit; the oldest first (signed longest ago). */
+export function waitingJobs(db: Pick<DB, "jobs" | "visits" | "estimates">): { job: DB["jobs"][number]; since?: string }[] {
+  return db.jobs
+    .filter((j) => j.status === "unscheduled" && !db.visits.some((v) => v.jobId === j.id && isOpenVisit(v)))
+    .map((job) => {
+      const e = job.estimateId ? db.estimates.find((x) => x.id === job.estimateId) : undefined;
+      return { job, since: e?.approval?.at ?? e?.approvedAt };
+    })
+    .sort((a, b) => (a.since ?? "9999").localeCompare(b.since ?? "9999") || a.job.title.localeCompare(b.job.title));
+}
+
+/** whole days since an ISO time (0 = today), for «подписал N дн назад» */
+export function daysSince(iso: string | undefined, now: number = Date.now()): number | null {
+  if (!iso) return null;
+  const t = new Date(iso).getTime();
+  return Number.isNaN(t) ? null : Math.max(0, Math.floor((now - t) / 86_400_000));
+}
+
+/** «Чей план»: "all", "me" or a person id; a tech always sees only his own */
+export type PlanWho = "all" | "me" | ID;
+export function planFilter(v: Visit, who: PlanWho, me: ID): boolean {
+  if (who === "all") return true;
+  return isAssigned(v, who === "me" ? me : who);
+}
+
+/** a working day of the company (until «Ещё → Компания → Расписание», wave П4): Monday–Friday */
+export const isWorkday = (d: Date) => d.getDay() !== 0 && d.getDay() !== 6;

@@ -171,6 +171,8 @@ export interface Visit {
   techId: ID | null;
   /** everyone on the visit (docs/specs/03 §7.4, wave П3a; server: visit_assignees). Missing in old saved data → [techId] */
   assigneeIds?: ID[];
+  /** the note for the tech from the visit form (server: visits.notes, wave П3b) */
+  note?: string;
   start: string; // ISO
   durationMin: number;
   step: VisitStep;

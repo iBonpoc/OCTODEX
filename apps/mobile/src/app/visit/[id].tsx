@@ -99,6 +99,14 @@ export default function VisitScreen() {
 
       {office ? <WhenWho visitId={v.id} /> : null}
 
+      {/* the note for the tech from the visit form (docs/specs/03 §7.3, wave П3b): everyone on the visit sees it */}
+      {v.note ? (
+        <Card>
+          <T v="heading">{t("lead.book.note")}</T>
+          <T v="body">{v.note}</T>
+        </Card>
+      ) : null}
+
       <Card>
         <T v="heading">{t("visit.scope")}</T>
         {v.scope.map((s) => (

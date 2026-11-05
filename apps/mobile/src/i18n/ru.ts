@@ -1380,6 +1380,24 @@ export const ru = {
   "plan.onVisit": "На выезде",
   "toast.unassigned": "Мастера сняты с выезда",
   "vf.techsHint": "Можно отметить нескольких",
+  // П3b: the Plan tab (Лиды и клиенты)
+  "plan.waiting": "Ждут даты · {n}",
+  "plan.signedAgo": "подписал {n} дн назад",
+  "plan.signedToday": "подписал сегодня",
+  "plan.schedule": "Запланировать",
+  "plan.showAll": "Показать все",
+  "plan.who.all": "Все",
+  "plan.who.me": "Я",
+  "plan.add": "Записать в план",
+  "plan.addTitle": "Что записать",
+  "plan.addInspection": "Осмотр — выберите объект",
+  "plan.addJob": "Работа из «Ждут даты»",
+  "plan.search": "Имя или адрес",
+  "plan.emptyBook": "Записать осмотр",
+  "plan.kind.inspection": "Осмотр",
+  "plan.kind.job": "Работа",
+  "vf.otherDate": "Другая дата",
+  "vf.visitsSoFar": "Уже выездов: {n}",
 } as const;
 
 export type DictKey = keyof typeof ru;

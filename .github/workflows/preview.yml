@@ -1,9 +1,9 @@
-# Preview of every PR before it is merged: a web copy at its own deployment URL (link in a PR comment).
+# Preview of every PR before it is merged: a web copy at its own deployment URL (link in the PR description, not a comment).
 # No pr-<N> alias: the Expo free plan allows 5 aliases, so they ran out and every new preview 404'd (05.11.2026).
 # NOT published to Expo Go: Expo Go lists every update of the project, and the founder must see only what is merged
 # (main → release.yml). Founder decision 05.11.2026.
 # The preview uses the same database as the app, but database migrations from the PR are NOT applied
-# (they go out only on merge, release.yml) — the comment says so when the PR has migrations.
+# (they go out only on merge, release.yml) — the description says so when the PR has migrations.
 name: Preview
 
 on:
@@ -58,23 +58,27 @@ jobs:
         id: mig
         run: |
           if git diff --name-only "origin/${{ github.base_ref }}...HEAD" | grep -q '^supabase/migrations/'; then echo "has=1" >> "$GITHUB_OUTPUT"; else echo "has=0" >> "$GITHUB_OUTPUT"; fi
-      - name: Comment with the links
+      - name: Put the links in the PR description (no comment, so no notification e-mail)
         uses: actions/github-script@v7
         env:
           HAS_MIG: ${{ steps.mig.outputs.has }}
           WEB_URL: ${{ steps.web.outputs.url }}
         with:
           script: |
+            // founder 05.11.2026: a bot comment on every push e-mailed him every few minutes. Editing the PR body sends
+            // no e-mail, so the link lives in a marked block at the end of the description (and in the job summary).
             const pr = context.payload.pull_request.number;
             const sha = context.payload.pull_request.head.sha.slice(0, 7);
             const web = process.env.WEB_URL;
             const mig = process.env.HAS_MIG === "1"
               ? "\n\n⚠ В этом PR есть изменения базы. В предпросмотре они ещё не применены: проверяйте экраны в демо-режиме, облачные данные заработают после слияния."
               : "";
-            const body = `<!-- octodex-preview -->\n### Предпросмотр PR #${pr} (\`${sha}\`) — ещё не влит\n\n` +
+            const block = `<!-- octodex-preview -->\n### Предпросмотр PR #${pr} (\`${sha}\`) — ещё не влит\n\n` +
               `- **Сайт:** ${web}\n\n` +
-              `Только сайт: в Expo Go появляется лишь то, что влито в main.${mig}`;
-            const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: pr, per_page: 100 });
-            const old = comments.find((c) => c.body && c.body.includes("<!-- octodex-preview -->"));
-            if (old) await github.rest.issues.updateComment({ ...context.repo, comment_id: old.id, body });
-            else await github.rest.issues.createComment({ ...context.repo, issue_number: pr, body });
+              `Только сайт: в Expo Go появляется лишь то, что влито в main.${mig}\n<!-- /octodex-preview -->`;
+            const { data } = await github.rest.pulls.get({ ...context.repo, pull_number: pr });
+            const old = data.body || "";
+            const re = /<!-- octodex-preview -->[\s\S]*?<!-- \/octodex-preview -->/;
+            const body = re.test(old) ? old.replace(re, block) : `${old}\n\n${block}`;
+            await github.rest.pulls.update({ ...context.repo, pull_number: pr, body });
+            await core.summary.addRaw(block).write();

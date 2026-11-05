@@ -115,7 +115,7 @@ export function BookSheet({ l, visible, onClose }: { l: Lead; visible: boolean; 
       onClose={onClose}
       title={t("lead.next.book")}
       saveLabel={t("lead.next.book")}
-      init={{ durationMin: SCHEDULE_DEFAULTS.inspectionMin, techId: initialTech }}
+      init={{ durationMin: SCHEDULE_DEFAULTS.inspectionMin, techId: initialTech, propertyId: l.propertyId }}
       onSave={(v) => {
         const visitId = uid();
         const undo = store.bookLead(l.id, { ...v, visitId });

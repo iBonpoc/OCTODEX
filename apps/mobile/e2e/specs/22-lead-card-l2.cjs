@@ -45,7 +45,7 @@ exports.run = async (h) => {
   const visit = db.visits.find((v) => v.leadId === tom.id && !v.jobId && v.propertyId === tom.propertyId);
   h.expect(tom.status === "booked", "lead → estimate visit booked (S4)");
   h.expect(visit && visit.techId === "m-ivan" && new Date(visit.start).getHours() === 10 && new Date(visit.start).getMinutes() === 30, `visit with the picked tech and time: ${visit && visit.start}`);
-  h.expect(visit.scope.includes("Dog in the yard"), "note for the tech");
+  h.expect(visit.note === "Dog in the yard", "note for the tech (its own field, wave П3b)");
   h.expect(db.customers.length === clients0, "no second client for the same lead");
 
   // status sheet → snooze 3 months → leaves "open", shows under "snoozed", keeps its stage

@@ -79,6 +79,8 @@ jobs:
           node e2e/run.cjs --width=${{ matrix.width }} --theme=${{ matrix.theme }}
       - uses: actions/upload-artifact@v4
         if: always()
+        # screenshots are for reading a failure, not a test: a GitHub storage outage must not turn green tests red (05.11.2026)
+        continue-on-error: true
         with:
           name: e2e-screenshots-${{ matrix.width }}-${{ matrix.theme }}
           path: apps/mobile/e2e/out/
