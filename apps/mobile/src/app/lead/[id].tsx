@@ -278,7 +278,7 @@ function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew: () => v
               right={
                 <StatusChip
                   status={e.status === "approved" ? "ok" : e.status === "sent" ? "info" : "neutral"}
-                  label={t(e.status === "approved" ? "st.approved" : e.status === "sent" ? "st.sent" : e.status === "declined" ? "st.declined" : "st.draft")}
+                  label={t(e.status === "approved" ? "st.approved" : e.status === "sent" ? "st.sent" : e.status === "awaiting_countersign" ? "est.awaitingCountersign" : e.status === "declined" ? "st.declined" : "st.draft")}
                 />
               }
               onPress={() => router.push(`/estimate/${e.id}`)}
