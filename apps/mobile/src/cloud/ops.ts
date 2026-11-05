@@ -4,7 +4,7 @@
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
 import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, Tag, VisitStep } from "@/data/types";
+import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, Property, Tag, VisitStep } from "@/data/types";
 import { companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -131,6 +131,8 @@ export type Op =
   | { k: "customer.status"; id: string; status: CustomerStatus; reason?: string }
   | { k: "tag.save"; tag: Tag }
   | { k: "property.update"; id: string; address?: string; city?: string }
+  | { k: "property.save"; property: Omit<Property, "gateCode"> }
+  | { k: "property.gate"; id: string; code: string }
   | { k: "note.add"; id: string; subjectType: string; subjectId: string; body: string; visibility: "team" | "private" }
   | { k: "note.update"; id: string; pinned?: boolean; body?: string; deleted?: boolean }
   | { k: "catalog.save"; item: CatalogItem }
@@ -469,6 +471,23 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           { onConflict: "id" },
         ),
       );
+    case "property.save": {
+      const p = op.property;
+      const place = p.place ?? { city: p.city };
+      return run(
+        supabase.from("properties").upsert(
+          {
+            id: p.id, company_id: c, customer_id: p.customerId, address_line1: p.address || "—", address_unit: p.unit ?? null,
+            address_city: place.city || "—", address_state: place.state || "CA", address_zip: place.zip || null,
+            label: p.label ?? null, kind: p.kind ?? null, access_notes: p.accessNotes ?? null, contact_ids: p.contactIds ?? [], stories: p.stories || 1,
+          },
+          { onConflict: "id" },
+        ),
+      );
+    }
+    case "property.gate":
+      // kept apart from the property (migration 20261105160000): the office writes it, a tech reads it only on the visit days
+      return run(supabase.from("property_secrets").upsert({ property_id: op.id, company_id: c, gate_code: op.code || null }, { onConflict: "property_id" }));
     case "property.update": {
       const patch: Record<string, string> = {};
       if (op.address !== undefined) patch.address_line1 = op.address || "—";

@@ -5,7 +5,7 @@
 import { companyFromDb } from "./companyMap";
 import { customerStatus, estimateStatus, jobStatus, leadStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import type { CatalogItem, DB, Note, Payment, Estimate, EstimateDoc, Notice, Expense, ExpenseCategory, Invoice, Job, Lead, Source, Task, Activity, Member, Role, Visit, VisitStep } from "@/data/types";
+import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -70,7 +70,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       q<Row>(supabase.from("estimate_line_costs").select("line_item_id, unit_cost_cents").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
       q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
     ]);
-  const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows, tagRows, customerTagRows, phoneRows, emailRows] = await Promise.all([
+  const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows, tagRows, customerTagRows, phoneRows, emailRows, gateRows] = await Promise.all([
     q<Row>(supabase.from("companies").select("*").eq("id", companyId)),
     // EIN: owner/admin only — others get nothing
     q<Row>(supabase.from("company_secrets").select("ein").eq("company_id", companyId)).catch(() => [] as Row[]),
@@ -87,8 +87,11 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     q<Row>(supabase.from("customer_tags").select("customer_id, tag_id").eq("company_id", companyId)).catch(() => [] as Row[]),
     live<Row>("contact_phones", "contact_id, number, label, is_primary, position").catch(() => [] as Row[]),
     live<Row>("contact_emails", "contact_id, address, is_primary, position").catch(() => [] as Row[]),
+    // C2: gate codes — RLS gives the office all of them, a tech only on the visit days (app.can_see_gate_code)
+    q<Row>(supabase.from("property_secrets").select("property_id, gate_code").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
   ]);
   const people = peopleByCustomer(contacts, phoneRows, emailRows);
+  const gateOf = new Map(gateRows.filter((r) => r.gate_code).map((r) => [s(r.property_id), s(r.gate_code)]));
   // L2 part 2: people of leads that have no client yet (migration 20261105120000)
   const peopleOfLead = peopleByCustomer(contacts, phoneRows, emailRows, "lead_id");
   const tagsOfCustomer = new Map<string, string[]>();
@@ -328,6 +331,13 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       address: s(p.address_line1),
       city: [s(p.address_city), [s(p.address_state), s(p.address_zip)].filter(Boolean).join(" ")].filter(Boolean).join(", "),
       stories: n(p.stories) || 1,
+      unit: (p.address_unit as string | null) ?? undefined,
+      place: { city: s(p.address_city), state: (p.address_state as string | null) ?? undefined, zip: (p.address_zip as string | null) ?? undefined },
+      label: (p.label as string | null) ?? undefined,
+      kind: (PROPERTY_KINDS as readonly string[]).includes(s(p.kind)) ? (s(p.kind) as Property["kind"]) : undefined,
+      accessNotes: (p.access_notes as string | null) ?? undefined,
+      gateCode: gateOf.get(s(p.id)),
+      contactIds: Array.isArray(p.contact_ids) ? (p.contact_ids as string[]) : [],
     })),
     jobs: mappedJobs,
     visits: mappedVisits,

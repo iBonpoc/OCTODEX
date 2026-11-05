@@ -20,6 +20,7 @@ const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
+import { cityLine } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
@@ -51,6 +52,7 @@ import {
   type LeadInterest,
   type CustomerStatus,
   type Person,
+  type Property,
   type Tag,
 } from "./types";
 
@@ -146,6 +148,10 @@ interface StoreCtx {
   /** add or edit a company tag (hiding = active: false; a tag is never deleted) */
   saveTag: (t: Omit<Tag, "id" | "position"> & { id?: ID; position?: number }) => { id: ID; undo: Undo };
   updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
+  /** C2: a property of a client, new or edited (everything but the gate code) */
+  saveProperty: (p: Property) => Undo;
+  /** C2: the gate code (office only; the server refuses others) */
+  setGateCode: (propertyId: ID, code: string) => Undo;
   addNote: (n: Omit<Note, "id" | "at" | "authorId" | "pinned">) => Undo;
   updateNote: (id: ID, patch: { pinned?: boolean; body?: string; deleted?: boolean }) => Undo;
   /** client's choice + signature (on site or on the client page): job + visit in the plan + notice */
@@ -880,6 +886,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       updateCustomer: (id, patch) =>
         mutate("customer.update", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, ...patch } : c)) }), { k: "customer.update", id, ...patch }),
+      saveProperty: (p) => {
+        const city = p.place ? cityLine(p.place) : p.city;
+        const next: Property = { ...p, city, address: p.address.trim(), unit: p.unit?.trim() || undefined, label: p.label?.trim() || undefined, accessNotes: p.accessNotes?.trim() || undefined };
+        const { gateCode: _g, ...row } = next;
+        return mutate(
+          "property.save",
+          (d) => ({
+            ...d,
+            properties: d.properties.some((x) => x.id === p.id)
+              ? d.properties.map((x) => (x.id === p.id ? { ...next, gateCode: x.gateCode } : x))
+              : [...d.properties, next],
+          }),
+          { k: "property.save", property: row },
+        );
+      },
+      setGateCode: (propertyId, code) =>
+        mutate(
+          "property.gate",
+          (d) => ({ ...d, properties: d.properties.map((x) => (x.id === propertyId ? { ...x, gateCode: code.trim() || undefined } : x)) }),
+          { k: "property.gate", id: propertyId, code: code.trim() },
+        ),
       updateProperty: (id, patch) =>
         mutate("property.update", (d) => ({ ...d, properties: d.properties.map((p) => (p.id === id ? { ...p, ...patch } : p)) }), { k: "property.update", id, ...patch }),
       addNote: (n) => {

@@ -90,12 +90,27 @@ export interface Tag {
   system?: boolean;
 }
 
+export const PROPERTY_KINDS = ["single_family", "multi_family", "commercial", "hoa_common"] as const;
+export type PropertyKind = (typeof PROPERTY_KINDS)[number];
 export interface Property {
   id: ID;
   customerId: ID;
+  /** street line (line1) */
   address: string;
+  /** shown line: "City, ST zip" (built from place when it is known) */
   city: string;
   stories: number;
+  /** C2 (docs/specs/04 §3): apartment / suite, the city / state / zip apart, a label ("Home", "Rental"), the kind */
+  unit?: string;
+  place?: { city: string; state?: string; zip?: string };
+  label?: string;
+  kind?: PropertyKind;
+  /** dog, side gate, parking — whoever sees the property sees these */
+  accessNotes?: string;
+  /** office always; a tech only on the day of their visit and the day before (server: app.can_see_gate_code) */
+  gateCode?: string;
+  /** people of the property: links to the client's people (tenant, property manager) */
+  contactIds?: ID[];
 }
 
 /** unscheduled: client signed, the contractor has not picked a date yet (not in the plan) */
