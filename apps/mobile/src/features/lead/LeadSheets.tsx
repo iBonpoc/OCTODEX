@@ -37,12 +37,15 @@ export function CallResultSheet({ l, visible, onClose, onAnswered }: { l: Lead; 
     if (o === "answered") onAnswered();
   };
   const sms = () => {
+    store.callResult(l.id, "no_answer");
     Linking.openURL(smsWithBody(l.phone, t("lead.call.missedText", { name: l.name.split(" ")[0] ?? l.name }))).catch(() => {});
     store.touchLead(l.id, "sms");
     onClose();
   };
+  // closed without an answer: the call still counts as an attempt (never lost from the history)
+  const dismiss = () => done("no_answer");
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("lead.call.title")}>
+    <Sheet visible={visible} onClose={dismiss} title={t("lead.call.title")}>
       <Button label={t("lead.call.yes")} icon="check" full onPress={() => done("answered")} />
       <RowView style={{ flexWrap: "wrap" }}>
         <Button label={t("lead.call.no")} variant="secondary" onPress={() => done("no_answer")} />
@@ -56,23 +59,28 @@ export function CallResultSheet({ l, visible, onClose, onAnswered }: { l: Lead; 
 
 /** "What next?" — the step is set when the person thinks about it, so "no step" rarely happens. */
 export function NextStepSheet({
-  l, visible, onClose, onBook, onEstimate, onCloseLead,
-}: { l: Lead; visible: boolean; onClose: () => void; onBook: () => void; onEstimate: () => void; onCloseLead: () => void }) {
+  l, visible, onClose, onBook, onEstimate, onCloseLead, office,
+}: { l: Lead; visible: boolean; onClose: () => void; onBook: () => void; onEstimate: () => void; onCloseLead: () => void; office: boolean }) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
+  const q = useQ();
   const remindIn = (days: number) => {
     const due = new Date();
     due.setDate(due.getDate() + days);
     due.setHours(9, 0, 0, 0);
     const r = store.saveTask({ subjectType: "lead", subjectId: l.id, title: t("lead.next.remindTask", { name: l.name }), assigneeId: l.assigneeId ?? store.db.me, dueAt: due.toISOString() });
-    toast.show(t("task.saved"), r.undo);
+    toast.show(q(t("task.saved")), r.undo);
     onClose();
   };
   return (
     <Sheet visible={visible} onClose={onClose} title={t("lead.next.title")}>
-      <Button label={t("lead.next.book")} icon="calendar" full onPress={() => { onClose(); onBook(); }} />
-      <Button label={t("lead.next.estimate")} icon="invoice" variant="secondary" full onPress={() => { onClose(); onEstimate(); }} />
+      {office ? (
+        <>
+          <Button label={t("lead.next.book")} icon="calendar" full onPress={() => { onClose(); onBook(); }} />
+          <Button label={t("lead.next.estimate")} icon="invoice" variant="secondary" full onPress={() => { onClose(); onEstimate(); }} />
+        </>
+      ) : null}
       <Labeled label={t("lead.next.remind")}>
         <RowView style={{ flexWrap: "wrap" }}>
           {[1, 3, 7].map((n) => (
@@ -110,14 +118,18 @@ export function BookSheet({ l, visible, onClose }: { l: Lead; visible: boolean; 
     [t, day],
   );
   const start = bookStart(Number(dayOffset), startMin);
+  const past = new Date(start).getTime() < Date.now();
+  const initialTech = l.assigneeId && techs.some((m) => m.id === l.assigneeId) ? l.assigneeId : "none";
+  const dirty = dayOffset !== "1" || startMin !== 9 * 60 || duration !== 60 || techId !== initialTech || note.trim().length > 0;
   const busy = db.visits.filter((v) => techId !== "none" && v.techId === techId && new Date(v.start).toDateString() === new Date(start).toDateString());
   const save = () => {
+    if (past) return;
     const undo = store.bookLead(l.id, { start, durationMin: duration, techId: techId === "none" ? null : techId, note });
     toast.show(q(t("lead.book.saved", { date: day(start), time: time(start) })), undo);
     onClose();
   };
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("lead.next.book")} dirty={note.trim().length > 0} onSave={save}>
+    <Sheet visible={visible} onClose={onClose} title={t("lead.next.book")} dirty={dirty} onSave={past ? undefined : save}>
       <Labeled label={t("sch.date")}>
         <ChoiceChips value={dayOffset} onChange={setDayOffset} items={days} />
       </Labeled>
@@ -137,7 +149,8 @@ export function BookSheet({ l, visible, onClose }: { l: Lead; visible: boolean; 
         <TextField type="note" value={note} onChangeText={setNote} placeholder={t("lead.book.notePh")} />
       </Labeled>
       <T v="body" tone="mut">{t("sch.summary", { date: day(start), time: time(start), min: duration })}</T>
-      <Button label={t("lead.next.book")} icon="calendar" full onPress={save} />
+      {past ? <T v="caption" tone="warn">⚠ {t("lead.book.past")}</T> : null}
+      <Button label={t("lead.next.book")} icon="calendar" full disabled={past} onPress={save} />
     </Sheet>
   );
 }
@@ -170,7 +183,7 @@ export function SnoozeSheet({ l, visible, onClose }: { l: Lead; visible: boolean
 /** Tapping the status chip: where the lead is in the funnel and the rare status actions. */
 export function StatusSheet({
   l, visible, onClose, onMakeClient, onCloseLead, onSnooze,
-}: { l: Lead; visible: boolean; onClose: () => void; onMakeClient: () => void; onCloseLead: () => void; onSnooze: () => void }) {
+}: { l: Lead; visible: boolean; onClose: () => void; onMakeClient?: () => void; onCloseLead: () => void; onSnooze: () => void }) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -183,7 +196,7 @@ export function StatusSheet({
       <T v="caption" tone="mut">{t("lead.status.auto")}</T>
       {isOpenLead(l) ? (
         <View style={{ gap: space[2] }}>
-          <Button label={t("lead.makeClient")} icon="check" variant="secondary" full onPress={() => { onClose(); onMakeClient(); }} />
+          {onMakeClient ? <Button label={t("lead.makeClient")} icon="check" variant="secondary" full onPress={() => { onClose(); onMakeClient(); }} /> : null}
           {isSnoozed(l) ? (
             <Button label={t("lead.unsnooze")} icon="refresh" variant="secondary" full onPress={() => { toast.show(q(t("lead.unsnoozed")), store.unsnoozeLead(l.id)); onClose(); }} />
           ) : (

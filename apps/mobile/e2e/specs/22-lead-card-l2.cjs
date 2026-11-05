@@ -74,6 +74,48 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: /Подождать 7/ }).click(); await p.waitForTimeout(400);
   h.expect(!!(await lead("Nina Patel")).askAgainAt && (await lead("Nina Patel")).status === "estimate_sent", "wait 7 more days, still open");
 
+  // a new lead with no client: booking makes ONE prospect client + property, a second booking does nothing (one planned visit)
+  let angela = await lead("Angela Rossi");
+  const c0 = (await h.db()).customers.length;
+  await h.go(`/lead/${angela.id}`);
+  // closing "did you get through?" without an answer still counts the call as an attempt
+  await p.getByRole("button", { name: "Позвонить" }).first().click(); await p.waitForTimeout(400);
+  await p.keyboard.press("Escape"); await p.waitForTimeout(500);
+  angela = await lead("Angela Rossi");
+  if ((await p.locator('[aria-modal="true"]').count()) > 0) await h.sheet().getByRole("button", { name: "Не ответил" }).click();
+  angela = await lead("Angela Rossi");
+  h.expect(angela.status === "new" && (angela.callAttempts ?? 0) >= 1, "a dismissed call is an attempt, not lost");
+  const bookAngela = async () => {
+    await h.clickText("Задачи");
+    await h.click("Что дальше?");
+    await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
+    await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);
+  };
+  await bookAngela();
+  db = await h.db();
+  angela = db.leads.find((x) => x.name === "Angela Rossi");
+  const prospect = db.customers.find((c) => c.id === angela.customerId);
+  h.expect(angela.status === "booked" && prospect && prospect.status === "prospect" && db.customers.length === c0 + 1, "booking a lead without a client makes one prospect");
+  const visitsOf = (d) => d.visits.filter((v) => d.jobs.some((j) => j.id === v.jobId && j.propertyId === angela.propertyId && j.status === "estimate")).length;
+  h.expect(visitsOf(db) === 1, "one visit");
+  await bookAngela();
+  db = await h.db();
+  h.expect(visitsOf(db) === 1 && db.customers.length === c0 + 1, "second booking does nothing while a visit is planned");
+
+  // a tech: no "make client", no booking or estimate from "what next?"
+  await h.go("/today");
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
+  const kevin = await lead("Kevin Brooks");
+  await h.go(`/lead/${kevin.id}`);
+  await openStatus();
+  h.expect((await h.sheet().getByRole("button", { name: "Сделать клиентом" }).count()) === 0, "tech: no make-client");
+  await h.sheet().getByRole("button", { name: "Закрыть", exact: true }).last().click(); await p.waitForTimeout(300);
+  await h.clickText("Задачи");
+  await h.click("Что дальше?");
+  h.expect((await h.sheet().getByRole("button", { name: "Записать на оценку" }).count()) === 0, "tech: no booking (the server would refuse it)");
+  await h.sheet().getByRole("button", { name: "Позже" }).click(); await p.waitForTimeout(300);
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
+
   // tabs: files has a real empty state with an action
   await h.clickText("Файлы");
   await h.expectText(/Фото|Файлов нет|Нет фото/, "files tab");

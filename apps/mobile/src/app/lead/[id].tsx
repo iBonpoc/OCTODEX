@@ -74,7 +74,7 @@ export default function LeadScreen() {
     : turn.kind === "noStep" ? <Button label={t("lead.next.title")} icon="chevronRight" full onPress={() => setSheet("next")} />
     : turn.kind === "wait" && turn.action === "lostOrWait" ? <Button label={t("lead.low.title")} icon="clock" full onPress={() => setSheet("low")} />
     : turn.kind === "wait" ? <Button label={t("lead.remind")} icon="sms" full variant={turn.action === "remind" ? "primary" : "secondary"} onPress={remind} />
-    : turn.kind === "step" && l.status === "booked" ? <Button label={t("lead.makeEstimate")} icon="invoice" full onPress={makeEstimate} />
+    : turn.kind === "step" && l.status === "booked" && role !== "tech" ? <Button label={t("lead.makeEstimate")} icon="invoice" full onPress={makeEstimate} />
     : turn.kind === "step" ? <Button label={t("lead.tab.tasks")} icon="check" full variant="secondary" onPress={() => setTab("tasks")} />
     : turn.kind === "snoozed" ? <Button label={t("lead.unsnooze")} icon="refresh" full variant="secondary" onPress={() => toast.show(q(t("lead.unsnoozed")), store.unsnoozeLead(l.id))} />
     : isClosedLead(l) ? <Button label={t("lead.reopen")} icon="refresh" full onPress={() => toast.show(q(t("lead.reopened", { name: l.name })), store.reopenLead(l.id))} />
@@ -167,14 +167,14 @@ export default function LeadScreen() {
 
       <ReplySheet leadId={sheet === "reply" ? l.id : null} onClose={() => setSheet(null)} />
       <CallResultSheet key={`call-${sheet === "call"}`} l={l} visible={sheet === "call"} onClose={() => setSheet(null)} onAnswered={() => setSheet("next")} />
-      <NextStepSheet l={l} visible={sheet === "next"} onClose={() => setSheet(null)} onBook={() => setSheet("book")} onEstimate={makeEstimate} onCloseLead={() => setSheet("close")} />
+      <NextStepSheet office={role !== "tech"} l={l} visible={sheet === "next"} onClose={() => setSheet(null)} onBook={() => setSheet("book")} onEstimate={makeEstimate} onCloseLead={() => setSheet("close")} />
       <BookSheet key={`book-${sheet === "book"}`} l={l} visible={sheet === "book"} onClose={() => setSheet(null)} />
       <SnoozeSheet key={`snooze-${sheet === "snooze"}`} l={l} visible={sheet === "snooze"} onClose={() => setSheet(null)} />
       <StatusSheet
         l={l}
         visible={sheet === "status"}
         onClose={() => setSheet(null)}
-        onMakeClient={() => (canSeeLeadCost(role) ? setSheet("won") : undefined)}
+        onMakeClient={role !== "tech" ? () => setSheet("won") : undefined}
         onCloseLead={() => setSheet("close")}
         onSnooze={() => setSheet("snooze")}
       />

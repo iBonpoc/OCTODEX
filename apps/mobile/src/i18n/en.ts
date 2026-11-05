@@ -993,6 +993,7 @@ export const en: Dict = {
   "lead.next.skip": "Later",
   "lead.book.saved": "Visit {date} at {time}",
   "lead.book.note": "Note for the tech",
+  "lead.book.past": "That time has passed — pick a later one",
   "lead.book.notePh": "Gate code, dog in the yard…",
   "lead.snooze.title": "Snooze",
   "lead.snooze.months": "In {n} mo",

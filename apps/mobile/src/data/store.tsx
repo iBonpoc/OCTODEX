@@ -634,6 +634,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       bookLead: (id, at) => {
         const l = dbRef.current.leads.find((x) => x.id === id);
         if (!l || !isOpenLeadStatus(l.status)) return () => {};
+        // one planned estimate visit at a time (double tap, second booking): reschedule lives in the Plan
+        const d0 = dbRef.current;
+        if (l.propertyId && d0.visits.some((v) => new Date(v.start).getTime() > Date.now() && d0.jobs.some((j) => j.id === v.jobId && j.propertyId === l.propertyId && j.status === "estimate"))) return () => {};
         const target = leadTarget(id);
         if (!target) return () => {};
         const ids = { jobId: uid(), visitId: uid() };
