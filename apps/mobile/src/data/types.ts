@@ -130,6 +130,8 @@ export interface Job {
   status: JobStatus;
   amountCents: number;
   estimateId?: ID;
+  /** direction of the business (docs/specs/11-trade.md): from the estimate when the job is made */
+  serviceCategoryId?: ID;
 }
 
 export type VisitStep = "scheduled" | "en_route" | "on_site" | "working" | "signed" | "paid";
@@ -218,6 +220,8 @@ export interface Lead {
   receivedAt: string;
   message: string;
   status: LeadStatus;
+  /** direction of the business (docs/specs/11-trade.md): the company's only one by default */
+  serviceCategoryId?: ID;
   /** who works the lead (owner by default) */
   assigneeId?: ID;
   createdBy?: ID;
@@ -339,6 +343,8 @@ export interface MemberSignature {
 }
 export interface Estimate {
   id: ID;
+  /** direction of the business (docs/specs/11-trade.md): from the lead, else the client's latest, else the only one */
+  serviceCategoryId?: ID;
   customerId: ID;
   propertyId: ID;
   title: string;
@@ -450,7 +456,8 @@ export interface Company {
   timezone: string;
   /** language of what goes to clients when the client's own is not known (en in the US); docLanguageFor decides */
   docLanguage?: import("@/i18n/translate").DocLang;
-  trades: string[];
+  /** before docs/specs/11-trade.md: directions as text (read once by normalize; now `DB.serviceCategories`) */
+  trades?: string[];
   brand: { logo?: string; color?: string };
   insurance: { cglCarrier?: string; cglPolicy?: string; wcCarrier?: string; wcPolicy?: string; wcExempt?: boolean };
   /** where the client sends a cancellation (CA 3-day right) */
@@ -526,11 +533,22 @@ export interface QueuedAction {
   at: string;
 }
 
+/** A direction of the business: a preset (seedKey, translated) or the company's own name. Never deleted, only archived. */
+export interface ServiceCategory {
+  id: ID;
+  seedKey?: string;
+  name?: string;
+  position: number;
+  archivedAt?: string;
+}
+
 export interface DB {
   me: ID;
   members: Member[];
   sources: Source[];
   tags: Tag[];
+  /** directions of the business of the company (docs/specs/11-trade.md); archived ones stay for history */
+  serviceCategories: ServiceCategory[];
   tasks: Task[];
   activities: Activity[];
   customers: Customer[];

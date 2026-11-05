@@ -4,7 +4,7 @@ import type { Lead } from "@/data/types";
 export type LeadPatch = Partial<
   Pick<Lead, "name" | "phone" | "phone2" | "phone2Label" | "email" | "preferredContact" | "language" | "address" | "city" | "state" | "zip" | "sourceId"
     | "serviceItemId" | "service" | "timeframe" | "timeframeDate" | "budgetCents" | "message" | "assigneeId"
-    | "interest" | "snoozedUntil" | "snoozeReason" | "remindedAt" | "askAgainAt">
+    | "interest" | "snoozedUntil" | "snoozeReason" | "remindedAt" | "askAgainAt" | "serviceCategoryId">
 >;
 
 const COLS: Record<keyof LeadPatch, string> = {
@@ -32,6 +32,7 @@ const COLS: Record<keyof LeadPatch, string> = {
   snoozeReason: "snooze_reason",
   remindedAt: "reminded_at",
   askAgainAt: "ask_again_at",
+  serviceCategoryId: "service_category_id",
 };
 
 export function leadCols(p: LeadPatch, full?: Pick<Lead, "address" | "city" | "state" | "zip">): Record<string, unknown> {
