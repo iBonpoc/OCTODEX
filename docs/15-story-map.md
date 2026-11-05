@@ -91,6 +91,7 @@
 | S1 | Заявка → Лид | человек / приём лидов | — → `Lead.new` | e2e:15-lead-full, unit:leads | ◐ | цена и атрибуция; приём извне, повтор события, дубль в базе |
 | S2 | Первый ответ | человек | `new` → `replied` (только если дозвонились) | e2e:15-lead-full, db:T14, db:T15, unit:leadTurn | ✅ | — |
 | S3 | Лид → потенциальный клиент | система при осмотре или смете | — → `Customer.prospect`, `Property`, `Contact` | e2e:18-handoffs-lead-to-deposit, e2e:04-lead-funnel, e2e:24-lead-people, unit:leadPeople, db:T17 | ◐ | люди лида со всеми телефонами переходят клиенту (совпал телефон или email — сливаются, без дублей; триггер `app.move_lead_people`, то же правило в приложении `mergePeople`); клиента пока создаёт приложение, серверной функции `lead_to_client` нет |
+| S3c | Клиент → объекты (C2) | Д / офис | — → `Property` (адрес, ярлык, тип), доступ, код ворот (`property_secrets`), люди объекта | e2e:27-properties, unit:properties, db:T20 | ✅ | код ворот мастеру — только в день визита и накануне (`app.can_see_gate_code`, то же правило в `canSeeGateCode`) |
 | S4 | Лид → осмотр | человек | `replied` → `booked`; — → `Job(estimate)`, `Visit` | — | ✚ | весь стык |
 | S5 | Лид/Клиент → смета | человек | — → `Estimate.draft (leadId, propertyId)` | e2e:18-handoffs-lead-to-deposit, e2e:01-estimate-builder | ✅ | — |
 | S6 | Смета отправлена | человек | смета `draft` → `sent`; лид → `estimate_sent` | e2e:18-handoffs-lead-to-deposit, db:T8 | ✅ | — |

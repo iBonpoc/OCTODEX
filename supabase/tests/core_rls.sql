@@ -1044,6 +1044,134 @@ select tst.blocked($q$update public.companies set doc_language = 'es' where id =
 select tst.ok((select doc_language from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'en', 'still English after the tech tried');
 \echo 'T17b client language ok'
 
+-- ---------------------------------------------------------------- T20: properties C2 — people of a property, gate code by the day
+:as_owner_a
+do $$
+declare v_c uuid := 'c2000000-0000-4000-8000-000000000001'; k int; v_p uuid; v_j uuid; v_v uuid;
+  -- property → visit offset in days for tech 3 (null: no visit), status
+  plan text[][] := array[['0','scheduled'], ['1','scheduled'], ['3','scheduled'], ['-1','scheduled'], ['0','cancelled']];
+begin
+  insert into public.customers (id, company_id, display_name) values (v_c, 'ca000000-0000-0000-0000-000000000000', 'Gate Client');
+  for k in 1..5 loop
+    v_p := ('d2000000-0000-4000-8000-00000000000' || k)::uuid;
+    v_j := ('e2000000-0000-4000-8000-00000000000' || k)::uuid;
+    v_v := ('f2000000-0000-4000-8000-00000000000' || k)::uuid;
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Gate St', 'Pasadena', 1);
+    insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#' || k || '42');
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Gate job ' || k, v_c, v_p, 'scheduled');
+    insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j, now() + (plan[k][1] || ' days')::interval);
+    if plan[k][2] <> 'scheduled' then update public.visits set status = plan[k][2] where id = v_v; end if;
+    insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
+  end loop;
+  perform tst.ok((select count(*) from public.property_secrets where property_id::text like 'd2000000%') = 5, 'office sees every gate code');
+  -- people of a property: links to the client's people
+  update public.properties set contact_ids = array['a1700000-0000-4000-8000-000000000001'::uuid], access_notes = 'Dog in the yard' where id = 'd2000000-0000-4000-8000-000000000001';
+  perform tst.ok((select cardinality(contact_ids) from public.properties where id = 'd2000000-0000-4000-8000-000000000001') = 1, 'a property keeps its people');
+  perform tst.fails($q$insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', 'd2000000-0000-4000-8000-000000000001', 'again')$q$, 'one gate code per property');
+end $$;
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd2000000%'$q$) = 5, 'office role sees every gate code');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 1, 'tech: visit today → sees the code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000002'$q$) = 1, 'tech: visit tomorrow → sees the code the day before');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 0, 'tech: visit in 3 days → no code yet');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000004'$q$) = 0, 'tech: visit was yesterday → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000005'$q$) = 0, 'tech: cancelled visit today → no code');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd2000000-0000-4000-8000-000000000001' and access_notes = 'Dog in the yard'$q$) = 1, 'tech sees access notes of their property');
+select tst.blocked($q$update public.property_secrets set gate_code = 'tech' where property_id = 'd2000000-0000-4000-8000-000000000001'$q$, 'tech cannot change a gate code');
+select tst.fails($q$insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', 'd2000000-0000-4000-8000-000000000003', 'x')$q$, 'tech cannot set a gate code');
+:as_tech2_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 0, 'another tech, not on the visit → no code');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd2000000%'$q$) = 0, 'other company sees no gate codes');
+select tst.fails($q$insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', 'd2000000-0000-4000-8000-000000000003', 'x')$q$, 'other company cannot set a gate code');
+:as_owner_a
+select tst.ok((select gate_code from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001') = '#142', 'gate code unchanged by others');
+
+-- T20 (security review): every way the code could leak
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a0000000-0000-0000-0000-000000000005', 'sales@a.test', '{"full_name":"Sam Sales"}'),
+  ('b0000000-0000-0000-0000-000000000002', 'tech@b.test', '{"full_name":"Rival Tech"}');
+:as_owner_a
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000005', 'sales', 'active');
+:as_owner_b
+insert into public.memberships (company_id, user_id, role, status) values ('cb000000-0000-0000-0000-000000000000', 'b0000000-0000-0000-0000-000000000002', 'tech', 'active');
+:as_owner_a
+do $$
+declare k int; v_p uuid; v_j uuid; v_v uuid; v_c uuid := 'c2000000-0000-4000-8000-000000000001';
+begin
+  -- 6: +2 days, 7: completed today, 8: no_show today, 9: tech removed from today's visit, 10: deleted visit today,
+  -- 11: deleted job, 12: cancelled job, 13: deleted code, 14: 00:30 company time today (time zone check)
+  for k in 6..14 loop
+    v_p := ('d2000000-0000-4000-8000-0000000000' || lpad(k::text, 2, '0'))::uuid;
+    v_j := ('e2000000-0000-4000-8000-0000000000' || lpad(k::text, 2, '0'))::uuid;
+    v_v := ('f2000000-0000-4000-8000-0000000000' || lpad(k::text, 2, '0'))::uuid;
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Gate St', 'Pasadena', 1);
+    insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#' || k || '42');
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Gate job ' || k, v_c, v_p, 'scheduled');
+    insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j, case when k = 6 then now() + interval '2 days' else now() end);
+    insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
+  end loop;
+  update public.visits set status = 'en_route' where id = 'f2000000-0000-4000-8000-000000000007';
+  update public.visits set status = 'on_site' where id = 'f2000000-0000-4000-8000-000000000007';
+  update public.visits set status = 'completed' where id = 'f2000000-0000-4000-8000-000000000007';
+  update public.visits set status = 'no_show' where id = 'f2000000-0000-4000-8000-000000000008';
+  update public.visit_assignees set deleted_at = now() where visit_id = 'f2000000-0000-4000-8000-000000000009';
+  update public.visits set deleted_at = now() where id = 'f2000000-0000-4000-8000-000000000010';
+  update public.jobs set deleted_at = now() where id = 'e2000000-0000-4000-8000-000000000011';
+  update public.jobs set status = 'cancelled' where id = 'e2000000-0000-4000-8000-000000000012';
+  update public.property_secrets set deleted_at = now() where property_id = 'd2000000-0000-4000-8000-000000000013';
+end $$;
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000006'$q$) = 0, 'tech: visit in 2 days → no code yet');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000007'$q$) = 0, 'tech: completed visit → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000008'$q$) = 0, 'tech: no-show visit → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000009'$q$) = 0, 'tech taken off the visit → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000010'$q$) = 0, 'deleted visit → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000011'$q$) = 0, 'deleted job → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000012'$q$) = 0, 'cancelled job → no code');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000013'$q$) = 0, 'deleted code → nothing to see');
+-- the bypass from the review: a tech cannot move their visit to today, or onto another job
+select tst.fails($q$update public.visits set starts_at = now() where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot move a visit to today');
+select tst.fails($q$update public.visits set job_id = 'e2000000-0000-4000-8000-000000000001' where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot point a visit at another job');
+select tst.fails($q$update public.visits set deleted_at = now() where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot delete a visit');
+select tst.fails($q$update public.visits set arrival_window_start = now() where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot change the arrival window');
+select tst.fails($q$update public.visits set sequence_in_route = 1 where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot change the route order');
+select tst.fails($q$update public.visits set notify_customer = false where id = 'f2000000-0000-4000-8000-000000000003'$q$, 'tech cannot switch off the client notice');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 0, 'after the attempts: still no code in 3 days');
+select tst.ok((select count(*) from public.visits where id = 'f2000000-0000-4000-8000-000000000001') = 1, 'tech still moves their visit through its steps');
+update public.visits set status = 'en_route' where id = 'f2000000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.visits where id = 'f2000000-0000-4000-8000-000000000001') = 'en_route', 'tech: "on my way" still works');
+-- a server job (no user) may move a visit: the guard is only for people
+:as_super
+update public.visits set starts_at = starts_at + interval '1 hour' where id = 'f2000000-0000-4000-8000-000000000003';
+select tst.ok((select count(*) from public.visits where id = 'f2000000-0000-4000-8000-000000000003' and starts_at > now() + interval '3 days') = 1, 'no user (server, cron): the visit moves');
+-- sales is office staff (app.is_staff): sees the code like the dispatcher
+reset role; set request.jwt.claim.sub = 'a0000000-0000-0000-0000-000000000005'; set role authenticated;
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 1, 'sales (office staff) sees the gate code');
+-- a tech of another company sees nothing; another company cannot change a code
+reset role; set request.jwt.claim.sub = 'b0000000-0000-0000-0000-000000000002'; set role authenticated;
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id::text like 'd2000000%'$q$) = 0, 'tech of another company: no codes');
+:as_owner_b
+select tst.blocked($q$update public.property_secrets set gate_code = 'stolen' where property_id = 'd2000000-0000-4000-8000-000000000001'$q$, 'other company cannot change a gate code');
+-- time zone: 00:30 today in a company far ahead of UTC is today for the company (yesterday in UTC)
+:as_owner_a
+update public.companies set timezone = 'Pacific/Kiritimati' where id = 'ca000000-0000-0000-0000-000000000000';
+update public.visits set starts_at = (date_trunc('day', now() at time zone 'Pacific/Kiritimati') + interval '30 minutes') at time zone 'Pacific/Kiritimati'
+ where id = 'f2000000-0000-4000-8000-000000000014';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000014'$q$) = 1, 'visit at 00:30 company time today → code (company time zone, not UTC)');
+:as_owner_a
+-- 2 days ahead by the company's calendar (not by UTC) → no code
+update public.visits set starts_at = (date_trunc('day', now() at time zone 'Pacific/Kiritimati') + interval '2 days 30 minutes') at time zone 'Pacific/Kiritimati'
+ where id = 'f2000000-0000-4000-8000-000000000014';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000014'$q$) = 0, 'visit at 00:30 company time in 2 days → no code yet');
+:as_owner_a
+update public.companies set timezone = 'America/Los_Angeles' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select gate_code from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001') = '#142', 'no one else changed a code');
+\echo 'T20 properties C2 ok'
 -- ---------------------------------------------------------------- T18: estimate status (docs/specs/07 §4, S8b, edit after send)
 :as_owner_a
 do $$
