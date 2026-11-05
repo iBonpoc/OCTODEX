@@ -342,6 +342,10 @@ export function ListCard(p: ListCardProps) {
   );
 }
 
+/** desktop row: fixed value column (fits "$12,400.00") and two 28 buttons */
+const ROW_VALUE_W = component.tileMin + space[4];
+const ROW_ACTIONS_W = component.button.sm * 2 + space[1];
+
 /* ---------- desktop row (1280): same data, places become columns; text wraps ---------- */
 function ListCardRow(p: ListCardProps) {
   const { c } = useTheme();
@@ -386,13 +390,11 @@ function ListCardRow(p: ListCardProps) {
           <Txt color={p.facts?.[k] ? c.ink : c.mut} lines={FACT_MAX_LINES}>{p.facts?.[k] || "—"}</Txt>
         </View>
       ))}
-      {p.value ? (
-        <View style={{ alignItems: "flex-end", gap: spaceHalf.hair }}>
-          <Txt w="semibold" color={p.valueTone && p.valueTone !== "neutral" ? c.status[p.valueTone].text : c.ink} tabular>{p.value}</Txt>
-          {p.valueLabel ? <Txt v="caption" color={c.mut}>{p.valueLabel}</Txt> : null}
-        </View>
-      ) : null}
-      <View style={{ flexDirection: "row", gap: space[1] }}>
+      {/* fixed columns: every row keeps the same lines whether or not it has a value or both buttons */}
+      <View style={{ width: ROW_VALUE_W, alignItems: "flex-end" }}>
+        {p.value ? <Txt w="semibold" color={p.valueTone && p.valueTone !== "neutral" ? c.status[p.valueTone].text : c.ink} tabular>{p.value}</Txt> : null}
+      </View>
+      <View style={{ width: ROW_ACTIONS_W, flexDirection: "row", justifyContent: "flex-end", gap: space[1] }}>
         {actions.map((a) => (
           <Tap key={a.kind} visible={btn} onPress={() => void Linking.openURL(a.url).catch(() => undefined)} label={t(`card.act.${a.kind}`, { v: a.value })}>
             <View style={{ width: btn, height: btn, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}>
@@ -438,8 +440,8 @@ export function ListCardHeader({ title, columns, value }: { title: string; colum
       <View style={{ width: component.avatar.sm }} />
       <View style={{ flex: 1.3 }}>{cap(title)}</View>
       {rowColumns(columns).map((k) => <View key={k} style={{ flex: 1 }}>{cap(t(`card.fact.${k}`))}</View>)}
-      {value ? <View style={{ alignItems: "flex-end" }}>{cap(value)}</View> : null}
-      <View style={{ width: component.button.sm * 2 + space[1] }} />
+      <View style={{ width: ROW_VALUE_W, alignItems: "flex-end" }}>{value ? cap(value) : null}</View>
+      <View style={{ width: ROW_ACTIONS_W }} />
     </View>
   );
 }

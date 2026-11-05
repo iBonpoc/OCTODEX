@@ -58,7 +58,7 @@ export default function Clients() {
     const move = pickerOptions("customer", statusOf(c)).find((o) => o.status === s);
     if (!move?.enabled) return;
     if (move.how === "form") return router.push(`/client/${c.id}`);
-    toast.show(t("client.statusSaved"), store.setCustomerStatus(c.id, s));
+    toast.show(`${c.name}: ${t(clientStatusChip[s].l)}`, store.setCustomerStatus(c.id, s));
   };
   const groups = [...list.reduce((m, c) => m.set(c.name[0]!.toUpperCase(), [...(m.get(c.name[0]!.toUpperCase()) ?? []), c]), new Map<string, Customer[]>())];
   const card = (c: Customer) => {
@@ -80,7 +80,7 @@ export default function Clients() {
         // an active client has no chip (spec 06 §5); prospects, archive, «do not service» do — tappable when it can change
         status={st !== "active" ? { tone: clientStatusChip[st].s, label: t(clientStatusChip[st].l), onPress: office && canChangeStatus("customer", st) ? () => setPicking(c) : undefined } : undefined}
         signs={overdue.length ? [{ tone: "bad", label: t("card.sign.overdueDays", { d: Math.max(...overdue.map((x) => x.params?.d ?? 0)) }) }] : undefined}
-        tags={[...tagsOf(db, c).slice(0, 3).map((x) => tagLabel(x, t)), ...(open > 0 ? [`${t("st.sent")} · ${open}`] : [])]}
+        tags={[...tagsOf(db, c).slice(0, 3).map((x) => tagLabel(x, t)), ...(open > 0 ? [t("card.tag.estimateSent", { n: open })] : [])]}
         facts={{
           num: c.number,
           phone: c.phone,
@@ -88,7 +88,7 @@ export default function Clients() {
           addr: addr && props.length > 1 ? `${addr} · ${t("clients.properties", { n: props.length })}` : addr,
           last: last ? [t(last.title), last.detail, day(last.at)].filter(Boolean).join(" · ") : undefined,
         }}
-        figures={money ? [{ label: t("client.paidTotal"), value: moneyFmt(money.paidTotalCents) }] : undefined}
+        figures={money && money.paidTotalCents > 0 ? [{ label: t("client.paidTotal"), value: moneyFmt(money.paidTotalCents) }] : undefined}
         contact={{ phone: c.phone, email: c.email, addr }}
         density={device === "desktop" ? "row" : "rich"}
         columns={COLUMNS}
@@ -102,7 +102,7 @@ export default function Clients() {
       help={t("help.clients")}
       hintKey="clients"
       subtitle={t("clients.count", { n: count("all") })}
-      right={office ? <Button label={t("clients.new")} icon="plus" size="sm" onPress={() => router.push("/client/edit")} /> : undefined}
+      right={office ? <Button label={t("clients.new")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/client/edit")} /> : undefined}
     >
       <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.search")} icon="search" />
       <ChoiceChips<Filter>
@@ -121,8 +121,8 @@ export default function Clients() {
         <Empty
           icon="search"
           title={t("clients.empty")}
-          hint={t("clients.emptyHint")}
-          action={office ? <Button label={t("clients.new")} icon="plus" onPress={() => router.push("/client/edit")} /> : undefined}
+          hint={q.trim() ? t("clients.emptyHint") : t("card.emptyFilter")}
+          action={office && q.trim() ? <Button label={t("clients.new")} icon="plus" variant="secondary" onPress={() => router.push("/client/edit")} /> : undefined}
         />
       ) : device === "tablet" ? (
         <CardGrid>{list.map(card)}</CardGrid>

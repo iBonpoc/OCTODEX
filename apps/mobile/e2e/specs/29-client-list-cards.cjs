@@ -20,7 +20,15 @@ exports.run = async (h) => {
   h.expect(txt.includes(owes.phone), `phone on the card: ${owes.phone}`);
   const prop = db.properties.find((x) => x.customerId === owes.id);
   h.expect(txt.includes(prop.address), `address on the card: ${prop.address}`);
-  h.expect(/\$[\d,]+/.test(txt) && /Должен/i.test(txt), `owed amount with its label: ${txt.slice(0, 200)}`);
+  // the label «Должен» is next to the amount on cards; on 1280 rows it is the column title
+  h.expect(/\$[\d,]+/.test(txt) && (wide || /Должен/i.test(txt)), `owed amount with its label: ${txt.slice(0, 200)}`);
+  if (wide) {
+    // desktop rows: the phone column starts on the same line in every row (with or without a debt)
+    const xs = await p.locator('[data-testid="list-card"]').evaluateAll((els, phones) =>
+      els.map((e) => [...e.querySelectorAll("div")].find((d) => phones.includes(d.textContent.trim()) && !d.querySelector("div"))).filter(Boolean).map((d) => Math.round(d.getBoundingClientRect().x)),
+      db.customers.map((c) => c.phone));
+    h.expect(xs.length >= 2 && xs.every((x) => Math.abs(x - xs[0]) <= 1), `phone column on one line in every row (${xs.join(", ")})`);
+  }
   h.expect(!/…|\.\.\./.test(await p.locator("main, body").first().innerText()), "no «…» anywhere in the list");
 
   // alphabet groups on phone and desktop (one letter header per first letter); tablet is one 2-column grid

@@ -1237,6 +1237,8 @@ export const en: Dict = {
   "card.val.contract": "contract",
   "card.val.price": "price",
   "card.queued": "Not sent · waiting for network",
+  "card.tag.estimateSent": "Estimate sent · {n}",
+  "card.emptyFilter": "Nobody in this filter",
   "card.val.paid": "paid",
   "prop.h.visit": "Visit",
   "prop.h.estimate": "Estimate",
