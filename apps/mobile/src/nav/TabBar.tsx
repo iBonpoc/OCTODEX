@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
+import { useGlobalSearchParams, usePathname, useSegments } from "expo-router";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import { component, motion, radius, size, space } from "@octo/design-tokens";
@@ -13,6 +14,8 @@ import { useNavInsets } from "@/ui/surfaces";
 import { useKeyboardHeight } from "@/ui/keyboard";
 import { roleNav, type TabRoute } from "./roles";
 import { QuickActions } from "./QuickActions";
+import { goTo } from "./go";
+import { sectionTab } from "./hierarchy";
 
 /**
  * Phone: floating glass pill at the bottom (56 + safe area), 4 items + center "＋".
@@ -20,6 +23,29 @@ import { QuickActions } from "./QuickActions";
  * Active item gets the liquid accent fill (160ms stretch + 420ms settle).
  */
 export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
+  const current = state.routes[state.index]?.name as TabRoute | undefined;
+  const go = (route: TabRoute) => {
+    const r = state.routes.find((x) => x.name === route);
+    if (r) navigateToTab(r.key);
+  };
+  return <NavPill current={current} onGo={go} />;
+}
+
+/**
+ * Tablet/desktop: the same top pill above inner screens (client, job, estimate…), so another section is one tap away.
+ * The section the screen belongs to is highlighted (spec 10, Н1). Phone: inner screens have no bar (iOS), nothing here.
+ */
+export function StackNavPill() {
+  const { wide } = useDevice();
+  const store = useStore();
+  const pathname = usePathname();
+  const params = useGlobalSearchParams();
+  const segments = useSegments();
+  if (!wide || segments[0] === "(tabs)" || !segments.length || segments[0] === "p" || segments[0] === "auth") return null;
+  return <NavPill current={sectionTab(pathname, params, store.db, store.role)} onGo={(route) => goTo(`/${route}`)} />;
+}
+
+function NavPill({ current, onGo: go }: { current: TabRoute | undefined; onGo: (route: TabRoute) => void }) {
   const { role } = useStore();
   const { t } = useI18n();
   const { c } = useTheme();
@@ -30,11 +56,6 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   /** on a phone the floating bar would sit on top of the keyboard and cover the field: hide it while typing */
   const kb = useKeyboardHeight();
   const items = roleNav[role];
-  const current = state.routes[state.index]?.name as TabRoute | undefined;
-  const go = (route: TabRoute) => {
-    const r = state.routes.find((x) => x.name === route);
-    if (r) navigateToTab(r.key);
-  };
 
   const [layouts, setLayouts] = useState<Record<string, { x: number; w: number }>>({});
   const left = useSharedValue(0);
@@ -73,6 +94,7 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
         onPress={() => go(it.route)}
         accessibilityRole="tab"
         accessibilityState={{ selected: sel }}
+        aria-selected={sel}
         accessibilityLabel={t(it.label)}
         containerStyle={wide ? undefined : { flex: 1 }}
         onLayout={(e: LayoutChangeEvent) => {
