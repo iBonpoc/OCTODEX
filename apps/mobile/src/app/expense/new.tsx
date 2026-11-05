@@ -10,6 +10,7 @@ import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Screen } from "@/ui/surfaces";
+import { isAssigned } from "@/features/schedule";
 
 const CATS: ExpenseCategory[] = ["materials", "fuel", "dump", "tools", "other"];
 const VENDORS = ["Home Depot", "Lowe's", "ABC Supply", "Chevron"];
@@ -22,7 +23,7 @@ export default function NewExpense() {
   const [amount, setAmount] = useState("");
   const [vendor, setVendor] = useState("Home Depot");
   const [category, setCategory] = useState<ExpenseCategory>("materials");
-  const todays = db.visits.filter((v) => isToday(v.start) && v.techId === db.me);
+  const todays = db.visits.filter((v) => isToday(v.start) && isAssigned(v, db.me));
   const [jobId, setJobId] = useState<string>(todays[0]?.jobId ?? "none");
   const [photo, setPhoto] = useState<string | undefined>();
   const cents = Math.round(Number(amount.replace(/[^0-9.]/g, "")) * 100);

@@ -166,7 +166,10 @@ export interface Visit {
   id: ID;
   /** the job of the visit; an inspection has none (docs/specs/03 §3.1) */
   jobId?: ID;
+  /** the first person on the visit (kept for the screens that show one name); always assigneeIds[0] ?? null */
   techId: ID | null;
+  /** everyone on the visit (docs/specs/03 §7.4, wave П3a; server: visit_assignees). Missing in old saved data → [techId] */
+  assigneeIds?: ID[];
   start: string; // ISO
   durationMin: number;
   step: VisitStep;

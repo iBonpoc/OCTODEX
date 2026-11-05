@@ -15,6 +15,7 @@ import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip } from "
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { assigneesOf, canPlan, canReschedule, isAssigned } from "@/features/schedule";
 
 type Mode = "day" | "week" | "month";
 
@@ -27,7 +28,7 @@ export default function Plan() {
   const { db, role } = useStore();
   const [mode, setMode] = usePersistentState<Mode>("octo.planMode.v1", "day");
   const [date, setDate] = useState<DayKey>(todayKey());
-  const mine = (v: Visit) => role !== "tech" || v.techId === db.me;
+  const mine = (v: Visit) => role !== "tech" || isAssigned(v, db.me);
   const visitsOn = (k: DayKey) => db.visits.filter((v) => isoDayKey(v.start) === k && mine(v)).sort(sortByStart);
   const step = (n: number) => setDate(mode === "day" ? addDays(date, n) : mode === "week" ? addDays(date, 7 * n) : addMonths(date, n));
   const week = weekDays(date);
@@ -92,14 +93,17 @@ function DayView({ date, visits }: { date: DayKey; visits: Visit[] }) {
   const { db, role, assignVisit, online } = useStore();
   const toast = useToast();
   const [assign, setAssign] = useState<string | null>(null);
-  const canAssign = role !== "tech";
-  const drop = (visitId: string, techId: string) => {
-    const m = db.members.find((x) => x.id === techId);
-    toast.show(online ? t("toast.assigned", { name: m?.name ?? "" }) : t("offline.queued"), assignVisit(visitId, techId));
+  const canAssign = canPlan([role]);
+  // a card dragged from one person's column onto another: that person is replaced, the others stay (wave П3a)
+  const drop = (v: Visit, from: string, to: string) => {
+    if (from === to) return;
+    const m = db.members.find((x) => x.id === to);
+    const list = [...assigneesOf(v).filter((x) => x !== from && x !== to), to];
+    toast.show(online ? t("toast.assigned", { name: m?.name ?? "" }) : t("offline.queued"), assignVisit(v.id, from === "none" ? [to] : list));
   };
-  const drag = (v: { id: string; techId: string | null }, card: ReactNode) =>
-    canAssign ? (
-      <Draggable key={v.id} id={v.id} from={v.techId ?? "none"} onDrop={(z) => drop(v.id, z)}>
+  const drag = (v: Visit, card: ReactNode, from: string = v.techId ?? "none") =>
+    canAssign && canReschedule(v) ? (
+      <Draggable key={`${v.id}:${from}`} id={`${v.id}:${from}`} from={from} onDrop={(z) => drop(v, from, z)}>
         {card}
       </Draggable>
     ) : (
@@ -118,7 +122,7 @@ function DayView({ date, visits }: { date: DayKey; visits: Visit[] }) {
           <Grid>
             {unassigned.map((v) => (
               <View key={v.id} style={{ gap: space[2] }}>
-                {drag(v, <VisitCard v={v} />)}
+                {drag(v, <VisitCard v={v} />, "none")}
                 <Button label={t("plan.assign")} icon="user" onPress={() => setAssign(v.id)} />
               </View>
             ))}
@@ -127,7 +131,7 @@ function DayView({ date, visits }: { date: DayKey; visits: Visit[] }) {
       ) : null}
       <RaisedGrid ids={people.map((m) => m.id)}>
         {people.map((m) => {
-          const vs = visits.filter((v) => v.techId === m.id);
+          const vs = visits.filter((v) => isAssigned(v, m.id));
           return (
             <DropZone key={m.id} id={m.id} style={{ gap: space[2] }}>
               <RowView>
@@ -146,7 +150,7 @@ function DayView({ date, visits }: { date: DayKey; visits: Visit[] }) {
                   </T>
                 </Card>
               ) : (
-                vs.map((v) => drag(v, <VisitCard v={v} />))
+                vs.map((v) => drag(v, <VisitCard v={v} />, m.id))
               )}
             </DropZone>
           );

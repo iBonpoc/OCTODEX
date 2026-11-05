@@ -25,6 +25,16 @@ export function nextStep(v: Pick<Visit, "step" | "kind">): VisitStep {
   return path[Math.min(i < 0 ? 0 : i + 1, path.length - 1)]!;
 }
 
+/** everyone on a visit (old saved data has only techId) */
+export const assigneesOf = (v: Pick<Visit, "techId" | "assigneeIds">): ID[] => (v.assigneeIds?.length ? v.assigneeIds : v.techId ? [v.techId] : []);
+/** is this person on the visit (first or not) */
+export const isAssigned = (v: Pick<Visit, "techId" | "assigneeIds">, id: ID | null | undefined): boolean => !!id && assigneesOf(v).includes(id);
+/** a visit with these people: techId is the first, assigneeIds the list without doubles */
+export function withAssignees<V extends Visit>(v: V, ids: ID[]): V {
+  const list = [...new Set(ids.filter(Boolean))];
+  return { ...v, techId: list[0] ?? null, assigneeIds: list };
+}
+
 /** not finished and not closed: it can still happen */
 export const isOpenVisit = (v: Visit) => !v.closed && v.step !== "paid" && v.step !== "done";
 
@@ -44,12 +54,13 @@ export function startAllowed(startIso: string, now: number = Date.now()): boolea
 }
 
 /** visits of the same person that overlap [start, start + duration) — by time, not "how many that day" */
-export function overlaps(db: Pick<DB, "visits">, techId: ID | null, startIso: string, durationMin: number, exceptId?: ID): Visit[] {
-  if (!techId) return [];
+export function overlaps(db: Pick<DB, "visits">, techId: ID | ID[] | null, startIso: string, durationMin: number, exceptId?: ID): Visit[] {
+  const people = Array.isArray(techId) ? techId : techId ? [techId] : [];
+  if (!people.length) return [];
   const a = new Date(startIso).getTime();
   const b = a + durationMin * 60_000;
   return db.visits.filter((v) => {
-    if (v.id === exceptId || v.techId !== techId || !isOpenVisit(v)) return false;
+    if (v.id === exceptId || !people.some((p) => isAssigned(v, p)) || !isOpenVisit(v)) return false;
     const s = new Date(v.start).getTime();
     const e = s + (v.durationMin || 0) * 60_000;
     return s < b && a < e;
@@ -112,13 +123,13 @@ export function atMinute(day: Date, minute: number): string {
 /** open visits of a person on that day, by start (the row "2 visits · 10:00–12:00, 14:00–15:00") */
 export function dayVisits(db: Pick<DB, "visits">, techId: ID, day: Date, exceptId?: ID): Visit[] {
   return db.visits
-    .filter((v) => v.id !== exceptId && v.techId === techId && isOpenVisit(v) && sameDay(new Date(v.start), day))
+    .filter((v) => v.id !== exceptId && isAssigned(v, techId) && isOpenVisit(v) && sameDay(new Date(v.start), day))
     .sort((a, b) => a.start.localeCompare(b.start));
 }
 
 /** start minutes the person is free for `durationMin`, inside working hours, on the step; never in the past today */
 export function freeSlots(
-  db: Pick<DB, "visits">, techId: ID | null, day: Date, durationMin: number,
+  db: Pick<DB, "visits">, techId: ID | ID[] | null, day: Date, durationMin: number,
   opts: { exceptId?: ID; now?: number; hours?: Hours } = {},
 ): number[] {
   const h = opts.hours ?? SCHEDULE_DEFAULTS;
@@ -127,7 +138,8 @@ export function freeSlots(
   for (let m = h.dayStartMin; m + durationMin <= h.dayEndMin; m += h.stepMin) {
     const start = atMinute(day, m);
     if (new Date(start).getTime() < now) continue;
-    if (techId && overlaps(db, techId, start, durationMin, opts.exceptId).length) continue;
+    // several people: a slot is free when all of them are free
+    if (overlaps(db, techId, start, durationMin, opts.exceptId).length) continue;
     out.push(m);
   }
   return out;
@@ -137,7 +149,7 @@ export type FormWarning = { key: "busy"; visits: Visit[] } | { key: "outOfHours"
 
 /** what the form warns about (status warn, with a word); saving stays possible except in the past */
 export function formWarnings(
-  db: Pick<DB, "visits">, f: { techId: ID | null; start: string; durationMin: number; exceptId?: ID },
+  db: Pick<DB, "visits">, f: { techId: ID | ID[] | null; start: string; durationMin: number; exceptId?: ID },
   opts: { now?: number; hours?: Hours } = {},
 ): FormWarning[] {
   const h = opts.hours ?? SCHEDULE_DEFAULTS;
