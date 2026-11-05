@@ -84,6 +84,11 @@ describe("contact buttons", () => {
     expect(contactActions({ addr: "1 A St" }, "ios").map((x) => x.kind)).toEqual(["map"]);
     expect(contactActions({ phone: "n/a", email: "nope" }, "ios")).toEqual([]);
   });
+  it("an email with ?body= / &cc= from a web form gets no button (security-check 05.11)", () => {
+    for (const bad of ["a@b.co?body=pay%20now", "a@b.co&cc=x@evil.co", "a@b.co, x@evil.co", "a b@c.co", "a@b.co#x"])
+      expect(contactActions({ email: bad }, "ios"), bad).toEqual([]);
+    expect(contactActions({ email: "first.last+tag@mail.example.com" }, "ios")[0]!.url).toBe("mailto:first.last%2Btag@mail.example.com");
+  });
   it("map opens Apple Maps on iOS, Google Maps elsewhere", () => {
     expect(mapsUrl("12 Vine St", "ios")).toBe("https://maps.apple.com/?q=12%20Vine%20St");
     expect(mapsUrl("12 Vine St", "android")).toMatch(/^https:\/\/www\.google\.com\/maps\/search\/\?api=1&query=12%20Vine%20St$/);
