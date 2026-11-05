@@ -463,11 +463,14 @@ do $$ begin
   perform tst.fails($q$insert into public.estimate_line_items (company_id, option_id, name, unit_price_cents)
                        values ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000001', 'Extra', 100)$q$, 'add line to locked version');
   update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000001' where id = '0e1a0000-0000-0000-0000-000000000001';
-  update public.estimates set status = 'approved' where id = '0e1a0000-0000-0000-0000-000000000001';
+  -- approved only when an employee signs for the company (docs/specs/07 §4, S8b): a direct update is refused
+  perform tst.fails($q$update public.estimates set status = 'approved' where id = '0e1a0000-0000-0000-0000-000000000001'$q$, 'direct approve without the company signature');
   -- admin/owner: роль owner может выдать только owner; свою роль менять нельзя
   perform tst.fails($q$update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000001'$q$, 'owner changes own role');
   update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002';
 end $$;
+:as_super
+update public.estimates set status = 'approved' where id = '0e1a0000-0000-0000-0000-000000000001';  -- fixture for the tests below
 :as_office_a   -- теперь admin
 do $$ begin
   perform tst.fails($q$update public.memberships set role = 'owner' where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'admin grants owner');
@@ -552,20 +555,26 @@ begin
   -- tax round((14556−300)×9.5%) = 1354; total 48556 − 1000 + 1354 = 48910; deposit 10% = 4891
   r := public.portal_accept('tok_test_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000010',
                             array['0e4a0000-0000-0000-0000-000000000013']::uuid[], 'Yuri Petrov', 'M0 0 L10 10', true);
-  perform tst.ok(r ->> 'status' = 'approved', 'client approved');
+  perform tst.ok(r ->> 'status' = 'awaiting_countersign', 'client signed: awaiting the company (S8, docs/specs/07 §4)');
   perform tst.ok((r -> 'approval' -> 'selection' ->> 'total')::bigint = 48910, 'server total with add-on, discount and tax');
   perform tst.ok((r -> 'approval' -> 'selection' ->> 'deposit')::bigint = 4891, 'server deposit 10%');
   r := public.portal_accept('tok_test_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000010', null, 'Yuri Petrov', 'M0 0', true);
-  perform tst.ok(r ->> 'status' = 'approved', 'repeat accept is idempotent');
+  perform tst.ok(r ->> 'status' = 'awaiting_countersign', 'repeat accept is idempotent');
 end $$;
 reset role;
 do $$ begin
-  perform tst.ok((select count(*) from public.estimate_approvals where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 1, 'one approval');
+  perform tst.ok((select count(*) from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 0, 'no job before the company signs');
+end $$;
+:as_owner_a
+select public.countersign_estimate('0e1a0000-0000-0000-0000-000000000010', 'M0 0 L3 3') = 'approved' as countersigned;
+reset role;
+do $$ begin
+  perform tst.ok((select count(*) from public.estimate_approvals where estimate_id = '0e1a0000-0000-0000-0000-000000000010' and party = 'customer') = 1, 'one client approval');
   perform tst.ok((select status from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 'draft', 'job waits for a date');
   perform tst.ok((select contract_total_cents from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 48910, 'job total');
   perform tst.ok((select count(*) from public.visits v join public.jobs j on j.id = v.job_id
                    where j.estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 0, 'no automatic visit: contractor schedules');
-  perform tst.ok((select count(*) from public.notifications where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 2, 'viewed + approved notifications');
+  perform tst.ok((select count(*) from public.notifications where estimate_id = '0e1a0000-0000-0000-0000-000000000010') = 3, 'viewed + client signed + approved notifications');
 end $$;
 :as_tech_a
 do $$ begin
@@ -573,7 +582,7 @@ do $$ begin
 end $$;
 :as_owner_a
 do $$ begin
-  perform tst.ok(tst.cnt('select 1 from public.notifications') = 2, 'owner sees notifications');
+  perform tst.ok(tst.cnt('select 1 from public.notifications') = 3, 'owner sees notifications');
 end $$;
 \echo 'T8 universal estimate, catalog, client page ok'
 
@@ -643,6 +652,12 @@ reset role; reset request.jwt.claim.sub; set role anon;
 select public.portal_accept('tok_lead_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000077', null, 'Lead Person', 'M0 0 L5 5', true);
 reset role;
 do $$ begin
+  perform tst.ok((select status from public.leads where contact_name = 'Lead to client') = 'estimate_sent', 'client signed: the lead is not won yet (both must sign)');
+end $$;
+:as_owner_a
+select public.countersign_estimate('0e1a0000-0000-0000-0000-000000000077', 'M0 0 L3 3') = 'approved' as countersigned;
+reset role;
+do $$ begin
   perform tst.ok((select status || '/' || won_via from public.leads where contact_name = 'Lead to client') = 'won/approval', 'signature: lead won via approval');
   perform tst.ok((select status from public.customers where id = 'c1a00000-0000-0000-0000-000000000077') = 'active', 'prospect became active client');
   perform tst.ok((select won_via from public.leads where contact_name = 'Paper contract') = 'manual', 'manual conversion recorded');
@@ -672,6 +687,9 @@ begin
 end $$;
 set role anon;
 select public.portal_accept('tok_inv_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000088', null, 'Client', 'M0 0 L5 5', true) is not null as signed;
+reset role;
+:as_owner_a
+select public.countersign_estimate('0e1a0000-0000-0000-0000-000000000088', 'M0 0 L3 3') = 'approved' as countersigned;
 reset role;
 :as_owner_a
 do $$
@@ -1191,9 +1209,9 @@ begin
   perform tst.ok((select status from public.estimates where id = e) = 'draft', 'edit after send: back to draft');
   update public.estimates set status = 'sent' where id = e;
   update public.estimates set status = 'awaiting_countersign' where id = e;
-  update public.estimates set status = 'approved' where id = e;
-  perform tst.ok((select status from public.estimates where id = e) = 'approved', 'employee signed for the company: approved');
-  perform tst.fails(format($q$update public.estimates set status = 'draft' where id = %L$q$, e), 'approved -> draft (signed by both: no edits)');
+  perform tst.fails(format($q$update public.estimates set status = 'approved' where id = %L$q$, e), 'awaiting -> approved only through countersign_estimate (E2a)');
+  -- the T8 estimate was approved by countersign_estimate: signed by both, no edits
+  perform tst.fails($q$update public.estimates set status = 'draft' where id = '0e1a0000-0000-0000-0000-000000000010'$q$, 'approved -> draft (signed by both: no edits)');
   insert into public.estimates (company_id, customer_id, property_id, title)
   values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T18 draft')
   returning id into e2;
@@ -1345,6 +1363,157 @@ begin
   perform tst.ok((select viewed_count from public.estimates where id = v_e) = 2, 'two views counted once each: the wrapper does not run the base twice');
 end $$;
 \echo 'T19 client page language ok'
+
+-- ---------------------------------------------------------------- T23-T25 fixture: a sent estimate with a 10% deposit and a lead
+:as_owner_a
+do $$
+declare v_lead uuid;
+begin
+  insert into public.leads (company_id, source_id, contact_name, phone)
+  select 'ca000000-0000-0000-0000-000000000000', id, 'Sign Lead', '(818) 555-0723' from public.lead_sources
+   where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral' returning id into v_lead;
+  update public.leads set status = 'estimate_sent' where id = v_lead;
+  insert into public.estimates (id, company_id, number, customer_id, property_id, lead_id, title, public_token) values
+    ('0e1a0000-0000-0000-0000-000000000023', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001',
+     'd1a00000-0000-0000-0000-000000000001', v_lead, 'Sign test', 'tok_sign_0123456789abcdef');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
+    ('0e2a0000-0000-0000-0000-000000000023', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000023', 1, '{"kind":"pct","bps":1000}');
+  update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000023' where id = '0e1a0000-0000-0000-0000-000000000023';
+  insert into public.estimate_options (id, company_id, version_id, name) values
+    ('0e3a0000-0000-0000-0000-000000000023', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000023', 'Standard');
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+    ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000023', 'labor', 'Porch', 1, 200000, false);
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000023';
+  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000023' where id = '0e1a0000-0000-0000-0000-000000000023';
+end $$;
+
+-- ---------------------------------------------------------------- T25: the client signs → awaiting the company (S8)
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb;
+begin
+  perform tst.fails($q$select public.countersign_estimate('0e1a0000-0000-0000-0000-000000000023', 'M0 0 L1 1')$q$, 'anon cannot sign for the company');
+  r := public.portal_accept('tok_sign_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000023', null, 'Sign Client', 'M0 0 L5 5', true,
+                            'portal', gen_random_uuid(), null, gen_random_uuid());
+  perform tst.ok(r ->> 'status' = 'awaiting_countersign', 'client signed: awaiting the company');
+  perform tst.ok(r -> 'countersign' = 'null'::jsonb, 'no company signature yet');
+  perform tst.ok(r::text not like '%job_id%' and r::text not like '%invoice_id%', 'the page shows no internal ids');
+  r := public.portal_accept('tok_sign_0123456789abcdef', '0e3a0000-0000-0000-0000-000000000023', null, 'Sign Client', 'M0 0 L5 5', true);
+  perform tst.ok(r ->> 'status' = 'awaiting_countersign', 'repeat signature: nothing doubles');
+end $$;
+reset role;
+do $$ begin
+  perform tst.ok((select count(*) from public.estimate_approvals where estimate_id = '0e1a0000-0000-0000-0000-000000000023') = 1, 'one client signature');
+  perform tst.ok((select count(*) from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000023') = 0, 'no job before the company signs');
+  perform tst.ok((select status from public.leads where contact_name = 'Sign Lead') = 'estimate_sent', 'lead not won before both sign');
+  perform tst.ok((select selection ->> 'job_id' from public.estimate_approvals where estimate_id = '0e1a0000-0000-0000-0000-000000000023') is null,
+                 'ids from an anonymous caller are ignored');
+  perform tst.ok((select count(*) from public.notifications where estimate_id = '0e1a0000-0000-0000-0000-000000000023' and kind = 'estimate.client_signed') = 1,
+                 'the company is told: the client signed');
+end $$;
+\echo 'T25 client signature awaits the company ok'
+
+-- ---------------------------------------------------------------- T23: the company signs (S8b): rights, own signature, one deal
+:as_owner_a
+do $$ begin
+  perform tst.ok((select bool_and(can_sign_contracts) from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and role <> 'subcontractor'),
+                 'every employee may sign by default');
+  -- the owner takes the right from the tech
+  update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003';
+  perform tst.fails($q$insert into public.estimate_approvals (company_id, estimate_id, party, signer_user_id, signer_name, signature_svg)
+                       values ('ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000023', 'contractor',
+                               'a0000000-0000-0000-0000-000000000001', 'Me', 'M0 0')$q$, 'a company signature cannot be inserted directly');
+end $$;
+:as_office_a   -- admin since T6
+do $$ begin
+  perform tst.fails($q$update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'admin cannot give the right to sign');
+end $$;
+:as_tech_a
+do $$ begin
+  perform tst.fails($q$select public.countersign_estimate('0e1a0000-0000-0000-0000-000000000023', 'M0 0 L1 1')$q$, 'tech without the right cannot sign');
+end $$;
+:as_owner_b
+do $$ begin
+  perform tst.fails($q$select public.countersign_estimate('0e1a0000-0000-0000-0000-000000000023', 'M0 0 L1 1')$q$, 'another company cannot sign');
+  perform tst.ok(tst.cnt('select 1 from public.member_signatures') = 0, 'B sees no A signatures');
+end $$;
+:as_owner_a
+do $$
+declare v_sig uuid; v_old uuid; v_job uuid;
+begin
+  -- own saved signature: versions, never edited or deleted
+  insert into public.member_signatures (company_id, user_id, svg, name, title)
+  values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'M1 1 L2 2', 'Owner A', 'Owner') returning id into v_old;
+  insert into public.member_signatures (company_id, user_id, svg, name, title)
+  values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'M3 3 L4 4', 'Owner A', 'Owner') returning id into v_sig;
+  perform tst.ok((select revoked_at is not null from public.member_signatures where id = v_old), 'a new signature revokes the old one');
+  perform tst.ok((select count(*) from public.member_signatures where user_id = 'a0000000-0000-0000-0000-000000000001' and revoked_at is null) = 1, 'one current signature');
+  perform tst.fails(format($q$update public.member_signatures set svg = 'M9 9' where id = %L$q$, v_sig), 'a signature cannot be changed');
+  perform tst.fails(format($q$delete from public.member_signatures where id = %L$q$, v_old), 'a signature cannot be deleted');
+  perform tst.fails($q$insert into public.member_signatures (company_id, user_id, svg, name) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'M0 0', 'Fake')$q$,
+                    'nobody saves a signature for someone else');
+  perform tst.fails(format($q$select public.countersign_estimate('0e1a0000-0000-0000-0000-000000000023', null, %L)$q$, v_old), 'an old (revoked) signature cannot sign');
+  perform tst.fails($q$select public.countersign_estimate('0e1a0000-0000-0000-0000-000000000023')$q$, 'no signature: refused');
+  perform tst.ok(public.countersign_estimate('0e1a0000-0000-0000-0000-000000000023', null, v_sig) = 'approved', 'the owner signs with the saved signature');
+  perform tst.ok(public.countersign_estimate('0e1a0000-0000-0000-0000-000000000023', null, v_sig) = 'approved', 'repeat: nothing doubles');
+  perform tst.ok((select status from public.estimates where id = '0e1a0000-0000-0000-0000-000000000023') = 'approved', 'S8b: approved');
+  perform tst.ok((select count(*) from public.estimate_approvals where estimate_id = '0e1a0000-0000-0000-0000-000000000023' and party = 'contractor') = 1, 'one company signature');
+  perform tst.ok((select signer_user_id = 'a0000000-0000-0000-0000-000000000001' and method = 'saved' and member_signature_id = v_sig and signer_name = 'Owner A'
+                    from public.estimate_approvals where estimate_id = '0e1a0000-0000-0000-0000-000000000023' and party = 'contractor'), 'signed in their own name');
+  perform tst.ok((select count(*) from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000023') = 1, 'S8b: one job');
+  select id into v_job from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000023';
+  perform tst.ok((select status from public.jobs where id = v_job) = 'draft', 'job waits for a date');
+  perform tst.ok((select total_cents from public.invoices where job_id = v_job and kind = 'deposit') = 20000, 'S8b: deposit invoice 10% of $2,000');
+  perform tst.ok((select status || '/' || won_via from public.leads where contact_name = 'Sign Lead') = 'won/approval', 'S8b: lead won');
+  perform tst.ok((public.portal_estimate('tok_sign_0123456789abcdef') -> 'countersign' ->> 'signer_name') = 'Owner A', 'the client page shows the company signature');
+  -- the right comes back only from the owner
+  update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003';
+end $$;
+\echo 'T23 company signature and rights ok'
+
+-- ---------------------------------------------------------------- T24: the link: valid until, revoke (founder 05.11)
+:as_owner_a
+do $$
+declare e uuid; v_exp date; v_today date;
+begin
+  update public.companies set estimate_settings = estimate_settings || '{"valid_days": 3}' where id = 'ca000000-0000-0000-0000-000000000000';
+  insert into public.estimates (company_id, customer_id, property_id, title, public_token)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T24', 'tok_exp_0123456789abcdef')
+  returning id into e;
+  update public.estimates set status = 'sent' where id = e;
+  select (now() at time zone timezone)::date into v_today from public.companies where id = 'ca000000-0000-0000-0000-000000000000';
+  select expires_at into v_exp from public.estimates where id = e;
+  perform tst.ok(v_exp = v_today + 3, 'sent: valid until = today + the company''s days');
+  perform tst.ok(public.portal_estimate('tok_exp_0123456789abcdef') is not null, 'open until the date (inclusive)');
+  update public.companies set estimate_settings = estimate_settings - 'valid_days' where id = 'ca000000-0000-0000-0000-000000000000';
+end $$;
+:as_super
+update public.estimates set expires_at = current_date - 2 where public_token = 'tok_exp_0123456789abcdef';
+update public.estimates set expires_at = current_date - 2 where id = '0e1a0000-0000-0000-0000-000000000023';
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$ begin
+  perform tst.ok(public.portal_estimate('tok_exp_0123456789abcdef') is null, 'past valid until: the link does not open');
+  perform tst.fails($q$select public.portal_accept('tok_exp_0123456789abcdef', gen_random_uuid(), null, 'X', 'M0 0', true)$q$, 'past valid until: cannot sign');
+  perform tst.ok(public.portal_estimate('tok_sign_0123456789abcdef') is not null, 'signed by both: opens always, even past the date');
+end $$;
+:as_tech_a
+do $$ begin
+  perform tst.fails($q$select public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023')$q$, 'tech cannot revoke a link');
+end $$;
+:as_owner_a
+do $$ begin
+  perform public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023');
+  perform public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023');  -- again: nothing happens
+  perform tst.ok((select public_token is null and link_revoked_at is not null from public.estimates where id = '0e1a0000-0000-0000-0000-000000000023'), 'revoked: token dropped');
+  perform tst.ok((select count(*) from public.activities where subject_id = '0e1a0000-0000-0000-0000-000000000023' and meta ->> 'action' = 'link_revoked') = 1,
+                 'revoke is in the estimate history once');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$ begin
+  perform tst.ok(public.portal_estimate('tok_sign_0123456789abcdef') is null, 'revoked link: nothing');
+  perform tst.fails($q$select public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023')$q$, 'anon cannot revoke');
+end $$;
+\echo 'T24 link valid until and revoke ok'
 
 :as_super
 \echo 'ALL TESTS PASSED'
