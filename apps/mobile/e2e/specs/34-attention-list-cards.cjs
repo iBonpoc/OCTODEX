@@ -30,7 +30,7 @@ exports.run = async (h) => {
 
   // a reason row opens its own record
   const before = p.url();
-  const row = people.first().getByRole("button").filter({ hasText: /\S/ }).nth(1);
+  const row = people.first().locator('[data-testid="list-card-reason"]').first();
   await row.click();
   await p.waitForTimeout(600);
   h.expect(p.url() !== before, `a reason row opens its record (${p.url()})`);

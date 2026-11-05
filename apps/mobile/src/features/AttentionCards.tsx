@@ -14,8 +14,7 @@ import { attentionHref, type AttentionItem } from "./attention";
 import { attentionPeople, subjectOf } from "./attentionPeople";
 import { AssignSheet, ReplySheet } from "./sheets";
 import { Button } from "@/ui/controls";
-import { CardGrid, ListCard } from "@/ui/listCard";
-import { useDevice } from "@/theme/ThemeProvider";
+import { ListCard } from "@/ui/listCard";
 
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
@@ -55,7 +54,6 @@ export function useAttentionVerbs() {
 export function AttentionPeople({ items, max }: { items: AttentionItem[]; max: number }) {
   const { db, role } = useStore();
   const { t, money } = useI18n();
-  const { device } = useDevice();
   const { verb, sheets } = useAttentionVerbs();
   const office = role !== "tech";
   const people = attentionPeople(db, items);
@@ -101,7 +99,8 @@ export function AttentionPeople({ items, max }: { items: AttentionItem[]; max: n
   };
   return (
     <View style={{ gap: space[2] }}>
-      {device === "phone" ? <View style={{ gap: space[2] }}>{shown.map(card)}</View> : <CardGrid cols={device === "desktop" ? 2 : undefined}>{shown.map(card)}</CardGrid>}
+      {/* the section already sits in a column of «Today» (next to the crew): one card per row at every width */}
+      <View style={{ gap: space[2] }}>{shown.map(card)}</View>
       {people.length > max ? <Button label={t("card.morePeople", { n: people.length - max })} variant="secondary" size="sm" onPress={() => router.push("/triage")} /> : null}
       {sheets}
     </View>

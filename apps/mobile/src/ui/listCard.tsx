@@ -308,7 +308,7 @@ export function ListCard(p: ListCardProps) {
         <View style={{ gap: space[2], paddingTop: space[2], borderTopWidth: component.hairline, borderTopColor: c.bd }}>
           {p.reasons.map((r) => (
             <View key={r.key} style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
-              <Pressable onPress={r.onPress} disabled={!r.onPress} accessibilityRole={r.onPress ? "button" : undefined} accessibilityLabel={r.text} style={{ flex: 1, flexDirection: "row", gap: space[3], alignItems: "flex-start", minHeight: size.hitMin, paddingLeft: LEAD_INSET }}>
+              <Pressable testID="list-card-reason" onPress={r.onPress} disabled={!r.onPress} accessibilityRole={r.onPress ? "button" : undefined} accessibilityLabel={r.text} style={{ flex: 1, flexDirection: "row", gap: space[3], alignItems: "flex-start", minHeight: size.hitMin, paddingLeft: LEAD_INSET }}>
                 <View style={{ paddingTop: spaceHalf.hair }}>
                   <Icon name={statusIcon[r.tone]} s={size.iconSm} color={r.tone === "neutral" ? c.mut : c.status[r.tone].text} />
                 </View>
