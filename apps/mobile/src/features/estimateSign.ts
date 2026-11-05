@@ -74,7 +74,8 @@ export function companySigned(
   return {
     ...d,
     estimates: d.estimates.map((x) => (x.id === id ? next : x)),
-    jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: total, estimateId: id }],
+    // the job takes the estimate's direction of the business (docs/specs/11-trade.md S16; the server trigger does the same)
+    jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: total, estimateId: id, serviceCategoryId: e.serviceCategoryId }],
     leads: e.leadId
       ? d.leads.map((l) => (l.id === e.leadId && !CLOSED_LEAD.includes(l.status) ? { ...l, status: "won", wonVia: "approval", lastActivityAt: now } : l))
       : d.leads,

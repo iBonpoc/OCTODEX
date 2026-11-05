@@ -21,7 +21,7 @@ export default function CompanyScreen() {
       </Screen>
     );
   }
-  const p = setupProgress(c);
+  const p = setupProgress(c, db.serviceCategories);
   return (
     <Screen title={t("co.title")} back={back} help={t("co.help")} hintKey="company">
       <Card>
@@ -40,7 +40,7 @@ export default function CompanyScreen() {
       </Card>
       <View style={{ gap: space[2] }}>
         {SETUP_STEPS.map((s) => {
-          const done = stepDone(c, s);
+          const done = stepDone(c, s, db.serviceCategories);
           return (
             <Card key={s} onPress={() => router.push(`/company/${s}`)} accessibilityLabel={t(stepTitle(s))}>
               <RowView style={{ alignItems: "flex-start" }}>
