@@ -3,7 +3,8 @@
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
 import { companyFromDb } from "./companyMap";
-import { estimateStatus, jobStatus, leadStatus } from "./statusMap";
+import { customerStatus, estimateStatus, jobStatus, leadStatus } from "./statusMap";
+import { peopleByCustomer } from "@/data/people";
 import type { CatalogItem, DB, Note, Payment, Estimate, EstimateDoc, Notice, Expense, ExpenseCategory, Invoice, Job, Lead, Source, Task, Activity, Member, Role, Visit, VisitStep } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
@@ -49,7 +50,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       q<Row>(supabase.from("memberships").select("user_id, role, status, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).eq("status", "active")),
       live<Row>("lead_sources", "id, name, kind, phone, email, customer_id, note, is_active, is_system, position"),
       live<Row>("customers"),
-      live<Row>("contacts", "id, customer_id, phone, email, is_primary"),
+      live<Row>("contacts", "id, customer_id, name, role, phone, email, is_primary, preferred_language, created_at"),
       live<Row>("properties"),
       live<Row>("jobs"),
       live<Row>("visits"),
@@ -69,7 +70,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       q<Row>(supabase.from("estimate_line_costs").select("line_item_id, unit_cost_cents").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
       q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
     ]);
-  const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows] = await Promise.all([
+  const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows, tagRows, customerTagRows, phoneRows, emailRows] = await Promise.all([
     q<Row>(supabase.from("companies").select("*").eq("id", companyId)),
     // EIN: owner/admin only — others get nothing
     q<Row>(supabase.from("company_secrets").select("ein").eq("company_id", companyId)).catch(() => [] as Row[]),
@@ -81,7 +82,15 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     live<Row>("lead_contacts", "id, lead_id, name, role, phone, email").catch(() => [] as Row[]),
     live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at").catch(() => [] as Row[]),
     q<Row>(supabase.from("activities").select("id, subject_type, subject_id, kind, body, meta, at, actor_id").eq("company_id", companyId).is("deleted_at", null).order("at", { ascending: false }).limit(2000)).catch(() => [] as Row[]),
+    // clients C1 (tags, several phones / emails per person); empty before the migration is applied
+    live<Row>("tags", "id, name, is_active, is_system, position").catch(() => [] as Row[]),
+    q<Row>(supabase.from("customer_tags").select("customer_id, tag_id").eq("company_id", companyId)).catch(() => [] as Row[]),
+    live<Row>("contact_phones", "contact_id, number, label, is_primary, position").catch(() => [] as Row[]),
+    live<Row>("contact_emails", "contact_id, address, is_primary, position").catch(() => [] as Row[]),
   ]);
+  const people = peopleByCustomer(contacts, phoneRows, emailRows);
+  const tagsOfCustomer = new Map<string, string[]>();
+  for (const r of customerTagRows) tagsOfCustomer.set(s(r.customer_id), [...(tagsOfCustomer.get(s(r.customer_id)) ?? []), s(r.tag_id)]);
   const costOfLead = new Map(leadCosts.map((r) => [s(r.lead_id), n(r.cost_cents)]));
   const contactsOfLead = new Map<string, Lead["contacts"]>();
   for (const r of leadContacts) {
@@ -289,15 +298,26 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       id: s(r.id), subjectType: s(r.subject_type) as Activity["subjectType"], subjectId: s(r.subject_id), kind: s(r.kind) as Activity["kind"],
       body: (r.body as string | null) ?? undefined, meta: (r.meta as Record<string, string> | null) ?? undefined, at: s(r.at), actorId: s(r.actor_id),
     })),
-    customers: customers.map((c) => ({
-      id: s(c.id),
-      name: s(c.display_name),
-      phone: primaryPhone.get(s(c.id)) ?? "",
-      email: primaryEmail.get(s(c.id)) || undefined,
-      sourceId: s(c.lead_source_id),
-      balanceCents: 0,
-      status: c.status === "prospect" ? ("prospect" as const) : ("active" as const),
-    })),
+    customers: customers.map((c) => {
+      const ppl = people.get(s(c.id));
+      const main = ppl?.[0];
+      return {
+        id: s(c.id),
+        number: (c.number as string | null) ?? undefined,
+        name: s(c.display_name),
+        phone: main?.phones.find((p) => p.primary)?.number ?? main?.phones[0]?.number ?? primaryPhone.get(s(c.id)) ?? "",
+        email: main?.emails.find((e) => e.primary)?.address ?? (primaryEmail.get(s(c.id)) || undefined),
+        sourceId: s(c.lead_source_id),
+        balanceCents: 0,
+        status: customerStatus[s(c.status)] ?? "active",
+        statusReason: (c.do_not_service_reason as string | null) ?? undefined,
+        people: ppl,
+        tagIds: tagsOfCustomer.get(s(c.id)) ?? [],
+      };
+    }),
+    tags: tagRows
+      .map((r) => ({ id: s(r.id), name: s(r.name), active: r.is_active !== false, system: !!r.is_system, position: n(r.position) }))
+      .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name)),
     properties: properties.map((p) => ({
       id: s(p.id),
       customerId: s(p.customer_id),

@@ -7,8 +7,8 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { ESTIMATE_STATUSES, JOB_STATUSES, LEAD_STATUSES, VISIT_STEPS } from "../src/data/types";
-import { estimateStatus, jobStatus, leadStatus, leadStatusToDb } from "../src/cloud/statusMap";
+import { CUSTOMER_STATUSES, ESTIMATE_STATUSES, JOB_STATUSES, LEAD_STATUSES, VISIT_STEPS } from "../src/data/types";
+import { customerStatus, estimateStatus, jobStatus, leadStatus, leadStatusToDb } from "../src/cloud/statusMap";
 
 const ROOT = path.resolve(__dirname, "../../..");
 const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -85,6 +85,7 @@ describe("story map §5: statuses", () => {
     { entity: "Lead", app: LEAD_STATUSES as readonly string[], table: "leads", toApp: leadStatus as Record<string, string> },
     { entity: "Estimate", app: ESTIMATE_STATUSES as readonly string[], table: "estimates", toApp: estimateStatus as Record<string, string> },
     { entity: "Job", app: JOB_STATUSES as readonly string[], table: "jobs", toApp: jobStatus as Record<string, string> },
+    { entity: "Customer", app: CUSTOMER_STATUSES as readonly string[], table: "customers", toApp: customerStatus as Record<string, string> },
   ];
   for (const c of cases) {
     it(`${c.entity}: the map lists exactly the app statuses`, () => {
