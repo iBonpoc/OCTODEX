@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { DB } from "../src/data/types";
-import { canCountersign, canManageLink, clientSigned, companySigned, hisWarning, linkOpen, validUntilFor } from "../src/features/estimateSign";
+import { canCountersign, canManageLink, clientSigned, companyDeclined, companySigned, hisWarning, linkOpen, reopened, validUntilFor } from "../src/features/estimateSign";
 
 const NOW = "2026-11-05T18:00:00.000Z";
 const IDS = { jobId: "job-new", invoiceId: "inv-new" };
@@ -153,5 +153,29 @@ describe("the client link: valid until, revoked (founder 05.11)", () => {
     expect(linkOpen({ status: "approved", validUntil: "2026-11-01", token: "t" }, now)).toBe(true);
     expect(linkOpen({ status: "approved", token: "t", linkRevokedAt: "2026-11-02" }, now)).toBe(false);
     expect(linkOpen({ status: "sent" }, now)).toBe(false);
+  });
+});
+
+describe("E2b: after the client signed, the company declines or changes it", () => {
+  it("decline: declined with the reason; the lead does not change (lead 05.11); no job, no invoice", () => {
+    const { d, id } = withEstimate();
+    const s1 = sign(d, id);
+    const e = s1.estimates.find((x) => x.id === id)!;
+    const s2 = companyDeclined(s1, id, "  we cannot do it this month ");
+    expect(s2.estimates.find((x) => x.id === id)).toMatchObject({ status: "declined", declinedText: "we cannot do it this month" });
+    if (e.leadId) expect(s2.leads.find((l) => l.id === e.leadId)!.status).toBe(s1.leads.find((l) => l.id === e.leadId)!.status);
+    expect(s2.jobs.some((j) => j.estimateId === id)).toBe(false);
+    expect(companySigned(s2, id, { userId: d.me, signature: "M1 1", method: "drawn" }, IDS, NOW)).toBe(s2);
+  });
+  it("decline needs a reason, and only from awaiting the company", () => {
+    const { d, id } = withEstimate();
+    expect(companyDeclined(sign(d, id), id, "  ")).toEqual(sign(d, id));
+    expect(companyDeclined(d, id, "why")).toBe(d); // still sent
+  });
+  it("don't sign — change it: back to a draft without the client's signature (it stays on the server)", () => {
+    const { d, id } = withEstimate();
+    const s2 = reopened(sign(d, id), id);
+    expect(s2.estimates.find((x) => x.id === id)).toMatchObject({ status: "draft", approval: undefined, signature: undefined });
+    expect(reopened(d, id)).toBe(d);
   });
 });

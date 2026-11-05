@@ -21,7 +21,8 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
-import { canCountersign, hisWarning } from "@/features/estimateSign";
+import { canCountersign, canManageLink, hisWarning } from "@/features/estimateSign";
+import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
 
 
 /** Estimate: send by link (SMS/email), client view, PDF, on-site signature, deposit → job in the plan. */
@@ -102,15 +103,22 @@ export default function EstimateScreen() {
       {universal ? (
         <>
           <RowView style={{ flexWrap: "wrap" }}>
-            {isEstimateEditable(e.status) ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
+            {/* a client-signed estimate changes only through «don't sign — change it» (with a reason) */}
+            {isEstimateEditable(e.status) && e.status !== "awaiting_countersign" ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
             {e.status === "draft" || e.status === "sent" ? <Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /> : null}
             {e.token ? <Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /> : null}
             <Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={pdf} />
+            {/* E2b: only an unsigned link can be revoked (the signed client keeps their copy); director and office */}
+            {e.token && !e.linkRevokedAt && (e.status === "sent" || e.status === "draft") && canManageLink(store.db, store.db.me) ? (
+              <Button label={t("est.revoke.button")} icon="close" variant="ghost" onPress={() => toast.show(t("est.revoke.done"), store.revokeEstimateLink(e.id))} />
+            ) : null}
           </RowView>
           {e.status === "approved" && e.approval ? (
             <ApprovedCard e={e} jobId={job?.id} />
           ) : e.status === "awaiting_countersign" ? (
             <CountersignCard e={e} />
+          ) : e.status === "declined" ? (
+            <DeclinedCard e={e} />
           ) : (
             <OnSiteSign e={e} />
           )}
@@ -351,27 +359,40 @@ function LegacyBody({ e }: { e: Estimate }) {
  */
 function CountersignCard({ e }: { e: Estimate }) {
   const store = useStore();
-  const { t, day } = useI18n();
+  const { t, day, money } = useI18n();
   const toast = useToast();
+  const [sheet, setSheet] = useState<"reopen" | "decline" | null>(null);
   const me = store.db.members.find((m) => m.id === store.db.me);
-  const signedAt = e.approval?.at;
+  const a = e.approval;
+  const company = store.companyName ?? "OCTODEX";
+  const option = a && e.doc ? e.doc.options.find((o) => o.id === a.optionId)?.name ?? "" : "";
+  const manage = canManageLink(store.db, store.db.me);
   return (
     <>
       <SectionTitle title={t("est.countersign.title")} />
       <Card status="warn">
         <StatusChip status="warn" label={t("est.awaitingCountersign")} />
-        <T v="body">{signedAt ? t("est.countersign.clientSigned", { name: e.approval?.signerName ?? "", date: day(signedAt) }) : t("est.countersign.clientSignedNoDate")}</T>
+        <T v="body">{a?.at ? t("est.countersign.clientSigned", { name: a.signerName, date: day(a.at) }) : t("est.countersign.clientSignedNoDate")}</T>
+        {a ? (
+          <T v="caption" tone="mut" tabular>
+            {t("est.countersign.summary", { option, total: money(a.totalCents), deposit: money(a.depositCents) })}
+          </T>
+        ) : null}
         {canCountersign(store.db, store.db.me) ? (
           <>
-            <T v="caption" tone="mut">
-              {t("est.countersign.asYou", { name: me?.name ?? "", company: store.companyName ?? "OCTODEX" })}
+            <T v="body" w="semibold">
+              {a?.channel === "on_site" ? t("est.countersign.onSite", { company }) : t("est.countersign.asYou", { name: me?.name ?? "", company })}
             </T>
             {hisWarning(store.db, store.db.me) ? (
               <T v="caption" tone="warn">
                 {t("est.countersign.hisWarning")}
               </T>
             ) : null}
+            <T v="caption" tone="mut">
+              {t("est.countersign.becomesSaved")}
+            </T>
             <SignaturePad
+              label={t("est.countersign.padLabel")}
               confirmLabel={t("est.countersign.sign")}
               onConfirm={(path) => {
                 Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
@@ -385,7 +406,49 @@ function CountersignCard({ e }: { e: Estimate }) {
             {t("est.countersign.noRight")}
           </T>
         )}
+        {/* director and office: change it (back to draft) or decline — both with a reason; a tech does not see these */}
+        {manage ? (
+          <RowView style={{ flexWrap: "wrap" }}>
+            <Button label={t("est.reopen.button")} icon="pencil" variant="secondary" size="sm" onPress={() => setSheet("reopen")} />
+            <Button label={t("est.decline.button")} icon="close" variant="ghost" size="sm" onPress={() => setSheet("decline")} />
+          </RowView>
+        ) : null}
       </Card>
+      <EstimateReasonSheet
+        visible={sheet === "reopen"}
+        onClose={() => setSheet(null)}
+        title={t("est.reopen.button")}
+        hint={t("est.reopen.hint")}
+        confirmLabel={t("est.reopen.button")}
+        onConfirm={(reason) => {
+          toast.show(t("est.reopen.done"), store.reopenEstimate(e.id, reason));
+          router.push(`/estimate/new?id=${e.id}`);
+        }}
+      />
+      <EstimateReasonSheet
+        visible={sheet === "decline"}
+        onClose={() => setSheet(null)}
+        title={t("est.decline.button")}
+        hint={t("est.decline.hint")}
+        confirmLabel={t("est.decline.button")}
+        required
+        onConfirm={(reason) => toast.show(t("est.decline.done"), store.declineCountersign(e.id, reason))}
+      />
     </>
+  );
+}
+
+/** E2b: the company declined after the client signed; the reason is for the team only. */
+function DeclinedCard({ e }: { e: Estimate }) {
+  const { t } = useI18n();
+  return (
+    <Card status="bad">
+      <StatusChip status="bad" label={e.declinedText ? t("est.declined.title") : t("st.declined")} />
+      {e.declinedText ? (
+        <T v="body" tone="mut">
+          {t("est.declined.reason", { text: e.declinedText })}
+        </T>
+      ) : null}
+    </Card>
   );
 }

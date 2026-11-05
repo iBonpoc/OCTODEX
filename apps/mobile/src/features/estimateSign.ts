@@ -114,3 +114,17 @@ export function linkOpen(e: Pick<Estimate, "status" | "validUntil" | "linkRevoke
 export function mySignature(d: Pick<DB, "memberSignatures">, userId: ID) {
   return (d.memberSignatures ?? []).find((s) => s.userId === userId && !s.revokedAt);
 }
+
+/** E2b: the company declines after the client signed (server: decline_countersign). The lead does not change (lead 05.11). */
+export function companyDeclined(d: DB, id: ID, text: string): DB {
+  const e = d.estimates.find((x) => x.id === id);
+  if (!e || e.status !== "awaiting_countersign" || !text.trim()) return d;
+  return { ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, status: "declined", declinedText: text.trim() } : x)) };
+}
+
+/** E2b: «don't sign — change it» (server: reopen_estimate): back to draft; the client signs the new version again. */
+export function reopened(d: DB, id: ID): DB {
+  const e = d.estimates.find((x) => x.id === id);
+  if (!e || e.status !== "awaiting_countersign") return d;
+  return { ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, status: "draft", approval: undefined, signature: undefined } : x)) };
+}
