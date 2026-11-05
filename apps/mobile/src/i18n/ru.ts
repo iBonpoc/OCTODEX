@@ -1169,6 +1169,14 @@ export const ru = {
   "prop.saved": "Объект сохранён",
   "prop.gateSaved": "Код ворот сохранён",
   "prop.openJobs": "В работе: {n}",
+  "prop.h.visit": "Визит",
+  "prop.h.estimate": "Смета",
+  "prop.h.note": "Заметка",
+  "prop.noHistory": "Здесь пока ничего не было",
+  "prop.noDocs": "Смет и счетов по объекту нет",
+  "prop.noFiles": "Фото с визитов появятся здесь",
+  "prop.photoBefore": "До работы",
+  "prop.photoAfter": "После работы",
 } as const;
 
 export type DictKey = keyof typeof ru;

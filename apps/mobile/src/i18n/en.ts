@@ -1170,4 +1170,12 @@ export const en: Dict = {
   "prop.saved": "Property saved",
   "prop.gateSaved": "Gate code saved",
   "prop.openJobs": "Open: {n}",
+  "prop.h.visit": "Visit",
+  "prop.h.estimate": "Estimate",
+  "prop.h.note": "Note",
+  "prop.noHistory": "Nothing has happened here yet",
+  "prop.noDocs": "No estimates or invoices for this property",
+  "prop.noFiles": "Photos from visits will show here",
+  "prop.photoBefore": "Before",
+  "prop.photoAfter": "After",
 };
