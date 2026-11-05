@@ -6,7 +6,7 @@
     "packages/*"
   ],
   "scripts": {
-    "test": "npm test --workspaces --if-present",
+    "test": "npm test --workspaces --if-present && npm test --prefix design/naryad-ds",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "check": "npm run typecheck && npm test && bash supabase/tests/run.sh",
     "check:e2e": "cd apps/mobile && node e2e/run.cjs",
