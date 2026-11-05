@@ -32,3 +32,14 @@ export function RouteGuard() {
   if (allowed) return null;
   return <View testID="route-guard" style={[StyleSheet.absoluteFill, { backgroundColor: c.bg }]} />;
 }
+
+/**
+ * `screenLayout` of the tab bar and the root Stack: a screen this role may not open is not rendered at all.
+ * The tab navigator keeps a visited tab mounted (hidden) after the redirect, so without this the technician's page
+ * still held Today's amounts in the DOM (found by the list-cards chat on #131). Route names are file paths:
+ * "today", "company/[section]", "figures/[metric]" — the first part is the key of routeRoles.
+ */
+export function GuardedScreen({ route, children }: { route: { name: string }; children: React.ReactNode }) {
+  const { role } = useStore();
+  return <>{canOpen(role, `/${route.name}`) ? children : null}</>;
+}
