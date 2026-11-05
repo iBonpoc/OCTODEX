@@ -123,7 +123,7 @@ export const DEMO_COMPANY: Company = {
   timezone: "America/Los_Angeles",
   brand: {},
   insurance: {},
-  estimate: { validDays: 30, depositBps: 1000 },
+  estimate: { validDays: 7, depositBps: 1000 },
   payment: {},
   licenses: [{ id: "lic-demo", kind: "cslb", number: "TEST-000000", classes: ["B"], onDocuments: true }],
   contacts: [{ id: "cc-demo", name: "Alex Petrov", title: "Owner", phone: "(626) 555-0100", email: "office@example.com", isPrimary: true, onDocuments: true }],

@@ -73,7 +73,9 @@ export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
 </div>`;
   const record = a
     ? `<h2>${esc(t("est.pdf.record"))}</h2><table class="record"><thead><tr><th>${esc(t("est.pdf.signer"))}</th><th>${esc(t("est.pdf.when"))}</th><th>${esc(t("est.pdf.how"))}</th></tr></thead><tbody>
-<tr><td>${esc(t("est.pdf.customer"))}: ${esc(a.signerName)}</td><td>${esc(day(a.signedAt))} ${esc(usTime.format(new Date(a.signedAt)))}</td><td>${esc(t("est.pdf.eSignature"))}</td></tr>
+<tr><td>${esc(t("est.pdf.customer"))}: ${esc(a.signerName)}</td><td>${esc(day(a.signedAt))} ${esc(usTime.format(new Date(a.signedAt)))}</td><td>${esc(t("est.pdf.eSignature"))}${
+    a.channel === "on_site" ? ` · ${esc(a.deviceUser ? t("est.pdf.onSiteDevice", { name: a.deviceUser }) : t("est.pdf.onSite"))}` : ""
+  }</td></tr>
 </tbody></table>`
     : "";
   const title = `${t("portal.estimate")} ${p.number ?? ""}`.trim();

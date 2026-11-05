@@ -520,12 +520,13 @@ export function ChoiceChips<K extends string>({
               paddingHorizontal: space[3],
               borderRadius: radius.pill,
               justifyContent: "center",
-              backgroundColor: sel ? c.acc : c.surf2,
-              borderWidth: sel ? 0 : 1,
-              borderColor: c.bd,
+              // selected: ink frame on the same surface — yellow is kept for the one main action (rule 2, spec 06 «Аудит» №1)
+              backgroundColor: c.surf2,
+              borderWidth: sel ? component.selectedBorder : 1,
+              borderColor: sel ? c.ink : c.bd,
             }}
           >
-            <T v="button" style={{ color: sel ? c.onAcc : c.ink }}>
+            <T v="button" w={sel ? "bold" : undefined} style={{ color: c.ink }}>
               {it.label}
             </T>
           </Press>

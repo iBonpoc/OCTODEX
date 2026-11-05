@@ -35,7 +35,7 @@ exports.run = async (h) => {
   await chips.nth(2).click();
   for (let i = 0; i < 3; i++) await h.sheet().getByRole("button", { name: /Начало \+30/ }).click();
   await h.sheet().getByRole("radio", { name: "Ivan Sokolov" }).click();
-  await h.sheet().getByPlaceholder(/Код ворот/).fill("Dog in the yard");
+  await h.sheet().getByPlaceholder(/Собака во дворе, где парковаться/).fill("Dog in the yard");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);
   let db = await h.db();
   tom = db.leads.find((x) => x.id === tom.id);

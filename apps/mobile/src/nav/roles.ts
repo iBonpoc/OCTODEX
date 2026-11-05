@@ -31,4 +31,8 @@ export const roleNav: Record<Role, NavItem[]> = {
   ],
 };
 
+/** Screens of the bottom/top tab navigator ((tabs)/_layout): they already have the tab bar. */
+const TAB_SCREENS = new Set<string>(["index", "visits", "triage", "today", "inbox", "plan", "clients", "more"]);
+export const isTabScreen = (routeName: string) => TAB_SCREENS.has(routeName);
+
 export const roleHome: Record<Role, TabRoute> = { tech: "visits", dispatcher: "triage", director: "today" };

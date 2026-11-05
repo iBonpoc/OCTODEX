@@ -47,7 +47,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const live = <T,>(table: string, cols = "*") => q<T>(supabase.from(table).select(cols).eq("company_id", companyId).is("deleted_at", null));
   const [mems, sources, customers, contacts, properties, jobs, visits, assignees, leads, estimates, versions, options, lines, approvals, invoices, payments, files, expenses, catalogRows, lineCosts, notifications] =
     await Promise.all([
-      q<Row>(supabase.from("memberships").select("user_id, role, status, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).eq("status", "active")),
+      q<Row>(supabase.from("memberships").select("user_id, role, status, can_sign_contracts, title, his_registration_number, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).eq("status", "active")),
       live<Row>("lead_sources", "id, name, kind, phone, email, customer_id, note, is_active, is_system, position"),
       live<Row>("customers"),
       live<Row>("contacts", "id, customer_id, lead_id, name, role, phone, email, is_primary, preferred_language, created_at"),
@@ -60,7 +60,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs"),
       live<Row>("estimate_options", "id, version_id, name"),
       live<Row>("estimate_line_items", "id, option_id, name, quantity, line_total_cents, is_optional, client_visible, position"),
-      q<Row>(supabase.from("estimate_approvals").select("estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at").eq("company_id", companyId)),
+      q<Row>(supabase.from("estimate_approvals").select("estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method").eq("company_id", companyId)),
       live<Row>("invoices"),
       live<Row>("payments"),
       live<Row>("files", "id, visit_id, stage, storage_key, kind"),
@@ -116,7 +116,11 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const members: Member[] = mems.map((m) => {
     const u = (Array.isArray(m.users) ? m.users[0] : m.users) as Row | null;
     const name = s(u?.full_name) || s(u?.email) || "—";
-    return { id: s(m.user_id), name, initials: initials(name), kind: m.role === "subcontractor" ? "sub" : "employee", roles: appRoles(m.role as DbRole) };
+    return {
+      id: s(m.user_id), name, initials: initials(name), kind: m.role === "subcontractor" ? "sub" : "employee", roles: appRoles(m.role as DbRole),
+      // E2a: signing for the company (docs/specs/07 §2.2 А)
+      canSignContracts: m.can_sign_contracts !== false, title: (m.title as string | null) ?? undefined, hisNumber: (m.his_registration_number as string | null) ?? undefined,
+    };
   });
   const primaryPhone = new Map<string, string>();
   const primaryEmail = new Map<string, string>();
@@ -170,7 +174,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     const ver = versionOf.get(s(e.current_version_id));
     const totals = (ver?.totals ?? {}) as { total?: number; deposit?: number; marginPct?: string | null };
     const opt = options.find((o) => o.version_id === e.current_version_id);
-    const appr = approvals.filter((a) => a.estimate_id === e.id).sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
+    const appr = approvals.filter((a) => a.estimate_id === e.id && a.party !== "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
+    // E2a: the company's signature (an employee in their own name)
+    const csig = approvals.filter((a) => a.estimate_id === e.id && a.party === "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
     const sel = (appr?.selection ?? null) as { addon_ids?: string[]; total?: number; deposit?: number } | null;
     const depositJob = jobs.find((j) => j.estimate_id === e.id);
     const depInv = depositJob ? invoices.find((i) => i.job_id === depositJob.id && i.kind === "deposit") : undefined;
@@ -184,7 +190,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       totalCents: sel?.total !== undefined ? n(sel.total) : n(totals.total),
       status: estimateStatus[s(e.status)] ?? "draft",
       sentAt: (ver?.sent_at as string | null) ?? undefined,
-      approvedAt: (appr?.signed_at as string | null) ?? undefined,
+      // approved = both signed: the moment the company signed (a legacy contract signed before E2a: the client's moment)
+      approvedAt: e.status === "approved" ? ((csig?.signed_at ?? appr?.signed_at) as string | null) ?? undefined : undefined,
       depositCents: sel?.deposit !== undefined ? n(sel.deposit) : totals.deposit,
       marginPct: totals.marginPct ?? null,
       signature: (appr?.signature_svg as string | null) ?? undefined,
@@ -200,6 +207,14 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
             }
           : undefined,
       depositPaidAt: depInv && n(depInv.paid_cents) > 0 ? s(depInv.updated_at) : undefined,
+      countersign: csig
+        ? {
+            userId: s(csig.signer_user_id), signerName: s(csig.signer_name), signerTitle: (csig.signer_title as string | null) ?? undefined, his: (csig.signer_his as string | null) ?? undefined,
+            signature: s(csig.signature_svg), at: s(csig.signed_at), method: csig.method === "saved" ? "saved" : "drawn",
+          }
+        : undefined,
+      validUntil: (e.expires_at as string | null) ?? undefined,
+      linkRevokedAt: (e.link_revoked_at as string | null) ?? undefined,
       lines: lines
         .filter((l) => opt && l.option_id === opt.id && l.client_visible !== false)
         .sort((a, b) => n(a.position) - n(b.position))

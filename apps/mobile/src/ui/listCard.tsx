@@ -9,7 +9,7 @@
 import { useState, type ReactNode } from "react";
 import { Linking, Platform, Pressable, Text, View, type StyleProp, type TextStyle, type ViewStyle } from "react-native"; // ds-allow: src/ui primitive
 import { useReducedMotion } from "react-native-reanimated";
-import { component, font, radius, size, space, spaceHalf, statusIcon, motion, type StatusName } from "@octo/design-tokens";
+import { component, font, layout, radius, size, space, spaceHalf, statusIcon, motion, type StatusName } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, type IconKey } from "./primitives";
@@ -238,8 +238,10 @@ export function ListCard(p: ListCardProps) {
         const a = actions.find((x) => x.kind === e.nativeEvent.actionName);
         if (a) open(a)();
       }}
-      testID={p.testID}
+      testID={p.testID ?? "list-card"}
+      containerStyle={{ flexGrow: 1 }}
       style={{
+        flexGrow: 1,
         gap: compact ? space[2] : space[3],
         padding: compact ? space[2] : space[3],
         paddingLeft: space[4],
@@ -287,7 +289,9 @@ export function ListCard(p: ListCardProps) {
           )}
         </View>
       ) : null}
-      {/* figures */}
+      {/* bottom block (figures, progress, buttons) pinned to the bottom: in a grid row they line up across cards */}
+      {(density === "rich" && (p.figures?.length || p.progress)) || actions.length || p.action ? (
+      <View style={{ marginTop: "auto", gap: space[3] }}>
       {density === "rich" && p.figures?.length ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: spaceHalf.tight }}>
           {p.figures.map((f) => {
@@ -332,9 +336,15 @@ export function ListCard(p: ListCardProps) {
           ) : null}
         </View>
       ) : null}
+      </View>
+      ) : null}
     </Press>
   );
 }
+
+/** desktop row: fixed value column (fits "$12,400.00") and two 28 buttons */
+const ROW_VALUE_W = component.tileMin + space[4];
+const ROW_ACTIONS_W = component.button.sm * 2 + space[1];
 
 /* ---------- desktop row (1280): same data, places become columns; text wraps ---------- */
 function ListCardRow(p: ListCardProps) {
@@ -350,7 +360,7 @@ function ListCardRow(p: ListCardProps) {
       disabled={!p.onPress}
       accessibilityRole="button"
       accessibilityLabel={p.title}
-      testID={p.testID}
+      testID={p.testID ?? "list-card"}
       style={{
         flexDirection: "row",
         alignItems: "flex-start",
@@ -380,13 +390,11 @@ function ListCardRow(p: ListCardProps) {
           <Txt color={p.facts?.[k] ? c.ink : c.mut} lines={FACT_MAX_LINES}>{p.facts?.[k] || "—"}</Txt>
         </View>
       ))}
-      {p.value ? (
-        <View style={{ alignItems: "flex-end", gap: spaceHalf.hair }}>
-          <Txt w="semibold" color={p.valueTone && p.valueTone !== "neutral" ? c.status[p.valueTone].text : c.ink} tabular>{p.value}</Txt>
-          {p.valueLabel ? <Txt v="caption" color={c.mut}>{p.valueLabel}</Txt> : null}
-        </View>
-      ) : null}
-      <View style={{ flexDirection: "row", gap: space[1] }}>
+      {/* fixed columns: every row keeps the same lines whether or not it has a value or both buttons */}
+      <View style={{ width: ROW_VALUE_W, alignItems: "flex-end" }}>
+        {p.value ? <Txt w="semibold" color={p.valueTone && p.valueTone !== "neutral" ? c.status[p.valueTone].text : c.ink} tabular>{p.value}</Txt> : null}
+      </View>
+      <View style={{ width: ROW_ACTIONS_W, flexDirection: "row", justifyContent: "flex-end", gap: space[1] }}>
         {actions.map((a) => (
           <Tap key={a.kind} visible={btn} onPress={() => void Linking.openURL(a.url).catch(() => undefined)} label={t(`card.act.${a.kind}`, { v: a.value })}>
             <View style={{ width: btn, height: btn, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}>
@@ -396,6 +404,45 @@ function ListCardRow(p: ListCardProps) {
         ))}
       </View>
     </Press>
+  );
+}
+
+/* ---------- grid of cards: rows of equal height, equal gaps, edges on one line ----------
+ * Phone 1 column, tablet 2, desktop 3 (layout.gridCols). Every card in a row stretches to the tallest one, so tops,
+ * bottoms and the button lines match; an unfinished last row keeps the column width (empty cells). */
+export function CardGrid({ children, cols }: { children: ReactNode[]; cols?: number }) {
+  const { device } = useDevice();
+  const n = cols ?? layout.gridCols[device];
+  const items = children.filter(Boolean);
+  if (n <= 1) return <View style={{ gap: space[2] }}>{items}</View>;
+  const rows: ReactNode[][] = [];
+  for (let i = 0; i < items.length; i += n) rows.push(items.slice(i, i + n));
+  return (
+    <View style={{ gap: space[3] }}>
+      {rows.map((r, i) => (
+        <View key={i} style={{ flexDirection: "row", alignItems: "stretch", gap: space[3] }}>
+          {Array.from({ length: n }, (_, k) => (
+            <View key={k} style={{ flex: 1, minWidth: 0 }}>{r[k] ?? null}</View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+/* ---------- desktop: column titles above the rows (same widths as ListCardRow) ---------- */
+export function ListCardHeader({ title, columns, value }: { title: string; columns: readonly FactKey[]; value?: string }) {
+  const { c } = useTheme();
+  const { t } = useI18n();
+  const cap = (s: string) => <Txt v="caption" w="semibold" color={c.mut}>{s}</Txt>;
+  return (
+    <View style={{ flexDirection: "row", gap: space[3], paddingHorizontal: space[3], borderWidth: component.hairline, borderColor: "transparent" }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+      <View style={{ width: component.avatar.sm }} />
+      <View style={{ flex: 1.3 }}>{cap(title)}</View>
+      {rowColumns(columns).map((k) => <View key={k} style={{ flex: 1 }}>{cap(t(`card.fact.${k}`))}</View>)}
+      <View style={{ width: ROW_VALUE_W, alignItems: "flex-end" }}>{value ? cap(value) : null}</View>
+      <View style={{ width: ROW_ACTIONS_W }} />
+    </View>
   );
 }
 

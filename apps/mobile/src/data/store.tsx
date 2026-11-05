@@ -23,6 +23,7 @@ import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./peop
 import { inheritCategory } from "@/features/serviceCategories";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
+import { canCountersign, canManageLink, clientSigned, companySigned, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
 import {
@@ -161,8 +162,13 @@ interface StoreCtx {
   setGateCode: (propertyId: ID, code: string) => Undo;
   addNote: (n: Omit<Note, "id" | "at" | "authorId" | "pinned">) => Undo;
   updateNote: (id: ID, patch: { pinned?: boolean; body?: string; deleted?: boolean }) => Undo;
-  /** client's choice + signature (on site or on the client page): job + visit in the plan + notice */
+  /** client's choice + signature (on site or on the client page) → awaiting the company's signature (S8, docs/specs/07 §4) */
   approveEstimate: (id: ID, a: Omit<EstimateApproval, "at" | "totalCents" | "depositCents">) => Undo;
+  /* ---- wave E2a: the company signs (docs/specs/07 §2.2 А) ---- */
+  /** an employee signs for the company in their own name (S8b): approved, lead won, client active, job, deposit invoice */
+  countersignEstimate: (id: ID, signature: string) => Undo;
+  /** director / office: the client link stops working; the next send makes a new one */
+  revokeEstimateLink: (id: ID) => Undo;
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   readNotices: () => void;
@@ -288,6 +294,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (flushing.current || modeRef.current !== "cloud" || !company || !auth.userId || !onlineRef.current) return;
     flushing.current = true;
     let sentAny = false;
+    let dropped = false;
     try {
       for (;;) {
         const item = outboxRef.current[0];
@@ -303,6 +310,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (e instanceof PermanentError || item.tries >= 5) {
             // Will never succeed: drop it and reload the truth from the server.
             outboxRef.current = outboxRef.current.slice(1);
+            dropped = true;
           } else {
             outboxRef.current = [{ ...item, tries: item.tries + 1, error: msg }, ...outboxRef.current.slice(1)];
           }
@@ -313,7 +321,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } finally {
       flushing.current = false;
     }
-    if (sentAny && !outboxRef.current.length) await refresh();
+    // a dropped op left the phone ahead of the server: reload the truth
+    if ((sentAny && !outboxRef.current.length) || dropped) await refresh();
   }, [company, auth.userId, setOutbox, refresh]);
 
   useEffect(() => {
@@ -772,7 +781,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const now = new Date().toISOString();
             return {
               ...d,
-              estimates: d.estimates.map((e) => (e.id === id ? { ...e, token, status: e.status === "draft" ? "sent" : e.status, sentAt: e.sentAt ?? now } : e)),
+              estimates: d.estimates.map((e) =>
+                e.id === id
+                  ? {
+                      ...e, token, status: e.status === "draft" ? "sent" : e.status, sentAt: e.sentAt ?? now,
+                      // E2a: every send of a new version gets a fresh "valid until"; a revoked link is replaced by the new token
+                      validUntil: e.status === "draft" ? validUntilFor(d.company, new Date(now)) : e.validUntil, linkRevokedAt: undefined,
+                    }
+                  : e,
+              ),
               leads: est?.leadId
                 ? d.leads.map((l) => (l.id === est.leadId && (l.status === "new" || l.status === "replied" || l.status === "booked") ? { ...l, status: "estimate_sent", lastActivityAt: now } : l))
                 : d.leads,
@@ -793,6 +810,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const next: Estimate = {
               ...(prev ?? {}),
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
+              // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)
+              ...(prev?.status === "awaiting_countersign" ? { approval: undefined, signature: undefined } : {}),
               sentAt: prev?.status === "draft" ? prev.sentAt : undefined,
               // a new estimate takes the direction of its lead / client / company (S16); an existing one keeps its own
               serviceCategoryId: prev ? prev.serviceCategoryId : inheritCategory(d, { kind: "estimate", leadId: leadId0, customerId }),
@@ -804,48 +823,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       approveEstimate: (id, a) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e?.doc || e.status === "approved") return () => {};
+        if (!e?.doc || e.status === "approved" || e.status === "awaiting_countersign") return () => {};
+        // on site the client signs on an employee's device: only someone who may sign contracts (server: the same)
+        if (a.channel === "on_site" && !canCountersign(dbRef.current, dbRef.current.me)) return () => {};
+        if (a.channel === "on_site") a = { ...a, deviceUserId: dbRef.current.me };
         const token = e.token ?? newToken();
+        const ids = { jobId: dbRef.current.jobs.find((j) => j.estimateId === id)?.id ?? uid(), invoiceId: uid() };
         const now = new Date().toISOString();
-        const sum = summarize(e.doc, a);
-        const approval: EstimateApproval = { ...a, at: now, totalCents: sum.totalCents, depositCents: sum.depositCents };
-        const existingJob = dbRef.current.jobs.find((j) => j.estimateId === id);
-        const jobId = existingJob?.id ?? uid();
-        const depositInvoiceId = uid();
-        const needDepositInvoice = (sum.depositCents ?? 0) > 0 && !dbRef.current.invoices.some((i) => i.jobId === jobId && i.kind === "deposit");
-        const customer = dbRef.current.customers.find((c) => c.id === e.customerId);
+        return mutate("estimate.approve", (d) => clientSigned(d, id, a, ids, now, token), {
+          k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId: ids.jobId, invoiceId: ids.invoiceId,
+        });
+      },
+      countersignEstimate: (id, signature) => {
+        const d0 = dbRef.current;
+        const e = d0.estimates.find((x) => x.id === id);
+        if (!e || e.status !== "awaiting_countersign" || !canCountersign(d0, d0.me)) return () => {};
+        const now = new Date().toISOString();
+        // the same ids on the phone and the server (the client may have signed on the page: no ids were stored then)
+        const ids = { jobId: d0.jobs.find((j) => j.estimateId === id)?.id ?? e.approval?.jobId ?? uid(), invoiceId: e.approval?.invoiceId ?? uid() };
         return mutate(
-          "estimate.approve",
-          (d) => ({
-            ...d,
-            estimates: d.estimates.map((x) =>
-              x.id === id
-                ? { ...x, ...sum, token, status: "approved", approval, signature: a.signature, approvedAt: now, sentAt: x.sentAt ?? now }
-                : x,
-            ),
-            jobs: existingJob
-              ? d.jobs
-              : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: sum.totalCents, estimateId: id, serviceCategoryId: inheritCategory(d, { kind: "job", estimateId: id }) }],
-            leads: e.leadId
-              ? d.leads.map((l) => (l.id === e.leadId && l.status !== "won" && l.status !== "lost" ? { ...l, status: "won", wonVia: "approval", lastActivityAt: now } : l))
-              : d.leads,
-            customers: d.customers.map((c) => (c.id === e.customerId && c.status === "prospect" ? { ...c, status: "active" } : c)),
-            invoices: needDepositInvoice
-              ? [
-                  ...d.invoices,
-                  {
-                    id: depositInvoiceId, customerId: e.customerId, jobId, kind: "deposit", title: "Deposit", totalCents: sum.depositCents ?? 0, paidCents: 0,
-                    dueDate: now, sentAt: now, number: modeRef.current === "demo" ? nextInvoiceNumber(d) : undefined,
-                  },
-                ]
-              : d.invoices,
-            notices: [
-              { id: uid(), kind: "estimate.approved", estimateId: id, jobId, customer: customer?.name ?? a.signerName, totalCents: sum.totalCents, depositCents: sum.depositCents, at: now, read: a.channel === "on_site" },
-              ...d.notices,
-            ],
-          }),
-          { k: "estimate.approve", id, token, optionId: a.optionId, addonIds: a.addonIds, signer: a.signerName, svg: a.signature, channel: a.channel, jobId, invoiceId: depositInvoiceId },
+          "estimate.countersign",
+          (d) => companySigned(d, id, { userId: d.me, signature, method: "drawn" }, ids, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined)),
+          { k: "estimate.countersign", id, svg: signature, jobId: ids.jobId, invoiceId: ids.invoiceId },
         );
+      },
+      revokeEstimateLink: (id) => {
+        const e = dbRef.current.estimates.find((x) => x.id === id);
+        // the server allows the director and the office only (revoke_estimate_link)
+        if (!e?.token || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
+        const now = new Date().toISOString();
+        return mutate("estimate.revoke", (d) => ({ ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, token: undefined, linkRevokedAt: now } : x)) }), {
+          k: "estimate.revoke", id,
+        });
       },
       leadEstimateTarget: (leadId) => leadTarget(leadId),
       convertLead: (leadId, reasonText) => {
@@ -1045,15 +1054,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mutate("notice.read", (d) => ({ ...d, notices: d.notices.map((n) => ({ ...n, read: true })) }), { k: "notice.read", ids });
       },
       signEstimate: (id, path) =>
-        mutate(
+        !canCountersign(dbRef.current, dbRef.current.me) ? () => {} : mutate(
           "estimate.sign",
           (d) => ({
             ...d,
             estimates: d.estimates.map((e) =>
-              e.id === id ? { ...e, status: "approved", signature: path, approvedAt: new Date().toISOString(), sentAt: e.sentAt ?? new Date().toISOString() } : e,
+              // E2a: the client's signature waits for the company's (S8 → S8b), also for a legacy quick estimate
+              e.id === id && e.status !== "approved" ? { ...e, status: "awaiting_countersign", signature: path, sentAt: e.sentAt ?? new Date().toISOString() } : e,
             ),
           }),
-          { k: "estimate.sign", id, svg: path },
+          { k: "estimate.sign", id, svg: path, signer: dbRef.current.customers.find((c) => c.id === dbRef.current.estimates.find((x) => x.id === id)?.customerId)?.name ?? "Client" },
         ),
       payDeposit: (id, method, fromClient) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);

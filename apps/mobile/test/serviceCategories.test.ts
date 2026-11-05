@@ -116,3 +116,18 @@ describe("direction: old local data", () => {
     expect(normalizeDB(fresh as unknown as DB, "demo").serviceCategories.length).toBe(4);
   });
 });
+
+describe("direction: the job of a signed deal (S8b)", () => {
+  it("the company's signature makes a job with the estimate's direction", async () => {
+    const { clientSigned, companySigned } = await import("../src/features/estimateSign");
+    const d = structuredClone(makeSeed());
+    const e = d.estimates.find((x) => x.doc && x.status !== "approved")!;
+    d.estimates = d.estimates.map((x) => (x.id === e.id ? { ...x, status: "sent", token: "tok", serviceCategoryId: "cat-plumbing" } : x));
+    d.jobs = d.jobs.filter((j) => j.estimateId !== e.id);
+    const ids = { jobId: "job-dir", invoiceId: "inv-dir" };
+    const now = "2026-11-05T18:00:00.000Z";
+    const s1 = clientSigned(d, e.id, { optionId: e.doc!.options[0]!.id, addonIds: [], signerName: "Linda", signature: "M0 0", channel: "portal" }, ids, now, "tok");
+    const s2 = companySigned(s1, e.id, { userId: s1.me, signature: "M1 1", method: "drawn" }, ids, now);
+    expect(s2.jobs.find((j) => j.estimateId === e.id)?.serviceCategoryId).toBe("cat-plumbing");
+  });
+});

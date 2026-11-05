@@ -17,6 +17,13 @@ export interface Member {
   phone?: string;
   /** invited, has not joined yet */
   pending?: boolean;
+  /* ---- signing for the company (docs/specs/07 §2.2 А, wave E2a) ---- */
+  /** may sign contracts for the company (everyone by default; the owner can take it away) */
+  canSignContracts?: boolean;
+  /** shown under the signature: "Technician" */
+  title?: string;
+  /** CA home improvement salesperson registration number */
+  hisNumber?: string;
 }
 
 /**
@@ -304,6 +311,35 @@ export interface EstimateApproval {
   channel: "on_site" | "portal";
   totalCents: number;
   depositCents: number;
+  /* ---- company signature (docs/specs/07 §3.2, wave E2a) ---- */
+  /** ids the job and the deposit invoice will get when the company signs (offline: the same ids on the phone and the server) */
+  jobId?: ID;
+  invoiceId?: ID;
+  /** on site: the employee whose device the client signed on (signature record, security-check 05.11) */
+  deviceUserId?: ID;
+}
+
+/* ---------- Company signature on the contract (docs/specs/07 §2.2 А, §3, wave E2a) ---------- */
+/** An employee signs for the company in their own name: "Alex Kim, Technician, for Acme". */
+export interface EstimateCountersign {
+  userId: ID;
+  signerName: string;
+  signerTitle?: string;
+  /** CA home improvement salesperson registration, printed on the contract */
+  his?: string;
+  signature: string;
+  at: string;
+  method: "drawn" | "saved";
+}
+/** An employee's own saved signature: a new one replaces the old, the old stays in history. */
+export interface MemberSignature {
+  id: ID;
+  userId: ID;
+  svg: string;
+  name: string;
+  title?: string;
+  createdAt: string;
+  revokedAt?: string;
 }
 export interface Estimate {
   id: ID;
@@ -331,6 +367,13 @@ export interface Estimate {
   number?: string;
   viewedAt?: string;
   approval?: EstimateApproval;
+  /* ---- wave E2a (docs/specs/07 §3.1) ---- */
+  /** the company's signature: with the client's it makes the contract (approved) */
+  countersign?: EstimateCountersign;
+  /** YYYY-MM-DD: an unsigned estimate's link works until this day (founder 05.11: 7 days by default) */
+  validUntil?: string;
+  /** the client link was revoked (director / office); the next send makes a new one */
+  linkRevokedAt?: string;
 }
 
 /** Company catalog: services, labor, materials and kits (docs/04-domain-model.md CatalogItem). */
@@ -519,4 +562,6 @@ export interface DB {
   company: Company | null;
   notes: Note[];
   payments: Payment[];
+  /** employees' saved signatures (wave E2a); absent in old saved data */
+  memberSignatures?: MemberSignature[];
 }
