@@ -36,7 +36,7 @@ export type Op =
     }
   /** S4 (docs/specs/03): an inspection — a visit of the lead at the property, no job; replaces lead.visit (kept for old queues) */
   | { k: "visit.notified"; visitId: string }
-  | { k: "visit.inspection"; leadId?: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; assigneeIds?: string[]; scope: string[] }
+  | { k: "visit.inspection"; leadId?: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[] }
   /** the office cancels a visit with a reason; S4a / S9a roll the lead / job back when nothing open is left */
   | { k: "visit.cancel"; visitId: string; reason: CancelReason; text?: string; leadBack?: string; jobBack?: string }
   /** the office moves a visit (time, length); the status does not change */
@@ -101,7 +101,7 @@ export type Op =
     }
   | { k: "payment.record"; id: string; invoiceId: string; customerId: string; amountCents: number; method: PaymentMethod; reference?: string }
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number }
-  | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; scope: string[] }
+  | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[] }
   | { k: "company.save"; company: Company; einChanged: boolean }
   | { k: "license.save"; license: CompanyLicense }
   | { k: "license.remove"; id: string }
@@ -305,7 +305,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "visit.inspection": {
       const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
-      await run(ins("visits", { id: op.visitId, company_id: c, lead_id: op.leadId ?? null, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
+      await run(ins("visits", { id: op.visitId, company_id: c, lead_id: op.leadId ?? null, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope, notes: op.note ?? null }));
       // the lead first, the people last: a refused assignment must not leave the lead behind (security check of П3a)
       if (op.leadId) {
         await run(supabase.from("leads").update({ first_response_at: op.start < new Date().toISOString() ? op.start : new Date().toISOString(), first_response_kind: "manual" }).eq("id", op.leadId).is("first_response_at", null));
@@ -441,7 +441,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(Promise.resolve({ error }));
     }
     case "job.schedule": {
-      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, scope: op.scope }));
+      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, scope: op.scope, notes: op.note ?? null }));
       await advanceJob(op.jobId, "scheduled");
       return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
