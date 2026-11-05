@@ -1,3 +1,4 @@
+import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -40,7 +41,7 @@ export default function VisitScreen() {
     );
 
   const { job, property, customer } = visitContext(db, v);
-  const st = visitStatus(v);
+  const st = visitStatus(v, Date.now(), lateAfterOf(db));
   const idx = stepIndex(v.step);
   const before = v.photos.filter((p) => p.kind === "before");
   const after = v.photos.filter((p) => p.kind === "after");

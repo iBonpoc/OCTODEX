@@ -4,7 +4,8 @@ import type { DB, ID, Role } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
 import { leadSettingsOf } from "./leadSettings";
 import { canCountersign } from "./estimateSign";
-import { assigneesOf, canPlan, isOpenVisit, lateToday, sameDay, visitWho } from "./schedule";
+import { assigneesOf, canPlan, dayDiffIn, isOpenVisit, lateToday, visitWho } from "./schedule";
+import { companyTz, dayIn, scheduleSettingsOf } from "./scheduleSettings";
 import type { DictKey } from "@/i18n";
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
@@ -70,13 +71,15 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   }
   // Visits (docs/specs/03 П3c): only the people who plan (director, dispatcher) — a tech or sales has nothing to do here.
   // «Не назначено» today and tomorrow; «Опаздывает» by one rule (schedule.ts lateKind), «on the way» does not clear it.
+  // «today» and «tomorrow» are the company's calendar days, not the phone's (П4a); the threshold is the company's
+  const tz = companyTz(db.company);
+  const sch = scheduleSettingsOf(db.company);
   if (canPlan([role])) {
-    const tomorrow = new Date(now);
-    tomorrow.setDate(tomorrow.getDate() + 1);
     for (const v of db.visits) {
       if (!isOpenVisit(v)) continue;
-      const today = sameDay(new Date(v.start), new Date(now));
-      if (!today && !sameDay(new Date(v.start), tomorrow)) continue;
+      const dd = dayDiffIn(v.start, now, tz);
+      const today = dd === 0;
+      if (dd !== 0 && dd !== 1) continue;
       const { client, tech } = visitWho(db, v);
       if (!assigneesOf(v).length) {
         out.push({
@@ -85,7 +88,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
         });
         continue;
       }
-      const late = lateToday(v, now);
+      const late = lateToday(v, now, sch, tz);
       if (late)
         out.push({ id: `late-${v.id}`, kind: "late", refId: v.id, name: tech, label: "att.late", params: { name: `${tech} → ${client}` }, chip: late === "en_route" ? "late.enRoute" : "late.notLeft", status: "warn", score: 850 });
     }
@@ -104,7 +107,8 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     out.push({ id: `inv-${i.id}`, kind: "overdue", refId: i.id, name: c?.name ?? "", label: "att.overdue", params: { name: c?.name ?? "" }, chip: "st.overdue", status: "bad", amountCents: i.totalCents - i.paidCents, score: 800 + d });
   }
   const office = role === "director" || role === "dispatcher";
-  const today = localDay(new Date());
+  // «valid until» is a calendar day of the company (the server decides by it too)
+  const today = dayKeyIn(now, tz);
   for (const e of db.estimates) {
     const c0 = db.customers.find((x) => x.id === e.customerId);
     const who = c0?.name ?? "";
@@ -136,4 +140,8 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   return out.sort((a, b) => b.score - a.score);
 }
 
-const localDay = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** YYYY-MM-DD of a moment in a time zone */
+function dayKeyIn(t: number, tz: string): string {
+  const d = new Date(dayIn(t, tz) * 86_400_000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}

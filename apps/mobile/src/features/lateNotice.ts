@@ -6,6 +6,7 @@
  */
 import type { DB, Notice, Role } from "@/data/types";
 import { canPlan, lateToday, visitWho } from "./schedule";
+import { companyTime, companyTz, scheduleSettingsOf } from "./scheduleSettings";
 
 /** at most this many «running late» cards on «Today» (the server notices have their own 5) */
 export const LATE_NOTICES_MAX = 5;
@@ -13,9 +14,12 @@ export const LATE_NOTICES_MAX = 5;
 export function lateNotices(db: DB, role: Role, now: number = Date.now()): Notice[] {
   if (!canPlan([role])) return [];
   const out: Notice[] = [];
+  // the company's day and threshold (П4a), the same as «Требует внимания»
+  const tz = companyTz(db.company);
+  const sch = scheduleSettingsOf(db.company);
   for (const v of db.visits) {
     // the same window as «Требует внимания» (today), so the item and the notice agree
-    const late = lateToday(v, now);
+    const late = lateToday(v, now, sch, tz);
     if (!late) continue;
     const { client, tech } = visitWho(db, v);
     out.push({
@@ -26,4 +30,9 @@ export function lateNotices(db: DB, role: Role, now: number = Date.now()): Notic
     });
   }
   return out.sort((a, b) => (a.lateAt ?? "").localeCompare(b.lateAt ?? "")).slice(0, LATE_NOTICES_MAX);
+}
+
+/** the time a notice shows: «running late» in the company time zone (П4a, the office may be elsewhere), the rest as before */
+export function noticeTime(n: Pick<Notice, "kind">, iso: string, tz: string, phoneTime: (iso: string) => string): string {
+  return n.kind === "visit.late" ? companyTime(iso, tz) : phoneTime(iso);
 }

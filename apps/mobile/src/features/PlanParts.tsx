@@ -1,3 +1,4 @@
+import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -6,7 +7,7 @@ import { useStore } from "@/data/store";
 import type { ID } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { daysSince, SCHEDULE_DEFAULTS, waitingJobs, type PlanWho } from "@/features/schedule";
+import { daysSince, waitingJobs, type PlanWho } from "@/features/schedule";
 import { VisitFormSheet } from "@/features/VisitForm";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -120,7 +121,7 @@ export function PlanAddSheet({ visible, onClose }: { visible: boolean; onClose: 
           onClose={() => { setPropertyId(null); close(); }}
           title={t("vf.addInspection")}
           saveLabel={t("lead.next.book")}
-          init={{ durationMin: SCHEDULE_DEFAULTS.inspectionMin, propertyId }}
+          init={{ durationMin: scheduleSettingsOf(db.company).inspectionMin, propertyId }}
           onSave={(v) => {
             const visitId = uid();
             const r = store.addInspection(propertyId, { ...v, visitId });

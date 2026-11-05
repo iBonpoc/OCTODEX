@@ -1,3 +1,4 @@
+import { lateAfterOf } from "@/features/scheduleSettings";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -32,7 +33,7 @@ export default function Visits() {
     const { job, property, customer } = visitContext(db, v);
     // an inspection has no job and maybe no client yet: the lead's name and request (docs/specs/03 §3.1)
     const lead = v.leadId ? db.leads.find((l) => l.id === v.leadId) : undefined;
-    const st = visitStatus(v);
+    const st = visitStatus(v, Date.now(), lateAfterOf(db));
     const [hm, ampm] = time(v.start).split(" ");
     const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
     const addr = property ? `${property.address}, ${property.city}` : undefined;

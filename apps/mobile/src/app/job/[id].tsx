@@ -1,3 +1,4 @@
+import { lateAfterOf } from "@/features/scheduleSettings";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -66,7 +67,7 @@ export default function JobScreen() {
       {visits.length ? (
         <CardList>
           {visits.map((v) => {
-            const vs = visitStatus(v);
+            const vs = visitStatus(v, Date.now(), lateAfterOf(db));
             const tech = db.members.find((m) => m.id === v.techId);
             return (
               <ItemCard
