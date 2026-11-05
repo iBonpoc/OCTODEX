@@ -1,6 +1,7 @@
 import { VersionBadge } from "@/features/version";
 import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { router, useGlobalSearchParams, usePathname, type Href } from "expo-router";
+import { router, useLocalSearchParams, useRoute, type Href } from "expo-router";
+import { screenPath } from "./screenPath";
 import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
@@ -397,8 +398,10 @@ export function Screen({
   const { c } = useTheme();
   const { t } = useI18n();
   const store = useStore();
-  const pathname = usePathname();
-  const params = useGlobalSearchParams();
+  // This screen's own address, not the app's: during «back» the app's address still points at the card
+  // for a moment, and the list under it drew the card's header (screenPath.ts).
+  const params = useLocalSearchParams();
+  const pathname = screenPath(useRoute().name, params);
   const nav = navContext(pathname, params, store.db, store.role);
   const up = nav.up;
   const hasUp = !!(up || back);
