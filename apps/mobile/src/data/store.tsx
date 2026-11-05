@@ -766,7 +766,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       markNotified: (visitId) => {
         const at = new Date().toISOString();
-        return mutate("visit.notified", (d) => patchVisit(d, visitId, (v) => ({ ...v, customerNotifiedAt: at })), { k: "visit.notified", visitId, at });
+        return mutate("visit.notified", (d) => patchVisit(d, visitId, (v) => ({ ...v, customerNotifiedAt: at })), { k: "visit.notified", visitId });
       },
       rescheduleVisit: (id, start, durationMin) => {
         const v = dbRef.current.visits.find((x) => x.id === id);

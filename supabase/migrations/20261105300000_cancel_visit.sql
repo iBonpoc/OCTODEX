@@ -43,10 +43,12 @@ begin
   end if;
 
   perform set_config('app.status_reason', p_reason, true);
+  perform set_config('app.cancelling_visit', v.id::text, true);
   update public.visits
      set status = case when p_reason = 'no_show' then 'no_show' else 'cancelled' end,
          cancel_reason = p_reason, cancel_reason_text = nullif(btrim(p_text), '')
    where id = v.id;
+  perform set_config('app.cancelling_visit', '', true);
 
   -- S4a: the visit's own lead, only when no other open visit of that lead is left
   if v.lead_id is not null then
@@ -131,3 +133,30 @@ revoke all on function app.tg_visit_notified_stamp() from public, anon, authenti
 drop trigger if exists t07_visit_notified_stamp on public.visits;
 create trigger t07_visit_notified_stamp before update of customer_notified_at on public.visits
   for each row execute function app.tg_visit_notified_stamp();
+
+-- ---- a visit is cancelled only through public.cancel_visit (security check of П2) -------------
+-- visits_update_staff lets every staff role (sales too) update a visit: a direct "status = cancelled" would skip the
+-- reason, the rights (owner / admin / office) and the roll-backs. People cancel only inside cancel_visit (it runs as its
+-- owner, never as authenticated / anon, and marks this very visit); no user (service role, cron) as before.
+-- «Told the client» is the office's: owner, admin, office.
+create or replace function app.tg_visit_cancel_guard()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if auth.uid() is null then return new; end if;
+  if (new.status is distinct from old.status and new.status in ('cancelled', 'no_show'))
+     or new.cancel_reason is distinct from old.cancel_reason or new.cancel_reason_text is distinct from old.cancel_reason_text then
+    if current_user in ('authenticated', 'anon') or coalesce(current_setting('app.cancelling_visit', true), '') <> new.id::text then
+      raise exception 'a visit is cancelled only with public.cancel_visit' using errcode = '42501';
+    end if;
+  end if;
+  if new.customer_notified_at is distinct from old.customer_notified_at
+     and not app.has_role(old.company_id, array['owner', 'admin', 'office']) then
+    raise exception 'only the office marks the client as told' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_visit_cancel_guard() from public, anon, authenticated;
+drop trigger if exists t04_visit_cancel_guard on public.visits;
+create trigger t04_visit_cancel_guard before update on public.visits
+  for each row execute function app.tg_visit_cancel_guard();

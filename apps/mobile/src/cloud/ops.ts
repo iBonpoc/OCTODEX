@@ -35,7 +35,7 @@ export type Op =
       start: string;
     }
   /** S4 (docs/specs/03): an inspection — a visit of the lead at the property, no job; replaces lead.visit (kept for old queues) */
-  | { k: "visit.notified"; visitId: string; at: string }
+  | { k: "visit.notified"; visitId: string }
   | { k: "visit.inspection"; leadId?: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; scope: string[] }
   /** the office cancels a visit with a reason; S4a / S9a roll the lead / job back when nothing open is left */
   | { k: "visit.cancel"; visitId: string; reason: CancelReason; text?: string; leadBack?: string; jobBack?: string }
@@ -310,7 +310,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // a repeat after a partial failure changes nothing
       return run(supabase.rpc("cancel_visit", { p_visit_id: op.visitId, p_reason: op.reason, p_text: op.text ?? null }));
     case "visit.notified":
-      return run(supabase.from("visits").update({ customer_notified_at: op.at }).eq("id", op.visitId));
+      // the time is the server's (t07_visit_notified_stamp sets now()); any non-null value only marks «told»
+      return run(supabase.from("visits").update({ customer_notified_at: new Date(0).toISOString() }).eq("id", op.visitId));
     case "visit.reschedule": {
       const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
       return run(supabase.from("visits").update({ starts_at: op.start, ends_at: end }).eq("id", op.visitId));

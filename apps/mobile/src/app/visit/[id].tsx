@@ -7,6 +7,7 @@ import { jobProfit, useStore, visitContext } from "@/data/store";
 import type { PaymentMethod } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { WhenWho } from "@/features/VisitForm";
+import { canPlan } from "@/features/schedule";
 import { useTheme } from "@/theme/ThemeProvider";
 import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
@@ -45,7 +46,8 @@ export default function VisitScreen() {
   const after = v.photos.filter((p) => p.kind === "after");
   const left = v.checklist.filter((x) => !x.done).length;
   const queuedHint = () => (store.online ? undefined : t("offline.queued"));
-  const office = store.role !== "tech";
+  // «Перенести / Отменить»: the office only (owner / admin / office ↔ director / dispatcher), like cancel_visit on the server
+  const office = canPlan([store.role]);
 
   const advance = (msg: string) => {
     haptic();
