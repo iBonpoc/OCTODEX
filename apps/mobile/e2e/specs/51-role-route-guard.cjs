@@ -26,8 +26,22 @@ exports.run = async (h) => {
   // the tab bar has no extra «index» tab
   h.expect((await p.getByRole("button", { name: /^index$/i }).count()) === 0 && (await p.getByText(/^index$/).count()) === 0, "no «index» tab");
 
+  // Today's company money, as the director sees it (so the check below means something)
+  const MONEY = [/Подписано\s+\$5,180/, /Ждёт оплаты\s+\$2,800/, /Требует внимания/];
+  await setRole(h, "director");
+  await h.go("/today");
+  const own = await p.evaluate(() => document.body.innerText);
+  h.expect(MONEY.every((re) => re.test(own)), "director's Today shows its amounts");
+
   // the technician by a direct link: back to his own home with a toast, no company money on the way
   await setRole(h, "tech");
+  // the tab navigator keeps a visited tab mounted (hidden): Today must not be rendered at all (#131 review)
+  for (const path of ["/today", "/money", "/figures/profit"]) {
+    await h.go(path);
+    await p.waitForTimeout(800);
+    const text = await p.evaluate(() => document.body.innerText + "\n" + document.body.textContent);
+    for (const re of MONEY) h.expect(!re.test(text), `tech after ${path}: no «${re.source}» anywhere in the page`);
+  }
   for (const path of ["/money", "/team", "/company", "/company/hours", "/today", "/figures/profit", "/triage", "/inbox"]) {
     await h.go(path);
     await p.waitForTimeout(500);
