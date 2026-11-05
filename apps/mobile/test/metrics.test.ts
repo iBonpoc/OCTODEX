@@ -73,3 +73,20 @@ describe("period numbers (Today screen)", () => {
     expect(pct(5, 0)).toBe(0);
   });
 });
+
+describe("the numbers on «Сегодня» use the same money as the lists (list-cards chat, 05.11)", () => {
+  it("«Подписано»: the option the client signed, not the estimate total (estimateListAmount)", () => {
+    const d = db();
+    const e1 = d.estimates.find((e) => e.id === "e1")!;
+    // the client signed the cheaper option of two: 80.00, while the estimate total says 100.00
+    const signed = { ...e1, approval: { optionId: "o2", addonIds: [], signerName: "Ann", signature: "M0 0", at: at(TODAY), channel: "portal" as const, totalCents: 80_00, depositCents: 0 } };
+    const n = periodNumbers({ ...d, estimates: d.estimates.map((e) => (e.id === "e1" ? signed : e)) }, "today", TODAY);
+    expect(n.signedCents).toBe(80_00);
+  });
+  it("«Ждёт оплаты»: the invoice balance of the lists (invoiceBalance); partial and overpaid", async () => {
+    const { invoiceBalance } = await import("../src/features/invoiceStatus");
+    const d = db();
+    const n = periodNumbers(d, "today", TODAY);
+    expect(n.awaitingCents).toBe(d.invoices.reduce((s, i) => s + invoiceBalance(i).owesCents, 0));
+  });
+});
