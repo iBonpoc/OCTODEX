@@ -118,6 +118,13 @@ describe("review findings of wave L1", () => {
     const call = db({ status: "replied", lastOutboundAt: min(60) }, { activities: [act("call", min(60))] });
     expect(leadTurn(call.d, call.l, LEAD_SETTINGS_DEFAULT, NOW).kind).toBe("noStep");
   });
+  it("a planned estimate visit is the step for any open lead (also after the estimate went out)", () => {
+    const d0 = makeSeed();
+    const job = { id: "jx", propertyId: "px", title: "Estimate visit", status: "estimate" as const, amountCents: 0 };
+    const visit = { ...d0.visits[0]!, id: "vx", jobId: "jx", start: new Date(NOW + 2 * 86_400_000).toISOString() };
+    const { d, l } = db({ status: "estimate_sent", propertyId: "px", lastOutboundAt: days(10) }, { jobs: [job], visits: [visit] });
+    expect(leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW)).toMatchObject({ kind: "step", status: "neutral" });
+  });
   it("a task due earlier today is overdue", () => {
     const { d, l } = db({ status: "replied" }, { tasks: [{ id: "t", subjectType: "lead", subjectId: "L", title: "Call at 9", dueAt: min(120) }] });
     expect(leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW)).toMatchObject({ kind: "step", status: "bad" });

@@ -15,6 +15,7 @@ import {
   canSeeLeadCost, isOverdueTask, leadTimeline, openTasks, reasonsFor, sourceName, sourceOf, type TimelineEntry,
 } from "@/features/leads";
 import { SourceSheet, sourceKindLabel } from "./SourcePicker";
+import { InterestPicker, MissingBlock } from "./LeadSheets";
 import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -32,7 +33,8 @@ function useSaved() {
 }
 
 /* ======================= contact actions (call / SMS / email / route / marketplace) ======================= */
-export function ContactActions({ l }: { l: Lead }) {
+/** Call / SMS / email / route / marketplace. A call does not count as a reply by itself: onCall asks "did you get through?" (Р13). */
+export function ContactActions({ l, onCall }: { l: Lead; onCall?: () => void }) {
   const store = useStore();
   const { t } = useI18n();
   const src = sourceOf(store.db, l.sourceId);
@@ -43,7 +45,15 @@ export function ContactActions({ l }: { l: Lead }) {
   };
   return (
     <RowView style={{ flexWrap: "wrap" }}>
-      <IconButton icon="phone" label={t("visit.call")} onPress={() => touch("call", `tel:${tel(l.phone)}`)} />
+      <IconButton
+        icon="phone"
+        label={t("visit.call")}
+        onPress={() => {
+          Linking.openURL(`tel:${tel(l.phone)}`).catch(() => {});
+          if (onCall) onCall();
+          else store.touchLead(l.id, "call");
+        }}
+      />
       <IconButton icon="sms" label={t("visit.message")} onPress={() => touch("sms", `sms:${tel(l.phone)}`)} />
       {l.email ? <IconButton icon="mail" label={t("lead.emailTo")} onPress={() => touch("email", `mailto:${l.email}`)} /> : null}
       {addr ? <IconButton icon="navigate" label={t("visit.navigate")} onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${encodeURIComponent(addr)}`).catch(() => {})} /> : null}
@@ -90,6 +100,7 @@ export function LeadOverview({ l }: { l: Lead }) {
 
   return (
     <View style={{ gap: space[3] }}>
+      <MissingBlock l={l} onAdd={setEdit} />
       <Card>
         {head(t("lead.sec.contact"), "contact")}
         {row("user", l.name)}
@@ -149,6 +160,9 @@ export function LeadOverview({ l }: { l: Lead }) {
         {!item && !l.service && !l.message ? <T v="caption" tone="mut">{t("lead.noRequest")}</T> : null}
       </Card>
 
+      <Card>
+        <InterestPicker l={l} />
+      </Card>
       <Card>
         <T v="heading">{t("lead.sec.source")}</T>
         <ListRow title={src?.name ?? "—"} subtitle={src ? t(sourceKindLabel(src.kind)) : undefined} left={<Icon name="star" />} onPress={() => setEdit("source")} />

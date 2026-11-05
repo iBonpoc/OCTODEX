@@ -20,6 +20,6 @@ exports.run = async (h) => {
   await p.getByText("Kevin Brooks", { exact: true }).first().click();
   await p.waitForTimeout(600);
   await h.expectText(/Продажи · Лид/, "lead card opens");
-  await h.clickText("История");
+  await h.clickText("Переписка");
   await h.expectText(/Лид пришёл: Thumbtack/, "history works");
 };
