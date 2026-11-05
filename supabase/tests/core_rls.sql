@@ -2592,4 +2592,356 @@ begin
 end $$;
 \echo 'T23 contract title from the profile ok'
 
+-- ---------------------------------------------------------------- T37: Почта П1a — the signed copy waits in email_outbox
+-- (docs/specs/07-email.md §4, §6, §9; migration 20261105350000; S8b → S8c)
+:as_super
+insert into public.customers (id, company_id, display_name) values
+  ('c3700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T37 Mail Client'),
+  ('c3700000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T37 No Mail Client');
+insert into public.contacts (id, company_id, customer_id, name, is_primary, preferred_language) values
+  ('c3710000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'T37 Mail', true, 'es'),
+  ('c3710000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000002', 'T37 No Mail', true, null);
+insert into public.contact_emails (company_id, contact_id, address, is_primary, created_by) values
+  ('ca000000-0000-0000-0000-000000000000', 'c3710000-0000-4000-8000-000000000001', 'mail37@example.com', true, 'a0000000-0000-0000-0000-000000000002');
+update public.customers set primary_contact_id = 'c3710000-0000-4000-8000-000000000001' where id = 'c3700000-0000-4000-8000-000000000001';
+update public.customers set primary_contact_id = 'c3710000-0000-4000-8000-000000000002' where id = 'c3700000-0000-4000-8000-000000000002';
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d3700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', '37 Mail St', 'Pasadena'),
+  ('d3700000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000002', '37 Quiet St', 'Pasadena');
+-- an estimate sent and signed by the client (the caller signs on the page by its token); p_both: the company signs too
+create function tst.t37_estimate(p_customer uuid, p_property uuid, p_title text, p_both boolean default true)
+returns uuid language plpgsql as $$
+declare e uuid; v uuid; o uuid; tok text;
+begin
+  insert into public.estimates (id, company_id, customer_id, property_id, title) values
+    (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', p_customer, p_property, p_title) returning id into e;
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', e, 1, '{"kind":"none"}') returning id into v;
+  update public.estimates set current_version_id = v where id = e;
+  insert into public.estimate_options (id, company_id, version_id, name) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
+  insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 40000);
+  tok := public.send_estimate(e);
+  perform public.portal_accept(tok, o, null, 'T37 Signer', 'M0 0 L7 7', true);
+  if p_both then
+    perform tst.ok(public.countersign_estimate(e, 'M1 1 L7 7') = 'approved', 'T37 fixture: both signed');
+  end if;
+  perform set_config('tst.t37_tok_' || p_title, tok, false);
+  return e;
+end $$;
+grant execute on function tst.t37_estimate(uuid, uuid, text, boolean) to authenticated;
+grant usage on schema tst to service_role;   -- the edge function's role in 7.
+:as_owner_a
+do $$
+declare e uuid;
+begin
+  -- 1. the company did not turn the copy on (default, founder В3): one row, skipped_off
+  e := tst.t37_estimate('c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 't37off');
+  perform set_config('tst.t37_off', e::text, false);
+  perform tst.ok((select count(*) = 1 and min(status) = 'skipped_off' and bool_and(requested_by is null) from public.email_outbox where estimate_id = e),
+                 'new company: the copy is off by default → skipped_off');
+end $$;
+:as_super
+update public.companies set estimate_settings = estimate_settings || '{"autoSendSignedCopy": true}' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+do $$
+declare e uuid; e3 uuid; e4 uuid;
+begin
+  -- 2. turned on, the client has an email: exactly one queued row, in the client's language
+  e := tst.t37_estimate('c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 't37on');
+  perform set_config('tst.t37_on', e::text, false);
+  perform tst.ok((select count(*) = 1 and min(status) = 'queued' and min(lang) = 'es' and bool_and(to_email is null) from public.email_outbox where estimate_id = e),
+                 'both signed: one queued row in the client''s language, no address until sending');
+  -- a repeat countersign doubles nothing
+  perform tst.ok(public.countersign_estimate(e, 'M1 1 L7 7') = 'approved', 'repeat countersign answers approved');
+  perform tst.ok((select count(*) from public.email_outbox where estimate_id = e) = 1, 'repeat countersign: still one row');
+  -- 3. the client has no email: skipped_no_email, the contract is signed all the same
+  e3 := tst.t37_estimate('c3700000-0000-4000-8000-000000000002', 'd3700000-0000-4000-8000-000000000002', 't37nomail');
+  perform set_config('tst.t37_nomail', e3::text, false);
+  perform tst.ok((select status from public.email_outbox where estimate_id = e3) = 'skipped_no_email', 'no client email → skipped_no_email');
+  perform tst.ok((select status from public.estimates where id = e3) = 'approved', 'no client email: the contract is still approved');
+  -- a contract signed by the client only: no row yet
+  e4 := tst.t37_estimate('c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 't37half', false);
+  perform set_config('tst.t37_half', e4::text, false);
+  perform tst.ok(not exists (select 1 from public.email_outbox where estimate_id = e4), 'client signed only: no copy yet');
+  -- nobody writes the queue directly
+  perform tst.fails(format($q$insert into public.email_outbox (company_id, estimate_id, kind) values ('ca000000-0000-0000-0000-000000000000', %L, 'signed_copy')$q$, e4), 'owner inserts into the queue');
+  perform tst.blocked(format($q$update public.email_outbox set status = 'sent' where estimate_id = %L$q$, e), 'owner marks a row sent');
+  perform tst.blocked(format($q$delete from public.email_outbox where estimate_id = %L$q$, e), 'owner deletes a row');
+end $$;
+-- 4. the queue does not break the signature: a second execute (any path) neither fails nor adds a row
+:as_super
+do $$
+declare e uuid := current_setting('tst.t37_on')::uuid;
+begin
+  perform app.execute_estimate(e, null, null);
+  perform tst.ok((select count(*) from public.email_outbox where estimate_id = e) = 1, 'second execute_estimate: no new row, no error');
+  perform tst.ok((select count(*) from public.jobs where estimate_id = e) = 1 and (select status from public.estimates where id = e) = 'approved',
+                 'second execute_estimate: the deal stands');
+end $$;
+-- 5. who sees the journal: owner, office — yes; tech, sales, another company — no; the client page (anon) — no
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.email_outbox where estimate_id::text = current_setting('tst.t37_on')$q$) = 1, 'owner sees the journal');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.email_outbox where estimate_id::text = current_setting('tst.t37_on')$q$) = 1, 'office sees the journal');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.email_outbox$q$) = 0, 'tech does not see the journal');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.email_outbox$q$) = 0, 'sales does not see the journal');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.email_outbox$q$) = 0, 'another company does not see the journal');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$select 1 from public.email_outbox$q$, 'anon reads the queue');
+select tst.fails($q$select public.resend_signed_copy(current_setting('tst.t37_on')::uuid)$q$, 'anon sends again');
+select tst.ok(public.portal_estimate(current_setting('tst.t37_tok_t37on')) is not null, 'the signed copy link opens');
+\echo 'T37 signed copy queued once, journal for the office ok'
+
+-- 6. «Send again»: role, status, email, 10 minutes, 3 repeats
+:as_tech_a
+select tst.fails($q$select public.resend_signed_copy(current_setting('tst.t37_on')::uuid)$q$, 'tech sends again');
+:as_sales_a
+select tst.fails($q$select public.resend_signed_copy(current_setting('tst.t37_on')::uuid)$q$, 'sales sends again');
+:as_owner_b
+select tst.fails($q$select public.resend_signed_copy(current_setting('tst.t37_on')::uuid)$q$, 'another company sends again');
+:as_office_a
+select tst.fails($q$select public.resend_signed_copy(current_setting('tst.t37_half')::uuid)$q$, 'not approved: no copy');
+select tst.fails($q$select public.resend_signed_copy(current_setting('tst.t37_nomail')::uuid)$q$, 'no client email: no copy');
+select tst.fails($q$select public.resend_signed_copy(current_setting('tst.t37_on')::uuid)$q$, 'sooner than 10 minutes after the automatic copy');
+:as_super
+create function tst.t37_age(p_estimate uuid, p_by interval) returns void language sql as $$
+  update public.email_outbox set created_at = created_at - p_by where estimate_id = p_estimate;
+$$;
+select tst.t37_age(current_setting('tst.t37_on')::uuid, interval '11 minutes');
+:as_office_a
+select tst.ok(public.resend_signed_copy(current_setting('tst.t37_on')::uuid) = 'queued', 'office sends again: queued');
+select tst.ok((select requested_by from public.email_outbox where estimate_id::text = current_setting('tst.t37_on') and requested_by is not null)
+              = 'a0000000-0000-0000-0000-000000000002', 'the repeat records who asked (from the session, not from the caller)');
+select tst.fails($q$select public.resend_signed_copy(current_setting('tst.t37_on')::uuid)$q$, 'again right away: refused');
+:as_super
+select tst.t37_age(current_setting('tst.t37_on')::uuid, interval '11 minutes');
+:as_owner_a
+select tst.ok(public.resend_signed_copy(current_setting('tst.t37_on')::uuid) = 'queued', 'second repeat');
+:as_super
+select tst.t37_age(current_setting('tst.t37_on')::uuid, interval '11 minutes');
+:as_owner_a
+select tst.ok(public.resend_signed_copy(current_setting('tst.t37_on')::uuid) = 'queued', 'third repeat');
+:as_super
+select tst.t37_age(current_setting('tst.t37_on')::uuid, interval '11 minutes');
+:as_owner_a
+select tst.fails($q$select public.resend_signed_copy(current_setting('tst.t37_on')::uuid)$q$, 'a fourth repeat: refused (3 in all)');
+select tst.ok(tst.cnt($q$select 1 from public.email_outbox where estimate_id::text = current_setting('tst.t37_on')$q$) = 4, 'one automatic + three repeats');
+\echo 'T37 send again: role, status, email, 10 minutes, 3 repeats ok'
+
+-- 7. The edge function's side: take a row once; sent / failed / final; old rows expire; only the service role
+:as_owner_a
+select tst.fails($q$select public.email_claim((select id from public.email_outbox limit 1))$q$, 'a member takes a queue row');
+select tst.fails($q$select public.email_finish((select id from public.email_outbox limit 1), 'sent')$q$, 'a member marks a row sent');
+:as_super
+do $$
+declare
+  e uuid := current_setting('tst.t37_on')::uuid;
+  ids uuid[] := (select array_agg(id order by created_at) from public.email_outbox where estimate_id = e);
+  j jsonb;
+begin
+  perform set_config('tst.t37_ids', array_to_string(ids, ','), false);
+  -- all four rows are aged 44 minutes or less: bring them back inside the day
+  update public.email_outbox set created_at = now() - interval '1 minute' where estimate_id = e;
+end $$;
+set role service_role;
+do $$
+declare ids uuid[] := string_to_array(current_setting('tst.t37_ids'), ',')::uuid[]; j jsonb;
+begin
+  j := public.email_claim(ids[1]);
+  perform tst.ok(j ->> 'to' = 'mail37@example.com' and j ->> 'lang' = 'es' and (j ->> 'attempt')::int = 1, 'claim: address read from the client card at sending time');
+  perform tst.ok(public.email_claim(ids[1]) is null, 'the same webhook again: nothing to send (one letter)');
+  perform public.email_finish(ids[1], 'sent', 'resend_abc');
+  -- failed → retried → failed for good (a 4xx)
+  perform tst.ok(public.email_claim(ids[2]) is not null, 'claim the first repeat');
+  perform public.email_finish(ids[2], 'failed', null, 'http_500');
+  perform tst.ok((public.email_claim(ids[2]) ->> 'attempt')::int = 2, 'a failed row is taken again');
+  perform public.email_finish(ids[2], 'failed', null, 'http_422', true);
+  perform tst.ok(public.email_claim(ids[2]) is null, 'after a 4xx: no retry');
+  -- no platform key: final
+  perform public.email_finish(ids[3], 'not_configured');
+  perform tst.ok(public.email_claim(ids[3]) is null, 'not_configured is final');
+  perform tst.fails(format($q$select public.email_finish(%L, 'bogus')$q$, ids[4]), 'unknown status refused');
+end $$;
+:as_super
+do $$
+declare ids uuid[] := string_to_array(current_setting('tst.t37_ids'), ',')::uuid[];
+begin
+  perform tst.ok((select status = 'sent' and to_email = 'mail37@example.com' and provider_id = 'resend_abc' and sent_at is not null
+                         and to_email_set_by = 'a0000000-0000-0000-0000-000000000002'
+                    from public.email_outbox where id = ids[1]), 'sent: address, provider id, who set the address');
+  perform tst.ok((select status = 'failed' and attempts = 3 and error = 'http_422' from public.email_outbox where id = ids[2]), 'failed for good: attempts used up, only the code');
+  perform tst.ok((select status from public.email_outbox where id = ids[3]) = 'not_configured', 'not_configured kept');
+  update public.email_outbox set created_at = now() - interval '25 hours' where id = ids[4];
+end $$;
+set role service_role;
+select tst.ok(public.email_claim(split_part(current_setting('tst.t37_ids'), ',', 4)::uuid) is null, 'a row older than a day is not sent');
+:as_super
+select tst.ok((select status from public.email_outbox where id = split_part(current_setting('tst.t37_ids'), ',', 4)::uuid) = 'expired', 'an old row expires');
+-- the client lost their email between signing and sending
+do $$
+declare e uuid; r uuid;
+begin
+  insert into public.email_outbox (company_id, estimate_id, kind, requested_by) values
+    ('ca000000-0000-0000-0000-000000000000', current_setting('tst.t37_nomail')::uuid, 'signed_copy', 'a0000000-0000-0000-0000-000000000001') returning id into r;
+  perform set_config('tst.t37_lost', r::text, false);
+end $$;
+set role service_role;
+select tst.ok(public.email_claim(current_setting('tst.t37_lost')::uuid) is null, 'no address at sending time: nothing sent');
+:as_super
+select tst.ok((select status from public.email_outbox where id = current_setting('tst.t37_lost')::uuid) = 'skipped_no_email', 'no address at sending time → skipped_no_email');
+\echo 'T37 claim once, retries, expiry, service role only ok'
+
+-- 8. Addresses: one clean ASCII address only (§9.10)
+select tst.ok(app.clean_email('  Ok.Name+1@ex-ample.co ') = 'Ok.Name+1@ex-ample.co', 'clean address trimmed');
+select tst.ok(app.clean_email('a@b.com?cc=x@y.com') is null, 'a query in the address');
+select tst.ok(app.clean_email(e'a@b.com\r\nBcc: x@y.com') is null, 'CR LF in the address');
+select tst.ok(app.clean_email('a@b.com,c@d.com') is null and app.clean_email('a@b.com;c@d.com') is null, 'two addresses');
+select tst.ok(app.clean_email('jüri@example.com') is null, 'not ASCII');
+select tst.ok(app.clean_email(repeat('a', 243) || '@example.com') is null, 'longer than 254');
+select tst.ok(app.clean_email('a..b@example.com') is null and app.clean_email('.a@example.com') is null and app.clean_email('a@example') is null, 'malformed');
+select tst.ok(app.clean_email('<a@b.com>') is null and app.clean_email('A <a@b.com>') is null, 'a display name is not an address');
+select tst.ok(app.clean_email('a%evil.com@relay.com') is null and app.clean_email('a!b@relay.com') is null, 'no routing characters');
+select tst.ok(app.clean_email(repeat('a', 65) || '@example.com') is null and app.clean_email(repeat('a', 64) || '@example.com') is not null, 'local part ≤ 64');
+\echo 'T37 clean addresses ok'
+
+-- 9. Limits: 20 a day for a company, 90 a day for the platform → rate_limited; skipped rows do not count
+do $$
+begin
+  insert into public.email_outbox (company_id, estimate_id, kind, status, requested_by)
+  select 'ca000000-0000-0000-0000-000000000000', current_setting('tst.t37_off')::uuid, 'signed_copy', 'sent', 'a0000000-0000-0000-0000-000000000001'
+    from generate_series(1, 18);
+end $$;
+:as_owner_a
+do $$
+declare e uuid;
+begin
+  -- the company has 20 today: 18 + the sent copy + the failed one (skipped, not_configured and expired do not count)
+  e := tst.t37_estimate('c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 't37limit');
+  perform tst.ok((select status from public.email_outbox where estimate_id = e) = 'rate_limited', 'company over 20 a day → rate_limited');
+  perform tst.ok((select status from public.estimates where id = e) = 'approved', 'over the limit: the contract is still signed');
+end $$;
+:as_super
+delete from public.email_outbox where estimate_id = current_setting('tst.t37_off')::uuid and status = 'sent';
+-- the platform: 90 letters of other companies today
+insert into public.customers (id, company_id, display_name) values ('c3700000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'T37 B Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3700000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-0000000000b1', '37 Rival St', 'Glendale');
+insert into public.estimates (id, company_id, customer_id, property_id, title) values ('0e370000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-0000000000b1', 'd3700000-0000-4000-8000-0000000000b1', 'T37 B');
+insert into public.email_outbox (company_id, estimate_id, kind, status, requested_by)
+select 'cb000000-0000-0000-0000-000000000000', '0e370000-0000-4000-8000-0000000000b1', 'signed_copy', 'sent', 'b0000000-0000-0000-0000-000000000001'
+  from generate_series(1, 90);
+select tst.t37_age(current_setting('tst.t37_nomail')::uuid, interval '11 minutes');
+-- the client of the no-email contract adds an address later; the office sends the copy by hand
+insert into public.contact_emails (company_id, contact_id, address, is_primary) values
+  ('ca000000-0000-0000-0000-000000000000', 'c3710000-0000-4000-8000-000000000002', 'late37@example.com', true);
+:as_office_a
+select tst.ok(public.resend_signed_copy(current_setting('tst.t37_nomail')::uuid) = 'rate_limited', 'platform over 90 a day → rate_limited');
+:as_super
+delete from public.email_outbox where company_id = 'cb000000-0000-0000-0000-000000000000';
+select tst.ok(not app.email_over_limit('ca000000-0000-0000-0000-000000000000'), 'skipped and limited rows do not count');
+\echo 'T37 daily limits ok'
+
+-- 10. A new link for a signed estimate (§9.7): director and office; the old link dies for good
+:as_tech_a
+select tst.fails($q$select public.reissue_estimate_link(current_setting('tst.t37_on')::uuid)$q$, 'tech issues a new link');
+:as_owner_b
+select tst.fails($q$select public.reissue_estimate_link(current_setting('tst.t37_on')::uuid)$q$, 'another company issues a new link');
+:as_owner_a
+do $$
+declare e uuid; t text;
+begin
+  insert into public.estimates (id, company_id, customer_id, property_id, title) values
+    (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T37 draft') returning id into e;
+  perform tst.fails(format($q$select public.reissue_estimate_link(%L)$q$, e), 'an unsigned estimate: revoke and send instead');
+  t := public.reissue_estimate_link(current_setting('tst.t37_on')::uuid);
+  perform tst.ok(t <> current_setting('tst.t37_tok_t37on') and length(t) >= 20, 'a new token');
+  perform set_config('tst.t37_newtok', t, false);
+  perform tst.fails($q$update public.estimates set public_token = 'tok_t37_planted_0123456789' where id = current_setting('tst.t37_on')::uuid$q$,
+                    'the link still changes only through the functions');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_estimate(current_setting('tst.t37_tok_t37on')) is null, 'the old link no longer opens');
+select tst.ok(public.portal_estimate(current_setting('tst.t37_newtok')) ->> 'status' = 'approved', 'the new link opens the signed contract');
+:as_super
+select tst.ok(exists (select 1 from public.revoked_link_tokens where token_hash = encode(sha256(convert_to(current_setting('tst.t37_tok_t37on'), 'UTF8')), 'hex')),
+              'the old token is on the revoked list');
+select tst.ok(exists (select 1 from public.activities where subject_id = current_setting('tst.t37_on')::uuid and meta ->> 'action' = 'link_reissued'), 'reissue in the history');
+update public.companies set estimate_settings = estimate_settings - 'autoSendSignedCopy' where id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T37 new link for a signed estimate ok'
+
+-- 11. security-check П1a: the queue never rolls a signature back; a row is checked again at sending time; app. functions closed
+:as_super
+create function tst.t37_boom() returns trigger language plpgsql as $$ begin raise exception 'queue is down'; end $$;
+create trigger t37_boom before insert on public.email_outbox for each row execute function tst.t37_boom();
+update public.companies set estimate_settings = estimate_settings || '{"autoSendSignedCopy": true}' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+do $$
+declare e uuid;
+begin
+  e := tst.t37_estimate('c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 't37boom');
+  perform tst.ok((select status from public.estimates where id = e) = 'approved', 'the queue fails: the contract is still signed');
+  perform tst.ok((select count(*) from public.jobs where estimate_id = e) = 1, 'the queue fails: the job is made');
+  perform tst.ok(not exists (select 1 from public.email_outbox where estimate_id = e), 'the queue fails: no row, no error');
+end $$;
+:as_super
+drop trigger t37_boom on public.email_outbox;
+-- junk in the setting means off and never raises
+update public.companies set estimate_settings = estimate_settings || '{"autoSendSignedCopy": "yes"}' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+do $$
+declare e uuid;
+begin
+  e := tst.t37_estimate('c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 't37junk');
+  perform set_config('tst.t37_junk', e::text, false);
+  perform tst.ok((select status from public.email_outbox where estimate_id = e) = 'skipped_off', 'a junk setting reads as off');
+end $$;
+:as_super
+update public.companies set estimate_settings = estimate_settings || '{"autoSendSignedCopy": true}' where id = 'ca000000-0000-0000-0000-000000000000';
+-- queued, then the estimate is deleted / the company turns the copy off: nothing is sent
+do $$
+declare r1 uuid; r2 uuid;
+begin
+  insert into public.email_outbox (company_id, estimate_id, kind, status) values
+    ('ca000000-0000-0000-0000-000000000000', current_setting('tst.t37_junk')::uuid, 'signed_copy', 'queued')
+  on conflict do nothing;
+  update public.email_outbox set status = 'queued' where estimate_id = current_setting('tst.t37_junk')::uuid returning id into r1;
+  perform set_config('tst.t37_r1', r1::text, false);
+end $$;
+update public.companies set estimate_settings = estimate_settings - 'autoSendSignedCopy' where id = 'ca000000-0000-0000-0000-000000000000';
+set role service_role;
+select tst.ok(public.email_claim(current_setting('tst.t37_r1')::uuid) is null, 'turned off after queueing: the automatic copy is not sent');
+:as_super
+select tst.ok((select status from public.email_outbox where id = current_setting('tst.t37_r1')::uuid) = 'skipped_off', 'turned off after queueing → skipped_off');
+update public.email_outbox set status = 'queued', attempts = 0 where id = current_setting('tst.t37_r1')::uuid;
+update public.companies set estimate_settings = estimate_settings || '{"autoSendSignedCopy": true}' where id = 'ca000000-0000-0000-0000-000000000000';
+update public.estimates set deleted_at = now() where id = current_setting('tst.t37_junk')::uuid;
+set role service_role;
+select tst.ok(public.email_claim(current_setting('tst.t37_r1')::uuid) is null, 'deleted estimate: nothing sent');
+:as_super
+select tst.ok((select status from public.email_outbox where id = current_setting('tst.t37_r1')::uuid) = 'expired', 'deleted estimate → expired');
+update public.companies set estimate_settings = estimate_settings - 'autoSendSignedCopy' where id = 'ca000000-0000-0000-0000-000000000000';
+-- the error column keeps a code only
+do $$
+declare r uuid;
+begin
+  insert into public.email_outbox (company_id, estimate_id, kind, status, requested_by) values
+    ('ca000000-0000-0000-0000-000000000000', current_setting('tst.t37_on')::uuid, 'signed_copy', 'sending', 'a0000000-0000-0000-0000-000000000001') returning id into r;
+  perform set_config('tst.t37_err', r::text, false);
+  perform tst.fails(format($q$update public.email_outbox set error = 'bad to: mail37@example.com' where id = %L$q$, r), 'an address in error refused');
+end $$;
+set role service_role;
+select public.email_finish(current_setting('tst.t37_err')::uuid, 'failed', null, E'HTTP 500 for <mail37@example.com>\r\n');
+:as_super
+select tst.ok((select error from public.email_outbox where id = current_setting('tst.t37_err')::uuid) !~ '[@<> ]', 'email_finish keeps only code characters');
+delete from public.email_outbox where id = current_setting('tst.t37_err')::uuid;
+-- members cannot call the app. functions of the queue (authenticated has usage on schema app)
+:as_owner_a
+select tst.fails($q$select app.enqueue_signed_copy(current_setting('tst.t37_on')::uuid)$q$, 'a member queues a copy');
+select tst.fails($q$select app.email_over_limit('ca000000-0000-0000-0000-000000000000')$q$, 'a member reads the limits');
+select tst.fails($q$select app.email_outbox_purge()$q$, 'a member purges the journal');
+select tst.fails($q$select * from app.estimate_client_email(current_setting('tst.t37_on')::uuid)$q$, 'a member reads a client address through app.');
+select tst.fails($q$select app.clean_email('a@b.com')$q$, 'a member calls clean_email');
+\echo 'T37 security-check: signature safe, checked at sending, app. closed ok'
+
 \echo 'ALL TESTS PASSED'
