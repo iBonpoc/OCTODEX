@@ -180,7 +180,15 @@ export interface ListCardProps {
   /** offline: change waits in the queue */
   queued?: boolean;
   testID?: string;
+  /**
+   * The ONLY way a card changes data (spec 06): a contact button is handed to the screen instead of being opened here,
+   * so the screen records it with existing store functions (lead: touchLead / call result) and opens the url itself (openContact).
+   */
+  onContact?: (a: ContactAction) => void;
 }
+
+/** open a contact action's url (call, SMS, map, email) */
+export const openContact = (a: ContactAction) => void Linking.openURL(a.url).catch(() => undefined);
 
 export function ListCard(p: ListCardProps) {
   const { c } = useTheme();
@@ -196,7 +204,7 @@ export function ListCard(p: ListCardProps) {
   const lines = layoutFacts(p.facts ?? {}, density, device);
   const edge = edgeTone([p.status?.tone, ...(p.signs ?? []).map((s) => s.tone)]);
   const btn = device === "phone" ? component.button.phone : component.button.md;
-  const open = (a: ContactAction) => () => void Linking.openURL(a.url).catch(() => undefined);
+  const open = (a: ContactAction) => () => (p.onContact ? p.onContact(a) : openContact(a));
   const a11yActions = actions.map((a) => ({ name: a.kind, label: t(`card.act.${a.kind}`, { v: a.value }) }));
 
   /** a single fact and the first of a pair sit under the centre of the lead; the second of a pair starts after the same gap */
@@ -351,7 +359,9 @@ function ListCardRow(p: ListCardProps) {
   const { c } = useTheme();
   const { t } = useI18n();
   const cols = rowColumns(p.columns ?? []);
-  const actions = contactActions(p.contact ?? {}, Platform.OS as OS).filter((a) => a.kind === "call" || a.kind === "map");
+  const all = contactActions(p.contact ?? {}, Platform.OS as OS);
+  // two buttons fit a row: call, then the card's main action if any (e.g. «Reply» on a new lead), otherwise the map
+  const actions = all.filter((a) => a.kind === "call" || (!p.action && a.kind === "map"));
   const edge = edgeTone([p.status?.tone, ...(p.signs ?? []).map((s) => s.tone)]);
   const btn = component.button.sm;
   return (
@@ -379,7 +389,8 @@ function ListCardRow(p: ListCardProps) {
       <Lead lead={p.lead} small />
       <View style={{ flex: 1.3, minWidth: 0, gap: spaceHalf.hair }}>
         <Txt w="semibold" color={c.ink}>{p.title}</Txt>
-        {p.when ? <Txt v="caption" color={c.mut}>{p.when}</Txt> : null}
+        {/* the document number is not a column: it sits under the name, with "when" */}
+        {p.facts?.num || p.when ? <Txt v="caption" color={c.mut}>{[p.facts?.num, p.when].filter(Boolean).join(" · ")}</Txt> : null}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1], marginTop: space[1] }}>
           {p.status ? <Chip tone={p.status.tone} label={p.status.label} soft onPress={p.status.onPress} a11y={t("card.changeStatus", { s: p.status.label })} /> : null}
           {(p.signs ?? []).map((s, i) => <Chip key={i} tone={s.tone} label={s.label} soft />)}
@@ -396,12 +407,19 @@ function ListCardRow(p: ListCardProps) {
       </View>
       <View style={{ width: ROW_ACTIONS_W, flexDirection: "row", justifyContent: "flex-end", gap: space[1] }}>
         {actions.map((a) => (
-          <Tap key={a.kind} visible={btn} onPress={() => void Linking.openURL(a.url).catch(() => undefined)} label={t(`card.act.${a.kind}`, { v: a.value })}>
+          <Tap key={a.kind} visible={btn} onPress={() => (p.onContact ? p.onContact(a) : openContact(a))} label={t(`card.act.${a.kind}`, { v: a.value })}>
             <View style={{ width: btn, height: btn, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}>
               <Icon name={a.icon} s={size.iconSm} color={c.ink} />
             </View>
           </Tap>
         ))}
+        {p.action ? (
+          <Tap visible={btn} onPress={p.action.onPress} label={p.action.label}>
+            <View style={{ width: btn, height: btn, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}>
+              <Icon name="send" s={size.iconSm} color={c.ink} />
+            </View>
+          </Tap>
+        ) : null}
       </View>
     </Press>
   );
