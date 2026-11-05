@@ -52,10 +52,16 @@ exports.run = async (h) => {
   await p.waitForTimeout(600);
   h.expect(p.url().includes(`/estimate/${other.id}`), `card opens the estimate (${p.url()})`);
 
-  // technician: no notices block
+  // technician: «Сегодня» is closed (route guard) — on his visits there is no notices block and no client amounts from it
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
+  // what the tech really sees: the open screen only (a tab he was sent away from stays mounted, hidden with aria-hidden)
+  const shownText = () => p.evaluate(() => { const c = document.body.cloneNode(true); c.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove()); return c.innerText || c.textContent; });
+  const shownCount = (sel) => p.evaluate((s) => [...document.querySelectorAll(s)].filter((n) => !n.closest('[aria-hidden="true"]')).length, sel);
   await h.go("/today");
-  h.expect((await cards.count()) === 0, "the technician sees no notices");
+  await p.waitForTimeout(500);
+  h.expect(new URL(p.url()).pathname === "/visits", `tech /today → /visits (got ${p.url()})`);
+  const techBody = await shownText();
+  h.expect((await shownCount('[data-testid="notice-card"]')) === 0 && !/Уведомления · \d+/.test(techBody) && !techBody.includes("$5,180"), "the technician sees no notices and no approved amount");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 
   // «Понятно» marks all read → the block is gone

@@ -3,7 +3,8 @@
  * - one card per person: name, roles and «Субподрядчик» / «Вы» as grey tags, phone, call / SMS (not on my own card);
  * - a tech: «Выездов сегодня: N» and the current visit's own status in words, read only (as in «Бригады сейчас»);
  * - «Приглашён» is a neutral status (was a yellow chip), no coloured edge on any card;
- * - the director opens «Сотрудник» on an employee; a subcontractor's card does not open; no «…»; edges aligned.
+ * - the director opens «Сотрудник» on an employee; a subcontractor's card does not open; no «…»; edges aligned;
+ * - the technician cannot open «Команда» (route guard): he lands on his visits, no team cards, no «Пригласить».
  */
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 
@@ -81,12 +82,12 @@ exports.run = async (h) => {
     h.expect(!new RegExp(`Сотрудник: ${sub.name}`).test(await h.text()), "a subcontractor's card does not open «Сотрудник»");
   }
 
-  // the technician: the same cards, nothing opens, no «Пригласить»
+  // the technician: «Команда» is the director's screen (route guard, #132) — he lands on his visits, no team, no invite
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/team");
-  h.expect((await cards.count()) === db.members.length, "the tech sees the team");
+  await p.waitForTimeout(500);
+  h.expect(new URL(p.url()).pathname === "/visits", `tech /team → /visits (got ${p.url()})`);
+  const techBody = await p.locator("body").innerText();
+  h.expect(!techBody.includes("Nina Invited") && !techBody.includes("Приглашён"), "the tech sees no team cards");
   h.expect((await p.getByRole("button", { name: "Пригласить", exact: true }).count()) === 0, "the tech cannot invite");
-  await cardOf(tech.name).click();
-  await p.waitForTimeout(400);
-  h.expect(!/Сотрудник: /.test(await h.text()), "the tech does not open «Сотрудник»");
 };

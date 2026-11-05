@@ -3,7 +3,7 @@
  * - «Today»: one card per client with all their reasons (a lead without a client — its own card), debt only from overdue invoices;
  *   reason rows open their record; «More» opens «Triage»;
  * - «Triage»: the rest of the queue are cards that open their record (they did not before);
- * - a technician sees no amounts; no «…».
+ * - a technician never gets «Сегодня» / «Требует внимания» (route guard → his visits, no reasons, no debts); no «…».
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -46,13 +46,18 @@ exports.run = async (h) => {
   }
   await h.shot("triage");
 
-  // technician: no amounts in «Требует внимания»
+  // technician: «Сегодня» and «Требует внимания» are closed (route guard) — he lands on his visits: no attention cards, no debts
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
-  await h.go("/today");
-  const body = await p.locator("body").innerText();
-  const i = body.indexOf("Требует внимания");
-  if (i > -1) {
-    const section = body.slice(i, body.indexOf("Бригада", i) > -1 ? body.indexOf("Бригада", i) : undefined);
-    h.expect(!/\$[\d,]+/.test(section), "tech sees no amounts in «Требует внимания»");
+  // what the tech really sees: the open screen only (a tab he was sent away from stays mounted, hidden with aria-hidden)
+  const shownText = () => p.evaluate(() => { const c = document.body.cloneNode(true); c.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove()); return c.innerText || c.textContent; });
+  const shownCount = (sel) => p.evaluate((s) => [...document.querySelectorAll(s)].filter((n) => !n.closest('[aria-hidden="true"]')).length, sel);
+  for (const path of ["/today", "/triage"]) {
+    await h.go(path);
+    await p.waitForTimeout(500);
+    h.expect(new URL(p.url()).pathname === "/visits", `tech ${path} → /visits (got ${p.url()})`);
+    const body = await shownText();
+    h.expect((await shownCount('[data-testid="list-card"]')) > 0, "the tech sees his visit cards");
+    h.expect(!body.includes("Требует внимания") && !/Причин: \d+/.test(body) && !/Должен/.test(body), `tech sees no «Требует внимания» and no debts after ${path}`);
+    h.expect((await shownCount('[data-testid="list-card-reason"]')) === 0, "no attention reason rows");
   }
 };
