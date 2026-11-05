@@ -18,8 +18,12 @@ exports.run = async (h) => {
   const up = (to) => p.getByRole("button", { name: `Назад: ${to}`, exact: true }).locator("visible=true").first();
   const roundBack = () => p.locator('[aria-label^="Назад"]:visible').filter({ has: p.locator("svg") }).filter({ hasNotText: /./ });
 
+  const focused = () => p.evaluate(() => { const e = document.activeElement; return e ? `${e.getAttribute("role") || e.tagName}|${e.getAttribute("aria-label") || ""}|${(e.textContent || "").slice(0, 60)}` : ""; });
+
   // Н1: the pill on an inner screen, "Клиенты" highlighted
   await h.go(`/client/${cust.id}`);
+  // Н3а: the screen title is a real heading (all widths)
+  h.expect((await p.locator('[role="heading"][aria-level="1"]:visible').count()) === 1, "title is a level-1 heading");
   if (!wide) {
     h.expect((await tab("Продажи").count()) === 0 && (await tab("Ещё").count()) === 0, "phone: no tab bar on an inner screen");
     h.expect((await roundBack().count()) === 0, "phone: no round back");
@@ -103,4 +107,25 @@ exports.run = async (h) => {
   await p.keyboard.press("Escape");
   await p.waitForTimeout(600);
   h.expect(p.url().includes("/client/edit"), `Esc in a field stays (${p.url()})`);
+
+  // Н3а: focus after a move. Down → the new screen's title; back up → where you left (the client's card in the list)
+  await h.go("/clients");
+  const card = p.getByRole("button", { name: new RegExp(cust.name) }).locator("visible=true").first();
+  await card.focus();
+  const cardLabel = await card.getAttribute("aria-label");
+  await p.keyboard.press("Enter");
+  await p.waitForTimeout(700);
+  h.expect(p.url().includes(`/client/${cust.id}`), `Enter opens the client (${p.url()})`);
+  let f = await focused();
+  h.expect(f.startsWith("heading|") && f.includes(cust.name), `focus on the new title (${f})`);
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(700);
+  f = await focused();
+  h.expect(/\/clients$/.test(p.url()) && f.includes(cardLabel || cust.name), `Esc back → focus on the card left (${f})`);
+  // nothing remembered (opened by a link): back up lands on the title
+  await h.go(`/job/${job.id}`);
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(700);
+  f = await focused();
+  h.expect(f.startsWith("heading|") && f.includes(ownerName), `no memory → title (${f})`);
 };

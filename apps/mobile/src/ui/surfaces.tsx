@@ -2,6 +2,7 @@ import { VersionBadge } from "@/features/version";
 import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { goTo } from "@/nav/go";
+import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { StackNavPill } from "@/nav/TabBar";
 import { isTabScreen } from "@/nav/roles";
 import { screenPath } from "./screenPath";
@@ -436,6 +437,26 @@ export function Screen({
       return () => document.removeEventListener("keydown", onKey);
     }, [up?.href]),
   );
+  // Focus after a move (spec 10, 1.7, Н3а; web only): coming back UP — where you left; coming DOWN — this screen's title.
+  const titleRef = useRef<ComponentRef<typeof View>>(null);
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "web" || typeof document === "undefined") return;
+      const back = takeFocus(pathname) as HTMLElement | undefined;
+      const frame = requestAnimationFrame(() => {
+        // the screen already put the focus somewhere (a field with autoFocus): leave it
+        const cur = document.activeElement as HTMLElement | null;
+        if (cur && cur !== document.body && cur.offsetParent !== null) return;
+        const target = back && back.isConnected && back.offsetParent !== null ? back : (titleRef.current as unknown as HTMLElement | null);
+        target?.focus?.({ preventScroll: !!back });
+      });
+      return () => {
+        cancelAnimationFrame(frame);
+        const el = document.activeElement;
+        rememberFocus(pathname, el && el !== document.body ? el : null);
+      };
+    }, [pathname]),
+  );
   const addressRow = hasUp ? (
           <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, gap: space[2] }}>
             {pinned && up ? (
@@ -492,9 +513,11 @@ export function Screen({
               Tablet/desktop: the same row is pinned above the scroll (addressBar). */}
           {pinned ? null : addressRow}
           <RowView style={{ gap: space[1] }}>
-            <T v="title" numberOfLines={2} style={{ flexShrink: 1 }}>
-              {title}
-            </T>
+            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={{ flexShrink: 1, outlineWidth: 0 }}>
+              <T v="title" numberOfLines={2}>
+                {title}
+              </T>
+            </View>
             {help ? <HelpButton title={title} text={help} /> : null}
           </RowView>
         </>
@@ -502,9 +525,11 @@ export function Screen({
         /* tab root: the big title is where you are */
         <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
           <RowView style={{ flex: 1, gap: space[1] }}>
-            <T v="display" numberOfLines={1} style={{ flexShrink: 1 }}>
-              {title}
-            </T>
+            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={{ flexShrink: 1, outlineWidth: 0 }}>
+              <T v="display" numberOfLines={1}>
+                {title}
+              </T>
+            </View>
             {help ? <HelpButton title={title} text={help} /> : null}
           </RowView>
           {right}
