@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { View, type LayoutChangeEvent } from "react-native";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
-import { useGlobalSearchParams, usePathname } from "expo-router";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
 import * as Haptics from "expo-haptics";
 import { component, motion, radius, size, space } from "@octo/design-tokens";
@@ -23,7 +22,10 @@ import { sectionTab } from "./hierarchy";
  * Active item gets the liquid accent fill (160ms stretch + 420ms settle).
  */
 export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
-  const current = state.routes[state.index]?.name as TabRoute | undefined;
+  const { role } = useStore();
+  const name = state.routes[state.index]?.name as TabRoute | undefined;
+  // a tab the role has no button for (Plan, Triage opened from «More») lights «More», where it was opened from
+  const current = name && !roleNav[role].some((n) => n.route === name) ? "more" : name;
   const go = (route: TabRoute) => {
     const r = state.routes.find((x) => x.name === route);
     if (r) navigateToTab(r.key);
@@ -36,10 +38,9 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
  * the section the screen belongs to is highlighted (spec 10, Н1). Drawn by Screen inside its pinned header, so on
  * iPad it slides with its screen (push, swipe back) and comes first in the keyboard order. Phone: none (iOS).
  */
-export function StackNavPill() {
+export function StackNavPill({ pathname, params }: { pathname: string; params: Record<string, string | string[] | undefined> }) {
+  // the screen's own address (from Screen), not the app's: during «back» the app's address still points at the card above
   const store = useStore();
-  const pathname = usePathname();
-  const params = useGlobalSearchParams();
   return <NavPill inline current={sectionTab(pathname, params, store.db, store.role)} onGo={(route) => goTo(`/${route}`)} />;
 }
 

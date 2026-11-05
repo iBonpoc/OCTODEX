@@ -42,6 +42,16 @@ exports.run = async (h) => {
   await p.waitForTimeout(600);
   h.expect(/\/inbox/.test(p.url()), `pill → Sales from a client (${p.url()})`);
 
+  // a tab opened from «More» (owner has no Plan/Triage in the bar): exactly one pill, the trail is not covered
+  for (const route of ["/plan", "/triage"]) {
+    await h.go(route);
+    h.expect((await tab("Ещё").count()) === 1, `${route}: exactly one pill`);
+    h.expect((await tab("Ещё").getAttribute("aria-selected")) === "true", `${route}: More highlighted`);
+    const pill = await tab("Ещё").boundingBox();
+    const crumb = await p.getByRole("button", { name: "Назад: Ещё", exact: true }).locator("visible=true").first().boundingBox();
+    h.expect(!!crumb && crumb.y >= pill.y + pill.height, `${route}: trail below the pill (${crumb && crumb.y} vs ${pill.y + pill.height})`);
+  }
+
   // estimate → Sales highlighted
   await h.go(`/estimate/${db.estimates[0].id}`);
   h.expect((await tab("Продажи").getAttribute("aria-selected")) === "true", "Sales highlighted on an estimate");

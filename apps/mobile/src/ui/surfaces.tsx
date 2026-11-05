@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState, type ComponentRef, type React
 import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { goTo } from "@/nav/go";
 import { StackNavPill } from "@/nav/TabBar";
+import { isTabScreen } from "@/nav/roles";
 import { screenPath } from "./screenPath";
 import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
@@ -404,6 +405,7 @@ export function Screen({
   // for a moment, and the list under it drew the card's header (screenPath.ts).
   const params = useLocalSearchParams();
   const pathname = screenPath(useRoute().name, params);
+  const routeName = useRoute().name;
   const nav = navContext(pathname, params, store.db, store.role);
   const up = nav.up;
   const hasUp = !!(up || back);
@@ -413,7 +415,8 @@ export function Screen({
   const goUp = () => (up ? go(up.href) : back?.());
   const { wide, device } = useDevice();
   /** tablet/desktop: the address bar is pinned above the scroll, with a round «‹» (spec 10, Н2) */
-  const pinned = wide && !!up;
+  // a tab opened from «More» (Plan, Triage…) has a parent too, but it lives in the tab navigator that already draws the pill
+  const pinned = wide && !!up && !isTabScreen(routeName);
   // Esc = one level up on the web (spec 10, Н3); only screens with a parent (not the client page /p, not sign-in).
   const goUpRef = useRef(goUp);
   goUpRef.current = goUp;
@@ -431,7 +434,7 @@ export function Screen({
       };
       document.addEventListener("keydown", onKey);
       return () => document.removeEventListener("keydown", onKey);
-    }, [up]),
+    }, [up?.href]),
   );
   const addressRow = hasUp ? (
           <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, gap: space[2] }}>
@@ -559,7 +562,7 @@ export function Screen({
           onLayout={(e) => setBarH(e.nativeEvent.layout.height)}
           style={{ paddingTop: navInsets.safeTop + space[3], paddingBottom: space[1], paddingHorizontal: space[4], gap: space[2], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
         >
-          <StackNavPill />
+          <StackNavPill pathname={pathname} params={params} />
           <View style={column}>{addressRow}</View>
         </View>
       ) : null}
