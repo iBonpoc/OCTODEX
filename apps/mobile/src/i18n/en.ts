@@ -1386,6 +1386,7 @@ export const en: Dict = {
   "card.tag.noReceipt": "No receipt",
   "card.noJob": "No job",
   "card.sign.loss": "At a loss",
+  "card.sign.overlap": "Overlap",
   "card.fig.cost": "Cost",
   "card.fig.margin": "Margin",
   "card.vendorTax": "tax {pct}%",

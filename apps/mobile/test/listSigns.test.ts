@@ -1,7 +1,8 @@
 /** Computed signs on list cards (map §5 «вычисляемые»): when each appears and when it goes away. */
 import { describe, expect, it } from "vitest";
 import { timing } from "@octo/design-tokens";
-import { MISSED_CALLS_MIN, estimateSigns, invoiceSigns, leadSigns, visitSigns } from "@/features/listSigns";
+import { MISSED_CALLS_MIN, estimateSigns, invoiceSigns, leadSigns, overlapSigns, visitSigns } from "@/features/listSigns";
+import type { Visit } from "@/data/types";
 
 const NOW = new Date("2026-11-05T15:00:00").getTime();
 const ago = (d: number) => new Date(NOW - d * 86_400_000).toISOString();
@@ -67,5 +68,32 @@ describe("visit: late (П3c, one rule — schedule.ts lateKind)", () => {
     expect(visitSigns(v({ step: "on_site" }), NOW)).toEqual([]);
     expect(visitSigns(v({ checklist: [{ id: "c", label: "x", done: true }] }), NOW)).toEqual([]);
     expect(visitSigns(v({ techId: null, assigneeIds: [] }), NOW)).toEqual([]);
+  });
+});
+
+describe("visit: «Накладка» (П3c п. 8, one rule — schedule.ts overlaps)", () => {
+  const at = (h: number) => new Date(Date.UTC(2026, 10, 6, h)).toISOString();
+  const mk = (id: string, h: number, p: Partial<Visit> = {}): Visit =>
+    ({ id, start: at(h), durationMin: 120, step: "scheduled", techId: "m1", checklist: [], photos: [], amountDueCents: 0, ...p }) as Visit;
+  it("appears on both visits of one person that cross", () => {
+    const a = mk("a", 9), b = mk("b", 10);
+    const db = { visits: [a, b] };
+    expect(overlapSigns(db, a)).toEqual([{ key: "card.sign.overlap", tone: "warn" }]);
+    expect(overlapSigns(db, b)).toEqual([{ key: "card.sign.overlap", tone: "warn" }]);
+  });
+  it("not for back-to-back visits, other people, or a lone visit", () => {
+    const a = mk("a", 9), b = mk("b", 11), c = mk("c", 10, { techId: "m2" });
+    const db = { visits: [a, b, c] };
+    expect(overlapSigns(db, a)).toEqual([]);
+    expect(overlapSigns(db, c)).toEqual([]);
+  });
+  it("counts every assignee (several techs on one visit)", () => {
+    const a = mk("a", 9, { techId: null, assigneeIds: ["m1", "m2"] }), c = mk("c", 10, { techId: "m2" });
+    expect(overlapSigns({ visits: [a, c] }, c)).toEqual([{ key: "card.sign.overlap", tone: "warn" }]);
+  });
+  it("goes away when the other visit is done or closed; a done visit has none", () => {
+    const a = mk("a", 9), b = mk("b", 10, { step: "done" }), c = mk("c", 10, { closed: true });
+    expect(overlapSigns({ visits: [a, b, c] }, a)).toEqual([]);
+    expect(overlapSigns({ visits: [a, b] }, b)).toEqual([]);
   });
 });
