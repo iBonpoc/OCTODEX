@@ -1,6 +1,6 @@
 /** Properties inside a client (wave C2, docs/specs/04 §3, §7.3). */
 import { describe, expect, it } from "vitest";
-import { canSaveProperty, canSeeGateCode, cityLine, placeOf, propertyMapQuery, propertyNow, propertyPeople, propertyTitle } from "../src/features/properties";
+import { canSaveProperty, canSeeGateCode, cityLine, placeOf, propertyMapQuery, propertyNow, propertyPeople, propertyTitle, splitGateCodes, withGateCodes } from "../src/features/properties";
 import { navContext } from "../src/nav/hierarchy";
 import { makeSeed } from "../src/data/seed";
 import type { DB, Property, Visit } from "../src/data/types";
@@ -26,37 +26,53 @@ describe("address lines", () => {
   });
 });
 
-describe("gate code: office always, a tech only on the visit day and the day before", () => {
-  const at = (days: number, h = 10) => {
-    const d = new Date(2026, 10, 5, h, 0);
-    d.setDate(d.getDate() + days);
-    return d.toISOString();
-  };
-  const NOW = new Date(2026, 10, 5, 8, 0).getTime();
-  const withVisit = (offset: number, step: Visit["step"] = "scheduled", techId = "m-ivan"): DB => {
+describe("gate code: office always, a tech only on the visit day and the day before (company time zone)", () => {
+  // now: Nov 5, 2026, 09:00 in Los Angeles (17:00 UTC)
+  const NOW = Date.parse("2026-11-05T17:00:00Z");
+  const withVisit = (startIso: string, extra: Partial<Visit> = {}, tz = "America/Los_Angeles"): DB => {
     const d = base();
     d.me = "m-ivan";
+    d.company = d.company ? { ...d.company, timezone: tz } : d.company;
     d.properties = [...d.properties, prop()];
     d.jobs = [...d.jobs, { id: "jX", propertyId: "pX", title: "Gate job", status: "scheduled", amountCents: 0 }];
-    d.visits = [...d.visits.filter((v) => !d.jobs.some((j) => j.id === v.jobId && j.propertyId === "pX")), { id: "vX", jobId: "jX", techId, start: at(offset), durationMin: 60, step, scope: [], checklist: [], photos: [], amountDueCents: 0 }];
+    d.visits = [...d.visits, { id: "vX", jobId: "jX", techId: "m-ivan", start: startIso, durationMin: 60, step: "scheduled", scope: [], checklist: [], photos: [], amountDueCents: 0, ...extra }];
     return d;
   };
   it("office roles see it any day", () => {
-    expect(canSeeGateCode(withVisit(5), "director", "pX", NOW)).toBe(true);
-    expect(canSeeGateCode(withVisit(5), "dispatcher", "pX", NOW)).toBe(true);
+    expect(canSeeGateCode(withVisit("2026-11-20T17:00:00Z"), "director", "pX", NOW)).toBe(true);
+    expect(canSeeGateCode(withVisit("2026-11-20T17:00:00Z"), "dispatcher", "pX", NOW)).toBe(true);
   });
-  it("tech: today and tomorrow yes; in 2 days, yesterday, finished, someone else's — no", () => {
-    expect(canSeeGateCode(withVisit(0), "tech", "pX", NOW)).toBe(true);
-    expect(canSeeGateCode(withVisit(1), "tech", "pX", NOW)).toBe(true);
-    expect(canSeeGateCode(withVisit(2), "tech", "pX", NOW)).toBe(false);
-    expect(canSeeGateCode(withVisit(-1), "tech", "pX", NOW)).toBe(false);
-    expect(canSeeGateCode(withVisit(0, "paid"), "tech", "pX", NOW)).toBe(false);
-    expect(canSeeGateCode(withVisit(0, "scheduled", "m-other"), "tech", "pX", NOW)).toBe(false);
+  it("tech: today and tomorrow yes; the day after, yesterday — no", () => {
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z"), "tech", "pX", NOW)).toBe(true); // today 14:00
+    expect(canSeeGateCode(withVisit("2026-11-07T06:30:00Z"), "tech", "pX", NOW)).toBe(true); // tomorrow 22:30 LA (already Nov 7 in UTC)
+    expect(canSeeGateCode(withVisit("2026-11-07T17:00:00Z"), "tech", "pX", NOW)).toBe(false); // +2 days
+    expect(canSeeGateCode(withVisit("2026-11-04T17:00:00Z"), "tech", "pX", NOW)).toBe(false); // yesterday
   });
-  it("a visit late tomorrow evening still counts as tomorrow", () => {
-    const d = withVisit(1);
-    d.visits = d.visits.map((v) => (v.id === "vX" ? { ...v, start: at(1, 23) } : v));
-    expect(canSeeGateCode(d, "tech", "pX", NOW)).toBe(true);
+  it("tech: a visit that is over, someone else's, or of a finished job — no", () => {
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { step: "paid" }), "tech", "pX", NOW)).toBe(false);
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { closed: true }), "tech", "pX", NOW)).toBe(false);
+    expect(canSeeGateCode(withVisit("2026-11-05T22:00:00Z", { techId: "m-other" }), "tech", "pX", NOW)).toBe(false);
+    const done = withVisit("2026-11-05T22:00:00Z");
+    done.jobs = done.jobs.map((j) => (j.id === "jX" ? { ...j, status: "done" } : j));
+    expect(canSeeGateCode(done, "tech", "pX", NOW)).toBe(false);
+  });
+  it("by the company's time zone, not the phone's: 00:30 today far ahead of UTC is still today", () => {
+    // Kiritimati is UTC+14: now there it is Nov 6, 07:00; a visit at 00:30 Nov 6 local = Nov 5, 10:30 UTC
+    expect(canSeeGateCode(withVisit("2026-11-05T10:30:00Z", {}, "Pacific/Kiritimati"), "tech", "pX", NOW)).toBe(true);
+    // 12 hours behind UTC (now Nov 5, 05:00 there) the same moment was yesterday; 22:30 tonight there is today
+    expect(canSeeGateCode(withVisit("2026-11-05T10:30:00Z", {}, "Etc/GMT+12"), "tech", "pX", NOW)).toBe(false);
+    expect(canSeeGateCode(withVisit("2026-11-06T10:30:00Z", {}, "Etc/GMT+12"), "tech", "pX", NOW)).toBe(true);
+  });
+});
+
+describe("gate codes never reach the cache on the phone", () => {
+  it("split keeps them apart and join puts them back", () => {
+    const d = base();
+    d.properties = d.properties.map((p) => (p.id === "p1" ? { ...p, gateCode: "#1234" } : p));
+    const { db, codes } = splitGateCodes(d);
+    expect(codes).toEqual({ p1: "#1234" });
+    expect(JSON.stringify(db)).not.toContain("#1234");
+    expect(withGateCodes(db, codes).properties.find((p) => p.id === "p1")?.gateCode).toBe("#1234");
   });
 });
 

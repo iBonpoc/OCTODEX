@@ -39,20 +39,42 @@ export function propertyNow(db: DB, propertyId: string, now = Date.now()): Prope
   return { estimates, jobs, nextVisit };
 }
 
-/** Local calendar day number of a moment (the device's time zone, which is the company's for the field crew). */
-const dayNo = (t: number) => {
-  const d = new Date(t);
-  return Math.floor(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) / 86_400_000);
-};
+/** Calendar day number of a moment in a time zone (the company's: the server decides by it too). */
+export function dayIn(t: number, timeZone: string): number {
+  let parts: Intl.DateTimeFormatPart[];
+  try {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date(t));
+  } catch {
+    parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date(t));
+  }
+  const n = (k: string) => Number(parts.find((p) => p.type === k)?.value ?? 0);
+  return Math.floor(Date.UTC(n("year"), n("month") - 1, n("day")) / 86_400_000);
+}
 /**
  * May this person see the gate code? The office always; a tech only on the day of a visit of theirs at the property
- * or the day before (the same rule as app.can_see_gate_code on the server, which decides in the cloud).
+ * or the day before, by the company's time zone, and not for a visit that is over (paid, completed, no-show).
+ * The same rule as app.can_see_gate_code on the server, which decides in the cloud.
  */
 export function canSeeGateCode(db: DB, role: Role, propertyId: string, now = Date.now()): boolean {
   if (role !== "tech") return true;
-  const jobIds = new Set(db.jobs.filter((j) => j.propertyId === propertyId).map((j) => j.id));
-  const today = dayNo(now);
-  return db.visits.some((v) => jobIds.has(v.jobId) && v.techId === db.me && v.step !== "paid" && [today, today + 1].includes(dayNo(new Date(v.start).getTime())));
+  const tz = db.company?.timezone || "America/Los_Angeles";
+  const jobIds = new Set(db.jobs.filter((j) => j.propertyId === propertyId && j.status !== "done").map((j) => j.id));
+  const today = dayIn(now, tz);
+  return db.visits.some(
+    (v) => jobIds.has(v.jobId) && v.techId === db.me && v.step !== "paid" && !v.closed && [today, today + 1].includes(dayIn(new Date(v.start).getTime(), tz)),
+  );
+}
+
+/** Gate codes stay in memory in the cloud (never in the cache on the phone): the db without them, and the codes apart. */
+export function splitGateCodes(db: DB): { db: DB; codes: Record<string, string> } {
+  const codes: Record<string, string> = {};
+  for (const p of db.properties) if (p.gateCode) codes[p.id] = p.gateCode;
+  if (!Object.keys(codes).length) return { db, codes };
+  return { db: { ...db, properties: db.properties.map(({ gateCode: _g, ...p }) => p) }, codes };
+}
+export function withGateCodes(db: DB, codes: Record<string, string>): DB {
+  if (!Object.keys(codes).length) return db;
+  return { ...db, properties: db.properties.map((p) => (codes[p.id] ? { ...p, gateCode: codes[p.id] } : p)) };
 }
 
 /** People of a property: the client's people it links to (a removed person drops out). */

@@ -20,7 +20,7 @@ const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
-import { cityLine } from "@/features/properties";
+import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
@@ -224,8 +224,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         Array.isArray(v?.db?.visits) && Array.isArray(v?.db?.expenses) && (mode === "cloud" ? v.day === "cloud" : v.day === todayKey()),
     },
   );
-  const db = useMemo(() => normalizeDB(saved.db, mode), [saved.db, mode]);
-  const setDb = useCallback((next: DB) => setSaved({ day: mode === "cloud" ? "cloud" : todayKey(), db: next }), [setSaved, mode]);
+  // gate codes (C2) stay in memory in the cloud: never written to the cache on the phone (security review of #62)
+  const [gateCodes, setGateCodes] = useState<Record<string, string>>({});
+  const db = useMemo(() => {
+    const d = normalizeDB(saved.db, mode);
+    return mode === "cloud" ? withGateCodes(d, gateCodes) : d;
+  }, [saved.db, mode, gateCodes]);
+  const setDb = useCallback(
+    (next: DB) => {
+      if (mode !== "cloud") return setSaved({ day: todayKey(), db: next });
+      const { db: bare, codes } = splitGateCodes(next);
+      setGateCodes(codes);
+      setSaved({ day: "cloud", db: bare });
+    },
+    [setSaved, mode],
+  );
   const [role, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "tech");
   const [online, setOnlineState] = useState(true);
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);

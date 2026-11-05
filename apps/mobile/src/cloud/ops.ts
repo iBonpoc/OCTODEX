@@ -487,7 +487,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "property.gate":
       // kept apart from the property (migration 20261105160000): the office writes it, a tech reads it only on the visit days
-      return run(supabase.from("property_secrets").upsert({ property_id: op.id, company_id: c, gate_code: op.code || null }, { onConflict: "property_id" }));
+      return run(supabase.from("property_secrets").upsert({ property_id: op.id, company_id: c, gate_code: op.code || null, deleted_at: null }, { onConflict: "property_id" }));
     case "property.update": {
       const patch: Record<string, string> = {};
       if (op.address !== undefined) patch.address_line1 = op.address || "—";

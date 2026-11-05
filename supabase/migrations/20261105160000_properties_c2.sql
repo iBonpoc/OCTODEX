@@ -42,8 +42,9 @@ $$;
 
 alter table public.property_secrets enable row level security;
 alter table public.property_secrets force row level security;
+-- the office also sees removed codes (a soft delete must stay visible to whoever made it); a tech only live ones
 create policy property_secrets_select on public.property_secrets for select to authenticated
-  using (deleted_at is null and app.can_see_gate_code(property_id));
+  using (app.is_staff(company_id) or (deleted_at is null and app.can_see_gate_code(property_id)));
 create policy property_secrets_insert on public.property_secrets for insert to authenticated
   with check (app.is_staff(company_id));
 create policy property_secrets_update on public.property_secrets for update to authenticated

@@ -158,6 +158,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
           .map((f) => ({ id: s(f.id), kind: f.stage === "after" ? "after" : "before", uri: undefined })),
         amountDueCents: n(job?.contract_total_cents),
         signature: (v.signature_svg as string | null) ?? undefined,
+        closed: v.status === "completed" || v.status === "no_show" || undefined,
         payment: pay ? { method: s(pay.method) as Visit["payment"] extends infer P ? P extends { method: infer M } ? M : never : never, amountCents: n(pay.amount_cents), at: s(pay.received_at) } : undefined,
       };
     });

@@ -156,6 +156,8 @@ export interface Visit {
   signature?: string; // SVG path data
   payment?: { method: PaymentMethod; amountCents: number; at: string };
   late?: boolean;
+  /** the visit ended without the client's payment step: completed or no-show on the server (cancelled visits are not loaded) */
+  closed?: boolean;
 }
 
 /**
