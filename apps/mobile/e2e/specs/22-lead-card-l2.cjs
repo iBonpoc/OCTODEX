@@ -39,7 +39,8 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);
   let db = await h.db();
   tom = db.leads.find((x) => x.id === tom.id);
-  const visit = db.visits.find((v) => db.jobs.find((j) => j.id === v.jobId && j.propertyId === tom.propertyId && j.status === "estimate"));
+  // S4: an inspection is a visit of the lead at its property, without a job (docs/specs/03 §1)
+  const visit = db.visits.find((v) => v.leadId === tom.id && !v.jobId && v.propertyId === tom.propertyId);
   h.expect(tom.status === "booked", "lead → estimate visit booked (S4)");
   h.expect(visit && visit.techId === "m-ivan" && new Date(visit.start).getHours() === 10 && new Date(visit.start).getMinutes() === 30, `visit with the picked tech and time: ${visit && visit.start}`);
   h.expect(visit.scope.includes("Dog in the yard"), "note for the tech");
@@ -66,7 +67,7 @@ exports.run = async (h) => {
     n.lastOutboundAt = new Date(Date.now() - 20 * 86400000).toISOString();
     n.remindedAt = new Date(Date.now() - 15 * 86400000).toISOString();
     raw.db.tasks = raw.db.tasks.filter((t) => t.subjectId !== nid);
-    raw.db.visits = raw.db.visits.filter((v) => !raw.db.jobs.some((j) => j.id === v.jobId && j.propertyId === n.propertyId));
+    raw.db.visits = raw.db.visits.filter((v) => v.leadId !== n.id && v.propertyId !== n.propertyId && !raw.db.jobs.some((j) => j.id === v.jobId && j.propertyId === n.propertyId));
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
   }, nina.id);
   await h.go(`/lead/${nina.id}`);
@@ -96,7 +97,7 @@ exports.run = async (h) => {
   angela = db.leads.find((x) => x.name === "Angela Rossi");
   const prospect = db.customers.find((c) => c.id === angela.customerId);
   h.expect(angela.status === "booked" && prospect && prospect.status === "prospect" && db.customers.length === c0 + 1, "booking a lead without a client makes one prospect");
-  const visitsOf = (d) => d.visits.filter((v) => d.jobs.some((j) => j.id === v.jobId && j.propertyId === angela.propertyId && j.status === "estimate")).length;
+  const visitsOf = (d) => d.visits.filter((v) => v.leadId === angela.id).length;
   h.expect(visitsOf(db) === 1, "one visit");
   await bookAngela();
   db = await h.db();

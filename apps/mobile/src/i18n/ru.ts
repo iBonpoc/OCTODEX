@@ -39,6 +39,9 @@ export const ru = {
   "st.working": "Идёт работа",
   "st.signed": "Подписано",
   "st.paid": "Оплачено",
+  // visits (docs/specs/03 §4.1)
+  "st.done": "Готово",
+  "st.cancelled": "Отменён",
   "st.overdue": "Просрочено",
   "st.new": "Новый",
   "st.replied": "На связи",

@@ -92,7 +92,8 @@
 | S2 | Первый ответ | человек | `new` → `replied` (только если дозвонились) | e2e:15-lead-full, db:T14, db:T15, unit:leadTurn | ✅ | — |
 | S3 | Лид → потенциальный клиент | система при осмотре или смете | — → `Customer.prospect`, `Property`, `Contact` | e2e:18-handoffs-lead-to-deposit, e2e:04-lead-funnel, e2e:24-lead-people, unit:leadPeople, db:T17 | ◐ | люди лида со всеми телефонами переходят клиенту (совпал телефон или email — сливаются, без дублей; триггер `app.move_lead_people`, то же правило в приложении `mergePeople`); клиента пока создаёт приложение, серверной функции `lead_to_client` нет |
 | S3c | Клиент → объекты (C2) | Д / офис | — → `Property` (адрес, ярлык, тип), доступ, код ворот (`property_secrets`), люди объекта | e2e:27-properties, unit:properties, db:T20 | ✅ | код ворот мастеру — только в день визита и накануне (`app.can_see_gate_code`, то же правило в `canSeeGateCode`) |
-| S4 | Лид → осмотр | человек | `replied` → `booked`; — → `Job(estimate)`, `Visit` | — | ✚ | весь стык |
+| S4 | Лид → осмотр | Д/Дп | `new` / `replied` → `booked`; — → `Visit(kind=inspection, leadId, propertyId)`, работы нет (`docs/specs/03` §1) | e2e:40-book-inspection, unit:schedule, db:T32 | ◐ | мастер видит осмотр (T33 в базе, на экране — П2) |
+| S4a | Осмотр перенесён / отменён | Д/Дп | перенос — статус тот же; отмена с причиной; отменён последний открытый осмотр → лид `booked` → `replied` | unit:schedule, db:T32 | ◐ | шторки «Перенести» / «Отменить» — волна П2 (e2e 41) |
 | S5 | Лид/Клиент → смета | человек | — → `Estimate.draft (leadId, propertyId)` | e2e:18-handoffs-lead-to-deposit, e2e:01-estimate-builder | ✅ | — |
 | S6 | Смета отправлена | человек | смета `draft` → `sent`; лид → `estimate_sent` | e2e:18-handoffs-lead-to-deposit, db:T8 | ✅ | — |
 | S7 | Клиент открыл | К | смета `sent` → `viewed` (в базе), счётчик | db:T8 | ◐ | в приложении нет отметки «открыл» в демо-режиме и счётчика «открыл N раз» |
@@ -100,12 +101,13 @@
 | S8b | Подпись компании | сотрудник своим именем (право по умолчанию у всех, кроме субподрядчика; снимает директор) | смета `awaiting_countersign` → `approved` (только через `countersign_estimate`); лид `won (approval)`, клиент `active`; — → работа «назначить дату», счёт на депозит | e2e:18-handoffs-lead-to-deposit, e2e:02-sign-deposit-card, db:T23, db:T10, db:T11, db:T18, unit:countersign, unit:estimateStatus | ✅ | сохранённая подпись, шторка, экран «Моя подпись» — волна E2b; копия на почту — шаг «Почта П1» |
 | S8a | Ручная победа | Д | лид `won (manual)`; клиент `active` | e2e:04-lead-funnel, db:T10 | ◐ | клиент `active` |
 | S9 | Работа → расписание | Д/Дп | `unscheduled` → `scheduled`; — → `Visit` | e2e:05-schedule-job | ✅ | время и длительность |
-| S10 | Визит выполнен | М | шаги визита; работа `in_progress` → `done` | e2e:12-tech-day, db:T4 | ◐ | работа → `done` |
+| S9a | Выезд работы перенесён / отменён | Д/Дп | перенос — статус тот же; отменён последний открытый выезд → работа `scheduled` → `unscheduled` («ждёт даты») | unit:schedule, db:T32 | ◐ | шторки — волна П2 (e2e 41) |
+| S10 | Визит выполнен | М | шаги визита; работа `in_progress` → `done`; осмотр: на месте → «Готово» (`done`), без подписи и оплаты | e2e:12-tech-day, e2e:40-book-inspection, unit:schedule, db:T4 | ◐ | работа → `done` |
 | S11 | Работа → счёт | Д / система | — → `Invoice (progress/final)` | e2e:03-invoices-partial, engine:contract | ◐ | счёт за этап на экране |
 | S12 | Оплата → квитанция | К / Д | баланс ↓; — → `Payment`, квитанция | e2e:03-invoices-partial, db:T13, db:T11, db:T12, db:T5 | ✅ | — |
 | S13 | Закрытие лида | человек | открыт → `lost`/`declined`; «открыть снова» → `replied` | e2e:15-lead-full, e2e:04-lead-funnel, db:T14 | ✅ | — |
 | S14 | Всё → отчёт | система (чтение) | — | — | ✚ | весь стык |
-| S15 | Всё → «Сегодня» / «Разбор» | система (чтение) | — | unit:attention, unit:universalEstimate, e2e:11-today-funnel | ✅ | — |
+| S15 | Всё → «Сегодня» / «Разбор» | система (чтение) | — | unit:attention, unit:universalEstimate, e2e:11-today-funnel | ◐ | «Осмотр прошёл — сметы нет» (`docs/specs/03` §5.2) — волна П2 |
 | S16 | Направление: лид → смета → работа | человек / система при создании | `service_category_id` пуст → берётся с предыдущего шага (компания → лид → смета → работа), меняется вручную, назад и вперёд не идёт (`docs/specs/11-trade.md` §1) | unit:serviceCategories, db:T27, e2e:37-service-categories | ◐ | строка на экране сметы (T2, чат смет), чип на карточках (T3), отчёт по направлениям (T4) |
 
 Правила стыков:
@@ -127,8 +129,8 @@
 | Lead | `new` `replied` `booked` `estimate_sent` `won` `lost` `declined`; архив — `archivedAt` | new, contacted, qualified, inspection_scheduled, estimate_sent, won, lost, declined, archived | человек + авто (S2, S4, S6, S8) |
 | Customer | `prospect` `active` `archived` `do_not_service` | prospect, active, archived, do_not_service | авто (S3, S8); архив и «не обслуживаем» — человек (`docs/specs/04` §4) |
 | Estimate | `draft` `sent` `awaiting_countersign` `approved` `declined` | draft, sent, viewed, awaiting_countersign, approved, declined, expired, cancelled_by_customer | человек, клиент, сотрудник за компанию (S8b); правка после отправки — новая версия, `draft` (`docs/specs/07` §4) |
-| Job | `lead` `estimate` `unscheduled` `scheduled` `in_progress` `done` | draft, scheduled, in_progress, on_hold, completed, closed, cancelled | авто + человек |
-| Visit | `scheduled` `en_route` `on_site` `working` `signed` `paid` | scheduled, en_route, on_site, completed, cancelled, no_show | монтажник |
+| Job | `unscheduled` `scheduled` `in_progress` `done` | draft, scheduled, in_progress, on_hold, completed, closed, cancelled | авто + человек |
+| Visit | `scheduled` `en_route` `on_site` `working` `signed` `paid` `done` `cancelled` | scheduled, en_route, on_site, completed, cancelled, no_show (`done` ↔ completed осмотра; `cancelled` ↔ cancelled и no_show, различает причина) | монтажник; отмена и перенос — офис |
 | Invoice | вычисляется из баланса движка | status: draft, sent, void; payment_status: unpaid, partially_paid, paid, refunded | — |
 | Payment | запись (отмена — отдельная запись) | pending, succeeded, failed, partially_refunded, refunded, returned, voided | человек, клиент |
 | Task | открыта / выполнена (`doneAt`) | — | человек |
@@ -195,8 +197,8 @@
 |---|---|---|
 | PRD 02 ↔ код | статусы лида `contacted/qualified/inspection_scheduled` ↔ `replied/booked` | Лиды |
 | PRD ↔ код | роли owner/admin/tech ↔ director/dispatcher/tech | Лиды (договориться об именах) |
-| `04` ↔ код | `JobStatus` содержит `lead` и `estimate` — работа как лид дублирует Lead | Работы |
-| код | «Записать осмотр» ставит завтра 10:00 без выбора | Осмотр (волна L2) |
+| `04` ↔ код | ~~`JobStatus` содержит `lead` и `estimate` — работа как лид дублирует Lead~~ — закрыто волной П1 (`docs/specs/03`): осмотр — выезд без работы | Работы |
+| код | ~~«Записать осмотр» ставит завтра 10:00 без выбора~~ — закрыто волной L2 (шторка с датой, временем, длительностью и мастером) | Осмотр (волна L2) |
 | код | пороги времени в токенах дизайна | Лиды (L1) |
 | код | Invoice без статуса — проверить, что все экраны берут его из движка | Счета |
 | `05` | сценарии называют экраны, которых нет (канбан, «Проверить») | при углублении каждого шага |

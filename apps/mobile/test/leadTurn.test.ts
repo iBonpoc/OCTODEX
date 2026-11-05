@@ -102,10 +102,10 @@ describe("review findings of wave L1", () => {
   });
   it("booked: a past estimate visit with no estimate becomes overdue; a future one is calm", () => {
     const d0 = makeSeed();
-    const job = { id: "jx", propertyId: "px", title: "Estimate visit", status: "estimate" as const, amountCents: 0 };
-    const visit = (start: string) => ({ ...d0.visits[0]!, id: "vx", jobId: "jx", start });
+    // an inspection: a visit of the lead at the property, no job (docs/specs/03 §3.1)
+    const visit = (start: string) => ({ ...d0.visits[0]!, id: "vx", jobId: undefined, leadId: "L", propertyId: "px", kind: "inspection" as const, start });
     const r = (start: string) => {
-      const { d, l } = db({ status: "booked", propertyId: "px" }, { jobs: [job], visits: [visit(start)] });
+      const { d, l } = db({ status: "booked", propertyId: "px" }, { jobs: [], visits: [visit(start)] });
       return leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW);
     };
     expect(r(days(10))).toMatchObject({ kind: "step", status: "bad" });
@@ -120,9 +120,8 @@ describe("review findings of wave L1", () => {
   });
   it("a planned estimate visit is the step for any open lead (also after the estimate went out)", () => {
     const d0 = makeSeed();
-    const job = { id: "jx", propertyId: "px", title: "Estimate visit", status: "estimate" as const, amountCents: 0 };
-    const visit = { ...d0.visits[0]!, id: "vx", jobId: "jx", start: new Date(NOW + 2 * 86_400_000).toISOString() };
-    const { d, l } = db({ status: "estimate_sent", propertyId: "px", lastOutboundAt: days(10) }, { jobs: [job], visits: [visit] });
+    const visit = { ...d0.visits[0]!, id: "vx", jobId: undefined, leadId: "L", propertyId: "px", kind: "inspection" as const, start: new Date(NOW + 2 * 86_400_000).toISOString() };
+    const { d, l } = db({ status: "estimate_sent", propertyId: "px", lastOutboundAt: days(10) }, { jobs: [], visits: [visit] });
     expect(leadTurn(d, l, LEAD_SETTINGS_DEFAULT, NOW)).toMatchObject({ kind: "step", status: "neutral" });
   });
   it("a task due earlier today is overdue", () => {

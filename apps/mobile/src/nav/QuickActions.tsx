@@ -1,4 +1,5 @@
 import { View } from "react-native";
+import { isOpenVisit } from "@/features/schedule";
 import * as ImagePicker from "expo-image-picker";
 import { router } from "expo-router";
 import { radius, space, component, size } from "@octo/design-tokens";
@@ -35,7 +36,7 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
     onClose();
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 }).catch(() => null);
     if (!res || res.canceled) return;
-    const visit = db.visits.find((v) => v.techId === db.me && isToday(v.start) && v.step !== "paid");
+    const visit = db.visits.find((v) => v.techId === db.me && isToday(v.start) && isOpenVisit(v));
     if (!visit) return;
     const kind = visit.step === "working" || visit.step === "signed" ? "after" : "before";
     const undo = addPhoto(visit.id, kind, res.assets[0]?.uri);
@@ -44,7 +45,7 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
 
   const newEstimate = () => {
     onClose();
-    const visit = db.visits.find((v) => v.techId === db.me && isToday(v.start) && v.step !== "paid");
+    const visit = db.visits.find((v) => v.techId === db.me && isToday(v.start) && isOpenVisit(v));
     const job = db.jobs.find((j) => j.id === visit?.jobId);
     const prop = db.properties.find((p) => p.id === job?.propertyId);
     router.push(prop ? `/estimate/new?customerId=${prop.customerId}&propertyId=${prop.id}` : "/estimate/new");
