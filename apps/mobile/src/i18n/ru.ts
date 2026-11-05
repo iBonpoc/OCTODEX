@@ -22,6 +22,7 @@ export const ru = {
   "nav.goTo": "Перейти: {to}",
   "nav.trail": "Где вы",
   "nav.hiddenLevels": "Скрытые уровни",
+  "nav.escHint": "на уровень вверх",
 
   "quick.title": "Быстрые действия",
   "quick.voice": "Голосовая заметка",

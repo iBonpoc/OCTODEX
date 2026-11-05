@@ -23,6 +23,7 @@ export const es: Dict = {
   "nav.goTo": "Ir a {to}",
   "nav.trail": "Usted está aquí",
   "nav.hiddenLevels": "Niveles ocultos",
+  "nav.escHint": "subir un nivel",
 
   "quick.title": "Acciones rápidas",
   "quick.voice": "Nota de voz",
