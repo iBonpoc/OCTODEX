@@ -28,6 +28,8 @@ export default function Visits() {
   /** a visit card: read-only status (steps change on the visit screen); contact buttons only open the phone and the map */
   const visitCard = (v: Visit, isFocus: boolean) => {
     const { job, property, customer } = visitContext(db, v);
+    // an inspection has no job and maybe no client yet: the lead's name and request (docs/specs/03 §3.1)
+    const lead = v.leadId ? db.leads.find((l) => l.id === v.leadId) : undefined;
     const st = visitStatus(v);
     const [hm, ampm] = time(v.start).split(" ");
     const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
@@ -36,15 +38,15 @@ export default function Visits() {
     return (
       <ListCard
         key={v.id}
-        title={customer?.name ?? "—"}
+        title={customer?.name ?? lead?.name ?? "—"}
         when={`${later.includes(v) ? `${day(v.start)} · ` : ""}${time(v.start)} – ${time(end)}`}
         lead={{ kind: "time", top: hm ?? "", bottom: ampm ?? "" }}
         value={v.amountDueCents > 0 ? money(v.amountDueCents) : undefined}
         valueLabel={v.amountDueCents > 0 ? t("card.val.toPay") : undefined}
         status={{ tone: st.status, label: t(st.label) }}
         tags={[...(v.checklist.length ? [t("vcard.checks", { done, n: v.checklist.length })] : []), ...(v.photos.length ? [t("vcard.photos", { n: v.photos.length })] : [])]}
-        facts={{ phone: customer?.phone, addr, work: job?.title }}
-        contact={{ phone: customer?.phone, addr }}
+        facts={{ phone: customer?.phone ?? lead?.phone, addr, work: job?.title ?? lead?.service }}
+        contact={{ phone: customer?.phone ?? lead?.phone, addr }}
         // the visit in progress / next one: «Open visit» inside the card (secondary), no full-width button
         action={isFocus ? { label: t("tday.open"), icon: "route", onPress: () => router.push(`/visit/${v.id}`) } : undefined}
         onPress={() => router.push(`/visit/${v.id}`)}
