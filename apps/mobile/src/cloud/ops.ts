@@ -126,6 +126,7 @@ export type Op =
     }
   | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string }
   | { k: "customer.people"; id: string; people: Person[] }
+  | { k: "lead.people"; id: string; people: Person[] }
   | { k: "customer.tags"; id: string; tagIds: string[] }
   | { k: "customer.status"; id: string; status: CustomerStatus; reason?: string }
   | { k: "tag.save"; tag: Tag }
@@ -315,6 +316,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "assigned", meta: { to: op.userId } }));
     case "lead.cost":
       return run(supabase.from("lead_costs").upsert({ lead_id: op.leadId, company_id: c, cost_cents: op.cents }, { onConflict: "lead_id" }));
+    case "lead.people":
+      // all people of a lead in one transaction (migration 20261105120000); the lead caches the main phone / email
+      return run(supabase.rpc("save_lead_people", { p_lead_id: op.id, p_people: op.people }));
+    // older queued ops (before L2 part 2): the migration copied lead_contacts once, so these still land somewhere readable
     case "lead.contactSave":
       return run(
         supabase.from("lead_contacts").upsert(

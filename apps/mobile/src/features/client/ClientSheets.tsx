@@ -21,24 +21,46 @@ const LABELS: PhoneLabel[] = ["mobile", "home", "work", "other"];
 
 export function PeopleSheet({ visible, customer, onClose }: { visible: boolean; customer: Customer; onClose: () => void }) {
   const store = useStore();
+  return <PeopleEditSheet visible={visible} mainName={customer.name} people={peopleOf(customer)} onSave={(p) => store.saveCustomerPeople(customer.id, p)} onClose={onClose} />;
+}
+
+/**
+ * People of a client or a lead (one shape, docs/specs/04 §3.2 and docs/14 §2): the first is the client / lead itself
+ * (its name, role "main"); the others have a name and a role. Each has several phones and emails.
+ */
+export function PeopleEditSheet({
+  visible,
+  mainName,
+  people: initial,
+  onSave,
+  onClose,
+}: {
+  visible: boolean;
+  mainName: string;
+  people: Person[];
+  /** returns the undo for the toast */
+  onSave: (people: Person[]) => () => void;
+  onClose: () => void;
+}) {
   const { t } = useI18n();
   const toast = useToast();
-  const [people, setPeople] = useState<Person[]>(() => peopleOf(customer));
+  const [people, setPeople] = useState<Person[]>(initial);
   const [dirty, setDirty] = useState(false);
+  const key = JSON.stringify(initial);
   useEffect(() => {
     if (visible) {
-      setPeople(peopleOf(customer));
+      setPeople(JSON.parse(key) as Person[]);
       setDirty(false);
     }
-  }, [visible, customer]);
+  }, [visible, key]);
   const edit = (i: number, fn: (p: Person) => Person) => {
     setPeople((ps) => ps.map((p, k) => (k === i ? fn(p) : p)));
     setDirty(true);
   };
   const save = () => {
-    // the main contact is the client itself: same name
-    const out = people.map((p, i) => (i === 0 ? { ...p, name: customer.name, role: "main" as const } : p));
-    toast.show(t("person.saved"), store.saveCustomerPeople(customer.id, out));
+    // the main contact is the client / lead itself: same name
+    const out = people.map((p, i) => (i === 0 ? { ...p, name: mainName, role: "main" as const } : p));
+    toast.show(t("person.saved"), onSave(out));
     setDirty(false);
     onClose();
   };

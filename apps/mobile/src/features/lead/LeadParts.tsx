@@ -7,7 +7,9 @@ import { Linking, View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import type { ContactRole, ContactWay, Lead, LeadContact, LostReason, PhoneLabel, Task, Timeframe } from "@/data/types";
+import type { ContactWay, Lead, LostReason, Person, Task, Timeframe } from "@/data/types";
+import { peopleForLead } from "@/data/people";
+import { PeopleEditSheet } from "@/features/client/ClientSheets";
 import { useI18n, type DictKey } from "@/i18n";
 import { Labeled, MoneyField } from "@/features/fields";
 import { CatalogPicker } from "@/features/estimatePickers";
@@ -72,7 +74,13 @@ export function LeadOverview({ l }: { l: Lead }) {
   const { db, role } = store;
   const { t, money, day } = useI18n();
   const [edit, setEdit] = useState<EditKind>(null);
-  const [contact, setContact] = useState<LeadContact | null>(null);
+  const [peopleOpen, setPeopleOpen] = useState(false);
+  // the lead's people, or the client's once the lead has one (S3); a tech who cannot open the client does not edit them
+  const people = peopleForLead(db, l);
+  const main = people[0];
+  const others = people.slice(1);
+  const client = l.customerId ? db.customers.find((c) => c.id === l.customerId) : undefined;
+  const canEditPeople = !l.customerId || (!!client && canSeeLeadCost(role));
   const src = sourceOf(db, l.sourceId);
   const assignee = db.members.find((m) => m.id === l.assigneeId);
   const item = db.catalog.find((x) => x.id === l.serviceItemId);
@@ -98,37 +106,49 @@ export function LeadOverview({ l }: { l: Lead }) {
     </RowView>
   );
 
+  /** every phone (type, "primary" when several) and email of a person */
+  const phoneRows = (p?: Person) =>
+    p ? (
+      <>
+        {p.phones.map((x, i) => (
+          <View key={`p${i}`}>{row("phone", x.number, [t(`phone.${x.label}` as DictKey), p.phones.length > 1 && x.primary ? t("person.primary") : ""].filter(Boolean).join(" · "))}</View>
+        ))}
+        {p.emails.map((x, i) => (
+          <View key={`e${i}`}>{row("mail", x.address, p.emails.length > 1 && x.primary ? t("person.primary") : undefined)}</View>
+        ))}
+      </>
+    ) : null;
+
   return (
     <View style={{ gap: space[3] }}>
-      <MissingBlock l={l} onAdd={setEdit} />
+      <MissingBlock l={l} onAdd={(k) => (k === "contact" && canEditPeople ? setPeopleOpen(true) : setEdit(k))} />
       <Card>
         {head(t("lead.sec.contact"), "contact")}
-        {row("user", l.name)}
-        {row("phone", l.phone, t("lead.phone.mobile"))}
-        {row("phone", l.phone2, l.phone2Label ? t(`lead.phone.${l.phone2Label}` as DictKey) : undefined)}
-        {row("mail", l.email)}
+        {row("user", l.name, l.customerId ? t("lead.peopleOfClient") : undefined)}
+        {phoneRows(main)}
         {l.preferredContact || l.language ? (
           <RowView style={{ flexWrap: "wrap" }}>
             {l.preferredContact ? <StatusChip status="neutral" label={t("lead.prefers", { way: t(`lead.way.${l.preferredContact}` as DictKey) })} soft /> : null}
             {l.language ? <StatusChip status="neutral" label={t("lead.lang", { lang: l.language.toUpperCase() })} soft /> : null}
           </RowView>
         ) : null}
+        {canEditPeople ? <Button label={t("lead.editPhones")} icon="pencil" size="sm" variant="secondary" onPress={() => setPeopleOpen(true)} /> : null}
       </Card>
 
       <View style={{ gap: space[2] }}>
         <SectionTitle
           title={t("lead.sec.people")}
-          right={<Button label={t("lead.addPerson")} icon="plus" size="sm" variant="ghost" onPress={() => setContact({ id: uid(), name: "", role: "spouse" })} />}
+          right={canEditPeople ? <Button label={t("lead.addPerson")} icon="plus" size="sm" variant="ghost" onPress={() => setPeopleOpen(true)} /> : undefined}
         />
-        {(l.contacts ?? []).length ? (
+        {others.length ? (
           <CardList>
-            {(l.contacts ?? []).map((c) => (
+            {others.map((p) => (
               <ItemCard
-                key={c.id}
-                title={c.name}
-                subtitle={[t(`lead.role.${c.role}` as DictKey), c.phone, c.email].filter(Boolean).join(" · ")}
+                key={p.id}
+                title={p.name || "—"}
+                subtitle={[t(`person.role.${p.role}` as DictKey), ...p.phones.map((x) => x.number), ...p.emails.map((x) => x.address)].join(" · ")}
                 left={<Icon name="user" />}
-                onPress={() => setContact(c)}
+                onPress={canEditPeople ? () => setPeopleOpen(true) : undefined}
               />
             ))}
           </CardList>
@@ -195,39 +215,28 @@ export function LeadOverview({ l }: { l: Lead }) {
           if (id !== l.sourceId) store.updateLead(l.id, { sourceId: id });
         }}
       />
-      <PersonSheet key={contact?.id ?? "none"} leadId={l.id} value={contact} onClose={() => setContact(null)} />
+      <PeopleEditSheet visible={peopleOpen} mainName={l.name} people={people} onSave={(p) => store.saveLeadPeople(l.id, p)} onClose={() => setPeopleOpen(false)} />
     </View>
   );
 }
 
+/** who the lead is and how they like to be reached; phones and emails are in the people sheet */
 function ContactSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onClose: () => void }) {
   const store = useStore();
   const { t } = useI18n();
   const saved = useSaved();
-  const [d, setD] = useState({ name: l.name, phone: l.phone, phone2: l.phone2 ?? "", phone2Label: l.phone2Label ?? ("home" as PhoneLabel), email: l.email ?? "", preferredContact: l.preferredContact, language: l.language });
+  const [d, setD] = useState({ name: l.name, preferredContact: l.preferredContact, language: l.language });
   const set = (p: Partial<typeof d>) => setD((x) => ({ ...x, ...p }));
   const [d0] = useState(d);
-  const ok = d.name.trim().length > 1 && d.phone.replace(/\D/g, "").length >= 10;
+  const ok = d.name.trim().length > 1;
   const save = () => {
-    saved(store.updateLead(l.id, { ...d, name: d.name.trim(), phone2: d.phone2 || undefined, phone2Label: d.phone2 ? d.phone2Label : undefined, email: d.email.trim() || undefined }));
+    saved(store.updateLead(l.id, { ...d, name: d.name.trim() }));
     onClose();
   };
   return (
     <Sheet visible={visible} onClose={onClose} title={t("lead.sec.contact")} dirty={JSON.stringify(d) !== JSON.stringify(d0)} onSave={ok ? save : undefined}>
       <Labeled label={t("lead.name")}>
         <TextField type="name" value={d.name} onChangeText={(v) => set({ name: v })} placeholder={t("lead.name")} icon="user" />
-      </Labeled>
-      <Labeled label={t("lead.phone.mobile")}>
-        <TextField type="phone" value={d.phone} onChangeText={(v) => set({ phone: v })} placeholder="(555) 555-0100" label={t("lead.phone.mobile")} icon="phone" />
-      </Labeled>
-      <Labeled label={t("lead.phone2")}>
-        <TextField type="phone" value={d.phone2} onChangeText={(v) => set({ phone2: v })} placeholder="(555) 555-0100" label={t("lead.phone2")} icon="phone" />
-      </Labeled>
-      {d.phone2 ? (
-        <ChoiceChips<PhoneLabel> value={d.phone2Label} onChange={(v) => set({ phone2Label: v })} items={(["home", "work", "mobile", "other"] as const).map((k) => ({ key: k, label: t(`lead.phone.${k}` as DictKey) }))} />
-      ) : null}
-      <Labeled label={t("co.email")}>
-        <TextField type="email" value={d.email} onChangeText={(v) => set({ email: v })} placeholder="client@example.com" label={t("co.email")} icon="mail" />
       </Labeled>
       <Labeled label={t("lead.prefersLabel")}>
         <ChoiceChips<ContactWay | "">
@@ -243,13 +252,7 @@ function ContactSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
           items={[{ key: "", label: t("lead.any") }, { key: "en", label: "English" }, { key: "es", label: "Español" }]}
         />
       </Labeled>
-      <Button
-        label={t("ue.save")}
-        icon="check"
-        full
-        disabled={!ok}
-        onPress={save}
-      />
+      <Button label={t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
     </Sheet>
   );
 }
@@ -396,42 +399,6 @@ function AssigneeSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onC
           </View>
         ))}
       </View>
-    </Sheet>
-  );
-}
-
-const ROLES: ContactRole[] = ["spouse", "tenant", "property_manager", "owner", "other"];
-function PersonSheet({ leadId, value, onClose }: { leadId: string; value: LeadContact | null; onClose: () => void }) {
-  const store = useStore();
-  const { t } = useI18n();
-  const saved = useSaved();
-  const [d, setD] = useState<LeadContact | null>(value);
-  const [d0] = useState(value);
-  if (!value || !d) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
-  const set = (p: Partial<LeadContact>) => setD((x) => (x ? { ...x, ...p } : x));
-  const exists = (store.db.leads.find((x) => x.id === leadId)?.contacts ?? []).some((c) => c.id === d.id);
-  return (
-    <Sheet
-      visible
-      onClose={onClose}
-      title={exists ? t("lead.editPerson") : t("lead.addPerson")}
-      dirty={JSON.stringify(d) !== JSON.stringify(d0)}
-      onSave={d.name.trim().length >= 2 ? () => { saved(store.saveLeadContact(leadId, { ...d, name: d.name.trim() })); onClose(); } : undefined}
-    >
-      <Labeled label={t("lead.name")}>
-        <TextField type="name" value={d.name} onChangeText={(v) => set({ name: v })} placeholder={t("lead.name")} icon="user" />
-      </Labeled>
-      <ChoiceChips<ContactRole> value={d.role} onChange={(v) => set({ role: v })} items={ROLES.map((r) => ({ key: r, label: t(`lead.role.${r}` as DictKey) }))} />
-      <Labeled label={t("co.phone")}>
-        <TextField type="phone" value={d.phone ?? ""} onChangeText={(v) => set({ phone: v || undefined })} placeholder="(555) 555-0100" label={t("co.phone")} icon="phone" />
-      </Labeled>
-      <Labeled label={t("co.email")}>
-        <TextField type="email" value={d.email ?? ""} onChangeText={(v) => set({ email: v || undefined })} placeholder="name@example.com" label={t("co.email")} icon="mail" />
-      </Labeled>
-      <Button label={t("ue.save")} icon="check" full disabled={d.name.trim().length < 2} onPress={() => { saved(store.saveLeadContact(leadId, { ...d, name: d.name.trim() })); onClose(); }} />
-      {exists ? (
-        <Button label={t("lead.removePerson")} icon="trash" variant="ghost" full onPress={() => { saved(store.removeLeadContact(leadId, d.id), t("lead.personRemoved")); onClose(); }} />
-      ) : null}
     </Sheet>
   );
 }
