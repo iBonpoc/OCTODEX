@@ -64,6 +64,8 @@ type Undo = () => void;
 export type Mode = "demo" | "cloud";
 /** when and who for an estimate visit */
 export interface BookAt {
+  /** the id of the new visit, when the caller needs it (the form shows «Сообщить клиенту?» for it) */
+  visitId?: ID;
   start: string;
   durationMin: number;
   techId: ID | null;
@@ -126,6 +128,10 @@ interface StoreCtx {
   cancelVisit: (id: ID, reason: CancelReason, text?: string) => Undo;
   /** the office moves a visit (time, length) before the tech is on site; the status does not change */
   rescheduleVisit: (id: ID, start: string, durationMin: number) => Undo;
+  /** «+ Осмотр» on a client / property (a returning client wants a new estimate): an inspection without a lead */
+  addInspection: (propertyId: ID, at: BookAt) => { id: ID; undo: Undo };
+  /** the office sent the client the time (an SMS / email app was opened with the text, or it was copied) */
+  markNotified: (visitId: ID) => Undo;
   assignVisit: (visitId: ID, techId: ID) => Undo;
   resetDemo: () => Undo;
   addLead: (l: Omit<Lead, "id" | "status" | "receivedAt">) => { id: ID; undo: Undo };
@@ -191,7 +197,7 @@ interface StoreCtx {
   saveContact: (c: CompanyContact) => Undo;
   removeContact: (id: ID) => Undo;
   /** contractor picks date, time, duration and (optionally) the tech → a visit appears in the plan */
-  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null }) => Undo;
+  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null; visitId?: ID; note?: string }) => Undo;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -697,7 +703,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (hasPlannedInspection(dbRef.current, l)) return () => {};
         const target = leadTarget(id);
         if (!target) return () => {};
-        const ids = { visitId: uid() };
+        const ids = { visitId: at.visitId ?? uid() };
         const now = new Date().toISOString();
         const undoVisit = mutate(
           "lead.book",
@@ -741,6 +747,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }),
           { k: "visit.cancel", visitId: id, reason, text: text?.trim() || undefined, leadBack: leadBack ?? undefined, jobBack: jobBack ?? undefined },
         );
+      },
+      addInspection: (propertyId, at) => {
+        const id = at.visitId ?? uid();
+        const scope = [at.note?.trim()].filter((x): x is string => !!x);
+        const undo = mutate(
+          "visit.inspection",
+          (d) => ({
+            ...d,
+            visits: [...d.visits, { id, propertyId, kind: "inspection", techId: at.techId, start: at.start, durationMin: at.durationMin, step: "scheduled", scope, checklist: [], photos: [], amountDueCents: 0 }],
+          }),
+          { k: "visit.inspection", propertyId, visitId: id, start: at.start, durationMin: at.durationMin, techId: at.techId, scope },
+        );
+        return { id, undo };
+      },
+      markNotified: (visitId) => {
+        const at = new Date().toISOString();
+        return mutate("visit.notified", (d) => patchVisit(d, visitId, (v) => ({ ...v, customerNotifiedAt: at })), { k: "visit.notified", visitId, at });
       },
       rescheduleVisit: (id, start, durationMin) => {
         const v = dbRef.current.visits.find((x) => x.id === id);
@@ -1030,9 +1053,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const job = d0.jobs.find((j) => j.id === jobId);
         if (!job) return () => {};
         const e = job.estimateId ? d0.estimates.find((x) => x.id === job.estimateId) : undefined;
-        const visitId = uid();
+        const visitId = sch.visitId ?? uid();
         const opt = e?.doc && e.approval ? e.doc.options.find((o) => o.id === e.approval!.optionId) : undefined;
-        const scope = opt ? opt.lines.filter((l) => l.name.trim() && (!l.optional || e!.approval!.addonIds.includes(l.id))).map((l) => l.name) : [job.title];
+        const scope0 = opt ? opt.lines.filter((l) => l.name.trim() && (!l.optional || e!.approval!.addonIds.includes(l.id))).map((l) => l.name) : [job.title];
+        // a note for the tech goes first (the visit form, docs/specs/03 §7.1)
+        const scope = sch.note?.trim() ? [sch.note.trim(), ...scope0] : scope0;
         const paidDeposit = e?.depositPaidAt ? e.depositCents ?? 0 : 0;
         const due = Math.max(0, job.amountCents - paidDeposit);
         const end = new Date(new Date(sch.start).getTime() + sch.durationMin * 60_000).toISOString();

@@ -160,6 +160,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         propertyId: (v.property_id as string | null) ?? undefined,
         leadId: (v.lead_id as string | null) ?? undefined,
         kind: (v.kind as Visit["kind"] | null) ?? undefined,
+        customerNotifiedAt: (v.customer_notified_at as string | null) ?? undefined,
         techId: assignee.get(s(v.id)) ?? null,
         start,
         durationMin: dur,

@@ -118,3 +118,34 @@ describe("S10: an inspection ends with done", () => {
     expect(isOpenVisit(V({ step: "done", kind: "inspection" }))).toBe(false);
   });
 });
+
+describe("visit form: slots, load, warnings (§7.1)", () => {
+  it("free slots skip a busy person's visits, the past and the end of the day", async () => {
+    const { freeSlots, atMinute, SCHEDULE_DEFAULTS } = await import("../src/features/schedule");
+    const day = new Date("2026-11-06T00:00:00"); // tomorrow, local
+    const busy = V({ id: "b", techId: "m1", start: atMinute(day, 10 * 60), durationMin: 60 });
+    const d = db({ visits: [busy] });
+    const now = new Date("2026-11-05T12:00:00").getTime();
+    const slots = freeSlots(d, "m1", day, 45, { now });
+    expect(slots[0]).toBe(SCHEDULE_DEFAULTS.dayStartMin);
+    expect(slots).not.toContain(10 * 60); // busy
+    expect(slots).not.toContain(9 * 60 + 30); // would run into 10:00
+    expect(slots).toContain(11 * 60);
+    expect(slots.at(-1)! + 45).toBeLessThanOrEqual(SCHEDULE_DEFAULTS.dayEndMin);
+    expect(freeSlots(d, "m1", day, 45, { exceptId: "b", now })).toContain(10 * 60); // moving that very visit
+    expect(freeSlots(d, null, day, 45, { now })).toContain(10 * 60); // nobody yet: every slot
+    const today = new Date("2026-11-05T00:00:00");
+    expect(freeSlots(db({}), "m1", today, 45, { now }).every((m) => m >= 12 * 60)).toBe(true); // never in the past
+  });
+  it("a person's day load and the form warnings", async () => {
+    const { dayVisits, formWarnings, atMinute } = await import("../src/features/schedule");
+    const day = new Date("2026-11-06T00:00:00");
+    const d = db({ visits: [V({ id: "a", techId: "m1", start: atMinute(day, 14 * 60) }), V({ id: "b", techId: "m1", start: atMinute(day, 10 * 60) }), V({ id: "c", techId: "m2", start: atMinute(day, 10 * 60) })] });
+    expect(dayVisits(d, "m1", day).map((v) => v.id)).toEqual(["b", "a"]);
+    const now = new Date("2026-11-05T12:00:00").getTime();
+    expect(formWarnings(d, { techId: "m1", start: atMinute(day, 10 * 60 + 30), durationMin: 45 }, { now }).map((w) => w.key)).toEqual(["busy"]);
+    expect(formWarnings(d, { techId: "m1", start: atMinute(day, 19 * 60), durationMin: 45 }, { now }).map((w) => w.key)).toEqual(["outOfHours"]);
+    expect(formWarnings(d, { techId: null, start: "2026-11-01T15:00:00.000Z", durationMin: 45 }, { now }).map((w) => w.key)).toContain("past");
+    expect(formWarnings(d, { techId: "m1", start: atMinute(day, 8 * 60), durationMin: 45 }, { now })).toEqual([]);
+  });
+});

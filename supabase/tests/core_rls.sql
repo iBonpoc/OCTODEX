@@ -2302,5 +2302,67 @@ end $$;
 select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c3300000-0000-4000-8000-000000000003'$q$) = 1, 'inspection of a lead without a client: the tech sees the owner of the property');
 \echo 'T33 lead without a client ok'
 
+-- ---------------------------------------------------------------- T34: cancel a visit — one server function for S4a / S9a
+:as_owner_a
+do $$
+declare v_src uuid; r jsonb;
+begin
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.customers (id, company_id, display_name) values ('c3400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T34 Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3400000-0000-4000-8000-000000000001', '34 Cancel St', 'Pasadena');
+  insert into public.leads (id, company_id, source_id, contact_name, phone, customer_id, property_id) values
+    ('b3400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', v_src, 'T34 Lead', '(818) 555-3401', 'c3400000-0000-4000-8000-000000000001', 'd3400000-0000-4000-8000-000000000001');
+  update public.leads set status = 'inspection_scheduled' where id = 'b3400000-0000-4000-8000-000000000001';
+  -- two inspections of the lead, a job with two visits
+  insert into public.visits (id, company_id, lead_id, property_id, kind, starts_at) values
+    ('f3400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'b3400000-0000-4000-8000-000000000001', 'd3400000-0000-4000-8000-000000000001', 'inspection', now() + interval '1 day'),
+    ('f3400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'b3400000-0000-4000-8000-000000000001', 'd3400000-0000-4000-8000-000000000001', 'inspection', now() + interval '2 days');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e3400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T34 job', 'c3400000-0000-4000-8000-000000000001', 'd3400000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('f3400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e3400000-0000-4000-8000-000000000001', now() + interval '3 days'),
+    ('f3400000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e3400000-0000-4000-8000-000000000001', now() + interval '4 days');
+  update public.jobs set status = 'scheduled' where id = 'e3400000-0000-4000-8000-000000000001';
+  insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3400000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+-- not the office: refused
+:as_tech_a
+select tst.fails($q$select public.cancel_visit('f3400000-0000-4000-8000-000000000001', 'we_cancelled')$q$, 'tech cannot cancel through the function');
+:as_owner_b
+select tst.fails($q$select public.cancel_visit('f3400000-0000-4000-8000-000000000001', 'we_cancelled')$q$, 'another company cannot cancel our visit');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$select public.cancel_visit('f3400000-0000-4000-8000-000000000001', 'we_cancelled')$q$, 'anon cannot cancel');
+:as_office_a
+do $$
+declare r jsonb;
+begin
+  perform tst.fails($q$select public.cancel_visit('f3400000-0000-4000-8000-000000000001', 'other', '  ')$q$, '"other" needs a text');
+  perform tst.fails($q$select public.cancel_visit('f3400000-0000-4000-8000-000000000001', 'because')$q$, 'unknown reason refused');
+  -- S4a: one of two inspections — the lead stays
+  r := public.cancel_visit('f3400000-0000-4000-8000-000000000001', 'client_cancelled');
+  perform tst.ok(r ->> 'lead_back' is null and (select status from public.leads where id = 'b3400000-0000-4000-8000-000000000001') = 'inspection_scheduled', 'S4a: another inspection open — lead stays');
+  perform tst.ok((select status = 'cancelled' and cancel_reason = 'client_cancelled' and cancelled_by = 'a0000000-0000-0000-0000-000000000002' from public.visits where id = 'f3400000-0000-4000-8000-000000000001'), 'cancelled with reason and who');
+  -- the last one (client not home → no_show): the lead goes back
+  r := public.cancel_visit('f3400000-0000-4000-8000-000000000002', 'no_show');
+  perform tst.ok((r ->> 'lead_back')::uuid = 'b3400000-0000-4000-8000-000000000001' and (select status from public.leads where id = 'b3400000-0000-4000-8000-000000000001') = 'contacted', 'S4a: last inspection cancelled — lead back to contacted');
+  perform tst.ok((select status from public.visits where id = 'f3400000-0000-4000-8000-000000000002') = 'no_show', '"client not home" is no_show');
+  perform tst.ok((select reason from public.status_events where entity_type = 'lead' and entity_id = 'b3400000-0000-4000-8000-000000000001' order by at desc limit 1) = 'no_show', 'the journal keeps the reason');
+  -- S9a: one of two job visits — the job stays; the last one — the job waits for a date again
+  r := public.cancel_visit('f3400000-0000-4000-8000-000000000003', 'reschedule_later');
+  perform tst.ok(r ->> 'job_back' is null and (select status from public.jobs where id = 'e3400000-0000-4000-8000-000000000001') = 'scheduled', 'S9a: another visit open — job stays');
+  r := public.cancel_visit('f3400000-0000-4000-8000-000000000004', 'other', 'roof under snow');
+  perform tst.ok((r ->> 'job_back')::uuid = 'e3400000-0000-4000-8000-000000000001' and (select status from public.jobs where id = 'e3400000-0000-4000-8000-000000000001') = 'draft', 'S9a: last visit cancelled — job waits for a date');
+  -- a repeat (offline queue) changes nothing
+  r := public.cancel_visit('f3400000-0000-4000-8000-000000000004', 'other', 'roof under snow');
+  perform tst.ok((r ->> 'repeat')::boolean, 'repeat: nothing happens twice');
+end $$;
+-- on site: not cancelled
+:as_owner_a
+do $$ begin
+  insert into public.visits (id, company_id, job_id, starts_at) values ('f3400000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'e3400000-0000-4000-8000-000000000001', now());
+  update public.visits set status = 'on_site' where id = 'f3400000-0000-4000-8000-000000000005';
+  perform tst.fails($q$select public.cancel_visit('f3400000-0000-4000-8000-000000000005', 'we_cancelled')$q$, 'a visit on site is not cancelled');
+end $$;
+\echo 'T34 cancel visit ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

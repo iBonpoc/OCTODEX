@@ -31,12 +31,14 @@ exports.run = async (h) => {
   await h.clickText("Задачи");
   await h.click("Что дальше?");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
+  // the visit form (docs/specs/03 §7.1): day → person (with the day's load) → a free slot → note
   const chips = h.sheet().getByRole("radio");
   await chips.nth(2).click();
-  for (let i = 0; i < 3; i++) await h.sheet().getByRole("button", { name: /Начало \+30/ }).click();
-  await h.sheet().getByRole("radio", { name: "Ivan Sokolov" }).click();
+  await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).click();
+  await h.sheet().getByRole("radio", { name: /^10:30/ }).click();
   await h.sheet().getByPlaceholder(/Собака во дворе, где парковаться/).fill("Dog in the yard");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);
+  await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(300);
   let db = await h.db();
   tom = db.leads.find((x) => x.id === tom.id);
   // S4: an inspection is a visit of the lead at its property, without a job (docs/specs/03 §1)
@@ -91,6 +93,7 @@ exports.run = async (h) => {
     await h.click("Что дальше?");
     await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
     await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(500);
+    if (await h.sheet().getByRole("button", { name: "Не сейчас" }).count()) { await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(300); }
   };
   await bookAngela();
   db = await h.db();

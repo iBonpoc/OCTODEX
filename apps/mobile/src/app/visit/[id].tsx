@@ -6,6 +6,7 @@ import { space, component, size } from "@octo/design-tokens";
 import { jobProfit, useStore, visitContext } from "@/data/store";
 import type { PaymentMethod } from "@/data/types";
 import { useI18n } from "@/i18n";
+import { WhenWho } from "@/features/VisitForm";
 import { useTheme } from "@/theme/ThemeProvider";
 import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
@@ -44,6 +45,7 @@ export default function VisitScreen() {
   const after = v.photos.filter((p) => p.kind === "after");
   const left = v.checklist.filter((x) => !x.done).length;
   const queuedHint = () => (store.online ? undefined : t("offline.queued"));
+  const office = store.role !== "tech";
 
   const advance = (msg: string) => {
     haptic();
@@ -92,6 +94,8 @@ export default function VisitScreen() {
           ) : null}
         </RowView>
       </Card>
+
+      {office ? <WhenWho visitId={v.id} /> : null}
 
       <Card>
         <T v="heading">{t("visit.scope")}</T>

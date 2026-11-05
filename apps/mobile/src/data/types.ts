@@ -182,6 +182,8 @@ export interface Visit {
   /** the lead of an inspection */
   leadId?: ID;
   kind?: VisitKind;
+  /** when the office sent the client the time (SMS / email opened from «Сообщить клиенту?», docs/specs/03 §7.1) */
+  customerNotifiedAt?: string;
 }
 
 /**
