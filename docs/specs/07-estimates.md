@@ -1,6 +1,6 @@
 # 07. Сметы: PDF подрядчика, подпись подрядчика, шаблоны — спецификация OCTODEX
 
-> Черновик v1, 05.11.2026. Шаг хребта 4–5 «Смета → Согласие» (`docs/15-story-map.md` §3, строки 4–5; `10-build-plan.md` §0 п. 19). Шаблон — §7 карты, образец — `14-leads-spec.md`.
+> v1, 05.11.2026, **одобрено основателем 05.11** (подпись за компанию — §2.2 А, с номером HIS). Шаг хребта 4–5 «Смета → Согласие» (`docs/15-story-map.md` §3, строки 4–5; `10-build-plan.md` §0 п. 19). Шаблон — §7 карты, образец — `14-leads-spec.md`.
 > Источники: код сборки 52 (`app/estimate/*`, `features/estimatePdf.ts`, `docPdf.ts`, `SignBlock.tsx`, `store.tsx` `approveEstimate`/`sendEstimate`, `app/p/[token].tsx`), база (`estimates`, `estimate_versions`, `estimate_approvals`, `memberships.can_sign_contracts`, `portal_accept`), PRD `03-prd/05-estimates.md` (EST-US-02, 13, 16, 26–31), `legal/legal-research.md` §1.6 (LEG-03).
 > Estixa (`estixa_1`) только прочитана: миграция `0056_company_signers.sql`, `docs/ENTITIES.md` (раздел «Сметы, договоры и документы»), `test/e2e/estimate-templates-and-ai.spec.ts`. Что взяли и почему — §2, колонка «Почему».
 > Это не юридическая консультация. Тексты договора и согласий уходят клиентам только после адвоката (`legal/README.md` п. 5); здесь — механика.
