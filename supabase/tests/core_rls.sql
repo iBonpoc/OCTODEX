@@ -1298,7 +1298,7 @@ select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 note of an
 select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 dog in the yard (tomorrow)'$q$) = 1, 'tech: note of their property visible');
 select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 note of tomorrow''s job'$q$) = 1, 'tech: note of their job visible');
 select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 note of their client'$q$) = 1, 'tech: note of the client of their visit visible');
-insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2200000-0000-4000-8000-000000000001', 'T22 tech own note');
+insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000017', 'T22 tech own note');
 select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T22 tech own note'$q$) = 1, 'tech: sees their own note');
 :as_office_a
 select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T22%'$q$) = 8, 'office sees every team note');
@@ -1308,6 +1308,55 @@ reset role; set role anon;
 select tst.fails($q$select 1 from public.notes$q$, 'anon cannot read notes');
 select tst.fails($q$select app.tech_visit_counts(gen_random_uuid())$q$, 'anon cannot call the visit window helper');
 \echo 'T22 tech visibility ok'
+
+-- ---------------------------------------------------------------- T26: a tech's clients and notes they write (security review of #67)
+-- docs/specs/04 §8: clients (and their people) of visits today, in the future, last 14 days; no cancelled / no-show;
+-- outside the office a note goes only on a subject the member sees
+:as_owner_a
+do $$
+declare k int; v_c uuid; v_p uuid; v_j uuid; v_v uuid;
+begin
+  -- 1: only a visit 15 days ago, 2: only a cancelled visit tomorrow, 3: only a no-show, 4: visit tomorrow
+  for k in 1..4 loop
+    v_c := ('c2600000-0000-4000-8000-00000000000' || k)::uuid;
+    v_p := ('d2600000-0000-4000-8000-00000000000' || k)::uuid;
+    v_j := ('e2600000-0000-4000-8000-00000000000' || k)::uuid;
+    v_v := ('f2600000-0000-4000-8000-00000000000' || k)::uuid;
+    insert into public.customers (id, company_id, display_name) values (v_c, 'ca000000-0000-0000-0000-000000000000', 'T26 Client ' || k);
+    insert into public.contacts (company_id, customer_id, name, role, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_c, 'T26 Person ' || k, 'main', true);
+    insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' T26 St', 'Pasadena', 1);
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'T26 job ' || k, v_c, v_p, 'scheduled');
+    insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j,
+      case k when 1 then now() - interval '15 days' else now() + interval '1 day' end);
+    insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
+  end loop;
+  update public.visits set status = 'cancelled' where id = 'f2600000-0000-4000-8000-000000000002';
+  update public.visits set status = 'no_show' where id = 'f2600000-0000-4000-8000-000000000003';
+end $$;
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c2600000-0000-4000-8000-000000000001'$q$) = 0, 'tech: client of a visit 15 days ago not visible');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c2600000-0000-4000-8000-000000000002'$q$) = 0, 'tech: client of a cancelled visit not visible');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c2600000-0000-4000-8000-000000000003'$q$) = 0, 'tech: client of a no-show visit not visible');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c2600000-0000-4000-8000-000000000004'$q$) = 1, 'tech: client of a visit tomorrow visible');
+select tst.ok(tst.cnt($q$select 1 from public.contacts where name in ('T26 Person 1', 'T26 Person 2', 'T26 Person 3')$q$) = 0, 'tech: people of those clients not visible');
+select tst.ok(tst.cnt($q$select 1 from public.contacts where name = 'T26 Person 4'$q$) = 1, 'tech: people of their client visible');
+-- notes: only on subjects the tech sees
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2600000-0000-4000-8000-000000000001', 'T26 x')$q$, 'tech cannot note an old client');
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2600000-0000-4000-8000-000000000002', 'T26 x')$q$, 'tech cannot note a property of a cancelled visit');
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e2600000-0000-4000-8000-000000000003', 'T26 x')$q$, 'tech cannot note a job of a no-show');
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'lead', gen_random_uuid(), 'T26 x')$q$, 'tech cannot note an unknown lead');
+insert into public.notes (company_id, subject_type, subject_id, body) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2600000-0000-4000-8000-000000000004', 'T26 client note'),
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2600000-0000-4000-8000-000000000004', 'T26 property note'),
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e2600000-0000-4000-8000-000000000004', 'T26 job note');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T26%'$q$) = 3, 'tech notes their client, property and job');
+:as_office_a
+insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2600000-0000-4000-8000-000000000001', 'T26 office note');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T26%'$q$) = 4, 'office notes any client and sees all');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id::text like 'c2600000%'$q$) = 4, 'office sees every client');
+:as_owner_b
+select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2600000-0000-4000-8000-000000000004', 'T26 x')$q$, 'other company cannot note our client');
+\echo 'T26 tech clients and notes ok'
 
 -- ---------------------------------------------------------------- T19: client page language (rule 7, docs/specs/07 §2.1)
 -- order: client's main person → lead's main person → lead → company → en; only doc_language is added
