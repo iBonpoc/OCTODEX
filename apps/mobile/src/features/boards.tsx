@@ -6,7 +6,7 @@ import { space, type StatusName } from "@octo/design-tokens";
 import { daysSince, isOverdue, useStore } from "@/data/store";
 import type { Estimate, EstimateStatus, Invoice } from "@/data/types";
 import { estimateStatusView } from "@/features/estimateStatus";
-import { optionTotals } from "@/features/estimateDoc";
+import { estimateListAmount } from "@/features/estimateDoc";
 import { estimateSigns, invoiceSigns } from "@/features/listSigns";
 import { ESTIMATE_GROUPS, INVOICE_GROUPS, estimateGroup, inEstimateFilter, inListFilter, invoiceGroup, type EstimateFilter, type EstimateGroup, type InvoiceGroup } from "@/features/listGroups";
 import { invoiceBalance, invoiceStatusView } from "@/features/invoiceStatus";
@@ -43,7 +43,8 @@ export function EstimatesBoard() {
     const prop = db.properties.find((x) => x.id === e.propertyId);
     const v = estimateStatusView(e.status);
     const sign = estimateSigns(e, now)[0];
-    const amount = listAmount(e);
+    // amount rule of the estimates chat: signed option / «from» the cheapest / the total (money through the engine)
+    const amount = estimateListAmount(e);
     const addr = prop ? `${prop.address}, ${prop.city}` : undefined;
     // the last event under the name: signed / opened / sent
     const when = e.approval ? `${t(v.l)} ${day(e.approval.at)}` : e.viewedAt ? t("ue.viewed", { date: day(e.viewedAt) }) : e.sentAt ? `${t("st.sent")} ${day(e.sentAt)}` : undefined;
@@ -108,17 +109,6 @@ export function EstimatesBoard() {
 }
 /** desktop row columns (docs/specs/06-list-cards.md, estimates) */
 const EST_COLUMNS: FactKey[] = ["addr", "work", "valid"];
-/**
- * Amount on the card (rule of the estimates chat): signed by the client → the signed option (with add-ons) and its name;
- * not signed with several options → «from» the cheapest; otherwise the estimate total. Money only through the engine (optionTotals).
- * TODO(10а): switch to estimateListAmount from features/estimateDoc.ts when it lands (estimates chat, E2b-1).
- */
-function listAmount(e: Estimate): { cents: number; from: boolean; option?: string } {
-  if ((e.status === "awaiting_countersign" || e.status === "approved") && e.approval)
-    return { cents: e.approval.totalCents, from: false, option: e.doc?.options.find((o) => o.id === e.approval!.optionId)?.name };
-  if (e.doc && e.doc.options.length > 1) return { cents: Math.min(...e.doc.options.map((o) => optionTotals(e.doc!, o).total)), from: true };
-  return { cents: e.totalCents, from: false };
-}
 
 /** Invoices on list cards (spec 06, PR5): needs action (overdue / due soon) → waiting → paid; status from invoiceStatusView. */
 export function InvoicesBoard() {
