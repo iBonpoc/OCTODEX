@@ -4,7 +4,11 @@
 -- Rules for everyone with a user (service role, cron and server functions are free):
 --   * set only together with the step to en_route (or while the visit is already en_route and has none — a replay);
 --   * once set, it does not change;
---   * not later than now() + 5 min (phone clock drift); an old build that sends no time gets now().
+--   * a time the server cannot believe becomes now() instead of a refusal (a refusal would jam the offline queue):
+--     later than now() + 5 min (phone clock), earlier than the visit was created, or older than 3 days (the longest
+--     an offline phone is expected to hold a step). An old build that sends no time gets now() too.
+--   The phone time can still be shaded inside that window; the status journal (status_events) keeps the server time
+--   of the step for a check.
 -- Test: supabase/tests/core_rls.sql T36.
 
 alter table public.visits add column if not exists en_route_at timestamptz;
@@ -30,8 +34,11 @@ begin
     if new.status <> 'en_route' then
       raise exception 'en_route_at is set only with the step «on the way»' using errcode = 'check_violation';
     end if;
-    if new.en_route_at > now() + interval '5 minutes' then
-      raise exception 'en_route_at is in the future' using errcode = 'check_violation';
+    if new.en_route_at is null then
+      raise exception 'en_route_at does not change once set' using errcode = 'check_violation';
+    end if;
+    if new.en_route_at > now() + interval '5 minutes' or new.en_route_at < greatest(old.created_at, now() - interval '3 days') then
+      new.en_route_at := now();
     end if;
   end if;
   return new;

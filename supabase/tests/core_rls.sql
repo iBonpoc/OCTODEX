@@ -2608,10 +2608,13 @@ select tst.fails($q$insert into public.visits (company_id, job_id, starts_at, en
 select (public.assign_visit(v, array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added') from unnest(array['f3600000-0000-4000-8000-000000000001', 'f3600000-0000-4000-8000-000000000002', 'f3600000-0000-4000-8000-000000000003']::uuid[]) v;
 :as_tech_a
 select tst.fails($q$update public.visits set en_route_at = now() where id = 'f3600000-0000-4000-8000-000000000001'$q$, 'the time alone, without the step «on the way», is refused');
-select tst.fails($q$update public.visits set status = 'en_route', en_route_at = now() + interval '5 minutes 1 second' where id = 'f3600000-0000-4000-8000-000000000001'$q$, 'more than 5 min in the future is refused');
+-- a time the server cannot believe becomes now(), not a refusal (a refusal would jam the offline queue)
+update public.visits set status = 'en_route', en_route_at = now() + interval '5 minutes 1 second' where id = 'f3600000-0000-4000-8000-000000000003';
+select tst.ok((select en_route_at between now() - interval '1 minute' and now() from public.visits where id = 'f3600000-0000-4000-8000-000000000003'), 'more than 5 min in the future becomes now()');
 update public.visits set status = 'en_route', en_route_at = now() + interval '4 minutes 59 seconds' where id = 'f3600000-0000-4000-8000-000000000001';
 select tst.ok((select en_route_at between now() + interval '4 minutes' and now() + interval '5 minutes' from public.visits where id = 'f3600000-0000-4000-8000-000000000001'), 'the phone time (within 5 min) is kept with the step');
 select tst.fails($q$update public.visits set en_route_at = now() - interval '1 hour' where id = 'f3600000-0000-4000-8000-000000000001'$q$, 'once set, the time does not change');
+select tst.fails($q$update public.visits set en_route_at = null where id = 'f3600000-0000-4000-8000-000000000001'$q$, '… and is not wiped either');
 -- a replay of the same step (offline queue) is not an error and keeps the first time
 update public.visits set status = 'en_route' where id = 'f3600000-0000-4000-8000-000000000001';
 select tst.ok((select en_route_at between now() + interval '4 minutes' and now() + interval '5 minutes' from public.visits where id = 'f3600000-0000-4000-8000-000000000001'), 'a replay keeps the first time');
@@ -2621,12 +2624,32 @@ select tst.ok((select en_route_at between now() - interval '1 minute' and now() 
 -- on site: the time stays and still does not change
 update public.visits set status = 'on_site' where id = 'f3600000-0000-4000-8000-000000000002';
 select tst.ok((select en_route_at is not null from public.visits where id = 'f3600000-0000-4000-8000-000000000002'), 'on site: the «left at» time stays');
+-- before the visit existed (or more than 3 days ago): now(), the time is not antedated
+:as_owner_a
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('f3600000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e3600000-0000-4000-8000-000000000001', now() - interval '20 minutes'),
+  ('f3600000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'e3600000-0000-4000-8000-000000000001', now() - interval '20 minutes');
+:as_office_a
+select (public.assign_visit(v, array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added') from unnest(array['f3600000-0000-4000-8000-000000000004', 'f3600000-0000-4000-8000-000000000005']::uuid[]) v;
+:as_tech_a
+update public.visits set status = 'en_route', en_route_at = now() - interval '2 hours' where id = 'f3600000-0000-4000-8000-000000000004';
+select tst.ok((select en_route_at between now() - interval '1 minute' and now() from public.visits where id = 'f3600000-0000-4000-8000-000000000004'), 'a time before the visit was created becomes now()');
 -- straight to on site (step «on the way» skipped): no time, and none can be planted later
-update public.visits set status = 'on_site' where id = 'f3600000-0000-4000-8000-000000000003';
-select tst.fails($q$update public.visits set en_route_at = now() where id = 'f3600000-0000-4000-8000-000000000003'$q$, 'on site without «on the way»: no time planted later');
+update public.visits set status = 'on_site' where id = 'f3600000-0000-4000-8000-000000000005';
+select tst.fails($q$update public.visits set en_route_at = now() where id = 'f3600000-0000-4000-8000-000000000005'$q$, 'on site without «on the way»: no time planted later');
+-- cancelled while on the way: the time stays
+:as_office_a
+select public.cancel_visit('f3600000-0000-4000-8000-000000000001', 'we_cancelled', null);
+select tst.ok((select en_route_at is not null from public.visits where id = 'f3600000-0000-4000-8000-000000000001'), 'cancelled on the way: the time stays');
+-- another company does not reach it; without a user (service role) the rule does not apply
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'f3600000-0000-4000-8000-000000000002'$q$) = 0, 'another company does not see the visit or its time');
+reset role; reset request.jwt.claim.sub;
+update public.visits set en_route_at = now() - interval '10 minutes' where id = 'f3600000-0000-4000-8000-000000000002';
+select tst.ok((select en_route_at between now() - interval '11 minutes' and now() - interval '9 minutes' from public.visits where id = 'f3600000-0000-4000-8000-000000000002'), 'service role (no user) may correct the time');
 -- the office has the same rule
 :as_office_a
-select tst.fails($q$update public.visits set en_route_at = now() - interval '2 hours' where id = 'f3600000-0000-4000-8000-000000000001'$q$, 'the office does not change the time either');
+select tst.fails($q$update public.visits set en_route_at = now() - interval '2 hours' where id = 'f3600000-0000-4000-8000-000000000002'$q$, 'the office does not change the time either');
 \echo 'T36 visit left-at time ok'
 
 \echo 'ALL TESTS PASSED'
