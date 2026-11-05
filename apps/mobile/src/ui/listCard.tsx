@@ -185,6 +185,11 @@ export interface ListCardProps {
    * so the screen records it with existing store functions (lead: touchLead / call result) and opens the url itself (openContact).
    */
   onContact?: (a: ContactAction) => void;
+  /**
+   * reasons of a «people» card (attention): each row — tone icon + text (+ a grey detail), opens its own record;
+   * an optional verb action (secondary, small) — never «open», the row itself opens
+   */
+  reasons?: { key: string; tone: StatusName; text: string; detail?: string; onPress?: () => void; action?: { label: string; onPress: () => void } }[];
   /** override the edge: by default the worst of status and signs; a list may say «only what needs action» (null = no edge) */
   edge?: "warn" | "bad" | null;
 }
@@ -297,6 +302,30 @@ export function ListCard(p: ListCardProps) {
               fact(l.key, "single")
             ),
           )}
+        </View>
+      ) : null}
+      {p.reasons?.length && !compact ? (
+        <View style={{ gap: space[2], paddingTop: space[2], borderTopWidth: component.hairline, borderTopColor: c.bd }}>
+          {p.reasons.map((r) => (
+            <View key={r.key} style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
+              <Pressable testID="list-card-reason" onPress={r.onPress} disabled={!r.onPress} accessibilityRole={r.onPress ? "button" : undefined} accessibilityLabel={r.text} style={{ flex: 1, flexDirection: "row", gap: space[3], alignItems: "flex-start", minHeight: size.hitMin, paddingLeft: LEAD_INSET }}>
+                <View style={{ paddingTop: spaceHalf.hair }}>
+                  <Icon name={statusIcon[r.tone]} s={size.iconSm} color={r.tone === "neutral" ? c.mut : c.status[r.tone].text} />
+                </View>
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Txt w="semibold" color={c.ink}>{r.text}</Txt>
+                  {r.detail ? <Txt v="caption" color={c.mut}>{r.detail}</Txt> : null}
+                </View>
+              </Pressable>
+              {r.action ? (
+                <Tap visible={component.button.sm} onPress={r.action.onPress} label={r.action.label}>
+                  <View style={{ height: component.button.sm, paddingHorizontal: space[3], borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, justifyContent: "center" }}>
+                    <Txt v="button" w="semibold" color={c.ink}>{r.action.label}</Txt>
+                  </View>
+                </Tap>
+              ) : null}
+            </View>
+          ))}
         </View>
       ) : null}
       {/* bottom block (figures, progress, buttons) pinned to the bottom: in a grid row they line up across cards */}

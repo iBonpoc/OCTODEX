@@ -4,7 +4,7 @@
  * Menus in sheets are rows (rule 12); one accent: the save button.
  */
 import { useEffect, useMemo, useState, type ReactNode } from "react";
-import { Linking, View } from "react-native";
+import { Linking, Platform, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -21,6 +21,7 @@ import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/contro
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
+import { mailtoHref, smsHref } from "@/features/contactLinks";
 
 export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string };
 
@@ -197,9 +198,8 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
   const company = db.company?.name ?? "";
   const text = ct(v.kind === "inspection" ? "vf.msg.inspection" : "vf.msg.job", { name, company, date, time: at });
   // numbers and addresses may come from outside (a web form): only digits and + for SMS; an address that looks like one, encoded
-  const phone = (ctx.customer?.phone ?? lead?.phone ?? "").replace(/[^\d+]/g, "");
-  const rawEmail = (ctx.customer?.email ?? lead?.email ?? "").trim();
-  const email = /^[^\s@?&]+@[^\s@?&]+\.[^\s@?&]+$/.test(rawEmail) ? rawEmail : "";
+  const sms = smsHref(ctx.customer?.phone ?? lead?.phone, text, Platform.OS);
+  const mail = mailtoHref(ctx.customer?.email ?? lead?.email, { subject: company, body: text });
   const done = () => {
     store.markNotified(v.id);
     onClose();
@@ -207,8 +207,8 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
   return (
     <Sheet visible onClose={onClose} title={t("vf.notify.title")}>
       <T v="body">{text}</T>
-      {phone ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => { Linking.openURL(`sms:${phone}?body=${encodeURIComponent(text)}`).catch(() => {}); done(); }} /> : null}
-      {email ? <Button label={t("vf.notify.email")} icon="mail" variant="secondary" full onPress={() => { Linking.openURL(`mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(company)}&body=${encodeURIComponent(text)}`).catch(() => {}); done(); }} /> : null}
+      {sms ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => { Linking.openURL(sms).catch(() => {}); done(); }} /> : null}
+      {mail ? <Button label={t("vf.notify.email")} icon="mail" variant="secondary" full onPress={() => { Linking.openURL(mail).catch(() => {}); done(); }} /> : null}
       <Button label={t("vf.notify.copy")} icon="copy" variant="secondary" full onPress={() => { Clipboard.setStringAsync(text).catch(() => {}); toast.show(t("vf.notify.copied")); done(); }} />
       <Button label={t("vf.notify.later")} variant="ghost" full onPress={onClose} />
     </Sheet>
