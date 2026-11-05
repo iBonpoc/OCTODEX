@@ -567,6 +567,7 @@ export const es: Dict = {
   "notice.title": "Notificaciones",
   "notice.approved": "{name} aprobó el presupuesto por {total}",
   "notice.viewed": "{name} abrió el presupuesto",
+  "notice.clientSigned": "{name} firmó el presupuesto por {total}: firme por la empresa",
   "notice.deposit": "{name}: depósito {amount}",
   "cat.title": "Catálogo",
   "cat.help": "Servicios, mano de obra, materiales y kits que usa a menudo. Material: precio del proveedor + impuesto del proveedor + su margen = precio en el presupuesto.",
