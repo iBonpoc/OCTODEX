@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import { roleNav } from "../src/nav/roles";
+import fs from "node:fs";
+import path from "node:path";
 import { breadcrumbs, collapseCrumbs, navContext, sectionTab } from "../src/nav/hierarchy";
 
 const db = makeSeed();
@@ -90,3 +92,23 @@ describe("top pill on inner screens highlights the section (spec 10, Н1)", () =
 });
 
 const roleHasTab = (role: "director" | "dispatcher" | "tech", tab: string) => roleNav[role].some((n) => n.route === tab);
+
+/** every screen the layout run opens (e2e/specs/08-layouts.cjs SCREENS), with real ids from the seed */
+const layoutSpec = fs.readFileSync(path.resolve(__dirname, "../e2e/specs/08-layouts.cjs"), "utf8");
+const screenUrls = [...layoutSpec.slice(layoutSpec.indexOf("SCREENS = ["), layoutSpec.indexOf("];")).matchAll(/"(\/[^"]*)"/g)].map((m) => m[1]!);
+
+describe("sectionTab on every inner screen, three roles", () => {
+  it("found the screens", () => expect(screenUrls.length).toBeGreaterThan(20));
+  for (const role of ["director", "dispatcher", "tech"] as const)
+    it(role, () => {
+      for (const url of screenUrls) {
+        const [p, q = ""] = url.split("?");
+        const params = Object.fromEntries(new URLSearchParams(q));
+        const ctx = navContext(p!, params, db, role);
+        const tab = sectionTab(p!, params, db, role);
+        if (p!.startsWith("/p/") || p!.startsWith("/auth")) expect(tab, `${role} ${url}`).toBeUndefined();
+        // an inner screen (has a parent) always lights one of this role's tabs
+        else if (ctx.up) expect(tab && roleHasTab(role, tab), `${role} ${url} → ${tab}`).toBe(true);
+      }
+    });
+});

@@ -21,6 +21,15 @@ exports.run = async (h) => {
   if (!wide) {
     h.expect((await tab("Продажи").count()) === 0 && (await tab("Ещё").count()) === 0, "phone: no tab bar on an inner screen");
     h.expect((await p.getByRole("button", { name: /^На уровень вверх/ }).locator("visible=true").count()) === 0, "phone: no round back");
+    h.expect(!/Esc/.test(await h.text()), "phone: no Esc hint");
+    // the trail scrolls away with the page, as before (not pinned)
+    const parent = p.getByRole("button", { name: "Назад: Клиенты" }).locator("visible=true");
+    const y0 = (await parent.boundingBox()).y;
+    await p.mouse.move(195, 500);
+    await p.mouse.wheel(0, 600);
+    await p.waitForTimeout(400);
+    const box = await parent.boundingBox();
+    h.expect(!box || box.y < y0 - 100, "phone: trail scrolls with the page");
     return;
   }
   h.expect((await tab("Клиенты").count()) === 1, "pill on the client card");
@@ -73,4 +82,12 @@ exports.run = async (h) => {
   await p.keyboard.press("Escape");
   await p.waitForTimeout(600);
   h.expect(/\/clients$/.test(p.url()), `Esc client → clients (${p.url()})`);
+
+  // Esc while typing in a field does not leave the screen
+  await h.go(`/client/edit?id=${cust.id}`);
+  const field = p.locator("input:visible").first();
+  await field.click();
+  await p.keyboard.press("Escape");
+  await p.waitForTimeout(600);
+  h.expect(p.url().includes("/client/edit"), `Esc in a field stays (${p.url()})`);
 };

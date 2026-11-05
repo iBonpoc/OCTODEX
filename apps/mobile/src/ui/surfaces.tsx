@@ -421,8 +421,9 @@ export function Screen({
       if (Platform.OS !== "web" || !hasUp || typeof document === "undefined") return;
       const onKey = (e: KeyboardEvent) => {
         if (e.key !== "Escape" || e.defaultPrevented || document.querySelector('[aria-modal="true"]')) return;
+        // typing in a field: Esc is not "leave the screen"
         const el = document.activeElement as HTMLElement | null;
-        if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA")) return el.blur();
+        if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
         goUpRef.current();
       };
       document.addEventListener("keydown", onKey, true);
