@@ -170,6 +170,7 @@ export interface Lead {
   id: ID;
   name: string;
   phone: string;
+  /** before wave L2 part 2 (read only; now a phone of the main person) */
   phone2?: string;
   phone2Label?: PhoneLabel;
   email?: string;
@@ -198,7 +199,11 @@ export interface Lead {
   createdBy?: ID;
   /** first call / SMS / email / "I replied" — stops the reply timer */
   firstResponseAt?: string;
+  /** before wave L2 part 2: extra people with one phone / email (read only; now in `people`) */
   contacts?: LeadContact[];
+  /** people of the lead, each with several phones and emails (docs/14 §2, Р12); the first is the lead itself.
+   *  `phone` / `email` above are the main person's primary ones, kept for search and lists. */
+  people?: Person[];
   /** set when a prospect card / client exists for this lead */
   customerId?: ID;
   propertyId?: ID;

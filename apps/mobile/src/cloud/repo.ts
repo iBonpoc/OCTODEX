@@ -50,7 +50,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       q<Row>(supabase.from("memberships").select("user_id, role, status, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).eq("status", "active")),
       live<Row>("lead_sources", "id, name, kind, phone, email, customer_id, note, is_active, is_system, position"),
       live<Row>("customers"),
-      live<Row>("contacts", "id, customer_id, name, role, phone, email, is_primary, preferred_language, created_at"),
+      live<Row>("contacts", "id, customer_id, lead_id, name, role, phone, email, is_primary, preferred_language, created_at"),
       live<Row>("properties"),
       live<Row>("jobs"),
       live<Row>("visits"),
@@ -89,6 +89,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     live<Row>("contact_emails", "contact_id, address, is_primary, position").catch(() => [] as Row[]),
   ]);
   const people = peopleByCustomer(contacts, phoneRows, emailRows);
+  // L2 part 2: people of leads that have no client yet (migration 20261105120000)
+  const peopleOfLead = peopleByCustomer(contacts, phoneRows, emailRows, "lead_id");
   const tagsOfCustomer = new Map<string, string[]>();
   for (const r of customerTagRows) tagsOfCustomer.set(s(r.customer_id), [...(tagsOfCustomer.get(s(r.customer_id)) ?? []), s(r.tag_id)]);
   const costOfLead = new Map(leadCosts.map((r) => [s(r.lead_id), n(r.cost_cents)]));
@@ -113,8 +115,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   });
   const primaryPhone = new Map<string, string>();
   const primaryEmail = new Map<string, string>();
-  for (const c of contacts) if (c.is_primary || !primaryPhone.has(s(c.customer_id))) primaryPhone.set(s(c.customer_id), s(c.phone));
-  for (const c of contacts) if (c.email && (c.is_primary || !primaryEmail.has(s(c.customer_id)))) primaryEmail.set(s(c.customer_id), s(c.email));
+  const clientContacts = contacts.filter((c) => !!c.customer_id);
+  for (const c of clientContacts) if (c.is_primary || !primaryPhone.has(s(c.customer_id))) primaryPhone.set(s(c.customer_id), s(c.phone));
+  for (const c of clientContacts) if (c.email && (c.is_primary || !primaryEmail.has(s(c.customer_id)))) primaryEmail.set(s(c.customer_id), s(c.email));
 
   const jobById = new Map(jobs.map((j) => [s(j.id), j]));
   const paidVisit = new Map<string, Row>();
@@ -236,6 +239,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     timeframeDate: (l.timeframe_date as string | null) ?? undefined,
     budgetCents: l.budget_cents == null ? undefined : n(l.budget_cents),
     costCents: costOfLead.get(s(l.id)),
+    people: peopleOfLead.get(s(l.id)),
     assigneeId: (l.assigned_to as string | null) ?? undefined,
     createdBy: (l.created_by as string | null) ?? undefined,
     firstResponseAt: (l.first_response_at as string | null) ?? undefined,

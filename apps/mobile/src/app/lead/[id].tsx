@@ -5,6 +5,7 @@ import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { usePersistentState } from "@/data/persist";
+import { peopleForLead, phonesOfPeople } from "@/data/people";
 import {
   canSeeLead, canSeeLeadCost, findDuplicates, isClosedLead, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
   responseMinutes, sourceName, type LeadTurn, type ManualWinReason,
@@ -52,7 +53,8 @@ export default function LeadScreen() {
   const sv = leadStatusView[l.status];
   const turn = leadTurn(db, l, leadSettingsOf(db.company));
   const replied = responseMinutes(l);
-  const dups = findDuplicates(db, { phone: l.phone, phone2: l.phone2, email: l.email }, l.id);
+  const mine = peopleForLead(db, l);
+  const dups = findDuplicates(db, { phones: phonesOfPeople(mine), emails: mine.flatMap((p) => p.emails.map((e) => e.address)) }, l.id);
   const dupCustomers = dups.customers.filter((c) => c.id !== l.customerId);
   const estimates = db.estimates.filter((e) => e.leadId === l.id || (l.customerId && e.customerId === l.customerId));
   const assignee = db.members.find((m) => m.id === l.assigneeId);
