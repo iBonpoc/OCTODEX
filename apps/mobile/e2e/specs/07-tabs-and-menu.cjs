@@ -13,7 +13,8 @@ exports.run = async (h) => {
   await h.clickText("Сметы");
   await h.expectText(/Открытые · \d+/, "estimate filters");
   await h.clickText("Счета");
-  await h.expectText(/Просрочено · \$1,840/, "overdue invoices");
+  await h.expectText(/Нужно действие · \d+ · \$1,840/, "overdue invoices group (list cards PR5)");
+  await h.expectText(/Просрочен \d+ дн/, "overdue sign on the invoice card");
   await h.go("/jobs");
   await h.expectText(/Запланирован · \d+/, "job filters");
 };
