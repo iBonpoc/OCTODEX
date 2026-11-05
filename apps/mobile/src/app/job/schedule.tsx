@@ -60,9 +60,7 @@ export default function ScheduleJob() {
           </T>
         ) : null}
       </Card>
-      <Card>
-        <VisitFormFields f={f} />
-      </Card>
+      <VisitFormFields f={f} />
       <Button label={t("sch.save")} icon="calendar" variant="primary" full disabled={f.past} onPress={save} />
       <NotifySheet visitId={notifyId} onClose={() => { setNotifyId(null); back(); }} />
     </Screen>

@@ -21,10 +21,10 @@ exports.run = async (h) => {
   await h.go(`/job/schedule?jobId=${job.id}`);
   await h.page.getByRole("radiogroup").first().getByRole("radio").nth(3).click();
   // the visit form (docs/specs/03 §7.1): person, a free slot, length, note
-  await h.page.getByRole("button", { name: "Ivan Sokolov" }).click();
-  await h.page.getByRole("radio", { name: /^1:00/ }).click();
-  await h.page.getByRole("button", { name: "Длительность +15" }).first().click();
-  await h.page.getByPlaceholder(/Собака во дворе/).fill("Gate code at the office");
+  await h.page.getByRole("button", { name: "Ivan Sokolov" }).last().click();
+  await h.page.getByRole("radio", { name: /^1:00/ }).last().click();
+  await h.page.getByRole("button", { name: "Длительность +15" }).last().click();
+  await h.page.getByPlaceholder(/Собака во дворе/).last().fill("Gate code at the office");
   await h.page.getByRole("button", { name: "Запланировать", exact: true }).last().click(); await h.page.waitForTimeout(600);
   await h.expectText(/Сообщить клиенту\?/, "notify sheet after scheduling");
   await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await h.page.waitForTimeout(400);

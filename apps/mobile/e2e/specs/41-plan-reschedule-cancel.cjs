@@ -43,8 +43,14 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: "Клиент отменил" }).click();
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click(); await p.waitForTimeout(600);
   db = await h.db();
-  h.expect(!db.visits.some((x) => x.id === v.id), "the cancelled visit leaves the screens");
+  h.expect(!db.visits.some((x) => x.id === v.id), "the cancelled visit leaves the Plan and the day");
+  const gone = (db.cancelledVisits ?? []).find((x) => x.id === v.id);
+  h.expect(gone && gone.cancelReason === "client_cancelled", "…but it is kept with its reason (§5.2)");
   h.expect(db.leads.find((x) => x.id === angela.id).status === "replied", "S4a: lead back to «На связи»");
+  // the lead's feed shows the cancelled inspection with the reason
+  await h.go(`/lead/${angela.id}`);
+  await h.clickText("Переписка");
+  await h.expectText(/Осмотр отменён: клиент отменил/, "the lead's feed keeps the cancelled inspection");
 
   // S9a: the only visit of a scheduled job (demo j2) — the job waits for a date again
   h.expect(db.jobs.find((j) => j.id === "j2").status === "scheduled" && db.visits.filter((x) => x.jobId === "j2").length === 1, "j2 has one visit");
@@ -55,6 +61,10 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click(); await p.waitForTimeout(600);
   db = await h.db();
   h.expect(db.jobs.find((j) => j.id === "j2").status === "unscheduled", "S9a: job waits for a date again");
+  // «Отменить» in the toast (5 s) brings the visit and the job back
+  await p.getByRole("button", { name: "Отменить", exact: true }).last().click(); await p.waitForTimeout(500);
+  db = await h.db();
+  h.expect(db.visits.some((x) => x.id === "v2") && db.jobs.find((j) => j.id === "j2").status === "scheduled", "undo: the visit and the job are back");
 
   // a visit already on site: no move, no cancel (demo v4 is working)
   await h.go("/visit/v4");

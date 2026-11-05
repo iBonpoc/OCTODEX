@@ -136,6 +136,7 @@ export function makeSeed(): DB {
     sources: SEED_SOURCES,
     tags: SEED_TAGS,
     serviceCategories: SEED_SERVICE_CATEGORIES,
+    cancelledVisits: [],
     tasks: [
       { id: "t1", subjectType: "lead", subjectId: "l3", title: "Send the painting estimate", dueAt: hoursFromNow(20), assigneeId: "m-alex" },
     ],

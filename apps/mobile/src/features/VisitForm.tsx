@@ -3,7 +3,7 @@
  * работу», «Перенести»; «Сообщить клиенту?» after saving; «Отменить выезд» (§7.4). Rules — features/schedule.ts.
  * Menus in sheets are rows (rule 12); one accent: the save button.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Linking, View } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { router } from "expo-router";
@@ -15,7 +15,6 @@ import type { CancelReason, ID, Visit } from "@/data/types";
 import { CANCEL_REASONS } from "@/data/types";
 import { tFor } from "@/i18n/translate";
 import { useI18n, type DictKey } from "@/i18n";
-import { Labeled } from "@/features/fields";
 import { atMinute, canReschedule, dayVisits, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -30,6 +29,18 @@ const startOfDay = (offset: number) => {
   d.setDate(d.getDate() + offset);
   return d;
 };
+
+/** a labelled block that keeps its own height (Labeled grows with flex: 1 and collapses inside a wide screen) */
+function Field({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <View style={{ gap: space[1] }}>
+      <T v="micro" tone="mut">
+        {label}
+      </T>
+      {children}
+    </View>
+  );
+}
 
 /** state of the form: day (0 = today), start minute, length, person, note; derived start and warnings */
 export function useVisitForm(init: { durationMin: number; techId?: ID | null; start?: string; exceptId?: ID }) {
@@ -75,19 +86,19 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
   };
   return (
     <View style={{ gap: space[3] }}>
-      <Labeled label={t("sch.date")}>
+      <Field label={t("sch.date")}>
         <ChoiceChips value={String(f.dayOffset)} onChange={(k) => { f.setDayOffset(Number(k)); f.setMinute(null); }} items={days} />
         {!moreDays ? <Button label={t("vf.moreDays")} size="sm" variant="ghost" onPress={() => setMoreDays(true)} /> : null}
-      </Labeled>
-      <Labeled label={t("sch.tech")}>
+      </Field>
+      <Field label={t("sch.tech")}>
         <View>
           <ListRow title={`${f.techId === null ? "✓ " : ""}${t("vf.dispatcherAssigns")}`} onPress={() => f.setTechId(null)} />
           {techs.map((m) => (
             <ListRow key={m.id} title={`${f.techId === m.id ? "✓ " : ""}${m.name}`} subtitle={load(m.id)} onPress={() => { f.setTechId(m.id); f.setMinute(null); }} />
           ))}
         </View>
-      </Labeled>
-      <Labeled label={t("sch.start")}>
+      </Field>
+      <Field label={t("sch.start")}>
         {f.slots.length ? (
           <ChoiceChips
             value={String(f.startMin)}
@@ -102,12 +113,12 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
           <T v="title" tabular>{time(f.value.start)}</T>
           <IconButton icon="plus" label={`${t("vf.otherTime")} +${SCHEDULE_DEFAULTS.stepMin}`} onPress={() => f.setMinute(Math.min(SCHEDULE_DEFAULTS.latestMin, f.startMin + SCHEDULE_DEFAULTS.stepMin))} />
         </RowView>
-      </Labeled>
+      </Field>
       <Stepper label={t("sch.duration")} unit={t("sch.min")} value={f.duration} step={SCHEDULE_DEFAULTS.durationStepMin} min={SCHEDULE_DEFAULTS.durationStepMin} max={SCHEDULE_DEFAULTS.maxDurationMin} onChange={f.setDuration} />
       {noteLabel ? (
-        <Labeled label={t("lead.book.note")}>
+        <Field label={t("lead.book.note")}>
           <TextField type="note" value={f.note} onChangeText={f.setNote} placeholder={t("lead.book.notePh")} />
-        </Labeled>
+        </Field>
       ) : null}
       {f.warnings.map((w) => (
         <T key={w.key} v="caption" tone="warn">
