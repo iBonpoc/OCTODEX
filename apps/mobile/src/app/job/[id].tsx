@@ -3,6 +3,7 @@ import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { jobProfit, useStore } from "@/data/store";
+import { canSeeProfit } from "@/nav/roles";
 import { useI18n } from "@/i18n";
 import { ContractStatement } from "@/features/ContractStatement";
 import { jobStatusView } from "@/features/jobs";
@@ -37,7 +38,7 @@ export default function JobScreen() {
   const st = jobStatusView[j.status];
   const tel = (c?.phone ?? "").replace(/[^\d+]/g, "");
   const addr = [p?.address, p?.city].filter(Boolean).join(", ");
-  const showMoney = store.role !== "tech";
+  const showMoney = canSeeProfit(store.role);
   return (
     <Screen title={j.title} back={back} subtitle={c?.name}>
       <Card status={st.status}>

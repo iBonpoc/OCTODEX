@@ -27,13 +27,12 @@ export const es: Dict = {
   "nav.escHint": "subir un nivel",
 
   "quick.title": "Acciones rápidas",
-  "quick.voice": "Nota de voz",
-  "quick.voiceHint": "Diga qué hacer: “presupuesto de 120 pies, dos pisos”",
   "quick.lead": "Nuevo cliente potencial",
   "quick.estimate": "Presupuesto",
   "quick.photo": "Foto",
   "quick.receipt": "Gasto con recibo",
-  "quick.soon": "Llega en la etapa {n}",
+  // nav.* — app shell (docs/specs/13)
+  "nav.photoNoVisit": "La foto va en una visita. Hoy no tiene visitas abiertas: abra la visita y agregue la foto allí.",
 
   "st.scheduled": "Programada",
   "st.en_route": "En camino",
@@ -437,7 +436,7 @@ export const es: Dict = {
   "exp.save": "Guardar gasto",
   "exp.saved": "Gasto {amount} guardado",
   "exp.need": "Ingrese el monto",
-  "exp.aiNote": "La lectura de recibos con IA llega en la etapa 6; por ahora ingrese el monto.",
+  "exp.aiNote": "Por ahora ingrese a mano el monto del recibo.",
   "exp.cat.materials": "Materiales",
   "exp.cat.fuel": "Gasolina",
   "exp.cat.dump": "Basurero",
@@ -906,7 +905,7 @@ export const es: Dict = {
   "settings.hints": "Consejos",
   "settings.hintsText": "Consejos en la primera visita a una sección.",
   "settings.testing": "Para pruebas",
-  "settings.testingHint": "Visible en la demo y para quien tiene varios roles. Al personal el director le asigna el rol en Equipo.",
+  "settings.testingHint": "Solo en la demo: trabajar sin conexión y restablecer los datos de ejemplo.",
   "menu.sections": "Secciones",
   "menu.companySettings": "Ajustes de la empresa",
   "client.mainContacts": "Contactos principales del cliente",
