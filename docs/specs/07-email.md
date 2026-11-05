@@ -107,7 +107,17 @@ countersign_estimate → app.execute_estimate → insert email_outbox (kind 'sig
 ## 7. План PR (новый чат смет)
 
 1. **П1a, база:** `email_outbox`, вставка в `execute_estimate`, `resend_signed_copy`, тесты базы.
-2. **П1b, функция:** `send-email`, `_shared/mailer.ts`, `_shared/emailText.ts`, Deno-тесты, runbook оператора, вебхук (настройка — в runbook).
+   Сделано (миграция `20261105350000_email_outbox.sql`, тест базы T37):
+   - `public.email_outbox` (очередь и журнал), чтение — owner, admin, office; запись — только функции;
+   - `app.enqueue_signed_copy` из `app.execute_estimate`: одна автоматическая строка на договор (`on conflict do nothing`), ошибки очереди перехватываются, подпись не откатывается;
+   - первый статус ставит база: выкл в настройках → `skipped_off`; нет email → `skipped_no_email`; лимит → `rate_limited`; иначе `queued`;
+   - лимиты: 3 повтора на смету, не чаще раза в 10 минут; 20 в сутки на компанию; 90 в сутки на площадку; `skipped_*` и `rate_limited` в лимит не входят;
+   - `public.resend_signed_copy` (owner, admin, office): «Отправить ещё раз» — отдельная строка, ручной повтор не зависит от автокопии;
+   - для функции П1b: `public.email_claim` (забрать строку один раз, адрес читается из карточки клиента в момент отправки, строка старше суток → `expired`) и `public.email_finish` (`sent` / `failed` / `not_configured`, `p_final` после 4xx) — только `service_role`;
+   - `app.clean_email` (один ASCII-адрес ≤ 254, без `\r\n , ; ? <>`), `app.email_outbox_purge` (адреса старше 2 лет);
+   - `public.reissue_estimate_link` (§9.7): новая ссылка подписанной сметы, старый токен — в `revoked_link_tokens`.
+   **Перенесено в П1b** (решение руководителя 05.11): триггер `after insert` через `pg_net`, секрет вебхука в Vault, `pg_cron` повторов и ежедневной очистки. Функции отправки ещё нет, а в локальной базе тестов нет `pg_net`, `pg_cron` и Vault. До П1b строки копятся в `queued`, наружу ничего не уходит.
+2. **П1b, функция:** `send-email`, `_shared/mailer.ts`, `_shared/emailText.ts`, Deno-тесты, runbook оператора, триггер `pg_net` + Vault + `pg_cron` (из П1a).
 3. **П1c, приложение:** статус в карточке сметы, «Отправить ещё раз», переключатель (по согласованию), e2e. Общие файлы — отдельным маленьким PR.
 
 ## 8. Вопросы основателю
