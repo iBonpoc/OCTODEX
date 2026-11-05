@@ -567,6 +567,7 @@ export const en: Dict = {
   "notice.title": "Notifications",
   "notice.approved": "{name} approved the estimate for {total}",
   "notice.viewed": "{name} opened the estimate",
+  "notice.clientSigned": "{name} signed the estimate for {total} — sign for the company",
   "notice.deposit": "{name}: deposit {amount}",
   "cat.title": "Catalog",
   "cat.help": "Services, labor, materials and kits you often add to estimates. Material: supplier price + supplier tax + your markup = estimate price.",
