@@ -7,6 +7,10 @@ name: Release
 on:
   push:
     branches: [main]
+    # docs-only pushes do not change the app or the database: no release (founder 05.11.2026)
+    paths-ignore:
+      - 'docs/**'
+      - '**/*.md'
   workflow_dispatch:
 
 concurrency:
