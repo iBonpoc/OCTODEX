@@ -8,7 +8,7 @@ import Animated, { FadeIn, FadeOut, SlideInDown, SlideOutDown, useAnimatedProps,
 import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
-import { Icon, Press, T } from "./primitives";
+import { Icon, Press, T, type IconKey } from "./primitives";
 
 /* ---------- Glass panel (overlay background --ov + blur --blurov) ---------- */
 export function Glass({ children, style, strong }: { children: ReactNode; style?: object; strong?: boolean }) {
@@ -18,6 +18,81 @@ export function Glass({ children, style, strong }: { children: ReactNode; style?
       <BlurView intensity={strong ? c.blurOverlay * 3 : c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
       {children}
     </View>
+  );
+}
+
+/* ---------- Menu: iOS-style menu that opens right at the control (not a sheet from the bottom) ----------
+ * `anchor` = the control's frame in the window (measureInWindow). Tap outside or Android back closes.
+ */
+export interface MenuItem<K extends string> {
+  key: K;
+  label: string;
+  icon?: IconKey;
+  selected?: boolean;
+  destructive?: boolean;
+}
+export function Menu<K extends string>({
+  visible,
+  anchor,
+  items,
+  onSelect,
+  onClose,
+  title,
+}: {
+  visible: boolean;
+  anchor: { x: number; y: number; w: number; h: number } | null;
+  items: MenuItem<K>[];
+  onSelect: (k: K) => void;
+  onClose: () => void;
+  title?: string;
+}) {
+  const { c } = useTheme();
+  const { width: winW, height: winH } = useWindowDimensions();
+  const reduce = useReducedMotion();
+  if (!visible || !anchor) return null;
+  const w = Math.min(component.menuW, winW - space[4] * 2);
+  const left = Math.max(space[4], Math.min(anchor.x, winW - w - space[4]));
+  const below = anchor.y + anchor.h + space[1];
+  const estH = (items.length + (title ? 1 : 0)) * size.hitMin + space[2] * 2;
+  const top = below + estH > winH - space[4] ? Math.max(space[4], anchor.y - estH - space[1]) : below;
+  return (
+    <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
+      <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={title ?? ""} />
+      <Animated.View
+        entering={reduce ? undefined : FadeIn.duration(motion.durFast)}
+        exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
+        style={{ position: "absolute", left, top, width: w }}
+        accessibilityRole="menu"
+      >
+        <Glass strong style={{ borderRadius: radius.inner, paddingVertical: space[2] }}>
+          {title ? (
+            <T v="micro" tone="mut" style={{ paddingHorizontal: space[4], paddingVertical: space[1] }}>
+              {title}
+            </T>
+          ) : null}
+          {items.map((it) => (
+            <Press
+              key={it.key}
+              onPress={() => {
+                onClose();
+                onSelect(it.key);
+              }}
+              visibleHeight={size.hitMin}
+              accessibilityRole="menuitem"
+              accessibilityState={{ selected: !!it.selected }}
+              accessibilityLabel={it.label}
+              style={{ minHeight: size.hitMin, paddingHorizontal: space[4], flexDirection: "row", alignItems: "center", gap: space[2] }}
+            >
+              <View style={{ width: size.iconMd }}>{it.selected ? <Icon name="check" color={c.ink} /> : null}</View>
+              <T v="body" tone={it.destructive ? "bad" : "ink"} style={{ flex: 1 }}>
+                {it.label}
+              </T>
+              {it.icon ? <Icon name={it.icon} /> : null}
+            </Press>
+          ))}
+        </Glass>
+      </Animated.View>
+    </Modal>
   );
 }
 

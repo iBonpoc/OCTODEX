@@ -271,10 +271,13 @@ export function Segmented<K extends string>({
       })}
     </View>
   );
+  // scroll: a fixed capsule the width of the screen; the tabs slide inside it, its rounded ends never get cut
   return scroll ? (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
-      {bar}
-    </ScrollView>
+    <View style={{ alignSelf: "stretch", borderRadius: radius.pill, overflow: "hidden", backgroundColor: c.track }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+        {bar}
+      </ScrollView>
+    </View>
   ) : (
     bar
   );

@@ -12,7 +12,8 @@ exports.run = async (h) => {
   await h.expectText(/CLT-0001/, "client number in the header");
   await h.expectText(/VIP[\s\S]*Постоянный/, "tags, translated, in order");
   await h.expectText(/Должен[\s\S]*\$0[\s\S]*Оплатил всего[\s\S]*\$582\b/, "owes / paid total");
-  await h.expectText(/Tom Mitchell[\s\S]*Супруг\(а\)/, "second person with a role");
+  await h.expectText(/Контакты[\s\S]*\(626\) 555-0142[\s\S]*Дополнительные контакты[\s\S]*Tom Mitchell[\s\S]*Супруг\(а\)/, "contacts first, then the spouse");
+  await h.expectText(/Выставлено всего[\s\S]*Работ/, "invoiced total and jobs");
   await h.expectText(/\(626\) 555-0143/, "second phone of the main person");
 
   await tab("История");
@@ -26,6 +27,10 @@ exports.run = async (h) => {
   await p.getByPlaceholder("Новая задача").fill("Call in spring about painting");
   await h.click("Добавить");
   await h.expectText(/Call in spring about painting/, "task added");
+  await h.click("Готово");
+  await h.expectText(/Выполненные · 1[\s\S]*Call in spring about painting/, "done task stays, under Done");
+  await h.click("Вернуть");
+  await h.expectText(/Call in spring about painting[\s\S]*Готово/, "task reopened");
   await tab("Файлы");
   await h.expectText(/Фото с выездов|Файлов нет/, "files tab renders");
   await tab("Обзор");
@@ -45,10 +50,16 @@ exports.run = async (h) => {
   await save();
   await h.expectText(/VIP[\s\S]*Постоянный[\s\S]*Избранный/, "tag added");
 
-  // Status sheet: do not service needs a reason
+  // Status menu at the label (not a sheet): archive at once; "do not service" asks for a reason
   await p.getByRole("button", { name: /^Статус клиента/ }).click();
+  await p.waitForTimeout(400);
+  await p.getByRole("menuitem", { name: "В архиве" }).click();
+  await p.waitForTimeout(400);
+  await h.expectText(/В архиве/, "archived from the menu");
+  await p.getByRole("button", { name: /^Статус клиента/ }).click();
+  await p.waitForTimeout(400);
+  await p.getByRole("menuitem", { name: "Не обслуживаем" }).click();
   await p.waitForTimeout(500);
-  await h.sheet().getByRole("radio", { name: "Не обслуживаем" }).click();
   h.expect(await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().isDisabled(), "save needs a reason");
   await h.sheet().getByPlaceholder("Почему не обслуживаем").fill("Did not pay twice");
   await save();
@@ -60,6 +71,11 @@ exports.run = async (h) => {
   await p.getByPlaceholder("Имя, телефон или адрес").fill("555-0199");
   await p.waitForTimeout(400);
   await h.expectText(/Sarah Mitchell/, "found by a second person's phone");
+  await p.getByPlaceholder("Имя, телефон или адрес").fill("");
+  await p.getByRole("checkbox", { name: "Избранный" }).click();
+  await p.waitForTimeout(400);
+  const fav = await h.text();
+  h.expect(/Linda Alvarez/.test(fav) && !/David Kim/.test(fav), "filter by tag");
 
   // tech: own clients only, no money
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));

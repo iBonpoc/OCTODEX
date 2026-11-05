@@ -36,19 +36,111 @@ export function PeopleSheet({ visible, customer, onClose }: { visible: boolean; 
     setDirty(true);
   };
   const save = () => {
-    toast.show(t("person.saved"), store.saveCustomerPeople(customer.id, people));
+    // the main contact is the client itself: same name
+    const out = people.map((p, i) => (i === 0 ? { ...p, name: customer.name, role: "main" as const } : p));
+    toast.show(t("person.saved"), store.saveCustomerPeople(customer.id, out));
     setDirty(false);
     onClose();
   };
+  /** phones and emails of one person: "+ Phone" / "+ Email" are buttons; with several, one is marked "primary" */
+  const fields = (p: Person, i: number) => (
+    <>
+      {p.phones.map((ph, k) => (
+        <View key={`ph${k}`} style={{ gap: space[2] }}>
+          <RowView>
+            <View style={{ flex: 1 }}>
+              <TextField
+                type="phone"
+                value={ph.number}
+                onChangeText={(v) => edit(i, (x) => ({ ...x, phones: x.phones.map((y, j) => (j === k ? { ...y, number: v } : y)) }))}
+                placeholder={t("person.phone")}
+              />
+            </View>
+            <IconButton icon="trash" label={t("person.removePhone")} onPress={() => edit(i, (x) => ({ ...x, phones: x.phones.filter((_, j) => j !== k) }))} />
+          </RowView>
+          <RowView style={{ flexWrap: "wrap" }}>
+            <ChoiceChips<PhoneLabel>
+              value={ph.label}
+              onChange={(l) => edit(i, (x) => ({ ...x, phones: x.phones.map((y, j) => (j === k ? { ...y, label: l } : y)) }))}
+              items={LABELS.map((l) => ({ key: l, label: t(`phone.${l}` as DictKey) }))}
+            />
+            {p.phones.length > 1 ? (
+              ph.primary ? (
+                <T v="caption" tone="mut">
+                  {t("person.primary")}
+                </T>
+              ) : (
+                <Button
+                  label={t("person.makePrimary")}
+                  variant="ghost"
+                  size="sm"
+                  onPress={() => edit(i, (x) => ({ ...x, phones: x.phones.map((y, j) => ({ ...y, primary: j === k || undefined })) }))}
+                />
+              )
+            ) : null}
+          </RowView>
+        </View>
+      ))}
+      {p.emails.map((e, k) => (
+        <View key={`em${k}`} style={{ gap: space[2] }}>
+          <RowView>
+            <View style={{ flex: 1 }}>
+              <TextField
+                type="email"
+                value={e.address}
+                onChangeText={(v) => edit(i, (x) => ({ ...x, emails: x.emails.map((y, j) => (j === k ? { ...y, address: v } : y)) }))}
+                placeholder={t("person.email")}
+              />
+            </View>
+            <IconButton icon="trash" label={t("person.removeEmail")} onPress={() => edit(i, (x) => ({ ...x, emails: x.emails.filter((_, j) => j !== k) }))} />
+          </RowView>
+          {p.emails.length > 1 ? (
+            e.primary ? (
+              <T v="caption" tone="mut">
+                {t("person.primary")}
+              </T>
+            ) : (
+              <Button
+                label={t("person.makePrimary")}
+                variant="ghost"
+                size="sm"
+                onPress={() => edit(i, (x) => ({ ...x, emails: x.emails.map((y, j) => ({ ...y, primary: j === k || undefined })) }))}
+              />
+            )
+          ) : null}
+        </View>
+      ))}
+      <RowView style={{ flexWrap: "wrap" }}>
+        <Button
+          label={t("person.addPhone")}
+          icon="plus"
+          variant="secondary"
+          size="sm"
+          onPress={() => edit(i, (x) => ({ ...x, phones: [...x.phones, { number: "", label: "mobile", primary: x.phones.length === 0 || undefined }] }))}
+        />
+        <Button
+          label={t("person.addEmail")}
+          icon="plus"
+          variant="secondary"
+          size="sm"
+          onPress={() => edit(i, (x) => ({ ...x, emails: [...x.emails, { address: "", primary: x.emails.length === 0 || undefined }] }))}
+        />
+      </RowView>
+    </>
+  );
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("client.people")} dirty={dirty} onSave={save}>
-      {people.map((p, i) => (
-        <Card key={p.id}>
-          <RowView style={{ justifyContent: "space-between" }}>
-            <T v="micro" tone="mut">
-              {i === 0 ? t("person.mainPerson") : t("person.n", { n: i + 1 })}
-            </T>
-            {people.length > 1 ? (
+    <Sheet visible={visible} onClose={onClose} title={t("client.contacts")} dirty={dirty} onSave={save}>
+      <SectionTitle title={t("client.mainContacts")} />
+      {people[0] ? <Card>{fields(people[0], 0)}</Card> : null}
+      <SectionTitle title={t("client.moreContacts")} />
+      {people.slice(1).map((p, j) => {
+        const i = j + 1;
+        return (
+          <Card key={p.id}>
+            <RowView>
+              <View style={{ flex: 1 }}>
+                <TextField type="name" value={p.name} onChangeText={(v) => edit(i, (x) => ({ ...x, name: v }))} placeholder={t("person.name")} />
+              </View>
               <Button
                 label={t("person.remove")}
                 variant="ghost"
@@ -58,79 +150,22 @@ export function PeopleSheet({ visible, customer, onClose }: { visible: boolean; 
                   setDirty(true);
                 }}
               />
-            ) : null}
-          </RowView>
-          <TextField type="name" value={p.name} onChangeText={(v) => edit(i, (x) => ({ ...x, name: v }))} placeholder={t("person.name")} />
-          <ChoiceChips<PersonRole> value={p.role} onChange={(r) => edit(i, (x) => ({ ...x, role: r }))} items={ROLES.map((r) => ({ key: r, label: t(`person.role.${r}` as DictKey) }))} />
-          {p.phones.map((ph, k) => (
-            <View key={`ph${k}`} style={{ gap: space[2] }}>
-              <RowView>
-                <View style={{ flex: 1 }}>
-                  <TextField
-                    type="phone"
-                    value={ph.number}
-                    onChangeText={(v) => edit(i, (x) => ({ ...x, phones: x.phones.map((y, j) => (j === k ? { ...y, number: v } : y)) }))}
-                    placeholder={t("person.phone")}
-                  />
-                </View>
-                <IconButton
-                  icon="star"
-                  label={t("person.makePrimary")}
-                  active={!!ph.primary}
-                  onPress={() => edit(i, (x) => ({ ...x, phones: x.phones.map((y, j) => ({ ...y, primary: j === k || undefined })) }))}
-                />
-                <IconButton icon="trash" label={t("person.removePhone")} onPress={() => edit(i, (x) => ({ ...x, phones: x.phones.filter((_, j) => j !== k) }))} />
-              </RowView>
-              <ChoiceChips<PhoneLabel>
-                value={ph.label}
-                onChange={(l) => edit(i, (x) => ({ ...x, phones: x.phones.map((y, j) => (j === k ? { ...y, label: l } : y)) }))}
-                items={LABELS.map((l) => ({ key: l, label: t(`phone.${l}` as DictKey) }))}
-              />
-            </View>
-          ))}
-          {p.emails.map((e, k) => (
-            <RowView key={`em${k}`}>
-              <View style={{ flex: 1 }}>
-                <TextField
-                  type="email"
-                  value={e.address}
-                  onChangeText={(v) => edit(i, (x) => ({ ...x, emails: x.emails.map((y, j) => (j === k ? { ...y, address: v } : y)) }))}
-                  placeholder={t("person.email")}
-                />
-              </View>
-              <IconButton
-                icon="star"
-                label={t("person.makePrimary")}
-                active={!!e.primary}
-                onPress={() => edit(i, (x) => ({ ...x, emails: x.emails.map((y, j) => ({ ...y, primary: j === k || undefined })) }))}
-              />
-              <IconButton icon="trash" label={t("person.removeEmail")} onPress={() => edit(i, (x) => ({ ...x, emails: x.emails.filter((_, j) => j !== k) }))} />
             </RowView>
-          ))}
-          <RowView style={{ flexWrap: "wrap" }}>
-            <Button
-              label={t("person.addPhone")}
-              icon="plus"
-              variant="secondary"
-              size="sm"
-              onPress={() => edit(i, (x) => ({ ...x, phones: [...x.phones, { number: "", label: "mobile", primary: x.phones.length === 0 || undefined }] }))}
+            <ChoiceChips<PersonRole>
+              value={p.role}
+              onChange={(r) => edit(i, (x) => ({ ...x, role: r }))}
+              items={ROLES.filter((r) => r !== "main").map((r) => ({ key: r, label: t(`person.role.${r}` as DictKey) }))}
             />
-            <Button
-              label={t("person.addEmail")}
-              icon="plus"
-              variant="secondary"
-              size="sm"
-              onPress={() => edit(i, (x) => ({ ...x, emails: [...x.emails, { address: "", primary: x.emails.length === 0 || undefined }] }))}
-            />
-          </RowView>
-        </Card>
-      ))}
+            {fields(p, i)}
+          </Card>
+        );
+      })}
       <Button
-        label={t("person.add")}
+        label={t("client.addContact")}
         icon="plus"
         variant="secondary"
         onPress={() => {
-          setPeople((ps) => [...ps, { id: Crypto.randomUUID(), name: "", role: "spouse", phones: [], emails: [] }]);
+          setPeople((ps) => [...ps, { id: Crypto.randomUUID(), name: "", role: "spouse", phones: [{ number: "", label: "mobile", primary: true }], emails: [] }]);
           setDirty(true);
         }}
       />
@@ -186,7 +221,7 @@ export function TagsSheet({ visible, customer, onClose }: { visible: boolean; cu
   );
 }
 
-export function StatusSheet({ visible, customer, onClose }: { visible: boolean; customer: Customer; onClose: () => void }) {
+export function StatusSheet({ visible, customer, onClose, preset }: { visible: boolean; customer: Customer; onClose: () => void; preset?: CustomerStatus }) {
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -195,10 +230,10 @@ export function StatusSheet({ visible, customer, onClose }: { visible: boolean; 
   const [reason, setReason] = useState(customer.statusReason ?? "");
   useEffect(() => {
     if (visible) {
-      setSt(statusOf(customer));
+      setSt(preset ?? statusOf(customer));
       setReason(customer.statusReason ?? "");
     }
-  }, [visible, customer]);
+  }, [visible, customer, preset]);
   // prospect becomes active by itself (signature / manual win); here the office moves between the other three
   const options: CustomerStatus[] = cur === "prospect" ? ["prospect", "archived", "do_not_service"] : ["active", "archived", "do_not_service"];
   const dirty = st !== cur || (st === "do_not_service" && reason !== (customer.statusReason ?? ""));

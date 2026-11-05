@@ -1,8 +1,8 @@
 import { VersionBadge } from "@/features/version";
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { router, useGlobalSearchParams, usePathname, type Href } from "expo-router";
 import { navContext } from "@/nav/hierarchy";
-import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type StyleProp, type ViewStyle } from "react-native";
+import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
@@ -289,6 +289,9 @@ export function Screen({
   back,
   subtitle,
   hintKey,
+  tabs,
+  tabKey,
+  below,
 }: {
   title: string;
   help?: string;
@@ -299,6 +302,14 @@ export function Screen({
   subtitle?: string;
   /** stable id for the first-visit hint (shown once when `help` is set) */
   hintKey?: string;
+  /**
+   * Tabs that stick to the top while scrolling (like the App Store), with `below` = the tab's content.
+   * When `tabKey` changes and the page is scrolled past the tabs, it glides back so the tabs sit at the top;
+   * the content area is at least one screen tall, so switching tabs never makes the page jump.
+   */
+  tabs?: ReactNode;
+  tabKey?: string;
+  below?: ReactNode;
 }) {
   const navInsets = useNavInsets();
   const kb = useKeyboardHeight();
@@ -398,18 +409,39 @@ export function Screen({
       {children}
     </View>
   );
+  const { height: winH } = useWindowDimensions();
+  const scrollRef = useRef<ScrollViewInstance>(null);
+  const tabsY = useRef(0);
+  const offset = useRef(0);
+  useEffect(() => {
+    if (tabs && offset.current > tabsY.current) scrollRef.current?.scrollTo({ y: tabsY.current, animated: true });
+  }, [tabKey, tabs]);
+  const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
   return (
     <View style={{ flex: 1 }}>
       <Background />
       {scroll ? (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
           <ScrollView
+            ref={scrollRef}
             contentContainerStyle={{ paddingTop: navInsets.top, paddingBottom: kb ? space[6] : navInsets.bottom, paddingHorizontal: space[4] }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             automaticallyAdjustKeyboardInsets
+            stickyHeaderIndices={tabs ? [1] : undefined}
+            scrollEventThrottle={16}
+            onScroll={tabs ? (e) => (offset.current = e.nativeEvent.contentOffset.y) : undefined}
           >
             {content}
+            {tabs ? (
+              <View
+                onLayout={(e) => (tabsY.current = e.nativeEvent.layout.y)}
+                style={{ backgroundColor: c.bg, paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
+              >
+                <View style={column}>{tabs}</View>
+              </View>
+            ) : null}
+            {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - navInsets.top - navInsets.bottom }]}>{below}</View> : null}
           </ScrollView>
         </KeyboardAvoidingView>
       ) : (

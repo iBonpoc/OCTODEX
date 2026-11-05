@@ -35,17 +35,25 @@ describe("old saved data after an app update", () => {
     expect(db.sources).toEqual([]);
     expect(() => filterLeads(db, "director", { filter: "open" })).not.toThrow();
   });
-  it("build 45 data (no tags, clients without people / numbers): demo gets default tags, clients read as one main person", () => {
+  it("build 45 data (no tags, clients without people / numbers): demo gets tags, numbers, tags and people of test clients", () => {
     const d = makeSeed() as unknown as Record<string, unknown>;
     delete d.tags;
-    d.customers = (d.customers as Record<string, unknown>[]).map(({ people: _p, tagIds: _t, number: _n, ...c }) => c);
+    d.customers = [
+      ...(d.customers as Record<string, unknown>[]).map(({ people: _p, tagIds: _t, number: _n, ...c }) => c),
+      { id: "mine", name: "Added by hand", phone: "(818) 555-0000", sourceId: "src-other", balanceCents: 0 },
+    ];
     const db = normalizeDB(d as unknown as DB, "demo");
     expect(db.tags.map((t) => t.name)).toEqual(["VIP", "Regular", "Favorite", "No calls after 6 pm"]);
     const sarah = db.customers.find((c) => c.id === "c1")!;
-    expect(peopleOf(sarah)).toHaveLength(1);
-    expect(peopleOf(sarah)[0]!.phones[0]!.number).toBe("(626) 555-0142");
-    expect(sarah.tagIds ?? []).toEqual([]);
-    expect(normalizeDB(d as unknown as DB, "cloud").tags).toEqual([]);
+    expect(sarah.number).toBe("CLT-0001");
+    expect(sarah.tagIds).toEqual(["tag-vip", "tag-regular"]);
+    expect(peopleOf(sarah).map((p) => p.name)).toEqual(["Sarah Mitchell", "Tom Mitchell"]);
+    expect(db.customers.find((c) => c.id === "mine")!.number).toBe("CLT-0008");
+    // the cloud keeps what the server sends: no demo tags, no invented numbers
+    const cloud = normalizeDB(d as unknown as DB, "cloud");
+    expect(cloud.tags).toEqual([]);
+    expect(cloud.customers.find((c) => c.id === "c1")!.number).toBeUndefined();
+    expect(peopleOf(cloud.customers.find((c) => c.id === "c1")!)).toHaveLength(1);
   });
   it("today's data is left as is", () => {
     const d = makeSeed();
