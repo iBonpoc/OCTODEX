@@ -70,7 +70,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       q<Row>(supabase.from("estimate_line_costs").select("line_item_id, unit_cost_cents").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
       q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
     ]);
-  const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows, tagRows, customerTagRows, phoneRows, emailRows, gateRows] = await Promise.all([
+  const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows, tagRows, customerTagRows, phoneRows, emailRows, catRows, gateRows] = await Promise.all([
     q<Row>(supabase.from("companies").select("*").eq("id", companyId)),
     // EIN: owner/admin only — others get nothing
     q<Row>(supabase.from("company_secrets").select("ein").eq("company_id", companyId)).catch(() => [] as Row[]),
@@ -87,6 +87,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     q<Row>(supabase.from("customer_tags").select("customer_id, tag_id").eq("company_id", companyId)).catch(() => [] as Row[]),
     live<Row>("contact_phones", "contact_id, number, label, is_primary, position").catch(() => [] as Row[]),
     live<Row>("contact_emails", "contact_id, address, is_primary, position").catch(() => [] as Row[]),
+    // directions of the business (docs/specs/11-trade.md): no deleted_at, archived ones stay; empty before the migration
+    q<Row>(supabase.from("service_categories").select("id, seed_key, name, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]),
     // C2: gate codes — RLS gives the office all of them, a tech only on the visit days (app.can_see_gate_code)
     q<Row>(supabase.from("property_secrets").select("property_id, gate_code").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
   ]);
@@ -180,6 +182,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     const depInv = depositJob ? invoices.find((i) => i.job_id === depositJob.id && i.kind === "deposit") : undefined;
     return {
       id: s(e.id),
+      serviceCategoryId: (e.service_category_id as string | null) ?? undefined,
       customerId: s(e.customer_id),
       propertyId: s(e.property_id),
       title: s(e.title) || s(e.number),
@@ -240,6 +243,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
 
   const mappedLeads: Lead[] = leads.map((l) => ({
     id: s(l.id),
+    serviceCategoryId: (l.service_category_id as string | null) ?? undefined,
     name: s(l.contact_name) || "—",
     phone: s(l.phone),
     email: (l.email as string | null) ?? undefined,
@@ -291,6 +295,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     status: j.status === "draft" && j.estimate_id ? "unscheduled" : jobStatus[s(j.status)] ?? "scheduled",
     amountCents: n(j.contract_total_cents),
     estimateId: (j.estimate_id as string | null) ?? undefined,
+    serviceCategoryId: (j.service_category_id as string | null) ?? undefined,
   }));
 
   const mappedExpenses: Expense[] = expenses.map((x) => ({
@@ -338,6 +343,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         tagIds: tagsOfCustomer.get(s(c.id)) ?? [],
       };
     }),
+    serviceCategories: catRows
+      .map((r) => ({ id: s(r.id), seedKey: (r.seed_key as string | null) ?? undefined, name: (r.name as string | null) ?? undefined, position: n(r.position), archivedAt: (r.archived_at as string | null) ?? undefined }))
+      .sort((a, b) => a.position - b.position),
     tags: tagRows
       .map((r) => ({ id: s(r.id), name: s(r.name), active: r.is_active !== false, system: !!r.is_system, position: n(r.position) }))
       .sort((a, b) => a.position - b.position || a.name.localeCompare(b.name)),

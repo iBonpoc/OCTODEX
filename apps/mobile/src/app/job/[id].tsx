@@ -6,6 +6,8 @@ import { useI18n } from "@/i18n";
 import { ContractStatement } from "@/features/ContractStatement";
 import { jobStatusView } from "@/features/jobs";
 import { NotesBlock } from "@/features/NotesBlock";
+import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
+import { useToast } from "@/ui/overlays";
 import { visitStatus } from "@/features/visits";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -17,6 +19,7 @@ export default function JobScreen() {
   const store = useStore();
   const { db } = store;
   const { t, money, day, time } = useI18n();
+  const toast = useToast();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/jobs"));
   const j = db.jobs.find((x) => x.id === id);
   if (!j)
@@ -115,6 +118,7 @@ export default function JobScreen() {
         </View>
       ) : null}
 
+      <ServiceCategoryRow value={j.serviceCategoryId} onChange={(id) => toast.show(t("dir.changed"), store.setJobCategory(j.id, id))} />
       <NotesBlock subjectType="job" subjectId={j.id} />
     </Screen>
   );

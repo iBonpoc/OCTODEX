@@ -12,7 +12,7 @@ import { Card, RowView } from "@/ui/surfaces";
 export function CompanySetupCard() {
   const { db } = useStore();
   const { t } = useI18n();
-  const p = setupProgress(db.company);
+  const p = setupProgress(db.company, db.serviceCategories);
   if (!db.company || p.done === p.total) return null;
   return (
     <Card status="warn" onPress={() => router.push("/company")} accessibilityLabel={t("co.setupTitle")}>

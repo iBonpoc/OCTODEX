@@ -13,6 +13,7 @@ import {
 import { leadSettingsOf } from "@/features/leadSettings";
 import { CloseSheet, ContactActions, LeadHistory, LeadOverview, smsWithBody, TasksBlock } from "@/features/lead/LeadParts";
 import { BookSheet, CallResultSheet, LostOrWaitSheet, NextStepSheet, SnoozeSheet, StatusSheet } from "@/features/lead/LeadSheets";
+import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { NotesBlock } from "@/features/NotesBlock";
 import { ReplySheet, useTick } from "@/features/sheets";
 import { Button, ChoiceChips, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
@@ -140,6 +141,7 @@ export default function LeadScreen() {
       {tab === "overview" ? (
         <>
           <LeadOverview l={l} />
+          <ServiceCategoryRow value={l.serviceCategoryId} onChange={(id) => toast.show(t("dir.changed"), store.updateLead(l.id, { serviceCategoryId: id }))} />
           <SectionTitle title={t("lead.recent")} right={<Button label={t("lead.recent.all")} size="sm" variant="ghost" onPress={() => setTab("history")} />} />
           {events.length ? (
             <CardList>
