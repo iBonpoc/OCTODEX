@@ -7,7 +7,8 @@ export default function TabsLayout() {
       tabBar={(props) => <TabBar {...props} />}
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: "transparent" } }}
     >
-      <Tabs.Screen name="index" options={{ href: null }} />
+      {/* no `href: null` here: a hidden screen cannot be opened by its address, and «/» fell to the first tab (Visits) */}
+      <Tabs.Screen name="index" />
       <Tabs.Screen name="visits" />
       <Tabs.Screen name="triage" />
       <Tabs.Screen name="today" />

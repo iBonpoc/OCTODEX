@@ -1427,6 +1427,8 @@ export const ru = {
   "plan.kind.job": "Работа",
   "vf.otherDate": "Другая дата",
   "vf.visitsSoFar": "Уже выездов: {n}",
+  // route-guard (screens by role)
+  "guard.noAccess": "Нет доступа к этому экрану — открыт ваш главный экран",
 } as const;
 
 export type DictKey = keyof typeof ru;

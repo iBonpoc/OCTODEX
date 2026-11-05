@@ -1428,4 +1428,6 @@ export const en: Dict = {
   "plan.kind.job": "Job",
   "vf.otherDate": "Other date",
   "vf.visitsSoFar": "Visits so far: {n}",
+  // route-guard (screens by role)
+  "guard.noAccess": "No access to this screen — opened your home screen",
 };

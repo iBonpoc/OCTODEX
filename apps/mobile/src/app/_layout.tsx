@@ -11,6 +11,7 @@ import { AuthProvider } from "@/cloud/auth";
 import { ToastProvider } from "@/ui/overlays";
 import { HintsProvider } from "@/ui/hints";
 import { NoticeWatcher } from "@/features/notices";
+import { RouteGuard } from "@/nav/RouteGuard";
 
 function Shell() {
   const { c, name } = useTheme();
@@ -20,6 +21,7 @@ function Shell() {
       <ToastProvider>
         <NoticeWatcher />
         <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }} />
+        <RouteGuard />
       </ToastProvider>
     </View>
   );
