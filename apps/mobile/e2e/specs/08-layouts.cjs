@@ -11,7 +11,7 @@ const SCREENS = [
  * Screens already on the new list cards (step 10а, docs/specs/06-list-cards.md): also checked for straight edges and equal
  * rows (e2e/cardsAlignment.cjs). Every PR that moves a list to ListCard adds its screen here.
  */
-const CARD_SCREENS = [{ path: "/clients", search: "Имя, телефон или адрес" }, { path: "/inbox", search: "Имя, телефон, адрес, услуга" }, { path: "/estimates", reference: (p) => p.getByRole("radiogroup").first(), min: 1 }, { path: "/money", reference: (p) => p.getByRole("radiogroup").first(), min: 1 }, { path: "/catalog", search: "Поиск в каталоге" }];
+const CARD_SCREENS = [{ path: "/clients", search: "Имя, телефон или адрес" }, { path: "/inbox", search: "Имя, телефон, адрес, услуга" }, { path: "/estimates", reference: (p) => p.getByRole("radiogroup").first(), min: 1 }, { path: "/money", reference: (p) => p.getByRole("radiogroup").first(), min: 1 }, { path: "/catalog", search: "Поиск в каталоге" }, { path: "/jobs", reference: (p) => p.getByRole("radiogroup").first(), min: 1 }];
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 /** loops over all requested layouts itself (one browser context per layout) */
 exports.ownLayouts = true;
