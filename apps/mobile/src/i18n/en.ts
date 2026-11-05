@@ -1364,6 +1364,7 @@ export const en: Dict = {
   "card.morePeople": "More people: {n}",
   "card.moreReasons": "{n} more reasons",
   "card.val.paid": "paid",
+  "card.val.deposit": "deposit",
   "prop.h.visit": "Visit",
   "prop.h.estimate": "Estimate",
   "prop.h.note": "Note",

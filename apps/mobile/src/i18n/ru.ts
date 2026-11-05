@@ -1363,6 +1363,7 @@ export const ru = {
   "card.morePeople": "Ещё людей: {n}",
   "card.moreReasons": "ещё причин: {n}",
   "card.val.paid": "оплачен",
+  "card.val.deposit": "депозит",
   "prop.h.visit": "Визит",
   "prop.h.estimate": "Смета",
   "prop.h.note": "Заметка",

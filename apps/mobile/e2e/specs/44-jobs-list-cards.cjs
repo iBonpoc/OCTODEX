@@ -49,5 +49,5 @@ exports.run = async (h) => {
   h.expect(cards.length > 0, "the tech sees the jobs");
   for (const c of cards) h.expect(!/\$[\d,]+/.test(c), `tech sees no amount: ${c.slice(0, 160)}`);
   await h.shot("tech");
-  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("owner")));
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 };
