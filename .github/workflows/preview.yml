@@ -1,5 +1,6 @@
-# Preview of every PR before it is merged: an Expo Go update on its own channel "pr-<N>" and a web copy at
-# https://octodex--pr-<N>.expo.app. A comment on the PR gives both links. main and the release are not touched.
+# Preview of every PR before it is merged: a web copy at https://octodex--pr-<N>.expo.app (link in a PR comment).
+# NOT published to Expo Go: Expo Go lists every update of the project, and the founder must see only what is merged
+# (main → release.yml). Founder decision 05.11.2026.
 # The preview uses the same database as the app, but database migrations from the PR are NOT applied
 # (they go out only on merge, release.yml) — the comment says so when the PR has migrations.
 name: Preview
@@ -34,10 +35,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Publish the Expo Go update (channel pr-N)
-        working-directory: apps/mobile
-        run: |
-          npx eas-cli@latest update --channel "pr-$PR" --platform all --non-interactive --message "PR $PR @ ${GITHUB_SHA::7}"
       - name: Build the web app
         working-directory: apps/mobile
         run: npx expo export --platform web
@@ -61,16 +58,14 @@ jobs:
           script: |
             const pr = context.payload.pull_request.number;
             const sha = context.payload.pull_request.head.sha.slice(0, 7);
-            const expoGo = `exp://u.expo.dev/49d009d4-a05b-4911-b7da-1e47c4e10fba?runtime-version=exposdk%3A58.0.0&channel-name=pr-${pr}`;
             const alias = `https://octodex--pr-${pr}.expo.app`;
             const web = process.env.WEB_URL ? `${process.env.WEB_URL} (постоянный адрес этого PR: ${alias})` : alias;
             const mig = process.env.HAS_MIG === "1"
               ? "\n\n⚠ В этом PR есть изменения базы. В предпросмотре они ещё не применены: проверяйте экраны в демо-режиме, облачные данные заработают после слияния."
               : "";
-            const body = `<!-- octodex-preview -->\n### Предпросмотр PR #${pr} (\`${sha}\`)\n\n` +
-              `- **Телефон (Expo Go):** откройте ссылку в Safari на iPhone: \`${expoGo}\`\n` +
+            const body = `<!-- octodex-preview -->\n### Предпросмотр PR #${pr} (\`${sha}\`) — ещё не влит\n\n` +
               `- **Сайт:** ${web}\n\n` +
-              `Номер сборки в шапке экрана — номер этого PR. После новых правок ссылки те же, закройте и откройте приложение заново.${mig}`;
+              `Только сайт: в Expo Go появляется лишь то, что влито в main.${mig}`;
             const { data: comments } = await github.rest.issues.listComments({ ...context.repo, issue_number: pr, per_page: 100 });
             const old = comments.find((c) => c.body && c.body.includes("<!-- octodex-preview -->"));
             if (old) await github.rest.issues.updateComment({ ...context.repo, comment_id: old.id, body });
