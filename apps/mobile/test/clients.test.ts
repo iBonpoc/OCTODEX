@@ -27,10 +27,10 @@ describe("tags", () => {
 
 describe("money on the card", () => {
   it("Sarah owes nothing and paid $582 in total (deposit $342 + final $240)", () => {
-    expect(clientMoneyOf(db, "c1")).toEqual({ owesCents: 0, paidTotalCents: 58200 });
+    expect(clientMoneyOf(db, "c1")).toEqual({ owesCents: 0, paidTotalCents: 58200, invoicedCents: 58200 });
   });
   it("David owes $1,840 and paid nothing", () => {
-    expect(clientMoneyOf(db, "c2")).toEqual({ owesCents: 184000, paidTotalCents: 0 });
+    expect(clientMoneyOf(db, "c2")).toEqual({ owesCents: 184000, paidTotalCents: 0, invoicedCents: 184000 });
   });
   it("only office roles see money", () => {
     expect(canSeeClientMoney("director")).toBe(true);

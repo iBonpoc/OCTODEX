@@ -4,7 +4,7 @@ import { router } from "expo-router";
 import { customerBalance, useStore } from "@/data/store";
 import { clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { useI18n } from "@/i18n";
-import { Avatar, Button, ChoiceChips, StatusChip, TagChip, TextField } from "@/ui/controls";
+import { Avatar, Button, ChoiceChips, MultiChips, StatusChip, TagChip, TextField } from "@/ui/controls";
 import { Card, CardList, Empty, RowView, Screen } from "@/ui/surfaces";
 import { Icon, T } from "@/ui/primitives";
 import { size, space } from "@octo/design-tokens";
@@ -21,6 +21,7 @@ export default function Clients() {
   const office = role !== "tech";
   const [q, setQ] = useState("");
   const [tab, setTab] = useState<Filter>("all");
+  const [tagIds, setTagIds] = useState<string[]>([]);
   const owes = (id: string) => customerBalance(db, id) > 0;
   const openEst = (id: string) => db.estimates.some((e) => e.customerId === id && e.status === "sent");
   const pass: Record<Filter, (c: (typeof db.customers)[number]) => boolean> = {
@@ -36,6 +37,7 @@ export default function Clients() {
   const list = clients
     .filter(pass[tab])
     .filter((c) => matchClient(db, c, q))
+    .filter((c) => tagIds.length === 0 || (c.tagIds ?? []).some((x) => tagIds.includes(x)))
     .sort((a, b) => a.name.localeCompare(b.name));
   return (
     <Screen
@@ -51,6 +53,13 @@ export default function Clients() {
         onChange={setTab}
         items={filters.map((f) => ({ key: f, label: `${t(`clients.f.${f}`)} · ${count(f)}` }))}
       />
+      {db.tags.some((x) => x.active) ? (
+        <MultiChips<string>
+          value={tagIds}
+          onChange={setTagIds}
+          items={db.tags.filter((x) => x.active).sort((a, b) => a.position - b.position).map((x) => ({ key: x.id, label: tagLabel(x, t) }))}
+        />
+      ) : null}
       {list.length === 0 ? (
         <Empty
           icon="search"

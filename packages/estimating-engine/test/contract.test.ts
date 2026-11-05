@@ -36,11 +36,11 @@ describe("clientMoney (client card: owes / paid total)", () => {
       ],
       [40_00, 50_00, 25_00],
     );
-    expect(r).toEqual({ owesCents: 60_00, paidTotalCents: 115_00 });
+    expect(r).toEqual({ owesCents: 60_00, paidTotalCents: 115_00, invoicedCents: 170_00 });
   });
   it("refunds are already netted into payments; the total never goes below zero", () => {
     expect(clientMoney([], [100_00, -30_00]).paidTotalCents).toBe(70_00);
     expect(clientMoney([], [-5_00]).paidTotalCents).toBe(0);
-    expect(clientMoney([], [])).toEqual({ owesCents: 0, paidTotalCents: 0 });
+    expect(clientMoney([], [])).toEqual({ owesCents: 0, paidTotalCents: 0, invoicedCents: 0 });
   });
 });
