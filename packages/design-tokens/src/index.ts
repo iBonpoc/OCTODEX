@@ -138,6 +138,8 @@ export const component = {
   toastRing: 2,
   /** widest "‹ Parent" back button in a header */
   backMax: 220,
+  /** widest crumb in the header trail ("Today › Clients › …"); longer names end with "…" */
+  crumbMax: 160,
   /** dimmed element: disabled control, day outside the shown month */
   dimOpacity: 0.45,
   /** iOS-style menu that opens at the control (status, quick choices) */
