@@ -4,14 +4,8 @@ import type { DB, ID, Role } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
 import { leadSettingsOf } from "./leadSettings";
 import { canCountersign } from "./estimateSign";
-import { assigneesOf, canPlan, isOpenVisit, lateKind } from "./schedule";
+import { assigneesOf, canPlan, isOpenVisit, lateToday, sameDay, visitWho } from "./schedule";
 import type { DictKey } from "@/i18n";
-
-/** the same calendar day, phone time (company time zone — П4) */
-const sameDay = (iso: string, d: Date) => {
-  const x = new Date(iso);
-  return x.getFullYear() === d.getFullYear() && x.getMonth() === d.getMonth() && x.getDate() === d.getDate();
-};
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
   /* E2b-2 (docs/specs/07 «E2b — экраны подписи» §3, §7, §8) */
@@ -81,19 +75,19 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     tomorrow.setDate(tomorrow.getDate() + 1);
     for (const v of db.visits) {
       if (!isOpenVisit(v)) continue;
-      const today = sameDay(v.start, new Date(now));
-      if (!today && !sameDay(v.start, tomorrow)) continue;
-      const { customer, tech } = visitContext(db, v);
+      const today = sameDay(new Date(v.start), new Date(now));
+      if (!today && !sameDay(new Date(v.start), tomorrow)) continue;
+      const { client, tech } = visitWho(db, v);
       if (!assigneesOf(v).length) {
         out.push({
-          id: `un-${v.id}`, kind: "unassigned", refId: v.id, name: customer?.name ?? "", label: today ? "att.unassigned" : "late.unassignedTomorrow", params: { name: customer?.name ?? "" },
+          id: `un-${v.id}`, kind: "unassigned", refId: v.id, name: client, label: today ? "att.unassigned" : "late.unassignedTomorrow", params: { name: client },
           chip: today ? "st.unassigned" : "late.unassignedTomorrowChip", status: "warn", score: today ? 900 : 880,
         });
         continue;
       }
-      const late = today ? lateKind(v, now) : null;
+      const late = lateToday(v, now);
       if (late)
-        out.push({ id: `late-${v.id}`, kind: "late", refId: v.id, name: tech?.name ?? "", label: "att.late", params: { name: `${tech?.name ?? ""} → ${customer?.name ?? ""}` }, chip: late === "en_route" ? "late.enRoute" : "late.notLeft", status: "warn", score: 850 });
+        out.push({ id: `late-${v.id}`, kind: "late", refId: v.id, name: tech, label: "att.late", params: { name: `${tech} → ${client}` }, chip: late === "en_route" ? "late.enRoute" : "late.notLeft", status: "warn", score: 850 });
     }
   }
   for (const j of db.jobs) {

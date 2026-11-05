@@ -3,7 +3,7 @@
 -- The time comes from the phone with the step (so the offline queue does not move it to the sync time).
 -- Rules for everyone with a user (service role, cron and server functions are free):
 --   * set only together with the step to en_route (or while the visit is already en_route and has none — a replay);
---   * once set, it does not change;
+--   * once set, it does not change: a repeat of the step keeps the first time quietly, any other change is refused;
 --   * a time the server cannot believe becomes now() instead of a refusal (a refusal would jam the offline queue):
 --     later than now() + 5 min (phone clock), earlier than the visit was created, or older than 3 days (the longest
 --     an offline phone is expected to hold a step). An old build that sends no time gets now() too.
@@ -26,6 +26,10 @@ begin
   -- an old build moves to en_route without a time: the server notes it
   if new.status = 'en_route' and old.status is distinct from 'en_route' and new.en_route_at is null and old.en_route_at is null then
     new.en_route_at := now();
+  end if;
+  -- a repeat of «on the way» (the offline queue, or the second person on the visit with older data): the first time stays
+  if old.en_route_at is not null and new.status = 'en_route' then
+    new.en_route_at := old.en_route_at;
   end if;
   if new.en_route_at is distinct from old.en_route_at then
     if old.en_route_at is not null then

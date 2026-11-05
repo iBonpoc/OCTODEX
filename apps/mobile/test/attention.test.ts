@@ -69,4 +69,10 @@ describe("needs attention: visits (П3c)", () => {
     expect(run(visits, "tech")).toEqual([]);
     expect(run(visits, "sales")).toEqual([]);
   });
+  it("names: the first of everyone when techId is empty", () => {
+    const [i] = run([V("x", { start: min(-16), techId: null, assigneeIds: ["m-sub"] })]);
+    const sub = base.members.find((m) => m.id === "m-sub")!;
+    expect(String(i!.params.name).startsWith(`${sub.name} → `)).toBe(true);
+    expect(i!.name).toBe(sub.name);
+  });
 });

@@ -3,7 +3,7 @@
  * tested in test/schedule.test.ts. The database holds the same transitions (app.status_transitions, migration
  * 20261105280000) and the same rights (tech guard).
  */
-import { visitPropertyId } from "@/data/selectors";
+import { visitContext, visitPropertyId } from "@/data/selectors";
 import { VISIT_STEPS, type DB, type ID, type Lead, type Role, type Visit, type VisitStep } from "@/data/types";
 
 type Db = Pick<DB, "visits" | "jobs" | "leads">;
@@ -89,6 +89,30 @@ export function lateKind(
 export const visitLate = (v: Parameters<typeof lateKind>[0], now: number = Date.now(), lateAfterMin?: number): boolean =>
   lateKind(v, now, lateAfterMin) !== null;
 
+/**
+ * П3c, the office side (the item in «Требует внимания» and the notice): the same rule, for visits of today only —
+ * an older visit that never started is a matter of «Работы» (step 7), not «running late» for ever. One window for both.
+ */
+export const lateToday = (v: Parameters<typeof lateKind>[0], now: number = Date.now()): LateKind | null =>
+  sameDay(new Date(v.start), new Date(now)) ? lateKind(v, now) : null;
+
+/** who the office reads on a visit item: the client (or the lead of an inspection without a client yet) and the first person */
+export function visitWho(db: DB, v: Visit): { client: string; tech: string } {
+  const { customer, tech } = visitContext(db, v);
+  const first = tech ?? db.members.find((m) => m.id === assigneesOf(v)[0]);
+  const lead = v.leadId ? db.leads.find((l) => l.id === v.leadId) : undefined;
+  return { client: customer?.name ?? lead?.name ?? "", tech: first?.name ?? "" };
+}
+
+/**
+ * The next step of a visit as the store writes it: «on the way» carries the phone time (kept on a repeat), so the
+ * offline queue does not move it to the sync time (П3c, решение 3; server: visits.en_route_at).
+ */
+export function stepChange(v: Visit | undefined, nowIso: string): { step: VisitStep; at?: string } {
+  const step: VisitStep = v ? nextStep(v) : "en_route";
+  return step === "en_route" ? { step, at: v?.enRouteAt ?? nowIso } : { step };
+}
+
 /** S4a: after this visit is cancelled, does its lead go back from "booked" to "replied"? (no other open inspection) */
 export function leadRollsBack(db: Db, cancelledId: ID): ID | null {
   const v = db.visits.find((x) => x.id === cancelledId);
@@ -129,7 +153,8 @@ export const SCHEDULE_DEFAULTS = {
 } as const;
 type Hours = Pick<typeof SCHEDULE_DEFAULTS, "dayStartMin" | "dayEndMin" | "stepMin">;
 
-const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+/** the same calendar day, phone time (company time zone — П4) */
+export const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
 const minuteOfDay = (d: Date) => d.getHours() * 60 + d.getMinutes();
 
 /** the start of a day + minutes (local time of the phone) */

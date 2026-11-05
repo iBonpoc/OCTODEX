@@ -22,7 +22,7 @@ import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { inheritCategory } from "@/features/serviceCategories";
-import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, nextStep, withAssignees } from "@/features/schedule";
+import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
@@ -555,9 +555,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       advanceVisit: (id) => {
         const v = dbRef.current.visits.find((x) => x.id === id);
         // an inspection ends with "done" after "on site" (S10, docs/specs/03 §4.1); a job visit walks VISIT_STEPS
-        const step: VisitStep = v ? nextStep(v) : "en_route";
         // «on the way»: the phone time goes with the step, so the offline queue does not move it (docs/specs/03 П3c)
-        const at = step === "en_route" ? (v?.enRouteAt ?? new Date().toISOString()) : undefined;
+        const { step, at } = stepChange(v, new Date().toISOString());
         return mutate(
           "visit.step",
           (d) => patchVisit(d, id, (x) => ({ ...x, step, enRouteAt: at ?? x.enRouteAt, closed: step === "done" ? true : x.closed })),

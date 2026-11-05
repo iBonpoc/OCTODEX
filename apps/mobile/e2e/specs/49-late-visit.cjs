@@ -40,6 +40,8 @@ exports.run = async (h) => {
   await h.shot("office-not-left");
   // the whole list (Today shows the first people only): «Не назначено» tomorrow
   await h.go("/triage");
+  const item = new RegExp(`Мастер опаздывает · ${me.name} → ${client.name}`);
+  await h.expectText(item, "the item «Мастер опаздывает» is in «Требует внимания»");
   await h.expectText(new RegExp(`Завтра выезд без мастера · ${client2.name}`), "«Не назначено» tomorrow is in «Требует внимания»");
 
   // the tech sees none of the office's items
@@ -50,6 +52,7 @@ exports.run = async (h) => {
   await h.go("/triage");
   body = await h.text();
   h.expect(!/Завтра выезд без мастера/.test(body), "the tech sees no «Не назначено» of the office");
+  h.expect(!/Мастер опаздывает ·/.test(body), "the tech sees no «Мастер опаздывает» item");
 
   // the tech leaves: still late, now «on the way»
   await h.go("/visit/e2e-late");
@@ -72,4 +75,7 @@ exports.run = async (h) => {
   await h.go("/today");
   body = await h.text();
   h.expect(!new RegExp(`${me.name} опаздывает на ${client.name}`).test(body), "on site: the notice is gone");
+  await h.go("/triage");
+  body = await h.text();
+  h.expect(!item.test(body), "on site: the item is gone too");
 };

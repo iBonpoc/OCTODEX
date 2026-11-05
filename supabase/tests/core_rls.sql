@@ -2613,8 +2613,10 @@ update public.visits set status = 'en_route', en_route_at = now() + interval '5 
 select tst.ok((select en_route_at between now() - interval '1 minute' and now() from public.visits where id = 'f3600000-0000-4000-8000-000000000003'), 'more than 5 min in the future becomes now()');
 update public.visits set status = 'en_route', en_route_at = now() + interval '4 minutes 59 seconds' where id = 'f3600000-0000-4000-8000-000000000001';
 select tst.ok((select en_route_at between now() + interval '4 minutes' and now() + interval '5 minutes' from public.visits where id = 'f3600000-0000-4000-8000-000000000001'), 'the phone time (within 5 min) is kept with the step');
-select tst.fails($q$update public.visits set en_route_at = now() - interval '1 hour' where id = 'f3600000-0000-4000-8000-000000000001'$q$, 'once set, the time does not change');
-select tst.fails($q$update public.visits set en_route_at = null where id = 'f3600000-0000-4000-8000-000000000001'$q$, '… and is not wiped either');
+-- once set: a repeat of «on the way» with another time (the second person, older data) keeps the first, no error
+update public.visits set status = 'en_route', en_route_at = now() - interval '1 minute' where id = 'f3600000-0000-4000-8000-000000000001';
+update public.visits set en_route_at = null where id = 'f3600000-0000-4000-8000-000000000001';
+select tst.ok((select en_route_at between now() + interval '4 minutes' and now() + interval '5 minutes' from public.visits where id = 'f3600000-0000-4000-8000-000000000001'), 'on the way: another time or a wipe keeps the first time');
 -- a replay of the same step (offline queue) is not an error and keeps the first time
 update public.visits set status = 'en_route' where id = 'f3600000-0000-4000-8000-000000000001';
 select tst.ok((select en_route_at between now() + interval '4 minutes' and now() + interval '5 minutes' from public.visits where id = 'f3600000-0000-4000-8000-000000000001'), 'a replay keeps the first time');
