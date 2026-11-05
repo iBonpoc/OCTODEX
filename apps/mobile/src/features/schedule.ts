@@ -4,7 +4,7 @@
  * 20261105280000) and the same rights (tech guard).
  */
 import { visitPropertyId } from "@/data/selectors";
-import type { DB, ID, Lead, Role, Visit } from "@/data/types";
+import { VISIT_STEPS, type DB, type ID, type Lead, type Role, type Visit, type VisitStep } from "@/data/types";
 
 type Db = Pick<DB, "visits" | "jobs" | "leads">;
 
@@ -15,6 +15,14 @@ export function isInspectionOf(db: Pick<DB, "jobs">, v: Visit, l: Pick<Lead, "id
   const j = db.jobs.find((x) => x.id === v.jobId);
   // old saved data: the job status was "estimate" (normalize moves it; kept for a cache read before that)
   return !!j && (j.status as string) === "estimate" && j.propertyId === l.propertyId;
+}
+
+/** S10: the next step on site. An inspection ends with "done" after "on site" (no work, signature or payment, §4.1) */
+export const INSPECTION_STEPS: VisitStep[] = ["scheduled", "en_route", "on_site", "done"];
+export function nextStep(v: Pick<Visit, "step" | "kind">): VisitStep {
+  const path = v.kind === "inspection" ? INSPECTION_STEPS : VISIT_STEPS;
+  const i = path.indexOf(v.step);
+  return path[Math.min(i < 0 ? 0 : i + 1, path.length - 1)]!;
 }
 
 /** not finished and not closed: it can still happen */

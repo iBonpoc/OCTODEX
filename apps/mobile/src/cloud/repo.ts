@@ -3,7 +3,7 @@
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
 import { companyFromDb } from "./companyMap";
-import { customerStatus, estimateStatus, jobStatus, leadStatus } from "./statusMap";
+import { customerStatus, estimateStatus, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
 import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep } from "@/data/types";
 import type { DbRole } from "./auth";
@@ -146,7 +146,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   };
 
   const mappedVisits: Visit[] = visits
-    .filter((v) => v.status !== "cancelled" && (v.job_id || v.property_id))
+    // cancelled and no-show ("the client was not home" is a cancel reason) leave the screens, as after a local cancel
+    .filter((v) => visitDbStatus[s(v.status)] !== "cancelled" && (v.job_id || v.property_id))
     .map((v) => {
       const job = jobById.get(s(v.job_id));
       const pay = paidVisit.get(s(v.id));

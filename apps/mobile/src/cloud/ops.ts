@@ -238,6 +238,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "visit.step": {
       if (op.to === "en_route" || op.to === "on_site") return run(supabase.from("visits").update({ status: op.to }).eq("id", op.visitId));
       if (op.to === "working") return run(supabase.from("visits").update({ work_started_at: new Date().toISOString() }).eq("id", op.visitId));
+      // an inspection ends on site: completed (S10)
+      if (op.to === "done") return run(supabase.from("visits").update({ status: "completed" }).eq("id", op.visitId).eq("status", "on_site"));
       return;
     }
     case "photo.add": {

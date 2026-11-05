@@ -1,4 +1,5 @@
 import { useWindowDimensions, View } from "react-native";
+import { isOpenVisit } from "@/features/schedule";
 import { router } from "expo-router";
 import { component, font, layout, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -132,7 +133,7 @@ export default function Today() {
           <CardList>
             {techs.map((m, i) => {
               const vs = todayVisits(db, m.id);
-              const active = vs.find((v) => v.step !== "scheduled" && v.step !== "paid") ?? vs.find((v) => v.step === "scheduled");
+              const active = vs.find((v) => v.step !== "scheduled" && isOpenVisit(v)) ?? vs.find((v) => v.step === "scheduled");
               const st = active ? visitStatus(active) : null;
               return (
                 <View key={m.id}>

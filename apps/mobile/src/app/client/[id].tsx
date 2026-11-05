@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { isOpenVisit } from "@/features/schedule";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { component, space, type StatusName } from "@octo/design-tokens";
@@ -93,7 +94,7 @@ export default function ClientScreen() {
   const tel = c.phone.replace(/[^\d+]/g, "");
   const lateCalls = noLateCallsNow(db, c);
   const nextVisit = db.visits
-    .filter((v) => jobs.some((j) => j.id === v.jobId) && v.step !== "paid" && new Date(v.start).getTime() >= Date.now() - 86_400_000)
+    .filter((v) => jobs.some((j) => j.id === v.jobId) && isOpenVisit(v) && new Date(v.start).getTime() >= Date.now() - 86_400_000)
     .sort((a, b) => a.start.localeCompare(b.start))[0];
   const label = (k: Tab, n?: number) => (n ? `${t(`client.tab.${k}`)} · ${n}` : t(`client.tab.${k}`));
 

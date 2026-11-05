@@ -5,7 +5,7 @@
  *   Reply timer runs around the clock until the first answered call / SMS / email / "I replied".
  *   "Whose turn" (leadTurn) — the one question the card answers: reply / do the step / wait for the client / snoozed.
  */
-import { isInspectionOf } from "@/features/schedule";
+import { isInspectionOf, isOpenVisit, visitPropertyId } from "@/features/schedule";
 import type { StatusName } from "@octo/design-tokens";
 import { LEAD_SETTINGS_DEFAULT, type LeadSettings } from "./leadSettings";
 import { DECLINE_REASONS, LOST_REASONS, type Customer, type DB, type Lead, type LeadStatus, type Person, type LostReason, type Role, type Source, type SourceKind, type Task } from "@/data/types";
@@ -103,7 +103,8 @@ export const openTasks = (db: DB, subjectId: string) =>
 /** An open lead must have a next step: an open task or a booked estimate visit. */
 export function needsNextStep(db: DB, l: Lead): boolean {
   if (!isOpenLead(l) || l.status === "new") return false;
-  const hasVisit = l.status === "booked" || db.visits.some((v) => db.jobs.find((j) => j.id === v.jobId)?.propertyId === l.propertyId && l.propertyId && v.step !== "paid");
+  // an open inspection of the lead, or any open visit at its property
+  const hasVisit = l.status === "booked" || db.visits.some((v) => isOpenVisit(v) && (isInspectionOf(db, v, l) || (!!l.propertyId && visitPropertyId(db, v) === l.propertyId)));
   return openTasks(db, l.id).length === 0 && !hasVisit;
 }
 export const isOverdueTask = (t: Task, now = Date.now()) => !t.doneAt && !!t.dueAt && new Date(t.dueAt).getTime() < now;

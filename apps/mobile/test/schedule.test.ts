@@ -106,3 +106,15 @@ describe("old saved data", () => {
     expect(v.propertyId).toBe("p7");
   });
 });
+
+describe("S10: an inspection ends with done", () => {
+  it("inspection: on site → done; a job visit: on site → working", async () => {
+    const { nextStep } = await import("../src/features/schedule");
+    expect(nextStep({ step: "scheduled", kind: "inspection" })).toBe("en_route");
+    expect(nextStep({ step: "on_site", kind: "inspection" })).toBe("done");
+    expect(nextStep({ step: "done", kind: "inspection" })).toBe("done");
+    expect(nextStep({ step: "on_site", kind: "install" })).toBe("working");
+    expect(nextStep({ step: "on_site" })).toBe("working");
+    expect(isOpenVisit(V({ step: "done", kind: "inspection" }))).toBe(false);
+  });
+});

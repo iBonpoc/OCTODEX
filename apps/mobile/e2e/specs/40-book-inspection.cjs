@@ -33,4 +33,13 @@ exports.run = async (h) => {
   await h.go(`/visit/${v.id}`);
   await h.expectText(/Angela Rossi/, "the inspection card shows the client");
   await h.expectText(/План/, "up to the Plan");
+
+  // S10: on site the inspection ends with "Done" — no work, signature or payment
+  await p.getByRole("button", { name: /в пути/i }).last().click(); await p.waitForTimeout(400);
+  await p.getByRole("button", { name: /На месте/ }).last().click(); await p.waitForTimeout(400);
+  await p.getByRole("button", { name: "Готово", exact: true }).last().click(); await p.waitForTimeout(500);
+  db = await h.db();
+  const done = db.visits.find((x) => x.id === v.id);
+  h.expect(done.step === "done" && done.closed, `inspection done and closed (${done.step})`);
+  h.expect(!db.invoices.some((i) => i.jobId === undefined && i.customerId === lead.customerId && i.kind === "final"), "no invoice for an inspection");
 };
