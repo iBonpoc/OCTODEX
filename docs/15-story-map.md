@@ -90,12 +90,12 @@
 | S0 | Компания → документы | Д в настройках | — → шапка смет/счетов, PDF, `/p/` | e2e:06-company-setup, db:T9, db:T1 | ◐ | шапка сметы/счёта, PDF, телефон, логотип, префиксы |
 | S1 | Заявка → Лид | человек / приём лидов | — → `Lead.new` | e2e:15-lead-full, unit:leads | ◐ | цена и атрибуция; приём извне, повтор события, дубль в базе |
 | S2 | Первый ответ | человек | `new` → `replied` | e2e:15-lead-full, db:T14 | ◐ | `lastOutboundAt`; модульный тест «чей ход» |
-| S3 | Лид → потенциальный клиент | система при осмотре или смете | — → `Customer.prospect`, `Property`, `Contact` | e2e:04-lead-funnel | ◐ | объект, контакт, источник клиента, повтор без дублей; db T10 создаёт клиента вручную |
+| S3 | Лид → потенциальный клиент | система при осмотре или смете | — → `Customer.prospect`, `Property`, `Contact` | e2e:18-handoffs-lead-to-deposit, e2e:04-lead-funnel | ◐ | контакт, источник клиента; серверной функции `lead_to_client` нет (клиента создаёт приложение) — db-теста быть не может до L1 |
 | S4 | Лид → осмотр | человек | `replied` → `booked`; — → `Job(estimate)`, `Visit` | — | ✚ | весь стык |
-| S5 | Лид/Клиент → смета | человек | — → `Estimate.draft (leadId, propertyId)` | e2e:01-estimate-builder, e2e:04-lead-funnel | ◐ | сохранённые `leadId`/`propertyId` у черновика |
-| S6 | Смета отправлена | человек | смета `draft` → `sent`; лид → `estimate_sent` | e2e:04-lead-funnel, db:T8 | ◐ | статус сметы и ссылка в e2e |
-| S7 | Клиент открыл | К | смета `sent` → `viewed` (в базе), счётчик | db:T8 | ◐ | счётчик «открыл N раз» на экране |
-| S8 | Подпись / депозит | К | смета `approved`; лид `won (approval)`; клиент `active`; работа «назначить дату»; счёт на депозит | e2e:02-sign-deposit-card, e2e:04-lead-funnel, db:T8, db:T10, db:T11 | ◐ | ни один тест не проверяет все стороны сразу; `wonVia` |
+| S5 | Лид/Клиент → смета | человек | — → `Estimate.draft (leadId, propertyId)` | e2e:18-handoffs-lead-to-deposit, e2e:01-estimate-builder | ✅ | — |
+| S6 | Смета отправлена | человек | смета `draft` → `sent`; лид → `estimate_sent` | e2e:18-handoffs-lead-to-deposit, db:T8 | ✅ | — |
+| S7 | Клиент открыл | К | смета `sent` → `viewed` (в базе), счётчик | db:T8 | ◐ | в приложении нет отметки «открыл» в демо-режиме и счётчика «открыл N раз» |
+| S8 | Подпись / депозит | К | смета `approved`; лид `won (approval)`; клиент `active`; работа «назначить дату»; счёт на депозит | e2e:18-handoffs-lead-to-deposit, e2e:02-sign-deposit-card, db:T8, db:T10, db:T11 | ✅ | — |
 | S8a | Ручная победа | Д | лид `won (manual)`; клиент `active` | e2e:04-lead-funnel, db:T10 | ◐ | клиент `active` |
 | S9 | Работа → расписание | Д/Дп | `unscheduled` → `scheduled`; — → `Visit` | e2e:05-schedule-job | ✅ | время и длительность |
 | S10 | Визит выполнен | М | шаги визита; работа `in_progress` → `done` | e2e:12-tech-day, db:T4 | ◐ | работа → `done` |
