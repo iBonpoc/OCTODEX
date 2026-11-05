@@ -11,6 +11,7 @@ import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
+import { effectiveRole } from "@/nav/roles";
 import { applyOp, PermanentError, type Op, type OutboxItem } from "@/cloud/ops";
 import { readyToSend } from "@/cloud/outboxTiming";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
@@ -279,7 +280,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [setSaved, mode],
   );
-  const [role, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "tech");
+  // nothing chosen yet → the first role this person has (owner → director); route-guard fix
+  const [savedRole, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "director");
   const [online, setOnlineState] = useState(true);
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
   const [outbox, setOutbox, outboxReady] = usePersistentState<OutboxItem[]>("octo.outbox.v1", []);
@@ -295,8 +297,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   modeRef.current = mode;
 
   const availableRoles: Role[] = mode === "cloud" ? appRoles(company!.role) : ["tech", "dispatcher", "director", "sales"];
+  const role = effectiveRole(savedRole, availableRoles);
   useEffect(() => {
-    if (!availableRoles.includes(role)) setRole(availableRoles[0]!);
+    if (savedRole !== role) setRole(role);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, company?.role]);
 

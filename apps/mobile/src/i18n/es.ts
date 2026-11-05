@@ -1436,4 +1436,6 @@ export const es: Dict = {
   "late.notice.notLeft": "{tech} llega tarde a {client}, no ha salido · inicio {time}",
   "late.unassignedTomorrow": "Mañana: visita sin técnico · {name}",
   "late.unassignedTomorrowChip": "Sin asignar · mañana",
+  // route-guard (screens by role)
+  "guard.noAccess": "Sin acceso a esta pantalla — se abrió su pantalla principal",
 };

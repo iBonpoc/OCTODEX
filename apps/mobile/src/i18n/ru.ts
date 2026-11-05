@@ -1435,6 +1435,8 @@ export const ru = {
   "late.notice.notLeft": "{tech} опаздывает на {client}, не выехал · начало {time}",
   "late.unassignedTomorrow": "Завтра выезд без мастера · {name}",
   "late.unassignedTomorrowChip": "Не назначен · завтра",
+  // route-guard (screens by role)
+  "guard.noAccess": "Нет доступа к этому экрану — открыт ваш главный экран",
 } as const;
 
 export type DictKey = keyof typeof ru;
