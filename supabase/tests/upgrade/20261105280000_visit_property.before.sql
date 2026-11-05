@@ -20,3 +20,14 @@ insert into public.visits (id, company_id, job_id, lead_id, kind, starts_at) val
   ('cfa70000-0000-0000-0000-000000000002', 'cfa00000-0000-0000-0000-000000000001', 'cfa40000-0000-0000-0000-000000000002', 'cfa30000-0000-0000-0000-000000000001', 'inspection', now()),
   ('cfa70000-0000-0000-0000-000000000003', 'cfa00000-0000-0000-0000-000000000001', 'cfa40000-0000-0000-0000-000000000003', null, 'install', now()),
   ('cfa70000-0000-0000-0000-000000000004', 'cfa00000-0000-0000-0000-000000000001', 'cfa40000-0000-0000-0000-000000000004', 'cfa30000-0000-0000-0000-000000000001', 'inspection', now());
+-- 5: a real job that happens to be called "Estimate visit" (install, started) — untouched;
+-- 6: a lead visit that knows no property at all — kept as legacy, still cancellable
+insert into public.jobs (id, company_id, number, title, type, status, customer_id, property_id) values
+  ('cfa40000-0000-0000-0000-000000000005', 'cfa00000-0000-0000-0000-000000000001', '', 'Estimate visit', 'install', 'draft', 'cfa10000-0000-0000-0000-000000000001', 'cfa20000-0000-0000-0000-000000000001');
+insert into public.visits (id, company_id, job_id, kind, starts_at) values
+  ('cfa70000-0000-0000-0000-000000000005', 'cfa00000-0000-0000-0000-000000000001', 'cfa40000-0000-0000-0000-000000000005', 'install', now());
+insert into public.leads (id, company_id, source_id, contact_name, phone)
+select 'cfa30000-0000-0000-0000-000000000002', 'cfa00000-0000-0000-0000-000000000001', s.id, 'No address lead', '(818) 555-0902'
+  from (select id from public.lead_sources where company_id = 'cfa00000-0000-0000-0000-000000000001' order by position, name limit 1) s;
+insert into public.visits (id, company_id, lead_id, kind, starts_at) values
+  ('cfa70000-0000-0000-0000-000000000006', 'cfa00000-0000-0000-0000-000000000001', 'cfa30000-0000-0000-0000-000000000002', 'inspection', now());

@@ -10,7 +10,10 @@
 --   is no longer cancelled (the tech is there: only through the job).
 -- * The tech guard: a tech does not cancel or no-show a visit and does not move it to another property.
 -- * What a tech sees goes through the visit's own property (an inspection has no job): properties, clients, notes,
---   gate code.
+--   gate code. The property of a visit follows its job / lead (changed job, lead or their property → the visit
+--   follows), and outside the office nobody re-points a lead at another client or property (security check of П1a:
+--   a tech could plant a property on their lead and see it through the inspection).
+-- * Old visits that know no property at all are flagged legacy_no_property: they still load and can be cancelled.
 
 -- ---- the field and the rule -----------------------------------------------------------------
 alter table public.visits add column if not exists property_id uuid;
@@ -28,10 +31,15 @@ alter table public.visits drop constraint if exists visits_cancel_other_text;
 alter table public.visits add constraint visits_cancel_other_text
   check (cancel_reason is distinct from 'other' or coalesce(btrim(cancel_reason_text), '') <> '');
 
--- fill from the job, else from the lead; never overwrite (the app sends it from wave П1b)
+-- fill from the job, else from the lead; a sent value is kept, but a new job or lead without a new property re-derives
+-- it (the visit follows its job / lead). Invoker: only the office inserts or re-points visits (visits_insert, t05 guard).
 create or replace function app.tg_visit_property()
-returns trigger language plpgsql security definer set search_path = '' as $$
+returns trigger language plpgsql set search_path = '' as $$
 begin
+  if tg_op = 'UPDATE' and new.property_id is not distinct from old.property_id
+     and (new.job_id is distinct from old.job_id or new.lead_id is distinct from old.lead_id) then
+    new.property_id := null;
+  end if;
   if new.property_id is null and new.job_id is not null then
     select j.property_id into new.property_id from public.jobs j where j.id = new.job_id and j.company_id = new.company_id;
   end if;
@@ -58,7 +66,7 @@ create temporary table _inspection_jobs as
 select j.id, j.company_id, j.property_id
   from public.jobs j
  where j.deleted_at is null and j.estimate_id is null
-   and (j.type = 'inspection' or j.title = 'Estimate visit')
+   and j.type = 'inspection' and j.status in ('draft', 'scheduled')
    and not exists (select 1 from public.invoices i where i.job_id = j.id)
    and not exists (select 1 from public.expenses x where x.job_id = j.id)
    and not exists (select 1 from public.files f where f.job_id = j.id)
@@ -87,8 +95,12 @@ begin
     execute format('alter table public.visits drop constraint %I', c.conname);
   end loop;
 end $$;
+alter table public.visits add column if not exists legacy_no_property boolean not null default false;
+alter table public.visits disable trigger user;
+update public.visits set legacy_no_property = true where property_id is null;
+alter table public.visits enable trigger user;
 alter table public.visits drop constraint if exists visits_property_required;
-alter table public.visits add constraint visits_property_required check (property_id is not null) not valid;
+alter table public.visits add constraint visits_property_required check (property_id is not null or legacy_no_property);
 
 -- ---- transitions --------------------------------------------------------------------------
 insert into app.status_transitions (entity_type, from_status, to_status) values
@@ -112,7 +124,8 @@ begin
      or new.subcontractor_assignment_id is distinct from old.subcontractor_assignment_id or new.schedule_mode is distinct from old.schedule_mode
      or new.flex_week_start is distinct from old.flex_week_start or new.sequence_in_route is distinct from old.sequence_in_route
      or new.cancel_reason is distinct from old.cancel_reason or new.cancel_reason_text is distinct from old.cancel_reason_text
-     or new.cancelled_at is distinct from old.cancelled_at or new.cancelled_by is distinct from old.cancelled_by then
+     or new.cancelled_at is distinct from old.cancelled_at or new.cancelled_by is distinct from old.cancelled_by
+     or new.legacy_no_property is distinct from old.legacy_no_property then
     raise exception 'only the office changes the time, job or place of a visit' using errcode = '42501';
   end if;
   if new.status is distinct from old.status and new.status in ('cancelled', 'no_show') then
@@ -133,12 +146,15 @@ returns boolean language sql stable security definer set search_path = '' as $$
   );
 $$;
 
+-- the client of the visit: of its job, else of its lead, else the owner of its (live) property
 create or replace function app.is_customer_assignee(p_customer_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
     select 1 from public.visits v
-      join public.properties p on p.id = v.property_id and p.company_id = v.company_id
-     where p.customer_id = p_customer_id and v.deleted_at is null
+      left join public.jobs j on j.id = v.job_id and j.company_id = v.company_id
+      left join public.leads l on l.id = v.lead_id and l.company_id = v.company_id
+      left join public.properties p on p.id = v.property_id and p.company_id = v.company_id and p.deleted_at is null
+     where coalesce(j.customer_id, l.customer_id, p.customer_id) = p_customer_id and v.deleted_at is null
        and app.tech_visit_counts(v.id)
   );
 $$;
@@ -190,3 +206,71 @@ grant execute on function app.is_property_assignee(uuid) to authenticated;
 grant execute on function app.is_customer_assignee(uuid) to authenticated;
 grant execute on function app.can_see_note_subject(text, uuid, uuid) to authenticated;
 grant execute on function app.can_see_gate_code(uuid) to authenticated;
+
+-- ---- cancellation is stamped by the server, not by the caller ---------------------------------
+create or replace function app.tg_visit_cancel_stamp()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.status in ('cancelled', 'no_show') and old.status is distinct from new.status then
+    new.cancelled_at := now();
+    new.cancelled_by := coalesce(auth.uid(), new.cancelled_by);
+  elsif new.status is not distinct from old.status then
+    new.cancelled_at := old.cancelled_at;
+    new.cancelled_by := old.cancelled_by;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_visit_cancel_stamp() from public, anon, authenticated;
+drop trigger if exists t06_visit_cancel_stamp on public.visits;
+create trigger t06_visit_cancel_stamp before update on public.visits
+  for each row execute function app.tg_visit_cancel_stamp();
+
+-- ---- a visit follows the property of its job / lead -----------------------------------------
+create or replace function app.tg_visit_follow_property()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if new.property_id is distinct from old.property_id then
+    if tg_argv[0] = 'job' then
+      update public.visits set property_id = new.property_id
+       where job_id = new.id and company_id = new.company_id and deleted_at is null;
+    else
+      update public.visits set property_id = new.property_id
+       where lead_id = new.id and job_id is null and company_id = new.company_id and deleted_at is null and new.property_id is not null;
+    end if;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_visit_follow_property() from public, anon, authenticated;
+drop trigger if exists t87_visit_follow_property on public.jobs;
+create trigger t87_visit_follow_property after update of property_id on public.jobs
+  for each row execute function app.tg_visit_follow_property('job');
+drop trigger if exists t87_visit_follow_property on public.leads;
+create trigger t87_visit_follow_property after update of property_id on public.leads
+  for each row execute function app.tg_visit_follow_property('lead');
+
+-- ---- outside the office a lead never points at a client or property, nor rolls back S4a itself --
+create or replace function app.tg_lead_place_guard()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if auth.uid() is null or app.is_staff(new.company_id) then return new; end if;
+  if tg_op = 'INSERT' then
+    if new.customer_id is not null or new.property_id is not null then
+      raise exception 'only the office links a lead to a client or property' using errcode = '42501';
+    end if;
+    return new;
+  end if;
+  if new.customer_id is distinct from old.customer_id or new.property_id is distinct from old.property_id then
+    raise exception 'only the office links a lead to a client or property' using errcode = '42501';
+  end if;
+  if old.status = 'inspection_scheduled' and new.status = 'contacted' then
+    raise exception 'the lead goes back only when the office cancels its inspection' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_lead_place_guard() from public, anon, authenticated;
+drop trigger if exists t06_lead_place_guard on public.leads;
+create trigger t06_lead_place_guard before insert or update on public.leads
+  for each row execute function app.tg_lead_place_guard();
