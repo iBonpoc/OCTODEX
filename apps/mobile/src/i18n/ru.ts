@@ -150,6 +150,7 @@ export const ru = {
   "today.nPayments": "Платежей: {n}",
   "today.allTime": "Все открытые счета",
   "today.funnel": "Воронка продаж",
+  "figures.empty": "Здесь пока ничего",
   "today.f.leads": "Новые лиды",
   "today.f.sent": "Сметы отправлены",
   "today.f.signed": "Сметы подписаны",

@@ -59,3 +59,30 @@ export function periodNumbers(db: DB, p: Period, today?: DayKey): PeriodNumbers 
     sentToSignedPct: pct(signedList.length, sent),
   };
 }
+
+/** What each number on "Today" counts — the drill-down shows exactly these records (count = number on the tile). */
+export type Figure = "leads" | "sent" | "signed" | "received" | "awaiting";
+export const FIGURES: Figure[] = ["leads", "sent", "signed", "received", "awaiting"];
+export interface FigureItems {
+  leads: DB["leads"];
+  estimates: DB["estimates"];
+  payments: DB["payments"];
+  invoices: DB["invoices"];
+}
+export function figureItems(db: DB, f: Figure, p: Period, today?: DayKey): FigureItems {
+  const r = periodRange(p, today);
+  const none: FigureItems = { leads: [], estimates: [], payments: [], invoices: [] };
+  const newest = <T,>(at: (x: T) => string | undefined) => (a: T, b: T) => (at(b) ?? "").localeCompare(at(a) ?? "");
+  switch (f) {
+    case "leads":
+      return { ...none, leads: db.leads.filter((l) => inRange(l.receivedAt, r)).sort(newest((l) => l.receivedAt)) };
+    case "sent":
+      return { ...none, estimates: db.estimates.filter((e) => inRange(e.sentAt, r)).sort(newest((e) => e.sentAt)) };
+    case "signed":
+      return { ...none, estimates: db.estimates.filter((e) => e.status === "approved" && inRange(e.approvedAt, r)).sort(newest((e) => e.approvedAt)) };
+    case "received":
+      return { ...none, payments: db.payments.filter((x) => inRange(x.at, r)).sort(newest((x) => x.at)) };
+    case "awaiting":
+      return { ...none, invoices: db.invoices.filter((i) => i.totalCents - i.paidCents > 0).sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "")) };
+  }
+}
