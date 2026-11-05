@@ -2,6 +2,7 @@
 exports.run = async (h) => {
   await h.go("/inbox");
   await h.page.getByText("Kevin Brooks", { exact: true }).first().click(); await h.page.waitForTimeout(700);
+  await h.clickText("Сметы");
   await h.click("Смета");
   await h.page.getByRole("button", { name: "Добавить позицию" }).first().click(); await h.page.waitForTimeout(300);
   await h.sheet().getByPlaceholder(/Начните писать/).fill("Replace water heater");
@@ -22,12 +23,14 @@ exports.run = async (h) => {
   h.expect(db.customers.find((c) => c.id === kevin.customerId).status === "active", "prospect → active");
   const tom = db.leads.find((l) => l.name === "Tom Becker");
   await h.go(`/lead/${tom.id}`);
-  await h.page.getByRole("button", { name: "Закрыть лид" }).first().click(); await h.page.waitForTimeout(300);
+  await h.page.getByRole("button", { name: /^Статус:/ }).first().click(); await h.page.waitForTimeout(300);
+  await h.sheet().getByRole("button", { name: "Закрыть лид" }).click(); await h.page.waitForTimeout(300);
   await h.sheet().getByRole("radio", { name: "Дорого" }).click();
   await h.sheet().getByRole("button", { name: "Закрыть как потерянный" }).click(); await h.page.waitForTimeout(400);
   const nina = db.leads.find((l) => l.name === "Nina Patel");
   await h.go(`/lead/${nina.id}`);
-  await h.page.getByRole("button", { name: "Сделать клиентом" }).first().click(); await h.page.waitForTimeout(300);
+  await h.page.getByRole("button", { name: /^Статус:/ }).first().click(); await h.page.waitForTimeout(300);
+  await h.sheet().getByRole("button", { name: "Сделать клиентом" }).click(); await h.page.waitForTimeout(300);
   await h.sheet().getByRole("button", { name: "Сделать клиентом" }).click(); await h.page.waitForTimeout(400);
   db = await h.db();
   h.expect(db.leads.find((l) => l.id === tom.id).lostReason === "price_too_high" && db.leads.find((l) => l.id === tom.id).status === "lost", "lost with reason");

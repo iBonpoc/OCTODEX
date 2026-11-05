@@ -33,6 +33,19 @@ export type Op =
       message: string;
       start: string;
     }
+  /** estimate visit for a lead whose client and property already exist (lead.prospect or earlier); replaces lead.book */
+  | {
+      k: "lead.visit";
+      leadId: string;
+      customerId: string;
+      propertyId: string;
+      jobId: string;
+      visitId: string;
+      start: string;
+      durationMin: number;
+      techId: string | null;
+      scope: string[];
+    }
   | { k: "lead.add"; id: string; name: string; phone: string; city: string; address?: string; sourceId: string; message: string; costCents?: number; cols?: Record<string, unknown> }
   | { k: "visit.assign"; visitId: string; userId: string }
   | {
@@ -255,6 +268,16 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         }),
       );
       return run(supabase.from("leads").update({ status: "inspection_scheduled", customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));
+    }
+    case "lead.visit": {
+      await run(
+        ins("jobs", { id: op.jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, title: "Estimate visit", type: "inspection", number: "" }),
+      );
+      const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
+      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, lead_id: op.leadId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
+      if (op.techId) await run(supabase.from("visit_assignees").insert({ company_id: c, visit_id: op.visitId, user_id: op.techId }));
+      // only an open lead before "estimate sent" moves to "inspection scheduled"
+      return run(supabase.from("leads").update({ status: "inspection_scheduled" }).eq("id", op.leadId).in("status", ["new", "contacted", "qualified"]));
     }
     case "lead.add": {
       const src = await sourceRef(c, op);
