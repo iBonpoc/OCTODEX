@@ -21,6 +21,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
+import { canCountersign, hisWarning } from "@/features/estimateSign";
 
 
 /** Estimate: send by link (SMS/email), client view, PDF, on-site signature, deposit → job in the plan. */
@@ -108,7 +109,9 @@ export default function EstimateScreen() {
           </RowView>
           {e.status === "approved" && e.approval ? (
             <ApprovedCard e={e} jobId={job?.id} />
-          ) : e.status === "awaiting_countersign" ? null : (
+          ) : e.status === "awaiting_countersign" ? (
+            <CountersignCard e={e} />
+          ) : (
             <OnSiteSign e={e} />
           )}
         </>
@@ -168,6 +171,7 @@ function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
       <Card status="ok">
         <StatusChip status="ok" label={t("portal.approved")} />
         <T v="body">{t("ue.approvedBy", { name: a.signerName, date: day(a.at) })}</T>
+        {e.countersign ? <T v="body">{t("est.countersign.by", { name: e.countersign.signerName, date: day(e.countersign.at) })}</T> : null}
         {jobId && visits.length === 0 ? (
           <>
             <StatusChip status="warn" label={t("st.toSchedule")} />
@@ -204,16 +208,24 @@ function OnSiteSign({ e }: { e: Estimate }) {
     <>
       <EstimateView doc={doc} optionId={optionId} onOption={setOptionId} addonIds={addonIds} onAddons={setAddonIds} />
       <SectionTitle title={t("est.signOnSite")} />
-      <Card>
-        <SignBlock
-          defaultName={customer?.name ?? ""}
-          onSign={(name, svg) => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-            const undo = store.approveEstimate(e.id, { optionId, addonIds, signerName: name, signature: svg, channel: "on_site" });
-            toast.show(store.online ? t("est.signedToast", { name }) : t("offline.queued"), undo);
-          }}
-        />
-      </Card>
+      {!canCountersign(store.db, store.db.me) ? (
+        <Card>
+          <T v="body" tone="mut">
+            {t("est.countersign.noRightOnSite")}
+          </T>
+        </Card>
+      ) : (
+        <Card>
+          <SignBlock
+            defaultName={customer?.name ?? ""}
+            onSign={(name, svg) => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              const undo = store.approveEstimate(e.id, { optionId, addonIds, signerName: name, signature: svg, channel: "on_site" });
+              toast.show(store.online ? t("est.signedToast", { name }) : t("offline.queued"), undo);
+            }}
+          />
+        </Card>
+      )}
     </>
   );
 }
@@ -302,7 +314,13 @@ function LegacyBody({ e }: { e: Estimate }) {
           </T>
         )}
       </Card>
-      {e.status === "draft" || e.status === "sent" ? (
+      {(e.status === "draft" || e.status === "sent") && !canCountersign(store.db, store.db.me) ? (
+        <Card>
+          <T v="body" tone="mut">
+            {t("est.countersign.noRightOnSite")}
+          </T>
+        </Card>
+      ) : e.status === "draft" || e.status === "sent" ? (
         <>
           <SectionTitle title={t("est.signOnSite")} />
           <Card>
@@ -320,7 +338,54 @@ function LegacyBody({ e }: { e: Estimate }) {
             />
           </Card>
         </>
+      ) : e.status === "awaiting_countersign" ? (
+        <CountersignCard e={e} />
       ) : null}
+    </>
+  );
+}
+
+/**
+ * S8b (docs/specs/07 §2.2 А, §7.1): the client signed — an employee signs the contract for the company in their own name.
+ * Wave E2a: drawn with a finger; the saved signature, the sheet and «My signature» come in E2b.
+ */
+function CountersignCard({ e }: { e: Estimate }) {
+  const store = useStore();
+  const { t, day } = useI18n();
+  const toast = useToast();
+  const me = store.db.members.find((m) => m.id === store.db.me);
+  const signedAt = e.approval?.at;
+  return (
+    <>
+      <SectionTitle title={t("est.countersign.title")} />
+      <Card status="warn">
+        <StatusChip status="warn" label={t("est.awaitingCountersign")} />
+        <T v="body">{signedAt ? t("est.countersign.clientSigned", { name: e.approval?.signerName ?? "", date: day(signedAt) }) : t("est.countersign.clientSignedNoDate")}</T>
+        {canCountersign(store.db, store.db.me) ? (
+          <>
+            <T v="caption" tone="mut">
+              {t("est.countersign.asYou", { name: me?.name ?? "", company: store.companyName ?? "OCTODEX" })}
+            </T>
+            {hisWarning(store.db, store.db.me) ? (
+              <T v="caption" tone="warn">
+                {t("est.countersign.hisWarning")}
+              </T>
+            ) : null}
+            <SignaturePad
+              confirmLabel={t("est.countersign.sign")}
+              onConfirm={(path) => {
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                const undo = store.countersignEstimate(e.id, path);
+                toast.show(store.online ? t("est.countersign.done") : t("offline.queued"), undo);
+              }}
+            />
+          </>
+        ) : (
+          <T v="body" tone="mut">
+            {t("est.countersign.noRight")}
+          </T>
+        )}
+      </Card>
     </>
   );
 }
