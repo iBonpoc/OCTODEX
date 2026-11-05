@@ -74,7 +74,7 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
   const hours = formHours(businessHoursOf(db.company), sch.stepMin, day);
   const slots = freeSlots(db, techIds, day, duration, { exceptId: init.exceptId, hours });
   const [minute, setMinute] = useState<number | null>(initStart ? initStart.getHours() * 60 + initStart.getMinutes() : null);
-  const startMin = minute ?? slots[0] ?? SCHEDULE_DEFAULTS.dayStartMin;
+  const startMin = minute ?? slots[0] ?? hours.dayStartMin;
   const start = atMinute(day, startMin);
   const warnings = formWarnings(db, { techId: techIds, start, durationMin: duration, exceptId: init.exceptId }, { hours });
   const value: VisitFormValue = { start, durationMin: duration, techId, assigneeIds: techIds, note };
@@ -155,8 +155,9 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
       <T v="body" tone="mut">
         {t("vf.summary", {
           date: day(f.value.start),
-          from: time(f.value.start),
-          to: time(new Date(new Date(f.value.start).getTime() + f.duration * 60_000).toISOString()),
+          // the company's clock, as the client's line below (П4a)
+          from: companyTime(f.value.start, companyTz(db.company)),
+          to: companyTime(new Date(new Date(f.value.start).getTime() + f.duration * 60_000).toISOString(), companyTz(db.company)),
           who: f.techIds.length ? f.techIds.map((id) => techs.find((m) => m.id === id)?.name ?? "").filter(Boolean).join(", ") : t("vf.dispatcherAssigns"),
         })}
       </T>

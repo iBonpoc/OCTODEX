@@ -50,6 +50,10 @@ const contactFromDb = (r: Row): CompanyContact => ({
   id: s(r.id), name: s(r.name), title: opt(r.title), phone: opt(r.phone), email: opt(r.email), isPrimary: !!r.is_primary, onDocuments: r.on_documents !== false,
 });
 
+/** jsonb columns of `companies` that companyToDb merges with what is stored: company.save must read all of them first,
+ *  or a save from one screen wipes what another saved (П4a review: schedule_settings, business_hours, lead_settings). */
+export const COMPANY_STORED_COLUMNS = ["brand", "contract_settings", "estimate_settings", "payment_settings", "onboarding_state", "lead_settings", "schedule_settings", "business_hours"] as const;
+
 /** Columns of `companies` (jsonb settings are merged with what is already stored). */
 export function companyToDb(c: Company, stored: Row) {
   const n = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
@@ -73,8 +77,8 @@ export function companyToDb(c: Company, stored: Row) {
     onboarding_state: { ...((stored.onboarding_state as Row) ?? {}), skipped: c.skipped },
     lead_settings: { ...((stored.lead_settings as Row) ?? {}), ...(c.leadSettings ?? {}) },
     schedule_settings: { ...((stored.schedule_settings as Row) ?? {}), ...(c.scheduleSettings ?? {}) },
-    // hours are one object: what the company set replaces the stored one (null stays null = defaults)
-    business_hours: c.businessHours ? { ...((stored.business_hours as Row) ?? {}), ...c.businessHours } : ((stored.business_hours as Row | null) ?? null),
+    // hours: the days the phone has win, the stored ones stay; no hours on the phone — the stored ones stay (null = defaults)
+    business_hours: c.businessHours ? { ...((stored.business_hours as Row) ?? {}), ...c.businessHours } : ((stored.business_hours as Row | null | undefined) ?? null),
   };
 }
 

@@ -48,6 +48,9 @@ revoke all on function app.valid_business_hours(jsonb) from public, anon, authen
 -- the check runs as the user who saves the company (owner / admin): a pure validator, nothing else to reach
 grant execute on function app.valid_schedule_settings(jsonb) to authenticated;
 grant execute on function app.valid_business_hours(jsonb) to authenticated;
+-- and for server code that writes companies without a user (the check runs for it too)
+grant execute on function app.valid_schedule_settings(jsonb) to service_role;
+grant execute on function app.valid_business_hours(jsonb) to service_role;
 
 -- business_hours was never written by the app: a stray old shape becomes null (= defaults) instead of blocking the check
 update public.companies set business_hours = null where not app.valid_business_hours(business_hours);

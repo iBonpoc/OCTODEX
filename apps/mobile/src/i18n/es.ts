@@ -1444,7 +1444,7 @@ export const es: Dict = {
   "schs.title": "Horario",
   "schs.hint": "Zona horaria, horario laboral, duración de visitas, ventana para el cliente, «Con retraso».",
   "schs.who": "Lo cambia el director",
-  "schs.tzHint": "Todas las horas de visitas, «hoy» y «mañana» siguen esta zona.",
+  "schs.tzHint": "«Hoy» y «mañana» en «Requiere atención», la hora para el cliente y «Con retraso» siguen esta zona.",
   "schs.tzLine": "Zona horaria: {tz}",
   "schs.hours": "Horario laboral",
   "schs.hoursHint": "El formulario ofrece horas dentro de él; una visita fuera tiene aviso.",

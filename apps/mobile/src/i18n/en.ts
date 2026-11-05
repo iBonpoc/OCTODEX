@@ -1444,7 +1444,7 @@ export const en: Dict = {
   "schs.title": "Schedule",
   "schs.hint": "Time zone, working hours, visit lengths, the client's window, «Running late».",
   "schs.who": "The director changes it",
-  "schs.tzHint": "All visit times, «today» and «tomorrow» follow this zone.",
+  "schs.tzHint": "«Today» and «tomorrow» in «Needs attention», the client's time and «Running late» follow this zone.",
   "schs.tzLine": "Time zone: {tz}",
   "schs.hours": "Working hours",
   "schs.hoursHint": "The visit form offers slots inside them; a visit outside gets a warning.",
