@@ -437,7 +437,7 @@ export function Screen({
                 onPress={goUp}
                 visibleHeight={component.button.md}
                 accessibilityRole="button"
-                accessibilityLabel={t("nav.upTo", { to: upLabel ?? "" })}
+                accessibilityLabel={upLabel ? t("nav.backTo", { to: upLabel }) : t("common.back")}
                 style={{ width: component.button.md, height: component.button.md, borderRadius: radius.pill, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
               >
                 <Icon name="chevronLeft" s={size.iconSm} color={c.ink} />
@@ -551,7 +551,6 @@ export function Screen({
       <Background />
       {pinned ? (
         <View
-          accessibilityRole="header"
           style={{ paddingTop: navInsets.top - space[3], paddingBottom: space[1], paddingHorizontal: space[4], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
         >
           <View style={column}>{addressRow}</View>

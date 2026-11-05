@@ -14,13 +14,15 @@ exports.run = async (h) => {
   const ownerName = db.customers.find((c) => c.id === owner).name;
   // screens below in the stack stay in the page (hidden): count only what is on screen
   const tab = (name) => p.locator(`[role="tab"][aria-label="${name}"]:visible`);
-  const up = (to) => p.getByRole("button", { name: `На уровень вверх: ${to}` }).locator("visible=true");
+  // «‹» and the parent crumb share one name (same action, WCAG 3.2.4); «‹» comes first
+  const up = (to) => p.getByRole("button", { name: `Назад: ${to}`, exact: true }).locator("visible=true").first();
+  const roundBack = () => p.locator('[aria-label^="Назад"]:visible').filter({ has: p.locator("svg") }).filter({ hasNotText: /./ });
 
   // Н1: the pill on an inner screen, "Клиенты" highlighted
   await h.go(`/client/${cust.id}`);
   if (!wide) {
     h.expect((await tab("Продажи").count()) === 0 && (await tab("Ещё").count()) === 0, "phone: no tab bar on an inner screen");
-    h.expect((await p.getByRole("button", { name: /^На уровень вверх/ }).locator("visible=true").count()) === 0, "phone: no round back");
+    h.expect((await roundBack().count()) === 0, "phone: no round back");
     h.expect(!/Esc/.test(await h.text()), "phone: no Esc hint");
     // the trail scrolls away with the page, as before (not pinned)
     const parent = p.getByRole("button", { name: "Назад: Клиенты" }).locator("visible=true");
@@ -46,13 +48,14 @@ exports.run = async (h) => {
 
   // Н2: «‹» goes one level up: job → client → clients
   await h.go(`/job/${job.id}`);
+  h.expect((await roundBack().count()) === 1, "round ‹ on 820/1280");
   await up(ownerName).click();
   await p.waitForTimeout(600);
   h.expect(p.url().includes(`/client/${owner}`), `‹ job → client (${p.url()})`);
   await up("Клиенты").click();
   await p.waitForTimeout(600);
   h.expect(/\/clients$/.test(p.url()), `‹ client → clients (${p.url()})`);
-  h.expect((await p.getByRole("button", { name: /^На уровень вверх/ }).locator("visible=true").count()) === 0, "no ‹ on a tab root");
+  h.expect((await p.getByRole("button", { name: /^Назад/ }).locator("visible=true").count()) === 0, "no ‹ on a tab root");
 
   // the address bar stays put while the page scrolls
   await h.go(`/client/${cust.id}`);

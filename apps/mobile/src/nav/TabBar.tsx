@@ -178,7 +178,7 @@ function NavPill({ current, onGo: go }: { current: TabRoute | undefined; onGo: (
             maxWidth: wide ? undefined : 480,
           }}
         >
-          <View key={`${role}-${wide}`} style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
+          <View key={`${role}-${wide}`} role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
             <Animated.View
               pointerEvents="none"
               style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill, backgroundColor: c.acc }, pill]}
