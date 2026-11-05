@@ -12,7 +12,7 @@ create table public.service_categories (
   id            uuid primary key default public.uuid_generate_v7(),
   company_id    uuid not null references public.companies (id),
   seed_key      text check (seed_key ~ '^[a-z][a-z0-9_]*$'),
-  name          text check (name is null or btrim(name) <> ''),
+  name          text check (name is null or (btrim(name) <> '' and char_length(name) <= 80)),
   parent_id     uuid check (parent_id is null),            -- "kind of work" level comes later
   position      int not null default 0 check (position >= 0),
   archived_at   timestamptz,
@@ -152,7 +152,8 @@ declare k text := tg_argv[0]; j jsonb := to_jsonb(new); v_parent uuid;
 begin
   if new.service_category_id is null then return new; end if;
   if tg_op = 'UPDATE' and new.service_category_id is not distinct from old.service_category_id then return new; end if;
-  if exists (select 1 from public.service_categories c where c.id = new.service_category_id and c.archived_at is not null) then
+  if exists (select 1 from public.service_categories c
+             where c.id = new.service_category_id and c.company_id = new.company_id and c.archived_at is not null) then
     if tg_op = 'INSERT' and k in ('estimate', 'job') then
       v_parent := app.service_category_parent(k, new.company_id, (j ->> 'lead_id')::uuid, (j ->> 'estimate_id')::uuid);
       if v_parent is not distinct from new.service_category_id then return new; end if;

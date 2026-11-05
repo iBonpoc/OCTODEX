@@ -2004,9 +2004,21 @@ select tst.blocked($q$update public.service_categories set name = 'x' where seed
 :as_sales_a
 select tst.ok(tst.cnt($q$select 1 from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 3, 'office reads the directions');
 select tst.fails($q$insert into public.service_categories (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'Sales direction')$q$, 'office (not admin) cannot add a direction');
-:as_office_a
+select tst.blocked($q$update public.service_categories set position = 9 where name = 'Seamless gutters'$q$, 'office (not admin) cannot reorder');
+:as_office_a   -- a0…02 was made admin in T7
 update public.service_categories set position = 5 where name = 'Seamless gutters';
 select tst.ok((select position from public.service_categories where name = 'Seamless gutters') = 5, 'admin reorders');
+-- security-check of #83: a name has a limit; nothing crosses companies
+select tst.fails(format($q$insert into public.service_categories (company_id, name) values ('ca000000-0000-0000-0000-000000000000', %L)$q$, repeat('x', 81)), 'name longer than 80 refused');
+:as_owner_a
+select tst.fails($q$insert into public.service_categories (company_id, seed_key) values ('cb000000-0000-0000-0000-000000000000', 'fencing')$q$, 'owner A cannot add a direction to company B');
+select tst.fails(format($q$insert into public.estimates (company_id, customer_id, property_id, service_category_id, title) values ('ca000000-0000-0000-0000-000000000000', 'c2000000-0000-4000-8000-000000000001', 'd2000000-0000-4000-8000-000000000001', %L, 'x')$q$, :'b_cat'), 'estimate with a direction of company B refused');
+select tst.fails(format($q$insert into public.jobs (company_id, title, customer_id, property_id, service_category_id) values ('ca000000-0000-0000-0000-000000000000', 'x', 'c2000000-0000-4000-8000-000000000001', 'd2000000-0000-4000-8000-000000000001', %L)$q$, :'b_cat'), 'job with a direction of company B refused');
+:as_owner_b
+select tst.blocked($q$update public.service_categories set name = 'Stolen' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'owner B cannot rename our directions');
+select tst.blocked($q$update public.service_categories set archived_at = now() where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'owner B cannot archive our directions');
+:as_owner_a
+select tst.ok((select count(*) from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000' and (name = 'Stolen' or (archived_at is not null and seed_key = 'gutters'))) = 0, 'our directions untouched by B');
 reset role; reset request.jwt.claim.sub; set role anon;
 select tst.fails($q$select 1 from public.service_categories$q$, 'anon cannot read directions');
 \echo 'T27 directions ok'
