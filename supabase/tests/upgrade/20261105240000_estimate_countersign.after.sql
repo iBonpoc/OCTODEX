@@ -15,7 +15,7 @@ begin
   if (select expires_at from public.estimates where id = 'cf540000-0000-0000-0000-000000000002') is not null then
     raise exception 'upgrade: a draft gets no valid until';
   end if;
-  if (select revoked_token_hashes from public.estimates where id = 'cf540000-0000-0000-0000-000000000001') <> '{}' then
+  if exists (select 1 from public.revoked_link_tokens) then
     raise exception 'upgrade: no revoked tokens yet';
   end if;
 end $$;

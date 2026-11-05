@@ -1722,7 +1722,7 @@ do $$ begin
 end $$;
 :as_owner_a
 do $$
-declare e uuid := current_setting('tst.exp_id')::uuid; v_tok text;
+declare e uuid := current_setting('tst.exp_id')::uuid; v_tok text; v_other uuid; v_ver uuid;
 begin
   perform tst.fails($q$select public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023')$q$, 'a signed estimate keeps its link (copy promised to the client)');
   perform tst.fails(format($q$update public.estimates set link_revoked_at = null, expires_at = current_date + 99 where id = %L$q$, e), 'expiry / revoke only through the functions');
@@ -1735,6 +1735,18 @@ begin
   perform tst.ok(v_tok is not null and v_tok <> 'tok_exp_0123456789abcdef', 'a revoked token never comes back: the server made a new one');
   perform tst.ok((select link_revoked_at is null from public.estimates where id = e), 'the new link is open');
   perform tst.fails(format($q$update public.estimates set public_token = 'tok_exp_0123456789abcdef' where id = %L$q$, e), 'the token cannot be set directly');
+  -- …and not on ANOTHER estimate either: the old SMS link to client X must never open client Y's estimate
+  insert into public.estimates (company_id, customer_id, property_id, title) values
+    ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'Other client') returning id into v_other;
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', v_other, 1) returning id into v_ver;
+  update public.estimates set current_version_id = v_ver where id = v_other;
+  v_tok := public.send_estimate(v_other, 'tok_exp_0123456789abcdef');
+  perform tst.ok(v_tok <> 'tok_exp_0123456789abcdef', 'a revoked token of X is not accepted for Y: the server made a new one');
+  perform tst.ok((select count(*) from public.estimates where public_token = 'tok_exp_0123456789abcdef') = 0, 'nobody holds the revoked token');
+end $$;
+:as_owner_a
+do $$ begin
+  perform tst.fails('select 1 from public.revoked_link_tokens', 'the revoked tokens table is closed to the app');
 end $$;
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin

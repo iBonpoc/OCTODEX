@@ -124,8 +124,18 @@ alter table public.estimate_approvals add constraint estimate_approvals_member_s
 
 -- ---- 4. Link: valid until, revoke; approved only through execute -----------------------------
 alter table public.estimates add column if not exists link_revoked_at timestamptz;
--- sha-256 of every revoked token of this estimate: a revoked link never comes back (an old token from a phone's memory)
-alter table public.estimates add column if not exists revoked_token_hashes text[] not null default '{}';
+-- sha-256 of every revoked link token, across ALL estimates: a revoked link never comes back — neither on its own
+-- estimate nor on another one (an old SMS link must never open another client's estimate; security-check 05.11).
+-- Written and read only by the security definer functions below; nobody else sees the table.
+create table if not exists public.revoked_link_tokens (
+  token_hash   text primary key,
+  company_id   uuid not null references public.companies (id),
+  estimate_id  uuid not null,
+  revoked_at   timestamptz not null default now()
+);
+alter table public.revoked_link_tokens enable row level security;
+alter table public.revoked_link_tokens force row level security;
+revoke all on public.revoked_link_tokens from anon, authenticated;
 
 create or replace function app.tg_estimate_send_and_guard()
 returns trigger language plpgsql set search_path = '' as $$
@@ -154,7 +164,7 @@ begin
       raise exception 'a signed estimate keeps its client, property, lead and versions' using errcode = '42501';
     end if;
     -- the link (token, valid until, revoke) changes only through send_estimate / revoke_estimate_link
-    if (new.public_token, new.link_revoked_at, new.revoked_token_hashes) is distinct from (old.public_token, old.link_revoked_at, old.revoked_token_hashes)
+    if (new.public_token, new.link_revoked_at) is distinct from (old.public_token, old.link_revoked_at)
        or (new.expires_at is distinct from old.expires_at and not (new.status = 'sent' and old.status in ('draft', 'expired'))) then
       raise exception 'the client link changes only through send_estimate / revoke_estimate_link' using errcode = '42501';
     end if;
@@ -436,11 +446,11 @@ begin
     -- the client signed: they were promised their copy on this page (plan audit 05.11)
     raise exception 'a signed estimate keeps its link' using errcode = '22023';
   end if;
+  insert into public.revoked_link_tokens (token_hash, company_id, estimate_id)
+  values (encode(sha256(convert_to(e.public_token, 'UTF8')), 'hex'), e.company_id, e.id)
+  on conflict (token_hash) do nothing;
   perform set_config('app.signing_estimate', e.id::text, true);
-  update public.estimates
-     set public_token = null, link_revoked_at = now(),
-         revoked_token_hashes = revoked_token_hashes || encode(sha256(convert_to(e.public_token, 'UTF8')), 'hex')
-   where id = e.id;
+  update public.estimates set public_token = null, link_revoked_at = now() where id = e.id;
   perform set_config('app.signing_estimate', '', true);
   insert into public.activities (company_id, subject_type, subject_id, kind, body, meta)
   values (e.company_id, 'estimate', e.id, 'edited', 'link revoked', jsonb_build_object('action', 'link_revoked'));
@@ -546,7 +556,7 @@ begin
   v_token := e.public_token;
   if v_token is null then
     if p_token is not null and length(p_token) >= 20 and p_token ~ '^[A-Za-z0-9_-]+$'
-       and not (encode(sha256(convert_to(p_token, 'UTF8')), 'hex') = any (e.revoked_token_hashes))
+       and not exists (select 1 from public.revoked_link_tokens r where r.token_hash = encode(sha256(convert_to(p_token, 'UTF8')), 'hex'))
        and not exists (select 1 from public.estimates where public_token = p_token) then
       v_token := p_token;
     else
