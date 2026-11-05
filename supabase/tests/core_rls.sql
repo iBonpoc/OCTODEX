@@ -1027,6 +1027,23 @@ begin
 end $$;
 \echo 'T17 lead people ok'
 
+-- ---------------------------------------------------------------- T17b: client language (company default for documents)
+:as_owner_a
+select tst.ok((select doc_language from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'en', 'documents to clients are in English by default');
+update public.companies set doc_language = 'es' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select doc_language from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'es', 'owner sets Spanish for client documents');
+update public.companies set doc_language = 'ru' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.fails($q$update public.companies set doc_language = 'fr' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'client documents: English, Spanish or Russian only');
+select tst.ok((select count(*) from pg_constraint where conname in ('contacts_preferred_language_check', 'leads_language_check') and pg_get_constraintdef(oid) like '%ru%') = 2, 'a person and a lead can read Russian too');
+update public.contacts set preferred_language = 'ru' where name = 'Pat People';
+select tst.fails($q$update public.contacts set preferred_language = 'fr' where name = 'Pat People'$q$, 'unknown person language refused');
+update public.companies set doc_language = 'en' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.blocked($q$update public.companies set doc_language = 'es' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'tech cannot change the company document language');
+:as_owner_a
+select tst.ok((select doc_language from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'en', 'still English after the tech tried');
+\echo 'T17b client language ok'
+
 -- ---------------------------------------------------------------- T18: estimate status (docs/specs/07 §4, S8b, edit after send)
 :as_owner_a
 do $$

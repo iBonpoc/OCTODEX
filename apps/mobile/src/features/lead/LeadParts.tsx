@@ -79,6 +79,8 @@ export function LeadOverview({ l }: { l: Lead }) {
   const people = peopleForLead(db, l);
   const main = people[0];
   const others = people.slice(1);
+  // the client's language for estimates and messages: the main person's (people sheet), else the lead's from before
+  const lang = main?.language ?? l.language;
   const client = l.customerId ? db.customers.find((c) => c.id === l.customerId) : undefined;
   const canEditPeople = !l.customerId || (!!client && canSeeLeadCost(role));
   const src = sourceOf(db, l.sourceId);
@@ -126,10 +128,10 @@ export function LeadOverview({ l }: { l: Lead }) {
         {head(t("lead.sec.contact"), "contact")}
         {row("user", l.name, l.customerId ? t("lead.peopleOfClient") : undefined)}
         {phoneRows(main)}
-        {l.preferredContact || l.language ? (
+        {l.preferredContact || lang ? (
           <RowView style={{ flexWrap: "wrap" }}>
             {l.preferredContact ? <StatusChip status="neutral" label={t("lead.prefers", { way: t(`lead.way.${l.preferredContact}` as DictKey) })} soft /> : null}
-            {l.language ? <StatusChip status="neutral" label={t("lead.lang", { lang: l.language.toUpperCase() })} soft /> : null}
+            {lang ? <StatusChip status="neutral" label={t("lead.lang", { lang: lang.toUpperCase() })} soft /> : null}
           </RowView>
         ) : null}
         {canEditPeople ? <Button label={t("lead.editPhones")} icon="pencil" size="sm" variant="secondary" onPress={() => setPeopleOpen(true)} /> : null}
@@ -220,12 +222,12 @@ export function LeadOverview({ l }: { l: Lead }) {
   );
 }
 
-/** who the lead is and how they like to be reached; phones and emails are in the people sheet */
+/** who the lead is and how they like to be reached; phones, emails and language are in the people sheet */
 function ContactSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onClose: () => void }) {
   const store = useStore();
   const { t } = useI18n();
   const saved = useSaved();
-  const [d, setD] = useState({ name: l.name, preferredContact: l.preferredContact, language: l.language });
+  const [d, setD] = useState({ name: l.name, preferredContact: l.preferredContact });
   const set = (p: Partial<typeof d>) => setD((x) => ({ ...x, ...p }));
   const [d0] = useState(d);
   const ok = d.name.trim().length > 1;
@@ -243,13 +245,6 @@ function ContactSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onCl
           value={d.preferredContact ?? ""}
           onChange={(v) => set({ preferredContact: v || undefined })}
           items={[{ key: "", label: t("lead.any") }, ...(["call", "sms", "email"] as const).map((k) => ({ key: k, label: t(`lead.way.${k}` as DictKey) }))]}
-        />
-      </Labeled>
-      <Labeled label={t("lead.langLabel")}>
-        <ChoiceChips<"en" | "es" | "">
-          value={d.language ?? ""}
-          onChange={(v) => set({ language: v || undefined })}
-          items={[{ key: "", label: t("lead.any") }, { key: "en", label: "English" }, { key: "es", label: "Español" }]}
         />
       </Labeled>
       <Button label={t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
