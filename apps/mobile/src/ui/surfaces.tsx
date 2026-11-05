@@ -364,6 +364,10 @@ function Breadcrumbs({ trail, current, go }: { trail: Crumb[]; current?: string;
   );
 }
 
+/** The screen title takes focus only so a screen reader starts there (spec 10, Н3а): it is not a control, no ring.
+ *  react-native-web passes outlineStyle through; RN's types only list solid/dotted/dashed. */
+const noFocusRing = (Platform.OS === "web" ? { outlineStyle: "none" } : {}) as ViewStyle;
+
 /* ---------- Screen: background, header with title + "?" + offline badge, scroll ---------- */
 export function Screen({
   title,
@@ -513,7 +517,7 @@ export function Screen({
               Tablet/desktop: the same row is pinned above the scroll (addressBar). */}
           {pinned ? null : addressRow}
           <RowView style={{ gap: space[1] }}>
-            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={{ flexShrink: 1, outlineWidth: 0 }}>
+            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
               <T v="title" numberOfLines={2}>
                 {title}
               </T>
@@ -525,7 +529,7 @@ export function Screen({
         /* tab root: the big title is where you are */
         <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
           <RowView style={{ flex: 1, gap: space[1] }}>
-            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={{ flexShrink: 1, outlineWidth: 0 }}>
+            <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
               <T v="display" numberOfLines={1}>
                 {title}
               </T>

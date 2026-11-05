@@ -118,6 +118,8 @@ exports.run = async (h) => {
   h.expect(p.url().includes(`/client/${cust.id}`), `Enter opens the client (${p.url()})`);
   let f = await focused();
   h.expect(f.startsWith("heading|") && f.includes(cust.name), `focus on the new title (${f})`);
+  const ring = await p.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
+  h.expect(ring === "none", `the title has no focus ring (${ring})`);
   await p.keyboard.press("Escape");
   await p.waitForTimeout(700);
   f = await focused();
