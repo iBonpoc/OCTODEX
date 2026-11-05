@@ -8,7 +8,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { ESTIMATE_STATUSES, type EstimateStatus } from "../src/data/types";
 import { estimateStatus as fromDb } from "../src/cloud/statusMap";
-import { ESTIMATE_MOVES, canMoveEstimate, estimateStatusView, isEstimateEditable } from "../src/features/estimateStatus";
+import { ESTIMATE_MOVES, canChangeEstimateCategory, canMoveEstimate, estimateStatusView, isEstimateEditable } from "../src/features/estimateStatus";
 
 const ROOT = path.resolve(__dirname, "../../..");
 const migrations = fs
@@ -74,5 +74,19 @@ describe("estimate status: app and database agree", () => {
       expect(b, `db status ${y}`).toBeDefined();
       if (a !== b) expect(canMoveEstimate(a, b), `db ${x} → ${y} = app ${a} → ${b}`).toBe(true);
     }
+  });
+});
+
+describe("canChangeEstimateCategory (T2, S16)", () => {
+  it("the office and the director change it until the client signs", () => {
+    for (const role of ["director", "dispatcher", "sales"] as const) {
+      expect(canChangeEstimateCategory("draft", role)).toBe(true);
+      expect(canChangeEstimateCategory("sent", role)).toBe(true);
+      for (const s of ["awaiting_countersign", "approved", "declined"] as const) expect(canChangeEstimateCategory(s, role)).toBe(false);
+    }
+  });
+  it("a tech only in a draft", () => {
+    expect(canChangeEstimateCategory("draft", "tech")).toBe(true);
+    for (const s of ESTIMATE_STATUSES.filter((x) => x !== "draft")) expect(canChangeEstimateCategory(s, "tech")).toBe(false);
   });
 });
