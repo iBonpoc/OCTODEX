@@ -4,6 +4,18 @@
  * page → signs (estimate approved, lead won by approval, client active, job waits for a date, deposit invoice)
  * → pays the deposit (payment with a receipt).
  */
+/** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
+async function countersign(h, estimateId) {
+  await h.go(`/estimate/${estimateId}`);
+  const pad = h.page.getByLabel(/расписывается|signs here/i).last();
+  await pad.scrollIntoViewIfNeeded(); await h.page.waitForTimeout(250);
+  const bb = await pad.boundingBox();
+  await h.page.mouse.move(bb.x + 30, bb.y + 90); await h.page.mouse.down();
+  for (let i = 0; i < 20; i++) await h.page.mouse.move(bb.x + 30 + i * 12, bb.y + 90 - Math.sin(i / 2) * 40);
+  await h.page.mouse.up();
+  await h.page.getByRole("button", { name: "Подписать договор" }).last().click(); await h.page.waitForTimeout(700);
+}
+
 exports.run = async (h) => {
   await h.go("/inbox");
   await h.page.getByText("Kevin Brooks", { exact: true }).first().click(); await h.page.waitForTimeout(700);
@@ -45,6 +57,12 @@ exports.run = async (h) => {
   // S8: signs
   await h.sign("Kevin Brooks");
   await h.expectText(/Estimate approved/, "approved on the client page (in the client's language, rule 7)");
+  db = await h.db();
+  h.expect(db.estimates.find((e) => e.id === est.id).status === "awaiting_countersign", "S8: the client signed, awaiting the company");
+  h.expect(!db.jobs.some((j) => j.estimateId === est.id), "S8: no job before the company signs");
+  h.expect(db.leads.find((l) => l.id === lead.id).status !== "won", "S8: lead not won before the company signs");
+  // S8b: an employee signs for the company
+  await countersign(h, est.id);
   db = await h.db();
   const e2 = db.estimates.find((e) => e.id === est.id);
   const l2 = db.leads.find((l) => l.id === lead.id);

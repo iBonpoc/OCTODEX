@@ -45,3 +45,12 @@ export function estimateMessage(lang: DocLang, m: { company: string; name: strin
     subject: t("ue.sendSubject", { number: m.number ?? "", company: m.company }),
   };
 }
+
+/**
+ * The signed contract to the client's email (founder 05.11: automatically when the client has an email).
+ * The one place where sending is wired: step «Почта П1» (Resend, a platform key set once by the operator) replaces the body.
+ * Until then it sends nothing anywhere and says so honestly.
+ */
+export async function sendSignedCopy(_estimateId: string): Promise<{ sent: false; reason: "mail_not_connected" }> {
+  return { sent: false, reason: "mail_not_connected" };
+}

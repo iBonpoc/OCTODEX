@@ -8,7 +8,7 @@
  */
 import type { DB, Role } from "@/data/types";
 import type { DictKey } from "@/i18n";
-import { roleHome, roleNav } from "./roles";
+import { roleHome, roleNav, type TabRoute } from "./roles";
 
 export type Label = { key: DictKey } | { text: string };
 export interface NavContext {
@@ -171,4 +171,25 @@ export function breadcrumbs(pathname: string, params: P, db: DB, role: Role): Cr
 export function collapseCrumbs<C>(trail: C[], max: number): { shown: C[]; hidden: C[]; at: number } {
   if (trail.length <= max) return { shown: trail, hidden: [], at: -1 };
   return { shown: [trail[0]!, trail[trail.length - 1]!], hidden: trail.slice(1, -1), at: 1 };
+}
+
+/** Section → tab it lives under (spec 10, Н1: the top pill highlights it on inner screens). */
+const sectionRoute: Partial<Record<DictKey, TabRoute>> = {
+  "tab.today": "today",
+  "tab.sales": "inbox",
+  "tab.clients": "clients",
+  "tab.plan": "plan",
+  "tab.visits": "visits",
+  "tab.more": "more",
+};
+
+/** Which tab of the role is highlighted for this screen; a section the role has no tab for lives under "More". */
+export function sectionTab(pathname: string, params: P, db: DB, role: Role): TabRoute | undefined {
+  const route = split(pathname).path.split("/").filter(Boolean)[0] ?? "";
+  const own = roleNav[role].map((n) => n.route);
+  if (own.includes(route as TabRoute)) return route as TabRoute;
+  const section = navContext(pathname, params, db, role).section;
+  const tab = section ? sectionRoute[section] : undefined;
+  if (!tab) return undefined;
+  return own.includes(tab) ? tab : "more";
 }

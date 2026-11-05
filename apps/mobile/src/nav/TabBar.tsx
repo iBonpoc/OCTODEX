@@ -13,6 +13,8 @@ import { useNavInsets } from "@/ui/surfaces";
 import { useKeyboardHeight } from "@/ui/keyboard";
 import { roleNav, type TabRoute } from "./roles";
 import { QuickActions } from "./QuickActions";
+import { goTo } from "./go";
+import { sectionTab } from "./hierarchy";
 
 /**
  * Phone: floating glass pill at the bottom (56 + safe area), 4 items + center "＋".
@@ -20,6 +22,29 @@ import { QuickActions } from "./QuickActions";
  * Active item gets the liquid accent fill (160ms stretch + 420ms settle).
  */
 export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
+  const { role } = useStore();
+  const name = state.routes[state.index]?.name as TabRoute | undefined;
+  // a tab the role has no button for (Plan, Triage opened from «More») lights «More», where it was opened from
+  const current = name && !roleNav[role].some((n) => n.route === name) ? "more" : name;
+  const go = (route: TabRoute) => {
+    const r = state.routes.find((x) => x.name === route);
+    if (r) navigateToTab(r.key);
+  };
+  return <NavPill current={current} onGo={go} />;
+}
+
+/**
+ * Tablet/desktop: the same top pill on inner screens (client, job, estimate…), so another section is one tap away;
+ * the section the screen belongs to is highlighted (spec 10, Н1). Drawn by Screen inside its pinned header, so on
+ * iPad it slides with its screen (push, swipe back) and comes first in the keyboard order. Phone: none (iOS).
+ */
+export function StackNavPill({ pathname, params }: { pathname: string; params: Record<string, string | string[] | undefined> }) {
+  // the screen's own address (from Screen), not the app's: during «back» the app's address still points at the card above
+  const store = useStore();
+  return <NavPill inline current={sectionTab(pathname, params, store.db, store.role)} onGo={(route) => goTo(`/${route}`)} />;
+}
+
+function NavPill({ current, onGo: go, inline }: { current: TabRoute | undefined; onGo: (route: TabRoute) => void; inline?: boolean }) {
   const { role } = useStore();
   const { t } = useI18n();
   const { c } = useTheme();
@@ -30,11 +55,6 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   /** on a phone the floating bar would sit on top of the keyboard and cover the field: hide it while typing */
   const kb = useKeyboardHeight();
   const items = roleNav[role];
-  const current = state.routes[state.index]?.name as TabRoute | undefined;
-  const go = (route: TabRoute) => {
-    const r = state.routes.find((x) => x.name === route);
-    if (r) navigateToTab(r.key);
-  };
 
   const [layouts, setLayouts] = useState<Record<string, { x: number; w: number }>>({});
   const left = useSharedValue(0);
@@ -73,6 +93,7 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
         onPress={() => go(it.route)}
         accessibilityRole="tab"
         accessibilityState={{ selected: sel }}
+        aria-selected={sel}
         accessibilityLabel={t(it.label)}
         containerStyle={wide ? undefined : { flex: 1 }}
         onLayout={(e: LayoutChangeEvent) => {
@@ -135,10 +156,7 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
       <View
         pointerEvents="box-none"
         style={{
-          position: "absolute",
-          left: 0,
-          right: 0,
-          ...(wide ? { top: nav.safeTop + space[3] } : { bottom: nav.tabBottom }),
+          ...(inline ? {} : { position: "absolute", left: 0, right: 0, ...(wide ? { top: nav.safeTop + space[3] } : { bottom: nav.tabBottom }) }),
           alignItems: "center",
           paddingHorizontal: space[4],
         }}
@@ -156,7 +174,7 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
             maxWidth: wide ? undefined : 480,
           }}
         >
-          <View key={`${role}-${wide}`} style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
+          <View key={`${role}-${wide}`} role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
             <Animated.View
               pointerEvents="none"
               style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill, backgroundColor: c.acc }, pill]}
