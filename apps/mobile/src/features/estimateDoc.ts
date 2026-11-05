@@ -144,3 +144,18 @@ export function estimateTitle(doc: EstimateDoc, fallback: string): string {
 }
 
 export const isUniversal = (e: Estimate): e is Estimate & { doc: EstimateDoc } => !!e.doc?.options?.length;
+
+/**
+ * The amount on an estimate's list card (agreed with the list-cards chat, 05.11):
+ * signed by the client (awaiting the company or approved) → what the client signed, with the chosen option's name;
+ * not signed, several options → «from» the cheapest option; otherwise → the estimate total. Money through the engine.
+ */
+export function estimateListAmount(e: Pick<Estimate, "status" | "doc" | "approval" | "totalCents">): { cents: number; from: boolean; option?: string } {
+  if ((e.status === "awaiting_countersign" || e.status === "approved") && e.approval) {
+    return { cents: e.approval.totalCents, from: false, option: e.doc?.options.find((o) => o.id === e.approval!.optionId)?.name };
+  }
+  if (e.doc && e.doc.options.length > 1) {
+    return { cents: Math.min(...e.doc.options.map((o) => optionTotals(e.doc!, o).total)), from: true };
+  }
+  return { cents: e.totalCents, from: false };
+}

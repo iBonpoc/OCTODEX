@@ -1738,7 +1738,8 @@ select tst.set_expires((select id from public.estimates where public_token = 'to
 select tst.set_expires('0e1a0000-0000-0000-0000-000000000023', current_date - 2);
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin
-  perform tst.ok(public.portal_estimate('tok_exp_0123456789abcdef') is null, 'past valid until: the link does not open');
+  perform tst.ok(public.portal_estimate('tok_exp_0123456789abcdef') ->> 'status' = 'expired'
+                 and public.portal_estimate('tok_exp_0123456789abcdef') -> 'doc' is null, 'past valid until: only "expired" and who to call (E2b)');
   perform tst.fails($q$select public.portal_accept('tok_exp_0123456789abcdef', gen_random_uuid(), null, 'X', 'M0 0', true)$q$, 'past valid until: cannot sign');
   perform tst.ok(public.portal_estimate('tok_sign_0123456789abcdef') is not null, 'signed by both: opens always, even past the date');
   perform tst.ok(public.portal_estimate('tok_await_0123456789abcd') is not null, 'signed by the client (awaiting the company): the client keeps the page past the date');
@@ -2022,6 +2023,102 @@ select tst.ok((select count(*) from public.service_categories where company_id =
 reset role; reset request.jwt.claim.sub; set role anon;
 select tst.fails($q$select 1 from public.service_categories$q$, 'anon cannot read directions');
 \echo 'T27 directions ok'
+
+-- ---------------------------------------------------------------- T29–T30 fixture: two client-signed estimates
+:as_owner_a
+do $$
+declare e uuid; v uuid; o uuid; k int;
+begin
+  for k in 1..2 loop
+    insert into public.estimates (company_id, customer_id, property_id, title) values
+      ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'E2b ' || k) returning id into e;
+    insert into public.estimate_versions (company_id, estimate_id, version_no, deposit_rule) values ('ca000000-0000-0000-0000-000000000000', e, 1, '{"kind":"pct","bps":1000}') returning id into v;
+    update public.estimates set current_version_id = v where id = e;
+    insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 50000);
+    perform set_config('tst.e2b_' || k, e::text || ',' || o::text || ',' || public.send_estimate(e), false);
+  end loop;
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare k int;
+begin
+  for k in 1..2 loop
+    perform public.portal_accept(split_part(current_setting('tst.e2b_' || k), ',', 3), split_part(current_setting('tst.e2b_' || k), ',', 2)::uuid,
+                                 null, 'E2b Client', 'M0 0 L4 4', true);
+  end loop;
+end $$;
+
+-- ---------------------------------------------------------------- T29: the company declines a client-signed estimate
+:as_tech_a
+do $$ begin
+  perform tst.fails(format($q$select public.decline_countersign(%L, 'no')$q$, split_part(current_setting('tst.e2b_1'), ',', 1)), 'tech cannot decline');
+end $$;
+:as_owner_b
+do $$ begin
+  perform tst.fails(format($q$select public.decline_countersign(%L, 'no')$q$, split_part(current_setting('tst.e2b_1'), ',', 1)), 'another company''s owner cannot decline');
+end $$;
+:as_sales_a
+do $$ begin
+  perform tst.fails(format($q$select public.decline_countersign(%L, 'no')$q$, split_part(current_setting('tst.e2b_1'), ',', 1)), 'sales cannot decline');
+end $$;
+:as_owner_a
+do $$
+declare e uuid := split_part(current_setting('tst.e2b_1'), ',', 1)::uuid; e_ok uuid := split_part(current_setting('tst.e2b_2'), ',', 1)::uuid;
+begin
+  perform tst.fails(format($q$select public.decline_countersign(%L, '  ')$q$, e), 'a reason is required');
+  perform tst.fails(format($q$select public.decline_countersign(%L, %L)$q$, e, repeat('x', 501)), 'a reason longer than 500 characters is refused');
+  perform public.decline_countersign(e, 'we cannot do it this month');
+  perform public.decline_countersign(e, 'we cannot do it this month');   -- repeat: nothing doubles
+  perform tst.ok((select status || '/' || declined_reason || '/' || declined_reason_text from public.estimates where id = e) = 'declined/other/we cannot do it this month',
+                 'declined with the reason in words');
+  perform tst.ok((select count(*) from public.activities where subject_id = e and meta ->> 'action' = 'declined_by_company') = 1, 'the decline is in the history once');
+  perform tst.fails(format($q$select public.countersign_estimate(%L, 'M0 0 L1 1')$q$, e), 'after a decline the company cannot sign');
+  -- the other one is approved first: then a decline is refused
+  perform tst.ok(public.countersign_estimate(e_ok, 'M0 0 L1 1') = 'approved', 'the second estimate is signed by both');
+  perform tst.fails(format($q$select public.decline_countersign(%L, 'too late')$q$, e_ok), 'an approved estimate cannot be declined');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$ begin
+  perform tst.fails(format($q$select public.portal_accept(%L, %L, null, 'X', 'M0 0', true)$q$, split_part(current_setting('tst.e2b_1'), ',', 3), split_part(current_setting('tst.e2b_1'), ',', 2)),
+                    'a declined estimate cannot be signed again');
+  perform tst.ok(public.portal_estimate(split_part(current_setting('tst.e2b_1'), ',', 3)) ->> 'status' = 'declined', 'the client page shows the decline (until valid until)');
+  perform tst.ok((select r -> 'doc' is null and r -> 'approval' is null and r -> 'countersign' is null and r -> 'customer' is null and r -> 'invoices' is null
+                    and r -> 'company' ->> 'name' is not null and r ->> 'doc_language' is not null
+                    from (select public.portal_estimate(split_part(current_setting('tst.e2b_1'), ',', 3)) r) x),
+                 'declined: only who declined and who to call (no document, no signatures)');
+  perform tst.fails(format($q$select public.decline_countersign(%L, 'x')$q$, split_part(current_setting('tst.e2b_1'), ',', 1)), 'anon cannot decline');
+end $$;
+\echo 'T29 company decline ok'
+
+-- ---------------------------------------------------------------- T30: the client page answers; two employees sign at once
+:as_owner_a
+do $$
+declare e uuid := split_part(current_setting('tst.e2b_2'), ',', 1)::uuid;
+begin
+  -- a second employee signs right after (two phones): one job, one deposit invoice
+  perform tst.ok(public.countersign_estimate(e, 'M0 0 L2 2') = 'approved', 'the second signature returns approved');
+  perform tst.ok((select count(*) from public.jobs where estimate_id = e) = 1, 'one job');
+  perform tst.ok((select count(*) from public.invoices i join public.jobs j on j.id = i.job_id where j.estimate_id = e and i.kind = 'deposit') = 1, 'one deposit invoice');
+  perform tst.ok((select count(*) from public.estimate_approvals where estimate_id = e and party = 'contractor') = 1, 'one company signature');
+  perform tst.ok(public.portal_estimate(split_part(current_setting('tst.e2b_2'), ',', 3)) -> 'company' ->> 'timezone' = 'America/Los_Angeles', 'the page has the company time zone');
+end $$;
+:as_super
+select tst.set_expires(split_part(current_setting('tst.e2b_1'), ',', 1)::uuid, current_date - 3);
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb;
+begin
+  r := public.portal_estimate(split_part(current_setting('tst.e2b_1'), ',', 3));
+  perform tst.ok(r ->> 'status' = 'expired', 'past valid until: the page says expired');
+  perform tst.ok(r -> 'company' ->> 'name' is not null, 'expired: who to call');
+  perform tst.ok(r -> 'doc' is null and r -> 'customer' is null and r -> 'approval' is null and r -> 'invoices' is null and r ->> 'title' is null,
+                 'expired: nothing of the estimate or the client');
+  perform tst.ok(r ->> 'doc_language' is not null, 'expired: still in the client''s language');
+  perform tst.ok(public.portal_estimate('tok_exp_0123456789abcdef') is null, 'revoked: nothing at all');
+  perform tst.ok(public.portal_estimate(split_part(current_setting('tst.e2b_2'), ',', 3)) ->> 'status' = 'approved', 'signed by both: opens');
+end $$;
+\echo 'T30 client page answers, two signers ok'
 
 :as_super
 \echo 'ALL TESTS PASSED'
