@@ -256,7 +256,7 @@ export type CallOutcome = "answered" | "no_answer" | "voicemail";
 /** A to-do with a date on a lead, client, job or estimate ("next step"). */
 export interface Task {
   id: ID;
-  subjectType: "lead" | "customer" | "job" | "estimate";
+  subjectType: "lead" | "customer" | "job" | "estimate" | "property";
   subjectId: ID;
   title: string;
   dueAt?: string;

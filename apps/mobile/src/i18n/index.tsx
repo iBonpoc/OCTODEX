@@ -3,7 +3,7 @@ import { getLocales } from "expo-localization";
 import { dec, roundCents } from "@octo/estimating-engine";
 import { usePersistentState } from "@/data/persist";
 import type { DictKey } from "./ru";
-import { translate, type Lang, type Params } from "./translate";
+import { translate, type DocLang, type Lang, type Params } from "./translate";
 
 export { tFor, DOC_LANGS, DOC_LANG_LABEL, type DocLang, type Lang } from "./translate";
 export const languages: { id: Lang; label: string }[] = [
@@ -18,7 +18,7 @@ function deviceLang(): Lang {
   return code === "ru" || code === "es" ? code : "en";
 }
 
-interface I18nCtx {
+export interface I18nCtx {
   lang: Lang;
   setLang: (l: Lang) => void;
   t: (key: DictKey, params?: Params) => string;
@@ -57,6 +57,24 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   }, [lang, t]);
   if (!ready) return null;
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** Dates on what goes to a client: always US numeric (11/05/2026), the same in every client language (rule 7). */
+const docDayFmt = new Intl.DateTimeFormat("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+
+/**
+ * Everything inside speaks the client's language (rule 7: the /p/ page, its buttons, sheets and toasts).
+ * Money stays US; dates become US numeric. The app's own language is untouched outside.
+ */
+export function I18nOverride({ lang, children }: { lang: DocLang; children: ReactNode }) {
+  const parent = useI18n();
+  const value = useMemo(() => overrideI18n(parent, lang), [parent, lang]);
+  return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
+}
+
+/** The context inside I18nOverride: the client's language for t / lang / day; money as is; setLang does nothing. Pure. */
+export function overrideI18n(parent: I18nCtx, lang: DocLang): I18nCtx {
+  return { ...parent, lang, setLang: () => {}, t: (key, params) => translate(lang, key, params), day: (iso) => docDayFmt.format(new Date(iso)) };
 }
 
 export function useI18n(): I18nCtx {

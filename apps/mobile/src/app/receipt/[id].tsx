@@ -2,7 +2,8 @@ import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { companyForPortal } from "@/cloud/portal";
-import { receiptHtml } from "@/features/docPdf";
+import { receiptHtml, receiptMessage } from "@/features/docPdf";
+import { docLanguageFor } from "@/data/people";
 import { saveEstimatePdf } from "@/features/estimatePdf";
 import { openEmail, openSms } from "@/features/sendEstimate";
 import { Button, StatusChip } from "@/ui/controls";
@@ -28,8 +29,8 @@ export default function ReceiptScreen() {
   const inv = db.invoices.find((i) => i.id === p.invoiceId);
   const cust = db.customers.find((c) => c.id === p.customerId);
   const company = companyForPortal(db, store.companyName ?? "OCTODEX");
-  const html = () => receiptHtml(db, p, company, { t, money, day });
-  const text = t("rcpt.sendText", { company: company.name, amount: money(p.amountCents), number: p.receiptNumber ?? "", date: day(p.at) });
+  const html = () => receiptHtml(db, p, company, { lang: docLanguageFor(db, { customerId: p.customerId }) });
+  const msg = receiptMessage(p, company, docLanguageFor(db, { customerId: p.customerId }));
   const line = (label: string, v: string) => (
     <RowView style={{ justifyContent: "space-between" }}>
       <T v="body" tone="mut">
@@ -64,8 +65,8 @@ export default function ReceiptScreen() {
           icon="invoice"
           onPress={() => saveEstimatePdf(html(), `Receipt ${p.receiptNumber ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })))}
         />
-        {cust?.phone ? <Button label={t("ue.sendSms")} icon="message" variant="secondary" onPress={() => openSms(cust.phone, text).catch(() => {})} /> : null}
-        {cust?.email ? <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => openEmail(cust.email!, `${t("rcpt.title")} ${p.receiptNumber ?? ""}`, text).catch(() => {})} /> : null}
+        {cust?.phone ? <Button label={t("ue.sendSms")} icon="message" variant="secondary" onPress={() => openSms(cust.phone, msg.text).catch(() => {})} /> : null}
+        {cust?.email ? <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => openEmail(cust.email!, msg.subject, msg.text).catch(() => {})} /> : null}
         {inv ? <Button label={t("inv.title")} icon="chevronRight" variant="ghost" onPress={() => router.push(`/invoice/${inv.id}`)} /> : null}
       </RowView>
     </Screen>

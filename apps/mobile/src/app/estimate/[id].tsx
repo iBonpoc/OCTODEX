@@ -13,8 +13,9 @@ import { SignaturePad } from "@/features/SignaturePad";
 import { isUniversal, mainOption, newToken } from "@/features/estimateDoc";
 import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
-import { estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
-import { clientLink, copyText, openEmail, openSms } from "@/features/sendEstimate";
+import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
+import { clientLink, copyText, estimateMessage, openEmail, openSms } from "@/features/sendEstimate";
+import { docLanguageFor } from "@/data/people";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -48,7 +49,7 @@ export default function EstimateScreen() {
 
   const pdf = () => {
     const p = portalFromEstimate(db, e, store.companyName ?? "OCTODEX");
-    saveEstimatePdf(estimateHtml(p, { t, money, day }), `Estimate ${e.number ?? ""} ${customer?.name ?? ""}`.trim()).catch((err) =>
+    saveEstimatePdf(estimateHtml(p, { lang: p.lang }), estimateFileName(p)).catch((err) =>
       toast.show(t("portal.error", { msg: String(err?.message ?? err) })),
     );
   };
@@ -223,14 +224,15 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
   const toast = useToast();
   const customer = store.db.customers.find((c) => c.id === e.customerId);
   const company = store.companyName ?? "OCTODEX";
-  const text = (url: string) => t("ue.sendText", { company, name: customer?.name ?? "", total: money(e.totalCents), link: url });
+  /** to the client in the client's language (rule 7), whatever the app language is */
+  const msg = (url: string) => estimateMessage(docLanguageFor(store.db, { customerId: e.customerId, leadId: e.leadId }), { company, name: customer?.name ?? "", totalCents: e.totalCents, number: e.number, link: url });
   const go = async (how: "sms" | "email" | "copy") => {
     const token = e.token ?? newToken();
     const undo = store.sendEstimate(e.id, token);
     const url = clientLink(token);
     try {
-      if (how === "sms") await openSms(customer?.phone ?? "", text(url));
-      if (how === "email") await openEmail(customer?.email ?? "", t("ue.sendSubject", { number: e.number ?? "", company }), text(url));
+      if (how === "sms") await openSms(customer?.phone ?? "", msg(url).text);
+      if (how === "email") await openEmail(customer?.email ?? "", msg(url).subject, msg(url).text);
       if (how === "copy") await copyText(url);
       toast.show(how === "copy" ? t("ue.linkCopied") : t("est.sentToast", { name: customer?.name ?? "" }), e.status === "draft" ? undo : undefined);
     } catch (err) {
