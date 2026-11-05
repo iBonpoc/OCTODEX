@@ -3,6 +3,7 @@
  * Pure functions, unit-tested in test/jobList.test.ts.
  */
 import type { DB, ID, Job, Member, Visit } from "@/data/types";
+import { assigneesOf } from "@/features/schedule";
 
 /** the visit the job waits for: the earliest one not finished yet; else the latest (a done job shows its last visit) */
 export function nextVisitOf(db: Pick<DB, "visits">, jobId: ID): Visit | undefined {
@@ -10,10 +11,9 @@ export function nextVisitOf(db: Pick<DB, "visits">, jobId: ID): Visit | undefine
   return vs.find((v) => v.step !== "paid" && v.step !== "done") ?? vs[vs.length - 1];
 }
 
-/** who is assigned to a visit. TODO(10а PR8): switch to the assignees function of «Лиды и клиенты» after #105 (assigneeIds). */
+/** everyone assigned to a visit, in the visit's order (assigneesOf of «Лиды и клиенты»: assigneeIds, else techId) */
 export function visitPeople(db: Pick<DB, "members">, v: Visit | undefined): Member[] {
-  const m = v?.techId ? db.members.find((x) => x.id === v.techId) : undefined;
-  return m ? [m] : [];
+  return v ? assigneesOf(v).flatMap((id) => db.members.filter((m) => m.id === id)) : [];
 }
 
 /** the job's estimate number, if the job was made from an estimate */
