@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
-    <!-- viewport-fit=cover: the app draws under the notch and the home indicator; safe-area insets keep content clear. -->
+    <!-- viewport-fit=cover: the app draws under the home indicator (and the notch in landscape); safe-area insets keep content clear. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
     <title>OCTODEX</title>
     <!-- Home Screen icon opens as an app: no Safari address bar or toolbar. -->
@@ -11,7 +11,9 @@
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="OCTODEX" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- "default": iOS draws the status bar itself, so the clock stays readable in the light theme too
+         ("black-translucent" = white clock over our light bg). Read once when the icon is added. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
     <!-- Colors = theme bg tokens (packages/design-tokens: dark.bg / light.bg), checked by test/pwa.test.ts. -->
     <meta name="theme-color" content="#24272D" media="(prefers-color-scheme: dark)" />

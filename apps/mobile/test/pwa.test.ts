@@ -19,13 +19,27 @@ describe("PWA: Home Screen icon opens as an app", () => {
 
   it("viewport covers the notch so safe-area insets are real", () => {
     expect(html).toMatch(/name="viewport"[^>]*viewport-fit=cover/);
-    expect(html).toMatch(/apple-mobile-web-app-status-bar-style" content="black-translucent"/);
+  });
+
+  it("status bar is drawn by iOS, so the clock is readable in both themes", () => {
+    // black-translucent = white clock over the light theme bg (EFEBE5): unreadable
+    expect(html).toMatch(/apple-mobile-web-app-status-bar-style" content="default"/);
   });
 
   it("manifest is standalone and its icons exist", () => {
     expect(manifest.display).toBe("standalone");
     expect(manifest.start_url).toBe("/");
+    expect(manifest.scope).toBe("/");
+    expect(manifest.id).toBe("/");
     for (const i of manifest.icons) expect(existsSync(join(pub, i.src))).toBe(true);
+  });
+
+  it("Android: 192 and 512 icons plus a maskable one (else the icon sits in a white circle)", () => {
+    const sizes = manifest.icons.map((i: { sizes: string }) => i.sizes);
+    expect(sizes).toContain("192x192");
+    expect(sizes).toContain("512x512");
+    const mask = manifest.icons.find((i: { purpose?: string }) => i.purpose === "maskable");
+    expect(mask?.sizes).toBe("512x512");
   });
 
   it("colors are the theme bg tokens", () => {
