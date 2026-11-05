@@ -1,3 +1,4 @@
+import { lateAfterOf } from "@/features/scheduleSettings";
 import { useWindowDimensions, View } from "react-native";
 import { isOpenVisit } from "@/features/schedule";
 import { router } from "expo-router";
@@ -136,7 +137,7 @@ export default function Today() {
             {techs.map((m) => {
               const vs = todayVisits(db, m.id);
               const { current, next } = crewNow(vs);
-              const st = current ? visitStatus(current) : next ? visitStatus(next) : null;
+              const st = current ? visitStatus(current, Date.now(), lateAfterOf(db)) : next ? visitStatus(next, Date.now(), lateAfterOf(db)) : null;
               const where = (v: typeof current) => {
                 if (!v) return undefined;
                 const { customer, property } = visitContext(db, v);

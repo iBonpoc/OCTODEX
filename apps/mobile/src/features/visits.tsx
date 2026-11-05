@@ -1,3 +1,4 @@
+import { lateAfterOf } from "@/features/scheduleSettings";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { component, size, space, type StatusName } from "@octo/design-tokens";
@@ -13,10 +14,10 @@ import { assigneesOf, isAssigned, lateKind } from "@/features/schedule";
 import { overlapSigns } from "@/features/listSigns";
 
 /** Visit status → DS status color (4+1) and word. */
-export function visitStatus(v: Visit, now: number = Date.now()): { status: StatusName; label: DictKey } {
+export function visitStatus(v: Visit, now: number = Date.now(), lateAfterMin?: number): { status: StatusName; label: DictKey } {
   if (!assigneesOf(v).length) return { status: "warn", label: "st.unassigned" };
   // one rule for the chip, the list sign, «Требует внимания» and the office notice (docs/specs/03 П3c)
-  const late = lateKind(v, now);
+  const late = lateKind(v, now, lateAfterMin);
   if (late) return { status: "warn", label: late === "en_route" ? "late.enRoute" : "late.notLeft" };
   const map: Record<VisitStep, { status: StatusName; label: DictKey }> = {
     scheduled: { status: "neutral", label: "st.scheduled" },
@@ -42,7 +43,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
   const { t, time, money } = useI18n();
   const { c } = useTheme();
   const { job, property, customer, tech } = visitContext(db, v);
-  const st = visitStatus(v);
+  const st = visitStatus(v, Date.now(), lateAfterOf(db));
   const people = assigneesOf(v).map((id) => db.members.find((m) => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m);
   const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
   return (

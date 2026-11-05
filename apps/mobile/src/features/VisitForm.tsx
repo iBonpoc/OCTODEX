@@ -15,7 +15,8 @@ import type { CancelReason, ID, Visit } from "@/data/types";
 import { CANCEL_REASONS } from "@/data/types";
 import { tFor } from "@/i18n/translate";
 import { useI18n, type DictKey } from "@/i18n";
-import { assigneesOf, atMinute, canPlan, canReschedule, dayVisits, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { assigneesOf, atMinute, canPlan, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { arrivalWindow, businessHoursOf, clientDate, companyTime, companyTz, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { AssignSheet } from "@/features/sheets";
 import { DatePick, dayOffsetOf } from "@/features/DatePick";
 import { dayKeyOf } from "@/features/calendar";
@@ -68,14 +69,17 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
   };
   const [note, setNote] = useState("");
   const day = startOfDay(dayOffset);
-  const slots = freeSlots(db, techIds, day, duration, { exceptId: init.exceptId });
+  // the company's hours of that weekday and its step (П4a; «Компания → Расписание»)
+  const sch = scheduleSettingsOf(db.company);
+  const hours = formHours(businessHoursOf(db.company), sch.stepMin, day);
+  const slots = freeSlots(db, techIds, day, duration, { exceptId: init.exceptId, hours });
   const [minute, setMinute] = useState<number | null>(initStart ? initStart.getHours() * 60 + initStart.getMinutes() : null);
-  const startMin = minute ?? slots[0] ?? SCHEDULE_DEFAULTS.dayStartMin;
+  const startMin = minute ?? slots[0] ?? hours.dayStartMin;
   const start = atMinute(day, startMin);
-  const warnings = formWarnings(db, { techId: techIds, start, durationMin: duration, exceptId: init.exceptId });
+  const warnings = formWarnings(db, { techId: techIds, start, durationMin: duration, exceptId: init.exceptId }, { hours });
   const value: VisitFormValue = { start, durationMin: duration, techId, assigneeIds: techIds, note };
   return {
-    value, day, dayOffset, setDayOffset, duration, setDuration, techId, techIds, setTechId, toggleTech, note, setNote, slots, startMin,
+    value, day, hours, dayOffset, setDayOffset, duration, setDuration, techId, techIds, setTechId, toggleTech, note, setNote, slots, startMin,
     setMinute, warnings, past: warnings.some((w) => w.key === "past"), exceptId: init.exceptId,
     dirty: dayOffset !== initDay || duration !== init.durationMin || techIds.join() !== initTechs.join() || note.trim().length > 0 || (minute !== null && !initStart),
   };
@@ -132,9 +136,9 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
           <T v="caption" tone="mut">{t("vf.noSlots")}</T>
         )}
         <RowView style={{ justifyContent: "space-between" }}>
-          <IconButton icon="minus" label={`${t("vf.otherTime")} −${SCHEDULE_DEFAULTS.stepMin}`} onPress={() => f.setMinute(Math.max(SCHEDULE_DEFAULTS.earliestMin, f.startMin - SCHEDULE_DEFAULTS.stepMin))} />
+          <IconButton icon="minus" label={`${t("vf.otherTime")} −${f.hours.stepMin}`} onPress={() => f.setMinute(Math.max(SCHEDULE_DEFAULTS.earliestMin, f.startMin - f.hours.stepMin))} />
           <T v="title" tabular>{time(f.value.start)}</T>
-          <IconButton icon="plus" label={`${t("vf.otherTime")} +${SCHEDULE_DEFAULTS.stepMin}`} onPress={() => f.setMinute(Math.min(SCHEDULE_DEFAULTS.latestMin, f.startMin + SCHEDULE_DEFAULTS.stepMin))} />
+          <IconButton icon="plus" label={`${t("vf.otherTime")} +${f.hours.stepMin}`} onPress={() => f.setMinute(Math.min(SCHEDULE_DEFAULTS.latestMin, f.startMin + f.hours.stepMin))} />
         </RowView>
       </Field>
       <Stepper label={t("sch.duration")} unit={t("sch.min")} value={f.duration} step={SCHEDULE_DEFAULTS.durationStepMin} min={SCHEDULE_DEFAULTS.durationStepMin} max={SCHEDULE_DEFAULTS.maxDurationMin} onChange={f.setDuration} />
@@ -151,13 +155,23 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
       <T v="body" tone="mut">
         {t("vf.summary", {
           date: day(f.value.start),
-          from: time(f.value.start),
-          to: time(new Date(new Date(f.value.start).getTime() + f.duration * 60_000).toISOString()),
+          // the company's clock, as the client's line below (П4a)
+          from: companyTime(f.value.start, companyTz(db.company)),
+          to: companyTime(new Date(new Date(f.value.start).getTime() + f.duration * 60_000).toISOString(), companyTz(db.company)),
           who: f.techIds.length ? f.techIds.map((id) => techs.find((m) => m.id === id)?.name ?? "").filter(Boolean).join(", ") : t("vf.dispatcherAssigns"),
         })}
       </T>
+      {/* what the client is told (§7.1 п. 8): the window from the start, company time zone (П4a) */}
+      <T v="caption" tone="mut">{clientSees(f.value.start, db, t)}</T>
     </View>
   );
+}
+
+/** «Клиент увидит окно 10:00–12:00» / «Клиент увидит время 10:00» — times en-US in the company time zone */
+function clientSees(start: string, db: ReturnType<typeof useStore>["db"], t: ReturnType<typeof useI18n>["t"]): string {
+  const tz = companyTz(db.company);
+  const w = arrivalWindow(start, scheduleSettingsOf(db.company));
+  return w ? t("schs.clientWindow", { from: companyTime(w.from, tz), to: companyTime(w.to, tz) }) : t("schs.clientExact", { time: companyTime(start, tz) });
 }
 
 /** The head of the form (§7.1 п. 1): the address of the place; for a job — how many visits it has already */
@@ -223,12 +237,17 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
   const ctx = visitContext(db, v);
   const lead = v.leadId ? db.leads.find((l) => l.id === v.leadId) : undefined;
   const ct = tFor(docLanguageFor(db, { customerId: ctx.customer?.id, leadId: v.leadId }));
-  const d = new Date(v.start);
-  const date = d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
-  const at = d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  // the client's time is the company's (en-US, company time zone), with the arrival window if the company gives one (П4a)
+  const tz = companyTz(db.company);
+  const date = clientDate(v.start, tz);
+  const w = arrivalWindow(v.start, scheduleSettingsOf(db.company));
+  const at = companyTime(v.start, tz);
   const name = (ctx.customer?.name ?? lead?.name ?? "").split(" ")[0] ?? "";
   const company = db.company?.name ?? "";
-  const text = ct(v.kind === "inspection" ? "vf.msg.inspection" : "vf.msg.job", { name, company, date, time: at });
+  const insp = v.kind === "inspection";
+  const text = w
+    ? ct(insp ? "schs.msg.inspection" : "schs.msg.job", { name, company, date, from: companyTime(w.from, tz), to: companyTime(w.to, tz) })
+    : ct(insp ? "vf.msg.inspection" : "vf.msg.job", { name, company, date, time: at });
   // numbers and addresses may come from outside (a web form): only digits and + for SMS; an address that looks like one, encoded
   const sms = smsHref(ctx.customer?.phone ?? lead?.phone, text, Platform.OS);
   const mail = mailtoHref(ctx.customer?.email ?? lead?.email, { subject: company, body: text });

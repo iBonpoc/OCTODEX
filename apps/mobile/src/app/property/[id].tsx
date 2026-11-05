@@ -6,6 +6,7 @@
  */
 type Tab = "overview" | "history" | "documents" | "files" | "tasks";
 const TABS: Tab[] = ["overview", "history", "documents", "files", "tasks"];
+import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useState, type ReactNode } from "react";
 import { Linking } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -25,7 +26,6 @@ import { Icon, T } from "@/ui/primitives";
 import { Card, CardList, Empty, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { useToast } from "@/ui/overlays";
 import { VisitFormSheet } from "@/features/VisitForm";
-import { SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { uid } from "@/features/estimateDoc";
 
 export default function PropertyScreen() {
@@ -91,7 +91,7 @@ export default function PropertyScreen() {
             onClose={() => setInspect(false)}
             title={t("vf.addInspection")}
             saveLabel={t("lead.next.book")}
-            init={{ durationMin: SCHEDULE_DEFAULTS.inspectionMin, propertyId: p.id }}
+            init={{ durationMin: scheduleSettingsOf(db.company).inspectionMin, propertyId: p.id }}
             onSave={(v) => {
               const visitId = uid();
               const r = store.addInspection(p.id, { ...v, visitId });

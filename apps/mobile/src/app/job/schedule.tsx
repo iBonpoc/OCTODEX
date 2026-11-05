@@ -1,10 +1,10 @@
+import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { NotifySheet, useVisitForm, VisitFormFields } from "@/features/VisitForm";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -23,7 +23,7 @@ export default function ScheduleJob() {
   const { t, money, day, time } = useI18n();
   const toast = useToast();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
-  const f = useVisitForm({ durationMin: SCHEDULE_DEFAULTS.jobMin });
+  const f = useVisitForm({ durationMin: scheduleSettingsOf(db.company).jobMin });
   const [notifyId, setNotifyId] = useState<string | null>(null);
 
   const job = db.jobs.find((j) => j.id === jobId);

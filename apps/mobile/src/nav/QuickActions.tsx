@@ -13,19 +13,16 @@ interface Action {
   key: string;
   label: DictKey;
   icon: IconKey;
-  /** build wave that delivers it; undefined = works now */
-  wave?: number;
-  hint?: DictKey;
 }
+/** Only what works now: a voice note appears when it works (docs/specs/13 §2.4) — no «coming in wave N». */
 const ACTIONS: Action[] = [
-  { key: "voice", label: "quick.voice", icon: "mic", wave: 6, hint: "quick.voiceHint" },
   { key: "photo", label: "quick.photo", icon: "camera" },
   { key: "lead", label: "quick.lead", icon: "user" },
   { key: "estimate", label: "quick.estimate", icon: "invoice" },
   { key: "receipt", label: "quick.receipt", icon: "wallet" },
 ];
 
-/** Center "＋": voice note, lead, estimate, photo, receipt (docs/10-build-plan.md §3). */
+/** Center "＋": photo, lead, estimate, receipt (docs/10-build-plan.md §3). */
 export function QuickActions({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { t } = useI18n();
   const { c } = useTheme();
@@ -34,6 +31,11 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
 
   const takePhoto = async () => {
     onClose();
+    // the photo belongs to today's open visit; without one say so instead of silently doing nothing (13 §2.4)
+    if (!db.visits.some((v) => isAssigned(v, db.me) && isToday(v.start) && isOpenVisit(v))) {
+      toast.show(t("nav.photoNoVisit"));
+      return;
+    }
     const res = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 }).catch(() => null);
     if (!res || res.canceled) return;
     const visit = db.visits.find((v) => isAssigned(v, db.me) && isToday(v.start) && isOpenVisit(v));
@@ -55,11 +57,9 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
     <Sheet visible={visible} onClose={onClose} title={t("quick.title")}>
       <View style={{ gap: space[2] }}>
         {ACTIONS.map((a) => {
-          const disabled = a.wave !== undefined;
           return (
             <Press
               key={a.key}
-              disabled={disabled}
               onPress={a.key === "photo" ? takePhoto : a.key === "estimate" ? newEstimate : a.key === "receipt" ? () => { onClose(); router.push("/expense/new"); } : a.key === "lead" ? () => { onClose(); router.push("/lead/new"); } : undefined}
               accessibilityRole="button"
               accessibilityLabel={t(a.label)}
@@ -80,23 +80,17 @@ export function QuickActions({ visible, onClose }: { visible: boolean; onClose: 
                   width: component.dockBtn,
                   height: component.dockBtn,
                   borderRadius: radius.pill,
-                  backgroundColor: disabled ? c.surf2 : c.acc,
+                  backgroundColor: c.acc,
                   alignItems: "center",
                   justifyContent: "center",
                 }}
               >
-                <Icon name={a.icon} s={size.iconMd} color={disabled ? c.ink : c.onAcc} />
+                <Icon name={a.icon} s={size.iconMd} color={c.onAcc} />
               </View>
               <View style={{ flex: 1 }}>
                 <T v="body" w="semibold">
                   {t(a.label)}
                 </T>
-                {disabled ? (
-                  <T v="caption" tone="mut">
-                    {a.hint ? `${t(a.hint)} · ` : ""}
-                    {t("quick.soon", { n: a.wave ?? 0 })}
-                  </T>
-                ) : null}
               </View>
             </Press>
           );

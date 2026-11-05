@@ -5,6 +5,7 @@
  */
 import { visitContext, visitPropertyId } from "@/data/selectors";
 import { VISIT_STEPS, type DB, type ID, type Lead, type Role, type Visit, type VisitStep } from "@/data/types";
+import { BUSINESS_HOURS_DEFAULT, dayIn, hoursOn, SCHEDULE_SETTINGS_DEFAULT, type BusinessHours } from "./scheduleSettings";
 
 type Db = Pick<DB, "visits" | "jobs" | "leads">;
 
@@ -78,7 +79,7 @@ export type LateKind = "en_route" | "not_left";
 export function lateKind(
   v: Pick<Visit, "start" | "step" | "closed" | "checklist" | "techId" | "assigneeIds">,
   now: number = Date.now(),
-  lateAfterMin: number = SCHEDULE_DEFAULTS.lateAfterMin,
+  lateAfterMin: number = SCHEDULE_SETTINGS_DEFAULT.lateAfterMin,
 ): LateKind | null {
   if (v.closed || (v.step !== "scheduled" && v.step !== "en_route")) return null;
   if (!assigneesOf(v).length || v.checklist?.some((c) => c.done)) return null;
@@ -92,9 +93,18 @@ export const visitLate = (v: Parameters<typeof lateKind>[0], now: number = Date.
 /**
  * П3c, the office side (the item in «Требует внимания» and the notice): the same rule, for visits of today only —
  * an older visit that never started is a matter of «Работы» (step 7), not «running late» for ever. One window for both.
+ * «Today» is the company's calendar day (П4a), the threshold the company's setting.
  */
-export const lateToday = (v: Parameters<typeof lateKind>[0], now: number = Date.now()): LateKind | null =>
-  sameDay(new Date(v.start), new Date(now)) ? lateKind(v, now) : null;
+export const lateToday = (
+  v: Parameters<typeof lateKind>[0], now: number = Date.now(),
+  s: { lateAfterMin: number } = SCHEDULE_SETTINGS_DEFAULT, tz: string = "America/Los_Angeles",
+): LateKind | null => (sameDayIn(v.start, now, tz) ? lateKind(v, now, s.lateAfterMin) : null);
+
+/** the same calendar day in a time zone (the company's) — not the phone's */
+export const sameDayIn = (a: string | number, b: string | number, tz: string) =>
+  dayIn(new Date(a).getTime(), tz) === dayIn(new Date(b).getTime(), tz);
+/** whole calendar days from `now` to `t` in a time zone: 0 today, 1 tomorrow, −1 yesterday */
+export const dayDiffIn = (t: string | number, now: number, tz: string) => dayIn(new Date(t).getTime(), tz) - dayIn(now, tz);
 
 /** who the office reads on a visit item: the client (or the lead of an inspection without a client yet) and the first person */
 export function visitWho(db: DB, v: Visit): { client: string; tech: string } {
@@ -143,15 +153,23 @@ export { visitPropertyId };
 
 /* ---------- the visit form (docs/specs/03 §7.1, wave П2) ---------- */
 
-/** defaults until "More → Company → Schedule" (wave П4) replaces them with the company's settings */
+/**
+ * What is not a company setting. The company's own numbers (hours, lengths, step, window, «late») live in
+ * companies.schedule_settings / business_hours — features/scheduleSettings.ts (wave П4a); dayStartMin / dayEndMin /
+ * stepMin here are the defaults of a day when no hours are given.
+ */
 export const SCHEDULE_DEFAULTS = {
-  dayStartMin: 8 * 60, dayEndMin: 18 * 60, stepMin: 30, inspectionMin: 45, jobMin: 120,
-  /** a visit is late this many minutes after its start (docs/specs/03 П3c; company setting — П4) */
-  lateAfterMin: 15,
+  dayStartMin: 8 * 60, dayEndMin: 18 * 60, stepMin: SCHEDULE_SETTINGS_DEFAULT.stepMin,
   /** the form: days shown as chips (twice that with «Ещё неделя»), the range of «Другое время», length step and max */
   formDays: 7, earliestMin: 6 * 60, latestMin: 20 * 60, durationStepMin: 15, maxDurationMin: 12 * 60,
 } as const;
-type Hours = Pick<typeof SCHEDULE_DEFAULTS, "dayStartMin" | "dayEndMin" | "stepMin">;
+/** the working day the form uses: start and end minute (a day off has none) and the slot step */
+export type Hours = { dayStartMin: number; dayEndMin: number; stepMin: number; off?: boolean };
+/** the hours of this day for the form: the company's hours of the weekday and its step; a day off is «off» (slots: none) */
+export function formHours(hours: BusinessHours, stepMin: number, day: Date): Hours {
+  const h = hoursOn(hours, day);
+  return h ? { dayStartMin: h[0], dayEndMin: h[1], stepMin } : { dayStartMin: SCHEDULE_DEFAULTS.dayStartMin, dayEndMin: SCHEDULE_DEFAULTS.dayEndMin, stepMin, off: true };
+}
 
 /** the same calendar day, phone time (company time zone — П4) */
 export const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
@@ -176,9 +194,11 @@ export function freeSlots(
   db: Pick<DB, "visits">, techId: ID | ID[] | null, day: Date, durationMin: number,
   opts: { exceptId?: ID; now?: number; hours?: Hours } = {},
 ): number[] {
-  const h = opts.hours ?? SCHEDULE_DEFAULTS;
+  const h: Hours = opts.hours ?? SCHEDULE_DEFAULTS;
   const now = opts.now ?? Date.now();
   const out: number[] = [];
+  // a day off: no slots, «Другое время» still works (with the warning «Вне рабочих часов»)
+  if (h.off) return out;
   for (let m = h.dayStartMin; m + durationMin <= h.dayEndMin; m += h.stepMin) {
     const start = atMinute(day, m);
     if (new Date(start).getTime() < now) continue;
@@ -196,12 +216,12 @@ export function formWarnings(
   db: Pick<DB, "visits">, f: { techId: ID | ID[] | null; start: string; durationMin: number; exceptId?: ID },
   opts: { now?: number; hours?: Hours } = {},
 ): FormWarning[] {
-  const h = opts.hours ?? SCHEDULE_DEFAULTS;
+  const h: Hours = opts.hours ?? SCHEDULE_DEFAULTS;
   const out: FormWarning[] = [];
   const busy = overlaps(db, f.techId, f.start, f.durationMin, f.exceptId);
   if (busy.length) out.push({ key: "busy", visits: busy });
   const s = minuteOfDay(new Date(f.start));
-  if (s < h.dayStartMin || s + f.durationMin > h.dayEndMin) out.push({ key: "outOfHours" });
+  if (h.off || s < h.dayStartMin || s + f.durationMin > h.dayEndMin) out.push({ key: "outOfHours" });
   if (!startAllowed(f.start, opts.now)) out.push({ key: "past" });
   return out;
 }
@@ -233,5 +253,5 @@ export function planFilter(v: Visit, who: PlanWho, me: ID): boolean {
   return isAssigned(v, who === "me" ? me : who);
 }
 
-/** a working day of the company (until «Ещё → Компания → Расписание», wave П4): Monday–Friday */
-export const isWorkday = (d: Date) => d.getDay() !== 0 && d.getDay() !== 6;
+/** a working day of the company: its hours of that weekday (default Monday–Saturday, §6.1; «Компания → Расписание», П4a) */
+export const isWorkday = (d: Date, hours: BusinessHours = BUSINESS_HOURS_DEFAULT) => hoursOn(hours, d) !== null;

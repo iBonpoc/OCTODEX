@@ -3006,4 +3006,58 @@ select tst.ok((select en_route_at between now() - interval '11 minutes' and now(
 select tst.fails($q$update public.visits set en_route_at = now() - interval '2 hours' where id = 'f3600000-0000-4000-8000-000000000002'$q$, 'the office does not change the time either');
 \echo 'T36 visit left-at time ok'
 
+-- ---------------------------------------------------------------- T38: П4a — «Компания → Расписание»
+-- (docs/specs/03 «П4 — этап 0», §6.1; migration 20261105370000). Settings and hours: owner / admin change them, the
+-- dispatcher (office), sales and the tech read them; the database refuses what the app would ignore (same limits as unit:scheduleSettings).
+:as_owner_a
+select tst.ok((select schedule_settings = '{}'::jsonb from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'new column: {} by default');
+update public.companies set schedule_settings = '{"inspectionMin": 60, "lateAfterMin": 30, "arrivalWindowMin": 0, "stepMin": 15}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select (schedule_settings ->> 'inspectionMin')::int = 60 and (schedule_settings ->> 'lateAfterMin')::int = 30 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'owner saves the schedule settings');
+update public.companies set business_hours = '{"mon": [420, 960], "sat": null, "sun": null}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select business_hours -> 'mon' = '[420, 960]'::jsonb and business_hours -> 'sat' = 'null'::jsonb from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'owner saves the hours, a day off is null');
+select tst.fails($q$update public.companies set schedule_settings = '{"lateAfterMin": 0}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'late after 0 min');
+select tst.fails($q$update public.companies set schedule_settings = '{"lateAfterMin": 65}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'late after 65 min (the screen goes to 60)');
+select tst.fails($q$update public.companies set schedule_settings = '{"stepMin": 20}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'step 20');
+select tst.fails($q$update public.companies set schedule_settings = '{"arrivalWindowMin": 90}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'window 90');
+select tst.fails($q$update public.companies set schedule_settings = '{"jobMin": "120"}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'a length as text');
+select tst.fails($q$update public.companies set schedule_settings = '{"jobMin": 50}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'a length not on 15 min');
+select tst.fails($q$update public.companies set schedule_settings = '{"jobMin": 60.5}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'a fraction of a minute');
+select tst.fails($q$update public.companies set schedule_settings = '{"color": 1}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'an unknown key');
+select tst.fails($q$update public.companies set schedule_settings = '[]' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'settings not an object');
+select tst.fails($q$update public.companies set business_hours = '{"mon": [1080, 480]}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'hours 18:00–8:00');
+select tst.fails($q$update public.companies set business_hours = '{"mon": [480, 1500]}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'hours past midnight');
+select tst.fails($q$update public.companies set business_hours = '{"monday": [480, 1080]}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'an unknown day');
+select tst.fails($q$update public.companies set business_hours = '{"mon": "8-6"}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'hours as text');
+update public.companies set business_hours = null where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select business_hours is null from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'hours back to null = the defaults');
+:as_office_a   -- admin since T5: the director in the app, may change them
+select tst.ok((select (schedule_settings ->> 'lateAfterMin')::int = 30 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'admin reads the settings');
+update public.companies set schedule_settings = schedule_settings || '{"lateAfterMin": 25}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select (schedule_settings ->> 'lateAfterMin')::int = 25 and (schedule_settings ->> 'inspectionMin')::int = 60 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'admin saves the settings, the rest kept');
+update public.companies set schedule_settings = schedule_settings || '{"lateAfterMin": 30}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+-- a real dispatcher (role office): reads, does not change
+:as_super
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+select tst.ok((select (schedule_settings ->> 'lateAfterMin')::int = 30 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'the dispatcher reads the settings');
+select tst.blocked($q$update public.companies set schedule_settings = '{"lateAfterMin": 60}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'the dispatcher changes the settings');
+select tst.blocked($q$update public.companies set business_hours = '{"sun": [480, 1080]}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'the dispatcher changes the hours');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_sales_a
+select tst.ok((select (schedule_settings ->> 'lateAfterMin')::int = 30 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'sales reads the settings');
+select tst.blocked($q$update public.companies set schedule_settings = '{"lateAfterMin": 60}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'sales changes the settings');
+:as_tech_a
+select tst.ok((select (schedule_settings ->> 'lateAfterMin')::int = 30 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'the tech reads the settings');
+select tst.blocked($q$update public.companies set schedule_settings = '{"lateAfterMin": 60}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'the tech changes the settings');
+select tst.blocked($q$update public.companies set business_hours = '{"sun": [480, 1080]}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'the tech changes the hours');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.companies where id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'another company does not see the settings');
+select tst.blocked($q$update public.companies set schedule_settings = '{}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'another company changes the settings');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$select schedule_settings from public.companies$q$, 'anon reads the settings');
+:as_super
+update public.companies set schedule_settings = '{}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T38 schedule settings and hours ok'
+
 \echo 'ALL TESTS PASSED'

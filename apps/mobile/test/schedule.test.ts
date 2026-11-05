@@ -6,6 +6,8 @@ import { visitPropertyId } from "../src/data/selectors";
 import type { DB, Job, Lead, Visit } from "../src/data/types";
 import { canCancel, canPlan, canReschedule, hasPlannedInspection, isInspectionOf, isOpenVisit, jobRollsBack, leadRollsBack, overlaps, SCHEDULE_DEFAULTS, lateKind, startAllowed, visitLate } from "../src/features/schedule";
 
+import { SCHEDULE_SETTINGS_DEFAULT } from "../src/features/scheduleSettings";
+
 const NOW = new Date("2026-11-05T18:00:00.000Z").getTime();
 const at = (h: number) => new Date(NOW + h * 3_600_000).toISOString();
 const base: Visit = { id: "v", techId: "m1", start: at(2), durationMin: 60, step: "scheduled", scope: [], checklist: [], photos: [], amountDueCents: 0 };
@@ -36,7 +38,7 @@ describe("visit: what can happen to it", () => {
   it("late (П3c): start + 15 min passed and nobody on site; «on the way» does not clear it", () => {
     const min = (m: number) => new Date(NOW - m * 60_000).toISOString();
     const sec = (s: number) => new Date(NOW - s * 1000).toISOString();
-    expect(SCHEDULE_DEFAULTS.lateAfterMin).toBe(15);
+    expect(SCHEDULE_SETTINGS_DEFAULT.lateAfterMin).toBe(15);
     expect(lateKind(V({ start: sec(14 * 60 + 59) }), NOW)).toBeNull();
     expect(lateKind(V({ start: min(15) }), NOW)).toBe("not_left");
     expect(lateKind(V({ start: min(40), step: "en_route" }), NOW)).toBe("en_route");
@@ -219,7 +221,8 @@ describe("the Plan (wave П3b, S8b / S9a on the screen)", () => {
     expect(planFilter(v, "all", "m9")).toBe(true);
     expect(planFilter(v, "me", "m2")).toBe(true);
     expect(planFilter(v, "m3", "m2")).toBe(false);
-    expect(isWorkday(new Date(2026, 10, 7))).toBe(false); // a Saturday
+    expect(isWorkday(new Date(2026, 10, 7))).toBe(true); // a Saturday: Mon–Sat by default (§6.1, П4a)
+    expect(isWorkday(new Date(2026, 10, 8))).toBe(false); // a Sunday
     expect(isWorkday(new Date(2026, 10, 9))).toBe(true);
   });
 });

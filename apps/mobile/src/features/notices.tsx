@@ -10,11 +10,13 @@ import { useToast } from "@/ui/overlays";
 import { SectionTitle } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
 import { space } from "@octo/design-tokens";
-import { lateNotices } from "./lateNotice";
+import { lateNotices, noticeTime } from "./lateNotice";
+import { companyTz } from "./scheduleSettings";
 
 export function useNoticeText() {
   const { t, money, time } = useI18n();
-  return (n: Notice) => noticeText(n, { t, money, time });
+  const tz = companyTz(useStore().db.company);
+  return (n: Notice) => noticeText(n, { t, money, time: (iso) => noticeTime(n, iso, tz, time) });
 }
 
 /** Toast when a new notice arrives (client opened / approved an estimate). Office roles only. */
