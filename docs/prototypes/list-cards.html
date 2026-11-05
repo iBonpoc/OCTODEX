@@ -221,6 +221,10 @@ svg{flex:none}
 .row .pick{margin:3px 0}
 .row .ra{display:flex;gap:4px;justify-content:flex-end}
 .row .ra .btn{height:var(--c-sm);width:var(--c-sm)}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+.ft3{position:relative}
+.tag.trade{color:var(--ink);font-weight:600}
+.tag svg{color:var(--mut)}
 
 /* скелет загрузки */
 .skel{border-radius:var(--ri);background:var(--surf);border:1px solid var(--bd);padding:var(--s3);display:grid;grid-template-columns:36px 1fr 70px;gap:var(--s3);align-items:center}
@@ -303,7 +307,7 @@ td .chip{height:20px;padding:0 6px;font-size:var(--fs-micro);margin:0 2px 2px 0}
 <div class="top">
   <div class="brand">
     <h1>Карточки списков OCTODEX</h1>
-    <p>Прототип единой системы карточек по дизайн-системе OCTODEX. Версия 2: подробные карточки. Данные — примеры, суммы тестовые.</p>
+    <p>Прототип единой системы карточек по дизайн-системе OCTODEX. Версия 3: значки вместо подписей, направление бизнеса. Данные — примеры, суммы тестовые.</p>
   </div>
   <div class="controls" id="controls"></div>
 </div>
@@ -313,6 +317,16 @@ td .chip{height:20px;padding:0 6px;font-size:var(--fs-micro);margin:0 2px 2px 0}
 const ICONS = {"home":"M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10","inbox":"M22 12h-6l-2 3h-4l-2-3H2M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z","users":"M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.3M15.5 4.2a3.5 3.5 0 0 1 0 6.6","user":"M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0","calendar":"M7 3v4M17 3v4M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z","more":"M6 12m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0M12 12m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0M18 12m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0","phone":"M5 4h3l2 5-2.5 1.5a11 11 0 0 0 6 6L15 14l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z","pin":"M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5","message":"M21 12a8 8 0 0 1-11.5 7.2L4 20.5l1.3-4.3A8 8 0 1 1 21 12z","send":"M21 3L10 14M21 3l-7 18-4-7-7-4z","plus":"M12 5v14M5 12h14","check":"M5 12.5l4.5 4.5L19 7.5","close":"M6 6l12 12M18 6L6 18","chevronRight":"M9 6l6 6-6 6","chevronLeft":"M15 6l-6 6 6 6","chevronDown":"M6 9l6 6 6-6","search":"M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4","bell":"M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 21h4","sliders":"M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6","mic":"M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM6 12a6 6 0 0 0 12 0M12 18v3","camera":"M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7","invoice":"M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5M9 13h6M9 17h6","wallet":"M4 7h15a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12M16 13.5h.01","chart":"M5 20V10M12 20V4M19 20v-7","note":"M8 4h8v3H8zM6 5.5a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6.5a1 1 0 0 0-1-1M9 12h6M9 16h4","pencil":"M4 20l1-4L16 5a2 2 0 0 1 3 3L8 19z","trash":"M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13","clock":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2","wifiOff":"M3 3l18 18M8.5 16.5a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 3-2M19 12.5a10 10 0 0 0-6-3M12 20h.01","alert":"M12 4l9.5 16h-19zM12 10v4M12 17h.01","star":"M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z","route":"M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 17h6a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6","wrench":"M14.5 6.5a4 4 0 0 0 4.9 5L20 12l-8 8a2.1 2.1 0 0 1-3-3l8-8-.5-.5a4 4 0 0 1-2-5z","mail":"M4 6h16v12H4zM4 7l8 6 8-6","sms":"M21 12a8 8 0 0 1-11.5 7.2L4 20.5l1.3-4.3A8 8 0 1 1 21 12zM9 12h.01M12 12h.01M15 12h.01","copy":"M9 9h10v10H9zM5 15V5h10","undo":"M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3","refresh":"M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5","link":"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 10 18.7l1-1","navigate":"M3 11l18-8-8 18-2-8z","image":"M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 16l5-5 4 4 3-3 6 6M15.5 9.5h.01","signature":"M3 17c3-1 4-9 7-9 2 0 0 7 2 7 1.5 0 2-3 3.5-3S17 15 21 15M3 21h18","checklist":"M10 6h10M10 12h10M10 18h10M4 6l1.2 1.2L7.5 5M4 12l1.2 1.2 2.3-2.2M4 18l1.2 1.2 2.3-2.2","dollar":"M12 3v18M16.5 7.5c-.8-1.3-2.5-2-4.5-2-2.5 0-4 1.3-4 3s1.5 2.6 4 3 4 1.3 4 3-1.5 3-4 3c-2 0-3.7-.7-4.5-2","sun":"M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4","moon":"M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z","ruler":"M3 17L17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2","globe":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18","sync":"M20 11a8 8 0 0 0-14.5-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5L20 16M20 20v-4h-4","help":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.2h.01","home2":"M4 21V10l8-6 8 6v11zM9 21v-6h6v6","minus":"M5 12h14"};
 Object.assign(ICONS,{
   /* кандидаты в дизайн-систему (BACKLOG): та же сетка 24, линия 1.75 */
+  megaphone:"M3 10v4h3l7 4V6l-7 4zM16 9.5a3 3 0 0 1 0 5M18.5 7a6.5 6.5 0 0 1 0 10M6 14l1 5h3l-1-4",
+  clipboard:"M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M8 11h8M8 15h8M8 19h5",
+  toolbox:"M3 9h18v10H3zM8 9V6h8v3M3 13.5h18M10 12v3M14 12v3",
+  userCheck:"M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM2 21v-1a6 6 0 0 1 10-4.5M15 19l2 2 4-4",
+  hourglass:"M6 3h12M6 21h12M7 3c0 5 10 5 10 9s-10 4-10 9M17 3c0 5-10 5-10 9s10 4 10 9",
+  key:"M14.5 14a5 5 0 1 0-4.6-3.1L3 17.8V21h3.2v-2h2v-2h2l1.7-1.7A5 5 0 0 0 14.5 14zM16 8h.01",
+  history:"M3 12a9 9 0 1 0 2.6-6.4L3 8M3 3v5h5M12 7v5l3 2",
+  shield:"M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6zM9 12l2 2 4-4",
+  eye:"M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6",
+  hash:"M5 9h14M5 15h14M10 3 8 21M16 3l-2 18",
   repeat:"M4 12a8 8 0 0 1 14-5.3L20 9M20 4v5h-5M20 12a8 8 0 0 1-14 5.3L4 15M4 20v-5h5",
   box:"M3 7.5 12 3l9 4.5v9L12 21l-9-4.5zM3 7.5l9 4.5 9-4.5M12 12v9",
   truck:"M2 6h12v10H2zM14 9h4l3 3.5V16h-7M5 18.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0M15 18.5a1.5 1.5 0 1 0 3 0a1.5 1.5 0 1 0-3 0",
@@ -348,13 +362,13 @@ const SECTIONS=[
  {id:"signals",name:"Сигналы",lists:["attention","notifs","notes"]},
 ];
 const F={
- src:["inbox","Откуда"],svc:["wrench","Что нужно"],work:["wrench","Работа"],addr:["pin","Адрес"],phone:["phone","Телефон"],email:["mail","Email"],
- resp:["user","Ответственный"],client:["user","Клиент"],when:["calendar","Когда"],due:["clock","Срок"],links:["link","Связано"],
- valid:["clock","Действует"],access:["lock","Доступ"],history:["checklist","История"],kind:["home","Тип"],sched:["calendar","Расписание"],
+ src:["megaphone","Источник"],svc:["clipboard","Запрос клиента"],work:["toolbox","Работа"],addr:["pin","Адрес"],phone:["phone","Телефон"],email:["mail","Email"],
+ resp:["userCheck","Ответственный"],client:["user","Клиент"],when:["calendar","Когда"],due:["clock","Срок"],links:["link","Связано"],
+ valid:["hourglass","Действует"],access:["key","Доступ"],history:["history","История"],kind:["home","Тип объекта"],sched:["repeat","Расписание"],
  pay:["wallet","Оплата"],method:["wallet","Способ"],by:["user","Кто"],receipt:["camera","Чек"],bill:["dollar","Клиенту"],
  supplier:["truck","Поставщик"],stock:["box","Склад"],terms:["doc","Условия"],price:["tag","Прайс"],deliv:["truck","Получение"],
- lines:["checklist","Что в заказе"],ref:["doc","Номер у поставщика"],now:["route","Сейчас"],next:["calendar","Дальше"],hours:["clock","Часы"],
- lic:["doc","Лицензия"],coi:["alert","Страховка"],note:["note","Заметка"],desc:["note","Описание"],last:["clock","Последнее"],vis:["lock","Видят"],
+ lines:["checklist","Что в заказе"],ref:["hash","Номер у поставщика"],now:["route","Сейчас"],next:["calendar","Дальше"],hours:["clock","Часы"],
+ lic:["doc","Лицензия"],coi:["shield","Страховка"],note:["note","Заметка"],desc:["note","Описание"],last:["history","Последнее"],vis:["eye","Видят"],
 };
 const L={
  leads:{name:"Лиды",icon:"inbox",arch:"A",density:"rich",facts:["src","svc","addr","phone","email","resp","note"],cols:["src","svc","addr","phone"],val:"",
@@ -362,35 +376,35 @@ const L={
   empty:["Лидов пока нет","Добавьте первый вручную или перешлите письмо с площадки на свой адрес для лидов."],
   st:{new:["info","Новый"],late:["bad","Ответ просрочен"],noans:["warn","Не дозвонились ×2"],booked:["info","Осмотр Nov 6, 9:00 AM"],sent:["info","Смета отправлена"],won:["ok","Стал клиентом"],lost:["neutral","Потерян · цена"]},
   items:[
-   {t:"Maria Gonzalez",n:"LEA-0231 · 3 мин назад",st:"new",f:{src:"Thumbtack · лид стоил $45.00",svc:"Бесшовные водостоки, дом в 2 этажа, ~140 фт",addr:"2210 N Lake Ave, Altadena, CA 91001",phone:"(626) 555-0198",resp:"Jenny Park"},act:"Ответить"},
-   {t:"Kevin O’Neil",n:"LEA-0229 · 2 ч назад",st:"late",f:{src:"Google LSA · лид стоил $32.00",svc:"Протекает крыша над гаражом после дождя",addr:"640 W Dryden St, Glendale, CA 91202",phone:"(213) 555-0100 · номер Google",resp:"Alex Lee"},act:"Ответить"},
-   {t:"Angela Reyes",n:"LEA-0227 · вчера",st:"noans",f:{src:"Сайт, форма заявки",svc:"Замена водонагревателя 40 gal",addr:"12 Vine St, Altadena, CA 91001",phone:"(626) 555-0142",email:"angela.reyes@gmail.com",resp:"Jenny Park",note:"Следующий звонок сегодня до 6:00 PM"},act:"Позвонить"},
-   {t:"Thomas Wright",n:"LEA-0225 · Nov 3",st:"booked",f:{src:"Сосед, привёл Carlos M.",svc:"Замена электрощита на 200 A",addr:"3 Cedar Ln, Pasadena, CA 91105",phone:"(626) 555-0115",resp:"Alex Lee (осмотр)"}},
-   {t:"Emily Chen",n:"LEA-0219 · Oct 30",v:485000,vl:"смета",st:"sent",f:{src:"Angi · лид стоил $28.00",svc:"Покраска, 3 комнаты и коридор",addr:"77 Maple Dr, Arcadia, CA 91006",phone:"(626) 555-0171",resp:"Alex Lee"}},
-   {t:"Marcus Hill",n:"LEA-0214 · Oct 28",st:"won",f:{src:"Yelp",svc:"Уборка раз в 2 недели",addr:"35 Hill St, Monrovia, CA 91016",phone:"(626) 555-0109"}},
-   {t:"Brian Foster",n:"LEA-0207 · Oct 20",st:"lost",f:{src:"Thumbtack · лид стоил $45.00, возврат запрошен",svc:"Ремонт деревянного забора, 40 фт",phone:"(818) 555-0164"}},
+   {t:"Maria Gonzalez",trade:"Кровля и водостоки",n:"LEA-0231 · 3 мин назад",st:"new",f:{src:"Thumbtack — $45.00",svc:"Бесшовные водостоки, дом в 2 этажа, ~140 фт",addr:"2210 N Lake Ave, Altadena, CA 91001",phone:"(626) 555-0198",resp:"Jenny Park"},act:"Ответить"},
+   {t:"Kevin O’Neil",trade:"Кровля и водостоки",n:"LEA-0229 · 2 ч назад",st:"late",f:{src:"Google LSA — $32.00",svc:"Протекает крыша над гаражом после дождя",addr:"640 W Dryden St, Glendale, CA 91202",phone:"(213) 555-0100 · номер Google",resp:"Alex Lee"},act:"Ответить"},
+   {t:"Angela Reyes",trade:"Сантехника",n:"LEA-0227 · вчера",st:"noans",f:{src:"Сайт, форма заявки",svc:"Замена водонагревателя 40 gal",addr:"12 Vine St, Altadena, CA 91001",phone:"(626) 555-0142",email:"angela.reyes@gmail.com",resp:"Jenny Park",note:"Следующий звонок сегодня до 6:00 PM"},act:"Позвонить"},
+   {t:"Thomas Wright",trade:"Электрика",n:"LEA-0225 · Nov 3",st:"booked",f:{src:"Сосед — привёл Carlos M.",svc:"Замена электрощита на 200 A",addr:"3 Cedar Ln, Pasadena, CA 91105",phone:"(626) 555-0115",resp:"Alex Lee (осмотр)"}},
+   {t:"Emily Chen",trade:"Покраска",n:"LEA-0219 · Oct 30",v:485000,vl:"смета",st:"sent",f:{src:"Angi — $28.00",svc:"Покраска, 3 комнаты и коридор",addr:"77 Maple Dr, Arcadia, CA 91006",phone:"(626) 555-0171",resp:"Alex Lee"}},
+   {t:"Marcus Hill",trade:"Уборка",n:"LEA-0214 · Oct 28",st:"won",f:{src:"Yelp",svc:"Уборка раз в 2 недели",addr:"35 Hill St, Monrovia, CA 91016",phone:"(626) 555-0109"}},
+   {t:"Brian Foster",trade:"Ремонт",n:"LEA-0207 · Oct 20",st:"lost",f:{src:"Thumbtack — $45.00, возврат запрошен",svc:"Ремонт деревянного забора, 40 фт",phone:"(818) 555-0164"}},
   ]},
  estimates:{name:"Сметы",icon:"doc",arch:"B",money:true,density:"rich",facts:["addr","work","valid","resp","phone"],cols:["addr","work","valid"],val:"сумма",
   swR:["send","Напомнить"],swL:["copy","Копия"],cta:"Новая смета",empty:["Смет пока нет","Смета собирается из каталога или шаблона за пару минут."],
   st:{stale:["warn","Без ответа 7 дн"],declined:["bad","Отказ · дорого"],draft:["neutral","Черновик"],viewed:["info","Открыта 3 раза"],sent:["info","Отправлена"],approved:["ok","Одобрена"]},
   items:[
-   {t:"Robert Kim",n:"EST-0145 · отправлена Oct 29",v:397500,st:"stale",f:{addr:"501 Pine Rd, Burbank, CA 91505",work:"Ремонт крыши: замена 120 кв. фт черепицы, герметизация трубы",valid:"до Nov 28",resp:"Alex Lee",phone:"(818) 555-0158"},act:"Напомнить"},
-   {t:"David Brooks",n:"EST-0139 · Oct 18",v:186000,st:"declined",f:{addr:"9 Ridge Ct, La Cañada Flintridge, CA 91011",work:"Ограждение заднего двора, 60 фт",resp:"Alex Lee",phone:"(818) 555-0110"}},
-   {t:"James Carter",n:"EST-0148 · создана Nov 5",v:234000,st:"draft",f:{addr:"1420 Elm St, Pasadena, CA 91104",work:"Замена 2 водостоков и герметизация углов",resp:"Carlos Mendez",phone:"(626) 555-0187"},act:"Отправить"},
-   {t:"Linda Nguyen",n:"EST-0147 · отправлена Nov 4",v:612000,st:"viewed",tags:["3 варианта"],f:{addr:"88 Oak Ave, Glendale, CA 91203",work:"Водонагреватель 50 gal с установкой и вывозом старого",valid:"до Dec 4",resp:"Alex Lee",phone:"(818) 555-0133"}},
-   {t:"Emily Chen",n:"EST-0144 · отправлена Oct 30",v:485000,st:"sent",f:{addr:"77 Maple Dr, Arcadia, CA 91006",work:"Покраска, 3 комнаты и коридор",valid:"до Nov 29",resp:"Alex Lee",phone:"(626) 555-0171"}},
-   {t:"Patricia Moore",n:"EST-0141 · одобрена Oct 22",v:1240000,st:"approved",tags:["вариант Better"],f:{addr:"210 Lake Ave, Pasadena, CA 91101",work:"Монтаж кухни: шкафы, столешница, мойка",resp:"Alex Lee",phone:"(626) 555-0164"}},
+   {t:"Robert Kim",trade:"Кровля и водостоки",n:"EST-0145 · отправлена Oct 29",v:397500,st:"stale",f:{addr:"501 Pine Rd, Burbank, CA 91505",work:"Ремонт крыши: замена 120 кв. фт черепицы, герметизация трубы",valid:"до Nov 28",resp:"Alex Lee",phone:"(818) 555-0158"},act:"Напомнить"},
+   {t:"David Brooks",trade:"Ремонт",n:"EST-0139 · Oct 18",v:186000,st:"declined",f:{addr:"9 Ridge Ct, La Cañada Flintridge, CA 91011",work:"Ограждение заднего двора, 60 фт",resp:"Alex Lee",phone:"(818) 555-0110"}},
+   {t:"James Carter",trade:"Кровля и водостоки",n:"EST-0148 · создана Nov 5",v:234000,st:"draft",f:{addr:"1420 Elm St, Pasadena, CA 91104",work:"Замена 2 водостоков и герметизация углов",resp:"Carlos Mendez",phone:"(626) 555-0187"},act:"Отправить"},
+   {t:"Linda Nguyen",trade:"Сантехника",n:"EST-0147 · отправлена Nov 4",v:612000,st:"viewed",tags:["3 варианта"],f:{addr:"88 Oak Ave, Glendale, CA 91203",work:"Водонагреватель 50 gal с установкой и вывозом старого",valid:"до Dec 4",resp:"Alex Lee",phone:"(818) 555-0133"}},
+   {t:"Emily Chen",trade:"Покраска",n:"EST-0144 · отправлена Oct 30",v:485000,st:"sent",f:{addr:"77 Maple Dr, Arcadia, CA 91006",work:"Покраска, 3 комнаты и коридор",valid:"до Nov 29",resp:"Alex Lee",phone:"(626) 555-0171"}},
+   {t:"Patricia Moore",trade:"Ремонт",n:"EST-0141 · одобрена Oct 22",v:1240000,st:"approved",tags:["вариант Better"],f:{addr:"210 Lake Ave, Pasadena, CA 91101",work:"Монтаж кухни: шкафы, столешница, мойка",resp:"Alex Lee",phone:"(626) 555-0164"}},
   ]},
  contracts:{name:"Договоры",icon:"signature",arch:"B",money:true,density:"rich",facts:["work","addr","links","when"],cols:["work","links","when"],val:"договор",
   swR:["send","Напомнить"],swL:["doc","PDF"],cta:"Новый договор",empty:["Договоров нет","Договор появляется, когда клиент подписывает смету."],
   st:{counter:["warn","Ждёт вашей подписи"],await:["warn","Ждёт подписи клиента"],rescinded:["bad","Отменён в срок отказа"],cooling:["info","Срок отказа · ещё 2 дн"],signed:["ok","Подписан"]},
   items:[
-   {t:"Robert Kim",n:"CTR-0033 · клиент подписал Nov 4",v:397500,st:"counter",f:{work:"Ремонт крыши",addr:"501 Pine Rd, Burbank, CA 91505",links:"Смета EST-0145 · счёт INV-0088 (депозит, просрочен)",when:"Отправлен Nov 2"},kv:[["Выставлено",119250],["Оплачено",0],["Осталось",397500]],act:"Подписать"},
-   {t:"Linda Nguyen",n:"CTR-0034 · отправлен Nov 4",v:612000,st:"await",f:{work:"Водонагреватель 50 gal",addr:"88 Oak Ave, Glendale, CA 91203",links:"Смета EST-0147",when:"Ушёл по SMS и email, открыт 1 раз"},act:"Напомнить"},
-   {t:"Sarah Whitman",n:"CTR-0032 · подписан Nov 1",v:820000,st:"cooling",f:{work:"Плитка в ванной, 85 кв. фт",addr:"44 Rose Blvd, Pasadena, CA 91105",links:"Смета EST-0140 · счёт INV-0093 · работа JOB-0213",when:"Право отказа 3 рабочих дня (CA) до Nov 7"},kv:[["Выставлено",246000],["Оплачено",246000],["Осталось",574000]]},
-   {t:"David Brooks",n:"CTR-0029 · отменён Oct 14",v:510000,st:"rescinded",f:{work:"Ограждение",links:"Счёт INV-0081 · возврат RCT-0072",when:"Клиент отказался на 2-й день"}},
-   {t:"Patricia Moore",n:"CTR-0031 · подписан Oct 22",v:1240000,st:"signed",f:{work:"Монтаж кухни",addr:"210 Lake Ave, Pasadena, CA 91101",links:"Смета EST-0141 · работа JOB-0214 · счета INV-0085, INV-0091",when:"Работа идёт, визит 2 из 3"},kv:[["Выставлено",992000],["Оплачено",496000],["Осталось",744000]],prog:[496000,1240000]},
-   {t:"Marcus Hill",n:"CTR-0030 · подписан Oct 28",v:312000,st:"signed",f:{work:"Уборка раз в 2 недели, 12 мес",addr:"35 Hill St, Monrovia, CA 91016",links:"Абонемент PLN-0007"}},
+   {t:"Robert Kim",trade:"Кровля и водостоки",n:"CTR-0033 · клиент подписал Nov 4",v:397500,st:"counter",f:{work:"Ремонт крыши",addr:"501 Pine Rd, Burbank, CA 91505",links:"Смета EST-0145 · счёт INV-0088 (депозит, просрочен)",when:"Отправлен Nov 2"},kv:[["Выставлено",119250],["Оплачено",0],["Осталось",397500]],act:"Подписать"},
+   {t:"Linda Nguyen",trade:"Сантехника",n:"CTR-0034 · отправлен Nov 4",v:612000,st:"await",f:{work:"Водонагреватель 50 gal",addr:"88 Oak Ave, Glendale, CA 91203",links:"Смета EST-0147",when:"Ушёл по SMS и email, открыт 1 раз"},act:"Напомнить"},
+   {t:"Sarah Whitman",trade:"Ремонт",n:"CTR-0032 · подписан Nov 1",v:820000,st:"cooling",f:{work:"Плитка в ванной, 85 кв. фт",addr:"44 Rose Blvd, Pasadena, CA 91105",links:"Смета EST-0140 · счёт INV-0093 · работа JOB-0213",when:"Право отказа 3 рабочих дня (CA) до Nov 7"},kv:[["Выставлено",246000],["Оплачено",246000],["Осталось",574000]]},
+   {t:"David Brooks",trade:"Ремонт",n:"CTR-0029 · отменён Oct 14",v:510000,st:"rescinded",f:{work:"Ограждение",links:"Счёт INV-0081 · возврат RCT-0072",when:"Клиент отказался на 2-й день"}},
+   {t:"Patricia Moore",trade:"Ремонт",n:"CTR-0031 · подписан Oct 22",v:1240000,st:"signed",f:{work:"Монтаж кухни",addr:"210 Lake Ave, Pasadena, CA 91101",links:"Смета EST-0141 · работа JOB-0214 · счета INV-0085, INV-0091",when:"Работа идёт, визит 2 из 3"},kv:[["Выставлено",992000],["Оплачено",496000],["Осталось",744000]],prog:[496000,1240000]},
+   {t:"Marcus Hill",trade:"Уборка",n:"CTR-0030 · подписан Oct 28",v:312000,st:"signed",f:{work:"Уборка раз в 2 недели, 12 мес",addr:"35 Hill St, Monrovia, CA 91016",links:"Абонемент PLN-0007"}},
   ]},
  clients:{name:"Клиенты",icon:"users",arch:"A",money:true,density:"rich",group:"alpha",facts:["addr","phone","email","src","last"],cols:["addr","phone","last"],val:"должен",
   swR:["phone","Позвонить"],swL:["sms","SMS"],cta:"Новый клиент",empty:["Клиентов пока нет","Клиент появляется из лида или вручную. Можно загрузить CSV."],
@@ -420,33 +434,33 @@ const L={
   swR:["calendar","Назначить"],swL:["clock","Перенести"],cta:"Новая работа",empty:["Работ нет","Работа создаётся сама, когда клиент подписывает смету."],
   st:{unsch:["warn","Ждёт даты"],hold:["warn","Ждёт материал"],prog:["info","В работе"],sched:["info","Запланирована"],done:["ok","Готова"],cancel:["neutral","Отменена"]},
   items:[
-   {t:"Sarah Whitman",lead:{ic:"calendar"},n:"JOB-0213",v:820000,st:"unsch",f:{work:"Плитка в ванной, 85 кв. фт",addr:"44 Rose Blvd, Pasadena, CA 91105",when:"Дата не назначена · подписано Nov 1, депозит получен",resp:"Не назначен",links:"Договор CTR-0032"},act:"Назначить дату"},
-   {t:"Linda Nguyen",lead:{dt:["NOV","9"]},n:"JOB-0211",v:215000,st:"hold",f:{work:"Водонагреватель 50 gal: установка, вывоз старого",addr:"88 Oak Ave, Glendale, CA 91203",when:"Начало Nov 9, 8:00 AM · 4 ч",resp:"Carlos Mendez",links:"Заказ PO-0034, доставка Nov 6"}},
-   {t:"Patricia Moore",lead:{dt:["NOV","5"]},n:"JOB-0214",v:1240000,st:"prog",f:{work:"Монтаж кухни: шкафы, столешница, мойка",addr:"210 Lake Ave, Pasadena, CA 91101",when:"Oct 30 – Nov 12 · сейчас визит 2 из 3",resp:"Бригада A: Carlos M., Luis O."},kv:[["Оплачено",744000],["Осталось",496000],["Расходы",48620]],prog:[2,3,"Визит 2 из 3"]},
-   {t:"Marcus Hill",lead:{dt:["NOV","6"]},n:"JOB-0212",v:26000,st:"sched",f:{work:"Генеральная уборка, 3 спальни",addr:"35 Hill St, Monrovia, CA 91016",when:"Nov 6, 10:00 AM · 4 ч",resp:"Ana Ruiz"}},
-   {t:"James Carter",lead:{dt:["NOV","2"]},n:"JOB-0208",v:32000,st:"done",f:{work:"Чистка водостоков",addr:"1420 Elm St, Pasadena, CA 91104",when:"Сделано Nov 2 · оплачено",resp:"Carlos Mendez"}},
-   {t:"Kevin O’Neil",lead:{dt:["OCT","27"]},n:"JOB-0205",v:140000,st:"cancel",f:{work:"Ремонт крыши",addr:"640 W Dryden St, Glendale, CA 91202",when:"Отменена Oct 27 · клиент нашёл другого"}},
+   {t:"Sarah Whitman",lead:{ic:"calendar"},trade:"Ремонт",n:"JOB-0213",v:820000,st:"unsch",f:{work:"Плитка в ванной, 85 кв. фт",addr:"44 Rose Blvd, Pasadena, CA 91105",when:"Дата не назначена · подписано Nov 1, депозит получен",resp:"Не назначен",links:"Договор CTR-0032"},act:"Назначить дату"},
+   {t:"Linda Nguyen",lead:{dt:["NOV","9"]},trade:"Сантехника",n:"JOB-0211",v:215000,st:"hold",f:{work:"Водонагреватель 50 gal: установка, вывоз старого",addr:"88 Oak Ave, Glendale, CA 91203",when:"Начало Nov 9, 8:00 AM · 4 ч",resp:"Carlos Mendez",links:"Заказ PO-0034, доставка Nov 6"}},
+   {t:"Patricia Moore",lead:{dt:["NOV","5"]},trade:"Ремонт",n:"JOB-0214",v:1240000,st:"prog",f:{work:"Монтаж кухни: шкафы, столешница, мойка",addr:"210 Lake Ave, Pasadena, CA 91101",when:"Oct 30 – Nov 12 · сейчас визит 2 из 3",resp:"Бригада A: Carlos M., Luis O."},kv:[["Оплачено",744000],["Осталось",496000],["Расходы",48620]],prog:[2,3,"Визит 2 из 3"]},
+   {t:"Marcus Hill",lead:{dt:["NOV","6"]},trade:"Уборка",n:"JOB-0212",v:26000,st:"sched",f:{work:"Генеральная уборка, 3 спальни",addr:"35 Hill St, Monrovia, CA 91016",when:"Nov 6, 10:00 AM · 4 ч",resp:"Ana Ruiz"}},
+   {t:"James Carter",lead:{dt:["NOV","2"]},trade:"Кровля и водостоки",n:"JOB-0208",v:32000,st:"done",f:{work:"Чистка водостоков",addr:"1420 Elm St, Pasadena, CA 91104",when:"Сделано Nov 2 · оплачено",resp:"Carlos Mendez"}},
+   {t:"Kevin O’Neil",lead:{dt:["OCT","27"]},trade:"Кровля и водостоки",n:"JOB-0205",v:140000,st:"cancel",f:{work:"Ремонт крыши",addr:"640 W Dryden St, Glendale, CA 91202",when:"Отменена Oct 27 · клиент нашёл другого"}},
   ]},
  visits:{name:"Визиты",icon:"calendar",arch:"C",density:"rich",group:"field",facts:["addr","resp","work","phone","note"],cols:["addr","resp","work"],val:"",
   swR:["navigate","Маршрут"],swL:["phone","Позвонить"],cta:"Новый визит",empty:["На этот день визитов нет","Перетащите работу из «Ждут даты» на день."],
   st:{late:["bad","Опаздывает 15 мин"],unconf:["warn","Клиент не подтвердил"],enroute:["info","В пути · 12 мин"],sched:["info","Окно 2–4 PM"],conf:["ok","Клиент подтвердил"],done:["ok","Завершён"]},
   items:[
-   {g:"Сегодня · Thu, Nov 5",t:"Patricia Moore",lead:{tm:["8:00","AM"]},n:"Монтаж · 8:00–11:00 AM",st:"done",f:{addr:"210 Lake Ave, Pasadena, CA 91101",resp:"Бригада A: Carlos M., Luis O.",work:"JOB-0214 · Монтаж кухни, визит 2 из 3",phone:"(626) 555-0164"}},
-   {g:"Сегодня · Thu, Nov 5",t:"Robert Kim",lead:{tm:["11:30","AM"]},n:"Осмотр · 11:30 AM–12:30 PM",st:"enroute",f:{addr:"501 Pine Rd, Burbank, CA 91505",resp:"Alex Lee",work:"Лид LEA-0222 · протечка крыши",phone:"(818) 555-0158",note:"Собака во дворе, звонить перед приездом"}},
-   {g:"Сегодня · Thu, Nov 5",t:"Angela Reyes",lead:{tm:["1:00","PM"]},n:"Сервис · 1:00–3:00 PM",st:"late",f:{addr:"12 Vine St, Altadena, CA 91001",resp:"Luis Ortega",work:"JOB-0216 · Замена водонагревателя",phone:"(626) 555-0142"},act:"Предупредить клиента"},
-   {g:"Сегодня · Thu, Nov 5",t:"Marcus Hill",lead:{tm:["3:30","PM"]},n:"Уборка · 3:30–7:30 PM",st:"unconf",f:{addr:"35 Hill St, Monrovia, CA 91016",resp:"Ana Ruiz",work:"Абонемент PLN-0007",phone:"(626) 555-0109"},act:"Напомнить"},
-   {g:"Завтра · Fri, Nov 6",t:"Thomas Wright",lead:{tm:["9:00","AM"]},n:"Осмотр · 9:00–10:00 AM",st:"conf",f:{addr:"3 Cedar Ln, Pasadena, CA 91105",resp:"Alex Lee",work:"Лид LEA-0225 · электрощит 200 A",phone:"(626) 555-0115"}},
-   {g:"Завтра · Fri, Nov 6",t:"Emily Chen",lead:{tm:["2:00","PM"]},n:"Осмотр · окно 2:00–4:00 PM",st:"sched",f:{addr:"77 Maple Dr, Arcadia, CA 91006",resp:"Alex Lee",work:"Смета EST-0144 · уточнить цвета",phone:"(626) 555-0171"}},
+   {g:"Сегодня · Thu, Nov 5",t:"Patricia Moore",lead:{tm:["8:00","AM"]},trade:"Ремонт",n:"Монтаж · 8:00–11:00 AM",st:"done",f:{addr:"210 Lake Ave, Pasadena, CA 91101",resp:"Бригада A: Carlos M., Luis O.",work:"JOB-0214 · Монтаж кухни, визит 2 из 3",phone:"(626) 555-0164"}},
+   {g:"Сегодня · Thu, Nov 5",t:"Robert Kim",lead:{tm:["11:30","AM"]},trade:"Кровля и водостоки",n:"Осмотр · 11:30 AM–12:30 PM",st:"enroute",f:{addr:"501 Pine Rd, Burbank, CA 91505",resp:"Alex Lee",work:"Лид LEA-0222 · протечка крыши",phone:"(818) 555-0158",note:"Собака во дворе, звонить перед приездом"}},
+   {g:"Сегодня · Thu, Nov 5",t:"Angela Reyes",lead:{tm:["1:00","PM"]},trade:"Сантехника",n:"Сервис · 1:00–3:00 PM",st:"late",f:{addr:"12 Vine St, Altadena, CA 91001",resp:"Luis Ortega",work:"JOB-0216 · Замена водонагревателя",phone:"(626) 555-0142"},act:"Предупредить клиента"},
+   {g:"Сегодня · Thu, Nov 5",t:"Marcus Hill",lead:{tm:["3:30","PM"]},trade:"Уборка",n:"Уборка · 3:30–7:30 PM",st:"unconf",f:{addr:"35 Hill St, Monrovia, CA 91016",resp:"Ana Ruiz",work:"Абонемент PLN-0007",phone:"(626) 555-0109"},act:"Напомнить"},
+   {g:"Завтра · Fri, Nov 6",t:"Thomas Wright",lead:{tm:["9:00","AM"]},trade:"Электрика",n:"Осмотр · 9:00–10:00 AM",st:"conf",f:{addr:"3 Cedar Ln, Pasadena, CA 91105",resp:"Alex Lee",work:"Лид LEA-0225 · электрощит 200 A",phone:"(626) 555-0115"}},
+   {g:"Завтра · Fri, Nov 6",t:"Emily Chen",lead:{tm:["2:00","PM"]},trade:"Покраска",n:"Осмотр · окно 2:00–4:00 PM",st:"sched",f:{addr:"77 Maple Dr, Arcadia, CA 91006",resp:"Alex Lee",work:"Смета EST-0144 · уточнить цвета",phone:"(626) 555-0171"}},
   ]},
  plans:{name:"Абонементы",icon:"repeat",arch:"B",money:true,density:"rich",facts:["sched","next","addr","pay"],cols:["sched","next","pay"],val:"",
   swR:["calendar","Визит"],swL:["clock","Пауза"],cta:"Новый абонемент",empty:["Абонементов нет","Повторяющиеся работы: уборка, чистка водостоков, обслуживание. Визиты создаются сами."],
   st:{pastdue:["bad","Платёж просрочен"],renew:["warn","Продление через 14 дн"],active:["ok","Активен"],paused:["neutral","Пауза до Jan 5"]},
   items:[
-   {t:"Kevin O’Neil",n:"PLN-0004 · Бассейн",v:9500,per:"мес",st:"pastdue",f:{sched:"Раз в месяц, 2-й четверг",next:"Nov 12 · Luis Ortega",addr:"640 W Dryden St, Glendale, CA 91202",pay:"Карта ··0019 отклонена Nov 1",phone:"(213) 555-0100"},kv:[["В год",114000],["Визитов",12],["С",  "Mar 2026"]],act:"Напомнить"},
-   {t:"Linda Nguyen",n:"PLN-0002 · HVAC обслуживание",v:18900,per:"год",st:"renew",f:{sched:"Раз в год, ноябрь",next:"Nov 19 · Carlos Mendez",addr:"88 Oak Ave, Glendale, CA 91203",pay:"Счётом, автопродление выключено",phone:"(818) 555-0133"},kv:[["В год",18900],["Визитов",1],["С","Nov 2025"]],act:"Продлить"},
-   {t:"Marcus Hill",n:"PLN-0007 · Уборка",v:13000,per:"визит",st:"active",f:{sched:"Раз в 2 недели, по пятницам",next:"Nov 6, 10:00 AM · Ana Ruiz",addr:"35 Hill St, Monrovia, CA 91016",pay:"Карта ··4242, списание после визита",phone:"(626) 555-0109"},kv:[["В год",338000],["Визитов",26],["С","Oct 2026"]]},
-   {t:"James Carter",n:"PLN-0001 · Чистка водостоков",v:16000,per:"визит",st:"active",f:{sched:"Октябрь и апрель",next:"Apr 12, 2027 · Carlos Mendez",addr:"1420 Elm St, Pasadena, CA 91104",pay:"Счётом после визита",phone:"(626) 555-0187"},kv:[["В год",32000],["Визитов",2],["С","Mar 2025"]]},
-   {t:"Emily Chen",n:"PLN-0006 · Защита от вредителей",v:12000,per:"кв.",st:"paused",f:{sched:"Раз в квартал",next:"После паузы, Jan 5",addr:"77 Maple Dr, Arcadia, CA 91006",pay:"Карта ··7781",phone:"(626) 555-0171"}},
+   {t:"Kevin O’Neil",trade:"Бассейны",n:"PLN-0004 · Бассейн",v:9500,per:"мес",st:"pastdue",f:{sched:"Раз в месяц, 2-й четверг",next:"Nov 12 · Luis Ortega",addr:"640 W Dryden St, Glendale, CA 91202",pay:"Карта ··0019 отклонена Nov 1",phone:"(213) 555-0100"},kv:[["В год",114000],["Визитов",12],["С",  "Mar 2026"]],act:"Напомнить"},
+   {t:"Linda Nguyen",trade:"HVAC",n:"PLN-0002 · HVAC обслуживание",v:18900,per:"год",st:"renew",f:{sched:"Раз в год, ноябрь",next:"Nov 19 · Carlos Mendez",addr:"88 Oak Ave, Glendale, CA 91203",pay:"Счётом, автопродление выключено",phone:"(818) 555-0133"},kv:[["В год",18900],["Визитов",1],["С","Nov 2025"]],act:"Продлить"},
+   {t:"Marcus Hill",trade:"Уборка",n:"PLN-0007 · Уборка",v:13000,per:"визит",st:"active",f:{sched:"Раз в 2 недели, по пятницам",next:"Nov 6, 10:00 AM · Ana Ruiz",addr:"35 Hill St, Monrovia, CA 91016",pay:"Карта ··4242, списание после визита",phone:"(626) 555-0109"},kv:[["В год",338000],["Визитов",26],["С","Oct 2026"]]},
+   {t:"James Carter",trade:"Кровля и водостоки",n:"PLN-0001 · Чистка водостоков",v:16000,per:"визит",st:"active",f:{sched:"Октябрь и апрель",next:"Apr 12, 2027 · Carlos Mendez",addr:"1420 Elm St, Pasadena, CA 91104",pay:"Счётом после визита",phone:"(626) 555-0187"},kv:[["В год",32000],["Визитов",2],["С","Mar 2025"]]},
+   {t:"Emily Chen",trade:"Вредители",n:"PLN-0006 · Защита от вредителей",v:12000,per:"кв.",st:"paused",f:{sched:"Раз в квартал",next:"После паузы, Jan 5",addr:"77 Maple Dr, Arcadia, CA 91006",pay:"Карта ··7781",phone:"(626) 555-0171"}},
   ]},
  tasks:{name:"Задачи",icon:"checklist",arch:"E",density:"rich",facts:["links","resp","due","note"],cols:["links","resp","due"],val:"",
   swR:["check","Готово"],swL:["clock","Завтра"],cta:"Новая задача",empty:["Задач нет","Задача — напоминание себе или коллеге, привязанное к клиенту, лиду или работе."],
@@ -462,13 +476,13 @@ const L={
   swR:["send","Напомнить"],swL:["wallet","Оплата"],cta:"Новый счёт",empty:["Счетов нет","Счёт выставляется из договора: депозит, этап или остаток."],
   st:{overdue:["bad","Просрочен 12 дн"],soon:["warn","Срок завтра"],draft:["neutral","Черновик"],partial:["info","Оплачен частично"],sent:["info","Отправлен"],paid:["ok","Оплачен"]},
   items:[
-   {t:"Robert Kim",n:"INV-0088 · Депозит",v:119250,st:"overdue",f:{addr:"501 Pine Rd, Burbank, CA 91505",due:"Выставлен Oct 17 · срок Oct 24",links:"Договор CTR-0033 · смета EST-0145",last:"Напоминание Oct 31, не открыт",phone:"(818) 555-0158"},kv:[["Сумма",119250],["Оплачено",0],["Осталось",119250,"bad"]],act:"Напомнить"},
-   {t:"Patricia Moore",n:"INV-0091 · Этап 2 из 3",v:496000,st:"soon",f:{addr:"210 Lake Ave, Pasadena, CA 91101",due:"Выставлен Oct 30 · срок Nov 6",links:"Договор CTR-0031 · работа JOB-0214",last:"Открыт Nov 2",phone:"(626) 555-0164"},kv:[["Сумма",496000],["Оплачено",0],["Осталось",496000,"warn"]],act:"Напомнить"},
-   {t:"Thomas Wright",n:"INV-0094 · Осмотр",v:45000,st:"draft",f:{addr:"3 Cedar Ln, Pasadena, CA 91105",due:"Не отправлен",phone:"(626) 555-0115"},act:"Отправить"},
-   {t:"Linda Nguyen",n:"INV-0092 · Остаток",v:115000,st:"partial",f:{addr:"88 Oak Ave, Glendale, CA 91203",due:"Выставлен Nov 1 · срок Nov 15",links:"Договор CTR-0027 · квитанция RCT-0079",phone:"(818) 555-0133"},kv:[["Сумма",215000],["Оплачено",100000],["Осталось",115000]],prog:[100000,215000]},
-   {t:"Sarah Whitman",n:"INV-0093 · Депозит",v:246000,st:"sent",f:{addr:"44 Rose Blvd, Pasadena, CA 91105",due:"Выставлен Nov 1 · срок Nov 10",links:"Договор CTR-0032 · оплата ACH в обработке",phone:"(626) 555-0120"}},
-   {t:"Marcus Hill",n:"INV-0090 · Визит Nov 2",v:0,total:13000,st:"paid",f:{due:"Оплачен Nov 2 картой",links:"Абонемент PLN-0007 · RCT-0078"}},
-   {t:"James Carter",n:"INV-0089 · Чистка водостоков",v:0,total:32000,st:"paid",f:{due:"Оплачен Nov 3 чеком #1043",links:"JOB-0208 · RCT-0076"}},
+   {t:"Robert Kim",trade:"Кровля и водостоки",n:"INV-0088 · Депозит",v:119250,st:"overdue",f:{addr:"501 Pine Rd, Burbank, CA 91505",due:"Выставлен Oct 17 · срок Oct 24",links:"Договор CTR-0033 · смета EST-0145",last:"Напоминание Oct 31, не открыт",phone:"(818) 555-0158"},kv:[["Сумма",119250],["Оплачено",0],["Осталось",119250,"bad"]],act:"Напомнить"},
+   {t:"Patricia Moore",trade:"Ремонт",n:"INV-0091 · Этап 2 из 3",v:496000,st:"soon",f:{addr:"210 Lake Ave, Pasadena, CA 91101",due:"Выставлен Oct 30 · срок Nov 6",links:"Договор CTR-0031 · работа JOB-0214",last:"Открыт Nov 2",phone:"(626) 555-0164"},kv:[["Сумма",496000],["Оплачено",0],["Осталось",496000,"warn"]],act:"Напомнить"},
+   {t:"Thomas Wright",trade:"Электрика",n:"INV-0094 · Осмотр",v:45000,st:"draft",f:{addr:"3 Cedar Ln, Pasadena, CA 91105",due:"Не отправлен",phone:"(626) 555-0115"},act:"Отправить"},
+   {t:"Linda Nguyen",trade:"Сантехника",n:"INV-0092 · Остаток",v:115000,st:"partial",f:{addr:"88 Oak Ave, Glendale, CA 91203",due:"Выставлен Nov 1 · срок Nov 15",links:"Договор CTR-0027 · квитанция RCT-0079",phone:"(818) 555-0133"},kv:[["Сумма",215000],["Оплачено",100000],["Осталось",115000]],prog:[100000,215000]},
+   {t:"Sarah Whitman",trade:"Ремонт",n:"INV-0093 · Депозит",v:246000,st:"sent",f:{addr:"44 Rose Blvd, Pasadena, CA 91105",due:"Выставлен Nov 1 · срок Nov 10",links:"Договор CTR-0032 · оплата ACH в обработке",phone:"(626) 555-0120"}},
+   {t:"Marcus Hill",trade:"Уборка",n:"INV-0090 · Визит Nov 2",v:0,total:13000,st:"paid",f:{due:"Оплачен Nov 2 картой",links:"Абонемент PLN-0007 · RCT-0078"}},
+   {t:"James Carter",trade:"Кровля и водостоки",n:"INV-0089 · Чистка водостоков",v:0,total:32000,st:"paid",f:{due:"Оплачен Nov 3 чеком #1043",links:"JOB-0208 · RCT-0076"}},
   ]},
  payments:{name:"Платежи",icon:"wallet",arch:"B",money:true,density:"rich",group:"field",techHidden:true,facts:["method","links","by","note"],cols:["method","links","by"],val:"",
   swR:["send","Квитанция"],swL:["undo","Возврат"],cta:"Принять оплату",empty:["Платежей нет","Каждая оплата сразу получает квитанцию RCT."],
@@ -495,13 +509,13 @@ const L={
   swR:["plus","В смету"],swL:["copy","Копия"],cta:"Новая позиция",empty:["Каталог пуст","Загрузите прайс поставщика (CSV, XLSX) или добавьте позиции вручную."],
   st:{out:["warn","Нет у поставщика"],low:["warn","Мало: 2 шт"],arch:["neutral","В архиве"],margin:["warn","Маржа ниже 35%"]},
   items:[
-   {g:"Услуги и работа",t:"Выезд мастера",lead:{ic:"route"},n:"SRV-001",tags:["Услуга","Все направления"],cost:3200,price:8900,per:"визит",f:{supplier:"Своя позиция",stock:"Не хранится",desc:"Диагностика до 30 мин. При заказе работы вычитается из сметы."}},
-   {g:"Услуги и работа",t:"Час работы мастера",lead:{ic:"clock"},n:"LAB-001",tags:["Работа","Все направления"],cost:3800,price:9500,per:"час",f:{supplier:"Своя позиция",stock:"Не хранится",desc:"Ставка мастера $38.00/ч с налогами работодателя."}},
-   {g:"Услуги и работа",t:"Монтаж электрощита 200 A",lead:{ic:"users"},n:"SUB-004",tags:["Субподряд","Электрика"],cost:180000,price:260000,per:"шт",f:{supplier:"Valley Electric Inc (субподрядчик)",stock:"Не хранится",desc:"Включает разрешение (permit) и проверку инспектором."}},
-   {g:"Материалы",t:"Водонагреватель 50 gal, газ, низкий NOx",lead:{ic:"box"},n:"WH-50G",tags:["Товар","Сантехника"],cost:108045,price:145000,per:"шт",st:"low",f:{supplier:"Ferguson Plumbing · закупка $980.00 + налог 10.25%",stock:"На складе 2 шт · в заказе 1",desc:"Rheem Performance, гарантия 6 лет."}},
-   {g:"Материалы",t:"Желоб 5″ K-style, бесшовный",lead:{ic:"box"},n:"GT-5K",tags:["Товар","Кровля и водостоки"],cost:1103,price:1800,per:"фт",f:{supplier:"ABC Supply · закупка $10.00 + налог 10.25%",stock:"Катушка: 380 фт",desc:"Алюминий 0.027″, 22 цвета. Модуль Gutters считает длину по чертежу."}},
-   {g:"Материалы",t:"Краска интерьерная, eggshell",lead:{ic:"box"},n:"SW-EGG-1G",tags:["Товар","Покраска"],cost:4631,price:6200,per:"галлон",f:{supplier:"Sherwin-Williams · закупка $42.00 + налог 10.25%",stock:"На складе 6 галлонов",desc:"Duration Home, моющаяся."}},
-   {g:"Материалы",t:"Водосток медный 3×4",lead:{ic:"box"},n:"DS-CU34",tags:["Товар","Кровля и водостоки"],cost:2315,price:3800,per:"фт",st:"out",f:{supplier:"ABC Supply · закупка $21.00 + налог 10.25%",stock:"0 фт · поставщик ждёт партию",desc:"Медь 16 oz."}},
+   {g:"Услуги и работа",t:"Выезд мастера",lead:{ic:"route"},n:"SRV-001",trade:"Все направления",tags:["Услуга"],cost:3200,price:8900,per:"визит",f:{supplier:"Своя позиция",stock:"Не хранится",desc:"Диагностика до 30 мин. При заказе работы вычитается из сметы."}},
+   {g:"Услуги и работа",t:"Час работы мастера",lead:{ic:"clock"},n:"LAB-001",trade:"Все направления",tags:["Работа"],cost:3800,price:9500,per:"час",f:{supplier:"Своя позиция",stock:"Не хранится",desc:"Ставка мастера $38.00/ч с налогами работодателя."}},
+   {g:"Услуги и работа",t:"Монтаж электрощита 200 A",lead:{ic:"users"},n:"SUB-004",trade:"Электрика",tags:["Субподряд"],cost:180000,price:260000,per:"шт",f:{supplier:"Valley Electric Inc (субподрядчик)",stock:"Не хранится",desc:"Включает разрешение (permit) и проверку инспектором."}},
+   {g:"Материалы",t:"Водонагреватель 50 gal, газ, низкий NOx",lead:{ic:"box"},n:"WH-50G",trade:"Сантехника",tags:["Товар"],cost:108045,price:145000,per:"шт",st:"low",f:{supplier:"Ferguson Plumbing · закупка $980.00 + налог 10.25%",stock:"На складе 2 шт · в заказе 1",desc:"Rheem Performance, гарантия 6 лет."}},
+   {g:"Материалы",t:"Желоб 5″ K-style, бесшовный",lead:{ic:"box"},n:"GT-5K",trade:"Кровля и водостоки",tags:["Товар"],cost:1103,price:1800,per:"фт",f:{supplier:"ABC Supply · закупка $10.00 + налог 10.25%",stock:"Катушка: 380 фт",desc:"Алюминий 0.027″, 22 цвета. Модуль Gutters считает длину по чертежу."}},
+   {g:"Материалы",t:"Краска интерьерная, eggshell",lead:{ic:"box"},n:"SW-EGG-1G",trade:"Покраска",tags:["Товар"],cost:4631,price:6200,per:"галлон",f:{supplier:"Sherwin-Williams · закупка $42.00 + налог 10.25%",stock:"На складе 6 галлонов",desc:"Duration Home, моющаяся."}},
+   {g:"Материалы",t:"Водосток медный 3×4",lead:{ic:"box"},n:"DS-CU34",trade:"Кровля и водостоки",tags:["Товар"],cost:2315,price:3800,per:"фт",st:"out",f:{supplier:"ABC Supply · закупка $21.00 + налог 10.25%",stock:"0 фт · поставщик ждёт партию",desc:"Медь 16 oz."}},
   ]},
  suppliers:{name:"Поставщики",icon:"truck",arch:"A",money:true,density:"rich",group:"none",facts:["resp","phone","email","addr","terms","price"],cols:["resp","phone","terms"],val:"",
   swR:["phone","Позвонить"],swL:["mail","Email"],cta:"Новый поставщик",empty:["Поставщиков нет","Поставщик нужен для заказов и обновления цен по прайсу."],
@@ -516,12 +530,12 @@ const L={
   swR:["check","Получено"],swL:["send","Повторить"],cta:"Новый заказ",empty:["Заказов нет","Заказ собирается сам из одобренной сметы."],
   st:{outdated:["warn","Устарел: смета изменилась"],partial:["warn","Получено 8 из 12"],draft:["neutral","Черновик"],sent:["info","Отправлен"],conf:["info","Подтверждён"],recv:["ok","Получен"]},
   items:[
-   {t:"Sherwin-Williams",n:"PO-0032 · Nov 1",v:21240,st:"outdated",f:{links:"JOB-0207 · Emily Chen",deliv:"Самовывоз, Pasadena",lines:"Краска eggshell × 4 гал, валики × 2",phone:"(626) 555-0190"},act:"Обновить заказ"},
-   {t:"Home Depot Pro",n:"PO-0033 · Nov 4",v:48620,st:"partial",f:{links:"JOB-0214 · Patricia Moore",deliv:"Самовывоз Nov 4, получил Carlos M.",lines:"12 позиций · не хватает: петли × 4",ref:"Заказ HD-55120"},prog:[8,12,"Получено 8 из 12 позиций"]},
-   {t:"ABC Supply",n:"PO-0036 · черновик",v:184000,st:"draft",f:{links:"JOB-0215 · James Carter",lines:"Желоб 5″ × 140 фт, водостоки × 4, крепёж"},act:"Отправить"},
-   {t:"ABC Supply",n:"PO-0035 · Nov 4",v:230000,st:"sent",f:{links:"JOB-0217 · Thomas Wright",deliv:"Доставка Nov 9, 7–9 AM на 3 Cedar Ln",lines:"Черепица, мембрана, отливы — 9 позиций",phone:"(626) 555-0150"}},
-   {t:"Ferguson Plumbing",n:"PO-0034 · Nov 3",v:112000,st:"conf",f:{links:"JOB-0211 · Linda Nguyen",deliv:"Доставка Nov 6, 7–9 AM на 88 Oak Ave",lines:"Водонагреватель 50 gal × 1, гибкие подводки × 2",ref:"Заказ FG-88213"},kv:[["Товары",100000],["Налог",10250],["Доставка",1750]]},
-   {t:"ABC Supply",n:"PO-0030 · Oct 31",v:18400,st:"recv",f:{links:"JOB-0208 · James Carter",deliv:"Получен Oct 31",lines:"Герметик × 6, заклёпки"}},
+   {t:"Sherwin-Williams",trade:"Покраска",n:"PO-0032 · Nov 1",v:21240,st:"outdated",f:{links:"JOB-0207 · Emily Chen",deliv:"Самовывоз, Pasadena",lines:"Краска eggshell × 4 гал, валики × 2",phone:"(626) 555-0190"},act:"Обновить заказ"},
+   {t:"Home Depot Pro",trade:"Ремонт",n:"PO-0033 · Nov 4",v:48620,st:"partial",f:{links:"JOB-0214 · Patricia Moore",deliv:"Самовывоз Nov 4, получил Carlos M.",lines:"12 позиций · не хватает: петли × 4",ref:"Заказ HD-55120"},prog:[8,12,"Получено 8 из 12 позиций"]},
+   {t:"ABC Supply",trade:"Кровля и водостоки",n:"PO-0036 · черновик",v:184000,st:"draft",f:{links:"JOB-0215 · James Carter",lines:"Желоб 5″ × 140 фт, водостоки × 4, крепёж"},act:"Отправить"},
+   {t:"ABC Supply",trade:"Электрика",n:"PO-0035 · Nov 4",v:230000,st:"sent",f:{links:"JOB-0217 · Thomas Wright",deliv:"Доставка Nov 9, 7–9 AM на 3 Cedar Ln",lines:"Черепица, мембрана, отливы — 9 позиций",phone:"(626) 555-0150"}},
+   {t:"Ferguson Plumbing",trade:"Сантехника",n:"PO-0034 · Nov 3",v:112000,st:"conf",f:{links:"JOB-0211 · Linda Nguyen",deliv:"Доставка Nov 6, 7–9 AM на 88 Oak Ave",lines:"Водонагреватель 50 gal × 1, гибкие подводки × 2",ref:"Заказ FG-88213"},kv:[["Товары",100000],["Налог",10250],["Доставка",1750]]},
+   {t:"ABC Supply",trade:"Кровля и водостоки",n:"PO-0030 · Oct 31",v:18400,st:"recv",f:{links:"JOB-0208 · James Carter",deliv:"Получен Oct 31",lines:"Герметик × 6, заклёпки"}},
   ]},
  team:{name:"Команда",icon:"user",arch:"A",density:"rich",group:"none",facts:["now","next","phone","email","hours"],cols:["now","next","hours"],val:"",
   swR:["phone","Позвонить"],swL:["sms","SMS"],cta:"Пригласить",empty:["В команде только вы","Пригласите мастеров и офис: каждый увидит только своё."],
@@ -645,8 +659,8 @@ function factsHTML(l,it,d,idx){
   if(d==="regular")keys=keys.filter(k=>k!=="desc"&&k!=="note").slice(0,4);
   const lim=S.device==="phone"?20:30;
   const half=k=>HALF.has(k)&&String(f[k]).length<=lim;
-  const one=(k,short)=>{const [icn,label]=k==="num"?["doc","Номер"]:F[k];
-    return `<span class="fc"><span class="fi" title="${label}">${ic(icn,16)}</span><span class="ft3">${short?"":`<span class="fl">${label}: </span>`}${esc(f[k])}</span></span>`};
+  const one=(k,short)=>{const [icn,label]=k==="num"?["hash","Номер"]:F[k];
+    return `<span class="fc"><span class="fi" title="${label}">${ic(icn,16)}</span><span class="ft3"><span class="sr">${label}: </span>${esc(f[k])}</span></span>`};
   const rows=[];const used=new Set();
   keys.forEach((k,i)=>{if(used.has(k))return;used.add(k);
     if(half(k)){const mate=keys.find(m=>!used.has(m)&&half(m));
@@ -677,9 +691,9 @@ function card(l,it,d,idx=0){
   const sel=S.sel===it.id&&S.device==="desktop";
   const picking=S.selecting?`<span class="pick ${S.picked.has(it.id)?"on":""}" aria-hidden="true">${S.picked.has(it.id)?ic("check",14):""}</span>`:"";
   const done=it.done||(it.lead&&it.lead.chk&&S.checked.has(it.id));
-  const tags=(it.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  const tags=(it.trade?`<span class="tag trade" title="Направление">${ic("toolbox",13)}${esc(it.trade)}</span>`:"")+(it.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
   const chips=d==="compact"?chipHTML(l,it,true):chipHTML(l,it)+tags;
-  let body=`${edgeHTML(l,it)}<div class="ch">${picking||lead(l,it,d)}<span class="main"><span class="t">${esc(it.t)}</span>${(d==="compact"?it.n:splitNum(it).rest)?`<span class="n">${esc(d==="compact"?it.n:splitNum(it).rest)}</span>`:""}${d==="compact"&&chips?`<span class="tags" style="margin-top:4px">${chips}</span>`:""}</span><span class="side">${valHTML(l,it)}</span></div>`;
+  let body=`${edgeHTML(l,it)}<div class="ch">${picking||lead(l,it,d)}<span class="main"><span class="t">${esc(it.t)}</span>${(d==="compact"?it.n:(valHTML(l,it)||splitNum(it).rest.includes(" · ")?splitNum(it).rest:""))?`<span class="n">${esc(d==="compact"?it.n:splitNum(it).rest)}</span>`:""}${d==="compact"&&chips?`<span class="tags" style="margin-top:4px">${chips}</span>`:""}</span><span class="side">${valHTML(l,it)||(d!=="compact"&&splitNum(it).rest&&!splitNum(it).rest.includes(" · ")?`<span class="n">${esc(splitNum(it).rest)}</span>`:"")}</span></div>`;
   if(d!=="compact"){
     if(chips)body+=`<div class="tags">${chips}</div>`;
     body+=factsHTML(l,it,d,idx);
@@ -698,7 +712,7 @@ function personCard(who,items){
   const f=Object.assign({},...items.map(i=>i.f));
   const lines=items.map(i=>{const tt=l.st[i.st][0];return `<div class="reason"><span class="tr-${tt}">${stIc(tt,16)}</span><span><b>${esc(i.t)}</b><br><span class="mut">${esc(i.n||"")}${typeof i.v==="number"&&S.role!=="tech"?" · "+$(i.v):""}</span></span>${i.act?`<button class="btn sm" data-act="${i.id}">${esc(i.act)}</button>`:""}</div>`}).join("");
   const n=items.length;
-  const facts=["addr","phone"].filter(k=>f[k]).map(k=>`<li class="f"><span class="fc"><span class="fi">${ic(F[k][0],16)}</span><span class="ft3"><span class="fl">${F[k][1]}: </span>${esc(f[k])}</span></span></li>`).join("");
+  const facts=["addr","phone"].filter(k=>f[k]).map(k=>`<li class="f"><span class="fc"><span class="fi">${ic(F[k][0],16)}</span><span class="ft3"><span class="sr">${F[k][1]}: </span>${esc(f[k])}</span></span></li>`).join("");
   const fake={f:{phone:f.phone,addr:f.addr}};
   return `<div class="card rich" role="button" tabindex="0" data-open="${worst.id}" aria-label="${esc(who)}"><span class="edge e-${t}"></span><div class="ch"><span class="av">${ini(who)}</span><span class="main"><span class="t">${esc(who)}</span><span class="n">${n} ${n===1?"причина":n<5?"причины":"причин"}${sum&&S.role!=="tech"?" · на кону "+$(sum):""}</span></span><span class="side"></span></div><div class="tags"><span class="chip ${t}">${stIc(t)}${l.st[worst.st][1]}</span></div>${facts?`<ul class="facts">${facts}</ul>`:""}<div class="reasons">${lines}</div>${actsHTML(l,fake)}</div>`;
 }
@@ -842,14 +856,14 @@ function spec(){
   return `<div class="spec">
   <section><h2>Что изменилось во второй версии</h2><ul>
    <li><b>Без троеточий.</b> Текст переносится, до 3 строк на факт; длиннее — последняя строка мягко гаснет.</li><li><b>Короткие факты парами:</b> номер документа и телефон, срок и склад — в одну строку. Их длина постоянная, поэтому на 390 они помещаются всегда (проверка: до 20 знаков на телефоне, до 30 на планшете).</li>
-   <li><b>Каждый факт — своя строка</b> со значком и подписью: «Адрес», «Телефон», «Откуда», «Ответственный», «Срок», «Связано». Номер документа — своя строка под именем.</li>
+   <li><b>Каждый факт — своя строка со своим значком, без слов-подписей.</b> У каждого факта в списке свой значок: источник — рупор, запрос клиента — планшет со списком, работа — ящик с инструментами, ответственный — человек с галочкой, страховка — щит.</li><li><b>Направление бизнеса</b> (кровля, электрика, сантехника…) — серая метка с ящиком инструментов на лидах, сметах, договорах, работах, визитах, счетах, абонементах, заказах и в каталоге. Список направлений компания задаёт при регистрации.</li><li><b>Когда</b> («3 мин назад», «с Nov 2026») — справа от имени, если справа нет суммы.</li>
    <li><b>Кнопки связи на каждой карточке,</b> где есть контакт: позвонить, SMS, карта и маршрут, email. Справа — главное действие карточки («Напомнить», «Назначить дату», «Подписать»).</li>
    <li><b>Цифры плитками:</b> сумма / оплачено / осталось у счетов и договоров, себестоимость / цена / маржа у каталога, «за год» у поставщиков и субподрядчиков.</li>
    <li><b>Карточки разного размера.</b> «Подробная» — по умолчанию почти везде. «Обычная» — три главные строки и кнопки (уведомления). «Компактная» — для шторок выбора и «Другое у этого клиента».</li></ul></section>
   <section><h2>Анатомия карточки</h2><div class="anat"><div class="panel"><div class="list">${ex("invoices",0,"rich")}</div></div>
    <div class="slots"><b>1</b><span><b>Шапка.</b> Слева значок, инициалы, время или галочка. В центре имя (15/600, переносится), под ним номер и дата (11.5). Справа сумма или время и подпись к ней («к оплате», «договор»).</span>
-   <b>2</b><span><b>Статус и метки.</b> Статус — цветной чип «значок + слово». Метки (направление, «2 объекта», «вариант Better») — серые, без цвета.</span>
-   <b>3</b><span><b>Строки фактов</b> 13: значок 16 под ведущим элементом, подпись серым, текст переносится, но не больше 3 строк — дальше мягко гаснет (полностью — в открытой карточке). Факты постоянной длины — номер документа, телефон, дата, срок, остаток на складе — встают по два в строку, без подписи, по значку. Пустые факты не показываются.</span>
+   <b>2</b><span><b>Статус и метки.</b> Статус — цветной чип «значок + слово». Первая метка — направление бизнеса, дальше прочие («2 объекта», «вариант Better»); метки серые, без цвета.</span>
+   <b>3</b><span><b>Строки фактов</b> 13: только значок 16 (подпись слышит экранный диктор и видна при наведении), текст переносится, но не больше 3 строк — дальше мягко гаснет (полностью — в открытой карточке). Факты постоянной длины — номер документа, телефон, дата, срок, остаток на складе — встают по два в строку. Пустые факты не показываются.</span>
    <b>4</b><span><b>Цифры</b> — 2–4 плитки. Цвет у цифры только по статусу (просрочено, маржа ниже нормы).</span>
    <b>5</b><span><b>Прогресс</b> — оплата или визиты.</span>
    <b>6</b><span><b>Кнопки:</b> круглые 36 (зона 44) по контактам и одна текстовая — главное действие. Жёлтая кнопка на экране одна — «＋».</span>
@@ -868,7 +882,7 @@ function spec(){
    <p class="mut">Таблица собрана из тех же данных, что и прототип. Статусы с «N дн» вычисляются из дат и не хранятся в базе; маржа каталога сравнивается с нормой компании (35%, настройка смет).</p></section>
   <section><h2>Решения на ваш выбор</h2><ol class="q-list">
    <li><span><b>Подробная карточка по умолчанию</b> почти во всех списках. Список длиннее, зато открывать карточку нужно реже. Уведомления — «обычная».</span></li>
-   <li><span><b>Подписи у фактов</b> («Адрес:», «Ответственный:»). Без них карточка короче, но новичку непонятно, что за строка. Предлагаю оставить.</span></li>
+   <li><span><b>Значки вместо подписей.</b> Новые значки (рупор, планшет запроса, ящик инструментов, человек с галочкой, песочные часы, ключ, щит, глаз, решётка номера, часы с историей) нужно добавить в дизайн-систему.</span></li>
    <li><span><b>Компьютер — строками с переносом текста</b> и открытой подробной карточкой справа.</span></li>
    <li><span><b>Каталог:</b> себестоимость включает налог при покупке; маржа ниже нормы компании — оранжевый статус.</span></li>
    <li><span><b>Мастер не видит денег</b>, но видит адреса, телефоны и кнопки связи.</span></li></ol></section>
