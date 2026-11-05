@@ -2336,7 +2336,7 @@ select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c3300000-000
 \echo 'T33 lead without a client ok'
 
 :as_super
--- ---------------------------------------------------------------- T23, security-check #98 (migration 20261105290000):
+-- ---------------------------------------------------------------- T23, security-check #98 (migration 20261105310000):
 -- the title on the contract is the profile's (owner / admin set it), not the one typed with the employee's own signature
 :as_owner_a
 do $$
