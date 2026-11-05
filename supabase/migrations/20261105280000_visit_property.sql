@@ -72,6 +72,8 @@ select j.id, j.company_id, j.property_id
    and not exists (select 1 from public.files f where f.job_id = j.id)
    and not exists (select 1 from public.tasks t where t.subject_type = 'job' and t.subject_id = j.id and t.deleted_at is null)
    and not exists (select 1 from public.notes n where n.subject_type = 'job' and n.subject_id = j.id and n.deleted_at is null)
+   and not exists (select 1 from public.activities a where a.subject_type = 'job' and a.subject_id = j.id and a.deleted_at is null)
+   and not exists (select 1 from public.notifications x where x.job_id = j.id)
    -- only jobs whose every visit knows its lead (S4: an inspection belongs to a lead)
    and exists (select 1 from public.visits v where v.job_id = j.id)
    and not exists (select 1 from public.visits v where v.job_id = j.id and v.lead_id is null);
@@ -81,10 +83,16 @@ alter table public.visits enable trigger user;
 alter table public.jobs disable trigger user;
 update public.jobs j set deleted_at = now() from _inspection_jobs ij where j.id = ij.id;
 alter table public.jobs enable trigger user;
+-- the move runs with triggers off (no status_events): one feed entry per moved job says where it went
+insert into public.activities (company_id, subject_type, subject_id, kind, body, meta, actor_id)
+select ij.company_id, 'job', ij.id, 'edited', 'inspection moved to its visit (migration 20261105280000)',
+       jsonb_build_object('event', 'inspection_job_moved', 'visit_ids', (select coalesce(jsonb_agg(v.id), '[]'::jsonb) from public.visits v where v.company_id = ij.company_id and v.lead_id is not null and v.job_id is null and v.property_id = ij.property_id)),
+       null
+  from _inspection_jobs ij;
 drop table _inspection_jobs;
 
--- the new rule: a visit is at a property. NOT VALID: an old visit of a lead without a property keeps loading;
--- every new or changed row must have one (the trigger above fills it in for the current app).
+-- the new rule: a visit is at a property. An old visit that knows no property at all is flagged legacy_no_property
+-- below and passes; every new row must have one (the trigger above fills it in for the current app).
 do $$
 declare c record;
 begin
@@ -254,7 +262,17 @@ create trigger t87_visit_follow_property after update of property_id on public.l
 create or replace function app.tg_lead_place_guard()
 returns trigger language plpgsql set search_path = '' as $$
 begin
-  if auth.uid() is null or app.is_staff(new.company_id) then return new; end if;
+  if auth.uid() is null or app.is_staff(case when tg_op = 'UPDATE' then old.company_id else new.company_id end) then return new; end if;
+  -- the signing function of E2a (app.execute_estimate, security definer: runs as its owner, never as authenticated /
+  -- anon) wins the lead of an approved estimate and links it to that estimate's client — also when a tech with the
+  -- right to sign countersigns. Only that exact change passes; a person never runs as the owner.
+  if tg_op = 'UPDATE' and current_user not in ('authenticated', 'anon')
+     and new.status = 'won' and new.property_id is not distinct from old.property_id
+     and exists (select 1 from public.estimates e
+                  where e.lead_id = new.id and e.company_id = new.company_id and e.status = 'approved' and e.deleted_at is null
+                    and new.customer_id is not distinct from coalesce(old.customer_id, e.customer_id)) then
+    return new;
+  end if;
   if tg_op = 'INSERT' then
     if new.customer_id is not null or new.property_id is not null then
       raise exception 'only the office links a lead to a client or property' using errcode = '42501';
