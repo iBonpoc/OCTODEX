@@ -19,7 +19,7 @@ import { leadStatusToDb } from "@/cloud/statusMap";
 const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
-import { cleanPeople, nextClientNumber } from "./people";
+import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
@@ -44,7 +44,6 @@ import {
   type Role,
   type Visit,
   type VisitStep,
-  type LeadContact,
   type Task,
   type Source,
   type LeadStatus,
@@ -107,8 +106,8 @@ interface StoreCtx {
   reopenLead: (id: ID) => Undo;
   assignLead: (id: ID, memberId: ID) => Undo;
   setLeadCost: (id: ID, cents: number) => Undo;
-  saveLeadContact: (leadId: ID, c: LeadContact) => Undo;
-  removeLeadContact: (leadId: ID, contactId: ID) => Undo;
+  /** all people of a lead in one save (the first is the lead itself); once the lead has a client, its people are the client's */
+  saveLeadPeople: (leadId: ID, people: Person[]) => Undo;
   saveTask: (t: Omit<Task, "id"> & { id?: ID }) => { id: ID; undo: Undo };
   /** company lead sources: add / edit / hide (sources with leads are never deleted) */
   saveSource: (s: Omit<Source, "id"> & { id?: ID }) => { id: ID; undo: Undo };
@@ -430,7 +429,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       "lead.prospect",
       (d) => ({
         ...d,
-        customers: [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "prospect" }],
+        // the lead's people become the client's (S3; the server moves them the same way, app.move_lead_people)
+        customers: [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "prospect", people: clientPeopleFromLead(l, ids.contactId) }],
         properties: [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: l.address ?? "", city: l.city, stories: 1 }],
         leads: d.leads.map((x) => (x.id === leadId ? { ...x, customerId: ids.customerId, propertyId: ids.propertyId, lastActivityAt: now } : x)),
       }),
@@ -438,6 +438,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
     return { customerId: ids.customerId, propertyId: ids.propertyId, undo };
   };
+
+  /** all people of a client in one save (one RPC on the server) */
+  const saveCustomerPeople = (id: ID, people: Person[]): Undo => {
+    const clean = cleanPeople(people, uid);
+    const main = clean[0];
+    const phone = main?.phones.find((p) => p.primary)?.number ?? main?.phones[0]?.number ?? "";
+    const email = main?.emails.find((e) => e.primary)?.address ?? main?.emails[0]?.address;
+    return mutate(
+      "customer.people",
+      (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, people: clean, phone, email } : c)) }),
+      { k: "customer.people", id, people: clean },
+    );
+  };
+
+  /** a lead's people for its new client: the main person is the client's main contact (the server merges them, same id) */
+  const clientPeopleFromLead = (l: Lead, contactId: ID): Person[] => cleanPeople(leadPeopleOf(l), uid).map((p, i) => (i === 0 ? { ...p, id: contactId } : p));
 
   /** a plain field change on a lead (same path as "edit lead") */
   const patchLead = (id: ID, patch: LeadPatch): Undo => {
@@ -593,23 +609,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       setLeadCost: (id, cents) =>
         mutate("lead.cost", (d) => ({ ...d, leads: d.leads.map((x) => (x.id === id ? { ...x, costCents: cents } : x)) }), { k: "lead.cost", leadId: id, cents }),
-      saveLeadContact: (leadId, c) =>
-        mutate(
-          "lead.contact",
-          (d) => ({
-            ...d,
-            leads: d.leads.map((x) =>
-              x.id === leadId ? { ...x, contacts: (x.contacts ?? []).some((y) => y.id === c.id) ? (x.contacts ?? []).map((y) => (y.id === c.id ? c : y)) : [...(x.contacts ?? []), c] } : x,
-            ),
-          }),
-          { k: "lead.contactSave", leadId, contact: c },
-        ),
-      removeLeadContact: (leadId, contactId) =>
-        mutate(
-          "lead.contactRemove",
-          (d) => ({ ...d, leads: d.leads.map((x) => (x.id === leadId ? { ...x, contacts: (x.contacts ?? []).filter((y) => y.id !== contactId) } : x)) }),
-          { k: "lead.contactRemove", id: contactId },
-        ),
+      saveLeadPeople: (leadId, people) => {
+        const l = dbRef.current.leads.find((x) => x.id === leadId);
+        if (!l) return () => {};
+        const named = people.map((p, i) => (i === 0 ? { ...p, name: l.name, role: "main" as const } : p));
+        if (l.customerId && dbRef.current.customers.some((c) => c.id === l.customerId)) return saveCustomerPeople(l.customerId, named);
+        const clean = cleanPeople(named, uid);
+        const { phone, email } = mainContact(clean);
+        return mutate(
+          "lead.people",
+          (d) => ({ ...d, leads: d.leads.map((x) => (x.id === leadId ? { ...x, people: clean, phone, email, phone2: undefined, phone2Label: undefined, contacts: undefined } : x)) }),
+          { k: "lead.people", id: leadId, people: clean },
+        );
+      },
       saveTask: (t) => {
         const id = t.id ?? uid();
         const task = { ...t, id };
@@ -819,7 +831,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => ({
             ...d,
             customers: needCustomer
-              ? [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "active" }]
+              ? [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "active", people: clientPeopleFromLead(l, ids.contactId) }]
               : d.customers.map((c) => (c.id === ids.customerId ? { ...c, status: "active" } : c)),
             properties: needCustomer ? [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: l.address ?? "", city: l.city, stories: 1 }] : d.properties,
             leads: d.leads.map((x) => (x.id === leadId ? { ...x, status: "won", wonVia: "manual", customerId: ids.customerId, propertyId: ids.propertyId, lastActivityAt: now } : x)),
@@ -846,17 +858,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
         return { id: ids.customerId, undo };
       },
-      saveCustomerPeople: (id, people) => {
-        const clean = cleanPeople(people, uid);
-        const main = clean[0];
-        const phone = main?.phones.find((p) => p.primary)?.number ?? main?.phones[0]?.number ?? "";
-        const email = main?.emails.find((e) => e.primary)?.address ?? main?.emails[0]?.address;
-        return mutate(
-          "customer.people",
-          (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, people: clean, phone, email } : c)) }),
-          { k: "customer.people", id, people: clean },
-        );
-      },
+      saveCustomerPeople,
       setCustomerTags: (id, tagIds) =>
         mutate("customer.tags", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, tagIds } : c)) }), { k: "customer.tags", id, tagIds }),
       setCustomerStatus: (id, status, reason) =>

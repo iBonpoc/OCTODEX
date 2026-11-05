@@ -71,16 +71,17 @@ exports.run = async (h) => {
   await p.waitForTimeout(300);
   h.expect(!!(await h.db()).tasks.find((x) => x.id === task.id).doneAt, "task done");
 
-  // edit the contact: email + second phone
+  // edit the contact: email + second phone (people sheet, L2 part 2)
   await h.clickText("Обзор");
-  await p.getByRole("button", { name: "Изменить: Контакт" }).click();
-  await p.waitForTimeout(300);
-  await h.sheet().getByPlaceholder("client@example.com").fill("maria@example.com");
-  await h.sheet().getByPlaceholder("(555) 555-0100").nth(1).pressSequentially("6265550112");
+  await h.click("Телефоны, email и люди");
+  await h.sheet().getByRole("button", { name: "Email", exact: true }).first().click();
+  await h.sheet().getByPlaceholder("Email", { exact: true }).first().fill("maria@example.com");
+  await h.sheet().getByRole("button", { name: "Телефон", exact: true }).first().click();
+  await h.sheet().getByPlaceholder("Телефон", { exact: true }).nth(1).pressSequentially("6265550112");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(300);
   l = await lead(id);
-  h.expect(l.email === "maria@example.com" && l.phone2 === "(626) 555-0112", "contact edited");
+  h.expect(l.email === "maria@example.com" && l.people && l.people[0].phones[1].number === "(626) 555-0112", "contact edited");
 
   // declined (we decided) with a reason, then back to work
   await p.getByRole("button", { name: /^Статус:/ }).first().click(); await p.waitForTimeout(300);
