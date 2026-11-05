@@ -306,10 +306,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "visit.inspection": {
       const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
       await run(ins("visits", { id: op.visitId, company_id: c, lead_id: op.leadId ?? null, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
-      await assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
-      if (!op.leadId) return; // «+ Осмотр» on a client: no lead to move
-      await run(supabase.from("leads").update({ first_response_at: op.start < new Date().toISOString() ? op.start : new Date().toISOString(), first_response_kind: "manual" }).eq("id", op.leadId).is("first_response_at", null));
-      return run(supabase.from("leads").update({ status: "inspection_scheduled" }).eq("id", op.leadId).in("status", ["new", "contacted", "qualified"]));
+      // the lead first, the people last: a refused assignment must not leave the lead behind (security check of П3a)
+      if (op.leadId) {
+        await run(supabase.from("leads").update({ first_response_at: op.start < new Date().toISOString() ? op.start : new Date().toISOString(), first_response_kind: "manual" }).eq("id", op.leadId).is("first_response_at", null));
+        await run(supabase.from("leads").update({ status: "inspection_scheduled" }).eq("id", op.leadId).in("status", ["new", "contacted", "qualified"]));
+      }
+      return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
     case "visit.cancel":
       // one server function for S4a / S9a (migration 20261105300000): the cancel and the roll-backs in one transaction;
@@ -440,8 +442,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "job.schedule": {
       await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, scope: op.scope }));
-      await assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
-      return advanceJob(op.jobId, "scheduled");
+      await advanceJob(op.jobId, "scheduled");
+      return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
     case "company.save": {
       const { data: stored } = await supabase.from("companies").select("brand, contract_settings, estimate_settings, payment_settings, onboarding_state").eq("id", c).maybeSingle();

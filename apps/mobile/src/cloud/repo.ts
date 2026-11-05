@@ -54,7 +54,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("properties"),
       live<Row>("jobs"),
       live<Row>("visits"),
-      live<Row>("visit_assignees", "visit_id, user_id"),
+      live<Row>("visit_assignees", "visit_id, user_id, created_at"),
       live<Row>("leads"),
       live<Row>("estimates"),
       live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs"),
@@ -133,7 +133,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   for (const p of payments) if (p.visit_id && ["succeeded", "partially_refunded"].includes(s(p.status))) paidVisit.set(s(p.visit_id), p);
   // everyone on a visit (wave П3a); the first one is techId for the screens that show one name
   const assignee = new Map<string, string[]>();
-  for (const a of assignees) assignee.set(s(a.visit_id), [...(assignee.get(s(a.visit_id)) ?? []), s(a.user_id)]);
+  // by the time they were put on: the first one stays the first between loads
+  const byTime = [...assignees].sort((a, b) => s(a.created_at).localeCompare(s(b.created_at)) || s(a.user_id).localeCompare(s(b.user_id)));
+  for (const a of byTime) assignee.set(s(a.visit_id), [...(assignee.get(s(a.visit_id)) ?? []), s(a.user_id)]);
 
   const visitStep = (v: Row): VisitStep => {
     // an inspection ends with "done" (no signature, no payment)

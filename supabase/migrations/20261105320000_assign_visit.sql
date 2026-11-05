@@ -25,13 +25,14 @@ begin
                             or new.company_id is distinct from old.company_id) then
     raise exception 'an assignment does not move to another visit or person' using errcode = '42501';
   end if;
-  select status into v_status from public.visits where id = r.visit_id and company_id = r.company_id;
+  -- for share: a tech moving to "on site" at the same moment waits for this write (or this one waits for his)
+  select status into v_status from public.visits where id = r.visit_id and company_id = r.company_id and deleted_at is null for share;
   if v_status is null or v_status not in ('scheduled', 'en_route') then
     raise exception 'people change only before the visit is on site (status %)', v_status using errcode = 'check_violation';
   end if;
   if new.deleted_at is null and not exists (
        select 1 from public.memberships m
-        where m.company_id = new.company_id and m.user_id = new.user_id and m.status = 'active') then
+        where m.company_id = new.company_id and m.user_id = new.user_id and m.status = 'active' and m.deleted_at is null) then
     raise exception 'only an active member of the company is assigned' using errcode = 'check_violation';
   end if;
   return new;
@@ -58,13 +59,22 @@ begin
     raise exception 'only the office assigns people to a visit' using errcode = '42501';
   end if;
   select * into v from public.visits where id = p_visit_id and company_id = v_company and deleted_at is null for update;
+  if v.id is null then   -- deleted between the two reads: the same refusal
+    raise exception 'only the office assigns people to a visit' using errcode = '42501';
+  end if;
+  select coalesce(array_agg(distinct u), '{}') into v_ids from unnest(coalesce(p_user_ids, '{}')) u where u is not null;
+  -- the same list again (an offline replay after a later step failed, maybe once the tech is already on site): nothing to do
+  if (select coalesce(array_agg(a.user_id order by a.user_id), '{}') from public.visit_assignees a
+       where a.visit_id = v.id and a.deleted_at is null)
+     = (select coalesce(array_agg(u order by u), '{}') from unnest(v_ids) u) then
+    return jsonb_build_object('assignees', to_jsonb(v_ids), 'added', 0, 'removed', 0);
+  end if;
   if v.status not in ('scheduled', 'en_route') then
     raise exception 'people change only before the visit is on site (status %)', v.status using errcode = 'check_violation';
   end if;
-  select coalesce(array_agg(distinct u), '{}') into v_ids from unnest(coalesce(p_user_ids, '{}')) u where u is not null;
   if exists (select 1 from unnest(v_ids) u
               where not exists (select 1 from public.memberships m
-                                 where m.company_id = v_company and m.user_id = u and m.status = 'active')) then
+                                 where m.company_id = v_company and m.user_id = u and m.status = 'active' and m.deleted_at is null)) then
     raise exception 'only an active member of the company is assigned' using errcode = 'check_violation';
   end if;
 

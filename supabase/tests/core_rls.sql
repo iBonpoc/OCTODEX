@@ -2462,6 +2462,12 @@ update public.visits set status = 'on_site' where id = 'f3500000-0000-4000-8000-
 select tst.fails($q$select public.assign_visit('f3500000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003', 'a3500000-0000-4000-8000-000000000001']::uuid[])$q$, 'on site: people do not change');
 select tst.fails($q$insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3500000-0000-4000-8000-000000000001', 'a3500000-0000-4000-8000-000000000001')$q$, 'on site: a direct insert is refused too');
 select tst.ok(tst.cnt($q$select 1 from public.visit_assignees where visit_id = 'f3500000-0000-4000-8000-000000000001' and deleted_at is null$q$) = 1, 'after the refusals the people are as they were');
+select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added')::int = 0, 'on site: a replay of the same list is not an error (offline queue)');
+select tst.fails($q$update public.visit_assignees set visit_id = 'f3500000-0000-4000-8000-000000000002' where visit_id = 'f3500000-0000-4000-8000-000000000001'$q$, 'an assignment does not move to another visit');
+-- a member removed with deleted_at (not suspended) is not assigned; a direct «back on» of an inactive one is refused
+update public.memberships set deleted_at = now() where user_id = 'a3500000-0000-4000-8000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000';
+select tst.fails($q$select public.assign_visit('f3500000-0000-4000-8000-000000000002', array['a3500000-0000-4000-8000-000000000001']::uuid[])$q$, 'a deleted member is not assigned');
+select tst.fails($q$insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3500000-0000-4000-8000-000000000002', 'a3500000-0000-4000-8000-000000000001')$q$, 'a direct insert of a deleted member is refused (the visit is still scheduled)');
 \echo 'T35 several people on a visit ok'
 
 :as_super
