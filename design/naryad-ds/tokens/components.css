@@ -10,6 +10,8 @@
  --help-visible:18px;--help-icon:11px;
  --tip-fs:var(--fs-caption);--tip-px:8px;--tip-py:4px;--tip-radius:8px;--tip-max:220px;--tip-gap:6px;
  --dock-btn:var(--control-lg);--modal-w:380px;--panel-w:360px;--palette-w:560px;
+ /* карточки списков (docs/specs/06-list-cards.md): строка выбора в шторке, мин. ширина плитки цифр */
+ --row-option:48px;--tile-min:78px;
  --ease-liquid:cubic-bezier(.3,1.35,.5,1);
  --liquid-stretch:160ms;--liquid-settle:420ms;
 }
