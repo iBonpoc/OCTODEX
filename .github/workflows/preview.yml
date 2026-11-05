@@ -1,4 +1,5 @@
-# Preview of every PR before it is merged: a web copy at https://octodex--pr-<N>.expo.app (link in a PR comment).
+# Preview of every PR before it is merged: a web copy at its own deployment URL (link in a PR comment).
+# No pr-<N> alias: the Expo free plan allows 5 aliases, so they ran out and every new preview 404'd (05.11.2026).
 # NOT published to Expo Go: Expo Go lists every update of the project, and the founder must see only what is merged
 # (main → release.yml). Founder decision 05.11.2026.
 # The preview uses the same database as the app, but database migrations from the PR are NOT applied
@@ -38,13 +39,21 @@ jobs:
       - name: Build the web app
         working-directory: apps/mobile
         run: npx expo export --platform web
-      - name: Deploy the web copy (octodex--pr-N.expo.app)
+      - name: Deploy the web copy (its own deployment URL)
         id: web
         working-directory: apps/mobile
         run: |
-          npx eas-cli@latest deploy --alias "pr-$PR" --non-interactive | tee deploy.log
-          # the alias can take a while to start answering; the deployment's own URL works at once
-          echo "url=$(grep -o 'https://[a-z0-9-]*\.expo\.app' deploy.log | grep -v -- "--pr-" | head -1)" >> "$GITHUB_OUTPUT"
+          set -o pipefail
+          npx eas-cli@latest deploy --non-interactive | tee deploy.log
+          # the unique deployment URL looks like https://<project>--<id>.expo.app (never the production octodex.expo.app)
+          url="$(grep -oE 'https://[a-z0-9-]+--[a-z0-9-]+\.expo\.app' deploy.log | head -1)"
+          # a preview without a working link is a failed preview — never a green step with a dead link
+          [ -n "$url" ] || { echo "::error::eas deploy printed no deployment URL"; exit 1; }
+          for i in $(seq 1 12); do
+            code="$(curl -s -o /dev/null -w '%{http_code}' "$url")"; [ "$code" = "200" ] && break; sleep 5
+          done
+          [ "$code" = "200" ] || { echo "::error::$url answers $code"; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
       - name: Does the PR change the database?
         id: mig
         run: |
@@ -58,8 +67,7 @@ jobs:
           script: |
             const pr = context.payload.pull_request.number;
             const sha = context.payload.pull_request.head.sha.slice(0, 7);
-            const alias = `https://octodex--pr-${pr}.expo.app`;
-            const web = process.env.WEB_URL ? `${process.env.WEB_URL} (постоянный адрес этого PR: ${alias})` : alias;
+            const web = process.env.WEB_URL;
             const mig = process.env.HAS_MIG === "1"
               ? "\n\n⚠ В этом PR есть изменения базы. В предпросмотре они ещё не применены: проверяйте экраны в демо-режиме, облачные данные заработают после слияния."
               : "";
