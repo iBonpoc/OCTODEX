@@ -25,7 +25,7 @@
 
 | ID | Стык | Запускает | Было → стало | Тест |
 |---|---|---|---|---|
-| S8b | Подпись подрядчика | Д (или право «подписывать договоры»), или автоподпись | смета `awaiting_countersign` → `approved`; — → `Job(unscheduled)`, `Invoice(deposit)`, исполненная копия | e2e:24-estimate-countersign, db:T17, db:T18 |
+| S8b | Подпись подрядчика | Д (или право «подписывать договоры»), или автоподпись | смета `awaiting_countersign` → `approved`; — → `Job(unscheduled)`, `Invoice(deposit)`, исполненная копия | e2e:24-estimate-countersign, db:T18, db:T19 |
 
 ---
 
@@ -113,9 +113,9 @@
 
 Запреты:
 - Менять строки и цены в `awaiting_countersign` и `approved` нельзя (версия заблокирована, база уже проверяет `tg_estimate_version_lock`).
-- Подписать за компанию может только человек с `can_sign_contracts` (база: проверка в функции, тест T17). Сам себе право не выдаёт (только `owner`).
+- Подписать за компанию может только человек с `can_sign_contracts` (база: проверка в функции, тест T18). Сам себе право не выдаёт (только `owner`).
 - Подпись подрядчика без подписи клиента нельзя (кроме «на месте», где они в одной функции, клиентская первой).
-- Работа и счёт на депозит не создаются до `approved` (тест T18).
+- Работа и счёт на депозит не создаются до `approved` (тест T19).
 - Повторное нажатие «Подписать» ничего не дублирует (одна функция, идемпотентна).
 
 Одна функция на стык (правило §4 карты): `countersignEstimate(id, by)` в сторе и `public.countersign_estimate(p_estimate_id, p_signature_id)` в базе; `portal_accept` при `auto` вызывает ту же внутреннюю функцию `app.execute_estimate()`.
@@ -206,25 +206,25 @@
 
 | Что | Тест | Где |
 |---|---|---|
-| S8 → `awaiting_countersign` при `manual`: лид `won`, клиент `active`, работы и счёта нет | db:T17, e2e:24-estimate-countersign | `supabase/tests/core_rls.sql`, `e2e/specs/24-…` |
-| S8b подпись подрядчика: `approved`, работа, депозит один раз, повтор без дублей | db:T18, e2e:24-estimate-countersign | база, e2e |
-| Подписать без права → отказ (база и экран) | db:T17, unit:countersign | база, `test/countersign.test.ts` |
-| Автоподпись: `portal_accept` → сразу `approved`, `method=auto`, подпись `autoSignerUserId` | db:T18 | база |
+| S8 → `awaiting_countersign` при `manual`: лид `won`, клиент `active`, работы и счёта нет | db:T18, e2e:24-estimate-countersign | `supabase/tests/core_rls.sql`, `e2e/specs/24-…` |
+| S8b подпись подрядчика: `approved`, работа, депозит один раз, повтор без дублей | db:T19, e2e:24-estimate-countersign | база, e2e |
+| Подписать без права → отказ (база и экран) | db:T18, unit:countersign | база, `test/countersign.test.ts` |
+| Автоподпись: `portal_accept` → сразу `approved`, `method=auto`, подпись `autoSignerUserId` | db:T19 | база |
 | Подпись на месте: клиент + подрядчик одной функцией | e2e:24-estimate-countersign | e2e |
-| `member_signatures`: только своя, только добавление, отзыв без удаления | db:T19 | база |
-| Чужая компания не видит подписи и шаблоны | db:T19 | база (RLS) |
+| `member_signatures`: только своя, только добавление, отзыв без удаления | db:T20 | база |
+| Чужая компания не видит подписи и шаблоны | db:T20 | база (RLS) |
 | Язык клиента (§2.1): интерфейс RU, клиент EN → PDF сметы, счёта, квитанции, страница клиента и текст SMS на EN; клиент ES → ES; язык не задан → язык компании по стране; порядок «человек → клиент → лид → компания» | unit:clientLang, e2e:24-estimate-countersign | `test/clientLang.test.ts`, e2e (интерфейс RU, проверка английских слов в PDF и на `/p/`) |
 | Сторож: ни одна функция документа не печатает на языке интерфейса (во всех `*Html` и тексте SMS — только `tFor(clientLang)`); для каждого языка клиента все ключи документов есть | unit:clientLang | там же |
-| Лид → клиент переносит язык (S3) | unit:clientLang, db:T21 | приложение, база |
+| Лид → клиент переносит язык (S3) | unit:clientLang, db:T22 | приложение, база |
 | PDF: нет себестоимости; две подписи; журнал; номер страницы; имя файла | unit:estimatePdf | `test/estimatePdf.test.ts` |
 | Общая шапка: смета, счёт, квитанция одинаковы (логотип, лицензии, контакты) | unit:estimatePdf | там же |
 | Шаблон → смета: цены из текущего каталога; строка без ссылки — цена шаблона; скрытая позиция — пометка | unit:estimateTemplate | `test/estimateTemplate.test.ts` |
-| Итоги сметы из шаблона = итоги движка по тем же строкам (деньги) | engine:custom, db:T20 (итог в `estimate_versions.totals` совпадает) | движок, база |
-| Сохранить как шаблон: нет клиента, объекта, лида; себестоимость — только тем, кому видна | unit:estimateTemplate, db:T20 | приложение, база |
+| Итоги сметы из шаблона = итоги движка по тем же строкам (деньги) | engine:custom, db:T21 (итог в `estimate_versions.totals` совпадает) | движок, база |
+| Сохранить как шаблон: нет клиента, объекта, лида; себестоимость — только тем, кому видна | unit:estimateTemplate, db:T21 | приложение, база |
 | Экраны шаблонов и подписи — 6 видов, в `SCREENS` спеки `08-layouts` | e2e:25-estimate-templates, e2e:08-layouts | e2e |
 | Миграция на чистой и текущей базе | `supabase/tests/run.sh` | база |
 
-Номера db:T17–T21 — по порядку после последнего в `core_rls.sql` на момент PR (файл общий → через чат «Leads tab implementation»).
+Номера db:T18–T22 — по порядку после последнего в `core_rls.sql` на момент PR (файл общий → через чат «Leads tab implementation»).
 
 ---
 
@@ -234,7 +234,7 @@
 | Волна | Что | Файлы (мои) | Общие файлы (через чат «Leads tab implementation», маленьким PR до волны) |
 |---|---|---|---|
 | **E1 PDF и язык клиента** | правило §2.1: `clientLang`, `tFor`, язык у клиента и «язык документов по умолчанию» у компании; общая шапка и подвал, контакты клиента, «Valid until», блок двух подписей (пока одна), журнал подписи, номера страниц, имя файла, «цена за единицу» | `docPdf.ts`, `estimatePdf.ts`, `estimateDoc.ts`, `app/estimate/[id].tsx` | i18n: ключи PDF на EN/ES, `tFor`; `types.ts` (`Customer.language`, `Company.docLanguage`); миграция поля языка у клиента и компании; карточка клиента и настройки — поле «Язык документов»; `invoice/[id].tsx`, `receipt/[id].tsx`, `p/[token].tsx` — вызов с языком клиента |
-| **E2 Подпись подрядчика** | моя подпись, шторка «Подписать договор», подпись на месте, `awaiting_countersign`, настройки, страница клиента, миграция | `SignBlock.tsx`, `SignaturePad.tsx`, `app/estimate/*`, `sendEstimate.ts`, своя миграция `20261106…_estimate_countersign.sql` | §5 карты + S8b в §4; `types.ts`, `statusMap.ts`, `store.tsx` (`countersignEstimate`, правка `approveEstimate`), `attention.ts`, i18n, тесты базы, `p/[token].tsx`, ссылки в настройках |
+| **E2 Подпись подрядчика** | моя подпись, шторка «Подписать договор», подпись на месте, `awaiting_countersign`, настройки, страница клиента, миграция | `SignBlock.tsx`, `SignaturePad.tsx`, `app/estimate/*`, `sendEstimate.ts`, своя миграция `20261105130000_estimate_countersign.sql` (время после 20261105120000) | §5 карты + S8b в §4; `types.ts`, `statusMap.ts`, `store.tsx` (`countersignEstimate`, правка `approveEstimate`), `attention.ts`, i18n, тесты базы, `p/[token].tsx`, ссылки в настройках |
 | **E3 Шаблоны** | `EstimateTemplate`, «Сохранить как шаблон», «С чего начать?», экран шаблонов, миграция | `app/estimate/new.tsx`, `app/estimate/templates.tsx`, `estimatePickers.tsx`, `LineSheet.tsx`, своя миграция | `types.ts`, `store.tsx` (`saveTemplate`, `archiveTemplate`), i18n, тесты базы, ссылка в настройках |
 | **G1… Gutters** | после ядра, по своей спецификации (`docs/specs/09-gutters.md`): стартовые шаблоны модуля, чертёж → смета | `src/modules/gutters/**`, `packages/estimating-engine` | включение модуля в настройках компании |
 
