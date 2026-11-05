@@ -131,8 +131,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const jobById = new Map(jobs.map((j) => [s(j.id), j]));
   const paidVisit = new Map<string, Row>();
   for (const p of payments) if (p.visit_id && ["succeeded", "partially_refunded"].includes(s(p.status))) paidVisit.set(s(p.visit_id), p);
-  const assignee = new Map<string, string>();
-  for (const a of assignees) if (!assignee.has(s(a.visit_id))) assignee.set(s(a.visit_id), s(a.user_id));
+  // everyone on a visit (wave П3a); the first one is techId for the screens that show one name
+  const assignee = new Map<string, string[]>();
+  for (const a of assignees) assignee.set(s(a.visit_id), [...(assignee.get(s(a.visit_id)) ?? []), s(a.user_id)]);
 
   const visitStep = (v: Row): VisitStep => {
     // an inspection ends with "done" (no signature, no payment)
@@ -158,7 +159,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         leadId: (v.lead_id as string | null) ?? undefined,
         kind: (v.kind as Visit["kind"] | null) ?? undefined,
         customerNotifiedAt: (v.customer_notified_at as string | null) ?? undefined,
-        techId: assignee.get(s(v.id)) ?? null,
+        techId: assignee.get(s(v.id))?.[0] ?? null,
+        assigneeIds: assignee.get(s(v.id)) ?? [],
         start,
         durationMin: dur,
         step: visitStep(v),
