@@ -169,6 +169,8 @@ export interface Visit {
   late?: boolean;
   /** the visit ended without the client's payment step: completed or no-show on the server (cancelled visits are not loaded) */
   closed?: boolean;
+  /** the property of the visit (docs/specs/03 §3.1, migration 20261105280000); an inspection has it without a job */
+  propertyId?: ID;
 }
 
 /**

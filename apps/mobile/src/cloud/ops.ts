@@ -3,6 +3,7 @@
  * then sent to the OCTODEX database when online (offline-first, docs/06-architecture, ADR-003).
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
+import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION } from "@octo/estimating-engine";
 import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { companyToDb, contactToDb, licenseToDb } from "./companyMap";
@@ -193,6 +194,7 @@ function ins(table: string, row: Record<string, unknown>) {
 
 const JOB_PATH = ["draft", "scheduled", "in_progress", "completed"];
 async function advanceJob(jobId: string, to: "scheduled" | "in_progress" | "completed") {
+  if (!realJob(jobId)) return;
   const { data } = await supabase.from("jobs").select("status").eq("id", jobId).maybeSingle();
   let cur = (data?.status as string | undefined) ?? "draft";
   let i = JOB_PATH.indexOf(cur);
@@ -237,7 +239,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "photo.add": {
       await run(
-        ins("files", { id: op.id, company_id: c, kind: "photo", visit_id: op.visitId, job_id: op.jobId, stage: op.stage, taken_at: new Date().toISOString() }),
+        ins("files", { id: op.id, company_id: c, kind: "photo", visit_id: op.visitId, job_id: realJob(op.jobId), stage: op.stage, taken_at: new Date().toISOString() }),
       );
       if (op.uri) await uploadPhoto(c, op.id, op.uri);
       return;
@@ -252,7 +254,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       await advanceJob(op.jobId, "in_progress");
       await run(
         ins("invoices", {
-          id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: op.jobId, kind: "final", status: "sent",
+          id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: realJob(op.jobId), kind: "final", status: "sent",
           subtotal_cents: op.amountCents, total_cents: op.amountCents, due_date: new Date().toISOString().slice(0, 10), sent_at: new Date().toISOString(),
         }),
       );
@@ -634,7 +636,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "expense.add":
       return run(
         ins("expenses", {
-          id: op.id, company_id: c, job_id: op.jobId, vendor: op.vendor, category: expenseCategoryToDb[op.category],
+          id: op.id, company_id: c, job_id: realJob(op.jobId), vendor: op.vendor, category: expenseCategoryToDb[op.category],
           amount_cents: op.amountCents, idempotency_key: op.id,
         }),
       );

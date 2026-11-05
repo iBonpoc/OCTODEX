@@ -1,3 +1,4 @@
+const { expectOneAccent } = require("../accent.cjs");
 /** Today: period switch (Today / Week / Month) changes money tiles; sales funnel shows leads → sent → signed → paid. */
 /** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
 async function countersign(h, estimateId) {
@@ -14,6 +15,7 @@ async function countersign(h, estimateId) {
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
+  await expectOneAccent(h, "Today");
   await h.expectText(/Воронка продаж/, "funnel card");
   for (const label of ["Новые лиды", "Сметы отправлены", "Сметы подписаны", "Деньги получены"]) await h.expectText(new RegExp(label), label);
   await h.expectText(/Все открытые счета/, "awaiting is all-time");

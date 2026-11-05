@@ -6,7 +6,7 @@ import { useStore } from "@/data/store";
 import { techDay } from "@/features/techDay";
 import { VisitCard, sortByStart } from "@/features/visits";
 import { useTick } from "@/features/sheets";
-import { Button, StatusChip } from "@/ui/controls";
+import { Button, MetaTag, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, Grid, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
@@ -45,8 +45,8 @@ export default function Visits() {
           </RowView>
           <RowView style={{ flexWrap: "wrap" }}>
             {d.awaitingPay ? <StatusChip status="warn" label={t("tday.awaitingPay", { n: d.awaitingPay })} /> : null}
-            {d.checksLeft ? <StatusChip status="info" label={t("tday.checksLeft", { n: d.checksLeft })} /> : null}
-            <StatusChip status="neutral" label={t("tday.photos", { n: d.photos })} />
+            {d.checksLeft ? <MetaTag icon="checklist" label={t("tday.checksLeft", { n: d.checksLeft })} /> : null}
+            <MetaTag icon="camera" label={t("tday.photos", { n: d.photos })} />
           </RowView>
         </Card>
       )}
@@ -54,7 +54,7 @@ export default function Visits() {
         <View style={{ gap: space[2] }}>
           <SectionTitle title={d.current ? t("tday.now") : t("tday.next")} />
           <VisitCard v={focus} />
-          <Button label={t("tday.open")} icon="route" full onPress={() => router.push(`/visit/${focus.id}`)} />
+          <Button label={t("tday.open")} icon="route" variant="secondary" full onPress={() => router.push(`/visit/${focus.id}`)} />
         </View>
       ) : null}
       {rest.length > 0 ? (
