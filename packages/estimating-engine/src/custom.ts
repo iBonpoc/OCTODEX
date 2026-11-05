@@ -130,3 +130,23 @@ export function parseQty(input: string): string | null {
   if (!/^\d*(\.\d+)?$/.test(s) || s === "") return null;
   return dec(s).toString();
 }
+
+/**
+ * Cost of a kit (catalog card): Σ unit cost × quantity, one rounding at the end.
+ * Unknown when any part has no cost or a quantity that is not a number — never a guess.
+ */
+export function partsCost(parts: { unitCostCents?: number; qty: string }[]): number | null {
+  let sum = dec(0);
+  for (const p of parts) {
+    const q = parseQty(p.qty);
+    if (p.unitCostCents === undefined || q === null) return null;
+    sum = sum.add(dec(p.unitCostCents).mul(q));
+  }
+  return roundCents(sum);
+}
+
+/** Margin % of a price, like the estimate's: one decimal; null when the price is 0 or the cost unknown; may be negative. */
+export function marginPctOf(priceCents: number, costCents: number | null): string | null {
+  if (costCents === null || priceCents === 0) return null;
+  return dec(priceCents - costCents).mul(100).div(priceCents).toDecimalPlaces(1).toFixed(1);
+}
