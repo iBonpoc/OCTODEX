@@ -4,16 +4,19 @@ import { space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useStore } from "@/data/store";
 import { techDay } from "@/features/techDay";
-import { VisitCard, sortByStart } from "@/features/visits";
+import { sortByStart, visitStatus } from "@/features/visits";
+import { visitContext } from "@/data/selectors";
+import type { Visit } from "@/data/types";
+import { CardGrid, ListCard } from "@/ui/listCard";
 import { useTick } from "@/features/sheets";
-import { Button, MetaTag, StatusChip } from "@/ui/controls";
+import { MetaTag, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Card, Empty, Grid, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 /** Technician home ("my day"): progress and money collected, the visit in progress or the next one, the rest of today, then the week. */
 export default function Visits() {
   useTick();
-  const { t, day, moneyWhole } = useI18n();
+  const { t, day, moneyWhole, money, time } = useI18n();
   const { db } = useStore();
   const d = techDay(db, db.me);
   const focus = d.current ?? d.next;
@@ -21,6 +24,34 @@ export default function Visits() {
   const end = new Date();
   end.setHours(23, 59, 59, 999);
   const later = db.visits.filter((v) => v.techId === db.me && new Date(v.start) > end).sort(sortByStart);
+  const sections = ([[d.current ? t("tday.now") : t("tday.next"), focus ? [focus] : []], [t("today.title"), rest], [t("visits.later"), later]] as const).filter(([, vs]) => vs.length);
+  /** a visit card: read-only status (steps change on the visit screen); contact buttons only open the phone and the map */
+  const visitCard = (v: Visit, isFocus: boolean) => {
+    const { job, property, customer } = visitContext(db, v);
+    const st = visitStatus(v);
+    const [hm, ampm] = time(v.start).split(" ");
+    const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
+    const addr = property ? `${property.address}, ${property.city}` : undefined;
+    const done = v.checklist.filter((x) => x.done).length;
+    return (
+      <ListCard
+        key={v.id}
+        title={customer?.name ?? "—"}
+        when={`${later.includes(v) ? `${day(v.start)} · ` : ""}${time(v.start)} – ${time(end)}`}
+        lead={{ kind: "time", top: hm ?? "", bottom: ampm ?? "" }}
+        value={v.amountDueCents > 0 ? money(v.amountDueCents) : undefined}
+        valueLabel={v.amountDueCents > 0 ? t("card.val.toPay") : undefined}
+        status={{ tone: st.status, label: t(st.label) }}
+        tags={[...(v.checklist.length ? [t("vcard.checks", { done, n: v.checklist.length })] : []), ...(v.photos.length ? [t("vcard.photos", { n: v.photos.length })] : [])]}
+        facts={{ phone: customer?.phone, addr, work: job?.title }}
+        contact={{ phone: customer?.phone, addr }}
+        // the visit in progress / next one: «Open visit» inside the card (secondary), no full-width button
+        action={isFocus ? { label: t("tday.open"), icon: "route", onPress: () => router.push(`/visit/${v.id}`) } : undefined}
+        onPress={() => router.push(`/visit/${v.id}`)}
+      />
+    );
+  };
+
   return (
     <Screen title={t("visits.title")} help={t("help.visits")} hintKey="visits" subtitle={`${day(new Date().toISOString())} · ${t("visits.count", { n: d.visits.length })}`}>
       {d.visits.length === 0 ? (
@@ -50,33 +81,13 @@ export default function Visits() {
           </RowView>
         </Card>
       )}
-      {focus ? (
-        <View style={{ gap: space[2] }}>
-          <SectionTitle title={d.current ? t("tday.now") : t("tday.next")} />
-          <VisitCard v={focus} />
-          <Button label={t("tday.open")} icon="route" variant="secondary" full onPress={() => router.push(`/visit/${focus.id}`)} />
+      {sections.map(([title, vs]) => (
+        <View key={title} style={{ gap: space[2] }}>
+          <SectionTitle title={title} />
+          {/* one grid for every section: rows of equal height, the same columns (no full-width block next to narrow ones) */}
+          <CardGrid>{vs.map((v) => visitCard(v, v.id === focus?.id))}</CardGrid>
         </View>
-      ) : null}
-      {rest.length > 0 ? (
-        <>
-          <SectionTitle title={t("today.title")} />
-          <Grid>
-            {rest.map((v) => (
-              <VisitCard key={v.id} v={v} />
-            ))}
-          </Grid>
-        </>
-      ) : null}
-      {later.length > 0 ? (
-        <>
-          <SectionTitle title={t("visits.later")} />
-          <Grid>
-            {later.map((v) => (
-              <VisitCard key={v.id} v={v} />
-            ))}
-          </Grid>
-        </>
-      ) : null}
+      ))}
     </Screen>
   );
 }
