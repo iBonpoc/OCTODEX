@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { acceptPayment, contractStatement, progressAmount } from "../src/contract.js";
+import { acceptPayment, clientMoney, contractStatement, progressAmount } from "../src/contract.js";
 
 describe("contract statement", () => {
   it("$3,400 contract, 10% deposit invoiced and paid", () => {
@@ -22,5 +22,25 @@ describe("contract statement", () => {
   it("payment can't exceed the balance", () => {
     expect(acceptPayment({ totalCents: 306000, paidCents: 100000 }, 300000)).toBe(206000);
     expect(acceptPayment({ totalCents: 1000, paidCents: 1000 }, 500)).toBe(0);
+  });
+});
+
+describe("clientMoney (client card: owes / paid total)", () => {
+  it("owes = unpaid part of live invoices; void invoices and overpaid ones add nothing", () => {
+    const r = clientMoney(
+      [
+        { totalCents: 100_00, paidCents: 40_00 },
+        { totalCents: 50_00, paidCents: 50_00 },
+        { totalCents: 70_00, paidCents: 0, void: true },
+        { totalCents: 20_00, paidCents: 25_00 },
+      ],
+      [40_00, 50_00, 25_00],
+    );
+    expect(r).toEqual({ owesCents: 60_00, paidTotalCents: 115_00 });
+  });
+  it("refunds are already netted into payments; the total never goes below zero", () => {
+    expect(clientMoney([], [100_00, -30_00]).paidTotalCents).toBe(70_00);
+    expect(clientMoney([], [-5_00]).paidTotalCents).toBe(0);
+    expect(clientMoney([], [])).toEqual({ owesCents: 0, paidTotalCents: 0 });
   });
 });

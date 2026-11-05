@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from "react";
-import { TextInput, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { ScrollView, TextInput, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -189,11 +189,14 @@ export function Segmented<K extends string>({
   value,
   onChange,
   full,
+  scroll,
 }: {
   items: { key: K; label: string }[];
   value: K;
   onChange: (k: K) => void;
   full?: boolean;
+  /** many tabs: one line that scrolls sideways on a narrow phone (the page itself never scrolls sideways) */
+  scroll?: boolean;
 }) {
   const { c } = useTheme();
   const reduce = useReducedMotion();
@@ -222,7 +225,7 @@ export function Segmented<K extends string>({
 
   const pill = useAnimatedStyle(() => ({ left: left.value, width: width.value }));
   const { h, pad } = component.segmented;
-  return (
+  const bar = (
     <View
       accessibilityRole="tablist"
       style={{
@@ -267,6 +270,41 @@ export function Segmented<K extends string>({
         );
       })}
     </View>
+  );
+  return scroll ? (
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+      {bar}
+    </ScrollView>
+  ) : (
+    bar
+  );
+}
+
+/* ---------- Tag: neutral label on a client (never coloured: colour is only for statuses) ---------- */
+export function TagChip({ label, onPress }: { label: string; onPress?: () => void }) {
+  const { c } = useTheme();
+  const body = (
+    <View
+      style={{
+        height: component.button.sm,
+        paddingHorizontal: space[3],
+        borderRadius: radius.pill,
+        borderWidth: 1,
+        borderColor: c.bd,
+        backgroundColor: c.surf2,
+        justifyContent: "center",
+      }}
+    >
+      <T v="caption" numberOfLines={1}>
+        {label}
+      </T>
+    </View>
+  );
+  if (!onPress) return body;
+  return (
+    <Press onPress={onPress} visibleHeight={component.button.sm} accessibilityRole="button" accessibilityLabel={label}>
+      {body}
+    </Press>
   );
 }
 
