@@ -4,6 +4,9 @@ import { Linking } from "react-native";
 import { useStore, visitContext } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { buildAttention, type AttentionItem } from "@/features/attention";
+import { AttentionRows } from "@/features/AttentionCards";
+import { subjectOf } from "@/features/attentionPeople";
+import { telHref } from "@/features/contactLinks";
 import { AssignSheet, ReplySheet, useTick } from "@/features/sheets";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -22,6 +25,13 @@ export default function Triage() {
   const [assign, setAssign] = useState<string | null>(null);
   const all = buildAttention(db, role).filter((x) => !snoozed.includes(x.id));
   const cur = all[0];
+  // the top card also shows how to reach the client and how many other reasons this client has (spec 06, PR7)
+  const curSubject = cur ? subjectOf(db, cur) : {};
+  const curC = curSubject.customerId ? db.customers.find((c) => c.id === curSubject.customerId) : undefined;
+  const curL = curSubject.leadId ? db.leads.find((l) => l.id === curSubject.leadId) : undefined;
+  const curProp = curC ? db.properties.find((x) => x.customerId === curC.id) : undefined;
+  const curWho = cur && (curC || curL) ? { phone: curC?.phone ?? curL?.phone, addr: curProp ? `${curProp.address}, ${curProp.city}` : curL?.address } : undefined;
+  const curMore = cur ? all.filter((x) => x !== cur && JSON.stringify(subjectOf(db, x)) === JSON.stringify(curSubject) && (curSubject.customerId || curSubject.leadId)).length : 0;
 
   const snooze = (it: AttentionItem, msg: string) => {
     setSnoozed((s) => [...s, it.id]);
@@ -40,8 +50,8 @@ export default function Triage() {
         return <Button label={t("triage.assign")} icon="user" onPress={() => setAssign(it.refId)} />;
       case "late": {
         const v = db.visits.find((x) => x.id === it.refId);
-        const phone = v ? visitContext(db, v).customer?.phone.replace(/[^\d+]/g, "") : undefined;
-        return <Button label={t("visit.call")} icon="phone" onPress={() => phone && Linking.openURL(`tel:${phone}`)} />;
+        const href = v ? telHref(visitContext(db, v).customer?.phone) : null;
+        return href ? <Button label={t("visit.call")} icon="phone" onPress={() => Linking.openURL(href)} /> : null;
       }
       default:
         return <Button label={t("triage.remind")} icon="bell" onPress={() => snooze(it, t("toast.reminded", { name: it.name }))} />;
@@ -64,6 +74,11 @@ export default function Triage() {
           <T v="body" tone="mut">
             {t(cur.label, cur.params)}
           </T>
+          {curWho ? (
+            <T v="body" tone="mut">
+              {[curWho.phone, curWho.addr, curMore ? t("card.moreReasons", { n: curMore }) : ""].filter(Boolean).join(" · ")}
+            </T>
+          ) : null}
           {cur.amountCents ? (
             <T v="heading" tabular>
               {money(cur.amountCents)}
@@ -78,17 +93,8 @@ export default function Triage() {
       {all.length > 1 ? (
         <>
           <SectionTitle title={t("today.attention")} />
-          <CardList>
-            {all.slice(1).map((it, i) => (
-              <View key={it.id}>
-                <ItemCard
-                  title={it.name}
-                  subtitle={t(it.label, it.params)}
-                  right={<StatusChip status={it.status} label={t(it.chip, it.params)} soft />}
-                />
-              </View>
-            ))}
-          </CardList>
+          {/* the rest of the queue: one reason per card, each opens its record (spec 06: the triage queue stays «one at a time») */}
+          <AttentionRows items={all.slice(1)} />
         </>
       ) : null}
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />

@@ -7,7 +7,8 @@ import { usePersistentState } from "@/data/persist";
 import { periodNumbers, type Figure, type Period } from "@/features/metrics";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { attentionHref, buildAttention } from "@/features/attention";
+import { buildAttention } from "@/features/attention";
+import { AttentionPeople } from "@/features/AttentionCards";
 import { todayVisits, visitStatus } from "@/features/visits";
 import { useTick } from "@/features/sheets";
 import { NoticesCard } from "@/features/notices";
@@ -116,25 +117,14 @@ export default function Today() {
         <View style={{ gap: space[2] }}>
           {/* the count sits next to the title, not at the far edge (unslop 05.11) */}
           <SectionTitle title={attention.length ? `${t("today.attention")} · ${attention.length}` : t("today.attention")} />
-          <CardList>
-            {attention.length === 0 ? (
-              <T v="body" tone="ok">
-                ✓ {t("today.allClear")}
-              </T>
-            ) : (
-              attention.slice(0, 6).map((it, i) => (
-                <View key={it.id}>
-                  <ItemCard
-                    status={it.status}
-                    title={it.name}
-                    subtitle={t(it.label, it.params)}
-                    right={<StatusChip status={it.status} label={t(it.chip, it.params)} />}
-                    onPress={() => router.push(attentionHref(it))}
-                  />
-                </View>
-              ))
-            )}
-          </CardList>
+          {attention.length === 0 ? (
+            <T v="body" tone="ok">
+              ✓ {t("today.allClear")}
+            </T>
+          ) : (
+            // people view (spec 06 decision 5): one card per client with all reasons, 3 people + «More» → Triage
+            <AttentionPeople items={attention} max={3} />
+          )}
         </View>
         <View style={{ gap: space[2] }}>
           <SectionTitle title={t("today.crew")} right={<Button label={t("plan.title")} icon="calendar" size="sm" variant="ghost" onPress={() => router.push("/plan")} />} />
