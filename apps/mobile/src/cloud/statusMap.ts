@@ -16,14 +16,24 @@ export const leadStatusToDb: Record<LeadStatus, string> = {
   declined: "declined",
 };
 
+/** a job waiting for a date is draft in the database; an inspection is a visit, not a job (docs/specs/03 §4.4) */
 export const jobStatus: Record<string, JobStatus> = {
-  draft: "estimate",
+  draft: "unscheduled",
   scheduled: "scheduled",
   in_progress: "in_progress",
   on_hold: "scheduled",
   completed: "done",
   closed: "done",
   cancelled: "done",
+};
+/** a visit in the database → the app's status (the step comes from the visit's own fields, cloud/repo.ts) */
+export const visitDbStatus: Record<string, "open" | "done" | "cancelled"> = {
+  scheduled: "open",
+  en_route: "open",
+  on_site: "open",
+  completed: "done",
+  cancelled: "cancelled",
+  no_show: "cancelled",
 };
 export const leadStatus: Record<string, LeadStatus> = {
   new: "new",

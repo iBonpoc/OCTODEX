@@ -121,7 +121,8 @@ export interface Property {
 }
 
 /** unscheduled: client signed, the contractor has not picked a date yet (not in the plan) */
-export const JOB_STATUSES = ["lead", "estimate", "unscheduled", "scheduled", "in_progress", "done"] as const;
+/** an inspection is a visit, not a job: no "lead" / "estimate" statuses (docs/specs/03 §4.4) */
+export const JOB_STATUSES = ["unscheduled", "scheduled", "in_progress", "done"] as const;
 export type JobStatus = (typeof JOB_STATUSES)[number];
 export interface Job {
   id: ID;
@@ -134,8 +135,16 @@ export interface Job {
   serviceCategoryId?: ID;
 }
 
-export type VisitStep = "scheduled" | "en_route" | "on_site" | "working" | "signed" | "paid";
+export type VisitStep = "scheduled" | "en_route" | "on_site" | "working" | "signed" | "paid" | "done";
+/** the steps a job visit walks through on site (an inspection ends with "done", docs/specs/03 §4.1) */
 export const VISIT_STEPS: VisitStep[] = ["scheduled", "en_route", "on_site", "working", "signed", "paid"];
+/** every status of a visit the story map lists (docs/15-story-map.md §5): the steps, "done" and "cancelled" */
+export const VISIT_STATUSES = [...VISIT_STEPS, "done", "cancelled"] as const;
+export type VisitStatus = (typeof VISIT_STATUSES)[number];
+export type VisitKind = "inspection" | "install" | "service" | "follow_up";
+/** why a visit was cancelled (docs/specs/03 §4.1); "no_show" = the client was not home */
+export const CANCEL_REASONS = ["client_cancelled", "no_show", "reschedule_later", "we_cancelled", "other"] as const;
+export type CancelReason = (typeof CANCEL_REASONS)[number];
 
 export interface ChecklistItem {
   id: ID;
@@ -153,7 +162,8 @@ export type PaymentMethod = "card" | "cash" | "check" | "zelle";
 
 export interface Visit {
   id: ID;
-  jobId: ID;
+  /** the job of the visit; an inspection has none (docs/specs/03 §3.1) */
+  jobId?: ID;
   techId: ID | null;
   start: string; // ISO
   durationMin: number;
@@ -169,6 +179,9 @@ export interface Visit {
   closed?: boolean;
   /** the property of the visit (docs/specs/03 §3.1, migration 20261105280000); an inspection has it without a job */
   propertyId?: ID;
+  /** the lead of an inspection */
+  leadId?: ID;
+  kind?: VisitKind;
 }
 
 /**

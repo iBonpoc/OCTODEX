@@ -1,4 +1,5 @@
 /** Technician's day: progress, what is happening now, what is next, money collected on site today. */
+import { isOpenVisit } from "@/features/schedule";
 import type { DB, Visit } from "@/data/types";
 import { dayKeyOf, isoDayKey } from "./calendar";
 
@@ -24,9 +25,9 @@ export function techDay(db: DB, techId: string, now: Date = new Date()): TechDay
     .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
   return {
     visits,
-    done: visits.filter((v) => v.step === "paid").length,
+    done: visits.filter((v) => v.step === "paid" || v.step === "done").length,
     awaitingPay: visits.filter((v) => v.step === "signed").length,
-    current: visits.find((v) => v.step !== "scheduled" && v.step !== "paid"),
+    current: visits.find((v) => v.step !== "scheduled" && isOpenVisit(v)),
     next: visits.find((v) => v.step === "scheduled"),
     collectedCents: visits.reduce((s, v) => s + (v.payment && isoDayKey(v.payment.at) === today ? v.payment.amountCents : 0), 0),
     checksLeft: visits.reduce((s, v) => s + v.checklist.filter((x) => !x.done).length, 0),

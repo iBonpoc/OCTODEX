@@ -7,9 +7,15 @@ export function isToday(iso: string): boolean {
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
 }
 
+/** The property of a visit: its own (an inspection has no job, docs/specs/03 §3.1), else its job's. */
+export function visitPropertyId(db: Pick<DB, "jobs">, v: Pick<Visit, "propertyId" | "jobId">): string | undefined {
+  return v.propertyId ?? (v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.propertyId : undefined);
+}
+
 export function visitContext(db: DB, v: Visit) {
-  const job = db.jobs.find((j) => j.id === v.jobId);
-  const property = db.properties.find((p) => p.id === job?.propertyId);
+  const job = v.jobId ? db.jobs.find((j) => j.id === v.jobId) : undefined;
+  const pid = visitPropertyId(db, v);
+  const property = db.properties.find((p) => p.id === pid);
   const customer = db.customers.find((c) => c.id === property?.customerId);
   const tech = db.members.find((m) => m.id === v.techId) ?? null;
   return { job, property, customer, tech };

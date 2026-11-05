@@ -105,7 +105,7 @@ describe("property tabs (C2b): history, documents, files", () => {
     for (let i = 1; i < h.length; i++) expect(h[i - 1]!.at >= h[i]!.at).toBe(true);
     const jobIds = new Set(d.jobs.filter((j) => j.propertyId === "p1").map((j) => j.id));
     for (const x of h) {
-      if (x.kind === "visit") expect(jobIds.has(x.visit.jobId)).toBe(true);
+      if (x.kind === "visit") expect(jobIds.has(x.visit.jobId ?? "") || x.visit.propertyId === "p1").toBe(true);
       if (x.kind === "estimate") expect(x.estimate.propertyId === "p1" && !!(x.estimate.sentAt || x.estimate.approvedAt)).toBe(true);
     }
   });

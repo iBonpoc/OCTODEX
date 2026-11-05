@@ -5,14 +5,14 @@
  */
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
+import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
 
 export type Op =
   | { k: "visit.step"; visitId: string; to: VisitStep }
-  | { k: "photo.add"; id: string; visitId: string; jobId: string; stage: "before" | "after"; uri?: string }
+  | { k: "photo.add"; id: string; visitId: string; jobId?: string; stage: "before" | "after"; uri?: string }
   | { k: "photo.remove"; id: string }
   | { k: "visit.checklist"; visitId: string; checklist: { id: string; label: string; done: boolean }[] }
   | { k: "visit.sign"; visitId: string; svg: string }
@@ -34,7 +34,13 @@ export type Op =
       message: string;
       start: string;
     }
-  /** estimate visit for a lead whose client and property already exist (lead.prospect or earlier); replaces lead.book */
+  /** S4 (docs/specs/03): an inspection — a visit of the lead at the property, no job; replaces lead.visit (kept for old queues) */
+  | { k: "visit.inspection"; leadId: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; scope: string[] }
+  /** the office cancels a visit with a reason; S4a / S9a roll the lead / job back when nothing open is left */
+  | { k: "visit.cancel"; visitId: string; reason: CancelReason; text?: string; leadBack?: string; jobBack?: string }
+  /** the office moves a visit (time, length); the status does not change */
+  | { k: "visit.reschedule"; visitId: string; start: string; durationMin: number }
+  /** estimate visit for a lead whose client and property already exist (lead.prospect or earlier); replaced by visit.inspection */
   | {
       k: "lead.visit";
       leadId: string;
@@ -232,6 +238,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "visit.step": {
       if (op.to === "en_route" || op.to === "on_site") return run(supabase.from("visits").update({ status: op.to }).eq("id", op.visitId));
       if (op.to === "working") return run(supabase.from("visits").update({ work_started_at: new Date().toISOString() }).eq("id", op.visitId));
+      // an inspection ends on site: completed (S10)
+      if (op.to === "done") return run(supabase.from("visits").update({ status: "completed" }).eq("id", op.visitId).eq("status", "on_site"));
       return;
     }
     case "photo.add": {
@@ -286,6 +294,26 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         }),
       );
       return run(supabase.from("leads").update({ status: "inspection_scheduled", customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));
+    }
+    case "visit.inspection": {
+      const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
+      await run(ins("visits", { id: op.visitId, company_id: c, lead_id: op.leadId, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
+      if (op.techId) await run(supabase.from("visit_assignees").upsert({ company_id: c, visit_id: op.visitId, user_id: op.techId }, { onConflict: "visit_id,user_id", ignoreDuplicates: true }));
+      await run(supabase.from("leads").update({ first_response_at: op.start < new Date().toISOString() ? op.start : new Date().toISOString(), first_response_kind: "manual" }).eq("id", op.leadId).is("first_response_at", null));
+      return run(supabase.from("leads").update({ status: "inspection_scheduled" }).eq("id", op.leadId).in("status", ["new", "contacted", "qualified"]));
+    }
+    case "visit.cancel": {
+      // "the client was not home" is no_show in the database; who and when is stamped by the server (t06)
+      await run(
+        supabase.from("visits").update({ status: op.reason === "no_show" ? "no_show" : "cancelled", cancel_reason: op.reason, cancel_reason_text: op.text ?? null }).eq("id", op.visitId).in("status", ["scheduled", "en_route"]),
+      );
+      if (op.leadBack) await run(supabase.from("leads").update({ status: "contacted" }).eq("id", op.leadBack).eq("status", "inspection_scheduled"));
+      if (op.jobBack) await run(supabase.from("jobs").update({ status: "draft" }).eq("id", op.jobBack).eq("status", "scheduled"));
+      return;
+    }
+    case "visit.reschedule": {
+      const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
+      return run(supabase.from("visits").update({ starts_at: op.start, ends_at: end }).eq("id", op.visitId));
     }
     case "lead.visit": {
       await run(

@@ -2,9 +2,8 @@
  * Read the company's data from the OCTODEX database and map it to the app's view model (src/data/types.ts).
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
-import { inspectionJobId } from "./inspectionBridge";
 import { companyFromDb } from "./companyMap";
-import { customerStatus, estimateStatus, jobStatus, leadStatus } from "./statusMap";
+import { customerStatus, estimateStatus, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
 import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep } from "@/data/types";
 import type { DbRole } from "./auth";
@@ -136,6 +135,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   for (const a of assignees) if (!assignee.has(s(a.visit_id))) assignee.set(s(a.visit_id), s(a.user_id));
 
   const visitStep = (v: Row): VisitStep => {
+    // an inspection ends with "done" (no signature, no payment)
+    if (v.status === "completed" && v.kind === "inspection" && !paidVisit.has(s(v.id))) return "done";
     if (paidVisit.has(s(v.id)) || v.status === "completed") return "paid";
     if (v.signed_at) return "signed";
     if (v.work_started_at) return "working";
@@ -145,7 +146,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   };
 
   const mappedVisits: Visit[] = visits
-    .filter((v) => v.status !== "cancelled" && (v.job_id || v.property_id))
+    // cancelled and no-show ("the client was not home" is a cancel reason) leave the screens, as after a local cancel
+    .filter((v) => visitDbStatus[s(v.status)] !== "cancelled" && (v.job_id || v.property_id))
     .map((v) => {
       const job = jobById.get(s(v.job_id));
       const pay = paidVisit.get(s(v.id));
@@ -153,10 +155,11 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       const dur = v.ends_at && v.starts_at ? Math.round((new Date(s(v.ends_at)).getTime() - new Date(s(v.starts_at)).getTime()) / 60000) : 60;
       return {
         id: s(v.id),
-        // an inspection has no job since migration 20261105280000; until wave П1b the screens still read it
-        // through a job, so it gets the in-memory inspection job below (inspectionJobId)
-        jobId: v.job_id ? s(v.job_id) : inspectionJobId(s(v.id)),
+        // an inspection has no job (docs/specs/03 §3.1): the visit carries its property and lead
+        jobId: (v.job_id as string | null) ?? undefined,
         propertyId: (v.property_id as string | null) ?? undefined,
+        leadId: (v.lead_id as string | null) ?? undefined,
+        kind: (v.kind as Visit["kind"] | null) ?? undefined,
         techId: assignee.get(s(v.id)) ?? null,
         start,
         durationMin: dur,
@@ -292,20 +295,15 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     archivedAt: (l.archived_at as string | null) ?? undefined,
   }));
 
-  // П1a bridge: an inspection without a job is shown the old way (a job "estimate" in memory only, never sent);
-  // wave П1b reads visits by their property and removes this
-  const inspectionJobs: Job[] = visits
-    .filter((v) => v.status !== "cancelled" && !v.job_id && v.property_id)
-    .map((v) => ({ id: inspectionJobId(s(v.id)), propertyId: s(v.property_id), title: "Estimate visit", status: "estimate", amountCents: 0 }));
-  const mappedJobs: Job[] = [...inspectionJobs, ...jobs.map((j) => ({
+  const mappedJobs: Job[] = jobs.map((j) => ({
     id: s(j.id),
     propertyId: s(j.property_id),
     title: s(j.title) || s(j.number),
-    status: j.status === "draft" && j.estimate_id ? "unscheduled" : jobStatus[s(j.status)] ?? "scheduled",
+    status: jobStatus[s(j.status)] ?? "scheduled",
     amountCents: n(j.contract_total_cents),
     estimateId: (j.estimate_id as string | null) ?? undefined,
     serviceCategoryId: (j.service_category_id as string | null) ?? undefined,
-  }) as Job)];
+  }));
 
   const mappedExpenses: Expense[] = expenses.map((x) => ({
     id: s(x.id),

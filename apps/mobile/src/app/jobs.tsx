@@ -15,7 +15,7 @@ export default function Jobs() {
   const { db } = useStore();
   const { t, money, day } = useI18n();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
-  const work = db.jobs.filter((j) => j.status !== "lead" && j.status !== "estimate");
+  const work = db.jobs;
   const count = (f: Filter) => work.filter((j) => j.status === f).length;
   const [f, setF] = useState<Filter>(count("unscheduled") ? "unscheduled" : "scheduled");
   const nextVisit = (j: Job) =>
