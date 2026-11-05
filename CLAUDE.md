@@ -13,21 +13,14 @@ CRM/FSM для подрядчиков США **любых направлений
 - `design/naryad-ds/` — дизайн-система основателя (источник правды по виду). Прочитать её `CLAUDE.md`, `HANDOFF.md`, `CHECKLIST.md`.
 - `docs/` — продукт, PRD, модель данных, архитектура, ADR, юр. исследование; план сборки `docs/10-build-plan.md`.
 
-## Кто за что отвечает (два чата, решение основателя 05.11.2026)
-Над проектом работают два чата Claude. У каждого своё направление; чужие файлы не правим.
+## Кто ведёт работу (решение основателя 05.11.2026)
+Весь проект ведёт **один чат** — «Leads tab implementation». Второй чат («dazzling-hamilton»: клиенты, меню, общий UI, выпуск) передал дела 05.11 и заархивирован; что он сделал и что осталось — `docs/handover-2026-11-05-clients-chat.md`. Живой список «что сделано / что сейчас / что дальше» — `docs/10-build-plan.md` §0; порядок шагов и стыки — `docs/15-story-map.md`.
 
-| Направление | Чат | Файлы |
-|---|---|---|
-| **Лиды** (L1–L4), **Осмотр и План** (`docs/specs/03-visit-and-plan.md`), карта шагов `docs/15-story-map.md`, превью PR (`.github/workflows/preview.yml`) | «Leads tab implementation» | `src/app/lead/**`, `src/features/lead/**`, `src/features/leads.ts`, `src/cloud/leadCols.ts`, `src/app/(tabs)/inbox.tsx`, `(tabs)/plan.tsx`, `(tabs)/triage.tsx`, `src/app/visit/**`, `src/features/calendar.ts`, `visits.tsx`, `docs/14-leads-spec.md`, `docs/specs/03-visit-and-plan.md`, `docs/16-audit-*`, `apps/mobile/e2e/run.cjs`, `apps/mobile/test/storyMap.test.ts`, `screens.test.ts`, `.claude/agents/*`, `.github/pull_request_template.md` |
-| **Клиенты и объекты** (`docs/specs/04-…`), **меню «Ещё», настройки, вид «Люди / Документы»** (`docs/specs/05-…`), общий UI и дизайн-система, выпуск сборок (`.github/workflows/release.yml`) | «dazzling-hamilton» | `src/app/client/**`, `(tabs)/clients.tsx`, `(tabs)/more.tsx`, `(tabs)/today.tsx`, `src/app/settings/**`, `src/app/company/**`, `src/ui/**`, `packages/design-tokens`, `design/naryad-ds` |
+Если основатель снова откроет второй чат на OCTODEX, сначала вписать сюда таблицу «кто какие файлы ведёт» и правило: общие файлы (`store.tsx`, `types.ts`, `normalize.ts`, `ops.ts`, `nav/*`, `attention.ts`, `i18n/*`, `statusMap.ts`, `repo.ts`, `checks.yml`, тесты базы) — только после сообщения другому чату и отдельным небольшим PR.
 
-Сметы, работы, счета и деньги пока ничьи. Кто их берёт, сначала пишет другому чату и вписывает себя в эту таблицу.
+Для любой работы: новая e2e-спека работает на всех 6 видах (3 ширины × 2 темы, через `h.layout`); новый экран добавляется в `SCREENS` спеки `08-layouts`, иначе падает `screens.test.ts`. Лид без клиента всегда своя карточка в «Требует внимания».
 
-**Общие файлы** — менять только после сообщения другому чату (через `send_message`) и в отдельном небольшом PR: `src/data/store.tsx`, `src/data/types.ts`, `src/data/normalize.ts`, `src/cloud/ops.ts`, `src/nav/*` (`hierarchy.ts`, `roles.ts`), `src/features/attention.ts`, `src/i18n/*`, `.github/workflows/checks.yml`, `CLAUDE.md`, `docs/10-build-plan.md`, `src/cloud/statusMap.ts`, `src/cloud/repo.ts`, `supabase/tests/core_rls.sql` и `run.sh`, ограничение `doc_type` в `app.company_numbering`, `docs/15-story-map.md` §4–§5 (стыки и статусы дописывает каждый; структуру карты ведёт чат лидов). Свои миграции — у каждого чата свои, время в имени разное.
-
-Для обоих: новая e2e-спека работает на всех 6 видах (3 ширины × 2 темы, через `h.layout`); новый экран добавляется в `SCREENS` спеки `08-layouts`, иначе падает `screens.test.ts`. Лид без клиента всегда своя карточка в «Требует внимания».
-
-Порядок: каждый работает в своей ветке; `main` один на двоих. Перед PR — `git merge origin/main`. Номер сборки `BUILD` = номер своего PR (номера PR общие, поэтому идут с пропусками). Публикует в Expo Go (канал `preview`) только `release.yml` после слияния в `main`. Миграции базы — новым файлом с уникальным временем, слитые миграции не правим.
+Порядок: работа в своей ветке; перед PR — `git merge origin/main`. Номер сборки `BUILD` = номер своего PR. Публикует в Expo Go (канал `preview`) только `release.yml` после слияния в `main`; предпросмотр PR — только сайт. Миграции базы — новым файлом с уникальным временем, слитые миграции не правим; в новой миграции сначала `revoke all … from anon, authenticated`, потом минимальные `grant`.
 
 ## Правила (не нарушать)
 1. **Только токены.** Ни одного «своего» цвета, размера, радиуса, шрифта, длительности в компонентах. Нет токена — сначала добавить в `packages/design-tokens`. Новая выгрузка дизайн-системы кладётся в `design/naryad-ds/`, затем значения переносятся в `packages/design-tokens`, пока не позеленеет `mirror.test.ts`.
