@@ -159,7 +159,7 @@ export function InvoicesBoard() {
         // contact buttons only open the phone / map / mail: nothing is written for an invoice
         contact={{ phone: c?.phone, email: c?.email, addr }}
         // secondary: the one accent of the screen stays the main action of the screen
-        action={open ? { label: t("visit.recordPayment"), onPress: () => router.push(`/invoice/${i.id}`) } : undefined}
+        action={open ? { label: t("visit.recordPayment"), icon: "wallet", onPress: () => router.push(`/invoice/${i.id}`) } : undefined}
         density={device === "desktop" ? "row" : "rich"}
         columns={INV_COLUMNS}
         onPress={() => router.push(`/invoice/${i.id}`)}
