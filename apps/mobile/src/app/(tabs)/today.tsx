@@ -12,7 +12,7 @@ import { useTick } from "@/features/sheets";
 import { NoticesCard } from "@/features/notices";
 import { CompanySetupCard, FirstStepsCard } from "@/features/SetupCards";
 import { Avatar, Button, Segmented, StatusChip } from "@/ui/controls";
-import { Icon, T, type IconKey } from "@/ui/primitives";
+import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Card, CardList, Divider, Grid, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 function Kpi({ label, cents, icon, hint, onPress, width }: { label: string; cents: number; icon: IconKey; hint?: string; onPress?: () => void; width: number }) {
@@ -28,7 +28,8 @@ function Kpi({ label, cents, icon, hint, onPress, width }: { label: string; cent
         <View style={{ flexShrink: 0 }}>
           <Icon name={icon} s={size.iconSm} color={c.mut} />
         </View>
-        <T v="caption" tone="mut" style={{ flex: 1 }}>
+        {/* two caption lines reserved: amounts in one row stay on one line even when a label wraps (unslop 05.11) */}
+        <T v="caption" tone="mut" style={{ flex: 1, minHeight: font.size.caption * font.lineHeight.body * 2 }}>
           {label}
         </T>
       </RowView>
@@ -48,20 +49,26 @@ function Kpi({ label, cents, icon, hint, onPress, width }: { label: string; cent
 /** One step of the sales funnel: count (and money), share of the previous step. */
 function FunnelRow({ icon, label, value, share, onPress }: { icon: IconKey; label: string; value: string; share?: number; onPress?: () => void }) {
   const { t } = useI18n();
+  const { c } = useTheme();
+  // a compact option row (48): the share is plain muted text, not a chip (rule 2: color only for status)
   return (
-    <ListRow
-      title={label}
-      left={<Icon name={icon} />}
-      right={
-        <RowView gap={space[2]}>
-          {share !== undefined ? <StatusChip status="neutral" label={t("today.share", { n: share })} soft /> : null}
-          <T v="body" w="semibold" tabular>
-            {value}
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label}: ${value}`}>
+      <RowView gap={space[3]} style={{ minHeight: component.rowOption, alignItems: "center" }}>
+        <Icon name={icon} />
+        <T v="body" w="semibold" style={{ flex: 1 }}>
+          {label}
+        </T>
+        {share !== undefined ? (
+          <T v="caption" tone="mut" tabular>
+            {t("today.share", { n: share })}
           </T>
-        </RowView>
-      }
-      onPress={onPress}
-    />
+        ) : null}
+        <T v="body" w="semibold" tabular>
+          {value}
+        </T>
+        {onPress ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
+      </RowView>
+    </Press>
   );
 }
 
@@ -106,7 +113,8 @@ export default function Today() {
       <NoticesCard />
       <Grid>
         <View style={{ gap: space[2] }}>
-          <SectionTitle title={t("today.attention")} right={<T v="caption" tone="mut">{attention.length}</T>} />
+          {/* the count sits next to the title, not at the far edge (unslop 05.11) */}
+          <SectionTitle title={attention.length ? `${t("today.attention")} · ${attention.length}` : t("today.attention")} />
           <CardList>
             {attention.length === 0 ? (
               <T v="body" tone="ok">

@@ -1,3 +1,4 @@
+import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
 import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
@@ -611,8 +612,10 @@ export function Screen({
             {tabs ? (
               <View
                 onLayout={(e) => (tabsY.current = e.nativeEvent.layout.y)}
-                style={{ backgroundColor: c.bg, paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
+                // glass (--ov + blur), not a solid plate: in the light theme the bar blends with the page (unslop 05.11)
+                style={{ backgroundColor: c.ov, overflow: "hidden", paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
               >
+                <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
                 <View style={column}>{tabs}</View>
               </View>
             ) : null}

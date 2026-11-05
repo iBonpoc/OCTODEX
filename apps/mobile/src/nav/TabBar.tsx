@@ -19,7 +19,7 @@ import { sectionTab } from "./hierarchy";
 /**
  * Phone: floating glass pill at the bottom (56 + safe area), 4 items + center "＋".
  * Tablet/desktop: the same pill at the top (HANDOFF "верхняя пилюля").
- * Active item gets the liquid accent fill (160ms stretch + 420ms settle).
+ * Active item gets the liquid fill (160ms stretch + 420ms settle): raised surface + ink frame; yellow stays for «＋» only (rule 2).
  */
 export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   const { role } = useStore();
@@ -111,8 +111,8 @@ function NavPill({ current, onGo: go, inline }: { current: TabRoute | undefined;
           gap: wide ? space[2] : 2,
         }}
       >
-        <Icon name={it.icon} s={wide ? 16 : 20} color={sel ? c.onAcc : c.ink} />
-        <T v="micro" w={sel ? "semibold" : "medium"} style={{ color: sel ? c.onAcc : c.mut }} numberOfLines={1}>
+        <Icon name={it.icon} s={wide ? 16 : 20} color={c.ink} />
+        <T v="micro" w={sel ? "semibold" : "medium"} style={{ color: sel ? c.ink : c.mut }} numberOfLines={1}>
           {t(it.label)}
         </T>
       </Press>
@@ -177,7 +177,7 @@ function NavPill({ current, onGo: go, inline }: { current: TabRoute | undefined;
           <View key={`${role}-${wide}`} role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
             <Animated.View
               pointerEvents="none"
-              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill, backgroundColor: c.acc }, pill]}
+              style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.ink }, pill]}
             />
             {ordered}
           </View>
