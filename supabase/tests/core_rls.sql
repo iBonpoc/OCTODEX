@@ -1473,6 +1473,35 @@ select tst.ok(tst.cnt($q$select 1 from public.customers where id::text like 'c26
 select tst.fails($q$insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2600000-0000-4000-8000-000000000004', 'T26 x')$q$, 'other company cannot note our client');
 \echo 'T26 tech clients and notes ok'
 
+-- ---------------------------------------------------------------- T28: notes keep their subject; phones and emails follow the window
+-- (security re-check of #72/#74): outside the office a note never moves to another subject; a client's phones and emails
+-- are visible to a tech exactly when the client's people are (visits today / future / last 14 days)
+:as_owner_a
+do $$
+declare k int; v_ct uuid;
+begin
+  for k in 1..4 loop
+    select id into v_ct from public.contacts where name = 'T26 Person ' || k;
+    insert into public.contact_phones (company_id, contact_id, number, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_ct, '(818) 555-28' || lpad(k::text, 2, '0'), true);
+    insert into public.contact_emails (company_id, contact_id, address, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_ct, 't28-' || k || '@example.com', true);
+  end loop;
+end $$;
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.contact_phones where number in ('(818) 555-2801', '(818) 555-2802', '(818) 555-2803')$q$) = 0, 'tech: phones of clients outside the window hidden (old, cancelled, no-show)');
+select tst.ok(tst.cnt($q$select 1 from public.contact_emails where address in ('t28-1@example.com', 't28-2@example.com', 't28-3@example.com')$q$) = 0, 'tech: emails of clients outside the window hidden');
+select tst.ok(tst.cnt($q$select 1 from public.contact_phones where number = '(818) 555-2804'$q$) = 1, 'tech: phone of their client visible');
+select tst.ok(tst.cnt($q$select 1 from public.contact_emails where address = 't28-4@example.com'$q$) = 1, 'tech: email of their client visible');
+-- the tech's own note (T26) cannot be moved to a subject they do not see, nor to one they do
+select tst.fails($q$update public.notes set subject_id = 'c2600000-0000-4000-8000-000000000001' where body = 'T26 client note'$q$, 'tech cannot move their note to an old client');
+select tst.fails($q$update public.notes set subject_type = 'property', subject_id = 'd2600000-0000-4000-8000-000000000004' where body = 'T26 client note'$q$, 'tech cannot move their note even to their own property');
+update public.notes set body = 'T26 client note (edited)', pinned = true where body = 'T26 client note';
+select tst.ok(tst.cnt($q$select 1 from public.notes where body = 'T26 client note (edited)' and pinned$q$) = 1, 'tech still edits and pins their own note');
+:as_office_a
+insert into public.notes (company_id, subject_type, subject_id, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2600000-0000-4000-8000-000000000001', 'T28 office note');
+update public.notes set subject_id = 'c2600000-0000-4000-8000-000000000004' where body = 'T28 office note';
+select tst.ok((select subject_id from public.notes where body = 'T28 office note') = 'c2600000-0000-4000-8000-000000000004', 'office moves its note to another client');
+\echo 'T28 notes guard ok'
+
 -- ---------------------------------------------------------------- T19: client page language (rule 7, docs/specs/07 §2.1)
 -- order: client's main person → lead's main person → lead → company → en; only doc_language is added
 :as_owner_a
