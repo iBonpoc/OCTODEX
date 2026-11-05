@@ -4,7 +4,7 @@
  */
 exports.run = async (h) => {
   const p = h.page;
-  await h.go("/company/profile");
+  await h.go("/company/documents");
   await h.expectText(/Язык документов для клиентов/, "company setting is there");
   await p.getByRole("radio", { name: "Español" }).last().click();
   await h.click("Сохранить");

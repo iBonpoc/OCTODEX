@@ -118,17 +118,6 @@ export default function CompanySection() {
             <T v="heading">{t("co.timezone")}</T>
             <ChoiceChips value={draft.timezone} onChange={(v) => set({ timezone: v })} items={US_TIMEZONES.map((z) => ({ key: z, label: z.split("/")[1]!.replace("_", " ") }))} />
           </Card>
-          <Card>
-            <T v="heading">{t("co.docLanguage")}</T>
-            <T v="caption" tone="mut">
-              {t("co.docLanguageHint")}
-            </T>
-            <ChoiceChips<"en" | "es">
-              value={draft.docLanguage ?? "en"}
-              onChange={(v) => set({ docLanguage: v })}
-              items={[{ key: "en", label: "English" }, { key: "es", label: "Español" }]}
-            />
-          </Card>
         </>
       ) : null}
 
@@ -178,6 +167,17 @@ export default function CompanySection() {
 
       {step === "documents" ? (
         <>
+          <Card>
+            <T v="heading">{t("co.docLanguage")}</T>
+            <T v="caption" tone="mut">
+              {t("co.docLanguageHint")}
+            </T>
+            <ChoiceChips<"en" | "es">
+              value={draft.docLanguage ?? "en"}
+              onChange={(v) => set({ docLanguage: v })}
+              items={[{ key: "en", label: "English" }, { key: "es", label: "Español" }]}
+            />
+          </Card>
           <Card>
             <Stepper label={t("co.validDays")} value={draft.estimate.validDays} min={1} max={180} step={5} onChange={(v) => set({ estimate: { ...draft.estimate, validDays: v } })} />
             <T v="body">{t("co.defaultDeposit")}</T>
