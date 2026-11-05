@@ -1201,5 +1201,27 @@ begin
 end $$;
 \echo 'T18 estimate status ok'
 
+-- ---------------------------------------------------------------- T21: tasks of a property (C2b)
+:as_owner_a
+insert into public.tasks (company_id, subject_type, subject_id, title) values
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Replace the side gate latch'),
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000003', 'Trim the tree over the roof');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'house', 'd2000000-0000-4000-8000-000000000001', 'x')$q$, 'unknown subject type refused');
+:as_tech_a
+-- tech 3 is on visits at properties 1 and 3 (today, in 3 days): sees both properties' tasks, like the properties themselves
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property' and subject_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 1, 'tech: task of a property with their visit');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property' and subject_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 1, 'tech: task of their property even with no code that day');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 0, 'tech: still no gate code there');
+insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Gate sticks in the rain');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'Gate sticks in the rain'$q$) = 1, 'tech adds a task to their property');
+:as_tech2_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property' and subject_id::text like 'd2000000%'$q$) = 0, 'another tech: no tasks of properties they have no visit at');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'x')$q$, 'another tech cannot add a task there');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property'$q$) = 0, 'other company: no property tasks');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property' and subject_id::text like 'd2000000%'$q$) = 3, 'office sees every property task');
+\echo 'T21 property tasks ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'
