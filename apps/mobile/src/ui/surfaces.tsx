@@ -1,6 +1,9 @@
 import { VersionBadge } from "@/features/version";
-import { useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { router, useLocalSearchParams, useRoute, type Href } from "expo-router";
+import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
+import { goTo } from "@/nav/go";
+import { StackNavPill } from "@/nav/TabBar";
+import { isTabScreen } from "@/nav/roles";
 import { screenPath } from "./screenPath";
 import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
@@ -402,25 +405,50 @@ export function Screen({
   // for a moment, and the list under it drew the card's header (screenPath.ts).
   const params = useLocalSearchParams();
   const pathname = screenPath(useRoute().name, params);
+  const routeName = useRoute().name;
   const nav = navContext(pathname, params, store.db, store.role);
   const up = nav.up;
   const hasUp = !!(up || back);
   const upLabel = up ? ("key" in up.label ? t(up.label.key) : up.label.text) : undefined;
   const trail = up ? breadcrumbs(pathname, params, store.db, store.role) : [];
-  /** to a screen above: if it is already below us in the stack we pop to it, otherwise it replaces this screen */
-  const go = (href: string) => {
-    if (router.canDismiss()) router.dismissTo(href as Href);
-    else router.replace(href as Href);
-  };
+  const go = goTo;
   const goUp = () => (up ? go(up.href) : back?.());
-  const header = (
-    <View style={{ gap: space[2], marginBottom: space[3] }}>
-      <VersionBadge />
-      {hasUp ? (
-        <>
-          {/* detail screen: the trail "Home › … › Parent › This", actions on the right, then the title.
-              Back is a swipe (iOS) / system back (Android); on the trail the parent is the "back" button. */}
+  const { wide, device } = useDevice();
+  /** tablet/desktop: the address bar is pinned above the scroll, with a round «‹» (spec 10, Н2) */
+  // a tab opened from «More» (Plan, Triage…) has a parent too, but it lives in the tab navigator that already draws the pill
+  const pinned = wide && !!up && !isTabScreen(routeName);
+  // Esc = one level up on the web (spec 10, Н3); only screens with a parent (not the client page /p, not sign-in).
+  const goUpRef = useRef(goUp);
+  goUpRef.current = goUp;
+  useFocusEffect(
+    useCallback(() => {
+      if (Platform.OS !== "web" || !up || typeof document === "undefined") return;
+      const onKey = (e: KeyboardEvent) => {
+        if (e.key !== "Escape" || e.defaultPrevented || e.repeat || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+        // an open sheet or menu closes first (react-native-web Modal closes on keyup, aria-modal is still there now)
+        if (document.querySelector('[aria-modal="true"]')) return;
+        // typing in a field: Esc is not "leave the screen"
+        const el = document.activeElement as HTMLElement | null;
+        if (el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable)) return;
+        goUpRef.current();
+      };
+      document.addEventListener("keydown", onKey);
+      return () => document.removeEventListener("keydown", onKey);
+    }, [up?.href]),
+  );
+  const addressRow = hasUp ? (
           <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, gap: space[2] }}>
+            {pinned && up ? (
+              <Press
+                onPress={goUp}
+                visibleHeight={component.button.md}
+                accessibilityRole="button"
+                accessibilityLabel={upLabel ? t("nav.backTo", { to: upLabel }) : t("common.back")}
+                style={{ width: component.button.md, height: component.button.md, borderRadius: radius.pill, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
+              >
+                <Icon name="chevronLeft" s={size.iconSm} color={c.ink} />
+              </Press>
+            ) : null}
             {trail.length ? (
               <Breadcrumbs trail={trail} current={nav.kind ? t(nav.kind) : undefined} go={go} />
             ) : (
@@ -439,8 +467,30 @@ export function Screen({
                 </RowView>
               </Press>
             )}
+            {device === "desktop" ? (
+              <RowView gap={space[1]} style={{ flexShrink: 0 }}>
+                <View style={{ borderWidth: component.hairline, borderColor: c.bd, borderRadius: radius.tip, paddingHorizontal: space[1] }}>
+                  <T v="caption" w="semibold">
+                    Esc
+                  </T>
+                </View>
+                <T v="caption" tone="mut">
+                  {t("nav.escHint")}
+                </T>
+              </RowView>
+            ) : null}
             {right}
           </RowView>
+  ) : null;
+  const header = (
+    <View style={{ gap: space[2], marginBottom: space[3] }}>
+      <VersionBadge />
+      {hasUp ? (
+        <>
+          {/* detail screen: the trail "Home › … › Parent › This", actions on the right, then the title.
+              Back is a swipe (iOS) / system back (Android); on the trail the parent is the "back" button.
+              Tablet/desktop: the same row is pinned above the scroll (addressBar). */}
+          {pinned ? null : addressRow}
           <RowView style={{ gap: space[1] }}>
             <T v="title" numberOfLines={2} style={{ flexShrink: 1 }}>
               {title}
@@ -501,14 +551,26 @@ export function Screen({
     if (tabs && offset.current > tabsY.current) scrollRef.current?.scrollTo({ y: tabsY.current, animated: true });
   }, [tabKey, tabs]);
   const column = { width: "100%" as const, maxWidth: layout.contentMax, alignSelf: "center" as const };
+  const top = pinned ? space[3] : navInsets.top;
+  /** the pinned bar is outside the scroll: the sticky-tabs area below is one screen minus the bar */
+  const [barH, setBarH] = useState(0);
   return (
     <View style={{ flex: 1 }}>
       <Background />
+      {pinned ? (
+        <View
+          onLayout={(e) => setBarH(e.nativeEvent.layout.height)}
+          style={{ paddingTop: navInsets.safeTop + space[3], paddingBottom: space[1], paddingHorizontal: space[4], gap: space[2], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
+        >
+          <StackNavPill pathname={pathname} params={params} />
+          <View style={column}>{addressRow}</View>
+        </View>
+      ) : null}
       {scroll ? (
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
           <ScrollView
             ref={scrollRef}
-            contentContainerStyle={{ paddingTop: navInsets.top, paddingBottom: kb ? space[6] : navInsets.bottom, paddingHorizontal: space[4] }}
+            contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom, paddingHorizontal: space[4] }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             automaticallyAdjustKeyboardInsets
@@ -525,11 +587,11 @@ export function Screen({
                 <View style={column}>{tabs}</View>
               </View>
             ) : null}
-            {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - navInsets.top - navInsets.bottom }]}>{below}</View> : null}
+            {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - top - navInsets.bottom - (pinned ? barH : 0) }]}>{below}</View> : null}
           </ScrollView>
         </KeyboardAvoidingView>
       ) : (
-        <View style={{ flex: 1, paddingTop: navInsets.top, paddingBottom: navInsets.bottom, paddingHorizontal: space[4] }}>{content}</View>
+        <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingHorizontal: space[4] }}>{content}</View>
       )}
     </View>
   );

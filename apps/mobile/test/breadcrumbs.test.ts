@@ -1,6 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
-import { breadcrumbs, collapseCrumbs, navContext } from "../src/nav/hierarchy";
+import { roleNav } from "../src/nav/roles";
+import fs from "node:fs";
+import path from "node:path";
+import { breadcrumbs, collapseCrumbs, navContext, sectionTab } from "../src/nav/hierarchy";
 
 const db = makeSeed();
 const hrefs = (p: string, params = {}, role: "director" | "dispatcher" | "tech" = "director") => breadcrumbs(p, params, db, role).map((c) => c.href);
@@ -57,4 +60,55 @@ describe("breadcrumbs: Home › … › Parent (founder, 05.11.2026)", () => {
     expect(collapseCrumbs([1, 2, 3], 3)).toEqual({ shown: [1, 2, 3], hidden: [], at: -1 });
     expect(collapseCrumbs([1, 2, 3, 4, 5], 3)).toEqual({ shown: [1, 5], hidden: [2, 3, 4], at: 1 });
   });
+});
+
+describe("top pill on inner screens highlights the section (spec 10, Н1)", () => {
+  it("client, job → Clients; lead, estimate, invoice → Sales; catalog → More", () => {
+    const job = db.jobs[0]!;
+    expect(sectionTab(`/client/${db.customers[0]!.id}`, {}, db, "director")).toBe("clients");
+    expect(sectionTab(`/job/${job.id}`, {}, db, "director")).toBe("clients");
+    expect(sectionTab(`/lead/${db.leads[0]!.id}`, {}, db, "director")).toBe("inbox");
+    expect(sectionTab(`/estimate/${db.estimates[0]!.id}`, {}, db, "director")).toBe("inbox");
+    expect(sectionTab(`/invoice/${db.invoices[0]!.id}`, {}, db, "director")).toBe("inbox");
+    expect(sectionTab("/catalog/x", {}, db, "director")).toBe("more");
+    expect(sectionTab("/figures/x", {}, db, "director")).toBe("today");
+  });
+  it("a section the role has no tab for lives under More; a role's own tab is itself", () => {
+    expect(sectionTab(`/client/${db.customers[0]!.id}`, {}, db, "dispatcher")).toBe("more");
+    expect(sectionTab(`/lead/${db.leads[0]!.id}`, {}, db, "tech")).toBe("more");
+    expect(sectionTab("/plan", {}, db, "director")).toBe("more");
+    expect(sectionTab("/plan", {}, db, "dispatcher")).toBe("plan");
+    expect(sectionTab(`/visit/${db.visits[0]!.id}`, {}, db, "tech")).toBe("visits");
+  });
+  it("every tab it returns is one the role has", () => {
+    const paths = ["/client/x", "/job/x", "/lead/x", "/estimate/x", "/invoice/x", "/receipt/x", "/visit/x", "/catalog/x", "/company/x", "/money", "/jobs", "/figures/x"];
+    for (const role of ["director", "dispatcher", "tech"] as const)
+      for (const p of paths) {
+        const tab = sectionTab(p, {}, db, role);
+        expect(tab === undefined || ["today", "triage", "inbox", "visits", "plan", "clients", "more"].includes(tab), `${role} ${p}`).toBe(true);
+        if (tab) expect(roleHasTab(role, tab), `${role} ${p} → ${tab}`).toBe(true);
+      }
+  });
+});
+
+const roleHasTab = (role: "director" | "dispatcher" | "tech", tab: string) => roleNav[role].some((n) => n.route === tab);
+
+/** every screen the layout run opens (e2e/specs/08-layouts.cjs SCREENS), with real ids from the seed */
+const layoutSpec = fs.readFileSync(path.resolve(__dirname, "../e2e/specs/08-layouts.cjs"), "utf8");
+const screenUrls = [...layoutSpec.slice(layoutSpec.indexOf("SCREENS = ["), layoutSpec.indexOf("];")).matchAll(/"(\/[^"]*)"/g)].map((m) => m[1]!);
+
+describe("sectionTab on every inner screen, three roles", () => {
+  it("found the screens", () => expect(screenUrls.length).toBeGreaterThan(20));
+  for (const role of ["director", "dispatcher", "tech"] as const)
+    it(role, () => {
+      for (const url of screenUrls) {
+        const [p, q = ""] = url.split("?");
+        const params = Object.fromEntries(new URLSearchParams(q));
+        const ctx = navContext(p!, params, db, role);
+        const tab = sectionTab(p!, params, db, role);
+        if (p!.startsWith("/p/") || p!.startsWith("/auth")) expect(tab, `${role} ${url}`).toBeUndefined();
+        // an inner screen (has a parent) always lights one of this role's tabs
+        else if (ctx.up) expect(tab && roleHasTab(role, tab), `${role} ${url} → ${tab}`).toBe(true);
+      }
+    });
 });
