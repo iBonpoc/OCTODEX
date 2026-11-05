@@ -2,7 +2,8 @@
  * П3c (docs/specs/03 «П3c — этап 0»; story map S15, §5 «вычисляемые»): one rule «Опаздывает», start + 15 min.
  * Office side: «Требует внимания» and the notice «{tech} опаздывает на {client}, не выехал · начало …»;
  * the tech taps «Я в пути» → still late: «Опаздывает · в пути», «в пути с h:mm AM» (on the way does NOT clear it);
- * «На месте» → the item and the notice are gone. A visit tomorrow without people → «Завтра выезд без мастера».
+ * «На месте» → the item and the notice are gone. A visit tomorrow without people → «Завтра выезд без мастера»
+ * (tomorrow of the company, П4a: 24 h from now, not the browser's calendar).
  * The tech sees neither the office notice nor the office items. No fixed demo time: the spec plants its own visits.
  */
 exports.run = async (h) => {
@@ -22,7 +23,8 @@ exports.run = async (h) => {
   const other = db.properties.find((x) => x.customerId && x.customerId !== client.id && db.customers.some((c) => c.id === x.customerId));
   h.expect(other, "demo has a property of another client");
   const client2 = db.customers.find((c) => c.id === other.customerId);
-  const tomorrow = new Date(); tomorrow.setDate(tomorrow.getDate() + 1); tomorrow.setHours(10, 0, 0, 0);
+  // «tomorrow» is the company's day (П4a, Los Angeles), not the browser's: 24 h from now is tomorrow in any zone
+  const tomorrow = new Date(Date.now() + 24 * 3_600_000);
   await p.evaluate(([late, tm]) => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
     raw.db.visits = [late, tm, ...raw.db.visits.filter((v) => !v.id.startsWith("e2e-"))];

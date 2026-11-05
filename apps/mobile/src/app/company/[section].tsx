@@ -9,7 +9,8 @@ import type { Address, Company, CompanyContact, CompanyLicense, EntityType, Lice
 import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { Labeled, PctField } from "@/features/fields";
-import { SETUP_STEPS, US_TIMEZONES, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
+import { SETUP_STEPS, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
+import { tzLabel } from "@/features/scheduleSettings";
 import { ServiceCategoryEditor } from "@/features/ServiceCategoryPicker";
 import { Button, ChoiceChips, IconButton, Segmented, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -115,9 +116,12 @@ export default function CompanySection() {
             </RowView>
             {draft.mailingAddress ? <AddressFields value={draft.mailingAddress} onChange={(a) => set({ mailingAddress: a })} /> : null}
           </Card>
-          <Card>
-            <T v="heading">{t("co.timezone")}</T>
-            <ChoiceChips value={draft.timezone} onChange={(v) => set({ timezone: v })} items={US_TIMEZONES.map((z) => ({ key: z, label: z.split("/")[1]!.replace("_", " ") }))} />
+          {/* the time zone lives in «Расписание» (П4a); here, in the address — a line that leads there */}
+          <Card onPress={() => router.push("/company/schedule")} accessibilityLabel={t("schs.title")}>
+            <RowView style={{ justifyContent: "space-between" }}>
+              <T v="body">{t("schs.tzLine", { tz: tzLabel(c.timezone) })}</T>
+              <T v="caption" tone="mut">{t("schs.title")}</T>
+            </RowView>
           </Card>
         </>
       ) : null}

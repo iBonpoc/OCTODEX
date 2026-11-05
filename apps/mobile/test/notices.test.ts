@@ -44,7 +44,8 @@ describe("unit:notices — visit.late", () => {
     expect(lateNotices(db([V("a", { start: min(-24 * 60) })]), "director", NOW)).toEqual([]);
   });
   it("after midnight a 11:50 PM visit is gone from both the notice and the item (one window)", () => {
-    const mid = new Date(NOW); mid.setHours(0, 5, 0, 0);
+    // the company's midnight (Los Angeles, PST): 00:05 on Nov 6 = 08:05 UTC — whatever the phone's zone (П4a)
+    const mid = new Date("2026-11-06T08:05:00.000Z");
     const late = new Date(mid.getTime() - 15 * 60_000).toISOString(); // 11:50 PM yesterday
     expect(lateNotices(db([V("a", { start: late })]), "director", mid.getTime())).toEqual([]);
   });

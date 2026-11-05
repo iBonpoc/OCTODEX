@@ -5,6 +5,8 @@ import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { addMonths, dayKeyOf, fromDayKey, monthGrid, todayKey, type DayKey } from "@/features/calendar";
 import { isWorkday } from "@/features/schedule";
+import { businessHoursOf } from "@/features/scheduleSettings";
+import { useStore } from "@/data/store";
 import { IconButton } from "@/ui/controls";
 import { Press, T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
@@ -15,6 +17,8 @@ import { RowView } from "@/ui/surfaces";
  * the form stays the save button (rule 2).
  */
 export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey) => void }) {
+  // days off of the company are paler (its hours by weekday, «Компания → Расписание»)
+  const hours = businessHoursOf(useStore().db.company);
   const { t, lang } = useI18n();
   const { c } = useTheme();
   const [month, setMonth] = useState<DayKey>(value);
@@ -43,7 +47,7 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
         <View key={row[0]!.key} style={{ flexDirection: "row", gap: space[1] }}>
           {row.map((x) => {
             const past = x.key < today;
-            const off = !isWorkday(fromDayKey(x.key));
+            const off = !isWorkday(fromDayKey(x.key), hours);
             const selected = x.key === value;
             return (
               <Press

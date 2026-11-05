@@ -59,6 +59,20 @@ export default function CompanyScreen() {
           );
         })}
       </View>
+      {/* not a setup step (the «N of 8» count stays): working hours, lengths, window, «late» (П4a) */}
+      <Card onPress={() => router.push("/company/schedule")} accessibilityLabel={t("schs.title")}>
+        <RowView style={{ alignItems: "flex-start" }}>
+          <Icon name="calendar" />
+          <View style={{ flex: 1, gap: space[1] }}>
+            <T v="body" w="semibold">
+              {t("schs.title")}
+            </T>
+            <T v="caption" tone="mut">
+              {t("schs.hint")}
+            </T>
+          </View>
+        </RowView>
+      </Card>
     </Screen>
   );
 }

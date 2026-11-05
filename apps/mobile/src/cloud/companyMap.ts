@@ -32,6 +32,8 @@ export function companyFromDb(r: Row, ein: string | undefined, licenses: Row[], 
     insurance: contract.insurance ?? {},
     cancelEmail: contract.cancel_email,
     leadSettings: (r.lead_settings as Company["leadSettings"] | null) ?? undefined,
+    scheduleSettings: (r.schedule_settings as Company["scheduleSettings"] | null) ?? undefined,
+    businessHours: (r.business_hours as Company["businessHours"] | null) ?? undefined,
     estimate: { validDays: est.valid_days ?? 7, depositBps: est.deposit_bps === undefined ? 1000 : est.deposit_bps, terms: est.terms },
     payment: { zelle: pay.zelle, checkPayableTo: pay.check_payable_to },
     licenses: licenses.map(licenseFromDb),
@@ -70,6 +72,9 @@ export function companyToDb(c: Company, stored: Row) {
     payment_settings: { ...((stored.payment_settings as Row) ?? {}), zelle: n(c.payment.zelle), check_payable_to: n(c.payment.checkPayableTo) },
     onboarding_state: { ...((stored.onboarding_state as Row) ?? {}), skipped: c.skipped },
     lead_settings: { ...((stored.lead_settings as Row) ?? {}), ...(c.leadSettings ?? {}) },
+    schedule_settings: { ...((stored.schedule_settings as Row) ?? {}), ...(c.scheduleSettings ?? {}) },
+    // hours are one object: what the company set replaces the stored one (null stays null = defaults)
+    business_hours: c.businessHours ? { ...((stored.business_hours as Row) ?? {}), ...c.businessHours } : ((stored.business_hours as Row | null) ?? null),
   };
 }
 
