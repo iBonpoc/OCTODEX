@@ -468,7 +468,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "customer.status":
       return run(supabase.from("customers").update({ status: op.status, do_not_service_reason: op.status === "do_not_service" ? op.reason || "—" : null }).eq("id", op.id));
     case "serviceCategory.save": {
-      // seed_key is set once; afterwards only name, position and archive change (column grants, migration 20261105230000)
+      // seed_key is set once; afterwards only name, position and archive change (column grants, migration 20261105250000)
       const x = op.category;
       const common = { name: x.name ?? null, position: x.position, archived_at: x.archivedAt ?? null };
       return run(

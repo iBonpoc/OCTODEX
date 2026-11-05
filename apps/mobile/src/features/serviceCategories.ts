@@ -1,6 +1,6 @@
 /**
  * Direction of the business (docs/specs/11-trade.md, stык S16). Core, niche-free: works with ids of the company's list.
- * The same inheritance rule runs in the database (trigger t15_service_category_inherit, migration 20261105230000).
+ * The same inheritance rule runs in the database (trigger t15_service_category_inherit, migration 20261105250000).
  * Pure — tested in test/serviceCategories.test.ts.
  */
 import type { DB, ID, ServiceCategory } from "@/data/types";

@@ -21,4 +21,4 @@ begin
   if (select trades from public.companies where id = 'cf500000-0000-0000-0000-000000000001') is null then
     raise exception 'upgrade: trades column kept for now'; end if;
 end $$;
-\echo 'upgrade 20261105230000_service_categories ok'
+\echo 'upgrade 20261105250000_service_categories ok'
