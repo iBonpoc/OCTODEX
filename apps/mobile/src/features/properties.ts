@@ -3,6 +3,7 @@
  */
 import type { DB, Estimate, Job, Person, Property, Role, Visit } from "@/data/types";
 import { peopleOf } from "@/data/people";
+import { visitPropertyId } from "@/data/selectors";
 
 /** "City, ST zip" */
 export function cityLine(place: { city: string; state?: string; zip?: string }): string {
@@ -32,9 +33,8 @@ export interface PropertyNow {
 export function propertyNow(db: DB, propertyId: string, now = Date.now()): PropertyNow {
   const jobs = db.jobs.filter((j) => j.propertyId === propertyId && j.status !== "done");
   const estimates = db.estimates.filter((e) => e.propertyId === propertyId && (e.status === "draft" || e.status === "sent"));
-  const jobIds = new Set(db.jobs.filter((j) => j.propertyId === propertyId).map((j) => j.id));
   const nextVisit = db.visits
-    .filter((v) => jobIds.has(v.jobId) && v.step !== "paid" && new Date(v.start).getTime() >= now - (v.durationMin || 0) * 60_000)
+    .filter((v) => visitPropertyId(db, v) === propertyId && v.step !== "paid" && new Date(v.start).getTime() >= now - (v.durationMin || 0) * 60_000)
     .sort((a, b) => a.start.localeCompare(b.start))[0];
   return { estimates, jobs, nextVisit };
 }
@@ -58,10 +58,11 @@ export function dayIn(t: number, timeZone: string): number {
 export function canSeeGateCode(db: DB, role: Role, propertyId: string, now = Date.now()): boolean {
   if (role !== "tech") return true;
   const tz = db.company?.timezone || "America/Los_Angeles";
-  const jobIds = new Set(db.jobs.filter((j) => j.propertyId === propertyId && j.status !== "done").map((j) => j.id));
+  // a visit of a live job, or an inspection (no job) at this property
+  const doneJobs = new Set(db.jobs.filter((j) => j.status === "done").map((j) => j.id));
   const today = dayIn(now, tz);
   return db.visits.some(
-    (v) => jobIds.has(v.jobId) && v.techId === db.me && v.step !== "paid" && !v.closed && [today, today + 1].includes(dayIn(new Date(v.start).getTime(), tz)),
+    (v) => visitPropertyId(db, v) === propertyId && !(v.jobId && doneJobs.has(v.jobId)) && v.techId === db.me && v.step !== "paid" && !v.closed && [today, today + 1].includes(dayIn(new Date(v.start).getTime(), tz)),
   );
 }
 
@@ -93,9 +94,8 @@ export type PropertyEntry =
   | { kind: "note"; at: string; note: DB["notes"][number] };
 /** History of a property, newest first: visits, estimates sent or signed, notes on the property. */
 export function propertyTimeline(db: DB, propertyId: string): PropertyEntry[] {
-  const jobIds = new Set(db.jobs.filter((j) => j.propertyId === propertyId).map((j) => j.id));
   const out: PropertyEntry[] = [
-    ...db.visits.filter((v) => jobIds.has(v.jobId)).map((v) => ({ kind: "visit" as const, at: v.start, visit: v })),
+    ...db.visits.filter((v) => visitPropertyId(db, v) === propertyId).map((v) => ({ kind: "visit" as const, at: v.start, visit: v })),
     ...db.estimates
       .filter((e) => e.propertyId === propertyId && (e.approvedAt || e.sentAt))
       .map((e) => ({ kind: "estimate" as const, at: (e.approvedAt ?? e.sentAt)!, estimate: e })),
@@ -112,9 +112,8 @@ export function propertyDocs(db: DB, propertyId: string): { estimates: Estimate[
 
 /** Photos taken on the visits of a property (before / after), newest visit first. */
 export function propertyPhotos(db: DB, propertyId: string): { visit: Visit; photo: Visit["photos"][number] }[] {
-  const jobIds = new Set(db.jobs.filter((j) => j.propertyId === propertyId).map((j) => j.id));
   return db.visits
-    .filter((v) => jobIds.has(v.jobId))
+    .filter((v) => visitPropertyId(db, v) === propertyId)
     .sort((a, b) => b.start.localeCompare(a.start))
     .flatMap((v) => v.photos.map((photo) => ({ visit: v, photo })));
 }

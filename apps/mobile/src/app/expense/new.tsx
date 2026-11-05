@@ -34,7 +34,7 @@ export default function NewExpense() {
   };
   const jobs = [
     { key: "none", label: t("exp.noJob") },
-    ...todays.map((v) => ({ key: v.jobId, label: visitContext(db, v).customer?.name ?? v.jobId })),
+    ...todays.filter((v): v is typeof v & { jobId: string } => !!v.jobId).map((v) => ({ key: v.jobId, label: visitContext(db, v).customer?.name ?? v.jobId })),
   ];
   return (
     <Screen title={t("exp.title")} back={back}>

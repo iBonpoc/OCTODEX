@@ -21,6 +21,7 @@ import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { inheritCategory } from "@/features/serviceCategories";
+import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, validUntilFor } from "@/features/estimateSign";
@@ -57,6 +58,7 @@ import {
   type Property,
   type Tag,
   ServiceCategory,
+  CancelReason,
 } from "./types";
 
 type Undo = () => void;
@@ -121,6 +123,10 @@ interface StoreCtx {
    * Reuses the lead's client and property if it already has them (no second client); otherwise makes a prospect first.
    */
   bookLead: (id: ID, at: BookAt) => Undo;
+  /** the office cancels a visit before the tech is on site; S4a / S9a roll the lead / job back (docs/specs/03 §4) */
+  cancelVisit: (id: ID, reason: CancelReason, text?: string) => Undo;
+  /** the office moves a visit (time, length) before the tech is on site; the status does not change */
+  rescheduleVisit: (id: ID, start: string, durationMin: number) => Undo;
   assignVisit: (visitId: ID, techId: ID) => Undo;
   resetDemo: () => Undo;
   addLead: (l: Omit<Lead, "id" | "status" | "receivedAt">) => { id: ID; undo: Undo };
@@ -568,7 +574,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!v) return () => {};
         const invoiceId = uid();
         const paymentId = uid();
-        const customerId = customerOfJob(d0, v.jobId);
+        // an inspection (no job) takes no payment
+        const customerId = v.jobId ? customerOfJob(d0, v.jobId) : "";
         const now = new Date().toISOString();
         return mutate(
           "visit.pay",
@@ -580,13 +587,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               invoices: customerId
                 ? [
                     ...next.invoices,
-                    { id: invoiceId, customerId, jobId: v.jobId, totalCents: v.amountDueCents, paidCents: v.amountDueCents, dueDate: now, paidAt: now, method, kind: "final" },
+                    { id: invoiceId, customerId, jobId: v.jobId!, totalCents: v.amountDueCents, paidCents: v.amountDueCents, dueDate: now, paidAt: now, method, kind: "final" },
                   ]
                 : next.invoices,
             };
           },
           v.amountDueCents > 0 && customerId
-            ? { k: "visit.pay", visitId, jobId: v.jobId, customerId, invoiceId, paymentId, amountCents: v.amountDueCents, method }
+            ? { k: "visit.pay", visitId, jobId: v.jobId!, customerId, invoiceId, paymentId, amountCents: v.amountDueCents, method }
             : undefined,
         );
       },
@@ -686,12 +693,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       bookLead: (id, at) => {
         const l = dbRef.current.leads.find((x) => x.id === id);
         if (!l || !isOpenLeadStatus(l.status)) return () => {};
-        // one planned estimate visit at a time (double tap, second booking): reschedule lives in the Plan
-        const d0 = dbRef.current;
-        if (l.propertyId && d0.visits.some((v) => new Date(v.start).getTime() > Date.now() && d0.jobs.some((j) => j.id === v.jobId && j.propertyId === l.propertyId && j.status === "estimate"))) return () => {};
+        // S4 (docs/specs/03 §1): an inspection is a visit of the lead at the property, without a job.
+        // One planned inspection at a time (double tap, second booking): reschedule lives in the Plan.
+        if (hasPlannedInspection(dbRef.current, l)) return () => {};
         const target = leadTarget(id);
         if (!target) return () => {};
-        const ids = { jobId: uid(), visitId: uid() };
+        const ids = { visitId: uid() };
         const now = new Date().toISOString();
         const undoVisit = mutate(
           "lead.book",
@@ -700,17 +707,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             leads: d.leads.map((x) =>
               x.id === id ? { ...x, status: x.status === "new" || x.status === "replied" ? "booked" : x.status, firstResponseAt: x.firstResponseAt ?? now, lastActivityAt: now } : x,
             ),
-            jobs: [...d.jobs, { id: ids.jobId, propertyId: target.propertyId, title: "Estimate visit", status: "estimate", amountCents: 0, serviceCategoryId: inheritCategory(d, { kind: "job", customerId: l.customerId }) }],
             visits: [
               ...d.visits,
               {
-                id: ids.visitId, jobId: ids.jobId, techId: at.techId, start: at.start, durationMin: at.durationMin, step: "scheduled",
+                id: ids.visitId, leadId: id, propertyId: target.propertyId, kind: "inspection", techId: at.techId, start: at.start, durationMin: at.durationMin, step: "scheduled",
                 scope: [at.note?.trim(), l.message].filter((x): x is string => !!x), checklist: [], photos: [], amountDueCents: 0,
               },
             ],
           }),
           {
-            k: "lead.visit", leadId: id, customerId: target.customerId, propertyId: target.propertyId, ...ids, start: at.start, durationMin: at.durationMin,
+            k: "visit.inspection", leadId: id, propertyId: target.propertyId, visitId: ids.visitId, start: at.start, durationMin: at.durationMin,
             techId: at.techId, scope: [at.note?.trim(), l.message].filter((x): x is string => !!x),
           },
         );
@@ -718,6 +724,29 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           undoVisit();
           target.undo();
         };
+      },
+      cancelVisit: (id, reason, text) => {
+        const d0 = dbRef.current;
+        const v = d0.visits.find((x) => x.id === id);
+        if (!v || !canCancel(v) || (reason === "other" && !text?.trim())) return () => {};
+        const leadBack = leadRollsBack(d0, id);
+        const jobBack = jobRollsBack(d0, id);
+        return mutate(
+          "visit.cancel",
+          (d) => ({
+            ...d,
+            // a cancelled visit leaves the screens (the server keeps it with its reason; history comes with wave П2)
+            visits: d.visits.filter((x) => x.id !== id),
+            leads: leadBack ? d.leads.map((l) => (l.id === leadBack ? { ...l, status: "replied" } : l)) : d.leads,
+            jobs: jobBack ? d.jobs.map((j) => (j.id === jobBack ? { ...j, status: "unscheduled" } : j)) : d.jobs,
+          }),
+          { k: "visit.cancel", visitId: id, reason, text: text?.trim() || undefined, leadBack: leadBack ?? undefined, jobBack: jobBack ?? undefined },
+        );
+      },
+      rescheduleVisit: (id, start, durationMin) => {
+        const v = dbRef.current.visits.find((x) => x.id === id);
+        if (!v || !canReschedule(v) || durationMin <= 0) return () => {};
+        return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => ({ ...x, start, durationMin })), { k: "visit.reschedule", visitId: id, start, durationMin });
       },
       addLead: (lead) => {
         const id = uid();

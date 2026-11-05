@@ -181,7 +181,6 @@ export function makeSeed(): DB {
       { id: "j4", propertyId: "p4", title: "Interior painting, 2 bedrooms", status: "done", amountCents: 96000 },
       { id: "j5", propertyId: "p5", title: "Deep clean after move-out", status: "scheduled", amountCents: 156000 },
       { id: "j6", propertyId: "p6", title: "Panel upgrade 200A", status: "scheduled", amountCents: 518000 },
-      { id: "j7", propertyId: "p7", title: "Estimate visit", status: "estimate", amountCents: 0 },
       { id: "j8", propertyId: "p1b", title: "TV mount + shelves", status: "done", amountCents: 24000 },
     ],
     visits: [
@@ -209,7 +208,8 @@ export function makeSeed(): DB {
         scope: ["Replace 100A panel with 200A", "Permit and inspection"], checklist: jobChecklist("v5"), photos: [], amountDueCents: 518000,
       },
       {
-        id: "v6", jobId: "j7", techId: null, start: at(0, 15, 0), durationMin: 45, step: "scheduled",
+        // an inspection: a visit at the property, no job (docs/specs/03 §3.1)
+        id: "v6", propertyId: "p7", kind: "inspection", techId: null, start: at(0, 15, 0), durationMin: 45, step: "scheduled",
         scope: ["Free estimate: fence repair and gate"], checklist: [], photos: [], amountDueCents: 0,
       },
       {

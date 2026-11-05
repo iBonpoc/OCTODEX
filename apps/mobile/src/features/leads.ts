@@ -5,6 +5,7 @@
  *   Reply timer runs around the clock until the first answered call / SMS / email / "I replied".
  *   "Whose turn" (leadTurn) — the one question the card answers: reply / do the step / wait for the client / snoozed.
  */
+import { isInspectionOf } from "@/features/schedule";
 import type { StatusName } from "@octo/design-tokens";
 import { LEAD_SETTINGS_DEFAULT, type LeadSettings } from "./leadSettings";
 import { DECLINE_REASONS, LOST_REASONS, type Customer, type DB, type Lead, type LeadStatus, type Person, type LostReason, type Role, type Source, type SourceKind, type Task } from "@/data/types";
@@ -142,11 +143,7 @@ export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAU
   }
   // the estimate visit is the step: a planned one for any open lead (also a second visit after the estimate went out);
   // once it has passed with no estimate yet ("booked"), it is overdue after a day of grace
-  const visit = l.propertyId
-    ? db.visits
-        .filter((v) => db.jobs.find((j) => j.id === v.jobId && j.propertyId === l.propertyId && j.status === "estimate"))
-        .sort((a, b) => b.start.localeCompare(a.start))[0]
-    : undefined;
+  const visit = db.visits.filter((v) => isInspectionOf(db, v, l)).sort((a, b) => b.start.localeCompare(a.start))[0];
   const vStart = visit ? new Date(visit.start).getTime() : null;
   if (visit && vStart! > now) return { kind: "step", dueAt: visit.start, status: new Date(vStart!).toDateString() === new Date(now).toDateString() ? "info" : "neutral" };
   if (l.status === "booked") {
@@ -273,10 +270,8 @@ export function leadTimeline(db: DB, l: Lead, viewer?: string): TimelineEntry[] 
     if (e.viewedAt) out.push({ id: `ev-${e.id}`, at: e.viewedAt, icon: "invoice", key: "tl.estViewed", params: p });
     if (e.approvedAt) out.push({ id: `ea-${e.id}`, at: e.approvedAt, icon: "check", key: "tl.estApproved", params: p });
   }
-  if (l.propertyId) {
-    for (const v of db.visits.filter((x) => db.jobs.find((j) => j.id === x.jobId)?.propertyId === l.propertyId && db.jobs.find((j) => j.id === x.jobId)?.status === "estimate")) {
-      out.push({ id: `v-${v.id}`, at: v.start, icon: "calendar", key: "tl.visit" });
-    }
+  for (const v of db.visits.filter((x) => isInspectionOf(db, x, l))) {
+    out.push({ id: `v-${v.id}`, at: v.start, icon: "calendar", key: "tl.visit" });
   }
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }

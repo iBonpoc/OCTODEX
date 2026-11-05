@@ -28,6 +28,7 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     sources,
     tags: Array.isArray(d.tags) && d.tags.length ? d.tags : mode === "demo" ? SEED_TAGS : [],
     serviceCategories: serviceCategoriesOf(d, mode),
+    ...inspectionsWithoutJobs(d),
     tasks: Array.isArray(d.tasks) ? d.tasks : [],
     activities: Array.isArray(d.activities) ? d.activities : [],
     leads: (d.leads ?? []).map((l) => (l.sourceId ? l : { ...l, sourceId: sourceIdOf(l as Legacy) })),
@@ -37,6 +38,21 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
       mode,
     ),
   };
+}
+
+/** Visit and Plan П1 (docs/specs/03 §3.1, migration 20261105280000): an older phone keeps inspections as jobs with the
+ *  status "estimate" (or "lead"). They become visits of the lead at the property, without a job; the job goes. */
+function inspectionsWithoutJobs(d: DB): Pick<DB, "jobs" | "visits"> {
+  const old = new Map((d.jobs ?? []).filter((j) => (j.status as string) === "estimate" || (j.status as string) === "lead").map((j) => [j.id, j]));
+  if (!old.size) return { jobs: d.jobs ?? [], visits: d.visits ?? [] };
+  const visits = (d.visits ?? []).map((v) => {
+    const j = v.jobId ? old.get(v.jobId) : undefined;
+    if (!j) return v;
+    const lead = (d.leads ?? []).find((l) => l.propertyId === j.propertyId);
+    const { jobId: _j, ...rest } = v;
+    return { ...rest, propertyId: v.propertyId ?? j.propertyId, leadId: v.leadId ?? lead?.id, kind: "inspection" as const };
+  });
+  return { jobs: (d.jobs ?? []).filter((j) => !old.has(j.id)), visits };
 }
 
 /** Directions (docs/specs/11-trade.md): an older phone holds them as text in company.trades — moved once, same rule as

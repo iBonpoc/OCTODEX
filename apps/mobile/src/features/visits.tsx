@@ -21,6 +21,8 @@ export function visitStatus(v: Visit): { status: StatusName; label: DictKey } {
     working: { status: "info", label: "st.working" },
     signed: { status: "warn", label: "st.awaiting" },
     paid: { status: "ok", label: "st.paid" },
+    // an inspection ends with "done" (no signature, no payment)
+    done: { status: "ok", label: "st.done" },
   };
   return map[v.step];
 }

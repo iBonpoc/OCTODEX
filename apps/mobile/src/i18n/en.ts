@@ -40,6 +40,9 @@ export const en: Dict = {
   "st.working": "Working",
   "st.signed": "Signed",
   "st.paid": "Paid",
+  // visits (docs/specs/03 §4.1)
+  "st.done": "Done",
+  "st.cancelled": "Cancelled",
   "st.overdue": "Overdue",
   "st.new": "New",
   "st.replied": "In touch",

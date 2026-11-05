@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { visitPropertyId } from "@/data/selectors";
 import { Image, Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { component, radius, space } from "@octo/design-tokens";
@@ -233,7 +234,8 @@ function LeadVisits({ leadId }: { leadId: string }) {
   const { db } = useStore();
   const { t, day, time } = useI18n();
   const l = db.leads.find((x) => x.id === leadId)!;
-  const visits = l.propertyId ? db.visits.filter((v) => db.jobs.find((j) => j.id === v.jobId)?.propertyId === l.propertyId) : [];
+  // the lead's inspections (no job) and any visit at its property
+  const visits = db.visits.filter((v) => v.leadId === l.id || (!!l.propertyId && visitPropertyId(db, v) === l.propertyId));
   if (!visits.length) return null;
   return (
     <View style={{ gap: space[2] }}>
@@ -246,7 +248,7 @@ function LeadVisits({ leadId }: { leadId: string }) {
               key={v.id}
               status={v.techId ? "info" : "warn"}
               title={`${day(v.start)} · ${time(v.start)}`}
-              subtitle={[db.jobs.find((j) => j.id === v.jobId)?.title, tech?.name ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
+              subtitle={[v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : t("st.inspection"), tech?.name ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
               onPress={() => router.push(`/visit/${v.id}`)}
             />
           );
@@ -263,7 +265,7 @@ function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew: () => v
   const { c } = useTheme();
   const l = db.leads.find((x) => x.id === leadId)!;
   const estimates = db.estimates.filter((e) => e.leadId === l.id || (l.customerId && e.customerId === l.customerId));
-  const photos = l.propertyId ? db.visits.filter((v) => db.jobs.find((j) => j.id === v.jobId)?.propertyId === l.propertyId).flatMap((v) => v.photos) : [];
+  const photos = db.visits.filter((v) => v.leadId === l.id || (!!l.propertyId && visitPropertyId(db, v) === l.propertyId)).flatMap((v) => v.photos);
   return (
     <View style={{ gap: space[3] }}>
       {part === "estimates" ? (

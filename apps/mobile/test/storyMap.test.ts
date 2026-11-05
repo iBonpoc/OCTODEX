@@ -7,7 +7,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { CUSTOMER_STATUSES, ESTIMATE_STATUSES, JOB_STATUSES, LEAD_STATUSES, VISIT_STEPS } from "../src/data/types";
+import { CUSTOMER_STATUSES, ESTIMATE_STATUSES, JOB_STATUSES, LEAD_STATUSES, VISIT_STATUSES } from "../src/data/types";
 import { customerStatus, estimateStatus, jobStatus, leadStatus, leadStatusToDb } from "../src/cloud/statusMap";
 
 const ROOT = path.resolve(__dirname, "../../..");
@@ -111,7 +111,7 @@ describe("story map §5: statuses", () => {
       expect(leadStatus[leadStatusToDb[s]], `round trip of '${s}'`).toBe(s);
     }
   });
-  it("Visit: the map lists exactly the app steps", () => {
-    expect(ticks(statusRows.get("Visit")![1]!).sort()).toEqual([...VISIT_STEPS].sort());
+  it("Visit: the map lists exactly the app statuses (steps + done + cancelled)", () => {
+    expect(ticks(statusRows.get("Visit")![1]!).sort()).toEqual([...VISIT_STATUSES].sort());
   });
 });
