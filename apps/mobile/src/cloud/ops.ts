@@ -180,6 +180,7 @@ export interface OutboxItem {
   error?: string;
 }
 
+
 /** Errors that will never succeed on retry (permission, constraint). Network errors are retried. */
 export class PermanentError extends Error {}
 

@@ -12,6 +12,7 @@ import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { applyOp, PermanentError, type Op, type OutboxItem } from "@/cloud/ops";
+import { readyToSend } from "@/cloud/outboxTiming";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
@@ -314,7 +315,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     try {
       for (;;) {
         const item = outboxRef.current[0];
-        if (!item || Date.now() - new Date(item.at).getTime() < motion.toastUndoMs) break;
+        // the toast's «Отменить» window first: an undone op never reaches the server
+        if (!item || !readyToSend(item, Date.now())) break;
         try {
           await applyOp(item.op, company.companyId, auth.userId);
           sentAny = true;
