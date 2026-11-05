@@ -1237,6 +1237,8 @@ export const es: Dict = {
   "card.val.contract": "contrato",
   "card.val.price": "precio",
   "card.queued": "No enviado · esperando red",
+  "card.tag.estimateSent": "Presupuesto enviado · {n}",
+  "card.emptyFilter": "Nadie en este filtro",
   "card.val.paid": "pagada",
   "prop.h.visit": "Visita",
   "prop.h.estimate": "Presupuesto",

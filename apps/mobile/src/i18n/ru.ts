@@ -1236,6 +1236,8 @@ export const ru = {
   "card.val.contract": "договор",
   "card.val.price": "цена",
   "card.queued": "Не отправлено · ждёт сети",
+  "card.tag.estimateSent": "Смета отправлена · {n}",
+  "card.emptyFilter": "В этом отборе никого нет",
   "card.val.paid": "оплачен",
   "prop.h.visit": "Визит",
   "prop.h.estimate": "Смета",
