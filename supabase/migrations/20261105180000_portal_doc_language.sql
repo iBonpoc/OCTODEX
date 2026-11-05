@@ -5,6 +5,8 @@
 -- the company's default for documents → 'en'.
 -- The existing body is kept as app.portal_estimate_base (moved, not copied), so it cannot drift from a copy;
 -- portal_accept / portal_pay_simulated keep calling public.portal_estimate and get doc_language too.
+-- !! The page body is edited in app.portal_estimate_base. `create or replace function public.portal_estimate`
+--    in a later migration replaces this wrapper and DROPS the client's language (test T19 catches it).
 
 alter function public.portal_estimate(text) set schema app;
 alter function app.portal_estimate(text) rename to portal_estimate_base;
