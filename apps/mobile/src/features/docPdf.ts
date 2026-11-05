@@ -1,18 +1,52 @@
 /**
- * Invoice and receipt as printable HTML (→ PDF via saveEstimatePdf). Company header from the profile.
- * US documents: amounts in $, en-US dates (via the passed formatters). Colors/sizes from the `print` tokens.
+ * Documents for the client as printable HTML (→ PDF via saveEstimatePdf): one page layout for the estimate,
+ * the invoice and the receipt — the same company header and footer, in one of the three print styles.
+ *
+ * Rule 7 (founder 05.11.2026): what goes to a client is in the CLIENT's language. These functions take the
+ * client's language (`lang`), never the app's translator — passing `t` is a type error (test/estimatePdf.test.ts).
+ * Money in $, dates US numeric (11/05/2026) in every language. Colours and sizes only from the `print` tokens;
+ * the brand colour is the company's own setting and is used only if it is a plain hex colour.
  */
-import { print as P } from "@octo/design-tokens";
+import { print as P, type PrintStyleName } from "@octo/design-tokens";
 import { contractStatement } from "@octo/estimating-engine";
 import { licenseLine, type PortalData } from "@/cloud/portal";
 import type { DB, Invoice, Payment } from "@/data/types";
 import type { DictKey } from "@/i18n";
+import { tFor, type DocLang } from "@/i18n/translate";
 
-type Fmt = { t: (k: DictKey, params?: Record<string, string | number>) => string; money: (c: number) => string; day: (iso: string) => string };
-const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
+/** What a document function needs to know: the client's language and the company's print style. Never a translator. */
+export interface DocOpts {
+  lang: DocLang;
+  style?: PrintStyleName;
+}
 
-function page(title: string, company: PortalData["company"], body: string): string {
-  const c = company;
+export const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
+const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
+const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
+const usDay = new Intl.DateTimeFormat("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+/** $ amounts, US format, the same for every client language */
+export const docMoney = (cents: number) => (cents % 100 === 0 ? usd.format(cents / 100) : usdCents.format(cents / 100));
+/** 11/05/2026 — US numeric date, the same for every client language */
+export const docDay = (iso: string) => usDay.format(new Date(iso));
+/** the brand colour is typed by the company: only a plain hex colour reaches the CSS */
+const safeColor = (c?: string) => (c && /^#[0-9a-f]{3,8}$/i.test(c) ? c : undefined);
+
+export interface DocPageInput {
+  /** "Estimate EST-0012" */
+  title: string;
+  /** right side under the title: "Date: 11/05/2026" … */
+  meta: string[];
+  /** repeated at the bottom of every printed page */
+  footer: string;
+  company: PortalData["company"];
+  body: string;
+  opts: DocOpts;
+}
+
+/** One page shell for every client document: header (logo, company, licenses), body, repeated footer. */
+export function docPage({ title, meta, footer, company: c, body, opts }: DocPageInput): string {
+  const s = P.styles[opts.style ?? "classic"];
+  const brand = safeColor(c.color);
   const lines = [
     c.address,
     ...c.contacts.map((x) => [[x.name, x.title].filter(Boolean).join(", "), x.phone].filter(Boolean).join(" · ")),
@@ -21,33 +55,57 @@ function page(title: string, company: PortalData["company"], body: string): stri
     c.website,
     ...c.licenses.map(licenseLine),
   ].filter(Boolean) as string[];
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title>
+  const logo = c.logo && c.logo.startsWith("data:image/") ? `<img class="logo" src="${esc(c.logo)}" alt="">` : "";
+  const who = `<div class="who">${logo}<div><h1>${esc(c.name || "OCTODEX")}</h1>${lines.map((l) => `<div class="mut">${esc(l)}</div>`).join("")}</div></div>`;
+  const what = `<div class="what"><h1>${esc(title)}</h1>${meta.map((m) => `<div class="mut">${esc(m)}</div>`).join("")}</div>`;
+  return `<!doctype html><html lang="${opts.lang}"><head><meta charset="utf-8"><title>${esc(title)}</title>
 <style>
 @page { margin: ${P.pagePadMm}mm; }
-body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: ${P.ink}; background: ${P.paper}; font-size: ${P.fontPt.body}pt; margin: 0; }
-h1 { font-size: ${P.fontPt.title}pt; margin: 0 0 4pt; }
-h2 { font-size: ${P.fontPt.heading}pt; margin: 14pt 0 4pt; }
-.mut { color: ${P.mut}; font-size: ${P.fontPt.small}pt; }
-.head { display: flex; justify-content: space-between; gap: 12pt; border-bottom: ${c.color ? `2px solid ${esc(c.color)}` : `1px solid ${P.rule}`}; padding-bottom: 8pt; }
+body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: ${P.ink}; background: ${P.paper}; font-size: ${s.fontPt.body}pt; margin: 0; }
+h1 { font-size: ${s.fontPt.title}pt; margin: 0 0 4pt; }
+h2 { font-size: ${s.fontPt.heading}pt; margin: ${s.sectionGapPt}pt 0 4pt; }
+.mut { color: ${P.mut}; font-size: ${s.fontPt.small}pt; }
+.head { display: flex; flex-direction: ${s.logoSide === "right" ? "row-reverse" : "row"}; justify-content: space-between; gap: 12pt; padding-bottom: 8pt;${
+    s.headRulePx ? ` border-bottom: ${s.headRulePx}px solid ${P.rule};` : ""
+  } }
+.who { display: flex; flex-direction: ${s.logoSide === "right" ? "row-reverse" : "row"}; gap: 10pt; align-items: flex-start; }
+.what { text-align: ${s.logoSide === "right" ? "left" : "right"}; }
+.logo { width: ${s.logoPt}pt; height: ${s.logoPt}pt; object-fit: contain; }
+.band { height: ${s.brandBandPt}pt; background: ${brand ?? P.rule}; margin-bottom: 6pt; }
 table { width: 100%; border-collapse: collapse; }
-td, th { padding: 4pt 0; border-bottom: 1px solid ${P.rule}; text-align: left; }
-th { color: ${P.mut}; font-weight: 500; font-size: ${P.fontPt.small}pt; }
-.r { text-align: right; white-space: nowrap; }
-.tot td { font-weight: 700; font-size: ${P.fontPt.heading}pt; }
+td, th { padding: ${s.rowPadPt}pt 0; border-bottom: 1px solid ${P.rule}; text-align: left; vertical-align: top; }
+th { color: ${P.mut}; font-weight: 500; font-size: ${s.fontPt.small}pt; }
+.r { text-align: right; white-space: nowrap; padding-left: 8pt; }
+.grp td { font-weight: 600; padding-top: ${s.rowPadPt * 2}pt; }
+.opt td { color: ${P.mut}; }
+.sums { width: 50%; margin-left: auto; margin-top: 6pt; }
+.sums td { border: 0; padding: 2pt 0; }
+.tot td { font-weight: 700; font-size: ${s.fontPt.heading}pt; }
+.sums .tot td { border-top: 1px solid ${P.rule}; padding-top: 4pt; }
+.note { margin-top: 10pt; white-space: pre-wrap; }
 .ok { color: ${P.okText}; font-weight: 600; }
+.sigs { display: flex; gap: 24pt; margin-top: ${s.sectionGapPt}pt; break-inside: avoid; }
+.sig { flex: 1; }
+.sig .line { border-bottom: 1px solid ${P.ink}; min-height: 40pt; display: flex; align-items: flex-end; }
+.record td { font-size: ${s.fontPt.small}pt; }
+.foot { position: fixed; bottom: 0; left: 0; right: 0; text-align: center; color: ${P.mut}; font-size: ${s.fontPt.small}pt; }
+.page { padding-bottom: 18pt; }
 </style></head><body>
-<div class="head"><div style="display:flex;gap:10pt;align-items:flex-start">${
-    c.logo && c.logo.startsWith("data:image/") ? `<img src="${esc(c.logo)}" style="width:48pt;height:48pt;object-fit:contain" alt="">` : ""
-  }<div><h1>${esc(c.name || "OCTODEX")}</h1>${lines.map((l) => `<div class="mut">${esc(l)}</div>`).join("")}</div></div>
-<div style="text-align:right"><h1>${esc(title)}</h1></div></div>
+<div class="page">
+<div class="head">${who}${what}</div>
+${s.brandBandPt && brand ? `<div class="band"></div>` : ""}
 ${body}
+</div>
+<div class="foot">${esc(footer)}</div>
 </body></html>`;
 }
 
 const kindKey = (i: Invoice): DictKey => (i.kind === "deposit" ? "inv.kind.deposit" : i.kind === "progress" ? "inv.kind.progress" : "inv.kind.final");
 
-export function invoiceHtml(db: DB, inv: Invoice, company: PortalData["company"], f: Fmt): string {
-  const { t, money, day } = f;
+export function invoiceHtml(db: DB, inv: Invoice, company: PortalData["company"], opts: DocOpts): string {
+  const t = tFor(opts.lang);
+  const money = docMoney;
+  const day = docDay;
   const cust = db.customers.find((c) => c.id === inv.customerId);
   const job = db.jobs.find((j) => j.id === inv.jobId);
   const prop = db.properties.find((p) => p.id === job?.propertyId);
@@ -56,11 +114,7 @@ export function invoiceHtml(db: DB, inv: Invoice, company: PortalData["company"]
   const st = job ? contractStatement(job.amountCents, jobInvoices) : null;
   const prior = jobInvoices.filter((i) => i.id !== inv.id && (i.sentAt ?? "") <= (inv.sentAt ?? "~"));
   const body = `
-<table style="margin-top:10pt"><tr><td style="border:0;vertical-align:top"><b>${esc(t("portal.for"))}:</b> ${esc(cust?.name ?? "")}<br>${esc(
-    [prop?.address, prop?.city].filter(Boolean).join(", "),
-  )}</td><td class="r" style="border:0;vertical-align:top"><b>${esc(inv.number ?? "")}</b><br>${esc(t("inv.date"))}: ${day(inv.sentAt ?? inv.dueDate)}<br>${esc(
-    t("inv.due"),
-  )}: ${day(inv.dueDate)}</td></tr></table>
+<p><b>${esc(t("portal.for"))}:</b> ${esc(cust?.name ?? "")}<br>${esc([prop?.address, prop?.city].filter(Boolean).join(", "))}</p>
 <h2>${esc(inv.title || t(kindKey(inv)))}</h2>
 <table>
 ${job && st && inv.kind !== "deposit" ? `<tr><td>${esc(t("inv.contract"))}: ${esc(job.title)}</td><td class="r">${money(st.contract)}</td></tr>` : ""}
@@ -70,18 +124,28 @@ ${pays.map((p) => `<tr><td class="mut">${esc(t("inv.paymentOn", { date: day(p.at
 <tr class="tot"><td>${esc(t("inv.balance"))}</td><td class="r">${money(Math.max(0, inv.totalCents - inv.paidCents))}</td></tr>
 </table>
 ${inv.paidCents >= inv.totalCents ? `<p class="ok">✓ ${esc(t("inv.paidInFull"))}</p>` : ""}
-${payInstructions(db, f)}`;
-  return page(`${t("inv.title")} ${inv.number ?? ""}`.trim(), company, body);
+${payInstructions(db, t)}`;
+  const title = `${t("inv.title")} ${inv.number ?? ""}`.trim();
+  return docPage({
+    title,
+    meta: [`${t("inv.date")}: ${day(inv.sentAt ?? inv.dueDate)}`, `${t("inv.due")}: ${day(inv.dueDate)}`],
+    footer: [title, company.name].filter(Boolean).join(" · "),
+    company,
+    body,
+    opts,
+  });
 }
 
-function payInstructions(db: DB, f: Fmt): string {
+function payInstructions(db: DB, t: ReturnType<typeof tFor>): string {
   const p = db.company?.payment;
-  const lines = [p?.zelle ? `Zelle: ${p.zelle}` : "", p?.checkPayableTo ? `${f.t("inv.checkTo")} ${p.checkPayableTo}` : ""].filter(Boolean);
+  const lines = [p?.zelle ? `Zelle: ${p.zelle}` : "", p?.checkPayableTo ? `${t("inv.checkTo")} ${p.checkPayableTo}` : ""].filter(Boolean);
   return lines.length ? `<p class="mut">${lines.map(esc).join("<br>")}</p>` : "";
 }
 
-export function receiptHtml(db: DB, p: Payment, company: PortalData["company"], f: Fmt): string {
-  const { t, money, day } = f;
+export function receiptHtml(db: DB, p: Payment, company: PortalData["company"], opts: DocOpts): string {
+  const t = tFor(opts.lang);
+  const money = docMoney;
+  const day = docDay;
   const inv = db.invoices.find((i) => i.id === p.invoiceId);
   const cust = db.customers.find((c) => c.id === p.customerId);
   const balance = inv ? Math.max(0, inv.totalCents - inv.paidCents) : 0;
@@ -95,5 +159,27 @@ ${inv ? `<tr><td>${esc(t("rcpt.forInvoice"))}</td><td class="r">${esc([inv.numbe
 ${inv ? `<tr><td>${esc(t("rcpt.balanceAfter"))}</td><td class="r">${money(balance)}</td></tr>` : ""}
 </table>
 <p class="ok">✓ ${esc(t("rcpt.thanks"))}</p>`;
-  return page(`${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim(), company, body);
+  const title = `${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim();
+  return docPage({ title, meta: [`${t("rcpt.date")}: ${day(p.at)}`], footer: [title, company.name].filter(Boolean).join(" · "), company, body, opts });
+}
+
+/** SMS / email text for an invoice — in the CLIENT's language (rule 7). */
+export function invoiceMessage(db: DB, inv: Invoice, company: PortalData["company"], lang: DocLang): { text: string; subject: string } {
+  const t = tFor(lang);
+  const p = db.company?.payment;
+  const how = [p?.zelle ? `Zelle ${p.zelle}` : "", p?.checkPayableTo ? `${t("inv.checkTo")} ${p.checkPayableTo}` : ""].filter(Boolean).join(", ");
+  const balance = Math.max(0, inv.totalCents - inv.paidCents);
+  return {
+    text: t("inv.sendText", { company: company.name, number: inv.number ?? "", amount: docMoney(balance), date: docDay(inv.dueDate), how: how || "—" }),
+    subject: `${t("inv.title")} ${inv.number ?? ""}`.trim(),
+  };
+}
+
+/** SMS / email text for a receipt — in the CLIENT's language (rule 7). */
+export function receiptMessage(p: Payment, company: PortalData["company"], lang: DocLang): { text: string; subject: string } {
+  const t = tFor(lang);
+  return {
+    text: t("rcpt.sendText", { company: company.name, amount: docMoney(p.amountCents), number: p.receiptNumber ?? "", date: docDay(p.at) }),
+    subject: `${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim(),
+  };
 }
