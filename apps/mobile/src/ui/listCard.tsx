@@ -185,6 +185,8 @@ export interface ListCardProps {
    * so the screen records it with existing store functions (lead: touchLead / call result) and opens the url itself (openContact).
    */
   onContact?: (a: ContactAction) => void;
+  /** override the edge: by default the worst of status and signs; a list may say «only what needs action» (null = no edge) */
+  edge?: "warn" | "bad" | null;
 }
 
 /** open a contact action's url (call, SMS, map, email) */
@@ -202,7 +204,7 @@ export function ListCard(p: ListCardProps) {
   const compact = density === "compact";
   const actions = compact ? [] : contactActions(p.contact ?? {}, Platform.OS as OS);
   const lines = layoutFacts(p.facts ?? {}, density, device);
-  const edge = edgeTone([p.status?.tone, ...(p.signs ?? []).map((s) => s.tone)]);
+  const edge = p.edge !== undefined ? p.edge : edgeTone([p.status?.tone, ...(p.signs ?? []).map((s) => s.tone)]);
   const btn = device === "phone" ? component.button.phone : component.button.md;
   const open = (a: ContactAction) => () => (p.onContact ? p.onContact(a) : openContact(a));
   const a11yActions = actions.map((a) => ({ name: a.kind, label: t(`card.act.${a.kind}`, { v: a.value }) }));
@@ -362,7 +364,7 @@ function ListCardRow(p: ListCardProps) {
   const all = contactActions(p.contact ?? {}, Platform.OS as OS);
   // two buttons fit a row: call, then the card's main action if any (e.g. «Reply» on a new lead), otherwise the map
   const actions = all.filter((a) => a.kind === "call" || (!p.action && a.kind === "map"));
-  const edge = edgeTone([p.status?.tone, ...(p.signs ?? []).map((s) => s.tone)]);
+  const edge = p.edge !== undefined ? p.edge : edgeTone([p.status?.tone, ...(p.signs ?? []).map((s) => s.tone)]);
   const btn = component.button.sm;
   return (
     <Press
@@ -458,7 +460,7 @@ export function ListCardHeader({ title, columns, value }: { title: string; colum
       <View style={{ width: component.avatar.sm }} />
       <View style={{ flex: 1.3 }}>{cap(title)}</View>
       {rowColumns(columns).map((k) => <View key={k} style={{ flex: 1 }}>{cap(t(`card.fact.${k}`))}</View>)}
-      <View style={{ width: ROW_VALUE_W, alignItems: "flex-end" }}>{value ? cap(value) : null}</View>
+      <View style={{ width: ROW_VALUE_W, alignItems: "flex-end" }}>{value ? cap(value.charAt(0).toUpperCase() + value.slice(1)) : null}</View>
       <View style={{ width: ROW_ACTIONS_W }} />
     </View>
   );
