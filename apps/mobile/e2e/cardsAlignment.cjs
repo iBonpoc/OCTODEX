@@ -1,7 +1,7 @@
 /**
  * Alignment guard for lists on the new list cards (docs/specs/06-list-cards.md): call it from every list spec.
  * - phone 390 / desktop 1280: every card starts and ends on the same vertical lines as the search field;
- * - tablet 820 (grid): cards of one row have the same top and the same height, gaps between columns are equal,
+ * - grid (tablet 820, or a list shown as a grid on 1280): cards of one row have the same top and the same height, gaps between columns are equal,
  *   the first column starts and the last column ends on the search field's edges.
  * Cards are found by testID "list-card"; tolerance 1 px (sub-pixel rounding).
  */
@@ -28,7 +28,9 @@ exports.checkCardAlignment = async (h, { searchPlaceholder, reference, min = 2 }
   );
   h.expect(cards.length >= min, `at least ${min} cards on screen (${cards.length})`);
   const right = box.x + box.w;
-  if (h.layout.width !== 820) {
+  // a grid: several cards on one row, or a card narrower than the line (tablet, a list shown as a grid on 1280, a row with one card)
+  const grid = cards.some((a, i) => cards.some((b, j) => i !== j && near(a.y, b.y))) || cards.some((c) => c.w < box.w - TOL);
+  if (!grid) {
     for (const c of cards) {
       h.expect(near(c.x, box.x), `card left edge ${c.x.toFixed(1)} = search left ${box.x.toFixed(1)}`);
       h.expect(near(c.x + c.w, right), `card right edge ${(c.x + c.w).toFixed(1)} = search right ${right.toFixed(1)}`);
@@ -54,6 +56,11 @@ exports.checkCardAlignment = async (h, { searchPlaceholder, reference, min = 2 }
       const gap0 = r.length > 1 ? r[1].x - (r[0].x + r[0].w) : gap;
       h.expect(near(gap, gap0), `equal gaps between columns (${gap.toFixed(1)} vs ${gap0.toFixed(1)})`);
     }
-    if (r.length > 1) h.expect(near(r[r.length - 1].x + r[r.length - 1].w, right), "last full column ends on the search edge");
+    // only a FULL row must end on the right edge: columns = how many cards of this width (with the row's gap) fit the line
+    if (r.length > 1) {
+      const gap = r[1].x - (r[0].x + r[0].w);
+      const cols = Math.round((box.w + gap) / (r[0].w + gap));
+      if (r.length === cols) h.expect(near(r[r.length - 1].x + r[r.length - 1].w, right), "last full column ends on the search edge");
+    }
   }
 };
