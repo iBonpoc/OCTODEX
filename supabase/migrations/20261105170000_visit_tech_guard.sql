@@ -1,17 +1,23 @@
 -- Security review of C2 (gate code, migration 20261105160000), blocker: visits_update_tech lets a tech change any column
 -- of their visit. A tech could set starts_at = now() and get the gate code at once, or point job_id at another job and
 -- see that property, client and code. A tech only moves a visit through its steps (status, work started, checklist,
--- signature); time, job, lead, company and deletion are the office's.
+-- signature); time, arrival window, crew, route order, client notice, job, lead, company and deletion are the office's.
+-- Without a user (service role, cron, server functions) the guard does not apply.
 -- Also: a cancelled job no longer opens the gate code.
 
 create or replace function app.tg_visit_tech_guard()
 returns trigger language plpgsql set search_path = '' as $$
 begin
-  if app.is_staff(old.company_id) then return new; end if;
+  -- no user (service role, cron, server functions) or the office: anything goes
+  if auth.uid() is null or app.is_staff(old.company_id) then return new; end if;
   if new.starts_at is distinct from old.starts_at or new.ends_at is distinct from old.ends_at
      or new.job_id is distinct from old.job_id or new.lead_id is distinct from old.lead_id
      or new.company_id is distinct from old.company_id or new.kind is distinct from old.kind
-     or new.deleted_at is distinct from old.deleted_at then
+     or new.deleted_at is distinct from old.deleted_at
+     or new.arrival_window_start is distinct from old.arrival_window_start or new.arrival_window_end is distinct from old.arrival_window_end
+     or new.notify_customer is distinct from old.notify_customer or new.crew_id is distinct from old.crew_id
+     or new.subcontractor_assignment_id is distinct from old.subcontractor_assignment_id or new.schedule_mode is distinct from old.schedule_mode
+     or new.flex_week_start is distinct from old.flex_week_start or new.sequence_in_route is distinct from old.sequence_in_route then
     raise exception 'only the office changes the time, job or place of a visit' using errcode = '42501';
   end if;
   return new;
