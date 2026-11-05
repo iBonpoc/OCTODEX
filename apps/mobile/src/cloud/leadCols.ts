@@ -3,7 +3,8 @@ import type { Lead } from "@/data/types";
 
 export type LeadPatch = Partial<
   Pick<Lead, "name" | "phone" | "phone2" | "phone2Label" | "email" | "preferredContact" | "language" | "address" | "city" | "state" | "zip" | "sourceId"
-    | "serviceItemId" | "service" | "timeframe" | "timeframeDate" | "budgetCents" | "message" | "assigneeId">
+    | "serviceItemId" | "service" | "timeframe" | "timeframeDate" | "budgetCents" | "message" | "assigneeId"
+    | "interest" | "snoozedUntil" | "snoozeReason" | "remindedAt" | "askAgainAt">
 >;
 
 const COLS: Record<keyof LeadPatch, string> = {
@@ -26,6 +27,11 @@ const COLS: Record<keyof LeadPatch, string> = {
   budgetCents: "budget_cents",
   message: "message",
   assigneeId: "assigned_to",
+  interest: "interest",
+  snoozedUntil: "snoozed_until",
+  snoozeReason: "snooze_reason",
+  remindedAt: "reminded_at",
+  askAgainAt: "ask_again_at",
 };
 
 export function leadCols(p: LeadPatch, full?: Pick<Lead, "address" | "city" | "state" | "zip">): Record<string, unknown> {

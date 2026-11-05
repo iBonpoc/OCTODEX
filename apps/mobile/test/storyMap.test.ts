@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { ESTIMATE_STATUSES, JOB_STATUSES, LEAD_STATUSES, VISIT_STEPS } from "../src/data/types";
-import { estimateStatus, jobStatus, leadStatus } from "../src/cloud/statusMap";
+import { estimateStatus, jobStatus, leadStatus, leadStatusToDb } from "../src/cloud/statusMap";
 
 const ROOT = path.resolve(__dirname, "../../..");
 const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -103,6 +103,13 @@ describe("story map §5: statuses", () => {
       for (const s of Object.keys(c.toApp)) expect(allowed, `statusMap.ts '${s}'`).toContain(s);
     });
   }
+  it("Lead: every app status is written as a status the database allows, and reads back as itself", () => {
+    const allowed = dbStatuses("leads");
+    for (const s of LEAD_STATUSES) {
+      expect(allowed, `app '${s}' → db '${leadStatusToDb[s]}'`).toContain(leadStatusToDb[s]);
+      expect(leadStatus[leadStatusToDb[s]], `round trip of '${s}'`).toBe(s);
+    }
+  });
   it("Visit: the map lists exactly the app steps", () => {
     expect(ticks(statusRows.get("Visit")![1]!).sort()).toEqual([...VISIT_STEPS].sort());
   });

@@ -109,7 +109,7 @@ function LeadsBoard() {
       <ChoiceChips<LeadFilter>
         value={f}
         onChange={setF}
-        items={(["open", "mine", "waiting", "won", "closed"] as const).map((k) => ({ key: k, label: `${t(`lead.f.${k}` as DictKey)} · ${count(k)}` }))}
+        items={(["open", "mine", "waiting", "snoozed", "won", "closed"] as const).map((k) => ({ key: k, label: `${t(`lead.f.${k}` as DictKey)} · ${count(k)}` }))}
       />
       {usedSources.length > 1 ? (
         <ChoiceChips<string> value={src} onChange={setSrc} items={[{ key: "", label: t("lead.allSources") }, ...usedSources.map((x) => ({ key: x.id, label: x.name }))]} />

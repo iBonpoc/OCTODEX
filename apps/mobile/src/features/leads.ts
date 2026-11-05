@@ -2,10 +2,11 @@
  * Lead logic (founder decisions 04.11, docs/03-prd/02-leads.md). Pure functions — unit-tested in test/leads.test.ts.
  *   Funnel: new → in touch → estimate visit → estimate sent → client.
  *   Closed: lost (the client decided) or declined (we decided), always with a reason; both can be reopened.
- *   Reply timer runs around the clock until the first call / SMS / email / "I replied".
+ *   Reply timer runs around the clock until the first answered call / SMS / email / "I replied".
+ *   "Whose turn" (leadTurn) — the one question the card answers: reply / do the step / wait for the client / snoozed.
  */
 import type { StatusName } from "@octo/design-tokens";
-import { timing } from "@octo/design-tokens";
+import { LEAD_SETTINGS_DEFAULT, type LeadSettings } from "./leadSettings";
 import { DECLINE_REASONS, LOST_REASONS, type Customer, type DB, type Lead, type LeadStatus, type LostReason, type Role, type Source, type SourceKind, type Task } from "@/data/types";
 import type { DictKey } from "@/i18n";
 
@@ -27,13 +28,13 @@ export type ManualWinReason = (typeof MANUAL_WIN_REASONS)[number];
 export const isOpenLead = (l: Lead) => l.status !== "won" && l.status !== "lost" && l.status !== "declined";
 export const isClosedLead = (l: Lead) => l.status === "lost" || l.status === "declined";
 
-/** Days since the lead last moved (contractor action) or arrived. */
-export function leadIdleDays(l: Lead, now = Date.now()): number {
-  const t = new Date(l.lastActivityAt ?? l.receivedAt).getTime();
-  return Math.floor((now - t) / 86_400_000);
-}
-export const LEAD_FOLLOW_UP_DAYS = 14;
-export const LEAD_CLOSE_DAYS = 30;
+const DAY = 86_400_000;
+const daysBetween = (from: string, now: number) => Math.floor((now - new Date(from).getTime()) / DAY);
+/** Snoozed right now ("call me in 3 months"): out of the open lists until the date. */
+export const isSnoozed = (l: Lead, now = Date.now()) => isOpenLead(l) && !!l.snoozedUntil && new Date(l.snoozedUntil).getTime() > now;
+/** The snooze date has come and nobody has touched the lead since: it is back on the list. */
+export const isBackFromSnooze = (l: Lead, now = Date.now()) =>
+  isOpenLead(l) && !!l.snoozedUntil && new Date(l.snoozedUntil).getTime() <= now && (l.lastActivityAt ?? "") < l.snoozedUntil;
 
 /* ---------- sources ---------- */
 export const sourceOf = (db: DB, id: string | undefined): Source | undefined => db.sources.find((s) => s.id === id);
@@ -55,8 +56,8 @@ export function waitingMinutes(l: Lead, now = Date.now()): number | null {
   if (l.firstResponseAt || l.status !== "new") return null;
   return Math.max(0, Math.floor((now - new Date(l.receivedAt).getTime()) / 60_000));
 }
-export function waitStatus(m: number): StatusName {
-  return m >= timing.leadReplyBadMin ? "bad" : m >= timing.leadReplyWarnMin ? "warn" : "info";
+export function waitStatus(m: number, st: LeadSettings = LEAD_SETTINGS_DEFAULT): StatusName {
+  return m >= st.replyBadMin ? "bad" : m >= st.replyWarnMin ? "warn" : "info";
 }
 /** How fast we replied (minutes) — for the card and the source report. */
 export function responseMinutes(l: Lead): number | null {
@@ -105,6 +106,84 @@ export function needsNextStep(db: DB, l: Lead): boolean {
 }
 export const isOverdueTask = (t: Task, now = Date.now()) => !t.doneAt && !!t.dueAt && new Date(t.dueAt).getTime() < now;
 
+/* ---------- whose turn ---------- */
+export type LeadTurn =
+  | { kind: "reply"; minutes: number; attempts: number; status: StatusName }
+  | { kind: "step"; dueAt?: string; title?: string; status: StatusName }
+  | { kind: "wait"; days: number; action: "none" | "remind" | "lostOrWait"; status: StatusName }
+  | { kind: "noStep"; status: StatusName }
+  | { kind: "snoozed"; until: string; status: StatusName }
+  | { kind: "done"; status: StatusName };
+/**
+ * What to do with the lead now (docs/14-leads-spec.md §3.2). Computed, never stored.
+ *   reply   — new lead (later: the client wrote last); colour by minutes, unanswered calls don't stop it
+ *   step    — an open task or a booked estimate visit; overdue = red
+ *   wait    — the estimate went out (or we wrote last) and there is no step: remind after N days, then "lost or wait?"
+ *   noStep  — open, not new, nothing planned
+ *   snoozed — hidden until the date
+ */
+export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAULT, now = Date.now()): LeadTurn {
+  if (!isOpenLead(l)) return { kind: "done", status: leadStatusView[l.status].status };
+  if (isSnoozed(l, now)) return { kind: "snoozed", until: l.snoozedUntil!, status: "neutral" };
+  // silence is not counted while the lead was snoozed: clocks start again from the return date
+  const after = (t: string | undefined) => (t && l.snoozedUntil && l.snoozedUntil > t ? l.snoozedUntil : t);
+  const clientWroteLast = !!l.lastInboundAt && (!l.lastOutboundAt || l.lastInboundAt > l.lastOutboundAt);
+  if (l.status === "new" || clientWroteLast) {
+    const since = l.status === "new" ? l.receivedAt : l.lastInboundAt!;
+    const minutes = Math.max(0, Math.floor((now - new Date(since).getTime()) / 60_000));
+    return { kind: "reply", minutes, attempts: l.callAttempts ?? 0, status: waitStatus(minutes, st) };
+  }
+  const task = openTasks(db, l.id)[0];
+  if (task) {
+    const due = task.dueAt ? new Date(task.dueAt).getTime() : null;
+    const today = due !== null && new Date(due).toDateString() === new Date(now).toDateString();
+    return { kind: "step", dueAt: task.dueAt, title: task.title, status: due === null ? "neutral" : due < now ? "bad" : today ? "info" : "neutral" };
+  }
+  if (l.status === "booked") {
+    // the estimate visit is the step; once it has passed with no estimate, it is overdue (a day of grace)
+    const visit = l.propertyId
+      ? db.visits
+          .filter((v) => db.jobs.find((j) => j.id === v.jobId && j.propertyId === l.propertyId && j.status === "estimate"))
+          .sort((a, b) => b.start.localeCompare(a.start))[0]
+      : undefined;
+    if (!visit) return { kind: "step", status: "info" };
+    const start = new Date(visit.start).getTime();
+    if (start > now) return { kind: "step", dueAt: visit.start, status: new Date(start).toDateString() === new Date(now).toDateString() ? "info" : "neutral" };
+    return { kind: "step", dueAt: visit.start, status: now - start >= DAY ? "bad" : "warn" };
+  }
+  const sentAt = db.estimates.filter((e) => e.leadId === l.id && e.status === "sent" && e.sentAt).map((e) => e.sentAt!).sort().pop();
+  // we wrote last: the last thing we did was a message (SMS / email / marketplace / "I replied"), not a conversation
+  const lastOut = db.activities
+    .filter((a) => a.subjectType === "lead" && a.subjectId === l.id && ["call", "sms", "email", "marketplace", "reply"].includes(a.kind))
+    .sort((a, b) => b.at.localeCompare(a.at))[0];
+  const wroteLast = !!lastOut && lastOut.kind !== "call" && (!l.lastInboundAt || lastOut.at > l.lastInboundAt);
+  if (l.status === "estimate_sent" || sentAt || wroteLast) {
+    const from = after([sentAt, wroteLast ? lastOut!.at : undefined].filter((x): x is string => !!x).sort().pop() ?? l.lastOutboundAt ?? l.lastActivityAt ?? l.receivedAt)!;
+    const days = Math.max(0, daysBetween(from, now));
+    // a reminder counts only for what is waiting now: a newer estimate or message starts over
+    const reminded = l.remindedAt && (!sentAt || l.remindedAt >= sentAt) ? after(l.remindedAt)! : undefined;
+    if (reminded && l.askAgainAt) {
+      return new Date(l.askAgainAt).getTime() > now ? { kind: "wait", days, action: "none", status: "neutral" } : { kind: "wait", days, action: "lostOrWait", status: "warn" };
+    }
+    if (reminded) return daysBetween(reminded, now) >= st.lostOrWaitDays ? { kind: "wait", days, action: "lostOrWait", status: "warn" } : { kind: "wait", days, action: "none", status: "neutral" };
+    if (days >= st.remindDays) return { kind: "wait", days, action: "remind", status: "warn" };
+    return { kind: "wait", days, action: "none", status: "neutral" };
+  }
+  return { kind: "noStep", status: "warn" };
+}
+
+/** What the lead still needs before an estimate (docs/14 Р8): each item has an "Add" button on the card. */
+export type MissingItem = "phone" | "email" | "address" | "zip" | "request";
+export function missingForEstimate(l: Lead): MissingItem[] {
+  const out: MissingItem[] = [];
+  if (phoneKey(l.phone).length !== 10) out.push("phone");
+  if (!l.email?.trim()) out.push("email");
+  if (!l.address?.trim()) out.push("address");
+  if (!/^\d{5}$/.test((l.zip ?? "").trim())) out.push("zip");
+  if (!(l.service?.trim() || l.serviceItemId || l.message?.trim())) out.push("request");
+  return out;
+}
+
 /* ---------- who sees what ---------- */
 /** Office sees every lead; a tech sees leads assigned to him or created by him (a neighbor on site). Same rule as the server (RLS). */
 export function canSeeLead(role: Role, me: string, l: Lead): boolean {
@@ -114,16 +193,17 @@ export function canSeeLead(role: Role, me: string, l: Lead): boolean {
 export const canSeeLeadCost = (role: Role) => role !== "tech";
 
 /* ---------- list ---------- */
-export type LeadFilter = "open" | "mine" | "waiting" | "won" | "closed";
+export type LeadFilter = "open" | "mine" | "waiting" | "snoozed" | "won" | "closed";
 export function filterLeads(db: DB, role: Role, f: { filter: LeadFilter; sourceId?: string; q?: string }, now = Date.now()): Lead[] {
   const needle = (f.q ?? "").trim().toLowerCase();
   const digits = needle.replace(/\D/g, "");
   return db.leads
     .filter((l) => canSeeLead(role, db.me, l))
     .filter((l) =>
-      f.filter === "open" ? isOpenLead(l)
-      : f.filter === "mine" ? isOpenLead(l) && l.assigneeId === db.me
-      : f.filter === "waiting" ? waitingMinutes(l, now) !== null
+      f.filter === "open" ? isOpenLead(l) && !isSnoozed(l, now)
+      : f.filter === "mine" ? isOpenLead(l) && !isSnoozed(l, now) && l.assigneeId === db.me
+      : f.filter === "waiting" ? waitingMinutes(l, now) !== null && !isSnoozed(l, now)
+      : f.filter === "snoozed" ? isSnoozed(l, now)
       : f.filter === "won" ? l.status === "won"
       : isClosedLead(l),
     )

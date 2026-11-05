@@ -15,12 +15,12 @@ import { View } from "react-native";
 export default function Triage() {
   useTick();
   const { t, money } = useI18n();
-  const { db } = useStore();
+  const { db, role } = useStore();
   const toast = useToast();
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const [reply, setReply] = useState<string | null>(null);
   const [assign, setAssign] = useState<string | null>(null);
-  const all = buildAttention(db).filter((x) => !snoozed.includes(x.id));
+  const all = buildAttention(db, role).filter((x) => !snoozed.includes(x.id));
   const cur = all[0];
 
   const snooze = (it: AttentionItem, msg: string) => {

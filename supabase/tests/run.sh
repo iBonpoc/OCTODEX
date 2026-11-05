@@ -48,9 +48,14 @@ PSQL=("${RUN_AS[@]}" psql -X -q -v ON_ERROR_STOP=1 -h "$SOCK" -p "$PGPORT" -U "$
 
 echo "== auth stub"
 "${PSQL[@]}" -f "$WORK/auth_stub.sql"
+# Migration on a database that already has data (CLAUDE.md rule 15): upgrade/<migration>.before.sql puts old-shape
+# rows in right before that migration, upgrade/<migration>.after.sql checks them right after (and cleans up).
 for m in $(ls "$WORK" | grep -E '^[0-9]+_.*\.sql$' | sort); do
+  b="$HERE/upgrade/${m%.sql}.before.sql"; a="$HERE/upgrade/${m%.sql}.after.sql"
+  [[ -f "$b" ]] && { echo "== upgrade data before $m"; cp "$b" "$WORK/_before.sql"; [[ ${#RUN_AS[@]} -gt 0 ]] && chown "$RUN_USER" "$WORK/_before.sql"; "${PSQL[@]}" -f "$WORK/_before.sql"; }
   echo "== migration $m"
   "${PSQL[@]}" -f "$WORK/$m"
+  [[ -f "$a" ]] && { echo "== upgrade check after $m"; cp "$a" "$WORK/_after.sql"; [[ ${#RUN_AS[@]} -gt 0 ]] && chown "$RUN_USER" "$WORK/_after.sql"; "${PSQL[@]}" -f "$WORK/_after.sql"; }
 done
 echo "== tests core_rls.sql"
 VERB=(); [[ "${VERBOSE:-}" == "1" ]] && VERB=(-v verbose=1)
