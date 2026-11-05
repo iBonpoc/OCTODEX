@@ -86,3 +86,35 @@ export function propertyPeople(db: DB, p: Property): Person[] {
 
 /** A new property of a client: the street is required, the place may be empty. */
 export const canSaveProperty = (p: { address: string }) => p.address.trim().length >= 3;
+
+export type PropertyEntry =
+  | { kind: "visit"; at: string; visit: Visit }
+  | { kind: "estimate"; at: string; estimate: Estimate }
+  | { kind: "note"; at: string; note: DB["notes"][number] };
+/** History of a property, newest first: visits, estimates sent or signed, notes on the property. */
+export function propertyTimeline(db: DB, propertyId: string): PropertyEntry[] {
+  const jobIds = new Set(db.jobs.filter((j) => j.propertyId === propertyId).map((j) => j.id));
+  const out: PropertyEntry[] = [
+    ...db.visits.filter((v) => jobIds.has(v.jobId)).map((v) => ({ kind: "visit" as const, at: v.start, visit: v })),
+    ...db.estimates
+      .filter((e) => e.propertyId === propertyId && (e.approvedAt || e.sentAt))
+      .map((e) => ({ kind: "estimate" as const, at: (e.approvedAt ?? e.sentAt)!, estimate: e })),
+    ...db.notes.filter((n) => n.subjectType === "property" && n.subjectId === propertyId).map((n) => ({ kind: "note" as const, at: n.at, note: n })),
+  ];
+  return out.sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/** Documents of a property: its estimates and the invoices of its jobs. */
+export function propertyDocs(db: DB, propertyId: string): { estimates: Estimate[]; invoices: DB["invoices"] } {
+  const jobIds = new Set(db.jobs.filter((j) => j.propertyId === propertyId).map((j) => j.id));
+  return { estimates: db.estimates.filter((e) => e.propertyId === propertyId), invoices: db.invoices.filter((i) => jobIds.has(i.jobId)) };
+}
+
+/** Photos taken on the visits of a property (before / after), newest visit first. */
+export function propertyPhotos(db: DB, propertyId: string): { visit: Visit; photo: Visit["photos"][number] }[] {
+  const jobIds = new Set(db.jobs.filter((j) => j.propertyId === propertyId).map((j) => j.id));
+  return db.visits
+    .filter((v) => jobIds.has(v.jobId))
+    .sort((a, b) => b.start.localeCompare(a.start))
+    .flatMap((v) => v.photos.map((photo) => ({ visit: v, photo })));
+}

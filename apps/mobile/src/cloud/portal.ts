@@ -5,6 +5,8 @@
  */
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
 import { clientDoc } from "@/features/estimateDoc";
+import { docLanguageFor } from "@/data/people";
+import type { DocLang } from "@/i18n/translate";
 import { supabase } from "./client";
 
 export interface PortalData {
@@ -33,6 +35,8 @@ export interface PortalData {
   depositPaid: boolean;
   /** issued invoices of the job (client pays them on this page) */
   invoices: { id: string; number?: string; title?: string; kind: string; totalCents: number; paidCents: number; dueDate?: string }[];
+  /** the client's language for this page and its PDF (rule 7); from the server: portal_estimate.doc_language */
+  lang: DocLang;
 }
 
 type Raw = {
@@ -46,6 +50,7 @@ type Raw = {
   approval?: { option_id: string; signer_name: string; signed_at: string; signature_svg?: string; selection?: { addon_ids?: string[]; total?: number; deposit?: number } } | null;
   deposit_paid?: boolean;
   invoices?: { id: string; number?: string; title?: string; kind: string; total: number; paid: number; due_date?: string }[];
+  doc_language?: string;
 };
 
 function fromRaw(r: Raw): PortalData {
@@ -72,6 +77,7 @@ function fromRaw(r: Raw): PortalData {
         }
       : null,
     depositPaid: !!r.deposit_paid,
+    lang: r.doc_language === "es" || r.doc_language === "ru" ? r.doc_language : "en",
     invoices: (r.invoices ?? []).map((i) => ({ id: i.id, number: i.number, title: i.title ?? undefined, kind: i.kind, totalCents: Number(i.total), paidCents: Number(i.paid), dueDate: i.due_date })),
   };
 }
@@ -99,6 +105,7 @@ export function portalFromEstimate(db: DB, e: Estimate, companyName: string): Po
       ? { optionId: e.approval.optionId, addonIds: e.approval.addonIds, signerName: e.approval.signerName, signedAt: e.approval.at, signature: e.approval.signature, totalCents: e.approval.totalCents, depositCents: e.approval.depositCents }
       : null,
     depositPaid: !!e.depositPaidAt,
+    lang: docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }),
     invoices: (() => {
       const job = db.jobs.find((x) => x.estimateId === e.id);
       return job

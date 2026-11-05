@@ -1,13 +1,13 @@
 /** Client signs on the client page → deposit invoice issued → pays by simulated card → contract statement paid. */
 exports.run = async (h) => {
   await h.go("/p/demo0handyman0estimate0000000001");
-  await h.expectText(/Итого \| \$772\.36/, "client sees total with 9.5% tax on materials");
+  await h.expectText(/Total \| \$772\.36/, "client sees total with 9.5% tax on materials (client page in the client's language, rule 7)");
   await h.sign("Linda Alvarez");
-  await h.expectText(/Смета одобрена/, "approved");
+  await h.expectText(/Estimate approved/, "approved");
   await h.expectText(/INV-\d+ · Deposit/, "deposit invoice on the client page");
-  await h.page.getByRole("button", { name: "Оплатить картой" }).first().click(); await h.page.waitForTimeout(300);
-  await h.expectText(/Тестовый режим/, "test mode label");
-  await h.sheet().getByRole("button", { name: /Оплатить \$77\.24/ }).click(); await h.page.waitForTimeout(800);
+  await h.page.getByRole("button", { name: "Pay by card" }).first().click(); await h.page.waitForTimeout(300);
+  await h.expectText(/Test mode/, "test mode label");
+  await h.sheet().getByRole("button", { name: /Pay \$77\.24/ }).click(); await h.page.waitForTimeout(800);
   await h.go("/estimate/e6");
   await h.expectText(/Выставлено \| \$77\.24 \| Оплачено \| \$77\.24/, "deposit paid in the statement");
   await h.expectText(/Осталось получить \| \$695\.12/, "remaining = 772.36 − 77.24");

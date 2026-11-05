@@ -1201,5 +1201,150 @@ begin
 end $$;
 \echo 'T18 estimate status ok'
 
+-- ---------------------------------------------------------------- T21: tasks of a property (C2b)
+:as_owner_a
+insert into public.tasks (company_id, subject_type, subject_id, title) values
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Replace the side gate latch'),
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000003', 'Trim the tree over the roof');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'house', 'd2000000-0000-4000-8000-000000000001', 'x')$q$, 'unknown subject type refused');
+:as_tech_a
+-- tech 3 is on visits at properties 1 and 3 (today, in 3 days): sees both properties' tasks, like the properties themselves
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property' and subject_id = 'd2000000-0000-4000-8000-000000000001'$q$) = 1, 'tech: task of a property with their visit');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property' and subject_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 1, 'tech: task of their property even with no code that day');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000003'$q$) = 0, 'tech: still no gate code there');
+insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Gate sticks in the rain');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'Gate sticks in the rain'$q$) = 1, 'tech adds a task to their property');
+:as_tech2_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property' and subject_id::text like 'd2000000%'$q$) = 0, 'another tech: no tasks of properties they have no visit at');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'x')$q$, 'another tech cannot add a task there');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property'$q$) = 0, 'other company: no property tasks');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property' and subject_id::text like 'd2000000%'$q$) = 3, 'office sees every property task');
+
+-- T21 (security review): no task planted from another company; a tech closes, never re-points
+:as_owner_b
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('cb000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Call 555-0000 now')$q$, 'other company cannot plant a task on our property');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Call 555-0000 now')$q$, 'nor as our company');
+:as_owner_a
+insert into public.tasks (company_id, subject_type, subject_id, title) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2000000-0000-4000-8000-000000000001', 'Customer follow-up'),
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e2000000-0000-4000-8000-000000000001', 'Job follow-up'),
+  ('ca000000-0000-0000-0000-000000000000', 'estimate', '0e1a0000-0000-0000-0000-000000000001', 'Estimate follow-up'),
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000006', 'Task of a property that goes away');
+update public.properties set deleted_at = now() where id = 'd2000000-0000-4000-8000-000000000006';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title like 'Call 555%'$q$) = 0, 'tech sees no planted task');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title in ('Customer follow-up', 'Job follow-up', 'Estimate follow-up')$q$) = 0, 'tech: no tasks of a client, job or estimate they neither wrote nor got');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'Task of a property that goes away'$q$) = 0, 'deleted property: its tasks are gone for the tech');
+-- closes the office's task of their property, but cannot rewrite or re-point it
+update public.tasks set done_at = now(), done_by = 'a0000000-0000-0000-0000-000000000003' where title = 'Replace the side gate latch';
+select tst.ok((select done_at is not null from public.tasks where title = 'Replace the side gate latch'), 'tech marks the office task of their property done');
+select tst.fails($q$update public.tasks set title = 'Ignore this' where title = 'Replace the side gate latch'$q$, 'tech cannot rewrite the office task');
+select tst.fails($q$update public.tasks set subject_id = 'd2000000-0000-4000-8000-000000000004' where title = 'Gate sticks in the rain'$q$, 'tech cannot move even their own task to another property');
+select tst.fails($q$update public.tasks set subject_type = 'customer', subject_id = 'c2000000-0000-4000-8000-000000000001' where title = 'Gate sticks in the rain'$q$, 'tech cannot move their task to a client');
+update public.tasks set title = 'Gate sticks when it rains' where title = 'Gate sticks in the rain';
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'Gate sticks when it rains'$q$) = 1, 'the author edits their own task');
+reset role; set role anon;
+select tst.fails($q$select 1 from public.tasks$q$, 'anon cannot read tasks');
+\echo 'T21 property tasks ok'
+
+-- ---------------------------------------------------------------- T19: client page language (rule 7, docs/specs/07 §2.1)
+-- order: client's main person → lead's main person → lead → company → en; only doc_language is added
+:as_owner_a
+do $$
+declare v_cust uuid; v_prop uuid; v_lead uuid; v_main uuid; v_lp uuid; v_e uuid;
+begin
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'Lang Client') returning id into v_cust;
+  insert into public.properties (company_id, customer_id, address_line1, address_city) values ('ca000000-0000-0000-0000-000000000000', v_cust, '1 Lang St', 'Pasadena') returning id into v_prop;
+  insert into public.contacts (company_id, customer_id, name, role, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_cust, 'Lang Main', 'main', true) returning id into v_main;
+  update public.customers set primary_contact_id = v_main where id = v_cust;
+  insert into public.leads (company_id, source_id, contact_name, phone)
+  select 'ca000000-0000-0000-0000-000000000000', id, 'Lang Lead', '(818) 555-0700' from public.lead_sources
+   where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'
+  returning id into v_lead;
+  select id into v_lp from public.contacts where lead_id = v_lead and customer_id is null and is_primary and deleted_at is null;
+  perform tst.ok(v_lp is not null, 'the lead has its main person');
+  insert into public.estimates (company_id, customer_id, property_id, lead_id, title, public_token)
+  values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, v_lead, 'T19 lang', 'tok_lang_0123456789abcdef') returning id into v_e;
+  update public.companies set doc_language = 'en' where id = 'ca000000-0000-0000-0000-000000000000';
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'en', 'nobody has a language: company default');
+  update public.companies set doc_language = 'es' where id = 'ca000000-0000-0000-0000-000000000000';
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'es', 'company default changes the page');
+  update public.leads set language = 'ru' where id = v_lead;
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'ru', 'the lead beats the company');
+  update public.contacts set preferred_language = 'en' where id = v_lp;
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'en', 'the lead''s main person beats the lead');
+  update public.contacts set preferred_language = 'ru' where id = v_main;
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'ru', 'the client''s main person beats everything');
+  perform tst.ok((public.portal_estimate('tok_lang_0123456789abcdef') ->> 'title') = 'T19 lang', 'the rest of the page is still there');
+  update public.companies set doc_language = 'en' where id = 'ca000000-0000-0000-0000-000000000000';
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb;
+begin
+  perform tst.ok(public.portal_estimate('no-such-token-lang-00000') is null, 'unknown token: nothing, not even a language');
+  r := public.portal_estimate('tok_lang_0123456789abcdef');
+  perform tst.ok(r ->> 'doc_language' = 'ru', 'client (anon) gets the language');
+  perform tst.ok(r::text not like '%preferred_language%' and r::text not like '%Lang Main%', 'only doc_language is added: no people data');
+  perform tst.fails($q$select app.portal_estimate_base('tok_lang_0123456789abcdef')$q$, 'anon cannot call the base function');
+  perform tst.fails($q$select app.estimate_doc_language(gen_random_uuid())$q$, 'anon cannot call the language helper');
+end $$;
+-- T19, more (security-check 05.11): signed-in users cannot reach the helpers either; deleted estimate / null token → null;
+-- a deleted main person falls through to the next step; the answer = base keys + doc_language; a client view marks viewed once
+:as_tech_a
+do $$ begin
+  perform tst.fails($q$select app.portal_estimate_base('tok_lang_0123456789abcdef')$q$, 'tech A cannot call the base function');
+  perform tst.fails($q$select app.estimate_doc_language(gen_random_uuid())$q$, 'tech A cannot call the language helper');
+end $$;
+:as_owner_b
+do $$ begin
+  perform tst.fails($q$select app.portal_estimate_base('tok_lang_0123456789abcdef')$q$, 'owner B cannot call the base function');
+  perform tst.fails($q$select app.estimate_doc_language(gen_random_uuid())$q$, 'owner B cannot call the language helper');
+end $$;
+:as_owner_a
+do $$
+declare v_cust uuid; v_main uuid; v_e uuid; v_prop uuid;
+begin
+  perform tst.ok(public.portal_estimate(null) is null, 'null token → null');
+  select customer_id, property_id into v_cust, v_prop from public.estimates where public_token = 'tok_lang_0123456789abcdef';
+  select primary_contact_id into v_main from public.customers where id = v_cust;
+  -- the client's main person is deleted: the lead's main person (en) decides
+  update public.contacts set deleted_at = now() where id = v_main;
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'en', 'deleted main person → the next step (lead''s main person)');
+  -- a deleted estimate: nothing
+  insert into public.estimates (company_id, customer_id, property_id, title, public_token)
+  values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T19 deleted', 'tok_lang_deleted_0123456789') returning id into v_e;
+  update public.estimates set deleted_at = now() where id = v_e;
+  perform tst.ok(public.portal_estimate('tok_lang_deleted_0123456789') is null, 'deleted estimate → null');
+  -- a sent estimate for the "viewed once" check
+  insert into public.estimates (company_id, customer_id, property_id, title, public_token)
+  values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T19 viewed', 'tok_lang_viewed_0123456789') returning id into v_e;
+  update public.estimates set status = 'sent' where id = v_e;
+end $$;
+:as_super
+do $$ begin
+  perform tst.ok(
+    (select array_agg(k order by k) from jsonb_object_keys(public.portal_estimate('tok_lang_0123456789abcdef')) k)
+    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language') x),
+    'answer keys = base keys + doc_language, nothing else');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$ begin
+  perform public.portal_estimate('tok_lang_viewed_0123456789');
+  perform public.portal_estimate('tok_lang_viewed_0123456789');
+end $$;
+:as_owner_a
+do $$
+declare v_e uuid;
+begin
+  select id into v_e from public.estimates where public_token = 'tok_lang_viewed_0123456789';
+  perform tst.ok((select status from public.estimates where id = v_e) = 'viewed', 'client view: sent → viewed');
+  perform tst.ok((select count(*) from public.notifications where estimate_id = v_e and kind = 'estimate.viewed') = 1, 'sent → viewed (and its notification) only once');
+  perform tst.ok((select viewed_count from public.estimates where id = v_e) = 2, 'two views counted once each: the wrapper does not run the base twice');
+end $$;
+\echo 'T19 client page language ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

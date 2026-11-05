@@ -3,13 +3,14 @@ import { Image, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { useI18n } from "@/i18n";
+import { I18nOverride, useI18n } from "@/i18n";
+import type { EstimateDoc } from "@/data/types";
 import { acceptPortal, fetchPortal, licenseLine, localPortal, paySimulated, type PortalData } from "@/cloud/portal";
 import { SimulatedCheckout } from "@/features/SimulatedCheckout";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { mainOption, optionTotals, withAddons } from "@/features/estimateDoc";
-import { estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
+import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -23,13 +24,10 @@ import { Card, CardList, Empty, RowView, Screen, SectionTitle } from "@/ui/surfa
 export default function ClientEstimatePage() {
   const { token } = useLocalSearchParams<{ token: string }>();
   const store = useStore();
-  const { t, money, day } = useI18n();
-  const toast = useToast();
+  const { t } = useI18n();
   const local = localPortal(store.db, token ?? "", store.companyName ?? "OCTODEX");
   const [remote, setRemote] = useState<PortalData | null | undefined>(undefined);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [paying, setPaying] = useState<string | null>(null);
   useEffect(() => {
     if (local || !token) return;
     fetchPortal(token)
@@ -38,12 +36,9 @@ export default function ClientEstimatePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token, !!local]);
   const data = local ?? remote;
-  const doc = data?.doc ?? null;
-  const [optionId, setOptionId] = useState<string | null>(null);
-  const [addonIds, setAddonIds] = useState<string[]>([]);
   const back = router.canGoBack() ? () => router.back() : undefined;
 
-  if (!data || !doc) {
+  if (!data || !data.doc) {
     return (
       <Screen title={t("portal.estimate")} back={back}>
         {data === undefined && !error ? (
@@ -54,6 +49,23 @@ export default function ClientEstimatePage() {
       </Screen>
     );
   }
+
+  // Rule 7: the page, its sheets and toasts speak the client's language, not the app's (or the browser's).
+  return (
+    <I18nOverride lang={data.lang}>
+      <PortalBody data={data} doc={data.doc} token={token!} back={back} setRemote={setRemote} />
+    </I18nOverride>
+  );
+}
+
+function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; doc: EstimateDoc; token: string; back?: () => void; setRemote: (d: PortalData | null) => void }) {
+  const store = useStore();
+  const { t, money, day } = useI18n();
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const [paying, setPaying] = useState<string | null>(null);
+  const [optionId, setOptionId] = useState<string | null>(null);
+  const [addonIds, setAddonIds] = useState<string[]>([]);
 
   const approved = data.status === "approved" && data.approval;
   const chosen = approved ? data.approval!.optionId : optionId ?? mainOption(doc).id;
@@ -68,7 +80,7 @@ export default function ClientEstimatePage() {
       if (data.source === "local" && data.estimateId) {
         store.approveEstimate(data.estimateId, { optionId: base.id, addonIds: addons, signerName: name, signature: svg, channel: "portal" });
       } else {
-        setRemote(await acceptPortal(token!, { optionId: base.id, addonIds: addons, signer: name, svg }));
+        setRemote(await acceptPortal(token, { optionId: base.id, addonIds: addons, signer: name, svg }));
       }
     } catch (e) {
       toast.show(t("portal.error", { msg: String((e as Error)?.message ?? e) }));
@@ -83,14 +95,14 @@ export default function ClientEstimatePage() {
       if (data.source === "local") {
         store.recordPayment(payingInv.id, payingInv.totalCents - payingInv.paidCents, "card", "stripe-simulated", true);
       } else {
-        setRemote(await paySimulated(token!, payingInv.id));
+        setRemote(await paySimulated(token, payingInv.id));
       }
     } catch (e) {
       toast.show(t("portal.error", { msg: String((e as Error)?.message ?? e) }));
     }
   };
   const pdf = () =>
-    saveEstimatePdf(estimateHtml(data, { t, money, day }), `Estimate ${data.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+    saveEstimatePdf(estimateHtml(data, { lang: data.lang }), estimateFileName(data)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
 
   return (
     <Screen

@@ -9,7 +9,8 @@ import { useI18n, type DictKey } from "@/i18n";
 import { ChoiceChips, StatusChip } from "@/ui/controls";
 import { CardList, Empty, ItemCard, SectionTitle } from "@/ui/surfaces";
 
-const estView: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
+/** status chip of an estimate — the one place for it (lists, client and property documents) */
+export const estView: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
   draft: { s: "neutral", l: "st.draft" },
   sent: { s: "info", l: "st.sent" },
   awaiting_countersign: { s: "warn", l: "est.awaitingCountersign" },

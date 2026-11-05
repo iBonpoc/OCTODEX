@@ -5,6 +5,8 @@
 import { Linking, Platform, Share } from "react-native";
 import * as Clipboard from "expo-clipboard";
 import { WEB_APP_URL } from "@/config/backend";
+import { tFor, type DocLang } from "@/i18n/translate";
+import { docMoney } from "./docPdf";
 
 export function clientLink(token: string): string {
   const origin = Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL;
@@ -30,4 +32,16 @@ export async function shareText(message: string, url: string) {
     return;
   }
   await Share.share(Platform.OS === "ios" ? { message, url } : { message });
+}
+
+/**
+ * The SMS / email text to the client — in the CLIENT's language (rule 7), never the app's.
+ * Company and client names go as typed; the amount in $.
+ */
+export function estimateMessage(lang: DocLang, m: { company: string; name: string; totalCents: number; number?: string; link: string }): { text: string; subject: string } {
+  const t = tFor(lang);
+  return {
+    text: t("ue.sendText", { company: m.company, name: m.name, total: docMoney(m.totalCents), link: m.link }),
+    subject: t("ue.sendSubject", { number: m.number ?? "", company: m.company }),
+  };
 }

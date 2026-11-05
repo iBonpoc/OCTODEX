@@ -1,6 +1,6 @@
 /** Properties inside a client (wave C2, docs/specs/04 §3, §7.3). */
 import { describe, expect, it } from "vitest";
-import { canSaveProperty, canSeeGateCode, cityLine, placeOf, propertyMapQuery, propertyNow, propertyPeople, propertyTitle, splitGateCodes, withGateCodes } from "../src/features/properties";
+import { canSaveProperty, canSeeGateCode, cityLine, placeOf, propertyMapQuery, propertyNow, propertyPeople, propertyTitle, splitGateCodes, withGateCodes, propertyDocs, propertyPhotos, propertyTimeline } from "../src/features/properties";
 import { navContext } from "../src/nav/hierarchy";
 import { makeSeed } from "../src/data/seed";
 import type { DB, Property, Visit } from "../src/data/types";
@@ -93,5 +93,35 @@ describe("now at the property and its people", () => {
   it("the property card goes up to its client", () => {
     const d = base();
     expect(navContext("/property/p1", {}, d, "director").up?.href).toBe("/client/c1");
+  });
+});
+
+describe("property tabs (C2b): history, documents, files", () => {
+  it("history: visits, sent / signed estimates and notes of this property, newest first; drafts and other properties stay out", () => {
+    const d = base();
+    d.notes = [...d.notes, { id: "nP", subjectType: "property", subjectId: "p1", body: "Side gate sticks", visibility: "team", pinned: false, authorId: d.me, at: "2030-01-01T00:00:00Z" }];
+    const h = propertyTimeline(d, "p1");
+    expect(h[0]).toMatchObject({ kind: "note", at: "2030-01-01T00:00:00Z" });
+    for (let i = 1; i < h.length; i++) expect(h[i - 1]!.at >= h[i]!.at).toBe(true);
+    const jobIds = new Set(d.jobs.filter((j) => j.propertyId === "p1").map((j) => j.id));
+    for (const x of h) {
+      if (x.kind === "visit") expect(jobIds.has(x.visit.jobId)).toBe(true);
+      if (x.kind === "estimate") expect(x.estimate.propertyId === "p1" && !!(x.estimate.sentAt || x.estimate.approvedAt)).toBe(true);
+    }
+  });
+  it("documents: the property's estimates and the invoices of its jobs only", () => {
+    const d = base();
+    const { estimates, invoices } = propertyDocs(d, "p1");
+    expect(estimates.every((e) => e.propertyId === "p1")).toBe(true);
+    const jobIds = new Set(d.jobs.filter((j) => j.propertyId === "p1").map((j) => j.id));
+    expect(invoices.every((i) => jobIds.has(i.jobId))).toBe(true);
+  });
+  it("files: photos of the property's visits, newest visit first", () => {
+    const d = base();
+    d.jobs = [...d.jobs, { id: "jP", propertyId: "pP", title: "x", status: "scheduled", amountCents: 0 }];
+    d.properties = [...d.properties, prop({ id: "pP" })];
+    const v = (id: string, start: string, kind: "before" | "after") => ({ id, jobId: "jP", techId: null, start, durationMin: 60, step: "scheduled" as const, scope: [], checklist: [], photos: [{ id: `ph-${id}`, kind }], amountDueCents: 0 });
+    d.visits = [...d.visits, v("v1", "2026-11-01T10:00:00Z", "before"), v("v2", "2026-11-03T10:00:00Z", "after")];
+    expect(propertyPhotos(d, "pP").map((x) => x.photo.id)).toEqual(["ph-v2", "ph-v1"]);
   });
 });
