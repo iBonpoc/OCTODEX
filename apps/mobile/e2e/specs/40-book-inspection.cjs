@@ -30,8 +30,8 @@ exports.run = async (h) => {
   h.expect(lead.status === "booked", "lead side: booked");
   h.expect(!!lead.customerId && !!lead.propertyId, "S3: the lead got its prospect client and property");
   h.expect(v && v.kind === "inspection" && !v.jobId && v.propertyId === lead.propertyId, `visit side: an inspection at the property without a job (${JSON.stringify(v && { kind: v.kind, jobId: v.jobId })})`);
-  // several people can be ticked (wave П3a): the picked tech is added next to the default one (the lead's owner, Р3)
-  h.expect((v.assigneeIds ?? []).includes("m-ivan") && v.techId === (v.assigneeIds ?? [])[0], `the picked tech is on the visit (${JSON.stringify(v.assigneeIds)})`);
+  // the default person (the lead's owner, Р3) is only a preselection: the first tick replaces it (wave П3a)
+  h.expect(v.techId === "m-ivan" && JSON.stringify(v.assigneeIds) === JSON.stringify(["m-ivan"]), `the picked tech replaces the default (${JSON.stringify(v.assigneeIds)})`);
   h.expect(!!v.customerNotifiedAt, "the client was told (copy pressed)");
   h.expect(db.jobs.length === jobs0, `no job is made for an inspection (${jobs0} → ${db.jobs.length})`);
   h.expect(db.visits.length === visits0 + 1, "exactly one new visit");

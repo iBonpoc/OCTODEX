@@ -55,8 +55,14 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
   // several people on a visit (wave П3a): the first one is techId; none = «Назначит диспетчер»
   const [techIds, setTechIds] = useState<ID[]>(initTechs);
   const techId = techIds[0] ?? null;
-  const setTechId = (id: ID | null) => setTechIds(id ? [id] : []);
-  const toggleTech = (id: ID) => setTechIds((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+  const setTechId = (id: ID | null) => { setTechIds(id ? [id] : []); setTouched(true); };
+  // the default person (the lead's owner, Р3) is only a preselection: the first person the user ticks replaces it;
+  // after that ticks add and untick (several people). People of an existing visit (techIds, «Перенести») are real: ticks add.
+  const [touched, setTouched] = useState(init.techIds !== undefined);
+  const toggleTech = (id: ID) => {
+    setTechIds((p) => (!touched && !p.includes(id) ? [id] : p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
+    setTouched(true);
+  };
   const [note, setNote] = useState("");
   const day = startOfDay(dayOffset);
   const slots = freeSlots(db, techIds, day, duration, { exceptId: init.exceptId });
