@@ -20,7 +20,8 @@ import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
+import { canChangeEstimateCategory, estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
+import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { canCountersign, canManageLink, hisWarning, mySignature } from "@/features/estimateSign";
 import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
 
@@ -99,6 +100,13 @@ export default function EstimateScreen() {
           <StatusChip status="info" label={t("ue.viewed", { date: day(e.viewedAt) })} />
         ) : null}
       </Card>
+
+      {/* T2 (S16): the direction of the business; read-only once the client signed — the job keeps its own */}
+      <ServiceCategoryRow
+        value={e.serviceCategoryId}
+        readOnly={!canChangeEstimateCategory(e.status, store.role)}
+        onChange={(cid) => toast.show(q(t("dir.changed")), store.setEstimateCategory(e.id, cid))}
+      />
 
       {universal ? (
         <>
