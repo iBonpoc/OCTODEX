@@ -171,7 +171,7 @@ export interface ListCardProps {
   figures?: CardFigure[];
   progress?: { value: number; max: number; label?: string };
   contact?: Contact;
-  action?: { label: string; onPress: () => void };
+  action?: { label: string; onPress: () => void; /** icon of the action on a desktop row (default: send) */ icon?: IconKey };
   density?: Density;
   /** desktop row: which facts become columns */
   columns?: readonly FactKey[];
@@ -240,8 +240,8 @@ export function ListCard(p: ListCardProps) {
   return (
     <Press
       onPress={p.onPress}
-      disabled={!p.onPress}
-      accessibilityRole="button"
+      // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control
+      accessibilityRole={p.onPress ? "button" : undefined}
       accessibilityLabel={p.title}
       accessibilityActions={a11yActions}
       onAccessibilityAction={(e) => {
@@ -369,8 +369,8 @@ function ListCardRow(p: ListCardProps) {
   return (
     <Press
       onPress={p.onPress}
-      disabled={!p.onPress}
-      accessibilityRole="button"
+      // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control
+      accessibilityRole={p.onPress ? "button" : undefined}
       accessibilityLabel={p.title}
       testID={p.testID ?? "list-card"}
       style={{
@@ -396,6 +396,8 @@ function ListCardRow(p: ListCardProps) {
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1], marginTop: space[1] }}>
           {p.status ? <Chip tone={p.status.tone} label={p.status.label} soft onPress={p.status.onPress} a11y={t("card.changeStatus", { s: p.status.label })} /> : null}
           {(p.signs ?? []).map((s, i) => <Chip key={i} tone={s.tone} label={s.label} soft />)}
+          {p.trade ? <Tag label={p.trade} icon="toolbox" /> : null}
+          {(p.tags ?? []).map((x) => <Tag key={x} label={x} />)}
         </View>
       </View>
       {cols.map((k) => (
@@ -418,7 +420,7 @@ function ListCardRow(p: ListCardProps) {
         {p.action ? (
           <Tap visible={btn} onPress={p.action.onPress} label={p.action.label}>
             <View style={{ width: btn, height: btn, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd, alignItems: "center", justifyContent: "center" }}>
-              <Icon name="send" s={size.iconSm} color={c.ink} />
+              <Icon name={p.action.icon ?? "send"} s={size.iconSm} color={c.ink} />
             </View>
           </Tap>
         ) : null}

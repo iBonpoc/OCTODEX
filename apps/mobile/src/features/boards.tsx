@@ -7,8 +7,9 @@ import { daysSince, isOverdue, useStore } from "@/data/store";
 import type { Estimate, EstimateStatus, Invoice } from "@/data/types";
 import { estimateStatusView } from "@/features/estimateStatus";
 import { optionTotals } from "@/features/estimateDoc";
-import { estimateSigns } from "@/features/listSigns";
-import { ESTIMATE_GROUPS, estimateGroup, inEstimateFilter, type EstimateFilter, type EstimateGroup } from "@/features/listGroups";
+import { estimateSigns, invoiceSigns } from "@/features/listSigns";
+import { ESTIMATE_GROUPS, INVOICE_GROUPS, estimateGroup, inEstimateFilter, inListFilter, invoiceGroup, type EstimateFilter, type EstimateGroup, type InvoiceGroup } from "@/features/listGroups";
+import { invoiceBalance, invoiceStatusView } from "@/features/invoiceStatus";
 import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -119,47 +120,80 @@ function listAmount(e: Estimate): { cents: number; from: boolean; option?: strin
   return { cents: e.totalCents, from: false };
 }
 
-/** Invoices grouped: overdue → awaiting → paid (each invoice is a card). */
+/** Invoices on list cards (spec 06, PR5): needs action (overdue / due soon) → waiting → paid; status from invoiceStatusView. */
 export function InvoicesBoard() {
   const { db } = useStore();
   const { t, money, day } = useI18n();
+  const { device } = useDevice();
+  const [f, setF] = useState<EstimateFilter>("open");
   const now = Date.now();
-  const open = db.invoices.filter((i) => i.paidCents < i.totalCents);
-  const overdue = open.filter((i) => isOverdue(i.dueDate, now)).sort((a, b) => a.dueDate.localeCompare(b.dueDate));
-  const awaiting = open.filter((i) => !isOverdue(i.dueDate, now));
-  const paid = db.invoices.filter((i) => i.paidCents >= i.totalCents).sort((a, b) => (b.paidAt ?? "").localeCompare(a.paidAt ?? ""));
-  const name = (i: Invoice) => db.customers.find((c) => c.id === i.customerId)?.name ?? "";
-  const section = (title: string, list: Invoice[], kind: "bad" | "warn" | "ok") =>
-    list.length ? (
-      <View style={{ gap: space[2] }}>
-        <SectionTitle title={`${title} · ${money(list.reduce((s, i) => s + (kind === "ok" ? i.paidCents : i.totalCents - i.paidCents), 0))}`} />
-        <CardList>
-          {list.map((i) => (
-            <ItemCard
-              key={i.id}
-              status={kind}
-              title={name(i)}
-              onPress={() => router.push(`/invoice/${i.id}`)}
-              subtitle={[
-                i.number,
-                i.title ?? (i.kind === "deposit" ? t("money.deposit") : undefined),
-                kind === "ok" && i.paidAt ? t("money.paidOn", { date: day(i.paidAt) }) : t("money.due", { date: day(i.dueDate) }),
-                i.paidCents > 0 && kind !== "ok" ? t("inv.paidPart", { amount: money(i.paidCents) }) : undefined,
-              ]
-                .filter(Boolean)
-                .join(" · ")}
-              right={<StatusChip status={kind} label={money(kind === "ok" ? i.paidCents : i.totalCents - i.paidCents)} />}
-            />
-          ))}
-        </CardList>
-      </View>
-    ) : null;
+  const all = db.invoices.map((i) => ({ i, g: invoiceGroup(i, now) }));
+  const count = (x: EstimateFilter) => all.filter(({ g }) => inListFilter(g, x)).length;
+  const list = all.filter(({ g }) => inListFilter(g, f)).sort((a, b) => a.i.dueDate.localeCompare(b.i.dueDate));
+  const card = ({ i }: { i: Invoice }) => {
+    const c = db.customers.find((x) => x.id === i.customerId);
+    const job = db.jobs.find((j) => j.id === i.jobId);
+    const prop = job ? db.properties.find((x) => x.id === job.propertyId) : undefined;
+    const v = invoiceStatusView(i);
+    const { owesCents } = invoiceBalance(i);
+    const sign = invoiceSigns(i, now)[0];
+    const addr = prop ? `${prop.address}, ${prop.city}` : undefined;
+    const what = [i.title ?? (i.kind === "deposit" ? t("money.deposit") : undefined), job?.title].filter(Boolean).join(" · ");
+    const open = owesCents > 0;
+    return (
+      <ListCard
+        key={i.id}
+        title={c?.name ?? "—"}
+        when={!open && i.paidAt ? t("money.paidOn", { date: day(i.paidAt) }) : undefined}
+        lead={{ kind: "icon", icon: "invoice" }}
+        value={money(open ? owesCents : i.paidCents)}
+        valueLabel={open ? t("card.val.toPay") : t("card.val.paid")}
+        // read only: an invoice status is derived from the balance (map §5), the one place is invoiceStatusView
+        status={{ tone: v.s, label: t(v.l) }}
+        signs={sign ? [{ tone: sign.tone, label: t(sign.key, sign.params) }] : undefined}
+        // edge only for what needs action (overdue / due soon); a paid invoice has none
+        edge={sign ? sign.tone : null}
+        facts={{ num: i.number, phone: c?.phone, email: c?.phone ? undefined : c?.email, addr, work: what || undefined, due: open ? day(i.dueDate) : undefined }}
+        figures={open ? [{ label: t("card.fig.total"), value: money(i.totalCents) }, { label: t("st.paid"), value: money(i.paidCents) }] : undefined}
+        progress={open && i.paidCents > 0 ? { value: i.paidCents, max: i.totalCents, label: t("inv.paidPart", { amount: money(i.paidCents) }) } : undefined}
+        // contact buttons only open the phone / map / mail: nothing is written for an invoice
+        contact={{ phone: c?.phone, email: c?.email, addr }}
+        // secondary: the one accent of the screen stays the main action of the screen
+        action={open ? { label: t("visit.recordPayment"), icon: "wallet", onPress: () => router.push(`/invoice/${i.id}`) } : undefined}
+        density={device === "desktop" ? "row" : "rich"}
+        columns={INV_COLUMNS}
+        onPress={() => router.push(`/invoice/${i.id}`)}
+      />
+    );
+  };
+  const groups = INVOICE_GROUPS.map((g) => [g, list.filter((x) => x.g === g)] as const).filter(([, xs]) => xs.length);
+  const sum = (g: InvoiceGroup, xs: readonly { i: Invoice }[]) => money(xs.reduce((s, { i }) => s + (g === "done" ? i.paidCents : invoiceBalance(i).owesCents), 0));
   return (
     <View style={{ gap: space[3] }}>
-      {db.invoices.length === 0 ? <Empty icon="invoice" title={t("money.empty")} /> : null}
-      {section(t("money.overdue"), overdue, "bad")}
-      {section(t("money.awaiting"), awaiting, "warn")}
-      {section(t("money.paid"), paid, "ok")}
+      <ChoiceChips<EstimateFilter>
+        value={f}
+        onChange={setF}
+        items={[
+          { key: "open", label: `${t("board.open")} · ${count("open")}` },
+          { key: "closed", label: `${t("card.f.closed")} · ${count("closed")}` },
+          { key: "all", label: `${t("cat.all")} · ${count("all")}` },
+        ]}
+      />
+      {list.length === 0 ? (
+        <Empty icon="invoice" title={t("money.empty")} />
+      ) : (
+        <>
+          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={INV_COLUMNS} value={t("card.val.toPay")} /> : null}
+          {groups.map(([g, xs]) => (
+            <View key={g} style={{ gap: space[2] }}>
+              <T v="caption" w="semibold" tone="mut">{`${t(g === "done" ? "money.paid" : g === "waiting" ? "money.awaiting" : "card.group.action")} · ${xs.length} · ${sum(g, xs)}`}</T>
+              {device === "tablet" ? <CardGrid>{xs.map(card)}</CardGrid> : <CardList>{xs.map(card)}</CardList>}
+            </View>
+          ))}
+        </>
+      )}
     </View>
   );
 }
+/** desktop row columns (docs/specs/06-list-cards.md, invoices) */
+const INV_COLUMNS: FactKey[] = ["addr", "work", "due"];
