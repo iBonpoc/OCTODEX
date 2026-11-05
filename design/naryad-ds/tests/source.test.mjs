@@ -6,7 +6,8 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const files = ['Наряд CRM.dc.html', 'Наряд Design System.dc.html'];
+// the files were renamed to ASCII names in the export (naryad-crm.dc.html, naryad-design-system.dc.html)
+const files = ['naryad-crm.dc.html', 'naryad-design-system.dc.html'];
 const SCALE = new Set(['28', '20', '15', '13', '11.5', '10.5']);
 const ICON_ONLY = ['Позвонить', 'SMS', 'Почта', 'Написать', 'Маршрут', 'Квитанция', 'Скопировать ссылку', 'Отложить'];
 let failed = 0, checked = 0;
