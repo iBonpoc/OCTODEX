@@ -3,6 +3,7 @@
  * One order of fact lines for every card, short fixed-length facts in pairs, contact buttons in one order.
  * Unit-tested in test/listCardLayout.test.ts.
  */
+import { cleanPhone, mailtoHref, smsHref, telHref } from "@/features/contactLinks";
 import type { IconKey } from "./primitives";
 
 /** Fact lines a card can show. A list decides WHICH facts it passes, never their order. */
@@ -96,15 +97,6 @@ export interface ContactAction {
 }
 export type OS = "ios" | "android" | "web" | "windows" | "macos";
 
-const digits = (phone: string) => {
-  const d = phone.replace(/[^\d+]/g, "");
-  return d.length === 10 && !d.startsWith("+") ? `+1${d}` : d;
-};
-export const telUrl = (phone: string) => `tel:${digits(phone)}`;
-export const smsUrl = (phone: string) => `sms:${digits(phone)}`;
-/** a plain address only: no spaces, «?», «&», «#» or «,» — a lead's email from a web form must not add ?body= / &cc= (security-check 05.11) */
-export const SAFE_EMAIL = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
-export const mailUrl = (email: string) => `mailto:${encodeURIComponent(email.trim()).replace(/%40/g, "@")}`;
 /** iOS → Apple Maps, everything else → Google Maps search */
 export const mapsUrl = (addr: string, os: OS) =>
   os === "ios" ? `https://maps.apple.com/?q=${encodeURIComponent(addr)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
@@ -115,13 +107,15 @@ export function contactActions(c: Contact, os: OS): ContactAction[] {
   const phone = c.phone?.trim();
   const addr = c.addr?.trim();
   const email = c.email?.trim();
-  if (phone && digits(phone).replace("+", "").length >= 7) {
-    out.push({ kind: "call", icon: "phone", url: telUrl(phone), value: phone });
-    out.push({ kind: "sms", icon: "sms", url: smsUrl(phone), value: phone });
+  const tel = phone && cleanPhone(phone).replace("+", "").length >= 7 ? telHref(phone) : null;
+  const sms = tel ? smsHref(phone) : null;
+  if (tel && sms) {
+    out.push({ kind: "call", icon: "phone", url: tel, value: phone! });
+    out.push({ kind: "sms", icon: "sms", url: sms, value: phone! });
   }
   if (addr) out.push({ kind: "map", icon: "map", url: mapsUrl(addr, os), value: addr });
-  // TODO(10а): switch to the shared mailtoHref / smsHref when «Лиды и клиенты» land it (after #101)
-  if (email && SAFE_EMAIL.test(email)) out.push({ kind: "email", icon: "mail", url: mailUrl(email), value: email });
+  const mail = mailtoHref(email);
+  if (email && mail) out.push({ kind: "email", icon: "mail", url: mail, value: email });
   return out;
 }
 

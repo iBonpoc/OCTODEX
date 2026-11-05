@@ -76,11 +76,11 @@ describe("densities", () => {
 });
 
 describe("contact buttons", () => {
-  it("always call, SMS, map, email — only for what the card has", () => {
+  it("links come from the shared contactLinks; always call, SMS, map, email — only for what the card has", () => {
     const a = contactActions({ email: "a@b.co", addr: "12 Vine St, Altadena, CA 91001", phone: "(626) 555-0142" }, "ios");
     expect(a.map((x) => x.kind)).toEqual(["call", "sms", "map", "email"]);
-    expect(a[0]!.url).toBe("tel:+16265550142");
-    expect(a[1]!.url).toBe("sms:+16265550142");
+    expect(a[0]!.url).toBe("tel:6265550142");
+    expect(a[1]!.url).toBe("sms:6265550142");
     expect(contactActions({ addr: "1 A St" }, "ios").map((x) => x.kind)).toEqual(["map"]);
     expect(contactActions({ phone: "n/a", email: "nope" }, "ios")).toEqual([]);
   });

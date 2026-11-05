@@ -6,6 +6,7 @@ import { useI18n } from "@/i18n";
 import { buildAttention, type AttentionItem } from "@/features/attention";
 import { AttentionRows } from "@/features/AttentionCards";
 import { subjectOf } from "@/features/attentionPeople";
+import { telHref } from "@/features/contactLinks";
 import { AssignSheet, ReplySheet, useTick } from "@/features/sheets";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -49,8 +50,8 @@ export default function Triage() {
         return <Button label={t("triage.assign")} icon="user" onPress={() => setAssign(it.refId)} />;
       case "late": {
         const v = db.visits.find((x) => x.id === it.refId);
-        const phone = v ? visitContext(db, v).customer?.phone.replace(/[^\d+]/g, "") : undefined;
-        return <Button label={t("visit.call")} icon="phone" onPress={() => phone && Linking.openURL(`tel:${phone}`)} />;
+        const href = v ? telHref(visitContext(db, v).customer?.phone) : null;
+        return href ? <Button label={t("visit.call")} icon="phone" onPress={() => Linking.openURL(href)} /> : null;
       }
       default:
         return <Button label={t("triage.remind")} icon="bell" onPress={() => snooze(it, t("toast.reminded", { name: it.name }))} />;
