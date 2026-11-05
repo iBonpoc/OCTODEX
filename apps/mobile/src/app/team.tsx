@@ -5,11 +5,16 @@ import { size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Member, Role } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { Avatar, Button, ChoiceChips, MultiChips, StatusChip, TextField, Toggle } from "@/ui/controls";
+import { Button, ChoiceChips, MultiChips, TextField, Toggle } from "@/ui/controls";
 import { canGrantSign } from "@/features/estimateSign";
+import { todayVisits, visitStatus } from "@/features/visits";
+import { crewNow } from "@/features/crewList";
+import { visitContext } from "@/data/selectors";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { CardList, ItemCard, RowView, Screen } from "@/ui/surfaces";
+import { CardList, RowView, Screen } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
+import { useDevice } from "@/theme/ThemeProvider";
 
 const ROLES: Role[] = ["tech", "dispatcher", "director"];
 
@@ -27,6 +32,7 @@ export default function Team() {
   const [kind, setKind] = useState<"employee" | "sub">("employee");
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   const [editing, setEditing] = useState<Member | null>(null);
+  const { device } = useDevice();
   const ok = name.trim().length > 1 && (email.includes("@") || phone.replace(/\D/g, "").length >= 7) && roles.length > 0;
   const invite = () => {
     const undo = store.inviteMember({ name: name.trim(), email: email.trim() || undefined, phone: phone.trim() || undefined, roles, kind });
@@ -36,6 +42,38 @@ export default function Team() {
     setEmail("");
     setPhone("");
   };
+  /**
+   * One list card per person (spec 06 §5 «Команда», PR9b): name, roles and «Субподрядчик» / «Вы» as grey tags,
+   * «today» for a tech (visits count, the visit's own status — read only, as in «Бригады сейчас»), phone and email,
+   * call / SMS. «Приглашён» is neutral (not a problem to fix). No coloured edge: nothing here needs action.
+   */
+  const card = (m: Member) => {
+    const tech = m.roles.includes("tech");
+    const vs = tech && !m.pending ? todayVisits(db, m.id) : [];
+    const { current, next } = crewNow(vs);
+    const st = current ? visitStatus(current) : next ? visitStatus(next) : null;
+    const now = current ? visitContext(db, current) : null;
+    const status = m.pending ? { tone: "neutral" as const, label: t("team.pending") } : st ? { tone: st.status, label: t(st.label) } : undefined;
+    return (
+      <ListCard
+        key={m.id}
+        title={m.name}
+        when={tech && !m.pending ? t("visits.count", { n: vs.length }) : undefined}
+        lead={{ kind: "initials", text: m.initials, dashed: m.kind === "sub" }}
+        status={status}
+        tags={[...m.roles.map((r) => t(`role.${r}`)), ...(m.kind === "sub" ? [t("team.sub")] : []), ...(m.id === db.me ? [t("team.you")] : [])]}
+        facts={{
+          phone: m.phone,
+          email: m.email,
+          now: now ? [now.customer?.name, now.property ? `${now.property.address}, ${now.property.city}` : undefined].filter(Boolean).join(" · ") : undefined,
+        }}
+        // a person on the team: call / SMS only (spec 06 §5)
+        contact={m.id === db.me ? undefined : { phone: m.phone }}
+        edge={null}
+        onPress={store.role === "director" && m.kind === "employee" ? () => setEditing(m) : undefined}
+      />
+    );
+  };
   return (
     <Screen
       title={t("team.title")}
@@ -44,18 +82,7 @@ export default function Team() {
       hintKey="team"
       right={store.role === "director" ? <Button label={t("team.invite")} icon="plus" size="sm" onPress={() => setOpen(true)} /> : undefined}
     >
-      <CardList>
-        {db.members.map((m) => (
-          <ItemCard
-            key={m.id}
-            title={m.name}
-            subtitle={[m.roles.map((r) => t(`role.${r}`)).join(", "), m.kind === "sub" ? t("team.sub") : undefined, m.email ?? m.phone].filter(Boolean).join(" · ")}
-            left={<Avatar initials={m.initials} sub={m.kind === "sub"} />}
-            onPress={store.role === "director" && m.kind === "employee" ? () => setEditing(m) : undefined}
-            right={m.pending ? <StatusChip status="warn" label={t("team.pending")} /> : m.id === db.me ? <StatusChip status="ok" label={t("team.you")} /> : undefined}
-          />
-        ))}
-      </CardList>
+      {device === "phone" ? <CardList>{db.members.map(card)}</CardList> : <CardGrid>{db.members.map(card)}</CardGrid>}
       <Sheet visible={open} onClose={() => setOpen(false)} title={t("team.invite")}>
         <View style={{ gap: space[3] }}>
           <TextField type="name" value={name} onChangeText={setName} placeholder={t("co.personName")} icon="user" />
