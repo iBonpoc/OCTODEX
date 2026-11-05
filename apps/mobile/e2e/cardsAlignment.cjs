@@ -8,9 +8,10 @@
 const TOL = 1;
 const near = (a, b) => Math.abs(a - b) <= TOL;
 
-exports.checkCardAlignment = async (h, { searchPlaceholder, min = 2 } = {}) => {
+exports.checkCardAlignment = async (h, { searchPlaceholder, reference, min = 2 } = {}) => {
   const p = h.page;
-  const field = p.getByPlaceholder(searchPlaceholder).last();
+  // the line the cards must sit on: the search field, or another full-width element of the list (e.g. the filter row)
+  const field = reference ? reference(p) : p.getByPlaceholder(searchPlaceholder).last();
   // the search field's frame (the input sits inside a padded box: use its parent row)
   const box = await field.evaluate((el) => {
     let n = el;
