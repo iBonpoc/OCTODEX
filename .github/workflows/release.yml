@@ -17,6 +17,8 @@ concurrency:
   group: release
   cancel-in-progress: false
 
+# eas-cli pinned to 27.4.1 (05.11.2026): 27.5.0 was published broken (ETARGET @expo/turtle-spawn@27.5.0).
+# Raise the pin deliberately after checking a new version, never back to @latest.
 jobs:
   migrate:
     name: Database migrations
@@ -63,10 +65,10 @@ jobs:
       - run: npm ci
       - name: Who publishes
         working-directory: apps/mobile
-        run: npx eas-cli@latest whoami
+        run: npx eas-cli@27.4.1 whoami
       - name: Publish the Expo Go update (channel preview)
         working-directory: apps/mobile
-        run: npx eas-cli@latest update --channel preview --platform all --non-interactive --message "main @ ${GITHUB_SHA::7}"
+        run: npx eas-cli@27.4.1 update --channel preview --platform all --non-interactive --message "main @ ${GITHUB_SHA::7}"
       - name: Check that Expo serves the new update
         run: |
           created=$(curl -sS https://u.expo.dev/49d009d4-a05b-4911-b7da-1e47c4e10fba -H 'expo-platform: ios' -H 'expo-runtime-version: exposdk:58.0.0' \
@@ -78,4 +80,4 @@ jobs:
         run: npx expo export --platform web
       - name: Deploy the web app (octodex.expo.app)
         working-directory: apps/mobile
-        run: npx eas-cli@latest deploy --prod --non-interactive
+        run: npx eas-cli@27.4.1 deploy --prod --non-interactive
