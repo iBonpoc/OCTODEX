@@ -277,7 +277,7 @@ function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew: () => v
               subtitle={`${money(e.totalCents)}${e.sentAt ? ` · ${t("st.sent")} ${day(e.sentAt)}` : ""}${e.viewedAt ? ` · ${t("ue.viewed", { date: day(e.viewedAt) })}` : ""}`}
               right={
                 <StatusChip
-                  status={e.status === "approved" ? "ok" : e.status === "sent" ? "info" : "neutral"}
+                  status={e.status === "approved" ? "ok" : e.status === "sent" ? "info" : e.status === "awaiting_countersign" ? "warn" : "neutral"}
                   label={t(e.status === "approved" ? "st.approved" : e.status === "sent" ? "st.sent" : e.status === "awaiting_countersign" ? "est.awaitingCountersign" : e.status === "declined" ? "st.declined" : "st.draft")}
                 />
               }
