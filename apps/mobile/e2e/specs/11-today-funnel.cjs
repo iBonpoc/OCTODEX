@@ -1,4 +1,16 @@
 /** Today: period switch (Today / Week / Month) changes money tiles; sales funnel shows leads → sent → signed → paid. */
+/** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
+async function countersign(h, estimateId) {
+  await h.go(`/estimate/${estimateId}`);
+  const pad = h.page.getByLabel(/расписывается|signs here/i).last();
+  await pad.scrollIntoViewIfNeeded(); await h.page.waitForTimeout(250);
+  const bb = await pad.boundingBox();
+  await h.page.mouse.move(bb.x + 30, bb.y + 90); await h.page.mouse.down();
+  for (let i = 0; i < 20; i++) await h.page.mouse.move(bb.x + 30 + i * 12, bb.y + 90 - Math.sin(i / 2) * 40);
+  await h.page.mouse.up();
+  await h.page.getByRole("button", { name: "Подписать договор" }).last().click(); await h.page.waitForTimeout(700);
+}
+
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/today");
@@ -11,6 +23,7 @@ exports.run = async (h) => {
   const leadsMonth = before.leads.length;
   await h.go("/p/demo0handyman0estimate0000000001");
   await h.sign("Linda Alvarez");
+  await countersign(h, "e6");
   await h.go("/today");
   const db = await h.db();
   const signedToday = db.estimates.filter((e) => e.status === "approved" && e.approvedAt && new Date(e.approvedAt).toDateString() === new Date().toDateString());

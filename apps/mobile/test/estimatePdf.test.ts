@@ -128,6 +128,15 @@ describe("estimate PDF: in the client's language for every app language", () => 
     expect(html).toContain("<path d=\"M0 0 L10 10\"");
   });
 
+  it("signed on site: the record says on whose device (security-check 05.11)", () => {
+    const { db, e } = dbWith("en");
+    const me = db.members.find((m) => m.id === db.me)!;
+    const signed = { ...e, status: "awaiting_countersign" as const, approval: { optionId: "o1", addonIds: [], signerName: "Rosa Diaz", signature: "M0 0 L1 1", at: "2026-11-05T21:05:00Z", channel: "on_site" as const, totalCents: 28650, depositCents: 0, deviceUserId: me.id } };
+    db.estimates = db.estimates.map((x) => (x.id === e.id ? signed : x));
+    const html = estimateHtml(portalFromEstimate(db, signed, "Acme"), { lang: "en" });
+    expect(html).toContain(translate("en", "est.pdf.onSiteDevice", { name: me.name }).replace("'", "&#39;"));
+  });
+
   it("unit prices can be hidden (company setting)", () => {
     const { db, e } = dbWith("en");
     const p = portalFromEstimate(db, e, "Acme");

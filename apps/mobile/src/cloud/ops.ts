@@ -138,7 +138,10 @@ export type Op =
   | { k: "catalog.save"; item: CatalogItem }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
-  | { k: "estimate.sign"; id: string; svg: string }
+  | { k: "estimate.sign"; id: string; svg: string; signer?: string }
+  /* ---- wave E2a: the company signs; the client link can be revoked (docs/specs/07 §2.2 А, Б) ---- */
+  | { k: "estimate.countersign"; id: string; svg: string; jobId?: string; invoiceId?: string }
+  | { k: "estimate.revoke"; id: string }
   | {
       k: "estimate.deposit";
       id: string;
@@ -522,12 +525,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "notice.read":
       return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", op.ids));
     case "estimate.send": {
-      if (op.token) await run(supabase.from("estimates").update({ public_token: op.token }).eq("id", op.id).is("public_token", null));
-      const { data } = await supabase.from("estimates").select("current_version_id, status").eq("id", op.id).maybeSingle();
-      if (!data || data.status !== "draft") return;
-      const now = new Date().toISOString();
-      await run(supabase.from("estimate_versions").update({ locked_at: now, sent_at: now }).eq("id", data.current_version_id));
-      await run(supabase.from("estimates").update({ status: "sent", sent_version_id: data.current_version_id }).eq("id", op.id));
+      // E2a, security-check 05.11: the server locks the version, sets "valid until" and the link token
+      // (it takes the phone's token only if it was never revoked; otherwise makes its own — the next refresh brings it)
+      const { error } = await supabase.rpc("send_estimate", { p_estimate_id: op.id, p_token: op.token ?? null });
+      await run(Promise.resolve({ error }));
       const { data: est } = await supabase.from("estimates").select("lead_id").eq("id", op.id).maybeSingle();
       if (est?.lead_id) {
         await run(
@@ -537,15 +538,21 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return;
     }
     case "estimate.sign": {
+      // a quick estimate signed on site: the server records the client's signature and the total (sign_estimate_on_site);
+      // the app no longer writes the signature or the status directly (security-check 05.11)
       await applyOp({ k: "estimate.send", id: op.id }, c, userId);
-      const { data } = await supabase.from("estimates").select("current_version_id, status").eq("id", op.id).maybeSingle();
-      if (data?.status === "approved") return;
-      await run(
-        supabase.from("estimate_approvals").insert({
-          company_id: c, estimate_id: op.id, version_id: data?.current_version_id ?? null, signature_svg: op.svg, esign_consent: true, channel: "on_site",
-        }),
-      );
-      return run(supabase.from("estimates").update({ status: "approved" }).eq("id", op.id));
+      const { error } = await supabase.rpc("sign_estimate_on_site", { p_estimate_id: op.id, p_signer: op.signer ?? "Client", p_svg: op.svg });
+      return run(Promise.resolve({ error }));
+    }
+    case "estimate.countersign": {
+      const { error } = await supabase.rpc("countersign_estimate", {
+        p_estimate_id: op.id, p_svg: op.svg, p_member_signature_id: null, p_job_id: op.jobId ?? null, p_invoice_id: op.invoiceId ?? null,
+      });
+      return run(Promise.resolve({ error }));
+    }
+    case "estimate.revoke": {
+      const { error } = await supabase.rpc("revoke_estimate_link", { p_estimate_id: op.id });
+      return run(Promise.resolve({ error }));
     }
     case "estimate.deposit": {
       const { data } = await supabase.from("estimates").select("current_version_id").eq("id", op.id).maybeSingle();
@@ -603,6 +610,12 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   );
   const { data: est } = await supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle();
   if (!est) throw new PermanentError("estimate is not visible");
+  // «don't sign — change it» (E2a): the client signed, the company changes it → back to draft on the server, signature kept in history
+  if (est.status === "awaiting_countersign") {
+    const { error } = await supabase.rpc("reopen_estimate", { p_estimate_id: op.id, p_reason: null });
+    await run(Promise.resolve({ error }));
+    est.status = "draft";
+  }
   if (!["draft", "sent", "viewed"].includes(est.status as string)) return;
   if (est.status !== "draft") await run(supabase.from("estimates").update({ status: "draft" }).eq("id", op.id));
   let versionId = est.current_version_id as string | null;
