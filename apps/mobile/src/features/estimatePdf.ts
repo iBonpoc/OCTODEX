@@ -1,8 +1,9 @@
 /**
- * Estimate as a printable HTML page → PDF.
- * Phone (iOS/Android): expo-print renders a PDF file, the share sheet saves or sends it.
+ * Estimate (and, once signed, the contract) as a printable HTML page → PDF, in the CLIENT's language (rule 7).
+ * Phone (iOS/Android): expo-print renders a PDF file, the share sheet saves or sends it (SMS / iMessage / WhatsApp / mail).
  * Web: the browser print dialog ("Save as PDF").
- * Only client-visible data goes in (no costs). Colors/sizes from the `print` tokens.
+ * Only client-visible data goes in (no costs). Text the contractor typed (line names, notes) goes as typed.
+ * Layout and the company header are shared with the invoice and the receipt (docPdf.ts).
  */
 import { Platform } from "react-native";
 import * as Print from "expo-print";
@@ -10,19 +11,27 @@ import * as Sharing from "expo-sharing";
 import { LINE_GROUPS, activeLines } from "@octo/estimating-engine";
 import { print as P } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
-import { licenseLine, type PortalData } from "@/cloud/portal";
+import { tFor } from "@/i18n/translate";
+import type { PortalData } from "@/cloud/portal";
 import { optionTotals, withAddons } from "./estimateDoc";
+import { docDay, docMoney, docPage, esc, type DocOpts } from "./docPdf";
 
-const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
+export interface EstimatePdfOpts extends DocOpts {
+  /** company setting «Show unit prices» (docs/specs/07 §3.4); on by default */
+  showUnitPrices?: boolean;
+}
 
-export function estimateHtml(
-  p: PortalData,
-  fmt: { t: (k: DictKey, params?: Record<string, string | number>) => string; money: (c: number) => string; day: (iso: string) => string },
-): string {
-  const { t, money, day } = fmt;
+const usTime = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
+
+export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
+  const t = tFor(opts.lang);
+  const money = docMoney;
+  const day = docDay;
+  const unit = opts.showUnitPrices !== false;
   const doc = p.doc;
   const options = doc?.options ?? [];
   const chosen = p.approval ? options.filter((o) => o.id === p.approval!.optionId) : options;
+  const cols = unit ? 4 : 3;
   const blocks = chosen
     .map((o0) => {
       const o = p.approval ? withAddons(o0, p.approval.addonIds) : o0;
@@ -32,12 +41,12 @@ export function estimateHtml(
         const l = act[i]!;
         return `<tr${l.optional && !l.selected ? ' class="opt"' : ""}><td>${esc(l.name)}${l.optional ? ` <span class="mut">(${esc(t("ue.addonChip"))})</span>` : ""}${
           l.description ? `<div class="mut">${esc(l.description)}</div>` : ""
-        }</td><td class="r">${esc(String(l.quantity))} ${esc(l.unit)}</td><td class="r">${money(l.unitPriceCents)}</td><td class="r">${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
+        }</td><td class="r">${esc(String(l.quantity))} ${esc(l.unit)}</td>${unit ? `<td class="r">${money(l.unitPriceCents)}</td>` : ""}<td class="r">${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
       };
       const groups = LINE_GROUPS.map((g) => {
         const idx = act.map((l, i) => (l.group === g ? i : -1)).filter((i) => i >= 0);
         if (!idx.length) return "";
-        return `<tr class="grp"><td colspan="4">${esc(t(`ue.group.${g}` as DictKey))}</td></tr>${idx.map(row).join("")}`;
+        return `<tr class="grp"><td colspan="${cols}">${esc(t(`ue.group.${g}` as DictKey))}</td></tr>${idx.map(row).join("")}`;
       }).join("");
       const s = doc!.settings;
       const sums = [
@@ -48,54 +57,50 @@ export function estimateHtml(
         tot.deposit ? `<tr><td>${esc(t("ue.deposit"))}</td><td class="r">${money(tot.deposit)}</td></tr>` : "",
       ].join("");
       return `<h2>${esc(o.name)}${o.recommended && options.length > 1 ? ` · ${esc(t("ue.recommended"))}` : ""}</h2>
-<table class="lines"><thead><tr><th></th><th class="r">${esc(t("ue.qty"))}</th><th class="r">${esc(t("ue.price"))}</th><th class="r">${esc(t("ue.total"))}</th></tr></thead><tbody>${groups}</tbody></table>
+<table class="lines"><thead><tr><th></th><th class="r">${esc(t("ue.qty"))}</th>${unit ? `<th class="r">${esc(t("ue.price"))}</th>` : ""}<th class="r">${esc(t("ue.total"))}</th></tr></thead><tbody>${groups}</tbody></table>
 <table class="sums">${sums}</table>`;
     })
     .join("");
-  const signed = p.approval
-    ? `<div class="sig"><div class="ok">✓ ${esc(t("portal.approved"))}</div><div>${esc(t("ue.approvedBy", { name: p.approval.signerName, date: day(p.approval.signedAt) }))}</div>${
-        p.approval.signature ? `<svg viewBox="0 0 400 160" width="260" height="104"><path d="${esc(p.approval.signature)}" stroke="${P.ink}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>` : ""
-      }</div>`
+  const a = p.approval;
+  const sigSvg = (path: string) =>
+    `<svg viewBox="0 0 400 160" width="200" height="80"><path d="${esc(path)}" stroke="${P.ink}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  const company = p.company.name || "OCTODEX";
+  const signatures = `<div class="sigs">
+<div class="sig"><div class="mut">${esc(t("est.pdf.customer"))}</div><div class="line">${a?.signature ? sigSvg(a.signature) : ""}</div><div>${esc(a?.signerName ?? p.customer.name)}</div><div class="mut">${
+    a ? esc(day(a.signedAt)) : esc(t("est.pdf.awaitingSignature"))
+  }</div></div>
+<div class="sig"><div class="mut">${esc(t("est.pdf.contractor"))}</div><div class="line"></div><div>${esc(t("est.pdf.forCompany", { company }))}</div><div class="mut">${esc(t("est.pdf.awaitingSignature"))}</div></div>
+</div>`;
+  const record = a
+    ? `<h2>${esc(t("est.pdf.record"))}</h2><table class="record"><thead><tr><th>${esc(t("est.pdf.signer"))}</th><th>${esc(t("est.pdf.when"))}</th><th>${esc(t("est.pdf.how"))}</th></tr></thead><tbody>
+<tr><td>${esc(t("est.pdf.customer"))}: ${esc(a.signerName)}</td><td>${esc(day(a.signedAt))} ${esc(usTime.format(new Date(a.signedAt)))}</td><td>${esc(t("est.pdf.eSignature"))}</td></tr>
+</tbody></table>`
     : "";
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${esc(t("portal.estimate"))} ${esc(p.number ?? "")}</title>
-<style>
-@page { margin: ${P.pagePadMm}mm; }
-body { font-family: -apple-system, "Helvetica Neue", Arial, sans-serif; color: ${P.ink}; background: ${P.paper}; font-size: ${P.fontPt.body}pt; margin: 0; }
-h1 { font-size: ${P.fontPt.title}pt; margin: 0 0 4pt; }
-h2 { font-size: ${P.fontPt.heading}pt; margin: 14pt 0 4pt; }
-.mut { color: ${P.mut}; font-size: ${P.fontPt.small}pt; }
-.head { display: flex; justify-content: space-between; gap: 12pt; border-bottom: 1px solid ${P.rule}; padding-bottom: 8pt; }
-table { width: 100%; border-collapse: collapse; }
-.lines td, .lines th { padding: 4pt 0; border-bottom: 1px solid ${P.rule}; vertical-align: top; }
-.lines th { color: ${P.mut}; font-weight: 500; font-size: ${P.fontPt.small}pt; }
-.grp td { font-weight: 600; padding-top: 8pt; }
-.opt td { color: ${P.mut}; }
-.r { text-align: right; white-space: nowrap; padding-left: 8pt; }
-.sums { width: 50%; margin-left: auto; margin-top: 6pt; }
-.sums td { padding: 2pt 0; }
-.tot td { font-weight: 700; font-size: ${P.fontPt.heading}pt; border-top: 1px solid ${P.rule}; padding-top: 4pt; }
-.note { margin-top: 10pt; white-space: pre-wrap; }
-.sig { margin-top: 16pt; }
-.ok { color: ${P.okText}; font-weight: 600; }
-</style></head><body>
-<div class="head"${p.company.color ? ` style="border-bottom: 2px solid ${esc(p.company.color)}"` : ""}><div style="display:flex;gap:10pt;align-items:flex-start">${
-    p.company.logo && p.company.logo.startsWith("data:image/") ? `<img src="${esc(p.company.logo)}" style="width:48pt;height:48pt;object-fit:contain" alt="">` : ""
-  }<div><h1>${esc(p.company.name || "OCTODEX")}</h1>${p.company.address ? `<div class="mut">${esc(p.company.address)}</div>` : ""}${
-    p.company.contacts.length
-      ? p.company.contacts.map((x) => `<div class="mut">${esc([x.name, x.title].filter(Boolean).join(", "))}${x.phone ? ` · ${esc(x.phone)}` : ""}</div>`).join("")
-      : p.company.phone ? `<div class="mut">${esc(p.company.phone)}</div>` : ""
-  }${p.company.email ? `<div class="mut">${esc(p.company.email)}</div>` : ""}${p.company.website ? `<div class="mut">${esc(p.company.website)}</div>` : ""}${p.company.licenses
-    .map((l) => `<div class="mut">${esc(licenseLine(l))}</div>`)
-    .join("")}</div></div>
-<div style="text-align:right"><h1>${esc(t("portal.estimate"))} ${esc(p.number ?? "")}</h1><div class="mut">${esc(t("portal.date"))}: ${day(p.sentAt ?? new Date().toISOString())}</div></div></div>
+  const title = `${t("portal.estimate")} ${p.number ?? ""}`.trim();
+  const body = `
 <p><b>${esc(t("portal.for"))}:</b> ${esc(p.customer.name)}<br>${esc(p.property.address)}${p.property.city ? `, ${esc(p.property.city)}` : ""}</p>
 ${p.title ? `<p><b>${esc(p.title)}</b></p>` : ""}
 ${blocks}
 ${doc?.note ? `<div class="note">${esc(doc.note)}</div>` : ""}
 ${p.company.terms ? `<div class="note mut">${esc(p.company.terms)}</div>` : ""}
 <p class="mut">${esc(t("est.rescission"))}</p>
-${signed}
-</body></html>`;
+${a ? `<p class="ok">✓ ${esc(t("portal.approved"))}</p>` : ""}
+${signatures}
+${record}`;
+  return docPage({
+    title,
+    meta: [`${t("portal.date")}: ${day(p.sentAt ?? new Date().toISOString())}`],
+    footer: [title, company].join(" · "),
+    company: p.company,
+    body,
+    opts,
+  });
+}
+
+/** «EST-0012 Smith» — the estimate number and the client's last name; no characters a file system refuses. */
+export function estimateFileName(p: Pick<PortalData, "number" | "customer">): string {
+  const last = p.customer.name.trim().split(/\s+/).pop() ?? "";
+  return [p.number, last].filter(Boolean).join(" ").replace(/[\\/:*?"<>|]/g, "").trim() || "Estimate";
 }
 
 /** Save/share the PDF (phone) or open the print dialog (web). */

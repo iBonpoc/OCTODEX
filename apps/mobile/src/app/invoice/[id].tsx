@@ -7,7 +7,8 @@ import type { PaymentMethod } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { companyForPortal } from "@/cloud/portal";
 import { invoiceChip } from "@/features/ContractStatement";
-import { invoiceHtml } from "@/features/docPdf";
+import { invoiceHtml, invoiceMessage } from "@/features/docPdf";
+import { docLanguageFor } from "@/data/people";
 import { saveEstimatePdf } from "@/features/estimatePdf";
 import { Labeled, MoneyField } from "@/features/fields";
 import { openEmail, openSms } from "@/features/sendEstimate";
@@ -43,14 +44,9 @@ export default function InvoiceScreen() {
   const pays = db.payments.filter((p) => p.invoiceId === inv.id);
   const chip = invoiceChip(inv);
   const company = companyForPortal(db, store.companyName ?? "OCTODEX");
-  const fmt = { t, money, day };
-  const sendText = () => {
-    const p = db.company?.payment;
-    const how = [p?.zelle ? `Zelle ${p.zelle}` : "", p?.checkPayableTo ? `${t("inv.checkTo")} ${p.checkPayableTo}` : ""].filter(Boolean).join(", ");
-    return t("inv.sendText", { company: company.name, number: inv.number ?? "", amount: money(balance), date: day(inv.dueDate), how: how || "—" });
-  };
+  const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }));
   const pdf = () =>
-    saveEstimatePdf(invoiceHtml(db, inv, company, fmt), `Invoice ${inv.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+    saveEstimatePdf(invoiceHtml(db, inv, company, { lang: docLanguageFor(db, { customerId: inv.customerId }) }), `Invoice ${inv.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
 
   return (
     <Screen title={`${t("inv.title")} ${inv.number ?? ""}`.trim()} back={back} subtitle={cust?.name}>
@@ -106,9 +102,9 @@ export default function InvoiceScreen() {
             }}
           />
         ) : null}
-        {balance > 0 && cust?.phone ? <Button label={t("ue.sendSms")} icon="message" variant="secondary" onPress={() => openSms(cust.phone, sendText()).catch(() => {})} /> : null}
+        {balance > 0 && cust?.phone ? <Button label={t("ue.sendSms")} icon="message" variant="secondary" onPress={() => openSms(cust.phone, msg().text).catch(() => {})} /> : null}
         {balance > 0 && cust?.email ? (
-          <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => openEmail(cust.email!, `${t("inv.title")} ${inv.number ?? ""}`, sendText()).catch(() => {})} />
+          <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => openEmail(cust.email!, msg().subject, msg().text).catch(() => {})} />
         ) : null}
         <Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={pdf} />
       </RowView>

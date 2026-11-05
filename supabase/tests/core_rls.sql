@@ -1073,5 +1073,49 @@ begin
 end $$;
 \echo 'T18 estimate status ok'
 
+-- ---------------------------------------------------------------- T19: client page language (rule 7, docs/specs/07 §2.1)
+-- order: client's main person → lead's main person → lead → company → en; only doc_language is added
+:as_owner_a
+do $$
+declare v_cust uuid; v_prop uuid; v_lead uuid; v_main uuid; v_lp uuid; v_e uuid;
+begin
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'Lang Client') returning id into v_cust;
+  insert into public.properties (company_id, customer_id, address_line1, address_city) values ('ca000000-0000-0000-0000-000000000000', v_cust, '1 Lang St', 'Pasadena') returning id into v_prop;
+  insert into public.contacts (company_id, customer_id, name, role, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_cust, 'Lang Main', 'main', true) returning id into v_main;
+  update public.customers set primary_contact_id = v_main where id = v_cust;
+  insert into public.leads (company_id, source_id, contact_name, phone)
+  select 'ca000000-0000-0000-0000-000000000000', id, 'Lang Lead', '(818) 555-0700' from public.lead_sources
+   where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral'
+  returning id into v_lead;
+  select id into v_lp from public.contacts where lead_id = v_lead and customer_id is null and is_primary and deleted_at is null;
+  perform tst.ok(v_lp is not null, 'the lead has its main person');
+  insert into public.estimates (company_id, customer_id, property_id, lead_id, title, public_token)
+  values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, v_lead, 'T19 lang', 'tok_lang_0123456789abcdef') returning id into v_e;
+  update public.companies set doc_language = 'en' where id = 'ca000000-0000-0000-0000-000000000000';
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'en', 'nobody has a language: company default');
+  update public.companies set doc_language = 'es' where id = 'ca000000-0000-0000-0000-000000000000';
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'es', 'company default changes the page');
+  update public.leads set language = 'ru' where id = v_lead;
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'ru', 'the lead beats the company');
+  update public.contacts set preferred_language = 'en' where id = v_lp;
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'en', 'the lead''s main person beats the lead');
+  update public.contacts set preferred_language = 'ru' where id = v_main;
+  perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'ru', 'the client''s main person beats everything');
+  perform tst.ok((public.portal_estimate('tok_lang_0123456789abcdef') ->> 'title') = 'T19 lang', 'the rest of the page is still there');
+  update public.companies set doc_language = 'en' where id = 'ca000000-0000-0000-0000-000000000000';
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb;
+begin
+  perform tst.ok(public.portal_estimate('no-such-token-lang-00000') is null, 'unknown token: nothing, not even a language');
+  r := public.portal_estimate('tok_lang_0123456789abcdef');
+  perform tst.ok(r ->> 'doc_language' = 'ru', 'client (anon) gets the language');
+  perform tst.ok(r::text not like '%preferred_language%' and r::text not like '%Lang Main%', 'only doc_language is added: no people data');
+  perform tst.fails($q$select app.portal_estimate_base('tok_lang_0123456789abcdef')$q$, 'anon cannot call the base function');
+  perform tst.fails($q$select app.estimate_doc_language(gen_random_uuid())$q$, 'anon cannot call the language helper');
+end $$;
+\echo 'T19 client page language ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'
