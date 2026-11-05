@@ -15,13 +15,15 @@
 --    the platform — 90 a day (below Resend's free 100 a day).
 -- 5. public.reissue_estimate_link (§9.7): a signed estimate gets a new client link; the old one is revoked for good.
 
--- ---- 1. A clean single address (the same rules as cleanEmail in the app; §9.10) ------------------------------------
+-- ---- 1. A clean single address (§9.10) ----------------------------------------------------------------------------
+-- ASCII only, one address: no spaces, CR/LF, commas, semicolons, «?», «%», «!» or angle brackets; local part ≤ 64.
 create or replace function app.clean_email(p text)
 returns text language sql immutable set search_path = '' as $$
   select case
     when x is null or x = '' or length(x) > 254 then null
-    -- ASCII only, one address: no spaces, CR/LF, commas, semicolons, «?» or angle brackets
-    when x !~ '^[A-Za-z0-9.!#$%&''*+/=^_`{|}~-]+@[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$' then null
+    when length(split_part(x, '@', 1)) > 64 then null
+    -- no «%» or «!» either: old relays read them as routing (security-check П1a)
+    when x !~ '^[A-Za-z0-9.#$&''*+/=^_`{|}~-]+@[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+$' then null
     when x ~ '^\.|\.\.|\.@' then null
     else x
   end
@@ -30,15 +32,16 @@ $$;
 revoke all on function app.clean_email(text) from public, anon, authenticated;
 
 -- The client's email: the main person of the estimate's client — their primary address, else the cached contacts.email.
--- Returns the address and who last set it (§9.7: the journal keeps who changed the client's email).
+-- The first address that is clean (a bad primary does not hide a good second one).
+-- Returns the address and who last edited that row (§9.7; approximate: any edit of the row counts, see 07-email §9a).
 create or replace function app.estimate_client_email(p_estimate_id uuid, out email text, out set_by uuid)
 language sql stable security definer set search_path = '' as $$
   select app.clean_email(coalesce(ce.address, c.email)), coalesce(ce.updated_by, ce.created_by, c.updated_by, c.created_by)
     from public.estimates e
-    join public.customers cu on cu.id = e.customer_id
+    join public.customers cu on cu.id = e.customer_id and cu.deleted_at is null
     join public.contacts c on c.id = cu.primary_contact_id and c.deleted_at is null
     left join lateral (select x.address, x.updated_by, x.created_by from public.contact_emails x
-                        where x.contact_id = c.id and x.deleted_at is null
+                        where x.contact_id = c.id and x.deleted_at is null and app.clean_email(x.address) is not null
                         order by x.is_primary desc, x.position, x.created_at limit 1) ce on true
    where e.id = p_estimate_id;
 $$;
@@ -48,7 +51,7 @@ revoke all on function app.estimate_client_email(uuid) from public, anon, authen
 create table if not exists public.email_outbox (
   id            uuid primary key default public.uuid_generate_v7(),
   company_id    uuid not null references public.companies (id),
-  estimate_id   uuid not null references public.estimates (id),
+  estimate_id   uuid not null,
   kind          text not null check (kind in ('signed_copy')),
   to_email      text check (to_email is null or length(to_email) <= 254),   -- set by email_claim at sending time
   to_email_set_by uuid,                                                      -- who last changed that address
@@ -57,11 +60,12 @@ create table if not exists public.email_outbox (
                                                         'skipped_off', 'not_configured', 'rate_limited', 'expired')),
   attempts      integer not null default 0 check (attempts between 0 and 3),
   provider_id   text check (provider_id is null or length(provider_id) <= 128),
-  error         text check (error is null or length(error) <= 64),          -- a response code only, never an address
+  error         text check (error is null or error ~ '^[a-z0-9_.:-]{1,64}$'),  -- a response code only, never an address
   requested_by  uuid references public.users (id),                          -- null: sent automatically on signing
   created_at    timestamptz not null default now(),
   updated_at    timestamptz not null default now(),
-  sent_at       timestamptz
+  sent_at       timestamptz,
+  foreign key (company_id, estimate_id) references public.estimates (company_id, id)   -- a row is of its estimate's company
 );
 -- one automatic copy per contract; manual repeats are separate rows
 create unique index if not exists email_outbox_auto_once on public.email_outbox (estimate_id, kind) where requested_by is null;
@@ -104,9 +108,14 @@ begin
   if not found then
     return;
   end if;
+  if e.status <> 'approved' then
+    return;                                               -- only a contract signed by both sides
+  end if;
+  perform pg_advisory_xact_lock(hashtext('email_outbox_limit'));   -- parallel signings cannot pass a limit together
   v_lang := app.estimate_doc_language(e.id);
   v_status := case
-    when coalesce((select (estimate_settings ->> 'autoSendSignedCopy')::boolean from public.companies where id = e.company_id), false) is not true
+    -- read as text: a junk value («yes») means off and never raises
+    when coalesce((select estimate_settings ->> 'autoSendSignedCopy' from public.companies where id = e.company_id), 'false') <> 'true'
       then 'skipped_off'
     when (select email from app.estimate_client_email(e.id)) is null then 'skipped_no_email'
     when app.email_over_limit(e.company_id) then 'rate_limited'
@@ -192,11 +201,13 @@ begin
   if (select email from app.estimate_client_email(e.id)) is null then
     raise exception 'the client has no email' using errcode = '22023';
   end if;
-  if exists (select 1 from public.email_outbox where estimate_id = e.id and kind = 'signed_copy'
+  perform pg_advisory_xact_lock(hashtext('email_outbox_limit'));
+  if exists (select 1 from public.email_outbox where estimate_id = e.id and kind = 'signed_copy' and status <> 'rate_limited'
                 and created_at > now() - interval '10 minutes') then
     raise exception 'the copy was sent less than 10 minutes ago' using errcode = '22023';
   end if;
-  if (select count(*) from public.email_outbox where estimate_id = e.id and kind = 'signed_copy' and requested_by is not null) >= 3 then
+  if (select count(*) from public.email_outbox where estimate_id = e.id and kind = 'signed_copy' and requested_by is not null
+         and status <> 'rate_limited') >= 3 then
     raise exception 'the copy was already sent again 3 times' using errcode = '22023';
   end if;
   v_lang := app.estimate_doc_language(e.id);
@@ -222,6 +233,17 @@ begin
    where id = p_outbox_id and status in ('queued', 'failed') and attempts < 3
    returning * into r;
   if not found then
+    return null;
+  end if;
+  -- the state now, not when queued: a deleted estimate or a dead link sends nothing; an automatic copy
+  -- the company turned off meanwhile is not sent either
+  if not exists (select 1 from public.estimates e where e.id = r.estimate_id and e.deleted_at is null
+                    and e.status = 'approved' and e.public_token is not null) then
+    update public.email_outbox set status = 'expired', updated_at = now() where id = r.id;
+    return null;
+  end if;
+  if r.requested_by is null and coalesce((select estimate_settings ->> 'autoSendSignedCopy' from public.companies where id = r.company_id), 'false') <> 'true' then
+    update public.email_outbox set status = 'skipped_off', updated_at = now() where id = r.id;
     return null;
   end if;
   select c.email, c.set_by into v_email, v_by from app.estimate_client_email(r.estimate_id) c;
@@ -250,7 +272,7 @@ begin
     update public.email_outbox set status = 'sent', provider_id = left(p_provider_id, 128), error = null, sent_at = now(), updated_at = now()
      where id = p_outbox_id and status = 'sending';
   elsif p_status = 'failed' then
-    update public.email_outbox set status = 'failed', error = left(p_error, 64), updated_at = now(),
+    update public.email_outbox set status = 'failed', error = nullif(left(regexp_replace(lower(coalesce(p_error, '')), '[^a-z0-9_.:-]', '', 'g'), 64), ''), updated_at = now(),
            attempts = case when p_final then 3 else attempts end
      where id = p_outbox_id and status = 'sending';
   else
