@@ -11,7 +11,7 @@
   --fs-display:28px;--fs-title:20px;--fs-heading:15px;--fs-body:13px;--fs-btn:12.5px;--fs-caption:11.5px;--fs-micro:10.5px;
   --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
   --c-sm:28px;--c-md:32px;--c-lg:36px;--hit:44px;--field:34px;--field-phone:44px;--chip-h:24px;--chip-px:10px;
-  --tabbar-h:56px;--edge:3px;--avatar:36px;--avatar-sm:28px;--row-min:44px;--row-max:52px;--panel-w:360px;
+  --icon-sm:16px;--tabbar-h:56px;--edge:3px;--avatar:36px;--avatar-sm:28px;--row-min:44px;--row-max:52px;--panel-w:360px;
   --dur-fast:160ms;--dur-base:220ms;--settle:420ms;--ease-spring:cubic-bezier(.3,1.25,.5,1);--ease-liquid:cubic-bezier(.3,1.35,.5,1);
   --st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--st-on:#0B0C0F;--scrim:rgba(0,0,0,.42);--shadow-pop:0 20px 60px rgba(0,0,0,.45);
   --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--in:rgba(255,255,255,.55);
@@ -158,9 +158,10 @@ svg{flex:none}
 .facts{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
 .f{display:grid;grid-template-columns:minmax(0,1fr);font-size:var(--fs-body);line-height:1.4}
 .f.pair{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s2)}
-.fc{display:grid;grid-template-columns:var(--avatar) minmax(0,1fr);gap:var(--s3);align-items:start;min-width:0}
-.f.pair .fc:last-child{grid-template-columns:16px minmax(0,1fr);gap:6px}
-.fi{justify-self:center;color:var(--mut);padding-top:1px}
+/* значок 16 стоит под центром ведущего элемента; отступ значок → текст одинаковый везде (--s3) */
+.fc{display:grid;grid-template-columns:var(--icon-sm) minmax(0,1fr);gap:var(--s3);align-items:start;min-width:0}
+.f>.fc:first-child{padding-left:calc((var(--avatar) - var(--icon-sm)) / 2)}
+.fi{color:var(--mut);padding-top:1px}
 .ft3{max-height:calc(1.4em * 3);overflow:hidden;min-width:0}
 .ft3.clip{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 1.4em),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 1.4em),transparent)}
 .f .fl{color:var(--mut)}
@@ -317,6 +318,7 @@ td .chip{height:20px;padding:0 6px;font-size:var(--fs-micro);margin:0 2px 2px 0}
 const ICONS = {"home":"M3 11l9-8 9 8M5 10v10h5v-6h4v6h5V10","inbox":"M22 12h-6l-2 3h-4l-2-3H2M5.5 5h13L22 12v6a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2v-6z","users":"M16 20v-1.5a3.5 3.5 0 0 0-3.5-3.5h-5A3.5 3.5 0 0 0 4 18.5V20M10 11a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7M20 20v-1.5a3.5 3.5 0 0 0-2.5-3.3M15.5 4.2a3.5 3.5 0 0 1 0 6.6","user":"M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0","calendar":"M7 3v4M17 3v4M4 9h16M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z","more":"M6 12m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0M12 12m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0M18 12m-1.2 0a1.2 1.2 0 1 0 2.4 0a1.2 1.2 0 1 0-2.4 0","phone":"M5 4h3l2 5-2.5 1.5a11 11 0 0 0 6 6L15 14l5 2v3a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2z","pin":"M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11zM12 12.5a2.5 2.5 0 1 0 0-5 2.5 2.5 0 0 0 0 5","message":"M21 12a8 8 0 0 1-11.5 7.2L4 20.5l1.3-4.3A8 8 0 1 1 21 12z","send":"M21 3L10 14M21 3l-7 18-4-7-7-4z","plus":"M12 5v14M5 12h14","check":"M5 12.5l4.5 4.5L19 7.5","close":"M6 6l12 12M18 6L6 18","chevronRight":"M9 6l6 6-6 6","chevronLeft":"M15 6l-6 6 6 6","chevronDown":"M6 9l6 6 6-6","search":"M11 18a7 7 0 1 0 0-14 7 7 0 0 0 0 14zM20 20l-4-4","bell":"M6 16V11a6 6 0 0 1 12 0v5l1.5 2h-15zM10 21h4","sliders":"M4 7h10M18 7h2M4 17h2M10 17h10M16 4v6M8 14v6","mic":"M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3zM6 12a6 6 0 0 0 12 0M12 18v3","camera":"M4 8h3l1.5-2h7L17 8h3a1 1 0 0 1 1 1v9a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V9a1 1 0 0 1 1-1zM12 17a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7","invoice":"M7 3h7l5 5v12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM14 3v5h5M9 13h6M9 17h6","wallet":"M4 7h15a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h12M16 13.5h.01","chart":"M5 20V10M12 20V4M19 20v-7","note":"M8 4h8v3H8zM6 5.5a1 1 0 0 0-1 1V20a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V6.5a1 1 0 0 0-1-1M9 12h6M9 16h4","pencil":"M4 20l1-4L16 5a2 2 0 0 1 3 3L8 19z","trash":"M5 7h14M10 7V4h4v3M7 7l1 13h8l1-13","clock":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM12 7v5l3 2","wifiOff":"M3 3l18 18M8.5 16.5a5 5 0 0 1 7 0M5 12.5a10 10 0 0 1 3-2M19 12.5a10 10 0 0 0-6-3M12 20h.01","alert":"M12 4l9.5 16h-19zM12 10v4M12 17h.01","star":"M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1L3.2 9.5l6.1-.9z","route":"M6 19a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM18 9a2 2 0 1 0 0-4 2 2 0 0 0 0 4zM8 17h6a3 3 0 0 0 0-6h-4a3 3 0 0 1 0-6h6","wrench":"M14.5 6.5a4 4 0 0 0 4.9 5L20 12l-8 8a2.1 2.1 0 0 1-3-3l8-8-.5-.5a4 4 0 0 1-2-5z","mail":"M4 6h16v12H4zM4 7l8 6 8-6","sms":"M21 12a8 8 0 0 1-11.5 7.2L4 20.5l1.3-4.3A8 8 0 1 1 21 12zM9 12h.01M12 12h.01M15 12h.01","copy":"M9 9h10v10H9zM5 15V5h10","undo":"M9 14L4 9l5-5M4 9h11a5 5 0 0 1 0 10h-3","refresh":"M20 12a8 8 0 1 1-2.3-5.7M20 4v5h-5","link":"M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3A4 4 0 0 0 10 18.7l1-1","navigate":"M3 11l18-8-8 18-2-8z","image":"M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 16l5-5 4 4 3-3 6 6M15.5 9.5h.01","signature":"M3 17c3-1 4-9 7-9 2 0 0 7 2 7 1.5 0 2-3 3.5-3S17 15 21 15M3 21h18","checklist":"M10 6h10M10 12h10M10 18h10M4 6l1.2 1.2L7.5 5M4 12l1.2 1.2 2.3-2.2M4 18l1.2 1.2 2.3-2.2","dollar":"M12 3v18M16.5 7.5c-.8-1.3-2.5-2-4.5-2-2.5 0-4 1.3-4 3s1.5 2.6 4 3 4 1.3 4 3-1.5 3-4 3c-2 0-3.7-.7-4.5-2","sun":"M12 16a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4","moon":"M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z","ruler":"M3 17L17 3l4 4L7 21zM7 13l2 2M10 10l2 2M13 7l2 2","globe":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM3 12h18M12 3c2.5 3 2.5 15 0 18M12 3c-2.5 3-2.5 15 0 18","sync":"M20 11a8 8 0 0 0-14.5-4.5L4 8M4 4v4h4M4 13a8 8 0 0 0 14.5 4.5L20 16M20 20v-4h-4","help":"M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18zM9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17.2h.01","home2":"M4 21V10l8-6 8 6v11zM9 21v-6h6v6","minus":"M5 12h14"};
 Object.assign(ICONS,{
   /* кандидаты в дизайн-систему (BACKLOG): та же сетка 24, линия 1.75 */
+  map:"M3 6.5 9 4l6 2.5L21 4v13.5L15 20l-6-2.5L3 20zM9 4v13.5M15 6.5V20",
   megaphone:"M3 10v4h3l7 4V6l-7 4zM16 9.5a3 3 0 0 1 0 5M18.5 7a6.5 6.5 0 0 1 0 10M6 14l1 5h3l-1-4",
   clipboard:"M9 3h6v3H9zM7 4.5H5V21h14V4.5h-2M8 11h8M8 15h8M8 19h5",
   toolbox:"M3 9h18v10H3zM8 9V6h8v3M3 13.5h18M10 12v3M14 12v3",
@@ -364,7 +366,7 @@ const SECTIONS=[
 const F={
  src:["megaphone","Источник"],svc:["clipboard","Запрос клиента"],work:["toolbox","Работа"],addr:["pin","Адрес"],phone:["phone","Телефон"],email:["mail","Email"],
  resp:["userCheck","Ответственный"],client:["user","Клиент"],when:["calendar","Когда"],due:["clock","Срок"],links:["link","Связано"],
- valid:["hourglass","Действует"],access:["key","Доступ"],history:["history","История"],kind:["home","Тип объекта"],sched:["repeat","Расписание"],
+ valid:["calendar","Действует до"],access:["key","Доступ"],history:["history","История"],kind:["home","Тип объекта"],sched:["repeat","Расписание"],
  pay:["wallet","Оплата"],method:["wallet","Способ"],by:["user","Кто"],receipt:["camera","Чек"],bill:["dollar","Клиенту"],
  supplier:["truck","Поставщик"],stock:["box","Склад"],terms:["doc","Условия"],price:["tag","Прайс"],deliv:["truck","Получение"],
  lines:["checklist","Что в заказе"],ref:["hash","Номер у поставщика"],now:["route","Сейчас"],next:["calendar","Дальше"],hours:["clock","Часы"],
@@ -421,7 +423,7 @@ const L={
    {t:"Sarah Whitman",n:"CLT-0017 · с Oct 2026",v:246000,f:{addr:"44 Rose Blvd, Pasadena, CA 91105",phone:"(626) 555-0120",last:"Работа ждёт даты"},kv:[["Работ",1],["Оплатил",246000]]},
   ]},
  properties:{name:"Объекты",icon:"home",arch:"A",density:"rich",group:"none",facts:["client","phone","kind","access","history"],cols:["client","kind","history"],val:"",
-  swR:["navigate","Маршрут"],swL:["note","Заметка"],cta:"Новый объект",empty:["Объектов нет","Объект — адрес, где делается работа. Он живёт внутри клиента."],
+  swR:["map","Маршрут"],swL:["note","Заметка"],cta:"Новый объект",empty:["Объектов нет","Объект — адрес, где делается работа. Он живёт внутри клиента."],
   st:{open:["info","Открытая работа"],warranty:["ok","Гарантия до May 2031"]},
   items:[
    {t:"210 Lake Ave, Pasadena, CA 91101",addrOf:1,who:"Patricia Moore",n:"PRP-0012",st:"open",f:{client:"Patricia Moore",phone:"(626) 555-0164",kind:"Дом, 2 этажа, 1962 г.",access:"Ключ в сейфе у двери, код 0420",history:"2 работы · сейчас JOB-0214 Монтаж кухни"}},
@@ -442,7 +444,7 @@ const L={
    {t:"Kevin O’Neil",lead:{dt:["OCT","27"]},trade:"Кровля и водостоки",n:"JOB-0205",v:140000,st:"cancel",f:{work:"Ремонт крыши",addr:"640 W Dryden St, Glendale, CA 91202",when:"Отменена Oct 27 · клиент нашёл другого"}},
   ]},
  visits:{name:"Визиты",icon:"calendar",arch:"C",density:"rich",group:"field",facts:["addr","resp","work","phone","note"],cols:["addr","resp","work"],val:"",
-  swR:["navigate","Маршрут"],swL:["phone","Позвонить"],cta:"Новый визит",empty:["На этот день визитов нет","Перетащите работу из «Ждут даты» на день."],
+  swR:["map","Маршрут"],swL:["phone","Позвонить"],cta:"Новый визит",empty:["На этот день визитов нет","Перетащите работу из «Ждут даты» на день."],
   st:{late:["bad","Опаздывает 15 мин"],unconf:["warn","Клиент не подтвердил"],enroute:["info","В пути · 12 мин"],sched:["info","Окно 2–4 PM"],conf:["ok","Клиент подтвердил"],done:["ok","Завершён"]},
   items:[
    {g:"Сегодня · Thu, Nov 5",t:"Patricia Moore",lead:{tm:["8:00","AM"]},trade:"Ремонт",n:"Монтаж · 8:00–11:00 AM",st:"done",f:{addr:"210 Lake Ave, Pasadena, CA 91101",resp:"Бригада A: Carlos M., Luis O.",work:"JOB-0214 · Монтаж кухни, визит 2 из 3",phone:"(626) 555-0164"}},
@@ -681,7 +683,7 @@ function progHTML(l,it){
 function actsHTML(l,it){
   const f=it.f;const b=[];
   if(f.phone){b.push(["phone","Позвонить",f.phone]);b.push(["sms","SMS",f.phone])}
-  if(f.addr)b.push(["navigate","Карта и маршрут",f.addr]);
+  if(f.addr)b.push(["map","Карта и маршрут",f.addr]);
   if(f.email)b.push(["mail","Email",f.email]);
   const main=it.act?`<button class="btn" data-act="${it.id}">${esc(it.act)}</button>`:"";
   if(!b.length&&!main)return "";
@@ -791,7 +793,7 @@ function rowsHTML(l,items){
   const h=`<div class="rowh" style="--cols:${cols}"><span></span><span></span><button data-sort="t">${title}${ic("sort",12)}</button>${keys.map(k=>`<span>${F[k][1]}</span>`).join("")}${showV?`<button class="r" data-sort="v">${l.val||"Сумма"}${ic("sort",12)}</button>`:""}<span></span></div>`;
   const rows=arr.map((it,idx)=>{
     const picked=S.picked.has(it.id);
-    const quick=[it.f.phone?`<button class="btn ic" data-contact="Позвонить" data-val="${esc(it.f.phone)}" aria-label="Позвонить" title="Позвонить: ${esc(it.f.phone)}">${ic("phone",14)}</button>`:"",it.f.addr?`<button class="btn ic" data-contact="Карта и маршрут" data-val="${esc(it.f.addr)}" aria-label="Карта" title="Карта: ${esc(it.f.addr)}">${ic("navigate",14)}</button>`:""].join("");
+    const quick=[it.f.phone?`<button class="btn ic" data-contact="Позвонить" data-val="${esc(it.f.phone)}" aria-label="Позвонить" title="Позвонить: ${esc(it.f.phone)}">${ic("phone",14)}</button>`:"",it.f.addr?`<button class="btn ic" data-contact="Карта и маршрут" data-val="${esc(it.f.addr)}" aria-label="Карта" title="Карта: ${esc(it.f.addr)}">${ic("map",14)}</button>`:""].join("");
     return `<div class="row" role="button" tabindex="0" style="--cols:${cols}" data-open="${it.id}" aria-selected="${S.sel===it.id}">${edgeHTML(l,it)}<span class="pick ${picked?"on":""}" data-pick="${it.id}" role="checkbox" aria-checked="${picked}" aria-label="Выбрать">${picked?ic("check",14):""}</span><span class="lead">${lead(l,it,"compact")}</span><span class="c tt"><b>${esc(it.t)}</b>${it.n?`<span class="n">${esc(it.n)}</span>`:""}${it.st?`<span class="tags" style="margin-top:4px">${chipHTML(l,it,true)}</span>`:""}</span>${keys.map((k,j)=>`<span class="c mm">${j===0&&S.mode==="offline"&&idx<2?`${ic("cloud",13)} `:""}${esc(it.f[k]||"—")}</span>`).join("")}${showV?`<span class="c r side">${valHTML(l,it)}</span>`:""}<span class="c ra">${quick}</span></div>`}).join("");
   return totals(l,arr)+`<div class="rows">${h}${rows}</div>`;
 }
@@ -882,7 +884,7 @@ function spec(){
    <p class="mut">Таблица собрана из тех же данных, что и прототип. Статусы с «N дн» вычисляются из дат и не хранятся в базе; маржа каталога сравнивается с нормой компании (35%, настройка смет).</p></section>
   <section><h2>Решения на ваш выбор</h2><ol class="q-list">
    <li><span><b>Подробная карточка по умолчанию</b> почти во всех списках. Список длиннее, зато открывать карточку нужно реже. Уведомления — «обычная».</span></li>
-   <li><span><b>Значки вместо подписей.</b> Новые значки (рупор, планшет запроса, ящик инструментов, человек с галочкой, песочные часы, ключ, щит, глаз, решётка номера, часы с историей) нужно добавить в дизайн-систему.</span></li>
+   <li><span><b>Значки вместо подписей.</b> Новые значки (рупор, планшет запроса, ящик инструментов, человек с галочкой, ключ, щит, глаз, решётка номера, часы с историей) нужно добавить в дизайн-систему.</span></li>
    <li><span><b>Компьютер — строками с переносом текста</b> и открытой подробной карточкой справа.</span></li>
    <li><span><b>Каталог:</b> себестоимость включает налог при покупке; маржа ниже нормы компании — оранжевый статус.</span></li>
    <li><span><b>Мастер не видит денег</b>, но видит адреса, телефоны и кнопки связи.</span></li></ol></section>
