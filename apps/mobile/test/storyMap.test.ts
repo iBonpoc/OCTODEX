@@ -27,7 +27,7 @@ const rows = (sec: string) =>
     .map((l) => l.split("|").slice(1, -1).map((c) => c.trim()));
 
 /* ---------- §4 handoffs ---------- */
-const handoffs = rows(section(4)).filter((r) => /^S\d+a?$/.test(r[0] ?? ""));
+const handoffs = rows(section(4)).filter((r) => /^S\d+[ab]?$/.test(r[0] ?? ""));
 const dbTests = read("supabase/tests/core_rls.sql");
 
 function refExists(ref: string): boolean {

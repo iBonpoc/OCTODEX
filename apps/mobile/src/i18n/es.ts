@@ -278,6 +278,7 @@ export const es: Dict = {
   "est.depositDue": "Depósito a pagar",
   "est.recordDeposit": "Registrar depósito",
   "est.depositPaid": "Depósito recibido",
+  "est.awaitingCountersign": "Espera su firma",
   "est.depositToast": "Depósito {amount} registrado, trabajo creado",
   "est.noLines": "Sin partidas guardadas",
   "est.detail": "Presupuesto",

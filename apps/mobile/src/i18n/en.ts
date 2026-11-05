@@ -278,6 +278,7 @@ export const en: Dict = {
   "est.depositDue": "Deposit due",
   "est.recordDeposit": "Record deposit",
   "est.depositPaid": "Deposit received",
+  "est.awaitingCountersign": "Awaiting your signature",
   "est.depositToast": "Deposit {amount} recorded, job created",
   "est.noLines": "No line items saved in this estimate",
   "est.detail": "Estimate",

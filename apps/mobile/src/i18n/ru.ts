@@ -277,6 +277,7 @@ export const ru = {
   "est.depositDue": "Депозит к оплате",
   "est.recordDeposit": "Записать депозит",
   "est.depositPaid": "Депозит получен",
+  "est.awaitingCountersign": "Ждёт вашей подписи",
   "est.depositToast": "Депозит {amount} записан, работа создана",
   "est.noLines": "Позиции не сохранены в этой смете",
   "est.detail": "Смета",
