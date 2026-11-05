@@ -36,7 +36,7 @@ export type Op =
     }
   /** S4 (docs/specs/03): an inspection — a visit of the lead at the property, no job; replaces lead.visit (kept for old queues) */
   | { k: "visit.notified"; visitId: string }
-  | { k: "visit.inspection"; leadId?: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; scope: string[] }
+  | { k: "visit.inspection"; leadId?: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; assigneeIds?: string[]; scope: string[] }
   /** the office cancels a visit with a reason; S4a / S9a roll the lead / job back when nothing open is left */
   | { k: "visit.cancel"; visitId: string; reason: CancelReason; text?: string; leadBack?: string; jobBack?: string }
   /** the office moves a visit (time, length); the status does not change */
@@ -55,7 +55,8 @@ export type Op =
       scope: string[];
     }
   | { k: "lead.add"; id: string; name: string; phone: string; city: string; address?: string; sourceId: string; message: string; costCents?: number; cols?: Record<string, unknown> }
-  | { k: "visit.assign"; visitId: string; userId: string }
+  /** the whole list of people on a visit (wave П3a, public.assign_visit); userId — old queues with one person */
+  | { k: "visit.assign"; visitId: string; userIds?: string[]; userId?: string }
   | {
       k: "estimate.add";
       id: string;
@@ -100,7 +101,7 @@ export type Op =
     }
   | { k: "payment.record"; id: string; invoiceId: string; customerId: string; amountCents: number; method: PaymentMethod; reference?: string }
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number }
-  | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; scope: string[] }
+  | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; scope: string[] }
   | { k: "company.save"; company: Company; einChanged: boolean }
   | { k: "license.save"; license: CompanyLicense }
   | { k: "license.remove"; id: string }
@@ -190,6 +191,11 @@ async function run(p: PromiseLike<{ error: { message: string; code?: string } | 
   const permanent = error.code ? /^(42|23|22|P0)/.test(error.code) : false;
   if (permanent) throw new PermanentError(error.message);
   throw new Error(error.message);
+}
+
+/** people on a new visit: the same server function as «Назначить» (nobody → nothing to send) */
+async function assignPeople(visitId: string, ids: string[]) {
+  if (ids.length) await run(supabase.rpc("assign_visit", { p_visit_id: visitId, p_user_ids: ids }));
 }
 
 /** Insert by client-made id; a retry after a partial failure does not duplicate rows (ON CONFLICT DO NOTHING). */
@@ -300,10 +306,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "visit.inspection": {
       const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
       await run(ins("visits", { id: op.visitId, company_id: c, lead_id: op.leadId ?? null, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
-      if (op.techId) await run(supabase.from("visit_assignees").upsert({ company_id: c, visit_id: op.visitId, user_id: op.techId }, { onConflict: "visit_id,user_id", ignoreDuplicates: true }));
-      if (!op.leadId) return; // «+ Осмотр» on a client: no lead to move
-      await run(supabase.from("leads").update({ first_response_at: op.start < new Date().toISOString() ? op.start : new Date().toISOString(), first_response_kind: "manual" }).eq("id", op.leadId).is("first_response_at", null));
-      return run(supabase.from("leads").update({ status: "inspection_scheduled" }).eq("id", op.leadId).in("status", ["new", "contacted", "qualified"]));
+      // the lead first, the people last: a refused assignment must not leave the lead behind (security check of П3a)
+      if (op.leadId) {
+        await run(supabase.from("leads").update({ first_response_at: op.start < new Date().toISOString() ? op.start : new Date().toISOString(), first_response_kind: "manual" }).eq("id", op.leadId).is("first_response_at", null));
+        await run(supabase.from("leads").update({ status: "inspection_scheduled" }).eq("id", op.leadId).in("status", ["new", "contacted", "qualified"]));
+      }
+      return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
     case "visit.cancel":
       // one server function for S4a / S9a (migration 20261105300000): the cancel and the roll-backs in one transaction;
@@ -391,10 +399,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           { onConflict: "id" },
         ),
       );
-    case "visit.assign": {
-      await run(supabase.from("visit_assignees").delete().eq("visit_id", op.visitId));
-      return run(supabase.from("visit_assignees").insert({ company_id: c, visit_id: op.visitId, user_id: op.userId }));
-    }
+    case "visit.assign":
+      // the whole list in one transaction (migration 20261105320000): taken off = deleted_at; a replay changes nothing
+      return run(supabase.rpc("assign_visit", { p_visit_id: op.visitId, p_user_ids: op.userIds ?? (op.userId ? [op.userId] : []) }));
     case "estimate.add": {
       await run(
         ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, title: op.title, created_via: "drawing", number: "" }),
@@ -435,8 +442,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "job.schedule": {
       await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, scope: op.scope }));
-      if (op.techId) await run(ins("visit_assignees", { company_id: c, visit_id: op.visitId, user_id: op.techId }));
-      return advanceJob(op.jobId, "scheduled");
+      await advanceJob(op.jobId, "scheduled");
+      return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
     case "company.save": {
       const { data: stored } = await supabase.from("companies").select("brand, contract_settings, estimate_settings, payment_settings, onboarding_state").eq("id", c).maybeSingle();

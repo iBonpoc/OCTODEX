@@ -1,7 +1,7 @@
 /**
  * Properties inside a client (wave C2, docs/specs/04 §3, §7.3). Pure — tested in test/properties.test.ts.
  */
-import { isOpenVisit } from "@/features/schedule";
+import { isAssigned, isOpenVisit } from "@/features/schedule";
 import type { DB, Estimate, Job, Person, Property, Role, Visit } from "@/data/types";
 import { peopleOf } from "@/data/people";
 import { visitPropertyId } from "@/data/selectors";
@@ -63,7 +63,7 @@ export function canSeeGateCode(db: DB, role: Role, propertyId: string, now = Dat
   const doneJobs = new Set(db.jobs.filter((j) => j.status === "done").map((j) => j.id));
   const today = dayIn(now, tz);
   return db.visits.some(
-    (v) => visitPropertyId(db, v) === propertyId && !(v.jobId && doneJobs.has(v.jobId)) && v.techId === db.me && isOpenVisit(v) && !v.closed && [today, today + 1].includes(dayIn(new Date(v.start).getTime(), tz)),
+    (v) => visitPropertyId(db, v) === propertyId && !(v.jobId && doneJobs.has(v.jobId)) && isAssigned(v, db.me) && isOpenVisit(v) && !v.closed && [today, today + 1].includes(dayIn(new Date(v.start).getTime(), tz)),
   );
 }
 

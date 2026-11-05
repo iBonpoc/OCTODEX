@@ -9,6 +9,7 @@ import { visitPropertyId } from "@/data/selectors";
 import type { Customer, CustomerStatus, DB, ID, Role, Tag } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { IconKey } from "@/ui/primitives";
+import { isAssigned } from "@/features/schedule";
 
 /** Status label: colour + icon + word (CLAUDE.md rule 2). */
 export const clientStatusChip: Record<CustomerStatus, { s: StatusName; l: DictKey }> = {
@@ -51,7 +52,7 @@ export function visibleClients(db: DB, role: Role): Customer[] {
   if (role !== "tech") return db.customers;
   const mine = new Set(
     db.visits
-      .filter((v) => v.techId === db.me)
+      .filter((v) => isAssigned(v, db.me))
       .map((v) => db.properties.find((p) => p.id === db.jobs.find((j) => j.id === v.jobId)?.propertyId)?.customerId)
       .filter(Boolean),
   );

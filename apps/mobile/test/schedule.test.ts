@@ -149,3 +149,32 @@ describe("visit form: slots, load, warnings (§7.1)", () => {
     expect(formWarnings(d, { techId: "m1", start: atMinute(day, 8 * 60), durationMin: 45 }, { now })).toEqual([]);
   });
 });
+
+describe("several people on a visit (wave П3a, S9 / S9b; db:T35)", () => {
+  it("old saved data has only techId: it is the list", async () => {
+    const { assigneesOf, isAssigned } = await import("../src/features/schedule");
+    expect(assigneesOf(V({ techId: "m1" }))).toEqual(["m1"]);
+    expect(assigneesOf(V({ techId: null }))).toEqual([]);
+    expect(assigneesOf(V({ techId: "m1", assigneeIds: ["m1", "m2"] }))).toEqual(["m1", "m2"]);
+    expect(isAssigned(V({ techId: "m1", assigneeIds: ["m1", "m2"] }), "m2")).toBe(true);
+    expect(isAssigned(V({ techId: "m1" }), null)).toBe(false);
+  });
+  it("withAssignees: techId is the first, no doubles, [] = nobody", async () => {
+    const { withAssignees } = await import("../src/features/schedule");
+    expect(withAssignees(V({}), ["m2", "m1", "m2"])).toMatchObject({ techId: "m2", assigneeIds: ["m2", "m1"] });
+    expect(withAssignees(V({}), [])).toMatchObject({ techId: null, assigneeIds: [] });
+  });
+  it("the second person's visits count for overlaps and free slots", async () => {
+    const { freeSlots, atMinute } = await import("../src/features/schedule");
+    const day = new Date(NOW + 86_400_000);
+    day.setHours(0, 0, 0, 0);
+    // m2 is the second person on a 10:00 visit
+    const d = db({ visits: [V({ id: "b", techId: "m1", assigneeIds: ["m1", "m2"], start: atMinute(day, 10 * 60), durationMin: 60 })] });
+    expect(overlaps(d, "m2", atMinute(day, 10 * 60 + 30), 30)).toHaveLength(1);
+    expect(overlaps(d, ["m3", "m2"], atMinute(day, 10 * 60), 30)).toHaveLength(1);
+    expect(overlaps(d, ["m3"], atMinute(day, 10 * 60), 30)).toHaveLength(0);
+    // a slot is free only when everyone picked is free
+    expect(freeSlots(d, ["m3", "m2"], day, 30, { now: NOW })).not.toContain(10 * 60);
+    expect(freeSlots(d, ["m3"], day, 30, { now: NOW })).toContain(10 * 60);
+  });
+});
