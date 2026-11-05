@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
-  computeCustomOption, catalogCost, catalogPrice, depositAmount, caDepositLimit, parseMoneyToCents, parsePctToBps, parseQty,
+  computeCustomOption, catalogCost, catalogPrice, depositAmount, caDepositLimit, parseMoneyToCents, parsePctToBps, parseQty, partsCost, marginPctOf,
   DEFAULT_TAX, type CustomLine, type CustomSettings,
 } from "../src/custom.js";
 
@@ -105,5 +105,24 @@ describe("input parsing", () => {
     expect(parsePctToBps("10,25%")).toBe(1025);
     expect(parseQty("1,5")).toBe("1.5");
     expect(parseQty("-1")).toBeNull();
+  });
+});
+
+describe("catalog card: kit cost and margin % (test prices)", () => {
+  it("kit cost = Σ unit cost × qty, rounded once", () => {
+    expect(partsCost([{ unitCostCents: 1103, qty: "12" }, { unitCostCents: 333, qty: "0.5" }])).toBe(13236 + 167);
+    expect(partsCost([{ unitCostCents: 1, qty: "0.5" }, { unitCostCents: 1, qty: "0.5" }])).toBe(1); // no per-part rounding
+    expect(partsCost([])).toBe(0);
+  });
+  it("unknown when any part has no cost or a bad quantity", () => {
+    expect(partsCost([{ unitCostCents: 1000, qty: "1" }, { qty: "2" }])).toBeNull();
+    expect(partsCost([{ unitCostCents: 1000, qty: "abc" }])).toBeNull();
+  });
+  it("margin: one decimal; negative below cost; null at price 0 or unknown cost", () => {
+    expect(marginPctOf(12130, 11030)).toBe("9.1");
+    expect(marginPctOf(10000, 10000)).toBe("0.0");
+    expect(marginPctOf(9000, 10000)).toBe("-11.1");
+    expect(marginPctOf(0, 500)).toBeNull();
+    expect(marginPctOf(10000, null)).toBeNull();
   });
 });

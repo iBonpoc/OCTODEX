@@ -25,6 +25,8 @@ export interface Member {
   title?: string;
   /** CA home improvement salesperson registration number */
   hisNumber?: string;
+  /** E2b-2: the company owner (the only one who gives or takes the right to sign); absent in demo data → a director counts */
+  isOwner?: boolean;
 }
 
 /**

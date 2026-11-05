@@ -137,6 +137,49 @@ describe("estimate PDF: in the client's language for every app language", () => 
     expect(html).toContain(translate("en", "est.pdf.onSiteDevice", { name: me.name }).replace("'", "&#39;"));
   });
 
+  it("E2b-2: signed by both — the company's signature in the employee's own name, title, «for company», HIS, and in the record", () => {
+    const { db, e } = dbWith("es");
+    const signed: Estimate = {
+      ...e, status: "approved",
+      approval: { optionId: "o1", addonIds: [], signerName: "Rosa Diaz", signature: "M0 0 L1 1", at: "2026-11-05T21:05:00Z", channel: "portal", totalCents: 28650, depositCents: 0 },
+      countersign: { userId: db.me, signerName: "Sam Lee", signerTitle: "Project manager", his: "HIS-77", signature: "M2 2 L9 9", at: "2026-11-06T16:00:00Z", method: "saved" },
+    };
+    db.estimates = db.estimates.map((x) => (x.id === e.id ? signed : x));
+    const html = estimateHtml(portalFromEstimate(db, signed, "Acme"), { lang: "es" });
+    expect(html).toContain("Sam Lee, Project manager");
+    expect(html).toContain(translate("es", "est.pdf.forCompany", { company: portalFromEstimate(db, signed, "Acme").company.name }));
+    expect(html).toContain(translate("es", "est.pdf.his", { n: "HIS-77" }));
+    expect(html).toContain("<path d=\"M2 2 L9 9\"");
+    expect(html.split(word("es", "est.pdf.awaitingSignature")).length - 1).toBe(0);
+    expect(html).toContain(`${word("es", "est.pdf.contractor")}: Sam Lee`);
+  });
+
+  it("E2b-2: «Valid until» while unsigned (a calendar day, not shifted), gone once the client signed; the client's phone and email", () => {
+    const { db, e } = dbWith("en");
+    db.customers = db.customers.map((c) => (c.id === e.customerId ? { ...c, phone: "(916) 555-0101", email: "rosa@example.com" } : c));
+    const open = { ...e, validUntil: "2026-11-12" };
+    db.estimates = db.estimates.map((x) => (x.id === e.id ? open : x));
+    const html = estimateHtml(portalFromEstimate(db, open, "Acme"), { lang: "en" });
+    expect(html).toContain(`${word("en", "est.pdf.validUntil")}: 11/12/2026`);
+    expect(html).toContain("(916) 555-0101 · rosa@example.com");
+    const signed = { ...open, status: "awaiting_countersign" as const, approval: { optionId: "o1", addonIds: [], signerName: "Rosa Diaz", signature: "M0 0", at: "2026-11-05T21:05:00Z", channel: "portal" as const, totalCents: 28650, depositCents: 0 } };
+    expect(estimateHtml(portalFromEstimate(db, signed, "Acme"), { lang: "en" })).not.toContain(word("en", "est.pdf.validUntil"));
+  });
+
+  it("E2b-2: dates and times on the company's clock (its time zone), whatever the device's", () => {
+    expect(docDay("2026-11-06T03:30:00Z", "America/Los_Angeles")).toBe("11/05/2026");
+    expect(docDay("2026-11-06T03:30:00Z", "America/New_York")).toBe("11/05/2026");
+    expect(docDay("2026-11-06T06:30:00Z", "America/New_York")).toBe("11/06/2026");
+    expect(docDay("2026-11-12")).toBe("11/12/2026");
+    expect(docDay("2026-11-12", "Pacific/Kiritimati")).toBe("11/12/2026");
+    expect(() => docDay("2026-11-06T03:30:00Z", "Not/AZone")).not.toThrow();
+    const { db, e } = dbWith("en");
+    db.company = { ...db.company!, timezone: "America/Los_Angeles" };
+    const signed = { ...e, status: "awaiting_countersign" as const, approval: { optionId: "o1", addonIds: [], signerName: "Rosa Diaz", signature: "M0 0", at: "2026-11-06T03:30:00Z", channel: "portal" as const, totalCents: 28650, depositCents: 0 } };
+    db.estimates = db.estimates.map((x) => (x.id === e.id ? signed : x));
+    expect(estimateHtml(portalFromEstimate(db, signed, "Acme"), { lang: "en" })).toContain("11/05/2026 7:30 PM");
+  });
+
   it("unit prices can be hidden (company setting)", () => {
     const { db, e } = dbWith("en");
     const p = portalFromEstimate(db, e, "Acme");

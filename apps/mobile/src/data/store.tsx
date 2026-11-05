@@ -25,7 +25,7 @@ import { inheritCategory } from "@/features/serviceCategories";
 import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, nextStep, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
-import { canCountersign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, validUntilFor } from "@/features/estimateSign";
+import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
 import {
@@ -183,7 +183,7 @@ interface StoreCtx {
   approveEstimate: (id: ID, a: Omit<EstimateApproval, "at" | "totalCents" | "depositCents">) => Undo;
   /* ---- wave E2a: the company signs (docs/specs/07 §2.2 А) ---- */
   /** an employee signs for the company in their own name (S8b): approved, lead won, client active, job, deposit invoice */
-  countersignEstimate: (id: ID, signature: string) => Undo;
+  countersignEstimate: (id: ID, signature: string | { savedId: ID }) => Undo;
   /** director / office: the client link stops working; the next send makes a new one */
   revokeEstimateLink: (id: ID) => Undo;
   /* ---- wave E2b-1 ---- */
@@ -191,6 +191,11 @@ interface StoreCtx {
   declineCountersign: (id: ID, text: string) => Undo;
   /** director / office: «don't sign — change it» → draft (the client signs the new version again) */
   reopenEstimate: (id: ID, reason: string) => Undo;
+  /* ---- wave E2b-2 ---- */
+  /** my own saved signature (a new one replaces the old; the old stays in history) */
+  saveMySignature: (svg: string, name: string, title?: string) => Undo;
+  /** «Команда → Сотрудник»: title, HIS number; the right to sign — owner only */
+  updateMember: (id: ID, patch: { title?: string; hisNumber?: string; canSignContracts?: boolean }) => Undo;
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   readNotices: () => void;
@@ -915,10 +920,38 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const now = new Date().toISOString();
         // the same ids on the phone and the server (the client may have signed on the page: no ids were stored then)
         const ids = { jobId: d0.jobs.find((j) => j.estimateId === id)?.id ?? e.approval?.jobId ?? uid(), invoiceId: e.approval?.invoiceId ?? uid() };
+        // the saved signature (one tap) or one drawn now (the server saves it as the new own signature)
+        const saved = typeof signature === "string" ? undefined : (d0.memberSignatures ?? []).find((s) => s.id === signature.savedId && s.userId === d0.me && !s.revokedAt);
+        if (typeof signature !== "string" && !saved) return () => {};
+        const svg = typeof signature === "string" ? signature : saved!.svg;
         return mutate(
           "estimate.countersign",
-          (d) => companySigned(d, id, { userId: d.me, signature, method: "drawn" }, ids, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined)),
-          { k: "estimate.countersign", id, svg: signature, jobId: ids.jobId, invoiceId: ids.invoiceId },
+          (d) => companySigned(d, id, { userId: d.me, signature: svg, method: saved ? "saved" : "drawn", title: saved?.title }, ids, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined)),
+          { k: "estimate.countersign", id, svg: saved ? undefined : svg, memberSignatureId: saved?.id, jobId: ids.jobId, invoiceId: ids.invoiceId },
+        );
+      },
+      saveMySignature: (svg, name, title) => {
+        if (svg.length < 3 || !name.trim()) return () => {};
+        const sig = { id: uid(), userId: dbRef.current.me, svg, name: name.trim(), title: title?.trim() || undefined };
+        return mutate("member.signature", (d) => savedSignature(d, sig, new Date().toISOString()), { k: "member.signature", ...sig });
+      },
+      updateMember: (id, patch) => {
+        const d0 = dbRef.current;
+        // security-check #98: check the role before applying — offline must not show an edit the server refuses
+        if (!d0.members.some((m) => m.id === id) || !canEditMember(d0, d0.me)) return () => {};
+        // the right to sign: owner only (the server refuses others too)
+        const p = { ...patch, canSignContracts: canGrantSign(d0, d0.me) ? patch.canSignContracts : undefined };
+        return mutate(
+          "member.update",
+          (d) => ({
+            ...d,
+            members: d.members.map((m) =>
+              m.id === id
+                ? { ...m, ...(p.title !== undefined ? { title: p.title.trim() || undefined } : {}), ...(p.hisNumber !== undefined ? { hisNumber: p.hisNumber.trim() || undefined } : {}), ...(p.canSignContracts !== undefined ? { canSignContracts: p.canSignContracts } : {}) }
+                : m,
+            ),
+          }),
+          { k: "member.update", id, title: p.title, hisNumber: p.hisNumber, canSignContracts: p.canSignContracts },
         );
       },
       declineCountersign: (id, text) => {

@@ -4,6 +4,8 @@
 import {
   activeLines,
   catalogPrice,
+  marginPctOf,
+  partsCost,
   computeCustomOption,
   DEFAULT_TAX,
   type CustomLine,
@@ -85,6 +87,25 @@ export function linesFromCatalog(it: CatalogItem, catalog: CatalogItem[], qty = 
       catalogItemId: it.id,
     }),
   ];
+}
+
+/**
+ * Catalog card tiles «Cost» and «Margin %» (list-cards chat, catalog list): our cost per unit incl. supplier tax,
+ * the client price, the margin. A kit: Σ component cost × qty; unknown if any component has no cost or is missing.
+ * Unknown cost → null (the card shows «—»), never a guess. All money math in @octo/estimating-engine.
+ */
+export function catalogItemEconomics(it: CatalogItem, catalog: CatalogItem[]): { costCents: number | null; priceCents: number; marginPct: string | null } {
+  const priceCents = it.kind === "kit" ? kitPrice(it, catalog) : catalogUnitPrice(it);
+  const costCents =
+    it.kind === "kit"
+      ? partsCost(
+          (it.components ?? []).map((c) => {
+            const sub = catalog.find((x) => x.id === c.itemId);
+            return { unitCostCents: sub && sub.kind !== "kit" ? catalogUnitCost(sub) : undefined, qty: c.qty };
+          }),
+        )
+      : (catalogUnitCost(it) ?? null);
+  return { costCents, priceCents, marginPct: marginPctOf(priceCents, costCents) };
 }
 
 /** Kit price = Σ component price × qty (shown in the catalog). */

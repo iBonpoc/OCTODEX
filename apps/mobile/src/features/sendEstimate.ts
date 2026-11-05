@@ -7,19 +7,22 @@ import * as Clipboard from "expo-clipboard";
 import { WEB_APP_URL } from "@/config/backend";
 import { tFor, type DocLang } from "@/i18n/translate";
 import { docMoney } from "./docPdf";
+import { mailtoHref, smsHref } from "./contactLinks";
 
 export function clientLink(token: string): string {
   const origin = Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL;
   return `${origin}/p/${token}`;
 }
 
+/** The number and the address come from outside (web forms, marketplaces): links only through contactLinks (security-check). */
 export async function openSms(phone: string, body: string) {
-  const sep = Platform.OS === "ios" ? "&" : "?";
-  await Linking.openURL(`sms:${phone.replace(/[^\d+]/g, "")}${sep}body=${encodeURIComponent(body)}`);
+  const href = smsHref(phone, body, Platform.OS);
+  if (href) await Linking.openURL(href);
 }
 
 export async function openEmail(email: string, subject: string, body: string) {
-  await Linking.openURL(`mailto:${email}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`);
+  const href = mailtoHref(email, { subject, body });
+  if (href) await Linking.openURL(href);
 }
 
 export async function copyText(s: string) {

@@ -72,6 +72,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       q<Row>(supabase.from("estimate_line_costs").select("line_item_id, unit_cost_cents").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
       q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
     ]);
+  // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
+  const signatureRows = await q<Row>(supabase.from("member_signatures").select("id, user_id, svg, name, title, created_at, revoked_at").eq("company_id", companyId)).catch(() => [] as Row[]);
   const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows, tagRows, customerTagRows, phoneRows, emailRows, catRows, gateRows] = await Promise.all([
     q<Row>(supabase.from("companies").select("*").eq("id", companyId)),
     // EIN: owner/admin only — others get nothing
@@ -122,6 +124,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       id: s(m.user_id), name, initials: initials(name), kind: m.role === "subcontractor" ? "sub" : "employee", roles: appRoles(m.role as DbRole),
       // E2a: signing for the company (docs/specs/07 §2.2 А)
       canSignContracts: m.can_sign_contracts !== false, title: (m.title as string | null) ?? undefined, hisNumber: (m.his_registration_number as string | null) ?? undefined,
+      // E2b-2: only the owner gives or takes the right to sign (the app shows owner and admin both as director)
+      isOwner: m.role === "owner",
     };
   });
   const primaryPhone = new Map<string, string>();
@@ -423,6 +427,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         components: ((r.components as { item_id: string; qty: string }[] | null) ?? []).map((x) => ({ itemId: x.item_id, qty: String(x.qty) })),
         placeholder: !!r.is_placeholder_price,
       })),
+    memberSignatures: signatureRows.map((r) => ({
+      id: s(r.id), userId: s(r.user_id), svg: s(r.svg), name: s(r.name), title: (r.title as string | null) ?? undefined,
+      createdAt: s(r.created_at), revokedAt: (r.revoked_at as string | null) ?? undefined,
+    })),
     notices: notifications.map((r) => {
       const p = (r.payload ?? {}) as { customer?: string; total?: number; deposit?: number };
       return {

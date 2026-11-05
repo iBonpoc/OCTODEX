@@ -66,6 +66,8 @@ export default function Settings() {
             <Button label={t("account.signIn")} icon="user" onPress={() => router.push("/auth/sign-in")} />
           </>
         )}
+        {/* E2b-2 (docs/specs/07): the employee's own signature for contracts */}
+        <Button label={t("est.sig.settingsRow")} icon="pencil" variant="secondary" onPress={() => router.push("/estimate/signature")} />
       </Card>
 
       <SectionTitle title={t("settings.look")} />
