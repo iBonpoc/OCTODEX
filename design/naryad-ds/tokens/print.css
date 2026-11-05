@@ -1,0 +1,53 @@
+/* Печать (PDF сметы, счёта, квитанции). Бумага всегда белая, тёмная тема на неё не действует.
+   Значения согласованы в docs/specs/07-estimates.md §2.2 В («Вид документов») и §3.4 (Company.docDesign).
+   Три вида документа: classic (Классический), modern (Современный), compact (Компактный).
+   Фирменный цвет полосы — настройка компании (brand.color), здесь только её толщина; цветов клиента нет.
+   Шрифты — pt, поля страницы — mm, линии — px. Зеркало: packages/design-tokens/src/index.ts → print. */
+:root{
+  --print-paper:#FFFFFF;
+  --print-ink:#15161A;
+  --print-mut:#575C68;
+  --print-rule:rgba(20,22,30,0.14);
+  --print-ok-text:#176428;
+  --print-page-pad-mm:14;
+  --print-fs-title:18;
+  --print-fs-heading:11;
+  --print-fs-body:9.5;
+  --print-fs-small:8;
+
+  /* Классический: логотип слева, тонкая линия под шапкой */
+  --print-classic-fs-title:18;
+  --print-classic-fs-heading:11;
+  --print-classic-fs-body:9.5;
+  --print-classic-fs-small:8;
+  --print-classic-row-pad:4;
+  --print-classic-head-rule:1;
+  --print-classic-brand-band:2;
+  --print-classic-logo:48;
+  --print-classic-logo-side:left;
+  --print-classic-section-gap:14;
+
+  /* Современный: крупнее, полоса фирменного цвета вместо линии, больше воздуха */
+  --print-modern-fs-title:20;
+  --print-modern-fs-heading:12;
+  --print-modern-fs-body:10;
+  --print-modern-fs-small:8;
+  --print-modern-row-pad:6;
+  --print-modern-head-rule:0;
+  --print-modern-brand-band:6;
+  --print-modern-logo:56;
+  --print-modern-logo-side:left;
+  --print-modern-section-gap:18;
+
+  /* Компактный: мельче и плотнее, логотип справа — больше строк на странице */
+  --print-compact-fs-title:14;
+  --print-compact-fs-heading:10;
+  --print-compact-fs-body:8.5;
+  --print-compact-fs-small:7.5;
+  --print-compact-row-pad:2;
+  --print-compact-head-rule:1;
+  --print-compact-brand-band:0;
+  --print-compact-logo:32;
+  --print-compact-logo-side:right;
+  --print-compact-section-gap:8;
+}
