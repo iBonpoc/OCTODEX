@@ -27,13 +27,12 @@ export const en: Dict = {
   "nav.escHint": "up one level",
 
   "quick.title": "Quick actions",
-  "quick.voice": "Voice note",
-  "quick.voiceHint": "Say what to do: “estimate for 120 feet, two stories”",
   "quick.lead": "New lead",
   "quick.estimate": "Estimate",
   "quick.photo": "Photo",
   "quick.receipt": "Receipt expense",
-  "quick.soon": "Coming in wave {n}",
+  // nav.* — app shell (docs/specs/13)
+  "nav.photoNoVisit": "A photo goes on a visit. You have no open visit today — open the visit and add the photo there.",
 
   "st.scheduled": "Scheduled",
   "st.en_route": "En route",
@@ -437,7 +436,7 @@ export const en: Dict = {
   "exp.save": "Save expense",
   "exp.saved": "Expense {amount} saved",
   "exp.need": "Enter the amount",
-  "exp.aiNote": "AI receipt reading arrives in wave 6; for now enter the amount by hand.",
+  "exp.aiNote": "For now enter the amount from the receipt by hand.",
   "exp.cat.materials": "Materials",
   "exp.cat.fuel": "Fuel",
   "exp.cat.dump": "Dump fee",
@@ -906,7 +905,7 @@ export const en: Dict = {
   "settings.hints": "Tips",
   "settings.hintsText": "Tips on the first visit to a section.",
   "settings.testing": "For testing",
-  "settings.testingHint": "Shown in the demo and to people with several roles. For regular staff the director sets the role in Team.",
+  "settings.testingHint": "Demo only: working offline and resetting the sample data.",
   "menu.sections": "Sections",
   "menu.companySettings": "Company settings",
   "client.mainContacts": "Client's main contacts",

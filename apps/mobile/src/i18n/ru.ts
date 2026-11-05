@@ -26,13 +26,12 @@ export const ru = {
   "nav.escHint": "на уровень вверх",
 
   "quick.title": "Быстрые действия",
-  "quick.voice": "Голосовая заметка",
-  "quick.voiceHint": "Скажите, что сделать: «смета на 120 футов, два этажа»",
   "quick.lead": "Новый лид",
   "quick.estimate": "Смета",
   "quick.photo": "Фото",
   "quick.receipt": "Расход по чеку",
-  "quick.soon": "Появится в волне {n}",
+  // nav.* — app shell (docs/specs/13)
+  "nav.photoNoVisit": "Фото прикрепляется к выезду. Сегодня открытых выездов нет — откройте нужный выезд и добавьте фото там.",
 
   "st.scheduled": "Запланирован",
   "st.en_route": "В пути",
@@ -436,7 +435,7 @@ export const ru = {
   "exp.save": "Сохранить расход",
   "exp.saved": "Расход {amount} сохранён",
   "exp.need": "Укажите сумму",
-  "exp.aiNote": "Распознавание чека AI появится в волне 6; пока сумму вводите вручную.",
+  "exp.aiNote": "Сумму с чека пока вводите вручную.",
   "exp.cat.materials": "Материалы",
   "exp.cat.fuel": "Бензин",
   "exp.cat.dump": "Свалка",
@@ -905,7 +904,7 @@ export const ru = {
   "settings.hints": "Подсказки",
   "settings.hintsText": "Подсказки при первом заходе в раздел.",
   "settings.testing": "Для проверки",
-  "settings.testingHint": "Видно в демо и тем, у кого несколько ролей. Обычному сотруднику роль назначает директор в «Команде».",
+  "settings.testingHint": "Только в демо: работа без сети и сброс примеров.",
   "menu.sections": "Разделы",
   "menu.companySettings": "Настройки компании",
   "client.mainContacts": "Основные контакты клиента",

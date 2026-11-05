@@ -26,8 +26,8 @@ export default function Settings() {
     setRole(r);
     router.navigate(`/${roleHome[r]}`);
   };
-  // "For testing" is shown in the demo and to people who hold several roles (the owner checking each screen)
-  const testing = mode === "demo" || availableRoles.length > 1;
+  // «Для проверки» (offline, reset) — demo only (docs/specs/13 §2.3). Several roles: the role switch is its own card
+  // until «Сменить роль» moves to the profile in ☰ (wave 2).
   return (
     <Screen title={t("settings.title")}>
       <SectionTitle title={t("account.title")} />
@@ -96,26 +96,27 @@ export default function Settings() {
         <Button label={t("more.showHints")} icon="help" variant="secondary" onPress={hints.reset} />
       </Card>
 
-      {testing ? (
+      {availableRoles.length > 1 ? (
+        <Card>
+          <T v="heading">{t("more.role")}</T>
+          <Segmented<Role>
+            full
+            value={role}
+            onChange={changeRole}
+            items={(["tech", "dispatcher", "director", "sales"] as Role[]).filter((r) => availableRoles.includes(r)).map((r) => ({ key: r, label: t(`role.${r}`) }))}
+          />
+          <T v="caption" tone="mut">
+            {t("role.hint")}
+          </T>
+        </Card>
+      ) : null}
+
+      {mode === "demo" ? (
         <>
           <SectionTitle title={t("settings.testing")} />
           <T v="caption" tone="mut">
             {t("settings.testingHint")}
           </T>
-          {availableRoles.length > 1 ? (
-            <Card>
-              <T v="heading">{t("more.role")}</T>
-              <Segmented<Role>
-                full
-                value={role}
-                onChange={changeRole}
-                items={(["tech", "dispatcher", "director", "sales"] as Role[]).filter((r) => availableRoles.includes(r)).map((r) => ({ key: r, label: t(`role.${r}`) }))}
-              />
-              <T v="caption" tone="mut">
-                {t("role.hint")}
-              </T>
-            </Card>
-          ) : null}
           <Card>
             <RowView style={{ justifyContent: "space-between" }}>
               <T v="body" style={{ flex: 1 }}>
@@ -130,9 +131,7 @@ export default function Settings() {
                 }}
               />
             </RowView>
-            {mode === "demo" ? (
-              <Button label={t("more.resetDemo")} icon="sync" variant="secondary" onPress={() => toast.show(t("more.resetDone"), resetDemo())} />
-            ) : null}
+            <Button label={t("more.resetDemo")} icon="sync" variant="secondary" onPress={() => toast.show(t("more.resetDone"), resetDemo())} />
           </Card>
         </>
       ) : null}
