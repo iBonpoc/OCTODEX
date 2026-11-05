@@ -7,9 +7,11 @@ import { en } from "./en";
 import { es } from "./es";
 
 export type Lang = "en" | "ru" | "es";
-/** what a client may read: documents, the /p/ page, SMS and email texts */
-export type DocLang = "en" | "es";
-export const DOC_LANGS: DocLang[] = ["en", "es"];
+/** what a client may read: documents, the /p/ page, SMS and email texts (founder's decision В11: en, es, ru) */
+export type DocLang = "en" | "es" | "ru";
+export const DOC_LANGS: DocLang[] = ["en", "es", "ru"];
+/** how each client language is named, in itself (the same in every app language) */
+export const DOC_LANG_LABEL: Record<DocLang, string> = { en: "English", es: "Español", ru: "Русский" };
 const dicts: Record<Lang, Dict> = { ru, en, es };
 export type Params = Record<string, string | number>;
 

@@ -51,3 +51,25 @@ describe("tFor: a client's language, not the app's", () => {
     expect(translate("en", "lead.prefers", { way: "SMS" })).toContain("SMS");
   });
 });
+
+describe("every app language × every client language (founder's decision В11: en, es, ru)", () => {
+  const UI = ["ru", "en", "es"] as const;
+  const CLIENT = ["en", "es", "ru"] as const;
+  // a text that differs in all three languages
+  const KEY = "co.docLanguage" as const;
+  for (const ui of UI)
+    for (const client of CLIENT)
+      it(`app in ${ui}, client reads ${client}: what goes to the client is in ${client}`, () => {
+        const d = db();
+        d.company = { ...d.company!, docLanguage: "en" };
+        d.leads = [lead({ people: [{ id: "p1", name: "Rosa Diaz", role: "main", phones: [], emails: [], language: client }] })];
+        const lang = docLanguageFor(d, { leadId: "Lq" });
+        expect(lang).toBe(client);
+        const out = tFor(lang)(KEY);
+        expect(out).toBe(translate(client, KEY));
+        if (ui !== client) expect(out).not.toBe(translate(ui, KEY));
+      });
+  it("the three texts really differ", () => {
+    expect(new Set(CLIENT.map((l) => translate(l, KEY))).size).toBe(3);
+  });
+});

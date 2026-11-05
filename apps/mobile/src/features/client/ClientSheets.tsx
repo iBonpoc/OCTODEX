@@ -10,7 +10,7 @@ import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
 import { clientStatusChip, statusOf, tagLabel } from "@/features/clients";
 import type { Customer, CustomerStatus, Person, PersonRole, PhoneLabel } from "@/data/types";
-import { useI18n, type DictKey } from "@/i18n";
+import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
 import { Labeled } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, MultiChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -69,10 +69,10 @@ export function PeopleEditSheet({
   const fields = (p: Person, i: number) => (
     <>
       <Labeled label={t("lead.langLabel")}>
-        <ChoiceChips<"en" | "es" | "">
+        <ChoiceChips<DocLang | "">
           value={p.language ?? ""}
           onChange={(v) => edit(i, (x) => ({ ...x, language: v || undefined }))}
-          items={[{ key: "", label: t("lead.any") }, { key: "en", label: "English" }, { key: "es", label: "Español" }]}
+          items={[{ key: "", label: t("lead.any") }, ...DOC_LANGS.map((k) => ({ key: k, label: DOC_LANG_LABEL[k] }))]}
         />
       </Labeled>
       {p.phones.map((ph, k) => (

@@ -12,18 +12,18 @@ exports.run = async (h) => {
   let db = await h.db();
   h.expect(db.company.docLanguage === "es", "company default for client documents: Spanish");
 
-  // a person's own language beats the company's: Tom Becker reads English
+  // a person's own language beats the company's: Tom Becker reads Russian
   const tom = db.leads.find((x) => x.name === "Tom Becker");
   await h.go(`/lead/${tom.id}`);
   await h.clickText("Обзор");
   await h.click("Телефоны, email и люди");
-  await h.sheet().getByRole("radio", { name: "English" }).first().click();
+  await h.sheet().getByRole("radio", { name: "Русский" }).first().click();
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   db = await h.db();
   const t2 = db.leads.find((x) => x.id === tom.id);
-  h.expect(t2.people && t2.people[0].language === "en", "main person: English");
-  await h.expectText(/EN/, "language on the lead card");
+  h.expect(t2.people && t2.people[0].language === "ru", "main person: Russian");
+  await h.expectText(/RU/, "language on the lead card");
   // the app itself stays in Russian
   await h.expectText(/Телефоны, email и люди/, "app language unchanged");
 };

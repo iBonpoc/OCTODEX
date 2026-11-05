@@ -5,7 +5,7 @@ import { usePersistentState } from "@/data/persist";
 import type { DictKey } from "./ru";
 import { translate, type Lang, type Params } from "./translate";
 
-export { tFor, DOC_LANGS, type DocLang, type Lang } from "./translate";
+export { tFor, DOC_LANGS, DOC_LANG_LABEL, type DocLang, type Lang } from "./translate";
 export const languages: { id: Lang; label: string }[] = [
   { id: "en", label: "English" },
   { id: "ru", label: "Русский" },

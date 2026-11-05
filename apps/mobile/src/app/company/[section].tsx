@@ -6,7 +6,7 @@ import * as ImageManipulator from "expo-image-manipulator";
 import { component, radius, space, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Address, Company, CompanyContact, CompanyLicense, EntityType, LicenseKind } from "@/data/types";
-import { useI18n, type DictKey } from "@/i18n";
+import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { Labeled, PctField } from "@/features/fields";
 import { SETUP_STEPS, TRADES, US_TIMEZONES, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
@@ -172,11 +172,7 @@ export default function CompanySection() {
             <T v="caption" tone="mut">
               {t("co.docLanguageHint")}
             </T>
-            <ChoiceChips<"en" | "es">
-              value={draft.docLanguage ?? "en"}
-              onChange={(v) => set({ docLanguage: v })}
-              items={[{ key: "en", label: "English" }, { key: "es", label: "Español" }]}
-            />
+            <ChoiceChips<DocLang> value={draft.docLanguage ?? "en"} onChange={(v) => set({ docLanguage: v })} items={DOC_LANGS.map((k) => ({ key: k, label: DOC_LANG_LABEL[k] }))} />
           </Card>
           <Card>
             <Stepper label={t("co.validDays")} value={draft.estimate.validDays} min={1} max={180} step={5} onChange={(v) => set({ estimate: { ...draft.estimate, validDays: v } })} />

@@ -3,6 +3,7 @@
  * Pure functions — tested in test/people.test.ts.
  */
 import type { Customer, DB, Lead, Person, PersonRole, PhoneLabel } from "./types";
+import { DOC_LANGS, type DocLang } from "@/i18n/translate";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -98,7 +99,7 @@ export function mergePeople(into: Person[], add: Person[]): Person[] {
  * The language of what goes to a client (founder's rule 05.11.2026, docs/specs/07 §2.1): the person's own → the client's
  * (its main person) → the lead's → the company's default → English. Never the app's language.
  */
-export function docLanguageFor(db: DB, at: { personId?: string; customerId?: string; leadId?: string }): "en" | "es" {
+export function docLanguageFor(db: DB, at: { personId?: string; customerId?: string; leadId?: string }): DocLang {
   const lead = at.leadId ? db.leads.find((l) => l.id === at.leadId) : undefined;
   const customer = db.customers.find((c) => c.id === (at.customerId ?? lead?.customerId));
   const people = [...(customer ? peopleOf(customer) : []), ...(lead ? leadPeopleOf(lead) : [])];
@@ -163,7 +164,7 @@ export function peopleByCustomer(contacts: Row[], phones: Row[], emails: Row[], 
         ? [...pRows].sort(byPos).map((r) => ({ number: s(r.number), label: (PHONE_LABELS.includes(s(r.label) as PhoneLabel) ? s(r.label) : "other") as PhoneLabel, primary: !!r.is_primary || undefined }))
         : c.phone ? [{ number: s(c.phone), label: "mobile", primary: true }] : [],
       emails: eRows ? [...eRows].sort(byPos).map((r) => ({ address: s(r.address), primary: !!r.is_primary || undefined })) : c.email ? [{ address: s(c.email), primary: true }] : [],
-      language: c.preferred_language === "es" ? "es" : c.preferred_language === "en" ? "en" : undefined,
+      language: DOC_LANGS.find((x) => x === c.preferred_language),
     };
     const owner = s(c[key]);
     out.set(owner, [...(out.get(owner) ?? []), person]);
