@@ -1101,8 +1101,8 @@ begin
     insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#' || k || '42');
     insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Gate job ' || k, v_c, v_p, 'scheduled');
     insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j, now() + (plan[k][1] || ' days')::interval);
-    if plan[k][2] = 'cancelled' then perform public.cancel_visit(v_v, 'we_cancelled'); end if;
     insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
+    if plan[k][2] = 'cancelled' then perform public.cancel_visit(v_v, 'we_cancelled'); end if;
   end loop;
   perform tst.ok((select count(*) from public.property_secrets where property_id::text like 'd2000000%') = 5, 'office sees every gate code');
   -- people of a property: links to the client's people
@@ -2394,6 +2394,75 @@ update public.visits set status = 'en_route' where id = 'f3400000-0000-4000-8000
 select (public.cancel_visit('f3400000-0000-4000-8000-000000000006', 'we_cancelled') ->> 'lead_back') is null as no_lead_back;
 select tst.ok((select status from public.visits where id = 'f3400000-0000-4000-8000-000000000006') = 'cancelled', 'en_route → cancelled through the function');
 \echo 'T34 refusals and notified ok'
+
+-- ---------------------------------------------------------------- T35: several people on a visit — public.assign_visit (S9, S9b)
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a3500000-0000-4000-8000-000000000001', 'tech35@a.test', '{"full_name":"Tess Second"}'),
+  ('a3500000-0000-4000-8000-000000000002', 'gone35@a.test', '{"full_name":"Gus Gone"}');
+:as_owner_a
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a3500000-0000-4000-8000-000000000001', 'tech', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a3500000-0000-4000-8000-000000000002', 'tech', 'invited');
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c3500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T35 Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3500000-0000-4000-8000-000000000001', '35 Crew St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e3500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T35 job', 'c3500000-0000-4000-8000-000000000001', 'd3500000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('f3500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e3500000-0000-4000-8000-000000000001', now() + interval '1 day'),
+    ('f3500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e3500000-0000-4000-8000-000000000001', now() + interval '2 days');
+end $$;
+-- the office sets two people at once; a repeat changes nothing
+:as_office_a
+select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003', 'a3500000-0000-4000-8000-000000000001', 'a3500000-0000-4000-8000-000000000001']::uuid[]) ->> 'added')::int = 2, 'two people on one visit (a doubled id counts once)');
+select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000001', array['a3500000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added')::int = 0, 'a repeat with the same list changes nothing');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'f3500000-0000-4000-8000-000000000001'$q$) = 1, 'the first person sees the visit');
+reset role; set request.jwt.claim.sub = 'a3500000-0000-4000-8000-000000000001'; set role authenticated;
+select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'f3500000-0000-4000-8000-000000000001'$q$) = 1, 'the second person sees the visit too');
+-- take one off: marked, not deleted; that person stops seeing the visit
+:as_office_a
+select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'removed')::int = 1, 'one person taken off');
+select tst.ok((select deleted_at is not null from public.visit_assignees where visit_id = 'f3500000-0000-4000-8000-000000000001' and user_id = 'a3500000-0000-4000-8000-000000000001'), 'taken off with deleted_at, the row stays');
+reset role; set request.jwt.claim.sub = 'a3500000-0000-4000-8000-000000000001'; set role authenticated;
+select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'f3500000-0000-4000-8000-000000000001'$q$) = 0, 'the person taken off no longer sees the visit');
+-- back on: the same row comes back
+:as_office_a
+select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003', 'a3500000-0000-4000-8000-000000000001']::uuid[]) ->> 'added')::int = 1, 'put back on');
+select tst.ok((select count(*) from public.visit_assignees where visit_id = 'f3500000-0000-4000-8000-000000000001' and user_id = 'a3500000-0000-4000-8000-000000000001') = 1, 'one row per person, no doubles');
+-- «Снять всех»
+select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000002', array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added')::int = 1, 'second visit: one person');
+select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000002', '{}') ->> 'removed')::int = 1, 'take everyone off');
+select tst.ok(tst.cnt($q$select 1 from public.visit_assignees where visit_id = 'f3500000-0000-4000-8000-000000000002' and deleted_at is null$q$) = 0, 'nobody left on the visit');
+-- only active members of the same company
+select tst.fails($q$select public.assign_visit('f3500000-0000-4000-8000-000000000002', array['a3500000-0000-4000-8000-000000000002']::uuid[])$q$, 'an invited (not active) member is not assigned');
+select tst.fails($q$select public.assign_visit('f3500000-0000-4000-8000-000000000002', array['b0000000-0000-0000-0000-000000000002']::uuid[])$q$, 'a person of another company is not assigned');
+select tst.fails($q$insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3500000-0000-4000-8000-000000000002', 'a3500000-0000-4000-8000-000000000002')$q$, 'a direct insert of an invited member is refused too');
+-- nothing is deleted; a row does not move to another visit or person
+select tst.fails($q$delete from public.visit_assignees where visit_id = 'f3500000-0000-4000-8000-000000000001'$q$, 'a hard delete is refused (deleted_at)');
+select tst.fails($q$update public.visit_assignees set user_id = 'a3500000-0000-4000-8000-000000000002' where visit_id = 'f3500000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'an assignment does not move to another person');
+-- not the office: refused, also directly (visit_assignees_insert lets every staff role in)
+:as_sales_a
+select tst.fails($q$select public.assign_visit('f3500000-0000-4000-8000-000000000002', array['a0000000-0000-0000-0000-000000000003']::uuid[])$q$, 'sales does not assign (owner, admin, office only)');
+select tst.fails($q$insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3500000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000003')$q$, 'sales cannot assign with a direct insert');
+select tst.fails($q$update public.visit_assignees set deleted_at = now() where visit_id = 'f3500000-0000-4000-8000-000000000001'$q$, 'sales cannot take people off directly');
+:as_tech_a
+select tst.fails($q$select public.assign_visit('f3500000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003']::uuid[])$q$, 'tech does not assign');
+:as_owner_b
+select tst.fails($q$select public.assign_visit('f3500000-0000-4000-8000-000000000001', array['b0000000-0000-0000-0000-000000000002']::uuid[])$q$, 'another company does not assign on our visit');
+select tst.fails($q$select public.assign_visit(gen_random_uuid(), '{}')$q$, 'an unknown visit gives the same refusal');
+-- only before "on site"
+:as_tech_a
+update public.visits set status = 'en_route' where id = 'f3500000-0000-4000-8000-000000000001';
+:as_office_a
+select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'removed')::int = 1, 'en_route: people still change');
+:as_tech_a
+update public.visits set status = 'on_site' where id = 'f3500000-0000-4000-8000-000000000001';
+:as_office_a
+select tst.fails($q$select public.assign_visit('f3500000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003', 'a3500000-0000-4000-8000-000000000001']::uuid[])$q$, 'on site: people do not change');
+select tst.fails($q$insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3500000-0000-4000-8000-000000000001', 'a3500000-0000-4000-8000-000000000001')$q$, 'on site: a direct insert is refused too');
+select tst.ok(tst.cnt($q$select 1 from public.visit_assignees where visit_id = 'f3500000-0000-4000-8000-000000000001' and deleted_at is null$q$) = 1, 'after the refusals the people are as they were');
+\echo 'T35 several people on a visit ok'
 
 :as_super
 \echo 'ALL TESTS PASSED'
