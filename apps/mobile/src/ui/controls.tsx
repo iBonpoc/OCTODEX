@@ -383,7 +383,8 @@ export function Steps({ labels, current }: { labels: string[]; current: number }
               style={{
                 height: component.stepBar,
                 borderRadius: radius.pill,
-                backgroundColor: done ? c.status.ok.fill : now ? c.acc : c.track,
+                // the current step is a status (info), not the accent: yellow is kept for the main action (rule 2)
+                backgroundColor: done ? c.status.ok.fill : now ? c.status.info.fill : c.track,
               }}
             />
             <T v="micro" tone={done || now ? "ink" : "mut"} w={now ? "semibold" : "medium"} numberOfLines={1}>

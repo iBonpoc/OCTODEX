@@ -23,6 +23,10 @@ import { jobStatusView } from "@/features/jobs";
 import { Button, IconButton, Segmented, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Card, CardList, Empty, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { useToast } from "@/ui/overlays";
+import { VisitFormSheet } from "@/features/VisitForm";
+import { SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { uid } from "@/features/estimateDoc";
 
 export default function PropertyScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -30,6 +34,8 @@ export default function PropertyScreen() {
   const { db, role } = store;
   const { t, money, day, time } = useI18n();
   const [sheet, setSheet] = useState<"edit" | "access" | "people" | null>(null);
+  const [inspect, setInspect] = useState(false);
+  const toast = useToast();
   const [tab, setTab] = usePersistentState<Tab>("octo.propTab.v1", "overview", { validate: (v) => TABS.includes(v) });
   const p = db.properties.find((x) => x.id === id);
   const back = () => (router.canGoBack() ? router.back() : router.replace(p ? `/client/${p.customerId}` : "/clients"));
@@ -76,7 +82,24 @@ export default function PropertyScreen() {
         <RowView style={{ flexWrap: "wrap" }}>
           <Button label={t("jobs.route")} icon="route" variant="secondary" onPress={route} />
           {office ? <Button label={t("est.new")} icon="invoice" variant="ghost" onPress={() => router.push(`/estimate/new?customerId=${p.customerId}&propertyId=${p.id}`)} /> : null}
+          {/* «+ Осмотр»: a returning client wants a new estimate (docs/specs/03 §5.1) — an inspection without a lead */}
+          {office ? <Button label={t("vf.addInspection")} icon="plus" variant="ghost" onPress={() => setInspect(true)} /> : null}
         </RowView>
+        {office ? (
+          <VisitFormSheet
+            visible={inspect}
+            onClose={() => setInspect(false)}
+            title={t("vf.addInspection")}
+            saveLabel={t("lead.next.book")}
+            init={{ durationMin: SCHEDULE_DEFAULTS.inspectionMin }}
+            onSave={(v) => {
+              const visitId = uid();
+              const r = store.addInspection(p.id, { ...v, visitId });
+              toast.show(t("vf.inspectionSaved", { date: day(v.start), time: time(v.start) }), r.undo);
+              return visitId;
+            }}
+          />
+        ) : null}
       </Card>
 
       <SectionTitle title={t("prop.now")} />

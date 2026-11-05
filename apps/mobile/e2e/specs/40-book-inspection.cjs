@@ -1,3 +1,4 @@
+const { expectOneAccent } = require("../accent.cjs");
 /**
  * S4 (docs/specs/03-visit-and-plan.md §1, wave П1): an inspection is a visit of the lead at the property, WITHOUT a job.
  * Both sides: the lead goes to "booked", a prospect client + property appear once (S3), the visit carries lead and
@@ -16,8 +17,12 @@ exports.run = async (h) => {
   await h.clickText("Задачи");
   await h.click("Что дальше?");
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).click(); await p.waitForTimeout(400);
-  await h.sheet().getByRole("radio", { name: "Ivan Sokolov" }).click();
+  await expectOneAccent(h, "the visit form", '[aria-modal="true"]');
+  await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).click();
   await h.sheet().getByRole("button", { name: "Записать на оценку" }).last().click(); await p.waitForTimeout(600);
+  // «Сообщить клиенту?»: a ready text; copying it marks the visit as told (nothing is sent by us)
+  await h.expectText(/Сообщить клиенту\?/, "notify sheet after booking");
+  await h.sheet().getByRole("button", { name: "Скопировать" }).click(); await p.waitForTimeout(400);
 
   db = await h.db();
   const lead = db.leads.find((x) => x.id === angela.id);
@@ -26,6 +31,7 @@ exports.run = async (h) => {
   h.expect(!!lead.customerId && !!lead.propertyId, "S3: the lead got its prospect client and property");
   h.expect(v && v.kind === "inspection" && !v.jobId && v.propertyId === lead.propertyId, `visit side: an inspection at the property without a job (${JSON.stringify(v && { kind: v.kind, jobId: v.jobId })})`);
   h.expect(v.techId === "m-ivan", "the picked tech");
+  h.expect(!!v.customerNotifiedAt, "the client was told (copy pressed)");
   h.expect(db.jobs.length === jobs0, `no job is made for an inspection (${jobs0} → ${db.jobs.length})`);
   h.expect(db.visits.length === visits0 + 1, "exactly one new visit");
 
