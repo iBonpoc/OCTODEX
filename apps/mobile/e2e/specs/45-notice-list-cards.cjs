@@ -3,6 +3,7 @@
  * - an approved estimate: client, amount, «Одобрена», estimate number, «Запланировать работу» inside the card → scheduling;
  * - an opened estimate: «Открыта», no «Запланировать работу»; the card opens the estimate;
  * - «Понятно» marks all read; the technician never sees the block (amounts, spec 06 §7.6); no «…».
+ * - a computed «running late» notice (docs/specs/03 П3c) is not read by «Понятно»: spec 49 tests it.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -25,8 +26,11 @@ exports.run = async (h) => {
   ]);
   await inject(1);
   await h.go("/today");
-  await h.expectText(/Уведомления · 2/, "notices block with the count");
+  // П3c: the demo may also have a computed «running late» notice (v5) — count the server ones by their words
+  await h.expectText(/Уведомления · \d+/, "notices block with the count");
   const cards = p.locator('[data-testid="notice-card"]');
+  const serverCards = cards.filter({ hasText: /Одобрена|Открыта/ });
+  h.expect((await serverCards.count()) === 2, `two client notices (${await serverCards.count()})`);
   const ok = cards.filter({ hasText: "Одобрена" }).first();
   await ok.scrollIntoViewIfNeeded();
   const okText = await ok.innerText();
@@ -48,10 +52,16 @@ exports.run = async (h) => {
   await p.waitForTimeout(600);
   h.expect(p.url().includes(`/estimate/${other.id}`), `card opens the estimate (${p.url()})`);
 
-  // technician: no notices block
+  // technician: «Сегодня» is closed (route guard) — on his visits there is no notices block and no client amounts from it
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
+  // what the tech really sees: the open screen only (a tab he was sent away from stays mounted, hidden with aria-hidden)
+  const shownText = () => p.evaluate(() => { const c = document.body.cloneNode(true); c.querySelectorAll('[aria-hidden="true"]').forEach((n) => n.remove()); return c.innerText || c.textContent; });
+  const shownCount = (sel) => p.evaluate((s) => [...document.querySelectorAll(s)].filter((n) => !n.closest('[aria-hidden="true"]')).length, sel);
   await h.go("/today");
-  h.expect((await cards.count()) === 0, "the technician sees no notices");
+  await p.waitForTimeout(500);
+  h.expect(new URL(p.url()).pathname === "/visits", `tech /today → /visits (got ${p.url()})`);
+  const techBody = await shownText();
+  h.expect((await shownCount('[data-testid="notice-card"]')) === 0 && !/Уведомления · \d+/.test(techBody) && !techBody.includes("$5,180"), "the technician sees no notices and no approved amount");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 
   // «Понятно» marks all read → the block is gone
@@ -59,5 +69,5 @@ exports.run = async (h) => {
   await h.go("/today");
   await p.getByRole("button", { name: "Понятно" }).first().click();
   await p.waitForTimeout(400);
-  h.expect((await cards.count()) === 0, "«Понятно» hides the read notices");
+  h.expect((await serverCards.count()) === 0, "«Понятно» hides the read notices (a «running late» one stays while the visit is late, П3c)");
 };

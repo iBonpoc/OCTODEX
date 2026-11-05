@@ -9,12 +9,14 @@ import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 import { wasJustDragged } from "./dnd";
-import { assigneesOf, isAssigned } from "@/features/schedule";
+import { assigneesOf, isAssigned, lateKind } from "@/features/schedule";
 
 /** Visit status → DS status color (4+1) and word. */
-export function visitStatus(v: Visit): { status: StatusName; label: DictKey } {
-  if (!v.techId) return { status: "warn", label: "st.unassigned" };
-  if (v.late && (v.step === "scheduled" || v.step === "en_route")) return { status: "warn", label: "st.late" };
+export function visitStatus(v: Visit, now: number = Date.now()): { status: StatusName; label: DictKey } {
+  if (!assigneesOf(v).length) return { status: "warn", label: "st.unassigned" };
+  // one rule for the chip, the list sign, «Требует внимания» and the office notice (docs/specs/03 П3c)
+  const late = lateKind(v, now);
+  if (late) return { status: "warn", label: late === "en_route" ? "late.enRoute" : "late.notLeft" };
   const map: Record<VisitStep, { status: StatusName; label: DictKey }> = {
     scheduled: { status: "neutral", label: "st.scheduled" },
     en_route: { status: "info", label: "st.en_route" },

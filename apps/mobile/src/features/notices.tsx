@@ -10,11 +10,14 @@ import { SectionTitle } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
 import type { IconKey } from "@/ui/primitives";
 import { space } from "@octo/design-tokens";
+import { lateNotices } from "./lateNotice";
 
 export function useNoticeText() {
-  const { t, money } = useI18n();
+  const { t, money, time } = useI18n();
   return (n: Notice) =>
-    n.kind === "estimate.approved"
+    n.kind === "visit.late"
+      ? t(n.late === "not_left" ? "late.notice.notLeft" : n.lateAt ? "late.notice.enRoute" : "late.notice.enRouteNoTime", { tech: n.tech ?? "", client: n.customer, time: n.lateAt ? time(n.lateAt) : "" })
+      : n.kind === "estimate.approved"
       ? t("notice.approved", { name: n.customer, total: money(n.totalCents ?? 0) }) + " " + t("notice.pickDate")
       : n.kind === "deposit.paid"
         ? t("notice.deposit", { name: n.customer, amount: money(n.depositCents ?? 0) })
@@ -50,16 +53,33 @@ const NOTICE_ICON: Record<Notice["kind"], IconKey> = {
   "estimate.approved": "signature",
   "deposit.paid": "wallet",
   "invoice.paid": "wallet",
+  "visit.late": "clock",
 };
 
 /** Unread notices on the office «Today» (spec 06, PR9): one list card per event; «Pick a date» inside the card. */
 export function NoticesCard() {
   const { db, readNotices, role } = useStore();
   const { t, day, money } = useI18n();
-  const unread = db.notices.filter((n) => !n.read).slice(0, 5);
+  const text = useNoticeText();
+  // П3c: «running late» first — computed, not read by «Понятно», gone when the tech is on site (docs/specs/03)
+  const late = lateNotices(db, role);
+  const server = db.notices.filter((n) => !n.read).slice(0, 5);
+  const unread = [...late, ...server];
   // amounts and client events are for the office only (spec 06 §7.6)
   if (role === "tech" || !unread.length) return null;
+  const lateCard = (n: Notice) => (
+    <ListCard
+      key={n.id}
+      testID="notice-card"
+      title={text(n)}
+      lead={{ kind: "icon", icon: NOTICE_ICON[n.kind], tone: "warn" }}
+      status={{ tone: "warn", label: t(n.late === "en_route" ? "late.enRoute" : "late.notLeft") }}
+      density="rich"
+      onPress={() => router.push(`/visit/${n.visitId}`)}
+    />
+  );
   const card = (n: Notice) => {
+    if (n.kind === "visit.late") return lateCard(n);
     const est = n.estimateId ? db.estimates.find((e) => e.id === n.estimateId) : undefined;
     const c = est ? db.customers.find((x) => x.id === est.customerId) : undefined;
     const prop = est ? db.properties.find((x) => x.id === est.propertyId) : undefined;
@@ -89,7 +109,7 @@ export function NoticesCard() {
   };
   return (
     <View>
-      <SectionTitle title={`${t("notice.title")} · ${unread.length}`} right={<Button label={t("common.gotIt")} variant="ghost" size="sm" onPress={readNotices} />} />
+      <SectionTitle title={`${t("notice.title")} · ${unread.length}`} right={server.length ? <Button label={t("common.gotIt")} variant="ghost" size="sm" onPress={readNotices} /> : undefined} />
       <View style={{ gap: space[2] }}>{unread.map(card)}</View>
     </View>
   );

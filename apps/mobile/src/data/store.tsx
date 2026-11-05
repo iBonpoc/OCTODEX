@@ -11,6 +11,7 @@ import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
+import { effectiveRole } from "@/nav/roles";
 import { applyOp, PermanentError, type Op, type OutboxItem } from "@/cloud/ops";
 import { readyToSend } from "@/cloud/outboxTiming";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
@@ -22,7 +23,7 @@ import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { inheritCategory } from "@/features/serviceCategories";
-import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, nextStep, withAssignees } from "@/features/schedule";
+import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
@@ -279,7 +280,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     },
     [setSaved, mode],
   );
-  const [role, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "tech");
+  // nothing chosen yet → the first role this person has (owner → director); route-guard fix
+  const [savedRole, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "director");
   const [online, setOnlineState] = useState(true);
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
   const [outbox, setOutbox, outboxReady] = usePersistentState<OutboxItem[]>("octo.outbox.v1", []);
@@ -295,8 +297,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   modeRef.current = mode;
 
   const availableRoles: Role[] = mode === "cloud" ? appRoles(company!.role) : ["tech", "dispatcher", "director", "sales"];
+  const role = effectiveRole(savedRole, availableRoles);
   useEffect(() => {
-    if (!availableRoles.includes(role)) setRole(availableRoles[0]!);
+    if (savedRole !== role) setRole(role);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [mode, company?.role]);
 
@@ -555,11 +558,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       advanceVisit: (id) => {
         const v = dbRef.current.visits.find((x) => x.id === id);
         // an inspection ends with "done" after "on site" (S10, docs/specs/03 §4.1); a job visit walks VISIT_STEPS
-        const step: VisitStep = v ? nextStep(v) : "en_route";
+        // «on the way»: the phone time goes with the step, so the offline queue does not move it (docs/specs/03 П3c)
+        const { step, at } = stepChange(v, new Date().toISOString());
         return mutate(
           "visit.step",
-          (d) => patchVisit(d, id, (x) => ({ ...x, step, late: step === "on_site" ? false : x.late, closed: step === "done" ? true : x.closed })),
-          { k: "visit.step", visitId: id, to: step },
+          (d) => patchVisit(d, id, (x) => ({ ...x, step, enRouteAt: at ?? x.enRouteAt, closed: step === "done" ? true : x.closed })),
+          { k: "visit.step", visitId: id, to: step, ...(at ? { at } : {}) },
         );
       },
       addPhoto: (visitId, kind, uri) => {

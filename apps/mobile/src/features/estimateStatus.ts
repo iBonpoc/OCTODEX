@@ -6,7 +6,7 @@
  * On site both sign on one screen: sent → approved. Editing a sent estimate makes a new version: → draft.
  */
 import type { StatusName } from "@octo/design-tokens";
-import type { EstimateStatus } from "@/data/types";
+import type { EstimateStatus, Role } from "@/data/types";
 import type { DictKey } from "@/i18n";
 
 export const ESTIMATE_MOVES: readonly (readonly [EstimateStatus, EstimateStatus])[] = [
@@ -41,4 +41,14 @@ const VIEW: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
 /** Status chip for an estimate: colour only from the status, always with a word. */
 export function estimateStatusView(s: EstimateStatus): { s: StatusName; l: DictKey } {
   return VIEW[s];
+}
+
+/**
+ * T2 (docs/specs/11-trade.md §1, handoff S16): the direction of an estimate changes until the client signs.
+ * After a signature (awaiting_countersign, approved) or a decline it is read-only: the job keeps its own and a change
+ * never goes forward. A tech changes it only in a draft (in the database: their own draft); the office in any unsigned one.
+ */
+export function canChangeEstimateCategory(s: EstimateStatus, role: Role): boolean {
+  if (role === "tech") return s === "draft";
+  return s === "draft" || s === "sent";
 }

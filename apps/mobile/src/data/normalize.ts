@@ -9,7 +9,7 @@
  */
 import { fromLegacyTrades } from "@/features/serviceCategories";
 import { makeSeed, SEED_SERVICE_CATEGORIES, SEED_SOURCES, SEED_TAGS } from "./seed";
-import type { Customer, DB } from "./types";
+import type { Customer, DB, Visit } from "./types";
 
 type Legacy = { source?: string; sourceId?: string };
 
@@ -29,7 +29,7 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     tags: Array.isArray(d.tags) && d.tags.length ? d.tags : mode === "demo" ? SEED_TAGS : [],
     serviceCategories: serviceCategoriesOf(d, mode),
     cancelledVisits: Array.isArray(d.cancelledVisits) ? d.cancelledVisits : [],
-    ...inspectionsWithoutJobs(d),
+    ...withoutLateFlag(inspectionsWithoutJobs(d)),
     tasks: Array.isArray(d.tasks) ? d.tasks : [],
     activities: Array.isArray(d.activities) ? d.activities : [],
     leads: (d.leads ?? []).map((l) => (l.sourceId ? l : { ...l, sourceId: sourceIdOf(l as Legacy) })),
@@ -39,6 +39,11 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
       mode,
     ),
   };
+}
+
+/** П3c (docs/specs/03): «late» is computed now; the old demo flag `late` is dropped from saved visits. */
+function withoutLateFlag(x: Pick<DB, "jobs" | "visits">): Pick<DB, "jobs" | "visits"> {
+  return { ...x, visits: x.visits.map((v) => ("late" in v ? (({ late: _l, ...rest }) => rest)(v as Visit & { late?: boolean }) : v)) };
 }
 
 /** Visit and Plan П1 (docs/specs/03 §3.1, migration 20261105280000): an older phone keeps inspections as jobs with the

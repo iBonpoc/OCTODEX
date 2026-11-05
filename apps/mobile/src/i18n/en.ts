@@ -1428,4 +1428,14 @@ export const en: Dict = {
   "plan.kind.job": "Job",
   "vf.otherDate": "Other date",
   "vf.visitsSoFar": "Visits so far: {n}",
+  /* Leads and clients, П3c (docs/specs/03): running late, unassigned tomorrow */
+  "late.enRoute": "Running late · on the way",
+  "late.notLeft": "Running late · not left yet",
+  "late.notice.enRoute": "{tech} is running late to {client}, on the way since {time}",
+  "late.notice.enRouteNoTime": "{tech} is running late to {client}, on the way",
+  "late.notice.notLeft": "{tech} is running late to {client}, not left yet · start {time}",
+  "late.unassignedTomorrow": "Tomorrow: visit without technician · {name}",
+  "late.unassignedTomorrowChip": "Unassigned · tomorrow",
+  // route-guard (screens by role)
+  "guard.noAccess": "No access to this screen — opened your home screen",
 };

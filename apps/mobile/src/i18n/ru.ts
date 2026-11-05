@@ -1427,6 +1427,16 @@ export const ru = {
   "plan.kind.job": "Работа",
   "vf.otherDate": "Другая дата",
   "vf.visitsSoFar": "Уже выездов: {n}",
+  /* Лиды и клиенты, П3c (docs/specs/03): опаздывает, не назначено завтра */
+  "late.enRoute": "Опаздывает · в пути",
+  "late.notLeft": "Опаздывает · не выехал",
+  "late.notice.enRoute": "{tech} опаздывает на {client}, в пути с {time}",
+  "late.notice.enRouteNoTime": "{tech} опаздывает на {client}, в пути",
+  "late.notice.notLeft": "{tech} опаздывает на {client}, не выехал · начало {time}",
+  "late.unassignedTomorrow": "Завтра выезд без мастера · {name}",
+  "late.unassignedTomorrowChip": "Не назначен · завтра",
+  // route-guard (screens by role)
+  "guard.noAccess": "Нет доступа к этому экрану — открыт ваш главный экран",
 } as const;
 
 export type DictKey = keyof typeof ru;
