@@ -69,10 +69,10 @@ function FunnelRow({ icon, label, value, share, onPress }: { icon: IconKey; labe
 export default function Today() {
   useTick();
   const { t, day, moneyWhole } = useI18n();
-  const { db } = useStore();
+  const { db, role } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
   const n = periodNumbers(db, period);
-  const attention = buildAttention(db);
+  const attention = buildAttention(db, role);
   const techs = db.members.filter((m) => m.roles.includes("tech"));
   const { width: screenW } = useWindowDimensions();
   const tileW = Math.floor((Math.min(screenW, layout.contentMax) - space[4] * 2 - space[2] * 2) / 3);

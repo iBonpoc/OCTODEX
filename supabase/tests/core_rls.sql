@@ -799,5 +799,56 @@ do $$ begin
 end $$;
 \echo 'T14 full lead ok'
 
+-- ---------------------------------------------------------------- T15: leads L1 (number, interest, snooze, call attempts)
+:as_owner_a
+do $$
+declare v_src uuid; v_a uuid; v_b uuid; n_a text; n_b text;
+begin
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', v_src, 'Number one', '(818) 555-0190') returning id, number into v_a, n_a;
+  insert into public.leads (company_id, source_id, contact_name, phone, number) values ('ca000000-0000-0000-0000-000000000000', v_src, 'Number two', '(818) 555-0191', 'LEA-9999') returning id, number into v_b, n_b;
+  perform tst.ok(n_a ~ '^LEA-\d{4,}$', 'lead gets a server number LEA-0001');
+  perform tst.ok(n_b <> 'LEA-9999' and n_b > n_a, 'the client cannot pick the number; numbers grow');
+  update public.leads set number = 'LEA-0000' where id = v_a;
+  perform tst.ok((select number from public.leads where id = v_a) = n_a, 'the number never changes');
+  perform tst.ok((select count(*) from public.leads where company_id = 'ca000000-0000-0000-0000-000000000000' and number is null) = 0, 'every lead has a number (old ones numbered by the migration)');
+  -- interest: only hot / warm / cold
+  update public.leads set interest = 'hot' where id = v_a;
+  perform tst.fails(format($q$update public.leads set interest = 'boiling' where id = %L$q$, v_a), 'unknown interest refused');
+  -- unanswered calls count up; a real conversation resets them
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction, meta) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_b, 'call', 'out', '{"outcome":"no_answer"}');
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction, meta) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_b, 'call', 'out', '{"outcome":"voicemail"}');
+  perform tst.ok((select status = 'new' and first_response_at is null and call_attempts = 2 and last_outbound_at is not null from public.leads where id = v_b), 'unanswered calls: attempts, the reply timer keeps running');
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction, meta) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_b, 'call', 'out', '{"outcome":"answered"}');
+  perform tst.ok((select status = 'contacted' and first_response_at is not null and call_attempts = 0 from public.leads where id = v_b), 'answered call: contacted, attempts reset');
+  update public.leads set call_attempts = call_attempts + 1 where id = v_a;
+  update public.leads set call_attempts = call_attempts + 1 where id = v_a;
+  perform tst.ok((select call_attempts from public.leads where id = v_a) = 2, 'two unanswered calls');
+  perform tst.fails(format($q$update public.leads set call_attempts = -1 where id = %L$q$, v_a), 'negative attempts refused');
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_a, 'call', 'out');
+  perform tst.ok((select call_attempts = 0 and status = 'contacted' from public.leads where id = v_a), 'answered call (old activity, no outcome) resets the attempts');
+  -- attempts after the first answer are reset again by the next real contact (not only the first one)
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction, meta) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_a, 'call', 'out', '{"outcome":"no_answer"}');
+  perform tst.ok((select call_attempts from public.leads where id = v_a) = 1, 'missed call after contact counts');
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction) values ('ca000000-0000-0000-0000-000000000000', 'lead', v_a, 'sms', 'out');
+  perform tst.ok((select call_attempts from public.leads where id = v_a) = 0, 'any real contact resets the attempts, like the app');
+  -- snooze keeps the funnel status; closing the lead clears the snooze
+  update public.leads set snoozed_until = now() + interval '90 days', snooze_reason = 'call in spring' where id = v_a;
+  perform tst.ok((select status from public.leads where id = v_a) = 'contacted', 'snooze is not a status');
+  update public.leads set status = 'lost', lost_reason = 'not_ready_timing' where id = v_a;
+  perform tst.ok((select snoozed_until is null and snooze_reason is null from public.leads where id = v_a), 'closed lead is not snoozed');
+  -- lead settings live on the company
+  update public.companies set lead_settings = '{"replyWarnMin": 10}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
+end $$;
+:as_owner_b
+do $$ declare v_src uuid; n text;
+begin
+  select id into v_src from public.lead_sources where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1;
+  insert into public.leads (company_id, source_id, contact_name, phone) values ('cb000000-0000-0000-0000-000000000000', v_src, 'B first', '(818) 555-0192') returning number into n;
+  perform tst.ok(n = 'LEA-0001', 'each company has its own lead counter');
+  perform tst.ok((select count(*) from public.leads where contact_name = 'Number one') = 0, 'leads isolated');
+end $$;
+\echo 'T15 leads L1 ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

@@ -4,7 +4,7 @@
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
 import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { CatalogItem, Company, CompanyContact, CompanyLicense, EstimateDoc, ExpenseCategory, PaymentMethod, VisitStep } from "@/data/types";
+import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, EstimateDoc, ExpenseCategory, PaymentMethod, VisitStep } from "@/data/types";
 import { companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -95,10 +95,9 @@ export type Op =
       leadId: string; needCustomer: boolean; customerId: string; contactId: string; propertyId: string; noteId: string;
       name: string; phone: string; email?: string; sourceId: string; address: string; city: string; note: string;
     }
-  | { k: "lead.lose"; leadId: string; reason: string }
   /** columns of public.leads already in DB names (mapped by the store) */
   | { k: "lead.update"; id: string; cols: Record<string, unknown> }
-  | { k: "lead.touch"; activityId: string; leadId: string; kind: "call" | "sms" | "email" | "marketplace" | "reply"; at: string }
+  | { k: "lead.touch"; activityId: string; leadId: string; kind: "call" | "sms" | "email" | "marketplace" | "reply"; at: string; outcome?: CallOutcome }
   | { k: "lead.close"; leadId: string; status: "lost" | "declined"; reason: string; text?: string; activityId: string; from: string }
   | { k: "lead.reopen"; leadId: string; activityId: string; from: string }
   | { k: "lead.assign"; leadId: string; userId: string; activityId: string }
@@ -273,7 +272,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.from("leads").update(op.cols).eq("id", op.id));
     case "lead.touch":
       // the server sets first_response_at and moves new → contacted (trigger on activities)
-      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: op.kind, direction: "out", at: op.at }));
+      // an unanswered call / voicemail only counts an attempt (meta.outcome, migration 20261104130000)
+      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: op.kind, direction: "out", at: op.at, meta: op.outcome ? { outcome: op.outcome } : {} }));
     case "lead.close":
       await run(supabase.from("leads").update({ status: op.status, lost_reason: op.reason, lost_reason_text: op.text ?? null }).eq("id", op.leadId));
       return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "status", meta: { from: op.from, to: op.status, reason: op.reason } }));
@@ -402,12 +402,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (op.needCustomer) await createCustomer(c, op, "active");
       else await run(supabase.from("customers").update({ status: "active" }).eq("id", op.customerId).eq("status", "prospect"));
       await run(
-        supabase.from("leads").update({ status: "won", won_via: "manual", customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId).not("status", "in", "(won,lost,archived)"),
+        supabase.from("leads").update({ status: "won", won_via: "manual", customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId).not("status", "in", "(won,lost,declined,archived)"),
       );
       return run(ins("notes", { id: op.noteId, company_id: c, subject_type: "customer", subject_id: op.customerId, body: op.note, visibility: "team" }));
     }
-    case "lead.lose":
-      return run(supabase.from("leads").update({ status: "lost", lost_reason: op.reason }).eq("id", op.leadId));
     case "customer.create":
       return createCustomer(c, op, "active");
     case "customer.update": {

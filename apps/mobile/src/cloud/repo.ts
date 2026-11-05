@@ -240,6 +240,16 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     wonVia: (l.won_via as Lead["wonVia"] | null) ?? undefined,
     lostReason: (l.lost_reason as Lead["lostReason"] | null) ?? undefined,
     lastActivityAt: s(l.updated_at) || undefined,
+    number: (l.number as string | null) ?? undefined,
+    interest: (l.interest as Lead["interest"] | null) ?? undefined,
+    snoozedUntil: (l.snoozed_until as string | null) ?? undefined,
+    snoozeReason: (l.snooze_reason as string | null) ?? undefined,
+    callAttempts: l.call_attempts == null ? undefined : n(l.call_attempts),
+    lastOutboundAt: (l.last_outbound_at as string | null) ?? undefined,
+    lastInboundAt: (l.last_inbound_at as string | null) ?? undefined,
+    remindedAt: (l.reminded_at as string | null) ?? undefined,
+    askAgainAt: (l.ask_again_at as string | null) ?? undefined,
+    archivedAt: (l.archived_at as string | null) ?? undefined,
   }));
 
   const mappedJobs: Job[] = jobs.map((j) => ({
