@@ -87,7 +87,7 @@ svg{flex:none}
 .ver{font-size:var(--fs-micro);color:var(--mut);font-weight:600;letter-spacing:.02em}
 .hdr{display:flex;flex-direction:column;gap:var(--s2);margin:var(--s1) 0 var(--s3)}
 .hrow{display:flex;align-items:center;justify-content:space-between;gap:var(--s2);min-height:44px}
-.disp{font-size:var(--fs-display);font-weight:700;line-height:1.15;margin:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.disp{font-size:var(--fs-display);font-weight:700;line-height:1.15;margin:0}
 .ttl{font-size:var(--fs-title);font-weight:700;line-height:1.15;margin:0}
 .back{display:inline-flex;align-items:center;gap:4px;height:36px;font-weight:500}
 .help{width:18px;height:18px;border-radius:50%;border:1px solid var(--bd);display:inline-grid;place-items:center;font-size:11px;font-weight:700;color:var(--mut);position:relative}
@@ -126,82 +126,101 @@ svg{flex:none}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:var(--s3);align-items:start}
 .grid2 .sec{grid-column:1/-1;margin-bottom:0}
 
-/* ---------- КАРТОЧКА (ItemCard + рецепт) ---------- */
+/* ---------- КАРТОЧКА v2: всё видно, без троеточий ----------
+   Шапка (ведущий · имя + номер · значение) → чипы → строки фактов (значок + текст, перенос по словам)
+   → цифры (плитки) → кнопки связи и главное действие. Текст никогда не обрезается многоточием. */
 .sw{position:relative;border-radius:var(--ri);touch-action:pan-y}
 .sw .acts{position:absolute;inset:0;display:flex;justify-content:space-between;align-items:center;padding:0 var(--s4);border-radius:var(--ri);background:var(--surf2);font-size:var(--fs-caption);font-weight:600;opacity:0;transition:opacity var(--dur-fast)}
 .sw.dragging .acts{opacity:1}
 .sw .acts span{display:inline-flex;align-items:center;gap:4px}
-.card{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--s3);align-items:center;width:100%;text-align:left;padding:var(--s3) var(--s3) var(--s3) var(--s3);border-radius:var(--ri);background:var(--surf);border:1px solid var(--bd);box-shadow:var(--sh);backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));overflow:hidden;transition:transform var(--dur-base) var(--ease-spring),border-color var(--dur-fast)}
+.card{position:relative;display:flex;flex-direction:column;gap:var(--s3);width:100%;text-align:left;padding:var(--s3) var(--s3) var(--s3) var(--s4);border-radius:var(--ri);background:var(--surf);border:1px solid var(--bd);box-shadow:var(--sh);backdrop-filter:blur(var(--blur));-webkit-backdrop-filter:blur(var(--blur));overflow:hidden;transition:transform var(--dur-base) var(--ease-spring),border-color var(--dur-fast);overflow-wrap:anywhere}
 .card:active{transform:scale(.98)}
 .card[aria-selected="true"]{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc),var(--sh)}
 .edge{position:absolute;left:0;top:0;bottom:0;width:var(--edge)}
-.dpane .chip,.main .chip{align-self:flex-start}
-.main .chip{margin-top:4px}
 .e-ok{background:var(--st-ok)}.e-info{background:var(--st-info)}.e-warn{background:var(--st-warn)}.e-bad{background:var(--st-bad)}
-.card.compact{min-height:var(--row-min);padding-block:var(--s2);border-radius:var(--rf);box-shadow:none}
-.card.rich{grid-template-areas:"l m s" "f f f";row-gap:var(--s3)}
-.card .lead{grid-area:auto}
-.card.rich .lead{grid-area:l}.card.rich .main{grid-area:m}.card.rich .side{grid-area:s}.card.rich .foot{grid-area:f}
+.card.compact{gap:var(--s2);padding-block:var(--s2);border-radius:var(--rf);box-shadow:none}
+.ch{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--s3);align-items:start}
 .main{min-width:0;display:flex;flex-direction:column;gap:2px}
-.t{font-size:var(--fs-heading);font-weight:600;line-height:1.25;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.t{font-size:var(--fs-heading);font-weight:600;line-height:1.25}
 .compact .t{font-size:var(--fs-body)}
-.m{font-size:var(--fs-body);color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.m .q{display:inline-flex;align-items:center;gap:3px;color:var(--ink);font-weight:500}
-.side{display:flex;flex-direction:column;align-items:flex-end;gap:4px}
-.compact .main .chip{margin-top:2px;height:20px;font-size:var(--fs-micro);padding:0 6px}
+.num{font-variant-numeric:tabular-nums}
+.n{font-size:var(--fs-caption);color:var(--mut);font-weight:500;line-height:1.35}
+.side{display:flex;flex-direction:column;align-items:flex-end;gap:2px;text-align:right}
 .v{font-size:var(--fs-heading);font-weight:600;white-space:nowrap;font-variant-numeric:tabular-nums}
 .compact .v{font-size:var(--fs-body)}
 .v small{font-size:var(--fs-caption);color:var(--mut);font-weight:500}
 .v.plus{color:var(--st-ok-t)}
-.unread .t::after{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--st-info);margin-left:6px;vertical-align:middle}
+.vl{font-size:var(--fs-micro);color:var(--mut);font-weight:600;letter-spacing:.03em;text-transform:uppercase;white-space:nowrap}
+.unread .t::before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--st-info);margin-right:6px;vertical-align:middle}
 .done .t{text-decoration:line-through;color:var(--mut)}
+.tags{display:flex;flex-wrap:wrap;gap:4px;align-items:center}
+.tag{display:inline-flex;align-items:center;gap:4px;height:var(--chip-h);padding:0 8px;border-radius:999px;border:1px solid var(--bd);font-size:var(--fs-caption);font-weight:500;color:var(--mut);white-space:nowrap}
+.facts{display:flex;flex-direction:column;gap:6px;margin:0;padding:0;list-style:none}
+.f{display:grid;grid-template-columns:minmax(0,1fr);font-size:var(--fs-body);line-height:1.4}
+.f.pair{grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:var(--s2)}
+.fc{display:grid;grid-template-columns:var(--avatar) minmax(0,1fr);gap:var(--s3);align-items:start;min-width:0}
+.f.pair .fc:last-child{grid-template-columns:16px minmax(0,1fr);gap:6px}
+.fi{justify-self:center;color:var(--mut);padding-top:1px}
+.ft3{max-height:calc(1.4em * 3);overflow:hidden;min-width:0}
+.ft3.clip{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 1.4em),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - 1.4em),transparent)}
+.f .fl{color:var(--mut)}
+.f.desc{font-size:var(--fs-caption);color:var(--mut)}
+.fc .q{display:inline-flex;align-items:center;gap:3px;font-weight:600}
+.kv{display:grid;grid-template-columns:repeat(auto-fit,minmax(78px,1fr));gap:6px;margin:0}
+.kv div{display:flex;flex-direction:column;gap:1px;padding:6px var(--s2);border-radius:var(--rf);background:var(--in);border:1px solid var(--bd);min-width:0}
+.kv dt{font-size:var(--fs-micro);color:var(--mut);font-weight:600;letter-spacing:.02em}
+.kv dd{margin:0;font-size:var(--fs-body);font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}
+.kv dd.t-warn{color:var(--st-warn-t)}.kv dd.t-bad{color:var(--st-bad-t)}.kv dd.t-ok{color:var(--st-ok-t)}
+.bar{height:6px;border-radius:999px;background:var(--track);overflow:hidden}
+.bar i{display:block;height:100%;background:var(--st-ok);border-radius:999px}
+.prog{display:flex;flex-direction:column;gap:4px;font-size:var(--fs-caption);color:var(--mut)}
+.abar{display:flex;align-items:center;gap:var(--s2);padding-top:var(--s2);border-top:1px solid var(--bd)}
+.abar .grow{flex:1}
+.abar .btn.ic{color:var(--ink)}
 /* ведущий элемент */
-.av{width:var(--avatar);height:var(--avatar);border-radius:50%;display:grid;place-items:center;background:var(--surf2);border:1px solid var(--bd);font-size:var(--fs-caption);font-weight:600}
+.av{width:var(--avatar);height:var(--avatar);border-radius:50%;display:grid;place-items:center;background:var(--surf2);border:1px solid var(--bd);font-size:var(--fs-caption);font-weight:600;flex:none}
 .av.dash{border-style:dashed}
 .compact .av{width:var(--avatar-sm);height:var(--avatar-sm);font-size:var(--fs-micro)}
-.ico{width:var(--avatar);height:var(--avatar);border-radius:50%;display:grid;place-items:center;background:var(--surf2);border:1px solid var(--bd)}
+.ico{width:var(--avatar);height:var(--avatar);border-radius:50%;display:grid;place-items:center;background:var(--surf2);border:1px solid var(--bd);flex:none}
 .compact .ico{width:var(--avatar-sm);height:var(--avatar-sm)}
 .ico.t-bad{color:var(--st-bad-t)}.ico.t-warn{color:var(--st-warn-t)}.ico.t-ok{color:var(--st-ok-t)}.ico.t-info{color:var(--st-info-t)}
-.tm{width:var(--hit);display:flex;flex-direction:column;align-items:center;line-height:1.1;padding:var(--s1) 0;border-radius:var(--rf);background:var(--in);border:1px solid var(--bd)}
-.tm b{font-size:var(--fs-body);font-variant-numeric:tabular-nums}
+.tm{width:var(--avatar);display:flex;flex-direction:column;align-items:center;line-height:1.1;padding:var(--s1) 0;border-radius:var(--rf);background:var(--in);border:1px solid var(--bd)}
+.tm b{font-size:var(--fs-caption);font-variant-numeric:tabular-nums}
 .tm span{font-size:var(--fs-micro);color:var(--mut);font-weight:600;letter-spacing:.04em}
-.compact .tm{width:var(--c-lg);padding:2px 0}
 .chk{width:22px;height:22px;margin:7px;border-radius:7px;border:1.5px solid var(--mut);display:grid;place-items:center;position:relative}
 .chk::after{content:"";position:absolute;inset:-11px}
 .chk.on{background:var(--st-ok);border-color:transparent;color:var(--st-on)}
-.pick{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--mut);display:grid;place-items:center;flex:none}
+.pick{width:22px;height:22px;margin:7px;border-radius:50%;border:1.5px solid var(--mut);display:grid;place-items:center;flex:none}
 .pick.on{background:var(--acc);border-color:transparent;color:var(--on-acc)}
 /* статус-чип: цвет только для статуса, всегда значок + слово */
-.chip{display:inline-flex;align-items:center;gap:4px;height:var(--chip-h);padding:0 var(--chip-px);border-radius:999px;font-size:var(--fs-caption);font-weight:600;white-space:nowrap;max-width:100%;overflow:hidden;text-overflow:ellipsis;border:1px solid transparent;color:var(--st-on)}
+.chip{display:inline-flex;align-items:center;gap:4px;height:var(--chip-h);padding:0 var(--chip-px);border-radius:999px;font-size:var(--fs-caption);font-weight:600;white-space:nowrap;border:1px solid transparent;color:var(--st-on)}
 .chip.ok{background:var(--st-ok)}.chip.info{background:var(--st-info)}.chip.warn{background:var(--st-warn)}.chip.bad{background:var(--st-bad)}
 .chip.neutral{background:var(--surf2);border-color:var(--bd);color:var(--ink)}
 .chip.soft{background:transparent;border-color:var(--bd)}
 .chip.soft.ok{color:var(--st-ok-t)}.chip.soft.info{color:var(--st-info-t)}.chip.soft.warn{color:var(--st-warn-t)}.chip.soft.bad{color:var(--st-bad-t)}
-/* подвал rich */
-.foot{display:flex;align-items:center;gap:var(--s3);min-width:0;padding-top:var(--s2);border-top:1px solid var(--bd)}
-.foot .ft{flex:1;min-width:0;font-size:var(--fs-caption);color:var(--mut);display:flex;flex-direction:column;gap:4px}
-.bar{height:6px;border-radius:999px;background:var(--track);overflow:hidden}
-.bar i{display:block;height:100%;background:var(--st-ok);border-radius:999px}
-.reasons{grid-area:f;display:flex;flex-direction:column;gap:var(--s2);padding-top:var(--s2);border-top:1px solid var(--bd)}
-.reason{display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:var(--s2);align-items:center;font-size:var(--fs-body)}
-.reason .rt{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.reasons{display:flex;flex-direction:column;gap:var(--s2);padding-top:var(--s2);border-top:1px solid var(--bd)}
+.reason{display:grid;grid-template-columns:var(--avatar) minmax(0,1fr) auto;gap:var(--s3);align-items:center;font-size:var(--fs-body)}
+.reason>span:first-child{justify-self:center}
 .tr-bad{color:var(--st-bad-t)}.tr-warn{color:var(--st-warn-t)}.tr-info{color:var(--st-info-t)}.tr-ok{color:var(--st-ok-t)}
 
-/* строка-карточка (десктоп) */
+/* строка-карточка (десктоп): каждая строка — своя поверхность, текст переносится */
 .rows{display:flex;flex-direction:column;gap:4px}
-.rowh,.row{display:grid;grid-template-columns:var(--cols);gap:var(--s3);align-items:center;padding:0 var(--s3)}
-.rowh{height:32px;font-size:var(--fs-micro);color:var(--mut);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
+.rowh,.row{display:grid;grid-template-columns:var(--cols);gap:var(--s3);align-items:start;padding:0 var(--s3)}
+.rowh{align-items:center;height:32px;font-size:var(--fs-micro);color:var(--mut);font-weight:600;letter-spacing:.05em;text-transform:uppercase}
 .rowh button{display:inline-flex;gap:2px;align-items:center;text-transform:inherit;letter-spacing:inherit;font-weight:inherit}
 .rowh .r,.row .r{text-align:right;justify-self:end}
-.row{position:relative;min-height:var(--row-min);border-radius:var(--rf);background:var(--surf);border:1px solid var(--bd);text-align:left;width:100%;overflow:hidden}
+.row{position:relative;min-height:var(--row-min);padding-block:var(--s2);border-radius:var(--rf);background:var(--surf);border:1px solid var(--bd);text-align:left;width:100%;overflow:hidden;overflow-wrap:anywhere}
 .row:hover{background:var(--surf2)}
 .row[aria-selected="true"]{border-color:var(--acc);box-shadow:0 0 0 1px var(--acc)}
-.row .c{min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.row .c.tt{font-weight:600}
-.row .c.mm{color:var(--mut)}
+.row .c{min-width:0;line-height:1.35;padding-top:4px}
+.row .c.tt b{display:block;font-weight:600}
+.row .c.mm{color:var(--ink)}
+.row .lead{padding-top:0}
 .row .lead .av,.row .lead .ico{width:var(--avatar-sm);height:var(--avatar-sm);font-size:var(--fs-micro)}
 .row .lead .tm{width:var(--c-lg);padding:2px 0}
-.row .lead .tm b{font-size:var(--fs-caption)}
+.row .pick{margin:3px 0}
+.row .ra{display:flex;gap:4px;justify-content:flex-end}
+.row .ra .btn{height:var(--c-sm);width:var(--c-sm)}
 
 /* скелет загрузки */
 .skel{border-radius:var(--ri);background:var(--surf);border:1px solid var(--bd);padding:var(--s3);display:grid;grid-template-columns:36px 1fr 70px;gap:var(--s3);align-items:center}
@@ -240,13 +259,11 @@ svg{flex:none}
 .dmain{overflow-y:auto;padding:var(--s5) var(--s6) var(--s8);min-width:0}
 .dpane{width:var(--panel-w);border-left:1px solid var(--bd);background:var(--in);overflow-y:auto;padding:var(--s5);display:flex;flex-direction:column;gap:var(--s3)}
 .dpane .big{font-size:var(--fs-display);font-weight:700;font-variant-numeric:tabular-nums}
-.kv{display:grid;grid-template-columns:auto 1fr;gap:6px var(--s3);font-size:var(--fs-body)}
-.kv dt{color:var(--mut)}.kv dd{margin:0;text-align:right;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .dtool{display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap}
 
 /* тост с отменой */
 .toast{position:absolute;left:50%;bottom:96px;transform:translateX(-50%);z-index:9;display:flex;align-items:center;gap:var(--s3);padding:6px 6px 6px var(--s4);border-radius:999px;background:var(--ink);color:var(--bg);font-weight:500;box-shadow:var(--shadow-pop);white-space:nowrap;max-width:calc(100% - 32px)}
-.toast span{overflow:hidden;text-overflow:ellipsis}
+.toast span{white-space:normal}
 .toast button{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 var(--s3);border-radius:999px;background:var(--acc);color:var(--on-acc);font-weight:600;font-size:var(--fs-btn)}
 .ringc{stroke-dasharray:44;animation:ring 5s linear forwards}
 @keyframes ring{to{stroke-dashoffset:44}}
@@ -286,7 +303,7 @@ td .chip{height:20px;padding:0 6px;font-size:var(--fs-micro);margin:0 2px 2px 0}
 <div class="top">
   <div class="brand">
     <h1>Карточки списков OCTODEX</h1>
-    <p>Прототип единой системы карточек по дизайн-системе OCTODEX. Данные — примеры, суммы тестовые.</p>
+    <p>Прототип единой системы карточек по дизайн-системе OCTODEX. Версия 2: подробные карточки. Данные — примеры, суммы тестовые.</p>
   </div>
   <div class="controls" id="controls"></div>
 </div>
@@ -316,9 +333,11 @@ const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",
 const ini=n=>n.split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
 
 /* ================= ДАННЫЕ: все списки, нынешние и будущие =================
-   arch: A человек/организация · B документ с деньгами · C время · D позиция · E сигнал
-   cols: подписи колонок (заголовок + строка деталей) — из них же строится строка на десктопе
-   st:   статус → [тон, слово]; тон = ok/info/warn/bad/neutral (цвет только для статуса) */
+   arch:  A человек/организация · B документ с деньгами · C время · D позиция · E сигнал
+   facts: строки фактов карточки по порядку [ключ, значок, подпись]; у объекта — f:{ключ:текст}
+   cols:  какие факты становятся колонками строки на компьютере
+   st:    статус → [тон, слово]; тон = ok/info/warn/bad/neutral (цвет только для статуса)
+   Контакты (phone, addr, email) сами дают кнопки «Позвонить / SMS / Карта / Email». */
 const SECTIONS=[
  {id:"sales",name:"Продажи",lists:["leads","estimates","contracts"]},
  {id:"clients",name:"Клиенты",lists:["clients","properties"]},
@@ -328,223 +347,230 @@ const SECTIONS=[
  {id:"team",name:"Люди компании",lists:["team","subs"]},
  {id:"signals",name:"Сигналы",lists:["attention","notifs","notes"]},
 ];
+const F={
+ src:["inbox","Откуда"],svc:["wrench","Что нужно"],work:["wrench","Работа"],addr:["pin","Адрес"],phone:["phone","Телефон"],email:["mail","Email"],
+ resp:["user","Ответственный"],client:["user","Клиент"],when:["calendar","Когда"],due:["clock","Срок"],links:["link","Связано"],
+ valid:["clock","Действует"],access:["lock","Доступ"],history:["checklist","История"],kind:["home","Тип"],sched:["calendar","Расписание"],
+ pay:["wallet","Оплата"],method:["wallet","Способ"],by:["user","Кто"],receipt:["camera","Чек"],bill:["dollar","Клиенту"],
+ supplier:["truck","Поставщик"],stock:["box","Склад"],terms:["doc","Условия"],price:["tag","Прайс"],deliv:["truck","Получение"],
+ lines:["checklist","Что в заказе"],ref:["doc","Номер у поставщика"],now:["route","Сейчас"],next:["calendar","Дальше"],hours:["clock","Часы"],
+ lic:["doc","Лицензия"],coi:["alert","Страховка"],note:["note","Заметка"],desc:["note","Описание"],last:["clock","Последнее"],vis:["lock","Видят"],
+};
 const L={
- leads:{name:"Лиды",icon:"inbox",arch:"A",density:"rich",cols:["Имя","Источник","Услуга","Когда"],val:"Смета",
+ leads:{name:"Лиды",icon:"inbox",arch:"A",density:"rich",facts:["src","svc","addr","phone","email","resp","note"],cols:["src","svc","addr","phone"],val:"",
   swR:["phone","Позвонить"],swL:["clock","Отложить"],cta:"Новый лид",
   empty:["Лидов пока нет","Добавьте первый вручную или перешлите письмо с площадки на свой адрес для лидов."],
-  st:{new:["info","Новый"],late:["bad","Ответ просрочен"],noans:["warn","Не дозвонились ×2"],booked:["info","Осмотр Nov 6"],sent:["info","Смета отправлена"],won:["ok","Стал клиентом"],lost:["neutral","Потерян · цена"]},
+  st:{new:["info","Новый"],late:["bad","Ответ просрочен"],noans:["warn","Не дозвонились ×2"],booked:["info","Осмотр Nov 6, 9:00 AM"],sent:["info","Смета отправлена"],won:["ok","Стал клиентом"],lost:["neutral","Потерян · цена"]},
   items:[
-   {t:"Maria Gonzalez",m:["Thumbtack","Seamless gutters, 2 этажа","3 мин назад"],st:"new",foot:{text:"Ответьте в течение 5 мин",act:"Позвонить"}},
-   {t:"Kevin O’Neil",m:["Google LSA","Ремонт протечки крыши","2 ч назад"],st:"late",foot:{text:"Ждёт первого ответа 2 ч",act:"Позвонить"}},
-   {t:"Angela Reyes",m:["Сайт","Замена водонагревателя","вчера"],st:"noans",foot:{text:"Следующая попытка сегодня до 6 PM",act:"Позвонить"}},
-   {t:"Thomas Wright",m:["Сосед (от мастера)","Замена электрощита","Nov 3"],st:"booked"},
-   {t:"Emily Chen",m:["Angi","Покраска, 3 комнаты","Oct 30"],v:485000,st:"sent"},
-   {t:"Marcus Hill",m:["Yelp","Уборка раз в 2 недели","Oct 28"],st:"won"},
-   {t:"Brian Foster",m:["Thumbtack","Ремонт забора","Oct 20"],st:"lost"},
+   {t:"Maria Gonzalez",n:"LEA-0231 · 3 мин назад",st:"new",f:{src:"Thumbtack · лид стоил $45.00",svc:"Бесшовные водостоки, дом в 2 этажа, ~140 фт",addr:"2210 N Lake Ave, Altadena, CA 91001",phone:"(626) 555-0198",resp:"Jenny Park"},act:"Ответить"},
+   {t:"Kevin O’Neil",n:"LEA-0229 · 2 ч назад",st:"late",f:{src:"Google LSA · лид стоил $32.00",svc:"Протекает крыша над гаражом после дождя",addr:"640 W Dryden St, Glendale, CA 91202",phone:"(213) 555-0100 · номер Google",resp:"Alex Lee"},act:"Ответить"},
+   {t:"Angela Reyes",n:"LEA-0227 · вчера",st:"noans",f:{src:"Сайт, форма заявки",svc:"Замена водонагревателя 40 gal",addr:"12 Vine St, Altadena, CA 91001",phone:"(626) 555-0142",email:"angela.reyes@gmail.com",resp:"Jenny Park",note:"Следующий звонок сегодня до 6:00 PM"},act:"Позвонить"},
+   {t:"Thomas Wright",n:"LEA-0225 · Nov 3",st:"booked",f:{src:"Сосед, привёл Carlos M.",svc:"Замена электрощита на 200 A",addr:"3 Cedar Ln, Pasadena, CA 91105",phone:"(626) 555-0115",resp:"Alex Lee (осмотр)"}},
+   {t:"Emily Chen",n:"LEA-0219 · Oct 30",v:485000,vl:"смета",st:"sent",f:{src:"Angi · лид стоил $28.00",svc:"Покраска, 3 комнаты и коридор",addr:"77 Maple Dr, Arcadia, CA 91006",phone:"(626) 555-0171",resp:"Alex Lee"}},
+   {t:"Marcus Hill",n:"LEA-0214 · Oct 28",st:"won",f:{src:"Yelp",svc:"Уборка раз в 2 недели",addr:"35 Hill St, Monrovia, CA 91016",phone:"(626) 555-0109"}},
+   {t:"Brian Foster",n:"LEA-0207 · Oct 20",st:"lost",f:{src:"Thumbtack · лид стоил $45.00, возврат запрошен",svc:"Ремонт деревянного забора, 40 фт",phone:"(818) 555-0164"}},
   ]},
- estimates:{name:"Сметы",icon:"doc",arch:"B",money:true,density:"regular",cols:["Клиент","Номер","Дата","Объект"],val:"Сумма",
+ estimates:{name:"Сметы",icon:"doc",arch:"B",money:true,density:"rich",facts:["addr","work","valid","resp","phone"],cols:["addr","work","valid"],val:"сумма",
   swR:["send","Напомнить"],swL:["copy","Копия"],cta:"Новая смета",empty:["Смет пока нет","Смета собирается из каталога или шаблона за пару минут."],
-  st:{stale:["warn","Без ответа 7 дн"],declined:["bad","Отказ"],draft:["neutral","Черновик"],viewed:["info","Открыта 3 раза"],sent:["info","Отправлена"],approved:["ok","Одобрена"]},
+  st:{stale:["warn","Без ответа 7 дн"],declined:["bad","Отказ · дорого"],draft:["neutral","Черновик"],viewed:["info","Открыта 3 раза"],sent:["info","Отправлена"],approved:["ok","Одобрена"]},
   items:[
-   {t:"Robert Kim",m:["EST-0145","Oct 29","501 Pine Rd, Burbank"],v:397500,st:"stale",foot:{text:"Открыл 1 раз, Oct 29",act:"Напомнить"}},
-   {t:"David Brooks",m:["EST-0139","Oct 18","9 Ridge Ct, La Cañada"],v:186000,st:"declined",foot:{text:"Причина: дорого"}},
-   {t:"James Carter",m:["EST-0148","Nov 5","1420 Elm St, Pasadena"],v:234000,st:"draft",foot:{text:"Не отправлена",act:"Отправить"}},
-   {t:"Linda Nguyen",m:["EST-0147","Nov 4","88 Oak Ave, Glendale"],v:612000,st:"viewed",foot:{text:"Последний раз открыла 40 мин назад"}},
-   {t:"Emily Chen",m:["EST-0144","Oct 30","77 Maple Dr, Arcadia"],v:485000,st:"sent"},
-   {t:"Patricia Moore",m:["EST-0141","Oct 22","210 Lake Ave, Pasadena"],v:1240000,st:"approved",foot:{text:"Выбран вариант Better · депозит получен"}},
+   {t:"Robert Kim",n:"EST-0145 · отправлена Oct 29",v:397500,st:"stale",f:{addr:"501 Pine Rd, Burbank, CA 91505",work:"Ремонт крыши: замена 120 кв. фт черепицы, герметизация трубы",valid:"до Nov 28",resp:"Alex Lee",phone:"(818) 555-0158"},act:"Напомнить"},
+   {t:"David Brooks",n:"EST-0139 · Oct 18",v:186000,st:"declined",f:{addr:"9 Ridge Ct, La Cañada Flintridge, CA 91011",work:"Ограждение заднего двора, 60 фт",resp:"Alex Lee",phone:"(818) 555-0110"}},
+   {t:"James Carter",n:"EST-0148 · создана Nov 5",v:234000,st:"draft",f:{addr:"1420 Elm St, Pasadena, CA 91104",work:"Замена 2 водостоков и герметизация углов",resp:"Carlos Mendez",phone:"(626) 555-0187"},act:"Отправить"},
+   {t:"Linda Nguyen",n:"EST-0147 · отправлена Nov 4",v:612000,st:"viewed",tags:["3 варианта"],f:{addr:"88 Oak Ave, Glendale, CA 91203",work:"Водонагреватель 50 gal с установкой и вывозом старого",valid:"до Dec 4",resp:"Alex Lee",phone:"(818) 555-0133"}},
+   {t:"Emily Chen",n:"EST-0144 · отправлена Oct 30",v:485000,st:"sent",f:{addr:"77 Maple Dr, Arcadia, CA 91006",work:"Покраска, 3 комнаты и коридор",valid:"до Nov 29",resp:"Alex Lee",phone:"(626) 555-0171"}},
+   {t:"Patricia Moore",n:"EST-0141 · одобрена Oct 22",v:1240000,st:"approved",tags:["вариант Better"],f:{addr:"210 Lake Ave, Pasadena, CA 91101",work:"Монтаж кухни: шкафы, столешница, мойка",resp:"Alex Lee",phone:"(626) 555-0164"}},
   ]},
- contracts:{name:"Договоры",icon:"signature",arch:"B",money:true,density:"regular",cols:["Клиент","Номер","Что","Отправлен"],val:"Сумма",
+ contracts:{name:"Договоры",icon:"signature",arch:"B",money:true,density:"rich",facts:["work","addr","links","when"],cols:["work","links","when"],val:"договор",
   swR:["send","Напомнить"],swL:["doc","PDF"],cta:"Новый договор",empty:["Договоров нет","Договор появляется, когда клиент подписывает смету."],
   st:{counter:["warn","Ждёт вашей подписи"],await:["warn","Ждёт подписи клиента"],rescinded:["bad","Отменён в срок отказа"],cooling:["info","Срок отказа · ещё 2 дн"],signed:["ok","Подписан"]},
   items:[
-   {t:"Robert Kim",m:["CTR-0033","Ремонт крыши","Nov 2"],v:397500,st:"counter",foot:{text:"Клиент подписал Nov 4",act:"Подписать"}},
-   {t:"Linda Nguyen",m:["CTR-0034","Водонагреватель","Nov 4"],v:612000,st:"await",foot:{text:"Отправлен по SMS и email",act:"Напомнить"}},
-   {t:"Sarah Whitman",m:["CTR-0032","Плитка в ванной","Nov 1"],v:820000,st:"cooling",foot:{text:"Право отказа 3 рабочих дня (CA) до Nov 7"}},
-   {t:"David Brooks",m:["CTR-0029","Ограждение","Oct 12"],v:510000,st:"rescinded"},
-   {t:"Patricia Moore",m:["CTR-0031","Монтаж кухни","Oct 22"],v:1240000,st:"signed"},
-   {t:"Marcus Hill",m:["CTR-0030","Обслуживание, 12 мес","Oct 28"],v:312000,st:"signed"},
+   {t:"Robert Kim",n:"CTR-0033 · клиент подписал Nov 4",v:397500,st:"counter",f:{work:"Ремонт крыши",addr:"501 Pine Rd, Burbank, CA 91505",links:"Смета EST-0145 · счёт INV-0088 (депозит, просрочен)",when:"Отправлен Nov 2"},kv:[["Выставлено",119250],["Оплачено",0],["Осталось",397500]],act:"Подписать"},
+   {t:"Linda Nguyen",n:"CTR-0034 · отправлен Nov 4",v:612000,st:"await",f:{work:"Водонагреватель 50 gal",addr:"88 Oak Ave, Glendale, CA 91203",links:"Смета EST-0147",when:"Ушёл по SMS и email, открыт 1 раз"},act:"Напомнить"},
+   {t:"Sarah Whitman",n:"CTR-0032 · подписан Nov 1",v:820000,st:"cooling",f:{work:"Плитка в ванной, 85 кв. фт",addr:"44 Rose Blvd, Pasadena, CA 91105",links:"Смета EST-0140 · счёт INV-0093 · работа JOB-0213",when:"Право отказа 3 рабочих дня (CA) до Nov 7"},kv:[["Выставлено",246000],["Оплачено",246000],["Осталось",574000]]},
+   {t:"David Brooks",n:"CTR-0029 · отменён Oct 14",v:510000,st:"rescinded",f:{work:"Ограждение",links:"Счёт INV-0081 · возврат RCT-0072",when:"Клиент отказался на 2-й день"}},
+   {t:"Patricia Moore",n:"CTR-0031 · подписан Oct 22",v:1240000,st:"signed",f:{work:"Монтаж кухни",addr:"210 Lake Ave, Pasadena, CA 91101",links:"Смета EST-0141 · работа JOB-0214 · счета INV-0085, INV-0091",when:"Работа идёт, визит 2 из 3"},kv:[["Выставлено",992000],["Оплачено",496000],["Осталось",744000]],prog:[496000,1240000]},
+   {t:"Marcus Hill",n:"CTR-0030 · подписан Oct 28",v:312000,st:"signed",f:{work:"Уборка раз в 2 недели, 12 мес",addr:"35 Hill St, Monrovia, CA 91016",links:"Абонемент PLN-0007"}},
   ]},
- clients:{name:"Клиенты",icon:"users",arch:"A",money:true,density:"regular",group:"alpha",cols:["Имя","Адрес","Телефон"],val:"Должен",
+ clients:{name:"Клиенты",icon:"users",arch:"A",money:true,density:"rich",group:"alpha",facts:["addr","phone","email","src","last"],cols:["addr","phone","last"],val:"должен",
   swR:["phone","Позвонить"],swL:["sms","SMS"],cta:"Новый клиент",empty:["Клиентов пока нет","Клиент появляется из лида или вручную. Можно загрузить CSV."],
   st:{overdue:["bad","Просрочено"],prospect:["neutral","Потенциальный"]},
   items:[
-   {t:"Angela Reyes",m:["12 Vine St, Altadena","(626) 555-0142"]},
-   {t:"David Brooks",m:["9 Ridge Ct, La Cañada","(818) 555-0110"],st:"prospect"},
-   {t:"Emily Chen",m:["77 Maple Dr, Arcadia","(626) 555-0171"],st:"prospect"},
-   {t:"James Carter",m:["1420 Elm St, Pasadena","(626) 555-0187"]},
-   {t:"Linda Nguyen",m:["2 объекта · Glendale","(818) 555-0133"],v:115000},
-   {t:"Marcus Hill",m:["35 Hill St, Monrovia","(626) 555-0109"]},
-   {t:"Patricia Moore",m:["210 Lake Ave, Pasadena","(626) 555-0164"],v:496000},
-   {t:"Robert Kim",m:["501 Pine Rd, Burbank","(818) 555-0158"],v:119250,st:"overdue"},
-   {t:"Sarah Whitman",m:["44 Rose Blvd, Pasadena","(626) 555-0120"],v:246000},
+   {t:"Angela Reyes",n:"CLT-0019 · с Nov 2026",f:{addr:"12 Vine St, Altadena, CA 91001",phone:"(626) 555-0142",email:"angela.reyes@gmail.com",last:"Визит сегодня 1:00 PM"},kv:[["Работ",1],["Оплатил",0]]},
+   {t:"David Brooks",n:"CLT-0014 · с Oct 2026",st:"prospect",f:{addr:"9 Ridge Ct, La Cañada Flintridge, CA 91011",phone:"(818) 555-0110",src:"Thumbtack",last:"Отказ от сметы Oct 18"}},
+   {t:"Emily Chen",n:"CLT-0018 · с Oct 2026",st:"prospect",f:{addr:"77 Maple Dr, Arcadia, CA 91006",phone:"(626) 555-0171",email:"emily.chen@outlook.com",src:"Angi",last:"Открыла смету 1 ч назад"}},
+   {t:"James Carter",n:"CLT-0003 · с Mar 2025",tags:["абонемент"],f:{addr:"1420 Elm St, Pasadena, CA 91104",phone:"(626) 555-0187",src:"Сарафан",last:"Чистка водостоков Nov 2"},kv:[["Работ",4],["Оплатил",184000]]},
+   {t:"Linda Nguyen",n:"CLT-0011 · с Jun 2025",v:115000,tags:["2 объекта"],f:{addr:"88 Oak Ave, Glendale, CA 91203 · ещё 214 Oak Ave, Unit B",phone:"(818) 555-0133",email:"linda.n@yahoo.com",last:"Оплатила $1,000.00 сегодня"},kv:[["Работ",3],["Оплатил",512000]]},
+   {t:"Marcus Hill",n:"CLT-0016 · с Oct 2026",tags:["абонемент"],f:{addr:"35 Hill St, Monrovia, CA 91016",phone:"(626) 555-0109",src:"Yelp",last:"Уборка завтра 10:00 AM"},kv:[["Работ",2],["Оплатил",26000]]},
+   {t:"Patricia Moore",n:"CLT-0009 · с Jan 2025",v:496000,f:{addr:"210 Lake Ave, Pasadena, CA 91101",phone:"(626) 555-0164",email:"pmoore@me.com",last:"Монтаж кухни идёт"},kv:[["Работ",2],["Оплатил",744000]]},
+   {t:"Robert Kim",n:"CLT-0013 · с Sep 2026",v:119250,st:"overdue",f:{addr:"501 Pine Rd, Burbank, CA 91505",phone:"(818) 555-0158",src:"Google LSA",last:"Счёт INV-0088 просрочен 12 дн"},kv:[["Работ",1],["Оплатил",0]]},
+   {t:"Sarah Whitman",n:"CLT-0017 · с Oct 2026",v:246000,f:{addr:"44 Rose Blvd, Pasadena, CA 91105",phone:"(626) 555-0120",last:"Работа ждёт даты"},kv:[["Работ",1],["Оплатил",246000]]},
   ]},
- properties:{name:"Объекты",icon:"home",arch:"A",density:"regular",group:"none",cols:["Адрес","Город","Клиент"],val:"",
+ properties:{name:"Объекты",icon:"home",arch:"A",density:"rich",group:"none",facts:["client","phone","kind","access","history"],cols:["client","kind","history"],val:"",
   swR:["navigate","Маршрут"],swL:["note","Заметка"],cta:"Новый объект",empty:["Объектов нет","Объект — адрес, где делается работа. Он живёт внутри клиента."],
   st:{open:["info","Открытая работа"],warranty:["ok","Гарантия до May 2031"]},
   items:[
-   {t:"210 Lake Ave",who:"Patricia Moore",m:["Pasadena, CA 91101","Patricia Moore"],st:"open"},
-   {t:"88 Oak Ave",who:"Linda Nguyen",m:["Glendale, CA 91203","Linda Nguyen"],st:"open"},
-   {t:"214 Oak Ave, Unit B",who:"Linda Nguyen",m:["Glendale, CA 91203","Linda Nguyen · сдаёт"]},
-   {t:"1420 Elm St",who:"James Carter",m:["Pasadena, CA 91104","James Carter"],st:"warranty"},
-   {t:"501 Pine Rd",who:"Robert Kim",m:["Burbank, CA 91505","Robert Kim"],st:"open"},
-   {t:"77 Maple Dr",who:"Emily Chen",m:["Arcadia, CA 91006","Emily Chen"]},
+   {t:"210 Lake Ave, Pasadena, CA 91101",addrOf:1,who:"Patricia Moore",n:"PRP-0012",st:"open",f:{client:"Patricia Moore",phone:"(626) 555-0164",kind:"Дом, 2 этажа, 1962 г.",access:"Ключ в сейфе у двери, код 0420",history:"2 работы · сейчас JOB-0214 Монтаж кухни"}},
+   {t:"88 Oak Ave, Glendale, CA 91203",addrOf:1,who:"Linda Nguyen",n:"PRP-0008",st:"open",f:{client:"Linda Nguyen",phone:"(818) 555-0133",kind:"Дом, 1 этаж",access:"Код ворот 4471#",history:"3 работы · сейчас JOB-0211 Водонагреватель"}},
+   {t:"214 Oak Ave, Unit B, Glendale, CA 91203",addrOf:1,who:"Linda Nguyen",n:"PRP-0009",f:{client:"Linda Nguyen (сдаёт), жилец — Tom Ruiz",phone:"(818) 555-0133",kind:"Квартира в дуплексе",access:"Предупредить жильца за 24 ч",history:"Работ ещё не было"}},
+   {t:"1420 Elm St, Pasadena, CA 91104",addrOf:1,who:"James Carter",n:"PRP-0003",st:"warranty",f:{client:"James Carter",phone:"(626) 555-0187",kind:"Дом, 2 этажа",history:"4 работы · последняя JOB-0208 Nov 2"}},
+   {t:"501 Pine Rd, Burbank, CA 91505",addrOf:1,who:"Robert Kim",n:"PRP-0011",st:"open",f:{client:"Robert Kim",phone:"(818) 555-0158",kind:"Дом, 1 этаж, черепица",access:"Собака во дворе, звонить перед приездом",history:"Осмотр сегодня 11:30 AM"}},
   ]},
- jobs:{name:"Работы",icon:"wrench",arch:"C",money:true,density:"regular",cols:["Клиент","Номер","Что","Кто"],val:"Договор",
+ jobs:{name:"Работы",icon:"wrench",arch:"C",money:true,density:"rich",facts:["work","addr","when","resp","links"],cols:["work","when","resp"],val:"договор",
   swR:["calendar","Назначить"],swL:["clock","Перенести"],cta:"Новая работа",empty:["Работ нет","Работа создаётся сама, когда клиент подписывает смету."],
   st:{unsch:["warn","Ждёт даты"],hold:["warn","Ждёт материал"],prog:["info","В работе"],sched:["info","Запланирована"],done:["ok","Готова"],cancel:["neutral","Отменена"]},
   items:[
-   {t:"Sarah Whitman",lead:{ic:"calendar"},m:["JOB-0213","Плитка в ванной","—"],v:820000,st:"unsch",foot:{text:"Подписано Nov 1 · депозит получен",act:"Назначить дату"}},
-   {t:"Linda Nguyen",lead:{dt:["NOV","9"]},m:["JOB-0211","Водонагреватель 50 gal","Carlos M."],v:215000,st:"hold",foot:{text:"Заказ PO-0034 · доставка Nov 6"}},
-   {t:"Patricia Moore",lead:{dt:["NOV","5"]},m:["JOB-0214","Монтаж кухни","Бригада A"],v:1240000,st:"prog",foot:{prog:[2,3],text:"Визит 2 из 3 · оплачено $7,440 из $12,400"}},
-   {t:"Marcus Hill",lead:{dt:["NOV","6"]},m:["JOB-0212","Генеральная уборка","Ana R."],v:26000,st:"sched"},
-   {t:"James Carter",lead:{dt:["NOV","2"]},m:["JOB-0208","Чистка водостоков","Carlos M."],v:32000,st:"done"},
-   {t:"Kevin O’Neil",lead:{dt:["OCT","27"]},m:["JOB-0205","Ремонт крыши","—"],v:140000,st:"cancel"},
+   {t:"Sarah Whitman",lead:{ic:"calendar"},n:"JOB-0213",v:820000,st:"unsch",f:{work:"Плитка в ванной, 85 кв. фт",addr:"44 Rose Blvd, Pasadena, CA 91105",when:"Дата не назначена · подписано Nov 1, депозит получен",resp:"Не назначен",links:"Договор CTR-0032"},act:"Назначить дату"},
+   {t:"Linda Nguyen",lead:{dt:["NOV","9"]},n:"JOB-0211",v:215000,st:"hold",f:{work:"Водонагреватель 50 gal: установка, вывоз старого",addr:"88 Oak Ave, Glendale, CA 91203",when:"Начало Nov 9, 8:00 AM · 4 ч",resp:"Carlos Mendez",links:"Заказ PO-0034, доставка Nov 6"}},
+   {t:"Patricia Moore",lead:{dt:["NOV","5"]},n:"JOB-0214",v:1240000,st:"prog",f:{work:"Монтаж кухни: шкафы, столешница, мойка",addr:"210 Lake Ave, Pasadena, CA 91101",when:"Oct 30 – Nov 12 · сейчас визит 2 из 3",resp:"Бригада A: Carlos M., Luis O."},kv:[["Оплачено",744000],["Осталось",496000],["Расходы",48620]],prog:[2,3,"Визит 2 из 3"]},
+   {t:"Marcus Hill",lead:{dt:["NOV","6"]},n:"JOB-0212",v:26000,st:"sched",f:{work:"Генеральная уборка, 3 спальни",addr:"35 Hill St, Monrovia, CA 91016",when:"Nov 6, 10:00 AM · 4 ч",resp:"Ana Ruiz"}},
+   {t:"James Carter",lead:{dt:["NOV","2"]},n:"JOB-0208",v:32000,st:"done",f:{work:"Чистка водостоков",addr:"1420 Elm St, Pasadena, CA 91104",when:"Сделано Nov 2 · оплачено",resp:"Carlos Mendez"}},
+   {t:"Kevin O’Neil",lead:{dt:["OCT","27"]},n:"JOB-0205",v:140000,st:"cancel",f:{work:"Ремонт крыши",addr:"640 W Dryden St, Glendale, CA 91202",when:"Отменена Oct 27 · клиент нашёл другого"}},
   ]},
- visits:{name:"Визиты",icon:"calendar",arch:"C",density:"regular",group:"field",cols:["Клиент","Вид","Адрес","Мастер"],val:"Длит.",
+ visits:{name:"Визиты",icon:"calendar",arch:"C",density:"rich",group:"field",facts:["addr","resp","work","phone","note"],cols:["addr","resp","work"],val:"",
   swR:["navigate","Маршрут"],swL:["phone","Позвонить"],cta:"Новый визит",empty:["На этот день визитов нет","Перетащите работу из «Ждут даты» на день."],
-  st:{late:["bad","Опаздывает 15 мин"],unconf:["warn","Не подтвердил"],enroute:["info","В пути · 12 мин"],sched:["info","Окно 2–4 PM"],conf:["ok","Подтвердил"],done:["ok","Завершён"]},
+  st:{late:["bad","Опаздывает 15 мин"],unconf:["warn","Клиент не подтвердил"],enroute:["info","В пути · 12 мин"],sched:["info","Окно 2–4 PM"],conf:["ok","Клиент подтвердил"],done:["ok","Завершён"]},
   items:[
-   {g:"Сегодня · Thu, Nov 5",t:"Patricia Moore",lead:{tm:["8:00","AM"]},m:["Монтаж","210 Lake Ave","Бригада A"],v:"3 ч",st:"done"},
-   {g:"Сегодня · Thu, Nov 5",t:"Robert Kim",lead:{tm:["11:30","AM"]},m:["Осмотр","501 Pine Rd","Alex L."],v:"1 ч",st:"enroute",foot:{text:"Carlos выехал в 11:18",act:"Позвонить"}},
-   {g:"Сегодня · Thu, Nov 5",t:"Angela Reyes",lead:{tm:["1:00","PM"]},m:["Сервис","12 Vine St","Luis O."],v:"2 ч",st:"late",foot:{text:"Клиенту отправлено «опаздываем»",act:"Позвонить"}},
-   {g:"Сегодня · Thu, Nov 5",t:"Marcus Hill",lead:{tm:["3:30","PM"]},m:["Уборка","35 Hill St","Ana R."],v:"4 ч",st:"unconf",foot:{text:"Напоминание ушло вчера",act:"Напомнить"}},
-   {g:"Завтра · Fri, Nov 6",t:"Thomas Wright",lead:{tm:["9:00","AM"]},m:["Осмотр","3 Cedar Ln","Alex L."],v:"1 ч",st:"conf"},
-   {g:"Завтра · Fri, Nov 6",t:"Marcus Hill",lead:{tm:["10:00","AM"]},m:["Ген. уборка","35 Hill St","Ana R."],v:"4 ч",st:"conf"},
-   {g:"Завтра · Fri, Nov 6",t:"Emily Chen",lead:{tm:["2:00","PM"]},m:["Осмотр","77 Maple Dr","Alex L."],v:"1 ч",st:"sched"},
+   {g:"Сегодня · Thu, Nov 5",t:"Patricia Moore",lead:{tm:["8:00","AM"]},n:"Монтаж · 8:00–11:00 AM",st:"done",f:{addr:"210 Lake Ave, Pasadena, CA 91101",resp:"Бригада A: Carlos M., Luis O.",work:"JOB-0214 · Монтаж кухни, визит 2 из 3",phone:"(626) 555-0164"}},
+   {g:"Сегодня · Thu, Nov 5",t:"Robert Kim",lead:{tm:["11:30","AM"]},n:"Осмотр · 11:30 AM–12:30 PM",st:"enroute",f:{addr:"501 Pine Rd, Burbank, CA 91505",resp:"Alex Lee",work:"Лид LEA-0222 · протечка крыши",phone:"(818) 555-0158",note:"Собака во дворе, звонить перед приездом"}},
+   {g:"Сегодня · Thu, Nov 5",t:"Angela Reyes",lead:{tm:["1:00","PM"]},n:"Сервис · 1:00–3:00 PM",st:"late",f:{addr:"12 Vine St, Altadena, CA 91001",resp:"Luis Ortega",work:"JOB-0216 · Замена водонагревателя",phone:"(626) 555-0142"},act:"Предупредить клиента"},
+   {g:"Сегодня · Thu, Nov 5",t:"Marcus Hill",lead:{tm:["3:30","PM"]},n:"Уборка · 3:30–7:30 PM",st:"unconf",f:{addr:"35 Hill St, Monrovia, CA 91016",resp:"Ana Ruiz",work:"Абонемент PLN-0007",phone:"(626) 555-0109"},act:"Напомнить"},
+   {g:"Завтра · Fri, Nov 6",t:"Thomas Wright",lead:{tm:["9:00","AM"]},n:"Осмотр · 9:00–10:00 AM",st:"conf",f:{addr:"3 Cedar Ln, Pasadena, CA 91105",resp:"Alex Lee",work:"Лид LEA-0225 · электрощит 200 A",phone:"(626) 555-0115"}},
+   {g:"Завтра · Fri, Nov 6",t:"Emily Chen",lead:{tm:["2:00","PM"]},n:"Осмотр · окно 2:00–4:00 PM",st:"sched",f:{addr:"77 Maple Dr, Arcadia, CA 91006",resp:"Alex Lee",work:"Смета EST-0144 · уточнить цвета",phone:"(626) 555-0171"}},
   ]},
- plans:{name:"Абонементы",icon:"repeat",arch:"B",money:true,density:"regular",cols:["Клиент","План","Как часто","Следующий"],val:"Цена",
+ plans:{name:"Абонементы",icon:"repeat",arch:"B",money:true,density:"rich",facts:["sched","next","addr","pay"],cols:["sched","next","pay"],val:"",
   swR:["calendar","Визит"],swL:["clock","Пауза"],cta:"Новый абонемент",empty:["Абонементов нет","Повторяющиеся работы: уборка, чистка водостоков, обслуживание. Визиты создаются сами."],
   st:{pastdue:["bad","Платёж просрочен"],renew:["warn","Продление через 14 дн"],active:["ok","Активен"],paused:["neutral","Пауза до Jan 5"]},
   items:[
-   {t:"Kevin O’Neil",m:["Бассейн","ежемесячно","Nov 12"],v:9500,per:"мес",st:"pastdue",foot:{text:"Карта ··0019 отклонена Nov 1",act:"Напомнить"}},
-   {t:"Linda Nguyen",m:["HVAC обслуживание","раз в год","Nov 19"],v:18900,per:"год",st:"renew",foot:{text:"Автопродление выключено",act:"Продлить"}},
-   {t:"Marcus Hill",m:["Уборка","раз в 2 недели","Nov 6"],v:13000,per:"визит",st:"active"},
-   {t:"James Carter",m:["Чистка водостоков","октябрь и апрель","Apr 12"],v:16000,per:"визит",st:"active"},
-   {t:"Emily Chen",m:["Защита от вредителей","раз в квартал","—"],v:12000,per:"кв.",st:"paused"},
+   {t:"Kevin O’Neil",n:"PLN-0004 · Бассейн",v:9500,per:"мес",st:"pastdue",f:{sched:"Раз в месяц, 2-й четверг",next:"Nov 12 · Luis Ortega",addr:"640 W Dryden St, Glendale, CA 91202",pay:"Карта ··0019 отклонена Nov 1",phone:"(213) 555-0100"},kv:[["В год",114000],["Визитов",12],["С",  "Mar 2026"]],act:"Напомнить"},
+   {t:"Linda Nguyen",n:"PLN-0002 · HVAC обслуживание",v:18900,per:"год",st:"renew",f:{sched:"Раз в год, ноябрь",next:"Nov 19 · Carlos Mendez",addr:"88 Oak Ave, Glendale, CA 91203",pay:"Счётом, автопродление выключено",phone:"(818) 555-0133"},kv:[["В год",18900],["Визитов",1],["С","Nov 2025"]],act:"Продлить"},
+   {t:"Marcus Hill",n:"PLN-0007 · Уборка",v:13000,per:"визит",st:"active",f:{sched:"Раз в 2 недели, по пятницам",next:"Nov 6, 10:00 AM · Ana Ruiz",addr:"35 Hill St, Monrovia, CA 91016",pay:"Карта ··4242, списание после визита",phone:"(626) 555-0109"},kv:[["В год",338000],["Визитов",26],["С","Oct 2026"]]},
+   {t:"James Carter",n:"PLN-0001 · Чистка водостоков",v:16000,per:"визит",st:"active",f:{sched:"Октябрь и апрель",next:"Apr 12, 2027 · Carlos Mendez",addr:"1420 Elm St, Pasadena, CA 91104",pay:"Счётом после визита",phone:"(626) 555-0187"},kv:[["В год",32000],["Визитов",2],["С","Mar 2025"]]},
+   {t:"Emily Chen",n:"PLN-0006 · Защита от вредителей",v:12000,per:"кв.",st:"paused",f:{sched:"Раз в квартал",next:"После паузы, Jan 5",addr:"77 Maple Dr, Arcadia, CA 91006",pay:"Карта ··7781",phone:"(626) 555-0171"}},
   ]},
- tasks:{name:"Задачи",icon:"checklist",arch:"E",density:"regular",cols:["Задача","К чему","Кому"],val:"Срок",
+ tasks:{name:"Задачи",icon:"checklist",arch:"E",density:"rich",facts:["links","resp","due","note"],cols:["links","resp","due"],val:"",
   swR:["check","Готово"],swL:["clock","Завтра"],cta:"Новая задача",empty:["Задач нет","Задача — напоминание себе или коллеге, привязанное к клиенту, лиду или работе."],
   st:{overdue:["bad","Просрочена 2 дн"],today:["warn","Сегодня"],later:["neutral","Позже"],done:["ok","Готово"]},
   items:[
-   {t:"Заказать водонагреватель 50 gal",lead:{chk:1},who:"Linda Nguyen",m:["JOB-0211 · Linda Nguyen","Carlos M."],v:"Nov 3",st:"overdue"},
-   {t:"Перезвонить про цвет плитки",lead:{chk:1},who:"Sarah Whitman",m:["Sarah Whitman","Вы"],v:"5:00 PM",st:"today"},
-   {t:"Отправить фото «после»",lead:{chk:1},who:"James Carter",m:["JOB-0208 · James Carter","Jenny P."],v:"Nov 9",st:"later"},
-   {t:"Проверить страховку субподрядчика",lead:{chk:1},m:["Clean Sweep Co","Вы"],v:"Nov 12",st:"later"},
-   {t:"Подтвердить осмотр",lead:{chk:1},who:"Thomas Wright",m:["Thomas Wright","Jenny P."],v:"Nov 4",st:"done",done:1},
+   {t:"Заказать водонагреватель 50 gal",lead:{chk:1},who:"Linda Nguyen",st:"overdue",f:{links:"JOB-0211 · Linda Nguyen, 88 Oak Ave",resp:"Carlos Mendez · поставил Alex Lee",due:"Nov 3, 5:00 PM",note:"Брать модель с низким NOx, в Glendale требуют"}},
+   {t:"Перезвонить про цвет плитки",lead:{chk:1},who:"Sarah Whitman",st:"today",f:{links:"Sarah Whitman · JOB-0213",resp:"Вы",due:"Сегодня, 5:00 PM",phone:"(626) 555-0120"}},
+   {t:"Отправить клиенту фото «после»",lead:{chk:1},who:"James Carter",st:"later",f:{links:"JOB-0208 · James Carter",resp:"Jenny Park",due:"Nov 9"}},
+   {t:"Проверить страховку субподрядчика",lead:{chk:1},st:"later",f:{links:"Clean Sweep Co",resp:"Вы",due:"Nov 12",note:"Без новой страховки наряды им не отправляются"}},
+   {t:"Подтвердить осмотр",lead:{chk:1},who:"Thomas Wright",st:"done",done:1,f:{links:"Thomas Wright · визит Nov 6, 9:00 AM",resp:"Jenny Park",due:"Сделано Nov 4"}},
   ]},
- invoices:{name:"Счета",icon:"invoice",arch:"B",money:true,density:"regular",techHidden:true,cols:["Клиент","Номер","За что","Срок"],val:"К оплате",
+ invoices:{name:"Счета",icon:"invoice",arch:"B",money:true,density:"rich",techHidden:true,facts:["addr","due","links","last"],cols:["due","links","last"],val:"к оплате",
   swR:["send","Напомнить"],swL:["wallet","Оплата"],cta:"Новый счёт",empty:["Счетов нет","Счёт выставляется из договора: депозит, этап или остаток."],
   st:{overdue:["bad","Просрочен 12 дн"],soon:["warn","Срок завтра"],draft:["neutral","Черновик"],partial:["info","Оплачен частично"],sent:["info","Отправлен"],paid:["ok","Оплачен"]},
   items:[
-   {t:"Robert Kim",m:["INV-0088","Депозит","Oct 24"],v:119250,total:119250,st:"overdue",foot:{prog:[0,119250],act:"Напомнить"}},
-   {t:"Patricia Moore",m:["INV-0091","Этап 2 из 3","Nov 6"],v:496000,total:496000,st:"soon",foot:{prog:[0,496000],act:"Напомнить"}},
-   {t:"Thomas Wright",m:["INV-0094","Осмотр","—"],v:45000,total:45000,st:"draft",foot:{text:"Не отправлен",act:"Отправить"}},
-   {t:"Linda Nguyen",m:["INV-0092","Остаток","Nov 15"],v:115000,total:215000,st:"partial",foot:{prog:[100000,215000]}},
-   {t:"Sarah Whitman",m:["INV-0093","Депозит","Nov 10"],v:246000,total:246000,st:"sent",foot:{prog:[0,246000]}},
-   {t:"Marcus Hill",m:["INV-0090","Визит Nov 2","Nov 2"],v:0,total:13000,st:"paid"},
-   {t:"James Carter",m:["INV-0089","Чистка","Nov 2"],v:0,total:32000,st:"paid"},
+   {t:"Robert Kim",n:"INV-0088 · Депозит",v:119250,st:"overdue",f:{addr:"501 Pine Rd, Burbank, CA 91505",due:"Выставлен Oct 17 · срок Oct 24",links:"Договор CTR-0033 · смета EST-0145",last:"Напоминание Oct 31, не открыт",phone:"(818) 555-0158"},kv:[["Сумма",119250],["Оплачено",0],["Осталось",119250,"bad"]],act:"Напомнить"},
+   {t:"Patricia Moore",n:"INV-0091 · Этап 2 из 3",v:496000,st:"soon",f:{addr:"210 Lake Ave, Pasadena, CA 91101",due:"Выставлен Oct 30 · срок Nov 6",links:"Договор CTR-0031 · работа JOB-0214",last:"Открыт Nov 2",phone:"(626) 555-0164"},kv:[["Сумма",496000],["Оплачено",0],["Осталось",496000,"warn"]],act:"Напомнить"},
+   {t:"Thomas Wright",n:"INV-0094 · Осмотр",v:45000,st:"draft",f:{addr:"3 Cedar Ln, Pasadena, CA 91105",due:"Не отправлен",phone:"(626) 555-0115"},act:"Отправить"},
+   {t:"Linda Nguyen",n:"INV-0092 · Остаток",v:115000,st:"partial",f:{addr:"88 Oak Ave, Glendale, CA 91203",due:"Выставлен Nov 1 · срок Nov 15",links:"Договор CTR-0027 · квитанция RCT-0079",phone:"(818) 555-0133"},kv:[["Сумма",215000],["Оплачено",100000],["Осталось",115000]],prog:[100000,215000]},
+   {t:"Sarah Whitman",n:"INV-0093 · Депозит",v:246000,st:"sent",f:{addr:"44 Rose Blvd, Pasadena, CA 91105",due:"Выставлен Nov 1 · срок Nov 10",links:"Договор CTR-0032 · оплата ACH в обработке",phone:"(626) 555-0120"}},
+   {t:"Marcus Hill",n:"INV-0090 · Визит Nov 2",v:0,total:13000,st:"paid",f:{due:"Оплачен Nov 2 картой",links:"Абонемент PLN-0007 · RCT-0078"}},
+   {t:"James Carter",n:"INV-0089 · Чистка водостоков",v:0,total:32000,st:"paid",f:{due:"Оплачен Nov 3 чеком #1043",links:"JOB-0208 · RCT-0076"}},
   ]},
- payments:{name:"Платежи",icon:"wallet",arch:"B",money:true,density:"regular",group:"field",techHidden:true,cols:["Клиент","Квитанция","Способ","Счёт"],val:"Сумма",
+ payments:{name:"Платежи",icon:"wallet",arch:"B",money:true,density:"rich",group:"field",techHidden:true,facts:["method","links","by","note"],cols:["method","links","by"],val:"",
   swR:["send","Квитанция"],swL:["undo","Возврат"],cta:"Принять оплату",empty:["Платежей нет","Каждая оплата сразу получает квитанцию RCT."],
   st:{failed:["bad","Отклонено банком"],refund:["warn","Возврат"],pending:["info","В обработке · 3 дн"],ok:["ok","Получено"]},
   items:[
-   {g:"Сегодня",t:"Linda Nguyen",lead:{ic:"phone"},m:["RCT-0079","Zelle","INV-0092"],v:100000,sign:"+",st:"ok"},
-   {g:"Сегодня",t:"Sarah Whitman",lead:{ic:"link"},m:["RCT-0080","ACH","INV-0093"],v:246000,sign:"+",st:"pending"},
-   {g:"На этой неделе",t:"Marcus Hill",lead:{ic:"wallet"},m:["RCT-0078","Карта ··4242","INV-0090"],v:13000,sign:"+",st:"ok"},
-   {g:"На этой неделе",t:"James Carter",lead:{ic:"doc"},m:["RCT-0076","Чек #1043","INV-0089"],v:32000,sign:"+",st:"ok"},
-   {g:"На этой неделе",t:"Kevin O’Neil",lead:{ic:"wallet"},m:["RCT-0074","Карта ··0019","абонемент"],v:9500,st:"failed"},
-   {g:"Раньше",t:"David Brooks",lead:{ic:"undo"},m:["RCT-0072","Карта ··8812","INV-0081"],v:40000,sign:"−",st:"refund"},
+   {g:"Сегодня",t:"Linda Nguyen",lead:{ic:"phone"},n:"RCT-0079 · Nov 5, 9:14 AM",v:100000,sign:"+",st:"ok",f:{method:"Zelle · подтверждение 8F2KQ1",links:"Счёт INV-0092 · осталось $1,150.00",by:"Принял Jenny Park"}},
+   {g:"Сегодня",t:"Sarah Whitman",lead:{ic:"link"},n:"RCT-0080 · Nov 5, 8:02 AM",v:246000,sign:"+",st:"pending",f:{method:"ACH (банк) через Stripe",links:"Счёт INV-0093 · депозит",note:"Деньги придут до Nov 8"},kv:[["Сумма",246000],["Комиссия",1968],["На счёт",244032]]},
+   {g:"На этой неделе",t:"Marcus Hill",lead:{ic:"wallet"},n:"RCT-0078 · Nov 2",v:13000,sign:"+",st:"ok",f:{method:"Карта Visa ··4242, на месте",links:"Счёт INV-0090",by:"Принял Ana Ruiz"},kv:[["Сумма",13000],["Комиссия",407],["На счёт",12593]]},
+   {g:"На этой неделе",t:"James Carter",lead:{ic:"doc"},n:"RCT-0076 · Nov 3",v:32000,sign:"+",st:"ok",f:{method:"Чек #1043, Chase",links:"Счёт INV-0089",by:"Принял Carlos Mendez · фото чека есть"}},
+   {g:"На этой неделе",t:"Kevin O’Neil",lead:{ic:"wallet"},n:"RCT-0074 · Nov 1",v:9500,st:"failed",f:{method:"Карта ··0019, автосписание",links:"Абонемент PLN-0004",note:"Банк: недостаточно средств",phone:"(213) 555-0100"},act:"Попросить другую карту"},
+   {g:"Раньше",t:"David Brooks",lead:{ic:"undo"},n:"RCT-0072 · Oct 14",v:40000,sign:"−",st:"refund",f:{method:"Возврат на карту ··8812",links:"Счёт INV-0081 · договор CTR-0029 отменён",by:"Оформил Alex Lee"}},
   ]},
- expenses:{name:"Расходы",icon:"dollar",arch:"B",money:true,density:"regular",techHidden:true,cols:["Где","Категория","Работа","Дата"],val:"Сумма",
+ expenses:{name:"Расходы",icon:"dollar",arch:"B",money:true,density:"rich",techHidden:true,facts:["work","by","receipt","bill","addr"],cols:["work","by","receipt"],val:"",
   swR:["camera","Чек"],swL:["wrench","К работе"],cta:"Расход по чеку",empty:["Расходов нет","Сфотографируйте чек: сумма и магазин заполнятся сами."],
   st:{noreceipt:["warn","Без чека"],ocr:["info","Распознаётся"],draft:["neutral","Черновик"],ok:["ok","Учтён"]},
   items:[
-   {t:"Shell",lead:{ic:"route"},m:["Топливо","—","Nov 3"],v:6418,sign:"−",st:"noreceipt",foot:{text:"Чек нужен для расходов больше $50",act:"Прикрепить чек"}},
-   {t:"Ferguson Plumbing",lead:{ic:"box"},m:["Материалы","JOB-0211","Nov 4"],v:112000,sign:"−",st:"ocr"},
-   {t:"Pro Roofing LLC",lead:{ic:"users"},m:["Субподряд","JOB-0205","Oct 30"],v:90000,sign:"−",st:"draft"},
-   {t:"Home Depot",lead:{ic:"box"},m:["Материалы","JOB-0214","Nov 4"],v:48620,sign:"−",st:"ok"},
-   {t:"Sherwin-Williams",lead:{ic:"box"},m:["Материалы · перевыставлен +15%","JOB-0207","Nov 1"],v:21240,sign:"−",st:"ok"},
+   {t:"Shell",lead:{ic:"route"},n:"EXP-0046 · Топливо · Nov 3",v:6418,sign:"−",st:"noreceipt",f:{work:"Без работы (общий расход)",by:"Luis Ortega · карта компании ··1188",receipt:"Чек нужен для расходов больше $50.00"},act:"Прикрепить чек"},
+   {t:"Ferguson Plumbing",lead:{ic:"box"},n:"EXP-0045 · Материалы · Nov 4",v:112000,sign:"−",st:"ocr",f:{work:"JOB-0211 · Linda Nguyen",by:"Carlos Mendez · карта компании ··1188",receipt:"Фото есть, распознаётся (позиций: 3)"}},
+   {t:"Pro Roofing LLC",lead:{ic:"users"},n:"EXP-0043 · Субподряд · Oct 30",v:90000,sign:"−",st:"draft",f:{work:"JOB-0205 · Kevin O’Neil (отменена)",by:"Alex Lee",receipt:"Счёт субподрядчика #PR-512"}},
+   {t:"Home Depot",lead:{ic:"box"},n:"EXP-0044 · Материалы · Nov 4",v:48620,sign:"−",st:"ok",f:{work:"JOB-0214 · Patricia Moore",by:"Carlos Mendez · личная карта, вернуть",receipt:"Чек #4471-2210",bill:"Не перевыставляется"}},
+   {t:"Sherwin-Williams",lead:{ic:"box"},n:"EXP-0042 · Материалы · Nov 1",v:21240,sign:"−",st:"ok",f:{work:"JOB-0207 · Emily Chen",by:"Ana Ruiz · карта компании ··1188",receipt:"Чек #SW-90813",bill:"Перевыставлен +15% = $244.26"}},
   ]},
- catalog:{name:"Каталог",icon:"box",arch:"D",money:true,density:"compact",group:"field",cols:["Позиция","Ед.","Откуда"],val:"Цена",
+ catalog:{name:"Каталог",icon:"box",arch:"D",money:true,density:"rich",group:"field",facts:["supplier","stock","desc"],cols:["supplier","stock"],val:"цена",
   swR:["plus","В смету"],swL:["copy","Копия"],cta:"Новая позиция",empty:["Каталог пуст","Загрузите прайс поставщика (CSV, XLSX) или добавьте позиции вручную."],
-  st:{out:["warn","Нет у поставщика"],arch:["neutral","В архиве"]},
+  st:{out:["warn","Нет у поставщика"],low:["warn","Мало: 2 шт"],arch:["neutral","В архиве"],margin:["warn","Маржа ниже 35%"]},
   items:[
-   {g:"Услуги и работа",t:"Выезд мастера",lead:{ic:"route"},m:["визит","своя"],v:8900,per:"визит",test:1},
-   {g:"Услуги и работа",t:"Час работы",lead:{ic:"clock"},m:["час","своя"],v:9500,per:"час",test:1},
-   {g:"Материалы",t:"Водонагреватель 50 gal, газ",lead:{ic:"box"},m:["шт","Ferguson · WH-50G"],v:110400,per:"шт",test:1},
-   {g:"Материалы",t:"Краска интерьерная, eggshell",lead:{ic:"box"},m:["галлон","Sherwin-Williams"],v:6200,per:"гал",test:1},
-   {g:"Материалы",t:"Желоб 5″ K-style, бесшовный",lead:{ic:"box"},m:["фут","ABC Supply · модуль Gutters"],v:1103,per:"фт",test:1},
-   {g:"Материалы",t:"Водосток медный 3×4",lead:{ic:"box"},m:["фут","ABC Supply"],v:2450,per:"фт",test:1,st:"out"},
-   {g:"Материалы",t:"Желоб виниловый 4″",lead:{ic:"box"},m:["фут","—"],v:420,per:"фт",test:1,st:"arch"},
+   {g:"Услуги и работа",t:"Выезд мастера",lead:{ic:"route"},n:"SRV-001",tags:["Услуга","Все направления"],cost:3200,price:8900,per:"визит",f:{supplier:"Своя позиция",stock:"Не хранится",desc:"Диагностика до 30 мин. При заказе работы вычитается из сметы."}},
+   {g:"Услуги и работа",t:"Час работы мастера",lead:{ic:"clock"},n:"LAB-001",tags:["Работа","Все направления"],cost:3800,price:9500,per:"час",f:{supplier:"Своя позиция",stock:"Не хранится",desc:"Ставка мастера $38.00/ч с налогами работодателя."}},
+   {g:"Услуги и работа",t:"Монтаж электрощита 200 A",lead:{ic:"users"},n:"SUB-004",tags:["Субподряд","Электрика"],cost:180000,price:260000,per:"шт",f:{supplier:"Valley Electric Inc (субподрядчик)",stock:"Не хранится",desc:"Включает разрешение (permit) и проверку инспектором."}},
+   {g:"Материалы",t:"Водонагреватель 50 gal, газ, низкий NOx",lead:{ic:"box"},n:"WH-50G",tags:["Товар","Сантехника"],cost:108045,price:145000,per:"шт",st:"low",f:{supplier:"Ferguson Plumbing · закупка $980.00 + налог 10.25%",stock:"На складе 2 шт · в заказе 1",desc:"Rheem Performance, гарантия 6 лет."}},
+   {g:"Материалы",t:"Желоб 5″ K-style, бесшовный",lead:{ic:"box"},n:"GT-5K",tags:["Товар","Кровля и водостоки"],cost:1103,price:1800,per:"фт",f:{supplier:"ABC Supply · закупка $10.00 + налог 10.25%",stock:"Катушка: 380 фт",desc:"Алюминий 0.027″, 22 цвета. Модуль Gutters считает длину по чертежу."}},
+   {g:"Материалы",t:"Краска интерьерная, eggshell",lead:{ic:"box"},n:"SW-EGG-1G",tags:["Товар","Покраска"],cost:4631,price:6200,per:"галлон",f:{supplier:"Sherwin-Williams · закупка $42.00 + налог 10.25%",stock:"На складе 6 галлонов",desc:"Duration Home, моющаяся."}},
+   {g:"Материалы",t:"Водосток медный 3×4",lead:{ic:"box"},n:"DS-CU34",tags:["Товар","Кровля и водостоки"],cost:2315,price:3800,per:"фт",st:"out",f:{supplier:"ABC Supply · закупка $21.00 + налог 10.25%",stock:"0 фт · поставщик ждёт партию",desc:"Медь 16 oz."}},
   ]},
- suppliers:{name:"Поставщики",icon:"truck",arch:"A",money:true,density:"regular",group:"none",cols:["Компания","Что берём","Контакт"],val:"Открыто",
+ suppliers:{name:"Поставщики",icon:"truck",arch:"A",money:true,density:"rich",group:"none",facts:["resp","phone","email","addr","terms","price"],cols:["resp","phone","terms"],val:"",
   swR:["phone","Позвонить"],swL:["mail","Email"],cta:"Новый поставщик",empty:["Поставщиков нет","Поставщик нужен для заказов и обновления цен по прайсу."],
   st:{stale:["warn","Прайс старше 90 дн"],await:["info","Ждём поставку Nov 6"],rfq:["info","Запрос цены отправлен"]},
   items:[
-   {t:"Sherwin-Williams",m:["Краска","Dana · (626) 555-0190"],st:"stale",foot:{text:"Последний прайс Jul 28",act:"Обновить прайс"}},
-   {t:"Ferguson Plumbing",m:["Сантехника","Mike D. · (818) 555-0177"],v:112000,st:"await"},
-   {t:"ABC Supply",m:["Кровля, водостоки","Branch #412"],v:230000,st:"rfq"},
-   {t:"Home Depot Pro",m:["Всё понемногу","Аккаунт ··4471"],v:0},
+   {t:"Sherwin-Williams",n:"SUP-0006 · аккаунт ··2209",tags:["Покраска"],st:"stale",f:{resp:"Dana Lopez, менеджер",phone:"(626) 555-0190",email:"orders.pasadena@sherwin.example",addr:"1501 E Colorado Blvd, Pasadena, CA 91106",terms:"Оплата Net 30 · налог при покупке 10.25%",price:"Прайс от Jul 28 · 42 позиции"},kv:[["Открыто",0],["За год",412000],["Позиций",42]],act:"Обновить прайс"},
+   {t:"Ferguson Plumbing",n:"SUP-0002 · аккаунт ··7731",tags:["Сантехника"],st:"await",f:{resp:"Mike Davis",phone:"(818) 555-0177",email:"mdavis@ferguson.example",addr:"210 W Magnolia Blvd, Burbank, CA 91502",terms:"Net 30 · доставка $45.00 до $1,000.00",price:"Прайс от Oct 15 · 318 позиций"},kv:[["Открыто",112000],["За год",1846000],["Позиций",318]]},
+   {t:"ABC Supply",n:"SUP-0001 · филиал #412",tags:["Кровля и водостоки"],st:"rfq",f:{resp:"Steve Park",phone:"(626) 555-0150",email:"branch412@abcsupply.example",addr:"4100 Valley Blvd, Los Angeles, CA 90032",terms:"Net 30 · самовывоз и доставка",price:"Прайс от Sep 30 · 96 позиций"},kv:[["Открыто",414000],["За год",2980000],["Позиций",96]]},
+   {t:"Home Depot Pro",n:"SUP-0004 · аккаунт ··4471",tags:["Всё понемногу"],f:{resp:"Pro Desk",phone:"(626) 555-0101",addr:"3895 E Foothill Blvd, Pasadena, CA 91107",terms:"Оплата картой на кассе"},kv:[["Открыто",48620],["За год",624000],["Позиций",27]]},
   ]},
- pos:{name:"Заказы поставщикам",short:"Заказы",icon:"cart",arch:"B",money:true,density:"regular",techHidden:true,cols:["Поставщик","Номер","Работа","Получение"],val:"Сумма",
+ pos:{name:"Заказы поставщикам",short:"Заказы",icon:"cart",arch:"B",money:true,density:"rich",techHidden:true,facts:["links","deliv","lines","ref","phone"],cols:["links","deliv","lines"],val:"сумма",
   swR:["check","Получено"],swL:["send","Повторить"],cta:"Новый заказ",empty:["Заказов нет","Заказ собирается сам из одобренной сметы."],
   st:{outdated:["warn","Устарел: смета изменилась"],partial:["warn","Получено 8 из 12"],draft:["neutral","Черновик"],sent:["info","Отправлен"],conf:["info","Подтверждён"],recv:["ok","Получен"]},
   items:[
-   {t:"Sherwin-Williams",m:["PO-0032","JOB-0207","самовывоз"],v:21240,st:"outdated",foot:{text:"В смете 6 галлонов вместо 4",act:"Обновить"}},
-   {t:"Home Depot Pro",m:["PO-0033","JOB-0214","самовывоз Nov 4"],v:48620,st:"partial",foot:{prog:[8,12],text:"Не хватает: петли 4 шт"}},
-   {t:"ABC Supply",m:["PO-0036","JOB-0215","—"],v:184000,st:"draft"},
-   {t:"ABC Supply",m:["PO-0035","JOB-0215","доставка Nov 9"],v:230000,st:"sent"},
-   {t:"Ferguson Plumbing",m:["PO-0034","JOB-0211","доставка Nov 6"],v:112000,st:"conf"},
-   {t:"ABC Supply",m:["PO-0030","JOB-0208","Oct 31"],v:18400,st:"recv"},
+   {t:"Sherwin-Williams",n:"PO-0032 · Nov 1",v:21240,st:"outdated",f:{links:"JOB-0207 · Emily Chen",deliv:"Самовывоз, Pasadena",lines:"Краска eggshell × 4 гал, валики × 2",phone:"(626) 555-0190"},act:"Обновить заказ"},
+   {t:"Home Depot Pro",n:"PO-0033 · Nov 4",v:48620,st:"partial",f:{links:"JOB-0214 · Patricia Moore",deliv:"Самовывоз Nov 4, получил Carlos M.",lines:"12 позиций · не хватает: петли × 4",ref:"Заказ HD-55120"},prog:[8,12,"Получено 8 из 12 позиций"]},
+   {t:"ABC Supply",n:"PO-0036 · черновик",v:184000,st:"draft",f:{links:"JOB-0215 · James Carter",lines:"Желоб 5″ × 140 фт, водостоки × 4, крепёж"},act:"Отправить"},
+   {t:"ABC Supply",n:"PO-0035 · Nov 4",v:230000,st:"sent",f:{links:"JOB-0217 · Thomas Wright",deliv:"Доставка Nov 9, 7–9 AM на 3 Cedar Ln",lines:"Черепица, мембрана, отливы — 9 позиций",phone:"(626) 555-0150"}},
+   {t:"Ferguson Plumbing",n:"PO-0034 · Nov 3",v:112000,st:"conf",f:{links:"JOB-0211 · Linda Nguyen",deliv:"Доставка Nov 6, 7–9 AM на 88 Oak Ave",lines:"Водонагреватель 50 gal × 1, гибкие подводки × 2",ref:"Заказ FG-88213"},kv:[["Товары",100000],["Налог",10250],["Доставка",1750]]},
+   {t:"ABC Supply",n:"PO-0030 · Oct 31",v:18400,st:"recv",f:{links:"JOB-0208 · James Carter",deliv:"Получен Oct 31",lines:"Герметик × 6, заклёпки"}},
   ]},
- team:{name:"Команда",icon:"user",arch:"A",density:"regular",group:"none",cols:["Имя","Роль","Сегодня"],val:"Часы",
+ team:{name:"Команда",icon:"user",arch:"A",density:"rich",group:"none",facts:["now","next","phone","email","hours"],cols:["now","next","hours"],val:"",
   swR:["phone","Позвонить"],swL:["sms","SMS"],cta:"Пригласить",empty:["В команде только вы","Пригласите мастеров и офис: каждый увидит только своё."],
   st:{offline:["warn","Не на связи 40 мин"],enroute:["info","В пути"],onsite:["ok","На объекте"],shift:["ok","На смене"],off:["neutral","Выходной"],invited:["neutral","Приглашён"]},
   items:[
-   {t:"Carlos Mendez",m:["Мастер","3 визита"],v:"5 ч 10 м",st:"enroute"},
-   {t:"Luis Ortega",m:["Мастер","1 визит"],v:"2 ч 05 м",st:"offline",foot:{text:"Последняя точка: 12 Vine St, 12:20 PM",act:"Позвонить"}},
-   {t:"Ana Ruiz",m:["Мастер","2 визита"],v:"6 ч 20 м",st:"onsite"},
-   {t:"Jenny Park",m:["Офис","диспетчер"],v:"7 ч",st:"shift"},
-   {t:"Alex Lee",m:["Директор","вы"],v:"—"},
-   {t:"Sam Taylor",m:["Мастер","приглашение Nov 4"],st:"invited"},
+   {t:"Carlos Mendez",n:"Мастер · с 2024",tags:["Сантехника","Водостоки"],st:"enroute",f:{now:"Едет к Robert Kim, 501 Pine Rd · 12 мин",next:"Сегодня ещё 2 визита",phone:"(626) 555-0131",hours:"Сегодня 5 ч 10 мин · неделя 32 ч"}},
+   {t:"Luis Ortega",n:"Мастер · с 2025",tags:["Кровля","Сантехника"],st:"offline",f:{now:"Последняя точка 12:20 PM, 12 Vine St",next:"1:00 PM Angela Reyes — уже опаздывает",phone:"(626) 555-0147",hours:"Сегодня 2 ч 05 мин"},act:"Позвонить"},
+   {t:"Ana Ruiz",n:"Мастер · с 2025",tags:["Уборка","Покраска"],st:"onsite",f:{now:"На объекте 35 Hill St, Monrovia",next:"3:30 PM Marcus Hill",phone:"(626) 555-0122",hours:"Сегодня 6 ч 20 мин · неделя 30 ч"}},
+   {t:"Jenny Park",n:"Офис, диспетчер",st:"shift",f:{now:"В офисе · 4 лида ждут ответа",phone:"(626) 555-0103",email:"jenny@valleyhome.example",hours:"Сегодня 7 ч"}},
+   {t:"Alex Lee",n:"Директор · это вы",f:{next:"11:30 AM осмотр Robert Kim",phone:"(626) 555-0100",email:"alex@valleyhome.example"}},
+   {t:"Sam Taylor",n:"Мастер · приглашение Nov 4",st:"invited",f:{phone:"(818) 555-0199",email:"sam.taylor@gmail.com"},act:"Отправить ещё раз"},
   ]},
- subs:{name:"Субподрядчики",icon:"wrench",arch:"A",money:true,density:"regular",group:"none",techHidden:true,cols:["Компания","Направление","Лицензия"],val:"За год",
+ subs:{name:"Субподрядчики",icon:"wrench",arch:"A",money:true,density:"rich",group:"none",techHidden:true,facts:["resp","phone","lic","coi","links"],cols:["lic","coi","links"],val:"",
   swR:["phone","Позвонить"],swL:["send","Наряд"],cta:"Новый субподрядчик",empty:["Субподрядчиков нет","Добавьте субподрядчика, чтобы отдавать ему наряды по ссылке."],
   st:{expired:["bad","Страховка истекла"],soon:["warn","Страховка: 12 дн"],ok:["ok","Допущен"]},
   items:[
-   {t:"Clean Sweep Co",m:["Уборка","без лицензии"],v:90000,st:"expired",foot:{text:"Наряды заблокированы до новой страховки",act:"Запросить"}},
-   {t:"Valley Electric Inc",m:["Электрика","CSLB 1088734"],v:245000,st:"soon"},
-   {t:"Pro Roofing LLC",m:["Кровля","CSLB 1043221"],v:630000,st:"ok"},
+   {t:"Clean Sweep Co",n:"SUB-0003",tags:["Уборка"],st:"expired",f:{resp:"Rosa Diaz",phone:"(626) 555-0177",lic:"Лицензия не нужна · W-9 есть",coi:"Истекла Oct 31 — наряды заблокированы",links:"Открытых нарядов нет"},kv:[["За год",90000],["Нарядов",3],["1099","нужен"]],act:"Запросить страховку"},
+   {t:"Valley Electric Inc",n:"SUB-0002",tags:["Электрика"],st:"soon",f:{resp:"Greg Holt",phone:"(818) 555-0129",lic:"CSLB C-10 #1088734, до Aug 2027",coi:"До Nov 17",links:"Наряд на JOB-0217 · Thomas Wright"},kv:[["За год",245000],["Нарядов",2],["1099","нужен"]]},
+   {t:"Pro Roofing LLC",n:"SUB-0001",tags:["Кровля"],st:"ok",f:{resp:"Dave Kim",phone:"(818) 555-0144",lic:"CSLB C-39 #1043221, до Feb 2028",coi:"До Mar 2027",links:"Открытых нарядов нет"},kv:[["За год",630000],["Нарядов",5],["1099","нужен"]]},
   ]},
- attention:{name:"Требует внимания",short:"Внимание",icon:"alert",arch:"E",density:"rich",people:true,cols:["Что случилось","Кто","Документ"],val:"Сумма",
+ attention:{name:"Требует внимания",short:"Внимание",icon:"alert",arch:"E",density:"rich",people:true,facts:["client","addr","phone"],cols:["client","addr"],val:"",
   swR:["check","Сделано"],swL:["clock","Завтра"],cta:"",empty:["Всё спокойно","Здесь появятся просрочки, лиды без ответа и работы без даты."],
   st:{bad:["bad","Срочно"],warn:["warn","Внимание"]},
   items:[
-   {t:"Счёт просрочен 12 дн",who:"Robert Kim",lead:{ic:"invoice"},m:["Robert Kim","INV-0088"],v:119250,st:"bad",foot:{act:"Напомнить"}},
-   {t:"Лид ждёт ответа 2 ч",who:"Kevin O’Neil",lead:{ic:"inbox"},m:["Kevin O’Neil · лид","Google LSA"],st:"bad",foot:{act:"Позвонить"}},
-   {t:"Мастер опаздывает 15 мин",who:"Angela Reyes",lead:{ic:"clock"},m:["Angela Reyes","визит 1:00 PM"],st:"bad",foot:{act:"Позвонить"}},
-   {t:"Смета без ответа 7 дн",who:"Robert Kim",lead:{ic:"doc"},m:["Robert Kim","EST-0145"],v:397500,st:"warn",foot:{act:"Напомнить"}},
-   {t:"Нужна ваша подпись",who:"Robert Kim",lead:{ic:"signature"},m:["Robert Kim","CTR-0033"],st:"warn",foot:{act:"Подписать"}},
-   {t:"Работа ждёт даты",who:"Sarah Whitman",lead:{ic:"calendar"},m:["Sarah Whitman","JOB-0213"],v:820000,st:"warn",foot:{act:"Назначить"}},
+   {t:"Счёт просрочен 12 дн",n:"INV-0088 · депозит",who:"Robert Kim",lead:{ic:"invoice"},v:119250,st:"bad",f:{client:"Robert Kim",addr:"501 Pine Rd, Burbank, CA 91505",phone:"(818) 555-0158"},act:"Напомнить"},
+   {t:"Лид ждёт ответа 2 ч",n:"LEA-0229 · Google LSA",who:"Kevin O’Neil",lead:{ic:"inbox"},st:"bad",f:{client:"Kevin O’Neil (лид)",addr:"640 W Dryden St, Glendale, CA 91202",phone:"(213) 555-0100"},act:"Ответить"},
+   {t:"Мастер опаздывает 15 мин",n:"Визит 1:00 PM · Luis Ortega",who:"Angela Reyes",lead:{ic:"clock"},st:"bad",f:{client:"Angela Reyes",addr:"12 Vine St, Altadena, CA 91001",phone:"(626) 555-0142"},act:"Предупредить"},
+   {t:"Смета без ответа 7 дн",n:"EST-0145",who:"Robert Kim",lead:{ic:"doc"},v:397500,st:"warn",f:{client:"Robert Kim",phone:"(818) 555-0158"},act:"Напомнить"},
+   {t:"Нужна ваша подпись",n:"CTR-0033",who:"Robert Kim",lead:{ic:"signature"},st:"warn",f:{client:"Robert Kim"},act:"Подписать"},
+   {t:"Работа ждёт даты",n:"JOB-0213 · подписано Nov 1",who:"Sarah Whitman",lead:{ic:"calendar"},v:820000,st:"warn",f:{client:"Sarah Whitman",addr:"44 Rose Blvd, Pasadena, CA 91105",phone:"(626) 555-0120"},act:"Назначить"},
   ]},
- notifs:{name:"Уведомления",icon:"bell",arch:"E",density:"regular",group:"field",cols:["Событие","Когда"],val:"",
+ notifs:{name:"Уведомления",icon:"bell",arch:"E",density:"regular",group:"field",facts:["links"],cols:["links"],val:"",
   swR:["check","Прочитано"],swL:["close","Скрыть"],cta:"",empty:["Уведомлений нет","Здесь появятся оплаты, подписи и новые лиды."],
   st:{new:["info","Новое"]},
   items:[
-   {g:"Сегодня",t:"Новый лид: Maria Gonzalez",who:"Maria Gonzalez",lead:{ic:"inbox"},m:["Thumbtack · 3 мин назад"],st:"new",unread:1},
-   {g:"Сегодня",t:"Linda Nguyen оплатила $1,000.00",who:"Linda Nguyen",lead:{ic:"wallet"},m:["Zelle · INV-0092 · 10 мин назад"],st:"new",unread:1},
-   {g:"Сегодня",t:"Emily Chen открыла смету",who:"Emily Chen",lead:{ic:"doc"},m:["EST-0144 · 1 ч назад"]},
-   {g:"Сегодня",t:"Carlos Mendez: «В пути»",lead:{ic:"route"},m:["к Robert Kim · 25 мин назад"]},
-   {g:"Вчера",t:"Patricia Moore подписала договор",who:"Patricia Moore",lead:{ic:"signature"},m:["CTR-0031 · 4:12 PM"]},
+   {g:"Сегодня",t:"Новый лид: Maria Gonzalez",n:"3 мин назад",who:"Maria Gonzalez",lead:{ic:"inbox"},st:"new",unread:1,f:{links:"Thumbtack · водостоки, Altadena"},act:"Открыть лид"},
+   {g:"Сегодня",t:"Linda Nguyen оплатила $1,000.00",n:"10 мин назад",who:"Linda Nguyen",lead:{ic:"wallet"},st:"new",unread:1,f:{links:"Zelle · INV-0092 · осталось $1,150.00"},act:"Квитанция"},
+   {g:"Сегодня",t:"Emily Chen открыла смету",n:"1 ч назад",who:"Emily Chen",lead:{ic:"doc"},f:{links:"EST-0144 · $4,850.00 · открыта 2-й раз"}},
+   {g:"Сегодня",t:"Carlos Mendez выехал к Robert Kim",n:"25 мин назад",lead:{ic:"route"},f:{links:"Осмотр 11:30 AM · 501 Pine Rd"}},
+   {g:"Вчера",t:"Patricia Moore подписала договор",n:"4:12 PM",who:"Patricia Moore",lead:{ic:"signature"},f:{links:"CTR-0031 · $12,400.00"}},
   ]},
- notes:{name:"Заметки",icon:"note",arch:"E",density:"regular",group:"none",cols:["Заметка","К чему","Автор"],val:"",
+ notes:{name:"Заметки",icon:"note",arch:"E",density:"rich",group:"none",facts:["links","by","vis"],cols:["links","by","vis"],val:"",
   swR:["pin","Закрепить"],swL:["trash","Удалить"],cta:"Новая заметка",empty:["Заметок нет","Заметка «для команды» видна всем, «только мне» — только вам."],
-  st:{pin:["neutral","Закреплена"],me:["neutral","Только мне"]},
+  st:{pin:["neutral","Закреплена"]},
   items:[
-   {t:"Собака во дворе, звонить перед приездом",who:"Robert Kim",lead:{ic:"note"},m:["501 Pine Rd · Robert Kim","Alex L. · Oct 29"],st:"pin"},
-   {t:"Код ворот 4471#",who:"Linda Nguyen",lead:{ic:"lock"},m:["88 Oak Ave · Linda Nguyen","Вы · Nov 2"],st:"me"},
-   {t:"Хочет матовую плитку, образцы в машине",who:"Sarah Whitman",lead:{ic:"note"},m:["Sarah Whitman","Jenny P. · Nov 1"]},
-   {t:"Обещали 5% за повторный заказ",who:"Marcus Hill",lead:{ic:"note"},m:["Marcus Hill","Alex L. · Oct 28"]},
+   {t:"Собака во дворе, звонить перед приездом. Калитка слева от гаража, ключ не нужен.",who:"Robert Kim",lead:{ic:"note"},st:"pin",f:{links:"501 Pine Rd · Robert Kim",by:"Alex Lee · Oct 29",vis:"Вся команда"}},
+   {t:"Код ворот 4471#",who:"Linda Nguyen",lead:{ic:"lock"},f:{links:"88 Oak Ave · Linda Nguyen",by:"Вы · Nov 2",vis:"Только мне"}},
+   {t:"Хочет матовую плитку 12×24, серый тёплый. Образцы в машине у Ana, показать до назначения даты.",who:"Sarah Whitman",lead:{ic:"note"},tags:["2 фото"],f:{links:"Sarah Whitman · JOB-0213",by:"Jenny Park · Nov 1",vis:"Вся команда"}},
+   {t:"Обещали 5% скидки на следующий заказ.",who:"Marcus Hill",lead:{ic:"note"},f:{links:"Marcus Hill",by:"Alex Lee · Oct 28",vis:"Вся команда"}},
   ]},
 };
 const ARCH={
@@ -552,22 +578,32 @@ const ARCH={
  B:{name:"Документ с деньгами",lead:"значок документа",ex:"Сметы, договоры, счета, платежи, расходы, заказы, абонементы"},
  C:{name:"Время",lead:"блок даты или времени",ex:"Визиты, работы, календарь"},
  D:{name:"Позиция",lead:"значок категории",ex:"Каталог, строки прайса, сборки"},
- E:{name:"Сигнал",lead:"значок причины / галочка",ex:"Требует внимания, уведомления, задачи, заметки"},
+ E:{name:"Сигнал",lead:"значок причины или галочка",ex:"Требует внимания, уведомления, задачи, заметки"},
 };
-for(const [id,l] of Object.entries(L)){l.id=id;l.items.forEach((it,i)=>{it.id=id+i;it.L=id;if(!it.who&&["A","B","C"].includes(l.arch)&&!["suppliers","pos","expenses","team","subs"].includes(id))it.who=it.t;});}
+const MIN_MARGIN=35;
+for(const [id,l] of Object.entries(L)){l.id=id;l.items.forEach((it,i)=>{it.id=id+i;it.L=id;it.f=it.f||{};
+  if(!it.who&&["A","B","C"].includes(l.arch)&&!["suppliers","pos","expenses","team","subs","properties"].includes(id))it.who=it.t;
+  if(it.addrOf)it.f.addr=it.t;
+  if(it.price!=null){it.v=it.price;const m=(it.price-it.cost)/it.price*100;it.margin=m;
+    it.kv=[["Себестоимость",it.cost],["Цена",it.price],["Маржа",m.toFixed(1)+"%",m<MIN_MARGIN?"warn":"ok"]];
+    if(m<MIN_MARGIN&&!it.st)it.st="margin";}
+});}
+
 const TABS=[["home","Сегодня"],["inbox","Продажи"],["plus",""],["users","Клиенты"],["more","Ещё"]];
 const tabOf=id=>["leads","estimates","contracts","invoices"].includes(id)?1:["clients","properties"].includes(id)?3:["attention","notifs"].includes(id)?0:4;
 const GROUP_PH={sales:["leads","estimates","contracts","invoices"],clients:["clients","properties"]};
 const TONE_ORDER={bad:0,warn:1,neutral:2,info:3,ok:4};
-const TONE_GROUP=["Нужно действие","Нужно действие","Черновики","Ждём","Готово"];
+const TONE_GROUP=["Нужно действие","Нужно действие","Черновики и прочее","Ждём","Готово"];
+const DENS={compact:"Компактная",regular:"Обычная",rich:"Подробная"};
 
 /* ================= СОСТОЯНИЕ ================= */
 const S={view:"proto",list:"leads",device:"phone",theme:null,density:"auto",edge:"alert",mode:"data",role:"owner",
  filter:"all",q:"",sel:null,pane:true,selecting:false,picked:new Set(),peopleView:true,sort:null,checked:new Set(["tasks4"]),prev:{}};
-try{const saved=JSON.parse(localStorage.getItem("octo-cards")||"{}");["list","device","density","edge"].forEach(k=>{if(saved[k])S[k]=saved[k]})}catch(e){}
-const save=()=>{try{localStorage.setItem("octo-cards",JSON.stringify({list:S.list,device:S.device,density:S.density,edge:S.edge}))}catch(e){}};
+try{const saved=JSON.parse(localStorage.getItem("octo-cards2")||"{}");["list","device","density","edge"].forEach(k=>{if(saved[k])S[k]=saved[k]})}catch(e){}
+const save=()=>{try{localStorage.setItem("octo-cards2",JSON.stringify({list:S.list,device:S.device,density:S.density,edge:S.edge}))}catch(e){}};
 const sysDark=()=>window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches;
 const curTheme=()=>S.theme||(sysDark()?"dark":"light");
+const noMoney=l=>S.role==="tech"&&l.money;
 
 /* ================= КАРТОЧКА ================= */
 function lead(l,it,d){
@@ -583,50 +619,74 @@ function lead(l,it,d){
 function valHTML(l,it){
   if(it.v==null||it.v==="")return "";
   if(typeof it.v==="string")return `<span class="v">${esc(it.v)}</span>`;
-  if(S.role==="tech"&&l.money)return "";
-  if(it.v===0&&l.id!=="invoices")return "";
-  if(l.id==="invoices"&&it.v===0)return `<span class="v mut">${$(it.total)}</span>`;
+  if(noMoney(l))return "";
+  if(it.v===0&&l.id==="invoices")return `<span class="v mut">${$(it.total)}</span><span class="vl">оплачен</span>`;
+  if(it.v===0)return "";
   const sign=it.sign||"";
-  return `<span class="v ${sign==="+"?"plus":""}">${sign}${$(it.v)}${it.per?`<small> / ${it.per}</small>`:""}</span>`;
+  return `<span class="v ${sign==="+"?"plus":""}">${sign}${$(it.v)}${it.per?`<small> / ${it.per}</small>`:""}</span>${it.vl||l.val?`<span class="vl">${esc(it.vl||l.val)}</span>`:""}`;
 }
 function chipHTML(l,it,soft){
   const s=l.st[it.st];if(!s)return "";
-  const label=l.id==="catalog"||!it.test?s[1]:s[1];
-  return `<span class="chip ${s[0]} ${soft?"soft":""}">${stIc(s[0])}${esc(label)}</span>`;
+  return `<span class="chip ${s[0]} ${soft?"soft":""}">${stIc(s[0])}${esc(s[1])}</span>`;
 }
 function edgeHTML(l,it){
   const s=l.st[it.st];if(!s)return "";const t=s[0];
   const show=S.edge==="all"?t!=="neutral":(t==="warn"||t==="bad");
   return show?`<span class="edge e-${t}"></span>`:"";
 }
-function metaHTML(l,it,idx){
-  const parts=[...it.m];
-  if(S.mode==="offline"&&idx<2)parts.unshift("§Q");
-  if(it.test)parts.push("тестовая цена");
-  return parts.map(p=>p==="§Q"?`<span class="q">${ic("cloud",13)}Не отправлено</span>`:esc(p)).join(" · ");
+/* Факты: каждый на своей строке, переносится, но не больше 3 строк (дальше мягко гаснет, без «…»).
+   Факты постоянной длины (номер документа, телефон, дата, срок, ZIP) ставятся по два в строку. */
+const HALF=new Set(["num","phone","valid","due","stock","hours"]);
+const DOCNUM=/^([A-Z]{2,4}-\d{3,4})(?:\s·\s(.*))?$/;
+function splitNum(it){const m=(it.n||"").match(DOCNUM);return m?{num:m[1],rest:m[2]||""}:{num:"",rest:it.n||""}}
+function factsHTML(l,it,d,idx){
+  const f=Object.assign({},it.f);const sn=splitNum(it);if(sn.num)f.num=sn.num;
+  let keys=(sn.num?["num"]:[]).concat(l.facts.filter(k=>f[k]));
+  if(d==="regular")keys=keys.filter(k=>k!=="desc"&&k!=="note").slice(0,4);
+  const lim=S.device==="phone"?20:30;
+  const half=k=>HALF.has(k)&&String(f[k]).length<=lim;
+  const one=(k,short)=>{const [icn,label]=k==="num"?["doc","Номер"]:F[k];
+    return `<span class="fc"><span class="fi" title="${label}">${ic(icn,16)}</span><span class="ft3">${short?"":`<span class="fl">${label}: </span>`}${esc(f[k])}</span></span>`};
+  const rows=[];const used=new Set();
+  keys.forEach((k,i)=>{if(used.has(k))return;used.add(k);
+    if(half(k)){const mate=keys.find(m=>!used.has(m)&&half(m));
+      if(mate){used.add(mate);rows.push(`<li class="f pair ${k==="desc"?"desc":""}">${one(k,1)}${one(mate,1)}</li>`);return}}
+    rows.push(`<li class="f ${k==="desc"?"desc":""}">${one(k,0)}</li>`)});
+  if(S.mode==="offline"&&idx<2)rows.unshift(`<li class="f"><span class="fc"><span class="fi">${ic("cloud",16)}</span><span class="q">Не отправлено · ждёт сети</span></span></li>`);
+  return rows.length?`<ul class="facts">${rows.join("")}</ul>`:"";
 }
-function footHTML(l,it){
-  const f=it.foot;if(!f)return "";
-  let inner="";
-  if(f.prog){const [a,b]=f.prog;const pct=b?Math.round(a/b*100):0;
-    const txt=f.text||(l.money&&S.role!=="tech"?`Оплачено ${$(a)} из ${$(b)}`:"");
-    inner=`<div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>${txt?`<span>${esc(txt)}</span>`:""}`;}
-  else if(f.text)inner=`<span>${esc(f.text)}</span>`;
-  const act=f.act?`<button class="btn sm" data-act="${it.id}">${esc(f.act)}</button>`:"";
-  if(!inner&&!act)return "";
-  return `<div class="foot"><div class="ft">${inner}</div>${act}</div>`;
+function kvHTML(l,it){
+  if(!it.kv||noMoney(l))return "";
+  return `<dl class="kv">${it.kv.map(([k,v,t])=>`<div><dt>${esc(k)}</dt><dd class="${t?"t-"+t:""}">${typeof v==="number"&&k!=="Работ"&&k!=="Визитов"&&k!=="Позиций"&&k!=="Нарядов"?$(v):esc(v)}</dd></div>`).join("")}</dl>`;
 }
-function card(l,it,d,idx=0,extra=""){
+function progHTML(l,it){
+  const p=it.prog;if(!p)return "";const [a,b,label]=p;const pct=b?Math.round(a/b*100):0;
+  const txt=label||(noMoney(l)?"":`Оплачено ${$(a)} из ${$(b)} · ${pct}%`);
+  return `<div class="prog"><div class="bar" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>${txt?`<span>${esc(txt)}</span>`:""}</div>`;
+}
+function actsHTML(l,it){
+  const f=it.f;const b=[];
+  if(f.phone){b.push(["phone","Позвонить",f.phone]);b.push(["sms","SMS",f.phone])}
+  if(f.addr)b.push(["navigate","Карта и маршрут",f.addr]);
+  if(f.email)b.push(["mail","Email",f.email]);
+  const main=it.act?`<button class="btn" data-act="${it.id}">${esc(it.act)}</button>`:"";
+  if(!b.length&&!main)return "";
+  return `<div class="abar">${b.map(([icn,lbl,val])=>`<button class="btn ic" data-contact="${esc(lbl)}" data-val="${esc(val)}" aria-label="${lbl}: ${esc(val)}" title="${lbl}">${ic(icn,18)}</button>`).join("")}<span class="grow"></span>${main}</div>`;
+}
+function card(l,it,d,idx=0){
   const sel=S.sel===it.id&&S.device==="desktop";
   const picking=S.selecting?`<span class="pick ${S.picked.has(it.id)?"on":""}" aria-hidden="true">${S.picked.has(it.id)?ic("check",14):""}</span>`:"";
   const done=it.done||(it.lead&&it.lead.chk&&S.checked.has(it.id));
-  const foot=d==="rich"?footHTML(l,it):"";
-  const cls=`card ${d} ${foot?"rich":""} ${it.unread?"unread":""} ${done?"done":""}`.replace(" rich rich"," rich");
-  const side=d==="compact"
-    ?`<span class="side">${valHTML(l,it)}</span>`
-    :`<span class="side">${valHTML(l,it)}</span>`;
-  const body=`${edgeHTML(l,it)}${picking||lead(l,it,d)}<span class="main"><span class="t">${esc(it.t)}</span>${d==="compact"?"":`<span class="m">${metaHTML(l,it,idx)}</span>`}${chipHTML(l,it,d==="compact")}</span>${side}${foot}`;
-  const c=`<div class="${d==="rich"&&!foot?cls.replace(" rich",""):cls}" role="button" tabindex="0" data-open="${it.id}" aria-selected="${sel}" aria-label="${esc(it.t)}">${body}</div>`;
+  const tags=(it.tags||[]).map(t=>`<span class="tag">${esc(t)}</span>`).join("");
+  const chips=d==="compact"?chipHTML(l,it,true):chipHTML(l,it)+tags;
+  let body=`${edgeHTML(l,it)}<div class="ch">${picking||lead(l,it,d)}<span class="main"><span class="t">${esc(it.t)}</span>${(d==="compact"?it.n:splitNum(it).rest)?`<span class="n">${esc(d==="compact"?it.n:splitNum(it).rest)}</span>`:""}${d==="compact"&&chips?`<span class="tags" style="margin-top:4px">${chips}</span>`:""}</span><span class="side">${valHTML(l,it)}</span></div>`;
+  if(d!=="compact"){
+    if(chips)body+=`<div class="tags">${chips}</div>`;
+    body+=factsHTML(l,it,d,idx);
+    if(d==="rich")body+=kvHTML(l,it)+progHTML(l,it);
+    body+=actsHTML(l,it);
+  }
+  const c=`<div class="card ${d} ${it.unread?"unread":""} ${done?"done":""}" role="button" tabindex="0" data-open="${it.id}" aria-selected="${sel}" aria-label="${esc(it.t)}">${body}</div>`;
   if(S.device==="phone"&&!S.selecting&&d!=="compact"&&l.swR)
     return `<div class="sw" data-sw="${it.id}"><div class="acts" aria-hidden="true"><span>${ic(l.swR[0],16)}${l.swR[1]}</span><span>${l.swL[1]}${ic(l.swL[0],16)}</span></div>${c}</div>`;
   return c;
@@ -635,21 +695,24 @@ function card(l,it,d,idx=0,extra=""){
 function personCard(who,items){
   const l=L.attention;const worst=items.reduce((a,b)=>TONE_ORDER[l.st[b.st][0]]<TONE_ORDER[l.st[a.st][0]]?b:a);
   const t=l.st[worst.st][0];const sum=items.reduce((s,i)=>s+(typeof i.v==="number"?i.v:0),0);
-  const lines=items.map(i=>{const tt=l.st[i.st][0];return `<div class="reason"><span class="tr-${tt}">${stIc(tt)}</span><span class="rt">${esc(i.t)} <span class="mut">· ${esc(i.m[1]||"")}</span></span>${i.foot&&i.foot.act?`<button class="btn sm" data-act="${i.id}">${i.foot.act}</button>`:""}</div>`}).join("");
+  const f=Object.assign({},...items.map(i=>i.f));
+  const lines=items.map(i=>{const tt=l.st[i.st][0];return `<div class="reason"><span class="tr-${tt}">${stIc(tt,16)}</span><span><b>${esc(i.t)}</b><br><span class="mut">${esc(i.n||"")}${typeof i.v==="number"&&S.role!=="tech"?" · "+$(i.v):""}</span></span>${i.act?`<button class="btn sm" data-act="${i.id}">${esc(i.act)}</button>`:""}</div>`}).join("");
   const n=items.length;
-  return `<div class="card rich" role="button" tabindex="0" data-open="${worst.id}" aria-label="${esc(who)}"><span class="edge e-${t}"></span><span class="av">${ini(who)}</span><span class="main"><span class="t">${esc(who)}</span><span class="m">${n} ${n===1?"причина":n<5?"причины":"причин"}${sum&&S.role!=="tech"?" · "+$(sum):""}</span><span class="chip ${t}">${stIc(t)}${l.st[worst.st][1]}</span></span><span class="side"></span><div class="reasons">${lines}</div></div>`;
+  const facts=["addr","phone"].filter(k=>f[k]).map(k=>`<li class="f"><span class="fc"><span class="fi">${ic(F[k][0],16)}</span><span class="ft3"><span class="fl">${F[k][1]}: </span>${esc(f[k])}</span></span></li>`).join("");
+  const fake={f:{phone:f.phone,addr:f.addr}};
+  return `<div class="card rich" role="button" tabindex="0" data-open="${worst.id}" aria-label="${esc(who)}"><span class="edge e-${t}"></span><div class="ch"><span class="av">${ini(who)}</span><span class="main"><span class="t">${esc(who)}</span><span class="n">${n} ${n===1?"причина":n<5?"причины":"причин"}${sum&&S.role!=="tech"?" · на кону "+$(sum):""}</span></span><span class="side"></span></div><div class="tags"><span class="chip ${t}">${stIc(t)}${l.st[worst.st][1]}</span></div>${facts?`<ul class="facts">${facts}</ul>`:""}<div class="reasons">${lines}</div>${actsHTML(l,fake)}</div>`;
 }
 
 /* ================= ОТБОР, ГРУППЫ ================= */
 function visible(l){
   let it=l.items.slice();
-  if(S.q){const q=S.q.toLowerCase();it=it.filter(i=>(i.t+" "+i.m.join(" ")).toLowerCase().includes(q))}
-  if(S.filter!=="all")it=it.filter(i=>i.st===S.filter||(S.filter==="_none"&&!i.st));
+  if(S.q){const q=S.q.toLowerCase();it=it.filter(i=>(i.t+" "+(i.n||"")+" "+Object.values(i.f).join(" ")).toLowerCase().includes(q))}
+  if(S.filter!=="all")it=it.filter(i=>i.st===S.filter);
   return it;
 }
 function filterChips(l){
-  const counts={};l.items.forEach(i=>{const k=i.st||"_none";counts[k]=(counts[k]||0)+1});
-  const keys=Object.keys(counts).filter(k=>k!=="_none").sort((a,b)=>TONE_ORDER[l.st[a][0]]-TONE_ORDER[l.st[b][0]]);
+  const counts={};l.items.forEach(i=>{if(i.st)counts[i.st]=(counts[i.st]||0)+1});
+  const keys=Object.keys(counts).sort((a,b)=>TONE_ORDER[l.st[a][0]]-TONE_ORDER[l.st[b][0]]);
   const chip=(k,label,n)=>`<button class="fchip" aria-pressed="${S.filter===k}" data-filter="${k}">${label} <b>${n}</b></button>`;
   return `<div class="chips" role="toolbar" aria-label="Отбор">${chip("all","Все",l.items.length)}${keys.map(k=>chip(k,l.st[k][1].replace(/ ·.*$/,""),counts[k])).join("")}</div>`;
 }
@@ -657,25 +720,27 @@ function groups(l,items){
   const mode=l.group||"tone";
   if(mode==="none"||S.sort)return [[null,items]];
   const map=new Map();
-  const key=i=>mode==="alpha"?i.t[0].toUpperCase():mode==="field"?i.g:TONE_GROUP[TONE_ORDER[(l.st[i.st]||["neutral"])[0]]];
-  const sorted=mode==="tone"?items.slice().sort((a,b)=>TONE_ORDER[(l.st[a.st]||["neutral"])[0]]-TONE_ORDER[(l.st[b.st]||["neutral"])[0]]):items;
+  const tone=i=>(l.st[i.st]||["neutral"])[0];
+  const key=i=>mode==="alpha"?i.t[0].toUpperCase():mode==="field"?i.g:TONE_GROUP[TONE_ORDER[tone(i)]];
+  const sorted=mode==="tone"?items.slice().sort((a,b)=>TONE_ORDER[tone(a)]-TONE_ORDER[tone(b)]):items;
   sorted.forEach(i=>{const k=key(i);if(!map.has(k))map.set(k,[]);map.get(k).push(i)});
   return [...map.entries()];
 }
+const signed=i=>typeof i.v==="number"?i.v*(i.sign==="−"?-1:1):0;
 function secHead(l,name,items){
   if(!name)return "";
-  const sum=items.reduce((s,i)=>s+(typeof i.v==="number"?i.v*(i.sign==="−"?-1:1):0),0);
-  const right=l.money&&S.role!=="tech"&&sum?$(sum):items.length;
+  const sum=items.reduce((s,i)=>s+signed(i),0);
+  const right=l.money&&!noMoney(l)&&sum&&l.arch==="B"?$(sum):items.length;
   return `<div class="sec"><span>${esc(name)}</span><span class="num">${right}</span></div>`;
 }
 function totals(l,items){
-  if(!l.money||S.role==="tech"||l.arch!=="B")return "";
-  const sum=items.reduce((s,i)=>s+(typeof i.v==="number"?i.v*(i.sign==="−"?-1:1):0),0);
+  if(!l.money||noMoney(l)||l.arch!=="B")return "";
+  const sum=items.reduce((s,i)=>s+signed(i),0);
   const bad=items.filter(i=>l.st[i.st]&&l.st[i.st][0]==="bad").reduce((s,i)=>s+(typeof i.v==="number"?i.v:0),0);
   return `<div class="totals"><span>Показано ${items.length} · <b class="num">${$(sum)}</b></span>${bad?`<span class="bad">${stIc("bad",13)}Проблемы <span class="num">${$(bad)}</span></span>`:""}</div>`;
 }
 function density(l){
-  if(S.density!=="auto")return S.density==="row"&&S.device!=="desktop"?"regular":S.density;
+  if(S.density!=="auto")return S.density;
   if(S.device==="desktop")return l.id==="attention"?"rich":"row";
   return l.density;
 }
@@ -683,37 +748,37 @@ function density(l){
 /* ================= СОДЕРЖИМОЕ СПИСКА ================= */
 function listBody(l){
   if(S.role==="tech"&&l.techHidden)return emptyHTML("lock","Нет доступа","У роли «мастер» нет денег компании. Попросите директора, если нужно.","");
-  if(S.mode==="loading")return `<div class="list">${Array.from({length:6},()=>`<div class="skel"><i class="c"></i><span style="display:flex;flex-direction:column;gap:8px"><i style="width:70%"></i><i style="width:45%"></i></span><i></i></div>`).join("")}</div>`;
+  if(S.mode==="loading")return `<div class="list">${Array.from({length:4},()=>`<div class="skel"><i class="c"></i><span style="display:flex;flex-direction:column;gap:8px"><i style="width:70%"></i><i style="width:45%"></i><i style="width:85%"></i><i style="width:60%"></i></span><i></i></div>`).join("")}</div>`;
   if(S.mode==="empty")return emptyHTML(l.icon,l.empty[0],l.empty[1],l.cta);
   const items=visible(l);
   if(!items.length)return emptyHTML("search","Ничего не найдено","По этому отбору нет записей.","",true);
   const d=density(l);
-  let html="";
+  const wrap=S.device==="tablet"?"grid2":"list";
   if(l.people&&S.peopleView&&d!=="row"){
     const by=new Map();items.forEach(i=>{const k=i.who||i.t;if(!by.has(k))by.set(k,[]);by.get(k).push(i)});
     const arr=[...by.entries()].sort((a,b)=>b[1].length-a[1].length);
-    html=arr.map(([w,its])=>personCard(w,its)).join("");
-    return `<div class="${S.device==="tablet"?"grid2":"list"}">${html}</div>`;
+    return `<div class="${wrap}">${arr.map(([w,its])=>personCard(w,its)).join("")}</div>`;
   }
   if(d==="row")return rowsHTML(l,items);
-  let idx=0;
+  let html="",idx=0;
   for(const [g,its] of groups(l,items)){html+=secHead(l,g,its)+its.map(i=>card(l,i,d,idx++)).join("")}
-  return totals(l,items)+`<div class="${S.device==="tablet"?"grid2":"list"}">${html}</div>`;
+  return totals(l,items)+`<div class="${wrap}">${html}</div>`;
 }
 function emptyHTML(icon,title,hint,cta,reset){
   return `<div class="empty"><span class="big">${ic(icon,24)}</span><h4>${esc(title)}</h4><p>${esc(hint)}</p>${cta?`<button class="btn acc" data-new>${ic("plus",16)}${esc(cta)}</button>`:""}${reset?`<button class="btn" data-reset>Сбросить отбор</button>`:""}</div>`;
 }
 function rowsHTML(l,items){
-  const nMeta=S.pane&&S.sel?1:Math.max(...l.items.map(i=>i.m.length));
-  const metaCols=l.cols.slice(1,1+nMeta);
-  const showV=l.val&&!(S.role==="tech"&&l.money);
-  const cols=`22px 28px minmax(140px,1.4fr) ${metaCols.map(()=>"minmax(0,1fr)").join(" ")} 170px ${showV?"110px":""}`;
+  const keys=S.pane&&S.sel?l.cols.slice(0,1):l.cols;
+  const showV=items.some(i=>i.v!=null&&i.v!=="")&&!noMoney(l);
+  const cols=`22px 28px minmax(170px,1.2fr) ${keys.map(()=>"minmax(120px,1fr)").join(" ")} ${showV?"110px":""} 64px`;
   let arr=items.slice();
-  if(S.sort){const k=S.sort;arr.sort((a,b)=>k==="v"?((typeof b.v==="number"?b.v:0)-(typeof a.v==="number"?a.v:0)):k==="t"?a.t.localeCompare(b.t):TONE_ORDER[(l.st[a.st]||["neutral"])[0]]-TONE_ORDER[(l.st[b.st]||["neutral"])[0]])}
-  const h=`<div class="rowh" style="--cols:${cols}"><span></span><span></span><button data-sort="t">${l.cols[0]}${ic("sort",12)}</button>${metaCols.map(c=>`<span>${c}</span>`).join("")}<button data-sort="s">Статус${ic("sort",12)}</button>${showV?`<button class="r" data-sort="v">${l.val}${ic("sort",12)}</button>`:""}</div>`;
+  if(S.sort){const k=S.sort;arr.sort((a,b)=>k==="v"?(signed(b)-signed(a)):k==="t"?a.t.localeCompare(b.t):TONE_ORDER[(l.st[a.st]||["neutral"])[0]]-TONE_ORDER[(l.st[b.st]||["neutral"])[0]])}
+  const title=l.arch==="E"?"Что":l.id==="properties"?"Адрес":l.id==="catalog"?"Позиция":["suppliers","pos","subs"].includes(l.id)?"Компания":l.id==="expenses"?"Где":"Клиент";
+  const h=`<div class="rowh" style="--cols:${cols}"><span></span><span></span><button data-sort="t">${title}${ic("sort",12)}</button>${keys.map(k=>`<span>${F[k][1]}</span>`).join("")}${showV?`<button class="r" data-sort="v">${l.val||"Сумма"}${ic("sort",12)}</button>`:""}<span></span></div>`;
   const rows=arr.map((it,idx)=>{
     const picked=S.picked.has(it.id);
-    return `<div class="row" role="button" tabindex="0" style="--cols:${cols}" data-open="${it.id}" aria-selected="${S.sel===it.id}">${edgeHTML(l,it)}<span class="pick ${picked?"on":""}" data-pick="${it.id}" role="checkbox" aria-checked="${picked}" aria-label="Выбрать">${picked?ic("check",14):""}</span><span class="lead">${lead(l,it,"compact")}</span><span class="c tt">${esc(it.t)}</span>${metaCols.map((_,k)=>`<span class="c mm">${k===0&&S.mode==="offline"&&idx<2?`<span class="q" style="color:var(--ink)">${ic("cloud",13)}</span> `:""}${esc(it.m[k]||"—")}</span>`).join("")}<span class="c">${chipHTML(l,it,true)}</span>${showV?`<span class="c r">${valHTML(l,it)}</span>`:""}</div>`}).join("");
+    const quick=[it.f.phone?`<button class="btn ic" data-contact="Позвонить" data-val="${esc(it.f.phone)}" aria-label="Позвонить" title="Позвонить: ${esc(it.f.phone)}">${ic("phone",14)}</button>`:"",it.f.addr?`<button class="btn ic" data-contact="Карта и маршрут" data-val="${esc(it.f.addr)}" aria-label="Карта" title="Карта: ${esc(it.f.addr)}">${ic("navigate",14)}</button>`:""].join("");
+    return `<div class="row" role="button" tabindex="0" style="--cols:${cols}" data-open="${it.id}" aria-selected="${S.sel===it.id}">${edgeHTML(l,it)}<span class="pick ${picked?"on":""}" data-pick="${it.id}" role="checkbox" aria-checked="${picked}" aria-label="Выбрать">${picked?ic("check",14):""}</span><span class="lead">${lead(l,it,"compact")}</span><span class="c tt"><b>${esc(it.t)}</b>${it.n?`<span class="n">${esc(it.n)}</span>`:""}${it.st?`<span class="tags" style="margin-top:4px">${chipHTML(l,it,true)}</span>`:""}</span>${keys.map((k,j)=>`<span class="c mm">${j===0&&S.mode==="offline"&&idx<2?`${ic("cloud",13)} `:""}${esc(it.f[k]||"—")}</span>`).join("")}${showV?`<span class="c r side">${valHTML(l,it)}</span>`:""}<span class="c ra">${quick}</span></div>`}).join("");
   return totals(l,arr)+`<div class="rows">${h}${rows}</div>`;
 }
 
@@ -732,7 +797,7 @@ function header(l,dev){
   if(S.mode==="offline")h+=`<span class="offline">${ic("wifiOff",14)}Без сети · 2 в очереди</span>`;
   if(l.people&&density(l)!=="row")h+=`<div class="inseg" data-anim="pv" style="--n:2;--i:${S.prev.pv??(S.peopleView?0:1)}" data-to="${S.peopleView?0:1}"><button data-pv="1" aria-pressed="${S.peopleView}">Люди</button><button data-pv="0" aria-pressed="${!S.peopleView}">Документы</button></div>`;
   h+=`<label class="field">${ic("search",18)}<input id="q-${dev}" type="search" placeholder="Имя, телефон, адрес, номер" value="${esc(S.q)}" aria-label="Поиск"></label>`;
-  if(!(S.role==="tech"&&l.techHidden)&&S.mode==="data"||S.mode==="offline")h+=filterChips(l);
+  if(!(S.role==="tech"&&l.techHidden)&&(S.mode==="data"||S.mode==="offline"))h+=filterChips(l);
   return h+`</div>`;
 }
 function selbar(l){
@@ -760,14 +825,10 @@ function desktop(l){
   <main class="dmain" id="scroller">${header(l,"desktop")}${listBody(l)}${selbar(l)}</main>${S.pane&&it?pane(L[it.L],it):""}</div><div id="toast"></div></div>`;
 }
 function pane(l,it){
-  const s=l.st[it.st];
   const others=[];if(it.who)for(const x of Object.values(L)){if(x.id==="attention"||x.id==="notifs")continue;x.items.forEach(o=>{if(o!==it&&o.who===it.who&&!(S.role==="tech"&&x.techHidden))others.push([x,o])})}
+  const saved=S.device;
   return `<aside class="dpane" aria-label="Открытая карточка"><div class="dtool"><span class="ver" style="flex:1">${esc(l.name.toUpperCase())}</span><button class="btn ic sm" data-closepane aria-label="Закрыть">${ic("close",16)}</button></div>
-  <h3 class="ttl">${esc(it.t)}</h3>${s?`<span class="chip ${s[0]}">${stIc(s[0])}${esc(s[1])}</span>`:""}
-  ${typeof it.v==="number"&&!(S.role==="tech"&&l.money)?`<span class="big">${it.sign||""}${$(it.v)}</span>`:typeof it.v==="string"?`<span class="big">${esc(it.v)}</span>`:""}
-  <dl class="kv">${l.cols.slice(1).map((c,k)=>it.m[k]?`<dt>${c}</dt><dd>${esc(it.m[k])}</dd>`:"").join("")}</dl>
-  ${it.foot&&it.foot.text?`<p class="mut" style="margin:0">${esc(it.foot.text)}</p>`:""}
-  <div class="dtool">${it.foot&&it.foot.act?`<button class="btn acc" data-act="${it.id}">${esc(it.foot.act)}</button>`:""}<button class="btn">Открыть полностью</button></div>
+  ${card(l,it,"rich")}
   ${others.length?`<div class="sec" style="margin-top:8px"><span>Другое у этого клиента</span><span>${others.length}</span></div><div class="list">${others.map(([x,o])=>`<div style="display:flex;flex-direction:column;gap:2px"><span class="ver">${esc(x.short||x.name)}</span>${card(x,o,"compact")}</div>`).join("")}</div>`:""}
   </aside>`;
 }
@@ -775,47 +836,42 @@ function pane(l,it){
 /* ================= СПЕЦИФИКАЦИЯ ================= */
 function spec(){
   const ex=(id,i,d)=>card(L[id],L[id].items[i],d);
-  const archEx={A:["clients",7],B:["invoices",3],C:["visits",1],D:["catalog",4],E:["tasks",1]};
-  const rows=SECTIONS.flatMap(s=>s.lists.map(id=>{const l=L[id];return `<tr><td><b>${l.name}</b><br><span class="mut">${s.name}</span></td><td>${l.arch} · ${ARCH[l.arch].name}</td><td>${l.cols[0]}</td><td>${l.cols.slice(1).join(" · ")}</td><td>${l.val||"—"}</td><td>${Object.values(l.st).map(([t,w])=>`<span class="chip ${t}">${stIc(t,12)}${esc(w)}</span>`).join("")}</td><td>${{compact:"компактная",regular:"обычная",rich:"подробная"}[l.density]}</td><td>${l.swR?`→ ${l.swR[1]}<br>← ${l.swL[1]}`:"—"}</td><td>${l.group==="alpha"?"по алфавиту":l.group==="field"?"по дате / виду":l.group==="none"?"без групп":"по статусу"}</td></tr>`}));
+  const archEx={A:["clients",7],B:["invoices",0],C:["visits",1],D:["catalog",3],E:["tasks",0]};
+  const rows=SECTIONS.flatMap(s=>s.lists.map(id=>{const l=L[id];const it=l.items[0];
+    return `<tr><td><b>${l.name}</b><br><span class="mut">${s.name}</span></td><td>${l.arch} · ${ARCH[l.arch].name}</td><td>${l.arch==="E"?"что случилось / текст":l.id==="properties"?"полный адрес":l.id==="catalog"?"название позиции":"имя клиента или компании"}<br><span class="mut">${esc(it.n||"")}</span></td><td>${l.facts.map(k=>F[k][1]).join("<br>")}</td><td>${l.items.some(i=>i.kv)?[...new Set(l.items.flatMap(i=>(i.kv||[]).map(k=>k[0])))].join(", "):"—"}</td><td>${Object.values(l.st).map(([t,w])=>`<span class="chip ${t}">${stIc(t,12)}${esc(w)}</span>`).join("")}</td><td>${[...new Set(l.items.flatMap(i=>[i.f.phone?"позвонить, SMS":"",i.f.addr?"карта":"",i.f.email?"email":""]).filter(Boolean))].join(", ")||"—"}</td><td>${DENS[l.density]}</td></tr>`}));
   return `<div class="spec">
-  <section><h2>Главное правило</h2>
-   <p>Любой объект в любом списке — одна карточка <code>ItemCard</code>. Новых компонентов на каждую вкладку не делаем: у карточки один порядок мест и пять «рецептов» (архетипов), которые решают, что положить в каждое место. Новый список в будущем выбирает рецепт и заполняет таблицу ниже. Нового дизайна для этого не нужно.</p></section>
-  <section><h2>Анатомия: места в карточке</h2><div class="anat"><div class="panel"><div class="list">${ex("invoices",3,"rich")}</div></div>
-   <div class="slots"><b>1</b><span><b>Кромка</b> 3 px слева — только у «внимание» и «срочно» (предложение, переключатель «Кромка» сверху).</span>
-   <b>2</b><span><b>Ведущий элемент</b> 36: инициалы, значок документа, блок времени или галочка. Говорит, <i>что это за вещь</i>, без цвета.</span>
-   <b>3</b><span><b>Заголовок</b> 15/600, одна строка: <i>о ком или о чём</i> (клиент, поставщик, позиция), а не номер.</span>
-   <b>4</b><span><b>Строка деталей</b> 13, вторичный цвет, части через « · » в порядке колонок. Обрезается первой.</span>
-   <b>5</b><span><b>Значение справа</b> 15/600, цифры ровными колонками: сумма, время, длительность. Не обрезается.</span>
-   <b>6</b><span><b>Статус-чип</b> 11.5: значок + слово, третьей строкой под деталями, слева. Так длинные слова («Оплачен частично») не спорят с суммой за место. Цвет есть только у чипа и у кромки.</span>
-   <b>7</b><span><b>Подвал</b> (только «подробная»): прогресс оплаты или одна строка и одна кнопка 28. Кнопка не жёлтая: жёлтый на экране один — «＋ Новый».</span></div></div></section>
-  <section><h2>Пять рецептов</h2><div class="archs">${Object.entries(ARCH).map(([k,a])=>`<div class="arch"><header><b>${k} · ${a.name}</b><span>слева: ${a.lead}</span></header><div class="panel"><div class="list">${ex(archEx[k][0],archEx[k][1],"regular")}</div></div><span class="mut">${a.ex}</span></div>`).join("")}</div></section>
-  <section><h2>Плотность</h2><div class="dens">
-   <div class="arch"><header><b>Компактная · 44–52</b><span>шторки выбора, «Другое у клиента», каталог</span></header><div class="panel"><div class="list">${ex("catalog",2,"compact")}${ex("estimates",3,"compact")}</div></div></div>
-   <div class="arch"><header><b>Обычная · 76–84</b><span>все списки на телефоне и планшете</span></header><div class="panel"><div class="list">${ex("estimates",3,"regular")}</div></div></div>
-   <div class="arch"><header><b>Подробная · до 120</b><span>где нужно решение: внимание, лиды, просрочки</span></header><div class="panel"><div class="list">${ex("leads",1,"rich")}</div></div></div>
+  <section><h2>Что изменилось во второй версии</h2><ul>
+   <li><b>Без троеточий.</b> Текст переносится, до 3 строк на факт; длиннее — последняя строка мягко гаснет.</li><li><b>Короткие факты парами:</b> номер документа и телефон, срок и склад — в одну строку. Их длина постоянная, поэтому на 390 они помещаются всегда (проверка: до 20 знаков на телефоне, до 30 на планшете).</li>
+   <li><b>Каждый факт — своя строка</b> со значком и подписью: «Адрес», «Телефон», «Откуда», «Ответственный», «Срок», «Связано». Номер документа — своя строка под именем.</li>
+   <li><b>Кнопки связи на каждой карточке,</b> где есть контакт: позвонить, SMS, карта и маршрут, email. Справа — главное действие карточки («Напомнить», «Назначить дату», «Подписать»).</li>
+   <li><b>Цифры плитками:</b> сумма / оплачено / осталось у счетов и договоров, себестоимость / цена / маржа у каталога, «за год» у поставщиков и субподрядчиков.</li>
+   <li><b>Карточки разного размера.</b> «Подробная» — по умолчанию почти везде. «Обычная» — три главные строки и кнопки (уведомления). «Компактная» — для шторок выбора и «Другое у этого клиента».</li></ul></section>
+  <section><h2>Анатомия карточки</h2><div class="anat"><div class="panel"><div class="list">${ex("invoices",0,"rich")}</div></div>
+   <div class="slots"><b>1</b><span><b>Шапка.</b> Слева значок, инициалы, время или галочка. В центре имя (15/600, переносится), под ним номер и дата (11.5). Справа сумма или время и подпись к ней («к оплате», «договор»).</span>
+   <b>2</b><span><b>Статус и метки.</b> Статус — цветной чип «значок + слово». Метки (направление, «2 объекта», «вариант Better») — серые, без цвета.</span>
+   <b>3</b><span><b>Строки фактов</b> 13: значок 16 под ведущим элементом, подпись серым, текст переносится, но не больше 3 строк — дальше мягко гаснет (полностью — в открытой карточке). Факты постоянной длины — номер документа, телефон, дата, срок, остаток на складе — встают по два в строку, без подписи, по значку. Пустые факты не показываются.</span>
+   <b>4</b><span><b>Цифры</b> — 2–4 плитки. Цвет у цифры только по статусу (просрочено, маржа ниже нормы).</span>
+   <b>5</b><span><b>Прогресс</b> — оплата или визиты.</span>
+   <b>6</b><span><b>Кнопки:</b> круглые 36 (зона 44) по контактам и одна текстовая — главное действие. Жёлтая кнопка на экране одна — «＋».</span>
+   <b>7</b><span><b>Кромка</b> 3 px — только у «внимание» и «срочно».</span></div></div></section>
+  <section><h2>Пять рецептов</h2><div class="archs">${Object.entries(ARCH).map(([k,a])=>`<div class="arch"><header><b>${k} · ${a.name}</b><span>слева: ${a.lead}</span></header><div class="panel"><div class="list">${ex(archEx[k][0],archEx[k][1],"rich")}</div></div><span class="mut">${a.ex}</span></div>`).join("")}</div></section>
+  <section><h2>Три размера одной карточки</h2><div class="dens">
+   <div class="arch"><header><b>Компактная</b><span>шторки выбора, «Другое у клиента»</span></header><div class="panel"><div class="list">${ex("leads",2,"compact")}</div></div></div>
+   <div class="arch"><header><b>Обычная</b><span>3 строки фактов и кнопки</span></header><div class="panel"><div class="list">${ex("leads",2,"regular")}</div></div></div>
+   <div class="arch"><header><b>Подробная</b><span>всё: факты, цифры, заметка</span></header><div class="panel"><div class="list">${ex("leads",2,"rich")}</div></div></div>
   </div>
-  <div class="cols2"><div><h3>Телефон 390</h3><p>Одна колонка, обычная плотность. Свайп вправо — прямое действие (позвонить, напомнить), влево — отложить. Каждое действие свайпа есть и в открытой карточке, свайп только ускоряет.</p></div>
-  <div><h3>Планшет 820</h3><p>Две колонки той же карточки. Заголовки групп — на всю ширину.</p></div>
-  <div><h3>Компьютер 1280</h3><p>Боковое меню · список · открытая карточка справа (как Почта). Карточка рисуется <b>строкой-карточкой</b>: её места становятся колонками, высота 44, каждая строка остаётся отдельной поверхностью. Сортировка по колонкам, выбор нескольких, справа «Другое у этого клиента».</p></div>
-  <div><h3>Роль «мастер»</h3><p>Суммы денег не показываются, а не заменяются нулём. Списки «Счета», «Платежи», «Расходы», «Заказы», «Субподрядчики» закрыты пустым состоянием «Нет доступа».</p></div></div></section>
-  <section><h2>Обвязка любого списка (сверху вниз)</h2><ol>
-   <li>Шапка: заголовок, «?», «Выбрать», «＋» (единственная жёлтая кнопка). Под вкладкой «Продажи» и «Клиенты» — жидкий переключатель подсписков.</li>
-   <li>Плашка «Без сети · N в очереди», если нет сети; у карточки в очереди — «Не отправлено» в строке деталей.</li>
-   <li>Поиск: имя, телефон, адрес, номер документа (EST, INV, RCT, JOB, PO, CLT, LEA).</li>
-   <li>Чипы отбора: «Все · N», затем статусы в порядке «срочно → внимание → черновик → ждём → готово», у каждого число.</li>
-   <li>Итог денежного списка, прилипает при прокрутке: «Показано N · сумма» и отдельно «Проблемы $…». Считается по текущему отбору, в приложении — только через <code>@octo/estimating-engine</code>.</li>
-   <li>Группы. Документы — по статусу («Нужно действие → Черновики → Ждём → Готово»). Визиты и платежи — по дате. Клиенты — по алфавиту. В заголовке группы — число или сумма группы.</li>
-   <li>Состояния: скелет той же высоты при загрузке; «пусто вообще» (с главным действием) и «ничего по отбору» (кнопка «Сбросить отбор») — разные тексты.</li>
-   <li>Выбор нескольких: «Выбрать» на телефоне (нижняя панель меняется на «Выбрано N · действие всем»), галочки в строках на компьютере. Массовое действие — тост «Отменить» на 5 секунд.</li></ol></section>
-  <section><h2>Все списки: какой рецепт и что где</h2><div class="tblw"><table><thead><tr><th>Список</th><th>Рецепт</th><th>Заголовок</th><th>Строка деталей</th><th>Справа</th><th>Статусы (цвет → слово)</th><th>Плотность</th><th>Свайп</th><th>Группы</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
-   <p class="mut">Таблица собрана из тех же данных, что и прототип: новый список добавляется одной записью. Статусы с «7 дн», «12 дн», «через 14 дн» вычисляются из дат и не хранятся в базе. Их нужно внести в <code>docs/15-story-map.md</code> §5 как вычисляемые и покрыть модульными тестами.</p></section>
+  <div class="cols2"><div><h3>Телефон 390</h3><p>Одна колонка, подробные карточки. Сдвиг вбок ускоряет главное действие, но всё то же есть кнопками.</p></div>
+  <div><h3>Планшет 820</h3><p>Две колонки тех же карточек.</p></div>
+  <div><h3>Компьютер 1280</h3><p>Боковое меню · список строками · открытая карточка справа (та же подробная карточка). В строке колонки — те же факты, текст переносится, справа кнопки «позвонить» и «карта».</p></div>
+  <div><h3>Роль «мастер»</h3><p>Сумм и плиток с деньгами нет; денежные списки закрыты «Нет доступа». Контакты и адреса видны.</p></div></div></section>
+  <section><h2>Все списки: что на карточке</h2><div class="tblw"><table><thead><tr><th>Список</th><th>Рецепт</th><th>Шапка<br>(имя / номер)</th><th>Строки фактов</th><th>Цифры</th><th>Статусы</th><th>Кнопки</th><th>Размер</th></tr></thead><tbody>${rows.join("")}</tbody></table></div>
+   <p class="mut">Таблица собрана из тех же данных, что и прототип. Статусы с «N дн» вычисляются из дат и не хранятся в базе; маржа каталога сравнивается с нормой компании (35%, настройка смет).</p></section>
   <section><h2>Решения на ваш выбор</h2><ol class="q-list">
-   <li><span><b>Компьютер: строки-карточки вместо больших карточек.</b> Так в «Документах» помещается втрое больше и работает сортировка. Правило 12 соблюдено: каждая строка — своя поверхность. Сравните: «Плотность → Авто» и «Обычная» на компьютере.</span></li>
-   <li><span><b>Заголовок — клиент, номер документа — в деталях.</b> Люди помнят имена, а не EST-0145. Поиск по номеру остаётся.</span></li>
-   <li><span><b>Цветная кромка только у «внимание» и «срочно».</b> Иначе 30 зелёных «Оплачен» превращаются в шум. Сравните переключателем «Кромка».</span></li>
-   <li><span><b>Свайпы как ускоритель, а не единственный путь.</b> В «Требует внимания» и лидах кнопка видна в подвале карточки.</span></li>
-   <li><span><b>«Требует внимания» по умолчанию в виде «Люди»:</b> одна карточка на клиента со всеми причинами (у Robert Kim их три).</span></li>
-   <li><span><b>Мастер не видит сумм</b> ни в одном списке; в визитах справа у него длительность.</span></li></ol></section>
+   <li><span><b>Подробная карточка по умолчанию</b> почти во всех списках. Список длиннее, зато открывать карточку нужно реже. Уведомления — «обычная».</span></li>
+   <li><span><b>Подписи у фактов</b> («Адрес:», «Ответственный:»). Без них карточка короче, но новичку непонятно, что за строка. Предлагаю оставить.</span></li>
+   <li><span><b>Компьютер — строками с переносом текста</b> и открытой подробной карточкой справа.</span></li>
+   <li><span><b>Каталог:</b> себестоимость включает налог при покупке; маржа ниже нормы компании — оранжевый статус.</span></li>
+   <li><span><b>Мастер не видит денег</b>, но видит адреса, телефоны и кнопки связи.</span></li></ol></section>
   </div>`;
 }
 
@@ -824,7 +880,7 @@ const CTL=[
  ["view","Вид",[["proto","Прототип"],["spec","Спецификация"]]],
  ["device","Устройство",[["phone","Телефон"],["tablet","Планшет"],["desktop","Компьютер"]]],
  ["theme","Тема",[["dark","Тёмная"],["light","Светлая"]]],
- ["density","Плотность",[["auto","Авто"],["compact","Компакт"],["regular","Обычная"],["rich","Подробная"]]],
+ ["density","Размер карточки",[["auto","Авто"],["compact","Компакт"],["regular","Обычная"],["rich","Подробная"]]],
  ["edge","Кромка",[["alert","Только внимание"],["all","Все статусы"]]],
  ["mode","Состояние",[["data","Данные"],["loading","Загрузка"],["empty","Пусто"],["offline","Без сети"]]],
  ["role","Роль",[["owner","Директор"],["tech","Мастер"]]],
@@ -840,27 +896,28 @@ function render(keepScroll){
   const sc=document.getElementById("scroller");const top=keepScroll&&sc?sc.scrollTop:0;
   controls();
   const root=document.getElementById("root");
-  if(S.view==="spec"){root.innerHTML=spec();animSegs();return}
+  if(S.view==="spec"){root.innerHTML=spec();animSegs();clip();return}
   const l=L[S.list];
-  if(S.device==="desktop"&&!S.sel)S.sel=visible(l)[0]?.id||null;
+  if(S.device==="desktop"&&!S.sel&&S.pane)S.sel=visible(l)[0]?.id||null;
   const nav=SECTIONS.map(s=>`<div class="grp"><h3>${s.name}</h3>${s.lists.map(id=>`<button data-go="${id}" aria-current="${id===S.list}">${ic(L[id].icon,16)}${L[id].name}<span class="ar">${L[id].arch}</span></button>`).join("")}</div>`).join("");
   const opts=SECTIONS.map(s=>`<optgroup label="${s.name}">${s.lists.map(id=>`<option value="${id}" ${id===S.list?"selected":""}>${L[id].name}</option>`).join("")}</optgroup>`).join("");
   const devHTML=S.device==="phone"?phone(l):S.device==="tablet"?tablet(l):desktop(l);
   root.innerHTML=`<div class="layout"><nav class="nav" aria-label="Все списки">${nav}</nav><div class="stage">
-   <div class="stagebar"><div class="what"><b>${l.name} · рецепт ${l.arch} «${ARCH[l.arch].name}»</b><small>Нажмите карточку, потяните её вбок на телефоне, попробуйте «Выбрать», отбор и поиск.</small></div>
+   <div class="stagebar"><div class="what"><b>${l.name} · рецепт ${l.arch} «${ARCH[l.arch].name}»</b><small>Кнопки на карточке работают: позвонить, SMS, карта. Попробуйте размер карточки, отбор, поиск, «Выбрать».</small></div>
    <select class="navsel" id="navsel" aria-label="Список">${opts}</select></div>
    <div class="fit" id="fit"><div class="devwrap" id="devwrap">${devHTML}</div></div></div></div>`;
   fit();animSegs();
   const sc2=document.getElementById("scroller");if(sc2&&top)sc2.scrollTop=top;
-  bindSwipe();save();
+  bindSwipe();save();clip();
 }
+function clip(){document.querySelectorAll('.ft3').forEach(e=>e.classList.toggle('clip',e.scrollHeight>e.clientHeight+1))}
 function animSegs(){
   document.querySelectorAll("[data-anim]").forEach(el=>{const k=el.dataset.anim,to=el.dataset.to;S.prev[k]=+to;requestAnimationFrame(()=>requestAnimationFrame(()=>el.style.setProperty("--i",to)))});
 }
 function fit(){
   const f=document.getElementById("fit"),w=document.getElementById("devwrap"),d=document.getElementById("dev");if(!f||!d)return;
   const s=Math.min(1,f.clientWidth/d.offsetWidth);w.style.transform=`scale(${s})`;f.style.height=(d.offsetHeight*s)+"px";
-  if(s<1&&S.device!=="phone")w.style.left="0";else w.style.left=Math.max(0,(f.clientWidth-d.offsetWidth*s)/2)+"px";
+  w.style.left=s<1?"0":Math.max(0,(f.clientWidth-d.offsetWidth*s)/2)+"px";
 }
 addEventListener("resize",fit);
 
@@ -869,12 +926,12 @@ function toast(text,undo){
   const t=document.getElementById("toast");if(!t)return;clearTimeout(toastT);
   t.innerHTML=`<div class="toast" role="status"><span>${esc(text)}</span>${undo?`<button data-undo><svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-opacity=".3" stroke-width="2"/><circle class="ringc" cx="8" cy="8" r="7" fill="none" stroke="currentColor" stroke-width="2" transform="rotate(-90 8 8)"/></svg>Отменить</button>`:""}</div>`;
   toastT=setTimeout(()=>{t.innerHTML=""},undo?5000:2400);
-  if(undo)t.querySelector("[data-undo]").onclick=()=>{undo();t.innerHTML="";};
+  if(undo)t.querySelector("[data-undo]").onclick=e=>{e.stopPropagation();undo();t.innerHTML="";};
 }
 function find(id){for(const l of Object.values(L)){const i=l.items.find(x=>x.id===id);if(i)return [l,i]}return []}
 
 document.addEventListener("click",e=>{
-  const b=e.target.closest("[data-ctl],[data-go],[data-filter],[data-open],[data-act],[data-selmode],[data-bulk],[data-new],[data-reset],[data-pv],[data-sort],[data-closepane],[data-chk],[data-pick]");
+  const b=e.target.closest("[data-ctl],[data-go],[data-filter],[data-contact],[data-act],[data-chk],[data-pick],[data-open],[data-selmode],[data-bulk],[data-new],[data-reset],[data-pv],[data-sort],[data-closepane]");
   if(!b)return;const D=b.dataset;
   if(D.ctl){const k=D.ctl,v=D.v;
     if(k==="theme"){S.theme=v;document.documentElement.setAttribute("data-theme",v)}else S[k]=v;
@@ -882,6 +939,7 @@ document.addEventListener("click",e=>{
     render(k!=="device"&&k!=="view");return}
   if(D.go){S.list=D.go;S.filter="all";S.q="";S.sel=null;S.sort=null;S.selecting=false;S.picked.clear();render();return}
   if(D.filter){S.filter=D.filter;S.sel=null;render(true);return}
+  if(D.contact){e.stopPropagation();toast(`${D.contact}: ${D.val}`);return}
   if(D.reset!==undefined){S.filter="all";S.q="";render();return}
   if(D.pv){S.peopleView=D.pv==="1";render(true);return}
   if(D.sort){S.sort=S.sort===D.sort?null:D.sort;render(true);return}
@@ -891,10 +949,10 @@ document.addEventListener("click",e=>{
   if(D.selmode!==undefined){S.selecting=!S.selecting;S.picked.clear();render(true);return}
   if(D.bulk!==undefined){const n=S.picked.size,l=L[S.list];S.selecting=false;S.picked.clear();render(true);toast(`${l.swR[1]}: ${n} — поставлено в очередь`,()=>toast("Отменено"));return}
   if(D.new!==undefined){toast(`Открылась бы форма «${L[S.list].cta||"Новый"}»`);return}
-  if(D.act){e.stopPropagation();const [l,it]=find(D.act);if(!it)return;toast(`${it.foot.act}: ${it.who||it.t}`,()=>toast("Отменено"));return}
+  if(D.act){e.stopPropagation();const [l,it]=find(D.act);if(!it)return;toast(`${it.act}: ${it.who||it.t}`,()=>toast("Отменено"));return}
   if(D.open){
     if(S.selecting||(S.device==="desktop"&&S.picked.size)){S.picked.has(D.open)?S.picked.delete(D.open):S.picked.add(D.open);render(true);return}
-    if(S.device==="desktop"){S.sel=D.open;S.pane=true;render(true);return}
+    if(S.device==="desktop"){if(e.target.closest(".dpane"))return;S.sel=D.open;S.pane=true;render(true);return}
     const [l,it]=find(D.open);toast(`Открылась бы карточка: ${it.t}`);return}
 });
 document.addEventListener("keydown",e=>{if((e.key==="Enter"||e.key===" ")&&e.target.matches("[data-open]")){e.preventDefault();e.target.click()}});
@@ -916,4 +974,5 @@ function bindSwipe(){
 }
 if(window.matchMedia)matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change",()=>{if(!S.theme)render(true)});
 render();
+
 </script>
