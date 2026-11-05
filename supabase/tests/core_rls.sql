@@ -1910,5 +1910,118 @@ end $$;
 update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003';
 \echo 'T24 link valid until and revoke ok'
 
+-- ---------------------------------------------------------------- T27: direction of the business (docs/specs/11-trade.md, S16)
+\set as_sales_a 'reset role; set request.jwt.claim.sub = ''a0000000-0000-0000-0000-000000000005''; set role authenticated;'
+:as_owner_a
+do $$
+declare v_gut uuid; v_roof uuid; v_lead uuid; v_lead2 uuid; v_e uuid; v_e2 uuid; v_j uuid; v_c uuid := 'c2000000-0000-4000-8000-000000000001';
+  v_p uuid := 'd2000000-0000-4000-8000-000000000001'; v_src uuid;
+begin
+  perform tst.ok((select count(*) from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000') = 0, 'no directions yet');
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  -- one direction: a lead without one gets it
+  insert into public.service_categories (company_id, seed_key) values ('ca000000-0000-0000-0000-000000000000', 'gutters') returning id into v_gut;
+  insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', v_src, 'T27 One', '(818) 555-2701') returning id into v_lead;
+  perform tst.ok((select service_category_id from public.leads where id = v_lead) = v_gut, 'only direction of the company → the lead');
+  -- two directions: a lead stays empty
+  insert into public.service_categories (company_id, name, position) values ('ca000000-0000-0000-0000-000000000000', 'Pressure washing', 1) returning id into v_roof;
+  insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', v_src, 'T27 Two', '(818) 555-2702') returning id into v_lead2;
+  perform tst.ok((select service_category_id from public.leads where id = v_lead2) is null, 'two directions → the lead stays empty');
+  -- estimate of a lead takes the lead's; a set value is never overwritten
+  update public.leads set service_category_id = v_roof where id = v_lead2;
+  insert into public.estimates (company_id, customer_id, property_id, lead_id, title) values ('ca000000-0000-0000-0000-000000000000', v_c, v_p, v_lead2, 'T27 e1') returning id into v_e;
+  perform tst.ok((select service_category_id from public.estimates where id = v_e) = v_roof, 'estimate ← lead');
+  insert into public.estimates (company_id, customer_id, property_id, lead_id, service_category_id, title) values ('ca000000-0000-0000-0000-000000000000', v_c, v_p, v_lead2, v_gut, 'T27 e2') returning id into v_e2;
+  perform tst.ok((select service_category_id from public.estimates where id = v_e2) = v_gut, 'an explicit direction is kept');
+  -- job ← estimate (an app insert like estimate.approve; portal_accept and countersign insert the same way)
+  insert into public.jobs (company_id, title, customer_id, property_id, estimate_id) values ('ca000000-0000-0000-0000-000000000000', 'T27 job', v_c, v_p, v_e) returning id into v_j;
+  perform tst.ok((select service_category_id from public.jobs where id = v_j) = v_roof, 'job ← estimate');
+  -- a change never goes back or forward
+  update public.estimates set service_category_id = v_gut where id = v_e;
+  perform tst.ok((select service_category_id from public.leads where id = v_lead2) = v_roof, 'estimate change does not touch the lead');
+  perform tst.ok((select service_category_id from public.jobs where id = v_j) = v_roof, 'estimate change does not touch the job');
+  -- a second estimate of the same lead takes the lead's again
+  insert into public.estimates (company_id, customer_id, property_id, lead_id, title) values ('ca000000-0000-0000-0000-000000000000', v_c, v_p, v_lead2, 'T27 e3') returning id into v_e2;
+  perform tst.ok((select service_category_id from public.estimates where id = v_e2) = v_roof, 'second estimate of the lead ← the lead again');
+  -- estimate without a lead ← the client's latest estimate or job
+  insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', v_c, v_p, 'T27 e4') returning id into v_e2;
+  perform tst.ok((select service_category_id from public.estimates where id = v_e2) = v_roof, 'estimate without a lead ← client''s latest');
+  -- a job of an estimate "without a direction" gets none
+  insert into public.estimates (company_id, customer_id, property_id, lead_id, title) values ('ca000000-0000-0000-0000-000000000000', v_c, v_p, v_lead, 'T27 e5') returning id into v_e2;
+  update public.estimates set service_category_id = null where id = v_e2;
+  insert into public.jobs (company_id, title, customer_id, property_id, estimate_id) values ('ca000000-0000-0000-0000-000000000000', 'T27 job none', v_c, v_p, v_e2) returning id into v_j;
+  perform tst.ok((select service_category_id from public.jobs where id = v_j) is null, 'estimate without a direction → job without one');
+  -- archive: not chosen anew, stays where it is, a job may still take its estimate's
+  update public.service_categories set archived_at = now() where id = v_roof;
+  perform tst.fails(format($q$update public.leads set service_category_id = %L where id = %L$q$, v_roof, v_lead), 'archived direction is not chosen anew');
+  perform tst.fails(format($q$insert into public.estimates (company_id, customer_id, property_id, service_category_id, title) values ('ca000000-0000-0000-0000-000000000000', %L, %L, %L, 'x')$q$, v_c, v_p, v_roof), 'archived direction not set on a new estimate');
+  update public.leads set contact_name = 'T27 Two (renamed)' where id = v_lead2;
+  perform tst.ok((select service_category_id from public.leads where id = v_lead2) = v_roof, 'archived direction stays on an edited lead');
+  insert into public.estimates (company_id, customer_id, property_id, lead_id, title) values ('ca000000-0000-0000-0000-000000000000', v_c, v_p, v_lead2, 'T27 e6') returning id into v_e2;
+  perform tst.ok((select service_category_id from public.estimates where id = v_e2) = v_roof, 'estimate of the lead keeps the archived direction of its lead');
+  insert into public.jobs (company_id, title, customer_id, property_id, estimate_id, service_category_id) values ('ca000000-0000-0000-0000-000000000000', 'T27 job arch', v_c, v_p, v_e2, v_roof) returning id into v_j;
+  perform tst.ok((select service_category_id from public.jobs where id = v_j) = v_roof, 'the app may send the archived direction of the parent');
+  -- only one active now: a new lead gets it
+  insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', v_src, 'T27 Three', '(818) 555-2703') returning id into v_lead;
+  perform tst.ok((select service_category_id from public.leads where id = v_lead) = v_gut, 'archived ones do not count for "only direction"');
+  -- uniqueness among active ones; renaming keeps the id
+  perform tst.fails($q$insert into public.service_categories (company_id, seed_key) values ('ca000000-0000-0000-0000-000000000000', 'gutters')$q$, 'preset twice');
+  insert into public.service_categories (company_id, name) values ('ca000000-0000-0000-0000-000000000000', ' pressure WASHING ');
+  perform tst.fails(format($q$update public.service_categories set archived_at = null where id = %L$q$, v_roof), 'cannot bring back a duplicate name');
+  update public.service_categories set name = 'Seamless gutters' where id = v_gut;
+  perform tst.ok((select count(*) from public.leads where service_category_id = v_gut) = 2, 'rename keeps the leads on the direction');
+  perform tst.fails($q$insert into public.service_categories (company_id) values ('ca000000-0000-0000-0000-000000000000')$q$, 'neither preset nor name');
+  perform tst.fails($q$insert into public.service_categories (company_id, seed_key) values ('ca000000-0000-0000-0000-000000000000', 'Bad Key')$q$, 'bad preset key');
+  perform tst.fails(format($q$update public.service_categories set seed_key = 'roofing' where id = %L$q$, v_gut), 'preset key never changes');
+  perform tst.fails(format($q$delete from public.service_categories where id = %L$q$, v_gut), 'owner cannot delete a direction');
+end $$;
+:as_super
+select tst.fails($q$delete from public.service_categories where seed_key = 'gutters'$q$, 'no delete even without a user');
+-- a job made by a server function (no user) inherits too
+do $$
+declare v_e uuid; v_j uuid;
+begin
+  select id into v_e from public.estimates where title = 'T27 e4';
+  insert into public.jobs (company_id, title, customer_id, property_id, estimate_id)
+  values ('ca000000-0000-0000-0000-000000000000', 'T27 job server', 'c2000000-0000-4000-8000-000000000001', 'd2000000-0000-4000-8000-000000000001', v_e)
+  returning id into v_j;
+  perform tst.ok((select service_category_id from public.jobs where id = v_j) = (select service_category_id from public.estimates where id = v_e), 'server-made job ← estimate');
+end $$;
+-- another company's direction cannot be used
+:as_owner_b
+insert into public.service_categories (company_id, seed_key) values ('cb000000-0000-0000-0000-000000000000', 'roofing');
+select tst.ok(tst.cnt($q$select 1 from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'other company: none of our directions');
+:as_owner_a
+:as_super
+select id as b_cat from public.service_categories where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1 \gset
+:as_owner_a
+select tst.fails(format($q$update public.leads set service_category_id = %L where contact_name = 'T27 One'$q$, :'b_cat'), 'a direction of another company is refused');
+-- rights: everyone reads, only owner and admin change
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 3, 'tech reads the directions');
+select tst.fails($q$insert into public.service_categories (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'Tech direction')$q$, 'tech cannot add a direction');
+select tst.blocked($q$update public.service_categories set name = 'x' where seed_key = 'gutters'$q$, 'tech cannot rename');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 3, 'office reads the directions');
+select tst.fails($q$insert into public.service_categories (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'Sales direction')$q$, 'office (not admin) cannot add a direction');
+select tst.blocked($q$update public.service_categories set position = 9 where name = 'Seamless gutters'$q$, 'office (not admin) cannot reorder');
+:as_office_a   -- a0…02 was made admin in T7
+update public.service_categories set position = 5 where name = 'Seamless gutters';
+select tst.ok((select position from public.service_categories where name = 'Seamless gutters') = 5, 'admin reorders');
+-- security-check of #83: a name has a limit; nothing crosses companies
+select tst.fails(format($q$insert into public.service_categories (company_id, name) values ('ca000000-0000-0000-0000-000000000000', %L)$q$, repeat('x', 81)), 'name longer than 80 refused');
+:as_owner_a
+select tst.fails($q$insert into public.service_categories (company_id, seed_key) values ('cb000000-0000-0000-0000-000000000000', 'fencing')$q$, 'owner A cannot add a direction to company B');
+select tst.fails(format($q$insert into public.estimates (company_id, customer_id, property_id, service_category_id, title) values ('ca000000-0000-0000-0000-000000000000', 'c2000000-0000-4000-8000-000000000001', 'd2000000-0000-4000-8000-000000000001', %L, 'x')$q$, :'b_cat'), 'estimate with a direction of company B refused');
+select tst.fails(format($q$insert into public.jobs (company_id, title, customer_id, property_id, service_category_id) values ('ca000000-0000-0000-0000-000000000000', 'x', 'c2000000-0000-4000-8000-000000000001', 'd2000000-0000-4000-8000-000000000001', %L)$q$, :'b_cat'), 'job with a direction of company B refused');
+:as_owner_b
+select tst.blocked($q$update public.service_categories set name = 'Stolen' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'owner B cannot rename our directions');
+select tst.blocked($q$update public.service_categories set archived_at = now() where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'owner B cannot archive our directions');
+:as_owner_a
+select tst.ok((select count(*) from public.service_categories where company_id = 'ca000000-0000-0000-0000-000000000000' and (name = 'Stolen' or (archived_at is not null and seed_key = 'gutters'))) = 0, 'our directions untouched by B');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$select 1 from public.service_categories$q$, 'anon cannot read directions');
+\echo 'T27 directions ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

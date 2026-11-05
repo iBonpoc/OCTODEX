@@ -7,7 +7,8 @@
  *   - demo data gets the standard tags; demo clients saved by an older build get their number, tags and people
  *     from the seed (same id), other demo clients the next CLT number (a cloud client is read through peopleOf)
  */
-import { makeSeed, SEED_SOURCES, SEED_TAGS } from "./seed";
+import { fromLegacyTrades } from "@/features/serviceCategories";
+import { makeSeed, SEED_SERVICE_CATEGORIES, SEED_SOURCES, SEED_TAGS } from "./seed";
 import type { Customer, DB } from "./types";
 
 type Legacy = { source?: string; sourceId?: string };
@@ -26,6 +27,7 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     company: d.company ?? null,
     sources,
     tags: Array.isArray(d.tags) && d.tags.length ? d.tags : mode === "demo" ? SEED_TAGS : [],
+    serviceCategories: serviceCategoriesOf(d, mode),
     tasks: Array.isArray(d.tasks) ? d.tasks : [],
     activities: Array.isArray(d.activities) ? d.activities : [],
     leads: (d.leads ?? []).map((l) => (l.sourceId ? l : { ...l, sourceId: sourceIdOf(l as Legacy) })),
@@ -35,6 +37,16 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
       mode,
     ),
   };
+}
+
+/** Directions (docs/specs/11-trade.md): an older phone holds them as text in company.trades — moved once, same rule as
+ *  the migration (demo only); a demo with neither gets the demo set. The cloud cache is refilled from the server. */
+function serviceCategoriesOf(d: DB, mode: "demo" | "cloud") {
+  if (Array.isArray(d.serviceCategories)) return d.serviceCategories;
+  if (mode === "cloud") return [];
+  const old = fromLegacyTrades(d.company?.trades, () => `cat-${Math.random().toString(36).slice(2, 10)}`);
+  if (old.length) return old;
+  return mode === "demo" ? SEED_SERVICE_CATEGORIES : [];
 }
 
 /** Demo only: what newer builds added to the test clients (number CLT-…, tags, several people). */

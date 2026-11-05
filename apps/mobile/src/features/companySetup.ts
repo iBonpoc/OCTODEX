@@ -1,5 +1,5 @@
 /** Company setup steps (wizard after "Create company" + checklist on Today). docs/13 §1–2. */
-import type { Company } from "@/data/types";
+import type { Company, ServiceCategory } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { IconKey } from "@/ui/primitives";
 
@@ -19,7 +19,8 @@ export const stepIcon: Record<SetupStep, IconKey> = {
 export const stepTitle = (s: SetupStep): DictKey => `co.step.${s}` as DictKey;
 export const stepHint = (s: SetupStep): DictKey => `co.hint.${s}` as DictKey;
 
-export function stepDone(c: Company, s: SetupStep): boolean {
+/** `cats` — the company's directions (docs/specs/11-trade.md): the "trades" step is done with at least one active */
+export function stepDone(c: Company, s: SetupStep, cats: ServiceCategory[] = []): boolean {
   switch (s) {
     case "profile":
       return !!c.name.trim() && !!c.legalName?.trim() && !!c.entityType;
@@ -34,16 +35,16 @@ export function stepDone(c: Company, s: SetupStep): boolean {
     case "brand":
       return !!c.brand.logo;
     case "trades":
-      return c.trades.length > 0;
+      return cats.some((x) => !x.archivedAt);
     case "documents":
       return !!(c.payment.zelle || c.payment.checkPayableTo) && c.estimate.validDays > 0;
   }
 }
 
-export function setupProgress(c: Company | null) {
+export function setupProgress(c: Company | null, cats: ServiceCategory[] = []) {
   if (!c) return { done: 0, total: SETUP_STEPS.length, next: null as SetupStep | null };
-  const done = SETUP_STEPS.filter((s) => stepDone(c, s)).length;
-  const next = SETUP_STEPS.find((s) => !stepDone(c, s) && !c.skipped.includes(s)) ?? SETUP_STEPS.find((s) => !stepDone(c, s)) ?? null;
+  const done = SETUP_STEPS.filter((s) => stepDone(c, s, cats)).length;
+  const next = SETUP_STEPS.find((s) => !stepDone(c, s, cats) && !c.skipped.includes(s)) ?? SETUP_STEPS.find((s) => !stepDone(c, s, cats)) ?? null;
   return { done, total: SETUP_STEPS.length, next };
 }
 
