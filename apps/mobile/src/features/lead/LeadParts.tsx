@@ -22,6 +22,7 @@ import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip, TextFie
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ItemCard, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { mailtoHref, smsHref } from "@/features/contactLinks";
 
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 const tel = (p?: string) => (p ?? "").replace(/[^\d+]/g, "");
@@ -56,8 +57,8 @@ export function ContactActions({ l, onCall }: { l: Lead; onCall?: () => void }) 
           else store.touchLead(l.id, "call");
         }}
       />
-      <IconButton icon="sms" label={t("visit.message")} onPress={() => touch("sms", `sms:${tel(l.phone)}`)} />
-      {l.email ? <IconButton icon="mail" label={t("lead.emailTo")} onPress={() => touch("email", `mailto:${l.email}`)} /> : null}
+      <IconButton icon="sms" label={t("visit.message")} onPress={() => touch("sms", smsHref(l.phone) ?? undefined)} />
+      {mailtoHref(l.email) ? <IconButton icon="mail" label={t("lead.emailTo")} onPress={() => touch("email", mailtoHref(l.email) ?? undefined)} /> : null}
       {addr ? <IconButton icon="navigate" label={t("visit.navigate")} onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${encodeURIComponent(addr)}`).catch(() => {})} /> : null}
       {src?.kind === "marketplace" ? (
         <Button label={t("lead.answeredIn", { source: src.name })} icon="send" size="sm" variant="secondary" onPress={() => touch("marketplace")} />

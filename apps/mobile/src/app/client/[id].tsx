@@ -30,6 +30,7 @@ import { Button, ChoiceChips, IconButton, Segmented, StatusChip, TagChip, TextFi
 import { Icon, Press, T } from "@/ui/primitives";
 import { Menu, useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { cleanPhone, mailtoHref, smsHref } from "@/features/contactLinks";
 
 type Tab = "overview" | "properties" | "history" | "documents" | "tasks" | "files";
 const TABS: Tab[] = ["overview", "properties", "history", "documents", "tasks", "files"];
@@ -91,7 +92,8 @@ export default function ClientScreen() {
   const photos = db.visits.filter((v) => jobs.some((j) => j.id === v.jobId)).flatMap((v) => v.photos ?? []);
   const history = clientHistory(db, c.id, role);
   const m = clientMoneyOf(db, c.id);
-  const tel = c.phone.replace(/[^\d+]/g, "");
+  const tel = cleanPhone(c.phone);
+  const mail = mailtoHref(c.email);
   const lateCalls = noLateCallsNow(db, c);
   const nextVisit = db.visits
     .filter((v) => jobs.some((j) => j.id === v.jobId) && isOpenVisit(v) && new Date(v.start).getTime() >= Date.now() - 86_400_000)
@@ -137,7 +139,7 @@ export default function ClientScreen() {
         />
       ))}
       {p.emails.map((e, i) => (
-        <ListRow key={`em${i}`} title={e.address} subtitle={p.emails.length > 1 && e.primary ? t("person.primary") : undefined} left={<Icon name="mail" />} onPress={() => Linking.openURL(`mailto:${e.address}`)} />
+        <ListRow key={`em${i}`} title={e.address} subtitle={p.emails.length > 1 && e.primary ? t("person.primary") : undefined} left={<Icon name="mail" />} onPress={() => { const u = mailtoHref(e.address); if (u) Linking.openURL(u).catch(() => {}); }} />
       ))}
     </>
   );
@@ -415,8 +417,8 @@ export default function ClientScreen() {
 
       <RowView>
         {tel ? <IconButton icon="phone" label={t("client.call")} onPress={() => Linking.openURL(`tel:${tel}`)} /> : null}
-        {tel ? <IconButton icon="sms" label={t("visit.message")} onPress={() => Linking.openURL(`sms:${tel}`)} /> : null}
-        {c.email ? <IconButton icon="mail" label={t("client.email")} onPress={() => Linking.openURL(`mailto:${c.email}`)} /> : null}
+        {tel ? <IconButton icon="sms" label={t("visit.message")} onPress={() => Linking.openURL(smsHref(tel) ?? "").catch(() => {})} /> : null}
+        {mail ? <IconButton icon="mail" label={t("client.email")} onPress={() => Linking.openURL(mail).catch(() => {})} /> : null}
         {props[0] ? (
           <IconButton
             icon="navigate"
