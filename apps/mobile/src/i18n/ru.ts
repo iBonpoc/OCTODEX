@@ -318,6 +318,7 @@ export const ru = {
   "est.sig.draw": "Нарисуйте подпись",
   "est.sig.name": "Имя под подписью",
   "est.sig.jobTitle": "Должность",
+  "est.sig.titleFromProfile": "Должность задаёт владелец или администратор в «Команде»",
   "est.sig.save": "Сохранить подпись",
   "est.sig.done": "Подпись сохранена",
   "est.sig.settingsRow": "Моя подпись для договоров",

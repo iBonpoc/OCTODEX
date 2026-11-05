@@ -52,7 +52,7 @@ export function canManageLink(d: Pick<DB, "members">, userId: ID): boolean {
 export function companySigned(
   d: DB,
   id: ID,
-  by: { userId: ID; signature: string; method: EstimateCountersign["method"] },
+  by: { userId: ID; signature: string; method: EstimateCountersign["method"]; /** typed with the saved signature: used only when the profile has none */ title?: string },
   /** the same ids the server will use (sent with the op): the job and the deposit invoice */
   ids: { jobId: ID; invoiceId: ID },
   now: string,
@@ -61,7 +61,7 @@ export function companySigned(
   const e = d.estimates.find((x) => x.id === id);
   if (!e || e.status !== "awaiting_countersign" || !canCountersign(d, by.userId)) return d;
   const m = d.members.find((x) => x.id === by.userId)!;
-  const countersign: EstimateCountersign = { userId: m.id, signerName: m.name, signerTitle: m.title, his: m.hisNumber, signature: by.signature, at: now, method: by.method };
+  const countersign: EstimateCountersign = { userId: m.id, signerName: m.name, signerTitle: m.title?.trim() || by.title || undefined, his: m.hisNumber, signature: by.signature, at: now, method: by.method };
   const a = e.approval;
   const total = a?.totalCents ?? e.totalCents;
   const deposit = a?.depositCents ?? e.depositCents ?? 0;
@@ -128,6 +128,12 @@ export function reopened(d: DB, id: ID): DB {
   const e = d.estimates.find((x) => x.id === id);
   if (!e || e.status !== "awaiting_countersign") return d;
   return { ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, status: "draft", approval: undefined, signature: undefined } : x)) };
+}
+
+/** E2b-2, security-check #98: title and HIS of an employee — owner and admin (app: director); the server's memberships_update. */
+export function canEditMember(d: Pick<DB, "members">, userId: ID): boolean {
+  const m = d.members.find((x) => x.id === userId);
+  return !!m && m.roles.includes("director");
 }
 
 /** E2b-2: only the owner gives or takes the right to sign (server: tg_membership_sign_guard); demo data: a director. */

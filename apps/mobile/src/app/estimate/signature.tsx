@@ -43,12 +43,22 @@ export default function MySignatureScreen() {
       <Card>
         <View style={{ gap: space[3] }}>
           <TextField type="name" value={name} onChangeText={setName} placeholder={t("est.sig.name")} icon="user" />
-          <TextField type="jobTitle" value={title} onChangeText={setTitle} placeholder={t("est.sig.jobTitle")} />
+          {me?.title ? (
+            // security-check #98: the title on contracts comes from the profile (owner / admin set it in «Команда»)
+            <View>
+              <T v="body">{me.title}</T>
+              <T v="caption" tone="mut">
+                {t("est.sig.titleFromProfile")}
+              </T>
+            </View>
+          ) : (
+            <TextField type="jobTitle" value={title} onChangeText={setTitle} placeholder={t("est.sig.jobTitle")} />
+          )}
           <SignaturePad
             label={t("est.countersign.padLabel")}
             confirmLabel={t("est.sig.save")}
             disabled={name.trim().length < 2}
-            onConfirm={(svg) => toast.show(t("est.sig.done"), store.saveMySignature(svg, name, title))}
+            onConfirm={(svg) => toast.show(t("est.sig.done"), store.saveMySignature(svg, name, me?.title || title))}
           />
         </View>
       </Card>

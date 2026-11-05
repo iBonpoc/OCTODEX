@@ -23,7 +23,7 @@ import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./peop
 import { inheritCategory } from "@/features/serviceCategories";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
-import { canCountersign, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
+import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
 import {
@@ -859,7 +859,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const svg = typeof signature === "string" ? signature : saved!.svg;
         return mutate(
           "estimate.countersign",
-          (d) => companySigned(d, id, { userId: d.me, signature: svg, method: saved ? "saved" : "drawn" }, ids, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined)),
+          (d) => companySigned(d, id, { userId: d.me, signature: svg, method: saved ? "saved" : "drawn", title: saved?.title }, ids, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined)),
           { k: "estimate.countersign", id, svg: saved ? undefined : svg, memberSignatureId: saved?.id, jobId: ids.jobId, invoiceId: ids.invoiceId },
         );
       },
@@ -870,7 +870,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       updateMember: (id, patch) => {
         const d0 = dbRef.current;
-        if (!d0.members.some((m) => m.id === id)) return () => {};
+        // security-check #98: check the role before applying — offline must not show an edit the server refuses
+        if (!d0.members.some((m) => m.id === id) || !canEditMember(d0, d0.me)) return () => {};
         // the right to sign: owner only (the server refuses others too)
         const p = { ...patch, canSignContracts: canGrantSign(d0, d0.me) ? patch.canSignContracts : undefined };
         return mutate(

@@ -2154,4 +2154,56 @@ end $$;
 \echo 'T30 client page answers, two signers ok'
 
 :as_super
+-- ---------------------------------------------------------------- T23, security-check #98 (migration 20261105270000):
+-- the title on the contract is the profile's (owner / admin set it), not the one typed with the employee's own signature
+:as_owner_a
+do $$
+declare e uuid; v uuid; o uuid; k int;
+begin
+  update public.memberships set title = 'Technician'
+   where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+  for k in 3..4 loop
+    insert into public.estimates (company_id, customer_id, property_id, title) values
+      ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'E2b ' || k) returning id into e;
+    insert into public.estimate_versions (company_id, estimate_id, version_no, deposit_rule) values ('ca000000-0000-0000-0000-000000000000', e, 1, '{"kind":"none"}') returning id into v;
+    update public.estimates set current_version_id = v where id = e;
+    insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
+    insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 30000);
+    perform set_config('tst.e2b_' || k, e::text || ',' || o::text || ',' || public.send_estimate(e), false);
+  end loop;
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare k int;
+begin
+  for k in 3..4 loop
+    perform public.portal_accept(split_part(current_setting('tst.e2b_' || k), ',', 3), split_part(current_setting('tst.e2b_' || k), ',', 2)::uuid,
+                                 null, 'Title Client', 'M0 0 L4 4', true);
+  end loop;
+end $$;
+:as_tech_a
+do $$
+declare v_sig uuid; e uuid := split_part(current_setting('tst.e2b_3'), ',', 1)::uuid;
+begin
+  insert into public.member_signatures (company_id, user_id, svg, name, title)
+  values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'M5 5 L6 6', 'Tech A', 'President') returning id into v_sig;
+  perform tst.ok(public.countersign_estimate(e, null, v_sig) = 'approved', 'the tech signs with their saved signature');
+  perform tst.ok((select signer_title from public.estimate_approvals where estimate_id = e and party = 'contractor') = 'Technician',
+                 'the contract shows the profile title, not «President» typed with the signature');
+end $$;
+:as_owner_a
+do $$ begin
+  update public.memberships set title = null
+   where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+end $$;
+:as_tech_a
+do $$
+declare e uuid := split_part(current_setting('tst.e2b_4'), ',', 1)::uuid;
+begin
+  perform tst.ok(public.countersign_estimate(e, null, (select id from public.member_signatures where user_id = 'a0000000-0000-0000-0000-000000000003' and revoked_at is null)) = 'approved', 'signed');
+  perform tst.ok((select signer_title from public.estimate_approvals where estimate_id = e and party = 'contractor') = 'President',
+                 'no title in the profile: the one typed with the signature');
+end $$;
+\echo 'T23 contract title from the profile ok'
+
 \echo 'ALL TESTS PASSED'

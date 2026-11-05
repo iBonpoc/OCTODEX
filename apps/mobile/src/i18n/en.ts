@@ -319,6 +319,7 @@ export const en: Dict = {
   "est.sig.draw": "Draw your signature",
   "est.sig.name": "Name under the signature",
   "est.sig.jobTitle": "Title",
+  "est.sig.titleFromProfile": "Your title is set by the owner or an admin in Team",
   "est.sig.save": "Save signature",
   "est.sig.done": "Signature saved",
   "est.sig.settingsRow": "My signature for contracts",

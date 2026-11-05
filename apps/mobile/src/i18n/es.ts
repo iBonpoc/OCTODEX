@@ -319,6 +319,7 @@ export const es: Dict = {
   "est.sig.draw": "Dibuje su firma",
   "est.sig.name": "Nombre bajo la firma",
   "est.sig.jobTitle": "Cargo",
+  "est.sig.titleFromProfile": "Su cargo lo define el propietario o un administrador en Equipo",
   "est.sig.save": "Guardar firma",
   "est.sig.done": "Firma guardada",
   "est.sig.settingsRow": "Mi firma para contratos",

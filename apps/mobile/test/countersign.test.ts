@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { DB } from "../src/data/types";
-import { canCountersign, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, hisWarning, linkOpen, mySignature, reopened, savedSignature, validUntilFor } from "../src/features/estimateSign";
+import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, hisWarning, linkOpen, mySignature, reopened, savedSignature, validUntilFor } from "../src/features/estimateSign";
 
 const NOW = "2026-11-05T18:00:00.000Z";
 const IDS = { jobId: "job-new", invoiceId: "inv-new" };
@@ -206,5 +206,24 @@ describe("E2b-2: my saved signature, the right to sign", () => {
     const cloud = { ...d, members: d.members.map((m) => ({ ...m, isOwner: m.id === tech.id })) };
     expect(canGrantSign(cloud, dir.id)).toBe(false); // an admin who is not the owner
     expect(canGrantSign(cloud, tech.id)).toBe(true);
+  });
+});
+
+describe("security-check #98: the title on the contract, who edits an employee", () => {
+  it("the profile title wins over the one typed with the saved signature; that one only when the profile has none", () => {
+    const { d, id } = withEstimate();
+    const s1 = sign(d, id);
+    const withTitle = { ...s1, members: s1.members.map((m) => (m.id === s1.me ? { ...m, title: "Technician" } : m)) };
+    const a = companySigned(withTitle, id, { userId: s1.me, signature: "M1 1", method: "saved", title: "President" }, IDS, NOW);
+    expect(a.estimates.find((x) => x.id === id)!.countersign!.signerTitle).toBe("Technician");
+    const noTitle = { ...s1, members: s1.members.map((m) => (m.id === s1.me ? { ...m, title: undefined } : m)) };
+    const b = companySigned(noTitle, id, { userId: s1.me, signature: "M1 1", method: "saved", title: "President" }, IDS, NOW);
+    expect(b.estimates.find((x) => x.id === id)!.countersign!.signerTitle).toBe("President");
+  });
+  it("title and HIS: the director (owner / admin), not a tech or the office (the store checks before applying)", () => {
+    const d = makeSeed();
+    const dir = d.members.find((m) => m.roles.includes("director"))!;
+    expect(canEditMember(d, dir.id)).toBe(true);
+    for (const m of d.members.filter((x) => !x.roles.includes("director"))) expect(canEditMember(d, m.id)).toBe(false);
   });
 });

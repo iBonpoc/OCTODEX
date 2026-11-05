@@ -113,6 +113,9 @@ exports.run = async (h) => {
   await h.go("/settings");
   await h.page.getByRole("button", { name: "Моя подпись для договоров" }).last().click(); await h.page.waitForTimeout(800);
   await h.expectText(/Моя подпись/, "the signature screen");
+  // security-check #98: the title comes from the profile, the employee cannot type another one here
+  await h.expectText(/Должность задаёт владелец/, "title is read-only when the profile has one");
+  h.expect(await h.page.getByPlaceholder(/^Должность$/).count() === 0, "no title field");
   await h.page.getByPlaceholder(/Имя под подписью/).fill("Alex Petrov");
   await draw(h);
   await h.page.getByRole("button", { name: "Сохранить подпись" }).last().click(); await h.page.waitForTimeout(600);
