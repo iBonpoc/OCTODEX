@@ -17,6 +17,7 @@ export const ESTIMATE_MOVES: readonly (readonly [EstimateStatus, EstimateStatus]
   ["sent", "draft"],
   ["awaiting_countersign", "approved"],
   ["awaiting_countersign", "draft"],
+  ["awaiting_countersign", "declined"], // E2b: the company declines after the client signed
   ["approved", "declined"],
 ];
 

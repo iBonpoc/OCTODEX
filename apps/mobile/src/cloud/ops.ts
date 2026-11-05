@@ -145,6 +145,9 @@ export type Op =
   /* ---- wave E2a: the company signs; the client link can be revoked (docs/specs/07 §2.2 А, Б) ---- */
   | { k: "estimate.countersign"; id: string; svg: string; jobId?: string; invoiceId?: string }
   | { k: "estimate.revoke"; id: string }
+  /* ---- wave E2b-1 ---- */
+  | { k: "estimate.decline"; id: string; text: string }
+  | { k: "estimate.reopen"; id: string; reason: string }
   | {
       k: "estimate.deposit";
       id: string;
@@ -565,6 +568,14 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const { error } = await supabase.rpc("countersign_estimate", {
         p_estimate_id: op.id, p_svg: op.svg, p_member_signature_id: null, p_job_id: op.jobId ?? null, p_invoice_id: op.invoiceId ?? null,
       });
+      return run(Promise.resolve({ error }));
+    }
+    case "estimate.decline": {
+      const { error } = await supabase.rpc("decline_countersign", { p_estimate_id: op.id, p_text: op.text });
+      return run(Promise.resolve({ error }));
+    }
+    case "estimate.reopen": {
+      const { error } = await supabase.rpc("reopen_estimate", { p_estimate_id: op.id, p_reason: op.reason || null });
       return run(Promise.resolve({ error }));
     }
     case "estimate.revoke": {

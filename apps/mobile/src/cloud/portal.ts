@@ -97,8 +97,17 @@ function fromRaw(r: Raw): PortalData {
 
 export function localPortal(db: DB, token: string, companyName: string): PortalData | null {
   const e = db.estimates.find((x) => x.token === token);
-  // the same rule as the server (founder 05.11): past "valid until" (unsigned) or revoked → the page does not open
-  return e && linkOpen(e, new Date()) ? portalFromEstimate(db, e, companyName) : null;
+  // the same rule as the server (founder 05.11): revoked → nothing; past "valid until" (unsigned) → only who to call (E2b)
+  if (!e) return null;
+  // the same as the server: a declined estimate shows only who declined and who to call
+  if (e.status === "declined" && linkOpen(e, new Date())) {
+    const p = portalFromEstimate(db, e, companyName);
+    return { ...p, doc: null, title: "", customer: { name: "" }, property: { address: "" }, approval: null, countersign: null, invoices: [] };
+  }
+  if (linkOpen(e, new Date())) return portalFromEstimate(db, e, companyName);
+  if (e.linkRevokedAt) return { ...portalFromEstimate(db, e, companyName), status: "revoked", doc: null, approval: null, countersign: null, invoices: [] };
+  const p = portalFromEstimate(db, e, companyName);
+  return { ...p, status: "expired", doc: null, title: "", customer: { name: "" }, property: { address: "" }, approval: null, countersign: null, invoices: [] };
 }
 
 export function portalFromEstimate(db: DB, e: Estimate, companyName: string): PortalData {

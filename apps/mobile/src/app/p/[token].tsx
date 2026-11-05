@@ -38,13 +38,23 @@ export default function ClientEstimatePage() {
   const data = local ?? remote;
   const back = router.canGoBack() ? () => router.back() : undefined;
 
-  if (!data || !data.doc) {
+  // E2b: past "valid until" the server answers only who to call — in the client's language
+  // …and after the company declined: only who declined and who to call (the server sends nothing else)
+  if (data && (data.status === "expired" || data.status === "declined")) {
+    return (
+      <I18nOverride lang={data.lang}>
+        <ExpiredPage data={data} back={back} />
+      </I18nOverride>
+    );
+  }
+  if (!data || !data.doc || data.status === "revoked") {
     return (
       <Screen title={t("portal.estimate")} back={back}>
         {data === undefined && !error ? (
           <Empty icon="clock" title={t("portal.loading")} />
         ) : (
-          <Empty icon="alert" title={error ? t("portal.error", { msg: error }) : t("portal.notFound")} />
+          // not found or revoked: the token no longer leads anywhere
+          <Empty icon="alert" title={error ? t("portal.error", { msg: error }) : t("est.portal.invalid")} />
         )}
       </Screen>
     );
@@ -140,6 +150,12 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
               <T v="body" tone="mut">
                 {t("portal.thanks", { company: data.company.name || "OCTODEX" })}
               </T>
+              {/* E2b: until the company signs, the client knows where the copy will be */}
+              {data.status === "approved" ? (
+                <StatusChip status="ok" label={t("est.portal.both")} />
+              ) : (
+                <T v="body">{t("est.portal.awaiting", { company: data.company.name || "OCTODEX" })}</T>
+              )}
             </Card>
           ) : null}
           {approved && data.invoices.length ? (
@@ -187,7 +203,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
           {data.company.terms}
         </T>
       ) : null}
-      <Button label={t("portal.pdf")} icon="invoice" variant="secondary" full onPress={pdf} />
+      <Button label={data.status === "approved" ? t("est.portal.downloadSigned") : t("portal.pdf")} icon="invoice" variant="secondary" full onPress={pdf} />
       <SimulatedCheckout
         visible={!!payingInv}
         amountCents={payingInv ? payingInv.totalCents - payingInv.paidCents : 0}
@@ -200,6 +216,21 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
           {data.company.name} · {data.company.phone}
         </T>
       ) : null}
+    </Screen>
+  );
+}
+
+/** E2b: expired before the client signed, or declined by the company — only who to call, nothing of the estimate. */
+function ExpiredPage({ data, back }: { data: PortalData; back?: () => void }) {
+  const { t } = useI18n();
+  const company = data.company.name || "OCTODEX";
+  const declined = data.status === "declined";
+  return (
+    <Screen title={company} back={back}>
+      <Card status={declined ? "bad" : "warn"}>
+        <StatusChip status={declined ? "bad" : "warn"} label={declined ? t("est.portal.declined", { company }) : t("est.portal.expired", { company })} />
+        {data.company.phone ? <T v="body">{data.company.phone}</T> : null}
+      </Card>
     </Screen>
   );
 }

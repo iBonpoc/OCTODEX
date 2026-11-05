@@ -23,7 +23,7 @@ import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./peop
 import { inheritCategory } from "@/features/serviceCategories";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
-import { canCountersign, canManageLink, clientSigned, companySigned, validUntilFor } from "@/features/estimateSign";
+import { canCountersign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
 import {
@@ -169,6 +169,11 @@ interface StoreCtx {
   countersignEstimate: (id: ID, signature: string) => Undo;
   /** director / office: the client link stops working; the next send makes a new one */
   revokeEstimateLink: (id: ID) => Undo;
+  /* ---- wave E2b-1 ---- */
+  /** director / office: decline a client-signed estimate, with the reason (the lead does not change) */
+  declineCountersign: (id: ID, text: string) => Undo;
+  /** director / office: «don't sign — change it» → draft (the client signs the new version again) */
+  reopenEstimate: (id: ID, reason: string) => Undo;
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   readNotices: () => void;
@@ -773,7 +778,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
       },
       sendEstimate: (id, tk) => {
-        const token = dbRef.current.estimates.find((e) => e.id === id)?.token ?? tk ?? newToken();
+        const cur = dbRef.current.estimates.find((e) => e.id === id);
+        // a revoked token never comes back (the server refuses it too and makes its own)
+        const token = (cur?.linkRevokedAt ? undefined : cur?.token) ?? tk ?? newToken();
         return mutate(
           "estimate.send",
           (d) => {
@@ -847,12 +854,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { k: "estimate.countersign", id, svg: signature, jobId: ids.jobId, invoiceId: ids.invoiceId },
         );
       },
+      declineCountersign: (id, text) => {
+        const e = dbRef.current.estimates.find((x) => x.id === id);
+        if (!e || e.status !== "awaiting_countersign" || !text.trim() || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
+        return mutate("estimate.decline", (d) => companyDeclined(d, id, text), { k: "estimate.decline", id, text: text.trim() });
+      },
+      reopenEstimate: (id, reason) => {
+        const e = dbRef.current.estimates.find((x) => x.id === id);
+        if (!e || e.status !== "awaiting_countersign" || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
+        return mutate("estimate.reopen", (d) => reopened(d, id), { k: "estimate.reopen", id, reason: reason.trim() });
+      },
       revokeEstimateLink: (id) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
         // the server allows the director and the office only (revoke_estimate_link)
-        if (!e?.token || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
+        if (!e?.token || e.linkRevokedAt || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
         const now = new Date().toISOString();
-        return mutate("estimate.revoke", (d) => ({ ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, token: undefined, linkRevokedAt: now } : x)) }), {
+        // the phone keeps the old token marked revoked: the page says "not valid" at once, the next send makes a new one
+        return mutate("estimate.revoke", (d) => ({ ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, linkRevokedAt: now } : x)) }), {
           k: "estimate.revoke", id,
         });
       },

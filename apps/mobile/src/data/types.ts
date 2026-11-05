@@ -374,6 +374,8 @@ export interface Estimate {
   validUntil?: string;
   /** the client link was revoked (director / office); the next send makes a new one */
   linkRevokedAt?: string;
+  /** E2b: why the company declined after the client signed (shown in the app, never to the client) */
+  declinedText?: string;
 }
 
 /** Company catalog: services, labor, materials and kits (docs/04-domain-model.md CatalogItem). */
