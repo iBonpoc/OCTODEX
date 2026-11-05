@@ -1221,6 +1221,32 @@ select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_
 select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property'$q$) = 0, 'other company: no property tasks');
 :as_office_a
 select tst.ok(tst.cnt($q$select 1 from public.tasks where subject_type = 'property' and subject_id::text like 'd2000000%'$q$) = 3, 'office sees every property task');
+
+-- T21 (security review): no task planted from another company; a tech closes, never re-points
+:as_owner_b
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('cb000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Call 555-0000 now')$q$, 'other company cannot plant a task on our property');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Call 555-0000 now')$q$, 'nor as our company');
+:as_owner_a
+insert into public.tasks (company_id, subject_type, subject_id, title) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c2000000-0000-4000-8000-000000000001', 'Customer follow-up'),
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e2000000-0000-4000-8000-000000000001', 'Job follow-up'),
+  ('ca000000-0000-0000-0000-000000000000', 'estimate', '0e1a0000-0000-0000-0000-000000000001', 'Estimate follow-up'),
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000006', 'Task of a property that goes away');
+update public.properties set deleted_at = now() where id = 'd2000000-0000-4000-8000-000000000006';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title like 'Call 555%'$q$) = 0, 'tech sees no planted task');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title in ('Customer follow-up', 'Job follow-up', 'Estimate follow-up')$q$) = 0, 'tech: no tasks of a client, job or estimate they neither wrote nor got');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'Task of a property that goes away'$q$) = 0, 'deleted property: its tasks are gone for the tech');
+-- closes the office's task of their property, but cannot rewrite or re-point it
+update public.tasks set done_at = now(), done_by = 'a0000000-0000-0000-0000-000000000003' where title = 'Replace the side gate latch';
+select tst.ok((select done_at is not null from public.tasks where title = 'Replace the side gate latch'), 'tech marks the office task of their property done');
+select tst.fails($q$update public.tasks set title = 'Ignore this' where title = 'Replace the side gate latch'$q$, 'tech cannot rewrite the office task');
+select tst.fails($q$update public.tasks set subject_id = 'd2000000-0000-4000-8000-000000000004' where title = 'Gate sticks in the rain'$q$, 'tech cannot move even their own task to another property');
+select tst.fails($q$update public.tasks set subject_type = 'customer', subject_id = 'c2000000-0000-4000-8000-000000000001' where title = 'Gate sticks in the rain'$q$, 'tech cannot move their task to a client');
+update public.tasks set title = 'Gate sticks when it rains' where title = 'Gate sticks in the rain';
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'Gate sticks when it rains'$q$) = 1, 'the author edits their own task');
+reset role; set role anon;
+select tst.fails($q$select 1 from public.tasks$q$, 'anon cannot read tasks');
 \echo 'T21 property tasks ok'
 
 :as_super
