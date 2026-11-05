@@ -525,13 +525,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "notice.read":
       return run(supabase.from("notifications").update({ read_at: new Date().toISOString() }).in("id", op.ids));
     case "estimate.send": {
-      // a new token after a revoke opens the link again (E2a)
-      if (op.token) await run(supabase.from("estimates").update({ public_token: op.token, link_revoked_at: null }).eq("id", op.id).is("public_token", null));
-      const { data } = await supabase.from("estimates").select("current_version_id, status").eq("id", op.id).maybeSingle();
-      if (!data || data.status !== "draft") return;
-      const now = new Date().toISOString();
-      await run(supabase.from("estimate_versions").update({ locked_at: now, sent_at: now }).eq("id", data.current_version_id));
-      await run(supabase.from("estimates").update({ status: "sent", sent_version_id: data.current_version_id }).eq("id", op.id));
+      // E2a, security-check 05.11: the server locks the version, sets "valid until" and the link token
+      // (it takes the phone's token only if it was never revoked; otherwise makes its own — the next refresh brings it)
+      const { error } = await supabase.rpc("send_estimate", { p_estimate_id: op.id, p_token: op.token ?? null });
+      await run(Promise.resolve({ error }));
       const { data: est } = await supabase.from("estimates").select("lead_id").eq("id", op.id).maybeSingle();
       if (est?.lead_id) {
         await run(

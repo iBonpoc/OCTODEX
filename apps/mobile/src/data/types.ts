@@ -311,6 +311,8 @@ export interface EstimateApproval {
   /** ids the job and the deposit invoice will get when the company signs (offline: the same ids on the phone and the server) */
   jobId?: ID;
   invoiceId?: ID;
+  /** on site: the employee whose device the client signed on (signature record, security-check 05.11) */
+  deviceUserId?: ID;
 }
 
 /* ---------- Company signature on the contract (docs/specs/07 §2.2 А, §3, wave E2a) ---------- */

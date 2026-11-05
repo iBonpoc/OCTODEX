@@ -63,6 +63,21 @@ begin
   end if;
 end $$;
 
+-- fixtures: the client link token as send_estimate would set it (the app cannot set it directly since E2a)
+create function tst.set_expires(p_id uuid, p_date date) returns void language plpgsql security definer set search_path = '' as $$
+begin
+  perform set_config('app.signing_estimate', p_id::text, true);
+  update public.estimates set expires_at = p_date where id = p_id;
+  perform set_config('app.signing_estimate', '', true);
+end;
+$$;
+create function tst.set_token(p_id uuid, p_token text) returns void language plpgsql security definer set search_path = '' as $$
+begin
+  perform set_config('app.signing_estimate', p_id::text, true);
+  update public.estimates set public_token = p_token where id = p_id;
+  perform set_config('app.signing_estimate', '', true);
+end;
+$$;
 grant execute on all functions in schema tst to authenticated, anon;
 
 -- ---- Переключение пользователя (как PostgREST: роль + sub из JWT) -------------
@@ -513,9 +528,10 @@ end $$;
 do $$ begin
   insert into public.catalog_items (company_id, kind, name, unit, unit_price_cents, unit_cost_cents, vendor_tax_bps, markup_bps, is_placeholder_price)
   values ('ca000000-0000-0000-0000-000000000000', 'material', 'Railing bracket (test)', 'ea', 1213, 1000, 1025, 1000, true);
-  insert into public.estimates (id, company_id, number, customer_id, property_id, title, public_token) values
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
     ('0e1a0000-0000-0000-0000-000000000010', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001',
-     'd1a00000-0000-0000-0000-000000000001', 'Handyman visit', 'tok_test_0123456789abcdef');
+     'd1a00000-0000-0000-0000-000000000001', 'Handyman visit');
+  perform tst.set_token('0e1a0000-0000-0000-0000-000000000010', 'tok_test_0123456789abcdef');
   insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, deposit_rule, calc_inputs) values
     ('0e2a0000-0000-0000-0000-000000000010', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000010', 1,
      true, 950, '{"kind":"pct","bps":1000}', '{"options":[]}');
@@ -634,9 +650,10 @@ begin
   insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
     ('d1a00000-0000-0000-0000-000000000077', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000077', '7 Pine St', 'Pasadena');
   update public.leads set customer_id = 'c1a00000-0000-0000-0000-000000000077', property_id = 'd1a00000-0000-0000-0000-000000000077', status = 'estimate_sent' where id = v_lead;
-  insert into public.estimates (id, company_id, number, customer_id, property_id, lead_id, title, public_token) values
+  insert into public.estimates (id, company_id, number, customer_id, property_id, lead_id, title) values
     ('0e1a0000-0000-0000-0000-000000000077', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000077',
-     'd1a00000-0000-0000-0000-000000000077', v_lead, 'From lead', 'tok_lead_0123456789abcdef');
+     'd1a00000-0000-0000-0000-000000000077', v_lead, 'From lead');
+  perform tst.set_token('0e1a0000-0000-0000-0000-000000000077', 'tok_lead_0123456789abcdef');
   insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
     ('0e2a0000-0000-0000-0000-000000000077', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000077', 1, '{"kind":"none"}');
   update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000077' where id = '0e1a0000-0000-0000-0000-000000000077';
@@ -675,9 +692,10 @@ declare v_job uuid; v_inv uuid; v_fin uuid; v_rct text;
 begin
   -- T8 estimate had a 10% deposit: the deposit invoice must exist only if signed after this migration;
   -- sign a fresh estimate with a deposit
-  insert into public.estimates (id, company_id, number, customer_id, property_id, title, public_token) values
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
     ('0e1a0000-0000-0000-0000-000000000088', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001',
-     'd1a00000-0000-0000-0000-000000000001', 'Bathroom', 'tok_inv_0123456789abcdef');
+     'd1a00000-0000-0000-0000-000000000001', 'Bathroom');
+  perform tst.set_token('0e1a0000-0000-0000-0000-000000000088', 'tok_inv_0123456789abcdef');
   insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
     ('0e2a0000-0000-0000-0000-000000000088', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000088', 1, '{"kind":"pct","bps":1000}');
   update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000088' where id = '0e1a0000-0000-0000-0000-000000000088';
@@ -1471,8 +1489,9 @@ begin
   returning id into v_lead;
   select id into v_lp from public.contacts where lead_id = v_lead and customer_id is null and is_primary and deleted_at is null;
   perform tst.ok(v_lp is not null, 'the lead has its main person');
-  insert into public.estimates (company_id, customer_id, property_id, lead_id, title, public_token)
-  values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, v_lead, 'T19 lang', 'tok_lang_0123456789abcdef') returning id into v_e;
+  insert into public.estimates (company_id, customer_id, property_id, lead_id, title)
+  values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, v_lead, 'T19 lang') returning id into v_e;
+  perform tst.set_token(v_e, 'tok_lang_0123456789abcdef');
   update public.companies set doc_language = 'en' where id = 'ca000000-0000-0000-0000-000000000000';
   perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'en', 'nobody has a language: company default');
   update public.companies set doc_language = 'es' where id = 'ca000000-0000-0000-0000-000000000000';
@@ -1520,13 +1539,15 @@ begin
   update public.contacts set deleted_at = now() where id = v_main;
   perform tst.ok(public.portal_estimate('tok_lang_0123456789abcdef') ->> 'doc_language' = 'en', 'deleted main person → the next step (lead''s main person)');
   -- a deleted estimate: nothing
-  insert into public.estimates (company_id, customer_id, property_id, title, public_token)
-  values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T19 deleted', 'tok_lang_deleted_0123456789') returning id into v_e;
+  insert into public.estimates (company_id, customer_id, property_id, title)
+  values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T19 deleted') returning id into v_e;
+  perform tst.set_token(v_e, 'tok_lang_deleted_0123456789');
   update public.estimates set deleted_at = now() where id = v_e;
   perform tst.ok(public.portal_estimate('tok_lang_deleted_0123456789') is null, 'deleted estimate → null');
   -- a sent estimate for the "viewed once" check
-  insert into public.estimates (company_id, customer_id, property_id, title, public_token)
-  values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T19 viewed', 'tok_lang_viewed_0123456789') returning id into v_e;
+  insert into public.estimates (company_id, customer_id, property_id, title)
+  values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T19 viewed') returning id into v_e;
+  perform tst.set_token(v_e, 'tok_lang_viewed_0123456789');
   update public.estimates set status = 'sent' where id = v_e;
 end $$;
 :as_super
@@ -1561,9 +1582,10 @@ begin
   select 'ca000000-0000-0000-0000-000000000000', id, 'Sign Lead', '(818) 555-0723' from public.lead_sources
    where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral' returning id into v_lead;
   update public.leads set status = 'estimate_sent' where id = v_lead;
-  insert into public.estimates (id, company_id, number, customer_id, property_id, lead_id, title, public_token) values
+  insert into public.estimates (id, company_id, number, customer_id, property_id, lead_id, title) values
     ('0e1a0000-0000-0000-0000-000000000023', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001',
-     'd1a00000-0000-0000-0000-000000000001', v_lead, 'Sign test', 'tok_sign_0123456789abcdef');
+     'd1a00000-0000-0000-0000-000000000001', v_lead, 'Sign test');
+  perform tst.set_token('0e1a0000-0000-0000-0000-000000000023', 'tok_sign_0123456789abcdef');
   insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values
     ('0e2a0000-0000-0000-0000-000000000023', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000023', 1, '{"kind":"pct","bps":1000}');
   update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000023' where id = '0e1a0000-0000-0000-0000-000000000023';
@@ -1665,9 +1687,10 @@ do $$
 declare e uuid; v_exp date; v_today date;
 begin
   update public.companies set estimate_settings = estimate_settings || '{"valid_days": 3}' where id = 'ca000000-0000-0000-0000-000000000000';
-  insert into public.estimates (company_id, customer_id, property_id, title, public_token)
-  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T24', 'tok_exp_0123456789abcdef')
+  insert into public.estimates (company_id, customer_id, property_id, title)
+  values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T24')
   returning id into e;
+  perform tst.set_token(e, 'tok_exp_0123456789abcdef');
   update public.estimates set status = 'sent' where id = e;
   select (now() at time zone timezone)::date into v_today from public.companies where id = 'ca000000-0000-0000-0000-000000000000';
   select expires_at into v_exp from public.estimates where id = e;
@@ -1682,8 +1705,8 @@ update public.estimates set status = 'sent' where public_token = 'tok_await_0123
 select set_config('app.signing_estimate', (select id::text from public.estimates where public_token = 'tok_await_0123456789abcd'), false);
 update public.estimates set status = 'awaiting_countersign', expires_at = current_date - 2 where public_token = 'tok_await_0123456789abcd';
 select set_config('app.signing_estimate', '', false);
-update public.estimates set expires_at = current_date - 2 where public_token = 'tok_exp_0123456789abcdef';
-update public.estimates set expires_at = current_date - 2 where id = '0e1a0000-0000-0000-0000-000000000023';
+select tst.set_expires((select id from public.estimates where public_token = 'tok_exp_0123456789abcdef'), current_date - 2);
+select tst.set_expires('0e1a0000-0000-0000-0000-000000000023', current_date - 2);
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin
   perform tst.ok(public.portal_estimate('tok_exp_0123456789abcdef') is null, 'past valid until: the link does not open');
@@ -1691,22 +1714,34 @@ do $$ begin
   perform tst.ok(public.portal_estimate('tok_sign_0123456789abcdef') is not null, 'signed by both: opens always, even past the date');
   perform tst.ok(public.portal_estimate('tok_await_0123456789abcd') is not null, 'signed by the client (awaiting the company): the client keeps the page past the date');
 end $$;
+:as_super
+select set_config('tst.exp_id', (select id::text from public.estimates where public_token = 'tok_exp_0123456789abcdef'), false);
 :as_tech_a
 do $$ begin
-  perform tst.fails($q$select public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023')$q$, 'tech cannot revoke a link');
+  perform tst.fails(format($q$select public.revoke_estimate_link(%L)$q$, current_setting('tst.exp_id')), 'tech cannot revoke a link');
 end $$;
 :as_owner_a
-do $$ begin
-  perform public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023');
-  perform public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023');  -- again: nothing happens
-  perform tst.ok((select public_token is null and link_revoked_at is not null from public.estimates where id = '0e1a0000-0000-0000-0000-000000000023'), 'revoked: token dropped');
-  perform tst.ok((select count(*) from public.activities where subject_id = '0e1a0000-0000-0000-0000-000000000023' and meta ->> 'action' = 'link_revoked') = 1,
-                 'revoke is in the estimate history once');
+do $$
+declare e uuid := current_setting('tst.exp_id')::uuid; v_tok text;
+begin
+  perform tst.fails($q$select public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023')$q$, 'a signed estimate keeps its link (copy promised to the client)');
+  perform tst.fails(format($q$update public.estimates set link_revoked_at = null, expires_at = current_date + 99 where id = %L$q$, e), 'expiry / revoke only through the functions');
+  perform public.revoke_estimate_link(e);
+  perform public.revoke_estimate_link(e);  -- again: nothing happens
+  perform tst.ok((select public_token is null and link_revoked_at is not null from public.estimates where id = e), 'revoked: token dropped');
+  perform tst.ok((select count(*) from public.activities where subject_id = e and meta ->> 'action' = 'link_revoked') = 1, 'revoke is in the estimate history once');
+  -- a phone still holding the old token sends again: the server refuses the revoked token and makes a new one
+  v_tok := public.send_estimate(e, 'tok_exp_0123456789abcdef');
+  perform tst.ok(v_tok is not null and v_tok <> 'tok_exp_0123456789abcdef', 'a revoked token never comes back: the server made a new one');
+  perform tst.ok((select link_revoked_at is null from public.estimates where id = e), 'the new link is open');
+  perform tst.fails(format($q$update public.estimates set public_token = 'tok_exp_0123456789abcdef' where id = %L$q$, e), 'the token cannot be set directly');
 end $$;
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin
-  perform tst.ok(public.portal_estimate('tok_sign_0123456789abcdef') is null, 'revoked link: nothing');
+  perform tst.ok(public.portal_estimate('tok_exp_0123456789abcdef') is null, 'the revoked link: nothing');
+  perform tst.ok(public.portal_estimate('tok_sign_0123456789abcdef') is not null, 'the signed estimate still opens');
   perform tst.fails($q$select public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023')$q$, 'anon cannot revoke');
+  perform tst.fails($q$select public.send_estimate('0e1a0000-0000-0000-0000-000000000023')$q$, 'anon cannot send');
 end $$;
 
 -- T23–T25, security-check 05.11: no forged client signature, no company signature without the client's,
@@ -1729,6 +1764,9 @@ begin
   update public.estimates set status = 'sent', sent_version_id = v, expires_at = current_date - 3 where id = e;
   perform tst.ok(public.sign_estimate_on_site(e, 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign', 'on site: the client signs a quick estimate even past the date');
   perform tst.ok(public.sign_estimate_on_site(e, 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign', 'repeat: nothing doubles');
+  perform tst.fails(format($q$update public.estimates set status = 'sent' where id = %L$q$, e), 'awaiting_countersign -> sent is not allowed (T18)');
+  perform tst.ok((select signer_user_id from public.estimate_approvals where estimate_id = e) = 'a0000000-0000-0000-0000-000000000001',
+                 'on site: the client signature records whose device it was');
   perform tst.ok((select count(*) from public.estimate_approvals where estimate_id = e) = 1, 'one client signature');
   perform tst.ok((select (selection ->> 'total')::bigint from public.estimate_approvals where estimate_id = e) = 15000, 'the server set the total');
   perform public.reopen_estimate(e, 'client asked for a gate');
@@ -1767,6 +1805,68 @@ end $$;
 do $$ begin
   perform tst.fails(format($q$select public.countersign_estimate(%L, 'M0 0 L1 1')$q$, current_setting('tst.no_client')), 'no client signature: the company cannot sign');
 end $$;
+
+-- T25, independent security-check 05.11 — the attack: the client signs $100, the office changes the price and the client,
+-- then signs for the company. Every step must be refused.
+:as_office_a   -- admin since T6
+do $$
+declare e uuid; v uuid; o uuid; li uuid; r jsonb;
+begin
+  insert into public.estimates (company_id, customer_id, property_id, title) values
+    ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'Attack') returning id into e;
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', e, 1) returning id into v;
+  update public.estimates set current_version_id = v where id = e;
+  insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents)
+  values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Small fix', 1, 10000) returning id into li;
+  -- "sent" without locking the version (the old app path): the client must not be able to sign it
+  update public.estimates set status = 'sent' where id = e;
+  perform tst.set_token(e, 'tok_attack_0123456789ab');
+  perform set_config('tst.attack', e::text || ',' || o::text || ',' || li::text || ',' || v::text, false);
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$ begin
+  perform tst.fails(format($q$select public.portal_accept('tok_attack_0123456789ab', %L, null, 'Victim', 'M0 0 L1 1', true)$q$, split_part(current_setting('tst.attack'), ',', 2)),
+                    'a version that was never locked cannot be signed');
+end $$;
+:as_office_a
+do $$
+declare e uuid := split_part(current_setting('tst.attack'), ',', 1)::uuid; v uuid := split_part(current_setting('tst.attack'), ',', 4)::uuid;
+begin
+  -- the proper send locks the version
+  update public.estimates set status = 'draft' where id = e;
+  perform set_config('tst.attack_tok', public.send_estimate(e), false);
+  perform tst.ok((select locked_at is not null from public.estimate_versions where id = v), 'send_estimate locks the version');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$ begin
+  perform public.portal_accept(current_setting('tst.attack_tok'),
+                               split_part(current_setting('tst.attack'), ',', 2)::uuid, null, 'Victim', 'M0 0 L1 1', true);
+end $$;
+:as_office_a
+do $$
+declare e uuid := split_part(current_setting('tst.attack'), ',', 1)::uuid; li uuid := split_part(current_setting('tst.attack'), ',', 3)::uuid;
+        v2 uuid;
+begin
+  perform tst.ok((select status from public.estimates where id = e) = 'awaiting_countersign', 'the client signed $100');
+  perform tst.fails(format($q$update public.estimate_line_items set unit_price_cents = 999900 where id = %L$q$, li), 'the signed line cannot change');
+  perform tst.fails(format($q$update public.estimates set customer_id = 'c1a00000-0000-0000-0000-000000000002' where id = %L$q$, e), 'the signed client cannot change');
+  perform tst.fails(format($q$update public.estimates set property_id = 'd1a00000-0000-0000-0000-000000000002' where id = %L$q$, e), 'the signed property cannot change');
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', e, 2) returning id into v2;
+  perform tst.fails(format($q$update public.estimates set current_version_id = %L, sent_version_id = %L where id = %L$q$, v2, v2, e), 'the signed version cannot be swapped');
+  perform tst.ok(public.countersign_estimate(e, 'M0 0 L3 3') = 'approved', 'the company signs what the client signed');
+  perform tst.ok((select contract_total_cents from public.jobs where estimate_id = e) = 10000, 'the job is the $100 the client signed');
+  perform tst.ok((select customer_id from public.jobs where estimate_id = e) = 'c1a00000-0000-0000-0000-000000000001', 'the job is for the client who signed');
+end $$;
+-- on site only for someone who may sign contracts (the tech's right was given back in T23; take it again)
+:as_owner_a
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003';
+:as_tech_a
+do $$ begin
+  perform tst.fails($q$select public.sign_estimate_on_site(gen_random_uuid(), 'X', 'M0 0')$q$, 'a tech without the right cannot take an on-site signature');
+end $$;
+:as_owner_a
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003';
 \echo 'T24 link valid until and revoke ok'
 
 :as_super

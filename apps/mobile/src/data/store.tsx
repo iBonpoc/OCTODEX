@@ -814,6 +814,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       approveEstimate: (id, a) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
         if (!e?.doc || e.status === "approved" || e.status === "awaiting_countersign") return () => {};
+        // on site the client signs on an employee's device: only someone who may sign contracts (server: the same)
+        if (a.channel === "on_site" && !canCountersign(dbRef.current, dbRef.current.me)) return () => {};
+        if (a.channel === "on_site") a = { ...a, deviceUserId: dbRef.current.me };
         const token = e.token ?? newToken();
         const ids = { jobId: dbRef.current.jobs.find((j) => j.estimateId === id)?.id ?? uid(), invoiceId: uid() };
         const now = new Date().toISOString();
@@ -1024,7 +1027,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mutate("notice.read", (d) => ({ ...d, notices: d.notices.map((n) => ({ ...n, read: true })) }), { k: "notice.read", ids });
       },
       signEstimate: (id, path) =>
-        mutate(
+        !canCountersign(dbRef.current, dbRef.current.me) ? () => {} : mutate(
           "estimate.sign",
           (d) => ({
             ...d,

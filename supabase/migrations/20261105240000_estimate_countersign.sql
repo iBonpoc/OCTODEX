@@ -9,6 +9,11 @@
 -- Security: approved is reachable only inside app.execute_estimate (guard trigger); a contractor signature row only
 -- inside countersign_estimate (insert policy is customer-only); member signatures are append-only, own rows only.
 -- The /p/ page body lives in app.portal_estimate_base (20261105180000): edited here, the public wrapper is untouched.
+-- Named after 20261105220000 (already applied in production; db push takes migrations in order) — lead 05.11.
+-- Independent security-check 05.11 (fixed here): the signed version must be locked and the signed total must still
+-- hold at the company signature; who / what was signed is frozen once the client signed; on-site "client" signature
+-- only by someone who may sign contracts, recorded with their device; the link token is made on the server and a
+-- revoked token never comes back; expiry / revoke / token change only through the functions.
 
 -- ---- 1. Who may sign ------------------------------------------------------------------------
 alter table public.memberships alter column can_sign_contracts set default true;
@@ -119,6 +124,8 @@ alter table public.estimate_approvals add constraint estimate_approvals_member_s
 
 -- ---- 4. Link: valid until, revoke; approved only through execute -----------------------------
 alter table public.estimates add column if not exists link_revoked_at timestamptz;
+-- sha-256 of every revoked token of this estimate: a revoked link never comes back (an old token from a phone's memory)
+alter table public.estimates add column if not exists revoked_token_hashes text[] not null default '{}';
 
 create or replace function app.tg_estimate_send_and_guard()
 returns trigger language plpgsql set search_path = '' as $$
@@ -138,6 +145,23 @@ begin
     raise exception 'only a signature moves an estimate to % (portal_accept / sign_estimate_on_site / countersign_estimate)', new.status
       using errcode = '42501';
   end if;
+  if tg_op = 'UPDATE' and (current_user in ('authenticated', 'anon')
+                           or coalesce(current_setting('app.signing_estimate', true), '') <> new.id::text) then
+    -- what the client signed is frozen: the client, the place, the lead and the versions (security-check 05.11)
+    if old.status in ('awaiting_countersign', 'approved')
+       and (new.customer_id, new.property_id, new.lead_id, new.sent_version_id, new.current_version_id)
+           is distinct from (old.customer_id, old.property_id, old.lead_id, old.sent_version_id, old.current_version_id) then
+      raise exception 'a signed estimate keeps its client, property, lead and versions' using errcode = '42501';
+    end if;
+    -- the link (token, valid until, revoke) changes only through send_estimate / revoke_estimate_link
+    if (new.public_token, new.link_revoked_at, new.revoked_token_hashes) is distinct from (old.public_token, old.link_revoked_at, old.revoked_token_hashes)
+       or (new.expires_at is distinct from old.expires_at and not (new.status = 'sent' and old.status in ('draft', 'expired'))) then
+      raise exception 'the client link changes only through send_estimate / revoke_estimate_link' using errcode = '42501';
+    end if;
+  end if;
+  if tg_op = 'INSERT' and new.public_token is not null and current_user in ('authenticated', 'anon') then
+    raise exception 'the client link is made by send_estimate' using errcode = '42501';
+  end if;
   -- every send of a new version gets a fresh "valid until" (founder: extend = send again with a new date)
   if tg_op = 'UPDATE' and new.status = 'sent' and old.status is distinct from 'sent' and old.status in ('draft', 'expired') then
     select coalesce(nullif(estimate_settings ->> 'valid_days', '')::int, 7), timezone into v_days, v_tz
@@ -147,15 +171,17 @@ begin
   return new;
 end;
 $$;
-drop trigger if exists t25_estimate_send_and_guard on public.estimates;
-create trigger t25_estimate_send_and_guard before insert or update on public.estimates
-  for each row execute function app.tg_estimate_send_and_guard();
-
--- links sent before this migration had no "valid until": they get the default from today (not closed retroactively)
+-- links sent before this migration had no "valid until": they get the default from today (not closed retroactively);
+-- done before the guard below exists (it lets the link change only through the functions)
 update public.estimates e set expires_at = (now() at time zone coalesce(c.timezone, 'America/Los_Angeles'))::date
                                           + greatest(coalesce(nullif(c.estimate_settings ->> 'valid_days', '')::int, 7), 1)
   from public.companies c
  where c.id = e.company_id and e.status in ('sent', 'viewed') and e.expires_at is null;
+drop trigger if exists t25_estimate_send_and_guard on public.estimates;
+create trigger t25_estimate_send_and_guard before insert or update on public.estimates
+  for each row execute function app.tg_estimate_send_and_guard();
+
+
 
 -- the client page and its link are open: not revoked, and (signed by the client or both, or not past "valid until" in the company's day).
 -- The founder's limit is for an UNSIGNED estimate; once the client signed they keep their page.
@@ -227,8 +253,9 @@ begin
     raise exception 'estimate not found' using errcode = 'P0002';
   end if;
   member := app.is_member(e.company_id);
-  if p_channel = 'on_site' and not member then
-    raise exception 'on-site signature requires a company member' using errcode = '42501';
+  if p_channel = 'on_site' and not app.can_sign_contracts(e.company_id) then
+    -- on site the client signs on an employee's device: only someone who may sign contracts (security-check 05.11)
+    raise exception 'on-site signature requires an employee who may sign contracts' using errcode = '42501';
   end if;
   if e.status in ('awaiting_countersign', 'approved') then
     return public.portal_estimate(p_token);              -- repeat (network): no duplicates
@@ -240,7 +267,11 @@ begin
   if not (p_channel = 'on_site' and member) and not app.estimate_link_open(e) then
     raise exception 'the estimate link has expired or was revoked' using errcode = '22023';
   end if;
-  select * into v from public.estimate_versions where id = coalesce(e.sent_version_id, e.current_version_id);
+  -- the client signs only the sent, locked version: its lines can no longer change (security-check 05.11)
+  select * into v from public.estimate_versions where id = e.sent_version_id;
+  if not found or v.locked_at is null then
+    raise exception 'the estimate was not sent (no locked version)' using errcode = '22023';
+  end if;
   select * into o from public.estimate_options where id = p_option_id and version_id = v.id and deleted_at is null;
   if not found then
     raise exception 'option does not belong to the sent version' using errcode = '22023';
@@ -248,13 +279,14 @@ begin
   select * into t from app.estimate_option_totals(v.id, o.id, p_addon_ids);
 
   insert into public.estimate_approvals (company_id, estimate_id, version_id, option_id, decision, signer_name,
-                                         signature_svg, esign_consent, channel, selection, party, document_hash)
+                                         signature_svg, esign_consent, channel, selection, party, document_hash, signer_user_id)
   values (e.company_id, e.id, v.id, o.id, 'approved', trim(p_signer), p_svg, true,
           case when p_channel = 'on_site' then 'on_site' else 'portal' end,
           jsonb_build_object('addon_ids', coalesce(p_addon_ids, '{}'), 'subtotal', t.subtotal, 'discount', t.discount, 'tax', t.tax,
                              'total', t.total, 'deposit', t.deposit,
                              'job_id', case when member then p_job_id end, 'invoice_id', case when member then p_invoice_id end),
-          'customer', encode(sha256(convert_to(coalesce(v.calc_inputs::text, '') || v.id::text, 'UTF8')), 'hex'));
+          'customer', encode(sha256(convert_to(coalesce(v.calc_inputs::text, '') || v.id::text, 'UTF8')), 'hex'),
+          case when p_channel = 'on_site' then auth.uid() end);   -- on site: whose device the client signed on
   perform set_config('app.signing_estimate', e.id::text, true);
   update public.estimates set status = 'awaiting_countersign' where id = e.id;
   perform set_config('app.signing_estimate', '', true);
@@ -286,6 +318,10 @@ begin
   select * into t from app.estimate_option_totals(v.id, o.id,
     coalesce((select array_agg(x::uuid) from jsonb_array_elements_text(coalesce(a.selection -> 'addon_ids', '[]')) x), '{}'));
   total := t.total; dep := t.deposit;
+  -- the price the client signed must still hold (a locked version cannot change; this is the last line of defence)
+  if a.selection ? 'total' and (a.selection ->> 'total')::bigint <> total then
+    raise exception 'the signed total (%) no longer matches the estimate (%)', a.selection ->> 'total', total using errcode = '22023';
+  end if;
 
   perform set_config('app.signing_estimate', e.id::text, true);
   update public.estimates set status = 'approved' where id = e.id;
@@ -366,7 +402,8 @@ begin
   select * into ca from public.estimate_approvals
    where estimate_id = e.id and party = 'customer' and decision = 'approved' order by signed_at desc limit 1;
   -- security-check 05.11: the company signs only what the client signed — the client's signature on the sent version
-  if ca.id is null or ca.version_id is distinct from coalesce(e.sent_version_id, e.current_version_id) then
+  if ca.id is null or e.sent_version_id is null or ca.version_id is distinct from e.sent_version_id
+     or not exists (select 1 from public.estimate_versions where id = e.sent_version_id and locked_at is not null) then
     raise exception 'no client signature on the sent version' using errcode = '22023';
   end if;
 
@@ -395,7 +432,16 @@ begin
   if e.public_token is null then
     return;                                               -- already revoked: nothing to do
   end if;
-  update public.estimates set public_token = null, link_revoked_at = now() where id = e.id;
+  if e.status not in ('sent', 'viewed', 'draft', 'declined', 'expired') then
+    -- the client signed: they were promised their copy on this page (plan audit 05.11)
+    raise exception 'a signed estimate keeps its link' using errcode = '22023';
+  end if;
+  perform set_config('app.signing_estimate', e.id::text, true);
+  update public.estimates
+     set public_token = null, link_revoked_at = now(),
+         revoked_token_hashes = revoked_token_hashes || encode(sha256(convert_to(e.public_token, 'UTF8')), 'hex')
+   where id = e.id;
+  perform set_config('app.signing_estimate', '', true);
   insert into public.activities (company_id, subject_type, subject_id, kind, body, meta)
   values (e.company_id, 'estimate', e.id, 'edited', 'link revoked', jsonb_build_object('action', 'link_revoked'));
 end;
@@ -416,8 +462,9 @@ begin
   if not found or not app.is_staff(e.company_id) and not app.can_read_estimate(e.id) then
     raise exception 'estimate not found' using errcode = 'P0002';
   end if;
-  if not app.is_member(e.company_id) then
-    raise exception 'on-site signature requires a company member' using errcode = '42501';
+  if not app.can_sign_contracts(e.company_id) then
+    -- the client signs on an employee's device: only someone who may sign contracts (security-check 05.11)
+    raise exception 'on-site signature requires an employee who may sign contracts' using errcode = '42501';
   end if;
   if e.status in ('awaiting_countersign', 'approved') then
     return e.status;                                      -- repeat: nothing doubles
@@ -425,14 +472,18 @@ begin
   if e.status not in ('sent', 'viewed') then
     raise exception 'estimate is not open for approval (status %)', e.status using errcode = '22023';
   end if;
-  select * into v from public.estimate_versions where id = coalesce(e.sent_version_id, e.current_version_id);
+  select * into v from public.estimate_versions where id = e.sent_version_id;
+  if not found or v.locked_at is null then
+    raise exception 'the estimate was not sent (no locked version)' using errcode = '22023';
+  end if;
   select * into o from public.estimate_options where version_id = v.id and deleted_at is null order by position, created_at limit 1;
   select * into t from app.estimate_option_totals(v.id, o.id, '{}');
   insert into public.estimate_approvals (company_id, estimate_id, version_id, option_id, decision, signer_name, signature_svg,
-                                         esign_consent, channel, selection, party, document_hash)
+                                         esign_consent, channel, selection, party, document_hash, signer_user_id)
   values (e.company_id, e.id, v.id, o.id, 'approved', trim(p_signer), p_svg, true, 'on_site',
           jsonb_build_object('addon_ids', '[]'::jsonb, 'subtotal', t.subtotal, 'discount', t.discount, 'tax', t.tax, 'total', t.total, 'deposit', t.deposit),
-          'customer', encode(sha256(convert_to(coalesce(v.calc_inputs::text, '') || coalesce(v.id::text, ''), 'UTF8')), 'hex'));
+          'customer', encode(sha256(convert_to(coalesce(v.calc_inputs::text, '') || coalesce(v.id::text, ''), 'UTF8')), 'hex'),
+          auth.uid());                                    -- whose device the client signed on
   perform set_config('app.signing_estimate', e.id::text, true);
   update public.estimates set status = 'awaiting_countersign' where id = e.id;
   perform set_config('app.signing_estimate', '', true);
@@ -467,6 +518,48 @@ end;
 $$;
 revoke all on function public.reopen_estimate(uuid, text) from public, anon;
 grant execute on function public.reopen_estimate(uuid, text) to authenticated;
+
+-- ---- 9c. Send: lock the version, open the link (security-check 05.11) ---------------------------------------
+-- The phone may propose its own token (offline: the SMS with the link went out before the sync), but the server
+-- takes it only if this estimate never had it revoked and it is long enough; otherwise it makes one itself.
+-- Returns the token in force. The lead moves to estimate_sent in the app's op (leads are the leads chat's).
+create or replace function public.send_estimate(p_estimate_id uuid, p_token text default null)
+returns text language plpgsql security definer set search_path = '' as $$
+declare e public.estimates; v_token text;
+begin
+  select * into e from public.estimates where id = p_estimate_id and deleted_at is null for update;
+  if not found or not app.is_staff(e.company_id) or not app.can_edit_estimate(e.id) then
+    raise exception 'only the office or the director sends an estimate' using errcode = '42501';
+  end if;
+  if e.status not in ('draft', 'sent', 'viewed') then
+    return e.public_token;                                -- signed or closed: nothing to send, keep the link
+  end if;
+  perform set_config('app.signing_estimate', e.id::text, true);
+  if e.status = 'draft' then
+    if e.current_version_id is null then
+      raise exception 'nothing to send: the estimate has no version' using errcode = '22023';
+    end if;
+    update public.estimate_versions set locked_at = coalesce(locked_at, now()), sent_at = coalesce(sent_at, now())
+     where id = e.current_version_id;
+    update public.estimates set status = 'sent', sent_version_id = e.current_version_id where id = e.id;
+  end if;
+  v_token := e.public_token;
+  if v_token is null then
+    if p_token is not null and length(p_token) >= 20 and p_token ~ '^[A-Za-z0-9_-]+$'
+       and not (encode(sha256(convert_to(p_token, 'UTF8')), 'hex') = any (e.revoked_token_hashes))
+       and not exists (select 1 from public.estimates where public_token = p_token) then
+      v_token := p_token;
+    else
+      v_token := encode(extensions.gen_random_bytes(24), 'hex');
+    end if;
+    update public.estimates set public_token = v_token, link_revoked_at = null where id = e.id;
+  end if;
+  perform set_config('app.signing_estimate', '', true);
+  return v_token;
+end;
+$$;
+revoke all on function public.send_estimate(uuid, text) from public, anon;
+grant execute on function public.send_estimate(uuid, text) to authenticated;
 
 -- ---- 10. The client page: expired / revoked → nothing; valid until, client contacts, company signature ----
 create or replace function app.portal_estimate_base(p_token text)
@@ -535,7 +628,10 @@ begin
                    from public.properties p where p.id = e.property_id),
     'approval', case when a.id is null then null else jsonb_build_object(
                   'option_id', a.option_id, 'signer_name', a.signer_name, 'signed_at', a.signed_at,
-                  'signature_svg', a.signature_svg, 'selection', a.selection - 'job_id' - 'invoice_id') end,
+                  'signature_svg', a.signature_svg, 'selection', a.selection - 'job_id' - 'invoice_id',
+                  'channel', a.channel,
+                  -- on site: the employee whose device the client signed on (signature record, security-check 05.11)
+                  'device_user', (select u.full_name from public.users u where u.id = a.signer_user_id)) end,
     'countersign', case when ca.id is null then null else jsonb_build_object(
                   'signer_name', ca.signer_name, 'signer_title', ca.signer_title, 'his', ca.signer_his,
                   'signed_at', ca.signed_at, 'signature_svg', ca.signature_svg) end,

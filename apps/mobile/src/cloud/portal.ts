@@ -32,7 +32,7 @@ export interface PortalData {
   };
   customer: { name: string; phone?: string; email?: string };
   property: { address: string; city?: string };
-  approval: { optionId: string; addonIds: string[]; signerName: string; signedAt: string; signature?: string; totalCents?: number; depositCents?: number } | null;
+  approval: { optionId: string; addonIds: string[]; signerName: string; signedAt: string; signature?: string; totalCents?: number; depositCents?: number; channel?: "on_site" | "portal"; deviceUser?: string } | null;
   depositPaid: boolean;
   /** issued invoices of the job (client pays them on this page) */
   invoices: { id: string; number?: string; title?: string; kind: string; totalCents: number; paidCents: number; dueDate?: string }[];
@@ -53,7 +53,7 @@ type Raw = {
     contacts?: { name: string; title?: string; phone?: string; email?: string }[];
   };
   customer?: { name?: string; phone?: string | null; email?: string | null }; property?: { address?: string; city?: string; state?: string; zip?: string };
-  approval?: { option_id: string; signer_name: string; signed_at: string; signature_svg?: string; selection?: { addon_ids?: string[]; total?: number; deposit?: number } } | null;
+  approval?: { option_id: string; signer_name: string; signed_at: string; signature_svg?: string; selection?: { addon_ids?: string[]; total?: number; deposit?: number }; channel?: string; device_user?: string | null } | null;
   deposit_paid?: boolean;
   invoices?: { id: string; number?: string; title?: string; kind: string; total: number; paid: number; due_date?: string }[];
   doc_language?: string;
@@ -86,6 +86,7 @@ function fromRaw(r: Raw): PortalData {
       ? {
           optionId: r.approval.option_id, addonIds: r.approval.selection?.addon_ids ?? [], signerName: r.approval.signer_name,
           signedAt: r.approval.signed_at, signature: r.approval.signature_svg, totalCents: r.approval.selection?.total, depositCents: r.approval.selection?.deposit,
+          channel: r.approval.channel === "on_site" ? "on_site" : "portal", deviceUser: r.approval.device_user ?? undefined,
         }
       : null,
     depositPaid: !!r.deposit_paid,
@@ -119,7 +120,10 @@ export function portalFromEstimate(db: DB, e: Estimate, companyName: string): Po
       : null,
     property: { address: prop?.address ?? "", city: prop?.city },
     approval: e.approval
-      ? { optionId: e.approval.optionId, addonIds: e.approval.addonIds, signerName: e.approval.signerName, signedAt: e.approval.at, signature: e.approval.signature, totalCents: e.approval.totalCents, depositCents: e.approval.depositCents }
+      ? {
+          optionId: e.approval.optionId, addonIds: e.approval.addonIds, signerName: e.approval.signerName, signedAt: e.approval.at, signature: e.approval.signature, totalCents: e.approval.totalCents, depositCents: e.approval.depositCents,
+          channel: e.approval.channel, deviceUser: db.members.find((m) => m.id === e.approval!.deviceUserId)?.name,
+        }
       : null,
     depositPaid: !!e.depositPaidAt,
     lang: docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }),

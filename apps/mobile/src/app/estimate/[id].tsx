@@ -208,16 +208,24 @@ function OnSiteSign({ e }: { e: Estimate }) {
     <>
       <EstimateView doc={doc} optionId={optionId} onOption={setOptionId} addonIds={addonIds} onAddons={setAddonIds} />
       <SectionTitle title={t("est.signOnSite")} />
-      <Card>
-        <SignBlock
-          defaultName={customer?.name ?? ""}
-          onSign={(name, svg) => {
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-            const undo = store.approveEstimate(e.id, { optionId, addonIds, signerName: name, signature: svg, channel: "on_site" });
-            toast.show(store.online ? t("est.signedToast", { name }) : t("offline.queued"), undo);
-          }}
-        />
-      </Card>
+      {!canCountersign(store.db, store.db.me) ? (
+        <Card>
+          <T v="body" tone="mut">
+            {t("est.countersign.noRightOnSite")}
+          </T>
+        </Card>
+      ) : (
+        <Card>
+          <SignBlock
+            defaultName={customer?.name ?? ""}
+            onSign={(name, svg) => {
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+              const undo = store.approveEstimate(e.id, { optionId, addonIds, signerName: name, signature: svg, channel: "on_site" });
+              toast.show(store.online ? t("est.signedToast", { name }) : t("offline.queued"), undo);
+            }}
+          />
+        </Card>
+      )}
     </>
   );
 }
@@ -306,7 +314,13 @@ function LegacyBody({ e }: { e: Estimate }) {
           </T>
         )}
       </Card>
-      {e.status === "draft" || e.status === "sent" ? (
+      {(e.status === "draft" || e.status === "sent") && !canCountersign(store.db, store.db.me) ? (
+        <Card>
+          <T v="body" tone="mut">
+            {t("est.countersign.noRightOnSite")}
+          </T>
+        </Card>
+      ) : e.status === "draft" || e.status === "sent" ? (
         <>
           <SectionTitle title={t("est.signOnSite")} />
           <Card>

@@ -1,6 +1,6 @@
 /**
  * Signing an estimate, as pure functions over the data (docs/specs/07 §2.2 А, §4; story map S8 / S8b).
- * The store calls these; the server does the same in portal_accept / countersign_estimate (migration 20261105210000).
+ * The store calls these; the server does the same in portal_accept / countersign_estimate (migration 20261105240000).
  *
  *   S8  the client signs (page or on site)  → awaiting_countersign; no job, no invoice, the lead is not won yet.
  *   S8b an employee signs for the company   → approved; lead won, client active, job "waiting for a date", deposit invoice.
