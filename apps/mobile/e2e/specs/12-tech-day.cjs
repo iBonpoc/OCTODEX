@@ -1,3 +1,4 @@
+const { expectOneAccent } = require("../accent.cjs");
 /** Technician day: summary → open next visit → en route → on site → photo (view, delete, undo) → own checklist item → all checked → sign → pay → progress grows. */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
@@ -6,6 +7,7 @@ exports.run = async (h) => {
   await h.go("/today");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/visits");
+  await expectOneAccent(h, "Visits (tech)");
   let db = await h.db();
   const mine = db.visits.filter((v) => v.techId === db.me && new Date(v.start).toDateString() === new Date().toDateString());
   h.expect(mine.length > 0, "tech has visits today");

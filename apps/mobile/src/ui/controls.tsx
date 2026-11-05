@@ -239,7 +239,8 @@ export function Segmented<K extends string>({
     >
       {ready ? (
         <Animated.View
-          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill, backgroundColor: c.acc }, pill]}
+          // selected: ink frame on a raised surface — yellow is kept for the one main action (rule 2, unslop 05.11 №1)
+          style={[{ position: "absolute", top: pad, bottom: pad, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.ink }, pill]}
         />
       ) : null}
       {items.map((it) => {
@@ -260,10 +261,12 @@ export function Segmented<K extends string>({
               paddingHorizontal: space[3],
               justifyContent: "center",
               borderRadius: radius.pill,
-              backgroundColor: !ready && sel ? c.acc : "transparent",
+              backgroundColor: !ready && sel ? c.surf2 : "transparent",
+              borderWidth: !ready && sel ? 1 : 0,
+              borderColor: c.ink,
             }}
           >
-            <T v="button" style={{ color: sel ? c.onAcc : c.ink }} numberOfLines={1}>
+            <T v="button" w={sel ? "bold" : undefined} style={{ color: c.ink }} numberOfLines={1}>
               {it.label}
             </T>
           </Press>
@@ -331,6 +334,37 @@ export function Avatar({ initials, s = component.avatar.md, sub }: { initials: s
       <T v={s < 32 ? "micro" : "caption"} w="semibold">
         {initials}
       </T>
+    </View>
+  );
+}
+
+/* ---------- MetaTag: a neutral count or fact (not a status — rule 2); its own icon (spec 06 §0a) ---------- */
+export function MetaTag({ label, icon }: { label: string; icon?: IconKey }) {
+  const { c } = useTheme();
+  return (
+    <View style={{ flexDirection: "row", alignItems: "center", gap: space[1], height: component.chip.h, paddingHorizontal: component.chip.px, borderRadius: radius.chip, borderWidth: component.hairline, borderColor: c.bd }}>
+      {icon ? <Icon name={icon} s={sizes.iconXs} color={c.mut} /> : null}
+      <T v="caption" w="medium" style={{ color: icon ? c.ink : c.mut }}>
+        {label}
+      </T>
+    </View>
+  );
+}
+
+/* ---------- ProgressBar: "5 of 8" as a thin bar, not a colored chip ---------- */
+export function ProgressBar({ value, max, label }: { value: number; max: number; label?: string }) {
+  const { c } = useTheme();
+  const pct = max ? Math.min(100, (value / max) * 100) : 0;
+  return (
+    <View style={{ gap: space[1] }} accessibilityRole="progressbar" accessibilityValue={{ min: 0, max, now: value }}>
+      <View style={{ height: component.stepBar, borderRadius: radius.pill, backgroundColor: c.track, overflow: "hidden" }}>
+        <View style={{ width: `${pct}%`, height: "100%", backgroundColor: c.status.ok.fill }} />
+      </View>
+      {label ? (
+        <T v="caption" tone="mut">
+          {label}
+        </T>
+      ) : null}
     </View>
   );
 }
