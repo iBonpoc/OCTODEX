@@ -139,7 +139,11 @@ export default function VisitScreen() {
             onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "before", uri))}
             onRemove={removePhoto}
           />
-          {v.step === "on_site" ? (
+          {v.step === "on_site" && v.kind === "inspection" ? (
+            // an inspection ends on site with "Done": no work, signature or payment (S10, docs/specs/03 §4.1)
+            <Button label={t("st.done")} icon="check" full onPress={() => advance(t("toast.step", { step: t("st.done") }))} />
+          ) : null}
+          {v.step === "on_site" && v.kind !== "inspection" ? (
             <>
               {before.length === 0 ? (
                 <T v="caption" tone="warn">
@@ -266,7 +270,7 @@ export default function VisitScreen() {
         </Card>
       ) : null}
 
-      {v.step === "paid" ? (
+      {v.step === "paid" || v.step === "done" ? (
         <Card status="ok">
           <RowView>
             <Icon name="check" color={c.status.ok.text} />

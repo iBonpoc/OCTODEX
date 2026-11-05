@@ -5,6 +5,7 @@
 import type { StatusName } from "@octo/design-tokens";
 import { clientMoney } from "@octo/estimating-engine";
 import { peopleOf } from "@/data/people";
+import { visitPropertyId } from "@/data/selectors";
 import type { Customer, CustomerStatus, DB, ID, Role, Tag } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { IconKey } from "@/ui/primitives";
@@ -105,9 +106,8 @@ export function clientHistory(db: DB, customerId: ID, role: Role): HistoryItem[]
     if (e.approvedAt) out.push({ id: `est-ok-${e.id}`, at: e.approvedAt, kind: "docs", icon: "signature", title: "client.h.estimateSigned", detail: e.title, href: `/estimate/${e.id}`, cents: money ? e.totalCents : undefined });
   }
   const propIds = new Set(db.properties.filter((p) => p.customerId === customerId).map((p) => p.id));
-  const jobIds = new Set(db.jobs.filter((j) => propIds.has(j.propertyId)).map((j) => j.id));
-  for (const v of db.visits.filter((x) => jobIds.has(x.jobId))) {
-    const job = db.jobs.find((j) => j.id === v.jobId);
+  for (const v of db.visits.filter((x) => propIds.has(visitPropertyId(db, x) ?? ""))) {
+    const job = v.jobId ? db.jobs.find((j) => j.id === v.jobId) : undefined;
     out.push({ id: `visit-${v.id}`, at: v.start, kind: "docs", icon: "route", title: "client.h.visit", detail: job?.title, href: `/visit/${v.id}` });
   }
   if (money) {

@@ -95,7 +95,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
     case "visit": {
       if (role === "tech") return { section: "tab.visits", kind: "visit.title", up: { href: "/visits", label: K("tab.visits") } };
       const v = db.visits.find((x) => x.id === id);
-      return { section: "tab.plan", kind: "visit.title", up: v ? toJob(v.jobId) : { href: "/plan", label: K("tab.plan") } };
+      // an inspection has no job: up to the Plan
+      return { section: "tab.plan", kind: "visit.title", up: v?.jobId ? toJob(v.jobId) : { href: "/plan", label: K("tab.plan") } };
     }
     case "catalog":
       return id ? { section: "tab.more", kind: "cat.item", up: { href: "/catalog", label: K("cat.title") } } : { section: "tab.more", up: moreRoot };
