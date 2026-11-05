@@ -1,6 +1,6 @@
 /** Every screen (all routes in src/app) at 390 / 820 / 1280 in dark and light: no horizontal overflow; screenshots in e2e/out. */
 const SCREENS = [
-  "/today", "/triage", "/inbox", "/visits", "/plan", "/clients", "/more",
+  "/today", "/figures/leads?period=month", "/triage", "/inbox", "/visits", "/plan", "/clients", "/more",
   "/lead/l1", "/lead/new", "/client/c1", "/client/edit?id=c1", "/client/edit",
   "/estimate/new?id=e6", "/estimate/e5", "/estimates", "/p/demo0handyman0estimate0000000001",
   "/jobs", "/job/j1", "/job/schedule?jobId=j1", "/visit/v1",

@@ -21,6 +21,18 @@ export interface AttentionItem {
   score: number;
 }
 
+/** Where an attention item opens: its own record, never a general list. */
+export function attentionHref(it: AttentionItem): string {
+  switch (it.kind) {
+    case "schedule": return `/job/schedule?jobId=${it.refId}`;
+    case "overdue": return `/invoice/${it.refId}`;
+    case "estimate": return `/estimate/${it.refId}`;
+    case "unassigned":
+    case "late": return `/visit/${it.refId}`;
+    default: return `/lead/${it.refId}`;
+  }
+}
+
 /** "Требует внимания" / triage queue: everything that needs a human decision now, most urgent first. */
 export function buildAttention(db: DB, role: Role = "director"): AttentionItem[] {
   const out: AttentionItem[] = [];

@@ -151,6 +151,7 @@ export const en: Dict = {
   "today.nPayments": "Payments: {n}",
   "today.allTime": "All open invoices",
   "today.funnel": "Sales funnel",
+  "figures.empty": "Nothing here yet",
   "today.f.leads": "New leads",
   "today.f.sent": "Estimates sent",
   "today.f.signed": "Estimates signed",

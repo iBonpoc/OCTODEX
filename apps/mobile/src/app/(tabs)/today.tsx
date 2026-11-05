@@ -3,10 +3,10 @@ import { router } from "expo-router";
 import { component, font, layout, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
-import { periodNumbers, type Period } from "@/features/metrics";
+import { periodNumbers, type Figure, type Period } from "@/features/metrics";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { buildAttention } from "@/features/attention";
+import { attentionHref, buildAttention } from "@/features/attention";
 import { todayVisits, visitStatus } from "@/features/visits";
 import { useTick } from "@/features/sheets";
 import { NoticesCard } from "@/features/notices";
@@ -72,6 +72,8 @@ export default function Today() {
   const { db, role } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
   const n = periodNumbers(db, period);
+  // every number opens exactly the records it counts, for the same period (founder 05.11); back → Today
+  const open = (f: Figure) => router.push(`/figures/${f}?period=${period}`);
   const attention = buildAttention(db, role);
   const techs = db.members.filter((m) => m.roles.includes("tech"));
   const { width: screenW } = useWindowDimensions();
@@ -88,16 +90,16 @@ export default function Today() {
         ]}
       />
       <View style={{ flexDirection: "row", gap: space[2] }}>
-        <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} width={tileW} />
-        <Kpi label={t("today.received")} cents={n.receivedCents} icon="wallet" hint={t("today.nPayments", { n: n.payments })} onPress={() => router.push("/money")} width={tileW} />
-        <Kpi label={t("today.awaiting")} cents={n.awaitingCents} icon="invoice" hint={t("today.allTime")} onPress={() => router.push("/money")} width={tileW} />
+        <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} onPress={() => open("signed")} width={tileW} />
+        <Kpi label={t("today.received")} cents={n.receivedCents} icon="wallet" hint={t("today.nPayments", { n: n.payments })} onPress={() => open("received")} width={tileW} />
+        <Kpi label={t("today.awaiting")} cents={n.awaitingCents} icon="invoice" hint={t("today.allTime")} onPress={() => open("awaiting")} width={tileW} />
       </View>
       <Card>
         <SectionTitle title={t("today.funnel")} />
-        <FunnelRow icon="inbox" label={t("today.f.leads")} value={String(n.leads)} onPress={() => router.navigate("/inbox")} />
-        <FunnelRow icon="send" label={t("today.f.sent")} value={String(n.sent)} share={n.leads ? n.leadToSentPct : undefined} onPress={() => router.navigate("/inbox")} />
-        <FunnelRow icon="signature" label={t("today.f.signed")} value={`${n.signed} · ${moneyWhole(n.signedCents)}`} share={n.sent ? n.sentToSignedPct : undefined} />
-        <FunnelRow icon="wallet" label={t("today.f.paid")} value={moneyWhole(n.receivedCents)} onPress={() => router.push("/money")} />
+        <FunnelRow icon="inbox" label={t("today.f.leads")} value={String(n.leads)} onPress={() => open("leads")} />
+        <FunnelRow icon="send" label={t("today.f.sent")} value={String(n.sent)} share={n.leads ? n.leadToSentPct : undefined} onPress={() => open("sent")} />
+        <FunnelRow icon="signature" label={t("today.f.signed")} value={`${n.signed} · ${moneyWhole(n.signedCents)}`} share={n.sent ? n.sentToSignedPct : undefined} onPress={() => open("signed")} />
+        <FunnelRow icon="wallet" label={t("today.f.paid")} value={moneyWhole(n.receivedCents)} onPress={() => open("received")} />
       </Card>
       <CompanySetupCard />
       <FirstStepsCard />
@@ -118,13 +120,7 @@ export default function Today() {
                     title={it.name}
                     subtitle={t(it.label, it.params)}
                     right={<StatusChip status={it.status} label={t(it.chip, it.params)} />}
-                    onPress={() =>
-                      it.kind === "schedule"
-                        ? router.push(`/job/schedule?jobId=${it.refId}`)
-                        : it.kind === "leadIdle" || it.kind === "lead"
-                          ? router.push(`/lead/${it.refId}`)
-                          : router.navigate(it.kind === "overdue" ? "/money" : "/triage")
-                    }
+                    onPress={() => router.push(attentionHref(it))}
                   />
                 </View>
               ))

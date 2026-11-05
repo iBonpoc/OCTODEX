@@ -100,6 +100,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       const jid = one(params.jobId);
       return { section: "tab.more", kind: "exp.title", up: jid ? toJob(jid) : { href: "/money", label: K("money.title") } };
     }
+    case "figures":
+      // a number opened from "Today": back goes to Today, whatever tab the role has
+      return { section: "tab.today", up: { href: "/today", label: K("today.title") } };
     case "jobs":
     case "money":
     case "team":
