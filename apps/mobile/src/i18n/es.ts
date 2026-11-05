@@ -1020,7 +1020,7 @@ export const es: Dict = {
   "lead.book.saved": "Visita {date} a las {time}",
   "lead.book.note": "Nota para el técnico",
   "lead.book.past": "Esa hora ya pasó — elija una más tarde",
-  "lead.book.notePh": "Código del portón, perro en el patio…",
+  "lead.book.notePh": "Perro en el patio, dónde estacionar…",
   "lead.snooze.title": "Posponer",
   "lead.snooze.months": "En {n} meses",
   "lead.snooze.reason": "Motivo",

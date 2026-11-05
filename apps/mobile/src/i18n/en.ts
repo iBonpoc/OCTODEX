@@ -1020,7 +1020,7 @@ export const en: Dict = {
   "lead.book.saved": "Visit {date} at {time}",
   "lead.book.note": "Note for the tech",
   "lead.book.past": "That time has passed — pick a later one",
-  "lead.book.notePh": "Gate code, dog in the yard…",
+  "lead.book.notePh": "Dog in the yard, where to park…",
   "lead.snooze.title": "Snooze",
   "lead.snooze.months": "In {n} mo",
   "lead.snooze.reason": "Why",

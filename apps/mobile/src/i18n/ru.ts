@@ -1019,7 +1019,7 @@ export const ru = {
   "lead.book.saved": "Осмотр {date} в {time}",
   "lead.book.note": "Заметка мастеру",
   "lead.book.past": "Это время уже прошло — выберите позже",
-  "lead.book.notePh": "Код ворот, собака во дворе…",
+  "lead.book.notePh": "Собака во дворе, где парковаться…",
   "lead.snooze.title": "Отложить",
   "lead.snooze.months": "Через {n} мес",
   "lead.snooze.reason": "Почему",
