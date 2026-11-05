@@ -268,6 +268,8 @@
 
 Категория ставится на Lead и наследуется в Estimate → Job (`service_category_id`), чтобы выручка, маржа и ROI считались по направлениям.
 
+Собрано в волне T1 (`docs/specs/11-trade.md`, миграция `20261105230000`): таблица `service_categories`, пока только верхний уровень (`parent_id` пуст). Отличия от таблицы выше: `is_active` → `archived_at`; `is_user_modified` не нужен (переименование хранится в `name`, у заготовки `name` пуст); `color` не заводим (цвет только для статуса); `module`, `show_on_public_page`, `price_from_cents` — позже. `companies.trades[]` перенесён сюда.
+
 ### CatalogItem — позиция каталога
 | Поле | Тип | Описание |
 |---|---|---|

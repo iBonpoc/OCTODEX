@@ -20,6 +20,7 @@ const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
+import { inheritCategory } from "@/features/serviceCategories";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { acceptPayment } from "@octo/estimating-engine";
@@ -54,6 +55,7 @@ import {
   type Person,
   type Property,
   type Tag,
+  ServiceCategory,
 } from "./types";
 
 type Undo = () => void;
@@ -147,6 +149,11 @@ interface StoreCtx {
   setCustomerStatus: (id: ID, status: CustomerStatus, reason?: string) => Undo;
   /** add or edit a company tag (hiding = active: false; a tag is never deleted) */
   saveTag: (t: Omit<Tag, "id" | "position"> & { id?: ID; position?: number }) => { id: ID; undo: Undo };
+  /** directions of the business (docs/specs/11-trade.md): add, rename, reorder, archive / bring back — never delete */
+  saveServiceCategory: (c: Partial<Omit<ServiceCategory, "id">> & { id?: ID }) => { id: ID; undo: Undo };
+  setJobCategory: (id: ID, serviceCategoryId?: ID) => Undo;
+  /** for the estimate screen (chat «Сметы и модуль Gutters») */
+  setEstimateCategory: (id: ID, serviceCategoryId?: ID) => Undo;
   updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
   /** C2: a property of a client, new or edited (everything but the gate code) */
   saveProperty: (p: Property) => Undo;
@@ -175,7 +182,7 @@ const Ctx = createContext<StoreCtx | null>(null);
 /** UUIDs everywhere: the same id is used on the phone and in the database (offline-created rows). */
 const uid = (_p?: string) => Crypto.randomUUID();
 const emptyDB = (me: string): DB => ({
-  me, members: [], sources: [], tags: [], tasks: [], activities: [], customers: [], properties: [], jobs: [], visits: [], leads: [], estimates: [], invoices: [], expenses: [], catalog: [], notices: [],
+  me, members: [], sources: [], tags: [], serviceCategories: [], tasks: [], activities: [], customers: [], properties: [], jobs: [], visits: [], leads: [], estimates: [], invoices: [], expenses: [], catalog: [], notices: [],
   company: null, notes: [], payments: [],
 });
 const upsert = <T extends { id: string }>(list: T[], it: T): T[] => (list.some((x) => x.id === it.id) ? list.map((x) => (x.id === it.id ? it : x)) : [...list, it]);
@@ -679,7 +686,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             leads: d.leads.map((x) =>
               x.id === id ? { ...x, status: x.status === "new" || x.status === "replied" ? "booked" : x.status, firstResponseAt: x.firstResponseAt ?? now, lastActivityAt: now } : x,
             ),
-            jobs: [...d.jobs, { id: ids.jobId, propertyId: target.propertyId, title: "Estimate visit", status: "estimate", amountCents: 0 }],
+            jobs: [...d.jobs, { id: ids.jobId, propertyId: target.propertyId, title: "Estimate visit", status: "estimate", amountCents: 0, serviceCategoryId: inheritCategory(d, { kind: "job", customerId: l.customerId }) }],
             visits: [
               ...d.visits,
               {
@@ -706,7 +713,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // provisional number for the screen; the server assigns the real one (it ignores what the app sends)
         const last = Math.max(0, ...d0.leads.map((x) => Number(/^[A-Z]+-(\d+)$/.exec(x.number ?? "")?.[1] ?? 0)));
         const number = `LEA-${String(last + 1).padStart(4, "0")}`;
-        const full: Lead = { assigneeId: owner, createdBy: d0.me, ...lead, id, number, status: "new", receivedAt: new Date().toISOString() };
+        const full: Lead = { assigneeId: owner, createdBy: d0.me, ...lead, id, number, status: "new", receivedAt: new Date().toISOString(), serviceCategoryId: inheritCategory(d0, { kind: "lead" }, lead.serviceCategoryId) };
         const { name: _n, phone: _p, city: _c, address: _a, sourceId: _s, message: _m, number: _no, ...rest } = full;
         const undo = mutate("lead.add", (d) => ({ ...d, leads: [full, ...d.leads] }), {
           k: "lead.add", id, name: full.name, phone: full.phone, city: full.city, address: full.address, sourceId: full.sourceId, message: full.message,
@@ -718,7 +725,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         mutate("visit.assign", (d) => patchVisit(d, visitId, (v) => ({ ...v, techId })), { k: "visit.assign", visitId, userId: techId }),
       addEstimate: (e) => {
         const id = uid();
-        return mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id }] }), {
+        const serviceCategoryId = inheritCategory(dbRef.current, { kind: "estimate", leadId: e.leadId, customerId: e.customerId }, e.serviceCategoryId);
+        return mutate("estimate.add", (d) => ({ ...d, estimates: [...d.estimates, { ...e, id, serviceCategoryId }] }), {
           k: "estimate.add", id, versionId: uid(), optionId: uid(), customerId: e.customerId, propertyId: e.propertyId, title: e.title,
           totalCents: e.totalCents, depositCents: e.depositCents, marginPct: e.marginPct ?? null, lines: e.lines ?? [],
         });
@@ -786,6 +794,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               ...(prev ?? {}),
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
               sentAt: prev?.status === "draft" ? prev.sentAt : undefined,
+              // a new estimate takes the direction of its lead / client / company (S16); an existing one keeps its own
+              serviceCategoryId: prev ? prev.serviceCategoryId : inheritCategory(d, { kind: "estimate", leadId: leadId0, customerId }),
             };
             return { ...d, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
@@ -815,7 +825,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ),
             jobs: existingJob
               ? d.jobs
-              : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: sum.totalCents, estimateId: id }],
+              : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: sum.totalCents, estimateId: id, serviceCategoryId: inheritCategory(d, { kind: "job", estimateId: id }) }],
             leads: e.leadId
               ? d.leads.map((l) => (l.id === e.leadId && l.status !== "won" && l.status !== "lost" ? { ...l, status: "won", wonVia: "approval", lastActivityAt: now } : l))
               : d.leads,
@@ -886,6 +896,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, status, statusReason: status === "do_not_service" ? reason : undefined } : c)) }),
           { k: "customer.status", id, status, reason: status === "do_not_service" ? reason : undefined },
         ),
+      saveServiceCategory: (cat) => {
+        const id = cat.id ?? uid();
+        const list = dbRef.current.serviceCategories;
+        const prev = list.find((x) => x.id === id);
+        const position = cat.position ?? prev?.position ?? Math.max(-1, ...list.map((x) => x.position)) + 1;
+        const next: ServiceCategory = { ...prev, ...cat, id, position };
+        const undo = mutate(
+          "serviceCategory.save",
+          (d) => ({ ...d, serviceCategories: prev ? d.serviceCategories.map((x) => (x.id === id ? next : x)) : [...d.serviceCategories, next] }),
+          { k: "serviceCategory.save", category: next, isNew: !prev },
+        );
+        return { id, undo };
+      },
+      setJobCategory: (id, serviceCategoryId) =>
+        mutate("job.category", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, serviceCategoryId } : j)) }), { k: "job.category", id, serviceCategoryId: serviceCategoryId ?? null }),
+      setEstimateCategory: (id, serviceCategoryId) =>
+        mutate("estimate.category", (d) => ({ ...d, estimates: d.estimates.map((e) => (e.id === id ? { ...e, serviceCategoryId } : e)) }), { k: "estimate.category", id, serviceCategoryId: serviceCategoryId ?? null }),
       saveTag: (tg) => {
         const id = tg.id ?? uid();
         const position = tg.position ?? Math.max(0, ...dbRef.current.tags.map((x) => x.position)) + 1;
@@ -1048,7 +1075,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               { id: uid(), kind: "deposit.paid", estimateId: id, customer: d.customers.find((c) => c.id === e.customerId)?.name ?? "", depositCents: e.depositCents, at: now, read: !fromClient },
               ...d.notices,
             ],
-            jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: id }],
+            jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: id, serviceCategoryId: inheritCategory(d, { kind: "job", estimateId: id }) }],
             invoices: [
               ...d.invoices,
               { id: invoiceId, customerId: e.customerId, jobId, totalCents: e.depositCents!, paidCents: e.depositCents!, dueDate: now, paidAt: now, method, kind: "deposit", title: "Deposit" },

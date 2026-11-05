@@ -4,7 +4,7 @@
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
 import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, Property, Tag, VisitStep } from "@/data/types";
+import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -130,6 +130,9 @@ export type Op =
   | { k: "customer.tags"; id: string; tagIds: string[] }
   | { k: "customer.status"; id: string; status: CustomerStatus; reason?: string }
   | { k: "tag.save"; tag: Tag }
+  | { k: "serviceCategory.save"; category: ServiceCategory; isNew: boolean }
+  | { k: "job.category"; id: string; serviceCategoryId: string | null }
+  | { k: "estimate.category"; id: string; serviceCategoryId: string | null }
   | { k: "property.update"; id: string; address?: string; city?: string }
   | { k: "property.save"; property: Omit<Property, "gateCode"> }
   | { k: "property.gate"; id: string; code: string }
@@ -464,6 +467,20 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.rpc("set_customer_tags", { p_customer_id: op.id, p_tag_ids: op.tagIds }));
     case "customer.status":
       return run(supabase.from("customers").update({ status: op.status, do_not_service_reason: op.status === "do_not_service" ? op.reason || "—" : null }).eq("id", op.id));
+    case "serviceCategory.save": {
+      // seed_key is set once; afterwards only name, position and archive change (column grants, migration 20261105230000)
+      const x = op.category;
+      const common = { name: x.name ?? null, position: x.position, archived_at: x.archivedAt ?? null };
+      return run(
+        op.isNew
+          ? ins("service_categories", { id: x.id, company_id: c, seed_key: x.seedKey ?? null, ...common })
+          : supabase.from("service_categories").update(common).eq("id", x.id),
+      );
+    }
+    case "job.category":
+      return run(supabase.from("jobs").update({ service_category_id: op.serviceCategoryId }).eq("id", op.id));
+    case "estimate.category":
+      return run(supabase.from("estimates").update({ service_category_id: op.serviceCategoryId }).eq("id", op.id));
     case "tag.save":
       return run(
         supabase.from("tags").upsert(

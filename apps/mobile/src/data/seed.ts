@@ -2,7 +2,7 @@
  * Test data (placeholder prices — founder rule: real prices are never typed into seeds).
  * All times are relative to "now" so the demo always looks like a live day in Los Angeles.
  */
-import type { DB, ChecklistItem, CatalogItem, Company, EstimateDoc, Source, Tag } from "./types";
+import type { DB, ChecklistItem, CatalogItem, Company, EstimateDoc, ServiceCategory, Source, Tag } from "./types";
 import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
 
 /** Test catalog for several trades. All prices are PLACEHOLDERS (badge "test price"). */
@@ -108,6 +108,9 @@ const jobChecklist = (prefix: string): ChecklistItem[] =>
     "Walk through with the client",
   ].map((label, i) => ({ id: `${prefix}-c${i}`, label, done: false }));
 
+/** Demo directions of the business (presets, translated in the app). */
+export const SEED_SERVICE_CATEGORIES: ServiceCategory[] = ["handyman", "plumbing", "electrical", "painting"].map((k, i) => ({ id: `cat-${k}`, seedKey: k, position: i }));
+
 /** Demo company: partly filled so the setup checklist shows what is left. Test license number. */
 export const DEMO_COMPANY: Company = {
   id: "demo-company",
@@ -118,7 +121,6 @@ export const DEMO_COMPANY: Company = {
   email: "office@example.com",
   address: { line1: "100 E Colorado Blvd", city: "Pasadena", state: "CA", zip: "91105" },
   timezone: "America/Los_Angeles",
-  trades: ["handyman", "plumbing", "electrical", "painting"],
   brand: {},
   insurance: {},
   estimate: { validDays: 30, depositBps: 1000 },
@@ -133,6 +135,7 @@ export function makeSeed(): DB {
     me: "m-alex",
     sources: SEED_SOURCES,
     tags: SEED_TAGS,
+    serviceCategories: SEED_SERVICE_CATEGORIES,
     tasks: [
       { id: "t1", subjectType: "lead", subjectId: "l3", title: "Send the painting estimate", dueAt: hoursFromNow(20), assigneeId: "m-alex" },
     ],

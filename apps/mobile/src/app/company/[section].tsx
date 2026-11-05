@@ -9,8 +9,9 @@ import type { Address, Company, CompanyContact, CompanyLicense, EntityType, Lice
 import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { Labeled, PctField } from "@/features/fields";
-import { SETUP_STEPS, TRADES, US_TIMEZONES, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
-import { Button, ChoiceChips, IconButton, MultiChips, Segmented, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
+import { SETUP_STEPS, US_TIMEZONES, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
+import { ServiceCategoryEditor } from "@/features/ServiceCategoryPicker";
+import { Button, ChoiceChips, IconButton, Segmented, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
@@ -156,14 +157,7 @@ export default function CompanySection() {
 
       {step === "brand" ? <BrandEditor draft={draft} set={set} /> : null}
 
-      {step === "trades" ? (
-        <Card>
-          <MultiChips value={draft.trades} onChange={(v) => set({ trades: v })} items={TRADES.map((k) => ({ key: k, label: t(`trade.${k}` as DictKey) }))} />
-          <T v="caption" tone="mut">
-            {t("co.tradesNote")}
-          </T>
-        </Card>
-      ) : null}
+      {step === "trades" ? <ServiceCategoryEditor /> : null}
 
       {step === "documents" ? (
         <>
