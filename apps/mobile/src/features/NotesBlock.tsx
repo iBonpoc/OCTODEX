@@ -53,6 +53,9 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
         );
       })}
       <Card>
+        {subjectType === "property" || subjectType === "job" || subjectType === "customer" ? (
+          <T v="caption" tone="mut">{t("notes.accessHint")}</T>
+        ) : null}
         <TextField type="note" value={body} onChangeText={setBody} placeholder={t("notes.placeholder")} />
         <Segmented
           full

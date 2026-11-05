@@ -36,7 +36,9 @@ exports.run = async (h) => {
   h.expect(db.leads.find((l) => l.id === tom.id).lostReason === "price_too_high" && db.leads.find((l) => l.id === tom.id).status === "lost", "lost with reason");
   h.expect(db.leads.find((l) => l.id === nina.id).wonVia === "manual", "manual conversion");
   await h.go("/client/c1");
-  await h.page.getByPlaceholder(/Код ворот/).fill("Call before arrival");
+  // client notes: codes go to the property's "Access" field (shown to the tech only on the visit day)
+  await h.expectText(/Код ворот и пароли пишите в поле «Доступ»/, "notes: access hint on a client");
+  await h.page.getByPlaceholder(/Собака во дворе/).fill("Call before arrival");
   await h.click("Добавить заметку");
   db = await h.db();
   h.expect(db.notes.some((n) => n.body === "Call before arrival"), "note saved");

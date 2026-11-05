@@ -64,6 +64,8 @@ exports.run = async (h) => {
   db = await h.db();
   h.expect(db.tasks.some((x) => x.subjectType === "property" && x.subjectId === pr.id && x.title === "Fix the side gate latch"), "task of the property saved");
   await h.expectText(/Fix the side gate latch/, "task on the tab");
+  // notes of a property: codes go to "Access" (shown to the tech only on the day of the visit), not to notes
+  await h.expectText(/Код ворот и пароли пишите в поле «Доступ»/, "notes: access hint on a property");
   await h.clickText("Документы");
   await h.expectText(/Смет и счетов по объекту нет/, "no documents yet");
   await h.clickText("Файлы");
