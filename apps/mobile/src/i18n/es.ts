@@ -562,6 +562,8 @@ export const es: Dict = {
   "co.address": "Dirección física",
   "co.mailingDifferent": "Dirección legal / postal distinta",
   "co.timezone": "Zona horaria",
+  "co.docLanguage": "Idioma de los documentos para clientes",
+  "co.docLanguageHint": "Presupuestos, facturas, recibos, la página del cliente, SMS y correos van en el idioma del cliente. Si no está indicado, en este.",
   "co.street": "Calle, número, oficina",
   "co.city": "Ciudad",
   "co.primary": "Principal",

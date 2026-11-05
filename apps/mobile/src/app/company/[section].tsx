@@ -118,6 +118,17 @@ export default function CompanySection() {
             <T v="heading">{t("co.timezone")}</T>
             <ChoiceChips value={draft.timezone} onChange={(v) => set({ timezone: v })} items={US_TIMEZONES.map((z) => ({ key: z, label: z.split("/")[1]!.replace("_", " ") }))} />
           </Card>
+          <Card>
+            <T v="heading">{t("co.docLanguage")}</T>
+            <T v="caption" tone="mut">
+              {t("co.docLanguageHint")}
+            </T>
+            <ChoiceChips<"en" | "es">
+              value={draft.docLanguage ?? "en"}
+              onChange={(v) => set({ docLanguage: v })}
+              items={[{ key: "en", label: "English" }, { key: "es", label: "Español" }]}
+            />
+          </Card>
         </>
       ) : null}
 

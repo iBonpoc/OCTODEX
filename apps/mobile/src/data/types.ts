@@ -385,6 +385,8 @@ export interface Company {
   address: Address;
   mailingAddress?: Address;
   timezone: string;
+  /** language of what goes to clients when the client's own is not known (en in the US); docLanguageFor decides */
+  docLanguage?: "en" | "es";
   trades: string[];
   brand: { logo?: string; color?: string };
   insurance: { cglCarrier?: string; cglPolicy?: string; wcCarrier?: string; wcPolicy?: string; wcExempt?: boolean };

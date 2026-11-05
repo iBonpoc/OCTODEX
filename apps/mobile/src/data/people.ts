@@ -94,6 +94,18 @@ export function mergePeople(into: Person[], add: Person[]): Person[] {
   return out;
 }
 
+/**
+ * The language of what goes to a client (founder's rule 05.11.2026, docs/specs/07 §2.1): the person's own → the client's
+ * (its main person) → the lead's → the company's default → English. Never the app's language.
+ */
+export function docLanguageFor(db: DB, at: { personId?: string; customerId?: string; leadId?: string }): "en" | "es" {
+  const lead = at.leadId ? db.leads.find((l) => l.id === at.leadId) : undefined;
+  const customer = db.customers.find((c) => c.id === (at.customerId ?? lead?.customerId));
+  const people = [...(customer ? peopleOf(customer) : []), ...(lead ? leadPeopleOf(lead) : [])];
+  const person = at.personId ? people.find((p) => p.id === at.personId) : undefined;
+  return person?.language ?? (customer ? peopleOf(customer)[0]?.language : undefined) ?? (lead ? leadPeopleOf(lead)[0]?.language ?? lead.language : undefined) ?? db.company?.docLanguage ?? "en";
+}
+
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 /**
  * People as the database keeps them: real ids (a person derived from an old client gets a new one), names and numbers

@@ -1027,5 +1027,18 @@ begin
 end $$;
 \echo 'T17 lead people ok'
 
+-- ---------------------------------------------------------------- T17b: client language (company default for documents)
+:as_owner_a
+select tst.ok((select doc_language from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'en', 'documents to clients are in English by default');
+update public.companies set doc_language = 'es' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select doc_language from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'es', 'owner sets Spanish for client documents');
+select tst.fails($q$update public.companies set doc_language = 'ru' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'only English or Spanish for client documents');
+update public.companies set doc_language = 'en' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.blocked($q$update public.companies set doc_language = 'es' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'tech cannot change the company document language');
+:as_owner_a
+select tst.ok((select doc_language from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'en', 'still English after the tech tried');
+\echo 'T17b client language ok'
+
 :as_super
 \echo 'ALL TESTS PASSED'

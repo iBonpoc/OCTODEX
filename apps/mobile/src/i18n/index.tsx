@@ -2,12 +2,10 @@ import { createContext, useCallback, useContext, useMemo, type ReactNode } from 
 import { getLocales } from "expo-localization";
 import { dec, roundCents } from "@octo/estimating-engine";
 import { usePersistentState } from "@/data/persist";
-import { ru, type DictKey, type Dict } from "./ru";
-import { en } from "./en";
-import { es } from "./es";
+import type { DictKey } from "./ru";
+import { translate, type Lang, type Params } from "./translate";
 
-export type Lang = "en" | "ru" | "es";
-const dicts: Record<Lang, Dict> = { ru, en, es };
+export { tFor, DOC_LANGS, type DocLang, type Lang } from "./translate";
 export const languages: { id: Lang; label: string }[] = [
   { id: "en", label: "English" },
   { id: "ru", label: "Русский" },
@@ -20,7 +18,6 @@ function deviceLang(): Lang {
   return code === "ru" || code === "es" ? code : "en";
 }
 
-type Params = Record<string, string | number>;
 interface I18nCtx {
   lang: Lang;
   setLang: (l: Lang) => void;
@@ -41,11 +38,7 @@ const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "
 export function I18nProvider({ children }: { children: ReactNode }) {
   const [lang, setLang, ready] = usePersistentState<Lang>("octo.lang.v1", deviceLang);
   const t = useCallback(
-    (key: DictKey, params?: Params) => {
-      let s = dicts[lang][key] ?? ru[key] ?? key;
-      if (params) for (const [k, v] of Object.entries(params)) s = s.split(`{${k}}`).join(String(v));
-      return s;
-    },
+    (key: DictKey, params?: Params) => translate(lang, key, params),
     [lang],
   );
   const value = useMemo<I18nCtx>(() => {
