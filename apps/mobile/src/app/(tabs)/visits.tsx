@@ -13,6 +13,7 @@ import { MetaTag, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { isAssigned } from "@/features/schedule";
+import { overlapSigns } from "@/features/listSigns";
 
 /** Technician home ("my day"): progress and money collected, the visit in progress or the next one, the rest of today, then the week. */
 export default function Visits() {
@@ -45,6 +46,7 @@ export default function Visits() {
         value={v.amountDueCents > 0 ? money(v.amountDueCents) : undefined}
         valueLabel={v.amountDueCents > 0 ? t("card.val.toPay") : undefined}
         status={{ tone: st.status, label: t(st.label) }}
+        signs={overlapSigns(db, v).map((s) => ({ tone: s.tone, label: t(s.key, s.params) }))}
         tags={[...(v.checklist.length ? [t("vcard.checks", { done, n: v.checklist.length })] : []), ...(v.photos.length ? [t("vcard.photos", { n: v.photos.length })] : [])]}
         facts={{ phone: customer?.phone ?? lead?.phone, addr, work: job?.title ?? lead?.service }}
         contact={{ phone: customer?.phone ?? lead?.phone, addr }}

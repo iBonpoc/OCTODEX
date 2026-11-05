@@ -6,8 +6,8 @@
  */
 import { timing } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
-import type { Estimate, Invoice, Lead } from "@/data/types";
-import { lateKind } from "./schedule";
+import type { DB, Estimate, Invoice, Lead, Visit } from "@/data/types";
+import { assigneesOf, isOpenVisit, lateKind, overlaps } from "./schedule";
 
 export interface Sign {
   key: DictKey;
@@ -56,4 +56,14 @@ export function leadSigns(l: Pick<Lead, "status" | "callAttempts">): Sign[] {
 export function visitSigns(v: Parameters<typeof lateKind>[0], now: number = Date.now()): Sign[] {
   const late = lateKind(v, now);
   return late ? [{ key: late === "en_route" ? "late.enRoute" : "late.notLeft", tone: "warn" }] : [];
+}
+
+/**
+ * Visit «Накладка» (docs/specs/03 П3c п. 8, map §5): an open visit overlaps another open visit of one of its people by
+ * [start, end); touching ends is not an overlap; cancelled (not loaded) and closed visits do not count. A warning, not a ban.
+ * The one rule of features/schedule.ts overlaps (the same as the booking form). Shown on both cards; no «Требует внимания» item.
+ */
+export function overlapSigns(db: Pick<DB, "visits">, v: Visit): Sign[] {
+  if (!isOpenVisit(v)) return [];
+  return overlaps(db, assigneesOf(v), v.start, v.durationMin, v.id).length ? [{ key: "card.sign.overlap", tone: "warn" }] : [];
 }

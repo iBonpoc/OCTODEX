@@ -428,7 +428,7 @@ export interface CatalogItem {
 }
 
 /** visit.late — computed in the app for the office (docs/specs/03 П3c), never stored and not in the server notifications.kind */
-export type NoticeKind = "estimate.viewed" | "estimate.approved" | "deposit.paid" | "invoice.paid" | "visit.late";
+export type NoticeKind = "estimate.viewed" | "estimate.approved" | "estimate.client_signed" | "deposit.paid" | "invoice.paid" | "visit.late";
 export interface Notice {
   id: ID;
   kind: NoticeKind;
