@@ -44,7 +44,7 @@ exports.run = async (h) => {
 
   // S8: signs
   await h.sign("Kevin Brooks");
-  await h.expectText(/Смета одобрена/, "approved on the client page");
+  await h.expectText(/Estimate approved/, "approved on the client page (in the client's language, rule 7)");
   db = await h.db();
   const e2 = db.estimates.find((e) => e.id === est.id);
   const l2 = db.leads.find((l) => l.id === lead.id);
