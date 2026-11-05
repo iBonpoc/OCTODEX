@@ -35,7 +35,8 @@ export type Op =
       start: string;
     }
   /** S4 (docs/specs/03): an inspection — a visit of the lead at the property, no job; replaces lead.visit (kept for old queues) */
-  | { k: "visit.inspection"; leadId: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; scope: string[] }
+  | { k: "visit.notified"; visitId: string }
+  | { k: "visit.inspection"; leadId?: string; propertyId: string; visitId: string; start: string; durationMin: number; techId: string | null; scope: string[] }
   /** the office cancels a visit with a reason; S4a / S9a roll the lead / job back when nothing open is left */
   | { k: "visit.cancel"; visitId: string; reason: CancelReason; text?: string; leadBack?: string; jobBack?: string }
   /** the office moves a visit (time, length); the status does not change */
@@ -182,6 +183,7 @@ export interface OutboxItem {
   error?: string;
 }
 
+
 /** Errors that will never succeed on retry (permission, constraint). Network errors are retried. */
 export class PermanentError extends Error {}
 
@@ -300,20 +302,19 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "visit.inspection": {
       const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
-      await run(ins("visits", { id: op.visitId, company_id: c, lead_id: op.leadId, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
+      await run(ins("visits", { id: op.visitId, company_id: c, lead_id: op.leadId ?? null, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
       if (op.techId) await run(supabase.from("visit_assignees").upsert({ company_id: c, visit_id: op.visitId, user_id: op.techId }, { onConflict: "visit_id,user_id", ignoreDuplicates: true }));
+      if (!op.leadId) return; // «+ Осмотр» on a client: no lead to move
       await run(supabase.from("leads").update({ first_response_at: op.start < new Date().toISOString() ? op.start : new Date().toISOString(), first_response_kind: "manual" }).eq("id", op.leadId).is("first_response_at", null));
       return run(supabase.from("leads").update({ status: "inspection_scheduled" }).eq("id", op.leadId).in("status", ["new", "contacted", "qualified"]));
     }
-    case "visit.cancel": {
-      // "the client was not home" is no_show in the database; who and when is stamped by the server (t06)
-      await run(
-        supabase.from("visits").update({ status: op.reason === "no_show" ? "no_show" : "cancelled", cancel_reason: op.reason, cancel_reason_text: op.text ?? null }).eq("id", op.visitId).in("status", ["scheduled", "en_route"]),
-      );
-      if (op.leadBack) await run(supabase.from("leads").update({ status: "contacted" }).eq("id", op.leadBack).eq("status", "inspection_scheduled"));
-      if (op.jobBack) await run(supabase.from("jobs").update({ status: "draft" }).eq("id", op.jobBack).eq("status", "scheduled"));
-      return;
-    }
+    case "visit.cancel":
+      // one server function for S4a / S9a (migration 20261105300000): the cancel and the roll-backs in one transaction;
+      // a repeat after a partial failure changes nothing
+      return run(supabase.rpc("cancel_visit", { p_visit_id: op.visitId, p_reason: op.reason, p_text: op.text ?? null }));
+    case "visit.notified":
+      // the time is the server's (t07_visit_notified_stamp sets now()); any non-null value only marks «told»
+      return run(supabase.from("visits").update({ customer_notified_at: new Date(0).toISOString() }).eq("id", op.visitId));
     case "visit.reschedule": {
       const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
       return run(supabase.from("visits").update({ starts_at: op.start, ends_at: end }).eq("id", op.visitId));

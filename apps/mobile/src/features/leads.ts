@@ -274,5 +274,9 @@ export function leadTimeline(db: DB, l: Lead, viewer?: string): TimelineEntry[] 
   for (const v of db.visits.filter((x) => isInspectionOf(db, x, l))) {
     out.push({ id: `v-${v.id}`, at: v.start, icon: "calendar", key: "tl.visit" });
   }
+  // a cancelled inspection stays in the feed with its reason (docs/specs/03 §5.2)
+  for (const v of (db.cancelledVisits ?? []).filter((x) => isInspectionOf(db, x, l))) {
+    out.push({ id: `vc-${v.id}`, at: v.cancelledAt, icon: "close", key: `tl.visitCancelled.${v.cancelReason}` as DictKey, params: v.cancelText ? { text: v.cancelText } : undefined });
+  }
   return out.sort((a, b) => b.at.localeCompare(a.at));
 }

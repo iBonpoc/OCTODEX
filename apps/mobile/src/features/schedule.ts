@@ -88,3 +88,64 @@ export function hasPlannedInspection(db: Db, l: Pick<Lead, "id" | "propertyId">,
 
 /** the property of a visit, re-exported for the screens of the Plan */
 export { visitPropertyId };
+
+/* ---------- the visit form (docs/specs/03 §7.1, wave П2) ---------- */
+
+/** defaults until "More → Company → Schedule" (wave П4) replaces them with the company's settings */
+export const SCHEDULE_DEFAULTS = {
+  dayStartMin: 8 * 60, dayEndMin: 18 * 60, stepMin: 30, inspectionMin: 45, jobMin: 120,
+  /** the form: days shown as chips (twice that with «Ещё неделя»), the range of «Другое время», length step and max */
+  formDays: 7, earliestMin: 6 * 60, latestMin: 20 * 60, durationStepMin: 15, maxDurationMin: 12 * 60,
+} as const;
+type Hours = Pick<typeof SCHEDULE_DEFAULTS, "dayStartMin" | "dayEndMin" | "stepMin">;
+
+const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+const minuteOfDay = (d: Date) => d.getHours() * 60 + d.getMinutes();
+
+/** the start of a day + minutes (local time of the phone) */
+export function atMinute(day: Date, minute: number): string {
+  const d = new Date(day);
+  d.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
+  return d.toISOString();
+}
+
+/** open visits of a person on that day, by start (the row "2 visits · 10:00–12:00, 14:00–15:00") */
+export function dayVisits(db: Pick<DB, "visits">, techId: ID, day: Date, exceptId?: ID): Visit[] {
+  return db.visits
+    .filter((v) => v.id !== exceptId && v.techId === techId && isOpenVisit(v) && sameDay(new Date(v.start), day))
+    .sort((a, b) => a.start.localeCompare(b.start));
+}
+
+/** start minutes the person is free for `durationMin`, inside working hours, on the step; never in the past today */
+export function freeSlots(
+  db: Pick<DB, "visits">, techId: ID | null, day: Date, durationMin: number,
+  opts: { exceptId?: ID; now?: number; hours?: Hours } = {},
+): number[] {
+  const h = opts.hours ?? SCHEDULE_DEFAULTS;
+  const now = opts.now ?? Date.now();
+  const out: number[] = [];
+  for (let m = h.dayStartMin; m + durationMin <= h.dayEndMin; m += h.stepMin) {
+    const start = atMinute(day, m);
+    if (new Date(start).getTime() < now) continue;
+    if (techId && overlaps(db, techId, start, durationMin, opts.exceptId).length) continue;
+    out.push(m);
+  }
+  return out;
+}
+
+export type FormWarning = { key: "busy"; visits: Visit[] } | { key: "outOfHours" } | { key: "past" };
+
+/** what the form warns about (status warn, with a word); saving stays possible except in the past */
+export function formWarnings(
+  db: Pick<DB, "visits">, f: { techId: ID | null; start: string; durationMin: number; exceptId?: ID },
+  opts: { now?: number; hours?: Hours } = {},
+): FormWarning[] {
+  const h = opts.hours ?? SCHEDULE_DEFAULTS;
+  const out: FormWarning[] = [];
+  const busy = overlaps(db, f.techId, f.start, f.durationMin, f.exceptId);
+  if (busy.length) out.push({ key: "busy", visits: busy });
+  const s = minuteOfDay(new Date(f.start));
+  if (s < h.dayStartMin || s + f.durationMin > h.dayEndMin) out.push({ key: "outOfHours" });
+  if (!startAllowed(f.start, opts.now)) out.push({ key: "past" });
+  return out;
+}

@@ -147,6 +147,8 @@ export type VisitKind = "inspection" | "install" | "service" | "follow_up";
 /** why a visit was cancelled (docs/specs/03 §4.1); "no_show" = the client was not home */
 export const CANCEL_REASONS = ["client_cancelled", "no_show", "reschedule_later", "we_cancelled", "other"] as const;
 export type CancelReason = (typeof CANCEL_REASONS)[number];
+/** a visit the office cancelled: the visit as it was + why and when */
+export type CancelledVisit = Visit & { cancelReason: CancelReason; cancelText?: string; cancelledAt: string };
 
 export interface ChecklistItem {
   id: ID;
@@ -184,6 +186,8 @@ export interface Visit {
   /** the lead of an inspection */
   leadId?: ID;
   kind?: VisitKind;
+  /** when the office sent the client the time (SMS / email opened from «Сообщить клиенту?», docs/specs/03 §7.1) */
+  customerNotifiedAt?: string;
 }
 
 /**
@@ -564,6 +568,8 @@ export interface DB {
   members: Member[];
   sources: Source[];
   tags: Tag[];
+  /** cancelled visits (docs/specs/03 §5.2): out of the Plan and the day, kept in the lead's feed with the reason */
+  cancelledVisits?: CancelledVisit[];
   /** directions of the business of the company (docs/specs/11-trade.md); archived ones stay for history */
   serviceCategories: ServiceCategory[];
   tasks: Task[];

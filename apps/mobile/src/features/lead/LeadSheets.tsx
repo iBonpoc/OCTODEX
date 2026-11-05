@@ -2,6 +2,9 @@
  * Lead card sheets of wave L2 (docs/14-leads-spec.md §7.3): call result, "what next?", estimate visit booking,
  * snooze, status, "lost or wait?". Every action goes through the store (undo toast, offline queue).
  */
+import { VisitFormSheet } from "@/features/VisitForm";
+import { SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { uid } from "@/features/estimateDoc";
 import { useMemo, useState } from "react";
 import { Linking, View } from "react-native";
 import { router } from "expo-router";
@@ -98,60 +101,28 @@ export function NextStepSheet({
 
 /** Estimate visit: date, start, length, tech, note. No "tomorrow 10:00" by default — the person picks. */
 export function BookSheet({ l, visible, onClose }: { l: Lead; visible: boolean; onClose: () => void }) {
+  // the visit form (docs/specs/03 §7.1): date → person with the day's load → free slots → length → note
   const store = useStore();
   const { db } = store;
   const { t, day, time } = useI18n();
   const toast = useToast();
   const q = useQ();
-  const [dayOffset, setDayOffset] = useState("1");
-  const [startMin, setStartMin] = useState(9 * 60);
-  const [duration, setDuration] = useState(60);
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
-  const [techId, setTechId] = useState<string>(l.assigneeId && techs.some((m) => m.id === l.assigneeId) ? l.assigneeId : "none");
-  const [note, setNote] = useState("");
-  const days = useMemo(
-    () => Array.from({ length: BOOK_DAYS }, (_, i) => {
-      const d = new Date();
-      d.setDate(d.getDate() + i);
-      return { key: String(i), label: i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : day(d.toISOString()) };
-    }),
-    [t, day],
-  );
-  const start = bookStart(Number(dayOffset), startMin);
-  const past = new Date(start).getTime() < Date.now();
-  const initialTech = l.assigneeId && techs.some((m) => m.id === l.assigneeId) ? l.assigneeId : "none";
-  const dirty = dayOffset !== "1" || startMin !== 9 * 60 || duration !== 60 || techId !== initialTech || note.trim().length > 0;
-  const busy = db.visits.filter((v) => techId !== "none" && v.techId === techId && new Date(v.start).toDateString() === new Date(start).toDateString());
-  const save = () => {
-    if (past) return;
-    const undo = store.bookLead(l.id, { start, durationMin: duration, techId: techId === "none" ? null : techId, note });
-    toast.show(q(t("lead.book.saved", { date: day(start), time: time(start) })), undo);
-    onClose();
-  };
+  const initialTech = l.assigneeId && techs.some((m) => m.id === l.assigneeId) ? l.assigneeId : null;
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("lead.next.book")} dirty={dirty} onSave={past ? undefined : save}>
-      <Labeled label={t("sch.date")}>
-        <ChoiceChips value={dayOffset} onChange={setDayOffset} items={days} />
-      </Labeled>
-      <Labeled label={t("sch.start")}>
-        <RowView style={{ justifyContent: "space-between" }}>
-          <IconButton icon="minus" label={`${t("sch.start")} −30`} onPress={() => setStartMin((m) => Math.max(6 * 60, m - 30))} />
-          <T v="title" tabular>{time(start)}</T>
-          <IconButton icon="plus" label={`${t("sch.start")} +30`} onPress={() => setStartMin((m) => Math.min(20 * 60, m + 30))} />
-        </RowView>
-      </Labeled>
-      <Stepper label={t("sch.duration")} unit={t("sch.min")} value={duration} step={15} min={15} max={4 * 60} onChange={setDuration} />
-      <Labeled label={t("sch.tech")}>
-        <ChoiceChips value={techId} onChange={setTechId} items={[{ key: "none", label: t("sch.noTech") }, ...techs.map((m) => ({ key: m.id, label: m.name }))]} />
-      </Labeled>
-      {busy.length ? <T v="caption" tone="warn">⚠ {t("sch.busy", { n: busy.length })}</T> : null}
-      <Labeled label={t("lead.book.note")}>
-        <TextField type="note" value={note} onChangeText={setNote} placeholder={t("lead.book.notePh")} />
-      </Labeled>
-      <T v="body" tone="mut">{t("sch.summary", { date: day(start), time: time(start), min: duration })}</T>
-      {past ? <T v="caption" tone="warn">⚠ {t("lead.book.past")}</T> : null}
-      <Button label={t("lead.next.book")} icon="calendar" full disabled={past} onPress={save} />
-    </Sheet>
+    <VisitFormSheet
+      visible={visible}
+      onClose={onClose}
+      title={t("lead.next.book")}
+      saveLabel={t("lead.next.book")}
+      init={{ durationMin: SCHEDULE_DEFAULTS.inspectionMin, techId: initialTech }}
+      onSave={(v) => {
+        const visitId = uid();
+        const undo = store.bookLead(l.id, { ...v, visitId });
+        toast.show(q(t("lead.book.saved", { date: day(v.start), time: time(v.start) })), undo);
+        return visitId;
+      }}
+    />
   );
 }
 

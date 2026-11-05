@@ -102,7 +102,9 @@ const digits = (phone: string) => {
 };
 export const telUrl = (phone: string) => `tel:${digits(phone)}`;
 export const smsUrl = (phone: string) => `sms:${digits(phone)}`;
-export const mailUrl = (email: string) => `mailto:${email.trim()}`;
+/** a plain address only: no spaces, «?», «&», «#» or «,» — a lead's email from a web form must not add ?body= / &cc= (security-check 05.11) */
+export const SAFE_EMAIL = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$/;
+export const mailUrl = (email: string) => `mailto:${encodeURIComponent(email.trim()).replace(/%40/g, "@")}`;
 /** iOS → Apple Maps, everything else → Google Maps search */
 export const mapsUrl = (addr: string, os: OS) =>
   os === "ios" ? `https://maps.apple.com/?q=${encodeURIComponent(addr)}` : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(addr)}`;
@@ -118,7 +120,8 @@ export function contactActions(c: Contact, os: OS): ContactAction[] {
     out.push({ kind: "sms", icon: "sms", url: smsUrl(phone), value: phone });
   }
   if (addr) out.push({ kind: "map", icon: "map", url: mapsUrl(addr, os), value: addr });
-  if (email && email.includes("@")) out.push({ kind: "email", icon: "mail", url: mailUrl(email), value: email });
+  // TODO(10а): switch to the shared mailtoHref / smsHref when «Лиды и клиенты» land it (after #101)
+  if (email && SAFE_EMAIL.test(email)) out.push({ kind: "email", icon: "mail", url: mailUrl(email), value: email });
   return out;
 }
 
