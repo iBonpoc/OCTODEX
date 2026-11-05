@@ -4,7 +4,7 @@ import { makeSeed } from "../src/data/seed";
 import { normalizeDB } from "../src/data/normalize";
 import { visitPropertyId } from "../src/data/selectors";
 import type { DB, Job, Lead, Visit } from "../src/data/types";
-import { canCancel, canPlan, canReschedule, hasPlannedInspection, isInspectionOf, isOpenVisit, jobRollsBack, leadRollsBack, overlaps, startAllowed, visitLate } from "../src/features/schedule";
+import { canCancel, canPlan, canReschedule, hasPlannedInspection, isInspectionOf, isOpenVisit, jobRollsBack, leadRollsBack, overlaps, SCHEDULE_DEFAULTS, lateKind, startAllowed, visitLate } from "../src/features/schedule";
 
 const NOW = new Date("2026-11-05T18:00:00.000Z").getTime();
 const at = (h: number) => new Date(NOW + h * 3_600_000).toISOString();
@@ -33,9 +33,22 @@ describe("visit: what can happen to it", () => {
     expect(startAllowed(at(-30), NOW)).toBe(false);
     expect(startAllowed("not a date", NOW)).toBe(false);
   });
-  it("late: start passed and nobody on site; computed, not stored", () => {
-    expect(visitLate(V({ start: at(-1) }), NOW)).toBe(true);
-    expect(visitLate(V({ start: at(-1), step: "on_site" }), NOW)).toBe(false);
+  it("late (П3c): start + 15 min passed and nobody on site; «on the way» does not clear it", () => {
+    const min = (m: number) => new Date(NOW - m * 60_000).toISOString();
+    const sec = (s: number) => new Date(NOW - s * 1000).toISOString();
+    expect(SCHEDULE_DEFAULTS.lateAfterMin).toBe(15);
+    expect(lateKind(V({ start: sec(14 * 60 + 59) }), NOW)).toBeNull();
+    expect(lateKind(V({ start: min(15) }), NOW)).toBe("not_left");
+    expect(lateKind(V({ start: min(40), step: "en_route" }), NOW)).toBe("en_route");
+    expect(visitLate(V({ start: min(40), step: "en_route" }), NOW)).toBe(true);
+    for (const step of ["on_site", "working", "signed", "paid", "done"] as const) expect(lateKind(V({ start: min(40), step }), NOW)).toBeNull();
+    expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: true }] }), NOW)).toBeNull();
+    expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: false }] }), NOW)).toBe("not_left");
+    expect(lateKind(V({ start: min(40), techId: null, assigneeIds: [] }), NOW)).toBeNull(); // nobody on it: «Не назначено»
+    expect(lateKind(V({ start: min(40), techId: null, assigneeIds: ["m2"] }), NOW)).toBe("not_left");
+    expect(lateKind(V({ start: min(40), closed: true }), NOW)).toBeNull();
+    expect(lateKind(V({ start: min(40), kind: "inspection" }), NOW)).toBe("not_left");
+    expect(lateKind(V({ start: min(40) }), NOW, 60)).toBeNull(); // the threshold is a parameter (setting — П4)
     expect(visitLate(V({ start: at(1) }), NOW)).toBe(false);
   });
   it("overlaps by time for the same person, not by count per day", () => {

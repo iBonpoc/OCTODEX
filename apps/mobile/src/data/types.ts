@@ -184,7 +184,8 @@ export interface Visit {
   amountDueCents: number;
   signature?: string; // SVG path data
   payment?: { method: PaymentMethod; amountCents: number; at: string };
-  late?: boolean;
+  /** when the tech left (step «on the way»), phone time (docs/specs/03 П3c; server: visits.en_route_at). «Late» itself is computed (features/schedule.ts lateKind) */
+  enRouteAt?: string;
   /** the visit ended without the client's payment step: completed or no-show on the server (cancelled visits are not loaded) */
   closed?: boolean;
   /** the property of the visit (docs/specs/03 §3.1, migration 20261105280000); an inspection has it without a job */
@@ -426,13 +427,19 @@ export interface CatalogItem {
   placeholder?: boolean;
 }
 
-export type NoticeKind = "estimate.viewed" | "estimate.approved" | "deposit.paid" | "invoice.paid";
+/** visit.late — computed in the app for the office (docs/specs/03 П3c), never stored and not in the server notifications.kind */
+export type NoticeKind = "estimate.viewed" | "estimate.approved" | "deposit.paid" | "invoice.paid" | "visit.late";
 export interface Notice {
   id: ID;
   kind: NoticeKind;
   estimateId?: ID;
   jobId?: ID;
   customer: string;
+  /** visit.late: the visit, the tech, why late, and the time shown (left at, or the start) */
+  visitId?: ID;
+  tech?: string;
+  late?: "en_route" | "not_left";
+  lateAt?: string;
   totalCents?: number;
   depositCents?: number;
   at: string;

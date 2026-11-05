@@ -1,9 +1,10 @@
 import { timing, type StatusName } from "@octo/design-tokens";
-import { daysSince, isOverdue, isToday, minutesSince, visitContext } from "@/data/selectors";
+import { daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID, Role } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
 import { leadSettingsOf } from "./leadSettings";
 import { canCountersign } from "./estimateSign";
+import { assigneesOf, canPlan, isOpenVisit, lateToday, sameDay, visitWho } from "./schedule";
 import type { DictKey } from "@/i18n";
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
@@ -40,7 +41,7 @@ export function attentionHref(it: AttentionItem): string {
 }
 
 /** "Требует внимания" / triage queue: everything that needs a human decision now, most urgent first. */
-export function buildAttention(db: DB, role: Role = "director"): AttentionItem[] {
+export function buildAttention(db: DB, role: Role = "director", now: number = Date.now()): AttentionItem[] {
   const out: AttentionItem[] = [];
   // Leads by "whose turn" (docs/14-leads-spec.md §3.2, §7.4): reply · remind · lost or wait? · no step · back from snooze.
   const st = leadSettingsOf(db.company);
@@ -67,13 +68,27 @@ export function buildAttention(db: DB, role: Role = "director"): AttentionItem[]
       out.push({ id: `nostep-${l.id}`, kind: "leadNoStep", refId: l.id, name: l.name, label: "att.leadNoStep", params: { name: l.name }, chip: "lead.noNextStepShort", status: "warn", score: 610 });
     }
   }
-  for (const v of db.visits) {
-    if (!isToday(v.start)) continue;
-    const { customer, tech } = visitContext(db, v);
-    if (!v.techId)
-      out.push({ id: `un-${v.id}`, kind: "unassigned", refId: v.id, name: customer?.name ?? "", label: "att.unassigned", params: { name: customer?.name ?? "" }, chip: "st.unassigned", status: "warn", score: 900 });
-    else if (v.late && (v.step === "scheduled" || v.step === "en_route"))
-      out.push({ id: `late-${v.id}`, kind: "late", refId: v.id, name: tech?.name ?? "", label: "att.late", params: { name: `${tech?.name ?? ""} → ${customer?.name ?? ""}` }, chip: "st.late", status: "warn", score: 850 });
+  // Visits (docs/specs/03 П3c): only the people who plan (director, dispatcher) — a tech or sales has nothing to do here.
+  // «Не назначено» today and tomorrow; «Опаздывает» by one rule (schedule.ts lateKind), «on the way» does not clear it.
+  if (canPlan([role])) {
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    for (const v of db.visits) {
+      if (!isOpenVisit(v)) continue;
+      const today = sameDay(new Date(v.start), new Date(now));
+      if (!today && !sameDay(new Date(v.start), tomorrow)) continue;
+      const { client, tech } = visitWho(db, v);
+      if (!assigneesOf(v).length) {
+        out.push({
+          id: `un-${v.id}`, kind: "unassigned", refId: v.id, name: client, label: today ? "att.unassigned" : "late.unassignedTomorrow", params: { name: client },
+          chip: today ? "st.unassigned" : "late.unassignedTomorrowChip", status: "warn", score: today ? 900 : 880,
+        });
+        continue;
+      }
+      const late = lateToday(v, now);
+      if (late)
+        out.push({ id: `late-${v.id}`, kind: "late", refId: v.id, name: tech, label: "att.late", params: { name: `${tech} → ${client}` }, chip: late === "en_route" ? "late.enRoute" : "late.notLeft", status: "warn", score: 850 });
+    }
   }
   for (const j of db.jobs) {
     if (j.status !== "unscheduled" || db.visits.some((v) => v.jobId === j.id)) continue;

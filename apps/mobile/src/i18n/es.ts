@@ -1428,4 +1428,12 @@ export const es: Dict = {
   "plan.kind.job": "Trabajo",
   "vf.otherDate": "Otra fecha",
   "vf.visitsSoFar": "Visitas hasta ahora: {n}",
+  /* Clientes y leads, П3c (docs/specs/03): con retraso, sin asignar mañana */
+  "late.enRoute": "Con retraso · en camino",
+  "late.notLeft": "Con retraso · no ha salido",
+  "late.notice.enRoute": "{tech} llega tarde a {client}, en camino desde las {time}",
+  "late.notice.enRouteNoTime": "{tech} llega tarde a {client}, en camino",
+  "late.notice.notLeft": "{tech} llega tarde a {client}, no ha salido · inicio {time}",
+  "late.unassignedTomorrow": "Mañana: visita sin técnico · {name}",
+  "late.unassignedTomorrowChip": "Sin asignar · mañana",
 };

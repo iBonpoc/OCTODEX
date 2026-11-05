@@ -61,6 +61,14 @@ function demoDoc(): EstimateDoc {
   };
 }
 
+/** today, this many minutes ago (not before midnight, so the visit stays today) */
+function todayMinutesAgo(m: number): string {
+  const d = new Date();
+  const midnight = new Date(d);
+  midnight.setHours(0, 0, 0, 0);
+  return new Date(Math.max(midnight.getTime(), d.getTime() - m * 60_000)).toISOString();
+}
+
 function at(dayOffset: number, hour: number, minute = 0): string {
   const d = new Date();
   d.setDate(d.getDate() + dayOffset);
@@ -205,7 +213,8 @@ export function makeSeed(): DB {
         scope: ["Deep clean 3-bedroom house after move-out"], checklist: jobChecklist("v4"), photos: [{ id: "ph1", kind: "before" }], amountDueCents: 156000,
       },
       {
-        id: "v5", jobId: "j6", techId: "m-sub", start: at(0, 10, 0), durationMin: 360, step: "en_route", late: true,
+        // late by the rule, not by a flag (docs/specs/03 П3c): started 40 min ago (not before midnight), on the way for 30
+        id: "v5", jobId: "j6", techId: "m-sub", start: todayMinutesAgo(40), durationMin: 360, step: "en_route", enRouteAt: todayMinutesAgo(30),
         scope: ["Replace 100A panel with 200A", "Permit and inspection"], checklist: jobChecklist("v5"), photos: [], amountDueCents: 518000,
       },
       {
