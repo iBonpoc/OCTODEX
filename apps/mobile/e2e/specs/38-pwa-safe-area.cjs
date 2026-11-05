@@ -36,8 +36,47 @@ const measure = (page) =>
     };
   });
 
-exports.run = async (h) => {
+const fs = require("node:fs");
+const os = require("node:os");
+const path = require("node:path");
+const { chromium } = require("playwright");
+
+/**
+ * The manifest as Chromium itself reads it (CDP): no parse errors, standalone,
+ * and an empty installability list. The run's own browser can't answer that: headless-shell
+ * always returns [] and every context is incognito ("in-incognito"). So a full Chromium
+ * (channel "chromium") with a real profile opens the same page. No service worker needed:
+ * install from the menu doesn't require one since Chrome 108 (the auto prompt does — a separate step).
+ */
+async function installable(h, BASE) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "octodex-pwa-"));
+  const ctx = await chromium.launchPersistentContext(dir, { channel: "chromium" });
+  try {
+    const page = ctx.pages()[0] || (await ctx.newPage());
+    await page.goto(BASE + "/clients");
+    await page.waitForTimeout(1500);
+    const cdp = await ctx.newCDPSession(page);
+    const m = await cdp.send("Page.getAppManifest");
+    h.expect(/\/manifest\.webmanifest$/.test(m.url || ""), `manifest found (${m.url})`);
+    h.expect(m.errors.length === 0, `manifest parses without errors: ${JSON.stringify(m.errors)}`);
+    const data = JSON.parse(m.data);
+    h.expect(data.display === "standalone", "manifest display: standalone");
+    const { installabilityErrors } = await cdp.send("Page.getInstallabilityErrors");
+    h.expect(installabilityErrors.length === 0, `Chrome can install the app: ${JSON.stringify(installabilityErrors)}`);
+    // the host falls back to index.html with 200 for any missing file: check the type, not the status
+    for (const i of data.icons) {
+      const r = await page.request.get(new URL(i.src, BASE).href);
+      h.expect(r.ok() && r.headers()["content-type"] === "image/png", `icon ${i.src} is a PNG (${r.headers()["content-type"]})`);
+    }
+  } finally {
+    await ctx.close();
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+exports.run = async (h, { BASE }) => {
   const { page } = h;
+  await installable(h, BASE);
   await h.go("/clients");
   const viewport = await page.locator('meta[name="viewport"]').getAttribute("content");
   h.expect(/viewport-fit=cover/.test(viewport || ""), "page covers the notch (viewport-fit=cover)");
