@@ -3,7 +3,8 @@
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
 import { companyFromDb } from "./companyMap";
-import type { CatalogItem, DB, Note, Payment, Estimate, EstimateDoc, Notice, EstimateStatus, Expense, ExpenseCategory, Invoice, Job, JobStatus, Lead, LeadStatus, Source, Task, Activity, Member, Role, Visit, VisitStep } from "@/data/types";
+import { estimateStatus, jobStatus, leadStatus } from "./statusMap";
+import type { CatalogItem, DB, Note, Payment, Estimate, EstimateDoc, Notice, Expense, ExpenseCategory, Invoice, Job, Lead, Source, Task, Activity, Member, Role, Visit, VisitStep } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -25,36 +26,6 @@ const initials = (name: string) =>
     .join("")
     .toUpperCase() || "?";
 
-const jobStatus: Record<string, JobStatus> = {
-  draft: "estimate",
-  scheduled: "scheduled",
-  in_progress: "in_progress",
-  on_hold: "scheduled",
-  completed: "done",
-  closed: "done",
-  cancelled: "done",
-};
-const leadStatus: Record<string, LeadStatus> = {
-  new: "new",
-  contacted: "replied",
-  qualified: "replied",
-  inspection_scheduled: "booked",
-  estimate_sent: "estimate_sent",
-  won: "won",
-  lost: "lost",
-  declined: "declined",
-  archived: "lost",
-};
-const estimateStatus: Record<string, EstimateStatus> = {
-  draft: "draft",
-  sent: "sent",
-  viewed: "sent",
-  awaiting_countersign: "sent",
-  expired: "sent",
-  approved: "approved",
-  declined: "declined",
-  cancelled_by_customer: "declined",
-};
 export const expenseCategoryToDb: Record<ExpenseCategory, string> = {
   materials: "materials",
   fuel: "fuel",
