@@ -178,3 +178,35 @@ describe("several people on a visit (wave П3a, S9 / S9b; db:T35)", () => {
     expect(freeSlots(d, ["m3"], day, 30, { now: NOW })).toContain(10 * 60);
   });
 });
+
+describe("the Plan (wave П3b, S8b / S9a on the screen)", () => {
+  it("«Ждут даты»: unscheduled jobs without an open visit, signed longest ago first", async () => {
+    const { waitingJobs } = await import("../src/features/schedule");
+    const d = {
+      jobs: [
+        job({ id: "a", status: "unscheduled", estimateId: "e1", title: "A" }),
+        job({ id: "b", status: "unscheduled", estimateId: "e2", title: "B" }),
+        job({ id: "c", status: "unscheduled", title: "C" }), // no estimate: last
+        job({ id: "d", status: "unscheduled", title: "D" }), // has an open visit: not waiting
+        job({ id: "e", status: "scheduled", title: "E" }),
+      ],
+      visits: [V({ id: "vd", jobId: "d" }), V({ id: "vc", jobId: "c", step: "paid" })],
+      estimates: [
+        { id: "e1", approval: { at: "2026-11-03T10:00:00.000Z" } },
+        { id: "e2", approvedAt: "2026-11-01T10:00:00.000Z" },
+      ],
+    } as unknown as DB;
+    expect(waitingJobs(d).map((x) => x.job.id)).toEqual(["b", "a", "c"]);
+  });
+  it("days since a signature; the person filter", async () => {
+    const { daysSince, planFilter, isWorkday } = await import("../src/features/schedule");
+    expect(daysSince(new Date(NOW - 2 * 86_400_000 - 1000).toISOString(), NOW)).toBe(2);
+    expect(daysSince(undefined, NOW)).toBeNull();
+    const v = V({ techId: "m1", assigneeIds: ["m1", "m2"] });
+    expect(planFilter(v, "all", "m9")).toBe(true);
+    expect(planFilter(v, "me", "m2")).toBe(true);
+    expect(planFilter(v, "m3", "m2")).toBe(false);
+    expect(isWorkday(new Date(2026, 10, 7))).toBe(false); // a Saturday
+    expect(isWorkday(new Date(2026, 10, 9))).toBe(true);
+  });
+});

@@ -91,7 +91,7 @@ export default function PropertyScreen() {
             onClose={() => setInspect(false)}
             title={t("vf.addInspection")}
             saveLabel={t("lead.next.book")}
-            init={{ durationMin: SCHEDULE_DEFAULTS.inspectionMin }}
+            init={{ durationMin: SCHEDULE_DEFAULTS.inspectionMin, propertyId: p.id }}
             onSave={(v) => {
               const visitId = uid();
               const r = store.addInspection(p.id, { ...v, visitId });

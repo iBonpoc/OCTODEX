@@ -15,7 +15,8 @@ import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip } from "
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { assigneesOf, canPlan, canReschedule, isAssigned } from "@/features/schedule";
+import { assigneesOf, canPlan, canReschedule, isAssigned, planFilter, type PlanWho } from "@/features/schedule";
+import { PlanAddSheet, PlanWhoChips, WaitingJobs } from "@/features/PlanParts";
 
 type Mode = "day" | "week" | "month";
 
@@ -28,7 +29,12 @@ export default function Plan() {
   const { db, role } = useStore();
   const [mode, setMode] = usePersistentState<Mode>("octo.planMode.v1", "day");
   const [date, setDate] = useState<DayKey>(todayKey());
-  const mine = (v: Visit) => role !== "tech" || isAssigned(v, db.me);
+  const planner = canPlan([role]);
+  // «Чей план» (§7.2 п. 3): the office picks a person; a tech sees only his own
+  const [who, setWho] = usePersistentState<PlanWho>("octo.planWho.v1", "all");
+  const whoNow: PlanWho = planner && (who === "all" || who === "me" || db.members.some((m) => m.id === who)) ? who : "all";
+  const [adding, setAdding] = useState(false);
+  const mine = (v: Visit) => (role === "tech" ? isAssigned(v, db.me) : planFilter(v, whoNow, db.me));
   const visitsOn = (k: DayKey) => db.visits.filter((v) => isoDayKey(v.start) === k && mine(v)).sort(sortByStart);
   const step = (n: number) => setDate(mode === "day" ? addDays(date, n) : mode === "week" ? addDays(date, 7 * n) : addMonths(date, n));
   const week = weekDays(date);
@@ -42,6 +48,8 @@ export default function Plan() {
       help={t("help.plan")}
       hintKey="plan"
       right={
+        <RowView>
+        {planner ? <IconButton icon="plus" label={t("plan.add")} onPress={() => setAdding(true)} /> : null}
         <Segmented
           value={mode}
           onChange={setMode}
@@ -51,8 +59,11 @@ export default function Plan() {
             { key: "month", label: t("plan.month") },
           ]}
         />
+        </RowView>
       }
     >
+      {planner ? <PlanWhoChips who={whoNow} onChange={setWho} /> : null}
+      {planner ? <WaitingJobs /> : null}
       <RowView style={{ justifyContent: "space-between" }}>
         <IconButton icon="chevronLeft" label={t("plan.prev")} onPress={() => step(-1)} />
         <T v="heading" style={{ flex: 1, textAlign: "center" }} numberOfLines={1}>
@@ -76,19 +87,20 @@ export default function Plan() {
               })}
             />
           </ScrollView>
-          <DayView date={date} visits={visitsOn(date)} />
+          <DayView date={date} visits={visitsOn(date)} who={whoNow} onAdd={planner ? () => setAdding(true) : undefined} />
         </>
       ) : mode === "week" ? (
         <WeekView days={week} visitsOn={visitsOn} openDay={(k) => { setDate(k); setMode("day"); }} />
       ) : (
         <MonthView date={date} visitsOn={visitsOn} openDay={(k) => { setDate(k); setMode("day"); }} />
       )}
+      {planner ? <PlanAddSheet visible={adding} onClose={() => setAdding(false)} /> : null}
     </Screen>
   );
 }
 
 /** One day by person; unassigned first; drag a card onto another person to reassign. */
-function DayView({ date, visits }: { date: DayKey; visits: Visit[] }) {
+function DayView({ date, visits, who, onAdd }: { date: DayKey; visits: Visit[]; who: PlanWho; onAdd?: () => void }) {
   const { t } = useI18n();
   const { db, role, assignVisit, online } = useStore();
   const toast = useToast();
@@ -110,10 +122,13 @@ function DayView({ date, visits }: { date: DayKey; visits: Visit[] }) {
       <View key={v.id}>{card}</View>
     );
   const unassigned = visits.filter((v) => !v.techId);
-  const people = db.members.filter((m) => m.roles.includes("tech") && !m.pending && (role !== "tech" || m.id === db.me));
+  const only = role === "tech" || who === "me" ? db.me : who === "all" ? null : who;
+  const people = db.members.filter((m) => m.roles.includes("tech") && !m.pending && (!only || m.id === only));
   return (
     <DndProvider key={date}>
-      {visits.length === 0 ? <Empty icon="calendar" title={t("plan.empty")} /> : null}
+      {visits.length === 0 ? (
+        <Empty icon="calendar" title={t("plan.empty")} action={onAdd ? <Button label={t("plan.emptyBook")} icon="plus" variant="secondary" onPress={onAdd} /> : undefined} />
+      ) : null}
       {canAssign && unassigned.length > 0 ? (
         <View style={{ gap: space[2] }}>
           <T v="heading" tone="warn">

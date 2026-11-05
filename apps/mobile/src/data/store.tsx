@@ -723,13 +723,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               ...d.visits,
               {
                 id: ids.visitId, leadId: id, propertyId: target.propertyId, kind: "inspection", techId: peopleOf(at)[0] ?? null, assigneeIds: peopleOf(at), start: at.start, durationMin: at.durationMin, step: "scheduled",
-                scope: [at.note?.trim(), l.message].filter((x): x is string => !!x), checklist: [], photos: [], amountDueCents: 0,
+                // the note for the tech is its own field (visits.notes, wave П3b); the lead's message stays the scope
+                note: at.note?.trim() || undefined, scope: [l.message].filter((x): x is string => !!x), checklist: [], photos: [], amountDueCents: 0,
               },
             ],
           }),
           {
             k: "visit.inspection", leadId: id, propertyId: target.propertyId, visitId: ids.visitId, start: at.start, durationMin: at.durationMin,
-            techId: peopleOf(at)[0] ?? null, assigneeIds: peopleOf(at), scope: [at.note?.trim(), l.message].filter((x): x is string => !!x),
+            techId: peopleOf(at)[0] ?? null, assigneeIds: peopleOf(at), note: at.note?.trim() || undefined, scope: [l.message].filter((x): x is string => !!x),
           },
         );
         return () => {
@@ -759,14 +760,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addInspection: (propertyId, at) => {
         const id = at.visitId ?? uid();
         const people = peopleOf(at);
-        const scope = [at.note?.trim()].filter((x): x is string => !!x);
+        const scope: string[] = [];
+        const note = at.note?.trim() || undefined;
         const undo = mutate(
           "visit.inspection",
           (d) => ({
             ...d,
-            visits: [...d.visits, { id, propertyId, kind: "inspection", techId: people[0] ?? null, assigneeIds: people, start: at.start, durationMin: at.durationMin, step: "scheduled", scope, checklist: [], photos: [], amountDueCents: 0 }],
+            visits: [...d.visits, { id, propertyId, kind: "inspection", techId: people[0] ?? null, assigneeIds: people, start: at.start, durationMin: at.durationMin, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: 0 }],
           }),
-          { k: "visit.inspection", propertyId, visitId: id, start: at.start, durationMin: at.durationMin, techId: people[0] ?? null, assigneeIds: people, scope },
+          { k: "visit.inspection", propertyId, visitId: id, start: at.start, durationMin: at.durationMin, techId: people[0] ?? null, assigneeIds: people, note, scope },
         );
         return { id, undo };
       },
@@ -1070,8 +1072,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const visitId = sch.visitId ?? uid();
         const opt = e?.doc && e.approval ? e.doc.options.find((o) => o.id === e.approval!.optionId) : undefined;
         const scope0 = opt ? opt.lines.filter((l) => l.name.trim() && (!l.optional || e!.approval!.addonIds.includes(l.id))).map((l) => l.name) : [job.title];
-        // a note for the tech goes first (the visit form, docs/specs/03 §7.1)
-        const scope = sch.note?.trim() ? [sch.note.trim(), ...scope0] : scope0;
+        // the note for the tech is its own field (visits.notes, wave П3b)
+        const scope = scope0;
+        const note = sch.note?.trim() || undefined;
         const paidDeposit = e?.depositPaidAt ? e.depositCents ?? 0 : 0;
         const due = Math.max(0, job.amountCents - paidDeposit);
         const end = new Date(new Date(sch.start).getTime() + sch.durationMin * 60_000).toISOString();
@@ -1082,11 +1085,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: "scheduled" } : j)),
             visits: [
               ...d.visits,
-              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, step: "scheduled", scope, checklist: [], photos: [], amountDueCents: due },
+              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },
             ],
             notices: d.notices.map((n) => (n.jobId === jobId ? { ...n, read: true } : n)),
           }),
-          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), scope },
+          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope },
         );
       },
       saveCompany: (patch) => {

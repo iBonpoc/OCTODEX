@@ -9,7 +9,7 @@ import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 import { wasJustDragged } from "./dnd";
-import { isAssigned } from "@/features/schedule";
+import { assigneesOf, isAssigned } from "@/features/schedule";
 
 /** Visit status → DS status color (4+1) and word. */
 export function visitStatus(v: Visit): { status: StatusName; label: DictKey } {
@@ -40,6 +40,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
   const { c } = useTheme();
   const { job, property, customer, tech } = visitContext(db, v);
   const st = visitStatus(v);
+  const people = assigneesOf(v).map((id) => db.members.find((m) => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m);
   const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
   return (
     <Card
@@ -72,6 +73,11 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
           </T>
         ) : null}
       </RowView>
+      {/* the kind of the visit and everyone on it (docs/specs/03 §7.2, wave П3b) */}
+      <RowView style={{ flexWrap: "wrap" }}>
+        <StatusChip status="neutral" label={t(v.kind === "inspection" || (!v.jobId && v.leadId) ? "plan.kind.inspection" : "plan.kind.job")} soft />
+        {people.length > 1 ? people.map((m) => <Avatar key={m.id} initials={m.initials} s={component.avatar.sm} sub={m.kind === "sub"} />) : null}
+      </RowView>
       {v.checklist.length || v.photos.length ? (
         <RowView style={{ flexWrap: "wrap" }}>
           {v.checklist.length ? (
@@ -88,7 +94,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
         <RowView>
           {tech ? <Avatar initials={tech.initials} s={component.avatar.sm} sub={tech.kind === "sub"} /> : null}
           <T v="caption" tone="mut">
-            {tech ? tech.name : t("plan.unassigned")}
+            {people.length ? people.map((m) => m.name).join(", ") : t("plan.unassigned")}
           </T>
         </RowView>
       ) : null}
