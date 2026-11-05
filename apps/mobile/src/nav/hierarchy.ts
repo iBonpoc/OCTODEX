@@ -103,6 +103,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
     case "jobs":
     case "money":
     case "team":
+    case "settings":
       return { section: "tab.more", up: moreRoot };
     case "today":
     case "inbox":
