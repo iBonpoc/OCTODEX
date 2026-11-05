@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { space, type StatusName, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import type { Estimate, EstimateStatus, PaymentMethod } from "@/data/types";
+import type { Estimate, PaymentMethod } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { portalFromEstimate } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
@@ -19,13 +19,8 @@ import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
 
-const estimateStatus: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
-  draft: { s: "neutral", l: "st.draft" },
-  sent: { s: "info", l: "st.sent" },
-  approved: { s: "ok", l: "st.approved" },
-  declined: { s: "bad", l: "st.declined" },
-};
 
 /** Estimate: send by link (SMS/email), client view, PDF, on-site signature, deposit → job in the plan. */
 export default function EstimateScreen() {
@@ -46,7 +41,7 @@ export default function EstimateScreen() {
     );
   const customer = db.customers.find((c) => c.id === e.customerId);
   const property = db.properties.find((p) => p.id === e.propertyId);
-  const st = estimateStatus[e.status];
+  const st = estimateStatusView(e.status);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
   const universal = isUniversal(e);
   const job = db.jobs.find((j) => j.estimateId === e.id);
@@ -105,14 +100,14 @@ export default function EstimateScreen() {
       {universal ? (
         <>
           <RowView style={{ flexWrap: "wrap" }}>
-            {e.status !== "approved" ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
-            {e.status !== "approved" ? <Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /> : null}
+            {isEstimateEditable(e.status) ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
+            {e.status === "draft" || e.status === "sent" ? <Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /> : null}
             {e.token ? <Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /> : null}
             <Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={pdf} />
           </RowView>
           {e.status === "approved" && e.approval ? (
             <ApprovedCard e={e} jobId={job?.id} />
-          ) : (
+          ) : e.status === "awaiting_countersign" ? null : (
             <OnSiteSign e={e} />
           )}
         </>
