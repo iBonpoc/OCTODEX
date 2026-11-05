@@ -12,8 +12,7 @@ import type { IconKey } from "@/ui/primitives";
 import { T } from "@/ui/primitives";
 import { useDevice } from "@/theme/ThemeProvider";
 import { space } from "@octo/design-tokens";
-// TODO(10а PR6): import { catalogItemEconomics } from "@/features/estimateDoc" when #98 is in main
-import { catalogItemEconomics } from "@/features/catalogEconomicsStub";
+import { catalogItemEconomics } from "@/features/estimateDoc";
 
 const KINDS: (CatalogKind | "all")[] = ["all", "service", "labor", "material", "kit"];
 const KIND_ICON: Record<CatalogKind, IconKey> = { service: "route", labor: "clock", material: "box", kit: "checklist" };
