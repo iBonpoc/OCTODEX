@@ -78,7 +78,7 @@ export interface Person {
   role: PersonRole;
   phones: PersonPhone[];
   emails: PersonEmail[];
-  language?: "en" | "es";
+  language?: import("@/i18n/translate").DocLang;
 }
 
 /** Company tag on clients (VIP, Regular…): neutral, never coloured (colour is only for statuses). */
@@ -176,7 +176,7 @@ export interface Lead {
   email?: string;
   preferredContact?: ContactWay;
   /** client documents and messages in this language */
-  language?: "en" | "es";
+  language?: import("@/i18n/translate").DocLang;
   /** job address */
   address?: string;
   city: string;
@@ -385,6 +385,8 @@ export interface Company {
   address: Address;
   mailingAddress?: Address;
   timezone: string;
+  /** language of what goes to clients when the client's own is not known (en in the US); docLanguageFor decides */
+  docLanguage?: import("@/i18n/translate").DocLang;
   trades: string[];
   brand: { logo?: string; color?: string };
   insurance: { cglCarrier?: string; cglPolicy?: string; wcCarrier?: string; wcPolicy?: string; wcExempt?: boolean };
