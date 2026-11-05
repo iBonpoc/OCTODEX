@@ -97,6 +97,7 @@
 | S6 | Смета отправлена | человек | смета `draft` → `sent`; лид → `estimate_sent` | e2e:18-handoffs-lead-to-deposit, db:T8 | ✅ | — |
 | S7 | Клиент открыл | К | смета `sent` → `viewed` (в базе), счётчик | db:T8 | ◐ | в приложении нет отметки «открыл» в демо-режиме и счётчика «открыл N раз» |
 | S8 | Подпись / депозит | К | смета `approved`; лид `won (approval)`; клиент `active`; работа «назначить дату»; счёт на депозит | e2e:18-handoffs-lead-to-deposit, e2e:02-sign-deposit-card, db:T8, db:T10, db:T11 | ✅ | — |
+| S8b | Подпись компании | сотрудник своим именем (право по умолчанию у всех) | смета `awaiting_countersign` → `approved`; лид `won`, клиент `active`; — → работа «назначить дату», счёт на депозит, исполненная копия (`docs/specs/07` §1, §4) | unit:estimateStatus, db:T18 | ◐ | переходы и статус есть (волна A); подпись сотрудника, лид `won` и клиент `active` при S8b, работа и депозит после S8b — волна E2 |
 | S8a | Ручная победа | Д | лид `won (manual)`; клиент `active` | e2e:04-lead-funnel, db:T10 | ◐ | клиент `active` |
 | S9 | Работа → расписание | Д/Дп | `unscheduled` → `scheduled`; — → `Visit` | e2e:05-schedule-job | ✅ | время и длительность |
 | S10 | Визит выполнен | М | шаги визита; работа `in_progress` → `done` | e2e:12-tech-day, db:T4 | ◐ | работа → `done` |
@@ -124,7 +125,7 @@
 |---|---|---|---|
 | Lead | `new` `replied` `booked` `estimate_sent` `won` `lost` `declined`; архив — `archivedAt` | new, contacted, qualified, inspection_scheduled, estimate_sent, won, lost, declined, archived | человек + авто (S2, S4, S6, S8) |
 | Customer | `prospect` `active` `archived` `do_not_service` | prospect, active, archived, do_not_service | авто (S3, S8); архив и «не обслуживаем» — человек (`docs/specs/04` §4) |
-| Estimate | `draft` `sent` `approved` `declined` | draft, sent, viewed, awaiting_countersign, approved, declined, expired, cancelled_by_customer | человек, клиент |
+| Estimate | `draft` `sent` `awaiting_countersign` `approved` `declined` | draft, sent, viewed, awaiting_countersign, approved, declined, expired, cancelled_by_customer | человек, клиент, сотрудник за компанию (S8b); правка после отправки — новая версия, `draft` (`docs/specs/07` §4) |
 | Job | `lead` `estimate` `unscheduled` `scheduled` `in_progress` `done` | draft, scheduled, in_progress, on_hold, completed, closed, cancelled | авто + человек |
 | Visit | `scheduled` `en_route` `on_site` `working` `signed` `paid` | scheduled, en_route, on_site, completed, cancelled, no_show | монтажник |
 | Invoice | вычисляется из баланса движка | status: draft, sent, void; payment_status: unpaid, partially_paid, paid, refunded | — |

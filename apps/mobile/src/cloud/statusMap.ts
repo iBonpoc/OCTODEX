@@ -40,7 +40,7 @@ export const estimateStatus: Record<string, EstimateStatus> = {
   draft: "draft",
   sent: "sent",
   viewed: "sent",
-  awaiting_countersign: "sent",
+  awaiting_countersign: "awaiting_countersign",
   expired: "sent",
   approved: "approved",
   declined: "declined",

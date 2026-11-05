@@ -278,7 +278,8 @@ export interface Activity {
   actorId: ID;
 }
 
-export const ESTIMATE_STATUSES = ["draft", "sent", "approved", "declined"] as const;
+/** awaiting_countersign: the client signed remotely, an employee has not signed for the company yet (docs/specs/07 §4, S8b) */
+export const ESTIMATE_STATUSES = ["draft", "sent", "awaiting_countersign", "approved", "declined"] as const;
 export type EstimateStatus = (typeof ESTIMATE_STATUSES)[number];
 
 /** Universal estimate content (trade-agnostic): options → lines in groups, add-ons, discount, tax, deposit. */
