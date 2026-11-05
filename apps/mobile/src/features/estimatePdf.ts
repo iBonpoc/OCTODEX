@@ -14,19 +14,19 @@ import type { DictKey } from "@/i18n";
 import { tFor } from "@/i18n/translate";
 import type { PortalData } from "@/cloud/portal";
 import { optionTotals, withAddons } from "./estimateDoc";
-import { docDay, docMoney, docPage, esc, type DocOpts } from "./docPdf";
+import { docDay, docMoney, docPage, docTime, esc, type DocOpts } from "./docPdf";
 
 export interface EstimatePdfOpts extends DocOpts {
   /** company setting «Show unit prices» (docs/specs/07 §3.4); on by default */
   showUnitPrices?: boolean;
 }
 
-const usTime = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
-
 export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
   const t = tFor(opts.lang);
   const money = docMoney;
-  const day = docDay;
+  const tz = p.company.timezone;
+  const day = (iso: string) => docDay(iso, tz);
+  const time = (iso: string) => docTime(iso, tz);
   const unit = opts.showUnitPrices !== false;
   const doc = p.doc;
   const options = doc?.options ?? [];
@@ -65,22 +65,36 @@ export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
   const sigSvg = (path: string) =>
     `<svg viewBox="0 0 400 160" width="200" height="80"><path d="${esc(path)}" stroke="${P.ink}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const company = p.company.name || "OCTODEX";
+  // E2b-2: the employee signs in their own name «for the company», with the title and the HIS number when given
+  const cs = p.countersign;
+  const companySig = cs
+    ? `<div class="sig"><div class="mut">${esc(t("est.pdf.contractor"))}</div><div class="line">${cs.signature ? sigSvg(cs.signature) : ""}</div><div>${esc(cs.signerName)}${
+        cs.signerTitle ? `, ${esc(cs.signerTitle)}` : ""
+      }</div><div>${esc(t("est.pdf.forCompany", { company }))}</div>${cs.his ? `<div class="mut">${esc(t("est.pdf.his", { n: cs.his }))}</div>` : ""}<div class="mut">${esc(day(cs.signedAt))}</div></div>`
+    : `<div class="sig"><div class="mut">${esc(t("est.pdf.contractor"))}</div><div class="line"></div><div>${esc(t("est.pdf.forCompany", { company }))}</div><div class="mut">${esc(t("est.pdf.awaitingSignature"))}</div></div>`;
   const signatures = `<div class="sigs">
 <div class="sig"><div class="mut">${esc(t("est.pdf.customer"))}</div><div class="line">${a?.signature ? sigSvg(a.signature) : ""}</div><div>${esc(a?.signerName ?? p.customer.name)}</div><div class="mut">${
     a ? esc(day(a.signedAt)) : esc(t("est.pdf.awaitingSignature"))
   }</div></div>
-<div class="sig"><div class="mut">${esc(t("est.pdf.contractor"))}</div><div class="line"></div><div>${esc(t("est.pdf.forCompany", { company }))}</div><div class="mut">${esc(t("est.pdf.awaitingSignature"))}</div></div>
+${companySig}
 </div>`;
   const record = a
     ? `<h2>${esc(t("est.pdf.record"))}</h2><table class="record"><thead><tr><th>${esc(t("est.pdf.signer"))}</th><th>${esc(t("est.pdf.when"))}</th><th>${esc(t("est.pdf.how"))}</th></tr></thead><tbody>
-<tr><td>${esc(t("est.pdf.customer"))}: ${esc(a.signerName)}</td><td>${esc(day(a.signedAt))} ${esc(usTime.format(new Date(a.signedAt)))}</td><td>${esc(t("est.pdf.eSignature"))}${
+<tr><td>${esc(t("est.pdf.customer"))}: ${esc(a.signerName)}</td><td>${esc(day(a.signedAt))} ${esc(time(a.signedAt))}</td><td>${esc(t("est.pdf.eSignature"))}${
     a.channel === "on_site" ? ` · ${esc(a.deviceUser ? t("est.pdf.onSiteDevice", { name: a.deviceUser }) : t("est.pdf.onSite"))}` : ""
-  }</td></tr>
+  }</td></tr>${
+    cs
+      ? `<tr><td>${esc(t("est.pdf.contractor"))}: ${esc(cs.signerName)}</td><td>${esc(day(cs.signedAt))} ${esc(time(cs.signedAt))}</td><td>${esc(t("est.pdf.eSignature"))}</td></tr>`
+      : ""
+  }
 </tbody></table>`
     : "";
   const title = `${t("portal.estimate")} ${p.number ?? ""}`.trim();
+  const contacts = [p.customer.phone, p.customer.email].filter(Boolean).map((x) => esc(x!)).join(" · ");
   const body = `
-<p><b>${esc(t("portal.for"))}:</b> ${esc(p.customer.name)}<br>${esc(p.property.address)}${p.property.city ? `, ${esc(p.property.city)}` : ""}</p>
+<p><b>${esc(t("portal.for"))}:</b> ${esc(p.customer.name)}<br>${esc(p.property.address)}${p.property.city ? `, ${esc(p.property.city)}` : ""}${
+    contacts ? `<br>${contacts}` : ""
+  }</p>
 ${p.title ? `<p><b>${esc(p.title)}</b></p>` : ""}
 ${blocks}
 ${doc?.note ? `<div class="note">${esc(doc.note)}</div>` : ""}
@@ -91,7 +105,8 @@ ${signatures}
 ${record}`;
   return docPage({
     title,
-    meta: [`${t("portal.date")}: ${day(p.sentAt ?? new Date().toISOString())}`],
+    // «Valid until» only while it matters: the client has not signed yet (founder 05.11)
+    meta: [`${t("portal.date")}: ${day(p.sentAt ?? new Date().toISOString())}`, ...(p.validUntil && !a ? [`${t("est.pdf.validUntil")}: ${day(p.validUntil)}`] : [])],
     footer: [title, company].join(" · "),
     company: p.company,
     body,

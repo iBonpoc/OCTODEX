@@ -1710,6 +1710,39 @@ begin
 end $$;
 \echo 'T23 company signature and rights ok'
 
+-- T23, E2b-2 «Команда» → «Сотрудник»: title and HIS under the signature — owner and admin; a tech cannot change even their own
+:as_office_a   -- admin since T6
+do $$ begin
+  update public.memberships set title = 'Field lead', his_registration_number = 'HIS-555'
+   where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+  perform tst.ok((select title = 'Field lead' and his_registration_number = 'HIS-555' from public.memberships
+                   where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'), 'admin sets title and HIS');
+  update public.memberships set can_sign_contracts = true, title = 'Field lead 2'
+   where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';  -- the right unchanged: allowed
+end $$;
+:as_tech_a
+do $$ begin
+  update public.memberships set title = 'Boss', his_registration_number = 'FAKE'
+   where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+  update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003';
+end $$;
+:as_owner_a
+do $$ begin
+  perform tst.ok((select title = 'Field lead 2' and his_registration_number = 'HIS-555' from public.memberships
+                   where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'), 'tech cannot change own title or HIS');
+  perform tst.ok((select can_sign_contracts from public.memberships
+                   where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'), 'tech cannot take their own right to sign');
+end $$;
+:as_owner_b
+do $$ begin
+  update public.memberships set title = 'Hacked' where company_id = 'ca000000-0000-0000-0000-000000000000';
+end $$;
+:as_owner_a
+do $$ begin
+  perform tst.ok(not exists (select 1 from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and title = 'Hacked'), 'another company cannot change A''s employees');
+end $$;
+\echo 'T23 employee title and HIS ok'
+
 -- ---------------------------------------------------------------- T24: the link: valid until, revoke (founder 05.11)
 :as_owner_a
 do $$

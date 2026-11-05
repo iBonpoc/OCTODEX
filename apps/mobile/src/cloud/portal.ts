@@ -27,6 +27,8 @@ export interface PortalData {
     logo?: string;
     color?: string;
     terms?: string;
+    /** IANA zone of the company (E2b-2): dates and times on the documents are the company's local ones */
+    timezone?: string;
     licenses: { kind: string; number: string; classes: string[] }[];
     contacts: { name: string; title?: string; phone?: string; email?: string }[];
   };
@@ -48,7 +50,7 @@ export interface PortalData {
 type Raw = {
   number?: string; title?: string; status: string; sent_at?: string; doc?: EstimateDoc | null;
   company?: {
-    name?: string; phone?: string; email?: string; website?: string; address?: string; logo?: string; color?: string; terms?: string; license?: string;
+    name?: string; phone?: string; email?: string; website?: string; address?: string; logo?: string; color?: string; terms?: string; license?: string; timezone?: string;
     licenses?: { kind: string; number: string; classes?: string[] }[];
     contacts?: { name: string; title?: string; phone?: string; email?: string }[];
   };
@@ -73,6 +75,7 @@ function fromRaw(r: Raw): PortalData {
     company: {
       name: r.company?.name ?? "", phone: r.company?.phone, email: r.company?.email, website: r.company?.website,
       address: r.company?.address || undefined, logo: r.company?.logo, color: r.company?.color, terms: r.company?.terms,
+      timezone: r.company?.timezone || undefined,
       licenses: (r.company?.licenses ?? []).map((l) => ({ kind: l.kind, number: l.number, classes: l.classes ?? [] })),
       contacts: r.company?.contacts ?? [],
     },
@@ -176,6 +179,7 @@ export function companyForPortal(db: DB, fallbackName: string): PortalData["comp
     logo: c.brand.logo,
     color: c.brand.color,
     terms: c.estimate.terms,
+    timezone: c.timezone || undefined,
     licenses: c.licenses.filter((l) => l.onDocuments).map((l) => ({ kind: l.kind, number: l.number, classes: l.classes })),
     contacts: contacts.map((x) => ({ name: x.name, title: x.title, phone: x.phone, email: x.email })),
   };

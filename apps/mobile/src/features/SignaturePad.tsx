@@ -73,3 +73,18 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
     </View>
   );
 }
+
+/** A saved signature, drawn the same way as on the pad (path in the pad's own coordinates). */
+export function SignaturePreview({ svg, label }: { svg: string; label: string }) {
+  const { c } = useTheme();
+  return (
+    <View
+      style={{ height: component.mediaH, borderRadius: radius.inner, borderWidth: 1, borderColor: c.bd, backgroundColor: c.in, overflow: "hidden" }}
+      accessibilityLabel={label}
+    >
+      <Svg width="100%" height="100%" pointerEvents="none">
+        <Path d={svg} stroke={c.ink} strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      </Svg>
+    </View>
+  );
+}

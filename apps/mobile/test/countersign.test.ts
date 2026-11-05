@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { DB } from "../src/data/types";
-import { canCountersign, canManageLink, clientSigned, companyDeclined, companySigned, hisWarning, linkOpen, reopened, validUntilFor } from "../src/features/estimateSign";
+import { canCountersign, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, hisWarning, linkOpen, mySignature, reopened, savedSignature, validUntilFor } from "../src/features/estimateSign";
 
 const NOW = "2026-11-05T18:00:00.000Z";
 const IDS = { jobId: "job-new", invoiceId: "inv-new" };
@@ -177,5 +177,34 @@ describe("E2b: after the client signed, the company declines or changes it", () 
     const s2 = reopened(sign(d, id), id);
     expect(s2.estimates.find((x) => x.id === id)).toMatchObject({ status: "draft", approval: undefined, signature: undefined });
     expect(reopened(d, id)).toBe(d);
+  });
+});
+
+describe("E2b-2: my saved signature, the right to sign", () => {
+  it("a new saved signature revokes the previous one; it stays in history; mySignature is the current one", () => {
+    const d = makeSeed();
+    const s1 = savedSignature(d, { id: "sig1", userId: d.me, svg: "M0 0", name: "Sam Lee" }, "2026-11-01T00:00:00Z");
+    const s2 = savedSignature(s1, { id: "sig2", userId: d.me, svg: "M1 1", name: "Sam Lee", title: "PM" }, NOW);
+    expect(s2.memberSignatures!.filter((s) => s.userId === d.me)).toHaveLength(2);
+    expect(s2.memberSignatures!.find((s) => s.id === "sig1")!.revokedAt).toBe(NOW);
+    expect(mySignature(s2, d.me)?.id).toBe("sig2");
+    const other = d.members.find((m) => m.id !== d.me)!;
+    expect(mySignature(s2, other.id)).toBeUndefined();
+  });
+  it("signing with the saved signature: method «saved», the saved drawing in the contract", () => {
+    const { d, id } = withEstimate();
+    const s1 = savedSignature(sign(d, id), { id: "sig1", userId: d.me, svg: "M7 7", name: "Sam" }, NOW);
+    const s2 = companySigned(s1, id, { userId: d.me, signature: mySignature(s1, d.me)!.svg, method: "saved" }, IDS, NOW);
+    expect(s2.estimates.find((x) => x.id === id)!.countersign).toMatchObject({ method: "saved", signature: "M7 7" });
+  });
+  it("only the owner gives or takes the right (server: tg_membership_sign_guard); demo data without isOwner: the director", () => {
+    const d = makeSeed();
+    const dir = d.members.find((m) => m.roles.includes("director"))!;
+    const tech = d.members.find((m) => !m.roles.includes("director"))!;
+    expect(canGrantSign(d, dir.id)).toBe(true);
+    expect(canGrantSign(d, tech.id)).toBe(false);
+    const cloud = { ...d, members: d.members.map((m) => ({ ...m, isOwner: m.id === tech.id })) };
+    expect(canGrantSign(cloud, dir.id)).toBe(false); // an admin who is not the owner
+    expect(canGrantSign(cloud, tech.id)).toBe(true);
   });
 });

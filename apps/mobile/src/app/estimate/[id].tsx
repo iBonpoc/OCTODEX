@@ -9,7 +9,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { portalFromEstimate } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
-import { SignaturePad } from "@/features/SignaturePad";
+import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
 import { isUniversal, mainOption, newToken } from "@/features/estimateDoc";
 import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
@@ -21,7 +21,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
-import { canCountersign, canManageLink, hisWarning } from "@/features/estimateSign";
+import { canCountersign, canManageLink, hisWarning, mySignature } from "@/features/estimateSign";
 import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
 
 
@@ -367,6 +367,7 @@ function CountersignCard({ e }: { e: Estimate }) {
   const company = store.companyName ?? "OCTODEX";
   const option = a && e.doc ? e.doc.options.find((o) => o.id === a.optionId)?.name ?? "" : "";
   const manage = canManageLink(store.db, store.db.me);
+  const mine = mySignature(store.db, store.db.me);
   return (
     <>
       <SectionTitle title={t("est.countersign.title")} />
@@ -388,8 +389,22 @@ function CountersignCard({ e }: { e: Estimate }) {
                 {t("est.countersign.hisWarning")}
               </T>
             ) : null}
+            {mine ? (
+              <>
+                <SignaturePreview svg={mine.svg} label={t("est.sig.title")} />
+                <Button
+                  label={t("est.countersign.useSaved")}
+                  icon="check"
+                  full
+                  onPress={() => {
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
+                    toast.show(store.online ? t("est.countersign.done") : t("offline.queued"), store.countersignEstimate(e.id, { savedId: mine.id }));
+                  }}
+                />
+              </>
+            ) : null}
             <T v="caption" tone="mut">
-              {t("est.countersign.becomesSaved")}
+              {mine ? t("est.countersign.orDraw") : t("est.countersign.becomesSaved")}
             </T>
             <SignaturePad
               label={t("est.countersign.padLabel")}

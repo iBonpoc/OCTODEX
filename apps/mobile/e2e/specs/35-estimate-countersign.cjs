@@ -1,6 +1,7 @@
 /**
  * E2b-1 (docs/specs/07 «E2b — экраны подписи»): after the client signs, the company signs, declines or changes it;
  * the client page shows each state in the client's language (English here, the app is Russian); revoke; expired link.
+ * E2b-2: «Команда» → «Сотрудник» (title, HIS), «Моя подпись», «Требует внимания» → sign with the saved signature.
  */
 const TOKEN = "demo0handyman0estimate0000000001";
 
@@ -18,14 +19,18 @@ async function cloneEstimate(h, id, patch) {
 }
 const tokenOf = (id) => `demo0${id}0000000000000000000000`.slice(0, 32);
 
-async function countersign(h, estimateId) {
-  await h.go(`/estimate/${estimateId}`);
+async function draw(h) {
   const pad = h.page.getByLabel(/расписывается|signs here/i).last();
   await pad.scrollIntoViewIfNeeded(); await h.page.waitForTimeout(250);
   const bb = await pad.boundingBox();
   await h.page.mouse.move(bb.x + 30, bb.y + 90); await h.page.mouse.down();
   for (let i = 0; i < 20; i++) await h.page.mouse.move(bb.x + 30 + i * 12, bb.y + 90 - Math.sin(i / 2) * 40);
   await h.page.mouse.up();
+}
+
+async function countersign(h, estimateId) {
+  await h.go(`/estimate/${estimateId}`);
+  await draw(h);
   await h.page.getByRole("button", { name: "Подписать договор" }).last().click(); await h.page.waitForTimeout(700);
 }
 
@@ -35,6 +40,7 @@ exports.run = async (h) => {
   await cloneEstimate(h, "e35o", {});
   await cloneEstimate(h, "e35r", {});
   await cloneEstimate(h, "e35x", { validUntil: "2020-01-01" });
+  await cloneEstimate(h, "e35s", {});
 
   // 1. client signs → the company sees the summary, signs → the client page: signed by both + the signed PDF
   await h.go(`/p/${TOKEN}`);
@@ -88,4 +94,47 @@ exports.run = async (h) => {
   await h.go(`/p/${tokenOf("e35x")}`);
   await h.expectText(/This estimate has expired — contact/, "expired: who to call (client's language)");
   h.expect(!/Linda Alvarez/.test(await h.text()), "expired: nothing of the client");
+  // ...and the team sees «expired» in «Требует внимания» instead of «no reply»
+  await h.go("/triage");
+  await h.expectText(/срок сметы истёк/, "attention: expired");
+
+  // 6. «Команда» → «Сотрудник»: title and HIS under my signature
+  await h.go("/team");
+  await h.page.getByText("Alex Petrov", { exact: true }).last().click(); await h.page.waitForTimeout(400);
+  await h.sheet().getByPlaceholder(/Должность/).fill("Project manager");
+  await h.sheet().getByPlaceholder(/Номер HIS/).fill("HIS-77");
+  h.expect(await h.sheet().getByRole("switch", { name: /Может подписывать/ }).count() === 1, "the owner sees the right to sign");
+  await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await h.page.waitForTimeout(500);
+  db = await h.db();
+  h.expect(db.members.find((m) => m.id === db.me).title === "Project manager", "title saved");
+  h.expect(db.members.find((m) => m.id === db.me).hisNumber === "HIS-77", "HIS saved");
+
+  // 7. «Моя подпись» from the settings: a new saved signature
+  await h.go("/settings");
+  await h.page.getByRole("button", { name: "Моя подпись для договоров" }).last().click(); await h.page.waitForTimeout(800);
+  await h.expectText(/Моя подпись/, "the signature screen");
+  await h.page.getByPlaceholder(/Имя под подписью/).fill("Alex Petrov");
+  await draw(h);
+  await h.page.getByRole("button", { name: "Сохранить подпись" }).last().click(); await h.page.waitForTimeout(600);
+  await h.expectText(/Сохранена/, "saved");
+  db = await h.db();
+  const mine = db.memberSignatures.filter((x) => x.userId === db.me && !x.revokedAt);
+  h.expect(mine.length === 1, "one current saved signature");
+
+  // 8. the client signs → «sign the contract» in «Требует внимания» → one tap with the saved signature
+  await h.go(`/p/${tokenOf("e35s")}`);
+  await h.sign("Linda Alvarez");
+  await h.go("/triage");
+  await h.expectText(/клиент подписал — подпишите договор/, "attention: sign the contract");
+  await h.go("/estimate/e35s");
+  await h.page.getByRole("button", { name: "Подписать сохранённой подписью" }).last().click(); await h.page.waitForTimeout(800);
+  db = await h.db();
+  const signed = db.estimates.find((e) => e.id === "e35s");
+  h.expect(signed.status === "approved", "approved with the saved signature");
+  h.expect(signed.countersign.method === "saved" && signed.countersign.signature === mine[0].svg, "the saved drawing, method saved");
+  h.expect(signed.countersign.signerTitle === "Project manager" && signed.countersign.his === "HIS-77", "title and HIS go to the contract");
+  await h.go(`/p/${tokenOf("e35s")}`);
+  await h.expectText(/Contract signed by both sides/, "client page: signed by both");
+  await h.go("/triage");
+  h.expect(!/клиент подписал — подпишите договор/.test(await h.text()), "the item is gone once signed");
 };

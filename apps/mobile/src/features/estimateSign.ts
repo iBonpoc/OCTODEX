@@ -129,3 +129,15 @@ export function reopened(d: DB, id: ID): DB {
   if (!e || e.status !== "awaiting_countersign") return d;
   return { ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, status: "draft", approval: undefined, signature: undefined } : x)) };
 }
+
+/** E2b-2: only the owner gives or takes the right to sign (server: tg_membership_sign_guard); demo data: a director. */
+export function canGrantSign(d: Pick<DB, "members">, userId: ID): boolean {
+  const m = d.members.find((x) => x.id === userId);
+  return !!m && (m.isOwner ?? m.roles.includes("director"));
+}
+
+/** E2b-2: a new own signature; the previous one is revoked and stays in history (server: the same trigger). */
+export function savedSignature(d: DB, sig: { id: ID; userId: ID; svg: string; name: string; title?: string }, now: string): DB {
+  const list = (d.memberSignatures ?? []).map((s) => (s.userId === sig.userId && !s.revokedAt ? { ...s, revokedAt: now } : s));
+  return { ...d, memberSignatures: [...list, { ...sig, createdAt: now }] };
+}
