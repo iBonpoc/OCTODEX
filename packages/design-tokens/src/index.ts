@@ -140,6 +140,8 @@ export const component = {
   backMax: 220,
   /** dimmed element: disabled control, day outside the shown month */
   dimOpacity: 0.45,
+  /** iOS-style menu that opens at the control (status, quick choices) */
+  menuW: 240,
 } as const;
 
 /* ---------- breakpoints (HANDOFF: 390 / 820 / 1280) ---------- */
