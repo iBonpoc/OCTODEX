@@ -39,7 +39,8 @@ export default function ClientEstimatePage() {
   const back = router.canGoBack() ? () => router.back() : undefined;
 
   // E2b: past "valid until" the server answers only who to call — in the client's language
-  if (data && data.status === "expired") {
+  // …and after the company declined: only who declined and who to call (the server sends nothing else)
+  if (data && (data.status === "expired" || data.status === "declined")) {
     return (
       <I18nOverride lang={data.lang}>
         <ExpiredPage data={data} back={back} />
@@ -138,12 +139,6 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
 
       {data.status === "draft" ? (
         <Empty icon="pencil" title={t("portal.draft")} />
-      ) : data.status === "declined" ? (
-        // E2b: the company declined after the client signed (the reason is for the team only)
-        <Card status="bad">
-          <StatusChip status="bad" label={t("est.portal.declined", { company: data.company.name || "OCTODEX" })} />
-          {data.company.phone ? <T v="body">{data.company.phone}</T> : null}
-        </Card>
       ) : (
         <>
           <EstimateView doc={doc} optionId={base.id} onOption={setOptionId} addonIds={addons} onAddons={setAddonIds} readOnly={!!approved} />
@@ -225,14 +220,15 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
   );
 }
 
-/** E2b: the estimate expired before the client signed — only who to call, nothing of the estimate. */
+/** E2b: expired before the client signed, or declined by the company — only who to call, nothing of the estimate. */
 function ExpiredPage({ data, back }: { data: PortalData; back?: () => void }) {
   const { t } = useI18n();
   const company = data.company.name || "OCTODEX";
+  const declined = data.status === "declined";
   return (
     <Screen title={company} back={back}>
-      <Card status="warn">
-        <StatusChip status="warn" label={t("est.portal.expired", { company })} />
+      <Card status={declined ? "bad" : "warn"}>
+        <StatusChip status={declined ? "bad" : "warn"} label={declined ? t("est.portal.declined", { company }) : t("est.portal.expired", { company })} />
         {data.company.phone ? <T v="body">{data.company.phone}</T> : null}
       </Card>
     </Screen>

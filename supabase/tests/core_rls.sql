@@ -2054,11 +2054,20 @@ end $$;
 do $$ begin
   perform tst.fails(format($q$select public.decline_countersign(%L, 'no')$q$, split_part(current_setting('tst.e2b_1'), ',', 1)), 'tech cannot decline');
 end $$;
+:as_owner_b
+do $$ begin
+  perform tst.fails(format($q$select public.decline_countersign(%L, 'no')$q$, split_part(current_setting('tst.e2b_1'), ',', 1)), 'another company''s owner cannot decline');
+end $$;
+:as_sales_a
+do $$ begin
+  perform tst.fails(format($q$select public.decline_countersign(%L, 'no')$q$, split_part(current_setting('tst.e2b_1'), ',', 1)), 'sales cannot decline');
+end $$;
 :as_owner_a
 do $$
 declare e uuid := split_part(current_setting('tst.e2b_1'), ',', 1)::uuid; e_ok uuid := split_part(current_setting('tst.e2b_2'), ',', 1)::uuid;
 begin
   perform tst.fails(format($q$select public.decline_countersign(%L, '  ')$q$, e), 'a reason is required');
+  perform tst.fails(format($q$select public.decline_countersign(%L, %L)$q$, e, repeat('x', 501)), 'a reason longer than 500 characters is refused');
   perform public.decline_countersign(e, 'we cannot do it this month');
   perform public.decline_countersign(e, 'we cannot do it this month');   -- repeat: nothing doubles
   perform tst.ok((select status || '/' || declined_reason || '/' || declined_reason_text from public.estimates where id = e) = 'declined/other/we cannot do it this month',
@@ -2074,6 +2083,10 @@ do $$ begin
   perform tst.fails(format($q$select public.portal_accept(%L, %L, null, 'X', 'M0 0', true)$q$, split_part(current_setting('tst.e2b_1'), ',', 3), split_part(current_setting('tst.e2b_1'), ',', 2)),
                     'a declined estimate cannot be signed again');
   perform tst.ok(public.portal_estimate(split_part(current_setting('tst.e2b_1'), ',', 3)) ->> 'status' = 'declined', 'the client page shows the decline (until valid until)');
+  perform tst.ok((select r -> 'doc' is null and r -> 'approval' is null and r -> 'countersign' is null and r -> 'customer' is null and r -> 'invoices' is null
+                    and r -> 'company' ->> 'name' is not null and r ->> 'doc_language' is not null
+                    from (select public.portal_estimate(split_part(current_setting('tst.e2b_1'), ',', 3)) r) x),
+                 'declined: only who declined and who to call (no document, no signatures)');
   perform tst.fails(format($q$select public.decline_countersign(%L, 'x')$q$, split_part(current_setting('tst.e2b_1'), ',', 1)), 'anon cannot decline');
 end $$;
 \echo 'T29 company decline ok'

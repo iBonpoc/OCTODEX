@@ -17,6 +17,9 @@ begin
   if coalesce(trim(p_text), '') = '' then
     raise exception 'a reason is required' using errcode = '22023';
   end if;
+  if length(trim(p_text)) > 500 then
+    raise exception 'the reason is longer than 500 characters' using errcode = '22023';
+  end if;
   select * into e from public.estimates where id = p_estimate_id and deleted_at is null for update;
   if not found or not app.has_role(e.company_id, array['owner', 'admin', 'office']) then
     raise exception 'only the director or the office declines a signed estimate' using errcode = '42501';
@@ -34,7 +37,7 @@ begin
           jsonb_build_object('action', 'declined_by_company', 'from', 'awaiting_countersign', 'to', 'declined'));
 end;
 $$;
-revoke all on function public.decline_countersign(uuid, text) from public, anon;
+revoke all on function public.decline_countersign(uuid, text) from public, anon, authenticated;
 grant execute on function public.decline_countersign(uuid, text) to authenticated;
 
 -- ---- 2. The client page: an expired link says who to call; the company's time zone ---------------------
@@ -57,6 +60,11 @@ begin
     -- past "valid until" (unsigned): only who to call, nothing of the estimate (E2b, plan audit 05.11).
     -- A revoked link has no token any more, so it never reaches here (the page says "link not valid").
     return jsonb_build_object('status', 'expired',
+      'company', jsonb_build_object('name', coalesce(nullif(co.dba, ''), co.name), 'phone', co.phone));
+  end if;
+  if e.status = 'declined' then
+    -- the company declined (E2b, security-check 05.11): only what the page shows — who declined and who to call
+    return jsonb_build_object('status', 'declined',
       'company', jsonb_build_object('name', coalesce(nullif(co.dba, ''), co.name), 'phone', co.phone));
   end if;
   select * into v from public.estimate_versions where id = coalesce(e.sent_version_id, e.current_version_id);
@@ -124,4 +132,4 @@ begin
   );
 end;
 $$;
-revoke all on function app.portal_estimate_base(text) from public, anon, authenticated;
+revoke all on function app.portal_estimate_base(text) from public, anon, authenticated;  -- only the public wrapper calls it
