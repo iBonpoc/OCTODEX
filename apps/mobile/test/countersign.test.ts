@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { DB } from "../src/data/types";
-import { canCountersign, clientSigned, companySigned, hisWarning, linkOpen, validUntilFor } from "../src/features/estimateSign";
+import { canCountersign, canManageLink, clientSigned, companySigned, hisWarning, linkOpen, validUntilFor } from "../src/features/estimateSign";
 
 const NOW = "2026-11-05T18:00:00.000Z";
 const IDS = { jobId: "job-new", invoiceId: "inv-new" };
@@ -49,7 +49,7 @@ describe("S8b: an employee signs for the company → the deal", () => {
   it("approved in the employee's own name; lead won, client active, one job waiting for a date, the deposit invoice", () => {
     const { d, id } = withEstimate();
     const s1 = sign(d, id);
-    const s2 = companySigned(s1, id, { userId: s1.me, signature: "M1 1", method: "drawn" }, NOW, () => "INV-0999");
+    const s2 = companySigned(s1, id, { userId: s1.me, signature: "M1 1", method: "drawn" }, IDS, NOW, () => "INV-0999");
     const e = s2.estimates.find((x) => x.id === id)!;
     const me = s2.members.find((m) => m.id === s2.me)!;
     expect(e.status).toBe("approved");
@@ -68,12 +68,12 @@ describe("S8b: an employee signs for the company → the deal", () => {
   });
   it("signing again changes nothing (no second job or invoice)", () => {
     const { d, id } = withEstimate();
-    const s2 = companySigned(sign(d, id), id, { userId: d.me, signature: "M1 1", method: "drawn" }, NOW);
-    expect(companySigned(s2, id, { userId: d.me, signature: "M1 1", method: "drawn" }, NOW)).toBe(s2);
+    const s2 = companySigned(sign(d, id), id, { userId: d.me, signature: "M1 1", method: "drawn" }, IDS, NOW);
+    expect(companySigned(s2, id, { userId: d.me, signature: "M1 1", method: "drawn" }, IDS, NOW)).toBe(s2);
   });
   it("not before the client signed", () => {
     const { d, id } = withEstimate();
-    expect(companySigned(d, id, { userId: d.me, signature: "M1 1", method: "drawn" }, NOW)).toBe(d);
+    expect(companySigned(d, id, { userId: d.me, signature: "M1 1", method: "drawn" }, IDS, NOW)).toBe(d);
   });
   it("not without the right: taken away by the owner, a subcontractor, an invited person who has not joined", () => {
     const { d, id } = withEstimate();
@@ -81,12 +81,39 @@ describe("S8b: an employee signs for the company → the deal", () => {
     for (const patch of [{ canSignContracts: false }, { kind: "sub" as const }, { pending: true }]) {
       const s = { ...s1, members: s1.members.map((m) => (m.id === s1.me ? { ...m, ...patch } : m)) };
       expect(canCountersign(s, s.me)).toBe(false);
-      expect(companySigned(s, id, { userId: s.me, signature: "M1 1", method: "drawn" }, NOW)).toBe(s);
+      expect(companySigned(s, id, { userId: s.me, signature: "M1 1", method: "drawn" }, IDS, NOW)).toBe(s);
     }
   });
   it("every employee may sign by default (founder 05.11)", () => {
     const d = makeSeed();
     for (const m of d.members.filter((x) => x.kind === "employee" && !x.pending)) expect(canCountersign(d, m.id)).toBe(true);
+  });
+});
+
+describe("S8b, audit 05.11: the same as the server", () => {
+  it("a quick estimate signed on site (no option chosen) also gets the job and the deposit invoice, with the op's ids", () => {
+    const { d, id } = withEstimate();
+    const legacy = { ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, status: "awaiting_countersign" as const, approval: undefined, depositCents: 5000 } : x)) };
+    const s = companySigned(legacy, id, { userId: d.me, signature: "M1 1", method: "drawn" }, IDS, NOW);
+    expect(s.jobs.find((j) => j.estimateId === id)?.id).toBe("job-new");
+    expect(s.invoices.find((i) => i.jobId === "job-new" && i.kind === "deposit")).toMatchObject({ id: "inv-new", totalCents: 5000 });
+  });
+  it("a closed lead (lost, declined) is not won by a signature", () => {
+    for (const status of ["lost", "declined"] as const) {
+      const { d, id } = withEstimate();
+      const e = d.estimates.find((x) => x.id === id)!;
+      if (!e.leadId) return;
+      const s1 = sign({ ...d, leads: d.leads.map((l) => (l.id === e.leadId ? { ...l, status } : l)) }, id);
+      const s2 = companySigned(s1, id, { userId: d.me, signature: "M1 1", method: "drawn" }, IDS, NOW);
+      expect(s2.leads.find((l) => l.id === e.leadId)!.status).toBe(status);
+    }
+  });
+  it("revoke / reopen: the director and the office (server: owner, admin, office), not a tech", () => {
+    const d = makeSeed();
+    const dir = d.members.find((m) => m.roles.includes("director"))!;
+    const tech = d.members.find((m) => m.roles.length === 1 && m.roles[0] === "tech");
+    expect(canManageLink(d, dir.id)).toBe(true);
+    if (tech) expect(canManageLink(d, tech.id)).toBe(false);
   });
 });
 

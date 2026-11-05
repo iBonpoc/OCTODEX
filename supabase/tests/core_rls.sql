@@ -470,7 +470,10 @@ do $$ begin
   update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002';
 end $$;
 :as_super
-update public.estimates set status = 'approved' where id = '0e1a0000-0000-0000-0000-000000000001';  -- fixture for the tests below
+-- fixture for the tests below (as a signing function would: definer role + this estimate marked)
+select set_config('app.signing_estimate', '0e1a0000-0000-0000-0000-000000000001', false);
+update public.estimates set status = 'approved' where id = '0e1a0000-0000-0000-0000-000000000001';
+select set_config('app.signing_estimate', '', false);
 :as_office_a   -- теперь admin
 do $$ begin
   perform tst.fails($q$update public.memberships set role = 'owner' where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'admin grants owner');
@@ -1191,25 +1194,24 @@ update public.companies set timezone = 'America/Los_Angeles' where id = 'ca00000
 select tst.ok((select gate_code from public.property_secrets where property_id = 'd2000000-0000-4000-8000-000000000001') = '#142', 'no one else changed a code');
 \echo 'T20 properties C2 ok'
 -- ---------------------------------------------------------------- T18: estimate status (docs/specs/07 §4, S8b, edit after send)
+-- Signing statuses are set only by the signing functions (security-check 05.11); edit after send = back to draft.
 :as_owner_a
 do $$
 declare e uuid; e2 uuid;
 begin
+  perform tst.fails($q$insert into public.estimates (company_id, customer_id, property_id, title, status)
+                       values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'x', 'approved')$q$,
+                    'an estimate cannot be created already approved');
   insert into public.estimates (company_id, customer_id, property_id, title)
   values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T18 status')
   returning id into e;
   update public.estimates set status = 'sent' where id = e;
-  update public.estimates set status = 'awaiting_countersign' where id = e;
-  perform tst.ok((select status from public.estimates where id = e) = 'awaiting_countersign', 'client signed: awaiting our signature');
-  perform tst.fails(format($q$update public.estimates set status = 'sent' where id = %L$q$, e), 'awaiting_countersign -> sent (a new version goes through draft)');
-  update public.estimates set status = 'draft' where id = e;
-  perform tst.ok((select status from public.estimates where id = e) = 'draft', '"don''t sign — change it": back to draft');
-  update public.estimates set status = 'sent' where id = e;
+  perform tst.fails(format($q$update public.estimates set status = 'awaiting_countersign' where id = %L$q$, e), 'sent -> awaiting only through a client signature');
+  perform tst.fails(format($q$select set_config('app.signing_estimate', %L, true); update public.estimates set status = 'awaiting_countersign' where id = %L$q$, e, e),
+                    'the session flag alone does not open it');
+  perform tst.fails(format($q$update public.estimates set status = 'approved' where id = %L$q$, e), 'sent -> approved only through countersign');
   update public.estimates set status = 'draft' where id = e;
   perform tst.ok((select status from public.estimates where id = e) = 'draft', 'edit after send: back to draft');
-  update public.estimates set status = 'sent' where id = e;
-  update public.estimates set status = 'awaiting_countersign' where id = e;
-  perform tst.fails(format($q$update public.estimates set status = 'approved' where id = %L$q$, e), 'awaiting -> approved only through countersign_estimate (E2a)');
   -- the T8 estimate was approved by countersign_estimate: signed by both, no edits
   perform tst.fails($q$update public.estimates set status = 'draft' where id = '0e1a0000-0000-0000-0000-000000000010'$q$, 'approved -> draft (signed by both: no edits)');
   insert into public.estimates (company_id, customer_id, property_id, title)
@@ -1491,7 +1493,9 @@ end $$;
 insert into public.estimates (company_id, customer_id, property_id, title, public_token, status)
 values ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T24 client signed', 'tok_await_0123456789abcd', 'draft');
 update public.estimates set status = 'sent' where public_token = 'tok_await_0123456789abcd';
+select set_config('app.signing_estimate', (select id::text from public.estimates where public_token = 'tok_await_0123456789abcd'), false);
 update public.estimates set status = 'awaiting_countersign', expires_at = current_date - 2 where public_token = 'tok_await_0123456789abcd';
+select set_config('app.signing_estimate', '', false);
 update public.estimates set expires_at = current_date - 2 where public_token = 'tok_exp_0123456789abcdef';
 update public.estimates set expires_at = current_date - 2 where id = '0e1a0000-0000-0000-0000-000000000023';
 reset role; reset request.jwt.claim.sub; set role anon;
@@ -1517,6 +1521,65 @@ reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin
   perform tst.ok(public.portal_estimate('tok_sign_0123456789abcdef') is null, 'revoked link: nothing');
   perform tst.fails($q$select public.revoke_estimate_link('0e1a0000-0000-0000-0000-000000000023')$q$, 'anon cannot revoke');
+end $$;
+
+-- T23–T25, security-check 05.11: no forged client signature, no company signature without the client's,
+-- signatures visible to their owner and the admins, legacy on-site signing and «don't sign — change it» through functions
+:as_owner_a
+do $$
+declare e uuid; v uuid; o uuid;
+begin
+  perform tst.fails($q$insert into public.estimate_approvals (company_id, estimate_id, party, signer_name, signature_svg, selection)
+                       values ('ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000023', 'customer', 'Fake', 'M0 0', '{"total": 1}')$q$,
+                    'a client signature cannot be inserted directly (it would set the price)');
+  -- a quick estimate: first option, signed on site, then reopened by the office («don't sign — change it»)
+  insert into public.estimates (company_id, customer_id, property_id, title) values
+    ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'Quick') returning id into e;
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', e, 1) returning id into v;
+  update public.estimates set current_version_id = v where id = e;
+  insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Fix', 1, 15000);
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = v;
+  update public.estimates set status = 'sent', sent_version_id = v, expires_at = current_date - 3 where id = e;
+  perform tst.ok(public.sign_estimate_on_site(e, 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign', 'on site: the client signs a quick estimate even past the date');
+  perform tst.ok(public.sign_estimate_on_site(e, 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign', 'repeat: nothing doubles');
+  perform tst.ok((select count(*) from public.estimate_approvals where estimate_id = e) = 1, 'one client signature');
+  perform tst.ok((select (selection ->> 'total')::bigint from public.estimate_approvals where estimate_id = e) = 15000, 'the server set the total');
+  perform public.reopen_estimate(e, 'client asked for a gate');
+  perform tst.ok((select status from public.estimates where id = e) = 'draft', 'don''t sign — change it: back to draft');
+  perform tst.ok((select count(*) from public.estimate_approvals where estimate_id = e) = 1, 'the client signature stays in history');
+  perform tst.ok((select body from public.activities where subject_id = e and meta ->> 'action' = 'reopened') = 'client asked for a gate', 'the reason is in the history');
+end $$;
+:as_tech_a
+do $$ begin
+  perform tst.fails($q$select public.reopen_estimate('0e1a0000-0000-0000-0000-000000000023')$q$, 'tech cannot reopen');
+  perform tst.ok(tst.cnt($q$select 1 from public.member_signatures where user_id <> 'a0000000-0000-0000-0000-000000000003'$q$) = 0, 'tech does not see other people''s signatures');
+end $$;
+:as_owner_a
+do $$ begin
+  perform tst.ok(tst.cnt('select 1 from public.member_signatures') >= 2, 'the owner sees the team''s signatures');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$ begin
+  perform tst.fails($q$select public.sign_estimate_on_site(gen_random_uuid(), 'X', 'M0 0')$q$, 'anon cannot sign on site');
+  perform tst.fails($q$select public.reopen_estimate(gen_random_uuid())$q$, 'anon cannot reopen');
+end $$;
+-- a company signature needs the client's on the sent version (an "awaiting" without it is refused)
+:as_super
+do $$
+declare e uuid;
+begin
+  insert into public.estimates (company_id, customer_id, property_id, title) values
+    ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'No client') returning id into e;
+  update public.estimates set status = 'sent' where id = e;
+  perform set_config('app.signing_estimate', e::text, true);
+  update public.estimates set status = 'awaiting_countersign' where id = e;
+  perform set_config('app.signing_estimate', '', true);
+  perform set_config('tst.no_client', e::text, false);
+end $$;
+:as_owner_a
+do $$ begin
+  perform tst.fails(format($q$select public.countersign_estimate(%L, 'M0 0 L1 1')$q$, current_setting('tst.no_client')), 'no client signature: the company cannot sign');
 end $$;
 \echo 'T24 link valid until and revoke ok'
 

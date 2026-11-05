@@ -22,7 +22,7 @@ import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
-import { canCountersign, clientSigned, companySigned, validUntilFor } from "@/features/estimateSign";
+import { canCountersign, canManageLink, clientSigned, companySigned, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
 import {
@@ -287,6 +287,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     if (flushing.current || modeRef.current !== "cloud" || !company || !auth.userId || !onlineRef.current) return;
     flushing.current = true;
     let sentAny = false;
+    let dropped = false;
     try {
       for (;;) {
         const item = outboxRef.current[0];
@@ -302,6 +303,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (e instanceof PermanentError || item.tries >= 5) {
             // Will never succeed: drop it and reload the truth from the server.
             outboxRef.current = outboxRef.current.slice(1);
+            dropped = true;
           } else {
             outboxRef.current = [{ ...item, tries: item.tries + 1, error: msg }, ...outboxRef.current.slice(1)];
           }
@@ -312,7 +314,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     } finally {
       flushing.current = false;
     }
-    if (sentAny && !outboxRef.current.length) await refresh();
+    // a dropped op left the phone ahead of the server: reload the truth
+    if ((sentAny && !outboxRef.current.length) || dropped) await refresh();
   }, [company, auth.userId, setOutbox, refresh]);
 
   useEffect(() => {
@@ -799,6 +802,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const next: Estimate = {
               ...(prev ?? {}),
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
+              // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)
+              ...(prev?.status === "awaiting_countersign" ? { approval: undefined, signature: undefined } : {}),
               sentAt: prev?.status === "draft" ? prev.sentAt : undefined,
             };
             return { ...d, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
@@ -821,15 +826,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const e = d0.estimates.find((x) => x.id === id);
         if (!e || e.status !== "awaiting_countersign" || !canCountersign(d0, d0.me)) return () => {};
         const now = new Date().toISOString();
+        // the same ids on the phone and the server (the client may have signed on the page: no ids were stored then)
+        const ids = { jobId: d0.jobs.find((j) => j.estimateId === id)?.id ?? e.approval?.jobId ?? uid(), invoiceId: e.approval?.invoiceId ?? uid() };
         return mutate(
           "estimate.countersign",
-          (d) => companySigned(d, id, { userId: d.me, signature, method: "drawn" }, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined)),
-          { k: "estimate.countersign", id, svg: signature, jobId: e.approval?.jobId, invoiceId: e.approval?.invoiceId },
+          (d) => companySigned(d, id, { userId: d.me, signature, method: "drawn" }, ids, now, (x) => (modeRef.current === "demo" ? nextInvoiceNumber(x) : undefined)),
+          { k: "estimate.countersign", id, svg: signature, jobId: ids.jobId, invoiceId: ids.invoiceId },
         );
       },
       revokeEstimateLink: (id) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);
-        if (!e?.token) return () => {};
+        // the server allows the director and the office only (revoke_estimate_link)
+        if (!e?.token || !canManageLink(dbRef.current, dbRef.current.me)) return () => {};
         const now = new Date().toISOString();
         return mutate("estimate.revoke", (d) => ({ ...d, estimates: d.estimates.map((x) => (x.id === id ? { ...x, token: undefined, linkRevokedAt: now } : x)) }), {
           k: "estimate.revoke", id,
@@ -1025,7 +1033,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               e.id === id && e.status !== "approved" ? { ...e, status: "awaiting_countersign", signature: path, sentAt: e.sentAt ?? new Date().toISOString() } : e,
             ),
           }),
-          { k: "estimate.sign", id, svg: path },
+          { k: "estimate.sign", id, svg: path, signer: dbRef.current.customers.find((c) => c.id === dbRef.current.estimates.find((x) => x.id === id)?.customerId)?.name ?? "Client" },
         ),
       payDeposit: (id, method, fromClient) => {
         const e = dbRef.current.estimates.find((x) => x.id === id);

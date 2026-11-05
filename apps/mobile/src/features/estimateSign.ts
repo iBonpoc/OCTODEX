@@ -39,11 +39,22 @@ export function hisWarning(d: Pick<DB, "members" | "company">, userId: ID): bool
   return !m.roles.includes("director") && !m.hisNumber?.trim();
 }
 
+/** a closed lead is not won by a signature (the same set as the server: won, lost, declined; archived is a flag) */
+const CLOSED_LEAD = ["won", "lost", "declined"];
+
+/** Who may revoke a client link or reopen a client-signed estimate: director and office (server: owner / admin / office). */
+export function canManageLink(d: Pick<DB, "members">, userId: ID): boolean {
+  const m = d.members.find((x) => x.id === userId);
+  return !!m && (m.roles.includes("director") || m.roles.includes("dispatcher"));
+}
+
 /** The company's signature (S8b): one function for the whole deal. Repeating it changes nothing. */
 export function companySigned(
   d: DB,
   id: ID,
   by: { userId: ID; signature: string; method: EstimateCountersign["method"] },
+  /** the same ids the server will use (sent with the op): the job and the deposit invoice */
+  ids: { jobId: ID; invoiceId: ID },
   now: string,
   invoiceNumber?: (d: DB) => string | undefined,
 ): DB {
@@ -55,34 +66,32 @@ export function companySigned(
   const total = a?.totalCents ?? e.totalCents;
   const deposit = a?.depositCents ?? e.depositCents ?? 0;
   const existingJob = d.jobs.find((j) => j.estimateId === id);
-  const jobId = existingJob?.id ?? a?.jobId ?? `job-${id}`;
-  const needDeposit = !!a && deposit > 0 && !d.invoices.some((i) => i.jobId === jobId && i.kind === "deposit");
+  const jobId = existingJob?.id ?? ids.jobId;
+  // like the server (app.execute_estimate): a job and the deposit invoice also for a quick estimate signed on site
+  const needDeposit = deposit > 0 && !d.invoices.some((i) => i.jobId === jobId && i.kind === "deposit");
   const customer = d.customers.find((c) => c.id === e.customerId);
   const next: Estimate = { ...e, status: "approved", countersign, approvedAt: now };
   return {
     ...d,
     estimates: d.estimates.map((x) => (x.id === id ? next : x)),
-    // a legacy quick estimate (no option chosen on the page) keeps its old way: the job comes with the deposit
-    jobs: existingJob || !a ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: total, estimateId: id }],
+    jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: total, estimateId: id }],
     leads: e.leadId
-      ? d.leads.map((l) => (l.id === e.leadId && l.status !== "won" && l.status !== "lost" ? { ...l, status: "won", wonVia: "approval", lastActivityAt: now } : l))
+      ? d.leads.map((l) => (l.id === e.leadId && !CLOSED_LEAD.includes(l.status) ? { ...l, status: "won", wonVia: "approval", lastActivityAt: now } : l))
       : d.leads,
     customers: d.customers.map((c) => (c.id === e.customerId && c.status === "prospect" ? { ...c, status: "active" } : c)),
     invoices: needDeposit
       ? [
           ...d.invoices,
           {
-            id: a!.invoiceId ?? `inv-${id}`, customerId: e.customerId, jobId, kind: "deposit", title: "Deposit", totalCents: deposit, paidCents: 0,
+            id: ids.invoiceId, customerId: e.customerId, jobId, kind: "deposit", title: "Deposit", totalCents: deposit, paidCents: 0,
             dueDate: now, sentAt: now, number: invoiceNumber?.(d),
           },
         ]
       : d.invoices,
-    notices: a
-      ? [
-          { id: `ntc-${id}-approved`, kind: "estimate.approved", estimateId: id, jobId, customer: customer?.name ?? a.signerName, totalCents: total, depositCents: deposit, at: now, read: true },
-          ...d.notices.filter((n) => n.id !== `ntc-${id}-approved`),
-        ]
-      : d.notices,
+    notices: [
+      { id: `ntc-${id}-approved`, kind: "estimate.approved", estimateId: id, jobId, customer: customer?.name ?? a?.signerName ?? "", totalCents: total, depositCents: deposit, at: now, read: true },
+      ...d.notices.filter((n) => n.id !== `ntc-${id}-approved`),
+    ],
   };
 }
 
