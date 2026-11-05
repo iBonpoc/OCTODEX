@@ -289,7 +289,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const modeRef = useRef(mode);
   modeRef.current = mode;
 
-  const availableRoles: Role[] = mode === "cloud" ? appRoles(company!.role) : ["tech", "dispatcher", "director"];
+  const availableRoles: Role[] = mode === "cloud" ? appRoles(company!.role) : ["tech", "dispatcher", "director", "sales"];
   useEffect(() => {
     if (!availableRoles.includes(role)) setRole(availableRoles[0]!);
     // eslint-disable-next-line react-hooks/exhaustive-deps

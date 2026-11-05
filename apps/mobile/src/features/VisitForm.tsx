@@ -15,7 +15,7 @@ import type { CancelReason, ID, Visit } from "@/data/types";
 import { CANCEL_REASONS } from "@/data/types";
 import { tFor } from "@/i18n/translate";
 import { useI18n, type DictKey } from "@/i18n";
-import { assigneesOf, atMinute, canReschedule, dayVisits, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { assigneesOf, atMinute, canPlan, canReschedule, dayVisits, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { AssignSheet } from "@/features/sheets";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -46,12 +46,13 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 
 /** state of the form: day (0 = today), start minute, length, person, note; derived start and warnings */
 export function useVisitForm(init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID }) {
-  const { db } = useStore();
+  const { db, role } = useStore();
   const initStart = init.start ? new Date(init.start) : null;
   const initDay = initStart ? Math.max(0, Math.round((new Date(initStart).setHours(0, 0, 0, 0) - startOfDay(0).getTime()) / 86_400_000)) : 1;
   const [dayOffset, setDayOffset] = useState(initDay);
   const [duration, setDuration] = useState(init.durationMin);
-  const initTechs = init.techIds ?? (init.techId ? [init.techId] : []);
+  // sales books without people: the office assigns (canPlan); a form for a visit that has people keeps them
+  const initTechs = init.techIds ?? (init.techId && canPlan([role]) ? [init.techId] : []);
   // several people on a visit (wave П3a): the first one is techId; none = «Назначит диспетчер»
   const [techIds, setTechIds] = useState<ID[]>(initTechs);
   const techId = techIds[0] ?? null;
@@ -80,7 +81,8 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
 
 /** the fields, top to bottom as in §7.1: date → person (with the day's load) → time (free slots) → length → note → warnings → summary */
 export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof useVisitForm>; noteLabel?: boolean }) {
-  const { db } = useStore();
+  const { db, role } = useStore();
+  const planner = canPlan([role]);
   const { t, day, time } = useI18n();
   const [moreDays, setMoreDays] = useState(false);
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
@@ -104,13 +106,14 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
         {!moreDays ? <Button label={t("vf.moreDays")} size="sm" variant="ghost" onPress={() => setMoreDays(true)} /> : null}
       </Field>
       <Field label={t("sch.tech")}>
-        <T v="caption" tone="mut">{t("vf.techsHint")}</T>
-        <View>
+        {/* sales books, the office assigns (the server refuses sales: public.assign_visit) */}
+        {!planner ? <T v="body" tone="mut">{t("vf.dispatcherAssigns")}</T> : <T v="caption" tone="mut">{t("vf.techsHint")}</T>}
+        {planner ? <View>
           <ListRow title={`${f.techIds.length === 0 ? "✓ " : ""}${t("vf.dispatcherAssigns")}`} onPress={() => f.setTechId(null)} />
           {techs.map((m) => (
             <ListRow key={m.id} title={`${f.techIds.includes(m.id) ? "✓ " : ""}${m.name}`} subtitle={load(m.id)} onPress={() => { f.toggleTech(m.id); f.setMinute(null); }} />
           ))}
-        </View>
+        </View> : null}
       </Field>
       <Field label={t("sch.start")}>
         {f.slots.length ? (

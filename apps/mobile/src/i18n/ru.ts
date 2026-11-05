@@ -3,6 +3,7 @@ export const ru = {
   "role.tech": "Мастер",
   "role.dispatcher": "Диспетчер",
   "role.director": "Директор",
+  "role.sales": "Продажи",
   "role.hint": "Один человек может совмещать роли. Главный экран меняется.",
 
   "tab.visits": "Выезды",
