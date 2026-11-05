@@ -19,6 +19,9 @@ export const ru = {
   "cat.item": "Позиция каталога",
   "common.back": "Назад",
   "nav.backTo": "Назад: {to}",
+  "nav.goTo": "Перейти: {to}",
+  "nav.trail": "Где вы",
+  "nav.hiddenLevels": "Скрытые уровни",
 
   "quick.title": "Быстрые действия",
   "quick.voice": "Голосовая заметка",
