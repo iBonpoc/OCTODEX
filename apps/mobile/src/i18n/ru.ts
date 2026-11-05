@@ -1385,6 +1385,7 @@ export const ru = {
   "card.tag.noReceipt": "Без чека",
   "card.noJob": "Без работы",
   "card.sign.loss": "В убытке",
+  "card.sign.overlap": "Накладка",
   "card.fig.cost": "Себестоимость",
   "card.fig.margin": "Маржа",
   "card.vendorTax": "налог {pct}%",

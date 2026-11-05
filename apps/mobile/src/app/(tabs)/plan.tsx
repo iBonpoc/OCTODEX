@@ -8,6 +8,7 @@ import { useI18n } from "@/i18n";
 import { usePersistentState } from "@/data/persist";
 import { addDays, addMonths, fromDayKey, isoDayKey, monthGrid, todayKey, weekDays, type DayKey } from "@/features/calendar";
 import { VisitCard, sortByStart, visitStatus } from "@/features/visits";
+import { overlapSigns } from "@/features/listSigns";
 import { AssignSheet } from "@/features/sheets";
 import { DndProvider, Draggable, DropZone, useDragFrom } from "@/features/dnd";
 import { useToast } from "@/ui/overlays";
@@ -205,7 +206,7 @@ function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: D
                       status={tech ? st.status : "warn"}
                       title={`${time(v.start)} · ${c?.name ?? "—"}`}
                       subtitle={[job?.title, tech?.name ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
-                      right={<StatusChip status={tech ? st.status : "warn"} label={tech ? t(st.label) : t("st.unassigned")} />}
+                      right={<RowView>{overlapSigns(db, v).map((s) => <StatusChip key={s.key} status={s.tone} label={t(s.key, s.params)} />)}<StatusChip status={tech ? st.status : "warn"} label={tech ? t(st.label) : t("st.unassigned")} /></RowView>}
                       onPress={() => router.push(`/visit/${v.id}`)}
                     />
                   );

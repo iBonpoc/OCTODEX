@@ -10,6 +10,7 @@ import { Icon, T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 import { wasJustDragged } from "./dnd";
 import { assigneesOf, isAssigned, lateKind } from "@/features/schedule";
+import { overlapSigns } from "@/features/listSigns";
 
 /** Visit status → DS status color (4+1) and word. */
 export function visitStatus(v: Visit, now: number = Date.now()): { status: StatusName; label: DictKey } {
@@ -78,6 +79,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
       {/* the kind of the visit and everyone on it (docs/specs/03 §7.2, wave П3b) */}
       <RowView style={{ flexWrap: "wrap" }}>
         <StatusChip status="neutral" label={t(v.kind === "inspection" || (!v.jobId && v.leadId) ? "plan.kind.inspection" : "plan.kind.job")} soft />
+        {overlapSigns(db, v).map((s) => <StatusChip key={s.key} status={s.tone} label={t(s.key, s.params)} />)}
         {people.length > 1 ? people.map((m) => <Avatar key={m.id} initials={m.initials} s={component.avatar.sm} sub={m.kind === "sub"} />) : null}
       </RowView>
       {v.checklist.length || v.photos.length ? (
