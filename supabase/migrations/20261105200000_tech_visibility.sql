@@ -8,9 +8,10 @@
 --    of subjects they see: their lead, a property they see, a job with their visit in the window, the client of
 --    such a job, an estimate they may read.
 
--- A visit of the caller counts for a tech: not deleted, not cancelled, not no-show, and dated today, in the future
--- or within the last 14 days by the company's calendar. A visit with no time yet (flex week or not booked) counts
--- by its flex week, or as upcoming.
+-- A visit of the caller counts for a tech: not deleted, not cancelled, not no-show, its job (if any) not deleted,
+-- cancelled or closed, and dated today, in the future or within the last 14 days by the company's calendar.
+-- A visit with no time yet counts by the last day of its flex week; with neither, by the day it was created
+-- (so a visit never booked drops out 14 days after it was made).
 create or replace function app.tech_visit_counts(p_visit_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
@@ -18,12 +19,14 @@ returns boolean language sql stable security definer set search_path = '' as $$
       from public.visits v
       join public.companies co on co.id = v.company_id
       join public.visit_assignees a on a.visit_id = v.id and a.deleted_at is null and a.user_id = auth.uid()
+      left join public.jobs j on j.id = v.job_id
      where v.id = p_visit_id
        and v.deleted_at is null
        and v.status not in ('cancelled', 'no_show')
+       and (v.job_id is null or (j.deleted_at is null and j.status not in ('cancelled', 'closed')))
        and coalesce((v.starts_at at time zone coalesce(nullif(co.timezone, ''), 'America/Los_Angeles'))::date,
                     v.flex_week_start + 6,
-                    (now() at time zone coalesce(nullif(co.timezone, ''), 'America/Los_Angeles'))::date)
+                    (v.created_at at time zone coalesce(nullif(co.timezone, ''), 'America/Los_Angeles'))::date)
            >= (now() at time zone coalesce(nullif(co.timezone, ''), 'America/Los_Angeles'))::date - 14
   );
 $$;
@@ -39,7 +42,8 @@ returns boolean language sql stable security definer set search_path = '' as $$
   );
 $$;
 
--- the subject of a note is visible to the caller (runs as the caller where the subject has its own RLS)
+-- the subject of a note is visible to the caller; security definer: checks the subject itself, then the caller's
+-- rights through the helpers (can_see_lead, is_property_assignee, tech_visit_counts, can_read_estimate), all by auth.uid()
 create or replace function app.can_see_note_subject(p_type text, p_id uuid, p_company_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select case p_type
