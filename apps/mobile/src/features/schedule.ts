@@ -67,10 +67,27 @@ export function overlaps(db: Pick<DB, "visits">, techId: ID | ID[] | null, start
   });
 }
 
-/** late: the start has passed and the tech is not on site yet (computed, not stored) */
-export function visitLate(v: Visit, now: number = Date.now()): boolean {
-  return isOpenVisit(v) && (v.step === "scheduled" || v.step === "en_route") && new Date(v.start).getTime() < now;
+/** why a visit is late: the tech is on the way, or has not left yet (docs/specs/03 П3c) */
+export type LateKind = "en_route" | "not_left";
+
+/**
+ * П3c, one rule for the list sign, the "Needs attention" item and the office notice: the start + lateAfterMin has passed,
+ * someone is on the visit, and nobody is on site yet. «On the way» does not clear it (founder, 05.11); only «on site»
+ * (and any later step), a closed visit or the first ticked checklist item do. Computed, never stored.
+ */
+export function lateKind(
+  v: Pick<Visit, "start" | "step" | "closed" | "checklist" | "techId" | "assigneeIds">,
+  now: number = Date.now(),
+  lateAfterMin: number = SCHEDULE_DEFAULTS.lateAfterMin,
+): LateKind | null {
+  if (v.closed || (v.step !== "scheduled" && v.step !== "en_route")) return null;
+  if (!assigneesOf(v).length || v.checklist?.some((c) => c.done)) return null;
+  const t = new Date(v.start).getTime();
+  if (Number.isNaN(t) || now < t + lateAfterMin * 60_000) return null;
+  return v.step === "en_route" ? "en_route" : "not_left";
 }
+export const visitLate = (v: Parameters<typeof lateKind>[0], now: number = Date.now(), lateAfterMin?: number): boolean =>
+  lateKind(v, now, lateAfterMin) !== null;
 
 /** S4a: after this visit is cancelled, does its lead go back from "booked" to "replied"? (no other open inspection) */
 export function leadRollsBack(db: Db, cancelledId: ID): ID | null {
@@ -105,6 +122,8 @@ export { visitPropertyId };
 /** defaults until "More → Company → Schedule" (wave П4) replaces them with the company's settings */
 export const SCHEDULE_DEFAULTS = {
   dayStartMin: 8 * 60, dayEndMin: 18 * 60, stepMin: 30, inspectionMin: 45, jobMin: 120,
+  /** a visit is late this many minutes after its start (docs/specs/03 П3c; company setting — П4) */
+  lateAfterMin: 15,
   /** the form: days shown as chips (twice that with «Ещё неделя»), the range of «Другое время», length step and max */
   formDays: 7, earliestMin: 6 * 60, latestMin: 20 * 60, durationStepMin: 15, maxDurationMin: 12 * 60,
 } as const;

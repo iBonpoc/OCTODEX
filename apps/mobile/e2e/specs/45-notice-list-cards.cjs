@@ -3,6 +3,7 @@
  * - an approved estimate: client, amount, «Одобрена», estimate number, «Запланировать работу» inside the card → scheduling;
  * - an opened estimate: «Открыта», no «Запланировать работу»; the card opens the estimate;
  * - «Понятно» marks all read; the technician never sees the block (amounts, spec 06 §7.6); no «…».
+ * - a computed «running late» notice (docs/specs/03 П3c) is not read by «Понятно»: spec 49 tests it.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -25,8 +26,11 @@ exports.run = async (h) => {
   ]);
   await inject(1);
   await h.go("/today");
-  await h.expectText(/Уведомления · 2/, "notices block with the count");
+  // П3c: the demo may also have a computed «running late» notice (v5) — count the server ones by their words
+  await h.expectText(/Уведомления · \d+/, "notices block with the count");
   const cards = p.locator('[data-testid="notice-card"]');
+  const serverCards = cards.filter({ hasText: /Одобрена|Открыта/ });
+  h.expect((await serverCards.count()) === 2, `two client notices (${await serverCards.count()})`);
   const ok = cards.filter({ hasText: "Одобрена" }).first();
   await ok.scrollIntoViewIfNeeded();
   const okText = await ok.innerText();
@@ -59,5 +63,5 @@ exports.run = async (h) => {
   await h.go("/today");
   await p.getByRole("button", { name: "Понятно" }).first().click();
   await p.waitForTimeout(400);
-  h.expect((await cards.count()) === 0, "«Понятно» hides the read notices");
+  h.expect((await serverCards.count()) === 0, "«Понятно» hides the read notices (a «running late» one stays while the visit is late, П3c)");
 };

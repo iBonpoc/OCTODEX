@@ -11,7 +11,8 @@ import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
 
 export type Op =
-  | { k: "visit.step"; visitId: string; to: VisitStep }
+  /** at: when the tech left (step en_route), phone time — visits.en_route_at (П3c) */
+  | { k: "visit.step"; visitId: string; to: VisitStep; at?: string }
   | { k: "photo.add"; id: string; visitId: string; jobId?: string; stage: "before" | "after"; uri?: string }
   | { k: "photo.remove"; id: string }
   | { k: "visit.checklist"; visitId: string; checklist: { id: string; label: string; done: boolean }[] }
@@ -247,7 +248,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
   const c = companyId;
   switch (op.k) {
     case "visit.step": {
-      if (op.to === "en_route" || op.to === "on_site") return run(supabase.from("visits").update({ status: op.to }).eq("id", op.visitId));
+      // «on the way» carries the phone time; an op queued by an older build has none — the server notes now() (migration 20261105340000)
+      if (op.to === "en_route") return run(supabase.from("visits").update(op.at ? { status: op.to, en_route_at: op.at } : { status: op.to }).eq("id", op.visitId));
+      if (op.to === "on_site") return run(supabase.from("visits").update({ status: op.to }).eq("id", op.visitId));
       if (op.to === "working") return run(supabase.from("visits").update({ work_started_at: new Date().toISOString() }).eq("id", op.visitId));
       // an inspection ends on site: completed (S10)
       if (op.to === "done") return run(supabase.from("visits").update({ status: "completed" }).eq("id", op.visitId).eq("status", "on_site"));

@@ -2592,4 +2592,41 @@ begin
 end $$;
 \echo 'T23 contract title from the profile ok'
 
+-- ---------------------------------------------------------------- T36: when the tech left — visits.en_route_at (П3c, migration 20261105340000)
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c3600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T36 Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3600000-0000-4000-8000-000000000001', '36 Late St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e3600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T36 job', 'c3600000-0000-4000-8000-000000000001', 'd3600000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('f3600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e3600000-0000-4000-8000-000000000001', now() - interval '20 minutes'),
+    ('f3600000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e3600000-0000-4000-8000-000000000001', now() - interval '20 minutes'),
+    ('f3600000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e3600000-0000-4000-8000-000000000001', now() - interval '20 minutes');
+end $$;
+select tst.fails($q$insert into public.visits (company_id, job_id, starts_at, en_route_at) values ('ca000000-0000-0000-0000-000000000000', 'e3600000-0000-4000-8000-000000000001', now(), now())$q$, 'a new visit has no «left at» time');
+:as_office_a
+select (public.assign_visit(v, array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added') from unnest(array['f3600000-0000-4000-8000-000000000001', 'f3600000-0000-4000-8000-000000000002', 'f3600000-0000-4000-8000-000000000003']::uuid[]) v;
+:as_tech_a
+select tst.fails($q$update public.visits set en_route_at = now() where id = 'f3600000-0000-4000-8000-000000000001'$q$, 'the time alone, without the step «on the way», is refused');
+select tst.fails($q$update public.visits set status = 'en_route', en_route_at = now() + interval '5 minutes 1 second' where id = 'f3600000-0000-4000-8000-000000000001'$q$, 'more than 5 min in the future is refused');
+update public.visits set status = 'en_route', en_route_at = now() + interval '4 minutes 59 seconds' where id = 'f3600000-0000-4000-8000-000000000001';
+select tst.ok((select en_route_at between now() + interval '4 minutes' and now() + interval '5 minutes' from public.visits where id = 'f3600000-0000-4000-8000-000000000001'), 'the phone time (within 5 min) is kept with the step');
+select tst.fails($q$update public.visits set en_route_at = now() - interval '1 hour' where id = 'f3600000-0000-4000-8000-000000000001'$q$, 'once set, the time does not change');
+-- a replay of the same step (offline queue) is not an error and keeps the first time
+update public.visits set status = 'en_route' where id = 'f3600000-0000-4000-8000-000000000001';
+select tst.ok((select en_route_at between now() + interval '4 minutes' and now() + interval '5 minutes' from public.visits where id = 'f3600000-0000-4000-8000-000000000001'), 'a replay keeps the first time');
+-- an old build sends the step without a time: the server notes now()
+update public.visits set status = 'en_route' where id = 'f3600000-0000-4000-8000-000000000002';
+select tst.ok((select en_route_at between now() - interval '1 minute' and now() from public.visits where id = 'f3600000-0000-4000-8000-000000000002'), 'no time from the phone: the server notes now()');
+-- on site: the time stays and still does not change
+update public.visits set status = 'on_site' where id = 'f3600000-0000-4000-8000-000000000002';
+select tst.ok((select en_route_at is not null from public.visits where id = 'f3600000-0000-4000-8000-000000000002'), 'on site: the «left at» time stays');
+-- straight to on site (step «on the way» skipped): no time, and none can be planted later
+update public.visits set status = 'on_site' where id = 'f3600000-0000-4000-8000-000000000003';
+select tst.fails($q$update public.visits set en_route_at = now() where id = 'f3600000-0000-4000-8000-000000000003'$q$, 'on site without «on the way»: no time planted later');
+-- the office has the same rule
+:as_office_a
+select tst.fails($q$update public.visits set en_route_at = now() - interval '2 hours' where id = 'f3600000-0000-4000-8000-000000000001'$q$, 'the office does not change the time either');
+\echo 'T36 visit left-at time ok'
+
 \echo 'ALL TESTS PASSED'

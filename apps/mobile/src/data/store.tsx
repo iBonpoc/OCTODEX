@@ -556,10 +556,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const v = dbRef.current.visits.find((x) => x.id === id);
         // an inspection ends with "done" after "on site" (S10, docs/specs/03 §4.1); a job visit walks VISIT_STEPS
         const step: VisitStep = v ? nextStep(v) : "en_route";
+        // «on the way»: the phone time goes with the step, so the offline queue does not move it (docs/specs/03 П3c)
+        const at = step === "en_route" ? (v?.enRouteAt ?? new Date().toISOString()) : undefined;
         return mutate(
           "visit.step",
-          (d) => patchVisit(d, id, (x) => ({ ...x, step, late: step === "on_site" ? false : x.late, closed: step === "done" ? true : x.closed })),
-          { k: "visit.step", visitId: id, to: step },
+          (d) => patchVisit(d, id, (x) => ({ ...x, step, enRouteAt: at ?? x.enRouteAt, closed: step === "done" ? true : x.closed })),
+          { k: "visit.step", visitId: id, to: step, ...(at ? { at } : {}) },
         );
       },
       addPhoto: (visitId, kind, uri) => {
