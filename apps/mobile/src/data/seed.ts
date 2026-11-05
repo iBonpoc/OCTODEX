@@ -2,7 +2,7 @@
  * Test data (placeholder prices — founder rule: real prices are never typed into seeds).
  * All times are relative to "now" so the demo always looks like a live day in Los Angeles.
  */
-import type { DB, ChecklistItem, CatalogItem, Company, EstimateDoc, Source } from "./types";
+import type { DB, ChecklistItem, CatalogItem, Company, EstimateDoc, Source, Tag } from "./types";
 import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
 
 /** Test catalog for several trades. All prices are PLACEHOLDERS (badge "test price"). */
@@ -90,6 +90,13 @@ export const SEED_SOURCES: Source[] = [
   { id: "src-other", name: "Other", kind: "own", active: true, system: true, position: 10 },
   { id: "src-kolya", name: "Kolya (contractor)", kind: "person", phone: "(818) 555-0101", active: true, position: 11 },
 ];
+/** Default client tags (the same list the server seeds); names of system tags are shown translated. */
+export const SEED_TAGS: Tag[] = [
+  { id: "tag-vip", name: "VIP", active: true, system: true, position: 1 },
+  { id: "tag-regular", name: "Regular", active: true, system: true, position: 2 },
+  { id: "tag-favorite", name: "Favorite", active: true, system: true, position: 3 },
+  { id: "tag-late", name: "No calls after 6 pm", active: true, system: true, position: 4 },
+];
 /** Generic job checklist (company templates come later; trade modules add their own). */
 const jobChecklist = (prefix: string): ChecklistItem[] =>
   [
@@ -125,6 +132,7 @@ export function makeSeed(): DB {
   return {
     me: "m-alex",
     sources: SEED_SOURCES,
+    tags: SEED_TAGS,
     tasks: [
       { id: "t1", subjectType: "lead", subjectId: "l3", title: "Send the painting estimate", dueAt: hoursFromNow(20), assigneeId: "m-alex" },
     ],
@@ -139,13 +147,19 @@ export function makeSeed(): DB {
       { id: "m-sub", name: "Valley Electric LLC", initials: "VE", kind: "sub", roles: ["tech"] },
     ],
     customers: [
-      { id: "c1", name: "Sarah Mitchell", phone: "(626) 555-0142", email: "sarah.m@example.com", sourceId: "src-google", balanceCents: 0 },
-      { id: "c2", name: "David Kim", phone: "(818) 555-0187", sourceId: "src-thumbtack", balanceCents: 184000 },
-      { id: "c3", name: "Linda Alvarez", phone: "(310) 555-0110", email: "lalvarez@example.com", sourceId: "src-referral", balanceCents: 0 },
-      { id: "c4", name: "Robert Chen", phone: "(323) 555-0166", sourceId: "src-yelp", balanceCents: 96000 },
-      { id: "c5", name: "Maria Gonzalez", phone: "(562) 555-0133", sourceId: "src-website", balanceCents: 0 },
-      { id: "c6", name: "James O'Connor", phone: "(424) 555-0199", sourceId: "src-google", balanceCents: 0 },
-      { id: "c7", name: "Emily Park", phone: "(213) 555-0121", sourceId: "src-thumbtack", balanceCents: 0 },
+      {
+        id: "c1", number: "CLT-0001", name: "Sarah Mitchell", phone: "(626) 555-0142", email: "sarah.m@example.com", sourceId: "src-google", balanceCents: 0, tagIds: ["tag-vip", "tag-regular"],
+        people: [
+          { id: "pp-c1-1", name: "Sarah Mitchell", role: "main", phones: [{ number: "(626) 555-0142", label: "mobile", primary: true }, { number: "(626) 555-0143", label: "work" }], emails: [{ address: "sarah.m@example.com", primary: true }] },
+          { id: "pp-c1-2", name: "Tom Mitchell", role: "spouse", phones: [{ number: "(626) 555-0144", label: "mobile", primary: true }], emails: [] },
+        ],
+      },
+      { id: "c2", number: "CLT-0002", name: "David Kim", phone: "(818) 555-0187", sourceId: "src-thumbtack", balanceCents: 184000 },
+      { id: "c3", number: "CLT-0003", name: "Linda Alvarez", phone: "(310) 555-0110", email: "lalvarez@example.com", sourceId: "src-referral", balanceCents: 0, tagIds: ["tag-favorite"] },
+      { id: "c4", number: "CLT-0004", name: "Robert Chen", phone: "(323) 555-0166", sourceId: "src-yelp", balanceCents: 96000, tagIds: ["tag-late"] },
+      { id: "c5", number: "CLT-0005", name: "Maria Gonzalez", phone: "(562) 555-0133", sourceId: "src-website", balanceCents: 0 },
+      { id: "c6", number: "CLT-0006", name: "James O'Connor", phone: "(424) 555-0199", sourceId: "src-google", balanceCents: 0 },
+      { id: "c7", number: "CLT-0007", name: "Emily Park", phone: "(213) 555-0121", sourceId: "src-thumbtack", balanceCents: 0 },
     ],
     properties: [
       { id: "p1", customerId: "c1", address: "1420 Oak Grove Ave", city: "Pasadena, CA 91103", stories: 2 },

@@ -4,8 +4,9 @@
  *   - lists added later (catalog, notices, notes, payments, sources, tasks, activities) default to empty
  *   - demo data gets the standard sources
  *   - leads and clients that stored the source by name ("Thumbtack") get its id
+ *   - demo data gets the standard tags (an old client without people is read through peopleOf)
  */
-import { SEED_SOURCES } from "./seed";
+import { SEED_SOURCES, SEED_TAGS } from "./seed";
 import type { DB } from "./types";
 
 type Legacy = { source?: string; sourceId?: string };
@@ -23,9 +24,11 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     payments: d.payments ?? [],
     company: d.company ?? null,
     sources,
+    tags: Array.isArray(d.tags) && d.tags.length ? d.tags : mode === "demo" ? SEED_TAGS : [],
     tasks: Array.isArray(d.tasks) ? d.tasks : [],
     activities: Array.isArray(d.activities) ? d.activities : [],
     leads: (d.leads ?? []).map((l) => (l.sourceId ? l : { ...l, sourceId: sourceIdOf(l as Legacy) })),
+    // people / tagIds are optional: screens read them through peopleOf(c) and c.tagIds ?? []
     customers: (d.customers ?? []).map((c) => (c.sourceId ? c : { ...c, sourceId: sourceIdOf(c as Legacy) })),
   };
 }

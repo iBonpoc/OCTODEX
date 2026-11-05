@@ -4,7 +4,7 @@
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
 import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, EstimateDoc, ExpenseCategory, PaymentMethod, VisitStep } from "@/data/types";
+import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, Tag, VisitStep } from "@/data/types";
 import { companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -112,6 +112,10 @@ export type Op =
       name: string; phone: string; email?: string; sourceId: string; address: string; city: string;
     }
   | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string }
+  | { k: "customer.people"; id: string; people: Person[] }
+  | { k: "customer.tags"; id: string; tagIds: string[] }
+  | { k: "customer.status"; id: string; status: CustomerStatus; reason?: string }
+  | { k: "tag.save"; tag: Tag }
   | { k: "property.update"; id: string; address?: string; city?: string }
   | { k: "note.add"; id: string; subjectType: string; subjectId: string; body: string; visibility: "team" | "private" }
   | { k: "note.update"; id: string; pinned?: boolean; body?: string; deleted?: boolean }
@@ -420,6 +424,22 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       }
       return;
     }
+    case "customer.people":
+      return saveCustomerPeople(c, op.id, op.people);
+    case "customer.tags": {
+      await run(supabase.from("customer_tags").delete().eq("customer_id", op.id));
+      if (op.tagIds.length) await run(supabase.from("customer_tags").insert(op.tagIds.map((tag_id) => ({ company_id: c, customer_id: op.id, tag_id }))));
+      return;
+    }
+    case "customer.status":
+      return run(supabase.from("customers").update({ status: op.status, do_not_service_reason: op.status === "do_not_service" ? op.reason || "—" : null }).eq("id", op.id));
+    case "tag.save":
+      return run(
+        supabase.from("tags").upsert(
+          { id: op.tag.id, company_id: c, name: op.tag.name, is_active: op.tag.active, position: op.tag.position },
+          { onConflict: "id" },
+        ),
+      );
     case "property.update": {
       const patch: Record<string, string> = {};
       if (op.address !== undefined) patch.address_line1 = op.address || "—";
@@ -610,4 +630,38 @@ async function createCustomer(
   await run(ins("contacts", { id: op.contactId, company_id: c, customer_id: op.customerId, name: op.name, phone: op.phone, email: op.email ?? null, is_primary: true }));
   await run(supabase.from("customers").update({ primary_contact_id: op.contactId }).eq("id", op.customerId));
   await run(ins("properties", { id: op.propertyId, company_id: c, customer_id: op.customerId, address_line1: op.address || op.city || "—", address_city: op.city || "—", stories: 1 }));
+}
+
+/**
+ * People of a client → contacts + contact_phones + contact_emails. The first person is primary. Removed people are
+ * soft-deleted; phones and emails of each person are replaced (old rows soft-deleted first, so the "one primary"
+ * index never sees two). contacts.phone / email keep the main phone / email for search and old readers.
+ */
+async function saveCustomerPeople(c: string, customerId: string, people: Person[]) {
+  const now = new Date().toISOString();
+  const ids = people.map((p) => p.id);
+  const { data: existing } = await supabase.from("contacts").select("id").eq("customer_id", customerId).is("deleted_at", null);
+  const gone = (existing ?? []).map((r) => String(r.id)).filter((id) => !ids.includes(id));
+  // nobody is primary while the people are rewritten (one primary per client)
+  await run(supabase.from("contacts").update({ is_primary: false }).eq("customer_id", customerId).eq("is_primary", true));
+  if (gone.length) await run(supabase.from("contacts").update({ deleted_at: now }).in("id", gone));
+  for (const [i, p] of people.entries()) {
+    const phone = p.phones.find((x) => x.primary)?.number ?? p.phones[0]?.number ?? null;
+    const email = p.emails.find((x) => x.primary)?.address ?? p.emails[0]?.address ?? null;
+    await run(
+      supabase.from("contacts").upsert(
+        { id: p.id, company_id: c, customer_id: customerId, name: p.name || "—", role: p.role, is_primary: i === 0, phone, email, preferred_language: p.language ?? null },
+        { onConflict: "id" },
+      ),
+    );
+  }
+  if (ids.length) {
+    await run(supabase.from("contact_phones").update({ deleted_at: now }).in("contact_id", ids).is("deleted_at", null));
+    await run(supabase.from("contact_emails").update({ deleted_at: now }).in("contact_id", ids).is("deleted_at", null));
+    const phones = people.flatMap((p) => p.phones.map((x, k) => ({ company_id: c, contact_id: p.id, number: x.number, label: x.label, is_primary: !!x.primary, position: k })));
+    const emails = people.flatMap((p) => p.emails.map((x, k) => ({ company_id: c, contact_id: p.id, address: x.address, is_primary: !!x.primary, position: k })));
+    if (phones.length) await run(supabase.from("contact_phones").insert(phones));
+    if (emails.length) await run(supabase.from("contact_emails").insert(emails));
+    await run(supabase.from("customers").update({ primary_contact_id: ids[0] }).eq("id", customerId));
+  }
 }
