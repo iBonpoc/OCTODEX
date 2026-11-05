@@ -377,14 +377,16 @@ begin
   perform tst.fails(format($q$update public.visits set status = 'on_site' where id = %L$q$, v1), 'completed -> on_site');
   perform tst.fails(format($q$update public.visits set status = 'cancelled' where id = %L$q$, v1), 'completed -> cancelled');
 
-  -- отмена разрешена из открытого состояния; из отменённого — никуда
-  update public.visits set status = 'cancelled' where id = 'f1a00000-0000-0000-0000-000000000003';
-  perform tst.fails($q$update public.visits set status = 'scheduled' where id = 'f1a00000-0000-0000-0000-000000000003'$q$, 'cancelled -> scheduled');
+  -- отменяет только офис (docs/specs/03 §4.1, П1a); мастер — нет
+  perform tst.fails($q$update public.visits set status = 'cancelled' where id = 'f1a00000-0000-0000-0000-000000000003'$q$, 'tech cannot cancel a visit');
   perform tst.ok(tst.cnt(format($q$select 1 from public.status_events where entity_type = 'visit' and entity_id = %L$q$, v1)) = 4,
                  'status_events: created + en_route + on_site + completed (tech sees own)');
 end $$;
 
 :as_owner_a
+-- отмена разрешена из открытого состояния; из отменённого — никуда
+update public.visits set status = 'cancelled' where id = 'f1a00000-0000-0000-0000-000000000003';
+select tst.fails($q$update public.visits set status = 'scheduled' where id = 'f1a00000-0000-0000-0000-000000000003'$q$, 'cancelled -> scheduled');
 do $$ begin
   perform tst.ok((select paid_cents from public.invoices where id = '01a00000-0000-0000-0000-000000000001') = 50000, 'invoice paid_cents recalculated');
   perform tst.ok((select payment_status from public.invoices where id = '01a00000-0000-0000-0000-000000000001') = 'partially_paid', 'invoice partially_paid');
@@ -2119,6 +2121,86 @@ begin
   perform tst.ok(public.portal_estimate(split_part(current_setting('tst.e2b_2'), ',', 3)) ->> 'status' = 'approved', 'signed by both: opens');
 end $$;
 \echo 'T30 client page answers, two signers ok'
+
+-- ---------------------------------------------------------------- T32: a visit is at a property (docs/specs/03 §3.1, §4; S4, S4a, S9a)
+:as_owner_a
+do $$
+declare v_src uuid; v_lead uuid; v_c uuid; v_p uuid; v_v uuid; v_j uuid; v_v2 uuid;
+begin
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.customers (id, company_id, display_name) values ('c3200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T32 Client') returning id into v_c;
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', v_c, '32 Inspect St', 'Pasadena') returning id into v_p;
+  insert into public.leads (id, company_id, source_id, contact_name, phone, customer_id, property_id)
+  values ('b3200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', v_src, 'T32 Lead', '(818) 555-3201', v_c, v_p) returning id into v_lead;
+  -- S4: an inspection — a visit of the lead at the property, no job
+  insert into public.visits (id, company_id, lead_id, property_id, kind, starts_at) values ('f3200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', v_lead, v_p, 'inspection', now() + interval '1 day') returning id into v_v;
+  perform tst.ok((select job_id is null and property_id = v_p from public.visits where id = v_v), 'inspection: a visit at the property without a job');
+  -- the current app sends no property: it comes from the lead, or from the job
+  insert into public.visits (id, company_id, lead_id, starts_at) values ('f3200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', v_lead, now() + interval '2 days') returning id into v_v2;
+  perform tst.ok((select property_id from public.visits where id = v_v2) = v_p, 'no property sent: taken from the lead');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e3200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T32 job', v_c, v_p, 'draft') returning id into v_j;
+  insert into public.visits (id, company_id, job_id, starts_at) values ('f3200000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', v_j, now() + interval '3 days');
+  perform tst.ok((select property_id from public.visits where id = 'f3200000-0000-4000-8000-000000000003') = v_p, 'no property sent: taken from the job');
+  -- no property at all: refused
+  insert into public.leads (id, company_id, source_id, contact_name, phone) values ('b3200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', v_src, 'T32 No Place', '(818) 555-3202');
+  perform tst.fails($q$insert into public.visits (company_id, lead_id, starts_at) values ('ca000000-0000-0000-0000-000000000000', 'b3200000-0000-4000-8000-000000000002', now())$q$, 'a visit without a property is refused');
+  -- a property of another company is refused
+  perform tst.fails($q$insert into public.visits (company_id, lead_id, property_id, starts_at) values ('cb000000-0000-0000-0000-000000000000', 'b3200000-0000-4000-8000-000000000001', 'd3200000-0000-4000-8000-000000000001', now())$q$, 'a property of another company is refused');
+  -- cancel reason "other" needs a text
+  perform tst.fails(format($q$update public.visits set status = 'cancelled', cancel_reason = 'other' where id = %L$q$, v_v2), 'cancel reason other needs a text');
+  update public.visits set status = 'cancelled', cancel_reason = 'client_cancelled', cancelled_at = now(), cancelled_by = 'a0000000-0000-0000-0000-000000000001' where id = v_v2;
+  perform tst.ok((select cancel_reason from public.visits where id = v_v2) = 'client_cancelled', 'office cancels with a reason');
+  -- S4a: the lead goes back from "inspection scheduled" to "contacted"
+  update public.leads set status = 'inspection_scheduled' where id = v_lead;
+  update public.leads set status = 'contacted' where id = v_lead;
+  perform tst.ok((select status from public.leads where id = v_lead) = 'contacted', 'S4a: inspection_scheduled → contacted allowed');
+  -- S9a: a job goes back from scheduled to draft ("waits for a date")
+  update public.jobs set status = 'scheduled' where id = v_j;
+  update public.jobs set status = 'draft' where id = v_j;
+  perform tst.ok((select status from public.jobs where id = v_j) = 'draft', 'S9a: scheduled → draft allowed');
+  -- a visit on site is no longer cancelled
+  update public.visits set status = 'on_site' where id = 'f3200000-0000-4000-8000-000000000003';
+  perform tst.fails($q$update public.visits set status = 'cancelled' where id = 'f3200000-0000-4000-8000-000000000003'$q$, 'on_site → cancelled refused');
+  insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
+end $$;
+-- the tech of the inspection: cannot cancel, no-show or move it
+:as_tech_a
+select tst.fails($q$update public.visits set status = 'cancelled' where id = 'f3200000-0000-4000-8000-000000000001'$q$, 'tech cannot cancel the inspection');
+select tst.fails($q$update public.visits set status = 'no_show' where id = 'f3200000-0000-4000-8000-000000000001'$q$, 'tech cannot mark no-show');
+select tst.fails($q$update public.visits set property_id = 'd2000000-0000-4000-8000-000000000001' where id = 'f3200000-0000-4000-8000-000000000001'$q$, 'tech cannot move the visit to another property');
+select tst.fails($q$update public.visits set cancel_reason = 'we_cancelled' where id = 'f3200000-0000-4000-8000-000000000001'$q$, 'tech cannot set a cancel reason');
+update public.visits set status = 'en_route' where id = 'f3200000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.visits where id = 'f3200000-0000-4000-8000-000000000001') = 'en_route', 'tech still moves the inspection through its steps');
+\echo 'T32 visit at a property ok'
+
+-- ---------------------------------------------------------------- T33: what a tech sees through an inspection without a job
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd3200000-0000-4000-8000-000000000001'$q$) = 1, 'tech sees the property of their inspection (no job)');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c3200000-0000-4000-8000-000000000001'$q$) = 1, 'tech sees the client of their inspection');
+:as_office_a
+insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', 'd3200000-0000-4000-8000-000000000001', '#3232');
+insert into public.notes (company_id, subject_type, subject_id, body) values
+  ('ca000000-0000-0000-0000-000000000000', 'property', 'd3200000-0000-4000-8000-000000000001', 'T33 dog at the inspection'),
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c3200000-0000-4000-8000-000000000001', 'T33 client note');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd3200000-0000-4000-8000-000000000001'$q$) = 1, 'tech: gate code of tomorrow''s inspection (no job)');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body in ('T33 dog at the inspection', 'T33 client note')$q$) = 2, 'tech: notes of the inspection''s property and client');
+:as_tech2_a
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd3200000-0000-4000-8000-000000000001'$q$) = 0, 'another tech: not their inspection, no property');
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd3200000-0000-4000-8000-000000000001'$q$) = 0, 'another tech: no gate code');
+-- the inspection moves to next week (office): no code, still visible; cancelled: nothing
+:as_owner_a
+update public.visits set starts_at = now() + interval '5 days' where id = 'f3200000-0000-4000-8000-000000000001';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.property_secrets where property_id = 'd3200000-0000-4000-8000-000000000001'$q$) = 0, 'inspection in 5 days: no gate code yet');
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd3200000-0000-4000-8000-000000000001'$q$) = 1, 'inspection in 5 days: property still visible');
+:as_owner_a
+update public.visits set status = 'cancelled', cancel_reason = 'we_cancelled' where id = 'f3200000-0000-4000-8000-000000000001';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.properties where id = 'd3200000-0000-4000-8000-000000000001'$q$) = 0, 'cancelled inspection: property hidden');
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c3200000-0000-4000-8000-000000000001'$q$) = 0, 'cancelled inspection: client hidden');
+select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T33%'$q$) = 0, 'cancelled inspection: notes hidden');
+\echo 'T33 tech and inspections ok'
 
 :as_super
 \echo 'ALL TESTS PASSED'
