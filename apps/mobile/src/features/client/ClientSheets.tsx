@@ -10,7 +10,8 @@ import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
 import { clientStatusChip, statusOf, tagLabel } from "@/features/clients";
 import type { Customer, CustomerStatus, Person, PersonRole, PhoneLabel } from "@/data/types";
-import { useI18n, type DictKey } from "@/i18n";
+import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
+import { Labeled } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, MultiChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -67,6 +68,13 @@ export function PeopleEditSheet({
   /** phones and emails of one person: "+ Phone" / "+ Email" are buttons; with several, one is marked "primary" */
   const fields = (p: Person, i: number) => (
     <>
+      <Labeled label={t("lead.langLabel")}>
+        <ChoiceChips<DocLang | "">
+          value={p.language ?? ""}
+          onChange={(v) => edit(i, (x) => ({ ...x, language: v || undefined }))}
+          items={[{ key: "", label: t("lead.any") }, ...DOC_LANGS.map((k) => ({ key: k, label: DOC_LANG_LABEL[k] }))]}
+        />
+      </Labeled>
       {p.phones.map((ph, k) => (
         <View key={`ph${k}`} style={{ gap: space[2] }}>
           <RowView>

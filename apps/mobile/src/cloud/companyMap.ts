@@ -1,4 +1,5 @@
 /** Company profile ↔ database rows (companies, company_secrets, company_licenses, company_contacts). */
+import { DOC_LANGS } from "@/i18n/translate";
 import type { Address, Company, CompanyContact, CompanyLicense, EntityType, LicenseKind } from "@/data/types";
 
 type Row = Record<string, unknown>;
@@ -26,6 +27,7 @@ export function companyFromDb(r: Row, ein: string | undefined, licenses: Row[], 
     address: addr(r, "address_"),
     mailingAddress: mailing.line1 ? mailing : undefined,
     timezone: s(r.timezone) || "America/Los_Angeles",
+    docLanguage: DOC_LANGS.find((x) => x === r.doc_language) ?? "en",
     trades: (r.trades as string[] | null) ?? [],
     brand: { logo: brand.logo, color: brand.color },
     insurance: contract.insurance ?? {},
@@ -62,6 +64,7 @@ export function companyToDb(c: Company, stored: Row) {
     mailing_address_line1: n(c.mailingAddress?.line1), mailing_address_city: n(c.mailingAddress?.city),
     mailing_address_state: n(c.mailingAddress?.state), mailing_address_zip: n(c.mailingAddress?.zip),
     timezone: c.timezone,
+    doc_language: c.docLanguage ?? "en",
     trades: c.trades,
     brand: { ...((stored.brand as Row) ?? {}), logo: c.brand.logo ?? null, color: c.brand.color ?? null },
     contract_settings: { ...((stored.contract_settings as Row) ?? {}), insurance: c.insurance, cancel_email: n(c.cancelEmail) },
