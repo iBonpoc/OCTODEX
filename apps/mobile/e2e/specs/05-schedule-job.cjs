@@ -11,6 +11,11 @@ async function countersign(h, estimateId) {
   await h.page.getByRole("button", { name: "Подписать договор" }).last().click(); await h.page.waitForTimeout(700);
 }
 
+// a working day (П4a: by default Mon–Sat, Sunday off = no slots); the form counts days on the browser's calendar
+const workdayOffset = (from) => {
+  for (let o = from; ; o++) { const d = new Date(); d.setDate(d.getDate() + o); if (d.getDay() !== 0) return o; }
+};
+
 exports.run = async (h) => {
   await h.go("/p/demo0handyman0estimate0000000001");
   await h.sign("Linda Alvarez");
@@ -19,7 +24,8 @@ exports.run = async (h) => {
   const job = db.jobs.find((j) => j.estimateId === "e6");
   h.expect(job && job.status === "unscheduled" && !db.visits.some((v) => v.jobId === job.id), "no automatic visit");
   await h.go(`/job/schedule?jobId=${job.id}`);
-  await h.page.getByRole("radiogroup").first().getByRole("radio").nth(3).click();
+  const dayOffset = workdayOffset(3);
+  await h.page.getByRole("radiogroup").first().getByRole("radio").nth(dayOffset).click();
   // the visit form (docs/specs/03 §7.1): person, a free slot, length, note
   await h.page.getByRole("button", { name: "Ivan Sokolov" }).last().click();
   await h.page.getByRole("radio", { name: /^1:00/ }).last().click();
@@ -39,7 +45,7 @@ exports.run = async (h) => {
   await h.go(`/visit/${v.id}`);
   await h.expectText(/Заметка мастеру[\s\S]*Gate code at the office/, "the note is on the visit card");
   await h.go("/plan");
-  for (let i = 0; i < 3; i++) await h.page.getByRole("button", { name: "Вперёд" }).last().click();
+  for (let i = 0; i < dayOffset; i++) await h.page.getByRole("button", { name: "Вперёд" }).last().click();
   await h.page.waitForTimeout(400);
   await h.expectText(/Carpet, railing, bulb, haul-away/, "on the plan that day");
 };
