@@ -1,7 +1,7 @@
 -- After П1a: every visit knows its property; only the bare old inspection job moved to its visit (soft delete).
 do $$
 begin
-  if (select count(*) from public.visits where id::text like 'cfa70000%' and property_id = 'cfa20000-0000-0000-0000-000000000001') <> 5 then
+  if (select count(*) from public.visits where id::text like 'cfa70000%' and property_id = 'cfa20000-0000-0000-0000-000000000001') <> 10 then
     raise exception 'upgrade: every visit got its property'; end if;
   if (select job_id from public.visits where id = 'cfa70000-0000-0000-0000-000000000001') is not null
      or (select lead_id from public.visits where id = 'cfa70000-0000-0000-0000-000000000001') is distinct from 'cfa30000-0000-0000-0000-000000000001' then
@@ -22,6 +22,12 @@ begin
   if (select deleted_at from public.jobs where id = 'cfa40000-0000-0000-0000-000000000005') is not null
      or (select job_id from public.visits where id = 'cfa70000-0000-0000-0000-000000000005') is null then
     raise exception 'upgrade: a real job named "Estimate visit" is untouched'; end if;
+  if (select count(*) from public.jobs where id in ('cfa40000-0000-0000-0000-000000000007', 'cfa40000-0000-0000-0000-000000000008', 'cfa40000-0000-0000-0000-000000000009',
+       'cfa40000-0000-0000-0000-000000000010', 'cfa40000-0000-0000-0000-000000000011') and deleted_at is null) <> 5 then
+    raise exception 'upgrade: inspection jobs with a task, note, file, expense or call are untouched'; end if;
+  if (select count(*) from public.activities where subject_type = 'job' and subject_id = 'cfa40000-0000-0000-0000-000000000001'
+       and meta ->> 'event' = 'inspection_job_moved') <> 1 then
+    raise exception 'upgrade: the moved job has one feed entry saying where it went'; end if;
   if not (select legacy_no_property from public.visits where id = 'cfa70000-0000-0000-0000-000000000006') then
     raise exception 'upgrade: a visit without any property is flagged legacy'; end if;
   update public.visits set status = 'cancelled', cancel_reason = 'other', cancel_reason_text = 'no address' where id = 'cfa70000-0000-0000-0000-000000000006';

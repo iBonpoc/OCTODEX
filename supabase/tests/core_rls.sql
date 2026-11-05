@@ -2207,6 +2207,42 @@ update public.leads set status = 'inspection_scheduled' where id = 'b2200000-000
 :as_tech_a
 select tst.fails($q$update public.leads set status = 'contacted' where id = 'b2200000-0000-4000-8000-000000000001'$q$, 'tech cannot roll the lead back from inspection_scheduled');
 \echo 'T32 place of a visit ok'
+-- T32 (security check of #97): a tech with the right to sign signs the contract for the company; the signing function
+-- links the lead to the client although a tech may not do it by hand
+:as_owner_a
+do $$
+declare v_lead uuid;
+begin
+  insert into public.leads (id, company_id, source_id, contact_name, phone)
+  select 'b3200000-0000-4000-8000-000000000032', 'ca000000-0000-0000-0000-000000000000', id, 'T32 Sign Lead', '(818) 555-3232' from public.lead_sources
+   where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral' returning id into v_lead;
+  update public.leads set status = 'estimate_sent' where id = v_lead;
+  insert into public.estimates (id, company_id, number, customer_id, property_id, lead_id, title) values
+    ('0e1a0000-0000-0000-0000-000000000032', 'ca000000-0000-0000-0000-000000000000', '', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', v_lead, 'T32 sign');
+  perform tst.set_token('0e1a0000-0000-0000-0000-000000000032', 'tok_t32_0123456789abcdefg');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+    ('0e2a0000-0000-0000-0000-000000000032', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000032', 1);
+  update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000032' where id = '0e1a0000-0000-0000-0000-000000000032';
+  insert into public.estimate_options (id, company_id, version_id, name) values
+    ('0e3a0000-0000-0000-0000-000000000032', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000032', 'Standard');
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+    ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000032', 'labor', 'Gutters', 1, 100000, false);
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000032';
+  update public.estimates set status = 'sent', sent_version_id = '0e2a0000-0000-0000-0000-000000000032' where id = '0e1a0000-0000-0000-0000-000000000032';
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+select public.portal_accept('tok_t32_0123456789abcdefg', '0e3a0000-0000-0000-0000-000000000032', null, 'T32 Client', 'M0 0 L5 5', true) ->> 'status' = 'awaiting_countersign' as client_signed;
+:as_owner_a
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003';
+:as_tech_a
+select public.countersign_estimate('0e1a0000-0000-0000-0000-000000000032', 'M0 0 L3 3') = 'approved' as tech_countersigned;
+:as_owner_a
+select tst.ok((select status = 'won' and customer_id = 'c1a00000-0000-0000-0000-000000000001' from public.leads where id = 'b3200000-0000-4000-8000-000000000032'), 'tech countersign: lead won and linked to the client');
+select tst.ok(tst.cnt($q$select 1 from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000032'$q$) = 1, 'tech countersign: the job is made');
+-- the same tech still cannot link a lead by hand
+:as_tech_a
+select tst.fails($q$update public.leads set customer_id = 'c1a00000-0000-0000-0000-000000000001' where id = 'b2200000-0000-4000-8000-000000000001'$q$, 'outside a signing function the tech still cannot link a lead');
+\echo 'T32 signing links the lead ok'
 
 -- ---------------------------------------------------------------- T33: what a tech sees through an inspection without a job
 :as_tech_a
@@ -2250,6 +2286,21 @@ end $$;
 select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c3300000-0000-4000-8000-000000000001'$q$) = 1, 'tech sees the client of the job');
 select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c3300000-0000-4000-8000-000000000002'$q$) = 0, 'tech does not see the owner of the property instead');
 \echo 'T33 client of the visit ok'
+-- an inspection of a lead that has no client yet: the client a tech sees is the owner of the property
+:as_owner_a
+do $$
+declare v_src uuid;
+begin
+  select id into v_src from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' and name = 'Referral';
+  insert into public.customers (id, company_id, display_name) values ('c3300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T33 Owner');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c3300000-0000-4000-8000-000000000003', '33 Owner St', 'Pasadena');
+  insert into public.leads (id, company_id, source_id, contact_name, phone, property_id) values ('b3300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', v_src, 'T33 No Client', '(818) 555-3303', 'd3300000-0000-4000-8000-000000000003');
+  insert into public.visits (id, company_id, lead_id, kind, starts_at) values ('f3300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'b3300000-0000-4000-8000-000000000003', 'inspection', now() + interval '1 day');
+  insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3300000-0000-4000-8000-000000000003', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c3300000-0000-4000-8000-000000000003'$q$) = 1, 'inspection of a lead without a client: the tech sees the owner of the property');
+\echo 'T33 lead without a client ok'
 
 :as_super
 \echo 'ALL TESTS PASSED'
