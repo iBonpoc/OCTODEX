@@ -4845,6 +4845,13 @@ select tst.fresh(1);
 select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%keeps at least one active owner%', 'the second owner is now the last one');
 :as_super
 select tst.ok((select count(*) from public.memberships where company_id = :'t50_twin' and role = 'owner' and status = 'active') = 1, 'the company always keeps an active owner');
+-- the creator with a deleted membership no longer sees her company (has_any_membership counts soft-deleted ones)
+:as_eve50
+select tst.ok((select count(*) from public.companies where id = :'t50_twin') = 0, 'the creator who left does not see the company');
+-- a company is never created already closed
+reset role; set request.jwt.claim.sub = 'a5000000-0000-4000-8000-000000000007'; set role authenticated;
+select tst.fails_like($q$insert into public.companies (name, closed_at) values ('Closed From Birth Co', now())$q$, '%closed only with its last owner%', 'no company is created closed');
+
 -- the consent journal: even with the erasing flag, a client edits nothing
 set app.erasing_user = 'on';
 select tst.blocked($q$update public.legal_acceptance set ip = null$q$, 'the flag does not open the journal to a client');

@@ -22,7 +22,12 @@ export interface DeleteDeps {
   wait?: (ms: number) => Promise<void>;
 }
 /** what Supabase may keep about the person in user_metadata after a soft delete — cleared first (review #214 №3) */
-export const CLEARED_METADATA = { full_name: null, name: null, avatar_url: null, picture: null, locale: null, email: null, phone: null, email_verified: null, phone_verified: null, sub: null } as const;
+// Auth MERGES user_metadata, so this is the list of what to blank — including what Apple / Google sign-in would add later
+export const CLEARED_METADATA = {
+  full_name: null, name: null, given_name: null, family_name: null, nickname: null, preferred_username: null, user_name: null,
+  avatar_url: null, picture: null, locale: null, email: null, phone: null, email_verified: null, phone_verified: null,
+  sub: null, iss: null, provider_id: null, custom_claims: null,
+} as const;
 export interface DbError {
   message: string;
   code?: string;

@@ -320,6 +320,7 @@
 10. Скриншоты шагов 2, 3, 6, 8 — в PR выпуска.
 11. После шага 3: в Dashboard у C в `auth.users` — пустые `raw_user_meta_data` (имя, email, телефон, `sub`, `*_verified`) и `auth.identities.identity_data` (если GoTrue их оставил — записать и решить, ревью #214 №3).
 12. Функция: `deno check supabase/functions/delete-account/index.ts` (в CI deno нет). Вызов без токена → 401; с токеном нового (асимметричного) ключа подписи `verify_jwt` пускает; `OPTIONS` из браузера (веб-приложение) → 204 с CORS `POST, OPTIONS`.
+13. Не проверено тестами: ответ «try again» при конфликте блокировок в `delete_account` и `transfer_ownership` (нужна вторая сессия). На staging — два одновременных удаления двух owner одной компании: один проходит, второй — «try again» или «последний owner».
 
 ### 6.9 Финальная проверка 7а-2a (security-check, 06.11) — что сделано и что осталось
 **Сделано в 7а-2a.**
