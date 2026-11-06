@@ -93,7 +93,8 @@ function LeadsBoard() {
   /** the same records as the lead page (ContactActions): a call asks «did you get through?», SMS / email count as a reply */
   const contact = (l: Lead) => (a: ContactAction) => {
     openContact(a);
-    if (a.kind === "call") return isOpenLead(l) ? setCalling(l) : store.touchLead(l.id, "call");
+    // a call always asks «Чем кончился?»: the server counts a call without an outcome as answered (20 §3)
+    if (a.kind === "call") return setCalling(l);
     if (a.kind === "sms" || a.kind === "email") store.touchLead(l.id, a.kind);
   };
   /** reopen: one tap with «Undo»; close / won / book need a reason or a date → the lead page with its existing forms */
