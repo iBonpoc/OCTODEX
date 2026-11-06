@@ -15,7 +15,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { Labeled } from "@/features/fields";
 import { isClosedLead, isOpenLead, isSnoozed, leadStatusView, missingForEstimate, type MissingItem } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
-import { bookStart, snoozeUntil, SNOOZE_MONTHS, BOOK_DAYS } from "@/features/lead/bookRules";
+import { bookStart, dayAtHour, snoozeUntil, SNOOZE_MONTHS, BOOK_DAYS } from "@/features/lead/bookRules";
 import { Button, ChoiceChips, IconButton, Stepper, Steps, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -69,10 +69,8 @@ export function NextStepSheet({
   const toast = useToast();
   const q = useQ();
   const remindIn = (days: number) => {
-    const due = new Date();
-    due.setDate(due.getDate() + days);
-    due.setHours(9, 0, 0, 0);
-    const r = store.saveTask({ subjectType: "lead", subjectId: l.id, title: t("lead.next.remindTask", { name: l.name }), assigneeId: l.assigneeId ?? store.db.me, dueAt: due.toISOString() });
+    // 9:00 of the company's day (П4b)
+    const r = store.saveTask({ subjectType: "lead", subjectId: l.id, title: t("lead.next.remindTask", { name: l.name }), assigneeId: l.assigneeId ?? store.db.me, dueAt: dayAtHour(days, 9) });
     toast.show(q(t("task.saved")), r.undo);
     onClose();
   };

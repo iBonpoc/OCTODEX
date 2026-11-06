@@ -1,3 +1,4 @@
+const { dayKey, todayKey } = require("../companyTime.cjs");
 /**
  * S9 / S9b (docs/specs/03 §7.3, §7.4; wave П3a): several people on one visit, «Назначить» and «Снять всех».
  * Both sides: the office ticks two people on the visit card → both are on the visit, the summary names both, the second
@@ -11,7 +12,7 @@ exports.run = async (h) => {
   await h.go("/today");
   let db = await h.db();
   const me = db.me;
-  const todayMine = () => db.visits.filter((x) => (x.assigneeIds?.length ? x.assigneeIds : x.techId ? [x.techId] : []).includes(me) && new Date(x.start).toDateString() === new Date().toDateString());
+  const todayMine = () => db.visits.filter((x) => (x.assigneeIds?.length ? x.assigneeIds : x.techId ? [x.techId] : []).includes(me) && dayKey(x.start) === todayKey()); // the company's today (П4b)
   const before = todayMine().length;
   h.expect(db.visits.find((x) => x.id === "v6").techId === null, "demo v6 has nobody yet");
 

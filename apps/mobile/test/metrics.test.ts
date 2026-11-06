@@ -2,8 +2,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import { pct, periodNumbers, periodRange } from "../src/features/metrics";
 import type { DB } from "../src/data/types";
+import { wallToInstant } from "../src/features/zone";
 
-const at = (k: string, h = 12) => new Date(`${k}T${String(h).padStart(2, "0")}:00:00`).toISOString();
+// moments on the company's clock (Los Angeles — the default zone): the periods are the company's days (П4b)
+const at = (k: string, h = 12) => wallToInstant(k, h * 60, "America/Los_Angeles");
 const TODAY = "2026-11-04"; // Wednesday
 
 function db(): DB {

@@ -1,3 +1,4 @@
+const { ZONE, dueKey, todayKey } = require("../companyTime.cjs");
 /**
  * Invoices and expenses on the new list cards (step 10а, PR5), every view (3 widths × 2 themes).
  * - an overdue invoice: «Просрочен N дн» in words, under «Нужно действие», «к оплате» amount, number, «Записать оплату» opens the invoice;
@@ -11,11 +12,11 @@ exports.run = async (h) => {
   const p = h.page;
   await h.go("/money");
   const db = await h.db();
-  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const today = todayKey(); // overdue = due before the company's today (П4b)
   const cardOf = (text) => p.locator('[data-testid="list-card"]').filter({ hasText: text }).first();
 
   // overdue invoice: words, number, amount, group
-  const overdue = db.invoices.find((i) => i.paidCents < i.totalCents && new Date(i.dueDate) < today);
+  const overdue = db.invoices.find((i) => i.paidCents < i.totalCents && dueKey(i.dueDate) < today);
   h.expect(overdue, "demo has an overdue invoice");
   const name = db.customers.find((c) => c.id === overdue.customerId).name;
   const card = cardOf(overdue.number ?? name);
@@ -33,7 +34,7 @@ exports.run = async (h) => {
   // expenses: month header (US), category, «no receipt»
   const x = db.expenses[0];
   if (x) {
-    const month = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date(x.at));
+    const month = new Intl.DateTimeFormat("en-US", { timeZone: ZONE, month: "long", year: "numeric" }).format(new Date(x.at)); // the company's month (П4b)
     h.expect(body.includes(month), `expenses grouped by month «${month}»`);
     const et = await cardOf(x.vendor).innerText();
     h.expect(et.includes(x.vendor), "expense card shows the vendor");

@@ -1,3 +1,4 @@
+const { dayKey, todayKey } = require("../companyTime.cjs");
 const { expectOneAccent } = require("../accent.cjs");
 /** Today: period switch (Today / Week / Month) changes money tiles; sales funnel shows leads → sent → signed → paid. */
 /** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
@@ -28,7 +29,7 @@ exports.run = async (h) => {
   await countersign(h, "e6");
   await h.go("/today");
   const db = await h.db();
-  const signedToday = db.estimates.filter((e) => e.status === "approved" && e.approvedAt && new Date(e.approvedAt).toDateString() === new Date().toDateString());
+  const signedToday = db.estimates.filter((e) => e.status === "approved" && e.approvedAt && dayKey(e.approvedAt) === todayKey()); // the company's today (П4b)
   h.expect(signedToday.length >= 1, "an estimate signed today");
   await h.expectText(/Смет: [1-9]/, "signed count today");
   for (const period of ["Неделя", "Месяц"]) {

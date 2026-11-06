@@ -16,6 +16,7 @@ const app: I18nCtx = {
   moneyWhole: (c) => `$${Math.round(c / 100)}`,
   time: () => "10:00 AM",
   day: () => "чт, 5 нояб.",
+  dayOf: () => "чт, 5 нояб.",
 };
 
 describe("overrideI18n", () => {

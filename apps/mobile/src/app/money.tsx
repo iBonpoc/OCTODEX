@@ -13,10 +13,13 @@ import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ItemCard, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
+import { dayKeyIn, getZone, zonedFormat } from "@/features/zone";
 
 /** desktop row columns for expenses */
 const EXP_COLUMNS: FactKey[] = ["work", "by"];
-const monthFmt = new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" });
+/** the month of an expense on the company's calendar (П4b), not the UTC month of its moment */
+const monthKey = (iso: string) => dayKeyIn(iso).slice(0, 7);
+const monthOf = (iso: string) => zonedFormat(getZone(), { month: "long", year: "numeric" }).format(new Date(iso));
 
 /** Owner's money view: overdue → awaiting → paid. Manual payments now, Stripe in wave 4. */
 export default function Money() {
@@ -26,7 +29,7 @@ export default function Money() {
 
   const { device } = useDevice();
   // expenses by month, newest first; dates in US format (rule 7)
-  const months = [...db.expenses.slice().sort((a, b) => b.at.localeCompare(a.at)).reduce((m, x) => m.set(x.at.slice(0, 7), [...(m.get(x.at.slice(0, 7)) ?? []), x]), new Map<string, Expense[]>())];
+  const months = [...db.expenses.slice().sort((a, b) => b.at.localeCompare(a.at)).reduce((m, x) => m.set(monthKey(x.at), [...(m.get(monthKey(x.at)) ?? []), x]), new Map<string, Expense[]>())];
   /** an expense has no screen to open yet: the card has no tap and no contact buttons, nothing is written from it */
   const expenseCard = (x: Expense) => {
     const job = x.jobId ? db.jobs.find((j) => j.id === x.jobId) : undefined;
@@ -61,7 +64,7 @@ export default function Money() {
           <SectionTitle title={`${t("money.expenses")} · ${money(db.expenses.reduce((s, x) => s + x.amountCents, 0))}`} />
           {months.map(([m, xs]) => (
             <View key={m} style={{ gap: space[2] }}>
-              <T v="caption" w="semibold" tone="mut">{`${monthFmt.format(new Date(xs[0]!.at))} · ${money(xs.reduce((s, x) => s + x.amountCents, 0))}`}</T>
+              <T v="caption" w="semibold" tone="mut">{`${monthOf(xs[0]!.at)} · ${money(xs.reduce((s, x) => s + x.amountCents, 0))}`}</T>
               {device === "tablet" ? <CardGrid>{xs.map(expenseCard)}</CardGrid> : <CardList>{xs.map(expenseCard)}</CardList>}
             </View>
           ))}

@@ -14,6 +14,7 @@ import { MetaTag, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { isAssigned } from "@/features/schedule";
+import { isoDayKey, todayKey } from "@/features/calendar";
 import { overlapSigns } from "@/features/listSigns";
 
 /** Technician home ("my day"): progress and money collected, the visit in progress or the next one, the rest of today, then the week. */
@@ -24,9 +25,9 @@ export default function Visits() {
   const d = techDay(db, db.me);
   const focus = d.current ?? d.next;
   const rest = d.visits.filter((v) => v.id !== focus?.id);
-  const end = new Date();
-  end.setHours(23, 59, 59, 999);
-  const later = db.visits.filter((v) => isAssigned(v, db.me) && new Date(v.start) > end).sort(sortByStart);
+  // after today of the company (П4b)
+  const today = todayKey();
+  const later = db.visits.filter((v) => isAssigned(v, db.me) && isoDayKey(v.start) > today).sort(sortByStart);
   const sections = ([[d.current ? t("tday.now") : t("tday.next"), focus ? [focus] : []], [t("today.title"), rest], [t("visits.later"), later]] as const).filter(([, vs]) => vs.length);
   /** a visit card: read-only status (steps change on the visit screen); contact buttons only open the phone and the map */
   const visitCard = (v: Visit, isFocus: boolean) => {

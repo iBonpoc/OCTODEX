@@ -1,3 +1,4 @@
+const { dayKey, todayKey } = require("../companyTime.cjs");
 /**
  * «Команда» on the new list cards (step 10а, PR9b; docs/specs/06-list-cards.md §5), every view (3 widths × 2 themes).
  * - one card per person: name, roles and «Субподрядчик» / «Вы» as grey tags, phone, call / SMS (not on my own card);
@@ -12,11 +13,11 @@ exports.run = async (h) => {
   const p = h.page;
   await h.go("/team");
   const db0 = await h.db();
-  const today = new Date().toDateString();
+  const today = todayKey(); // the company's today (П4b)
   const assigned = (v, id) => (v.assigneeIds?.length ? v.assigneeIds : v.techId ? [v.techId] : []).includes(id);
-  const tech = db0.members.find((m) => m.id !== db0.me && m.kind === "employee" && m.roles.includes("tech") && db0.visits.some((v) => new Date(v.start).toDateString() === today && assigned(v, m.id)));
+  const tech = db0.members.find((m) => m.id !== db0.me && m.kind === "employee" && m.roles.includes("tech") && db0.visits.some((v) => dayKey(v.start) === today && assigned(v, m.id)));
   h.expect(tech, "demo has a tech (not me) with a visit today");
-  const visit = db0.visits.filter((v) => new Date(v.start).toDateString() === today && assigned(v, tech.id)).sort((a, b) => a.start.localeCompare(b.start))[0];
+  const visit = db0.visits.filter((v) => dayKey(v.start) === today && assigned(v, tech.id)).sort((a, b) => a.start.localeCompare(b.start))[0];
   // test data: the tech's phone, his first visit in work, one invited person
   await p.evaluate(({ techId, visitId }) => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
@@ -44,7 +45,7 @@ exports.run = async (h) => {
   const tc = cardOf(tech.name);
   await tc.scrollIntoViewIfNeeded();
   const tt = await tc.innerText();
-  const n = db.visits.filter((v) => new Date(v.start).toDateString() === today && assigned(v, tech.id)).length;
+  const n = db.visits.filter((v) => dayKey(v.start) === today && assigned(v, tech.id)).length;
   for (const s of [tech.name, "Мастер", `Выездов сегодня: ${n}`, "Идёт работа", "(818) 555-0199"]) h.expect(tt.includes(s), `tech card shows «${s}»: ${tt.slice(0, 240)}`);
   h.expect((await tc.getByRole("button", { name: /Позвонить/ }).count()) > 0 && (await tc.getByRole("button", { name: /SMS/ }).count()) > 0, "call and SMS on the tech card");
 

@@ -6,6 +6,10 @@
  * The store sets the zone from the company when the data loads. Tested in test/zone.test.ts (in several machine zones).
  */
 export const DEFAULT_ZONE = "America/Los_Angeles";
+/** the zone of the demo company (seed.ts): its «today», hours of visits and the daily reseed (persist.ts) */
+export const DEMO_ZONE = DEFAULT_ZONE;
+/** today of the demo company: the demo's «today» (seed.ts) and its daily reseed (persist.ts) */
+export const demoToday = (now: number = Date.now()): DayKey => dayKeyIn(now, DEMO_ZONE);
 let current = DEFAULT_ZONE;
 
 /** the company's zone (or Los Angeles before a company is known) */
@@ -128,3 +132,19 @@ export function dueDayKey(due: string, tz: string = getZone()): DayKey {
 }
 /** whole calendar days from a to b (b − a) */
 export const daysBetween = (a: DayKey, b: DayKey): number => dayNumber(b) - dayNumber(a);
+
+/**
+ * A label of a calendar day («Fri, Nov 6», a weekday in the calendar): a day key has no zone, so it is formatted in UTC
+ * at noon — the same label on any phone and in any company zone.
+ */
+export const formatDayKey = (k: DayKey, opts: Intl.DateTimeFormatOptions, locale = "en-US"): string =>
+  zonedFormat("UTC", opts, locale).format(new Date(dayNumber(k) * 86_400_000 + 43_200_000));
+
+const TIME_OPTS: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digit" };
+const DAY_OPTS: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" };
+/** «10:30 AM» — a moment on the company's clock (useI18n().time), en-US in every app language */
+export const timeLabel = (iso: string, tz: string = getZone()): string => zonedFormat(tz, TIME_OPTS).format(new Date(iso));
+/** «Fri, Nov 6» — the company's day of a moment (useI18n().day) */
+export const dayLabel = (iso: string, locale = "en-US", tz: string = getZone()): string => zonedFormat(tz, DAY_OPTS, locale).format(new Date(iso));
+/** «Fri, Nov 6» — a calendar day of «План» and the form's chips (useI18n().dayOf) */
+export const dayKeyLabel = (k: DayKey, locale = "en-US"): string => formatDayKey(k, DAY_OPTS, locale);

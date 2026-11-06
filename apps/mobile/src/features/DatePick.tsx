@@ -3,7 +3,8 @@ import { View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { addMonths, dayKeyOf, fromDayKey, monthGrid, todayKey, type DayKey } from "@/features/calendar";
+import { addMonths, monthGrid, todayKey, type DayKey } from "@/features/calendar";
+import { formatDayKey } from "@/features/zone";
 import { isWorkday } from "@/features/schedule";
 import { businessHoursOf } from "@/features/scheduleSettings";
 import { useStore } from "@/data/store";
@@ -25,8 +26,8 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
   const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
   const cells = monthGrid(month);
   const weeks = [0, 1, 2, 3, 4, 5].map((w) => cells.slice(w * 7, w * 7 + 7));
-  const wd = new Intl.DateTimeFormat(loc, { weekday: "short" });
-  const title = new Intl.DateTimeFormat(loc, { month: "long", year: "numeric" }).format(fromDayKey(month));
+  // labels of calendar days (no zone); «today» is the company's (П4b)
+  const title = formatDayKey(month, { month: "long", year: "numeric" }, loc);
   const today = todayKey();
   const thisMonth = month.slice(0, 7) <= today.slice(0, 7);
   return (
@@ -39,7 +40,7 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
       <View style={{ flexDirection: "row", gap: space[1] }}>
         {weeks[0]!.map((x) => (
           <T key={x.key} v="micro" tone="mut" center style={{ flex: 1 }}>
-            {wd.format(fromDayKey(x.key))}
+            {formatDayKey(x.key, { weekday: "short" }, loc)}
           </T>
         ))}
       </View>
@@ -47,7 +48,7 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
         <View key={row[0]!.key} style={{ flexDirection: "row", gap: space[1] }}>
           {row.map((x) => {
             const past = x.key < today;
-            const off = !isWorkday(fromDayKey(x.key), hours);
+            const off = !isWorkday(x.key, hours);
             const selected = x.key === value;
             return (
               <Press
@@ -57,7 +58,7 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
                 visibleHeight={component.rowCompact}
                 accessibilityRole="button"
                 accessibilityState={{ disabled: past, selected }}
-                accessibilityLabel={new Intl.DateTimeFormat(loc, { weekday: "long", month: "long", day: "numeric" }).format(fromDayKey(x.key))}
+                accessibilityLabel={formatDayKey(x.key, { weekday: "long", month: "long", day: "numeric" }, loc)}
                 containerStyle={{ flex: 1, minWidth: 0 }}
                 style={{
                   minHeight: component.rowCompact,
@@ -82,8 +83,4 @@ export function DatePick({ value, onPick }: { value: DayKey; onPick: (k: DayKey)
   );
 }
 
-export const dayOffsetOf = (k: DayKey): number => {
-  const a = fromDayKey(k).getTime();
-  const b = fromDayKey(dayKeyOf(new Date())).getTime();
-  return Math.round((a - b) / 86_400_000);
-};
+export { dayOffsetOf } from "@/features/calendar";

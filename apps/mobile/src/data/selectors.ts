@@ -2,13 +2,9 @@ import type { DB, Visit } from "./types";
 import { dayKeyIn, daysBetween, dueDayKey, getZone } from "@/features/zone";
 
 /* ---------- selectors ---------- */
-/** the same calendar day as now: of the zone when given (the company's), else of the phone — the screens that use it
- *  (QuickActions, a new expense) move to the company's day together with «Сегодня» and «План» in П4b-2 */
-export function isToday(iso: string, now: number = Date.now(), tz?: string): boolean {
-  if (tz) return dayKeyIn(iso, tz) === dayKeyIn(now, tz);
-  const d = new Date(iso);
-  const n = new Date(now);
-  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+/** the same calendar day as now, of the company (or of the zone given) — QuickActions, a new expense (П4b) */
+export function isToday(iso: string, now: number = Date.now(), tz: string = getZone()): boolean {
+  return dayKeyIn(iso, tz) === dayKeyIn(now, tz);
 }
 
 /** The property of a visit: its own (an inspection has no job, docs/specs/03 §3.1), else its job's. */

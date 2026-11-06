@@ -5,6 +5,7 @@
  */
 import { visitContext, visitPropertyId } from "@/data/selectors";
 import { VISIT_STEPS, type DB, type ID, type Lead, type Role, type Visit, type VisitStep } from "@/data/types";
+import { dayKeyIn, getZone, minuteIn, wallToInstant, type DayKey } from "./zone";
 import { BUSINESS_HOURS_DEFAULT, dayIn, hoursOn, SCHEDULE_SETTINGS_DEFAULT, type BusinessHours } from "./scheduleSettings";
 
 type Db = Pick<DB, "visits" | "jobs" | "leads">;
@@ -46,12 +47,12 @@ export const canCancel = canReschedule;
 /** who may plan, move, cancel or assign (§8.1): director and dispatcher; a tech only walks the steps */
 export const canPlan = (roles: Role[]) => roles.includes("director") || roles.includes("dispatcher");
 
-/** a new visit is never in the past, except earlier today ("I already went", noted in the feed) */
-export function startAllowed(startIso: string, now: number = Date.now()): boolean {
+/** a new visit is never in the past, except earlier today of the company ("I already went", noted in the feed) */
+export function startAllowed(startIso: string, now: number = Date.now(), tz: string = getZone()): boolean {
   const t = new Date(startIso).getTime();
   if (Number.isNaN(t)) return false;
   if (t >= now) return true;
-  return new Date(t).toDateString() === new Date(now).toDateString();
+  return dayKeyIn(t, tz) === dayKeyIn(now, tz);
 }
 
 /** visits of the same person that overlap [start, start + duration) — by time, not "how many that day" */
@@ -166,33 +167,28 @@ export const SCHEDULE_DEFAULTS = {
 /** the working day the form uses: start and end minute (a day off has none) and the slot step */
 export type Hours = { dayStartMin: number; dayEndMin: number; stepMin: number; off?: boolean };
 /** the hours of this day for the form: the company's hours of the weekday and its step; a day off is «off» (slots: none) */
-export function formHours(hours: BusinessHours, stepMin: number, day: Date): Hours {
+export function formHours(hours: BusinessHours, stepMin: number, day: DayKey): Hours {
   const h = hoursOn(hours, day);
   return h ? { dayStartMin: h[0], dayEndMin: h[1], stepMin } : { dayStartMin: SCHEDULE_DEFAULTS.dayStartMin, dayEndMin: SCHEDULE_DEFAULTS.dayEndMin, stepMin, off: true };
 }
 
-/** the same calendar day, phone time (company time zone — П4) */
-export const sameDay = (a: Date, b: Date) => a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
-const minuteOfDay = (d: Date) => d.getHours() * 60 + d.getMinutes();
-
-/** the start of a day + minutes (local time of the phone) */
-export function atMinute(day: Date, minute: number): string {
-  const d = new Date(day);
-  d.setHours(Math.floor(minute / 60), minute % 60, 0, 0);
-  return d.toISOString();
+/** a day of the company + minutes after its midnight, on the company's wall clock (10:00 in Los Angeles is 10:00 there
+ *  whatever the phone's zone; across a clock change — zone.ts wallToInstant) */
+export function atMinute(day: DayKey, minute: number, tz: string = getZone()): string {
+  return wallToInstant(day, minute, tz);
 }
 
-/** open visits of a person on that day, by start (the row "2 visits · 10:00–12:00, 14:00–15:00") */
-export function dayVisits(db: Pick<DB, "visits">, techId: ID, day: Date, exceptId?: ID): Visit[] {
+/** open visits of a person on that day of the company, by start (the row "2 visits · 10:00–12:00, 14:00–15:00") */
+export function dayVisits(db: Pick<DB, "visits">, techId: ID, day: DayKey, exceptId?: ID, tz: string = getZone()): Visit[] {
   return db.visits
-    .filter((v) => v.id !== exceptId && isAssigned(v, techId) && isOpenVisit(v) && sameDay(new Date(v.start), day))
+    .filter((v) => v.id !== exceptId && isAssigned(v, techId) && isOpenVisit(v) && dayKeyIn(v.start, tz) === day)
     .sort((a, b) => a.start.localeCompare(b.start));
 }
 
 /** start minutes the person is free for `durationMin`, inside working hours, on the step; never in the past today */
 export function freeSlots(
-  db: Pick<DB, "visits">, techId: ID | ID[] | null, day: Date, durationMin: number,
-  opts: { exceptId?: ID; now?: number; hours?: Hours } = {},
+  db: Pick<DB, "visits">, techId: ID | ID[] | null, day: DayKey, durationMin: number,
+  opts: { exceptId?: ID; now?: number; hours?: Hours; tz?: string } = {},
 ): number[] {
   const h: Hours = opts.hours ?? SCHEDULE_DEFAULTS;
   const now = opts.now ?? Date.now();
@@ -200,7 +196,7 @@ export function freeSlots(
   // a day off: no slots, «Другое время» still works (with the warning «Вне рабочих часов»)
   if (h.off) return out;
   for (let m = h.dayStartMin; m + durationMin <= h.dayEndMin; m += h.stepMin) {
-    const start = atMinute(day, m);
+    const start = atMinute(day, m, opts.tz);
     if (new Date(start).getTime() < now) continue;
     // several people: a slot is free when all of them are free
     if (overlaps(db, techId, start, durationMin, opts.exceptId).length) continue;
@@ -214,15 +210,16 @@ export type FormWarning = { key: "busy"; visits: Visit[] } | { key: "outOfHours"
 /** what the form warns about (status warn, with a word); saving stays possible except in the past */
 export function formWarnings(
   db: Pick<DB, "visits">, f: { techId: ID | ID[] | null; start: string; durationMin: number; exceptId?: ID },
-  opts: { now?: number; hours?: Hours } = {},
+  opts: { now?: number; hours?: Hours; tz?: string } = {},
 ): FormWarning[] {
   const h: Hours = opts.hours ?? SCHEDULE_DEFAULTS;
   const out: FormWarning[] = [];
   const busy = overlaps(db, f.techId, f.start, f.durationMin, f.exceptId);
   if (busy.length) out.push({ key: "busy", visits: busy });
-  const s = minuteOfDay(new Date(f.start));
+  // minutes on the company's clock (the slot the form shows), not the phone's
+  const s = minuteIn(f.start, opts.tz);
   if (h.off || s < h.dayStartMin || s + f.durationMin > h.dayEndMin) out.push({ key: "outOfHours" });
-  if (!startAllowed(f.start, opts.now)) out.push({ key: "past" });
+  if (!startAllowed(f.start, opts.now, opts.tz)) out.push({ key: "past" });
   return out;
 }
 
@@ -254,4 +251,4 @@ export function planFilter(v: Visit, who: PlanWho, me: ID): boolean {
 }
 
 /** a working day of the company: its hours of that weekday (default Monday–Saturday, §6.1; «Компания → Расписание», П4a) */
-export const isWorkday = (d: Date, hours: BusinessHours = BUSINESS_HOURS_DEFAULT) => hoursOn(hours, d) !== null;
+export const isWorkday = (d: DayKey, hours: BusinessHours = BUSINESS_HOURS_DEFAULT) => hoursOn(hours, d) !== null;
