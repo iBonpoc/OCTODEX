@@ -74,6 +74,31 @@ jobs:
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 >/dev/null
           sudo bash supabase/tests/run.sh
 
+  bundle:
+    # CHECKS §3а п.2: the iOS and Android bundles build (Metro, Hermes) and the dependencies match the Expo SDK.
+    # Not EAS: no account, no network beyond npm. Skipped for docs-only, like e2e.
+    name: iOS + Android bundle, Expo checks
+    needs: changes
+    if: needs.changes.outputs.app == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Dependencies match the Expo SDK
+        working-directory: apps/mobile
+        run: npx expo install --check
+      - name: expo-doctor (pinned, rule 17 checked in #225)
+        working-directory: apps/mobile
+        run: npx -y expo-doctor@1.21.5
+      - name: Export the iOS and Android bundles
+        working-directory: apps/mobile
+        run: npx expo export --platform ios --platform android --output-dir "$RUNNER_TEMP/bundle"
+
   e2e:
     name: End-to-end ${{ matrix.view }} part ${{ matrix.part }}
     needs: changes
@@ -110,7 +135,7 @@ jobs:
 
   checks:
     name: checks
-    needs: [changes, fast, e2e]
+    needs: [changes, fast, bundle, e2e]
     if: always()
     runs-on: ubuntu-24.04
     steps:
@@ -118,8 +143,12 @@ jobs:
         run: |
           # e2e may be skipped only when the change is docs-only
           e2e="${{ needs.e2e.result }}"
-          if [ "${{ needs.changes.result }}" = "success" ] && [ "${{ needs.changes.outputs.app }}" = "false" ] && [ "$e2e" = "skipped" ]; then e2e=success; fi
-          [ "${{ needs.fast.result }}" = "success" ] && [ "$e2e" = "success" ] || { echo "::error::changes=${{ needs.changes.result }} fast=${{ needs.fast.result }} e2e=${{ needs.e2e.result }}"; exit 1; }
+          bundle="${{ needs.bundle.result }}"
+          docs=false
+          if [ "${{ needs.changes.result }}" = "success" ] && [ "${{ needs.changes.outputs.app }}" = "false" ]; then docs=true; fi
+          if [ "$docs" = true ] && [ "$e2e" = "skipped" ]; then e2e=success; fi
+          if [ "$docs" = true ] && [ "$bundle" = "skipped" ]; then bundle=success; fi
+          [ "${{ needs.fast.result }}" = "success" ] && [ "$e2e" = "success" ] && [ "$bundle" = "success" ] || { echo "::error::changes=${{ needs.changes.result }} fast=${{ needs.fast.result }} bundle=${{ needs.bundle.result }} e2e=${{ needs.e2e.result }}"; exit 1; }
 
   # A red nightly run opens (or adds to) one issue, so the director sees it in the morning (docs/ai/CHECKS.md §1).
   nightly-alert:
