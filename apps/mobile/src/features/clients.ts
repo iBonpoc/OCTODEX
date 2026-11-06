@@ -10,6 +10,7 @@ import type { Customer, CustomerStatus, DB, ID, Role, Tag } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { IconKey } from "@/ui/primitives";
 import { isAssigned } from "@/features/schedule";
+import { getZone, minuteIn } from "@/features/zone";
 
 /** Status label: colour + icon + word (CLAUDE.md rule 2). */
 export const clientStatusChip: Record<CustomerStatus, { s: StatusName; l: DictKey }> = {
@@ -134,8 +135,9 @@ export function clientHistory(db: DB, customerId: ID, role: Role): HistoryItem[]
   return out.filter((x) => !!x.at).sort((a, b) => b.at.localeCompare(a.at));
 }
 
-/** "No calls after 6 pm" tag is on the client and it is 6 pm or later now (phone's local time). */
-export function noLateCallsNow(db: DB, c: Customer, now = new Date()): boolean {
-  if (now.getHours() < 18) return false;
+/** "No calls after 6 pm" tag is on the client and it is 6 pm or later now on the company's clock (П4b; the client is
+ *  local to the company, not to the phone) */
+export function noLateCallsNow(db: DB, c: Customer, now = new Date(), tz: string = getZone()): boolean {
+  if (minuteIn(now.getTime(), tz) < 18 * 60) return false;
   return tagsOf(db, c).some((x) => x.system && x.name.toLowerCase() === "no calls after 6 pm");
 }

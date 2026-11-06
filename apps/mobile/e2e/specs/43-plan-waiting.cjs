@@ -1,3 +1,4 @@
+const { dayKey, todayKey } = require("../companyTime.cjs");
 /**
  * The Plan tab for the office (docs/specs/03 §7.2, wave П3b; story map S8b / S9a — the screen side).
  * Both sides of S9a on the screen: the only visit of a job is cancelled → the job is in «Ждут даты» in the Plan →
@@ -32,14 +33,16 @@ exports.run = async (h) => {
   h.expect(/\/job\/schedule/.test(p.url()), `the form for the job opens (${p.url()})`);
   await p.getByRole("button", { name: "Другая дата" }).first().click(); await p.waitForTimeout(300);
   await p.getByRole("button", { name: "Вперёд" }).last().click(); await p.waitForTimeout(200);
-  const next = new Date(); next.setDate(1); next.setMonth(next.getMonth() + 1); next.setDate(15);
-  const label = new Intl.DateTimeFormat("ru-RU", { weekday: "long", month: "long", day: "numeric" }).format(next);
+  // next month of the company's calendar, the 15th (a day key: labelled in UTC, as the calendar does — П4b)
+  const [ny, nm] = todayKey().split("-").map(Number);
+  const nextKey = new Date(Date.UTC(ny, nm, 15)).toISOString().slice(0, 10);
+  const label = new Intl.DateTimeFormat("ru-RU", { timeZone: "UTC", weekday: "long", month: "long", day: "numeric" }).format(new Date(`${nextKey}T12:00:00Z`));
   await p.getByRole("button", { name: label, exact: true }).click(); await p.waitForTimeout(300);
   await p.getByRole("button", { name: "Запланировать", exact: true }).last().click(); await p.waitForTimeout(600);
   await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(400);
   db = await h.db();
   const v = db.visits.find((x) => x.jobId === "j2");
-  h.expect(v && new Date(v.start).getDate() === 15 && new Date(v.start).getMonth() === next.getMonth(), `planned on the picked day (${v && v.start})`);
+  h.expect(v && dayKey(v.start) === nextKey, `planned on the picked day of the company (${v && v.start})`);
   h.expect(db.jobs.find((j) => j.id === "j2").status === "scheduled", "S9: the job is scheduled again");
   await h.go("/plan");
   h.expect(!/Ждут даты/.test(await h.text()), "the job left «Ждут даты»");

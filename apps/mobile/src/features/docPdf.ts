@@ -13,6 +13,7 @@ import { licenseLine, type PortalData } from "@/cloud/portal";
 import type { DB, Invoice, Payment } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import { tFor, type DocLang } from "@/i18n/translate";
+import { getZone, zonedFormat } from "@/features/zone";
 
 /** What a document function needs to know: the client's language and the company's print style. Never a translator. */
 export interface DocOpts {
@@ -23,30 +24,22 @@ export interface DocOpts {
 export const esc = (s: string) => s.replace(/[&<>"']/g, (ch) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[ch]!);
 const usd = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 });
 const usdCents = new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" });
-const usDay = new Intl.DateTimeFormat("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
 /** $ amounts, US format, the same for every client language */
 export const docMoney = (cents: number) => (cents % 100 === 0 ? usd.format(cents / 100) : usdCents.format(cents / 100));
 /**
  * 11/05/2026 — US numeric date, the same for every client language. A calendar day (YYYY-MM-DD) goes as it is;
- * a moment is shown on the company's day when its zone is known (E2b-2), otherwise on the device's.
+ * a moment is shown on the company's day: its zone when given (E2b-2), else the app's company zone (zone.ts, П4b) —
+ * never the device's.
  */
 export const docDay = (iso: string, timeZone?: string) => {
   const day = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
   if (day) return `${day[2]}/${day[3]}/${day[1]}`;
-  return zoned(usDay, { month: "2-digit", day: "2-digit", year: "numeric" }, timeZone).format(new Date(iso));
+  return zoned({ month: "2-digit", day: "2-digit", year: "numeric" }, timeZone).format(new Date(iso));
 };
 /** 3:05 PM on the company's clock (E2b-2) */
-export const docTime = (iso: string, timeZone?: string) => zoned(usTime, { hour: "numeric", minute: "2-digit" }, timeZone).format(new Date(iso));
-const usTime = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
-/** a formatter in the given zone; an unknown zone falls back to the device's one */
-function zoned(fallback: Intl.DateTimeFormat, o: Intl.DateTimeFormatOptions, timeZone?: string): Intl.DateTimeFormat {
-  if (!timeZone) return fallback;
-  try {
-    return new Intl.DateTimeFormat("en-US", { ...o, timeZone });
-  } catch {
-    return fallback;
-  }
-}
+export const docTime = (iso: string, timeZone?: string) => zoned({ hour: "numeric", minute: "2-digit" }, timeZone).format(new Date(iso));
+/** a formatter in the given zone, else the company's (an unknown zone falls back to Los Angeles, zone.ts) */
+const zoned = (o: Intl.DateTimeFormatOptions, timeZone?: string): Intl.DateTimeFormat => zonedFormat(timeZone || getZone(), o);
 /** the brand colour is typed by the company: only a plain hex colour reaches the CSS */
 const safeColor = (c?: string) => (c && /^#[0-9a-f]{3,8}$/i.test(c) ? c : undefined);
 

@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useMemo, type ReactNode } from 
 import { getLocales } from "expo-localization";
 import { dec, roundCents } from "@octo/estimating-engine";
 import { usePersistentState } from "@/data/persist";
+import { dayKeyLabel, dayLabel, formatDayKey, getZone, timeLabel, zonedFormat, type DayKey } from "@/features/zone";
 import type { DictKey } from "./ru";
 import { translate, type DocLang, type Lang, type Params } from "./translate";
 
@@ -25,8 +26,12 @@ export interface I18nCtx {
   money: (cents: number) => string;
   /** whole dollars for tight places (KPI tiles) */
   moneyWhole: (cents: number) => string;
+  /** the time of a moment on the company's clock (features/zone.ts getZone), not the phone's (П4b) */
   time: (iso: string) => string;
+  /** the day of a moment on the company's calendar */
   day: (iso: string) => string;
+  /** the label of a calendar day (a day key of «План», the form's chips): no zone of its own */
+  dayOf: (k: DayKey) => string;
 }
 
 const Ctx = createContext<I18nCtx | null>(null);
@@ -43,24 +48,25 @@ export function I18nProvider({ children }: { children: ReactNode }) {
   );
   const value = useMemo<I18nCtx>(() => {
     const locale = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
-    const timeFmt = new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" });
-    const dayFmt = new Intl.DateTimeFormat(locale, { weekday: "short", month: "short", day: "numeric" });
+    // the zone is read on each call (the store sets it; I18nProvider sits above the store), formatters are cached by zone
     return {
       lang,
       setLang,
       t,
       money: (cents) => (cents % 100 === 0 ? usd.format(cents / 100) : usdCents.format(cents / 100)),
       moneyWhole: (cents) => usd.format(roundCents(dec(cents).div(100))),
-      time: (iso) => timeFmt.format(new Date(iso)),
-      day: (iso) => dayFmt.format(new Date(iso)),
+      time: (iso) => timeLabel(iso),
+      day: (iso) => dayLabel(iso, locale),
+      dayOf: (k) => dayKeyLabel(k, locale),
     };
   }, [lang, t]);
   if (!ready) return null;
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-/** Dates on what goes to a client: always US numeric (11/05/2026), the same in every client language (rule 7). */
-const docDayFmt = new Intl.DateTimeFormat("en-US", { month: "2-digit", day: "2-digit", year: "numeric" });
+/** Dates on what goes to a client: always US numeric (11/05/2026), the same in every client language (rule 7), on the
+ *  company's calendar (as the PDF, docPdf.ts docDay) */
+const DOC_DAY_OPTS: Intl.DateTimeFormatOptions = { month: "2-digit", day: "2-digit", year: "numeric" };
 
 /**
  * Everything inside speaks the client's language (rule 7: the /p/ page, its buttons, sheets and toasts).
@@ -74,7 +80,7 @@ export function I18nOverride({ lang, children }: { lang: DocLang; children: Reac
 
 /** The context inside I18nOverride: the client's language for t / lang / day; money as is; setLang does nothing. Pure. */
 export function overrideI18n(parent: I18nCtx, lang: DocLang): I18nCtx {
-  return { ...parent, lang, setLang: () => {}, t: (key, params) => translate(lang, key, params), day: (iso) => docDayFmt.format(new Date(iso)) };
+  return { ...parent, lang, setLang: () => {}, t: (key, params) => translate(lang, key, params), day: (iso) => zonedFormat(getZone(), DOC_DAY_OPTS).format(new Date(iso)), dayOf: (k) => formatDayKey(k, DOC_DAY_OPTS) };
 }
 
 export function useI18n(): I18nCtx {

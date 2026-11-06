@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { demoToday } from "@/features/zone";
 
 /**
  * State that survives an app restart (offline-first: the phone keeps its copy).
@@ -55,6 +56,6 @@ export function usePersistentState<T>(key: string, initial: T | (() => T), opts?
   return [state.value, setValue, ready] as const;
 }
 
-/** the day the demo was seeded (the phone's: the demo builds «today» from the phone's midnight; both move to the
- *  company's midnight together in П4b-3 — docs/specs/03) */
-export const todayKey = () => new Date().toDateString();
+/** the day the demo was seeded: the demo company's calendar day (its «today» is built from its midnight, seed.ts —
+ *  docs/specs/03 П4b), so the demo is reseeded at midnight in Los Angeles, not at the phone's */
+export const todayKey = demoToday;

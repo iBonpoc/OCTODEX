@@ -3,6 +3,7 @@ import { Linking, View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { assigneesOf, canPlan, dayVisits } from "@/features/schedule";
+import { isoDayKey, todayKey } from "@/features/calendar";
 import { sourceName } from "@/features/leads";
 import { smsWithBody } from "@/features/sms";
 import type { ID } from "@/data/types";
@@ -22,7 +23,8 @@ export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose:
   const [picked, setPicked] = useState<ID[]>([]);
   useEffect(() => setPicked(v ? assigneesOf(v) : []), [visitId]); // eslint-disable-line react-hooks/exhaustive-deps
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
-  const day = v ? new Date(v.start) : new Date();
+  // the day of the visit on the company's calendar (П4b)
+  const day = v ? isoDayKey(v.start) : todayKey();
   const toggle = (id: ID) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]));
   const save = (ids: ID[]) => {
     if (!visitId) return;

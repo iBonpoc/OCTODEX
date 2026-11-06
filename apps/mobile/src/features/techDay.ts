@@ -1,7 +1,8 @@
 /** Technician's day: progress, what is happening now, what is next, money collected on site today. */
 import { isAssigned, isOpenVisit } from "@/features/schedule";
 import type { DB, Visit } from "@/data/types";
-import { dayKeyOf, isoDayKey } from "./calendar";
+import { isoDayKey } from "./calendar";
+import { dayKeyIn } from "./zone";
 
 export interface TechDay {
   visits: Visit[];
@@ -19,7 +20,8 @@ export interface TechDay {
 }
 
 export function techDay(db: DB, techId: string, now: Date = new Date()): TechDay {
-  const today = dayKeyOf(now);
+  // today of the company, not of the phone (П4b)
+  const today = dayKeyIn(now.getTime());
   const visits = db.visits
     .filter((v) => isAssigned(v, techId) && isoDayKey(v.start) === today)
     .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
