@@ -3,7 +3,8 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Role } from "../src/data/types";
-import { canOpen, canSeeProfit, effectiveRole, roleHome, roleNav, routeKey, routeRoles } from "../src/nav/roles";
+import { canOpen, canSeeProfit, effectiveRole, roleHome, routeKey, routeRoles } from "../src/nav/roles";
+import { menuGroups, sectionHref, tabs } from "../src/nav/sections";
 
 const ROLES: Role[] = ["tech", "dispatcher", "director", "sales"];
 const APP = path.join(__dirname, "../src/app");
@@ -18,19 +19,19 @@ describe("route-guard: who may open a screen", () => {
   it("every key of the table is a real screen (a renamed screen must not slip out of the guard)", () => {
     for (const k of Object.keys(routeRoles)) expect(routes.has(k), k).toBe(true);
   });
-  it("every role opens its home and every tab of its bar", () => {
+  it("every role opens its home, every tab and every ☰ item it is shown", () => {
     for (const r of ROLES) {
       expect(canOpen(r, `/${roleHome[r]}`), `${r} home`).toBe(true);
-      for (const n of roleNav[r]) expect(canOpen(r, `/${n.route}`), `${r} ${n.route}`).toBe(true);
+      for (const s of [...tabs(r), ...menuGroups(r).flatMap((g) => g.items)]) expect(canOpen(r, sectionHref(s.id, r)), `${r} ${s.id}`).toBe(true);
       expect(canOpen(r, "/"), `${r} /`).toBe(true);
     }
   });
   it("the technician: no company money, Sales, Triage, Company or Team", () => {
-    for (const p of ["/today", "/money", "/figures/profit?period=month", "/triage", "/inbox?tab=leads", "/team", "/company", "/company/hours"])
+    for (const p of ["/today", "/money", "/figures/profit?period=month", "/triage", "/inbox?tab=leads", "/leads?tab=invoices", "/team", "/company", "/company/hours"])
       expect(canOpen("tech", p), p).toBe(false);
   });
   it("the technician keeps his own work, estimates, catalog, and invoices/receipts for a payment on site", () => {
-    for (const p of ["/visits", "/plan", "/clients", "/more", "/jobs", "/estimates", "/catalog", "/visit/v1", "/job/j1", "/invoice/i1", "/receipt/p1", "/expense/new", "/settings", "/p/abc"])
+    for (const p of ["/visits", "/plan", "/messages", "/calls", "/clients", "/more", "/jobs", "/estimates", "/catalog", "/visit/v1", "/job/j1", "/invoice/i1", "/receipt/p1", "/expense/new", "/settings", "/p/abc"])
       expect(canOpen("tech", p), p).toBe(true);
   });
   it("Company settings and Team — director only; the office sees money", () => {

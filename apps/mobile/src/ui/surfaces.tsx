@@ -5,6 +5,7 @@ import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { StackNavPill } from "@/nav/TabBar";
+import { MenuButton } from "@/nav/NavMenu";
 import { isTabScreen } from "@/nav/roles";
 import { screenPath } from "./screenPath";
 import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
@@ -414,7 +415,9 @@ export function Screen({
   const routeName = useRoute().name;
   const nav = navContext(pathname, params, store.db, store.role);
   const up = nav.up;
-  const hasUp = !!(up || back);
+  /** a ☰ root (Leads, Jobs, Catalog…, docs/specs/13а §3): a root like a tab — ☰, not the screen's own «back» */
+  const menuRoot = !up && !!nav.section;
+  const hasUp = !!(up || (back && !menuRoot));
   const upLabel = up ? ("key" in up.label ? t(up.label.key) : up.label.text) : undefined;
   const trail = up ? breadcrumbs(pathname, params, store.db, store.role) : [];
   const go = goTo;
@@ -422,7 +425,7 @@ export function Screen({
   const { wide, device } = useDevice();
   /** tablet/desktop: the address bar is pinned above the scroll, with a round «‹» (spec 10, Н2) */
   // a tab opened from «More» (Plan, Triage…) has a parent too, but it lives in the tab navigator that already draws the pill
-  const pinned = wide && !!up && !isTabScreen(routeName);
+  const pinned = wide && (!!up || menuRoot) && !isTabScreen(routeName);
   // Esc = one level up on the web (spec 10, Н3); only screens with a parent (not the client page /p, not sign-in).
   const goUpRef = useRef(goUp);
   goUpRef.current = goUp;
@@ -527,9 +530,12 @@ export function Screen({
           </RowView>
         </>
       ) : (
-        /* tab root: the big title is where you are */
-        <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin }}>
-          <RowView style={{ flex: 1, gap: space[1] }}>
+        /* tab root: the big title is where you are; phone: ☰ on the left (docs/specs/13 §2.2).
+           The screen's actions wrap under the title when the row is too narrow (Plan at 390), never squeeze it. */
+        <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, flexWrap: "wrap", rowGap: space[2] }}>
+          <RowView style={{ flexGrow: 1, flexShrink: 0, maxWidth: "100%", gap: space[1] }}>
+            {/* only in the app's own places: a tab or a ☰ root — never on the client page /p or sign-in */}
+            {wide || !(menuRoot || isTabScreen(routeName)) ? null : <MenuButton />}
             <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
               <T v="display" numberOfLines={1}>
                 {title}
@@ -537,7 +543,7 @@ export function Screen({
             </View>
             {help ? <HelpButton title={title} text={help} /> : null}
           </RowView>
-          {right}
+          {right ? <View style={{ marginLeft: "auto" }}>{right}</View> : null}
         </RowView>
       )}
       {subtitle ? (
