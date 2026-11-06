@@ -1,8 +1,11 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { WEB_APP_URL } from "@/config/backend";
+import { LEGAL_RETRY_MS, legalState, legalTickets, PENDING_LEGAL_KEY, resolveLegal, type LegalState } from "@/features/legal";
 import { supabase } from "./client";
+import { acceptLegal, legalStatus } from "./legal";
 
 /** Where email links (confirm / magic link) return. Must be in Supabase Auth → URL Configuration. */
 const redirectTo = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL);
@@ -28,6 +31,14 @@ interface AuthCtx {
   createCompany: (name: string) => Promise<string | null>;
   signOut: () => Promise<void>;
   reloadMemberships: () => Promise<void>;
+  /**
+   * The consent to the current Terms and Privacy (7а-1): "unknown" until asked or without the network (never blocks work),
+   * "first" / "changed" — the gate asks. `legalChecked` — the check for this session has run (ok or failed).
+   */
+  legal: LegalState;
+  legalChecked: boolean;
+  /** the person agreed (the tick): to the server now; null or the server's message */
+  agree: () => Promise<string | null>;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -37,6 +48,30 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [ready, setReady] = useState(false);
   const [session, setSession] = useState<Session | null>(null);
   const [memberships, setMemberships] = useState<Membership[]>([]);
+  const [legal, setLegal] = useState<LegalState>("unknown");
+  const [legalChecked, setLegalChecked] = useState(false);
+  const legalRun = useRef<Promise<void> | null>(null);
+  // a slow old answer never overwrites a newer one (review #206 M1): checks and accepts take tickets
+  const tickets = useRef(legalTickets()).current;
+  const sessionEmail = useRef<string | null>(null);
+
+  /** a tick remembered on the sign-in screen goes to the server first; otherwise just ask where the person stands */
+  const checkLegal = useCallback(
+    (email: string | null | undefined) => {
+      sessionEmail.current = email ?? null;
+      if (legalRun.current) return legalRun.current;
+      const ticket = tickets.take();
+      legalRun.current = (async () => {
+        const st = await resolveLegal(email, { store: AsyncStorage, accept: acceptLegal, status: legalStatus });
+        // no network or an old server: «unknown» never blocks the work; asked again (the retry effect below)
+        if (tickets.isNewest(ticket)) setLegal(st);
+        setLegalChecked(true);
+        legalRun.current = null;
+      })();
+      return legalRun.current;
+    },
+    [tickets],
+  );
 
   const reloadMemberships = useCallback(async () => {
     const { data: s } = await supabase.auth.getSession();
@@ -63,19 +98,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!alive) return;
       setSession(data.session);
-      if (data.session) await reloadMemberships();
+      if (data.session) await Promise.all([checkLegal(data.session.user.email), reloadMemberships()]);
       setReady(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s);
-      if (s) reloadMemberships();
-      else setMemberships([]);
+      if (s) {
+        checkLegal(s.user.email);
+        reloadMemberships();
+      } else {
+        setMemberships([]);
+        setLegal("unknown");
+        setLegalChecked(false);
+      }
     });
     return () => {
       alive = false;
       sub.subscription.unsubscribe();
     };
-  }, [reloadMemberships]);
+  }, [reloadMemberships, checkLegal]);
+
+  // the answer is unknown (no network): ask again on coming back to the app, on «online», and every minute (M2)
+  useEffect(() => {
+    if (!session || legal !== "unknown") return;
+    const again = () => void checkLegal(sessionEmail.current);
+    const sub = AppState.addEventListener("change", (st) => st === "active" && again());
+    const w = typeof window !== "undefined" && typeof window.addEventListener === "function" ? window : null;
+    w?.addEventListener("online", again);
+    const timer = setInterval(again, LEGAL_RETRY_MS);
+    return () => {
+      sub.remove();
+      w?.removeEventListener("online", again);
+      clearInterval(timer);
+    };
+  }, [session, legal, checkLegal]);
 
   const value = useMemo<AuthCtx>(
     () => ({
@@ -103,19 +159,36 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const { error } = await supabase.auth.signUp({ email, password, options: { data: { full_name: name }, emailRedirectTo: redirectTo() } });
         return error?.message ?? null;
       },
+      legal,
+      legalChecked,
+      agree: async () => {
+        const ticket = tickets.take();
+        try {
+          const st = legalState(await acceptLegal());
+          if (tickets.isNewest(ticket)) setLegal(st);
+          setLegalChecked(true);
+          await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
+          return null;
+        } catch (e) {
+          return (e as Error).message;
+        }
+      },
       createCompany: async (name) => {
-        // The DB trigger makes the creator the active owner and seeds standard lead sources.
+        // The DB trigger makes the creator the active owner and seeds standard lead sources. Since 7а-1 the server
+        // refuses without the current consent («legal not accepted»): a tick still on the device goes first.
+        if (legalRun.current) await legalRun.current;
         const { error } = await supabase.from("companies").insert({ name });
         if (!error) await reloadMemberships();
         return error?.message ?? null;
       },
       signOut: async () => {
+        await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
         await supabase.auth.signOut();
         setMemberships([]);
       },
       reloadMemberships,
     }),
-    [ready, session, memberships, reloadMemberships],
+    [ready, session, memberships, reloadMemberships, legal, legalChecked, tickets],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

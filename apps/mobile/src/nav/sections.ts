@@ -26,6 +26,7 @@ export type SectionId =
   | "team"
   | "company"
   | "settings"
+  | "help"
   | "more";
 export type MenuGroup = "top" | "work" | "docs" | "money" | "bottom";
 
@@ -66,6 +67,8 @@ export const SECTIONS: readonly Section[] = [
   { id: "team", label: "nav.team", icon: "users", group: "bottom", roles: ["director"] },
   { id: "company", label: "nav.companySettings", icon: "home2", group: "bottom", roles: ["director"] },
   { id: "settings", label: "nav.mySettings", icon: "sliders", group: "bottom" },
+  // «Помощь и поддержка» (7а-1; App Store 1.5): for everyone, last in the menu
+  { id: "help", label: "support.title", icon: "help", group: "bottom" },
   { id: "more", label: "nav.more", icon: "more", group: "bottom", tab: true, phoneOnly: true },
 ];
 

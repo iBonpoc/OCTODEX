@@ -3,6 +3,7 @@ import { router } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/cloud/auth";
 import { peekInviteKey } from "@/features/team";
+import { legalErrorKey } from "@/features/legal";
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -18,7 +19,7 @@ export default function CompanySetup() {
   useEffect(() => {
     if (auth.company && !busy) router.replace("/");
   }, [auth.company, busy]);
-  // a person who came by an invitation link joins that company instead of creating one (wave 7-2, S21)
+  // a person who came by an invitation link joins that company instead of creating one (7-2, S21)
   useEffect(() => {
     AsyncStorage.getItem(peekInviteKey).then((v) => v && router.replace("/auth/invite")).catch(() => {});
   }, []);
@@ -43,7 +44,10 @@ export default function CompanySetup() {
             setBusy(true);
             const e = await auth.createCompany(name.trim());
             setBusy(false);
-            if (e) setErr(e);
+            // no consent (7а-1): the gate asks for it; an old app with an old text — «update the app»
+            const k = legalErrorKey(e);
+            if (k === "legal.err.needed") router.push("/auth/terms");
+            if (e) setErr(k ? t(k) : e);
             // first run (13 §3.11): «Чем вы занимаетесь?» → the company profile
             else router.replace("/auth/trade");
           }}

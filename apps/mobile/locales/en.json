@@ -1,0 +1,6 @@
+{
+  "ios": {
+    "NSCameraUsageDescription": "Photos before and after the work are attached to the visit.",
+    "NSPhotoLibraryUsageDescription": "Photos of the work are attached to the visit."
+  }
+}
