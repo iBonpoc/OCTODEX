@@ -129,8 +129,9 @@ create index activities_contact_idx on public.activities (company_id, contact_id
 create or replace function app.tech_sees_activity_subject(p_company uuid, p_type text, p_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select app.has_role(p_company, array['tech']) and case p_type
-    when 'job' then exists (select 1 from public.jobs j where j.id = p_id and j.company_id = p_company and j.deleted_at is null)
-                    and app.is_job_assignee(p_id)
+    -- the same window as notes (app.tech_visit_counts): a live visit of his, not cancelled, not older than 14 days,
+    -- on a job that is not cancelled or closed
+    when 'job' then exists (select 1 from public.visits v where v.job_id = p_id and v.company_id = p_company and app.tech_visit_counts(v.id))
     when 'customer' then exists (select 1 from public.customers c where c.id = p_id and c.company_id = p_company and c.deleted_at is null)
                     and app.is_customer_assignee(p_id)
     else false
@@ -139,17 +140,34 @@ $$;
 revoke all on function app.tech_sees_activity_subject(uuid, text, uuid) from public, anon, authenticated;
 grant execute on function app.tech_sees_activity_subject(uuid, text, uuid) to authenticated;
 
+-- the person of an event a tech writes on a job: none, or a person of that job's client
+create or replace function app.contact_of_job_customer(p_company uuid, p_job uuid, p_contact uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select p_contact is null or exists (
+    select 1 from public.contacts k join public.jobs j on j.customer_id = k.customer_id and j.company_id = k.company_id
+     where k.id = p_contact and k.company_id = p_company and j.id = p_job and k.deleted_at is null);
+$$;
+revoke all on function app.contact_of_job_customer(uuid, uuid, uuid) from public, anon, authenticated;
+grant execute on function app.contact_of_job_customer(uuid, uuid, uuid) to authenticated;
+
 drop policy if exists activities_select on public.activities;
+-- a lead branch also ties the lead to the row's company (a member of another company cannot drop rows into ours)
 create policy activities_select on public.activities for select to authenticated
   using (app.is_staff(company_id)
-         or (subject_type = 'lead' and app.can_see_lead(subject_id))
+         or (subject_type = 'lead' and app.can_see_lead(subject_id)
+             and exists (select 1 from public.leads l where l.id = subject_id and l.company_id = activities.company_id))
          or (subject_type in ('job', 'customer') and app.tech_sees_activity_subject(company_id, subject_type, subject_id)));
--- a tech writes on the job of his visit («В пути», a call from the job, wave 3); not on the client
+-- a tech writes on the job of his visit («В пути», a call from the job, wave 3); not on the client. Not staff: the event
+-- is always his own (actor_id), on a job only a contact kind, and the person is one of that job's client
 drop policy if exists activities_insert on public.activities;
 create policy activities_insert on public.activities for insert to authenticated
   with check (app.is_staff(company_id)
-              or (subject_type = 'lead' and app.can_see_lead(subject_id))
-              or (subject_type = 'job' and app.tech_sees_activity_subject(company_id, 'job', subject_id)));
+              or (actor_id = (select auth.uid())
+                  and ((subject_type = 'lead' and app.can_see_lead(subject_id)
+                        and exists (select 1 from public.leads l where l.id = subject_id and l.company_id = activities.company_id))
+                       or (subject_type = 'job' and kind in ('call', 'sms', 'email')
+                           and app.tech_sees_activity_subject(company_id, 'job', subject_id)
+                           and app.contact_of_job_customer(company_id, subject_id, contact_id)))));
 
 -- ---- files of a client -----------------------------------------------------------------------
 alter table public.files add column if not exists customer_id uuid;
@@ -158,13 +176,20 @@ alter table public.files add constraint files_customer_fk
 create index files_customer_idx on public.files (company_id, customer_id) where customer_id is not null;
 drop policy if exists files_insert on public.files;
 create policy files_insert on public.files for insert to authenticated
-  with check (app.is_member(company_id)
-              and (customer_id is null or app.is_staff(company_id) or app.is_customer_assignee(customer_id)));
+  with check (app.is_staff(company_id)
+              or (app.is_member(company_id)
+                  and (customer_id is null or app.is_customer_assignee(customer_id))
+                  and (job_id is null or app.is_job_assignee(job_id))
+                  and (visit_id is null or app.is_visit_assignee(visit_id))));
+-- only a member of the company edits his own file (a removed employee does not)
 drop policy if exists files_update on public.files;
 create policy files_update on public.files for update to authenticated
-  using (app.is_staff(company_id) or created_by = (select auth.uid()))
+  using (app.is_staff(company_id) or (app.is_member(company_id) and created_by = (select auth.uid())))
   with check (app.is_staff(company_id)
-              or (created_by = (select auth.uid()) and (customer_id is null or app.is_customer_assignee(customer_id))));
+              or (app.is_member(company_id) and created_by = (select auth.uid())
+                  and (customer_id is null or app.is_customer_assignee(customer_id))
+                  and (job_id is null or app.is_job_assignee(job_id))
+                  and (visit_id is null or app.is_visit_assignee(visit_id))));
 
 -- ---- rights ----------------------------------------------------------------------------------
 alter table public.job_types enable row level security;
