@@ -1879,4 +1879,7 @@ export const en: Dict = {
   "plan5.ev.problem.long": "The text is too long",
   "plan5.addEvent": "Event",
   "plan5.addTimeOff": "Time off",
+  // wave 7б-1 «Работы и выезды»: personal settings
+  "pref7b.plan": "Plan",
+  "pref7b.showDoneHint": "Completed visits, jobs and tasks in the Plan. This setting is yours and the same on all your devices.",
 };
