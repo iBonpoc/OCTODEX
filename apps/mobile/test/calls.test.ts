@@ -24,7 +24,8 @@ import { applyOp, callCols } from "../src/cloud/ops";
 import { makeSeed } from "../src/data/seed";
 import type { useStore } from "../src/data/store";
 import type { Activity, DB } from "../src/data/types";
-import { callPlaceForClient, callPlaces, callReady, commsLog, peopleOfSubject } from "../src/features/comms/comms";
+import { callPlaceForClient, callPlaces, callReady, commsLog, peopleOfSubject, techVisitCounts } from "../src/features/comms/comms";
+import { callNext, callOp, realPersonId } from "../src/features/comms/contactEvents";
 
 type Api = ReturnType<typeof useStore>;
 
@@ -91,13 +92,26 @@ describe("calls: where a role may write one (RLS activities_insert)", () => {
   it("«Позвонить» on a client: the office writes on the client; the technician on his one job there, or picks", () => {
     const c = d.customers[0]!;
     expect(callPlaceForClient(d, "director", c.id)).toEqual({ subjectType: "customer", subjectId: c.id });
-    const job = tech.jobs.find((j) => tech.visits.some((v) => v.jobId === j.id && v.techId === me))!;
-    const cid = job.customerId ?? tech.properties.find((p) => p.id === job.propertyId)!.customerId!;
-    const jobsThere = callPlaces(tech, "tech").filter((x) => x.subjectType === "job" && (tech.jobs.find((j) => j.id === x.subjectId)?.customerId ?? tech.properties.find((p) => p.id === tech.jobs.find((j) => j.id === x.subjectId)?.propertyId)?.customerId) === cid);
-    const got = callPlaceForClient(tech, "tech", cid);
-    if (jobsThere.length === 1) expect(got).toEqual({ subjectType: "job", subjectId: jobsThere[0]!.subjectId });
-    else expect(got).toBeUndefined();
-    expect(callPlaceForClient(tech, "tech", "not-his")).toBeUndefined();
+    // an explicit world: client X has one job with the tech's visit tomorrow; client Y has two
+    const v0 = d.visits[0]!;
+    const job = (id: string, customerId: string) => ({ ...d.jobs[0]!, id, customerId, status: "scheduled" as const });
+    const visit = (id: string, jobId: string) => ({ ...v0, id, jobId, techId: "t-me", assigneeIds: ["t-me"], start: new Date(Date.now() + 86_400_000).toISOString(), closed: false });
+    const w: DB = { ...d, me: "t-me", jobs: [job("jx", "cx"), job("jy1", "cy"), job("jy2", "cy")], visits: [visit("vx", "jx"), visit("vy1", "jy1"), visit("vy2", "jy2")] };
+    expect(callPlaceForClient(w, "tech", "cx")).toEqual({ subjectType: "job", subjectId: "jx" });
+    expect(callPlaceForClient(w, "tech", "cy")).toBeUndefined();
+    expect(callPlaceForClient(w, "tech", "not-his")).toBeUndefined();
+  });
+  it("the technician's window = the server's tech_visit_counts: not old, not a no-show, not a done or cancelled job", () => {
+    const v0 = d.visits[0]!;
+    const base = { ...v0, id: "v", jobId: "j", techId: "t-me", assigneeIds: ["t-me"], start: new Date().toISOString(), closed: false };
+    const w = { me: "t-me", jobs: [{ ...d.jobs[0]!, id: "j", status: "scheduled" as const }] };
+    expect(techVisitCounts(w, base)).toBe(true);
+    expect(techVisitCounts(w, { ...base, start: new Date(Date.now() - 20 * 86_400_000).toISOString() })).toBe(false);
+    expect(techVisitCounts(w, { ...base, start: new Date(Date.now() - 10 * 86_400_000).toISOString() })).toBe(true);
+    expect(techVisitCounts(w, { ...base, closed: true, step: "arrived" as never })).toBe(false);
+    expect(techVisitCounts({ ...w, jobs: [] }, base)).toBe(false);
+    expect(techVisitCounts({ ...w, jobs: [{ ...w.jobs[0]!, status: "done" as const }] }, base)).toBe(false);
+    expect(techVisitCounts(w, { ...base, techId: "other", assigneeIds: ["other"] })).toBe(false);
   });
   it("the people of a job are its client's", () => {
     const job = d.jobs[0]!;
@@ -115,5 +129,47 @@ describe("calls: the log", () => {
     const a: Activity = { id: "k1", subjectType: "customer", subjectId: c.id, kind: "call", at: "2026-11-06T10:00:00Z", actorId: d.me, contactId: person.id, body: "Call back Monday", meta: { outcome: "answered", duration_min: "6" } };
     const [e] = commsLog({ ...d, activities: [a] }, "director", "calls");
     expect(e).toMatchObject({ id: "k1", who: c.name, person: person.name, durationMin: 6, note: "Call back Monday", outcome: "answered", href: `/client/${c.id}` });
+  });
+});
+
+describe("calls: what the store does (callNext / callOp — the store wraps them in mutate)", () => {
+  const d = makeSeed();
+  const ids = { activityId: "act-1", statusId: "st-1", at: "2026-11-06T10:00:00Z" };
+  const l = d.leads.find((x) => x.status === "new")!;
+  it("a client: one call event, op activity.call", () => {
+    const c = d.customers[0]!;
+    const input = { subjectType: "customer" as const, subjectId: c.id, outcome: "answered" as const, durationMin: 3 };
+    const next = callNext(d, input, ids);
+    expect(next.activities[0]).toMatchObject({ id: "act-1", subjectType: "customer", subjectId: c.id, kind: "call", direction: "out", meta: { outcome: "answered", duration_min: "3" } });
+    expect(next.activities.length).toBe(d.activities.length + 1);
+    expect(callOp(input, ids)).toMatchObject({ k: "activity.call", activityId: "act-1", subjectType: "customer", subjectId: c.id, outcome: "answered" });
+  });
+  it("a job: op activity.call on the job", () => {
+    const j = d.jobs[0]!;
+    expect(callOp({ subjectType: "job", subjectId: j.id, outcome: "voicemail" }, ids)).toMatchObject({ k: "activity.call", subjectType: "job", subjectId: j.id });
+  });
+  it("a lead: op lead.touch with the outcome; «Поговорили» moves a new lead to replied (S2), «Не ответил» counts an attempt", () => {
+    expect(callOp({ subjectType: "lead", subjectId: l.id, outcome: "no_answer" }, ids)).toMatchObject({ k: "lead.touch", leadId: l.id, kind: "call", outcome: "no_answer" });
+    const missed = callNext(d, { subjectType: "lead", subjectId: l.id, outcome: "no_answer" }, ids);
+    expect(missed.leads.find((x) => x.id === l.id)).toMatchObject({ status: "new", callAttempts: (l.callAttempts ?? 0) + 1 });
+    const got = callNext(d, { subjectType: "lead", subjectId: l.id, outcome: "answered" }, ids);
+    expect(got.leads.find((x) => x.id === l.id)).toMatchObject({ status: "replied", callAttempts: 0 });
+    expect(got.activities.slice(0, 2).map((a) => a.kind)).toEqual(["call", "status"]);
+  });
+  it("«Отменить» = the store keeps the old database: callNext never changes its input", () => {
+    const before = JSON.stringify(d);
+    callNext(d, { subjectType: "lead", subjectId: l.id, outcome: "answered" }, ids);
+    expect(JSON.stringify(d)).toBe(before);
+  });
+  it("a made-up person (<id>-main) never leaves the phone: not in the op, not as contact_id", () => {
+    const c = d.customers[0]!;
+    const input = { subjectType: "customer" as const, subjectId: c.id, outcome: "answered" as const, contactId: `${c.id}-main` };
+    expect(realPersonId(`${c.id}-main`)).toBeUndefined();
+    expect(realPersonId("4b1f0c4e-1111-4222-8333-444455556666")).toBe("4b1f0c4e-1111-4222-8333-444455556666");
+    expect(callOp(input, ids)).not.toHaveProperty("contactId", `${c.id}-main`);
+    expect((callOp(input, ids) as { contactId?: string }).contactId).toBeUndefined();
+    expect(callNext(d, input, ids).activities[0]!.contactId).toBeUndefined();
+    expect((callOp({ subjectType: "lead", subjectId: l.id, outcome: "no_answer", contactId: `${l.id}-main` }, ids) as { contactId?: string }).contactId).toBeUndefined();
+    expect(callCols({ at: "t", outcome: "answered", contactId: "c9-main" })).not.toHaveProperty("contact_id");
   });
 });

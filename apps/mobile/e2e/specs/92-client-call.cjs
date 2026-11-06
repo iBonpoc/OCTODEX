@@ -22,6 +22,21 @@ exports.run = async (h) => {
   await h.expectText(/Sarah Mitchell.*Поговорили/, "it is in «Звонки»");
   await h.expectText(/Booked for Monday/, "with its note");
 
+  // a client without people (an old one): the app makes up a «main» person — it is never sent as the call's person
+  await p.evaluate(() => {
+    const k = "octo.db.v5";
+    const s = JSON.parse(localStorage.getItem(k));
+    s.db.customers = s.db.customers.map((c) => (c.id === "c2" ? { ...c, people: undefined } : c));
+    localStorage.setItem(k, JSON.stringify(s));
+  });
+  await h.go("/client/c2");
+  await p.getByRole("button", { name: "Позвонить", exact: true }).first().click(); await p.waitForTimeout(500);
+  await h.sheet().getByText("Не ответил", { exact: true }).last().click();
+  await h.sheet().getByRole("button", { name: "Сохранить звонок" }).click(); await p.waitForTimeout(600);
+  const db2 = await h.db();
+  const a2 = db2.activities.find((x) => x.kind === "call" && x.subjectId === "c2");
+  h.expect(a2 && !a2.contactId, `the made-up person is not the call's person (${a2 && a2.contactId})`);
+
   // the technician: his jobs and leads only, never a client
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/calls");

@@ -283,7 +283,8 @@ export function callCols(op: { at: string; outcome?: CallOutcome; contactId?: st
   if (op.durationMin && op.durationMin > 0) meta.duration_min = String(Math.round(op.durationMin));
   return {
     direction: "out", at: op.at, meta,
-    ...(op.contactId ? { contact_id: op.contactId } : {}),
+    // a person the app made up for an old client / lead (`<id>-main`) is not a contact row: never sent (20 §3)
+    ...(op.contactId && !op.contactId.endsWith("-main") ? { contact_id: op.contactId } : {}),
     ...(op.note?.trim() ? { body: op.note.trim() } : {}),
   };
 }

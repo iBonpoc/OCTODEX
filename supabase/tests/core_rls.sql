@@ -4634,59 +4634,6 @@ delete from public.memberships where company_id = 'cb000000-0000-0000-0000-00000
 select tst.ok(tst.cnt($q$select 1 from public.member_prefs where company_id = 'cb000000-0000-0000-0000-000000000000'$q$) = 0, 'a membership removed for good takes its settings with it');
 \echo 'T51 personal settings (member_prefs) ok'
 
--- ---------------------------------------------------------------- T62: wave 6-2 — calls (docs/specs/20 §3, §8)
--- The app never sends a call without an outcome (unit test calls.test.ts); old versions still may, so the server keeps
--- counting such a call as answered (rule 16). Here: that behaviour is fixed, a missed call keeps the lead «new»,
--- minutes / person / note are kept, the tech writes on his job and lead but not on a client.
-:as_owner_a
-do $$ begin
-  insert into public.customers (id, company_id, display_name) values ('c6200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T62 Client');
-  insert into public.contacts (id, company_id, customer_id, name, is_primary) values
-    ('c6210000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6200000-0000-4000-8000-000000000001', 'T62 Mary', true);
-  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
-    ('d6200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6200000-0000-4000-8000-000000000001', '62 Call St', 'Pasadena');
-  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
-    ('e6200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T62 job', 'c6200000-0000-4000-8000-000000000001', 'd6200000-0000-4000-8000-000000000001', 'draft');
-  insert into public.visits (id, company_id, job_id, starts_at) values
-    ('f6200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e6200000-0000-4000-8000-000000000001', now() + interval '1 day');
-end $$;
-select tst.ok((public.assign_visit('f6200000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added')::int = 1, 'T62 the tech is on the visit');
-insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
-  ('16200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T62 missed', '+13235556201', null),
-  ('16200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T62 old app', '+13235556202', null),
-  ('16200000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T62 tech lead', '+13235556203', 'a0000000-0000-0000-0000-000000000003'),
-  ('16200000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T62 not his', '+13235556204', null);
-insert into public.activities (company_id, subject_type, subject_id, kind, direction, meta) values
-  ('ca000000-0000-0000-0000-000000000000', 'lead', '16200000-0000-4000-8000-000000000001', 'call', 'out', '{"outcome":"no_answer","duration_min":"1"}');
-select tst.ok((select status = 'new' and first_response_at is null and call_attempts = 1 from public.leads where id = '16200000-0000-4000-8000-000000000001'),
-  'a call «не ответил» keeps the lead new: one attempt, the reply timer runs');
-insert into public.activities (company_id, subject_type, subject_id, kind, direction) values
-  ('ca000000-0000-0000-0000-000000000000', 'lead', '16200000-0000-4000-8000-000000000002', 'call', 'out');
-select tst.ok((select status = 'contacted' and first_response_at is not null from public.leads where id = '16200000-0000-4000-8000-000000000002'),
-  'a call without an outcome (an old app) still counts as answered — kept for old versions, the new app always sends one');
-insert into public.activities (company_id, subject_type, subject_id, kind, direction, contact_id, body, meta) values
-  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c6200000-0000-4000-8000-000000000001', 'call', 'out', 'c6210000-0000-4000-8000-000000000001', 'T62 client call', '{"outcome":"answered","duration_min":"7"}');
-select tst.ok((select meta ->> 'duration_min' = '7' and meta ->> 'outcome' = 'answered' and contact_id = 'c6210000-0000-4000-8000-000000000001'
-                 and actor_id = 'a0000000-0000-0000-0000-000000000001' from public.activities where body = 'T62 client call'),
-  'the office logs a call on a client: outcome, minutes, the person, in its own name');
-:as_tech_a
-insert into public.activities (company_id, subject_type, subject_id, kind, direction, contact_id, body, meta) values
-  ('ca000000-0000-0000-0000-000000000000', 'job', 'e6200000-0000-4000-8000-000000000001', 'call', 'out', 'c6210000-0000-4000-8000-000000000001', 'T62 tech job call', '{"outcome":"voicemail","duration_min":"2"}');
-select tst.ok(tst.cnt($q$select 1 from public.activities where body = 'T62 tech job call'$q$) = 1, 'the tech logs a call on the job of his visit and sees it');
-insert into public.activities (company_id, subject_type, subject_id, kind, direction, body, meta) values
-  ('ca000000-0000-0000-0000-000000000000', 'lead', '16200000-0000-4000-8000-000000000003', 'call', 'out', 'T62 tech lead call', '{"outcome":"answered"}');
-select tst.ok(tst.cnt($q$select 1 from public.activities where body = 'T62 tech lead call'$q$) = 1, 'the tech logs a call on his own lead');
-select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, body, meta) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c6200000-0000-4000-8000-000000000001', 'call', 'out', 'T62 x', '{"outcome":"answered"}')$q$,
-  'the tech does not write a call on a client (only on his job or lead)');
-select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, body, meta) values ('ca000000-0000-0000-0000-000000000000', 'lead', '16200000-0000-4000-8000-000000000004', 'call', 'out', 'T62 y', '{"outcome":"answered"}')$q$,
-  'the tech does not write a call on a lead that is not his');
-select tst.ok(tst.cnt($q$select 1 from public.activities where body = 'T62 client call'$q$) = 1, 'the tech sees the calls on the client of his visit');
-:as_owner_b
-select tst.ok(tst.cnt($q$select 1 from public.activities where body like 'T62 %'$q$) = 0, 'another company sees none of the calls');
-:as_super
-select tst.ok((select status = 'contacted' from public.leads where id = '16200000-0000-4000-8000-000000000003'), 'his answered call moved his new lead (S2)');
-\echo 'T62 calls: outcome, minutes, person; the tech on his job and lead only ok'
-
 -- ---------------------------------------------------------------- T59: a row never moves to another company (security #2, 19 §7.1)
 :as_super
 -- (1) guard: every table with company_id, in every non-system schema, has the immutable trigger
@@ -4865,5 +4812,72 @@ begin
   perform tst.ok(exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'tasks_assignee_id_fk_idx'), 'the audit''s examples are indexed (tasks.assignee_id)');
 end $$;
 \echo 'T61 foreign keys have indexes ok'
+
+-- ---------------------------------------------------------------- T62: wave 6-2 — calls (docs/specs/20 §3, §8)
+-- The app never sends a call without an outcome (unit test calls.test.ts); old versions still may, so the server keeps
+-- counting such a call as answered (rule 16). Here: that behaviour is fixed, a missed call keeps the lead «new»,
+-- minutes / person / note are kept, the tech writes on his job and lead but not on a client.
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c6200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T62 Client');
+  insert into public.contacts (id, company_id, customer_id, name, is_primary) values
+    ('c6210000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6200000-0000-4000-8000-000000000001', 'T62 Mary', true);
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d6200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6200000-0000-4000-8000-000000000001', '62 Call St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e6200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T62 job', 'c6200000-0000-4000-8000-000000000001', 'd6200000-0000-4000-8000-000000000001', 'draft');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e6200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T62 old job', 'c6200000-0000-4000-8000-000000000001', 'd6200000-0000-4000-8000-000000000001', 'draft'),
+    ('e6200000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T62 cancelled visit job', 'c6200000-0000-4000-8000-000000000001', 'd6200000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('f6200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e6200000-0000-4000-8000-000000000001', now() + interval '1 day'),
+    ('f6200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e6200000-0000-4000-8000-000000000002', now() - interval '20 days'),
+    ('f6200000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e6200000-0000-4000-8000-000000000003', now() + interval '2 days');
+  -- the tech is on an old visit (20 days ago) and on a visit cancelled below: neither opens its job
+  insert into public.visit_assignees (company_id, visit_id, user_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'f6200000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000003'),
+    ('ca000000-0000-0000-0000-000000000000', 'f6200000-0000-4000-8000-000000000003', 'a0000000-0000-0000-0000-000000000003');
+  perform public.cancel_visit('f6200000-0000-4000-8000-000000000003', 'we_cancelled');
+end $$;
+select tst.ok((public.assign_visit('f6200000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added')::int = 1, 'T62 the tech is on the visit');
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('16200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T62 missed', '+13235556201', null),
+  ('16200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T62 old app', '+13235556202', null),
+  ('16200000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T62 tech lead', '+13235556203', 'a0000000-0000-0000-0000-000000000003'),
+  ('16200000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T62 not his', '+13235556204', null);
+insert into public.activities (company_id, subject_type, subject_id, kind, direction, meta) values
+  ('ca000000-0000-0000-0000-000000000000', 'lead', '16200000-0000-4000-8000-000000000001', 'call', 'out', '{"outcome":"no_answer","duration_min":"1"}');
+select tst.ok((select status = 'new' and first_response_at is null and call_attempts = 1 from public.leads where id = '16200000-0000-4000-8000-000000000001'),
+  'a call «не ответил» keeps the lead new: one attempt, the reply timer runs');
+insert into public.activities (company_id, subject_type, subject_id, kind, direction) values
+  ('ca000000-0000-0000-0000-000000000000', 'lead', '16200000-0000-4000-8000-000000000002', 'call', 'out');
+select tst.ok((select status = 'contacted' and first_response_at is not null from public.leads where id = '16200000-0000-4000-8000-000000000002'),
+  'a call without an outcome (an old app) still counts as answered — kept for old versions, the new app always sends one');
+insert into public.activities (company_id, subject_type, subject_id, kind, direction, contact_id, body, meta) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c6200000-0000-4000-8000-000000000001', 'call', 'out', 'c6210000-0000-4000-8000-000000000001', 'T62 client call', '{"outcome":"answered","duration_min":"7"}');
+select tst.ok((select meta ->> 'duration_min' = '7' and meta ->> 'outcome' = 'answered' and contact_id = 'c6210000-0000-4000-8000-000000000001'
+                 and actor_id = 'a0000000-0000-0000-0000-000000000001' from public.activities where body = 'T62 client call'),
+  'the office logs a call on a client: outcome, minutes, the person, in its own name');
+:as_tech_a
+insert into public.activities (company_id, subject_type, subject_id, kind, direction, contact_id, body, meta) values
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e6200000-0000-4000-8000-000000000001', 'call', 'out', 'c6210000-0000-4000-8000-000000000001', 'T62 tech job call', '{"outcome":"voicemail","duration_min":"2"}');
+select tst.ok(tst.cnt($q$select 1 from public.activities where body = 'T62 tech job call'$q$) = 1, 'the tech logs a call on the job of his visit and sees it');
+insert into public.activities (company_id, subject_type, subject_id, kind, direction, body, meta) values
+  ('ca000000-0000-0000-0000-000000000000', 'lead', '16200000-0000-4000-8000-000000000003', 'call', 'out', 'T62 tech lead call', '{"outcome":"answered"}');
+select tst.ok(tst.cnt($q$select 1 from public.activities where body = 'T62 tech lead call'$q$) = 1, 'the tech logs a call on his own lead');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, body, meta) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c6200000-0000-4000-8000-000000000001', 'call', 'out', 'T62 x', '{"outcome":"answered"}')$q$,
+  'the tech does not write a call on a client (only on his job or lead)');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, body, meta) values ('ca000000-0000-0000-0000-000000000000', 'lead', '16200000-0000-4000-8000-000000000004', 'call', 'out', 'T62 y', '{"outcome":"answered"}')$q$,
+  'the tech does not write a call on a lead that is not his');
+select tst.ok(tst.cnt($q$select 1 from public.activities where body = 'T62 client call'$q$) = 1, 'the tech sees the calls on the client of his visit');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, body, meta) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e6200000-0000-4000-8000-000000000002', 'call', 'out', 'T62 old', '{"outcome":"answered"}')$q$,
+  'the tech does not write a call on the job of a visit older than 14 days (the app does not offer it either)');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, body, meta) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e6200000-0000-4000-8000-000000000003', 'call', 'out', 'T62 cancelled', '{"outcome":"answered"}')$q$,
+  'the tech does not write a call on the job of a cancelled visit');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.activities where body like 'T62 %'$q$) = 0, 'another company sees none of the calls');
+:as_super
+select tst.ok((select status = 'contacted' from public.leads where id = '16200000-0000-4000-8000-000000000003'), 'his answered call moved his new lead (S2)');
+\echo 'T62 calls: outcome, minutes, person; the tech on his job and lead only ok'
 
 \echo 'ALL TESTS PASSED'

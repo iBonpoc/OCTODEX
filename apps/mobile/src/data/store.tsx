@@ -13,6 +13,7 @@ import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, PermanentError, type Op, type OutboxItem } from "@/cloud/ops";
+import { callNext, callOp, leadTouchNext, leadTouchOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { readyToSend } from "@/cloud/outboxTiming";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
 import { leadStatusToDb } from "@/cloud/statusMap";
@@ -63,7 +64,7 @@ import {
   type Source,
   type LeadStatus,
   type CallOutcome,
-  type CallLog,
+  type CallInput,
   type LeadTouchKind,
   type LeadInterest,
   type CustomerStatus,
@@ -120,7 +121,7 @@ interface StoreCtx {
   /** after a call from the card: answered = in touch; no answer / voicemail = one more attempt, the reply timer keeps going */
   callResult: (id: ID, outcome: CallOutcome) => Undo;
   /** wave 6-2: a call on a lead, a client or a job, with its outcome, person, minutes and a note */
-  logCall: (c: CallLog) => Undo;
+  logCall: (c: CallInput) => Undo;
   setLeadInterest: (id: ID, interest: LeadInterest | undefined) => Undo;
   /** "call me in 3 months": hidden until the date, keeps its funnel status */
   snoozeLead: (id: ID, until: string, reason?: string) => Undo;
@@ -487,36 +488,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? outbox.map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
-  type Touch = { kind: LeadTouchKind } | { kind: "call"; call: Omit<CallLog, "subjectType" | "subjectId"> };
-  const touchLead = (id: ID, t: Touch): Undo => {
-    const kind = t.kind;
-    const call = t.kind === "call" ? t.call : undefined;
-    const outcome = call?.outcome;
-    const activityId = uid();
-    const at = new Date().toISOString();
-    const missed = kind === "call" && (outcome === "no_answer" || outcome === "voicemail");
-    const meta = call ? { outcome: call.outcome, ...(call.durationMin ? { duration_min: String(call.durationMin) } : {}) } : undefined;
-    return mutate(
-      "lead.touch",
-      (d) => {
-        const l = d.leads.find((x) => x.id === id);
-        const toReplied = l?.status === "new" && !missed;
-        return {
-          ...d,
-          leads: d.leads.map((x) =>
-            x.id !== id ? x
-            : missed ? { ...x, callAttempts: (x.callAttempts ?? 0) + 1, lastOutboundAt: at, lastActivityAt: at }
-            : { ...x, firstResponseAt: x.firstResponseAt ?? at, status: toReplied ? "replied" : x.status, callAttempts: 0, lastOutboundAt: at, lastActivityAt: at },
-          ),
-          activities: [
-            { id: activityId, subjectType: "lead", subjectId: id, kind, at, actorId: d.me, direction: "out", ...(meta ? { meta } : {}), ...(call?.contactId ? { contactId: call.contactId } : {}), ...(call?.note ? { body: call.note } : {}) },
-            ...(toReplied ? [{ id: uid(), subjectType: "lead" as const, subjectId: id, kind: "status" as const, meta: { from: "new", to: "replied" }, at, actorId: d.me }] : []),
-            ...d.activities,
-          ],
-        };
-      },
-      { k: "lead.touch", activityId, leadId: id, kind, at, ...(call ? { outcome: call.outcome, contactId: call.contactId, durationMin: call.durationMin, note: call.note } : {}) },
-    );
+  /** wave 6-2: the change and the op are pure (features/comms/contactEvents.ts); a call always has its outcome */
+  const touchLead = (id: ID, t: LeadTouch): Undo => {
+    const ids = { activityId: uid(), statusId: uid(), at: new Date().toISOString() };
+    return mutate("lead.touch", (d) => leadTouchNext(d, id, t, ids), leadTouchOp(id, t, ids));
   };
 
   /** The lead's client and property; makes a prospect client + property the first time (S3). */
@@ -666,22 +641,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       touchLead: (id, kind) => touchLead(id, { kind }),
       callResult: (id, outcome) => touchLead(id, { kind: "call", call: { outcome } }),
       logCall: (c) => {
-        const { subjectType, subjectId, ...call } = c;
-        if (subjectType === "lead") return touchLead(subjectId, { kind: "call", call });
-        const activityId = uid();
-        const at = new Date().toISOString();
-        const meta = { outcome: call.outcome, ...(call.durationMin ? { duration_min: String(call.durationMin) } : {}) };
-        return mutate(
-          "activity.call",
-          (d) => ({
-            ...d,
-            activities: [
-              { id: activityId, subjectType, subjectId, kind: "call", at, actorId: d.me, direction: "out", meta, ...(call.contactId ? { contactId: call.contactId } : {}), ...(call.note ? { body: call.note } : {}) },
-              ...d.activities,
-            ],
-          }),
-          { k: "activity.call", activityId, subjectType, subjectId, at, ...call },
-        );
+        const ids = { activityId: uid(), statusId: uid(), at: new Date().toISOString() };
+        return mutate(c.subjectType === "lead" ? "lead.touch" : "activity.call", (d) => callNext(d, c, ids), callOp(c, ids));
       },
       setLeadInterest: (id, interest) => patchLead(id, { interest }),
       snoozeLead: (id, until, reason) => patchLead(id, { snoozedUntil: until, snoozeReason: reason?.trim() || undefined }),

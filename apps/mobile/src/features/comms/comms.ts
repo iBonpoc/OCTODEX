@@ -4,11 +4,14 @@
  * no unread or missed counters. Wave 6 grows these into full screens.
  * Pure (no React) — unit-tested in test/comms.test.ts.
  */
-import type { Activity, CallLog, CallOutcome, DB, Person, Role } from "@/data/types";
+import type { Activity, CallInput, CallOutcome, DB, Person, Role, Visit } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { StatusName } from "@octo/design-tokens";
 import { peopleForLead, peopleOf } from "@/data/people";
 import { canSeeLead } from "@/features/leads";
+import { isAssigned } from "@/features/schedule";
+import { addDays, todayKey } from "@/features/calendar";
+import { dayKeyIn } from "@/features/zone";
 
 export type CommsKind = "calls" | "messages";
 const KINDS: Record<CommsKind, readonly Activity["kind"][]> = { calls: ["call"], messages: ["sms", "email"] };
@@ -82,12 +85,29 @@ function subject(db: DB, a: Activity): { who: string; href?: string } {
 }
 
 /** the jobs the technician has a visit on, their clients, and his own leads (inspections he was given or made, map §2) */
-function techScope(db: DB): { jobs: Set<string>; customers: Set<string>; leads: Set<string> } {
-  const jobs = new Set(db.visits.filter((v) => v.jobId && (v.techId === db.me || v.assigneeIds?.includes(db.me))).map((v) => v.jobId!));
+function techScope(db: DB, now = Date.now()): { jobs: Set<string>; customers: Set<string>; leads: Set<string> } {
+  const jobs = new Set(db.visits.filter((v) => v.jobId && techVisitCounts(db, v, now)).map((v) => v.jobId!));
   const props = new Set(db.jobs.filter((j) => jobs.has(j.id)).map((j) => j.propertyId));
   const customers = new Set(db.properties.filter((p) => props.has(p.id)).map((p) => p.customerId).filter((c): c is string => !!c));
   const leads = new Set(db.leads.filter((l) => canSeeLead("tech", db.me, l)).map((l) => l.id));
   return { jobs, customers, leads };
+}
+
+/**
+ * A visit of the technician that opens its job and client to him — the server's app.tech_visit_counts (migration
+ * 20261105200000), repeated so the app never offers what the server refuses: his visit, not cancelled (cancelled ones
+ * are not loaded) and not a no-show (closed without the «done» step), its job loaded (not cancelled) and not done
+ * (the app does not tell «completed» from «closed», so both are left out — never a refused write), dated today, later or
+ * within the last 14 days of the company's calendar.
+ */
+export function techVisitCounts(db: Pick<DB, "me" | "jobs">, v: Visit, now = Date.now()): boolean {
+  if (!isAssigned(v, db.me)) return false;
+  if (v.closed && v.step !== "done") return false;
+  if (v.jobId) {
+    const j = db.jobs.find((x) => x.id === v.jobId);
+    if (!j || j.status === "done") return false;
+  }
+  return dayKeyIn(v.start) >= addDays(todayKey(undefined, now), -14);
 }
 
 /** the people of what a call or a message is about: a client's, a lead's, or a job's client's */
@@ -110,7 +130,7 @@ export function peopleOfSubject(db: DB, type: Activity["subjectType"], id: strin
 }
 
 export interface CallPlace {
-  subjectType: CallLog["subjectType"];
+  subjectType: CallInput["subjectType"];
   subjectId: string;
   label: string;
 }
@@ -144,4 +164,4 @@ export function callPlaceForClient(db: DB, role: Role, customerId: string): Pick
 }
 
 /** a call can be saved: something to tie it to and an outcome (the server counts a call without one as answered) */
-export const callReady = (c: Partial<CallLog>): c is CallLog => !!c.subjectType && !!c.subjectId && !!c.outcome && CALL_OUTCOMES.includes(c.outcome);
+export const callReady = (c: Partial<CallInput>): c is CallInput => !!c.subjectType && !!c.subjectId && !!c.outcome && CALL_OUTCOMES.includes(c.outcome);

@@ -375,7 +375,7 @@ export type CallOutcome = "answered" | "no_answer" | "voicemail";
  * Wave 6-2 (docs/specs/20 §3, §5): a call written down by hand or after «Позвонить». The outcome is required: the server
  * counts a call without one as answered (a new lead would move to «replied» by itself). Duration in minutes → meta.duration_min.
  */
-export interface CallLog {
+export interface CallInput {
   subjectType: "lead" | "customer" | "job";
   subjectId: ID;
   contactId?: ID;

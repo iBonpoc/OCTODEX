@@ -1,8 +1,8 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import type { CallLog, CallOutcome } from "@/data/types";
+import type { CallInput, CallOutcome } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -16,7 +16,7 @@ import { CALL_OUTCOME, CALL_OUTCOMES, callPlaces, callReady, peopleOfSubject } f
  * minutes, a note. Opened from «＋» of «Звонки» (no subject: asks «к чему») and after «Позвонить» on a client.
  * We never record the call itself (CIPA §632): only what the person writes down.
  */
-export type CallPreset = Partial<Pick<CallLog, "subjectType" | "subjectId" | "contactId">>;
+export type CallPreset = Partial<Pick<CallInput, "subjectType" | "subjectId" | "contactId">>;
 
 function Field({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -49,13 +49,16 @@ function CallSheetBody({ preset, onClose }: { preset: CallPreset; onClose: () =>
   const people = place.subjectType && place.subjectId ? peopleOfSubject(db, place.subjectType, place.subjectId) : [];
   // one person: the call is with them; several: the one picked (or none)
   const contactId = place.contactId ?? (people.length === 1 ? people[0]!.id : undefined);
-  const draft: Partial<CallLog> = { ...place, contactId, outcome, durationMin: minutes || undefined, note: note.trim() || undefined };
+  const draft: Partial<CallInput> = { ...place, contactId, outcome, durationMin: minutes || undefined, note: note.trim() || undefined };
   const ok = callReady(draft);
   const places = chosen ? [] : callPlaces(db, role, query).slice(0, 20);
-  const kind = (k: CallLog["subjectType"]) => t(k === "lead" ? "w6.task.kind.lead" : k === "job" ? "w6.task.kind.job" : "w6.task.kind.customer");
+  const kind = (k: CallInput["subjectType"]) => t(k === "lead" ? "w6.task.kind.lead" : k === "job" ? "w6.task.kind.job" : "w6.task.kind.customer");
 
+  // a double tap on «Сохранить» writes one call, never two (the sheet closes after the first)
+  const saved = useRef(false);
   const save = () => {
-    if (!callReady(draft)) return;
+    if (saved.current || !callReady(draft)) return;
+    saved.current = true;
     const undo = store.logCall(draft);
     toast.show(store.online ? t(draft.outcome === "answered" ? "w6.call.savedYes" : "w6.call.savedNo") : t("offline.queued"), undo);
     onClose();

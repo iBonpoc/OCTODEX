@@ -34,8 +34,8 @@ describe("comms log", () => {
   });
   it("the technician sees only his own: what he made, and what is about his jobs and their clients", () => {
     // wave 6-2 (map-keeper): his own leads (an inspection he was given or made) are his too — c2 is on such a lead
-    const hisLead = lead.assigneeId === base.me || lead.createdBy === base.me;
-    expect(commsLog(db, "tech", "calls").map((c) => c.id)).toEqual(hisLead ? ["c2", "c1"] : ["c1"]);
+    const hisLead: DB = { ...db, leads: db.leads.map((l) => (l.id === lead.id ? { ...l, assigneeId: base.me } : l)) };
+    expect(commsLog(hisLead, "tech", "calls").map((c) => c.id)).toEqual(["c2", "c1"]);
     const notHisLead: DB = { ...db, leads: db.leads.map((l) => (l.id === lead.id ? { ...l, assigneeId: other, createdBy: other } : l)) };
     expect(commsLog(notHisLead, "tech", "calls").map((c) => c.id)).toEqual(["c1"]);
     // s1 is an SMS to a client by someone else: his only if he has a visit at that client
