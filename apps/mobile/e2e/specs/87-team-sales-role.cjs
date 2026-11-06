@@ -13,7 +13,9 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Пригласить", exact: true }).locator("visible=true").first().click();
   const sheet = p.locator('[aria-modal="true"]').filter({ hasText: "Отправить приглашение" }).last();
   await sheet.waitFor({ timeout: 3000 });
-  const chip = (name) => sheet.getByRole("checkbox", { name, exact: true });
+  const chip = (name) => sheet.getByRole("checkbox", { name, exact: true }).locator("visible=true");
+  // the sheet slides in: wait for its items (820/1280 render it as a side panel a moment later)
+  await chip("Мастер").first().waitFor({ timeout: 5000 });
   for (const r of ["Мастер", "Продажи", "Диспетчер", "Директор"]) h.expect((await chip(r).count()) === 1, `role «${r}» in the invite`);
 
   await sheet.getByPlaceholder("Имя").fill("Sam Seller");
