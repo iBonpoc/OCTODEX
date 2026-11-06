@@ -24,6 +24,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ItemCard, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { dayAtHour } from "./bookRules";
+import { TaskSheet } from "@/features/tasks/TaskSheet";
 
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 const tel = (p?: string) => (p ?? "").replace(/[^\d+]/g, "");
@@ -484,60 +485,12 @@ export function TasksBlock({ subjectType, subjectId }: { subjectType: Task["subj
           <CardList>{done.slice(0, 5).map(card)}</CardList>
         </>
       ) : null}
-      <TaskSheet key={edit ? edit.id ?? `new-${edit.dueAt}` : "none"} value={edit} onClose={() => setEdit(null)} />
+      <TaskSheet value={edit} onClose={() => setEdit(null)} />
     </View>
   );
 }
 /** today of the company + n days at h:00 of its clock (П4b) */
 const at = (n: number, h: number) => dayAtHour(n, h);
-const WHEN = [
-  { key: "today", n: 0, h: 17 },
-  { key: "tomorrow", n: 1, h: 9 },
-  { key: "in3", n: 3, h: 9 },
-  { key: "week", n: 7, h: 9 },
-] as const;
-function TaskSheet({ value, onClose }: { value: (Omit<Task, "id"> & { id?: string }) | null; onClose: () => void }) {
-  const store = useStore();
-  const { t, day, time } = useI18n();
-  const saved = useSaved();
-  const [d, setD] = useState(value);
-  const [d0] = useState(value);
-  if (!value || !d) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
-  const set = (p: Partial<Task>) => setD((x) => (x ? { ...x, ...p } : x));
-  const people = store.db.members.filter((m) => !m.pending);
-  return (
-    <Sheet
-      visible
-      onClose={onClose}
-      title={d.id ? t("task.edit") : t("task.new")}
-      dirty={JSON.stringify(d) !== JSON.stringify(d0)}
-      onSave={d.title.trim().length >= 2 ? () => { saved(store.saveTask({ ...d, title: d.title.trim() }).undo, t("task.saved")); onClose(); } : undefined}
-    >
-      <Labeled label={t("task.what")}>
-        <TextField type="title" value={d.title} onChangeText={(v) => set({ title: v })} placeholder={t("task.whatPh")} />
-      </Labeled>
-      <Labeled label={t("task.when")}>
-        <ChoiceChips<string>
-          value={WHEN.find((w) => d.dueAt === at(w.n, w.h))?.key ?? ""}
-          onChange={(k) => { const w = WHEN.find((x) => x.key === k); if (w) set({ dueAt: at(w.n, w.h) }); }}
-          items={WHEN.map((w) => ({ key: w.key, label: t(`task.when.${w.key}` as DictKey) }))}
-        />
-      </Labeled>
-      {d.dueAt ? <T v="caption" tone="mut">{`${day(d.dueAt)} ${time(d.dueAt)}`}</T> : null}
-      <Labeled label={t("task.who")}>
-        <ChoiceChips<string> value={d.assigneeId ?? ""} onChange={(v) => set({ assigneeId: v })} items={people.map((m) => ({ key: m.id, label: m.name }))} />
-      </Labeled>
-      <Button
-        label={t("ue.save")}
-        icon="check"
-        full
-        disabled={d.title.trim().length < 2}
-        onPress={() => { saved(store.saveTask({ ...d, title: d.title.trim() }).undo, t("task.saved")); onClose(); }}
-      />
-    </Sheet>
-  );
-}
-
 /* ======================= history ======================= */
 export function LeadHistory({ l }: { l: Lead }) {
   const { db } = useStore();
