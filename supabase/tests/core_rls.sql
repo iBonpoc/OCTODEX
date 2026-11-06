@@ -4818,6 +4818,7 @@ select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 0, 'flag off:
 update app.company_flags set location_sharing = true where company_id = 'ca000000-0000-0000-0000-000000000000';
 -- purge: only older than 30 days — run by an owner WITHOUT BYPASSRLS (force RLS on the table must not make it a no-op)
 create role t57_owner nologin nobypassrls;
+grant postgres to t57_owner;   -- the rules are «to postgres»: membership carries them, not the superuser bit
 grant usage on schema app, public to t57_owner;
 grant select, delete on public.user_locations to t57_owner;
 grant execute on function app.has_role(uuid, text[]) to t57_owner;
@@ -5131,6 +5132,21 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
 select tst.ok(:'t50_stale' = '', format('no stale entries in the T50 lists: %s', :'t50_stale'));
 \echo 'T50 wave 7а-2a: account deletion (S22) ok'
+-- T57 + S22 (security-check 7б-2): a person whose owner row is switched off, with the location notice mark — the
+-- erasure of the mark must not trip the owner guard and roll the whole deletion back
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a5700000-0000-4000-8000-000000000009', 'olddir57@b.test', '{"full_name":"Old Owner"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('cb000000-0000-0000-0000-000000000000', 'a5700000-0000-4000-8000-000000000009', 'owner', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a5700000-0000-4000-8000-000000000009', 'tech', 'active');
+update public.memberships set location_notice_ack_at = now() - interval '1 day' where user_id = 'a5700000-0000-4000-8000-000000000009';
+update public.memberships set status = 'disabled' where user_id = 'a5700000-0000-4000-8000-000000000009' and company_id = 'cb000000-0000-0000-0000-000000000000';
+reset role; set request.jwt.claim.sub = 'a5700000-0000-4000-8000-000000000009'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'a switched-off owner with a notice mark deletes the account');
+:as_super
+select tst.ok((select every(location_notice_ack_at is null and status = 'deleted') from public.memberships where user_id = 'a5700000-0000-4000-8000-000000000009'), 'the notice marks are gone in both companies');
+\echo 'T57 + S22: deletion with a switched-off owner row and a notice mark ok'
 :as_super
 -- ---------------------------------------------------------------- T59: a row never moves to another company (security #2, 19 §7.1)
 :as_super

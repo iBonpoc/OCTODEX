@@ -178,12 +178,15 @@ create policy user_locations_insert_own on public.user_locations for insert to a
 -- the deletes of the functions below (forget on going off, purge from pg_cron, account deletion — often with no
 -- auth.uid()) must pass force RLS even if their owner has no BYPASSRLS (supabase/README, not checked on staging);
 -- no client has the delete right (T57), so the rule opens nothing to one
--- A delete with a WHERE needs a select rule too: inside these security definer functions current_user is their owner,
--- never a client role, so the server's own paths see and delete; a client (authenticated / anon) gets nothing from these
-create policy user_locations_select_server on public.user_locations for select
+-- A delete with a WHERE needs a select rule too: inside these security definer functions current_user is their owner
+-- (postgres; pg_cron runs as postgres too), so the server's own paths see and delete; the rules are only for postgres
+-- (and roles it is granted to), never a client role
+create policy user_locations_select_server on public.user_locations for select to postgres
   using (current_user not in ('authenticated', 'anon'));
-create policy user_locations_delete_server on public.user_locations for delete
+create policy user_locations_delete_server on public.user_locations for delete to postgres
   using (current_user not in ('authenticated', 'anon'));
+-- a third lock over t11 and the grants: the service role does not edit points either
+revoke update on public.user_locations from service_role;
 
 -- ---- 4. Going off removes the points (one path for: the person, the owner/admin, a role change, disabling) ----
 create or replace function app.tg_membership_location_forget()
@@ -272,7 +275,11 @@ returns void language plpgsql security definer set search_path = '' as $$
 begin
   delete from public.member_prefs where user_id = p_user;
   delete from public.user_locations where user_id = p_user;
+  -- the owner guard (110000) checks a switched-off owner row as if the role changed; this is the system erasing the
+  -- person's own mark, as delete_account's own memberships update does (security-check 7б-2: else the deletion rolls back)
+  perform set_config('app.accepting_invite', 'on', true);
   update public.memberships set location_notice_ack_at = null where user_id = p_user and location_notice_ack_at is not null;
+  perform set_config('app.accepting_invite', '', true);
 end;
 $$;
 revoke all on function app.erase_personal_rows(uuid) from public, anon, authenticated;
