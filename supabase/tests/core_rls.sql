@@ -471,8 +471,9 @@ do $$ begin
   perform tst.fails('delete from public.payments', 'superuser deletes payments');
   perform tst.fails('delete from public.status_events', 'superuser deletes status_events');
   perform tst.fails('update public.audit_log set action = $x$x$x$', 'superuser edits audit_log');
-  perform tst.ok((select count(*) from public.invoices) = 3, 'invoices intact');
-  perform tst.ok((select count(*) from public.payments) = 1, 'payments intact');
+  -- rows of the test companies (upgrade/*.sql leave their own: money rows are never deleted)
+  perform tst.ok((select count(*) from public.invoices where company_id in ('ca000000-0000-0000-0000-000000000000', 'cb000000-0000-0000-0000-000000000000')) = 3, 'invoices intact');
+  perform tst.ok((select count(*) from public.payments where company_id in ('ca000000-0000-0000-0000-000000000000', 'cb000000-0000-0000-0000-000000000000')) = 1, 'payments intact');
 end $$;
 \echo 'T5 money safety ok'
 
@@ -3833,5 +3834,73 @@ do $$ begin
 end $$;
 rollback;
 \echo 'T52 API rights: anon and authenticated only what is granted ok'
+
+
+-- ---------------------------------------------------------------- T53: the money of a sent invoice does not change directly (security audit 06.11, item 1)
+:as_owner_a
+insert into public.customers (id, company_id, display_name) values ('c5300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T53 Client');
+:as_sales_a
+-- as the app makes it (invoice.issue / visit.pay): inserted already sent, subtotal = total
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('15300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T53 sent', 10000, 10000, now());
+select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', -100, -100)$q$, 'an invoice is not born with a negative total');
+select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'draft', -1, 0)$q$, 'an invoice is not born with a negative subtotal');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('15310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'cash', 4000, 'succeeded', 't53-pay-1');
+select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'T53: a payment still lowers the balance');
+select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set a negative total on a sent invoice');
+select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set the total below what is paid');
+select tst.fails($q$update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the total of a sent invoice does not change at all');
+do $$ begin
+  update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001';
+  raise exception 'FAILED: the total of a sent invoice changed';
+exception when insufficient_privilege then null;   -- the freeze (42501), not some other error
+end $$;
+select tst.fails($q$update public.invoices set tax_cents = 500 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the tax of a sent invoice does not change');
+select tst.fails($q$update public.invoices set discount_cents = 500 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the discount of a sent invoice does not change');
+select tst.fails($q$update public.invoices set customer_id = (select id from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000' and id <> 'c5300000-0000-4000-8000-000000000001' limit 1) where id = '15300000-0000-4000-8000-000000000001'$q$, 'a sent invoice does not move to another client');
+select tst.fails($q$update public.invoices set kind = 'final' where id = '15300000-0000-4000-8000-000000000001'$q$, 'the kind of a sent invoice does not change');
+select tst.fails($q$update public.invoices set sent_at = null where id = '15300000-0000-4000-8000-000000000001'$q$, 'the sent time of a sent invoice does not change');
+-- the mark of the payment recalc cannot be set by the app's role
+do $$ begin
+  perform set_config('app.invoice_recalc', 'on', true);
+  begin
+    update public.invoices set total_cents = 4000, subtotal_cents = 4000 where id = '15300000-0000-4000-8000-000000000001';
+    raise exception 'FAILED: the recalc mark opened the amounts for authenticated';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('app.invoice_recalc', '', true);
+end $$;
+-- what still changes on a sent invoice
+update public.invoices set title = 'T53 renamed', due_date = current_date + 30, reminders_paused = true where id = '15300000-0000-4000-8000-000000000001';
+select tst.ok((select title = 'T53 renamed' and reminders_paused from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'title, due date and reminders of a sent invoice still change');
+update public.invoices set paid_cents = 10000, payment_status = 'paid' where id = '15300000-0000-4000-8000-000000000001';
+select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'paid stays with the payments (direct change ignored)');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('15310000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'check', 6000, 'succeeded', 't53-pay-2');
+select tst.ok((select paid_cents = 10000 and payment_status = 'paid' and total_cents = 10000 from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'the last payment closes the invoice (recalc passes the guard)');
+-- a draft still changes, but not below what is paid; once sent it is frozen
+insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values
+  ('15300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'draft', 5000, 5000);
+update public.invoices set subtotal_cents = 6000, total_cents = 6000 where id = '15300000-0000-4000-8000-000000000002';
+select tst.ok((select total_cents = 6000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'), 'a draft invoice still changes its amounts');
+select tst.fails($q$update public.invoices set total_cents = -1 where id = '15300000-0000-4000-8000-000000000002'$q$, 'a draft does not go negative');
+-- a paid draft: the total does not go below what is paid (check_violation, not the freeze)
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('15310000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000002', 'c5300000-0000-4000-8000-000000000001', 'cash', 3000, 'succeeded', 't53-pay-3');
+do $$ begin
+  update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
+  raise exception 'FAILED: a draft went below what is paid';
+exception when check_violation then null;
+end $$;
+update public.invoices set status = 'sent', sent_at = now() where id = '15300000-0000-4000-8000-000000000002';
+select tst.fails($q$update public.invoices set subtotal_cents = 7000, total_cents = 7000 where id = '15300000-0000-4000-8000-000000000002'$q$, 'after sending, the draft amounts are frozen');
+-- void still works for the owner (no payments)
+:as_owner_a
+insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents, sent_at) values
+  ('15300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 2500, 2500, now());
+update public.invoices set status = 'void', void_reason = 'T53 wrong amount' where id = '15300000-0000-4000-8000-000000000003';
+select tst.ok((select status = 'void' from public.invoices where id = '15300000-0000-4000-8000-000000000003'), 'the owner voids a sent invoice to reissue it');
+\echo 'T53 money of a sent invoice is frozen, payments and void still work ok'
 
 \echo 'ALL TESTS PASSED'
