@@ -2,7 +2,7 @@
  * Test data (placeholder prices — founder rule: real prices are never typed into seeds).
  * All times are relative to "now" so the demo always looks like a live day in Los Angeles.
  */
-import { JOB_TYPE_SEED_KEYS, type DB, type ChecklistItem, type CatalogItem, type Company, type EstimateDoc, type JobType, type ServiceCategory, type Source, type Tag } from "./types";
+import { JOB_TYPE_SEED_KEYS, MEMBER_PREFS_DEFAULT, type DB, type ChecklistItem, type CatalogItem, type Company, type EstimateDoc, type JobType, type ServiceCategory, type Source, type Tag } from "./types";
 import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
 import { addDays } from "@/features/calendar";
 import { DEMO_ZONE, demoToday, wallToInstant } from "@/features/zone";
@@ -156,6 +156,7 @@ export function makeSeed(): DB {
     calendarEvents: [],
     customFields: [],
     customFieldValues: [],
+    prefs: { ...MEMBER_PREFS_DEFAULT },
     tasks: [
       { id: "t1", subjectType: "lead", subjectId: "l3", title: "Send the painting estimate", dueAt: hoursFromNow(20), assigneeId: "m-alex" },
     ],

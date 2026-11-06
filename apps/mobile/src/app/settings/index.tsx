@@ -5,10 +5,11 @@ import type { Role } from "@/data/types";
 import { languages, useI18n, type Lang } from "@/i18n";
 import { roleHome } from "@/nav/roles";
 import { useTheme, type ThemePref } from "@/theme/ThemeProvider";
-import { Button, Segmented, Toggle } from "@/ui/controls";
+import { Button, ChoiceChips, Segmented, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
+import { usePlanShowDone } from "@/features/prefs";
 import { Card, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 /**
@@ -22,6 +23,7 @@ export default function Settings() {
   const { pref, setPref } = useTheme();
   const toast = useToast();
   const hints = useHints();
+  const [showDone, setShowDone] = usePlanShowDone();
   const changeRole = (r: Role) => {
     setRole(r);
     router.navigate(`/${roleHome[r]}`);
@@ -87,6 +89,20 @@ export default function Settings() {
       <Card>
         <T v="heading">{t("more.language")}</T>
         <Segmented<Lang> full value={lang} onChange={setLang} items={languages.map((l) => ({ key: l.id, label: l.label }))} />
+      </Card>
+      {/* wave 7б-1: personal, the same on every device (docs/specs/03 §12) */}
+      <SectionTitle title={t("pref7b.plan")} />
+      <Card>
+        <T v="heading">{t("plan5.showDone")}</T>
+        <T v="caption" tone="mut">{t("pref7b.showDoneHint")}</T>
+        <ChoiceChips
+          value={showDone ? "show" : "hide"}
+          onChange={(k) => setShowDone(k === "show")}
+          items={[
+            { key: "hide", label: t("plan5.hideDone") },
+            { key: "show", label: t("plan5.showDone") },
+          ]}
+        />
       </Card>
       <Card>
         <T v="heading">{t("settings.hints")}</T>

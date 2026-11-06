@@ -1,6 +1,6 @@
 -- Security #2, PR-5 (docs/specs/19-db-security.md §7.1): a row never moves to another company.
 --
--- 1. t11_company_id_immutable was missing on 11 tables with company_id. Reachable today: company_secrets (an owner /
+-- 1. t11_company_id_immutable was missing on 12 tables with company_id (member_prefs from 20261106130000 too). Reachable today: company_secrets (an owner /
 --    admin of two companies moved the EIN of A into B: the policy checks the role on the old and the new row
 --    separately). The others are closed by grants or other triggers today; the trigger keeps them closed when a
 --    grant or a server function appears later. The guard test T59 fails on any new table without it.
@@ -29,7 +29,7 @@ declare t regclass;
 begin
   foreach t in array array[
     'public.audit_log', 'public.company_secrets', 'public.customer_tags', 'public.email_outbox',
-    'public.estimate_approvals', 'public.invitations', 'public.job_tags', 'public.member_signatures',
+    'public.estimate_approvals', 'public.invitations', 'public.job_tags', 'public.member_prefs', 'public.member_signatures',
     'public.notifications', 'public.revoked_link_tokens', 'public.status_events'
   ]::regclass[] loop
     execute format('drop trigger if exists t11_company_id_immutable on %s', t);
