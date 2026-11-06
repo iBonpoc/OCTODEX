@@ -75,7 +75,8 @@ exports.run = async (h) => {
   await menu().getByRole("button", { name: "Сметы", exact: true }).click();
   await p.waitForTimeout(600);
   h.expect(p.url().includes("tab=estimates"), `Сметы → /leads?tab=estimates (${p.url()})`);
-  await h.clickText("Счета");
+  // the visible segment (the «Ещё» screen stays mounted, hidden, with its own «Счета» tile)
+  await p.getByRole("tab", { name: "Счета", exact: true }).locator("visible=true").first().click();
   await p.waitForTimeout(400);
   h.expect(p.url().includes("tab=invoices"), `the segment writes the address (${p.url()})`);
   await openMenu();

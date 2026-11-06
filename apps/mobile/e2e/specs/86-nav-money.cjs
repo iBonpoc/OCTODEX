@@ -37,7 +37,6 @@ exports.run = async (h) => {
   await item("Оплаты").click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/payments", `«Оплаты» → /payments (${p.url()})`);
-  await m.close();
 
   // the office has Payments too
   await setRole(h, "dispatcher");
