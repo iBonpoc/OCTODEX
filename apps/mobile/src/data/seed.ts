@@ -4,6 +4,8 @@
  */
 import type { DB, ChecklistItem, CatalogItem, Company, EstimateDoc, ServiceCategory, Source, Tag } from "./types";
 import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
+import { addDays } from "@/features/calendar";
+import { DEMO_ZONE, demoToday, wallToInstant } from "@/features/zone";
 
 /** Test catalog for several trades. All prices are PLACEHOLDERS (badge "test price"). */
 const S = (id: string, name: string, unit: string, priceCents: number, kind: "service" | "labor" = "service"): CatalogItem => ({
@@ -61,20 +63,19 @@ function demoDoc(): EstimateDoc {
   };
 }
 
-/** today, this many minutes ago (not before midnight, so the visit — or the money of «Сегодня» — stays today; a run
- *  just after midnight must not move the demo's «signed today» / «received today» to yesterday) */
+/** The demo company's clock (П4b): «today», «tomorrow» and the hours of visits are those of Los Angeles (its zone), not
+ *  of the phone — the screens show the company's time, so a 10:00 visit reads 10:00 AM on any phone. */
+
+/** today, this many minutes ago (not before the company's midnight, so the visit — or the money of «Сегодня» — stays
+ *  today; a run just after midnight must not move the demo's «signed today» / «received today» to yesterday) */
 function todayMinutesAgo(m: number): string {
-  const d = new Date();
-  const midnight = new Date(d);
-  midnight.setHours(0, 0, 0, 0);
-  return new Date(Math.max(midnight.getTime(), d.getTime() - m * 60_000)).toISOString();
+  const midnight = new Date(wallToInstant(demoToday(), 0, DEMO_ZONE)).getTime();
+  return new Date(Math.max(midnight, Date.now() - m * 60_000)).toISOString();
 }
 
+/** the company's today + dayOffset days at hour:minute of its clock */
 function at(dayOffset: number, hour: number, minute = 0): string {
-  const d = new Date();
-  d.setDate(d.getDate() + dayOffset);
-  d.setHours(hour, minute, 0, 0);
-  return d.toISOString();
+  return wallToInstant(addDays(demoToday(), dayOffset), hour * 60 + minute, DEMO_ZONE);
 }
 function minutesAgo(m: number): string {
   return new Date(Date.now() - m * 60_000).toISOString();
@@ -129,7 +130,7 @@ export const DEMO_COMPANY: Company = {
   phone: "(626) 555-0100",
   email: "office@example.com",
   address: { line1: "100 E Colorado Blvd", city: "Pasadena", state: "CA", zip: "91105" },
-  timezone: "America/Los_Angeles",
+  timezone: DEMO_ZONE,
   brand: {},
   insurance: {},
   estimate: { validDays: 7, depositBps: 1000 },
