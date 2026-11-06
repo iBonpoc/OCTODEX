@@ -130,7 +130,8 @@ begin
     if v_raw = '' then
       v_raw := null;
     end if;
-    v_ip := btrim(v_headers ->> 'cf-connecting-ip')::inet;
+    -- host(): an address only («1.2.3.4/0» → 1.2.3.4); trusted only while Cloudflare is in front (check on staging)
+    v_ip := host(btrim(v_headers ->> 'cf-connecting-ip')::inet)::inet;
   exception when others then
     v_ip := null;
   end;

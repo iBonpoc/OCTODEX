@@ -4510,6 +4510,13 @@ set request.headers = '{"cf-connecting-ip": "garbage", "x-forwarded-for": "1.2.3
 select tst.ok((public.accept_legal(:'v49', 'web', '1.0.0') ->> 'ok')::boolean, 'a broken cf-connecting-ip does not block the consent');
 reset request.headers;
 select tst.ok((select every(ip is null and ip_raw = 'cf=garbage | xff=1.2.3.4:5') from public.legal_acceptance), 'no IP then, the raw headers kept');
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a4900000-0000-4000-8000-000000000004', 'long49@a.test', '{"full_name":"Lou Longheader"}');
+reset role; set request.jwt.claim.sub = 'a4900000-0000-4000-8000-000000000004'; set role authenticated;
+select set_config('request.headers', jsonb_build_object('cf-connecting-ip', '192.0.2.5/0', 'x-forwarded-for', repeat('9.9.9.9, ', 40))::text, false) is not null as t49_long \gset
+select tst.ok((public.accept_legal(:'v49', 'web', '1.0.0') ->> 'ok')::boolean, 'a 300-character header does not block the consent');
+reset request.headers;
+select tst.ok((select every(length(ip_raw) = 200 and ip = '192.0.2.5'::inet and masklen(ip) = 32) from public.legal_acceptance), 'the raw header is cut to 200; the IP has no mask');
 :as_gone49
 :as_super
 select tst.ok((select count(*) from public.legal_acceptance where user_id = 'a4900000-0000-4000-8000-000000000002') = 2, 'the second person agreed');
