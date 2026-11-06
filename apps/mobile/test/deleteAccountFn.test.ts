@@ -5,7 +5,7 @@
  * the service key is never in an answer or a log.
  */
 import { describe, it, expect } from "vitest";
-import { CORS, handleDelete, parseBody, type DeleteDeps } from "../../../supabase/functions/delete-account/handler";
+import { CLEARED_METADATA, CORS, handleDelete, parseBody, type DeleteDeps } from "../../../supabase/functions/delete-account/handler";
 
 const UID = "a5000000-0000-4000-8000-000000000001";
 const C1 = "c5000000-0000-4000-8000-000000000002";
@@ -23,6 +23,7 @@ function deps(over: Partial<DeleteDeps> = {}) {
     deleteAsUser: async (jwt, confirm, cc) => (calls.push(`rpc ${jwt} ${confirm} ${cc.join(",")}`), { data: { deleted: true, repeat: false }, error: null }),
     closeSignIn: async (uid) => (calls.push(`close ${uid}`), { error: null }),
     log: (m) => logs.push(m),
+    wait: async () => {},
     ...over,
   };
   return { d, calls, logs };
@@ -108,12 +109,33 @@ describe("delete-account: the order", () => {
 });
 
 describe("delete-account: no secrets out", () => {
-  it("the service key is never in an answer or a log", async () => {
-    const { d, logs } = deps({ closeSignIn: async () => ({ error: { message: "auth failed" } }) });
-    const r = await handleDelete(req({}), d);
-    expect(r.body).not.toContain(SECRET);
-    expect(logs.join(" ")).not.toContain(SECRET);
-    expect(r.body).not.toMatch(/service|role|key/i);
+  it("a key inside a failing RPC or Auth error never reaches the answer or the log (review #214 №5)", async () => {
+    // the database / network error carries the key
+    const rpc = deps({ deleteAsUser: async () => ({ error: { message: `connection failed key=${SECRET}`, code: "08006", details: SECRET } }) });
+    const r1 = await handleDelete(req({}), rpc.d);
+    expect(r1.body).not.toContain(SECRET);
+    expect(rpc.logs.join(" ")).not.toContain(SECRET);
+    // a thrown client error with the key
+    const thrown = deps({ deleteAsUser: async () => { throw new Error(`fetch ${SECRET}`); } });
+    const r2 = await handleDelete(req({}), thrown.d);
+    expect(r2.body).not.toContain(SECRET);
+    expect(thrown.logs.join(" ")).not.toContain(SECRET);
+    // Auth fails with the key in its message, three times
+    const auth = deps({ closeSignIn: async () => ({ error: { message: `admin api ${SECRET}` } }) });
+    const r3 = await handleDelete(req({}), auth.d);
+    expect(JSON.parse(r3.body)).toMatchObject({ auth: "pending" });
+    expect(r3.body).not.toContain(SECRET);
+    expect(auth.logs.join(" ")).not.toContain(SECRET);
+    expect(auth.logs.join(" ")).not.toContain(UID);
+  });
+  it("tries Auth with a growing pause between the tries", async () => {
+    const pauses: number[] = [];
+    const { d } = deps({ closeSignIn: async () => ({ error: { message: "busy" } }), wait: async (ms) => void pauses.push(ms) });
+    await handleDelete(req({}), d);
+    expect(pauses).toEqual([300, 600]);
+  });
+  it("clears every name / contact field Supabase keeps in user_metadata", () => {
+    for (const k of ["full_name", "name", "email", "phone", "email_verified", "phone_verified", "sub", "avatar_url"]) expect(CLEARED_METADATA).toHaveProperty(k, null);
   });
   it("the Deno entry reads the key only from the environment and never logs or returns it", async () => {
     const { readFileSync } = await import("node:fs");
