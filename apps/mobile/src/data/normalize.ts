@@ -6,7 +6,7 @@
  *   - leads and clients that stored the source by name ("Thumbtack") get its id
  *   - demo data gets the standard tags; demo clients saved by an older build get their number, tags and people
  *     from the seed (same id), other demo clients the next CLT number (a cloud client is read through peopleOf)
- *   - wave П-1: cancelledJobs, jobTypes, files default to empty (demo: the standard job types); a job without
+ *   - wave П-1 / П-2a: cancelledJobs, jobTypes, files, jobLines default to empty (demo: the standard job types); a job without
  *     customerId takes the client of its property; demo jobs get their JOB number from the seed or the next one
  */
 import { fromLegacyTrades } from "@/features/serviceCategories";
@@ -35,6 +35,7 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     cancelledJobs: Array.isArray(d.cancelledJobs) ? d.cancelledJobs : [],
     jobTypes: Array.isArray(d.jobTypes) ? d.jobTypes : mode === "demo" ? SEED_JOB_TYPES : [],
     files: Array.isArray(d.files) ? d.files : [],
+    jobLines: Array.isArray(d.jobLines) ? d.jobLines : [],
     ...withJobFields(withoutLateFlag(inspectionsWithoutJobs(d)), d.properties ?? [], d.cancelledJobs, mode),
     tasks: Array.isArray(d.tasks) ? d.tasks : [],
     activities: Array.isArray(d.activities) ? d.activities : [],

@@ -75,6 +75,10 @@ export interface Customer {
   companyName?: string;
   /** address for invoices when it is not the property (server: billing_address_*); absent = the property address */
   billing?: BillingAddress;
+  /** wave П-2a: no sales tax on this client's new documents (server: tax_exempt; signed ones never change) */
+  taxExempt?: boolean;
+  /** certificate number or reason */
+  taxExemptNote?: string;
 }
 export interface BillingAddress {
   line1: string;
@@ -160,6 +164,27 @@ export interface Job {
   description?: string;
   /** a job type of the company (JobType); absent = not set (old jobs) */
   jobTypeId?: ID;
+  /** wave П-2a: tags of the job (the company's Tag list, server: job_tags) */
+  tagIds?: ID[];
+  /** wave П-2a: tax of a job without an estimate (server: jobs.tax_enabled / tax_rate_bps); an exempt client → off */
+  taxEnabled?: boolean;
+  taxRateBps?: number;
+}
+
+/** A line of a job made without an estimate (wave П-2a, server: job_line_items). The server owns the totals:
+ *  totalCents = floor(qty × price + 0.5), the job's amountCents = @octo/estimating-engine jobLinesTotals. */
+export interface JobLineItem {
+  id: ID;
+  jobId: ID;
+  position: number;
+  name: string;
+  description?: string;
+  catalogItemId?: ID;
+  /** decimal as text ("2.5"), as in estimate lines */
+  quantity: string;
+  unitPriceCents: number;
+  taxable: boolean;
+  totalCents: number;
 }
 
 /** The company's list of job types (13 §3.4 п. 8, server: job_types): a preset (seedKey, translated in the app) or an
@@ -654,6 +679,8 @@ export interface DB {
   jobTypes?: JobType[];
   /** wave П-1: file records (absent in old saved data → []) */
   files?: FileItem[];
+  /** wave П-2a: lines of jobs without an estimate (absent in old saved data → []) */
+  jobLines?: JobLineItem[];
   /** directions of the business of the company (docs/specs/11-trade.md); archived ones stay for history */
   serviceCategories: ServiceCategory[];
   tasks: Task[];
