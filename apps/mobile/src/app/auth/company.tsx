@@ -38,7 +38,8 @@ export default function CompanySetup() {
             const e = await auth.createCompany(name.trim());
             setBusy(false);
             if (e) setErr(e);
-            else router.replace("/company/profile?wizard=1");
+            // first run (13 §3.11): «Чем вы занимаетесь?» → the company profile
+            else router.replace("/auth/trade");
           }}
         />
       </Card>
