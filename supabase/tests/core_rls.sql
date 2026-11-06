@@ -3337,4 +3337,119 @@ select tst.fails($q$insert into public.job_line_items (company_id, job_id, name,
 select tst.fails($q$select public.set_job_tags('e4100000-0000-4000-8000-000000000001', '{}')$q$, 'anon does not set job tags');
 \echo 'T41 wave П-2a: exempt client, job lines, job tags ok'
 
+-- ---------------------------------------------------------------- T42: wave П-2b — tasks with a time, events and days off, own fields
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values
+    ('c4200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T42 Mine'),
+    ('c4200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T42 Other');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d4200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4200000-0000-4000-8000-000000000001', '42 Mine St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e4200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T42 job', 'c4200000-0000-4000-8000-000000000001', 'd4200000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('f4200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4200000-0000-4000-8000-000000000001', now() + interval '1 day');
+  insert into public.visit_assignees (company_id, visit_id, user_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'f4200000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+-- tasks with a time
+insert into public.tasks (id, company_id, subject_type, subject_id, title, description, starts_at, ends_at, all_day) values
+  ('a4210000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'job', 'e4200000-0000-4000-8000-000000000001', 'T42 order gutters', 'Call the supplier', now() + interval '2 hours', now() + interval '3 hours', false);
+select tst.ok(tst.cnt($q$select 1 from public.tasks where id = 'a4210000-0000-4000-8000-000000000001' and description = 'Call the supplier' and not all_day$q$) = 1, 'a task keeps its time and description');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title, starts_at, ends_at) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e4200000-0000-4000-8000-000000000001', 'T42 x', now(), now() - interval '1 hour')$q$, 'a task does not end before it starts');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title, ends_at) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e4200000-0000-4000-8000-000000000001', 'T42 x', now())$q$, 'a task end needs a start');
+-- events and days off: the office for anyone, for the whole company
+insert into public.calendar_events (id, company_id, kind, user_id, title, starts_at, ends_at, all_day) values
+  ('a4220000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'event', null, 'T42 team meeting', now() + interval '1 day', now() + interval '1 day 1 hour', false),
+  ('a4220000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'time_off', 'a0000000-0000-0000-0000-000000000004', null, now() + interval '3 days', now() + interval '4 days', true),
+  ('a4220000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'time_off', 'a0000000-0000-0000-0000-000000000003', null, now() + interval '5 days', now() + interval '6 days', true);
+select tst.fails($q$insert into public.calendar_events (company_id, kind, starts_at, ends_at) values ('ca000000-0000-0000-0000-000000000000', 'time_off', now(), now())$q$, 'a day off is always someone''s');
+select tst.fails($q$insert into public.calendar_events (company_id, kind, starts_at, ends_at) values ('ca000000-0000-0000-0000-000000000000', 'event', now(), now())$q$, 'an event has a name');
+select tst.fails($q$insert into public.calendar_events (company_id, kind, title, starts_at, ends_at) values ('ca000000-0000-0000-0000-000000000000', 'event', 'T42 x', now(), now() - interval '1 minute')$q$, 'an event does not end before it starts');
+select tst.fails($q$insert into public.calendar_events (company_id, kind, user_id, starts_at, ends_at) values ('ca000000-0000-0000-0000-000000000000', 'time_off', 'b0000000-0000-0000-0000-000000000002', now(), now())$q$, 'a day off of a person of another company is refused');
+-- own fields: owner / admin define them
+insert into public.custom_fields (id, company_id, entity, label, type, options, group_name, searchable, position) values
+  ('a4230000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'customer', 'HOA name', 'text', '[]', 'Property', true, 0),
+  ('a4230000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'customer', 'Preferred day', 'select', '["Mon", "Wed", "Fri"]', null, false, 1),
+  ('a4230000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'job', 'Permit needed', 'checkbox', '[]', null, false, 0),
+  ('a4230000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'job', 'Crew size', 'number', '[]', null, false, 1),
+  ('a4230000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'job', 'Start by', 'date', '[]', null, false, 2),
+  ('a4230000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'job', 'Materials', 'multiselect', '["Copper", "Aluminum"]', null, false, 3);
+select tst.fails($q$insert into public.custom_fields (company_id, entity, label, type) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'Day', 'select')$q$, 'a list needs choices');
+select tst.fails($q$insert into public.custom_fields (company_id, entity, label, type, options) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'T42 t', 'text', '["a"]')$q$, 'a text field has no choices');
+select tst.fails($q$insert into public.custom_fields (company_id, entity, label, type, options) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'T42 s', 'select', '[1, 2]')$q$, 'a choice is a text');
+select tst.fails($q$insert into public.custom_fields (company_id, entity, label, type) values ('ca000000-0000-0000-0000-000000000000', 'customer', ' hoa NAME ', 'text')$q$, 'the same name twice is refused');
+select tst.fails($q$update public.custom_fields set type = 'number' where id = 'a4230000-0000-4000-8000-000000000001'$q$, 'the type of a field does not change');
+select tst.fails($q$delete from public.custom_fields where id = 'a4230000-0000-4000-8000-000000000001'$q$, 'a field is not deleted');
+:as_super
+select tst.fails($q$update public.custom_fields set type = 'number' where id = 'a4230000-0000-4000-8000-000000000001'$q$, 'the type of a field does not change, even for the service role');
+select tst.fails($q$delete from public.custom_fields where id = 'a4230000-0000-4000-8000-000000000001'$q$, 'a field is not deleted, even by the service role (archive)');
+:as_owner_a
+-- values: checked against the type; the record belongs to the field's kind and company
+insert into public.custom_field_values (company_id, field_id, entity_id, value) values
+  ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000001', 'c4200000-0000-4000-8000-000000000001', '"Oak Park HOA"'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000002', 'c4200000-0000-4000-8000-000000000002', '"Wed"'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000003', 'e4200000-0000-4000-8000-000000000001', 'true'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000004', 'e4200000-0000-4000-8000-000000000001', '3'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000005', 'e4200000-0000-4000-8000-000000000001', '"2026-12-01"'),
+  ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000006', 'e4200000-0000-4000-8000-000000000001', '["Copper"]');
+select tst.ok(tst.cnt($q$select 1 from public.custom_field_values where entity_id in ('c4200000-0000-4000-8000-000000000001', 'c4200000-0000-4000-8000-000000000002', 'e4200000-0000-4000-8000-000000000001')$q$) = 6, 'values of every type are kept');
+select tst.fails($q$insert into public.custom_field_values (company_id, field_id, entity_id, value) values ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000002', 'c4200000-0000-4000-8000-000000000001', '"Sun"')$q$, 'a choice that is not in the list is refused');
+select tst.fails($q$insert into public.custom_field_values (company_id, field_id, entity_id, value) values ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000001', 'c4200000-0000-4000-8000-000000000002', '12')$q$, 'a number in a text field is refused');
+select tst.fails($q$update public.custom_field_values set value = '"three"' where field_id = 'a4230000-0000-4000-8000-000000000004'$q$, 'a text in a number field is refused');
+select tst.fails($q$update public.custom_field_values set value = '"yes"' where field_id = 'a4230000-0000-4000-8000-000000000003'$q$, 'a checkbox takes true / false only');
+select tst.fails($q$update public.custom_field_values set value = '"2026-02-30"' where field_id = 'a4230000-0000-4000-8000-000000000005'$q$, 'a date that does not exist is refused');
+select tst.fails($q$update public.custom_field_values set value = '["Copper", "Gold"]' where field_id = 'a4230000-0000-4000-8000-000000000006'$q$, 'a multi choice outside the list is refused');
+select tst.fails($q$insert into public.custom_field_values (company_id, field_id, entity_id, value) values ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000003', 'c4200000-0000-4000-8000-000000000001', 'true')$q$, 'a job field does not go on a client');
+select tst.fails($q$insert into public.custom_field_values (company_id, field_id, entity_id, value) values ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000001', 'c4200000-0000-4000-8000-000000000001', '"again"')$q$, 'one value per field and record');
+update public.custom_field_values set deleted_at = now() where field_id = 'a4230000-0000-4000-8000-000000000002';
+insert into public.custom_field_values (company_id, field_id, entity_id, value) values ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000002', 'c4200000-0000-4000-8000-000000000002', '"Fri"');
+select tst.ok(tst.cnt($q$select 1 from public.custom_field_values where field_id = 'a4230000-0000-4000-8000-000000000002' and deleted_at is null and value = '"Fri"'$q$) = 1, 'a cleared value can be set anew');
+select tst.fails($q$update public.custom_field_values set entity_id = 'c4200000-0000-4000-8000-000000000002' where field_id = 'a4230000-0000-4000-8000-000000000001'$q$, 'a value does not move to another record');
+update public.custom_fields set archived_at = now() where id = 'a4230000-0000-4000-8000-000000000001';
+select tst.fails($q$update public.custom_field_values set value = '"New HOA"' where field_id = 'a4230000-0000-4000-8000-000000000001'$q$, 'an archived field takes no new values');
+select tst.ok(tst.cnt($q$select 1 from public.custom_field_values where field_id = 'a4230000-0000-4000-8000-000000000001'$q$) = 1, 'an archived field keeps its old values');
+update public.custom_fields set archived_at = null where id = 'a4230000-0000-4000-8000-000000000001';
+-- the office (role office) reads definitions, does not change them, writes values
+:as_super
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.custom_fields where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 6, 'the office reads own fields');
+select tst.fails($q$insert into public.custom_fields (company_id, entity, label, type) values ('ca000000-0000-0000-0000-000000000000', 'job', 'T42 office', 'text')$q$, 'the office does not add own fields (13 §5а)');
+select tst.blocked($q$update public.custom_fields set label = 'x' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'the office does not rename own fields');
+update public.custom_field_values set value = '4' where field_id = 'a4230000-0000-4000-8000-000000000004';
+select tst.ok(tst.cnt($q$select 1 from public.custom_field_values where field_id = 'a4230000-0000-4000-8000-000000000004' and value = '4'$q$) = 1, 'the office writes values');
+select tst.ok(tst.cnt($q$select 1 from public.calendar_events where title = 'T42 team meeting' or kind = 'time_off'$q$) >= 3, 'the office sees every event and day off');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- the tech: his own days off and the company's events; values of his job and client, read only
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.calendar_events where id in ('a4220000-0000-4000-8000-000000000001', 'a4220000-0000-4000-8000-000000000003')$q$) = 2, 'the tech sees the company event and his own day off');
+select tst.ok(tst.cnt($q$select 1 from public.calendar_events where id = 'a4220000-0000-4000-8000-000000000002'$q$) = 0, 'the tech does not see another person''s day off');
+insert into public.calendar_events (id, company_id, kind, user_id, starts_at, ends_at, all_day) values
+  ('a4220000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'time_off', 'a0000000-0000-0000-0000-000000000003', now() + interval '9 days', now() + interval '10 days', true);
+update public.calendar_events set ends_at = starts_at + interval '2 days' where id = 'a4220000-0000-4000-8000-000000000004';
+select tst.ok(tst.cnt($q$select 1 from public.calendar_events where id = 'a4220000-0000-4000-8000-000000000004'$q$) = 1, 'the tech asks for his own day off and changes it');
+select tst.fails($q$insert into public.calendar_events (company_id, kind, user_id, starts_at, ends_at) values ('ca000000-0000-0000-0000-000000000000', 'time_off', 'a0000000-0000-0000-0000-000000000004', now(), now())$q$, 'the tech does not add a day off for someone else');
+select tst.fails($q$insert into public.calendar_events (company_id, kind, title, starts_at, ends_at) values ('ca000000-0000-0000-0000-000000000000', 'event', 'T42 tech for all', now(), now())$q$, 'the tech does not add a company event');
+select tst.blocked($q$update public.calendar_events set title = 'x' where id = 'a4220000-0000-4000-8000-000000000001'$q$, 'the tech does not change the company event');
+select tst.fails($q$update public.calendar_events set user_id = 'a0000000-0000-0000-0000-000000000004' where id = 'a4220000-0000-4000-8000-000000000004'$q$, 'the tech does not move his day off to another person');
+select tst.ok(tst.cnt($q$select 1 from public.custom_field_values where entity_id in ('c4200000-0000-4000-8000-000000000001', 'e4200000-0000-4000-8000-000000000001')$q$) = 5, 'the tech reads the values of his client and job');
+select tst.ok(tst.cnt($q$select 1 from public.custom_field_values where entity_id = 'c4200000-0000-4000-8000-000000000002'$q$) = 0, 'the tech does not see values of another client');
+select tst.fails($q$insert into public.custom_field_values (company_id, field_id, entity_id, value) values ('ca000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000002', 'c4200000-0000-4000-8000-000000000001', '"Mon"')$q$, 'the tech does not write values (v1)');
+select tst.blocked($q$update public.custom_field_values set value = '1' where field_id = 'a4230000-0000-4000-8000-000000000004'$q$, 'the tech does not change values');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where id = 'a4210000-0000-4000-8000-000000000001'$q$) = 0, 'a job task not given to the tech stays the office''s (tasks rules as before)');
+-- another company and anon
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.calendar_events where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'another company sees no events of ours');
+select tst.ok(tst.cnt($q$select 1 from public.custom_fields where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'another company sees no own fields of ours');
+select tst.ok(tst.cnt($q$select 1 from public.custom_field_values where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'another company sees no values of ours');
+select tst.fails($q$insert into public.custom_field_values (company_id, field_id, entity_id, value) values ('cb000000-0000-0000-0000-000000000000', 'a4230000-0000-4000-8000-000000000001', 'c4200000-0000-4000-8000-000000000001', '"x"')$q$, 'another company does not use our field');
+select tst.fails($q$insert into public.calendar_events (company_id, kind, title, starts_at, ends_at) values ('ca000000-0000-0000-0000-000000000000', 'event', 'T42 b', now(), now())$q$, 'another company does not add events to ours');
+reset role; set role anon;
+select tst.fails($q$select 1 from public.calendar_events$q$, 'anon does not read events');
+select tst.fails($q$select 1 from public.custom_fields$q$, 'anon does not read own fields');
+select tst.fails($q$select 1 from public.custom_field_values$q$, 'anon does not read values');
+\echo 'T42 wave П-2b: tasks with a time, events and days off, own fields ok'
+
 \echo 'ALL TESTS PASSED'

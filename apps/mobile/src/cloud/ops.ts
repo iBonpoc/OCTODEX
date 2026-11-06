@@ -8,7 +8,7 @@
 import { companyToday } from "@/features/zone";
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION, jobLineQty } from "@octo/estimating-engine";
-import type { BillingAddress, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
+import type { BillingAddress, CalendarEvent, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -131,7 +131,13 @@ export type Op =
   | { k: "lead.cost"; leadId: string; cents: number }
   | { k: "lead.contactSave"; leadId: string; contact: { id: string; name: string; role: string; phone?: string; email?: string } }
   | { k: "lead.contactRemove"; id: string }
-  | { k: "task.save"; task: { id: string; subjectType: string; subjectId: string; title: string; dueAt?: string; assigneeId?: string; doneAt?: string } }
+  | { k: "task.save"; task: { id: string; subjectType: string; subjectId: string; title: string; dueAt?: string; assigneeId?: string; doneAt?: string; startsAt?: string; endsAt?: string; allDay?: boolean; description?: string } }
+  // wave П-2b: events and days off; own fields (owner / admin) and their values (staff)
+  | { k: "calendarEvent.save"; event: CalendarEvent; isNew: boolean }
+  | { k: "calendarEvent.remove"; id: string }
+  | { k: "customField.save"; field: CustomField; isNew: boolean }
+  | { k: "customFieldValue.save"; value: CustomFieldValue; isNew: boolean }
+  | { k: "customFieldValue.remove"; id: string }
   | { k: "source.save"; source: { id: string; name: string; kind: string; phone?: string; email?: string; customerId?: string; note?: string; active: boolean; position?: number } }
   | {
       k: "customer.create";
@@ -258,6 +264,13 @@ async function uploadPhoto(companyId: string, fileId: string, uri: string) {
   } catch {
     await supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId);
   }
+}
+
+/** task.save → the time columns (wave П-2b); an end without a start is not sent (the server refuses it) */
+export function taskTimeCols(t: { startsAt?: string; endsAt?: string; allDay?: boolean; description?: string }) {
+  return {
+    starts_at: t.startsAt ?? null, ends_at: t.startsAt ? t.endsAt ?? null : null, all_day: !!t.allDay, description: t.description?.trim() || null,
+  };
 }
 
 /** customer.update → the customers columns it changes (wave П-1: first / last / company name, billing_address_*) */
@@ -426,10 +439,37 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           {
             id: op.task.id, company_id: c, subject_type: op.task.subjectType, subject_id: op.task.subjectId, title: op.task.title,
             due_at: op.task.dueAt ?? null, assignee_id: op.task.assigneeId ?? null, done_at: op.task.doneAt ?? null, done_by: op.task.doneAt ? userId : null,
+            ...taskTimeCols(op.task),
           },
           { onConflict: "id" },
         ),
       );
+    case "calendarEvent.save": {
+      const x = op.event;
+      const cols = {
+        kind: x.kind, user_id: x.userId ?? null, title: x.title?.trim() || null, description: x.description?.trim() || null,
+        starts_at: x.startsAt, ends_at: x.endsAt, all_day: x.allDay,
+      };
+      return run(op.isNew ? ins("calendar_events", { id: x.id, company_id: c, ...cols }) : supabase.from("calendar_events").update(cols).eq("id", x.id));
+    }
+    case "calendarEvent.remove":
+      return run(supabase.from("calendar_events").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
+    case "customField.save": {
+      // what a field is (entity, type) is set once (column grants and t05_custom_field_guard, migration 20261106030000)
+      const x = op.field;
+      const common = { label: x.label.trim(), options: x.options, group_name: x.group?.trim() || null, searchable: x.searchable, position: x.position, archived_at: x.archivedAt ?? null };
+      return run(op.isNew ? ins("custom_fields", { id: x.id, company_id: c, entity: x.entity, type: x.type, ...common }) : supabase.from("custom_fields").update(common).eq("id", x.id));
+    }
+    case "customFieldValue.save": {
+      const x = op.value;
+      return run(
+        op.isNew
+          ? ins("custom_field_values", { id: x.id, company_id: c, field_id: x.fieldId, entity_id: x.entityId, value: x.value })
+          : supabase.from("custom_field_values").update({ value: x.value, deleted_at: null }).eq("id", x.id),
+      );
+    }
+    case "customFieldValue.remove":
+      return run(supabase.from("custom_field_values").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "source.save":
       return run(
         supabase.from("lead_sources").upsert(
