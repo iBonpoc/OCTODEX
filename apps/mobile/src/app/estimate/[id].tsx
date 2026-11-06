@@ -14,7 +14,8 @@ import { isUniversal, mainOption, newToken } from "@/features/estimateDoc";
 import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
-import { clientLink, copyText, estimateMessage, openEmail, openSms } from "@/features/sendEstimate";
+import { beforeSend, clientLink, copyText, estimateMessage, openEmail, openSms } from "@/features/sendEstimate";
+import { canServe } from "@/features/clients";
 import { docLanguageFor } from "@/data/people";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -113,7 +114,7 @@ export default function EstimateScreen() {
           <RowView style={{ flexWrap: "wrap" }}>
             {/* a client-signed estimate changes only through «don't sign — change it» (with a reason) */}
             {isEstimateEditable(e.status) && e.status !== "awaiting_countersign" ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
-            {e.status === "draft" || e.status === "sent" ? <Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /> : null}
+            {(e.status === "draft" || e.status === "sent") && canServe(db, e.customerId) ? <Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /> : null}
             {e.token ? <Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /> : null}
             <Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={pdf} />
             {/* E2b: only an unsigned link can be revoked (the signed client keeps their copy); director and office */}
@@ -255,6 +256,10 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
   /** to the client in the client's language (rule 7), whatever the app language is */
   const msg = (url: string) => estimateMessage(docLanguageFor(store.db, { customerId: e.customerId, leadId: e.leadId }), { company, name: customer?.name ?? "", totalCents: e.totalCents, number: e.number, link: url });
   const go = async (how: "sms" | "email" | "copy") => {
+    // «do not service» sends nothing; a taxed draft of a client who became «Без налога» is re-saved first (04 §12)
+    const pre = beforeSend(store.db, e);
+    if (!pre.ok) return toast.show(t("client.noServiceHint"));
+    if (pre.resave) store.saveEstimate({ id: e.id, customerId: e.customerId, propertyId: e.propertyId, title: e.title, doc: pre.resave, leadId: e.leadId });
     const token = e.token ?? newToken();
     const undo = store.sendEstimate(e.id, token);
     const url = clientLink(token);
