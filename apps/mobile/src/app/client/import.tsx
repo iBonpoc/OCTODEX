@@ -4,16 +4,17 @@
  * пропустим M» with every skipped row and why → «Импортировать» → the clients list, toast «Отменить» (5 s, rule 5).
  * Imported clients are `active`. Needs the network (a big batch and the duplicates check against the server's clients).
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Platform, ScrollView, View } from "react-native";
 import { router } from "expo-router";
 import * as DocumentPicker from "expo-document-picker";
 import { File } from "expo-file-system";
 import { component } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
+import { clientStatusChip } from "@/features/clients";
 import { useI18n, type DictKey } from "@/i18n";
 import { SourceField } from "@/features/lead/SourcePicker";
-import { guessMapping, IMPORT_FIELDS, IMPORT_MAX_ROWS, parseCsv, planImport, rowsOf, type ImportField, type ImportMapping, type SkipReason } from "@/features/client/csvImport";
+import { guessMapping, IMPORT_FIELDS, IMPORT_MAX_BYTES, IMPORT_MAX_PARSED, IMPORT_MAX_ROWS, parseCsv, planImport, rowsOf, type ImportField, type ImportMapping, type SkipReason } from "@/features/client/csvImport";
 import { Button, StatusChip } from "@/ui/controls";
 import { Sheet, useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
@@ -58,7 +59,15 @@ export default function ImportClients() {
   const [mapping, setMapping] = useState<ImportMapping>({});
   const [pick, setPick] = useState<ImportField | null>(null);
   const [failed, setFailed] = useState(false);
-  const [sourceId, setSourceId] = useState(store.db.sources.find((x) => x.active && x.name === "Referral")?.id ?? store.db.sources[0]?.id ?? "");
+  const defaultSource = () => store.db.sources.find((x) => x.active && x.name === "Referral")?.id ?? store.db.sources.find((x) => x.active)?.id ?? "";
+  const [sourceId, setSourceId] = useState(defaultSource);
+  // in the cloud the sources may come after the screen opens: never leave the import without one (review #199)
+  useEffect(() => {
+    if (!sourceId) setSourceId(defaultSource());
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [store.db.sources]);
+  /** one import per tap: a double tap must not add everything twice (review #199) */
+  const busy = useRef(false);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/clients"));
 
   const rows = useMemo(() => (table ? rowsOf(table, mapping) : []), [table, mapping]);
@@ -78,6 +87,10 @@ export default function ImportClients() {
     try {
       const r = await DocumentPicker.getDocumentAsync({ type: ["text/csv", "text/comma-separated-values", "text/plain", "application/vnd.ms-excel", "*/*"], copyToCacheDirectory: true, multiple: false });
       if (r.canceled || !r.assets?.[0]) return;
+      if ((r.assets[0].size ?? 0) > IMPORT_MAX_BYTES) {
+        setFailed(true);
+        return;
+      }
       const parsed = parseCsv(await readPicked(r.assets[0]));
       if (parsed.length < 2) {
         setFailed(true);
@@ -99,14 +112,15 @@ export default function ImportClients() {
   const canImport = !!table && hasName && hasContact && plan.add.length > 0 && store.online && !!sourceId;
 
   const run = () => {
-    if (!canImport) return;
+    if (!canImport || busy.current) return;
+    busy.current = true;
     const undos: (() => void)[] = [];
     for (const r of plan.add) {
       const x = store.addCustomer({ name: r.name, phone: r.phone, email: r.email, sourceId, address: r.address, city: r.city });
       undos.push(x.undo);
       if (r.firstName || r.lastName || r.company) undos.push(store.updateCustomer(x.id, { firstName: r.firstName, lastName: r.lastName, companyName: r.company }));
     }
-    toast.show(t("client.import.done", { n: plan.add.length, m: plan.skip.length }), () => {
+    toast.show(plan.skip.length ? t("client.import.done", { n: plan.add.length, m: plan.skip.length }) : t("client.import.doneAll", { n: plan.add.length }), () => {
       for (const u of undos.reverse()) u();
     });
     router.replace("/clients");
@@ -124,6 +138,11 @@ export default function ImportClients() {
         </T>
       ) : null}
       {failed ? <StatusChip status="bad" label={t("client.import.unreadable")} /> : null}
+      {table && table.length > IMPORT_MAX_PARSED ? (
+        <T v="caption" tone="mut">
+          {t("client.import.truncated", { n: IMPORT_MAX_PARSED })}
+        </T>
+      ) : null}
 
       {table ? (
         <>
@@ -151,7 +170,7 @@ export default function ImportClients() {
                   key={s.row.line}
                   status={s.reason === "dupClient" || s.reason === "dupFile" ? "neutral" : "warn"}
                   title={t("client.import.line", { n: s.row.line, name: s.row.name || "—" })}
-                  subtitle={t(SKIP_LABEL[s.reason], { who: s.who ?? "", max: IMPORT_MAX_ROWS })}
+                  subtitle={[t(SKIP_LABEL[s.reason], { who: s.who ?? "", max: IMPORT_MAX_ROWS }), s.whoStatus ? t(clientStatusChip[s.whoStatus].l) : null].filter(Boolean).join(" · ")}
                 />
               ))}
               {plan.skip.length > SKIP_SHOWN ? (
@@ -163,6 +182,11 @@ export default function ImportClients() {
           ) : null}
           <Button label={t("client.import.run", { n: plan.add.length })} icon="check" full onPress={run} disabled={!canImport} />
           {!store.online ? <StatusChip status="warn" label={t("client.import.offline")} /> : null}
+          {store.db.customers.length >= 1000 ? (
+            <T v="caption" tone="mut">
+              {t("client.import.manyClients")}
+            </T>
+          ) : null}
         </>
       ) : null}
 

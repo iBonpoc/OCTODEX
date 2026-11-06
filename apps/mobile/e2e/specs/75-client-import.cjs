@@ -2,7 +2,8 @@
  * Wave 4b-2 «Импорт из CSV» (docs/specs/13-app-structure.md §3.16, 15-flows §1.13, 04 §12.5): Клиенты → «…» →
  * «Импорт из CSV» → file → columns guessed from the headers (changeable) → «Добавим N, пропустим M» with every skipped
  * row and why (a client already there by phone or email, a repeat in the file, no way to reach them) → import →
- * the clients are `active` in the list; «Отменить» takes the whole import back. The tech has no import.
+ * the clients are `active` in the list (once, even on a double tap); «Отменить» takes the whole import back with
+ * the properties; without the network the import button is off. The tech has no import.
  */
 const CSV = [
   "First Name,Last Name,Company,Mobile Phone,Email,Street Address,City",
@@ -38,7 +39,9 @@ exports.run = async (h) => {
   await h.expectText(/Город \| Нет в файле/, "the city column taken off");
   await h.shot("check");
 
-  await p.getByRole("button", { name: "Импортировать (2)" }).click(); await p.waitForTimeout(800);
+  // a double tap imports once (review #199): two clicks in the same moment
+  await p.getByRole("button", { name: "Импортировать (2)" }).evaluate((el) => { el.click(); el.click(); });
+  await p.waitForTimeout(800);
   h.expect(/\/clients$/.test(p.url()), `back to the clients (${p.url()})`);
   await h.expectText(/Добавлено 2, пропущено 3/, "the toast says what happened");
   let db = await h.db();
@@ -56,6 +59,25 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Отменить" }).last().click(); await p.waitForTimeout(600);
   db = await h.db();
   h.expect(db.customers.length === before && !db.customers.some((c) => c.name === "Ann Lee"), "undo: the import is gone");
+  h.expect(!db.properties.some((x) => x.customerId === ann.id || x.customerId === ray.id), "undo: their properties are gone too");
+  const queued = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.queue.v1") || "[]"));
+  h.expect(queued.length === 0, `undo: nothing left in the queue (${queued.length})`);
+
+  // no network: the file is checked, the import button is off and says why
+  await h.go("/settings");
+  await p.getByRole("switch", { name: "Проверка: режим без сети" }).click(); await p.waitForTimeout(300);
+  const wide = h.layout.width > 390;
+  // in-app navigation keeps the offline switch (a page load would reset it): settings → back → the Clients tab
+  if (!wide) { await p.getByTestId("back-more").locator("visible=true").first().click(); await p.waitForTimeout(600); }
+  await p.getByTestId(wide ? "side-clients" : "tab-clients").locator("visible=true").first().click(); await p.waitForTimeout(600);
+  await p.getByRole("button", { name: "Ещё действия" }).first().click(); await p.waitForTimeout(300);
+  await h.sheet().getByRole("button", { name: "Импорт из CSV" }).click(); await p.waitForTimeout(600);
+  const chooser2 = p.waitForEvent("filechooser");
+  await p.getByRole("button", { name: "Выбрать файл CSV" }).click();
+  await (await chooser2).setFiles({ name: "clients.csv", mimeType: "text/csv", buffer: Buffer.from(CSV, "utf8") });
+  await p.waitForTimeout(800);
+  await h.expectText(/Нужна сеть/, "offline: says the network is needed");
+  h.expect(await p.getByRole("button", { name: "Импортировать (2)" }).isDisabled(), "offline: the import button is off");
 
   // the tech: no «…», no import by address
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));

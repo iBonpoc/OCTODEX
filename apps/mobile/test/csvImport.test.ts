@@ -1,6 +1,6 @@
 /** Import clients from CSV (13 §3.16, 15-flows §1.13, 04 §12.5): parsing, the columns, duplicates, the limit. */
 import { describe, expect, it } from "vitest";
-import { guessMapping, IMPORT_MAX_ROWS, parseCsv, planImport, rowsOf, type ImportRow } from "../src/features/client/csvImport";
+import { cleanPhone, CsvError, guessMapping, IMPORT_MAX_CELL, IMPORT_MAX_PARSED, IMPORT_MAX_ROWS, parseCsv, planImport, rowsOf, type ImportRow } from "../src/features/client/csvImport";
 import type { Customer } from "../src/data/types";
 
 describe("parseCsv", () => {
@@ -82,5 +82,55 @@ describe("planImport", () => {
     const p = planImport({ customers: [] }, rows);
     expect(p.add).toHaveLength(IMPORT_MAX_ROWS);
     expect(p.skip.filter((s) => s.reason === "overLimit")).toHaveLength(3);
+  });
+});
+
+// review #199: what real exports contain
+describe("review #199: phones as people type them", () => {
+  it("an extension is dropped, the first of two numbers is kept, «N/A» or «-» is no phone", () => {
+    expect(cleanPhone("(310) 555-0101 ext 22")).toEqual({ phone: "(310) 555-0101", ok: true });
+    expect(cleanPhone("310-555-0101 x5")).toEqual({ phone: "310-555-0101", ok: true });
+    expect(cleanPhone("310 555 0101 доб. 7")).toEqual({ phone: "310 555 0101", ok: true });
+    expect(cleanPhone("310-555-0101 / 818-555-0187")).toEqual({ phone: "310-555-0101", ok: true });
+    expect(cleanPhone("310-555-0101 or 818-555-0187").phone).toBe("310-555-0101");
+    expect(cleanPhone("+1 310 555 0101")).toEqual({ phone: "+1 310 555 0101", ok: true });
+    for (const none of ["N/A", "-", "none", "", "  "]) expect(cleanPhone(none)).toEqual({ phone: "", ok: true });
+  });
+  it("not a US number is not guessed: 12 digits, or 11 not starting with 1, or too short", () => {
+    expect(cleanPhone("310555010122").ok).toBe(false);
+    expect(cleanPhone("23105550101").ok).toBe(false);
+    expect(cleanPhone("555-0101").ok).toBe(false);
+  });
+  it("a row with «N/A» as the phone and an email is added; an extension does not hide a duplicate", () => {
+    const t = [["Name", "Phone", "Email"], ["Ann", "N/A", "ann@x.io"], ["Sara", "(626) 555-0142 ext 9", ""], ["Bad", "310555010122", ""]];
+    const p = planImport({ customers: [{ id: "c1", name: "Sarah Mitchell", phone: "(626) 555-0142" } as Customer] }, rowsOf(t, guessMapping(t[0]!)));
+    expect(p.add.map((r) => r.name)).toEqual(["Ann"]);
+    expect(p.skip.map((s) => [s.row.name, s.reason])).toEqual([["Sara", "dupClient"], ["Bad", "badPhone"]]);
+  });
+});
+
+describe("review #199: broken and huge files", () => {
+  it("an unclosed quote is an unreadable file, not a silent half", () => {
+    expect(() => parseCsv('Name,Phone\n"Ann,310-555-0101\nBob,818-555-0187')).toThrow(CsvError);
+  });
+  it("a quote inside a cell (12\" pipe) is a character and does not break the delimiter", () => {
+    expect(parseCsv('Item;Size\n12" pipe;5')).toEqual([["Item", "Size"], ['12" pipe', "5"]]);
+  });
+  it(`cells are cut to ${IMPORT_MAX_CELL} characters, at most ${IMPORT_MAX_PARSED} rows are read`, () => {
+    expect(parseCsv(`Name\n${"a".repeat(1000)}`)[1]![0]).toHaveLength(IMPORT_MAX_CELL);
+    const big = ["Name", ...Array.from({ length: IMPORT_MAX_PARSED + 50 }, (_, i) => `N${i}`)].join("\n");
+    expect(parseCsv(big)).toHaveLength(IMPORT_MAX_PARSED + 1);
+  });
+});
+
+describe("review #199: a match with an archived or «do not service» client says so", () => {
+  it("whoStatus is set for archived / do not service, not for an ordinary client", () => {
+    const db = { customers: [
+      { id: "a", name: "Old", phone: "3105550001", status: "archived" },
+      { id: "b", name: "Banned", phone: "3105550002", status: "do_not_service" },
+      { id: "c", name: "Fine", phone: "3105550003" },
+    ] as Customer[] };
+    const p = planImport(db, [row({ name: "x", phone: "3105550001" }), row({ name: "y", phone: "3105550002" }), row({ name: "z", phone: "3105550003" })]);
+    expect(p.skip.map((s) => [s.who, s.whoStatus])).toEqual([["Old", "archived"], ["Banned", "do_not_service"], ["Fine", undefined]]);
   });
 });
