@@ -3713,8 +3713,24 @@ select tst.fails($q$update public.jobs set customer_id = 'c4700000-0000-4000-800
 update public.jobs set contract_total_cents = 1 where id = 'e4700000-0000-4000-8000-000000000001';
 select tst.ok((select contract_total_cents from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') is null, 'update: the total of a job does not change directly');
 select tst.fails($q$update public.jobs set job_type_id = (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty') where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'update: an archived job type is refused');
+select tst.fails($q$update public.jobs set completed_at = now() where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'update: no «completed» time without the status');
 update public.jobs set description = 'T47 note', job_type_id = (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'repair') where id = 'e4700000-0000-4000-8000-000000000001';
 select tst.ok((select description = 'T47 note' and job_type_id is not null from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'update: what the app changes still changes (job.update)');
+-- the other live paths of the app (ops.ts): job.update money, job.category, advanceJob, lead.visit
+update public.jobs set tax_enabled = true, tax_rate_bps = 825 where id = 'e4700000-0000-4000-8000-000000000001';
+select tst.ok((select tax_enabled and tax_rate_bps = 825 from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.update: the tax of a job still changes');
+update public.jobs set service_category_id = null where id = 'e4700000-0000-4000-8000-000000000001';
+select tst.ok((select service_category_id is null from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'job.category still changes');
+update public.jobs set status = 'scheduled' where id = 'e4700000-0000-4000-8000-000000000001';
+update public.jobs set status = 'in_progress' where id = 'e4700000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') = 'in_progress', 'advanceJob: a job still moves draft → scheduled → in progress');
+insert into public.jobs (id, company_id, customer_id, property_id, title, type, number) values
+  ('e4700000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000002', 'Estimate visit', 'inspection', '')
+  on conflict (id) do nothing;
+insert into public.jobs (id, company_id, customer_id, property_id, title, type, number) values
+  ('e4700000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000002', 'Estimate visit', 'inspection', '')
+  on conflict (id) do nothing;
+select tst.ok(tst.cnt($q$select 1 from public.jobs where id = 'e4700000-0000-4000-8000-000000000003' and status = 'draft'$q$) = 1, 'lead.visit: the inspection job is made once, a replay changes nothing');
 -- the office: the same refusals for any staff role, the server function still works
 :as_office_a
 select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000001')$q$, 'the office: the address must be of this client too');
@@ -3734,6 +3750,12 @@ begin
   perform tst.ok(public.countersign_estimate('0e470000-0000-4000-8000-000000000002', 'M0 0 L3 3') = 'approved', 'T47: the company signs');
   perform tst.ok((select status = 'draft' and contract_total_cents = 4700 from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002'), 'a signed estimate still makes its job, waiting for a date');
   perform tst.fails($q$insert into public.jobs (company_id, title, customer_id, property_id, estimate_id, contract_total_cents) values ('ca000000-0000-0000-0000-000000000000', 'squat', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000002', '0e470000-0000-4000-8000-000000000002', 100)$q$, 'a job of an estimate is never inserted by the app');
+  -- estimate.deposit (ops.ts): a replay of the signed estimate's job by its server id — upsert … do nothing passes, changes nothing
+  insert into public.jobs (id, company_id, customer_id, property_id, estimate_id, approved_version_id, title, contract_total_cents, number)
+  select j.id, j.company_id, j.customer_id, j.property_id, j.estimate_id, j.approved_version_id, 'T47 deposit replay', 1, ''
+    from public.jobs j where j.estimate_id = '0e470000-0000-4000-8000-000000000002'
+  on conflict (id) do nothing;
+  perform tst.ok((select contract_total_cents = 4700 and title <> 'T47 deposit replay' from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002'), 'estimate.deposit replay passes and changes nothing');
   update public.jobs set contract_total_cents = 100 where estimate_id = '0e470000-0000-4000-8000-000000000002';
   perform tst.ok((select contract_total_cents from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002') = 4700, 'the signed price of a job does not change directly');
   update public.job_types set archived_at = null where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty';

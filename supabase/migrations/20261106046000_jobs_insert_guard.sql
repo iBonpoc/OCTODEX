@@ -15,6 +15,7 @@
 -- UPDATE
 --   * the client, the estimate, its version / option, the recurring plan, the author do not change directly;
 --   * the total the app sends is dropped (kept as it was): t18 / t90 write it from the job's lines (security definer);
+--   * completed_at / closed_at / cancelled_at do not change without a change of the status;
 --   * a new address is a property of the same client, not deleted; a new job type is of this company and not archived.
 -- «Do not service» is not checked here: «Лиды и клиенты» guard it with their own trigger on jobs/estimates/visits (4b-1).
 -- Server functions (create_job, execute_estimate, cancel_visit, complete_job, …) are security definer: current_user there is
@@ -52,6 +53,11 @@ begin
        or new.recurring_plan_id is distinct from old.recurring_plan_id or new.occurrence_date is distinct from old.occurrence_date
        or new.created_by is distinct from old.created_by or new.company_id is distinct from old.company_id then
       raise exception 'the client, the estimate and the total of a job do not change here' using errcode = '42501';
+    end if;
+    -- the times of «completed» / «closed» / «cancelled» move only with the status (t31 guards the status itself)
+    if new.status is not distinct from old.status and (new.completed_at is distinct from old.completed_at
+       or new.closed_at is distinct from old.closed_at or new.cancelled_at is distinct from old.cancelled_at) then
+      raise exception 'the time of a status moves with the status' using errcode = '42501';
     end if;
   end if;
 
