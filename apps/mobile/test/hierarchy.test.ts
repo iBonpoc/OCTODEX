@@ -34,6 +34,8 @@ describe("navigation hierarchy: back = one level up", () => {
     const job = db.jobs[0]!;
     const cust = db.properties.find((p) => p.id === job.propertyId)!.customerId;
     expect(navContext(`/client/${cust}`, {}, db, "director").up?.href).toBe("/clients");
+    // wave 4: a row's list of the client goes up to the client, not to Clients
+    expect(navContext(`/client/${cust}`, { id: cust, s: "jobs" }, db, "director").up?.href).toBe(`/client/${cust}`);
     expect(navContext(`/job/${job.id}`, {}, db, "director").up?.href).toBe(`/client/${cust}`);
     expect(navContext("/job/schedule", { jobId: job.id }, db, "director").up?.href).toBe(`/job/${job.id}`);
     expect(navContext("/client/edit", { id: cust }, db, "director").up?.href).toBe(`/client/${cust}`);

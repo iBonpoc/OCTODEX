@@ -87,3 +87,39 @@ export function owedByClient(invoices: readonly OwedInvoice[]): OwedRow[] {
   }
   return [...m.values()].sort((a, b) => b.owesCents - a.owesCents || (a.customerId < b.customerId ? -1 : 1));
 }
+
+export interface FunnelEstimate {
+  /** sent in the period */
+  sent: boolean;
+  /** signed (approved) in the period */
+  signed: boolean;
+  /** Estimate value — what the client chose (PRD 14 §7), counted only when signed */
+  cents: number;
+}
+export interface SalesFunnel {
+  sent: number;
+  signed: number;
+  signedCents: number;
+  /** signed / sent, whole %, half up; 0 when nothing was sent */
+  signedPct: number;
+}
+/** «Продажи»: estimates sent, signed, the signed value, the share (S14) */
+export function salesFunnel(xs: readonly FunnelEstimate[]): SalesFunnel {
+  const sent = xs.filter((x) => x.sent).length;
+  const signedList = xs.filter((x) => x.signed);
+  const signed = signedList.length;
+  return {
+    sent,
+    signed,
+    signedCents: sumCents(signedList.map((x) => x.cents)),
+    signedPct: sent > 0 ? Math.floor((signed * 200 + sent) / (2 * sent)) : 0,
+  };
+}
+
+/** cents → "1840.50" for CSV (a spreadsheet reads a plain decimal; no "$", no thousands separators) */
+export function centsToDecimal(c: number): string {
+  assertCents(c);
+  const sign = c < 0 ? "-" : "";
+  const a = Math.abs(c);
+  return `${sign}${Math.floor(a / 100)}.${String(a % 100).padStart(2, "0")}`;
+}

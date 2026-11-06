@@ -12,6 +12,11 @@ export interface CustomerPatch {
   lastName?: string;
   companyName?: string;
   billing?: BillingAddress | null;
+  /** wave 4: where the client came from, changed in the client form */
+  sourceId?: string;
+  /** wave П-2a: no sales tax on the client's new documents, and why (certificate number) */
+  taxExempt?: boolean;
+  taxExemptNote?: string;
 }
 
 const clean = (v: string | undefined) => v?.trim() || undefined;
@@ -21,6 +26,9 @@ export function applyCustomerPatch(c: Customer, patch: CustomerPatch): Customer 
   if (patch.name !== undefined) next.name = patch.name;
   if (patch.phone !== undefined) next.phone = patch.phone;
   if (patch.email !== undefined) next.email = patch.email;
+  if (patch.sourceId) next.sourceId = patch.sourceId;
+  if (patch.taxExempt !== undefined) next.taxExempt = patch.taxExempt || undefined;
+  if (patch.taxExemptNote !== undefined) next.taxExemptNote = clean(patch.taxExemptNote);
   if (patch.firstName !== undefined) next.firstName = clean(patch.firstName);
   if (patch.lastName !== undefined) next.lastName = clean(patch.lastName);
   if (patch.companyName !== undefined) next.companyName = clean(patch.companyName);

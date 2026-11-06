@@ -52,6 +52,13 @@ describe("ops: customer.update (name parts, address for invoices)", () => {
       billing_address_line1: null, billing_address_line2: null, billing_address_unit: null, billing_address_city: null, billing_address_state: null, billing_address_zip: null,
     });
   });
+  it("wave 4: the source of the client goes to lead_source_id (cloud uuid only)", async () => {
+    await applyOp({ k: "customer.update", id: "c1", sourceId: "7d3f1c2a-1b2c-4d5e-8f90-123456789abc" }, "co", "u");
+    expect(calls).toEqual([{ table: "customers", how: "update", id: "c1", row: { lead_source_id: "7d3f1c2a-1b2c-4d5e-8f90-123456789abc" } }]);
+    calls.splice(0);
+    await applyOp({ k: "customer.update", id: "c1", sourceId: "src-referral" }, "co", "u");
+    expect(calls).toEqual([]);
+  });
   it("an op queued by an older build (name only) writes only the name", async () => {
     await applyOp({ k: "customer.update", id: "c1", name: "Mary Lee" }, "co", "u");
     expect(calls).toEqual([{ table: "customers", how: "update", id: "c1", row: { display_name: "Mary Lee" } }]);

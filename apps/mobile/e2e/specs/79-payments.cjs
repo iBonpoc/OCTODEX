@@ -43,7 +43,9 @@ exports.run = async (h) => {
   await cards.first().click();
   await p.waitForTimeout(600);
   h.expect(/\/receipt\//.test(p.url()), `card opens the receipt (${p.url()})`);
-  await h.click("Счёт");
+  // the receipt links to its invoice through «Связано» (PR-3)
+  await p.getByRole("button", { name: /^Связано: Счёт / }).locator("visible=true").first().click();
+  await p.waitForTimeout(600);
   h.expect(/\/invoice\//.test(p.url()), `receipt opens its invoice (${p.url()})`);
 
   // sales and tech: closed
