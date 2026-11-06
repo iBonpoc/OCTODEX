@@ -1,4 +1,3 @@
-import { findJob } from "@/data/jobs";
 import { useRef, useState } from "react";
 import { isOpenVisit } from "@/features/schedule";
 import { Linking, View } from "react-native";
@@ -190,7 +189,7 @@ export default function ClientScreen() {
             {nextVisit ? (
               <ItemCard
                 title={t("client.nextVisit")}
-                subtitle={[day(nextVisit.start), findJob(db, nextVisit.jobId)?.title].filter(Boolean).join(" · ")}
+                subtitle={[day(nextVisit.start), jobs.find((j) => j.id === nextVisit.jobId)?.title].filter(Boolean).join(" · ")}
                 left={<Icon name="route" />}
                 onPress={() => router.push(`/visit/${nextVisit.id}`)}
               />
@@ -275,7 +274,7 @@ export default function ClientScreen() {
                 <ItemCard
                   key={inv.id}
                   title={`${money(inv.totalCents)}${inv.number ? ` · ${inv.number}` : ""}`}
-                  subtitle={[inv.title, findJob(db, inv.jobId)?.title].filter(Boolean).join(" · ")}
+                  subtitle={[inv.title, db.jobs.find((j) => j.id === inv.jobId)?.title].filter(Boolean).join(" · ")}
                   right={<StatusChip status={ic.s} label={t(ic.l)} />}
                   onPress={() => router.push(`/invoice/${inv.id}`)}
                 />
