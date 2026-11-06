@@ -16,6 +16,7 @@ import { openEmail, openSms } from "@/features/sendEstimate";
 import { invoiceBalance } from "@/features/invoiceStatus";
 import { reminderMessage, remindersOf } from "@/features/invoiceRemind";
 import { DOC_LANG_LABEL } from "@/i18n/translate";
+import { RelatedBlock } from "@/features/RelatedBlock";
 import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -67,6 +68,8 @@ export default function InvoiceScreen() {
 
   return (
     <Screen title={`${t("inv.title")} ${inv.number ?? ""}`.trim()} back={back} subtitle={cust?.name}>
+      {/* «Связано» (13 §2.7, 15-flows §2): job, estimate, client — the parents of the invoice */}
+      <RelatedBlock of={{ type: "invoice", id: inv.id }} />
       <Card status={chip.s}>
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="heading" style={{ flex: 1 }}>
