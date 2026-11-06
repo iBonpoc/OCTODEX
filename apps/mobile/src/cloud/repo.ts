@@ -45,14 +45,44 @@ async function q<T = Row>(p: PromiseLike<{ data: unknown; error: { message: stri
   return (data ?? []) as T[];
 }
 
+/** PostgREST answers at most max_rows rows (1000, supabase/config.toml default) per request. */
+export const PAGE = 1000;
+type Order = { col: string; asc?: boolean };
+type Paged = {
+  order(col: string, o: { ascending: boolean }): Paged;
+  range(from: number, to: number): PromiseLike<{ data: unknown; error: { message: string } | null }>;
+};
+/**
+ * Every row of a query, page by page (range of PAGE rows) until a short page, at most `cap` rows.
+ * Each page has the same stable order (a unique key), so no row is skipped or read twice between pages.
+ * An error on any page fails the whole read, so the callers' fallbacks (old columns) still work.
+ */
+export async function pages<T = Row>(build: () => unknown, order: Order[], cap = Infinity): Promise<T[]> {
+  const out: T[] = [];
+  for (let from = 0; from < cap; from += PAGE) {
+    const to = Math.min(from + PAGE, cap) - 1;
+    let b = build() as Paged;
+    for (const o of order) b = b.order(o.col, { ascending: o.asc ?? true });
+    const page = await q<T>(b.range(from, to));
+    out.push(...page);
+    if (page.length < to - from + 1) break;
+  }
+  return out;
+}
+const byId: Order[] = [{ col: "id" }];
+const key = (...cols: string[]): Order[] => cols.map((col) => ({ col }));
+
 const activityRowsOf = (companyId: string, cols: string) =>
-  q<Row>(supabase.from("activities").select(cols).eq("company_id", companyId).is("deleted_at", null).order("at", { ascending: false }).limit(2000));
+  pages<Row>(() => supabase.from("activities").select(cols).eq("company_id", companyId).is("deleted_at", null), [{ col: "at", asc: false }, { col: "id", asc: false }], 2000);
 
 export async function loadCompanyDB(companyId: string, userId: string): Promise<DB> {
-  const live = <T,>(table: string, cols = "*") => q<T>(supabase.from(table).select(cols).eq("company_id", companyId).is("deleted_at", null));
+  // every read of the company goes page by page (a company can have more than 1000 clients, contacts, …)
+  const live = <T,>(table: string, cols = "*", order = byId) =>
+    pages<T>(() => supabase.from(table).select(cols).eq("company_id", companyId).is("deleted_at", null), order);
+  const every = <T,>(table: string, cols: string, order = byId) => pages<T>(() => supabase.from(table).select(cols).eq("company_id", companyId), order);
   const [mems, sources, customers, contacts, properties, jobs, visits, assignees, leads, estimates, versions, options, lines, approvals, invoices, payments, files, expenses, catalogRows, lineCosts, notifications] =
     await Promise.all([
-      q<Row>(supabase.from("memberships").select("user_id, role, status, can_sign_contracts, title, his_registration_number, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).in("status", ["active", "disabled"]).is("deleted_at", null)),
+      pages<Row>(() => supabase.from("memberships").select("user_id, role, status, can_sign_contracts, title, his_registration_number, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).in("status", ["active", "disabled"]).is("deleted_at", null), byId),
       live<Row>("lead_sources", "id, name, kind, phone, email, customer_id, note, is_active, is_system, position"),
       live<Row>("customers"),
       live<Row>("contacts", "id, customer_id, lead_id, name, role, phone, email, is_primary, preferred_language, created_at"),
@@ -65,7 +95,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs"),
       live<Row>("estimate_options", "id, version_id, name"),
       live<Row>("estimate_line_items", "id, option_id, name, quantity, line_total_cents, is_optional, client_visible, position"),
-      q<Row>(supabase.from("estimate_approvals").select("estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method").eq("company_id", companyId)),
+      every<Row>("estimate_approvals", "estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method"),
       live<Row>("invoices"),
       live<Row>("payments"),
       // wave П-1: customer_id is new — on a database without the migration read the old columns (preview of a PR)
@@ -73,19 +103,19 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("expenses"),
       live<Row>("catalog_items"),
       // Costs are visible only to owner/admin/office: for others the query returns nothing.
-      q<Row>(supabase.from("estimate_line_costs").select("line_item_id, unit_cost_cents").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
+      live<Row>("estimate_line_costs", "line_item_id, unit_cost_cents", key("line_item_id")).catch(() => [] as Row[]),
       q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
     ]);
   // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
-  const signatureRows = await q<Row>(supabase.from("member_signatures").select("id, user_id, svg, name, title, created_at, revoked_at").eq("company_id", companyId)).catch(() => [] as Row[]);
+  const signatureRows = await every<Row>("member_signatures", "id, user_id, svg, name, title, created_at, revoked_at").catch(() => [] as Row[]);
   // wave П-1: the company's job types (no deleted_at, archived ones stay); empty before the migration
-  const jobTypeRows = await q<Row>(supabase.from("job_types").select("id, seed_key, name, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]);
+  const jobTypeRows = await every<Row>("job_types", "id, seed_key, name, position, archived_at").catch(() => [] as Row[]);
   // wave П-2a: tags and own lines of jobs (RLS: what the job's reader sees); empty before the migration
-  const jobTagRows = await q<Row>(supabase.from("job_tags").select("job_id, tag_id").eq("company_id", companyId)).catch(() => [] as Row[]);
+  const jobTagRows = await every<Row>("job_tags", "job_id, tag_id", key("job_id", "tag_id")).catch(() => [] as Row[]);
   // wave П-2b: events and days off (RLS: the office all, a tech his own and the company's), own fields; empty before the migration
   const [eventRows, fieldRows, valueRows] = await Promise.all([
     live<Row>("calendar_events", "id, kind, user_id, title, description, starts_at, ends_at, all_day").catch(() => [] as Row[]),
-    q<Row>(supabase.from("custom_fields").select("id, entity, label, type, options, group_name, searchable, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]),
+    every<Row>("custom_fields", "id, entity, label, type, options, group_name, searchable, position, archived_at").catch(() => [] as Row[]),
     live<Row>("custom_field_values", "id, field_id, entity_id, value").catch(() => [] as Row[]),
   ]);
   const calendarEvents: CalendarEvent[] = eventRows
@@ -114,7 +144,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     live<Row>("company_contacts"),
     live<Row>("notes"),
     // lead cost: owner/admin/office only — others get nothing
-    live<Row>("lead_costs", "lead_id, cost_cents").catch(() => [] as Row[]),
+    live<Row>("lead_costs", "lead_id, cost_cents", key("lead_id")).catch(() => [] as Row[]),
     live<Row>("lead_contacts", "id, lead_id, name, role, phone, email").catch(() => [] as Row[]),
     // wave П-2b: the time of a task is new — without the migration the old columns are read
     live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at, starts_at, ends_at, all_day, description")
@@ -126,13 +156,13 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       .catch(() => [] as Row[]),
     // clients C1 (tags, several phones / emails per person); empty before the migration is applied
     live<Row>("tags", "id, name, is_active, is_system, position").catch(() => [] as Row[]),
-    q<Row>(supabase.from("customer_tags").select("customer_id, tag_id").eq("company_id", companyId)).catch(() => [] as Row[]),
+    every<Row>("customer_tags", "customer_id, tag_id", key("customer_id", "tag_id")).catch(() => [] as Row[]),
     live<Row>("contact_phones", "contact_id, number, label, is_primary, position").catch(() => [] as Row[]),
     live<Row>("contact_emails", "contact_id, address, is_primary, position").catch(() => [] as Row[]),
     // directions of the business (docs/specs/11-trade.md): no deleted_at, archived ones stay; empty before the migration
-    q<Row>(supabase.from("service_categories").select("id, seed_key, name, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]),
+    every<Row>("service_categories", "id, seed_key, name, position, archived_at").catch(() => [] as Row[]),
     // C2: gate codes — RLS gives the office all of them, a tech only on the visit days (app.can_see_gate_code)
-    q<Row>(supabase.from("property_secrets").select("property_id, gate_code").eq("company_id", companyId).is("deleted_at", null)).catch(() => [] as Row[]),
+    live<Row>("property_secrets", "property_id, gate_code", key("property_id")).catch(() => [] as Row[]),
   ]);
   const people = peopleByCustomer(contacts, phoneRows, emailRows);
   const gateOf = new Map(gateRows.filter((r) => r.gate_code).map((r) => [s(r.property_id), s(r.gate_code)]));
@@ -156,7 +186,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
 
   const sourceName = new Map(sources.map((r) => [s(r.id), s(r.name)]));
   // wave 7-2 (S21): pending invitations (RLS shows them to the owner and admins only); a failure here never breaks the load
-  const invites = await q<Row>(supabase.from("invitations").select("id, email, name, role, expires_at").eq("company_id", companyId).eq("status", "pending")).catch(() => [] as Row[]);
+  const invites = await pages<Row>(() => supabase.from("invitations").select("id, email, name, role, expires_at").eq("company_id", companyId).eq("status", "pending"), byId).catch(() => [] as Row[]);
   const all: Member[] = mems.map((m) => {
     const u = (Array.isArray(m.users) ? m.users[0] : m.users) as Row | null;
     const name = s(u?.full_name) || s(u?.email) || "—";

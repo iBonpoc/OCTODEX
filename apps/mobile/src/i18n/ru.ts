@@ -1819,7 +1819,6 @@ export const ru = {
   "client.import.run": "Импортировать ({n})",
   "client.import.offline": "Нужна сеть: дубли сверяем со свежим списком клиентов",
   "client.import.doneAll": "Добавлено {n}",
-  "client.import.manyClients": "Клиентов больше 1000 — телефон может знать не всех, часть дублей может пройти. Проверьте список после импорта.",
   "client.import.truncated": "Прочитаны первые {n} строк файла",
   "client.import.done": "Добавлено {n}, пропущено {m}",
   "client.import.f.firstName": "Имя",

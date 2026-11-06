@@ -1820,7 +1820,6 @@ export const en: Dict = {
   "client.import.run": "Import ({n})",
   "client.import.offline": "Needs the network: duplicates are checked against the latest client list",
   "client.import.doneAll": "Added {n}",
-  "client.import.manyClients": "More than 1,000 clients — the phone may not know them all, some duplicates may get through. Check the list after the import.",
   "client.import.truncated": "Only the first {n} rows of the file were read",
   "client.import.done": "Added {n}, skipped {m}",
   "client.import.f.firstName": "First name",
