@@ -8,7 +8,7 @@
 import { companyToday } from "@/features/zone";
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { BillingAddress, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
+import type { BillingAddress, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -139,7 +139,7 @@ export type Op =
       name: string; phone: string; email?: string; sourceId: string; address: string; city: string;
     }
   // wave П-1: name parts and the address for invoices (billing null = same as the property)
-  | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string; firstName?: string; lastName?: string; companyName?: string; billing?: BillingAddress | null }
+  | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string; firstName?: string; lastName?: string; companyName?: string; billing?: BillingAddress | null; taxExempt?: boolean; taxExemptNote?: string }
   | { k: "customer.people"; id: string; people: Person[] }
   | { k: "lead.people"; id: string; people: Person[] }
   | { k: "customer.tags"; id: string; tagIds: string[] }
@@ -148,7 +148,11 @@ export type Op =
   | { k: "serviceCategory.save"; category: ServiceCategory; isNew: boolean }
   | { k: "job.category"; id: string; serviceCategoryId: string | null }
   // wave П-1 (13 §5): description and type of a job; the company's list of job types
-  | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null }
+  | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null; taxEnabled?: boolean; taxRateBps?: number }
+  // wave П-2a: tags and own lines of a job (the server counts line and job totals)
+  | { k: "job.tags"; id: string; tagIds: string[] }
+  | { k: "jobLine.save"; line: Omit<JobLineItem, "totalCents">; isNew: boolean }
+  | { k: "jobLine.remove"; id: string }
   | { k: "jobType.save"; jobType: JobType; isNew: boolean }
   | { k: "estimate.category"; id: string; serviceCategoryId: string | null }
   | { k: "property.update"; id: string; address?: string; city?: string }
@@ -255,12 +259,14 @@ async function uploadPhoto(companyId: string, fileId: string, uri: string) {
 }
 
 /** customer.update → the customers columns it changes (wave П-1: first / last / company name, billing_address_*) */
-export function customerCols(op: Extract<Op, { k: "customer.update" }>): Record<string, string | null> {
-  const cols: Record<string, string | null> = {};
+export function customerCols(op: Extract<Op, { k: "customer.update" }>): Record<string, string | boolean | null> {
+  const cols: Record<string, string | boolean | null> = {};
   if (op.name !== undefined) cols.display_name = op.name;
   if (op.firstName !== undefined) cols.first_name = op.firstName.trim() || null;
   if (op.lastName !== undefined) cols.last_name = op.lastName.trim() || null;
   if (op.companyName !== undefined) cols.company_name = op.companyName.trim() || null;
+  if (op.taxExempt !== undefined) cols.tax_exempt = op.taxExempt;
+  if (op.taxExemptNote !== undefined) cols.tax_exempt_note = op.taxExemptNote.trim() || null;
   if (op.billing !== undefined) {
     const b = op.billing;
     Object.assign(cols, {
@@ -559,8 +565,25 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const cols: Record<string, string | null> = {};
       if (op.description !== undefined) cols.description = op.description?.trim() || null;
       if (op.jobTypeId !== undefined) cols.job_type_id = op.jobTypeId;
+      const money: Record<string, boolean | number> = {};
+      if (op.taxEnabled !== undefined) money.tax_enabled = op.taxEnabled;
+      if (op.taxRateBps !== undefined) money.tax_rate_bps = op.taxRateBps;
+      if (Object.keys(money).length) return run(supabase.from("jobs").update({ ...cols, ...money }).eq("id", op.id));
       return Object.keys(cols).length ? run(supabase.from("jobs").update(cols).eq("id", op.id)) : undefined;
     }
+    case "job.tags":
+      return run(supabase.rpc("set_job_tags", { p_job_id: op.id, p_tag_ids: op.tagIds }));
+    case "jobLine.save": {
+      // a line stays on its job: only a new line names it (column grants, migration 20261106020000)
+      const l = op.line;
+      const cols = {
+        position: l.position, name: l.name.trim() || "—", description: l.description?.trim() || null,
+        catalog_item_id: l.catalogItemId ?? null, quantity: l.quantity, unit_price_cents: l.unitPriceCents, taxable: l.taxable,
+      };
+      return run(op.isNew ? ins("job_line_items", { id: l.id, company_id: c, job_id: l.jobId, ...cols }) : supabase.from("job_line_items").update(cols).eq("id", l.id));
+    }
+    case "jobLine.remove":
+      return run(supabase.from("job_line_items").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "jobType.save": {
       // seed_key is set once; afterwards only name, position and archive change (column grants, migration 20261106010000)
       const x = op.jobType;

@@ -5,7 +5,7 @@
 import { companyFromDb } from "./companyMap";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -76,6 +76,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const signatureRows = await q<Row>(supabase.from("member_signatures").select("id, user_id, svg, name, title, created_at, revoked_at").eq("company_id", companyId)).catch(() => [] as Row[]);
   // wave П-1: the company's job types (no deleted_at, archived ones stay); empty before the migration
   const jobTypeRows = await q<Row>(supabase.from("job_types").select("id, seed_key, name, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]);
+  // wave П-2a: tags and own lines of jobs (RLS: what the job's reader sees); empty before the migration
+  const jobTagRows = await q<Row>(supabase.from("job_tags").select("job_id, tag_id").eq("company_id", companyId)).catch(() => [] as Row[]);
+  const jobLineRows = await live<Row>("job_line_items", "id, job_id, position, name, description, catalog_item_id, quantity, unit_price_cents, taxable, line_total_cents").catch(() => [] as Row[]);
   const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows, tagRows, customerTagRows, phoneRows, emailRows, catRows, gateRows] = await Promise.all([
     q<Row>(supabase.from("companies").select("*").eq("id", companyId)),
     // EIN: owner/admin only — others get nothing
@@ -319,6 +322,15 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     archivedAt: (l.archived_at as string | null) ?? undefined,
   }));
 
+  const tagsOfJob = new Map<string, string[]>();
+  for (const r of jobTagRows) tagsOfJob.set(s(r.job_id), [...(tagsOfJob.get(s(r.job_id)) ?? []), s(r.tag_id)]);
+  const jobLines: JobLineItem[] = jobLineRows
+    .map((r) => ({
+      id: s(r.id), jobId: s(r.job_id), position: n(r.position), name: s(r.name), description: (r.description as string | null) ?? undefined,
+      catalogItemId: (r.catalog_item_id as string | null) ?? undefined, quantity: s(Number(r.quantity)), unitPriceCents: n(r.unit_price_cents),
+      taxable: !!r.taxable, totalCents: n(r.line_total_cents),
+    }))
+    .sort((a, b) => a.jobId.localeCompare(b.jobId) || a.position - b.position);
   const toJob = (j: Row): Job => ({
     id: s(j.id),
     propertyId: s(j.property_id),
@@ -329,6 +341,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     customerId: (j.customer_id as string | null) ?? undefined,
     description: (j.description as string | null) ?? undefined,
     jobTypeId: (j.job_type_id as string | null) ?? undefined,
+    tagIds: tagsOfJob.get(s(j.id)) ?? [],
+    taxEnabled: j.tax_enabled == null ? undefined : !!j.tax_enabled,
+    taxRateBps: j.tax_rate_bps == null ? undefined : n(j.tax_rate_bps),
     status: jobStatus[s(j.status)] ?? "scheduled",
     amountCents: n(j.contract_total_cents),
     estimateId: (j.estimate_id as string | null) ?? undefined,
@@ -406,6 +421,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         lastName: (c.last_name as string | null) ?? undefined,
         companyName: (c.company_name as string | null) ?? undefined,
         billing: billingOf(c),
+        taxExempt: c.tax_exempt == null ? undefined : !!c.tax_exempt,
+        taxExemptNote: (c.tax_exempt_note as string | null) ?? undefined,
       };
     }),
     serviceCategories: catRows
@@ -433,6 +450,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     cancelledJobs,
     jobTypes,
     files: fileItems,
+    jobLines,
     visits: mappedVisits,
     cancelledVisits,
     leads: mappedLeads,
