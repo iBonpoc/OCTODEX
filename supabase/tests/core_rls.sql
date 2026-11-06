@@ -4608,5 +4608,40 @@ select tst.ok(not has_function_privilege('anon', 'app.client_doc(jsonb)', 'execu
           and not has_function_privilege('anon', 'app.jsonb_scalars(jsonb, text[])', 'execute')
           and not has_function_privilege('authenticated', 'app.jsonb_scalars(jsonb, text[])', 'execute'), 'nobody calls the cutters directly');
 \echo 'T60 our costs never reach the client page ok'
+-- ---------------------------------------------------------------- T61: foreign keys have indexes, none is invalid (security #2, 19 §7.3, audit item 11)
+:as_super
+do $$
+declare missing text; bad text;
+begin
+  select string_agg(x.tbl || '(' || x.cols || ')', ', ' order by 1) into missing
+    from (select c.conrelid::regclass::text tbl, c.conrelid, c.conkey,
+                 (select string_agg(a.attname, ',' order by k.ord) from unnest(c.conkey) with ordinality k(n, ord)
+                    join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.n) cols
+            from pg_constraint c join pg_class t on t.oid = c.conrelid join pg_namespace n on n.oid = t.relnamespace
+           where c.contype = 'f' and n.nspname = 'public') x
+   where not exists (select 1 from pg_index i where i.indrelid = x.conrelid and i.indisvalid
+                        and (i.indkey::int2[])[0:cardinality(x.conkey) - 1] @> x.conkey
+                        and (i.indkey::int2[])[0:cardinality(x.conkey) - 1] <@ x.conkey)
+     and (x.tbl, x.cols) not in (
+       -- the parent row is one per user / company and tiny: a scan costs nothing
+       ('users', 'last_active_company_id'), ('companies', 'lead_default_assignee_id'),
+       -- the parent is never deleted and its id never changes (soft delete, append-only or a guard trigger)
+       ('lead_sources', 'company_id,customer_id'), ('customers', 'company_id,lead_source_id'),
+       ('customers', 'company_id,merged_into_customer_id'), ('customers', 'company_id,primary_contact_id'),
+       ('leads', 'company_id,duplicate_of_lead_id'), ('leads', 'company_id,referred_from_visit_id'),
+       ('jobs', 'company_id,attributed_source_id'), ('job_line_items', 'company_id,catalog_item_id'),
+       ('estimate_approvals', 'company_id,member_signature_id'), ('service_categories', 'company_id,parent_id'),
+       -- estimate versions: locked versions are never deleted (t40); one current / sent pointer per estimate
+       ('estimates', 'company_id,current_version_id'), ('estimates', 'company_id,sent_version_id'),
+       ('estimate_versions', 'company_id,copied_from_version_id'), ('jobs', 'company_id,approved_version_id'),
+       ('invoices', 'company_id,source_estimate_version_id'));
+  perform tst.ok(missing is null, 'every foreign key has an index or a reason; missing: ' || coalesce(missing, '-'));
+  select string_agg(i.indexrelid::regclass::text, ', ') into bad from pg_index i
+    join pg_class c on c.oid = i.indrelid join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname not in ('pg_catalog', 'information_schema') and not i.indisvalid;
+  perform tst.ok(bad is null, 'no invalid index (a failed concurrent build): ' || coalesce(bad, '-'));
+  perform tst.ok(exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'tasks_assignee_id_fk_idx'), 'the audit''s examples are indexed (tasks.assignee_id)');
+end $$;
+\echo 'T61 foreign keys have indexes ok'
 
 \echo 'ALL TESTS PASSED'
