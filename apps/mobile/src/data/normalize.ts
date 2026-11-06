@@ -6,10 +6,13 @@
  *   - leads and clients that stored the source by name ("Thumbtack") get its id
  *   - demo data gets the standard tags; demo clients saved by an older build get their number, tags and people
  *     from the seed (same id), other demo clients the next CLT number (a cloud client is read through peopleOf)
+ *   - wave П-1: cancelledJobs, jobTypes, files default to empty (demo: the standard job types); a job without
+ *     customerId takes the client of its property; demo jobs get their JOB number from the seed or the next one
  */
 import { fromLegacyTrades } from "@/features/serviceCategories";
-import { makeSeed, SEED_SERVICE_CATEGORIES, SEED_SOURCES, SEED_TAGS } from "./seed";
-import type { Customer, DB, Visit } from "./types";
+import { nextJobNumber } from "./jobs";
+import { makeSeed, SEED_JOB_TYPES, SEED_SERVICE_CATEGORIES, SEED_SOURCES, SEED_TAGS } from "./seed";
+import type { Customer, DB, Job, Property, Visit } from "./types";
 
 type Legacy = { source?: string; sourceId?: string };
 
@@ -29,7 +32,10 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     tags: Array.isArray(d.tags) && d.tags.length ? d.tags : mode === "demo" ? SEED_TAGS : [],
     serviceCategories: serviceCategoriesOf(d, mode),
     cancelledVisits: Array.isArray(d.cancelledVisits) ? d.cancelledVisits : [],
-    ...withoutLateFlag(inspectionsWithoutJobs(d)),
+    cancelledJobs: Array.isArray(d.cancelledJobs) ? d.cancelledJobs : [],
+    jobTypes: Array.isArray(d.jobTypes) ? d.jobTypes : mode === "demo" ? SEED_JOB_TYPES : [],
+    files: Array.isArray(d.files) ? d.files : [],
+    ...withJobFields(withoutLateFlag(inspectionsWithoutJobs(d)), d.properties ?? [], d.cancelledJobs, mode),
     tasks: Array.isArray(d.tasks) ? d.tasks : [],
     activities: Array.isArray(d.activities) ? d.activities : [],
     leads: (d.leads ?? []).map((l) => (l.sourceId ? l : { ...l, sourceId: sourceIdOf(l as Legacy) })),
@@ -39,6 +45,27 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
       mode,
     ),
   };
+}
+
+/** wave П-1: an older phone's job has no customerId (→ the client of its property) and, in the demo, no JOB number
+ *  (→ the seed's number for the same id, else the next free one). A cloud job's number comes only from the server. */
+function withJobFields(x: Pick<DB, "jobs" | "visits">, properties: Property[], cancelledJobs: Job[] | undefined, mode: "demo" | "cloud"): Pick<DB, "jobs" | "visits"> {
+  const ownerOf = new Map(properties.map((p) => [p.id, p.customerId]));
+  let jobs = x.jobs.map((j) => (j.customerId || !ownerOf.get(j.propertyId) ? j : { ...j, customerId: ownerOf.get(j.propertyId) }));
+  if (mode === "demo" && jobs.some((j) => !j.number)) {
+    const seed = new Map(makeSeed().jobs.map((j) => [j.id, j.number]));
+    const taken = new Set(jobs.map((j) => j.number).filter(Boolean));
+    jobs = jobs.map((j) => {
+      if (j.number) return j;
+      const fromSeed = seed.get(j.id);
+      return fromSeed && !taken.has(fromSeed) ? (taken.add(fromSeed), { ...j, number: fromSeed }) : j;
+    });
+    for (let i = 0; i < jobs.length; i++) {
+      if (jobs[i]!.number) continue;
+      jobs[i] = { ...jobs[i]!, number: nextJobNumber({ jobs, cancelledJobs }) };
+    }
+  }
+  return { ...x, jobs };
 }
 
 /** П3c (docs/specs/03): «late» is computed now; the old demo flag `late` is dropped from saved visits. */

@@ -10,6 +10,7 @@ import { addDays } from "./calendar";
 import { dayKeyIn, getZone } from "./zone";
 import type { DB, Estimate, EstimateApproval, EstimateCountersign, ID, Member } from "@/data/types";
 import { summarize } from "./estimateDoc";
+import { jobOfEstimate } from "@/data/jobs";
 
 /** The client's signature (S8). Repeating it changes nothing. */
 export function clientSigned(d: DB, id: ID, a: Omit<EstimateApproval, "at" | "totalCents" | "depositCents">, ids: { jobId: ID; invoiceId: ID }, now: string, token: string): DB {
@@ -59,6 +60,8 @@ export function companySigned(
   ids: { jobId: ID; invoiceId: ID },
   now: string,
   invoiceNumber?: (d: DB) => string | undefined,
+  /** wave П-1: the demo numbers a new job itself; in the cloud the server does (undefined until the sync) */
+  jobNumber?: (d: DB) => string | undefined,
 ): DB {
   const e = d.estimates.find((x) => x.id === id);
   if (!e || e.status !== "awaiting_countersign" || !canCountersign(d, by.userId)) return d;
@@ -67,7 +70,8 @@ export function companySigned(
   const a = e.approval;
   const total = a?.totalCents ?? e.totalCents;
   const deposit = a?.depositCents ?? e.depositCents ?? 0;
-  const existingJob = d.jobs.find((j) => j.estimateId === id);
+  // a cancelled job of this estimate counts too: one estimate never makes a second job (server: unique estimate_id)
+  const existingJob = jobOfEstimate(d, id);
   const jobId = existingJob?.id ?? ids.jobId;
   // like the server (app.execute_estimate): a job and the deposit invoice also for a quick estimate signed on site
   const needDeposit = deposit > 0 && !d.invoices.some((i) => i.jobId === jobId && i.kind === "deposit");
@@ -77,7 +81,7 @@ export function companySigned(
     ...d,
     estimates: d.estimates.map((x) => (x.id === id ? next : x)),
     // the job takes the estimate's direction of the business (docs/specs/11-trade.md S16; the server trigger does the same)
-    jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: total, estimateId: id, serviceCategoryId: e.serviceCategoryId }],
+    jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, number: jobNumber?.(d), customerId: e.customerId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: total, estimateId: id, serviceCategoryId: e.serviceCategoryId }],
     leads: e.leadId
       ? d.leads.map((l) => (l.id === e.leadId && !CLOSED_LEAD.includes(l.status) ? { ...l, status: "won", wonVia: "approval", lastActivityAt: now } : l))
       : d.leads,

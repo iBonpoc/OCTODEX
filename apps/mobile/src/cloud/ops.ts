@@ -8,7 +8,7 @@
 import { companyToday } from "@/features/zone";
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
+import type { BillingAddress, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -138,7 +138,8 @@ export type Op =
       customerId: string; contactId: string; propertyId: string;
       name: string; phone: string; email?: string; sourceId: string; address: string; city: string;
     }
-  | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string }
+  // wave П-1: name parts and the address for invoices (billing null = same as the property)
+  | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string; firstName?: string; lastName?: string; companyName?: string; billing?: BillingAddress | null }
   | { k: "customer.people"; id: string; people: Person[] }
   | { k: "lead.people"; id: string; people: Person[] }
   | { k: "customer.tags"; id: string; tagIds: string[] }
@@ -146,6 +147,9 @@ export type Op =
   | { k: "tag.save"; tag: Tag }
   | { k: "serviceCategory.save"; category: ServiceCategory; isNew: boolean }
   | { k: "job.category"; id: string; serviceCategoryId: string | null }
+  // wave П-1 (13 §5): description and type of a job; the company's list of job types
+  | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null }
+  | { k: "jobType.save"; jobType: JobType; isNew: boolean }
   | { k: "estimate.category"; id: string; serviceCategoryId: string | null }
   | { k: "property.update"; id: string; address?: string; city?: string }
   | { k: "property.save"; property: Omit<Property, "gateCode"> }
@@ -248,6 +252,23 @@ async function uploadPhoto(companyId: string, fileId: string, uri: string) {
   } catch {
     await supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId);
   }
+}
+
+/** customer.update → the customers columns it changes (wave П-1: first / last / company name, billing_address_*) */
+export function customerCols(op: Extract<Op, { k: "customer.update" }>): Record<string, string | null> {
+  const cols: Record<string, string | null> = {};
+  if (op.name !== undefined) cols.display_name = op.name;
+  if (op.firstName !== undefined) cols.first_name = op.firstName.trim() || null;
+  if (op.lastName !== undefined) cols.last_name = op.lastName.trim() || null;
+  if (op.companyName !== undefined) cols.company_name = op.companyName.trim() || null;
+  if (op.billing !== undefined) {
+    const b = op.billing;
+    Object.assign(cols, {
+      billing_address_line1: b?.line1.trim() || null, billing_address_line2: b?.line2?.trim() || null, billing_address_unit: b?.unit?.trim() || null,
+      billing_address_city: b?.city.trim() || null, billing_address_state: b?.state?.trim() || null, billing_address_zip: b?.zip?.trim() || null,
+    });
+  }
+  return cols;
 }
 
 export async function applyOp(op: Op, companyId: string, userId: string): Promise<void> {
@@ -505,7 +526,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "customer.create":
       return createCustomer(c, op, "active");
     case "customer.update": {
-      if (op.name !== undefined) await run(supabase.from("customers").update({ display_name: op.name }).eq("id", op.id));
+      const cols = customerCols(op);
+      if (Object.keys(cols).length) await run(supabase.from("customers").update(cols).eq("id", op.id));
       if (op.phone !== undefined || op.email !== undefined) {
         const patch: Record<string, string | null> = {};
         if (op.phone !== undefined) patch.phone = op.phone || null;
@@ -531,6 +553,22 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         op.isNew
           ? ins("service_categories", { id: x.id, company_id: c, seed_key: x.seedKey ?? null, ...common })
           : supabase.from("service_categories").update(common).eq("id", x.id),
+      );
+    }
+    case "job.update": {
+      const cols: Record<string, string | null> = {};
+      if (op.description !== undefined) cols.description = op.description?.trim() || null;
+      if (op.jobTypeId !== undefined) cols.job_type_id = op.jobTypeId;
+      return Object.keys(cols).length ? run(supabase.from("jobs").update(cols).eq("id", op.id)) : undefined;
+    }
+    case "jobType.save": {
+      // seed_key is set once; afterwards only name, position and archive change (column grants, migration 20261106010000)
+      const x = op.jobType;
+      const common = { name: x.name?.trim() || null, position: x.position, archived_at: x.archivedAt ?? null };
+      return run(
+        op.isNew
+          ? ins("job_types", { id: x.id, company_id: c, seed_key: x.seedKey ?? null, ...common })
+          : supabase.from("job_types").update(common).eq("id", x.id),
       );
     }
     case "job.category":

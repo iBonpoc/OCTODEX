@@ -16,7 +16,8 @@ export const leadStatusToDb: Record<LeadStatus, string> = {
   declined: "declined",
 };
 
-/** a job waiting for a date is draft in the database; an inspection is a visit, not a job (docs/specs/03 §4.4) */
+/** a job waiting for a date is draft in the database; an inspection is a visit, not a job (docs/specs/03 §4.4).
+ *  A cancelled job is not "done" (wave П-1, 13 §5): it has no app status and leaves the list of jobs (jobDbCancelled). */
 export const jobStatus: Record<string, JobStatus> = {
   draft: "unscheduled",
   scheduled: "scheduled",
@@ -24,8 +25,9 @@ export const jobStatus: Record<string, JobStatus> = {
   on_hold: "scheduled",
   completed: "done",
   closed: "done",
-  cancelled: "done",
 };
+/** database job statuses that take the job out of the list (cloud/repo.ts → DB.cancelledJobs), like cancelled visits */
+export const jobDbCancelled: readonly string[] = ["cancelled"];
 /** a visit in the database → the app's status (the step comes from the visit's own fields, cloud/repo.ts) */
 export const visitDbStatus: Record<string, "open" | "done" | "cancelled"> = {
   scheduled: "open",
