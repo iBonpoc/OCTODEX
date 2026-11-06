@@ -3656,6 +3656,21 @@ select tst.ok((select count(*) from public.jobs where id in ('e4600000-0000-4000
 \echo 'T46 wave 3c: «Работа выполнена» (S10) ok'
 
 -- ---------------------------------------------------------------- T44: wave 4b-1 — «do not service» (docs/specs/04 §12): nothing new for the client
+:as_super
+create function tst.dns(p_sql text, p_msg text) returns void language plpgsql as $$
+begin
+  begin
+    execute p_sql;
+  exception when others then
+    if sqlstate = 'P0001' and sqlerrm = 'customer_do_not_service' then
+      raise notice 'EXPECTED [%] % -> %', p_msg, sqlstate, sqlerrm;
+      return;
+    end if;
+    raise exception 'FAILED (expected customer_do_not_service, got % %): % — %', sqlstate, sqlerrm, p_msg, p_sql;
+  end;
+  raise exception 'FAILED (expected customer_do_not_service): % — %', p_msg, p_sql;
+end $$;
+grant execute on function tst.dns(text, text) to authenticated, anon;
 :as_owner_a
 do $$
 declare v_ver uuid; v_ver2 uuid; v_tok text;
@@ -3693,18 +3708,50 @@ begin
 end $$;
 -- nothing new: job, estimate, visit (by job, by lead, by property), move, send, a new link
 :as_office_a
-select tst.fails($q$insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 new job', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001')$q$, 'no new job for a «do not service» client');
-select tst.fails($q$insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001', 'T44 new')$q$, 'no new estimate');
-select tst.fails($q$insert into public.visits (company_id, job_id, kind) values ('ca000000-0000-0000-0000-000000000000', 'e4400000-0000-4000-8000-000000000001', 'service')$q$, 'no new visit on the open job');
-select tst.fails($q$insert into public.visits (company_id, lead_id, kind) values ('ca000000-0000-0000-0000-000000000000', '14400000-0000-4000-8000-000000000001', 'inspection')$q$, 'no inspection by the client''s lead');
-select tst.fails($q$insert into public.visits (company_id, lead_id, kind) values ('ca000000-0000-0000-0000-000000000000', '14400000-0000-4000-8000-000000000002', 'inspection')$q$, 'no inspection at the client''s property (lead without a client)');
+select tst.dns($q$insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 new job', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001')$q$, 'no new job for a «do not service» client');
+select tst.dns($q$insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001', 'T44 new')$q$, 'no new estimate');
+select tst.dns($q$insert into public.visits (company_id, job_id, kind) values ('ca000000-0000-0000-0000-000000000000', 'e4400000-0000-4000-8000-000000000001', 'service')$q$, 'no new visit on the open job');
+select tst.dns($q$insert into public.visits (company_id, lead_id, kind) values ('ca000000-0000-0000-0000-000000000000', '14400000-0000-4000-8000-000000000001', 'inspection')$q$, 'no inspection by the client''s lead');
+select tst.dns($q$insert into public.visits (company_id, lead_id, kind) values ('ca000000-0000-0000-0000-000000000000', '14400000-0000-4000-8000-000000000002', 'inspection')$q$, 'no inspection at the client''s property (lead without a client)');
 -- moving a job onto the client: a job's client never changes («Работы» t14, their test)
-select tst.fails($q$update public.estimates set customer_id = 'c4400000-0000-4000-8000-000000000001', property_id = 'd4400000-0000-4000-8000-000000000001' where id = '0e440000-0000-4000-8000-000000000003'$q$, 'an estimate is not moved onto the client');
-select tst.fails($q$select public.send_estimate('0e440000-0000-4000-8000-000000000002')$q$, 'the old draft is not sent');
-select tst.fails($q$select public.send_estimate('0e440000-0000-4000-8000-000000000001')$q$, 'the revoked estimate gets no new link');
+select tst.dns($q$update public.estimates set customer_id = 'c4400000-0000-4000-8000-000000000001', property_id = 'd4400000-0000-4000-8000-000000000001' where id = '0e440000-0000-4000-8000-000000000003'$q$, 'an estimate is not moved onto the client');
+select tst.dns($q$select public.send_estimate('0e440000-0000-4000-8000-000000000002')$q$, 'the old draft is not sent');
+select tst.dns($q$select public.send_estimate('0e440000-0000-4000-8000-000000000001')$q$, 'the revoked estimate gets no new link');
 :as_super
 do $$ begin
-  perform tst.fails($q$select tst.set_token('0e440000-0000-4000-8000-000000000001', 'tok_t44_new_0123456789ab')$q$, 'not even a definer gives the client a new link');
+  perform tst.dns($q$select tst.set_token('0e440000-0000-4000-8000-000000000001', 'tok_t44_new_0123456789ab')$q$, 'not even a definer gives the client a new link');
+end $$;
+-- security-check 06.11: no signature, no revival, no restore, the property owner counts, the open is editable
+:as_super
+do $$ begin
+  perform set_config('app.signing_estimate', '0e440000-0000-4000-8000-000000000001', true);
+  perform tst.dns($q$update public.estimates set status = 'awaiting_countersign' where id = '0e440000-0000-4000-8000-000000000001'$q$, 'no signature (on site / countersign) for the client, even from a signing function');
+  update public.estimates set status = 'expired' where id = '0e440000-0000-4000-8000-000000000001';
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+:as_office_a
+select tst.dns($q$update public.estimates set status = 'viewed' where id = '0e440000-0000-4000-8000-000000000001'$q$, 'an expired estimate is not revived into «viewed»');
+select tst.dns($q$insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 at their address', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000001')$q$, 'no job of another client at the client''s property');
+select tst.dns($q$insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000001', 'T44 at their address')$q$, 'no estimate of another client at the client''s property');
+:as_super
+update public.estimates set deleted_at = now() where id = '0e440000-0000-4000-8000-000000000002';
+select tst.dns($q$update public.estimates set deleted_at = null where id = '0e440000-0000-4000-8000-000000000002'$q$, 'a deleted estimate is not restored for the client (any path, the app cannot even see it)');
+:as_office_a
+-- the open job moves to another address of the same client: its visit follows, nothing refused
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d4400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', '44 Second St', 'Pasadena');
+update public.jobs set property_id = 'd4400000-0000-4000-8000-000000000003' where id = 'e4400000-0000-4000-8000-000000000001';
+select tst.ok((select property_id from public.visits where id = 'f4400000-0000-4000-8000-000000000001') = 'd4400000-0000-4000-8000-000000000003', 'the open job and its visit move to another address of the client');
+update public.visits set property_id = 'd4400000-0000-4000-8000-000000000001' where id = 'f4400000-0000-4000-8000-000000000001';
+-- another company does not learn that our client is marked: RLS answers, not the mark
+:as_owner_b
+do $$ begin
+  begin
+    insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 spy', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001');
+    raise exception 'FAILED: another company inserted a job';
+  exception when others then
+    perform tst.ok(sqlerrm <> 'customer_do_not_service' and sqlerrm not like 'FAILED%', 'another company gets RLS, not the mark: ' || sqlerrm);
+  end;
 end $$;
 -- the open stays: the visit moves on, the job is edited, the draft is edited
 :as_office_a
@@ -3716,7 +3763,7 @@ select tst.ok((select title from public.jobs where id = 'e4400000-0000-4000-8000
 select tst.ok((select status from public.estimates where id = '0e440000-0000-4000-8000-000000000002') = 'draft', 'the draft stays a draft');
 -- another client: everything works
 insert into public.visits (company_id, job_id, kind) values ('ca000000-0000-0000-0000-000000000000', 'e4400000-0000-4000-8000-000000000002', 'service');
-select tst.fails($q$update public.visits set job_id = 'e4400000-0000-4000-8000-000000000001' where id = (select id from public.visits where job_id = 'e4400000-0000-4000-8000-000000000002' limit 1)$q$, 'a visit is not moved onto the client''s job');
+select tst.dns($q$update public.visits set job_id = 'e4400000-0000-4000-8000-000000000001' where id = (select id from public.visits where job_id = 'e4400000-0000-4000-8000-000000000002' limit 1)$q$, 'a visit is not moved onto the client''s job');
 insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 job for the open client', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000002');
 -- back to active: work again
 :as_owner_a
