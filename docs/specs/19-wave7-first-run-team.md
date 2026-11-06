@@ -137,7 +137,7 @@
 - §1–§2 этой спецификации частично устарели после #193 — поправлю в этом же PR.
 
 ## 6. 7а-2: удаление аккаунта, S22 (этап 0 «Каркаса» №4, 06.11.2026)
-> Источники: `15-flows.md` §1.12, §4 в.1; `14-app-store.md` §2 п.1 (Apple 5.1.1(v): «удаление, а не пометка»); `docs/legal/01` §3.3, §8; `CHECKS.md` §7. Клетка карты: **S22**, Membership `→ deleted`. Миграция `20261106150000_delete_account.sql`, тест базы T50, e2e 97.
+> Источники: `15-flows.md` §1.12, §4 в.1; `14-app-store.md` §2 п.1 (Apple 5.1.1(v): «удаление, а не пометка»); `docs/legal/01` §3.3, §8; `CHECKS.md` §7. Клетка карты: **S22**, Membership `→ deleted`. Миграция `20261106200000_delete_account.sql`, тест базы T50, e2e 97.
 
 ### 6.1 Инспекция
 - **Членство.** `memberships.status` уже допускает `deleted`, есть `deleted_at`. Статус меняется только в definer-функциях с флагом `app.accepting_invite` (guard из 110000). `is_member` = только `active`: удалённый сразу теряет доступ к данным компании.
@@ -170,7 +170,7 @@
 - «Удалить компанию» с выгрузкой и сроками хранения — отдельная задача **7а-3**: нужно решение основателя и правового чата о сроках (`legal-research` §8.3). Для Apple достаточно, чтобы удаление можно было начать в приложении (5.1.1(v): «initiate deletion»). Путь через поддержку для крайнего случая это допускает. Пишу как риск.
 
 ### 6.3 Решение (при «да» на варианты А и «код + слово»)
-**Миграция `20261106150000_delete_account.sql`.**
+**Миграция `20261106200000_delete_account.sql`.**
 - **`public.delete_account(p_confirm text)`** — security definer, `search_path = ''`.
   - Проверки: вошёл (не anon, не `is_anonymous`); свежий вход ≤ 10 мин; `p_confirm` в (`DELETE`, `УДАЛИТЬ`, `ELIMINAR`).
   - Блокирует свои членства `for update`, затем всех owner этих компаний `for update`. Не последний активный owner ни одной компании — иначе ошибка с `company_id`.
@@ -181,7 +181,7 @@
     - `company_contacts.user_id` → null (контакт компании остаётся данными компании);
     - вызвать `app.erase_personal_rows(uid)` — точка расширения: 7б-2 добавит туда `user_locations`, а T50 проверит.
   - `public.users`: `full_name = 'Deleted user'`, `email = deleted+<id>@deleted.invalid`, `phone`, `avatar_file_id`, `last_active_company_id` → null, `deleted_at = now()`.
-  - `legal_acceptance`: строки остаются как доказательство согласия, `ip`, `ip_raw` → null (`app.erasing_user = on`, guard из 140000 это пропускает только для `update ip/ip_raw`; правлю guard в 150000). Срок хранения — вопрос основателю.
+  - `legal_acceptance`: строки остаются как доказательство согласия, `ip`, `ip_raw` → null (`app.erasing_user = on`, guard из 140000 это пропускает только для `update ip/ip_raw`; правлю guard в 200000). Срок хранения — вопрос основателю.
   - `auth`: email и телефон обезличены, `banned_until = infinity`, сессии, токены, identities и MFA удалены.
   - Возвращает `{deleted: true}`.
 - **`public.transfer_ownership(p_company_id, p_to_user)`** — только активный owner. Цель — активный admin этой компании (не он сам). Под флагом: цель → owner + `can_sign_contracts`, сам → admin. Блокировки — как в `set_member_status`.
@@ -283,7 +283,7 @@
 **Вне S22 (руководителю).** `public.expenses` без `company_id_immutable`. `expenses_update` по `created_by` позволяет перенести свой расход в чужую компанию (security 15) — отдельный маленький PR «Деньгам» / «Безопасности».
 
 **План PR (вместо одного).**
-- **7а-2a, база:** миграция 150000 (`delete_account`, `transfer_ownership`, `account_alive`, политики, guard), заглушка auth, T50 со сторожем, upgrade-тест; staging-проверка.
+- **7а-2a, база:** миграция 200000 (`delete_account`, `transfer_ownership`, `account_alive`, политики, guard), заглушка auth, T50 со сторожем, upgrade-тест; staging-проверка.
 - **7а-2b, приложение:** экран, «Удалённый пользователь» в repo/types/Команде/назначениях, кэш и очередь, unit, e2e 97.
 
 ### 6.7 Решение руководителя (06.11) и итоговая схема
@@ -301,6 +301,8 @@
 - Срок хранения — параметр `app.retention_years()` (по умолчанию 7), основатель скорректирует. Удаление по сроку — 7а-3.
 
 **Чужие и общие файлы — разрешено:** политики `tasks` и `expenses` (`account_alive`), `set_my_prefs` (после #203), `auth_stub.sql`, T48, `repo.ts` (deleted-членства через `pages()` из #207, после его влития), `types.ts` `Member.deleted`, `statusMap` Membership, `features/schedule.ts` (одна функция «назначен только удалённый = не назначен» + unit), `release.yml` (один шаг). `public.expenses` без `company_id_immutable` — отдельный чат «Безопасность базы» №2.
+
+**Порядок миграций (руководитель, 06.11):** 160000 («Безопасность» №2) → **200000 (7а-2a)** → 210000 («Работы» №4, 7б-2: переопределяет `app.erase_personal_rows`, добавляет `user_locations`).
 
 **PR.** 7а-2a — база, функция, шаг `release.yml`, T50, upgrade (после влития #206). 7а-2b — приложение, e2e 97 (после #207).
 
