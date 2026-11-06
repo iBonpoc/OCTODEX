@@ -19,6 +19,13 @@ grant select on public.member_prefs to authenticated;
 
 create policy member_prefs_select on public.member_prefs for select to authenticated
   using (user_id = (select auth.uid()) and app.is_member(company_id));
+-- the writes of set_my_prefs pass force RLS by these rules too, not only by the owner's bypass (not yet checked on staging,
+-- supabase/README): nobody else has insert / update rights on the table, so the rules open nothing to a client
+create policy member_prefs_insert_own on public.member_prefs for insert
+  with check (user_id = (select auth.uid()) and app.is_member(company_id));
+create policy member_prefs_update_own on public.member_prefs for update
+  using (user_id = (select auth.uid()) and app.is_member(company_id))
+  with check (user_id = (select auth.uid()) and app.is_member(company_id));
 
 create or replace function public.set_my_prefs(p_company_id uuid, p_plan_show_done boolean)
 returns void language plpgsql security definer set search_path = '' as $$
