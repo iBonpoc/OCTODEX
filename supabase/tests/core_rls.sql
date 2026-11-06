@@ -1314,7 +1314,7 @@ begin
     insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Window St', 'Pasadena', 1);
     insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Window job ' || k, v_c, v_p, 'draft'); update public.jobs set status = 'scheduled' where id = v_j;
     insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j,
-      case k when 15 then now() - interval '15 days' when 18 then now() - interval '10 days' else now() + interval '1 day' end);
+      case k when 15 then ((now() at time zone 'America/Los_Angeles')::date - 15 + time '12:00') at time zone 'America/Los_Angeles' when 18 then now() - interval '10 days' else now() + interval '1 day' end);
     insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
   end loop;
   perform public.cancel_visit('f2000000-0000-4000-8000-000000000016', 'client_cancelled');
@@ -1456,7 +1456,7 @@ begin
     insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' T26 St', 'Pasadena', 1);
     insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'T26 job ' || k, v_c, v_p, 'draft'); update public.jobs set status = 'scheduled' where id = v_j;
     insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j,
-      case k when 1 then now() - interval '15 days' else now() + interval '1 day' end);
+      case k when 1 then ((now() at time zone 'America/Los_Angeles')::date - 15 + time '12:00') at time zone 'America/Los_Angeles' else now() + interval '1 day' end);
     insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
   end loop;
   perform public.cancel_visit('f2600000-0000-4000-8000-000000000002', 'client_cancelled');

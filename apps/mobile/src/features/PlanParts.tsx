@@ -1,18 +1,24 @@
-import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import type { ID } from "@/data/types";
+import type { CalendarEvent, CalendarEventKind, ID, Task } from "@/data/types";
+import { findJob } from "@/data/jobs";
+import { visitPropertyId } from "@/data/selectors";
+import { todayKey, type DayKey } from "@/features/calendar";
+import { lateAfterOf, scheduleSettingsOf } from "@/features/scheduleSettings";
+import { visitStatus } from "@/features/visits";
+import { AssignSheet } from "@/features/sheets";
+import { groupByDay, itemTimes, type PlanItem } from "@/features/planFeed";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { daysSince, waitingJobs, type PlanWho } from "@/features/schedule";
+import { assigneesOf, daysSince, unassignedSoon, visitWho, waitingJobs, type PlanWho } from "@/features/schedule";
 import { VisitFormSheet } from "@/features/VisitForm";
-import { Button, ChoiceChips, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { CardList, Divider, ItemCard, ListRow } from "@/ui/surfaces";
+import { CardList, Divider, ItemCard, ListRow, SectionTitle } from "@/ui/surfaces";
 
 /**
  * Parts of the Plan tab for the office (docs/specs/03 §7.2, wave П3b): «Ждут даты», «Чей план», «+».
@@ -74,7 +80,7 @@ export function PlanWhoChips({ who, onChange }: { who: PlanWho; onChange: (w: Pl
 }
 
 /** «+»: what to put in the plan — an inspection at a property (the visit form) or a job from «Ждут даты» */
-export function PlanAddSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function PlanAddSheet({ visible, onClose, onEvent }: { visible: boolean; onClose: () => void; onEvent?: (kind: CalendarEventKind) => void }) {
   const store = useStore();
   const { db } = store;
   const { t, day, time } = useI18n();
@@ -92,6 +98,14 @@ export function PlanAddSheet({ visible, onClose }: { visible: boolean; onClose: 
     <>
       <Sheet visible={visible && !propertyId} onClose={close} title={t("plan.addTitle")}>
         <View style={{ gap: space[3] }}>
+          {onEvent ? (
+            // wave 5: an event or a day off (the «＋» of the Plan will have them too — the shell's FAB set)
+            <View>
+              <ListRow title={t("plan5.addEvent")} onPress={() => { close(); onEvent("event"); }} />
+              <Divider />
+              <ListRow title={t("plan5.addTimeOff")} onPress={() => { close(); onEvent("time_off"); }} />
+            </View>
+          ) : null}
           {waiting.length ? (
             <View>
               <T v="heading">{t("plan.addJob")}</T>
@@ -131,5 +145,115 @@ export function PlanAddSheet({ visible, onClose }: { visible: boolean; onClose: 
         />
       ) : null}
     </>
+  );
+}
+
+/* ---------- wave 5 «План» (13 §3.2): Лента and «Не назначено» on top ---------- */
+
+const TASK_ROUTE: Record<Task["subjectType"], string> = { lead: "/lead", customer: "/client", job: "/job", estimate: "/estimate", property: "/property" };
+
+/** «Не назначено» today and tomorrow, on top of the Plan (office only; the same rule as «Требует внимания») */
+export function UnassignedSoon() {
+  const { db } = useStore();
+  const { t, time } = useI18n();
+  const [assign, setAssign] = useState<ID | null>(null);
+  const list = unassignedSoon(db);
+  if (!list.length) return null;
+  return (
+    <View style={{ gap: space[2] }} testID="plan-unassigned-soon">
+      <T v="heading" tone="warn">
+        {t("plan5.unassigned", { n: list.length })}
+      </T>
+      <CardList>
+        {list.map(({ v, dd }) => {
+          const { client } = visitWho(db, v);
+          const property = db.properties.find((p) => p.id === visitPropertyId(db, v));
+          return (
+            <ItemCard
+              key={v.id}
+              status="warn"
+              title={`${dd === 0 ? t("plan5.today") : t("plan5.tomorrow")} · ${time(v.start)} · ${client}`}
+              subtitle={[v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"), property?.address].filter(Boolean).join(" · ")}
+              right={<Button label={t("plan.assign")} icon="user" size="sm" variant="secondary" onPress={() => setAssign(v.id)} />}
+              onPress={() => router.push(`/visit/${v.id}`)}
+            />
+          );
+        })}
+      </CardList>
+      <AssignSheet visitId={assign} onClose={() => setAssign(null)} />
+    </View>
+  );
+}
+
+/** «Лента»: the days one under another, every item a card; an empty day says so */
+export function FeedView({ days, items, onEvent }: { days: DayKey[]; items: PlanItem[]; onEvent?: (e: CalendarEvent) => void }) {
+  const { t, dayOf } = useI18n();
+  return (
+    <View style={{ gap: space[4] }} testID="plan-feed">
+      {groupByDay(items, days).map(({ day, items: list }) => (
+        <View key={day} style={{ gap: space[2] }}>
+          <SectionTitle title={`${day === todayKey() ? `${t("common.today")} · ` : ""}${dayOf(day)}`} />
+          {list.length ? (
+            <CardList>
+              {list.map((x) => (
+                <FeedCard key={`${x.kind}:${x.id}:${day}`} x={x} onEvent={onEvent} />
+              ))}
+            </CardList>
+          ) : (
+            <T v="caption" tone="mut">
+              {t("plan5.emptyDay")}
+            </T>
+          )}
+        </View>
+      ))}
+    </View>
+  );
+}
+
+function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) => void }) {
+  const { db } = useStore();
+  const { t, time } = useI18n();
+  const names = x.people.map((id) => db.members.find((m) => m.id === id)?.name).filter(Boolean).join(", ");
+  // the title starts with the start of the day's part (short on a phone); the end goes to the subtitle
+  const { when, until } = itemTimes(x, time, t("plan5.allDay"));
+  if (x.kind === "visit") {
+    const v = x.visit;
+    const job = findJob(db, v.jobId);
+    const { client } = visitWho(db, v);
+    const property = db.properties.find((p) => p.id === visitPropertyId(db, v));
+    const st = visitStatus(v, Date.now(), lateAfterOf(db));
+    const status = assigneesOf(v).length ? st.status : "warn";
+    return (
+      <ItemCard
+        status={status}
+        title={`${when} · ${client || "—"}`}
+        subtitle={[until, v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"), job?.number, property?.address, names || t("plan.unassigned")].filter(Boolean).join(" · ")}
+        right={<StatusChip status={status} label={assigneesOf(v).length ? t(st.label) : t("st.unassigned")} />}
+        onPress={() => router.push(`/visit/${v.id}`)}
+      />
+    );
+  }
+  if (x.kind === "task") {
+    const tk = x.task;
+    return (
+      <ItemCard
+        status={x.done ? "ok" : "neutral"}
+        title={`${when} · ${tk.title}`}
+        subtitle={[until, t("plan5.task"), names].filter(Boolean).join(" · ")}
+        right={<StatusChip status={x.done ? "ok" : "neutral"} label={x.done ? t("plan5.done") : t("plan5.task")} />}
+        onPress={() => router.push(`${TASK_ROUTE[tk.subjectType]}/${tk.subjectId}`)}
+      />
+    );
+  }
+  const e = x.event;
+  const kind = x.kind === "timeOff" ? t("plan5.timeOff") : t("plan5.event");
+  return (
+    <ItemCard
+      status="neutral"
+      title={`${when} · ${e.title || kind}`}
+      subtitle={[until, kind, names || t("plan5.company")].filter(Boolean).join(" · ")}
+      right={<StatusChip status="neutral" label={kind} />}
+      onPress={onEvent ? () => onEvent(e) : undefined}
+    />
   );
 }
