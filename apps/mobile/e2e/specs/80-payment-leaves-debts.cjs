@@ -38,4 +38,8 @@ exports.run = async (h) => {
   const card = cards.filter({ hasText: name }).first();
   h.expect((await card.count()) === 1, "the payment card is in «Оплаты» · Сегодня");
   h.expect((await card.innerText()).includes(`+${whole.format(Math.round(owes(inv) / 100))}`), "amount on the card, without cents");
+  // who took it (wave 8, PR-2): the person who recorded it in the app
+  const me = after.members.find((m) => m.id === after.me);
+  h.expect(pay.receivedBy === after.me, "the payment knows who took it");
+  h.expect((await card.innerText()).includes(me.name), `«${me.name}» on the payment card`);
 };

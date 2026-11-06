@@ -10,6 +10,7 @@ import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, RowView, Screen } from "@/ui/surfaces";
+import { RelatedBlock } from "@/features/RelatedBlock";
 
 /** Receipt = one payment: number, amount, method, invoice, balance; PDF and send to the client. */
 export default function ReceiptScreen() {
@@ -43,6 +44,8 @@ export default function ReceiptScreen() {
   );
   return (
     <Screen title={`${t("rcpt.title")} ${p.receiptNumber ?? ""}`.trim()} back={back} subtitle={cust?.name}>
+      {/* «Связано»: invoice, job, client (15-flows §2 «квитанция → счёт → работа → клиент») */}
+      <RelatedBlock of={{ type: "receipt", id: p.id }} />
       <Card status="ok">
         <StatusChip status="ok" label={t("rcpt.received")} />
         <T v="display" tabular>
@@ -67,7 +70,6 @@ export default function ReceiptScreen() {
         />
         {cust?.phone ? <Button label={t("ue.sendSms")} icon="message" variant="secondary" onPress={() => openSms(cust.phone, msg.text).catch(() => {})} /> : null}
         {cust?.email ? <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => openEmail(cust.email!, msg.subject, msg.text).catch(() => {})} /> : null}
-        {inv ? <Button label={t("inv.title")} icon="chevronRight" variant="ghost" onPress={() => router.push(`/invoice/${inv.id}`)} /> : null}
       </RowView>
     </Screen>
   );

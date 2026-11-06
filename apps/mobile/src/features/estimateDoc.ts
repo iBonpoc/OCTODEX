@@ -15,6 +15,7 @@ import {
   type LineGroup,
 } from "@octo/estimating-engine";
 import type { CatalogItem, Estimate, EstimateDoc } from "@/data/types";
+import { taxModeFor } from "@octo/estimating-engine";
 
 /** UUID: Web Crypto when present (web, Node tests), expo-crypto on the phone. */
 export const uid = (): string => {
@@ -179,4 +180,14 @@ export function estimateListAmount(e: Pick<Estimate, "status" | "doc" | "approva
     return { cents: Math.min(...e.doc.options.map((o) => optionTotals(e.doc!, o).total)), from: true };
   }
   return { cents: e.totalCents, from: false };
+}
+
+/**
+ * The estimate of a tax-exempt client (wave П-2a, customers.tax_exempt): no sales tax. The server refuses an open version
+ * with tax for such a client (22023), so the phone turns the tax off before it counts and saves; the rate and the
+ * groups stay, so the tax comes back if the client stops being exempt. A signed (locked) version never changes.
+ */
+export function exemptDoc(doc: EstimateDoc, taxExempt: boolean | undefined): EstimateDoc {
+  if (taxModeFor(taxExempt) !== "exempt" || !doc.settings.tax.enabled) return doc;
+  return { ...doc, settings: { ...doc.settings, tax: { ...doc.settings.tax, enabled: false } } };
 }

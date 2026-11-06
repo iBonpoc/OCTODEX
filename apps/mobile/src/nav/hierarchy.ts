@@ -87,6 +87,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
         const cid = one(params.id);
         return { section: "clients", kind: cid ? "client.editTitle" : "clients.new", up: cid ? toClient(cid) : { href: "/clients", label: K("tab.clients") } };
       }
+      // wave 4 (13 §3.3): a row's list of the client (/client/<id>?s=jobs) sits under its client
+      if (one(params.s)) return { section: "clients", kind: "client.card", up: toClient(id) };
       return { section: "clients", kind: "client.card", up: { href: "/clients", label: K("tab.clients") } };
     case "property": {
       // C2: a property lives only inside its client
@@ -116,6 +118,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       const jid = one(params.jobId);
       return { section: "money", kind: "exp.title", up: jid ? toJob(jid) : { href: "/money", label: K("money.title") } };
     }
+    case "search":
+      // «Искать везде» (15-flows §3.2) opens over the home screen
+      return { section: "home", kind: "nav.search", up: homeRoot };
     case "notifications":
       // the bell on «Главная» (13 v2 §3.14)
       return { section: "home", kind: "notice.title", up: homeRoot };

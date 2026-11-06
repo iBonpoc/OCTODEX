@@ -164,7 +164,7 @@ export function makeSeed(): DB {
       { id: "a2", subjectType: "lead", subjectId: "l3", kind: "status", meta: { from: "new", to: "replied" }, at: minutesAgo(80), actorId: "m-alex" },
     ],
     members: [
-      { id: "m-alex", name: "Alex Petrov", initials: "AP", kind: "employee", roles: ["director", "dispatcher", "tech"] },
+      { id: "m-alex", name: "Alex Petrov", initials: "AP", kind: "employee", roles: ["director", "dispatcher", "tech"], isOwner: true },
       { id: "m-ivan", name: "Ivan Sokolov", initials: "IS", kind: "employee", roles: ["tech"] },
       { id: "m-dima", name: "Dmitry Orlov", initials: "DO", kind: "employee", roles: ["tech"] },
       { id: "m-sub", name: "Valley Electric LLC", initials: "VE", kind: "sub", roles: ["tech"] },
@@ -287,9 +287,9 @@ export function makeSeed(): DB {
       { id: "i5", number: "INV-0105", title: "Deposit", kind: "deposit", customerId: "c1", jobId: "j1", totalCents: 34200, paidCents: 34200, dueDate: daysAgo(8), paidAt: daysAgo(8), method: "card", sentAt: daysAgo(8) },
     ],
     payments: [
-      { id: "pay3", invoiceId: "i3", customerId: "c1", amountCents: 24000, method: "zelle", at: todayMinutesAgo(140), receiptNumber: "RCT-0103" },
-      { id: "pay4", invoiceId: "i4", customerId: "c5", amountCents: 78000, method: "check", at: todayMinutesAgo(60), receiptNumber: "RCT-0104", reference: "Check #1042" },
-      { id: "pay5", invoiceId: "i5", customerId: "c1", amountCents: 34200, method: "card", at: daysAgo(8), receiptNumber: "RCT-0102" },
+      { id: "pay3", invoiceId: "i3", customerId: "c1", amountCents: 24000, method: "zelle", at: todayMinutesAgo(140), receiptNumber: "RCT-0103", receivedBy: "m-ivan" },
+      { id: "pay4", invoiceId: "i4", customerId: "c5", amountCents: 78000, method: "check", at: todayMinutesAgo(60), receiptNumber: "RCT-0104", reference: "Check #1042", receivedBy: "m-alex" },
+      { id: "pay5", invoiceId: "i5", customerId: "c1", amountCents: 34200, method: "card", at: daysAgo(8), receiptNumber: "RCT-0102", receivedBy: "m-alex" },
     ],
   };
 }
