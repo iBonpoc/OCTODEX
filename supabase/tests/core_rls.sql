@@ -4634,4 +4634,182 @@ delete from public.memberships where company_id = 'cb000000-0000-0000-0000-00000
 select tst.ok(tst.cnt($q$select 1 from public.member_prefs where company_id = 'cb000000-0000-0000-0000-000000000000'$q$) = 0, 'a membership removed for good takes its settings with it');
 \echo 'T51 personal settings (member_prefs) ok'
 
+-- ---------------------------------------------------------------- T50: wave 7а-2a — удаление аккаунта (S22; docs/specs/19 §6)
+-- delete_account as the person: a fresh sign-in (amr of the token), the word, never the last active owner (unless the
+-- company closes with the account); memberships → deleted, own rows wiped/unlinked, the profile anonymised, business
+-- records stay; a still-valid token of the deleted person writes and sees nothing. The sign-in itself is closed by the
+-- edge function (auth.admin.deleteUser) — checked by hand before a release (§6.8).
+:as_super
+-- a fresh sign-in: the token's amr (Supabase puts the method and the time of each sign-in step there)
+create function tst.fresh(p_minutes_ago int default 0) returns void language plpgsql as $$
+begin
+  perform set_config('request.jwt.claims',
+    jsonb_build_object('amr', jsonb_build_array(jsonb_build_object('method', 'otp', 'timestamp',
+      extract(epoch from now() - make_interval(mins => p_minutes_ago))::bigint)))::text, false);
+end $$;
+grant execute on function tst.fresh(int) to authenticated, anon;
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a5000000-0000-4000-8000-000000000001', 'tom50@a.test',   '{"full_name":"Tom Fifty"}'),
+  ('a5000000-0000-4000-8000-000000000002', 'olga50@a.test',  '{"full_name":"Olga Owner"}'),
+  ('a5000000-0000-4000-8000-000000000003', 'adam50@a.test',  '{"full_name":"Adam Admin"}'),
+  ('a5000000-0000-4000-8000-000000000004', 'solo50@a.test',  '{"full_name":"Sol Solo"}'),
+  ('a5000000-0000-4000-8000-000000000005', 'eve50@a.test',   '{"full_name":"Eve Employee"}');
+select tst.agree('a5000000-0000-4000-8000-000000000001'), tst.agree('a5000000-0000-4000-8000-000000000002'), tst.agree('a5000000-0000-4000-8000-000000000003'),
+       tst.agree('a5000000-0000-4000-8000-000000000004'), tst.agree('a5000000-0000-4000-8000-000000000005');
+\set as_tom50  'reset role; set request.jwt.claim.sub = ''a5000000-0000-4000-8000-000000000001''; reset request.jwt.claims; set role authenticated;'
+\set as_olga50 'reset role; set request.jwt.claim.sub = ''a5000000-0000-4000-8000-000000000002''; reset request.jwt.claims; set role authenticated;'
+\set as_adam50 'reset role; set request.jwt.claim.sub = ''a5000000-0000-4000-8000-000000000003''; reset request.jwt.claims; set role authenticated;'
+\set as_solo50 'reset role; set request.jwt.claim.sub = ''a5000000-0000-4000-8000-000000000004''; reset request.jwt.claims; set role authenticated;'
+\set as_eve50  'reset role; set request.jwt.claim.sub = ''a5000000-0000-4000-8000-000000000005''; reset request.jwt.claims; set role authenticated;'
+-- Tom joins Bonpoc (company A) as a tech; Olga owns «Fifty Co» with Adam as admin; Sol owns «Solo Co» alone, Eve works there
+:as_owner_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'tom50@a.test', 'tech') ->> 'token' as t50_tom \gset
+:as_tom50
+select public.accept_invitation(:'t50_tom') is not null as t50_j1 \gset
+:as_olga50
+insert into public.companies (id, name) values ('c5000000-0000-4000-8000-000000000001', 'Fifty Co');
+select public.invite_member('c5000000-0000-4000-8000-000000000001', 'adam50@a.test', 'admin') ->> 'token' as t50_adam \gset
+:as_adam50
+select public.accept_invitation(:'t50_adam') is not null as t50_j2 \gset
+:as_solo50
+insert into public.companies (id, name) values ('c5000000-0000-4000-8000-000000000002', 'Solo Co');
+select public.invite_member('c5000000-0000-4000-8000-000000000002', 'eve50@a.test', 'tech') ->> 'token' as t50_eve \gset
+-- Sol also invites Tom (pending: it stops working when Tom leaves)
+select public.invite_member('c5000000-0000-4000-8000-000000000002', 'tom50@a.test', 'office') ->> 'id' as t50_inv_tom \gset
+:as_eve50
+select public.accept_invitation(:'t50_eve') is not null as t50_j3 \gset
+-- Tom's things in company A: his settings, a signature, notes, a task, a linked company contact, the lead default
+:as_tom50
+select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', true);
+insert into public.member_signatures (company_id, user_id, svg, name) values ('ca000000-0000-0000-0000-000000000000', 'a5000000-0000-4000-8000-000000000001', '<svg/>', 'Tom Fifty');
+:as_super
+insert into public.notes (company_id, subject_type, subject_id, body, visibility, created_by) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c1a00000-0000-0000-0000-000000000001', 'Tom private 50', 'private', 'a5000000-0000-4000-8000-000000000001'),
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c1a00000-0000-0000-0000-000000000001', 'Tom team 50', 'team', 'a5000000-0000-4000-8000-000000000001');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, created_by) values
+  ('d5000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Tom task 50', 'a5000000-0000-4000-8000-000000000001', 'a5000000-0000-4000-8000-000000000001');
+insert into public.company_contacts (company_id, name, user_id) values ('ca000000-0000-0000-0000-000000000000', 'Tom (contact)', 'a5000000-0000-4000-8000-000000000001');
+update public.companies set lead_default_assignee_id = 'a5000000-0000-4000-8000-000000000001' where id = 'ca000000-0000-0000-0000-000000000000';
+-- the journal is append-only: give Tom an IP for the fixture past the triggers
+set session_replication_role = replica;
+update public.legal_acceptance set ip = '203.0.113.50' where user_id = 'a5000000-0000-4000-8000-000000000001';
+set session_replication_role = origin;
+:as_super
+-- refusals: anon has no function; no word; a stale sign-in; an anonymous token
+reset role; set role anon;
+select tst.fails($q$select public.delete_account('DELETE')$q$, 'anon cannot delete');
+:as_tom50
+select tst.fails_like($q$select public.delete_account('yes')$q$, '%type the word%', 'the word is required');
+select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%sign in again first%', 'no amr in the token: refused (fail closed)');
+select tst.fresh(15);
+select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%sign in again first%', 'a sign-in 15 minutes ago is not fresh');
+set request.jwt.claims = '{"is_anonymous": true, "amr": []}';
+select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%sign in first%', 'an anonymous sign-in deletes nothing');
+:as_super
+select tst.ok((select status from public.memberships where user_id = 'a5000000-0000-4000-8000-000000000001') = 'active', 'the refusals changed nothing');
+-- delete Tom
+:as_tom50
+select tst.fresh(2);
+select tst.ok((public.delete_account('УДАЛИТЬ') ->> 'deleted')::boolean, 'Tom deletes his account (fresh sign-in, the word in Russian)');
+:as_super
+select tst.ok((select every(status = 'deleted' and deleted_at is not null and title is null and not share_location) from public.memberships where user_id = 'a5000000-0000-4000-8000-000000000001'), 'his membership is deleted');
+select tst.ok((select full_name = 'Deleted user' and email = 'deleted+a5000000-0000-4000-8000-000000000001@deleted.invalid' and phone is null and deleted_at is not null from public.users where id = 'a5000000-0000-4000-8000-000000000001'), 'the profile is anonymised');
+select tst.ok((select count(*) from public.member_prefs where user_id = 'a5000000-0000-4000-8000-000000000001') = 0, 'his settings are gone');
+select tst.ok((select every(revoked_at is not null) from public.member_signatures where user_id = 'a5000000-0000-4000-8000-000000000001'), 'his signature is revoked (kept on signed documents)');
+select tst.ok((select count(*) from public.notes where body = 'Tom private 50') = 0, 'his private note is gone');
+select tst.ok((select count(*) from public.notes where body = 'Tom team 50') = 1, 'his team note stays with the company');
+select tst.ok((select assignee_id from public.tasks where id = 'd5000000-0000-4000-8000-000000000001') = 'a5000000-0000-4000-8000-000000000001', 'the task stays, pointing to the anonymised person');
+select tst.ok((select user_id from public.company_contacts where name = 'Tom (contact)') is null, 'the company contact is unlinked');
+select tst.ok((select lead_default_assignee_id from public.companies where id = 'ca000000-0000-0000-0000-000000000000') is null, 'new leads no longer go to him');
+select tst.ok((select status from public.invitations where id = :'t50_inv_tom') = 'revoked', 'an invitation to his email stops working');
+select tst.ok((select every(email = 'deleted+a5000000-0000-4000-8000-000000000001@deleted.invalid' and name is null) from public.invitations where accepted_by = 'a5000000-0000-4000-8000-000000000001'), 'the accepted invitation forgets his email');
+select tst.ok((select count(*) = 2 and every(ip is null and ip_raw is null) from public.legal_acceptance where user_id = 'a5000000-0000-4000-8000-000000000001'), 'the proof of consent stays, without the IP');
+-- his token (valid up to an hour): sees nothing, writes nothing
+:as_tom50
+select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 0, 'the deleted person no longer sees the company');
+select tst.ok((select count(*) from public.tasks where id = 'd5000000-0000-4000-8000-000000000001') = 0, 'nor his task');
+select tst.ok(not app.account_alive(), 'account_alive is false');
+select tst.blocked($q$update public.users set full_name = 'Tom back' where id = 'a5000000-0000-4000-8000-000000000001'$q$, 'the anonymised profile is not written back');
+select tst.fails_like($q$insert into public.companies (name) values ('Tom Again Co')$q$, '%legal not accepted%', 'no new company by the old token');
+select tst.fails($q$select public.accept_legal('{"terms":"2026-11-06","privacy":"2026-11-06"}', 'web', '1.0.0')$q$, 'no new consent by the old token');
+select tst.fails($q$select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', false)$q$, 'no settings by the old token');
+select tst.fresh(1);
+select tst.ok((public.delete_account('DELETE') ->> 'repeat')::boolean, 'again: a success that changes nothing');
+:as_super
+select tst.ok((select full_name from public.users where id = 'a5000000-0000-4000-8000-000000000001') = 'Deleted user', 'the repeat changed nothing');
+-- the last owner: refused; a transfer to the admin needs a fresh sign-in; then the old owner may leave
+:as_olga50
+select tst.fresh(1);
+select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%keeps at least one active owner%', 'the last active owner cannot just leave');
+select tst.ok((select status from public.memberships where user_id = 'a5000000-0000-4000-8000-000000000002') = 'active', 'and nothing changed');
+select tst.fails_like($q$select public.transfer_ownership('c5000000-0000-4000-8000-000000000001', 'a5000000-0000-4000-8000-000000000005')$q$, '%no such person on the team%', 'not to a person of another company');
+select tst.fails_like($q$select public.transfer_ownership('c5000000-0000-4000-8000-000000000001', 'a5000000-0000-4000-8000-000000000002')$q$, '%no such person on the team%', 'not to oneself');
+select tst.fails_like($q$select public.transfer_ownership('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002')$q$, '%no such person on the team%', 'not in a company where I am not the owner');
+reset request.jwt.claims;
+select tst.fails_like($q$select public.transfer_ownership('c5000000-0000-4000-8000-000000000001', 'a5000000-0000-4000-8000-000000000003')$q$, '%sign in again first%', 'a transfer needs a fresh sign-in');
+select tst.fresh(1);
+select tst.ok((public.transfer_ownership('c5000000-0000-4000-8000-000000000001', 'a5000000-0000-4000-8000-000000000003') ->> 'owner') = 'a5000000-0000-4000-8000-000000000003', 'the company goes to the admin');
+:as_super
+select tst.ok((select role from public.memberships where user_id = 'a5000000-0000-4000-8000-000000000003') = 'owner'
+          and (select role from public.memberships where user_id = 'a5000000-0000-4000-8000-000000000002') = 'admin', 'Adam is the owner, Olga an admin');
+:as_adam50
+select tst.fresh(1);
+select tst.fails_like($q$select public.transfer_ownership('c5000000-0000-4000-8000-000000000001', 'a5000000-0000-4000-8000-000000000001')$q$, '%no such person on the team%', 'not to a deleted person');
+:as_olga50
+select tst.fresh(1);
+select tst.ok((public.delete_account('ELIMINAR') ->> 'deleted')::boolean, 'now Olga (an admin) may leave');
+select tst.ok((select count(*) from public.companies where id = 'c5000000-0000-4000-8000-000000000001') = 0, 'the creator does not see her company any more (companies_select)');
+:as_adam50
+select tst.ok((select count(*) from public.companies where id = 'c5000000-0000-4000-8000-000000000001') = 1, 'the new owner works on');
+-- the last owner without an admin: closes the company with the account
+:as_solo50
+select tst.fresh(1);
+select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%keeps at least one active owner%', 'Sol is the only owner');
+select tst.ok((public.delete_account('DELETE', array['c5000000-0000-4000-8000-000000000002']::uuid[]) -> 'closed_companies') ? 'c5000000-0000-4000-8000-000000000002', 'Sol closes «Solo Co» with his account');
+:as_super
+select tst.ok((select closed_at is not null from public.companies where id = 'c5000000-0000-4000-8000-000000000002'), 'the company is closed (its records are kept)');
+select tst.ok((select every(status = 'deleted') from public.memberships where company_id = 'c5000000-0000-4000-8000-000000000002'), 'nobody works in it any more');
+select tst.ok(app.retention_years() = 7, 'records are kept 7 years by default');
+:as_eve50
+select tst.ok((select count(*) from public.companies where id = 'c5000000-0000-4000-8000-000000000002') = 0, 'Eve no longer sees the closed company');
+select tst.ok(app.account_alive(), 'but her own account is alive');
+-- the consent journal: even with the erasing flag, a client edits nothing
+set app.erasing_user = 'on';
+select tst.blocked($q$update public.legal_acceptance set ip = null$q$, 'the flag does not open the journal to a client');
+reset app.erasing_user;
+-- rights (rule 18, T52)
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.delete_account(text,uuid[])', 'EXECUTE'), 'anon: no delete_account');
+select tst.ok(not has_function_privilege('anon', 'public.transfer_ownership(uuid,uuid)', 'EXECUTE'), 'anon: no transfer_ownership');
+select tst.ok(has_function_privilege('authenticated', 'public.delete_account(text,uuid[])', 'EXECUTE'), 'authenticated: delete_account');
+select tst.ok(not has_function_privilege('authenticated', 'app.signed_in_recently(int)', 'EXECUTE'), 'internal: signed_in_recently');
+select tst.ok(not has_function_privilege('authenticated', 'app.erase_personal_rows(uuid)', 'EXECUTE'), 'internal: erase_personal_rows');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_user_erased_guard()', 'EXECUTE'), 'internal: the users guard');
+-- the watchman: every column that points to a person is classified — a new table must say what happens on deletion
+select coalesce(string_agg(format('%s.%s', t, c), ', ' order by t, c), '') as t50_unclassified from (
+  select distinct cl.relname::text t, a.attname::text c
+    from pg_constraint k join pg_class cl on cl.oid = k.conrelid join pg_namespace n on n.oid = cl.relnamespace
+    join lateral unnest(k.conkey) ck(attnum) on true join pg_attribute a on a.attrelid = k.conrelid and a.attnum = ck.attnum
+   where k.contype = 'f' and k.confrelid in ('public.users'::regclass, 'public.memberships'::regclass) and n.nspname = 'public'
+     and not (k.confrelid = 'public.memberships'::regclass and a.attname = 'company_id')
+  union
+  select distinct c.table_name::text, c.column_name::text from information_schema.columns c
+   where c.table_schema = 'public' and c.data_type = 'uuid'
+     and c.column_name ~ '(^|_)(user_id|actor_id|assignee_id|owner_user_id|signer_user_id|on_behalf_of_user_id)$|_by$'
+) x
+where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kept, pointing to the anonymised person
+  and format('%s.%s', t, c) not in (
+    -- kept (business and legal records; the person reads as «Удалённый пользователь»)
+    'activities.actor_id', 'audit_log.actor_id', 'audit_log.on_behalf_of_user_id', 'calendar_events.user_id',
+    'email_outbox.requested_by', 'email_outbox.to_email_set_by', 'estimate_approvals.signer_user_id', 'estimates.owner_user_id',
+    'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
+    'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
+    'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by', 'legal_acceptance.user_id', 'users.id',
+    -- erased (app.erase_personal_rows)
+    'member_prefs.user_id',
+    -- unlinked (set to null)
+    'company_contacts.user_id', 'companies.lead_default_assignee_id') \gset
+select tst.ok(:'t50_unclassified' = '', format('every person column is classified in T50 (kept / erased / unlinked): %s', :'t50_unclassified'));
+\echo 'T50 wave 7а-2a: account deletion (S22) ok'
+
 \echo 'ALL TESTS PASSED'
