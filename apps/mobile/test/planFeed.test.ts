@@ -6,7 +6,7 @@
 const phoneTz = process.env.TZ;
 process.env.TZ = "America/New_York";
 import { afterAll, describe, expect, it } from "vitest";
-import { daysFrom, eventProblems, groupByDay, itemTimes, planItems, spanDays, whoMatches } from "../src/features/planFeed";
+import { daysFrom, eventFields, eventProblems, eventRange, groupByDay, itemTimes, planItems, spanDays, whoMatches } from "../src/features/planFeed";
 import { unassignedSoon } from "../src/features/schedule";
 import type { CalendarEvent, DB, Task, Visit } from "../src/data/types";
 
@@ -168,5 +168,26 @@ describe("eventProblems — the server's rules before saving (wave 5 PR-B)", () 
     expect(eventProblems({ ...ok, title: "x".repeat(201) })).toEqual(["long"]);
     expect(eventProblems({ ...ok, description: "x".repeat(4001) })).toEqual(["long"]);
     expect(eventProblems({ ...ok, title: "x".repeat(200), description: "x".repeat(4000) })).toEqual([]);
+  });
+});
+
+describe("the event form's fields (wave 5 PR-B, code review)", () => {
+  it("a new one opens on the day picked in the Plan, 9:00 for an hour", () => {
+    expect(eventFields(undefined, "2026-11-09", LA)).toEqual({ day: "2026-11-09", allDay: false, days: 1, startMin: 540, duration: 60 });
+  });
+  it("a 3-day «all day» across the clock change opens with 3 days and saves back the same moments", () => {
+    const e = Ev("off", { kind: "time_off", userId: "m-ivan", allDay: true, startsAt: "2026-10-31T07:00:00.000Z", endsAt: "2026-11-03T08:00:00.000Z" });
+    const f = eventFields(e, "2026-11-20", LA);
+    expect(f).toMatchObject({ day: "2026-10-31", allDay: true, days: 3 });
+    expect(eventRange(f, LA)).toEqual({ startsAt: e.startsAt, endsAt: e.endsAt });
+  });
+  it("a timed one opens with its start and length on the company's clock (phone in New York), and saves back the same", () => {
+    const e = Ev("meet", { startsAt: "2026-11-06T18:30:00.000Z", endsAt: "2026-11-06T20:00:00.000Z" }); // 10:30 AM LA, 90 min
+    const f = eventFields(e, "2026-11-20", LA);
+    expect(f).toEqual({ day: "2026-11-06", allDay: false, days: 1, startMin: 630, duration: 90 });
+    expect(eventRange(f, LA)).toEqual({ startsAt: e.startsAt, endsAt: e.endsAt });
+  });
+  it("«all day» ends at the company's midnight after the last day", () => {
+    expect(eventRange({ day: "2026-11-06", allDay: true, days: 2, startMin: 0, duration: 0 }, LA)).toEqual({ startsAt: "2026-11-06T08:00:00.000Z", endsAt: "2026-11-08T08:00:00.000Z" });
   });
 });

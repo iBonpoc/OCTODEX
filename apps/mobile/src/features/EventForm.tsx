@@ -4,11 +4,11 @@ import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CalendarEvent, CalendarEventKind, ID } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { addDays, isoDayKey, todayKey, type DayKey } from "@/features/calendar";
+import { todayKey, type DayKey } from "@/features/calendar";
+import { uid } from "@/features/estimateDoc";
 import { DatePick } from "@/features/DatePick";
-import { eventProblems, spanDays } from "@/features/planFeed";
+import { eventFields, eventProblems, eventRange } from "@/features/planFeed";
 import { atMinute, SCHEDULE_DEFAULTS } from "@/features/schedule";
-import { minuteIn } from "@/features/zone";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -20,7 +20,8 @@ import { RowView } from "@/ui/surfaces";
  * and a length, a description. Saving with problems is not possible (the same rules as the server, eventProblems).
  * An existing one can be changed or removed («Отменить» for 5 s, rule 5). Days and times are the company's.
  */
-export type EventSheetState = { kind: CalendarEventKind; event?: CalendarEvent } | null;
+/** `day` — the day picked in the Plan, for a new one */
+export type EventSheetState = { kind: CalendarEventKind; event?: CalendarEvent; day?: DayKey } | null;
 
 const STEP = 30;          // the start moves by half an hour
 const DAY_MIN = 24 * 60;
@@ -50,25 +51,32 @@ function EventSheetBody({ state, onClose }: { state: NonNullable<EventSheetState
   const e = state.event;
   const kind = e?.kind ?? state.kind;
   const people = db.members.filter((m) => !m.pending);
+  // one id per opening: a double tap on «Сохранить» saves the same event twice (an edit), never two events
+  const [id] = useState<ID>(() => e?.id ?? uid());
+  const init = useMemo(() => eventFields(e, state.day ?? todayKey()), [e, state.day]);
   const [title, setTitle] = useState(e?.title ?? "");
   const [who, setWho] = useState<ID | "all">(e?.userId ?? (kind === "event" ? "all" : ""));
-  const [allDay, setAllDay] = useState(e ? e.allDay : kind === "time_off");
-  const [day, setDay] = useState<DayKey>(e ? isoDayKey(e.startsAt) : todayKey());
-  const [days, setDays] = useState(e && e.allDay ? spanDays(e.startsAt, e.endsAt).length : 1);
-  const [startMin, setStartMin] = useState(e && !e.allDay ? minuteIn(e.startsAt) : 9 * 60);
-  const [duration, setDuration] = useState(e && !e.allDay ? Math.max(15, Math.round((Date.parse(e.endsAt) - Date.parse(e.startsAt)) / 60_000)) : 60);
+  const [allDay, setAllDay] = useState(e ? init.allDay : kind === "time_off");
+  const [day, setDay] = useState<DayKey>(init.day);
+  const [days, setDays] = useState(init.days);
+  const [startMin, setStartMin] = useState(init.startMin);
+  const [duration, setDuration] = useState(init.duration);
   const [description, setDescription] = useState(e?.description ?? "");
   const [calendar, setCalendar] = useState(false);
 
   const value = useMemo(() => {
-    const startsAt = allDay ? atMinute(day, 0) : atMinute(day, startMin);
-    const endsAt = allDay ? atMinute(addDays(day, days), 0) : new Date(Date.parse(startsAt) + duration * 60_000).toISOString();
-    return { kind, title, userId: who && who !== "all" ? who : undefined, startsAt, endsAt, allDay, description };
+    const r = eventRange({ day, allDay, days, startMin, duration });
+    return { kind, title, userId: who && who !== "all" ? who : undefined, ...r, allDay, description };
   }, [kind, title, who, allDay, day, days, startMin, duration, description]);
-  const problems = eventProblems(value);
+  // a person who left the company cannot keep the event (the server refuses it): choose another
+  const gone = !!value.userId && !people.some((m) => m.id === value.userId);
+  const problems = [...eventProblems(value), ...(gone ? (["person"] as const) : [])].filter((p, i, a) => a.indexOf(p) === i);
+  const changed = e
+    ? (e.title ?? "") !== title || (e.userId ?? "") !== (value.userId ?? "") || e.startsAt !== value.startsAt || e.endsAt !== value.endsAt || e.allDay !== allDay || (e.description ?? "") !== description
+    : !!title.trim() || !!description.trim();
 
   const save = () => {
-    const r = store.saveCalendarEvent({ ...value, id: e?.id });
+    const r = store.saveCalendarEvent({ ...value, id });
     if (!r) return;
     toast.show(t(kind === "time_off" ? "plan5.ev.savedOff" : "plan5.ev.saved", { date: dayText(value.startsAt) }), r.undo);
     onClose();
@@ -85,7 +93,7 @@ function EventSheetBody({ state, onClose }: { state: NonNullable<EventSheetState
   const sheetTitle = t(kind === "time_off" ? (e ? "plan5.timeOff" : "plan5.ev.newTimeOff") : e ? "plan5.event" : "plan5.ev.newEvent");
 
   return (
-    <Sheet visible onClose={onClose} title={sheetTitle} dirty={!e && (!!title.trim() || !!description.trim())} onSave={problems.length ? undefined : save}>
+    <Sheet visible onClose={onClose} title={sheetTitle} dirty={changed} onSave={problems.length ? undefined : save}>
       <View style={{ gap: space[3] }}>
         <Field label={t("plan5.ev.name")}>
           <TextField type="title" value={title} onChangeText={setTitle} placeholder={t(kind === "time_off" ? "plan5.ev.namePhOff" : "plan5.ev.namePh")} />
@@ -112,19 +120,19 @@ function EventSheetBody({ state, onClose }: { state: NonNullable<EventSheetState
           ]}
         />
         {allDay ? (
-          <Stepper label={t("plan5.ev.days")} value={days} min={1} max={31} onChange={setDays} />
+          <Stepper label={t("plan5.ev.days")} value={days} min={1} max={Math.max(31, init.days)} onChange={setDays} />
         ) : (
           <>
             <Field label={t("sch.start")}>
               <RowView style={{ justifyContent: "space-between" }}>
-                <IconButton icon="minus" label={`${t("sch.start")} −${STEP}`} onPress={() => setStartMin(Math.max(0, startMin - STEP))} />
+                <IconButton icon="minus" label={`${t("sch.start")} −${STEP} ${t("sch.min")}`} onPress={() => setStartMin(Math.max(0, startMin - STEP))} />
                 <T v="title" tabular>
                   {time(value.startsAt)}
                 </T>
-                <IconButton icon="plus" label={`${t("sch.start")} +${STEP}`} onPress={() => setStartMin(Math.min(DAY_MIN - STEP, startMin + STEP))} />
+                <IconButton icon="plus" label={`${t("sch.start")} +${STEP} ${t("sch.min")}`} onPress={() => setStartMin(Math.min(DAY_MIN - STEP, startMin + STEP))} />
               </RowView>
             </Field>
-            <Stepper label={t("sch.duration")} unit={t("sch.min")} value={duration} step={15} min={15} max={SCHEDULE_DEFAULTS.maxDurationMin} onChange={setDuration} />
+            <Stepper label={t("sch.duration")} unit={t("sch.min")} value={duration} step={15} min={15} max={Math.max(SCHEDULE_DEFAULTS.maxDurationMin, init.duration)} onChange={setDuration} />
           </>
         )}
         <Field label={t("plan5.ev.description")}>

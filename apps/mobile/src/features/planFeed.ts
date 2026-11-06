@@ -4,7 +4,7 @@
  */
 import type { CalendarEvent, DB, ID, Role, Task, Visit } from "@/data/types";
 import { addDays } from "./calendar";
-import { dayKeyIn, dayNumber, getZone, type DayKey } from "./zone";
+import { dayKeyIn, dayNumber, getZone, minuteIn, wallToInstant, type DayKey } from "./zone";
 import { assigneesOf, isOpenVisit, type PlanWho } from "./schedule";
 
 export type PlanItemKind = "visit" | "task" | "event" | "timeOff";
@@ -139,4 +139,18 @@ export function eventProblems(e: Pick<CalendarEvent, "kind" | "title" | "userId"
   if (!(Number.isFinite(a) && Number.isFinite(b) && b > a)) out.push("time");
   if (title.length > 200 || (e.description?.length ?? 0) > 4000) out.push("long");
   return out;
+}
+
+/** the fields of the event form: what an event opens with, and the moments they make (company days and clock) */
+export type EventFields = { day: DayKey; allDay: boolean; days: number; startMin: number; duration: number };
+export function eventFields(e: CalendarEvent | undefined, newDay: DayKey, tz: string = getZone()): EventFields {
+  if (!e) return { day: newDay, allDay: false, days: 1, startMin: 9 * 60, duration: 60 };
+  const day = dayKeyIn(e.startsAt, tz);
+  if (e.allDay) return { day, allDay: true, days: spanDays(e.startsAt, e.endsAt, tz).length, startMin: 9 * 60, duration: 60 };
+  return { day, allDay: false, days: 1, startMin: minuteIn(e.startsAt, tz), duration: Math.max(15, Math.round((Date.parse(e.endsAt) - Date.parse(e.startsAt)) / 60_000)) };
+}
+export function eventRange(f: EventFields, tz: string = getZone()): { startsAt: string; endsAt: string } {
+  if (f.allDay) return { startsAt: wallToInstant(f.day, 0, tz), endsAt: wallToInstant(addDays(f.day, f.days), 0, tz) };
+  const startsAt = wallToInstant(f.day, f.startMin, tz);
+  return { startsAt, endsAt: new Date(Date.parse(startsAt) + f.duration * 60_000).toISOString() };
 }

@@ -127,7 +127,7 @@ export default function Plan() {
       ) : (
         <MonthView date={date} visitsOn={visitsOn} openDay={(k) => { setDate(k); setMode("day"); }} />
       )}
-      {planner ? <PlanAddSheet visible={adding} onClose={() => setAdding(false)} onEvent={(kind) => setEv({ kind })} /> : null}
+      {planner ? <PlanAddSheet visible={adding} onClose={() => setAdding(false)} onEvent={(kind) => setEv({ kind, day: date })} /> : null}
       {planner ? <EventSheet state={ev} onClose={() => setEv(null)} /> : null}
     </Screen>
   );

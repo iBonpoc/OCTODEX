@@ -54,11 +54,28 @@ exports.run = async (h) => {
 
   // a card opens the form: a new name saves on the same event
   await p.getByText(/T68 crew meeting/).first().click(); await p.waitForTimeout(400);
-  await h.expectText(/Событие/, "the form of the event");
+  h.expect((await h.sheet().getByPlaceholder("Например: собрание бригады").inputValue()) === "T68 crew meeting", "the card opens the form with its name");
   await h.sheet().getByPlaceholder("Например: собрание бригады").fill("T68 crew meeting moved");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500);
   db = await h.db();
   h.expect(db.calendarEvents.filter((e) => e.kind === "event" && /^T68/.test(e.title || "")).map((e) => `${e.id}:${e.title}`).join() === `${ev.id}:T68 crew meeting moved`, "the same event, renamed");
+
+  // the two days off of Ivan open with 2 days and stay 2 days after a save
+  await p.getByText(/Выходной · Ivan Sokolov/).first().click(); await p.waitForTimeout(400);
+  await h.expectText(/Дней/, "all day: the number of days");
+  await h.sheet().getByPlaceholder("Необязательно: отпуск, врач…").fill("T68 vacation");
+  await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500);
+  db = await h.db();
+  const off2 = db.calendarEvents.find((e) => e.id === off.id);
+  h.expect(off2.title === "T68 vacation" && off2.startsAt === off.startsAt && off2.endsAt === off.endsAt, `the same two days, a new name (${JSON.stringify(off2)})`);
+
+  // «Со временем»: a day off at 9:00 for 60 min
+  await p.getByText(/T68 vacation/).first().click(); await p.waitForTimeout(400);
+  await h.sheet().getByRole("radio", { name: "Со временем", exact: true }).click(); await p.waitForTimeout(200);
+  await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500);
+  db = await h.db();
+  const off3 = db.calendarEvents.find((e) => e.id === off.id);
+  h.expect(!off3.allDay && off3.startsAt === atMinute(today, 9 * 60) && off3.endsAt === atMinute(today, 10 * 60), `«Со временем»: 9–10 AM (${JSON.stringify(off3)})`);
 
   // «Удалить» → «Отменить» brings it back (rule 5)
   await p.getByText(/T68 crew meeting moved/).first().click(); await p.waitForTimeout(400);
