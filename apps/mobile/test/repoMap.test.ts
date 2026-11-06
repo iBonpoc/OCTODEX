@@ -11,7 +11,7 @@ function builder(table: string) {
   const b: Record<string, unknown> = {};
   let cols = "";
   b.select = (c?: string) => ((cols = c ?? "*"), b);
-  for (const m of ["eq", "is", "order", "limit", "in", "not"]) b[m] = () => b;
+  for (const m of ["eq", "is", "order", "limit", "in", "not", "range"]) b[m] = () => b;
   b.then = (ok: (r: { data: unknown; error: { message: string } | null }) => unknown) => {
     const gone = cols.split(",").map((x) => x.trim()).find((c) => missing.has(`${table}.${c}`));
     return Promise.resolve(gone ? { data: null, error: { message: `column ${table}.${gone} does not exist` } } : { data: rows[table] ?? [], error: null }).then(ok);
