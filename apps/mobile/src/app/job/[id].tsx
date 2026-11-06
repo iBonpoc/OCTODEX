@@ -12,6 +12,9 @@ import { ContractStatement } from "@/features/ContractStatement";
 import { jobStatusView } from "@/features/jobs";
 import { enRouteSms, filterJobHistory, jobHistory, nextOpenVisit, type JobHistoryFilter } from "@/features/jobHistory";
 import { canSeeGateCode } from "@/features/properties";
+import { canPlan } from "@/features/schedule";
+import { completeBlock, jobAwaitingClose } from "@/features/jobDone";
+import { contractStatement } from "@octo/estimating-engine";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { smsWithBody } from "@/features/sms";
@@ -81,6 +84,21 @@ export default function JobScreen() {
     setNoteText("");
   };
 
+  // S10: «Да, выполнена» / «Завершить работу» — the office, no open visit (the server checks the same in complete_job)
+  const office = canPlan([store.role]);
+  const awaiting = jobAwaitingClose(db, j);
+  const rest = contractStatement(j.amountCents, invoices).toInvoice;
+  const complete = () => {
+    const block = completeBlock(db, j);
+    if (block === "openVisits") return toast.show(t("job3.done.openVisits"));
+    if (block === "notStarted") return toast.show(t("job3.done.notStarted"));
+    if (block) return;
+    toast.show(store.online ? t("job3.done.closed") : t("offline.queued"), store.completeJob(j.id));
+  };
+  const invoiceRest = () => {
+    toast.show(store.online ? t("job3.done.invoiced") : t("offline.queued"), store.issueInvoice(j.id, "final", rest, t("job3.done.restTitle")));
+  };
+
   const details = (
     <>
       <RowView style={{ flexWrap: "wrap" }}>
@@ -95,6 +113,23 @@ export default function JobScreen() {
         {next ? <Button label={t("job3.act.file")} icon="camera" size="sm" variant="secondary" onPress={() => router.push(`/visit/${next.id}`)} /> : null}
       </RowView>
 
+      {office && awaiting ? (
+        // S10 (13 §3.4.1): the last visit is over — the office decides; the technician is never asked
+        <Card status="info">
+          <T v="heading">{t("job3.done.ask")}</T>
+          <T v="body" tone="mut">
+            {t("job3.done.askHint")}
+          </T>
+          <RowView style={{ flexWrap: "wrap" }}>
+            <Button label={t("job3.done.yes")} icon="check" variant="primary" size="sm" onPress={complete} />
+            <Button label={t("job3.done.more")} icon="calendar" variant="secondary" size="sm" onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />
+          </RowView>
+        </Card>
+      ) : null}
+      {office && j.status === "done" && rest > 0 ? (
+        <Button label={t("job3.done.invoiceRest", { amount: money(rest) })} icon="invoice" variant="primary" full onPress={invoiceRest} />
+      ) : null}
+
       <Card status={st.status}>
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="heading" style={{ flex: 1 }}>
@@ -103,6 +138,9 @@ export default function JobScreen() {
           <StatusChip status={st.status} label={t(st.label)} />
         </RowView>
         {j.description ? <T v="body">{j.description}</T> : null}
+        {office && j.status !== "done" && j.status !== "unscheduled" && !awaiting ? (
+          <Button label={t("job3.done.complete")} icon="check" size="sm" variant="ghost" onPress={complete} />
+        ) : null}
         {addr ? (
           <T v="body" tone="mut">
             {addr}

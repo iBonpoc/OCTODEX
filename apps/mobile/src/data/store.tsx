@@ -24,6 +24,7 @@ import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
+import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/features/jobDone";
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { inheritCategory } from "@/features/serviceCategories";
 import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
@@ -179,6 +180,8 @@ interface StoreCtx {
   /** wave 3b «Новая работа» (S17, docs/specs/17-job.md §7.3): a job without an estimate, waiting for a date;
    *  the client and the address exist already (addCustomer / saveProperty first). Server: public.create_job */
   addJob: (x: NewJobInput) => { id: ID; undo: Undo };
+  /** wave 3c (S10): «Да, выполнена» / «Завершить работу» — office only, no open visit; server public.complete_job */
+  completeJob: (jobId: ID) => Undo;
   /** for the estimate screen (chat «Сметы и модуль Gutters») */
   setEstimateCategory: (id: ID, serviceCategoryId?: ID) => Undo;
   updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
@@ -572,7 +575,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const { step, at } = stepChange(v, new Date().toISOString());
         return mutate(
           "visit.step",
-          (d) => patchVisit(d, id, (x) => ({ ...x, step, enRouteAt: at ?? x.enRouteAt, closed: step === "done" ? true : x.closed })),
+          (d) => {
+            const next = patchVisit(d, id, (x) => ({ ...x, step, enRouteAt: at ?? x.enRouteAt, closed: step === "done" ? true : x.closed }));
+            // S10: the first visit «На месте» starts the job (the server: the visit trigger, migration 20261106045000)
+            return v?.jobId ? { ...next, jobs: next.jobs.map((j) => (j.id === v.jobId ? { ...j, status: jobStatusAfterStep(j.status, step) } : j)) } : next;
+          },
           { k: "visit.step", visitId: id, to: step, ...(at ? { at } : {}) },
         );
       },
@@ -614,7 +621,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const next = patchVisit(d, visitId, (x) => ({ ...x, step: "paid", payment: { method, amountCents: x.amountDueCents, at: now } }));
             return {
               ...next,
-              jobs: next.jobs.map((j) => (j.id === v.jobId ? { ...j, status: "done" } : j)),
+              // paying does not close the job: «Работа выполнена?» goes to the office (S10, 17-job §4)
               invoices: customerId
                 ? [
                     ...next.invoices,
@@ -625,7 +632,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           },
           v.amountDueCents > 0 && customerId
             ? { k: "visit.pay", visitId, jobId: v.jobId!, customerId, invoiceId, paymentId, amountCents: v.amountDueCents, method, dueDate: companyToday(Date.parse(now)) }
-            : undefined,
+            : // nothing to pay: the visit still ends on the server (it stayed open there and the stores drifted)
+              { k: "visit.step", visitId, to: "done" },
         );
       },
       replyLead: (id) => touchLead(id, "reply"),
@@ -1058,6 +1066,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         });
         return { id, undo };
       },
+      completeJob: (jobId) => mutate("job.complete", (d) => withJobDone(d, jobId), { k: "job.complete", id: jobId }),
       setJobCategory: (id, serviceCategoryId) =>
         mutate("job.category", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, serviceCategoryId } : j)) }), { k: "job.category", id, serviceCategoryId: serviceCategoryId ?? null }),
       setEstimateCategory: (id, serviceCategoryId) =>
@@ -1137,7 +1146,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           "job.schedule",
           (d) => ({
             ...d,
-            jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: "scheduled" } : j)),
+            // a second visit does not take a job that is going back to «scheduled» (S10, 15-flows §1.15)
+            jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: jobStatusAfterSchedule(j.status) } : j)),
             visits: [
               ...d.visits,
               { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },

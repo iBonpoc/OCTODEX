@@ -15,7 +15,7 @@ import type { CancelReason, ID, Visit } from "@/data/types";
 import { CANCEL_REASONS } from "@/data/types";
 import { tFor } from "@/i18n/translate";
 import { useI18n, type DictKey } from "@/i18n";
-import { assigneesOf, atMinute, canPlan, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { assigneesOf, atMinute, canPlan, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, quickStarts, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { arrivalWindow, businessHoursOf, clientDate, companyTime, companyTz, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { AssignSheet } from "@/features/sheets";
 import { DatePick, dayOffsetOf } from "@/features/DatePick";
@@ -105,6 +105,20 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
     <View style={{ gap: space[3] }}>
       <Field label={t("sch.date")}>
         <ChoiceChips value={String(f.dayOffset)} onChange={(k) => { f.setDayOffset(Number(k)); f.setMinute(null); }} items={days} />
+        {f.exceptId ? (
+          // moving a visit: quick dates on the company's calendar and clock (13 §3.6)
+          <RowView style={{ flexWrap: "wrap" }}>
+            {quickStarts(todayKey(), minuteIn(new Date().toISOString())).map((q) => (
+              <Button
+                key={q.key}
+                label={t(`job3.q.${q.key}` as DictKey, { time: time(atMinute(q.day, q.minute)) })}
+                size="sm"
+                variant="secondary"
+                onPress={() => { f.setDayOffset(dayOffsetOf(q.day)); f.setMinute(q.minute); }}
+              />
+            ))}
+          </RowView>
+        ) : null}
         <Button label={t("vf.otherDate")} icon="calendar" size="sm" variant="ghost" onPress={() => setCalendar((x) => !x)} />
         {calendar ? (
           <DatePick

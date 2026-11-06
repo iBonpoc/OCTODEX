@@ -1590,6 +1590,22 @@ export const ru = {
   "job3.new.needTitle": "Напишите название работы",
   "job3.new.create": "Создать работу",
   "job3.new.created": "Работа создана",
+  "job3.att.done": "{name}: работа выполнена?",
+  "job3.att.doneChip": "Выполнена?",
+  "job3.done.ask": "Работа выполнена?",
+  "job3.done.askHint": "Все выезды закончены. Закрыть работу или нужен ещё выезд?",
+  "job3.done.yes": "Да, выполнена",
+  "job3.done.more": "Нужен ещё выезд",
+  "job3.done.complete": "Завершить работу",
+  "job3.done.closed": "Работа завершена",
+  "job3.done.openVisits": "Сначала завершите или отмените открытые выезды",
+  "job3.done.notStarted": "У работы ещё нет выезда",
+  "job3.done.invoiceRest": "Создать счёт на остаток {amount}",
+  "job3.done.restTitle": "Остаток по работе",
+  "job3.done.invoiced": "Счёт на остаток создан",
+  "job3.q.laterToday": "Позже сегодня ({time})",
+  "job3.q.tomorrow": "Завтра утром ({time})",
+  "job3.q.monday": "В понедельник ({time})",
 } as const;
 
 export type DictKey = keyof typeof ru;

@@ -3385,4 +3385,55 @@ select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-0000000000
 select tst.ok(tst.cnt($q$select 1 from public.jobs where id in ('e4300000-0000-4000-8000-000000000003', 'e4300000-0000-4000-8000-000000000004', 'e4300000-0000-4000-8000-000000000005', 'e4300000-0000-4000-8000-000000000009')$q$) = 0, 'no refused job was made');
 \echo 'T43 wave 3b: a job without an estimate (S17) ok'
 
+-- ---------------------------------------------------------------- T46: wave 3c — «Работа выполнена» (S10): «on site» starts the job, the office closes it
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c4600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T46 Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city, address_state) values
+    ('d4600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4600000-0000-4000-8000-000000000001', '46 Pine St', 'Austin', 'TX');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e4600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T46 job', 'c4600000-0000-4000-8000-000000000001', 'd4600000-0000-4000-8000-000000000001', 'draft'),
+    ('e4600000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T46 waiting', 'c4600000-0000-4000-8000-000000000001', 'd4600000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+    ('f4600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4600000-0000-4000-8000-000000000001', 'install', now() - interval '1 hour', now()),
+    ('f4600000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e4600000-0000-4000-8000-000000000001', 'install', now() + interval '1 day', now() + interval '1 day 1 hour');
+  update public.jobs set status = 'scheduled' where id = 'e4600000-0000-4000-8000-000000000001';
+  insert into public.visit_assignees (company_id, visit_id, user_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'f4600000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+-- the technician (who may not update jobs) gets on site: the job starts anyway
+:as_tech_a
+update public.visits set status = 'en_route' where id = 'f4600000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000001') = 'scheduled', 'on the way does not start the job');
+update public.visits set status = 'on_site' where id = 'f4600000-0000-4000-8000-000000000001';
+:as_owner_a
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000001') = 'in_progress', '«on site» starts the job, even when the tech moves the visit');
+-- the tech does not close the job, neither by the function nor directly
+:as_tech_a
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'the tech does not close a job');
+select tst.blocked($q$update public.jobs set status = 'completed' where id = 'e4600000-0000-4000-8000-000000000001'$q$, 'the tech does not set «completed» directly');
+-- sales do not close a job
+:as_sales_a
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'sales do not close a job');
+-- the office: not while a visit is open
+:as_office_a
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'not while a visit of the job is open');
+update public.visits set status = 'completed' where id = 'f4600000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000001') = 'in_progress', 'a finished visit (paid) does not close the job');
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'the second visit is still open');
+select public.cancel_visit('f4600000-0000-4000-8000-000000000002', 'client_cancelled');
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000001') = 'in_progress', 'cancelling the last open visit of a going job leaves it going (S9a)');
+select tst.ok((public.complete_job('e4600000-0000-4000-8000-000000000001') ->> 'status') = 'completed', 'the office closes the job');
+select tst.ok((select status = 'completed' and completed_at is not null from public.jobs where id = 'e4600000-0000-4000-8000-000000000001'), 'the job is completed, with its time');
+select tst.ok((public.complete_job('e4600000-0000-4000-8000-000000000001') ->> 'repeat')::boolean, 'a repeat changes nothing');
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000002')$q$, 'a job waiting for a date is not closed');
+-- another company and anon
+:as_owner_b
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000002')$q$, 'another company does not close our job');
+reset role; set role anon;
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000002')$q$, 'anon does not close a job');
+:as_super
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000002') = 'draft', 'refused closes changed nothing');
+\echo 'T46 wave 3c: «Работа выполнена» (S10) ok'
+
 \echo 'ALL TESTS PASSED'
