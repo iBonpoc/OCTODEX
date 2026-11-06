@@ -1,6 +1,7 @@
 /**
  * PWA from the Home Screen (PR #77): the page covers the whole screen (viewport-fit=cover),
  * so the header and the tab pill must keep clear of the notch and the home indicator.
+ * 820/1280 (wave 2b, docs/specs/13 §2.5): no bottom tabs — the side menu; its first and last places keep clear too.
  * Chromium has no notch: the safe-area insets are substituted (47 top / 34 bottom, an iPhone with a notch)
  * on the element react-native-safe-area-context measures env(safe-area-inset-*) with.
  */
@@ -27,8 +28,20 @@ const measure = (page) =>
       const r = document.createRange(); r.selectNodeContents(n);
       for (const b of r.getClientRects()) if (b.height > 0 && b.width > 0) top = Math.min(top, b.top);
     }
-    const tabs = [...document.querySelectorAll('[role="tab"]')].map((e) => e.getBoundingClientRect()).filter((b) => b.height > 0);
+    // the section tabs only (a segmented control has role="tab" too)
+    const names = ["Главная", "План", "Сообщения", "Звонки", "Клиенты"];
+    const tabs = [...document.querySelectorAll('[role="tab"]')].filter((e) => names.includes(e.getAttribute("aria-label"))).map((e) => e.getBoundingClientRect()).filter((b) => b.height > 0);
+    // the side menu (820/1280): its places and the profile at the bottom
+    const nav = document.querySelector('[data-testid="side-nav"]');
+    // what is on screen: the scrolling list of places (it scrolls when taller than the screen) and the profile under it
+    const rect = (id) => nav?.querySelector(`[data-testid="${id}"]`)?.getBoundingClientRect();
+    const list = rect("side-scroll");
+    const first = rect("side-toggle");
+    const profile = rect("side-profile");
     return {
+      side: !!nav,
+      sideTop: first ? first.top : null,
+      sideBottom: list && profile ? Math.max(list.bottom, profile.bottom) : null,
       top,
       tabTop: tabs.length ? Math.min(...tabs.map((b) => b.top)) : null,
       tabBottom: tabs.length ? Math.max(...tabs.map((b) => b.bottom)) : null,
@@ -86,8 +99,15 @@ exports.run = async (h, { BASE }) => {
   await withInsets(h);
   let m = await measure(page);
   h.expect(m.top >= TOP, `/clients: header below the notch (text top ${m.top} ≥ ${TOP})`);
-  h.expect(m.tabTop !== null, "/clients: tab bar shown");
-  h.expect(m.tabTop >= TOP && m.tabBottom <= m.h - BOTTOM, `/clients: tabs clear of notch and home indicator (${m.tabTop}–${m.tabBottom}, screen ${m.h})`);
+  if (h.layout.width < 820) {
+    h.expect(m.tabTop !== null, "/clients: tab bar shown");
+    h.expect(m.tabTop >= TOP && m.tabBottom <= m.h - BOTTOM, `/clients: tabs clear of notch and home indicator (${m.tabTop}–${m.tabBottom}, screen ${m.h})`);
+    h.expect(!m.side, "/clients: no side menu on the phone");
+  } else {
+    h.expect(m.tabTop === null, "/clients: no bottom tab bar on 820/1280");
+    h.expect(m.side && m.sideTop !== null, "/clients: the side menu shown");
+    h.expect(m.sideTop >= TOP && m.sideBottom <= m.h - BOTTOM, `/clients: side menu clear of notch and home indicator (${m.sideTop}–${m.sideBottom}, screen ${m.h})`);
+  }
 
   // client page: an ordinary page in the client's browser, but its header still keeps clear of the notch
   await h.go("/p/demo0handyman0estimate0000000001");

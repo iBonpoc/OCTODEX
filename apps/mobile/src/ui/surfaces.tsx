@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState, type ComponentRef, type React
 import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
-import { StackNavPill } from "@/nav/TabBar";
 import { MenuButton } from "@/nav/NavMenu";
 import { isTabScreen } from "@/nav/roles";
 import { screenPath } from "./screenPath";
@@ -26,7 +25,8 @@ export function Background() {
   const { c, name } = useTheme();
   const { width, height } = useWindowDimensions();
   return (
-    <View style={[StyleSheet.absoluteFill, { backgroundColor: c.bg }]} pointerEvents="none">
+    // clipped to the screen: next to the side menu (820/1280) the screen is narrower than the window
+    <View style={[StyleSheet.absoluteFill, { backgroundColor: c.bg, overflow: "hidden" }]} pointerEvents="none">
       <Svg width={width} height={height}>
         <Defs>
           {c.glow.map((g, i) => (
@@ -279,7 +279,8 @@ export function useNavInsets() {
   const bottomGap = space[2];
   return {
     wide,
-    top: wide ? insets.top + space[3] + component.dockBtn + space[4] + space[3] : insets.top + space[2],
+    // 820/1280: the menu is on the left (SideNav, docs/specs/13 §2.5) — nothing above the screen any more
+    top: wide ? insets.top + space[3] : insets.top + space[2],
     bottom: wide ? insets.bottom + space[6] : Math.max(insets.bottom, space[3]) + size.tabbarH + bottomGap + space[6],
     tabBottom: Math.max(insets.bottom, space[3]),
     safeTop: insets.top,
@@ -425,7 +426,7 @@ export function Screen({
   const { wide, device } = useDevice();
   /** tablet/desktop: the address bar is pinned above the scroll, with a round «‹» (spec 10, Н2) */
   // a tab opened from «More» (Plan, Triage…) has a parent too, but it lives in the tab navigator that already draws the pill
-  const pinned = wide && (!!up || menuRoot) && !isTabScreen(routeName);
+  const pinned = wide && !!up && !isTabScreen(routeName);
   // Esc = one level up on the web (spec 10, Н3); only screens with a parent (not the client page /p, not sign-in).
   const goUpRef = useRef(goUp);
   goUpRef.current = goUp;
@@ -598,7 +599,6 @@ export function Screen({
           onLayout={(e) => setBarH(e.nativeEvent.layout.height)}
           style={{ paddingTop: navInsets.safeTop + space[3], paddingBottom: space[1], paddingHorizontal: space[4], gap: space[2], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
         >
-          <StackNavPill pathname={pathname} params={params} />
           <View style={column}>{addressRow}</View>
         </View>
       ) : null}

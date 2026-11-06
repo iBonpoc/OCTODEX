@@ -31,6 +31,8 @@ export const ru = {
   "quick.photo": "Фото",
   "quick.receipt": "Расход по чеку",
   // nav.* — app shell (docs/specs/13)
+  "nav.expand": "Развернуть меню",
+  "nav.collapse": "Свернуть меню",
   "nav.home": "Главная",
   "nav.plan": "План",
   "nav.messages": "Сообщения",

@@ -14,34 +14,30 @@ const MENU = {
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 const path = (h) => new URL(h.page.url()).pathname;
 
-/** the visible ☰ (the tab navigator keeps visited tabs mounted, hidden, with their own ☰) */
-const menuButton = async (p) => {
-  const all = p.getByRole("button", { name: "Меню", exact: true });
-  // a screen opened by a tab may still be rendering: wait up to 3 s
-  for (let t = 0; t < 15; t++, await p.waitForTimeout(200))
-    for (let i = (await all.count()) - 1; i >= 0; i--) if (await all.nth(i).isVisible()) return all.nth(i);
-  throw new Error("no visible ☰");
-};
+const { menuApi } = require("../menu.cjs");
 exports.run = async (h) => {
   const p = h.page;
-  const menu = () => p.getByRole("dialog", { name: "Меню" });
-  const openMenu = async () => {
-    await (await menuButton(p)).click();
-    await menu().waitFor({ timeout: 3000 });
-  };
+  const m = menuApi(h);
+  const menu = m.menu;
+  const openMenu = m.open;
+  const wide = h.layout.width >= 820;
+  // phone: the 5 bottom tabs; 820/1280: the same places on the side rail (13 §2.5)
+  const SIDE = { Главная: "home", План: "plan", Сообщения: "messages", Звонки: "calls", Клиенты: "clients" };
+  const place = (name) => (wide ? p.getByTestId(`side-${SIDE[name]}`) : p.getByRole("tab", { name, exact: true }));
+  const lit = async (name) => (wide ? (await place(name).getAttribute("aria-current")) === "page" : (await p.getByRole("tab", { name, selected: true }).count()) === 1);
   await h.go("/today");
 
   for (const role of ["director", "dispatcher", "sales", "tech"]) {
     await setRole(h, role);
     await h.go("/plan");
     // the same 5 tabs, no «Ещё», no «Продажи»
-    for (const name of TABS) h.expect((await p.getByRole("tab", { name, exact: true }).count()) === 1, `${role}: tab «${name}»`);
+    for (const name of TABS) h.expect((await place(name).count()) === 1, `${role}: tab «${name}»`);
     for (const name of ["Ещё", "Продажи", "Разбор", "Выезды", "Сегодня"]) h.expect((await p.getByRole("tab", { name, exact: true }).count()) === 0, `${role}: no tab «${name}»`);
     // «Главная» opens the role's own home
-    await p.getByRole("tab", { name: "Главная", exact: true }).click();
+    await place("Главная").click();
     await p.waitForTimeout(600);
     h.expect(path(h) === HOME[role], `${role}: «Главная» → ${HOME[role]} (got ${path(h)})`);
-    h.expect((await p.getByRole("tab", { name: "Главная", selected: true }).count()) === 1, `${role}: «Главная» is lit on the home screen`);
+    h.expect(await lit("Главная"), `${role}: «Главная» is lit on the home screen`);
 
     // ☰ by rights
     await openMenu();
@@ -50,9 +46,8 @@ exports.run = async (h) => {
     for (const it of has) h.expect(new RegExp(`(^|\\n)${it}(\\n|$)`).test(text), `${role}: ☰ has «${it}»`);
     for (const it of hasNot) h.expect(!new RegExp(`(^|\\n)${it}(\\n|$)`).test(text), `${role}: ☰ has no «${it}»`);
     if (role === "director") { await p.waitForTimeout(600); await h.shot("menu-director"); }
-    await menu().getByRole("button", { name: "Закрыть", exact: true }).click();
-    await p.waitForTimeout(400);
-    h.expect((await menu().count()) === 0, `${role}: ☰ closes`);
+    await m.close();
+    if (!m.desktop) h.expect((await menu().count()) === 0, `${role}: ☰ closes`);
   }
 
   // ☰ → «Счета» opens the invoices list on /leads and marks it in the menu
@@ -65,7 +60,7 @@ exports.run = async (h) => {
   await h.expectText(/Нужно действие · \d+/, "the invoices list is open");
   await openMenu();
   h.expect((await menu().locator('[aria-current="page"]').innerText()).includes("Счета"), "«Счета» is marked as the current item");
-  await menu().getByRole("button", { name: "Закрыть", exact: true }).click();
+  await m.close();
 
   // the list switched by its own segment, then ☰ «Счета» again: the list follows (failed before: the address kept ?tab)
   await h.clickText("Сметы");
@@ -87,16 +82,18 @@ exports.run = async (h) => {
   await p.waitForTimeout(700);
   h.expect(path(h) === "/today", `back from Jobs returns Home (${path(h)})`);
 
-  // a click (mouse) outside the menu closes it (failed before: touch only)
-  await openMenu();
-  const vw = h.layout.width;
-  await p.mouse.click(vw - 10, 400);
-  await p.waitForTimeout(500);
-  h.expect((await menu().count()) === 0, "a click outside closes ☰");
+  // a click (mouse) outside the drawer closes it (failed before: touch only); the 1280 side menu has no drawer
+  if (!m.desktop) {
+    await openMenu();
+    const vw = h.layout.width;
+    await p.mouse.click(vw - 10, 400);
+    await p.waitForTimeout(500);
+    h.expect((await menu().count()) === 0, "a click outside closes ☰");
+  }
 
   // the client page /p has no staff menu
   await h.go("/p/demo0handyman0estimate0000000001");
-  h.expect((await p.getByRole("button", { name: "Меню", exact: true }).count()) === 0, "no ☰ on the client page");
+  h.expect((await p.getByRole("button", { name: "Меню", exact: true }).count()) === 0 && (await p.getByTestId("side-nav").count()) === 0, "no ☰ and no side menu on the client page");
 
   // old addresses keep working: /inbox?tab=… → /leads?tab=…
   await h.go("/inbox?tab=estimates");
@@ -107,7 +104,7 @@ exports.run = async (h) => {
   const call = db.activities.find((a) => a.kind === "call");
   h.expect(call, "the demo has a call");
   const lead = db.leads.find((l) => l.id === call.subjectId);
-  await p.getByRole("tab", { name: "Звонки", exact: true }).click();
+  await place("Звонки").click();
   await p.waitForTimeout(600);
   h.expect(path(h) === "/calls", `tab «Звонки» → /calls (${path(h)})`);
   await h.expectText(new RegExp(lead.name), "the call is listed by the lead's name");

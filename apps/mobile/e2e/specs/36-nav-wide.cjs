@@ -1,7 +1,7 @@
 /**
- * Tablet and desktop navigation (spec 10, Н1–Н3, founder 05.11.2026):
- * the top pill stays on inner screens with the section highlighted; a round «‹» goes one level up;
- * Esc goes one level up (an open menu closes first). Phone: unchanged — no pill on inner screens, no «‹».
+ * Tablet and desktop navigation (spec 10, Н2–Н3; 13 §2.5): the side menu stays on inner screens with the section
+ * marked (it replaced the top pill, wave 2b); a round «‹» goes one level up; Esc goes one level up (an open menu
+ * closes first). Phone: unchanged — no tab bar on inner screens, no «‹».
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -14,6 +14,8 @@ exports.run = async (h) => {
   const ownerName = db.customers.find((c) => c.id === owner).name;
   // screens below in the stack stay in the page (hidden): count only what is on screen
   const tab = (name) => p.locator(`[role="tab"][aria-label="${name}"]:visible`);
+  const side = (id) => p.getByTestId(`side-${id}`);
+  const marked = async (id) => (await side(id).getAttribute("aria-current")) === "page";
   // «‹» and the parent crumb share one name (same action, WCAG 3.2.4); «‹» comes first
   const up = (to) => p.getByRole("button", { name: `Назад: ${to}`, exact: true }).locator("visible=true").first();
   const roundBack = () => p.locator('[aria-label^="Назад"]:visible').filter({ has: p.locator("svg") }).filter({ hasNotText: /./ });
@@ -38,27 +40,25 @@ exports.run = async (h) => {
     h.expect(!box || box.y < y0 - 100, "phone: trail scrolls with the page");
     return;
   }
-  h.expect((await tab("Клиенты").count()) === 1, "pill on the client card");
-  h.expect((await tab("Клиенты").getAttribute("aria-selected")) === "true", "Clients highlighted");
-  await h.shot("client-pill");
-  // another section in one tap (the 5 tabs of 13 §2.1)
-  await tab("План").click();
+  h.expect((await p.getByTestId("side-nav").count()) === 1 && (await tab("Клиенты").count()) === 0, "the side menu on the client card, no top pill");
+  h.expect(await marked("clients"), "Clients marked");
+  await h.shot("client-side");
+  // another section in one tap
+  await side("plan").click();
   await p.waitForTimeout(600);
-  h.expect(/\/plan/.test(p.url()), `pill → Plan from a client (${p.url()})`);
-  h.expect((await tab("План").getAttribute("aria-selected")) === "true", "Plan highlighted");
+  h.expect(/\/plan/.test(p.url()), `side menu → Plan from a client (${p.url()})`);
+  h.expect(await marked("plan"), "Plan marked");
 
-  // another role's home (the owner opens Triage): exactly one pill, «Главная» lit, the trail is not covered
+  // another role's home (the owner opens Triage): «Главная» marked, the trail at the top of the screen, right of the menu
   await h.go("/triage");
-  h.expect((await tab("Главная").count()) === 1, "/triage: exactly one pill");
-  h.expect((await tab("Главная").getAttribute("aria-selected")) === "true", "/triage: Home highlighted");
-  const pill = await tab("Главная").boundingBox();
+  h.expect(await marked("home"), "/triage: Home marked");
+  const nav = await p.getByTestId("side-nav").boundingBox();
   const crumb = await p.getByRole("button", { name: "Назад: Главная", exact: true }).locator("visible=true").first().boundingBox();
-  h.expect(!!crumb && crumb.y >= pill.y + pill.height, `/triage: trail below the pill (${crumb && crumb.y} vs ${pill.y + pill.height})`);
+  h.expect(!!crumb && crumb.x >= nav.x + nav.width, `/triage: trail right of the menu (${crumb && crumb.x} vs ${nav.x + nav.width})`);
 
-  // estimate: a ☰ section, no tab lit (the ☰ marks it); the pill still has ☰
+  // estimate: a ☰ section — «Сметы» marked
   await h.go(`/estimate/${db.estimates[0].id}`);
-  h.expect((await p.locator('[role="tab"][aria-selected="true"]:visible').count()) === 0, "no tab lit on an estimate");
-  h.expect((await p.getByRole("button", { name: "Меню", exact: true }).locator("visible=true").count()) === 1, "☰ in the pill on an estimate");
+  h.expect(await marked("estimates"), "Estimates marked on an estimate");
 
   // Н2: «‹» goes one level up: job → client → clients
   await h.go(`/job/${job.id}`);
