@@ -36,7 +36,8 @@ export function clientRecords(db: DB, c: Customer, role: Role) {
   // a tech sees only the jobs he has a visit on (same rule as visibleClients)
   const jobs = office ? allJobs : allJobs.filter((j) => db.visits.some((v) => v.jobId === j.id && isAssigned(v, db.me)));
   const leads = office ? db.leads.filter((l) => l.customerId === c.id) : [];
-  const leadIds = new Set(leads.map((l) => l.id));
+  // notes of the client's leads stay on the client for everyone who sees the client (as before wave 4)
+  const leadIds = new Set(db.leads.filter((l) => l.customerId === c.id).map((l) => l.id));
   const estimates = db.estimates.filter((e) => e.customerId === c.id);
   const invoices = office ? db.invoices.filter((i) => i.customerId === c.id) : [];
   const receipts = office ? db.payments.filter((p) => p.customerId === c.id) : [];
@@ -47,7 +48,7 @@ export function clientRecords(db: DB, c: Customer, role: Role) {
   const jobIds = new Set(jobs.map((j) => j.id));
   const photos = db.visits.filter((v) => v.jobId && jobIds.has(v.jobId)).flatMap((v) => v.photos ?? []);
   const files = (db.files ?? []).filter((f) => f.customerId === c.id || (f.jobId && jobIds.has(f.jobId)));
-  return { properties, people: peopleOf(c), jobs, leads, estimates, invoices, receipts, tasks, notes, photos, files };
+  return { properties, people: peopleOf(c), jobs, leads, leadIds: [...leadIds], estimates, invoices, receipts, tasks, notes, photos, files };
 }
 
 /** The counter on each row; billing and history have none. */

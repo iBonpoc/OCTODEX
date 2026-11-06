@@ -1543,6 +1543,10 @@ export const ru = {
   "client.f.billingOwn": "Другой адрес",
   "client.f.billingHint": "У всех объектов клиента один плательщик: счета уходят на этот адрес.",
   "client.f.nameNeeded": "Нужно имя или компания",
+  "client.f.taxExempt": "Без налога",
+  "client.f.taxExemptNote": "Сертификат или причина",
+  "client.f.taxExemptNoteHint": "Например, № сертификата перепродажи",
+  "client.f.taxExemptHint": "Новые сметы и счета клиента без налога с продаж. Подписанные документы не меняются.",
 } as const;
 
 export type DictKey = keyof typeof ru;

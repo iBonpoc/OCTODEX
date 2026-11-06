@@ -61,10 +61,26 @@ exports.run = async (h) => {
   h.expect(/Адрес для счетов\s*PO Box 4512, Sherman Oaks, CA 91413/.test(rows), `billing row (${rows})`);
   await h.expectText(/\(818\) 555-0177/, "the new phone in the contacts");
 
+  // «Без налога» (П-2a): a switch with the certificate; the card shows the label
+  await h.go("/client/edit?id=c2");
+  await p.getByRole("switch", { name: "Без налога" }).click();
+  await field("Например, № сертификата перепродажи").fill("RC-4512");
+  await p.getByRole("button", { name: "Сохранить", exact: true }).last().click();
+  await p.waitForTimeout(600);
+  const ce = (await h.db()).customers.find((x) => x.id === "c2");
+  h.expect(ce.taxExempt === true && ce.taxExemptNote === "RC-4512", `tax exempt saved: ${JSON.stringify([ce.taxExempt, ce.taxExemptNote])}`);
+  await h.go("/client/c2");
+  await h.expectText(/Без налога/, "label «Без налога» on the card");
+
   // back to «same as the property»: billing cleared
   await h.go("/client/edit?id=c2");
   await p.getByRole("radio", { name: "Как у объекта" }).click();
   await p.getByRole("button", { name: "Сохранить", exact: true }).last().click();
   await p.waitForTimeout(600);
   h.expect(!(await h.db()).customers.find((x) => x.id === "c2").billing, "billing cleared = the property address");
+
+  // the form is the office's: the tech does not open it by address (the server refuses his update)
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
+  await h.go("/client/edit?id=c2");
+  h.expect((await p.getByPlaceholder("Фамилия", { exact: true }).count()) === 0, "tech: no client form");
 };

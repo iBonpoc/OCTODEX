@@ -1544,4 +1544,8 @@ export const en: Dict = {
   "client.f.billingOwn": "Another address",
   "client.f.billingHint": "All the client's properties have one payer: invoices go to this address.",
   "client.f.nameNeeded": "A name or a company is needed",
+  "client.f.taxExempt": "Tax exempt",
+  "client.f.taxExemptNote": "Certificate or reason",
+  "client.f.taxExemptNoteHint": "E.g. resale certificate number",
+  "client.f.taxExemptHint": "New estimates and invoices of this client have no sales tax. Signed documents do not change.",
 };

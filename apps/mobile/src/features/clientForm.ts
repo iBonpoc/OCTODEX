@@ -27,31 +27,40 @@ export function displayName(p: NameParts): string {
 export const nameOk = (p: NameParts) => displayName(p).length >= 2;
 export const phoneOk = (v: string) => v.replace(/\D/g, "").length >= 7;
 
+/** a phone line of the form: the number and its label (a new line is «mobile») */
+export interface PhoneLine {
+  number: string;
+  label: PersonPhone["label"];
+}
+
 /**
- * The client's people with the main person's phones and primary email replaced by the form's. Labels of the phones
- * that stay keep their label; the first phone is the primary one; empty lines are dropped.
+ * The client's people with the main person's phones and primary email replaced by the form's. Each line keeps its own
+ * label (a removed line takes nothing with it); the first line is the primary phone; empty lines are dropped.
+ * A cleared email removes the primary address only; the other addresses stay, none of them becomes primary.
  */
-export function withMainContacts(c: Customer, phones: string[], email: string): Person[] {
+export function withMainContacts(c: Customer, phones: PhoneLine[], email: string): Person[] {
   const [main, ...others] = peopleOf(c);
   if (!main) return [];
   const nextPhones: PersonPhone[] = phones
-    .map((n) => n.trim())
-    .filter(Boolean)
-    .map((number, i) => ({ number, label: main.phones[i]?.label ?? "mobile", primary: i === 0 || undefined }));
-  const otherEmails = main.emails.filter((e) => !e.primary).filter((e) => e.address !== email.trim());
-  const nextEmails = email.trim() ? [{ address: email.trim(), primary: true }, ...otherEmails] : otherEmails.map((e, i) => ({ ...e, primary: i === 0 || undefined }));
+    .map((p) => ({ ...p, number: p.number.trim() }))
+    .filter((p) => p.number)
+    .map((p, i) => ({ number: p.number, label: p.label, primary: i === 0 || undefined }));
+  const mail = email.trim();
+  const rest = main.emails.filter((e) => !e.primary && e.address !== mail).map(({ address }) => ({ address }));
+  const nextEmails = mail ? [{ address: mail, primary: true }, ...rest] : rest;
   return [{ ...main, phones: nextPhones, emails: nextEmails }, ...others];
 }
 
-/** The main person's phones as the form shows them (primary first). */
-export function mainPhonesOf(c: Customer): string[] {
+/** The main person's phones as the form shows them (primary first), each with its label. */
+export function mainPhonesOf(c: Customer): PhoneLine[] {
   const main = peopleOf(c)[0];
   if (!main) return [];
-  return [...main.phones].sort((a, b) => Number(!!b.primary) - Number(!!a.primary)).map((p) => p.number);
+  return [...main.phones].sort((a, b) => Number(!!b.primary) - Number(!!a.primary)).map((p) => ({ number: p.number, label: p.label }));
 }
+/** the primary email only: an address the user cleared from the field does not come back as «the next one» */
 export const mainEmailOf = (c: Customer): string => {
   const main = peopleOf(c)[0];
-  return main?.emails.find((e) => e.primary)?.address ?? main?.emails[0]?.address ?? "";
+  return main?.emails.find((e) => e.primary)?.address ?? "";
 };
 
 export const EMPTY_BILLING: BillingAddress = { line1: "", unit: "", city: "", state: "CA", zip: "" };

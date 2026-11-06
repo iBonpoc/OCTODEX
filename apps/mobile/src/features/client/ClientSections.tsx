@@ -283,7 +283,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
     }
 
     case "notes":
-      return <NotesBlock subjectType="customer" subjectId={c.id} extraSubjects={r.leads.map((l) => ({ type: "lead" as const, id: l.id }))} />;
+      return <NotesBlock subjectType="customer" subjectId={c.id} extraSubjects={r.leadIds.map((id) => ({ type: "lead" as const, id }))} />;
 
     case "files":
       return r.photos.length + r.files.length === 0 ? (

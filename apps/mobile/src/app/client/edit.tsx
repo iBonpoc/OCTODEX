@@ -17,8 +17,9 @@ import {
   phoneOk,
   withMainContacts,
   type NameParts,
+  type PhoneLine,
 } from "@/features/clientForm";
-import { Button, ChoiceChips, IconButton, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, TextField, Toggle } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
@@ -37,15 +38,19 @@ export default function EditClient() {
   const c = id ? store.db.customers.find((x) => x.id === id) : undefined;
   const p = id ? store.db.properties.find((x) => x.customerId === id) : undefined;
   const [name, setName] = useState<NameParts>(c ? namePartsOf(c) : { first: "", last: "", company: "" });
-  const [phones, setPhones] = useState<string[]>(c ? (mainPhonesOf(c).length ? mainPhonesOf(c) : [""]) : [""]);
+  const blank: PhoneLine = { number: "", label: "mobile" };
+  const [phones, setPhones] = useState<PhoneLine[]>(c && mainPhonesOf(c).length ? mainPhonesOf(c) : [blank]);
   const [email, setEmail] = useState(c ? mainEmailOf(c) : "");
   const [address, setAddress] = useState(p?.address ?? "");
   const [city, setCity] = useState(p?.city ?? "");
   const [sourceId, setSourceId] = useState(c?.sourceId ?? store.db.sources.find((x) => x.active && x.name === "Referral")?.id ?? store.db.sources[0]?.id ?? "");
   const [billingOwn, setBillingOwn] = useState(!!c?.billing);
   const [billing, setBilling] = useState<BillingAddress>(c?.billing ?? EMPTY_BILLING);
+  const [taxExempt, setTaxExempt] = useState(!!c?.taxExempt);
+  const [taxNote, setTaxNote] = useState(c?.taxExemptNote ?? "");
   const back = () => (router.canGoBack() ? router.back() : router.replace(id ? `/client/${id}` : "/clients"));
-  if (!creating && !c) {
+  // the form is the office's: the tech has no «Изменить» and the server refuses his customers update (customers_update)
+  if (store.role === "tech" || (!creating && !c)) {
     return (
       <Screen title={t("clients.title")} back={back}>
         <Empty icon="user" title={t("clients.empty")} />
@@ -53,29 +58,34 @@ export default function EditClient() {
     );
   }
   const setPart = (k: keyof NameParts) => (v: string) => setName((x) => ({ ...x, [k]: v }));
-  const setPhone = (i: number) => (v: string) => setPhones((x) => x.map((n, j) => (j === i ? v : n)));
+  const setPhone = (i: number) => (v: string) => setPhones((x) => x.map((n, j) => (j === i ? { ...n, number: v } : n)));
   const setB = (k: keyof BillingAddress) => (v: string) => setBilling((x) => ({ ...x, [k]: v }));
   const shown = displayName(name);
-  const filled = phones.filter((x) => x.trim());
+  const filled = phones.map((x) => x.number.trim()).filter(Boolean);
+  // a new client: a name and one way to reach them (13 §3.3) plus the address of the first property (addCustomer makes it);
+  // an existing one may have neither phone nor email (a business client)
   const ok =
     nameOk(name) &&
     filled.every(phoneOk) &&
     (!billingOwn || billingOk(billing)) &&
-    (creating ? phoneOk(phones[0] ?? "") && !!(address.trim() || city.trim()) : filled.length > 0 || !!email.trim());
+    (!creating || ((filled.length > 0 || email.trim().includes("@")) && !!(address.trim() || city.trim())));
 
   const save = () => {
     const parts = { firstName: name.first, lastName: name.last, companyName: name.company };
     if (creating) {
-      const r = store.addCustomer({ name: shown, phone: phones[0]!.trim(), email: email.trim() || undefined, sourceId, address: address.trim(), city: city.trim() });
+      const r = store.addCustomer({ name: shown, phone: filled[0] ?? "", email: email.trim() || undefined, sourceId, address: address.trim(), city: city.trim() });
       const undos = [r.undo, store.updateCustomer(r.id, parts)];
       toast.show(store.online ? t("clients.created", { name: shown }) : t("offline.queued"), () => undos.reverse().forEach((u) => u()));
       router.replace(`/client/${r.id}`);
       return;
     }
+    // «Без налога» (П-2a): only when it changed — a signed document never changes, new ones get the exempt profile
+    const taxPatch =
+      taxExempt !== !!c!.taxExempt || (taxExempt && taxNote.trim() !== (c!.taxExemptNote ?? "")) ? { taxExempt, taxExemptNote: taxExempt ? taxNote : "" } : {};
     const undos = [
-      store.updateCustomer(c!.id, { name: shown, ...parts, ...(sourceId !== c!.sourceId ? { sourceId } : {}), billing: billingOwn ? billing : null }),
+      store.updateCustomer(c!.id, { name: shown, ...parts, ...(sourceId !== c!.sourceId ? { sourceId } : {}), billing: billingOwn ? billing : null, ...taxPatch }),
     ];
-    const samePhones = JSON.stringify(filled.map((x) => x.trim())) === JSON.stringify(mainPhonesOf(c!));
+    const samePhones = JSON.stringify(phones.filter((x) => x.number.trim()).map((x) => ({ number: x.number.trim(), label: x.label }))) === JSON.stringify(mainPhonesOf(c!));
     if (!samePhones || email.trim() !== mainEmailOf(c!)) undos.push(store.saveCustomerPeople(c!.id, withMainContacts(c!, phones, email)));
     if (p && (address !== p.address || city !== p.city)) undos.push(store.updateProperty(p.id, { address: address.trim(), city: city.trim() }));
     toast.show(store.online ? t("co.saved") : t("offline.queued"), () => undos.reverse().forEach((u) => u()));
@@ -107,14 +117,14 @@ export default function EditClient() {
             {phones.map((n, i) => (
               <RowView key={i}>
                 <View style={{ flex: 1 }}>
-                  <TextField type="phone" value={n} onChangeText={setPhone(i)} placeholder="(555) 555-0100" icon="phone" label={`${t("co.phone")} ${i + 1}`} />
+                  <TextField type="phone" value={n.number} onChangeText={setPhone(i)} placeholder="(555) 555-0100" icon="phone" label={`${t("co.phone")} ${i + 1}`} />
                 </View>
                 {i > 0 ? <IconButton icon="close" label={`${t("person.removePhone")} ${i + 1}`} onPress={() => setPhones((x) => x.filter((_, j) => j !== i))} /> : null}
               </RowView>
             ))}
           </View>
         </Labeled>
-        {!creating ? <Button label={t("client.f.addPhone")} icon="plus" variant="ghost" size="sm" onPress={() => setPhones((x) => [...x, ""])} /> : null}
+        {!creating ? <Button label={t("client.f.addPhone")} icon="plus" variant="ghost" size="sm" onPress={() => setPhones((x) => [...x, blank])} /> : null}
         <Labeled label={t("co.email")}>
           <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
         </Labeled>
@@ -134,6 +144,20 @@ export default function EditClient() {
       <Card>
         <SourceField value={sourceId} onChange={setSourceId} />
       </Card>
+
+      {!creating ? (
+        <Card>
+          <Toggle on={taxExempt} onChange={setTaxExempt} label={t("client.f.taxExempt")} />
+          {taxExempt ? (
+            <Labeled label={t("client.f.taxExemptNote")}>
+              <TextField type="text" value={taxNote} onChangeText={setTaxNote} placeholder={t("client.f.taxExemptNoteHint")} label={t("client.f.taxExemptNote")} />
+            </Labeled>
+          ) : null}
+          <T v="caption" tone="mut">
+            {t("client.f.taxExemptHint")}
+          </T>
+        </Card>
+      ) : null}
 
       {!creating ? (
         <>

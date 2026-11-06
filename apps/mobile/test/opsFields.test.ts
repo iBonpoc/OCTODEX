@@ -2,8 +2,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const calls: { table: string; how: "update" | "upsert"; row: Record<string, unknown>; id?: unknown }[] = [];
+const rpcs: { fn: string; args: unknown }[] = [];
 vi.mock("../src/cloud/client", () => ({
   supabase: {
+    rpc: (fn: string, args: unknown) => {
+      rpcs.push({ fn, args });
+      return { then: (ok: (r: { error: null }) => unknown) => Promise.resolve({ error: null }).then(ok) };
+    },
     from: (table: string) => {
       const done = (r: { table: string; how: "update" | "upsert"; row: Record<string, unknown> }) => {
         const entry: (typeof calls)[number] = { ...r };
@@ -23,7 +28,10 @@ vi.mock("../src/cloud/client", () => ({
 }));
 import { applyOp } from "../src/cloud/ops";
 
-beforeEach(() => void calls.splice(0));
+beforeEach(() => {
+  calls.splice(0);
+  rpcs.splice(0);
+});
 
 describe("ops: customer.update (name parts, address for invoices)", () => {
   it("writes first / last / company name and the billing address", async () => {
@@ -73,5 +81,47 @@ describe("ops: job.update and jobType.save", () => {
       { table: "job_types", how: "upsert", row: { id: "t9", company_id: "co", seed_key: null, name: "Gutter guards", position: 5, archived_at: null } },
       { table: "job_types", how: "update", id: "t2", row: { name: null, position: 1, archived_at: "2026-11-06T00:00:00Z" } },
     ]);
+  });
+});
+
+describe("ops: wave П-2a money fields", () => {
+  it("customer without tax and its note", async () => {
+    await applyOp({ k: "customer.update", id: "c1", taxExempt: true, taxExemptNote: " Cert 12-345 " }, "co", "u");
+    expect(calls).toEqual([{ table: "customers", how: "update", id: "c1", row: { tax_exempt: true, tax_exempt_note: "Cert 12-345" } }]);
+  });
+  it("job tax goes with the other job fields", async () => {
+    await applyOp({ k: "job.update", id: "j1", taxEnabled: true, taxRateBps: 1025 }, "co", "u");
+    expect(calls).toEqual([{ table: "jobs", how: "update", id: "j1", row: { tax_enabled: true, tax_rate_bps: 1025 } }]);
+  });
+  it("job tags in one call to the server", async () => {
+    await applyOp({ k: "job.tags", id: "j1", tagIds: ["a", "b"] }, "co", "u");
+    expect(rpcs).toEqual([{ fn: "set_job_tags", args: { p_job_id: "j1", p_tag_ids: ["a", "b"] } }]);
+  });
+  it("a new line names its job; an edit never moves it; the total is the server's", async () => {
+    const line = { id: "li1", jobId: "j1", position: 0, name: " Gutter ", quantity: "2.5", unitPriceCents: 1999, taxable: true };
+    await applyOp({ k: "jobLine.save", isNew: true, line }, "co", "u");
+    await applyOp({ k: "jobLine.save", isNew: false, line: { ...line, unitPriceCents: 2100 } }, "co", "u");
+    expect(calls[0]).toEqual({
+      table: "job_line_items", how: "upsert",
+      row: { id: "li1", company_id: "co", job_id: "j1", position: 0, name: "Gutter", description: null, catalog_item_id: null, quantity: "2.5", unit_price_cents: 1999, taxable: true },
+    });
+    expect(calls[1]).toEqual({
+      table: "job_line_items", how: "update", id: "li1",
+      row: { position: 0, name: "Gutter", description: null, catalog_item_id: null, quantity: "2.5", unit_price_cents: 2100, taxable: true },
+    });
+    expect(JSON.stringify(calls)).not.toContain("line_total");
+  });
+  it("a line removed by mistake comes back (Undo)", async () => {
+    await applyOp({ k: "jobLine.restore", id: "li1" }, "co", "u");
+    expect(calls).toEqual([{ table: "job_line_items", how: "update", id: "li1", row: { deleted_at: null } }]);
+  });
+  it("the quantity goes as the database keeps it (4 places), so the engine and the server count the same", async () => {
+    await applyOp({ k: "jobLine.save", isNew: false, line: { id: "li1", jobId: "j1", position: 0, name: "x", quantity: "1.00004", unitPriceCents: 12500, taxable: false } }, "co", "u");
+    expect(calls[0]!.row.quantity).toBe("1");
+  });
+  it("a removed line is marked, not deleted", async () => {
+    await applyOp({ k: "jobLine.remove", id: "li1" }, "co", "u");
+    expect(calls[0]).toMatchObject({ table: "job_line_items", how: "update", id: "li1" });
+    expect(Object.keys(calls[0]!.row)).toEqual(["deleted_at"]);
   });
 });

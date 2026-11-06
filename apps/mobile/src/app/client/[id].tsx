@@ -11,6 +11,7 @@ import { billingLine } from "@/features/clientForm";
 import { ClientSection, PersonRows } from "@/features/client/ClientSections";
 import { StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
 import { propertyTitle } from "@/features/properties";
+import { sourceName } from "@/features/leads";
 import type { CustomerStatus } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { Button, IconButton, StatusChip, TagChip } from "@/ui/controls";
@@ -122,11 +123,17 @@ export default function ClientScreen() {
         ) : (
           <StatusChip status={chip.s} label={t(chip.l)} />
         )}
+        {c.taxExempt ? <StatusChip status="neutral" label={t("client.f.taxExempt")} soft /> : null}
         {tags.map((x) => (
           <TagChip key={x.id} label={tagLabel(x, t)} onPress={office ? () => setSheet("tags") : undefined} />
         ))}
         {office ? <TagChip label={tags.length ? "+" : t("client.addTag")} onPress={() => setSheet("tags")} /> : null}
       </RowView>
+      {office && c.sourceId ? (
+        <T v="caption" tone="mut">
+          {t("client.cameFrom", { source: sourceName(db, c.sourceId) })}
+        </T>
+      ) : null}
       {status === "do_not_service" && c.statusReason ? (
         <T v="caption" tone="mut">
           {t("client.reason", { r: c.statusReason })}
