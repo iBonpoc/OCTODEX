@@ -1,1 +1,6 @@
 project_id = "octodex"
+
+# 7-2 (S21): accepting a team invitation trusts a CONFIRMED sign-in email (auth.users.email_confirmed_at).
+# Keep «Confirm email» on in the hosted project too (Authentication → Providers → Email).
+[auth.email]
+enable_confirmations = true
