@@ -56,3 +56,28 @@ describe("owedByClient («Кто должен»)", () => {
   });
   it("empty", () => expect(owedByClient([])).toEqual([]));
 });
+
+import { centsToDecimal, salesFunnel } from "../src/index.js";
+
+describe("salesFunnel («Продажи»)", () => {
+  it("sent, signed, value of the signed only, share half up", () => {
+    expect(
+      salesFunnel([
+        { sent: true, signed: true, cents: 120000 },
+        { sent: true, signed: false, cents: 50000 },
+        { sent: true, signed: false, cents: 1 },
+        { sent: false, signed: true, cents: 30050 },
+      ]),
+    ).toEqual({ sent: 3, signed: 2, signedCents: 150050, signedPct: 67 });
+  });
+  it("1 of 8 = 12.5% → 13; nothing sent → 0", () => {
+    expect(salesFunnel([{ sent: true, signed: true, cents: 0 }, ...Array.from({ length: 7 }, () => ({ sent: true, signed: false, cents: 0 }))]).signedPct).toBe(13);
+    expect(salesFunnel([{ sent: false, signed: true, cents: 100 }]).signedPct).toBe(0);
+    expect(salesFunnel([])).toEqual({ sent: 0, signed: 0, signedCents: 0, signedPct: 0 });
+  });
+});
+
+describe("centsToDecimal (CSV)", () => {
+  it.each([[0, "0.00"], [5, "0.05"], [184000, "1840.00"], [184050, "1840.50"], [-2500, "-25.00"], [-7, "-0.07"]])("%i → %s", (c, s) => expect(centsToDecimal(c)).toBe(s));
+  it("a fraction is a bug", () => expect(() => centsToDecimal(1.5)).toThrow());
+});
