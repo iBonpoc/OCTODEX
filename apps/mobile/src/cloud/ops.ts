@@ -146,7 +146,7 @@ export type Op =
       name: string; phone: string; email?: string; sourceId: string; address: string; city: string;
     }
   // wave П-1: name parts and the address for invoices (billing null = same as the property)
-  | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string; firstName?: string; lastName?: string; companyName?: string; billing?: BillingAddress | null; taxExempt?: boolean; taxExemptNote?: string }
+  | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string; firstName?: string; lastName?: string; companyName?: string; billing?: BillingAddress | null; taxExempt?: boolean; taxExemptNote?: string; sourceId?: string }
   | { k: "customer.people"; id: string; people: Person[] }
   | { k: "lead.people"; id: string; people: Person[] }
   | { k: "customer.tags"; id: string; tagIds: string[] }
@@ -285,6 +285,8 @@ export function customerCols(op: Extract<Op, { k: "customer.update" }>): Record<
   if (op.firstName !== undefined) cols.first_name = op.firstName.trim() || null;
   if (op.lastName !== undefined) cols.last_name = op.lastName.trim() || null;
   if (op.companyName !== undefined) cols.company_name = op.companyName.trim() || null;
+  // wave 4: the source changed in the client form; a cloud source is always a uuid (repo.ts), a demo name never reaches here
+  if (op.sourceId !== undefined && UUID.test(op.sourceId)) cols.lead_source_id = op.sourceId;
   if (op.taxExempt !== undefined) cols.tax_exempt = op.taxExempt;
   if (op.taxExemptNote !== undefined) cols.tax_exempt_note = op.taxExemptNote.trim() || null;
   if (op.billing !== undefined) {
