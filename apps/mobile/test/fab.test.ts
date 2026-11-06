@@ -26,10 +26,13 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
     expect(fabItems("home", "director").find((i) => i.id === "job")!.href).toBe("/job/new");
     expect(ids("home", "tech")).toEqual(["lead", "expense"]);
   });
-  it("План: planners — Лид · Работа · Записать в план; sales — Лид · Работа (без даты, S17); tech — no «＋» (Р7)", () => {
-    expect(ids("plan", "director")).toEqual(["lead", "job", "planAdd"]);
-    expect(ids("plan", "dispatcher")).toEqual(["lead", "job", "planAdd"]);
-    expect(ids("plan", "sales")).toEqual(["lead", "job"]);
+  it("План: planners — Работа · Лид · Записать в план · Событие · Выходной; sales — Работа · Лид (без даты, S17); tech — no «＋» (Р7)", () => {
+    expect(ids("plan", "director")).toEqual(["job", "lead", "planAdd", "planEvent", "planTimeOff"]);
+    expect(ids("plan", "dispatcher")).toEqual(["job", "lead", "planAdd", "planEvent", "planTimeOff"]);
+    expect(ids("plan", "sales")).toEqual(["job", "lead"]);
+    for (const it of fabItems("plan", "director").filter((i) => i.id.startsWith("plan"))) expect(it.href, it.id).toBeUndefined();
+    expect(fabItems("plan", "director").find((i) => i.id === "planEvent")!.act).toBe("planEvent");
+    expect(fabItems("plan", "director").find((i) => i.id === "planTimeOff")!.act).toBe("planTimeOff");
     expect(ids("plan", "tech")).toEqual([]);
   });
   it("Клиенты: office — Клиент; tech — none", () => {
@@ -75,7 +78,7 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
         }
   });
   it("no «coming in wave N» items: Task, Note, File, Event are not offered yet", () => {
-    for (const s of SETS) for (const r of ROLES) for (const it of fabItems(s, r, FULL)) expect(["lead", "client", "job", "estimate", "expense", "visit", "planAdd", "photo"]).toContain(it.id);
+    for (const s of SETS) for (const r of ROLES) for (const it of fabItems(s, r, FULL)) expect(["lead", "client", "job", "estimate", "expense", "visit", "planAdd", "planEvent", "planTimeOff", "photo"]).toContain(it.id);
   });
 });
 
