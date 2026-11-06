@@ -12,7 +12,7 @@ vi.mock("expo-sharing", () => ({}));
 vi.mock("@/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
 
-import { canServe, notServed } from "../src/features/clients";
+import { canMarkNoService, canServe, notServed, statusChoices } from "../src/features/clients";
 import { findDuplicates } from "../src/features/leads";
 import { beforeSend } from "../src/features/sendEstimate";
 import { newDoc, optionTotals } from "../src/features/estimateDoc";
@@ -79,5 +79,23 @@ describe("beforeSend", () => {
     const off = beforeSend({ customers: [cust("x", { taxExempt: true })] }, { customerId: "x", status: "draft", doc: newDoc() });
     expect(off).toEqual({ ok: true });
     expect(beforeSend({ customers: [cust("x", { taxExempt: true })] }, { customerId: "x", status: "sent", doc: taxed() })).toEqual({ ok: true });
+  });
+});
+
+describe("who marks «do not service» (04 §12.8, db T58)", () => {
+  it("the director and the office do; sales and the tech do not", () => {
+    expect(canMarkNoService("director")).toBe(true);
+    expect(canMarkNoService("dispatcher")).toBe(true);
+    expect(canMarkNoService("sales")).toBe(false);
+    expect(canMarkNoService("tech")).toBe(false);
+  });
+  it("the status menu: sales get archive only, and a marked client cannot be moved by them", () => {
+    expect(statusChoices("active", "director")).toEqual(["active", "archived", "do_not_service"]);
+    expect(statusChoices("prospect", "dispatcher")).toEqual(["prospect", "archived", "do_not_service"]);
+    expect(statusChoices("do_not_service", "director")).toEqual(["active", "archived", "do_not_service"]);
+    expect(statusChoices("active", "sales")).toEqual(["active", "archived"]);
+    expect(statusChoices("prospect", "sales")).toEqual(["prospect", "archived"]);
+    expect(statusChoices("archived", "sales")).toEqual(["active", "archived"]);
+    expect(statusChoices("do_not_service", "sales")).toEqual([]);
   });
 });

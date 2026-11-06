@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
-import { canServe, canSeeClientMoney, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
+import { canServe, canSeeClientMoney, statusChoices, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { clientCounts, clientRecords, clientRowsFor, isClientSection, type ClientRow } from "@/features/clientRows";
 import { billingLine } from "@/features/clientForm";
 import { ClientSection, PersonRows } from "@/features/client/ClientSections";
@@ -97,7 +97,8 @@ export default function ClientScreen() {
     if (st === "do_not_service") return setSheet("status"); // needs a reason
     toast.show(t("client.statusSaved"), store.setCustomerStatus(c.id, st));
   };
-  const statusOptions: CustomerStatus[] = status === "prospect" ? ["prospect", "archived", "do_not_service"] : ["active", "archived", "do_not_service"];
+  // the mark is the director's and the office's (04 §12.8): sales see no «Не обслуживаем» and cannot lift it
+  const statusOptions = statusChoices(status, role);
 
   return (
     <Screen
@@ -115,7 +116,7 @@ export default function ClientScreen() {
             {c.number}
           </T>
         ) : null}
-        {office ? (
+        {office && statusOptions.length ? (
           <View ref={statusRef} collapsable={false}>
             <Press onPress={openStatusMenu} visibleHeight={component.button.sm} accessibilityRole="button" accessibilityLabel={`${t("client.statusTitle")}: ${t(chip.l)}`}>
               <StatusChip status={chip.s} label={t(chip.l)} />

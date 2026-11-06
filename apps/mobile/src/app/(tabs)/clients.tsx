@@ -2,7 +2,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
-import { clientHistory, clientMoneyOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
+import { canMarkNoService, clientHistory, clientMoneyOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { invoiceSigns } from "@/features/listSigns";
 import { useI18n } from "@/i18n";
@@ -147,7 +147,8 @@ export default function Clients() {
           title={`${t("card.statusTitle")} · ${picking.name}`}
           options={pickerOptions("customer", statusOf(picking)).map((o) => {
             const chip = clientStatusChip[o.status as CustomerStatus];
-            return { key: o.status, tone: chip.s, label: t(chip.l), current: o.current, enabled: o.enabled, form: o.how === "form" };
+            // «Не обслуживаем» — the director's and the office's only (04 §12.8)
+            return { key: o.status, tone: chip.s, label: t(chip.l), current: o.current, enabled: o.enabled && (o.status !== "do_not_service" || canMarkNoService(role)), form: o.how === "form" };
           })}
           onPick={(k) => pickStatus(picking, k as CustomerStatus)}
         />

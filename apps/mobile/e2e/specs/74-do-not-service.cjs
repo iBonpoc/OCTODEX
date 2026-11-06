@@ -3,7 +3,8 @@
  * for them on the phone: no «＋» on the client, not in the estimate's client picker, an old estimate is not sent again,
  * their lead offers only «Открыть клиента», and a new lead with their phone gets the red mark (it is still saved).
  * The server refuses the same (db T44). Plus the 4a leftover: an old taxed draft of a client who became «Без налога»
- * is sent without tax (re-saved before the send).
+ * is sent without tax (re-saved before the send). Only the director and the office set or lift the mark: sales
+ * get archive only and cannot lift a mark (db T58).
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -56,6 +57,32 @@ exports.run = async (h) => {
   await p.getByText("Клиент", { exact: true }).last().click(); await p.waitForTimeout(600);
   h.expect((await h.db()).customers.find((c) => c.id === "c3").status === "active", "Linda is active again");
   h.expect((await plus().count()) === 1, "«＋» is back");
+
+  // only the director and the office set or lift the mark (04 §12.8, db T58): sales get archive only
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));
+  await h.go("/client/c3");
+  await p.getByRole("button", { name: /^Статус клиента:/ }).first().click(); await p.waitForTimeout(300);
+  await h.expectText(/В архиве/, "sales: the status menu opens with «В архиве»");
+  h.expect((await p.getByText("Не обслуживаем", { exact: true }).count()) === 0, "sales: no «Не обслуживаем» in the menu");
+  await p.keyboard.press("Escape"); await p.waitForTimeout(200);
+  // a client marked by the director: sales see the mark but cannot lift it
+  await p.evaluate(() => {
+    const k = "octo.db.v5";
+    const s = JSON.parse(localStorage.getItem(k));
+    s.db.customers = s.db.customers.map((c) => (c.id === "c3" ? { ...c, status: "do_not_service", statusReason: "Did not pay twice" } : c));
+    localStorage.setItem(k, JSON.stringify(s));
+  });
+  await h.go("/client/c3");
+  await h.expectText(/Не обслуживаем/, "sales see the mark");
+  h.expect((await p.getByRole("button", { name: /^Статус клиента:/ }).count()) === 0, "sales: the mark is not a button");
+  await h.shot("sales");
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
+  await p.evaluate(() => {
+    const k = "octo.db.v5";
+    const s = JSON.parse(localStorage.getItem(k));
+    s.db.customers = s.db.customers.map((c) => (c.id === "c3" ? { ...c, status: "active", statusReason: undefined } : c));
+    localStorage.setItem(k, JSON.stringify(s));
+  });
 
   // 4a leftover: a draft with tax for David (c2), then David becomes «Без налога», then the draft is sent
   await h.go("/estimate/new?customerId=c2&propertyId=p2");
