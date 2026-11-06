@@ -4,12 +4,34 @@
  * fails on any page error / console error, writes screenshots to e2e/out/.
  * Width and theme (CLAUDE.md rule 4): --width=390|820|1280 --theme=dark|light, or E2E_WIDTH / E2E_THEME.
  * --all-layouts runs every spec at all 3 widths × 2 themes (CI runs them as 6 parallel jobs instead).
+ * E2E_NOW=<ISO moment> starts the clock there (the specs' Date and every browser context's; it runs on from it), to check
+ * a spec at a risky hour, e.g. E2E_NOW=2026-11-06T08:10:00Z = 12:10 AM in Los Angeles (docs/ai/CHECKS.md §5).
  */
 const { execSync } = require("node:child_process");
 const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
+
+// E2E_NOW: the specs' clock is moved; installClock puts a browser context on the same clock
+let installClock = async () => {};
+if (process.env.E2E_NOW) {
+  const at = Date.parse(process.env.E2E_NOW);
+  if (Number.isNaN(at)) throw new Error(`E2E_NOW is not a date: ${process.env.E2E_NOW}`);
+  const Real = Date;
+  const shift = at - Real.now();
+  const Moved = class extends Real {
+    constructor(...a) { super(...(a.length ? a : [Real.now() + shift])); }
+    static now() { return Real.now() + shift; }
+  };
+  global.Date = Moved;
+  // Playwright stamps the install with its own Date.now() and the page counts on from that stamp by the real clock,
+  // so the install runs with the real Date (the runner does nothing else meanwhile)
+  installClock = async (ctx) => {
+    global.Date = Real;
+    try { await ctx.clock.install({ time: Real.now() + shift }); } finally { global.Date = Moved; }
+  };
+}
 
 const APP = path.join(__dirname, "..");
 const DIST = path.join(APP, "dist");
@@ -50,6 +72,7 @@ const server = http.createServer((req, res) => {
     const t0 = Date.now();
     const errors = [];
     const ctx = await browser.newContext({ viewport: { width: layout.width, height: layout.width === 390 ? 844 : 900 }, locale: "en-US" });
+    await installClock(ctx);
     await ctx.addInitScript((o) => {
       if (localStorage.getItem("octo.lang.v1")) return;
       localStorage.setItem("octo.lang.v1", JSON.stringify(o.lang));

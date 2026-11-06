@@ -175,7 +175,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
                       <T v="title" tabular>
                         {money(bal === 0 ? inv.totalCents : bal)}
                       </T>
-                      {bal > 0 ? <Button label={t("pay.payByCard")} icon="wallet" full onPress={() => setPaying(inv.id)} /> : null}
+                      {bal > 0 && data.simulatedPay ? <Button label={t("pay.payByCard")} icon="wallet" full onPress={() => setPaying(inv.id)} /> : null}
                     </Card>
                   );
                 })}

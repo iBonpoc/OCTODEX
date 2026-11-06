@@ -31,6 +31,17 @@ export function canServe(db: Pick<DB, "customers">, customerId: ID | undefined |
   const c = db.customers.find((x) => x.id === customerId);
   return !c || statusOf(c) !== "do_not_service";
 }
+/** Only the director and the office set or lift «do not service» (server: t45_customer_dns_who, db T58); sales do not. */
+export const canMarkNoService = (role: Role) => role === "director" || role === "dispatcher";
+/**
+ * The statuses the client's status menu offers this role: prospect → archive / do not service; otherwise active ⇄
+ * archive ⇄ do not service. Without the right to the mark it is not offered, and a marked client cannot be moved at all.
+ */
+export function statusChoices(cur: CustomerStatus, role: Role): CustomerStatus[] {
+  const all: CustomerStatus[] = cur === "prospect" ? ["prospect", "archived", "do_not_service"] : ["active", "archived", "do_not_service"];
+  if (canMarkNoService(role)) return all;
+  return cur === "do_not_service" ? [] : all.filter((s) => s !== "do_not_service");
+}
 /** Clients among these that are marked «do not service» (a new lead with their phone gets the red mark, 04 §4). */
 export const notServed = (cs: readonly Customer[]): Customer[] => cs.filter((c) => statusOf(c) === "do_not_service");
 

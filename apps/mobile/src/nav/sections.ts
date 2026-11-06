@@ -141,14 +141,14 @@ export interface FabCtx {
   /** the visit is an inspection (estimate from the visit) */
   inspection?: boolean;
 }
-export type FabId = "lead" | "client" | "job" | "estimate" | "expense" | "visit" | "planAdd" | "photo";
+export type FabId = "lead" | "client" | "job" | "estimate" | "expense" | "visit" | "planAdd" | "planEvent" | "planTimeOff" | "photo";
 export interface FabItem {
   id: FabId;
   label: DictKey;
   icon: IconKey;
   /** a screen to open; undefined = an action the screen or the «＋» itself does (`act`) */
   href?: string;
-  act?: "planAdd" | "photo";
+  act?: "planAdd" | "planEvent" | "planTimeOff" | "photo";
 }
 
 const TECH: readonly Role[] = ["tech"];
@@ -179,6 +179,8 @@ const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey }> = {
   expense: { label: "quick.receipt", icon: "wallet" },
   visit: { label: "sch.title", icon: "calendar" },
   planAdd: { label: "plan.add", icon: "calendar" },
+  planEvent: { label: "plan5.addEvent", icon: "clock" },
+  planTimeOff: { label: "plan5.addTimeOff", icon: "sun" },
   photo: { label: "quick.photo", icon: "camera" },
 };
 
@@ -201,7 +203,14 @@ const estimate = (roles: readonly Role[] | undefined, needs?: FabDef["needs"]): 
 export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
   home: [lead, client, job, estimate(OFFICE), expense()],
   // the schedule is the planners' (docs/specs/03 Р7): no «＋» on Plan for the technician
-  plan: [{ ...lead, roles: OFFICE }, job, { id: "planAdd", roles: PLANNERS, act: "planAdd" }],
+  // wave 5 (#187/#188): an event and a day off open the Plan's own EventSheet; the planners' only (Р7)
+  plan: [
+    job,
+    { ...lead, roles: OFFICE },
+    { id: "planAdd", roles: PLANNERS, act: "planAdd" },
+    { id: "planEvent", roles: PLANNERS, act: "planEvent" },
+    { id: "planTimeOff", roles: PLANNERS, act: "planTimeOff" },
+  ],
   calls: [lead, client],
   clients: [client],
   client: [{ ...job, needs: (c) => !!c.customerId }, estimate(OFFICE, (c) => !!c.customerId)],

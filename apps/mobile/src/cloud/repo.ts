@@ -52,7 +52,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const live = <T,>(table: string, cols = "*") => q<T>(supabase.from(table).select(cols).eq("company_id", companyId).is("deleted_at", null));
   const [mems, sources, customers, contacts, properties, jobs, visits, assignees, leads, estimates, versions, options, lines, approvals, invoices, payments, files, expenses, catalogRows, lineCosts, notifications] =
     await Promise.all([
-      q<Row>(supabase.from("memberships").select("user_id, role, status, can_sign_contracts, title, his_registration_number, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).eq("status", "active")),
+      q<Row>(supabase.from("memberships").select("user_id, role, status, can_sign_contracts, title, his_registration_number, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).in("status", ["active", "disabled"]).is("deleted_at", null)),
       live<Row>("lead_sources", "id, name, kind, phone, email, customer_id, note, is_active, is_system, position"),
       live<Row>("customers"),
       live<Row>("contacts", "id, customer_id, lead_id, name, role, phone, email, is_primary, preferred_language, created_at"),
@@ -158,7 +158,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   };
 
   const sourceName = new Map(sources.map((r) => [s(r.id), s(r.name)]));
-  const members: Member[] = mems.map((m) => {
+  // wave 7-2 (S21): pending invitations (RLS shows them to the owner and admins only); a failure here never breaks the load
+  const invites = await q<Row>(supabase.from("invitations").select("id, email, name, role, expires_at").eq("company_id", companyId).eq("status", "pending")).catch(() => [] as Row[]);
+  const all: Member[] = mems.map((m) => {
     const u = (Array.isArray(m.users) ? m.users[0] : m.users) as Row | null;
     const name = s(u?.full_name) || s(u?.email) || "—";
     return {
@@ -167,8 +169,21 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       canSignContracts: m.can_sign_contracts !== false, title: (m.title as string | null) ?? undefined, hisNumber: (m.his_registration_number as string | null) ?? undefined,
       // E2b-2: only the owner gives or takes the right to sign (the app shows owner and admin both as director)
       isOwner: m.role === "owner",
+      // switched off: kept so old records keep the name; `pending` leaves them out of pickers and signing
+      ...(m.status === "disabled" ? { disabled: true, pending: true } : {}),
     };
   });
+  const members: Member[] = [
+    ...all,
+    ...invites.map((r): Member => {
+      const name = s(r.name) || s(r.email);
+      return {
+        id: `inv-${s(r.id)}`, invitationId: s(r.id), name, initials: initials(name), kind: r.role === "subcontractor" ? "sub" : "employee",
+        roles: appRoles(r.role as DbRole), email: s(r.email), pending: true, expiresAt: s(r.expires_at) || undefined,
+      };
+    }),
+  ];
+
   const primaryPhone = new Map<string, string>();
   const primaryEmail = new Map<string, string>();
   const clientContacts = contacts.filter((c) => !!c.customer_id);

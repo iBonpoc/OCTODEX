@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { router } from "expo-router";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useAuth } from "@/cloud/auth";
+import { peekInviteKey } from "@/features/team";
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -16,6 +18,10 @@ export default function CompanySetup() {
   useEffect(() => {
     if (auth.company && !busy) router.replace("/");
   }, [auth.company, busy]);
+  // a person who came by an invitation link joins that company instead of creating one (wave 7-2, S21)
+  useEffect(() => {
+    AsyncStorage.getItem(peekInviteKey).then((v) => v && router.replace("/auth/invite")).catch(() => {});
+  }, []);
   return (
     <Screen title={t("company.title")} back={() => router.replace("/")}>
       <Card>
