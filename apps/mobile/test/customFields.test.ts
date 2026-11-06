@@ -21,6 +21,7 @@ describe("customValueOk — the same cases as T42", () => {
     expect(customValueOk(F("date"), "2026-12-01")).toBe(true);
     expect(customValueOk(F("date"), "2026-02-30")).toBe(false);
     expect(customValueOk(F("date"), "12/01/2026")).toBe(false);
+    expect(customValueOk(F("date"), "2026-13-45")).toBe(false);
   });
   it("lists: only the choices", () => {
     expect(customValueOk(F("select", ["Mon", "Wed", "Fri"]), "Wed")).toBe(true);
@@ -28,9 +29,11 @@ describe("customValueOk — the same cases as T42", () => {
     expect(customValueOk(F("multiselect", ["Copper", "Aluminum"]), ["Copper"])).toBe(true);
     expect(customValueOk(F("multiselect", ["Copper", "Aluminum"]), ["Copper", "Gold"])).toBe(false);
     expect(customValueOk(F("multiselect", ["Copper"]), "Copper")).toBe(false);
+    expect(customValueOk(F("multiselect", ["Copper"]), ["Copper", "Copper"])).toBe(false);
   });
   it("file: a file id", () => {
     expect(customValueOk(F("file"), "0195f3c2-0000-7000-8000-000000000001")).toBe(true);
     expect(customValueOk(F("file"), "photo.jpg")).toBe(false);
+    expect(customValueOk(F("file"), "------------------------------------")).toBe(false);
   });
 });

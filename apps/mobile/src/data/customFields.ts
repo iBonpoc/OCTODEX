@@ -9,7 +9,7 @@ const isDay = (v: string) => {
   const d = new Date(`${v}T00:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === v;
 };
-const UUID = /^[0-9a-f-]{36}$/;
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
 export function customValueOk(f: Pick<CustomField, "type" | "options">, v: CustomFieldValueData): boolean {
   switch (f.type) {
@@ -26,7 +26,7 @@ export function customValueOk(f: Pick<CustomField, "type" | "options">, v: Custo
     case "select":
       return typeof v === "string" && f.options.includes(v);
     case "multiselect":
-      return Array.isArray(v) && v.every((x) => typeof x === "string" && f.options.includes(x));
+      return Array.isArray(v) && new Set(v).size === v.length && v.every((x) => typeof x === "string" && f.options.includes(x));
     case "file":
       return typeof v === "string" && UUID.test(v);
     default:
