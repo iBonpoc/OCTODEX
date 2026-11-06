@@ -45,7 +45,7 @@ export function SideNav() {
       aria-label={t("nav.menu")}
       style={{ width: sideNavWidth(device, menu.sideOpen), borderRightWidth: component.hairline, borderRightColor: c.bd, backgroundColor: c.page, paddingTop: insets.top + space[3], paddingBottom: insets.bottom + space[3] }}
     >
-      <ScrollView contentContainerStyle={{ paddingHorizontal: space[2], gap: space[1], alignItems: open ? "stretch" : "center" }}>
+      <ScrollView testID="side-scroll" contentContainerStyle={{ paddingHorizontal: space[2], gap: space[1], alignItems: open ? "stretch" : "center" }}>
         <Item
           icon="menu"
           label={t(open ? "nav.collapse" : "nav.expand")}
@@ -72,6 +72,7 @@ export function SideNav() {
       </ScrollView>
       {/* profile → My settings */}
       <Press
+        testID="side-profile"
         onPress={() => go("settings")}
         visibleHeight={size.hitMin}
         accessibilityRole="button"
