@@ -4,7 +4,7 @@
  * - a number (EST-…) → the estimate; a phone by digits («555 0144») → the client «найдено: телефон Tom Mitchell»;
  *   an address → the property; groups by 3 with «Показать все»; nothing — «Ничего не нашлось по «…»»;
  * - the technician finds no invoices or payments.
- * (JOB-0001 → the job comes with Job.number, wave П: the job is found by its title meanwhile.)
+ * - JOB-0001 → the job (by Job.number).
  */
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 const path = (h) => new URL(h.page.url()).pathname;
@@ -41,6 +41,15 @@ exports.run = async (h) => {
   await p.getByTestId("search-group-estimates").locator("visible=true").locator('[data-testid="search-hit"]').first().click();
   await p.waitForTimeout(700);
   h.expect(path(h) === `/estimate/${est.id}`, `the hit opens the estimate (${p.url()})`);
+
+  // a job number → the job
+  const job = db.jobs.find((j) => j.number);
+  await h.go("/search");
+  await type(job.number);
+  h.expect((await p.getByTestId("search-group-jobs").locator("visible=true").count()) === 1, `the Jobs group for ${job.number}`);
+  await p.getByTestId("search-group-jobs").locator("visible=true").locator('[data-testid="search-hit"]').first().click();
+  await p.waitForTimeout(700);
+  h.expect(path(h) === `/job/${job.id}`, `the hit opens the job (${p.url()})`);
 
   // a phone of another person of the client, by digits
   await h.go("/search");
