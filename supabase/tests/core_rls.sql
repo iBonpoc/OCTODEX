@@ -3743,7 +3743,16 @@ do $$ begin
 end $$;
 :as_office_a
 select tst.dns($q$update public.estimates set status = 'viewed' where id = '0e440000-0000-4000-8000-000000000001'$q$, 'an expired estimate is not revived into «viewed»');
-select tst.dns($q$insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 at their address', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000001')$q$, 'no job of another client at the client''s property');
+-- a job of another client at the client's property: «Работы» t14 refuses it first (the address is not a property of
+-- that client, 22023) — still refused; t44 stays the guard for estimates and visits
+do $$ begin
+  begin
+    insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 at their address', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000001');
+    raise exception 'FAILED: a job of another client at the client''s property was made';
+  exception when others then
+    perform tst.ok(sqlstate = '22023' or sqlerrm = 'customer_do_not_service', 'no job of another client at the client''s property: ' || sqlerrm);
+  end;
+end $$;
 select tst.dns($q$insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000001', 'T44 at their address')$q$, 'no estimate of another client at the client''s property');
 :as_super
 update public.estimates set deleted_at = now() where id = '0e440000-0000-4000-8000-000000000002';
