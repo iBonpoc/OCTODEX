@@ -3,9 +3,9 @@
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
 import { companyFromDb } from "./companyMap";
-import { customerStatus, estimateStatus, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
+import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -65,7 +65,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       q<Row>(supabase.from("estimate_approvals").select("estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method").eq("company_id", companyId)),
       live<Row>("invoices"),
       live<Row>("payments"),
-      live<Row>("files", "id, visit_id, stage, storage_key, kind"),
+      live<Row>("files", "id, visit_id, job_id, customer_id, stage, storage_key, kind, created_at"),
       live<Row>("expenses"),
       live<Row>("catalog_items"),
       // Costs are visible only to owner/admin/office: for others the query returns nothing.
@@ -74,6 +74,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     ]);
   // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
   const signatureRows = await q<Row>(supabase.from("member_signatures").select("id, user_id, svg, name, title, created_at, revoked_at").eq("company_id", companyId)).catch(() => [] as Row[]);
+  // wave П-1: the company's job types (no deleted_at, archived ones stay); empty before the migration
+  const jobTypeRows = await q<Row>(supabase.from("job_types").select("id, seed_key, name, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]);
   const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows, tagRows, customerTagRows, phoneRows, emailRows, catRows, gateRows] = await Promise.all([
     q<Row>(supabase.from("companies").select("*").eq("id", companyId)),
     // EIN: owner/admin only — others get nothing
@@ -85,7 +87,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     live<Row>("lead_costs", "lead_id, cost_cents").catch(() => [] as Row[]),
     live<Row>("lead_contacts", "id, lead_id, name, role, phone, email").catch(() => [] as Row[]),
     live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at").catch(() => [] as Row[]),
-    q<Row>(supabase.from("activities").select("id, subject_type, subject_id, kind, body, meta, at, actor_id").eq("company_id", companyId).is("deleted_at", null).order("at", { ascending: false }).limit(2000)).catch(() => [] as Row[]),
+    q<Row>(supabase.from("activities").select("id, subject_type, subject_id, kind, body, meta, at, actor_id, direction, contact_id").eq("company_id", companyId).is("deleted_at", null).order("at", { ascending: false }).limit(2000)).catch(() => [] as Row[]),
     // clients C1 (tags, several phones / emails per person); empty before the migration is applied
     live<Row>("tags", "id, name, is_active, is_system, position").catch(() => [] as Row[]),
     q<Row>(supabase.from("customer_tags").select("customer_id, tag_id").eq("company_id", companyId)).catch(() => [] as Row[]),
@@ -317,15 +319,43 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     archivedAt: (l.archived_at as string | null) ?? undefined,
   }));
 
-  const mappedJobs: Job[] = jobs.map((j) => ({
+  const toJob = (j: Row): Job => ({
     id: s(j.id),
     propertyId: s(j.property_id),
-    title: s(j.title) || s(j.number),
+    // the job's own name only: the number is its own field (wave П-1); a screen shows «Job JOB-0001» itself
+    title: s(j.title),
+    number: s(j.number) || undefined,
+    customerId: (j.customer_id as string | null) ?? undefined,
+    description: (j.description as string | null) ?? undefined,
+    jobTypeId: (j.job_type_id as string | null) ?? undefined,
     status: jobStatus[s(j.status)] ?? "scheduled",
     amountCents: n(j.contract_total_cents),
     estimateId: (j.estimate_id as string | null) ?? undefined,
     serviceCategoryId: (j.service_category_id as string | null) ?? undefined,
+  });
+  // a cancelled job is not «done»: it leaves the list of jobs and stays apart for invoices and history (wave П-1)
+  const mappedJobs: Job[] = jobs.filter((j) => !jobDbCancelled.includes(s(j.status))).map(toJob);
+  const cancelledJobs: Job[] = jobs.filter((j) => jobDbCancelled.includes(s(j.status))).map(toJob);
+  const jobTypes: JobType[] = jobTypeRows
+    .map((r) => ({
+      id: s(r.id), seedKey: (r.seed_key as JobType["seedKey"] | null) ?? undefined, name: (r.name as string | null) ?? undefined,
+      position: n(r.position), archivedAt: (r.archived_at as string | null) ?? undefined,
+    }))
+    .sort((a, b) => a.position - b.position);
+  const fileItems: FileItem[] = files.map((f) => ({
+    id: s(f.id), kind: s(f.kind) as FileItem["kind"], jobId: (f.job_id as string | null) ?? undefined, visitId: (f.visit_id as string | null) ?? undefined,
+    customerId: (f.customer_id as string | null) ?? undefined, stage: (f.stage as FileItem["stage"] | null) ?? undefined,
+    storageKey: (f.storage_key as string | null) ?? undefined, at: s(f.created_at),
   }));
+  const billingOf = (c: Row): BillingAddress | undefined =>
+    c.billing_address_line1
+      ? {
+          line1: s(c.billing_address_line1), line2: (c.billing_address_line2 as string | null) ?? undefined, unit: (c.billing_address_unit as string | null) ?? undefined,
+          city: s(c.billing_address_city), state: (c.billing_address_state as string | null) ?? undefined, zip: (c.billing_address_zip as string | null) ?? undefined,
+        }
+      : undefined;
+  const geoOf = (p: Row): Property["geo"] =>
+    p.geo_lat == null || p.geo_lng == null ? undefined : { lat: Number(p.geo_lat), lng: Number(p.geo_lng) };
 
   const mappedExpenses: Expense[] = expenses.map((x) => ({
     id: s(x.id),
@@ -354,6 +384,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     activities: activityRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Activity["subjectType"], subjectId: s(r.subject_id), kind: s(r.kind) as Activity["kind"],
       body: (r.body as string | null) ?? undefined, meta: (r.meta as Record<string, string> | null) ?? undefined, at: s(r.at), actorId: s(r.actor_id),
+      contactId: (r.contact_id as string | null) ?? undefined, direction: r.direction === "in" || r.direction === "out" ? r.direction : undefined,
     })),
     customers: customers.map((c) => {
       const ppl = people.get(s(c.id));
@@ -370,6 +401,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         statusReason: (c.do_not_service_reason as string | null) ?? undefined,
         people: ppl,
         tagIds: tagsOfCustomer.get(s(c.id)) ?? [],
+        firstName: (c.first_name as string | null) ?? undefined,
+        lastName: (c.last_name as string | null) ?? undefined,
+        companyName: (c.company_name as string | null) ?? undefined,
+        billing: billingOf(c),
       };
     }),
     serviceCategories: catRows
@@ -391,8 +426,12 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       accessNotes: (p.access_notes as string | null) ?? undefined,
       gateCode: gateOf.get(s(p.id)),
       contactIds: Array.isArray(p.contact_ids) ? (p.contact_ids as string[]) : [],
+      geo: geoOf(p),
     })),
     jobs: mappedJobs,
+    cancelledJobs,
+    jobTypes,
+    files: fileItems,
     visits: mappedVisits,
     cancelledVisits,
     leads: mappedLeads,
@@ -435,7 +474,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     notices: notifications.map((r) => {
       const p = (r.payload ?? {}) as { customer?: string; total?: number; deposit?: number };
       return {
-        id: s(r.id), kind: s(r.kind) as Notice["kind"], estimateId: (r.estimate_id as string | null) ?? undefined, jobId: (r.job_id as string | null) ?? undefined, customer: p.customer ?? "",
+        id: s(r.id), kind: s(r.kind) as Notice["kind"], estimateId: (r.estimate_id as string | null) ?? undefined, jobId: (r.job_id as string | null) ?? undefined,
+        invoiceId: (r.invoice_id as string | null) ?? undefined, visitId: (r.visit_id as string | null) ?? undefined, customer: p.customer ?? "",
         totalCents: p.total, depositCents: p.deposit, at: s(r.created_at), read: !!r.read_at,
       };
     }),

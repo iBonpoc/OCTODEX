@@ -22,6 +22,7 @@ const dbStatus = (s: LeadStatus): string => leadStatusToDb[s];
 import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
+import { nextJobNumber } from "./jobs";
 import { inheritCategory } from "@/features/serviceCategories";
 import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
@@ -39,6 +40,7 @@ import {
   type Estimate,
   type EstimateApproval,
   type EstimateDoc,
+  type BillingAddress,
   type Expense,
   type Lead,
   type LostReason,
@@ -162,7 +164,8 @@ interface StoreCtx {
   convertLead: (leadId: ID, reasonText: string) => Undo;
   /** New client entered by hand (not from a lead): active client with one property. */
   addCustomer: (c: { name: string; phone: string; email?: string; sourceId: ID; address: string; city: string }) => { id: ID; undo: Undo };
-  updateCustomer: (id: ID, patch: { name?: string; phone?: string; email?: string }) => Undo;
+  /** wave П-1: also the name parts and the address for invoices (billing null = same as the property) */
+  updateCustomer: (id: ID, patch: { name?: string; phone?: string; email?: string; firstName?: string; lastName?: string; companyName?: string; billing?: BillingAddress | null }) => Undo;
   /** people of a client (several phones / emails each); the first person is the main one */
   saveCustomerPeople: (id: ID, people: Person[]) => Undo;
   setCustomerTags: (id: ID, tagIds: ID[]) => Undo;
@@ -432,7 +435,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           next = {
             ...next,
             notices: [
-              { id: uid(), kind: "invoice.paid", customer: d.customers.find((c) => c.id === inv.customerId)?.name ?? "", depositCents: amount, totalCents: amount, at: now },
+              { id: uid(), kind: "invoice.paid", invoiceId: inv.id, jobId: inv.jobId, customer: d.customers.find((c) => c.id === inv.customerId)?.name ?? "", depositCents: amount, totalCents: amount, at: now },
               ...next.notices,
             ],
           };
@@ -442,7 +445,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ...next,
             estimates: next.estimates.map((e) => (e.id === est.id ? { ...e, depositPaidAt: now } : e)),
             notices: [
-              { id: uid(), kind: "deposit.paid", estimateId: est.id, customer: d.customers.find((c) => c.id === est.customerId)?.name ?? "", depositCents: inv.totalCents, at: now, read: !fromClient },
+              { id: uid(), kind: "deposit.paid", estimateId: est.id, invoiceId: inv.id, customer: d.customers.find((c) => c.id === est.customerId)?.name ?? "", depositCents: inv.totalCents, at: now, read: !fromClient },
               ...next.notices,
             ],
           };
@@ -1059,7 +1062,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { id, undo };
       },
       updateCustomer: (id, patch) =>
-        mutate("customer.update", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, ...patch } : c)) }), { k: "customer.update", id, ...patch }),
+        mutate("customer.update", (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, ...patch, billing: patch.billing === undefined ? c.billing : patch.billing ?? undefined } : c)) }), { k: "customer.update", id, ...patch }),
       saveProperty: (p) => {
         const city = p.place ? cityLine(p.place) : p.city;
         const next: Property = { ...p, city, address: p.address.trim(), unit: p.unit?.trim() || undefined, label: p.label?.trim() || undefined, accessNotes: p.accessNotes?.trim() || undefined };
@@ -1210,10 +1213,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ...d,
             estimates: d.estimates.map((x) => (x.id === id ? { ...x, depositPaidAt: now } : x)),
             notices: [
-              { id: uid(), kind: "deposit.paid", estimateId: id, customer: d.customers.find((c) => c.id === e.customerId)?.name ?? "", depositCents: e.depositCents, at: now, read: !fromClient },
+              { id: uid(), kind: "deposit.paid", estimateId: id, invoiceId, customer: d.customers.find((c) => c.id === e.customerId)?.name ?? "", depositCents: e.depositCents, at: now, read: !fromClient },
               ...d.notices,
             ],
-            jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: id, serviceCategoryId: inheritCategory(d, { kind: "job", estimateId: id }) }],
+            jobs: existingJob ? d.jobs : [...d.jobs, { id: jobId, number: modeRef.current === "demo" ? nextJobNumber(d) : undefined, customerId: e.customerId, propertyId: e.propertyId, title: e.title, status: "unscheduled", amountCents: e.totalCents, estimateId: id, serviceCategoryId: inheritCategory(d, { kind: "job", estimateId: id }) }],
             invoices: [
               ...d.invoices,
               { id: invoiceId, customerId: e.customerId, jobId, totalCents: e.depositCents!, paidCents: e.depositCents!, dueDate: now, paidAt: now, method, kind: "deposit", title: "Deposit" },

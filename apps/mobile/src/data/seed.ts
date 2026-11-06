@@ -2,7 +2,7 @@
  * Test data (placeholder prices — founder rule: real prices are never typed into seeds).
  * All times are relative to "now" so the demo always looks like a live day in Los Angeles.
  */
-import type { DB, ChecklistItem, CatalogItem, Company, EstimateDoc, ServiceCategory, Source, Tag } from "./types";
+import { JOB_TYPE_SEED_KEYS, type DB, type ChecklistItem, type CatalogItem, type Company, type EstimateDoc, type JobType, type ServiceCategory, type Source, type Tag } from "./types";
 import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
 import { addDays } from "@/features/calendar";
 import { DEMO_ZONE, demoToday, wallToInstant } from "@/features/zone";
@@ -119,6 +119,8 @@ const jobChecklist = (prefix: string): ChecklistItem[] =>
   ].map((label, i) => ({ id: `${prefix}-c${i}`, label, done: false }));
 
 /** Demo directions of the business (presets, translated in the app). */
+/** the five common job types of a new company (13 §3.4 п. 8; server: app.seed_job_types) */
+export const SEED_JOB_TYPES: JobType[] = JOB_TYPE_SEED_KEYS.map((k, i) => ({ id: `jt-${k}`, seedKey: k, position: i }));
 export const SEED_SERVICE_CATEGORIES: ServiceCategory[] = ["handyman", "plumbing", "electrical", "painting"].map((k, i) => ({ id: `cat-${k}`, seedKey: k, position: i }));
 
 /** Demo company: partly filled so the setup checklist shows what is left. Test license number. */
@@ -147,6 +149,9 @@ export function makeSeed(): DB {
     tags: SEED_TAGS,
     serviceCategories: SEED_SERVICE_CATEGORIES,
     cancelledVisits: [],
+    cancelledJobs: [],
+    jobTypes: SEED_JOB_TYPES,
+    files: [],
     tasks: [
       { id: "t1", subjectType: "lead", subjectId: "l3", title: "Send the painting estimate", dueAt: hoursFromNow(20), assigneeId: "m-alex" },
     ],
@@ -186,13 +191,13 @@ export function makeSeed(): DB {
       { id: "p7", customerId: "c7", address: "520 W Olive Ave", city: "Burbank, CA 91506", stories: 2 },
     ],
     jobs: [
-      { id: "j1", propertyId: "p1", title: "Bathroom remodel: vanity, toilet, tile", status: "scheduled", amountCents: 342000, estimateId: "e5" },
-      { id: "j2", propertyId: "p2", title: "Kitchen faucet + garbage disposal", status: "scheduled", amountCents: 68000 },
-      { id: "j3", propertyId: "p3", title: "Drywall patch + paint touch-up", status: "scheduled", amountCents: 42000 },
-      { id: "j4", propertyId: "p4", title: "Interior painting, 2 bedrooms", status: "done", amountCents: 96000 },
-      { id: "j5", propertyId: "p5", title: "Deep clean after move-out", status: "scheduled", amountCents: 156000 },
-      { id: "j6", propertyId: "p6", title: "Panel upgrade 200A", status: "scheduled", amountCents: 518000 },
-      { id: "j8", propertyId: "p1b", title: "TV mount + shelves", status: "done", amountCents: 24000 },
+      { id: "j1", number: "JOB-0001", customerId: "c1", jobTypeId: "jt-install", propertyId: "p1", title: "Bathroom remodel: vanity, toilet, tile", status: "scheduled", amountCents: 342000, estimateId: "e5" },
+      { id: "j2", number: "JOB-0002", customerId: "c2", jobTypeId: "jt-repair", propertyId: "p2", title: "Kitchen faucet + garbage disposal", status: "scheduled", amountCents: 68000 },
+      { id: "j3", number: "JOB-0003", customerId: "c3", jobTypeId: "jt-repair", propertyId: "p3", title: "Drywall patch + paint touch-up", status: "scheduled", amountCents: 42000 },
+      { id: "j4", number: "JOB-0004", customerId: "c4", jobTypeId: "jt-install", propertyId: "p4", title: "Interior painting, 2 bedrooms", status: "done", amountCents: 96000 },
+      { id: "j5", number: "JOB-0005", customerId: "c5", jobTypeId: "jt-service", propertyId: "p5", title: "Deep clean after move-out", status: "scheduled", amountCents: 156000 },
+      { id: "j6", number: "JOB-0006", customerId: "c6", jobTypeId: "jt-install", propertyId: "p6", title: "Panel upgrade 200A", status: "scheduled", amountCents: 518000 },
+      { id: "j8", number: "JOB-0008", customerId: "c1", jobTypeId: "jt-install", propertyId: "p1b", title: "TV mount + shelves", status: "done", amountCents: 24000 },
     ],
     visits: [
       {

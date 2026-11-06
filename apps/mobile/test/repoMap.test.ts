@@ -1,0 +1,111 @@
+/**
+ * Wave П-1 (docs/specs/13-app-structure.md §5): what loadCompanyDB reads from the database rows.
+ * supabase is replaced by a fake that returns fixed rows per table, so the mapping is tested without a server.
+ */
+import { beforeEach, describe, expect, it, vi } from "vitest";
+
+const rows: Record<string, Record<string, unknown>[]> = {};
+function builder(table: string) {
+  const b: Record<string, unknown> = {};
+  for (const m of ["select", "eq", "is", "order", "limit", "in", "not"]) b[m] = () => b;
+  b.then = (ok: (r: { data: unknown; error: null }) => unknown) => Promise.resolve({ data: rows[table] ?? [], error: null }).then(ok);
+  return b;
+}
+vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => builder(t) } }));
+import { loadCompanyDB } from "../src/cloud/repo";
+
+const CO = "co-1";
+beforeEach(() => {
+  for (const k of Object.keys(rows)) delete rows[k];
+  rows.customers = [
+    {
+      id: "c1", company_id: CO, display_name: "Mary Lee", status: "active", first_name: "Mary", last_name: "Lee", company_name: null,
+      billing_address_line1: "PO Box 12", billing_address_city: "Pasadena", billing_address_state: "CA", billing_address_zip: "91101",
+    },
+    { id: "c2", company_id: CO, display_name: "Acme LLC", status: "active", company_name: "Acme LLC", billing_address_line1: null, billing_address_city: null },
+  ];
+  rows.properties = [
+    { id: "p1", customer_id: "c1", address_line1: "1 Main St", address_city: "Pasadena", geo_lat: "34.147800", geo_lng: "-118.144500" },
+    { id: "p2", customer_id: "c2", address_line1: "2 Oak St", address_city: "Pasadena", geo_lat: null, geo_lng: null },
+  ];
+  rows.jobs = [
+    { id: "j1", property_id: "p1", customer_id: "c1", number: "JOB-0001", title: null, status: "scheduled", description: "Two downspouts", job_type_id: "t2" },
+    { id: "j2", property_id: "p1", customer_id: "c1", number: "JOB-0002", title: "Gutter cleaning", status: "completed" },
+    { id: "j3", property_id: "p2", customer_id: "c2", number: "JOB-0003", title: "Cancelled roof", status: "cancelled" },
+  ];
+  rows.job_types = [
+    { id: "t2", seed_key: "repair", name: null, position: 1, archived_at: null },
+    { id: "t1", seed_key: "install", name: null, position: 0, archived_at: null },
+    { id: "t9", seed_key: null, name: "Gutter guards", position: 5, archived_at: "2026-11-01T00:00:00Z" },
+  ];
+  rows.files = [
+    { id: "f1", kind: "photo", visit_id: "v1", job_id: "j1", stage: "after", storage_key: "co-1/f1.jpg", created_at: "2026-11-05T10:00:00Z" },
+    { id: "f2", kind: "document", customer_id: "c1", stage: null, storage_key: "co-1/f2.pdf", created_at: "2026-11-05T11:00:00Z" },
+  ];
+  rows.visits = [{ id: "v1", job_id: "j1", status: "scheduled", starts_at: "2026-11-07T16:00:00Z", ends_at: "2026-11-07T17:00:00Z" }];
+  rows.activities = [{ id: "a1", subject_type: "customer", subject_id: "c1", kind: "sms", direction: "in", contact_id: "k1", at: "2026-11-05T12:00:00Z", actor_id: "u1" }];
+  rows.notifications = [
+    { id: "n1", kind: "invoice.paid", estimate_id: null, job_id: "j1", invoice_id: "i1", visit_id: null, payload: { customer: "Mary Lee", total: 5000 }, created_at: "2026-11-05T13:00:00Z" },
+  ];
+});
+
+describe("loadCompanyDB — jobs (wave П-1)", () => {
+  it("a cancelled job is not «done» and is not in the list of jobs; it stays in cancelledJobs", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.jobs.map((j) => j.id)).toEqual(["j1", "j2"]);
+    expect(db.jobs.find((j) => j.id === "j3")).toBeUndefined();
+    expect(db.cancelledJobs?.map((j) => j.id)).toEqual(["j3"]);
+  });
+  it("the number is its own field and never stands in for the title", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    const j1 = db.jobs.find((j) => j.id === "j1")!;
+    expect(j1.number).toBe("JOB-0001");
+    expect(j1.title).toBe("");
+    expect(db.jobs.find((j) => j.id === "j2")!.title).toBe("Gutter cleaning");
+  });
+  it("client, description and job type of a job", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    const j1 = db.jobs.find((j) => j.id === "j1")!;
+    expect(j1).toMatchObject({ customerId: "c1", description: "Two downspouts", jobTypeId: "t2", status: "scheduled" });
+    expect(db.jobs.find((j) => j.id === "j2")!.jobTypeId).toBeUndefined();
+  });
+  it("job types of the company, in their order, archived ones kept", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.jobTypes?.map((t) => t.id)).toEqual(["t1", "t2", "t9"]);
+    expect(db.jobTypes?.find((t) => t.id === "t9")).toMatchObject({ name: "Gutter guards", archivedAt: "2026-11-01T00:00:00Z" });
+    expect(db.jobTypes?.find((t) => t.id === "t1")).toMatchObject({ seedKey: "install" });
+  });
+});
+
+describe("loadCompanyDB — other fields (wave П-1)", () => {
+  it("client: name parts and the address for invoices", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    const c1 = db.customers.find((c) => c.id === "c1")!;
+    expect(c1).toMatchObject({ firstName: "Mary", lastName: "Lee", billing: { line1: "PO Box 12", city: "Pasadena", state: "CA", zip: "91101" } });
+    expect(c1.companyName).toBeUndefined();
+    const c2 = db.customers.find((c) => c.id === "c2")!;
+    expect(c2.companyName).toBe("Acme LLC");
+    expect(c2.billing).toBeUndefined();
+  });
+  it("property: geo from geo_lat / geo_lng, absent when unknown", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.properties.find((p) => p.id === "p1")!.geo).toEqual({ lat: 34.1478, lng: -118.1445 });
+    expect(db.properties.find((p) => p.id === "p2")!.geo).toBeUndefined();
+  });
+  it("files: one list; the photos of a visit are a view on the same rows", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.files).toEqual([
+      { id: "f1", kind: "photo", jobId: "j1", visitId: "v1", customerId: undefined, stage: "after", storageKey: "co-1/f1.jpg", at: "2026-11-05T10:00:00Z" },
+      { id: "f2", kind: "document", jobId: undefined, visitId: undefined, customerId: "c1", stage: undefined, storageKey: "co-1/f2.pdf", at: "2026-11-05T11:00:00Z" },
+    ]);
+    expect(db.visits[0]!.photos).toEqual([{ id: "f1", kind: "after", uri: undefined }]);
+  });
+  it("activity: the person and the direction", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.activities[0]).toMatchObject({ contactId: "k1", direction: "in" });
+  });
+  it("notice: leads to the invoice", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.notices[0]).toMatchObject({ kind: "invoice.paid", invoiceId: "i1", jobId: "j1" });
+  });
+});

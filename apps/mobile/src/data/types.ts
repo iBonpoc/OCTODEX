@@ -69,6 +69,20 @@ export interface Customer {
   /** people of the client, each with several phones and emails (docs/specs/04 §3.2) */
   people?: Person[];
   tagIds?: ID[];
+  /** wave П-1 (13 §5): the parts of the name (server: first_name, last_name, company_name); name stays the shown one */
+  firstName?: string;
+  lastName?: string;
+  companyName?: string;
+  /** address for invoices when it is not the property (server: billing_address_*); absent = the property address */
+  billing?: BillingAddress;
+}
+export interface BillingAddress {
+  line1: string;
+  line2?: string;
+  unit?: string;
+  city: string;
+  state?: string;
+  zip?: string;
 }
 
 /** A person of a client or a lead: one shape for both (agreed with the leads chat, 05.11.2026). */
@@ -121,6 +135,8 @@ export interface Property {
   gateCode?: string;
   /** people of the property: links to the client's people (tenant, property manager) */
   contactIds?: ID[];
+  /** wave П-1: where it is on the map (server: geo_lat / geo_lng), for the map and «distance from me»; absent = unknown */
+  geo?: { lat: number; lng: number };
 }
 
 /** unscheduled: client signed, the contractor has not picked a date yet (not in the plan) */
@@ -136,6 +152,39 @@ export interface Job {
   estimateId?: ID;
   /** direction of the business (docs/specs/11-trade.md): from the estimate when the job is made */
   serviceCategoryId?: ID;
+  /** wave П-1 (13 §5, 15-flows §3.1): JOB-0001 from the server; absent until the job is synced («New job»).
+   *  title is the job's own name only — the number is never put in it */
+  number?: string;
+  /** the client of the job (server: jobs.customer_id); absent in old saved data → through the property */
+  customerId?: ID;
+  description?: string;
+  /** a job type of the company (JobType); absent = not set (old jobs) */
+  jobTypeId?: ID;
+}
+
+/** The company's list of job types (13 §3.4 п. 8, server: job_types): a preset (seedKey, translated in the app) or an
+ *  own name; archived ones stay for old jobs. Not a status. */
+export const JOB_TYPE_SEED_KEYS = ["install", "repair", "service", "warranty", "other"] as const;
+export type JobTypeSeedKey = (typeof JOB_TYPE_SEED_KEYS)[number];
+export interface JobType {
+  id: ID;
+  seedKey?: JobTypeSeedKey;
+  name?: string;
+  position: number;
+  archivedAt?: string;
+}
+
+/** A file's record (server: public.files). The photos of a visit (Visit.photos) are a view on the same rows. */
+export type FileKind = "photo" | "receipt" | "signature" | "drawing" | "document";
+export interface FileItem {
+  id: ID;
+  kind: FileKind;
+  jobId?: ID;
+  visitId?: ID;
+  customerId?: ID;
+  stage?: "before" | "during" | "after" | "other";
+  storageKey?: string;
+  at: string;
 }
 
 export type VisitStep = "scheduled" | "en_route" | "on_site" | "working" | "signed" | "paid" | "done";
@@ -315,6 +364,9 @@ export interface Activity {
   meta?: Record<string, string>;
   at: string;
   actorId: ID;
+  /** wave П-1: the person the call / message was with (a contact of the client or the lead), and which way it went */
+  contactId?: ID;
+  direction?: "in" | "out";
 }
 
 /** awaiting_countersign: the client signed remotely, an employee has not signed for the company yet (docs/specs/07 §4, S8b) */
@@ -434,6 +486,8 @@ export interface Notice {
   kind: NoticeKind;
   estimateId?: ID;
   jobId?: ID;
+  /** wave П-1: invoice.paid / deposit.paid lead to the invoice (server: notifications.invoice_id) */
+  invoiceId?: ID;
   customer: string;
   /** visit.late: the visit, the tech, why late, and the time shown (left at, or the start) */
   visitId?: ID;
@@ -587,6 +641,13 @@ export interface DB {
   tags: Tag[];
   /** cancelled visits (docs/specs/03 §5.2): out of the Plan and the day, kept in the lead's feed with the reason */
   cancelledVisits?: CancelledVisit[];
+  /** wave П-1: cancelled jobs (server: jobs.status = cancelled) are not in `jobs`; kept here so invoices and the
+   *  history can still name them */
+  cancelledJobs?: Job[];
+  /** wave П-1: the company's job types (absent in old saved data → []) */
+  jobTypes?: JobType[];
+  /** wave П-1: file records (absent in old saved data → []) */
+  files?: FileItem[];
   /** directions of the business of the company (docs/specs/11-trade.md); archived ones stay for history */
   serviceCategories: ServiceCategory[];
   tasks: Task[];

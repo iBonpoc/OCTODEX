@@ -3060,4 +3060,95 @@ select tst.fails($q$select schedule_settings from public.companies$q$, 'anon rea
 update public.companies set schedule_settings = '{}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T38 schedule settings and hours ok'
 
+-- ---------------------------------------------------------------- T39: wave П-1 — job types, the tech's feed, files of a client
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values
+    ('c3900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T39 Mine'),
+    ('c3900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T39 Other');
+  insert into public.contacts (id, company_id, customer_id, name, is_primary) values
+    ('c3910000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3900000-0000-4000-8000-000000000001', 'T39 Mary', true);
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d3900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3900000-0000-4000-8000-000000000001', '39 Mine St', 'Pasadena'),
+    ('d3900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c3900000-0000-4000-8000-000000000002', '39 Other St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, description, customer_id, property_id, status) values
+    ('e3900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T39 mine', 'Two downspouts', 'c3900000-0000-4000-8000-000000000001', 'd3900000-0000-4000-8000-000000000001', 'draft'),
+    ('e3900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T39 other', null, 'c3900000-0000-4000-8000-000000000002', 'd3900000-0000-4000-8000-000000000002', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('f3900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e3900000-0000-4000-8000-000000000001', now() + interval '1 day');
+  insert into public.activities (company_id, subject_type, subject_id, kind, direction, contact_id, body) values
+    ('ca000000-0000-0000-0000-000000000000', 'job', 'e3900000-0000-4000-8000-000000000001', 'call', 'out', 'c3910000-0000-4000-8000-000000000001', 'T39 job mine'),
+    ('ca000000-0000-0000-0000-000000000000', 'customer', 'c3900000-0000-4000-8000-000000000001', 'sms', 'in', 'c3910000-0000-4000-8000-000000000001', 'T39 client mine'),
+    ('ca000000-0000-0000-0000-000000000000', 'job', 'e3900000-0000-4000-8000-000000000002', 'call', 'out', null, 'T39 job other'),
+    ('ca000000-0000-0000-0000-000000000000', 'customer', 'c3900000-0000-4000-8000-000000000002', 'sms', 'out', null, 'T39 client other');
+end $$;
+:as_office_a
+select tst.ok((public.assign_visit('f3900000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added')::int = 1, 'T39 the tech is on the visit of "mine"');
+select tst.ok(tst.cnt($q$select 1 from public.activities where body like 'T39 %'$q$) = 4, 'the office sees the whole feed');
+select tst.ok((select description from public.jobs where id = 'e3900000-0000-4000-8000-000000000001') = 'Two downspouts', 'jobs.description is kept');
+-- job types: a new company has the five common ones, in order
+select tst.ok((select array_agg(seed_key order by position) from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000')
+              = array['install', 'repair', 'service', 'warranty', 'other'], 'a new company gets the five job types');
+insert into public.job_types (id, company_id, name, position) values ('a3920000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Gutter guards', 5);
+update public.jobs set job_type_id = (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'repair')
+ where id = 'e3900000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.jobs j join public.job_types t on t.id = j.job_type_id where j.id = 'e3900000-0000-4000-8000-000000000001' and t.seed_key = 'repair'$q$) = 1, 'a job takes a type of its company');
+select tst.fails($q$insert into public.job_types (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'gutter GUARDS ')$q$, 'the same name twice is refused');
+select tst.fails($q$delete from public.job_types where id = 'a3920000-0000-4000-8000-000000000001'$q$, 'a job type is not deleted');
+update public.job_types set archived_at = now() where id = 'a3920000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.job_types where id = 'a3920000-0000-4000-8000-000000000001' and archived_at is not null$q$) = 1, 'a job type is archived instead');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'another company does not see our job types');
+:as_super
+select tst.fails($q$update public.jobs set job_type_id = (select id from public.job_types where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1) where id = 'e3900000-0000-4000-8000-000000000001'$q$, 'a job does not take a type of another company');
+select tst.fails($q$delete from public.job_types where id = 'a3920000-0000-4000-8000-000000000001'$q$, 'a job type is not deleted even by the service role (archive)');
+:as_sales_a
+select tst.fails($q$insert into public.job_types (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'T39 sales type')$q$, 'sales does not add job types');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 6, 'the tech reads the job types');
+select tst.fails($q$insert into public.job_types (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'T39 tech type')$q$, 'the tech does not add job types');
+select tst.blocked($q$update public.job_types set name = 'x' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'the tech does not rename job types');
+-- the tech's feed: the job and the client of his visit, nothing else
+select tst.ok(tst.cnt($q$select 1 from public.activities where body in ('T39 job mine', 'T39 client mine')$q$) = 2, 'the tech sees the feed of the job and the client of his visit');
+select tst.ok(tst.cnt($q$select 1 from public.activities where body in ('T39 job other', 'T39 client other')$q$) = 0, 'the tech does not see the feed of other jobs and clients');
+select tst.ok((select contact_id from public.activities where body = 'T39 client mine') = 'c3910000-0000-4000-8000-000000000001' and (select direction from public.activities where body = 'T39 client mine') = 'in', 'the person and the direction of an event are kept');
+insert into public.activities (company_id, subject_type, subject_id, kind, body) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e3900000-0000-4000-8000-000000000001', 'sms', 'T39 on the way');
+select tst.ok(tst.cnt($q$select 1 from public.activities where body = 'T39 on the way'$q$) = 1, 'the tech writes an event on the job of his visit');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, body) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e3900000-0000-4000-8000-000000000002', 'sms', 'T39 x')$q$, 'the tech does not write on another job');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c3900000-0000-4000-8000-000000000001', 'sms', 'T39 x')$q$, 'the tech does not write on the client');
+-- files of a client: the tech only for the client of his visit
+insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'document', 'c3900000-0000-4000-8000-000000000001');
+select tst.ok(tst.cnt($q$select 1 from public.files where customer_id = 'c3900000-0000-4000-8000-000000000001'$q$) = 1, 'the tech puts a file on the client of his visit');
+select tst.fails($q$insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'document', 'c3900000-0000-4000-8000-000000000002')$q$, 'the tech does not put a file on another client');
+select tst.blocked($q$update public.files set customer_id = 'c3900000-0000-4000-8000-000000000002' where customer_id = 'c3900000-0000-4000-8000-000000000001'$q$, 'the tech does not move his file to another client');
+-- taken off the visit: the feed goes too
+:as_office_a
+insert into public.files (company_id, kind, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', 'c3900000-0000-4000-8000-000000000002');
+select tst.ok(tst.cnt($q$select 1 from public.files where customer_id is not null and company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 2, 'the office puts a file on any client and sees them all');
+select tst.ok((public.assign_visit('f3900000-0000-4000-8000-000000000001', '{}') ->> 'removed')::int = 1, 'T39 the tech is taken off');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.activities where body like 'T39 %'$q$) = 0, 'taken off the visit, the tech no longer sees its feed');
+-- another company: a person of company B is not put on our event
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.activities where body like 'T39 %'$q$) = 0, 'another company sees nothing');
+:as_owner_a
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, contact_id) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e3900000-0000-4000-8000-000000000001', 'call', (select gen_random_uuid()))$q$, 'contact_id must be a person of the same company');
+\echo 'T39 wave П-1: job types, the tech feed, files of a client ok'
+
+-- ---------------------------------------------------------------- T40: wave П-1 — a paid notice leads to its invoice
+:as_super
+do $$ begin
+  perform tst.ok((select count(*) from public.notifications x join public.payments p on p.invoice_id = x.invoice_id
+                   where p.reference = 'stripe-simulated' and x.kind in ('invoice.paid', 'deposit.paid')) = 1,
+                 'portal_pay_simulated writes invoice_id on its notice (T12)');
+  perform tst.ok((select count(*) from public.notifications where kind in ('invoice.paid', 'deposit.paid') and (payload ->> 'simulated') = 'true' and invoice_id is null) = 0,
+                 'no paid notice of the client page is left without its invoice');
+end $$;
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.notifications where invoice_id is not null$q$) >= 1, 'the office reads invoice_id of a notice');
+:as_super
+select tst.fails($q$insert into public.notifications (company_id, kind, invoice_id) values ('cb000000-0000-0000-0000-000000000000', 'invoice.paid', (select invoice_id from public.payments where reference = 'stripe-simulated'))$q$, 'a notice does not lead to an invoice of another company');
+select tst.fails($q$insert into public.notifications (company_id, kind, visit_id) values ('cb000000-0000-0000-0000-000000000000', 'invoice.paid', 'f3900000-0000-4000-8000-000000000001')$q$, 'a notice does not lead to a visit of another company');
+\echo 'T40 paid notice leads to its invoice ok'
+
 \echo 'ALL TESTS PASSED'

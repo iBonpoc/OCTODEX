@@ -8,7 +8,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import { CUSTOMER_STATUSES, ESTIMATE_STATUSES, JOB_STATUSES, LEAD_STATUSES, VISIT_STATUSES } from "../src/data/types";
-import { customerStatus, estimateStatus, jobStatus, leadStatus, leadStatusToDb } from "../src/cloud/statusMap";
+import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, leadStatusToDb } from "../src/cloud/statusMap";
 
 const ROOT = path.resolve(__dirname, "../../..");
 const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -84,7 +84,8 @@ describe("story map §5: statuses", () => {
   const cases = [
     { entity: "Lead", app: LEAD_STATUSES as readonly string[], table: "leads", toApp: leadStatus as Record<string, string> },
     { entity: "Estimate", app: ESTIMATE_STATUSES as readonly string[], table: "estimates", toApp: estimateStatus as Record<string, string> },
-    { entity: "Job", app: JOB_STATUSES as readonly string[], table: "jobs", toApp: jobStatus as Record<string, string> },
+    // a cancelled job has no app status: it leaves the list (wave П-1, 13 §5), it is not "done"
+    { entity: "Job", app: JOB_STATUSES as readonly string[], table: "jobs", toApp: jobStatus as Record<string, string>, outOfList: jobDbCancelled },
     { entity: "Customer", app: CUSTOMER_STATUSES as readonly string[], table: "customers", toApp: customerStatus as Record<string, string> },
   ];
   for (const c of cases) {
@@ -95,6 +96,10 @@ describe("story map §5: statuses", () => {
     });
     it(`${c.entity}: every database status has a translation to a real app status`, () => {
       for (const s of dbStatuses(c.table)) {
+        if (c.outOfList?.includes(s)) {
+          expect(c.toApp[s], `${c.table}.status '${s}' leaves the list, it has no app status`).toBeUndefined();
+          continue;
+        }
         expect(c.toApp[s], `${c.table}.status '${s}' has no translation in statusMap.ts`).toBeDefined();
         expect(c.app, `${c.table}.status '${s}' → '${c.toApp[s]}'`).toContain(c.toApp[s]);
       }

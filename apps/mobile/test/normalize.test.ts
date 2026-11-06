@@ -60,3 +60,42 @@ describe("old saved data after an app update", () => {
     expect(normalizeDB(d, "demo")).toEqual(d);
   });
 });
+
+/** What a build before wave П-1 saved: jobs without number / customerId, no jobTypes, cancelledJobs, files. */
+function beforeWaveP1(): DB {
+  const d = makeSeed() as unknown as Record<string, unknown>;
+  delete d.jobTypes;
+  delete d.cancelledJobs;
+  delete d.files;
+  d.jobs = (d.jobs as Record<string, unknown>[]).map(({ number: _n, customerId: _c, jobTypeId: _t, ...j }) => j);
+  return d as unknown as DB;
+}
+
+describe("wave П-1: old saved data without the new fields", () => {
+  it("demo: jobs get the seed's JOB number and their client; the standard job types come", () => {
+    const d = beforeWaveP1();
+    d.jobs = [...d.jobs, { id: "j-local", propertyId: "p2", title: "Made on the phone", status: "unscheduled", amountCents: 100 }];
+    const db = normalizeDB(d, "demo");
+    expect(db.jobs.find((j) => j.id === "j1")).toMatchObject({ number: "JOB-0001", customerId: "c1" });
+    expect(db.jobs.find((j) => j.id === "j8")).toMatchObject({ number: "JOB-0008", customerId: "c1" });
+    expect(db.jobs.find((j) => j.id === "j-local")).toMatchObject({ number: "JOB-0009", customerId: "c2" });
+    expect(new Set(db.jobs.map((j) => j.number)).size).toBe(db.jobs.length);
+    expect(db.jobTypes?.map((t) => t.seedKey)).toEqual(["install", "repair", "service", "warranty", "other"]);
+    expect(db.cancelledJobs).toEqual([]);
+    expect(db.files).toEqual([]);
+  });
+  it("cloud: no number is invented (only the server sets it); lists default to empty", () => {
+    const db = normalizeDB(beforeWaveP1(), "cloud");
+    expect(db.jobs.every((j) => j.number === undefined)).toBe(true);
+    expect(db.jobs.find((j) => j.id === "j2")!.customerId).toBe("c2");
+    expect(db.jobTypes).toEqual([]);
+    expect(db.cancelledJobs).toEqual([]);
+    expect(db.files).toEqual([]);
+  });
+  it("today's data stays as it is", () => {
+    const seed = makeSeed();
+    const db = normalizeDB(seed, "demo");
+    expect(db.jobs).toEqual(seed.jobs);
+    expect(db.jobTypes).toEqual(seed.jobTypes);
+  });
+});
