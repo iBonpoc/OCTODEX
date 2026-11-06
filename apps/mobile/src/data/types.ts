@@ -708,6 +708,13 @@ export interface ServiceCategory {
   archivedAt?: string;
 }
 
+/** wave 7б-1 (docs/specs/03 §12): personal settings (server table member_prefs, one row per person in a company) */
+export interface MemberPrefs {
+  /** «Показывать выполненные» in the Plan */
+  planShowDone: boolean;
+}
+export const MEMBER_PREFS_DEFAULT: MemberPrefs = { planShowDone: false };
+
 export interface DB {
   me: ID;
   members: Member[];
@@ -728,6 +735,8 @@ export interface DB {
   calendarEvents?: CalendarEvent[];
   customFields?: CustomField[];
   customFieldValues?: CustomFieldValue[];
+  /** wave 7б-1: the personal settings of `me` in this company, the same on every device (absent in old saved data → defaults) */
+  prefs?: MemberPrefs;
   /** directions of the business of the company (docs/specs/11-trade.md); archived ones stay for history */
   serviceCategories: ServiceCategory[];
   tasks: Task[];

@@ -8,6 +8,7 @@ import { useStore } from "@/data/store";
 import type { Visit } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { usePersistentState } from "@/data/persist";
+import { usePlanShowDone } from "@/features/prefs";
 import { addDays, addMonths, isoDayKey, monthGrid, todayKey, weekDays, type DayKey } from "@/features/calendar";
 import { formatDayKey } from "@/features/zone";
 import { VisitCard, sortByStart, visitStatus } from "@/features/visits";
@@ -51,7 +52,8 @@ export default function Plan() {
   // days of «План» are the company's calendar days (П4b): labels of day keys, no zone of their own
   const monthName = formatDayKey(date, { month: "long", year: "numeric" }, lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU");
   const feedDays = useMemo(() => daysFrom(date, addDays(date, FEED_DAYS - 1)), [date]);
-  const [showDone, setShowDone] = usePersistentState<boolean>("octo.planShowDone.v1", false);
+  // wave 7б-1: a personal setting, the same on every device and in «Мои настройки → План»
+  const [showDone, setShowDone] = usePlanShowDone();
   const feedItems = useMemo(
     () => (mode === "feed" ? planItems(db, { from: feedDays[0]!, to: feedDays[FEED_DAYS - 1]! }, whoNow, role, { showDone }) : []),
     [mode, db.visits, db.tasks, db.calendarEvents, db.me, feedDays, whoNow, role, showDone],   // eslint-disable-line react-hooks/exhaustive-deps

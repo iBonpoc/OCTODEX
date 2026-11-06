@@ -3764,4 +3764,27 @@ end $$;
 select tst.ok(tst.cnt($q$select 1 from public.jobs where id = 'e4700000-0000-4000-8000-000000000009'$q$) = 0, 'no refused job was made');
 \echo 'T47 direct insert into jobs keeps the create_job checks ok'
 
+-- ---------------------------------------------------------------- T51: wave 7б-1 — personal settings (member_prefs), only your own
+:as_tech_a
+select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', true);
+select tst.ok((select plan_show_done from public.member_prefs where company_id = 'ca000000-0000-0000-0000-000000000000') = true, 'the tech saves «show done» for himself');
+select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', false);
+select tst.ok(tst.cnt($q$select 1 from public.member_prefs$q$) = 1 and (select not plan_show_done from public.member_prefs), 'a second save changes the same row, no copy');
+select tst.fails($q$insert into public.member_prefs (company_id, user_id, plan_show_done) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', true)$q$, 'no direct insert (not even for another person)');
+select tst.fails($q$update public.member_prefs set plan_show_done = true$q$, 'no direct update');
+select tst.fails($q$delete from public.member_prefs$q$, 'no delete');
+:as_owner_a
+select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', true);
+select tst.ok(tst.cnt($q$select 1 from public.member_prefs$q$) = 1 and (select user_id from public.member_prefs) = 'a0000000-0000-0000-0000-000000000001', 'the owner sees only his own row, not the tech''s');
+:as_owner_b
+select tst.fails($q$select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', true)$q$, 'not a member: cannot save in another company');
+select tst.ok(tst.cnt($q$select 1 from public.member_prefs$q$) = 0, 'another company sees no settings');
+reset role; set role anon;
+select tst.fails($q$select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', true)$q$, 'anon cannot save');
+select tst.fails($q$select 1 from public.member_prefs$q$, 'anon cannot read');
+:as_super
+select tst.ok((select plan_show_done from public.member_prefs where user_id = 'a0000000-0000-0000-0000-000000000003') = false
+  and (select plan_show_done from public.member_prefs where user_id = 'a0000000-0000-0000-0000-000000000001') = true, 'each person keeps their own value');
+\echo 'T51 personal settings (member_prefs) ok'
+
 \echo 'ALL TESTS PASSED'

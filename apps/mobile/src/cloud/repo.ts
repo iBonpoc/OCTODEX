@@ -5,7 +5,7 @@
 import { companyFromDb } from "./companyMap";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -88,6 +88,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     q<Row>(supabase.from("custom_fields").select("id, entity, label, type, options, group_name, searchable, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]),
     live<Row>("custom_field_values", "id, field_id, entity_id, value").catch(() => [] as Row[]),
   ]);
+  // wave 7б-1: my personal settings (RLS: only my own row); no row or no table yet → the defaults
+  const prefRows = await q<Row>(supabase.from("member_prefs").select("plan_show_done").eq("company_id", companyId).eq("user_id", userId)).catch(() => [] as Row[]);
+  const prefs: MemberPrefs = { planShowDone: prefRows[0]?.plan_show_done === true };
   const calendarEvents: CalendarEvent[] = eventRows
     .map((r) => ({
       id: s(r.id), kind: (r.kind === "time_off" ? "time_off" : "event") as CalendarEvent["kind"], userId: (r.user_id as string | null) ?? undefined,
@@ -490,6 +493,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     files: fileItems,
     jobLines,
     calendarEvents,
+    prefs,
     customFields,
     customFieldValues,
     visits: mappedVisits,

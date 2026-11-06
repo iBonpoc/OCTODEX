@@ -1791,4 +1791,7 @@ export const es: Dict = {
   "plan5.ev.problem.long": "El texto es demasiado largo",
   "plan5.addEvent": "Evento",
   "plan5.addTimeOff": "Día libre",
+  // wave 7б-1 «Работы и выезды»: personal settings
+  "pref7b.plan": "Plan",
+  "pref7b.showDoneHint": "Visitas, trabajos y tareas completados en el Plan. Este ajuste es tuyo y es el mismo en todos tus dispositivos.",
 };
