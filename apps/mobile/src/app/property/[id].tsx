@@ -1,44 +1,50 @@
 /**
- * Property card (wave C2, docs/specs/04 §7.3): lives only inside its client ("‹ Client").
- * Address, label and kind with route; "now at this property" (open estimates and jobs, next visit); access notes and
- * the gate code (a tech sees it only on the visit day and the day before); people of the property.
- * Tabs (C2b): overview · history · documents · files · tasks (with notes of the property).
+ * Property card (docs/specs/13-app-structure.md §3.3 «Объект», wave 4a-2): lives only inside its client («‹ Client»).
+ * Header: address, label and kind, route, the client, «＋ Смета» / «＋ Осмотр»; «now at this property»; access notes and
+ * the gate code (a tech sees it only on the visit day and the day before). Below — rows with counters, each opens its
+ * list at /property/<id>?s=<row>: people of the property, leads, jobs, estimates, invoices, visits, tasks, notes, files, history.
  */
-type Tab = "overview" | "history" | "documents" | "files" | "tasks";
-const TABS: Tab[] = ["overview", "history", "documents", "files", "tasks"];
 import { scheduleSettingsOf } from "@/features/scheduleSettings";
-import { useState, type ReactNode } from "react";
-import { Linking } from "react-native";
+import { useState } from "react";
+import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
-import type { Property } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { canSeeGateCode, propertyDocs, propertyMapQuery, propertyNow, propertyPeople, propertyPhotos, propertyTimeline, propertyTitle } from "@/features/properties";
-import { usePersistentState } from "@/data/persist";
-import { estView } from "@/features/boards";
-import { invoiceChip } from "@/features/ContractStatement";
-import { NotesBlock } from "@/features/NotesBlock";
-import { TasksBlock } from "@/features/lead/LeadParts";
-import { AccessSheet, PropertyPeopleSheet, PropertySheet } from "@/features/client/PropertySheets";
+import { canSeeGateCode, propertyMapQuery, propertyNow, propertyTitle } from "@/features/properties";
+import { isPropertyRow, propertyCounts, propertyRecords, propertyRowsFor, type PropertyRow } from "@/features/propertyRows";
+import { PropertySection, propertyRowLabel, RowCount } from "@/features/client/PropertySections";
+import { AccessSheet, PropertySheet } from "@/features/client/PropertySheets";
 import { jobStatusView } from "@/features/jobs";
-import { Button, IconButton, Segmented, StatusChip } from "@/ui/controls";
-import { Icon, T } from "@/ui/primitives";
-import { Card, CardList, Empty, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Button, IconButton, StatusChip } from "@/ui/controls";
+import { Icon, T, type IconKey } from "@/ui/primitives";
+import { Card, CardList, Empty, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { useToast } from "@/ui/overlays";
 import { VisitFormSheet } from "@/features/VisitForm";
 import { uid } from "@/features/estimateDoc";
 
+const ROW_ICON: Record<PropertyRow, IconKey> = {
+  people: "users",
+  leads: "inbox",
+  jobs: "wrench",
+  estimates: "invoice",
+  invoices: "wallet",
+  visits: "calendar",
+  tasks: "check",
+  notes: "note",
+  files: "image",
+  history: "clock",
+};
+
 export default function PropertyScreen() {
-  const { id } = useLocalSearchParams<{ id: string }>();
+  const { id, s: sec } = useLocalSearchParams<{ id: string; s?: string }>();
   const store = useStore();
   const { db, role } = store;
   const { t, money, day, time } = useI18n();
-  const [sheet, setSheet] = useState<"edit" | "access" | "people" | null>(null);
+  const [sheet, setSheet] = useState<"edit" | "access" | null>(null);
   const [inspect, setInspect] = useState(false);
   const toast = useToast();
-  const [tab, setTab] = usePersistentState<Tab>("octo.propTab.v1", "overview", { validate: (v) => TABS.includes(v) });
   const p = db.properties.find((x) => x.id === id);
-  const back = () => (router.canGoBack() ? router.back() : router.replace(p ? `/client/${p.customerId}` : "/clients"));
+  const back = () => (router.canGoBack() ? router.back() : router.replace(p ? (sec ? `/property/${p.id}` : `/client/${p.customerId}`) : "/clients"));
   if (!p)
     return (
       <Screen title={t("prop.card")} back={back}>
@@ -47,19 +53,22 @@ export default function PropertyScreen() {
     );
   const c = db.customers.find((x) => x.id === p.customerId);
   const office = role !== "tech";
+  const rows = propertyRowsFor(role);
+  // a row's own list: the same address with ?s=<row>
+  if (isPropertyRow(sec) && rows.includes(sec))
+    return (
+      <Screen title={t(propertyRowLabel(sec))} subtitle={propertyTitle(p)} back={back}>
+        <PropertySection p={p} s={sec} />
+      </Screen>
+    );
+  const r = propertyRecords(db, p, role);
+  const counts = propertyCounts(r);
   const now = propertyNow(db, p.id);
-  const people = propertyPeople(db, p);
   const gateOk = canSeeGateCode(db, role, p.id);
   const route = () => Linking.openURL(`https://maps.google.com/?q=${encodeURIComponent(propertyMapQuery(p))}`);
   const open = (k: typeof sheet) => setSheet(k);
-  const pencil = (k: "edit" | "access" | "people", title: string) =>
+  const pencil = (k: "edit" | "access", title: string) =>
     office ? <IconButton icon="pencil" label={`${t("common.edit")}: ${title}`} onPress={() => open(k)} /> : undefined;
-
-  const timeline = propertyTimeline(db, p.id);
-  const docs = propertyDocs(db, p.id);
-  const photos = propertyPhotos(db, p.id);
-  const tasks = db.tasks.filter((x) => x.subjectType === "property" && x.subjectId === p.id && !x.doneAt);
-  const label = (k: Tab, n?: number) => (n ? `${t(`client.tab.${k}`)} · ${n}` : t(`client.tab.${k}`));
 
   const overview = (
     <>
@@ -81,6 +90,7 @@ export default function PropertyScreen() {
         ) : null}
         <RowView style={{ flexWrap: "wrap" }}>
           <Button label={t("jobs.route")} icon="route" variant="secondary" onPress={route} />
+          {c ? <Button label={`${c.name} ›`} icon="user" variant="ghost" onPress={() => router.push(`/client/${c.id}`)} /> : null}
           {office ? <Button label={t("est.new")} icon="invoice" variant="ghost" onPress={() => router.push(`/estimate/new?customerId=${p.customerId}&propertyId=${p.id}`)} /> : null}
           {/* «+ Осмотр»: a returning client wants a new estimate (docs/specs/03 §5.1) — an inspection without a lead */}
           {office ? <Button label={t("vf.addInspection")} icon="plus" variant="ghost" onPress={() => setInspect(true)} /> : null}
@@ -158,146 +168,36 @@ export default function PropertyScreen() {
         </RowView>
       </Card>
 
-      <SectionTitle title={t("prop.people")} right={pencil("people", t("prop.people"))} />
-      {people.length ? (
-        <CardList>
-          {people.map((x) => {
-            const ph = x.phones.find((y) => y.primary) ?? x.phones[0];
-            const tel = (ph?.number ?? "").replace(/[^\d+]/g, "");
+      {/* rows with counters (13 §3.3): details of this one property, each opens its own list */}
+      <View testID="property-rows">
+        <Card>
+          {rows.map((row) => {
+            const n = counts[row];
             return (
-              <ItemCard
-                key={x.id}
-                title={x.name || "—"}
-                subtitle={[t(`person.role.${x.role}` as DictKey), ph?.number].filter(Boolean).join(" · ")}
-                left={<Icon name="user" />}
-                right={tel ? <IconButton icon="phone" label={`${t("client.call")}: ${x.name}`} onPress={() => Linking.openURL(`tel:${tel}`)} /> : undefined}
+              <ListRow
+                key={row}
+                title={t(propertyRowLabel(row))}
+                left={<Icon name={ROW_ICON[row]} />}
+                right={n !== undefined ? <RowCount n={n} /> : undefined}
+                onPress={() => router.push(`/property/${p.id}?s=${row}`)}
               />
             );
           })}
-        </CardList>
-      ) : (
-        <T v="caption" tone="mut">
-          {t("prop.noPeople")}
-        </T>
-      )}
-
+        </Card>
+      </View>
     </>
   );
-
-  const history = timeline.length ? (
-    <CardList>
-      {timeline.map((h) =>
-        h.kind === "visit" ? (
-          <ItemCard
-            key={`v${h.visit.id}`}
-            title={`${day(h.at)} · ${time(h.at)}`}
-            subtitle={[t("prop.h.visit"), db.members.find((m) => m.id === h.visit.techId)?.name].filter(Boolean).join(" · ")}
-            left={<Icon name="calendar" />}
-            onPress={() => router.push(`/visit/${h.visit.id}`)}
-          />
-        ) : h.kind === "estimate" ? (
-          <ItemCard
-            key={`e${h.estimate.id}`}
-            title={[h.estimate.number, h.estimate.title].filter(Boolean).join(" · ")}
-            subtitle={`${t("prop.h.estimate")} · ${day(h.at)}`}
-            left={<Icon name="invoice" />}
-            right={<StatusChip status={estView[h.estimate.status].s} label={t(estView[h.estimate.status].l)} />}
-            onPress={() => router.push(`/estimate/${h.estimate.id}`)}
-          />
-        ) : (
-          <ItemCard key={`n${h.note.id}`} title={h.note.body} subtitle={`${t("prop.h.note")} · ${day(h.at)}`} left={<Icon name="note" />} />
-        ),
-      )}
-    </CardList>
-  ) : (
-    <Empty icon="clock" title={t("prop.noHistory")} />
-  );
-
-  const documents =
-    docs.estimates.length || (office && docs.invoices.length) ? (
-      <CardList>
-        {docs.estimates.map((e) => (
-          <ItemCard
-            key={e.id}
-            title={[e.number, e.title].filter(Boolean).join(" · ")}
-            subtitle={office ? money(e.totalCents) : undefined}
-            left={<Icon name="invoice" />}
-            right={<StatusChip status={estView[e.status].s} label={t(estView[e.status].l)} />}
-            onPress={() => router.push(`/estimate/${e.id}`)}
-          />
-        ))}
-        {office
-          ? docs.invoices.map((i) => {
-              const ch = invoiceChip(i);
-              return (
-                <ItemCard
-                  key={i.id}
-                  title={i.number ?? t("inv.title")}
-                  subtitle={money(i.totalCents)}
-                  left={<Icon name="wallet" />}
-                  status={ch.s === "bad" ? "bad" : undefined}
-                  right={<StatusChip status={ch.s} label={t(ch.l)} />}
-                  onPress={() => router.push(`/invoice/${i.id}`)}
-                />
-              );
-            })
-          : null}
-      </CardList>
-    ) : (
-      <Empty icon="invoice" title={t("prop.noDocs")} />
-    );
-
-  const files = photos.length ? (
-    <CardList>
-      {photos.map(({ visit, photo }) => (
-        <ItemCard
-          key={photo.id}
-          title={photo.kind === "after" ? t("prop.photoAfter") : t("prop.photoBefore")}
-          subtitle={`${day(visit.start)} · ${time(visit.start)}`}
-          left={<Icon name="image" />}
-          onPress={() => router.push(`/visit/${visit.id}`)}
-        />
-      ))}
-    </CardList>
-  ) : (
-    <Empty icon="image" title={t("prop.noFiles")} />
-  );
-
-  const tasksTab = (
-    <>
-      <TasksBlock subjectType="property" subjectId={p.id} />
-      <NotesBlock subjectType="property" subjectId={p.id} />
-    </>
-  );
-
-  const body: Record<Tab, ReactNode> = { overview, history, documents, files, tasks: tasksTab };
 
   return (
     <Screen
       title={propertyTitle(p)}
       back={back}
       subtitle={c?.name}
-      tabKey={tab}
-      tabs={
-        <Segmented
-          scroll
-          value={tab}
-          onChange={setTab}
-          items={[
-            { key: "overview", label: label("overview") },
-            { key: "history", label: label("history", timeline.length) },
-            { key: "documents", label: label("documents", docs.estimates.length + (office ? docs.invoices.length : 0)) },
-            { key: "files", label: label("files", photos.length) },
-            { key: "tasks", label: label("tasks", tasks.length) },
-          ]}
-        />
-      }
     >
-      {body[tab]}
+      {overview}
 
       <PropertySheet value={sheet === "edit" ? p : null} onClose={() => setSheet(null)} />
       <AccessSheet value={sheet === "access" ? p : null} onClose={() => setSheet(null)} />
-      <PropertyPeopleSheet value={sheet === "people" ? (p as Property) : null} onClose={() => setSheet(null)} />
     </Screen>
   );
 }

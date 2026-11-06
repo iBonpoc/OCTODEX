@@ -1578,6 +1578,8 @@ export const en: Dict = {
   "client.f.taxExemptNoteHint": "E.g. resale certificate number",
   "client.f.taxExemptHint": "New estimates and invoices of this client have no sales tax. Signed documents do not change.",
   "ue.taxExemptClient": "The client is tax exempt: no sales tax on this estimate.",
+  "prop.row.visits": "Visits",
+  "prop.noVisits": "No visits at this property yet",
   /* ---- «Деньги и отчёты», wave 8 (docs/specs/18-money-reports.md) ---- */
   "mny.f.owed": "Unpaid · Overdue",
   "mny.f.paid": "Paid",
