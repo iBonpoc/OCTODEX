@@ -40,12 +40,12 @@ function useSaved() {
 
 /* ======================= contact actions (call / SMS / email / route / marketplace) ======================= */
 /** Call / SMS / email / route / marketplace. A call does not count as a reply by itself: onCall asks "did you get through?" (Р13). */
-export function ContactActions({ l, onCall }: { l: Lead; onCall?: () => void }) {
+export function ContactActions({ l, onCall }: { l: Lead; onCall: () => void }) {
   const store = useStore();
   const { t } = useI18n();
   const src = sourceOf(store.db, l.sourceId);
   const addr = [l.address, l.city, l.state, l.zip].filter(Boolean).join(", ");
-  const touch = (kind: "call" | "sms" | "email" | "marketplace", url?: string) => {
+  const touch = (kind: "sms" | "email" | "marketplace", url?: string) => {
     if (url) Linking.openURL(url).catch(() => {});
     store.touchLead(l.id, kind);
   };
@@ -56,8 +56,8 @@ export function ContactActions({ l, onCall }: { l: Lead; onCall?: () => void }) 
         label={t("visit.call")}
         onPress={() => {
           Linking.openURL(`tel:${tel(l.phone)}`).catch(() => {});
-          if (onCall) onCall();
-          else store.touchLead(l.id, "call");
+          // a call always asks «Чем кончился?» — never a call without an outcome (20 §3)
+          onCall();
         }}
       />
       <IconButton icon="sms" label={t("visit.message")} onPress={() => touch("sms", smsHref(l.phone) ?? undefined)} />
