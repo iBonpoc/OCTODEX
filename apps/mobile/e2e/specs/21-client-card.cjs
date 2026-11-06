@@ -1,12 +1,13 @@
 const { expectOneAccent } = require("../accent.cjs");
 /**
- * Client card C1 (docs/specs/04 §7.2): number, tags, owes / paid total, tabs, people with several phones,
+ * Client card C1 (docs/specs/04 §7.2): number, tags, owes / paid total, rows with counters (13 §3.3), people with several phones,
  * tags and status sheets, search by a second phone, tech rights. Same steps at every width (sheets are a dialog
  * on 820 / 1280, but every control used here is the same).
  */
 exports.run = async (h) => {
   const p = h.page;
-  const tab = (name) => p.getByRole("tab", { name: new RegExp(`^${name}`) }).click().then(() => p.waitForTimeout(400));
+  // rows with counters (13 §3.3): each opens its own list at /client/c1?s=<row>
+  const row = async (name) => { await p.getByTestId("client-rows").getByRole("button", { name, exact: true }).click(); await p.waitForTimeout(500); };
   const save = async () => { await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500); };
 
   await h.go("/client/c1");
@@ -14,17 +15,21 @@ exports.run = async (h) => {
   await h.expectText(/CLT-0001/, "client number in the header");
   await h.expectText(/VIP[\s\S]*Постоянный/, "tags, translated, in order");
   await h.expectText(/Должен[\s\S]*\$0[\s\S]*Оплатил всего[\s\S]*\$582\b/, "owes / paid total");
-  await h.expectText(/Контакты[\s\S]*\(626\) 555-0142[\s\S]*Дополнительные контакты[\s\S]*Tom Mitchell[\s\S]*Супруг\(а\)/, "contacts first, then the spouse");
-  await h.expectText(/Выставлено всего/, "invoiced total (jobs live in the tabs)");
+  await h.expectText(/Контакты[\s\S]*\(626\) 555-0142/, "the main person's contacts first");
+  await h.expectText(/Люди[\s\S]*Tom Mitchell/, "the spouse in the row «Люди»");
+  await h.expectText(/Выставлено всего/, "invoiced total");
   await h.expectText(/\(626\) 555-0143/, "second phone of the main person");
 
-  await tab("История");
+  await row("История");
+  h.expect(p.url().includes("/client/c1?s=history"), `history row opens its list (${p.url()})`);
   await h.expectText(/Смета подписана/, "history: estimate signed");
   await h.expectText(/Оплата/, "history: payment (office)");
-  await tab("Документы");
-  await h.expectText(/INV-0105/, "documents: invoice");
-  await h.expectText(/RCT-0102/, "documents: receipt");
-  await tab("Задачи");
+  await h.go("/client/c1");
+  await row("Счета и квитанции");
+  await h.expectText(/INV-0105/, "invoices: invoice");
+  await h.expectText(/RCT-0102/, "invoices: receipt");
+  await h.go("/client/c1");
+  await row("Задачи");
   await h.expectText(/Задач нет/, "tasks: empty state");
   await p.getByPlaceholder("Новая задача").fill("Call in spring about painting");
   await h.click("Добавить");
@@ -33,17 +38,20 @@ exports.run = async (h) => {
   await h.expectText(/Выполненные · 1[\s\S]*Call in spring about painting/, "done task stays, under Done");
   await h.click("Вернуть");
   await h.expectText(/Call in spring about painting[\s\S]*Готово/, "task reopened");
-  await tab("Файлы");
-  await h.expectText(/Фото с выездов|Файлов нет/, "files tab renders");
-  await tab("Обзор");
+  await h.go("/client/c1");
+  await row("Файлы");
+  await h.expectText(/Фото с выездов|Файлов нет/, "files list renders");
 
   // People: + Phone is a button; the new phone of the spouse is saved and shown
+  await h.go("/client/c1");
+  await row("Люди");
   await p.getByRole("button", { name: "Люди", exact: true }).last().click();
   await p.waitForTimeout(500);
   await h.sheet().getByRole("button", { name: "Телефон", exact: true }).last().click();
   await h.sheet().getByPlaceholder("Телефон").last().fill("6265550199");
   await save();
-  await h.expectText(/\(626\) 555-0199/, "new phone on the card");
+  await h.expectText(/\(626\) 555-0199/, "new phone in the people list");
+  await h.go("/client/c1");
 
   // Tags sheet: add Favorite
   await p.getByRole("button", { name: "VIP", exact: true }).first().click();

@@ -7,7 +7,7 @@ import { LINE_GROUPS, activeLines, type CustomLine, type CustomOption, type Depo
 import { useStore } from "@/data/store";
 import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, hasContent, newDoc, optionTotals, uid } from "@/features/estimateDoc";
+import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, newDoc, optionTotals, uid } from "@/features/estimateDoc";
 import { ClientPicker } from "@/features/estimatePickers";
 import { LineSheet } from "@/features/LineSheet";
 import { Labeled, MoneyField, PctField } from "@/features/fields";
@@ -44,8 +44,11 @@ export default function EstimateBuilder() {
   const customer = db.customers.find((c) => c.id === customerId);
   const property = db.properties.find((p) => p.id === propertyId) ?? db.properties.find((p) => p.customerId === customerId);
   const option = doc.options[Math.min(cur, doc.options.length - 1)]!;
-  const totals = useMemo(() => optionTotals(doc, option), [doc, option]);
-  const s = doc.settings;
+  // a tax-exempt client: no sales tax on the estimate (the server refuses it, П-2a)
+  const exempt = !!customer?.taxExempt;
+  const counted = useMemo(() => exemptDoc(doc, exempt), [doc, exempt]);
+  const totals = useMemo(() => optionTotals(counted, option), [counted, option]);
+  const s = counted.settings;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   const setOption = (fn: (o: CustomOption) => CustomOption) =>
@@ -82,7 +85,7 @@ export default function EstimateBuilder() {
   const save = (send: boolean) => {
     if (!customer || !property) return;
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-    const clean: EstimateDoc = { ...doc, options: doc.options.map((o) => ({ ...o, lines: activeLines(o.lines) })) };
+    const clean: EstimateDoc = exemptDoc({ ...doc, options: doc.options.map((o) => ({ ...o, lines: activeLines(o.lines) })) }, customer.taxExempt);
     const undo = store.saveEstimate({
       id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId,
       title: title.trim() || estimateTitle(clean, t("ue.title")),
@@ -255,10 +258,10 @@ export default function EstimateBuilder() {
                 <T v="body" style={{ flex: 1 }}>
                   {t("ue.taxOn")}
                 </T>
-                <Toggle label={t("ue.tax")} on={s.tax.enabled} onChange={(on) => setSettings({ tax: { ...s.tax, enabled: on } })} />
+                {exempt ? null : <Toggle label={t("ue.tax")} on={s.tax.enabled} onChange={(on) => setSettings({ tax: { ...s.tax, enabled: on } })} />}
               </RowView>
               <T v="caption" tone="mut">
-                {t("ue.taxHint")}
+                {exempt ? t("ue.taxExemptClient") : t("ue.taxHint")}
               </T>
               {s.tax.enabled ? (
                 <>

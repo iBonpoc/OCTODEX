@@ -1366,9 +1366,6 @@ begin
     insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
   end loop;
   update public.jobs set status = 'cancelled' where id = 'e2000000-0000-4000-8000-000000000021';
-  update public.jobs set status = 'in_progress' where id = 'e2000000-0000-4000-8000-000000000022';
-  update public.jobs set status = 'completed' where id = 'e2000000-0000-4000-8000-000000000022';
-  update public.jobs set status = 'closed' where id = 'e2000000-0000-4000-8000-000000000022';
   update public.visit_assignees set deleted_at = now() where visit_id = 'f2000000-0000-4000-8000-000000000025';
   -- lead of the tech and a lead of nobody; estimates inside and outside the window; a task outside the window
   insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to)
@@ -1383,6 +1380,11 @@ begin
   insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000015', 'T22 task of an old property');
 end $$;
 :as_super
+-- job 22: closed while its visit is still open — the app no longer lets the office do this (wave 3c, T46), so the old
+-- state is made by hand here
+update public.jobs set status = 'in_progress' where id = 'e2000000-0000-4000-8000-000000000022';
+update public.jobs set status = 'completed' where id = 'e2000000-0000-4000-8000-000000000022';
+update public.jobs set status = 'closed' where id = 'e2000000-0000-4000-8000-000000000022';
 -- created_at is kept by the standard trigger; an old row is made by hand
 alter table public.visits disable trigger user;
 update public.visits set created_at = now() - interval '20 days' where id = 'f2000000-0000-4000-8000-000000000024';
@@ -3337,6 +3339,48 @@ select tst.fails($q$insert into public.job_line_items (company_id, job_id, name,
 select tst.fails($q$select public.set_job_tags('e4100000-0000-4000-8000-000000000001', '{}')$q$, 'anon does not set job tags');
 \echo 'T41 wave П-2a: exempt client, job lines, job tags ok'
 
+-- ---------------------------------------------------------------- T45: wave 8 — money lists and reports (docs/specs/18-money-reports.md §9)
+-- Sums by method and by person = the engine on the same numbers (packages/estimating-engine/test/reports.test.ts «T45 fixture»);
+-- a refund — owner/admin only; the tech and another company do not read these payments; a reminder (S20) is an event of the
+-- client's feed written by the office, not by the tech.
+:as_super
+insert into public.customers (id, company_id, display_name) values ('c4500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T45 Kim');
+insert into public.invoices (id, company_id, number, customer_id, kind, status, due_date, subtotal_cents, total_cents) values
+  ('14500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T45-0001', 'c4500000-0000-4000-8000-000000000001', 'standalone', 'sent', current_date - 9, 30000, 30000);
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, received_by) values
+  ('94500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '14500000-0000-4000-8000-000000000001', 'c4500000-0000-4000-8000-000000000001', 'zelle', 10000, 'succeeded', 't45-1', 'a0000000-0000-0000-0000-000000000001'),
+  ('94500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '14500000-0000-4000-8000-000000000001', 'c4500000-0000-4000-8000-000000000001', 'cash', 5000, 'succeeded', 't45-2', 'a0000000-0000-0000-0000-000000000002'),
+  ('94500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '14500000-0000-4000-8000-000000000001', 'c4500000-0000-4000-8000-000000000001', 'zelle', 4000, 'succeeded', 't45-3', 'a0000000-0000-0000-0000-000000000002');
+-- a refund: not sales (staff, but not owner/admin), the owner may. (office_a is an admin by now, see T35/T37)
+:as_sales_a
+select tst.blocked($q$update public.payments set refunded_cents = 1000, status = 'partially_refunded' where id = '94500000-0000-4000-8000-000000000003'$q$, 'sales does not refund');
+:as_owner_a
+update public.payments set refunded_cents = 1000, status = 'partially_refunded' where id = '94500000-0000-4000-8000-000000000003';
+select tst.ok((select paid_cents = 18000 and balance_cents = 12000 from public.invoices where id = '14500000-0000-4000-8000-000000000001'), 'paid = net of the refund (10000 + 5000 + 3000), balance 12000');
+-- staff reads the report (office_a, an admin by now): collected by method and by person, net of refunds (= engine: zelle 13000 ×2, cash 5000 ×1; owner 10000, office 8000)
+:as_office_a
+select tst.ok((select string_agg(method || ':' || net || ':' || n, ',' order by net desc, method) = 'zelle:13000:2,cash:5000:1'
+               from (select method, sum(amount_cents - refunded_cents) as net, count(*) as n from public.payments
+                     where invoice_id = '14500000-0000-4000-8000-000000000001' and status in ('succeeded', 'partially_refunded') group by method) x),
+              'collected by method = the engine (totalsBy)');
+select tst.ok((select string_agg(net::text, ',' order by net desc) = '10000,8000'
+               from (select received_by, sum(amount_cents - refunded_cents) as net from public.payments
+                     where invoice_id = '14500000-0000-4000-8000-000000000001' and status in ('succeeded', 'partially_refunded') group by received_by) x),
+              'collected by person = the engine (totalsBy)');
+-- «Напомнить» (S20): the office logs a reminder in the client's feed, linked to the invoice
+insert into public.activities (id, company_id, subject_type, subject_id, kind, direction, actor_id, meta) values
+  ('a4500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'customer', 'c4500000-0000-4000-8000-000000000001', 'sms', 'out', 'a0000000-0000-0000-0000-000000000002',
+   '{"invoiceId": "14500000-0000-4000-8000-000000000001", "reminder": "1"}');
+select tst.ok(tst.cnt($q$select 1 from public.activities where subject_id = 'c4500000-0000-4000-8000-000000000001' and meta ->> 'reminder' = '1'$q$) = 1, 'the office logs a reminder');
+-- the tech: not his payments, no reminders
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.payments where invoice_id = '14500000-0000-4000-8000-000000000001'$q$) = 0, 'the tech does not read payments he did not take');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, actor_id, meta) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c4500000-0000-4000-8000-000000000001', 'sms', 'out', 'a0000000-0000-0000-0000-000000000003', '{"invoiceId": "14500000-0000-4000-8000-000000000001", "reminder": "1"}')$q$, 'the tech does not send reminders');
+-- another company
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.payments where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'another company does not read our payments');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, meta) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c4500000-0000-4000-8000-000000000001', 'sms', 'out', '{"reminder": "1"}')$q$, 'another company does not log reminders for our client');
+\echo 'T45 wave 8: collected by method and person, refund rights, reminders ok'
 -- ---------------------------------------------------------------- T42: wave П-2b — tasks with a time, events and days off, own fields
 :as_owner_a
 do $$ begin
@@ -3488,5 +3532,127 @@ select tst.fails($q$select 1 from public.calendar_events$q$, 'anon does not read
 select tst.fails($q$select 1 from public.custom_fields$q$, 'anon does not read own fields');
 select tst.fails($q$select 1 from public.custom_field_values$q$, 'anon does not read values');
 \echo 'T42 wave П-2b: tasks with a time, events and days off, own fields ok'
+
+-- ---------------------------------------------------------------- T43: wave 3b — a job without an estimate (S17)
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name, status, do_not_service_reason) values
+    ('c4300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T43 Prospect', 'prospect', null),
+    ('c4300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T43 Banned', 'do_not_service', 'T43');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city, address_state) values
+    ('d4300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4300000-0000-4000-8000-000000000001', '43 Oak St', 'Austin', 'TX'),
+    ('d4300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4300000-0000-4000-8000-000000000002', '43 Elm St', 'Austin', 'TX');
+end $$;
+-- a job type of company B (the office of A cannot read it, so it is taken here)
+:as_super
+select id as t43_btype from public.job_types where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1 \gset
+-- the office creates: a number from the server, status draft («ждёт даты»), the prospect becomes active
+:as_office_a
+select tst.ok((public.create_job('e4300000-0000-4000-8000-000000000001', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', '  Gutter repair  ', 'Back side', (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'repair')) ->> 'number') like 'JOB-%', 'the office creates a job, the server numbers it');
+select tst.ok((select status = 'draft' and title = 'Gutter repair' and description = 'Back side' and job_type_id is not null and estimate_id is null from public.jobs where id = 'e4300000-0000-4000-8000-000000000001'), 'a new job waits for a date, its fields are saved');
+select tst.ok((select status from public.customers where id = 'c4300000-0000-4000-8000-000000000001') = 'active', 'a prospect with a job becomes active');
+-- an archived job type is not chosen anew
+update public.job_types set archived_at = now() where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty';
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000009', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'X', null, (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty'))$q$, 'an archived job type is refused');
+update public.job_types set archived_at = null where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty';
+-- a repeat with the same id (offline replay) is the same job
+select tst.ok((public.create_job('e4300000-0000-4000-8000-000000000001', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'Other') ->> 'repeat')::boolean, 'a repeat returns the same job');
+select tst.ok(tst.cnt($q$select 1 from public.jobs where id = 'e4300000-0000-4000-8000-000000000001' and title = 'Gutter repair'$q$) = 1, 'a repeat changes nothing');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000001', 'c4300000-0000-4000-8000-000000000002', 'd4300000-0000-4000-8000-000000000002', 'Other')$q$, 'the same id for another client is refused, not «repeat»');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000009', 'c4300000-0000-4000-8000-000000000002', 'd4300000-0000-4000-8000-000000000002', 'X')$q$, 'a «do not service» client takes no new job');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000009', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000002', 'X')$q$, 'the address must be a property of this client');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000009', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', '   ')$q$, 'a job needs a name');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000009', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'X', null, $q$ || quote_literal(:'t43_btype') || $q$)$q$, 'a job type of another company is refused');
+-- the office plans it (S9): a visit of the job
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('f4300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4300000-0000-4000-8000-000000000001', 'install', now() + interval '1 day', now() + interval '1 day 1 hour');
+select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'f4300000-0000-4000-8000-000000000001'$q$) = 1, 'the office puts a visit on the job');
+-- sales create (without a date: the form has none for them)
+:as_sales_a
+select tst.ok((public.create_job('e4300000-0000-4000-8000-000000000002', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'Sales job') ->> 'number') like 'JOB-%', 'sales create a job without a date');
+-- the tech and another company create nothing
+:as_tech_a
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000003', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'Tech job')$q$, 'the tech does not create a job');
+:as_owner_b
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000004', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'B job')$q$, 'another company does not create a job for our client');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000001', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'B job')$q$, 'another company does not read our job through a repeat');
+reset role; set role anon;
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000005', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'anon')$q$, 'anon does not create a job');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.jobs where id in ('e4300000-0000-4000-8000-000000000003', 'e4300000-0000-4000-8000-000000000004', 'e4300000-0000-4000-8000-000000000005', 'e4300000-0000-4000-8000-000000000009')$q$) = 0, 'no refused job was made');
+\echo 'T43 wave 3b: a job without an estimate (S17) ok'
+
+-- ---------------------------------------------------------------- T46: wave 3c — «Работа выполнена» (S10): «on site» starts the job, the office closes it
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c4600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T46 Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city, address_state) values
+    ('d4600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4600000-0000-4000-8000-000000000001', '46 Pine St', 'Austin', 'TX');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e4600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T46 job', 'c4600000-0000-4000-8000-000000000001', 'd4600000-0000-4000-8000-000000000001', 'draft'),
+    ('e4600000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T46 waiting', 'c4600000-0000-4000-8000-000000000001', 'd4600000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+    ('f4600000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4600000-0000-4000-8000-000000000001', 'install', now() - interval '1 hour', now()),
+    ('f4600000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e4600000-0000-4000-8000-000000000001', 'install', now() + interval '1 day', now() + interval '1 day 1 hour');
+  update public.jobs set status = 'scheduled' where id = 'e4600000-0000-4000-8000-000000000001';
+  insert into public.visit_assignees (company_id, visit_id, user_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'f4600000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+-- a job on hold stays on hold when its visit gets on site (only the office resumes it)
+:as_owner_a
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e4600000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T46 held', 'c4600000-0000-4000-8000-000000000001', 'd4600000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+    ('f4600000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e4600000-0000-4000-8000-000000000003', 'install', now(), now() + interval '1 hour');
+  update public.jobs set status = 'scheduled' where id = 'e4600000-0000-4000-8000-000000000003';
+  update public.jobs set status = 'in_progress' where id = 'e4600000-0000-4000-8000-000000000003';
+  update public.jobs set status = 'on_hold' where id = 'e4600000-0000-4000-8000-000000000003';
+  insert into public.visit_assignees (company_id, visit_id, user_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'f4600000-0000-4000-8000-000000000003', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+:as_tech_a
+update public.visits set status = 'on_site' where id = 'f4600000-0000-4000-8000-000000000003';
+:as_owner_a
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000003') = 'on_hold', 'the tech on site does not resume a held job');
+-- the technician (who may not update jobs) gets on site: the job starts anyway
+:as_tech_a
+update public.visits set status = 'en_route' where id = 'f4600000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000001') = 'scheduled', 'on the way does not start the job');
+update public.visits set status = 'on_site' where id = 'f4600000-0000-4000-8000-000000000001';
+:as_owner_a
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000001') = 'in_progress', '«on site» starts the job, even when the tech moves the visit');
+-- the tech does not close the job, neither by the function nor directly
+:as_tech_a
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'the tech does not close a job');
+select tst.blocked($q$update public.jobs set status = 'completed' where id = 'e4600000-0000-4000-8000-000000000001'$q$, 'the tech does not set «completed» directly');
+-- sales do not close a job
+:as_sales_a
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'sales do not close a job');
+select tst.fails($q$update public.jobs set status = 'completed' where id = 'e4600000-0000-4000-8000-000000000001'$q$, 'sales do not close a job directly either');
+select tst.fails($q$insert into public.jobs (company_id, title, customer_id, property_id, status) values ('ca000000-0000-0000-0000-000000000000', 'T46 born closed', 'c4600000-0000-4000-8000-000000000001', 'd4600000-0000-4000-8000-000000000001', 'completed')$q$, 'sales do not insert a job that is already closed');
+-- the office: not while a visit is open
+:as_office_a
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'not while a visit of the job is open');
+select tst.fails($q$update public.jobs set status = 'completed' where id = 'e4600000-0000-4000-8000-000000000001'$q$, 'not directly either while a visit is open');
+update public.visits set status = 'completed' where id = 'f4600000-0000-4000-8000-000000000001';
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000001') = 'in_progress', 'a finished visit (paid) does not close the job');
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'the second visit is still open');
+select public.cancel_visit('f4600000-0000-4000-8000-000000000002', 'client_cancelled');
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000001') = 'in_progress', 'cancelling the last open visit of a going job leaves it going (S9a)');
+select tst.ok((public.complete_job('e4600000-0000-4000-8000-000000000001') ->> 'status') = 'completed', 'the office closes the job');
+select tst.ok((select status = 'completed' and completed_at is not null from public.jobs where id = 'e4600000-0000-4000-8000-000000000001'), 'the job is completed, with its time');
+select tst.ok((public.complete_job('e4600000-0000-4000-8000-000000000001') ->> 'repeat')::boolean, 'a repeat changes nothing');
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000002')$q$, 'a job waiting for a date is not closed');
+-- a scheduled job with no visit open (the visit was cancelled) closes through «in progress»
+update public.jobs set status = 'scheduled' where id = 'e4600000-0000-4000-8000-000000000002';
+select tst.ok((public.complete_job('e4600000-0000-4000-8000-000000000002') ->> 'status') = 'completed', 'a scheduled job closes (through in progress)');
+-- another company and anon
+:as_owner_b
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000002')$q$, 'another company does not close our job');
+reset role; set role anon;
+select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000002')$q$, 'anon does not close a job');
+:as_super
+select tst.ok((select count(*) from public.jobs where id in ('e4600000-0000-4000-8000-000000000001', 'e4600000-0000-4000-8000-000000000002') and status = 'completed') = 2, 'only the office closed, nothing else');
+\echo 'T46 wave 3c: «Работа выполнена» (S10) ok'
 
 \echo 'ALL TESTS PASSED'

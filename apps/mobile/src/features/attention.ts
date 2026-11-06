@@ -7,11 +7,14 @@ import { canCountersign } from "./estimateSign";
 import { assigneesOf, canPlan, dayDiffIn, isOpenVisit, lateToday, visitWho } from "./schedule";
 import { companyTz, scheduleSettingsOf } from "./scheduleSettings";
 import { dayKeyIn } from "./zone";
+import { jobAwaitingClose } from "@/features/jobDone";
 import type { DictKey } from "@/i18n";
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
   /* E2b-2 (docs/specs/07 «E2b — экраны подписи» §3, §7, §8) */
-  | "estimateSign" | "estimateExpired" | "estimateDeclined";
+  | "estimateSign" | "estimateExpired" | "estimateDeclined"
+  /* wave 3c (S10, S15): the last visit is over — is the job done? (docs/specs/17-job.md §4) */
+  | "jobDone";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -31,6 +34,7 @@ export interface AttentionItem {
 export function attentionHref(it: AttentionItem): string {
   switch (it.kind) {
     case "schedule": return `/job/schedule?jobId=${it.refId}`;
+    case "jobDone": return `/job/${it.refId}`;
     case "overdue": return `/invoice/${it.refId}`;
     case "estimate":
     case "estimateSign":
@@ -99,6 +103,14 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     const p = db.properties.find((x) => x.id === j.propertyId);
     const c = db.customers.find((x) => x.id === p?.customerId);
     out.push({ id: `sch-${j.id}`, kind: "schedule", refId: j.id, name: c?.name ?? "", label: "att.toSchedule", params: { name: c?.name ?? "" }, chip: "st.toSchedule", status: "warn", amountCents: j.amountCents, score: 950 });
+  }
+  // «Работа выполнена?» — to the office only (owner, admin, office); the technician is never asked (13 §3.4.1)
+  if (role === "director" || role === "dispatcher") {
+    for (const j of db.jobs) {
+      if (!jobAwaitingClose(db, j)) continue;
+      const c = db.customers.find((x) => x.id === (j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId));
+      out.push({ id: `done-${j.id}`, kind: "jobDone", refId: j.id, name: c?.name ?? "", label: "job3.att.done", params: { name: c?.name ?? "", title: j.title }, chip: "job3.att.doneChip", status: "info", amountCents: j.amountCents, score: 900 });
+    }
   }
   for (const i of db.invoices) {
     if (i.paidCents >= i.totalCents) continue;

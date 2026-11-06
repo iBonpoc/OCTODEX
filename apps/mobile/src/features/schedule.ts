@@ -5,7 +5,7 @@
  */
 import { visitContext, visitPropertyId } from "@/data/selectors";
 import { VISIT_STEPS, type DB, type ID, type Lead, type Role, type Visit, type VisitStep } from "@/data/types";
-import { dayKeyIn, getZone, minuteIn, wallToInstant, type DayKey } from "./zone";
+import { dayKeyIn, dayNumber, getZone, keyOfNumber, minuteIn, wallToInstant, weekdayOf, type DayKey } from "./zone";
 import { BUSINESS_HOURS_DEFAULT, dayIn, hoursOn, SCHEDULE_SETTINGS_DEFAULT, type BusinessHours } from "./scheduleSettings";
 
 type Db = Pick<DB, "visits" | "jobs" | "leads">;
@@ -252,3 +252,19 @@ export function planFilter(v: Visit, who: PlanWho, me: ID): boolean {
 
 /** a working day of the company: its hours of that weekday (default Monday–Saturday, §6.1; «Компания → Расписание», П4a) */
 export const isWorkday = (d: DayKey, hours: BusinessHours = BUSINESS_HOURS_DEFAULT) => hoursOn(hours, d) !== null;
+
+/**
+ * Quick dates of the move form (13 §3.6, 17-job §7.4): «Позже сегодня (18:00) · Завтра утром (9:00) · В понедельник
+ * (9:00)», on the company's calendar and clock. «Later today» only before 18:00; «Monday» is the next one (on a Monday —
+ * a week later). Not called «Отложить»: that word is the lead's snooze.
+ */
+export type QuickStartKey = "laterToday" | "tomorrow" | "monday";
+export function quickStarts(today: DayKey, nowMinute: number): { key: QuickStartKey; day: DayKey; minute: number }[] {
+  const out: { key: QuickStartKey; day: DayKey; minute: number }[] = [];
+  if (nowMinute < 18 * 60) out.push({ key: "laterToday", day: today, minute: 18 * 60 });
+  const n = dayNumber(today);
+  out.push({ key: "tomorrow", day: keyOfNumber(n + 1), minute: 9 * 60 });
+  const toMonday = ((8 - weekdayOf(today)) % 7) || 7;
+  out.push({ key: "monday", day: keyOfNumber(n + toMonday), minute: 9 * 60 });
+  return out;
+}

@@ -14,6 +14,7 @@ import { NoticeWatcher } from "@/features/notices";
 import { GuardedScreen, RouteGuard } from "@/nav/RouteGuard";
 import { NavMenuProvider } from "@/nav/NavMenu";
 import { SideNav } from "@/nav/SideNav";
+import { SlashToSearch } from "@/nav/SearchEntry";
 
 function Shell() {
   const { c, name } = useTheme();
@@ -23,6 +24,7 @@ function Shell() {
       <ToastProvider>
         <NavMenuProvider>
           <NoticeWatcher />
+          <SlashToSearch />
           {/* 820/1280: the side menu next to every screen (docs/specs/13 §2.5); the phone: nothing here */}
           <View style={{ flex: 1, flexDirection: "row" }}>
             <SideNav />
