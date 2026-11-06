@@ -36,6 +36,8 @@ export interface Member {
   hisNumber?: string;
   /** E2b-2: the company owner (the only one who gives or takes the right to sign); absent in demo data → a director counts */
   isOwner?: boolean;
+  /** wave 7б-2: shares their location during visits (server: memberships.share_location); unknown → not said */
+  sharesLocation?: boolean;
 }
 
 /**
@@ -728,6 +730,28 @@ export interface MemberPrefs {
 }
 export const MEMBER_PREFS_DEFAULT: MemberPrefs = { planShowDone: false };
 
+/** wave 7б-2 (docs/specs/03 §12): my consent to share my location in this company (server: memberships.share_location,
+ *  location_notice_ack_at; the company flag app.company_flags.location_sharing — AB 1331, off until the lawyer's answer) */
+export interface LocationState {
+  /** the company allows location sharing at all (operator flag); off → no question, no section */
+  allowed: boolean;
+  /** I agreed (after reading the notice) and have not taken it back */
+  on: boolean;
+  /** when I read the notice and agreed */
+  ackAt?: string;
+}
+
+/** wave 7б-2: the last point of a person on an open visit (server: public.user_locations; the phone keeps only the last) */
+export interface VisitPoint {
+  visitId: ID;
+  userId: ID;
+  lat: number;
+  lng: number;
+  accuracyM?: number;
+  /** when the phone took it */
+  at: string;
+}
+
 export interface DB {
   me: ID;
   members: Member[];
@@ -750,6 +774,10 @@ export interface DB {
   customFieldValues?: CustomFieldValue[];
   /** wave 7б-1: the personal settings of `me` in this company, the same on every device (absent in old saved data → defaults) */
   prefs?: MemberPrefs;
+  /** wave 7б-2: my location consent here (absent in old saved data → off) */
+  location?: LocationState;
+  /** wave 7б-2: the last point per person on open visits (absent → []) */
+  visitPoints?: VisitPoint[];
   /** directions of the business of the company (docs/specs/11-trade.md); archived ones stay for history */
   serviceCategories: ServiceCategory[];
   tasks: Task[];
