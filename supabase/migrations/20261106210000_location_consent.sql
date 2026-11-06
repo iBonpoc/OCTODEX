@@ -151,8 +151,8 @@ create trigger t10_user_location_fill before insert on public.user_locations
 create trigger t11_company_id_immutable before update on public.user_locations
   for each row execute function app.tg_company_id_immutable();
 
--- who reads a point: the person — their own; while they share and the company allows it: office — an open visit, the
--- last 12 hours; owner / admin — 30 days. A tech never sees someone else's points.
+-- who reads a point: the person — their own; while they share and the company allows it: office — an open visit they
+-- are still on, the last 12 hours; owner / admin — 30 days. A tech never sees someone else's points.
 create or replace function app.can_read_location(p_company uuid, p_user uuid, p_visit uuid, p_at timestamptz)
 returns boolean language sql stable security definer set search_path = '' as $$
   select case
@@ -165,6 +165,9 @@ returns boolean language sql stable security definer set search_path = '' as $$
     when app.has_role(p_company, array['office']) then p_at > now() - interval '12 hours'
       and exists (select 1 from public.visits v where v.company_id = p_company and v.id = p_visit
                      and v.status in ('en_route', 'on_site') and v.deleted_at is null)
+      -- only while the person is still on the visit (taken off — the office no longer follows them; review #217)
+      and exists (select 1 from public.visit_assignees a where a.company_id = p_company and a.visit_id = p_visit
+                     and a.user_id = p_user and a.deleted_at is null)
     else false
   end;
 $$;

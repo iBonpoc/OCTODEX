@@ -4730,8 +4730,8 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_membership_loc
   and not has_function_privilege('authenticated', 'app.tg_user_location_fill()', 'execute')
   and not has_function_privilege('authenticated', 'app.company_shares_location(uuid)', 'execute')
   and not has_function_privilege('authenticated', 'app.purge_user_locations()', 'execute'), 'trigger and operator functions: nobody calls them');
-select tst.ok(not exists (select 1 from public.audit_log where entity_type in ('memberships', 'membership', 'user_locations', 'user_location')
-  and (coalesce(after, '{}'::jsonb) ? 'lat' or coalesce(before, '{}'::jsonb) ? 'lat')), 'no coordinates in the audit journal');
+select tst.ok(not exists (select 1 from pg_trigger t where t.tgrelid = 'public.user_locations'::regclass and not t.tgisinternal
+                            and t.tgfoid = 'app.tg_audit()'::regprocedure), 'points have no audit trigger: the journal never keeps coordinates');
 \echo 'T56 wave 7б-2: location consent only by the person, with the notice ok'
 
 -- ---------------------------------------------------------------- T57: wave 7б-2 — points: own open visit only, read by role, forgotten on going off
@@ -4804,11 +4804,17 @@ select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 0, 'visit com
 select tst.ok(tst.cnt($q$select 1 from public.user_locations where visit_id = 'f5700000-0000-4000-8000-000000000001'$q$) = 1, 'the owner still does (history)');
 :as_tech_a
 select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 34.1, -118.1, now() + interval '45 seconds')$q$, '%not under way%', 'visit completed: no point');
--- taken off the visit (S9b): no point
+-- taken off the visit (S9b): the office stops reading the person there, and no new point
+:as_tech_a
+insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000002', 34.35, -118.35, now());
+:as_off56
+select tst.ok(tst.cnt($q$select 1 from public.user_locations where visit_id = 'f5700000-0000-4000-8000-000000000002'$q$) = 1, 'the office sees the point while the tech is on the visit');
 :as_office_a
 select public.assign_visit('f5700000-0000-4000-8000-000000000002', array['a0000000-0000-0000-0000-000000000001']::uuid[]);
 :as_tech_a
 select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000002', 34.1, -118.1, now())$q$, '%no such visit%', 'taken off the visit: no point');
+:as_off56
+select tst.ok(tst.cnt($q$select 1 from public.user_locations where visit_id = 'f5700000-0000-4000-8000-000000000002'$q$) = 0, 'taken off: the office no longer reads his points there');
 -- the company flag off: no writes, no reads by others
 :as_super
 update app.company_flags set location_sharing = false where company_id = 'ca000000-0000-0000-0000-000000000000';
@@ -4823,7 +4829,8 @@ grant usage on schema app, public to t57_owner;
 grant select, delete on public.user_locations to t57_owner;
 grant execute on function app.has_role(uuid, text[]) to t57_owner;
 alter function app.purge_user_locations() owner to t57_owner;
-select tst.ok(app.purge_user_locations() = 1 and tst.cnt($q$select 1 from public.user_locations$q$) = 1, 'purge removes only points older than 30 days, even without BYPASSRLS');
+select tst.ok(app.purge_user_locations() = 1 and tst.cnt($q$select 1 from public.user_locations where recorded_at < now() - interval '30 days'$q$) = 0
+  and tst.cnt($q$select 1 from public.user_locations$q$) = 2, 'purge removes only points older than 30 days, even without BYPASSRLS');
 -- the forget trigger too, for the rest of T57: going off (the tech; the admin) must delete without BYPASSRLS
 alter function app.tg_membership_location_forget() owner to t57_owner;
 -- going off forgets the points (the person; and through the admin)

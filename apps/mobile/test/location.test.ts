@@ -19,7 +19,7 @@ import { normalizeDB } from "../src/data/normalize";
 import { makeSeed } from "../src/data/seed";
 import type { DB, Visit, VisitPoint, VisitStep } from "../src/data/types";
 import {
-  distanceM, isSharingStep, keepLast, lastPoint, milesOf, nearAddress, officeLines, shouldAskConsent, shouldShare, NEAR_M, OFFICE_WINDOW_MS, STALE_MS,
+  distanceM, isSharingStep, keepLast, lastPoint, milesOf, nearAddress, officeLines, shouldAskConsent, shouldShare, stepPending, NEAR_M, OFFICE_WINDOW_MS, STALE_MS,
 } from "../src/features/location";
 
 const HOME = { lat: 34.1478, lng: -118.1445 }; // Pasadena
@@ -43,10 +43,19 @@ describe("when the phone sends a point", () => {
     expect(shouldShare(undefined, visit("en_route"), "me")).toBe(false);
   });
   it("asks once, and never when the company flag is off (AB 1331)", () => {
-    expect(shouldAskConsent({ allowed: true, on: false }, false)).toBe(true);
-    expect(shouldAskConsent({ allowed: true, on: false }, true)).toBe(false);
-    expect(shouldAskConsent({ allowed: false, on: false }, false)).toBe(false);
-    expect(shouldAskConsent(on, false)).toBe(false);
+    expect(shouldAskConsent({ allowed: true, on: false }, false, visit("scheduled"), "me")).toBe(true);
+    expect(shouldAskConsent({ allowed: true, on: false }, true, visit("scheduled"), "me")).toBe(false);
+    expect(shouldAskConsent({ allowed: false, on: false }, false, visit("scheduled"), "me")).toBe(false);
+    expect(shouldAskConsent(on, false, visit("scheduled"), "me")).toBe(false);
+  });
+  it("asks only the person on the visit: a dispatcher tapping «Я в пути» for a tech is not asked (review #217)", () => {
+    expect(shouldAskConsent({ allowed: true, on: false }, false, visit("scheduled", ["mike"]), "me")).toBe(false);
+  });
+  it("a point waits while the visit's step is still in the queue (the server would refuse it, review #217)", () => {
+    const q = [{ op: { k: "visit.step", visitId: "v1" } }, { op: { k: "photo.add", visitId: "v2" } }];
+    expect(stepPending(q, "v1")).toBe(true);
+    expect(stepPending(q, "v2")).toBe(false);
+    expect(stepPending([], "v1")).toBe(false);
   });
 });
 
@@ -111,7 +120,7 @@ describe("the server calls", () => {
   });
   it("a point never carries user_id or company_id (the server sets them)", async () => {
     calls.length = 0;
-    await sendVisitPoint({ visitId: "v1", lat: 1, lng: 2, at: "2026-11-06T12:00:00Z", source: "status_change" });
+    expect(await sendVisitPoint({ visitId: "v1", lat: 1, lng: 2, at: "2026-11-06T12:00:00Z", source: "status_change" })).toBe("ok");
     expect(calls[0].name).toBe("user_locations");
     expect(Object.keys(calls[0].args as object).sort()).toEqual(["accuracy_m", "lat", "lng", "recorded_at", "source", "visit_id"]);
   });

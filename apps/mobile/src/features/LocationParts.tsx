@@ -18,28 +18,45 @@ import { Card, RowView } from "@/ui/surfaces";
 import { usePersistentState } from "@/data/persist";
 import { assigneesOf, isSharingStep, lastPoint, LOCATION_OFF, nearAddress, officeLines, SEND_EVERY_MS, shouldAskConsent, shouldShare } from "./location";
 
-/** asked once on this device; afterwards the person changes it in «My settings» */
-const ASKED_KEY = "octo.locationAsked.v1";
+/** asked once per person and company on this device; afterwards the person changes it in «My settings» */
+export const askedKey = (companyId: string | undefined, me: string) => `octo.locationAsked.v1:${companyId ?? "demo"}:${me}`;
+function useAsked() {
+  const { db } = useStore();
+  return usePersistentState<boolean>(askedKey(db.company?.id, db.me), false);
+}
 
-/** the question before the first «On the way»: `ask(then)` runs `then` right away when there is nothing to ask */
-export function useConsentQuestion() {
-  const { db, setLocationConsent, online } = useStore();
+/** ON with a toast that tells the result: «on» with «Отменить», or the refusal (the step itself is never touched) */
+function useSwitchOn() {
+  const { setLocationConsent } = useStore();
   const toast = useToast();
   const { t } = useI18n();
-  const [asked, setAsked, ready] = usePersistentState<boolean>(ASKED_KEY, false);
+  return () => {
+    const change = setLocationConsent(true);
+    void change.done.then((ok) => toast.show(t(ok ? "loc7b.agreed" : "loc7b.failed"), ok ? change.undo : undefined));
+  };
+}
+
+/** the question before the first «On the way» on my own visit: `ask(then)` runs `then` right away when there is
+ *  nothing to ask; the step goes whatever the answer, and the consent never takes the step back */
+export function useConsentQuestion(v: Visit | undefined) {
+  const { db, online } = useStore();
+  const toast = useToast();
+  const { t } = useI18n();
+  const [asked, setAsked, ready] = useAsked();
+  const switchOn = useSwitchOn();
   const [pending, setPending] = useState<null | (() => void)>(null);
   const ask = (then: () => void) => {
-    if (ready && shouldAskConsent(db.location, asked)) setPending(() => then);
+    if (ready && v && shouldAskConsent(db.location, asked, v, db.me)) setPending(() => then);
     else then();
   };
   const answer = (on: boolean) => {
-    // offline: not now (switching on goes only online); asked again next time
-    if (on && !online) toast.show(t("loc7b.needOnline"));
-    else if (on) toast.show(t("loc7b.agreed"), setLocationConsent(true));
-    if (!on || online) setAsked(true);
     const then = pending;
     setPending(null);
     then?.();
+    // offline: not now (switching on goes only online); asked again next time
+    if (on && !online) toast.show(t("loc7b.needOnline"));
+    else if (on) switchOn();
+    if (!on || online) setAsked(true);
   };
   const sheet = <LocationConsentSheet visible={pending !== null} onAnswer={answer} />;
   return { ask, sheet };
@@ -63,7 +80,8 @@ export function LocationSetting() {
   const { db, setLocationConsent, online } = useStore();
   const toast = useToast();
   const { t } = useI18n();
-  const [, setAsked] = usePersistentState<boolean>(ASKED_KEY, false);
+  const [, setAsked] = useAsked();
+  const switchOn = useSwitchOn();
   const loc = db.location ?? LOCATION_OFF;
   if (!loc.allowed) return null;
   return (
@@ -79,7 +97,9 @@ export function LocationSetting() {
           if (on === loc.on) return;
           if (on && !online) return toast.show(t("loc7b.needOnline"));
           setAsked(true);
-          toast.show(t(on ? "loc7b.agreed" : "loc7b.stopped"), setLocationConsent(on));
+          if (on) return switchOn();
+          // off goes through the queue; «Отменить» while it waits keeps it on (offline the undo needs no server)
+          toast.show(t("loc7b.stopped"), setLocationConsent(false).undo);
         }}
         items={[
           { key: "off", label: t("loc7b.off") },
@@ -96,6 +116,8 @@ export function useVisitLocation(v: Visit, geo?: { lat: number; lng: number }) {
   const sharing = shouldShare(db.location, v, db.me);
   const [denied, setDenied] = useState(false);
   const busy = useRef(false);
+  // the step the screen last sent a point for: a point at a new step is «status_change», on opening — «foreground»
+  const lastStep = useRef<string | null>(null);
   // the store's functions are new on every render: keep the latest in a ref, so the focus effect runs only when the
   // visit, its step or the consent change (otherwise a point → a render → a new effect → a point … without end)
   const send = useRef({ recordVisitPoint, me: db.me });
@@ -104,6 +126,8 @@ export function useVisitLocation(v: Visit, geo?: { lat: number; lng: number }) {
     useCallback(() => {
       if (!sharing) return;
       const take = async (source: "status_change" | "foreground") => {
+        // never from a hidden tab or a phone in the background (the web keeps timers running there)
+        if (AppState.currentState !== "active" || (typeof document !== "undefined" && document.visibilityState === "hidden")) return;
         if (busy.current) return;
         busy.current = true;
         try {
@@ -122,7 +146,8 @@ export function useVisitLocation(v: Visit, geo?: { lat: number; lng: number }) {
           busy.current = false;
         }
       };
-      void take("status_change");
+      void take(lastStep.current !== null && lastStep.current !== v.step ? "status_change" : "foreground");
+      lastStep.current = v.step;
       const timer = setInterval(() => void take("foreground"), SEND_EVERY_MS);
       const sub = AppState.addEventListener("change", (s) => s === "active" && void take("foreground"));
       return () => {
@@ -163,6 +188,8 @@ export function OfficeLocation({ v, geo }: { v: Visit; geo?: { lat: number; lng:
   if (!loc.allowed || !isSharingStep(v.step)) return null;
   const lines = officeLines(db, v, geo, now);
   const nameOf = (id: string) => db.members.find((m) => m.id === id)?.name ?? "—";
+  // the visit's step in words: «В пути» before the address, «На месте» once there (the server: en_route / on_site)
+  const step = t(v.step === "en_route" ? "st.en_route" : "st.on_site").toLocaleLowerCase();
   const silent = assigneesOf(v).filter((id) => !lines.some((l) => l.userId === id) && (id === db.me ? !loc.on : db.members.find((m) => m.id === id)?.sharesLocation === false));
   if (!lines.length && !silent.length) return null;
   return (
@@ -174,8 +201,8 @@ export function OfficeLocation({ v, geo }: { v: Visit; geo?: { lat: number; lng:
             {l.stale
               ? t("loc7b.officeStale", { who: nameOf(l.userId), min: l.minutesAgo })
               : l.miles
-                ? t("loc7b.office", { who: nameOf(l.userId), mi: l.miles, min: l.minutesAgo })
-                : t("loc7b.officeNoGeo", { who: nameOf(l.userId), min: l.minutesAgo })}
+                ? t("loc7b.office", { who: nameOf(l.userId), step, mi: l.miles, min: l.minutesAgo })
+                : t("loc7b.officeNoGeo", { who: nameOf(l.userId), step, min: l.minutesAgo })}
           </T>
         </RowView>
       ))}

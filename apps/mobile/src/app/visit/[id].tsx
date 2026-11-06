@@ -35,8 +35,9 @@ export default function VisitScreen() {
   const [method, setMethod] = useState<PaymentMethod>("card");
   const [extra, setExtra] = useState("");
   const v = db.visits.find((x) => x.id === id);
-  // wave 7б-2: the location question comes before the first «On the way» (docs/specs/03 §12)
-  const consent = useConsentQuestion();
+  // wave 7б-2: the location question comes before the first «On the way» on my own visit (docs/specs/03 §12)
+  const consent = useConsentQuestion(v);
+
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   if (!v)

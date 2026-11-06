@@ -22,16 +22,18 @@ exports.run = async (h) => {
   const prop = db.properties.find((x) => !busyClients.has(x.customerId) && db.customers.some((c) => c.id === x.customerId));
   h.expect(prop, "demo has a free property");
   const client = db.customers.find((c) => c.id === prop.customerId);
-  const plant = (opts) => p.evaluate(([pid, geo, visits, loc]) => {
+  // «asked once» is per person and company on the device (review #217)
+  const askedKey = `octo.locationAsked.v1:${db.company?.id ?? "demo"}:${db.me}`;
+  const plant = (opts) => p.evaluate(([pid, geo, visits, loc, key]) => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
     raw.db.properties = raw.db.properties.map((x) => (x.id === pid ? { ...x, geo } : x));
     raw.db.visits = [...visits, ...raw.db.visits.filter((v) => !v.id.startsWith("e2e-"))];
     raw.db.location = loc;
     raw.db.visitPoints = [];
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
-    localStorage.removeItem("octo.locationAsked.v1");
+    localStorage.removeItem(key);
     localStorage.setItem("octo.role.v1", JSON.stringify("tech"));
-  }, [prop.id, { lat: HOME.latitude, lng: HOME.longitude }, opts.visits, opts.loc]);
+  }, [prop.id, { lat: HOME.latitude, lng: HOME.longitude }, opts.visits, opts.loc, askedKey]);
   const visit = (id) => ({ id, propertyId: prop.id, kind: "inspection", techId: me.id, assigneeIds: [me.id], start: new Date(Date.now() - 16 * 60_000).toISOString(), durationMin: 60, step: "scheduled", scope: [], checklist: [], photos: [], amountDueCents: 0 });
 
   // the company flag off: «Я в пути» goes straight, no question, nothing shared
@@ -41,6 +43,14 @@ exports.run = async (h) => {
   let body = await h.text();
   h.expect(!/Делиться геопозицией во время выезда/.test(body) && !/Геопозиция передаётся/.test(body), "flag off: no question, no sharing");
   h.expect((await h.db()).visits.find((v) => v.id === "e2e-geo-off").step === "en_route", "flag off: the step goes as before");
+
+  // the flag on, someone else's visit: the dispatcher taps «Я в пути» for the tech — not asked about themselves
+  await plant({ visits: [{ ...visit("e2e-geo-other"), techId: "someone-else", assigneeIds: ["someone-else"] }], loc: { allowed: true, on: false } });
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
+  await h.go("/visit/e2e-geo-other");
+  await h.click("Я в пути");
+  h.expect(!/Делиться геопозицией во время выезда/.test(await h.text()), "not my visit: no question about my location");
+  h.expect((await h.db()).visits.find((v) => v.id === "e2e-geo-other").step === "en_route", "the step goes for the tech");
 
   // the flag on: the first «Я в пути» asks with the notice
   await plant({ visits: [visit("e2e-geo")], loc: { allowed: true, on: false } });

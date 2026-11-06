@@ -29,10 +29,11 @@ export function shouldShare(loc: LocationState | undefined, v: Visit, me: ID): b
   return l.allowed && l.on && assigneesOf(v).includes(me) && isSharingStep(v.step);
 }
 
-/** ask for consent at the first «on the way»: the company allows it and the person never answered on this device */
-export function shouldAskConsent(loc: LocationState | undefined, askedBefore: boolean): boolean {
+/** ask for consent at the first «on the way»: the company allows it, the person is on this visit and never answered here */
+export function shouldAskConsent(loc: LocationState | undefined, askedBefore: boolean, v: Visit, me: ID): boolean {
   const l = loc ?? LOCATION_OFF;
-  return l.allowed && !l.on && !askedBefore;
+  // only the person on the visit is asked: a dispatcher tapping «Я в пути» for a tech is not asked about themselves
+  return l.allowed && !l.on && !askedBefore && assigneesOf(v).includes(me);
 }
 
 /** metres between two points (haversine) */
@@ -91,4 +92,9 @@ export function officeLines(db: Pick<DB, "visitPoints">, v: Visit, geo: { lat: n
 /** keep one point per person and visit (the newest): the phone does not need the track */
 export function keepLast(points: VisitPoint[] | undefined, p: VisitPoint): VisitPoint[] {
   return [...(points ?? []).filter((x) => !(x.visitId === p.visitId && x.userId === p.userId)), p];
+}
+
+/** the visit's step still waits in the offline queue: a point now would be refused («not under way») */
+export function stepPending(outbox: { op: { k: string; visitId?: string } }[], visitId: ID): boolean {
+  return outbox.some((x) => x.op.k === "visit.step" && x.op.visitId === visitId);
 }

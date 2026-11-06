@@ -915,9 +915,15 @@ async function createCustomer(
 
 /** wave 7б-2: a location point goes straight away, never through the offline queue — an old point is worthless, and the
  *  server skips one older than 5 min anyway. user_id and company_id come from the server (migration 20261106210000). */
-export async function sendVisitPoint(p: { visitId: string; lat: number; lng: number; accuracyM?: number; at: string; source: "status_change" | "foreground" }): Promise<boolean> {
-  const { error } = await supabase.from("user_locations").insert({
-    visit_id: p.visitId, lat: p.lat, lng: p.lng, accuracy_m: p.accuracyM ?? null, source: p.source, recorded_at: p.at,
-  });
-  return !error;
+export async function sendVisitPoint(p: { visitId: string; lat: number; lng: number; accuracyM?: number; at: string; source: "status_change" | "foreground" }): Promise<"ok" | "off" | "error"> {
+  try {
+    const { error } = await supabase.from("user_locations").insert({
+      visit_id: p.visitId, lat: p.lat, lng: p.lng, accuracy_m: p.accuracyM ?? null, source: p.source, recorded_at: p.at,
+    });
+    if (!error) return "ok";
+    // the server's own text (migration 20261106210000): sharing is off for me or for the company
+    return /location sharing is off/.test(error.message) ? "off" : "error";
+  } catch {
+    return "error";
+  }
 }

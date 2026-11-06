@@ -1,6 +1,6 @@
 /**
  * Wave 7б-2 (docs/specs/03 §12, Б1; story map S23): what the office sees of the tech's location on an open visit.
- * «{tech} · 2.1 mi от адреса · 3 мин назад»; no geo on the property — only the minutes; the visit done — no line;
+ * «{tech} · в пути · 2.1 mi от адреса · 3 мин назад»; no geo on the property — only the minutes; the visit done — no line;
  * the tech takes consent back in «Мои настройки → Местоположение» → the points are gone and the office reads
  * «{tech} не делится геопозицией»; the company flag off — no section and no line. A tech sees no office line.
  */
@@ -14,28 +14,29 @@ exports.run = async (h) => {
   const prop = db.properties.find((x) => db.customers.some((c) => c.id === x.customerId));
   const visit = { id: "e2e-off-geo", propertyId: prop.id, kind: "inspection", techId: me.id, assigneeIds: [me.id], start: new Date(Date.now() - 10 * 60_000).toISOString(), durationMin: 60, step: "en_route", enRouteAt: new Date(Date.now() - 8 * 60_000).toISOString(), scope: [], checklist: [], photos: [], amountDueCents: 0 };
   const point = { visitId: visit.id, userId: me.id, lat: HOME.lat + 0.03, lng: HOME.lng, accuracyM: 20, at: new Date(Date.now() - 3 * 60_000 - 10_000).toISOString() };
-  const plant = (o) => p.evaluate(([pid, geo, v, pt, loc, role]) => {
+  const askedKey = `octo.locationAsked.v1:${db.company?.id ?? "demo"}:${db.me}`;
+  const plant = (o) => p.evaluate(([pid, geo, v, pt, loc, role, key]) => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
     raw.db.properties = raw.db.properties.map((x) => (x.id === pid ? { ...x, geo: geo || undefined } : x));
     raw.db.visits = [v, ...raw.db.visits.filter((x) => !x.id.startsWith("e2e-"))];
     raw.db.location = loc;
     raw.db.visitPoints = pt ? [pt] : [];
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
-    localStorage.setItem("octo.locationAsked.v1", "true");
+    localStorage.setItem(key, "true");
     localStorage.setItem("octo.role.v1", JSON.stringify(role));
-  }, [prop.id, o.geo, o.visit || visit, o.point === undefined ? point : o.point, o.loc || { allowed: true, on: true, ackAt: new Date().toISOString() }, o.role || "director"]);
-  const officeLine = new RegExp(`${me.name} · \\d+\\.\\d mi от адреса · \\d+ мин назад`);
+  }, [prop.id, o.geo, o.visit || visit, o.point === undefined ? point : o.point, o.loc || { allowed: true, on: true, ackAt: new Date().toISOString() }, o.role || "director", askedKey]);
+  const officeLine = new RegExp(`${me.name} · (в пути|на месте) · \\d+\\.\\d mi от адреса · \\d+ мин назад`);
 
   // the office on an open visit
   await plant({ geo: HOME });
   await h.go(`/visit/${visit.id}`);
-  await h.expectText(new RegExp(`${me.name} · 2\\.1 mi от адреса · 3 мин назад`), "the office: distance to the address and the age of the point");
+  await h.expectText(new RegExp(`${me.name} · в пути · 2\\.1 mi от адреса · 3 мин назад`), "the office: the step, distance to the address and the age of the point");
   await h.shot("office-line");
 
   // no geo on the property: only the minutes
   await plant({ geo: null });
   await h.go(`/visit/${visit.id}`);
-  await h.expectText(new RegExp(`${me.name} · 3 мин назад`), "no address on the map: only the minutes");
+  await h.expectText(new RegExp(`${me.name} · в пути · 3 мин назад`), "no address on the map: the step and the minutes");
   h.expect(!/mi от адреса/.test(await h.text()), "no miles without geo");
 
   // the visit is done: no line
