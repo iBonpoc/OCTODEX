@@ -4430,4 +4430,69 @@ select tst.fails($q$select tst.mark_dns('c5800000-0000-4000-8000-000000000001', 
 :as_super
 \echo 'T58 «do not service»: only the director or the office, with a trace ok'
 
+-- ---------------------------------------------------------------- T59: a row never moves to another company (security #2, 19 §7.1)
+:as_super
+-- (1) guard: every table with company_id, in every non-system schema, has the immutable trigger
+do $$
+declare missing text;
+begin
+  select string_agg(n.nspname || '.' || c.relname, ', ' order by 1) into missing
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    join pg_attribute a on a.attrelid = c.oid and a.attname = 'company_id' and not a.attisdropped
+   where c.relkind in ('r', 'p')
+     and n.nspname not in ('pg_catalog', 'information_schema', 'tst') and n.nspname not like 'pg\_%'
+     -- exceptions, each with its reason:
+     and (n.nspname, c.relname) not in (
+       ('app', 'company_numbering'),   -- no API access; only app.next_document_number writes it, by company_id
+       ('app', 'company_flags'))       -- no API access; the operator sets it by SQL (#196)
+     and not exists (select 1 from pg_trigger t
+                      where t.tgrelid = c.oid and not t.tgisinternal and t.tgenabled <> 'D'
+                        and t.tgfoid = 'app.tg_company_id_immutable()'::regprocedure
+                        and t.tgtype & 1 = 1      -- for each row
+                        and t.tgtype & 2 = 2      -- before
+                        and t.tgtype & 16 = 16);  -- update
+  perform tst.ok(missing is null, 'every table with company_id keeps it immutable; missing: ' || coalesce(missing, '-'));
+end $$;
+-- fixture: owner_b also runs a second company (as an owner of two companies does)
+insert into public.companies (id, name) values ('c5900000-0000-4000-8000-000000000000', 'T59 Second');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('c5900000-0000-4000-8000-000000000000', 'b0000000-0000-0000-0000-000000000001', 'owner', 'active');
+-- (2) the EIN of one company does not move into the other (failed before: the row moved)
+:as_owner_b
+insert into public.company_secrets (company_id, ein) values ('cb000000-0000-0000-0000-000000000000', '98-7654321');
+select tst.fails_like($q$update public.company_secrets set company_id = 'c5900000-0000-4000-8000-000000000000' where company_id = 'cb000000-0000-0000-0000-000000000000'$q$,
+  '%company_id is immutable (company_secrets -)%', 'an owner of two companies does not move the EIN');
+select tst.ok((select count(*) from public.company_secrets where company_id = 'cb000000-0000-0000-0000-000000000000') = 1, 'the EIN stays with its company');
+update public.company_secrets set ein = '98-7654322' where company_id = 'cb000000-0000-0000-0000-000000000000';
+select tst.ok((select ein from public.company_secrets where company_id = 'cb000000-0000-0000-0000-000000000000') = '98-7654322', 'the EIN is still edited in place');
+-- (3) signatures: not moved; a former member does not touch his old signature (failed before: he revoked it)
+insert into public.member_signatures (id, company_id, user_id, svg, name) values
+  ('a5900000-0000-4000-8000-000000000001', 'c5900000-0000-4000-8000-000000000000', 'b0000000-0000-0000-0000-000000000001', '<svg/>', 'Owner B');
+select tst.fails($q$update public.member_signatures set company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a5900000-0000-4000-8000-000000000001'$q$, 'a signature does not move to another company');
+:as_super
+update public.memberships set status = 'disabled' where company_id = 'c5900000-0000-4000-8000-000000000000' and user_id = 'b0000000-0000-0000-0000-000000000001';
+:as_owner_b
+select tst.blocked($q$update public.member_signatures set revoked_at = now() where id = 'a5900000-0000-4000-8000-000000000001'$q$, 'a former member does not change his old signature');
+:as_super
+select tst.ok((select revoked_at is null from public.member_signatures where id = 'a5900000-0000-4000-8000-000000000001'), 'the old signature is untouched');
+update public.memberships set status = 'active' where company_id = 'c5900000-0000-4000-8000-000000000000' and user_id = 'b0000000-0000-0000-0000-000000000001';
+-- (4) tables without an id column say the right thing (before: «record old has no field id» or a foreign key error)
+select tst.fails_like($q$update public.customer_tags set company_id = 'cb000000-0000-0000-0000-000000000000' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%company_id is immutable (customer_tags -)%', 'customer_tags keep their company');
+select tst.fails_like($q$update public.notifications set company_id = 'cb000000-0000-0000-0000-000000000000' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%company_id is immutable (notifications %', 'notifications keep their company (even for a server function)');
+-- (5) Storage: an object is not renamed into another company (failed before: USING saw A, WITH CHECK saw B)
+:as_owner_b
+insert into storage.objects (bucket_id, name) values ('files', 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg');
+select tst.blocked($q$update storage.objects set name = 'c5900000-0000-4000-8000-000000000000/f5900000-0000-4000-8000-000000000001.jpg' where name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg'$q$,
+  'a staff member of two companies does not move a file between them');
+select tst.blocked($q$update storage.objects set name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000002.jpg' where name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg'$q$,
+  'nor renames it to another file of the company');
+insert into storage.objects (bucket_id, name) values ('files', 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg')
+  on conflict (bucket_id, name) do update set updated_at = now();
+select tst.ok((select updated_at is not null from storage.objects where name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg'), 'a repeat upload (upsert, same name) still works');
+:as_super
+select tst.ok((select count(*) from storage.objects where name like 'c5900000-0000-4000-8000-000000000000/%') = 0, 'nothing landed in the other company');
+\echo 'T59 a row never moves to another company ok'
+
 \echo 'ALL TESTS PASSED'
