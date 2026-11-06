@@ -11,6 +11,7 @@ import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
 import { usePlanShowDone } from "@/features/prefs";
+import { LocationSetting } from "@/features/LocationParts";
 import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
 
@@ -106,6 +107,8 @@ export default function Settings() {
           ]}
         />
       </Card>
+      {/* wave 7б-2: location during visits — only when the company allows it (docs/specs/03 §12) */}
+      <LocationSetting />
       <Card>
         <T v="heading">{t("settings.hints")}</T>
         <T v="caption" tone="mut">
