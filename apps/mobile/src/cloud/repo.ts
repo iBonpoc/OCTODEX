@@ -5,7 +5,7 @@
 import { companyFromDb } from "./companyMap";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -121,6 +121,33 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // wave 7б-1: my personal settings (RLS: only my own row); no row or no table yet → the defaults
   const prefRows = await pages<Row>(() => supabase.from("member_prefs").select("plan_show_done").eq("company_id", companyId).eq("user_id", userId), key("user_id")).catch(() => [] as Row[]);
   const prefs: MemberPrefs = { planShowDone: prefRows[0]?.plan_show_done === true };
+  // wave 7б-2 (migration 20261106210000): the company flag, who shares, the last points of open visits. Each read on its
+  // own: before the migration (or if a read fails) the location stays off and the rest of the company still loads.
+  const [locAllowed, shareRows, pointRows] = await Promise.all([
+    (async () => (await supabase.rpc("company_location_sharing", { p_company_id: companyId })).data === true)().catch(() => false),
+    pages<Row>(() => supabase.from("memberships").select("user_id, share_location, location_notice_ack_at").eq("company_id", companyId).is("deleted_at", null), key("user_id")).catch(() => [] as Row[]),
+    pages<Row>(
+      () => supabase.from("user_locations").select("id, visit_id, user_id, lat, lng, accuracy_m, recorded_at").eq("company_id", companyId).gte("recorded_at", new Date(Date.now() - 12 * 3600_000).toISOString()),
+      [{ col: "recorded_at", asc: false }, { col: "id", asc: false }],
+      2000,
+    ).catch(() => [] as Row[]),
+  ]);
+  const sharing = new Map(shareRows.map((r) => [s(r.user_id), r.share_location === true]));
+  const myShare = shareRows.find((r) => r.user_id === userId);
+  const location: LocationState = {
+    allowed: locAllowed,
+    on: locAllowed && myShare?.share_location === true,
+    ...(myShare?.location_notice_ack_at ? { ackAt: s(myShare.location_notice_ack_at) } : {}),
+  };
+  // newest first: the first row of a person on a visit is their last point (the phone keeps only that one)
+  const visitPoints: VisitPoint[] = [];
+  const seen = new Set<string>();
+  for (const r of pointRows) {
+    const k = `${s(r.visit_id)}|${s(r.user_id)}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    visitPoints.push({ visitId: s(r.visit_id), userId: s(r.user_id), lat: Number(r.lat), lng: Number(r.lng), accuracyM: r.accuracy_m == null ? undefined : Number(r.accuracy_m), at: s(r.recorded_at) });
+  }
   const calendarEvents: CalendarEvent[] = eventRows
     .map((r) => ({
       id: s(r.id), kind: (r.kind === "time_off" ? "time_off" : "event") as CalendarEvent["kind"], userId: (r.user_id as string | null) ?? undefined,
@@ -199,6 +226,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       canSignContracts: m.can_sign_contracts !== false, title: (m.title as string | null) ?? undefined, hisNumber: (m.his_registration_number as string | null) ?? undefined,
       // E2b-2: only the owner gives or takes the right to sign (the app shows owner and admin both as director)
       isOwner: m.role === "owner",
+      sharesLocation: sharing.has(s(m.user_id)) ? sharing.get(s(m.user_id)) : undefined,
       // switched off: kept so old records keep the name; `pending` leaves them out of pickers and signing
       ...(m.status === "disabled" ? { disabled: true, pending: true } : {}),
     };
@@ -539,6 +567,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     jobLines,
     calendarEvents,
     prefs,
+    location,
+    visitPoints,
     customFields,
     customFieldValues,
     visits: mappedVisits,
