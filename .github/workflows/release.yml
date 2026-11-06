@@ -1,16 +1,16 @@
-# Release on every push to main (and by hand): 1) database migrations → 2) Expo Go update (EAS Update, channel "preview")
+# Release after the checks are green on a push to main (and by hand): 1) database migrations → 2) Expo Go update (EAS Update, channel "preview")
 # → 3) web app (Expo Hosting) → 4) check that Expo really serves the new update. A failed step stops the next ones,
 # so the app never goes out ahead of its database. Logs are visible in GitHub Actions.
 # Secrets (repo → Settings → Secrets and variables → Actions): SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD, EXPO_TOKEN.
 name: Release
 
 on:
-  push:
+  # Only after the checks are green on that very commit of main (06.11.2026): two PRs green apart can break together,
+  # and the release must never ship ahead of its tests.
+  workflow_run:
+    workflows: [Checks]
+    types: [completed]
     branches: [main]
-    # docs-only pushes do not change the app or the database: no release (founder 05.11.2026)
-    paths-ignore:
-      - 'docs/**'
-      - '**/*.md'
   workflow_dispatch:
 
 concurrency:
@@ -20,8 +20,35 @@ concurrency:
 # eas-cli pinned to 27.4.1 (05.11.2026): 27.5.0 was published broken (ETARGET @expo/turtle-spawn@27.5.0).
 # Raise the pin deliberately after checking a new version, never back to @latest.
 jobs:
+  # Which commit, and whether to release it at all: the checks of a push to main are green, it is still the newest
+  # commit of main (an older run finishing late must not ship over a newer one), and it changes more than docs
+  # (founder 05.11.2026: docs-only pushes do not release).
+  gate:
+    name: Release this commit?
+    runs-on: ubuntu-24.04
+    outputs:
+      go: ${{ steps.g.outputs.go }}
+      sha: ${{ steps.g.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+      - id: g
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"; echo "go=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          sha="${{ github.event.workflow_run.head_sha }}"; echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          if [ "${{ github.event.workflow_run.event }}" != "push" ] || [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
+            echo "Checks: ${{ github.event.workflow_run.event }} / ${{ github.event.workflow_run.conclusion }} — no release"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          if [ "$(git rev-parse origin/main)" != "$sha" ]; then echo "$sha is no longer the newest main — its successor releases"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          files="$(git diff --name-only "$sha^1" "$sha")"
+          if [ -n "$files" ] && ! echo "$files" | grep -qvE '^docs/|\.md$'; then echo "docs only — no release"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          echo "go=true" >> "$GITHUB_OUTPUT"
+
   migrate:
     name: Database migrations
+    needs: gate
+    if: needs.gate.outputs.go == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -30,6 +57,8 @@ jobs:
       PROJECT_REF: kgiaxygsjkyiquhjbxdg
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
       - uses: supabase/setup-cli@v1
         with:
           # exact version: "latest" asks the GitHub API and fails on its rate limit
@@ -53,13 +82,15 @@ jobs:
 
   publish:
     name: Publish (Expo Go + web)
-    needs: migrate
+    needs: [gate, migrate]
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
       - name: Expo token is set
         run: |
           if [ -z "$EXPO_TOKEN" ]; then echo "::error::Add EXPO_TOKEN in Settings → Secrets and variables → Actions"; exit 1; fi
@@ -73,7 +104,9 @@ jobs:
         run: npx eas-cli@27.4.1 whoami
       - name: Publish the Expo Go update (channel preview)
         working-directory: apps/mobile
-        run: npx eas-cli@27.4.1 update --channel preview --platform all --non-interactive --message "main @ ${GITHUB_SHA::7}"
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+        run: npx eas-cli@27.4.1 update --channel preview --platform all --non-interactive --message "main @ ${SHA::7}"
       - name: Check that Expo serves the new update
         run: |
           created=$(curl -sS https://u.expo.dev/49d009d4-a05b-4911-b7da-1e47c4e10fba -H 'expo-platform: ios' -H 'expo-runtime-version: exposdk:58.0.0' \

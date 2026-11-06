@@ -1,6 +1,9 @@
 # Every PR and push to main: types, unit tests (engine money scenarios, design-system guard, tokens contrast, story map),
-# database tests (RLS, money safety, client page), then the end-to-end browser runs at 3 widths × 2 themes in parallel
-# (CLAUDE.md rule 4). The job "checks" is green only when all of them are — that is the one branch protection requires.
+# database tests (RLS, money safety, client page), then the end-to-end browser runs: every spec at 390 dark, 820 light
+# and 1280 dark (each width and both themes; 08-layouts checks every screen at all 6 views), each view in 2 parallel parts.
+# Nightly on main (and by hand): every spec at all 3 widths × 2 themes (CLAUDE.md rule 4, docs/ai/CHECKS.md §1).
+# The job "checks" is green only when all of them are — that is the one branch protection requires, and the release
+# (release.yml) starts only after it is green on main.
 # Docs-only changes (every changed file is under docs/ or ends in .md) skip the browser runs: they cannot change the app
 # (founder 05.11.2026, saves GitHub minutes and the queue). Types, unit and database tests still run — the story-map test
 # reads docs/15-story-map.md.
@@ -10,6 +13,11 @@ on:
   pull_request:
   push:
     branches: [main]
+  # Nightly on main: every spec at all 3 widths × 2 themes (docs/ai/CHECKS.md §1). 10:17 UTC = 2:17 AM in Los Angeles,
+  # away from the company-midnight window (CHECKS §5). A red nightly opens an issue for the director.
+  schedule:
+    - cron: '17 10 * * *'
+  workflow_dispatch:
 
 # A new push to a PR stops the run of its older version (saves GitHub minutes). Pushes to main are never cancelled:
 # each gets its own group (run_id).
@@ -23,6 +31,7 @@ jobs:
     runs-on: ubuntu-24.04
     outputs:
       app: ${{ steps.diff.outputs.app }}
+      views: ${{ steps.views.outputs.views }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,6 +44,17 @@ jobs:
           files="$(git diff --name-only "$base" "${{ github.sha }}")"
           echo "$files"
           if [ -n "$files" ] && ! echo "$files" | grep -qvE '^docs/|\.md$'; then echo "app=false" >> "$GITHUB_OUTPUT"; else echo "app=true" >> "$GITHUB_OUTPUT"; fi
+      # PR and push to main: every spec at 3 views that cover each width and both themes (08-layouts checks every screen
+      # at all 6 views by itself). Nightly and by hand: all 6 views. Each view runs in 2 parallel parts (--shard).
+      - id: views
+        name: Which views
+        run: |
+          if [ "${{ github.event_name }}" = "schedule" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            v='["390-dark","390-light","820-dark","820-light","1280-dark","1280-light"]'
+          else
+            v='["390-dark","820-light","1280-dark"]'
+          fi
+          echo "views=$v" >> "$GITHUB_OUTPUT"
 
   fast:
     name: Types, unit and database tests
@@ -55,16 +75,16 @@ jobs:
           sudo bash supabase/tests/run.sh
 
   e2e:
-    name: End-to-end ${{ matrix.width }} ${{ matrix.theme }}
+    name: End-to-end ${{ matrix.view }} part ${{ matrix.part }}
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 45  # 89+ спек на медленной машине доходят до 30 мин (#216, 06.11)
+    timeout-minutes: 45  # a part takes ~10 min; the limit only catches a hung run
     strategy:
       fail-fast: false
       matrix:
-        width: [390, 820, 1280]
-        theme: [dark, light]
+        view: ${{ fromJSON(needs.changes.outputs.views) }}
+        part: [1, 2]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -76,13 +96,14 @@ jobs:
         working-directory: apps/mobile
         run: |
           npx playwright install --with-deps chromium >/dev/null
-          node e2e/run.cjs --width=${{ matrix.width }} --theme=${{ matrix.theme }}
+          view="${{ matrix.view }}"
+          node e2e/run.cjs --width="${view%-*}" --theme="${view#*-}" --shard=${{ matrix.part }}/2
       - uses: actions/upload-artifact@v4
         if: always()
         # screenshots are for reading a failure, not a test: a GitHub storage outage must not turn green tests red (05.11.2026)
         continue-on-error: true
         with:
-          name: e2e-screenshots-${{ matrix.width }}-${{ matrix.theme }}
+          name: e2e-screenshots-${{ matrix.view }}-${{ matrix.part }}
           path: apps/mobile/e2e/out/
 
   checks:
@@ -97,3 +118,22 @@ jobs:
           e2e="${{ needs.e2e.result }}"
           if [ "${{ needs.changes.result }}" = "success" ] && [ "${{ needs.changes.outputs.app }}" = "false" ] && [ "$e2e" = "skipped" ]; then e2e=success; fi
           [ "${{ needs.fast.result }}" = "success" ] && [ "$e2e" = "success" ] || { echo "::error::changes=${{ needs.changes.result }} fast=${{ needs.fast.result }} e2e=${{ needs.e2e.result }}"; exit 1; }
+
+  # A red nightly run opens (or adds to) one issue, so the director sees it in the morning (docs/ai/CHECKS.md §1).
+  nightly-alert:
+    name: Nightly alert
+    needs: checks
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Open or update the issue
+        run: |
+          url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          n=$(gh issue list -R "${{ github.repository }}" --state open --label nightly-red --json number -q '.[0].number')
+          if [ -n "$n" ]; then gh issue comment "$n" -R "${{ github.repository }}" --body "Red again: $url"
+          else gh label create nightly-red -R "${{ github.repository }}" --color B60205 2>/dev/null || true
+               gh issue create -R "${{ github.repository }}" --label nightly-red --title "Nightly checks red on main" --body "Full run (6 views) failed: $url"; fi

@@ -3,7 +3,8 @@
  * Builds the web app (expo export), serves dist/ with SPA fallback, runs every spec in a fresh context,
  * fails on any page error / console error, writes screenshots to e2e/out/.
  * Width and theme (CLAUDE.md rule 4): --width=390|820|1280 --theme=dark|light, or E2E_WIDTH / E2E_THEME.
- * --all-layouts runs every spec at all 3 widths × 2 themes (CI runs them as 6 parallel jobs instead).
+ * --all-layouts runs every spec at all 3 widths × 2 themes (CI runs them as parallel jobs instead).
+ * --shard=k/n runs only the k-th of n parts of the spec list (CI splits each view in parts to finish sooner).
  * E2E_NOW=<ISO moment> starts the clock there (the specs' Date and every browser context's; it runs on from it), to check
  * a spec at a risky hour, e.g. E2E_NOW=2026-11-06T08:10:00Z = 12:10 AM in Los Angeles (docs/ai/CHECKS.md §5).
  */
@@ -71,7 +72,10 @@ const server = http.createServer((req, res) => {
   await new Promise((r) => server.listen(0, "127.0.0.1", r));
   const BASE = `http://127.0.0.1:${server.address().port}`;
   const browser = await chromium.launch();
-  const specs = fs.readdirSync(path.join(__dirname, "specs")).filter((f) => f.endsWith(".cjs") && (!only.length || only.some((o) => f.includes(o)))).sort();
+  // --shard=k/n: the k-th of n equal parts of the sorted list (CI runs the parts as parallel jobs, docs/ai/CHECKS.md §1)
+  const [shardK, shardN] = (opt("shard") || "1/1").split("/").map(Number);
+  const specs = fs.readdirSync(path.join(__dirname, "specs")).filter((f) => f.endsWith(".cjs") && (!only.length || only.some((o) => f.includes(o)))).sort()
+    .filter((_, i) => i % shardN === shardK - 1);
   let failed = 0;
   let runs = 0;
   for (const layout of layouts)
