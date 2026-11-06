@@ -14,7 +14,7 @@ import { openSection } from "./go";
 import { sideNavWidth } from "./shell";
 
 /** pages outside the app: the client page and sign-in have no staff menu (13а §8) */
-const isAppPath = (path: string) => !/^\/(p|auth)(\/|$)/.test(path);
+export const isAppPath = (path: string) => !/^\/(p|auth)(\/|$)/.test(path);
 
 /**
  * Side menu on 820 and 1280 (docs/specs/13 §2.5, 13а §8): a rail of icons with labels, always on screen.
