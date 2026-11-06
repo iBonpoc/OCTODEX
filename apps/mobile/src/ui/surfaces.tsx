@@ -534,7 +534,8 @@ export function Screen({
            The screen's actions wrap under the title when the row is too narrow (Plan at 390), never squeeze it. */
         <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, flexWrap: "wrap", rowGap: space[2] }}>
           <RowView style={{ flexGrow: 1, flexShrink: 0, maxWidth: "100%", gap: space[1] }}>
-            {wide ? null : <MenuButton />}
+            {/* only in the app's own places: a tab or a ☰ root — never on the client page /p or sign-in */}
+            {wide || !(menuRoot || isTabScreen(routeName)) ? null : <MenuButton />}
             <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
               <T v="display" numberOfLines={1}>
                 {title}

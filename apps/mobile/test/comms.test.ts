@@ -32,8 +32,22 @@ describe("comms log", () => {
     expect(msgs.map((m) => m.id)).toEqual(["s1", "e1"]);
     expect(msgs[0]).toMatchObject({ who: cust.name, href: `/client/${cust.id}` });
   });
-  it("the technician sees only his own", () => {
+  it("the technician sees only his own: what he made, and what is about his jobs and their clients", () => {
     expect(commsLog(db, "tech", "calls").map((c) => c.id)).toEqual(["c1"]);
-    expect(commsLog(db, "tech", "messages").map((c) => c.id)).toEqual(["e1"]);
+    // s1 is an SMS to a client by someone else: his only if he has a visit at that client
+    const hisJob = base.visits.find((v) => v.jobId && (v.techId === base.me || v.assigneeIds?.includes(base.me)))!.jobId!;
+    const hisClient = base.properties.find((p) => p.id === base.jobs.find((j) => j.id === hisJob)!.propertyId)!.customerId!;
+    const notHis = base.customers.find((c) => !base.jobs.some((j) => base.properties.find((p) => p.id === j.propertyId)?.customerId === c.id && base.visits.some((v) => v.jobId === j.id && (v.techId === base.me || v.assigneeIds?.includes(base.me)))))!;
+    const d2: DB = {
+      ...db,
+      activities: [
+        act("x1", "call", other, "2026-11-05T14:00:00Z", { subjectType: "customer", subjectId: hisClient }),
+        act("x2", "call", other, "2026-11-05T15:00:00Z", { subjectType: "job", subjectId: hisJob }),
+        act("x3", "call", other, "2026-11-05T16:00:00Z", { subjectType: "customer", subjectId: notHis.id }),
+        ...db.activities,
+      ],
+    };
+    expect(commsLog(d2, "tech", "calls").map((c) => c.id)).toEqual(["x2", "x1", "c1"]);
+    expect(commsLog(d2, "director", "calls").map((c) => c.id)).toContain("x3");
   });
 });

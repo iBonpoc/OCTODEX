@@ -12,9 +12,9 @@ import { Glass } from "@/ui/overlays";
 import { Avatar } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { activeSection } from "./hierarchy";
-import { menuGroups, sectionHref, type MenuGroup, type SectionId } from "./sections";
+import { hasSection, menuGroups, sectionHref, sectionOfHref, type MenuGroup, type SectionId } from "./sections";
 import { QuickActions } from "./QuickActions";
-import { goTo } from "./go";
+import { openSection } from "./go";
 
 /**
  * ☰ — the app menu (docs/specs/13 §2.3, 13а §3): slides in from the left, groups split by a line, items by rights.
@@ -23,7 +23,8 @@ import { goTo } from "./go";
  */
 interface NavMenuCtx {
   open: () => void;
-  close: () => void;
+  /** `refocus` = false when an item was chosen: the new screen puts the focus on its own title */
+  close: (refocus?: boolean) => void;
   isOpen: boolean;
 }
 const Ctx = createContext<NavMenuCtx>({ open: () => {}, close: () => {}, isOpen: false });
@@ -38,11 +39,11 @@ export function NavMenuProvider({ children }: { children: ReactNode }) {
     if (Platform.OS === "web" && typeof document !== "undefined") opener.current = document.activeElement as HTMLElement | null;
     setOpen(true);
   }, []);
-  const close = useCallback(() => {
+  const close = useCallback((refocus = true) => {
     setOpen(false);
     const el = opener.current;
     opener.current = null;
-    if (el && Platform.OS === "web") requestAnimationFrame(() => el.isConnected && el.focus?.());
+    if (refocus && el && Platform.OS === "web") requestAnimationFrame(() => el.isConnected && el.focus?.());
   }, []);
   const value = useMemo(() => ({ open, close, isOpen }), [open, close, isOpen]);
   return (
@@ -51,6 +52,7 @@ export function NavMenuProvider({ children }: { children: ReactNode }) {
       <Drawer
         visible={isOpen}
         onClose={close}
+        onChoose={() => close(false)}
         onCreate={() => {
           setOpen(false);
           setQuick(true);
@@ -82,7 +84,7 @@ export function MenuButton() {
 
 const GROUP_TITLE: Partial<Record<MenuGroup, DictKey>> = { work: "nav.group.work", docs: "nav.group.docs", money: "nav.group.money" };
 
-function Drawer({ visible, onClose, onCreate }: { visible: boolean; onClose: () => void; onCreate: () => void }) {
+function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; onClose: () => void; onChoose: () => void; onCreate: () => void }) {
   const { t } = useI18n();
   const { c } = useTheme();
   const insets = useSafeAreaInsets();
@@ -93,18 +95,27 @@ function Drawer({ visible, onClose, onCreate }: { visible: boolean; onClose: () 
   const auth = useAuth();
   const pathname = usePathname();
   const params = useGlobalSearchParams();
-  const current = activeSection(pathname, params, db, role);
+  // the menu marks the exact list on screen (/leads?tab=invoices → «Счета»), also for sales whose home it is
+  const own = sectionOfHref(pathname + (params.tab ? `?tab=${String(params.tab)}` : ""));
+  const current = own && own !== "home" && hasSection(role, own) ? own : activeSection(pathname, params, db, role);
   const me = db.members.find((m) => m.id === db.me);
   const go = (id: SectionId) => {
-    onClose();
-    goTo(sectionHref(id, role));
+    onChoose();
+    openSection(sectionHref(id, role));
   };
   const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={() => onClose()} statusBarTranslucent>
       <Animated.View entering={reduce ? undefined : FadeIn.duration(motion.durBase)} exiting={reduce ? undefined : FadeOut.duration(motion.durFast)} style={StyleSheet.absoluteFill}>
         {/* a tap outside closes it; for the keyboard and screen readers: «Закрыть» in the menu and Esc */}
-        <View testID="menu-scrim" style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]} onTouchEnd={onClose} accessible={false} />
+        <View
+          testID="menu-scrim"
+          style={[StyleSheet.absoluteFill, { backgroundColor: c.scrim }]}
+          // the responder system answers both a finger and a mouse (onTouchEnd was touch-only on the web)
+          onStartShouldSetResponder={() => true}
+          onResponderRelease={() => onClose()}
+          accessible={false}
+        />
       </Animated.View>
       <Animated.View
         entering={reduce ? undefined : SlideInLeft.duration(motion.durSlow)}
@@ -118,7 +129,7 @@ function Drawer({ visible, onClose, onCreate }: { visible: boolean; onClose: () 
         <Glass strong style={{ flex: 1, borderTopRightRadius: component.sheetRadius, borderBottomRightRadius: component.sheetRadius, paddingTop: insets.top + space[3], paddingBottom: insets.bottom + space[3] }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space[4], minHeight: size.hitMin }}>
             <T v="title">{t("nav.menu")}</T>
-            <Press onPress={onClose} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
+            <Press onPress={() => onClose()} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>
               <View style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
                 <Icon name="close" s={size.iconSm} />
               </View>
@@ -171,7 +182,8 @@ function MenuRow({ icon, label, onPress, selected, accent, testID }: { icon: Ico
     <Press
       testID={testID}
       onPress={onPress}
-      visibleHeight={component.button.md}
+      // the row is 44 tall itself: no extra hit area spilling onto the next row
+      visibleHeight={size.hitMin}
       accessibilityRole="button"
       accessibilityLabel={label}
       accessibilityState={{ selected: !!selected }}

@@ -67,6 +67,37 @@ exports.run = async (h) => {
   h.expect((await menu().locator('[aria-current="page"]').innerText()).includes("Счета"), "«Счета» is marked as the current item");
   await menu().getByRole("button", { name: "Закрыть", exact: true }).click();
 
+  // the list switched by its own segment, then ☰ «Счета» again: the list follows (failed before: the address kept ?tab)
+  await h.clickText("Сметы");
+  await p.waitForTimeout(400);
+  h.expect(p.url().includes("tab=estimates"), `the segment writes the address (${p.url()})`);
+  await openMenu();
+  h.expect((await menu().locator('[aria-current="page"]').innerText()).includes("Сметы"), "☰ marks «Сметы» after the segment");
+  await menu().getByRole("button", { name: "Счета", exact: true }).click();
+  await p.waitForTimeout(600);
+  await h.expectText(/Нужно действие · \d+/, "☰ «Счета» switches the list back");
+
+  // a ☰ item opened from a tab goes on top: browser / system back returns (failed before: replace closed the app)
+  await h.go("/today");
+  await openMenu();
+  await menu().getByRole("button", { name: "Работы", exact: true }).click();
+  await p.waitForTimeout(700);
+  h.expect(path(h) === "/jobs", `☰ → Работы (${path(h)})`);
+  await p.goBack();
+  await p.waitForTimeout(700);
+  h.expect(path(h) === "/today", `back from Jobs returns Home (${path(h)})`);
+
+  // a click (mouse) outside the menu closes it (failed before: touch only)
+  await openMenu();
+  const vw = h.layout.width;
+  await p.mouse.click(vw - 10, 400);
+  await p.waitForTimeout(500);
+  h.expect((await menu().count()) === 0, "a click outside closes ☰");
+
+  // the client page /p has no staff menu
+  await h.go("/p/demo0handyman0estimate0000000001");
+  h.expect((await p.getByRole("button", { name: "Меню", exact: true }).count()) === 0, "no ☰ on the client page");
+
   // old addresses keep working: /inbox?tab=… → /leads?tab=…
   await h.go("/inbox?tab=estimates");
   h.expect(p.url().includes("/leads?tab=estimates"), `/inbox → /leads (${p.url()})`);
@@ -84,10 +115,20 @@ exports.run = async (h) => {
   await p.getByText(lead.name, { exact: true }).first().click();
   await p.waitForTimeout(700);
   h.expect(p.url().includes(`/lead/${lead.id}`), `a call opens its lead (${p.url()})`);
+  // an office call to a client the technician has no visit at — the office sees it, he does not
+  const busy = new Set(db.visits.filter((v) => v.techId === db.me || (v.assigneeIds || []).includes(db.me)).map((v) => db.properties.find((x) => x.id === (v.propertyId ?? db.jobs.find((j) => j.id === v.jobId)?.propertyId))?.customerId));
+  const stranger = db.customers.find((c) => !busy.has(c.id));
+  const other = db.members.find((m) => m.id !== db.me);
+  await p.evaluate(([a]) => {
+    const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+    raw.db.activities = [a, ...raw.db.activities];
+    localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+  }, [{ id: "e2e-call", subjectType: "customer", subjectId: stranger.id, kind: "call", at: new Date().toISOString(), actorId: other.id }]);
+  await h.go("/calls");
+  h.expect((await p.locator('[data-testid="comms-e2e-call"]').count()) === 1, "the office sees the call to any client");
   await setRole(h, "tech");
   await h.go("/calls");
-  const mine = db.activities.filter((a) => a.kind === "call" && a.actorId === db.me).length;
-  h.expect((await p.locator('[data-testid^="comms-"]').count()) === mine, `tech: only his own calls (${mine})`);
+  h.expect((await p.locator('[data-testid="comms-e2e-call"]').count()) === 0, "tech: not a call to a client he has no visit at");
   await h.go("/messages");
   await h.expectText(/Сообщения/, "Messages opens for the technician");
 

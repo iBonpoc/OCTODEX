@@ -53,7 +53,11 @@ export default function Sales() {
       <Segmented
         full
         value={tab}
-        onChange={setTab}
+        onChange={(k) => {
+          setTab(k);
+          // the address follows the list on screen, so ☰ «Сметы» / «Счета» always switch it (review of #144)
+          router.setParams({ tab: k });
+        }}
         items={[
           { key: "leads", label: newLeads ? `${t("sales.leads")} · ${newLeads}` : t("sales.leads") },
           { key: "estimates", label: t("sales.estimates") },

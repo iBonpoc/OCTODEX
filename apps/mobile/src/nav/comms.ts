@@ -21,11 +21,15 @@ export interface CommsEntry {
   outcome?: CallOutcome;
 }
 
-/** Newest first. The technician sees only his own (13 §2.1: «мастер видит звонки и сообщения по своим выездам»). */
+/**
+ * Newest first. The technician sees only his own (13 §2.1: «мастер видит звонки и сообщения по своим выездам»):
+ * what he made, and what was said about his jobs and their clients.
+ */
 export function commsLog(db: DB, role: Role, kind: CommsKind): CommsEntry[] {
   const kinds = KINDS[kind];
+  const mine = role === "tech" ? techScope(db) : undefined;
   return db.activities
-    .filter((a) => kinds.includes(a.kind) && (role !== "tech" || a.actorId === db.me))
+    .filter((a) => kinds.includes(a.kind) && (!mine || a.actorId === db.me || (a.subjectType === "job" && mine.jobs.has(a.subjectId)) || (a.subjectType === "customer" && mine.customers.has(a.subjectId))))
     .sort((a, b) => b.at.localeCompare(a.at))
     .map((a) => {
       const s = subject(db, a);
@@ -53,4 +57,12 @@ function subject(db: DB, a: Activity): { who: string; href?: string } {
       return { who: e?.number ?? "", href: e ? `/estimate/${e.id}` : undefined };
     }
   }
+}
+
+/** the jobs the technician has a visit on, and their clients */
+function techScope(db: DB): { jobs: Set<string>; customers: Set<string> } {
+  const jobs = new Set(db.visits.filter((v) => v.jobId && (v.techId === db.me || v.assigneeIds?.includes(db.me))).map((v) => v.jobId!));
+  const props = new Set(db.jobs.filter((j) => jobs.has(j.id)).map((j) => j.propertyId));
+  const customers = new Set(db.properties.filter((p) => props.has(p.id)).map((p) => p.customerId).filter((c): c is string => !!c));
+  return { jobs, customers };
 }
