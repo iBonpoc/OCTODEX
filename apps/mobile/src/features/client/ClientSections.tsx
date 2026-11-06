@@ -18,6 +18,9 @@ import { jobStatusView } from "@/features/jobs";
 import { leadStatusView } from "@/features/leads";
 import { NotesBlock } from "@/features/NotesBlock";
 import { PeopleSheet } from "@/features/client/ClientSheets";
+import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
+import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
+import { callPlaceForClient } from "@/features/comms/comms";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { propertyTitle } from "@/features/properties";
 import { mailtoHref } from "@/features/contactLinks";
@@ -28,7 +31,8 @@ import { Card, CardList, Empty, ItemCard, ListRow, RowView, SectionTitle } from 
 
 const PHONE_KEY: Record<string, DictKey> = { mobile: "phone.mobile", home: "phone.home", work: "phone.work", other: "phone.other" };
 
-export function PersonRows({ p }: { p: Person }) {
+/** the phones and emails of a person; a phone calls and then asks «Чем кончился?» (onCall, 20 §5) */
+export function PersonRows({ p, onCall }: { p: Person; onCall?: (p: Person) => void }) {
   const { t } = useI18n();
   return (
     <>
@@ -38,7 +42,10 @@ export function PersonRows({ p }: { p: Person }) {
           title={ph.number}
           subtitle={[t(PHONE_KEY[ph.label] ?? "phone.other"), p.phones.length > 1 && ph.primary ? t("person.primary") : null].filter(Boolean).join(" · ")}
           left={<Icon name="phone" />}
-          onPress={() => Linking.openURL(`tel:${ph.number.replace(/[^\d+]/g, "")}`)}
+          onPress={() => {
+            Linking.openURL(`tel:${ph.number.replace(/[^\d+]/g, "")}`).catch(() => {});
+            onCall?.(p);
+          }}
         />
       ))}
       {p.emails.map((e, i) => (
@@ -67,7 +74,8 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
   const [newProp, setNewProp] = useState<Property | null>(null);
   const [people, setPeople] = useState(false);
   const [hist, setHist] = useState<"all" | HistoryKind>("all");
-  const [taskTitle, setTaskTitle] = useState("");
+  const [taskEdit, setTaskEdit] = useState<TaskDraft | null>(null);
+  const [calling, setCalling] = useState<CallPreset | null>(null);
 
   switch (s) {
     case "properties":
@@ -108,11 +116,12 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
                 <T v="caption" tone="mut">
                   {t(`person.role.${p.role}` as DictKey)}
                 </T>
-                <PersonRows p={p} />
+                <PersonRows p={p} onCall={(x) => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), contactId: x.id })} />
               </Card>
             ))}
           </CardList>
           <PeopleSheet visible={people} customer={c} onClose={() => setPeople(false)} />
+          <CallSheet preset={calling} onClose={() => setCalling(null)} />
         </>
       );
 
@@ -217,23 +226,9 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
       const done = r.tasks.filter((x) => x.doneAt).sort((a, b) => (b.doneAt ?? "").localeCompare(a.doneAt ?? ""));
       return (
         <>
-          {office ? (
-            <RowView>
-              <View style={{ flex: 1 }}>
-                <TextField type="text" value={taskTitle} onChangeText={setTaskTitle} placeholder={t("client.taskPlaceholder")} />
-              </View>
-              <Button
-                label={t("client.addTask")}
-                icon="plus"
-                disabled={!taskTitle.trim()}
-                onPress={() => {
-                  const x = store.saveTask({ subjectType: "customer", subjectId: c.id, title: taskTitle.trim(), assigneeId: db.me });
-                  setTaskTitle("");
-                  toast.show(t("client.taskAdded"), x.undo);
-                }}
-              />
-            </RowView>
-          ) : null}
+          {/* wave 6-1/6-2: the one task form (20 §7) — the client is already «к чему» */}
+          {office ? <Button label={t("task.new")} icon="plus" variant="secondary" onPress={() => setTaskEdit({ subjectType: "customer", subjectId: c.id, title: "", assigneeId: db.me })} /> : null}
+          <TaskSheet value={taskEdit} onClose={() => setTaskEdit(null)} />
           {open.length === 0 && done.length === 0 ? <Empty icon="check" title={t("client.empty.tasks")} hint={office ? t("client.empty.tasksHint") : undefined} /> : null}
           {open.length ? (
             <CardList>
@@ -243,6 +238,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
                   title={x.title}
                   subtitle={x.dueAt ? day(x.dueAt) : undefined}
                   left={<Icon name="check" />}
+                  onPress={() => setTaskEdit(x)}
                   right={
                     <Button
                       label={t("client.taskDone")}

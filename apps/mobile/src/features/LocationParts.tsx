@@ -16,7 +16,7 @@ import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, RowView } from "@/ui/surfaces";
 import { usePersistentState } from "@/data/persist";
-import { assigneesOf, isSharingStep, lastPoint, LOCATION_OFF, nearAddress, officeLines, SEND_EVERY_MS, shouldAskConsent, shouldShare } from "./location";
+import { isSharingStep, lastPoint, LOCATION_OFF, nearAddress, notSharing, officeLines, SEND_EVERY_MS, shouldAskConsent, shouldShare } from "./location";
 
 /** asked once per person and company on this device; afterwards the person changes it in «My settings» */
 export const askedKey = (companyId: string | undefined, me: string) => `octo.locationAsked.v1:${companyId ?? "demo"}:${me}`;
@@ -190,7 +190,7 @@ export function OfficeLocation({ v, geo }: { v: Visit; geo?: { lat: number; lng:
   const nameOf = (id: string) => db.members.find((m) => m.id === id)?.name ?? "—";
   // the visit's step in words: «В пути» before the address, «На месте» once there (the server: en_route / on_site)
   const step = t(v.step === "en_route" ? "st.en_route" : "st.on_site").toLocaleLowerCase();
-  const silent = assigneesOf(v).filter((id) => !lines.some((l) => l.userId === id) && (id === db.me ? !loc.on : db.members.find((m) => m.id === id)?.sharesLocation === false));
+  const silent = notSharing(db, v, lines);
   if (!lines.length && !silent.length) return null;
   return (
     <Card>
