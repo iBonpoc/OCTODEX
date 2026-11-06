@@ -4479,4 +4479,66 @@ delete from public.memberships where company_id = 'cb000000-0000-0000-0000-00000
 select tst.ok(tst.cnt($q$select 1 from public.member_prefs where company_id = 'cb000000-0000-0000-0000-000000000000'$q$) = 0, 'a membership removed for good takes its settings with it');
 \echo 'T51 personal settings (member_prefs) ok'
 
+-- ---------------------------------------------------------------- T60: our costs never reach the client page (security #2, 19 §7.2, audit item 8)
+:as_owner_a
+do $$
+declare v_cust uuid; v_prop uuid; v_e uuid; v_v uuid;
+begin
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'T60 Client') returning id into v_cust;
+  insert into public.properties (company_id, customer_id, address_line1, address_city) values ('ca000000-0000-0000-0000-000000000000', v_cust, '60 Cost St', 'Burbank') returning id into v_prop;
+  insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T60 costs') returning id into v_e;
+  -- what an old app, a module bug or a direct UPDATE could store: costs everywhere, a hidden BOM line, junk
+  insert into public.estimate_versions (company_id, estimate_id, version_no, calc_inputs) values ('ca000000-0000-0000-0000-000000000000', v_e, 1, $j${
+    "note": "Scope", "marginPct": "41.2", "internal": {"profit": 1},
+    "options": [
+      {"id": "o1", "name": "Standard", "recommended": true, "costCents": 5, "marginPct": "40", "lines": [
+        {"id": "l1", "name": "Install", "description": "Labor", "group": "labor", "quantity": "2", "unit": "hr", "unitPriceCents": 9000,
+         "unitCostCents": 4000, "catalogItemId": "cat-1", "vendor": "ABC Supply", "vendorTaxBps": 950, "markupBps": 3000, "purchaseTaxBps": 950,
+         "optional": false, "selected": false, "clientVisible": true},
+        {"id": "l2", "name": {"unitCostCents": 4000}, "group": "material", "quantity": 1, "unit": "ea", "unitPriceCents": 0,
+         "clientVisible": false, "unitMaterialCostCents": 1234},
+        {"id": "l3", "name": "Clean", "group": "service", "quantity": 1, "unit": "ea", "unitPriceCents": [1, 2], "optional": true, "selected": true},
+        "junk"
+      ]},
+      42
+    ],
+    "settings": {"caHic": true, "markup": 3000, "discount": {"kind": "fixed", "cents": 1000, "costShare": 1},
+                 "tax": {"enabled": true, "rateBps": 950, "vendorTaxBps": 1, "groups": {"service": false, "labor": false, "material": true, "cost": true}},
+                 "deposit": {"kind": "pct", "bps": 1000, "costBasis": 1}}
+  }$j$::jsonb) returning id into v_v;
+  update public.estimates set current_version_id = v_v where id = v_e;
+  perform tst.set_token(v_e, 'tok_costs_0123456789abcdef');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare d jsonb := public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc';
+begin
+  -- failed before: the page gave the stored document as it is
+  perform tst.ok(d = $j${
+    "note": "Scope",
+    "options": [
+      {"id": "o1", "name": "Standard", "recommended": true, "lines": [
+        {"id": "l1", "name": "Install", "description": "Labor", "group": "labor", "quantity": "2", "unit": "hr", "unitPriceCents": 9000,
+         "optional": false, "selected": false},
+        {"id": "l3", "name": "Clean", "group": "service", "quantity": 1, "unit": "ea", "optional": true, "selected": true}
+      ]}
+    ],
+    "settings": {"caHic": true, "discount": {"kind": "fixed", "cents": 1000},
+                 "tax": {"enabled": true, "rateBps": 950, "groups": {"service": false, "labor": false, "material": true}},
+                 "deposit": {"kind": "pct", "bps": 1000}}
+  }$j$::jsonb, 'the client gets only the listed fields of the estimate: ' || coalesce(d::text, 'null'));
+  perform tst.ok(d::text !~* '(cost|margin|markup|vendor|catalog|profit)', 'no cost, margin, markup, vendor or catalog word on the client page');
+end $$;
+:as_super
+-- the stored document is untouched (locked versions keep their signed text), only the client's copy is cut
+select tst.ok((select calc_inputs -> 'options' -> 0 -> 'lines' -> 0 ->> 'unitCostCents' from public.estimate_versions v
+                 join public.estimates e on e.current_version_id = v.id where e.title = 'T60 costs') = '4000', 'the app still reads its own costs');
+select tst.ok(app.client_doc(null) is null and app.client_doc('"x"') is null and app.client_doc('{}') = '{"options": []}', 'odd documents give nothing or an empty one');
+-- rule 18: only the page function (security definer) calls them
+select tst.ok(not has_function_privilege('anon', 'app.client_doc(jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.client_doc(jsonb)', 'execute')
+          and not has_function_privilege('anon', 'app.jsonb_scalars(jsonb, text[])', 'execute')
+          and not has_function_privilege('authenticated', 'app.jsonb_scalars(jsonb, text[])', 'execute'), 'nobody calls the cutters directly');
+\echo 'T60 our costs never reach the client page ok'
+
 \echo 'ALL TESTS PASSED'
