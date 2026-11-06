@@ -32,6 +32,8 @@ export const es: Dict = {
   "quick.photo": "Foto",
   "quick.receipt": "Gasto con recibo",
   // nav.* — app shell (docs/specs/13)
+  "nav.expand": "Expandir menú",
+  "nav.collapse": "Contraer menú",
   "nav.home": "Inicio",
   "nav.plan": "Plan",
   "nav.messages": "Mensajes",

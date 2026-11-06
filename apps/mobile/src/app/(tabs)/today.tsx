@@ -1,7 +1,8 @@
 import { lateAfterOf } from "@/features/scheduleSettings";
-import { useWindowDimensions, View } from "react-native";
+import { View } from "react-native";
 import { isOpenVisit } from "@/features/schedule";
 import { router } from "expo-router";
+import { useContentWidth } from "@/nav/NavMenu";
 import { component, font, layout, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
@@ -89,7 +90,8 @@ export default function Today() {
   const open = (f: Figure) => router.push(`/figures/${f}?period=${period}`);
   const attention = buildAttention(db, role);
   const techs = db.members.filter((m) => m.roles.includes("tech"));
-  const { width: screenW } = useWindowDimensions();
+  // the screen's own width: on 820/1280 the side menu takes the left (useContentWidth, 13 §2.5)
+  const screenW = useContentWidth();
   const tileW = Math.floor((Math.min(screenW, layout.contentMax) - space[4] * 2 - space[2] * 2) / 3);
   return (
     <Screen title={t("today.title")} help={t("help.today")} hintKey="today" subtitle={day(new Date().toISOString())}>
