@@ -1,0 +1,153 @@
+/**
+ * «Удалить аккаунт» — the app's rules (wave 7а-2b, story map S22; docs/specs/19 §6.10–§6.12). Pure — unit-tested in
+ * test/deleteAccount.test.ts. The server side: public.delete_account + public.transfer_ownership (migration
+ * 20261106200000) and the edge function supabase/functions/delete-account (handler.ts).
+ */
+import type { Lang } from "@/i18n";
+
+/* ---------- the word ---------- */
+/** the word typed to confirm, in the language of the app (the server accepts exactly these three) */
+export const CONFIRM_WORD: Record<Lang, string> = { ru: "УДАЛИТЬ", en: "DELETE", es: "ELIMINAR" };
+/** what the person typed, as the server compares it: no spaces around, upper case */
+export const normalizeWord = (typed: string) => typed.trim().toLocaleUpperCase();
+/** only the word shown on the screen (the word of the app's language) */
+export const wordOk = (typed: string, lang: Lang) => normalizeWord(typed) === CONFIRM_WORD[lang];
+
+/* ---------- the server's answers → the app's words (rule 7: no raw server text) ---------- */
+export type AccountErrorKey =
+  | "acct.err.signIn"
+  | "acct.err.fresh"
+  | "acct.err.word"
+  | "acct.err.lastOwner"
+  | "acct.err.noPerson"
+  | "acct.err.retry"
+  | "acct.err.network"
+  | "acct.err.code"
+  | "acct.err.failed";
+/** the texts are the server's own (migration 200000 OD001, handler.ts) — matched as they are */
+export function accountErrorKey(message: string | null | undefined, status?: number): AccountErrorKey {
+  const m = (message ?? "").toLowerCase();
+  if (m.includes("sign in again")) return "acct.err.fresh";
+  if (status === 401 || m.includes("sign in first") || m.includes("jwt")) return "acct.err.signIn";
+  if (m.includes("type the word")) return "acct.err.word";
+  if (m.includes("at least one active owner")) return "acct.err.lastOwner";
+  if (m.includes("no such person on the team")) return "acct.err.noPerson";
+  if (m.includes("try again") || m.includes("deadlock") || m.includes("could not serialize") || m.includes("could not obtain lock")) return "acct.err.retry";
+  if (m.includes("failed to fetch") || m.includes("network") || m.includes("fetch failed") || m.includes("load failed")) return "acct.err.network";
+  if (m.includes("token has expired") || m.includes("otp") || (m.includes("invalid") && m.includes("token"))) return "acct.err.code";
+  return "acct.err.failed";
+}
+/** Postgres codes of a lock conflict (transfer_ownership has no own «try again», review 7а-2 №5) */
+export const RETRY_CODES: readonly string[] = ["40P01", "40001", "55P03", "57014"];
+
+/* ---------- the companies where I am the last owner ---------- */
+export interface MembershipRow {
+  company_id: string;
+  user_id: string;
+  role: string;
+  status: string;
+  name?: string | null;
+}
+export interface OwnedCompany {
+  companyId: string;
+  name: string;
+  /** active admins: «Передать компанию» goes to one of them */
+  admins: { id: string; name: string }[];
+  /** active people besides me: they lose access if it closes */
+  others: number;
+}
+/** where I am an active owner and no other active owner is left (the server refuses to delete then) */
+export function lastOwnerCompanies(rows: readonly MembershipRow[], me: string, names: Record<string, string> = {}): OwnedCompany[] {
+  const active = rows.filter((r) => r.status === "active");
+  const mine = active.filter((r) => r.user_id === me && r.role === "owner");
+  return mine
+    .filter((m) => !active.some((o) => o.company_id === m.company_id && o.role === "owner" && o.user_id !== me))
+    .map((m) => {
+      const people = active.filter((o) => o.company_id === m.company_id && o.user_id !== me);
+      return {
+        companyId: m.company_id,
+        name: names[m.company_id] ?? "",
+        admins: people.filter((o) => o.role === "admin").map((o) => ({ id: o.user_id, name: o.name ?? "" })),
+        others: people.length,
+      };
+    });
+}
+
+/* ---------- may «Удалить навсегда» be pressed ---------- */
+export interface DeleteState {
+  /** a real account (a session), not the demo */
+  account: boolean;
+  /** unsent changes of the cloud (outbox) */
+  unsent: number;
+  /** the code from the email was taken: this session is a fresh sign-in */
+  fresh: boolean;
+  wordOk: boolean;
+  /** companies where I am the last owner that are neither handed over nor marked «закрыть» */
+  undecided: number;
+}
+export type DeleteBlock = "demo" | "unsent" | "code" | "companies" | "word" | null;
+/** the first thing that stops the deletion (in the order of the screen); null — it can go */
+export function deleteBlock(s: DeleteState): DeleteBlock {
+  if (!s.account) return "demo";
+  if (s.unsent > 0) return "unsent";
+  if (!s.fresh) return "code";
+  if (s.undecided > 0) return "companies";
+  if (!s.wordOk) return "word";
+  return null;
+}
+
+/* ---------- the answer of the edge function, and the repeat (§6.12) ---------- */
+export type DeleteAnswer =
+  | { kind: "done"; pending: boolean }
+  | { kind: "refused"; key: AccountErrorKey; companyId?: string }
+  | { kind: "unknown" };
+/** status + JSON body of delete-account → what happened. 500 / no answer — unknown (the data may be gone already) */
+export function readDeleteAnswer(status: number | null, body: unknown): DeleteAnswer {
+  const b = (body && typeof body === "object" ? body : {}) as { deleted?: unknown; auth?: unknown; error?: unknown; detail?: unknown };
+  if (status === 200 && b.deleted === true) return { kind: "done", pending: b.auth === "pending" };
+  if (status === 400 || status === 401) {
+    const msg = typeof b.error === "string" ? b.error : "";
+    const key = accountErrorKey(msg, status);
+    return { kind: "refused", key, ...(typeof b.detail === "string" && b.detail ? { companyId: b.detail } : {}) };
+  }
+  return { kind: "unknown" };
+}
+/** the tries after «Удалить навсегда»: a lost answer or a pending sign-in close is repeated (the RPC answers repeat) */
+export const DELETE_PAUSES_MS: readonly number[] = [1000, 2000, 4000];
+export type DeleteOutcome = { ok: true } | { ok: false; key: AccountErrorKey; companyId?: string };
+/**
+ * Calls `call` until it is done: 500 / network / auth pending → again after a pause; a 401 after an unknown or pending
+ * answer means the sign-in is already closed — success. Our own refusal (400, the first 401) stops at once.
+ */
+export async function deleteWithRepeat(
+  call: () => Promise<{ status: number | null; body: unknown }>,
+  sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
+  pauses: readonly number[] = DELETE_PAUSES_MS,
+): Promise<DeleteOutcome> {
+  let doneOnce = false; // the data is gone (deleted: true) or may be (500)
+  for (let i = 0; ; i++) {
+    const r = await call().catch(() => ({ status: null, body: null }));
+    const a = readDeleteAnswer(r.status, r.body);
+    if (a.kind === "done" && !a.pending) return { ok: true };
+    if (a.kind === "refused") {
+      if (doneOnce && r.status === 401) return { ok: true };
+      if (!doneOnce) return { ok: false, key: a.key, ...(a.companyId ? { companyId: a.companyId } : {}) };
+    }
+    if (a.kind === "done") doneOnce = true; // pending: the data is closed, the sign-in not yet
+    if (a.kind === "unknown" && r.status !== null) doneOnce = true;
+    if (i >= pauses.length) return a.kind === "done" ? { ok: true } : { ok: false, key: r.status === null ? "acct.err.network" : "acct.err.retry" };
+    await sleep(pauses[i]!);
+  }
+}
+
+/* ---------- what is wiped from the device ---------- */
+/** the keys of this person on this device (the cloud cache of every company, the outbox, the role, the Plan's person, …) */
+export const DEVICE_KEYS: readonly string[] = ["octo.outbox.v1", "octo.queue.v1", "octo.invite.token.v1", "octo.role.v1", "octo.planWho.v1", "octo.legal.pending.v1"];
+export const DEVICE_PREFIXES: readonly string[] = ["octo.cloud.v1.", "octo.nav.open."];
+export const isDeviceKey = (k: string) => DEVICE_KEYS.includes(k) || DEVICE_PREFIXES.some((p) => k.startsWith(p));
+export async function wipeDevice(store: { getAllKeys: () => Promise<readonly string[]>; multiRemove: (keys: string[]) => Promise<void> }): Promise<string[]> {
+  const keys = (await store.getAllKeys().catch(() => [] as readonly string[])).filter(isDeviceKey);
+  const all = [...new Set([...keys, ...DEVICE_KEYS])];
+  await store.multiRemove(all).catch(() => {});
+  return all;
+}

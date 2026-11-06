@@ -165,6 +165,13 @@ export default function Settings() {
           </Card>
         </>
       ) : null}
+
+      {/* 7а-2b (S22, Apple 5.1.1(v)): the very bottom; signed in with or without a company, and in the demo (it explains) */}
+      <Card>
+        <View testID="settings-delete-account">
+          <ListRow title={t("acct.title")} subtitle={t("acct.row")} onPress={() => router.push("/settings/delete-account")} />
+        </View>
+      </Card>
     </Screen>
   );
 }

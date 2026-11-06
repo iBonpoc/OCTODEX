@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import AsyncStorage from "@react-native-async-storage/async-storage";
@@ -9,6 +9,7 @@ import { legalErrorKey, PENDING_LEGAL_KEY, rememberAgreement } from "@/features/
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
+import { useToast } from "@/ui/overlays";
 import { Card, Screen } from "@/ui/surfaces";
 
 type Mode = "code" | "password" | "signup";
@@ -21,6 +22,13 @@ type Mode = "code" | "password" | "signup";
 export default function SignIn() {
   const { t } = useI18n();
   const auth = useAuth();
+  const toast = useToast();
+  // 7а-2b: just deleted (here or finished on sign-in) — say it once
+  useEffect(() => {
+    if (!auth.accountDeleted) return;
+    toast.show(t("acct.done"));
+    auth.setAccountDeleted(false);
+  }, [auth.accountDeleted]); // eslint-disable-line react-hooks/exhaustive-deps
   const [mode, setMode] = useState<Mode>("code");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");

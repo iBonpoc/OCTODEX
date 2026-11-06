@@ -6,6 +6,7 @@ import { WEB_APP_URL } from "@/config/backend";
 import { LEGAL_RETRY_MS, legalState, legalTickets, PENDING_LEGAL_KEY, resolveLegal, type LegalState } from "@/features/legal";
 import { supabase } from "./client";
 import { acceptLegal, legalStatus } from "./legal";
+import { finishDeletedAccount } from "./account";
 
 /** Where email links (confirm / magic link) return. Must be in Supabase Auth → URL Configuration. */
 const redirectTo = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL);
@@ -39,6 +40,9 @@ interface AuthCtx {
   legalChecked: boolean;
   /** the person agreed (the tick): to the server now; null or the server's message */
   agree: () => Promise<string | null>;
+  /** 7а-2b: the account was just deleted (here or finished on sign-in) — the sign-in screen says «Аккаунт удалён» once */
+  accountDeleted: boolean;
+  setAccountDeleted: (v: boolean) => void;
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -50,6 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [memberships, setMemberships] = useState<Membership[]>([]);
   const [legal, setLegal] = useState<LegalState>("unknown");
   const [legalChecked, setLegalChecked] = useState(false);
+  const [accountDeleted, setAccountDeleted] = useState(false);
   const legalRun = useRef<Promise<void> | null>(null);
   // a slow old answer never overwrites a newer one (review #206 M1): checks and accepts take tickets
   const tickets = useRef(legalTickets()).current;
@@ -93,17 +98,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     );
   }, []);
 
+  /**
+   * 7а-2b (§6.9, §6.11 п.4): a profile that is deleted but could still sign in (the sign-in close was «pending», or an
+   * old session) — finish the deletion quietly BEFORE the consent check: its legal_status says «not ok» and the gate
+   * would send it to «Условия» for ever. No network — false (nothing is blocked).
+   */
+  const finishedDeleted = useCallback(async (s: Session) => {
+    const gone = await finishDeletedAccount(s.user.id).catch(() => false);
+    if (gone) setAccountDeleted(true);
+    return gone;
+  }, []);
+
   useEffect(() => {
     let alive = true;
     supabase.auth.getSession().then(async ({ data }) => {
       if (!alive) return;
+      if (data.session && (await finishedDeleted(data.session))) {
+        setSession(null);
+        setReady(true);
+        return;
+      }
       setSession(data.session);
       if (data.session) await Promise.all([checkLegal(data.session.user.email), reloadMemberships()]);
       setReady(true);
     });
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((e, s) => {
       setSession(s);
-      if (s) {
+      if (s && e === "SIGNED_IN") {
+        // the gate waits (legalChecked stays false) until we know the profile is alive
+        setLegalChecked(false);
+        void finishedDeleted(s).then((gone) => {
+          if (gone) return;
+          checkLegal(s.user.email);
+          reloadMemberships();
+        });
+      } else if (s) {
         checkLegal(s.user.email);
         reloadMemberships();
       } else {
@@ -116,7 +145,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       alive = false;
       sub.subscription.unsubscribe();
     };
-  }, [reloadMemberships, checkLegal]);
+  }, [reloadMemberships, checkLegal, finishedDeleted]);
 
   // the answer is unknown (no network): ask again on coming back to the app, on «online», and every minute (M2)
   useEffect(() => {
@@ -187,8 +216,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setMemberships([]);
       },
       reloadMemberships,
+      accountDeleted,
+      setAccountDeleted,
     }),
-    [ready, session, memberships, reloadMemberships, legal, legalChecked, tickets],
+    [ready, session, memberships, reloadMemberships, legal, legalChecked, tickets, accountDeleted],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
