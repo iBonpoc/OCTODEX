@@ -13,7 +13,7 @@ import { Avatar } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { activeSection } from "./hierarchy";
 import { hasSection, menuGroups, sectionHref, sectionOfHref, type MenuGroup, type SectionId } from "./sections";
-import { QuickActions } from "./QuickActions";
+import { FabSheet } from "./Fab";
 import { contentWidth, openKey } from "./shell";
 import { roleHome, routeKey } from "./roles";
 import { usePersistentState } from "@/data/persist";
@@ -22,14 +22,14 @@ import { openSection } from "./go";
 /**
  * ☰ — the app menu (docs/specs/13 §2.3, 13а §3): slides in from the left, groups split by a line, items by rights.
  * One provider for the whole app (root _layout): any screen opens it with useNavMenu().open(); the old /more opens it too.
- * «＋ Создать» on top opens the quick actions (the per-screen «＋» comes with wave 2c).
+ * «＋ Создать» on top opens the home «＋» set (13 v2 §2.4; each screen has its own «＋», Fab.tsx).
  */
 interface NavMenuCtx {
   open: () => void;
   /** `refocus` = false when an item was chosen: the new screen puts the focus on its own title */
   close: (refocus?: boolean) => void;
   isOpen: boolean;
-  /** «＋ Создать»: the quick actions */
+  /** «＋ Создать»: the home «＋» set */
   create: () => void;
   /** 1280: the side menu is open (pushes the content), remembered per person on this device (13а §8) */
   sideOpen: boolean;
@@ -78,7 +78,7 @@ export function NavMenuProvider({ children }: { children: ReactNode }) {
         onChoose={() => close(false)}
         onCreate={create}
       />
-      <QuickActions visible={quick} onClose={() => setQuick(false)} />
+      <FabSheet set="home" visible={quick} onClose={() => setQuick(false)} />
     </Ctx.Provider>
   );
 }

@@ -119,3 +119,105 @@ export function sectionOfHref(href: string): SectionId | undefined {
   }
   return sectionOfRoute(route);
 }
+
+/* ---------- «＋» by screen (13 v2 §2.4, 13а §9) ---------- */
+
+/** the screens that declare a «＋»: `<Screen fab="client" fabCtx={{ customerId }}>`; «＋ Создать» in ☰ = "home" */
+export type FabSet = "home" | "plan" | "calls" | "clients" | "client" | "job" | "visit";
+/** what the new thing is tied to (the screen's own object) */
+export interface FabCtx {
+  customerId?: string;
+  propertyId?: string;
+  jobId?: string;
+  visitId?: string;
+  leadId?: string;
+  /** the visit is an inspection (estimate from the visit) */
+  inspection?: boolean;
+}
+export type FabId = "lead" | "client" | "estimate" | "expense" | "visit" | "planAdd" | "photo";
+export interface FabItem {
+  id: FabId;
+  label: DictKey;
+  icon: IconKey;
+  /** a screen to open; undefined = an action the screen or the «＋» itself does (`act`) */
+  href?: string;
+  act?: "planAdd" | "photo";
+}
+
+const TECH: readonly Role[] = ["tech"];
+
+interface FabDef {
+  id: FabId;
+  roles?: readonly Role[];
+  /** undefined = this screen has nothing to tie it to: the item is left out, never «created loose» (13 §2.4) */
+  href?: (ctx: FabCtx) => string | undefined;
+  act?: FabItem["act"];
+  /** the item needs these from the screen */
+  needs?: (ctx: FabCtx) => boolean;
+}
+
+const q = (o: Record<string, string | undefined>) => {
+  const s = Object.entries(o)
+    .filter((e): e is [string, string] => !!e[1])
+    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
+    .join("&");
+  return s ? `?${s}` : "";
+};
+
+const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey }> = {
+  lead: { label: "quick.lead", icon: "user" },
+  client: { label: "clients.new", icon: "users" },
+  estimate: { label: "quick.estimate", icon: "invoice" },
+  expense: { label: "quick.receipt", icon: "wallet" },
+  visit: { label: "sch.title", icon: "calendar" },
+  planAdd: { label: "plan.add", icon: "calendar" },
+  photo: { label: "quick.photo", icon: "camera" },
+};
+
+const lead: FabDef = { id: "lead", href: () => "/lead/new" };
+const client: FabDef = { id: "client", roles: OFFICE, href: () => "/client/edit" };
+const expense = (roles?: readonly Role[]): FabDef => ({ id: "expense", roles, href: () => "/expense/new" });
+const estimate = (roles: readonly Role[] | undefined, needs?: FabDef["needs"]): FabDef => ({
+  id: "estimate",
+  roles,
+  needs,
+  href: (c) => `/estimate/new${q({ customerId: c.customerId, propertyId: c.propertyId, leadId: c.leadId })}`,
+});
+
+/**
+ * Only what works (13 §2.4; 14-app-store п. 7): Job (S17), Invoice without a job, Task, Event, Day off, Note, File,
+ * Property, «Record a call», «New message» come with waves 3–6. «Lead» from a client — when lead/new takes customerId.
+ */
+export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
+  home: [lead, client, estimate(OFFICE), expense()],
+  // the schedule is the planners' (docs/specs/03 Р7): no «＋» on Plan for the technician
+  plan: [{ ...lead, roles: OFFICE }, { id: "planAdd", roles: PLANNERS, act: "planAdd" }],
+  calls: [lead, client],
+  clients: [client],
+  client: [estimate(OFFICE, (c) => !!c.customerId)],
+  job: [
+    { id: "visit", roles: PLANNERS, needs: (c) => !!c.jobId, href: (c) => `/job/schedule${q({ jobId: c.jobId })}` },
+    estimate(OFFICE, (c) => !!c.customerId),
+    expense(TECH),
+  ],
+  visit: [
+    { id: "photo", roles: TECH, act: "photo", needs: (c) => !!c.visitId },
+    estimate(undefined, (c) => !!c.inspection && !!c.customerId),
+    { ...lead, roles: TECH },
+    expense(TECH),
+  ],
+};
+
+/** the «＋» of a screen for this role: filtered by rights and by what the screen can tie it to; [] = no button */
+export function fabItems(set: FabSet, role: Role, ctx: FabCtx = {}): FabItem[] {
+  const out: FabItem[] = [];
+  for (const d of FAB_SETS[set]) {
+    if (d.roles && !d.roles.includes(role)) continue;
+    if (d.needs && !d.needs(ctx)) continue;
+    const href = d.href?.(ctx);
+    if (href && !canOpen(role, href)) continue;
+    if (!href && !d.act) continue;
+    out.push({ id: d.id, ...FAB_LOOK[d.id], href, act: d.act });
+  }
+  return out;
+}

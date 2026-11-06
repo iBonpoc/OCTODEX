@@ -94,7 +94,7 @@ export default function Today() {
   const screenW = useContentWidth();
   const tileW = Math.floor((Math.min(screenW, layout.contentMax) - space[4] * 2 - space[2] * 2) / 3);
   return (
-    <Screen title={t("today.title")} help={t("help.today")} hintKey="today" subtitle={day(new Date().toISOString())}>
+    <Screen title={t("today.title")} help={t("help.today")} hintKey="today" fab="home" home subtitle={day(new Date().toISOString())}>
       <Segmented<Period>
         value={period}
         onChange={setPeriod}

@@ -55,7 +55,9 @@ exports.run = async (h) => {
 
   // «+» → an inspection at a property; the form shows its address
   const visits0 = db.visits.length;
-  await p.getByRole("button", { name: "Записать в план", exact: true }).click(); await p.waitForTimeout(400);
+  // the Plan's «＋» (wave 2c, 13 v2 §2.4): floating on the phone, in the header on 820/1280 → «Записать в план»
+  await p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible').first().click(); await p.waitForTimeout(400);
+  await p.getByTestId("fab-planAdd").locator("visible=true").click(); await p.waitForTimeout(400);
   await h.expectText(/Что записать/, "the «+» sheet");
   await h.sheet().getByPlaceholder("Имя или адрес").fill(client.name.split(" ")[0]);
   await p.waitForTimeout(200);
@@ -71,6 +73,6 @@ exports.run = async (h) => {
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/plan");
   h.expect((await p.getByRole("radio", { name: "Все", exact: true }).count()) === 0, "tech: no «Чей план» chips");
-  h.expect((await p.getByRole("button", { name: "Записать в план", exact: true }).count()) === 0, "tech: no «+»");
+  h.expect((await p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible').count()) === 0, "tech: no «+»");
   h.expect(!/Ждут даты/.test(await h.text()), "tech: no «Ждут даты»");
 };

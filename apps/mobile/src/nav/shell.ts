@@ -16,3 +16,10 @@ export const contentWidth = (windowW: number, device: Device, open: boolean) => 
 
 /** the open menu is a choice of a person on a device */
 export const openKey = (me: string) => `octo.nav.open.${me}`;
+
+/**
+ * The sync badge in the header (13 v2 §2.2, §2.6): only while there is something to say —
+ * no network (with what waits in the queue) or the queue is still going out. Otherwise nothing.
+ */
+export type SyncState = "offline" | "sending" | null;
+export const syncState = (online: boolean, queued: number): SyncState => (!online ? "offline" : queued > 0 ? "sending" : null);

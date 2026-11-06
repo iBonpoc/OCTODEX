@@ -102,7 +102,7 @@ export default function Clients() {
       help={t("help.clients")}
       hintKey="clients"
       subtitle={t("clients.count", { n: count("all") })}
-      right={office ? <Button label={t("clients.new")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/client/edit")} /> : undefined}
+      fab="clients"
     >
       <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.search")} icon="search" />
       <ChoiceChips<Filter>
