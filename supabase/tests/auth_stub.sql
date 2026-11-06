@@ -36,20 +36,25 @@ grant usage on schema public to anon, authenticated, service_role;
 -- Minimal Storage stub (Supabase provides the real schema)
 create schema if not exists storage;
 create table if not exists storage.buckets (id text primary key, name text, public boolean);
-create table if not exists storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text);
+create table if not exists storage.objects (id uuid primary key default gen_random_uuid(), bucket_id text, name text, updated_at timestamptz, unique (bucket_id, name));
 alter table storage.objects enable row level security;
+-- as in Supabase: the API roles reach storage.objects, RLS decides
+grant usage on schema storage to anon, authenticated, service_role;
+grant select, insert, update, delete on storage.objects to authenticated;
 create or replace function storage.foldername(name text) returns text[] language sql immutable as $$
   select string_to_array(name, '/')
 $$;
 
 -- As in Supabase: objects that role postgres creates in public get ALL for anon, authenticated, service_role
 -- (security audit 06.11, item 5: without these lines the rights tests were falsely green).
--- Only once, before the migrations (a mark on schema auth): core_rls.sql includes this file again after them,
--- when the migrations have already revoked these defaults.
+-- Only once, before the migrations (a row in the stub's own table): core_rls.sql includes this file again after
+-- them, when the migrations have already revoked these defaults.
+create table if not exists auth.octo_stub_steps (step text primary key, done_at timestamptz not null default now());
+revoke all on auth.octo_stub_steps from public, anon, authenticated;
 do $$
 begin
-  if obj_description('auth'::regnamespace, 'pg_namespace') is distinct from 'octo-stub: supabase default privileges' then
-    comment on schema auth is 'octo-stub: supabase default privileges';
+  if not exists (select 1 from auth.octo_stub_steps where step = 'supabase default privileges') then
+    insert into auth.octo_stub_steps (step) values ('supabase default privileges');
     alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
     alter default privileges for role postgres in schema public grant all on functions to anon, authenticated, service_role;
     alter default privileges for role postgres in schema public grant all on sequences to anon, authenticated, service_role;

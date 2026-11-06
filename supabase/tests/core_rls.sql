@@ -3830,6 +3830,23 @@ begin
      and p.proname not in ('portal_estimate', 'portal_accept', 'portal_pay_simulated', 'uuid_generate_v7');
   perform tst.ok(bad is null, 'anon runs only the client-link functions in public: ' || coalesce(bad, ''));
 
+  -- schemas public and app: no function runs for PUBLIC (a forgotten revoke), but the id helper of column defaults
+  select string_agg(n.nspname || '.' || p.proname, ', ') into bad
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname in ('public', 'app')
+     and exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where a.grantee = 0 and a.privilege_type = 'EXECUTE')
+     and p.proname <> 'uuid_generate_v7';
+  perform tst.ok(bad is null, 'no function in public / app runs for PUBLIC (revoke all … from public): ' || coalesce(bad, ''));
+
+  select string_agg(p.proname, ', ') into bad
+    from pg_proc p where p.pronamespace = 'app'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE');
+  perform tst.ok(bad is null and not has_schema_privilege('anon', 'app', 'USAGE'), 'anon reaches nothing in schema app: ' || coalesce(bad, ''));
+
+  select string_agg(p.proname, ', ') into bad
+    from pg_proc p where p.pronamespace = 'app'::regnamespace and p.prorettype = 'trigger'::regtype
+     and has_function_privilege('authenticated', p.oid, 'EXECUTE');
+  perform tst.ok(bad is null, 'authenticated cannot call trigger functions of app: ' || coalesce(bad, ''));
+
   -- what the app reads and writes on the six tables still works
   -- has_table_privilege with a list is true if ANY right is held: check each one
   select string_agg(t || ':' || p, ', ') into bad
@@ -3988,5 +4005,48 @@ select tst.fails_like($q$select public.portal_pay_simulated('tok_inv_0123456789a
 :as_super
 select tst.ok((select paid_cents = 0 from public.invoices where id = '15400000-0000-4000-8000-000000000001'), 'T54: nothing was paid by the refused calls');
 \echo 'T54 simulated card payment only for a demo company ok'
+
+
+-- ---------------------------------------------------------------- T55: storage files by the files rule; app functions not for PUBLIC (security audit 06.11, items 3, 12)
+:as_owner_a
+insert into public.customers (id, company_id, display_name) values ('c5500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T55 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city, address_state) values
+  ('d5500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c5500000-0000-4000-8000-000000000001', '55 Oak St', 'Austin', 'TX');
+insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'document');
+:as_tech_a
+insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo');
+:as_super
+insert into storage.objects (bucket_id, name) values
+  ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'),
+  ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000002.jpg');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/%'$q$) = 1, 'a tech lists only the files he sees (his own photo), not the office document');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000002.jpg'$q$) = 1, 'a tech reads his own photo');
+-- pointing storage_key of his own row at the office document opens nothing (the object name decides)
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf' where id = 'f5500000-0000-4000-8000-000000000002';
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'$q$) = 0, 'storage_key does not open someone else''s object');
+-- upload: the app inserts the row, then the object; a repeat upload (upsert) updates it
+insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg'$q$) = 1, 'a tech uploads a photo of his row before storage_key is written');
+-- as Supabase Storage does it for upsert: true
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg')
+  on conflict (bucket_id, name) do update set updated_at = now() returning id \gset t55_
+select tst.ok((select updated_at is not null from storage.objects where id = :'t55_id'), 'a repeat upload of his own photo (upsert) updates the object');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.html')$q$, 'one files row takes no object of another kind (.html)');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003')$q$, 'an object without an extension is refused');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf')$q$, 'a tech does not write the office document');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-0000000000aa.jpg')$q$, 'a tech does not write an object without his files row');
+select tst.blocked($q$update storage.objects set bucket_id = 'files' where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'$q$, 'a tech does not overwrite the office document');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/x/../f5500000-0000-4000-8000-000000000003.jpg')$q$, 'an odd path is refused');
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/f55%'$q$) = 3, 'the office sees every file of the company');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/%'$q$) = 0, 'another company sees none of our files');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-0000000000bb.jpg')$q$, 'another company does not write into ours');
+-- 12: leads and contacts still work for the app's role after PUBLIC lost EXECUTE on app functions
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.leads$q$) > 0 and tst.cnt($q$select 1 from public.contacts$q$) > 0, 'leads and contacts still read (can_see_lead / can_see_contact for authenticated)');
+\echo 'T55 storage files by the files rule, app functions not for PUBLIC ok'
 
 \echo 'ALL TESTS PASSED'
