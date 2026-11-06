@@ -17,7 +17,8 @@ import { CardList, RowView, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useDevice } from "@/theme/ThemeProvider";
 
-const ROLES: Role[] = ["tech", "dispatcher", "director"];
+// sales (#111): leads, estimates and clients, no planning — the server limits it the same way
+const ROLES: Role[] = ["tech", "sales", "dispatcher", "director"];
 
 /** Team: who works in the company (roles), subcontractors, invite a person. */
 export default function Team() {
