@@ -4565,7 +4565,11 @@ begin
          "optional": false, "selected": false, "clientVisible": true},
         {"id": "l2", "name": {"unitCostCents": 4000}, "group": "material", "quantity": 1, "unit": "ea", "unitPriceCents": 0,
          "clientVisible": false, "unitMaterialCostCents": 1234},
-        {"id": "l3", "name": "Clean", "group": "service", "quantity": 1, "unit": "ea", "unitPriceCents": [1, 2], "optional": true, "selected": true},
+        {"id": "l3", "name": "Clean", "group": "service", "quantity": 1, "unit": "ea", "unitPriceCents": 9000, "optional": true, "selected": true, "unitCostCents": [1]},
+        {"id": "l4", "name": "Hidden as text", "group": "material", "quantity": 1, "unit": "ea", "unitPriceCents": 0, "clientVisible": "false"},
+        {"id": "l5", "name": "Hidden as zero", "group": "material", "quantity": 1, "unit": "ea", "unitPriceCents": 0, "clientVisible": 0},
+        {"id": "l6", "name": "Bad price", "group": "service", "quantity": 1, "unit": "ea", "unitPriceCents": [1, 2]},
+        {"id": "l7", "group": "service", "quantity": 1, "unit": "ea", "unitPriceCents": 100},
         "junk"
       ]},
       42
@@ -4588,7 +4592,7 @@ begin
       {"id": "o1", "name": "Standard", "recommended": true, "lines": [
         {"id": "l1", "name": "Install", "description": "Labor", "group": "labor", "quantity": "2", "unit": "hr", "unitPriceCents": 9000,
          "optional": false, "selected": false},
-        {"id": "l3", "name": "Clean", "group": "service", "quantity": 1, "unit": "ea", "optional": true, "selected": true}
+        {"id": "l3", "name": "Clean", "group": "service", "quantity": 1, "unit": "ea", "unitPriceCents": 9000, "optional": true, "selected": true}
       ]}
     ],
     "settings": {"caHic": true, "discount": {"kind": "fixed", "cents": 1000},
@@ -4597,6 +4601,14 @@ begin
   }$j$::jsonb, 'the client gets only the listed fields of the estimate: ' || coalesce(d::text, 'null'));
   perform tst.ok(d::text !~* '(cost|margin|markup|vendor|catalog|profit)', 'no cost, margin, markup, vendor or catalog word on the client page');
 end $$;
+-- a sent estimate is read through sent_version_id: the same cut
+:as_super
+update public.estimate_versions set locked_at = now(), sent_at = now() where id = (select current_version_id from public.estimates where title = 'T60 costs');
+update public.estimates set status = 'sent', sent_version_id = current_version_id where title = 'T60 costs';
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc')::text !~* 'cost' and
+              jsonb_array_length(public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc' -> 'options' -> 0 -> 'lines') = 2,
+              'the sent version is cut the same way');
 :as_super
 -- the stored document is untouched (locked versions keep their signed text), only the client's copy is cut
 select tst.ok((select calc_inputs -> 'options' -> 0 -> 'lines' -> 0 ->> 'unitCostCents' from public.estimate_versions v
