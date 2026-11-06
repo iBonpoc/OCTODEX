@@ -45,3 +45,6 @@ create index concurrently if not exists invitations_invited_by_fk_idx on public.
 create index concurrently if not exists invitations_accepted_by_fk_idx on public.invitations (accepted_by);
 create index concurrently if not exists calendar_events_user_id_fk_idx on public.calendar_events (user_id);
 create index concurrently if not exists company_contacts_user_id_fk_idx on public.company_contacts (user_id);
+create index concurrently if not exists visits_company_id_property_id_fk_idx on public.visits (company_id, property_id);
+create index concurrently if not exists users_last_active_company_id_fk_idx on public.users (last_active_company_id);
+create index concurrently if not exists companies_lead_default_assignee_id_fk_idx on public.companies (lead_default_assignee_id);

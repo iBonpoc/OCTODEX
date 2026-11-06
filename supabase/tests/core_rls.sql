@@ -4632,12 +4632,14 @@ begin
             from pg_constraint c join pg_class t on t.oid = c.conrelid join pg_namespace n on n.oid = t.relnamespace
            where c.contype = 'f' and n.nspname = 'public') x
    where not exists (select 1 from pg_index i where i.indrelid = x.conrelid and i.indisvalid
+                        -- a partial index helps the key check only when its condition is «<the key column> IS NOT NULL»
+                        and (i.indpred is null or exists (select 1 from unnest(string_to_array(x.cols, ',')) k(col)
+                              where pg_get_expr(i.indpred, i.indrelid) = '(' || quote_ident(k.col) || ' IS NOT NULL)'))
                         and (i.indkey::int2[])[0:cardinality(x.conkey) - 1] @> x.conkey
                         and (i.indkey::int2[])[0:cardinality(x.conkey) - 1] <@ x.conkey)
      and (x.tbl, x.cols) not in (
-       -- the parent row is one per user / company and tiny: a scan costs nothing
-       ('users', 'last_active_company_id'), ('companies', 'lead_default_assignee_id'),
-       -- the parent is never deleted and its id never changes (soft delete, append-only or a guard trigger)
+       -- the parent is never deleted and its id never changes (soft delete, append-only or a guard trigger) —
+       -- until a company is deleted for real (CCPA, S22): that PR adds these indexes first (19 §7.3)
        ('lead_sources', 'company_id,customer_id'), ('customers', 'company_id,lead_source_id'),
        ('customers', 'company_id,merged_into_customer_id'), ('customers', 'company_id,primary_contact_id'),
        ('leads', 'company_id,duplicate_of_lead_id'), ('leads', 'company_id,referred_from_visit_id'),
