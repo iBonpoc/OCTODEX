@@ -61,7 +61,8 @@ function demoDoc(): EstimateDoc {
   };
 }
 
-/** today, this many minutes ago (not before midnight, so the visit stays today) */
+/** today, this many minutes ago (not before midnight, so the visit — or the money of «Сегодня» — stays today; a run
+ *  just after midnight must not move the demo's «signed today» / «received today» to yesterday) */
 function todayMinutesAgo(m: number): string {
   const d = new Date();
   const midnight = new Date(d);
@@ -242,7 +243,7 @@ export function makeSeed(): DB {
         message: "Carpet removal, stair railing, a light fixture and haul-away after renovation." },
     ],
     estimates: [
-      { id: "e1", customerId: "c6", propertyId: "p6", title: "Panel upgrade 200A", totalCents: 518000, status: "approved", sentAt: daysAgo(6), approvedAt: minutesAgo(180) },
+      { id: "e1", customerId: "c6", propertyId: "p6", title: "Panel upgrade 200A", totalCents: 518000, status: "approved", sentAt: daysAgo(6), approvedAt: todayMinutesAgo(180) },
       { id: "e2", customerId: "c7", propertyId: "p7", title: "Fence repair + new gate", totalCents: 298000, status: "sent", sentAt: daysAgo(3) },
       { id: "e3", customerId: "c5", propertyId: "p5", title: "Deep clean after move-out", totalCents: 156000, status: "approved", sentAt: daysAgo(9), approvedAt: daysAgo(4) },
       { id: "e4", customerId: "c3", propertyId: "p3", title: "Kitchen backsplash tile", totalCents: 264000, status: "sent", sentAt: daysAgo(6) },
@@ -276,8 +277,8 @@ export function makeSeed(): DB {
       { id: "i5", number: "INV-0105", title: "Deposit", kind: "deposit", customerId: "c1", jobId: "j1", totalCents: 34200, paidCents: 34200, dueDate: daysAgo(8), paidAt: daysAgo(8), method: "card", sentAt: daysAgo(8) },
     ],
     payments: [
-      { id: "pay3", invoiceId: "i3", customerId: "c1", amountCents: 24000, method: "zelle", at: minutesAgo(140), receiptNumber: "RCT-0103" },
-      { id: "pay4", invoiceId: "i4", customerId: "c5", amountCents: 78000, method: "check", at: minutesAgo(60), receiptNumber: "RCT-0104", reference: "Check #1042" },
+      { id: "pay3", invoiceId: "i3", customerId: "c1", amountCents: 24000, method: "zelle", at: todayMinutesAgo(140), receiptNumber: "RCT-0103" },
+      { id: "pay4", invoiceId: "i4", customerId: "c5", amountCents: 78000, method: "check", at: todayMinutesAgo(60), receiptNumber: "RCT-0104", reference: "Check #1042" },
       { id: "pay5", invoiceId: "i5", customerId: "c1", amountCents: 34200, method: "card", at: daysAgo(8), receiptNumber: "RCT-0102" },
     ],
   };
