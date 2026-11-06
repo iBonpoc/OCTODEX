@@ -1,3 +1,4 @@
+import { findJob } from "@/data/jobs";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
@@ -198,7 +199,7 @@ function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: D
             {vs.length ? (
               <CardList>
                 {vs.map((v) => {
-                  const job = db.jobs.find((j) => j.id === v.jobId);
+                  const job = findJob(db, v.jobId);
                   const p = db.properties.find((x) => x.id === job?.propertyId);
                   const c = db.customers.find((x) => x.id === p?.customerId);
                   const tech = db.members.find((m) => m.id === v.techId);

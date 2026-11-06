@@ -3,6 +3,7 @@
  * of the main lists, shared with the lists behind the «Today» figures. Same facts, same amount, same status — only the screen's
  * own actions (status picker, call result, reply) are passed in by the screen that has them.
  */
+import { findJob } from "@/data/jobs";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import type { DictKey } from "@/i18n";
@@ -133,7 +134,7 @@ export function InvoiceListCard({ i, density }: { i: Invoice; density: Density }
   const { db } = useStore();
   const { t, money, day } = useI18n();
   const c = db.customers.find((x) => x.id === i.customerId);
-  const job = db.jobs.find((j) => j.id === i.jobId);
+  const job = findJob(db, i.jobId);
   const prop = job ? db.properties.find((x) => x.id === job.propertyId) : undefined;
   const v = invoiceStatusView(i);
   const { owesCents } = invoiceBalance(i);

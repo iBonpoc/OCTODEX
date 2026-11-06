@@ -1,3 +1,4 @@
+import { findJob } from "@/data/jobs";
 import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -39,7 +40,7 @@ export default function InvoiceScreen() {
       </Screen>
     );
   const cust = db.customers.find((c) => c.id === inv.customerId);
-  const job = db.jobs.find((j) => j.id === inv.jobId);
+  const job = findJob(db, inv.jobId);
   const balance = Math.max(0, inv.totalCents - inv.paidCents);
   const pays = db.payments.filter((p) => p.invoiceId === inv.id);
   const chip = invoiceChip(inv);
