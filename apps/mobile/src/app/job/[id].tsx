@@ -182,7 +182,7 @@ export default function JobScreen() {
       {visits.length ? (
         <CardList>
           {visits.map((v) => {
-            const vs = visitStatus(v, Date.now(), lateAfterOf(db));
+            const vs = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
             const tech = db.members.find((m) => m.id === v.techId);
             return (
               <ItemCard

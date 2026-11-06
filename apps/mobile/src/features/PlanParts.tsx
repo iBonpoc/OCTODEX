@@ -222,7 +222,7 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
     const job = findJob(db, v.jobId);
     const { client } = visitWho(db, v);
     const property = db.properties.find((p) => p.id === visitPropertyId(db, v));
-    const st = visitStatus(v, Date.now(), lateAfterOf(db), db.members);
+    const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
     const status = st.status;
     return (
       <ItemCard

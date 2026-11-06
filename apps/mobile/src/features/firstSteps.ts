@@ -32,7 +32,7 @@ export function firstSteps(db: DB, role: Role, where: Where): FirstStep[] {
   const steps: FirstStep[] = [
     { id: "profile", label: "first.profile", done: profile, href: "/company/profile?wizard=1" },
     { id: "job", label: "first.job", done: db.jobs.length > 0, href: "/job/new" },
-    { id: "team", label: "first.team", done: db.members.length > 1, href: "/team" },
+    { id: "team", label: "first.team", done: db.members.filter((m) => !m.pending).length > 1, href: "/team" },
   ];
   if (where.web) steps.push({ id: "install", label: "first.install", done: where.standalone });
   return steps;

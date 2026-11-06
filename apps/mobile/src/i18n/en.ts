@@ -1977,4 +1977,5 @@ export const en: Dict = {
   "pref7b.showDoneHint": "Completed visits, jobs and tasks in the Plan. This setting is yours and the same on all your devices.",
   // wave 7а-2b «Каркас»: account deletion (S22)
   "acct.deletedName": "Deleted user",
+  "acct.takenOff": "Taken off: {names}",
 };

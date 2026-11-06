@@ -29,23 +29,33 @@ export function nextStep(v: Pick<Visit, "step" | "kind">): VisitStep {
 
 /** everyone on a visit (old saved data has only techId) */
 export const assigneesOf = (v: Pick<Visit, "techId" | "assigneeIds">): ID[] => (v.assigneeIds?.length ? v.assigneeIds : v.techId ? [v.techId] : []);
-/**
- * The people who can still come (wave 7а-2b, S22): someone who deleted their account is not on the visit any more — a
- * visit with only them is «Не назначено» everywhere (the Plan, «Требует внимания», the card). Without `members` (old
- * callers, a tech's own day) everyone counts.
- */
-export function liveAssignees(v: Pick<Visit, "techId" | "assigneeIds">, members?: readonly Pick<Member, "id" | "deleted">[]): ID[] {
-  const ids = assigneesOf(v);
-  if (!members) return ids;
-  const gone = new Set(members.filter((m) => m.deleted).map((m) => m.id));
-  return gone.size ? ids.filter((id) => !gone.has(id)) : ids;
-}
+/** the people of the company as the visit rules need them: who is at work (`pending` — invited, switched off or deleted) */
+export type People = readonly Pick<Member, "id" | "pending">[];
 /** whom an assignment may keep: only people at work (the server assigns only active members — a switched-off or deleted
  *  person left on the list would make assign_visit refuse the whole change, stuck in the outbox) */
-export function keepableAssignees(ids: readonly ID[], members: readonly Pick<Member, "id" | "pending">[]): ID[] {
+export function keepableAssignees(ids: readonly ID[], members: People): ID[] {
   const off = new Set(members.filter((m) => m.pending).map((m) => m.id));
-  return ids.filter((id) => !off.has(id));
+  return off.size ? ids.filter((id) => !off.has(id)) : [...ids];
 }
+/**
+ * The people who can still come (wave 7а-2b, S22): someone switched off or who deleted their account is not on the
+ * visit any more — a visit with only them is «Не назначено» everywhere (the Plan's columns, «Требует внимания», the
+ * card, the chip), never «опаздывает: <them>». The same set as the Plan's columns and the assign sheet (`!pending`).
+ * An id that is not in `members` at all (old data) still counts.
+ */
+export const liveAssignees = (v: Pick<Visit, "techId" | "assigneeIds">, members: People): ID[] => keepableAssignees(assigneesOf(v), members);
+/** the people on the visit who are not at work any more: a new assignment takes them off (the toast names them) */
+export function hiddenAssignees(v: Pick<Visit, "techId" | "assigneeIds">, members: People): ID[] {
+  const live = new Set(liveAssignees(v, members));
+  return assigneesOf(v).filter((id) => !live.has(id));
+}
+/** «План»: a card dragged from one person's column onto another — that person is replaced, the others at work stay;
+ *  from the «Не назначено» column ("none") — only the new person (wave П3a; S22) */
+export function moveAssignee(v: Pick<Visit, "techId" | "assigneeIds">, from: ID | "none", to: ID, members: People): ID[] {
+  if (from === "none") return [to];
+  return [...liveAssignees(v, members).filter((x) => x !== from && x !== to), to];
+}
+
 /** is this person on the visit (first or not) */
 export const isAssigned = (v: Pick<Visit, "techId" | "assigneeIds">, id: ID | null | undefined): boolean => !!id && assigneesOf(v).includes(id);
 /** a visit with these people: techId is the first, assigneeIds the list without doubles */
@@ -96,9 +106,9 @@ export type LateKind = "en_route" | "not_left";
  */
 export function lateKind(
   v: Pick<Visit, "start" | "step" | "closed" | "checklist" | "techId" | "assigneeIds">,
+  members: People,
   now: number = Date.now(),
   lateAfterMin: number = SCHEDULE_SETTINGS_DEFAULT.lateAfterMin,
-  members?: readonly Pick<Member, "id" | "deleted">[],
 ): LateKind | null {
   if (v.closed || (v.step !== "scheduled" && v.step !== "en_route")) return null;
   // nobody who can come: «Не назначено», not «опаздывает» (S22)
@@ -107,8 +117,8 @@ export function lateKind(
   if (Number.isNaN(t) || now < t + lateAfterMin * 60_000) return null;
   return v.step === "en_route" ? "en_route" : "not_left";
 }
-export const visitLate = (v: Parameters<typeof lateKind>[0], now: number = Date.now(), lateAfterMin?: number): boolean =>
-  lateKind(v, now, lateAfterMin) !== null;
+export const visitLate = (v: Parameters<typeof lateKind>[0], members: People, now: number = Date.now(), lateAfterMin?: number): boolean =>
+  lateKind(v, members, now, lateAfterMin) !== null;
 
 /**
  * П3c, the office side (the item in «Требует внимания» and the notice): the same rule, for visits that touch today —
@@ -118,10 +128,9 @@ export const visitLate = (v: Parameters<typeof lateKind>[0], now: number = Date.
  * threshold the company's setting.
  */
 export const lateToday = (
-  v: Parameters<typeof lateKind>[0] & { durationMin?: number }, now: number = Date.now(),
+  v: Parameters<typeof lateKind>[0] & { durationMin?: number }, members: People, now: number = Date.now(),
   s: { lateAfterMin: number } = SCHEDULE_SETTINGS_DEFAULT, tz: string = "America/Los_Angeles",
-  members?: readonly Pick<Member, "id" | "deleted">[],
-): LateKind | null => (touchesTodayIn(v, now, s.lateAfterMin, tz) ? lateKind(v, now, s.lateAfterMin, members) : null);
+): LateKind | null => (touchesTodayIn(v, now, s.lateAfterMin, tz) ? lateKind(v, members, now, s.lateAfterMin) : null);
 
 /** the visit's planned time (at least up to the moment it becomes late) reaches the company's today */
 function touchesTodayIn(v: { start: string; durationMin?: number }, now: number, lateAfterMin: number, tz: string): boolean {
@@ -279,7 +288,7 @@ export function daysSince(iso: string | undefined, now: number = Date.now()): nu
  * «Не назначено» (docs/specs/03 П3c, decision 7): open visits of the company's today (0) and tomorrow (1) with nobody on
  * them. One rule for «Требует внимания» (attention.ts) and the block on top of the Plan (wave 5). Today first, by time.
  */
-export function unassignedSoon(db: Pick<DB, "visits"> & Partial<Pick<DB, "members">>, now: number = Date.now(), tz: string = getZone()): { v: Visit; dd: 0 | 1 }[] {
+export function unassignedSoon(db: Pick<DB, "visits" | "members">, now: number = Date.now(), tz: string = getZone()): { v: Visit; dd: 0 | 1 }[] {
   const out: { v: Visit; dd: 0 | 1 }[] = [];
   for (const v of db.visits) {
     // only a deleted account on it (S22) is nobody too

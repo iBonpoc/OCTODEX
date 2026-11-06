@@ -20,7 +20,7 @@ import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip } from "
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { assigneesOf, canPlan, canReschedule, isAssigned, keepableAssignees, liveAssignees, planFilter, type PlanWho } from "@/features/schedule";
+import { canPlan, canReschedule, hiddenAssignees, isAssigned, liveAssignees, moveAssignee, planFilter, type PlanWho } from "@/features/schedule";
 import { memberLabel, memberName } from "@/features/team";
 import { FeedView, PlanAddSheet, PlanWhoChips, UnassignedSoon, WaitingJobs } from "@/features/PlanParts";
 import { daysFrom, planItems } from "@/features/planFeed";
@@ -43,7 +43,8 @@ export default function Plan() {
   const planner = canPlan([role]);
   // «Чей план» (§7.2 п. 3): the office picks a person; a tech sees only his own
   const [who, setWho] = usePersistentState<PlanWho>("octo.planWho.v1", "all");
-  const whoNow: PlanWho = planner && (who === "all" || who === "me" || db.members.some((m) => m.id === who)) ? who : "all";
+  // a person no longer at work (switched off or deleted, S22) is not a choice any more: back to «Все»
+  const whoNow: PlanWho = planner && (who === "all" || who === "me" || db.members.some((m) => m.id === who && !m.pending)) ? who : "all";
   const [adding, setAdding] = useState(false);
   const [ev, setEv] = useState<EventSheetState>(null);
   const mine = (v: Visit) => (role === "tech" ? isAssigned(v, db.me) : planFilter(v, whoNow, db.me));
@@ -147,8 +148,9 @@ function DayView({ date, visits, who, onAdd }: { date: DayKey; visits: Visit[]; 
   const drop = (v: Visit, from: string, to: string) => {
     if (from === to) return;
     // the others stay — but only people at work: a switched-off or deleted person left on the list makes the server refuse (S22)
-    const list = [...keepableAssignees(assigneesOf(v), db.members).filter((x) => x !== from && x !== to), to];
-    toast.show(online ? t("toast.assigned", { name: memberName(db, to, t) ?? "" }) : t("offline.queued"), assignVisit(v.id, from === "none" ? [to] : list));
+    const gone = hiddenAssignees(v, db.members).map((id) => memberName(db, id, t) ?? "").filter(Boolean);
+    const said = online ? t("toast.assigned", { name: memberName(db, to, t) ?? "" }) : t("offline.queued");
+    toast.show(gone.length ? `${said} · ${t("acct.takenOff", { names: gone.join(", ") })}` : said, assignVisit(v.id, moveAssignee(v, from, to, db.members)));
   };
   const drag = (v: Visit, card: ReactNode, from: string = v.techId ?? "none") =>
     canAssign && canReschedule(v) ? (
@@ -237,7 +239,7 @@ function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: D
                   const c = db.customers.find((x) => x.id === p?.customerId);
                   const tech = db.members.find((m) => m.id === v.techId);
                   // nobody, or only a deleted account (S22): «Не назначено» — visitStatus decides, one rule
-                  const st = visitStatus(v, Date.now(), lateAfterOf(db), db.members);
+                  const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
                   return (
                     <ItemCard
                       key={v.id}
@@ -261,6 +263,7 @@ function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: D
 /** Month calendar: weekday header, 6 weeks × 7 days, number of visits per day; unassigned visits mark the day. */
 function MonthView({ date, visitsOn, openDay }: { date: DayKey; visitsOn: (k: DayKey) => Visit[]; openDay: (k: DayKey) => void }) {
   const { lang } = useI18n();
+  const { db } = useStore();
   const { c } = useTheme();
   const cells = monthGrid(date);
   const weeks = [0, 1, 2, 3, 4, 5].map((w) => cells.slice(w * 7, w * 7 + 7));
@@ -278,7 +281,7 @@ function MonthView({ date, visitsOn, openDay }: { date: DayKey; visitsOn: (k: Da
         <View key={row[0]!.key} style={{ flexDirection: "row", gap: space[1] }}>
           {row.map((x) => {
             const vs = visitsOn(x.key);
-            const unassigned = vs.some((v) => !v.techId);
+            const unassigned = vs.some((v) => !liveAssignees(v, db.members).length);
             const today = x.key === todayKey();
             const selected = x.key === date;
             return (

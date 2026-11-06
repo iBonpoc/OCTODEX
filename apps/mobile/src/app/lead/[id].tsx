@@ -25,6 +25,7 @@ import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } 
 import { useTheme } from "@/theme/ThemeProvider";
 import type { StatusName } from "@octo/design-tokens";
 import { memberLabel } from "@/features/team";
+import { liveAssignees } from "@/features/schedule";
 
 type Tab = "overview" | "history" | "tasks" | "estimates" | "files";
 type SheetName = "won" | "close" | "reply" | "call" | "next" | "book" | "snooze" | "status" | "low" | null;
@@ -261,7 +262,7 @@ function LeadVisits({ leadId }: { leadId: string }) {
           return (
             <ItemCard
               key={v.id}
-              status={v.techId ? "info" : "warn"}
+              status={liveAssignees(v, db.members).length ? "info" : "warn"}
               title={`${day(v.start)} · ${time(v.start)}`}
               subtitle={[v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : t("st.inspection"), memberLabel(tech, t) ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
               onPress={() => router.push(`/visit/${v.id}`)}

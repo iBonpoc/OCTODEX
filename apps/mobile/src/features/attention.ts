@@ -95,7 +95,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       // yesterday too: a visit of 11:50 PM is still running late after the company's midnight (lateToday decides)
       if (dd !== 0 && dd !== 1 && dd !== -1) continue;
       const { client, tech } = visitWho(db, v);
-      const late = lateToday(v, now, sch, tz, db.members);
+      const late = lateToday(v, db.members, now, sch, tz);
       if (late)
         out.push({ id: `late-${v.id}`, kind: "late", refId: v.id, name: tech, label: "att.late", params: { name: `${tech} → ${client}` }, chip: late === "en_route" ? "late.enRoute" : "late.notLeft", status: "warn", score: 850 });
     }

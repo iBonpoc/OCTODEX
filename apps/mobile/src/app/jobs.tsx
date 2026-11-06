@@ -11,6 +11,7 @@ import { CardList, Empty, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
+import { memberLabel } from "@/features/team";
 
 type Filter = "unscheduled" | "scheduled" | "in_progress" | "done";
 const FILTERS: Filter[] = ["unscheduled", "scheduled", "in_progress", "done"];
@@ -52,7 +53,7 @@ export default function Jobs() {
           addr,
           work: j.title,
           when: v && j.status !== "unscheduled" ? day(v.start) : undefined,
-          resp: visitPeople(db, v).map((m) => m.name).join(", ") || undefined,
+          resp: visitPeople(db, v).map((m) => memberLabel(m, t)).filter(Boolean).join(", ") || undefined,
           links: jobEstimateNumber(db, j),
         }}
         // contact buttons only open the phone / map / mail: nothing is written

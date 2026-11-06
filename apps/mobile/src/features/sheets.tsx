@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { Linking, View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { assigneesOf, canPlan, dayVisits, keepableAssignees } from "@/features/schedule";
+import { assigneesOf, canPlan, dayVisits, hiddenAssignees, keepableAssignees } from "@/features/schedule";
 import { memberName } from "@/features/team";
 import { isoDayKey, todayKey } from "@/features/calendar";
 import { sourceName } from "@/features/leads";
@@ -33,7 +33,10 @@ export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose:
     const undo = assignVisit(visitId, ids);
     onClose();
     const names = ids.map((id) => memberName(db, id, t) ?? "").filter(Boolean).join(", ");
-    toast.show(online ? (ids.length ? t("toast.assigned", { name: names }) : t("toast.unassigned")) : t("offline.queued"), undo);
+    // people no longer at work were on it and are taken off now: say so (S22)
+    const gone = v ? hiddenAssignees(v, db.members).filter((id) => !ids.includes(id)).map((id) => memberName(db, id, t) ?? "").filter(Boolean) : [];
+    const said = online ? (ids.length ? t("toast.assigned", { name: names }) : t("toast.unassigned")) : t("offline.queued");
+    toast.show(gone.length ? `${said} · ${t("acct.takenOff", { names: gone.join(", ") })}` : said, undo);
   };
   return (
     <Sheet visible={!!v} onClose={onClose} title={t("plan.assignTo")}>

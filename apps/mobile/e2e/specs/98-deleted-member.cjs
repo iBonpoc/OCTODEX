@@ -6,8 +6,12 @@
  *   «Когда и кто» on the visit names «Удалённый пользователь»;
  * - «Назначить»: they are not in the sheet and not kept — saving Ivan gives [Ivan] (before 7а-2b the hidden person stayed
  *   on the list and the server refused the whole change);
- * - «Оплаты»: «Принял: Удалённый пользователь».
+ * - «Оплаты»: «Принял: Удалённый пользователь»;
+ * - a «Чей план» saved on the deleted person falls back to «Все» (the columns of the people at work are shown).
+ * v6 is put an hour back on the company's today (not before its midnight), so it would be «late» if a deleted person
+ * counted (review #216: the late rule is checked, not just the text).
  */
+const { todayKey, minuteOf, atMinute } = require("../companyTime.cjs");
 const GONE = "Удалённый пользователь";
 
 exports.run = async (h) => {
@@ -18,13 +22,24 @@ exports.run = async (h) => {
   const pay = db0.payments.find((x) => x.receivedBy);
   h.expect(db0.visits.find((x) => x.id === "v6"), "demo has v6 (today, nobody on it)");
   h.expect(pay, "demo has a payment with «принял»");
-  await p.evaluate((payId) => {
+  // an hour ago on the company's clock, never before its midnight; «late» from 15 minutes after the start
+  const nowMin = minuteOf(Date.now());
+  const start = atMinute(todayKey(), Math.max(0, nowMin - 60));
+  const wouldBeLate = nowMin - Math.max(0, nowMin - 60) >= 16;
+  await p.evaluate(({ payId, start }) => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
     raw.db.members = [...raw.db.members.filter((m) => m.id !== "m-gone"), { id: "m-gone", name: "", initials: "—", kind: "employee", roles: ["tech"], pending: true, deleted: true }];
-    raw.db.visits = raw.db.visits.map((v) => (v.id === "v6" ? { ...v, techId: "m-gone", assigneeIds: ["m-gone"] } : v));
+    raw.db.visits = raw.db.visits.map((v) => (v.id === "v6" ? { ...v, techId: "m-gone", assigneeIds: ["m-gone"], start, step: "scheduled", closed: false } : v));
     raw.db.payments = raw.db.payments.map((x) => (x.id === payId ? { ...x, receivedBy: "m-gone" } : x));
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
-  }, pay.id);
+    localStorage.setItem("octo.planMode.v1", JSON.stringify("day"));
+    // «Чей план» saved on the person who is gone now
+    localStorage.setItem("octo.planWho.v1", JSON.stringify("m-gone"));
+  }, { payId: pay.id, start });
+  const v6 = db0.visits.find((x) => x.id === "v6");
+  const prop = db0.properties.find((x) => x.id === v6.propertyId);
+  const client = db0.customers.find((c) => c.id === prop?.customerId)?.name ?? db0.leads.find((l) => l.id === v6.leadId)?.name;
+  h.expect(client, "v6 has a client or a lead");
 
   // «Команда»: not there
   await h.go("/team");
@@ -33,16 +48,22 @@ exports.run = async (h) => {
 
   // «Требует внимания»: the visit is «без мастера», not late
   await h.go("/today");
-  await h.expectText(/Выезд без мастера/, "the visit with only a deleted person is unassigned");
-  h.expect(!(await h.text()).includes(`${GONE} →`), "never «опаздывает» for a deleted person");
+  await h.expectText(new RegExp(`Выезд без мастера · ${client}`), "the visit with only a deleted person is unassigned");
+  const today = await h.text();
+  h.expect(!today.includes(`→ ${client}`), "never «Мастер опаздывает» for it");
+  if (wouldBeLate) h.expect(!/Мастер опаздывает · +→/.test(today), "no late item without a person (the rule is checked: v6 is 1 h past its start)");
 
-  // the Plan: «Не назначено»
+  // the Plan (day): «Чей план» back to «Все»; v6 is in the group «Не назначено · N»
   await h.go("/plan");
-  await h.expectText(/Не назначено/, "«Не назначено» in the Plan");
+  await h.expectText(/Ivan Sokolov/, "a «Чей план» on a deleted person falls back to «Все»: the people's columns are shown");
+  const group = p.getByText(/^Не назначено · \d+$/).locator("visible=true").first().locator("xpath=..");
+  await group.waitFor({ timeout: 4000 });
+  h.expect((await group.innerText()).includes(client), `v6 (${client}) is in «Не назначено · N» of the day`);
 
   // the visit names them; «Назначить» does not keep them
   await h.go("/visit/v6");
   await h.expectText(new RegExp(GONE), "«Когда и кто» names «Удалённый пользователь»");
+  await h.expectText(/Не назначен(?!о)/, "the visit's chip: «Не назначен» (one rule with the Plan)");
   await p.getByRole("button", { name: "Назначить", exact: true }).first().click();
   await h.expectText(/Кому назначить/, "the assign sheet");
   await h.sheet().getByText("Ivan Sokolov").first().waitFor({ timeout: 4000 });

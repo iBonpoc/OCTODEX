@@ -8,7 +8,7 @@ import { dayKeyIn, daysBetween, dueDayKey, getZone } from "./zone";
 import { timing } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
 import type { DB, Estimate, Invoice, Lead, Visit } from "@/data/types";
-import { assigneesOf, isOpenVisit, lateKind, overlaps } from "./schedule";
+import { assigneesOf, isOpenVisit, lateKind, overlaps, type People } from "./schedule";
 
 export interface Sign {
   key: DictKey;
@@ -48,8 +48,8 @@ export function leadSigns(l: Pick<Lead, "status" | "callAttempts">): Sign[] {
 
 /** Visit late: start + the company's «late» minutes (15 by default) passed, nobody on site (docs/specs/03 П3c). «On the way» does not clear it; on site, a closed
  *  visit or a ticked checklist item do. The one rule of features/schedule.ts lateKind (same as visits.tsx and attention.ts). */
-export function visitSigns(v: Parameters<typeof lateKind>[0], now: number = Date.now(), lateAfterMin?: number): Sign[] {
-  const late = lateKind(v, now, lateAfterMin);
+export function visitSigns(v: Parameters<typeof lateKind>[0], members: People, now: number = Date.now(), lateAfterMin?: number): Sign[] {
+  const late = lateKind(v, members, now, lateAfterMin);
   return late ? [{ key: late === "en_route" ? "late.enRoute" : "late.notLeft", tone: "warn" }] : [];
 }
 
