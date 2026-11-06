@@ -12,6 +12,7 @@ import {
   responseMinutes, sourceName, type LeadTurn, type ManualWinReason,
 } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
+import { canServe, notServed } from "@/features/clients";
 import { CloseSheet, ContactActions, LeadHistory, LeadOverview, smsWithBody, TasksBlock } from "@/features/lead/LeadParts";
 import { BookSheet, CallResultSheet, LostOrWaitSheet, NextStepSheet, SnoozeSheet, StatusSheet } from "@/features/lead/LeadSheets";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
@@ -57,7 +58,12 @@ export default function LeadScreen() {
   const replied = responseMinutes(l);
   const mine = peopleForLead(db, l);
   const dups = findDuplicates(db, { phones: phonesOfPeople(mine), emails: mine.flatMap((p) => p.emails.map((e) => e.address)) }, l.id);
-  const dupCustomers = dups.customers.filter((c) => c.id !== l.customerId);
+  // «do not service» (04 §4, §12): the client of this lead, or a client with the same phone / email — a red mark
+  const ownClient = l.customerId ? db.customers.find((c) => c.id === l.customerId) : undefined;
+  const closed = notServed([...(ownClient ? [ownClient] : []), ...dups.customers.filter((c) => c.id !== l.customerId)]);
+  const closedIds = new Set(closed.map((c) => c.id));
+  const dupCustomers = dups.customers.filter((c) => c.id !== l.customerId && !closedIds.has(c.id));
+  const servable = canServe(db, l.customerId);
   const estimates = db.estimates.filter((e) => e.leadId === l.id || (l.customerId && e.customerId === l.customerId));
   const assignee = db.members.find((m) => m.id === l.assigneeId);
   const events = leadTimeline(db, l, db.me);
@@ -75,6 +81,7 @@ export default function LeadScreen() {
   const turnChip = turnLabel(turn, t, day);
   const main =
     turn.kind === "reply" ? <Button label={t("inbox.reply")} icon="send" full onPress={() => setSheet("reply")} />
+    : !servable && l.customerId && !isClosedLead(l) ? <Button label={t("lead.openClient")} icon="user" variant="secondary" full onPress={() => router.push(`/client/${l.customerId}`)} />
     : turn.kind === "noStep" ? <Button label={t("lead.next.title")} icon="chevronRight" full onPress={() => setSheet("next")} />
     : turn.kind === "wait" && turn.action === "lostOrWait" ? <Button label={t("lead.low.title")} icon="clock" full onPress={() => setSheet("low")} />
     : turn.kind === "wait" ? <Button label={t("lead.remind")} icon="sms" full variant={turn.action === "remind" ? "primary" : "secondary"} onPress={remind} />
@@ -110,6 +117,13 @@ export default function LeadScreen() {
         <ContactActions l={l} onCall={isOpenLead(l) ? () => setSheet("call") : undefined} />
       </Card>
 
+      {closed.length ? (
+        <CardList>
+          {closed.map((c) => (
+            <ItemCard key={c.id} status="bad" title={t("lead.noService", { name: c.name })} subtitle={c.statusReason ? `${t("lead.noServiceHint")} · ${t("client.reason", { r: c.statusReason })}` : t("lead.noServiceHint")} right={<StatusChip status="bad" label={t("client.st.doNotService")} />} onPress={() => router.push(`/client/${c.id}`)} />
+          ))}
+        </CardList>
+      ) : null}
       {dupCustomers.length || dups.leads.length ? (
         <CardList>
           {dupCustomers.map((c) => (

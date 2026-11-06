@@ -9,6 +9,7 @@ import { ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
+import { canServe } from "@/features/clients";
 
 const KINDS: (CatalogKind | "all")[] = ["all", "service", "labor", "material", "kit"];
 export const kindLabel = (k: CatalogKind | "all"): DictKey => (k === "all" ? "cat.all" : (`cat.kind.${k}` as DictKey));
@@ -67,7 +68,7 @@ export function ClientPicker({ visible, onClose, onPick }: { visible: boolean; o
   const [q, setQ] = useState("");
   const rows = db.properties
     .map((p) => ({ p, c: db.customers.find((c) => c.id === p.customerId) }))
-    .filter((r) => r.c && (!q.trim() || `${r.c.name} ${r.p.address}`.toLowerCase().includes(q.trim().toLowerCase())));
+    .filter((r) => r.c && canServe(db, r.c.id) && (!q.trim() || `${r.c.name} ${r.p.address}`.toLowerCase().includes(q.trim().toLowerCase())));
   return (
     <Sheet visible={visible} onClose={onClose} title={t("est.for")}>
       <View style={{ gap: space[3] }}>

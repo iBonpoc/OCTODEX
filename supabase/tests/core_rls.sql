@@ -18,6 +18,8 @@ set client_min_messages = warning;
 drop schema if exists tst cascade;
 create schema tst;
 grant usage on schema tst to authenticated, anon;
+-- migration 20261106100000 takes EXECUTE for PUBLIC off new functions of postgres; the helpers are for every test role
+alter default privileges for role postgres in schema tst grant execute on functions to public;
 
 create function tst.ok(p_cond boolean, p_msg text) returns void language plpgsql as $$
 begin
@@ -40,6 +42,21 @@ begin
   begin
     execute p_sql;
   exception when others then
+    raise notice 'EXPECTED [%] % -> %', p_msg, sqlstate, sqlerrm;
+    return;
+  end;
+  raise exception 'FAILED (expected error): % — %', p_msg, p_sql;
+end $$;
+
+-- Оператор должен упасть именно с этой ошибкой (текст по LIKE), а не с какой-то другой
+create function tst.fails_like(p_sql text, p_like text, p_msg text) returns void language plpgsql as $$
+begin
+  begin
+    execute p_sql;
+  exception when others then
+    if sqlerrm not like p_like then
+      raise exception 'FAILED (wrong error): % — got [%] %, expected like %', p_msg, sqlstate, sqlerrm, p_like;
+    end if;
     raise notice 'EXPECTED [%] % -> %', p_msg, sqlstate, sqlerrm;
     return;
   end;
@@ -125,10 +142,13 @@ do $$ begin
                  'creator becomes active owner');
 end $$;
 
+-- fixture: the team (since 7-2 nobody inserts a membership directly — people join by an invitation, T48)
+:as_super
 insert into public.memberships (company_id, user_id, role, status) values
   ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002', 'office', 'active'),
   ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'tech',   'active'),
   ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000004', 'tech',   'active');
+:as_owner_a
 
 insert into public.lead_sources (id, company_id, name, kind) values
   ('1a000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Thumbtack (test)', 'marketplace');
@@ -471,8 +491,9 @@ do $$ begin
   perform tst.fails('delete from public.payments', 'superuser deletes payments');
   perform tst.fails('delete from public.status_events', 'superuser deletes status_events');
   perform tst.fails('update public.audit_log set action = $x$x$x$', 'superuser edits audit_log');
-  perform tst.ok((select count(*) from public.invoices) = 3, 'invoices intact');
-  perform tst.ok((select count(*) from public.payments) = 1, 'payments intact');
+  -- rows of the test companies (upgrade/*.sql leave their own: money rows are never deleted)
+  perform tst.ok((select count(*) from public.invoices where company_id in ('ca000000-0000-0000-0000-000000000000', 'cb000000-0000-0000-0000-000000000000')) = 3, 'invoices intact');
+  perform tst.ok((select count(*) from public.payments where company_id in ('ca000000-0000-0000-0000-000000000000', 'cb000000-0000-0000-0000-000000000000')) = 1, 'payments intact');
 end $$;
 \echo 'T5 money safety ok'
 
@@ -494,8 +515,12 @@ do $$ begin
   perform tst.fails($q$update public.estimates set status = 'approved' where id = '0e1a0000-0000-0000-0000-000000000001'$q$, 'direct approve without the company signature');
   -- admin/owner: роль owner может выдать только owner; свою роль менять нельзя
   perform tst.fails($q$update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000001'$q$, 'owner changes own role');
-  update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002';
+  -- 7-2: a role is not a field a client writes (a race of two owners could leave none) — the fixture moves the dispatcher up
+  perform tst.fails($q$update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002'$q$, 'no direct role change');
 end $$;
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002';
+:as_owner_a
 :as_super
 -- fixture for the tests below (as a signing function would: definer role + this estimate marked)
 select set_config('app.signing_estimate', '0e1a0000-0000-0000-0000-000000000001', false);
@@ -504,8 +529,9 @@ select set_config('app.signing_estimate', '', false);
 :as_office_a   -- теперь admin
 do $$ begin
   perform tst.fails($q$update public.memberships set role = 'owner' where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'admin grants owner');
-  perform tst.fails($q$update public.memberships set status = 'suspended' where user_id = 'a0000000-0000-0000-0000-000000000001'$q$, 'admin suspends owner');
-  update public.memberships set status = 'suspended' where user_id = 'a0000000-0000-0000-0000-000000000004';
+  perform tst.fails($q$update public.memberships set status = 'disabled' where user_id = 'a0000000-0000-0000-0000-000000000001'$q$, 'admin suspends owner');
+  -- 7-2: a status changes only through set_member_status (a direct update is refused — T48)
+  perform public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000004', 'disabled');
 end $$;
 :as_tech2_a    -- отключён: не видит ничего
 do $$ begin
@@ -753,7 +779,19 @@ end $$;
 \echo 'T11 contract → invoices → receipts ok'
 
 -- ---------------------------------------------------------------- T12: simulated card payment on the client page
+-- off for every company until the operator marks it a demo (security audit 06.11, item 2; T54)
 reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb; v_inv uuid;
+begin
+  r := public.portal_estimate('tok_inv_0123456789abcdef');
+  perform tst.ok((r ->> 'simulated_pay')::boolean is false, 'a real company: the page shows no card button');
+  select (x ->> 'id')::uuid into v_inv from jsonb_array_elements(r -> 'invoices') x where x ->> 'kind' = 'final';
+  perform tst.fails_like(format($q$select public.portal_pay_simulated('tok_inv_0123456789abcdef', %L)$q$, v_inv), 'card payments are not available yet', 'a real company takes no simulated card payment');
+end $$;
+reset role;
+insert into app.company_flags (company_id, simulated_payments) values ('ca000000-0000-0000-0000-000000000000', true);
+set role anon;
 do $$
 declare r jsonb; v_inv uuid;
 begin
@@ -1144,9 +1182,8 @@ select tst.ok((select gate_code from public.property_secrets where property_id =
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a0000000-0000-0000-0000-000000000005', 'sales@a.test', '{"full_name":"Sam Sales"}'),
   ('b0000000-0000-0000-0000-000000000002', 'tech@b.test', '{"full_name":"Rival Tech"}');
-:as_owner_a
+-- fixture (7-2: memberships are not inserted by clients)
 insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000005', 'sales', 'active');
-:as_owner_b
 insert into public.memberships (company_id, user_id, role, status) values ('cb000000-0000-0000-0000-000000000000', 'b0000000-0000-0000-0000-000000000002', 'tech', 'active');
 :as_owner_a
 do $$
@@ -1597,8 +1634,8 @@ end $$;
 do $$ begin
   perform tst.ok(
     (select array_agg(k order by k) from jsonb_object_keys(public.portal_estimate('tok_lang_0123456789abcdef')) k)
-    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language') x),
-    'answer keys = base keys + doc_language, nothing else');
+    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language' union all select 'simulated_pay') x),
+    'answer keys = base keys + doc_language + simulated_pay (T54), nothing else');
 end $$;
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin
@@ -2447,10 +2484,12 @@ select tst.ok((select status from public.visits where id = 'f3400000-0000-4000-8
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a3500000-0000-4000-8000-000000000001', 'tech35@a.test', '{"full_name":"Tess Second"}'),
   ('a3500000-0000-4000-8000-000000000002', 'gone35@a.test', '{"full_name":"Gus Gone"}');
-:as_owner_a
+-- fixture (since 7-2 a membership is born only by accepting an invitation, or the company's owner trigger)
+:as_super
 insert into public.memberships (company_id, user_id, role, status) values
   ('ca000000-0000-0000-0000-000000000000', 'a3500000-0000-4000-8000-000000000001', 'tech', 'active'),
   ('ca000000-0000-0000-0000-000000000000', 'a3500000-0000-4000-8000-000000000002', 'tech', 'invited');
+:as_owner_a
 do $$ begin
   insert into public.customers (id, company_id, display_name) values ('c3500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T35 Client');
   insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3500000-0000-4000-8000-000000000001', '35 Crew St', 'Pasadena');
@@ -2512,7 +2551,10 @@ select tst.ok(tst.cnt($q$select 1 from public.visit_assignees where visit_id = '
 select tst.ok((public.assign_visit('f3500000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added')::int = 0, 'on site: a replay of the same list is not an error (offline queue)');
 select tst.fails($q$update public.visit_assignees set visit_id = 'f3500000-0000-4000-8000-000000000002' where visit_id = 'f3500000-0000-4000-8000-000000000001'$q$, 'an assignment does not move to another visit');
 -- a member removed with deleted_at (not suspended) is not assigned; a direct «back on» of an inactive one is refused
+:as_super
+-- fixture: a member removed (7-2: deleted_at is not a field a client writes)
 update public.memberships set deleted_at = now() where user_id = 'a3500000-0000-4000-8000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
 select tst.fails($q$select public.assign_visit('f3500000-0000-4000-8000-000000000002', array['a3500000-0000-4000-8000-000000000001']::uuid[])$q$, 'a deleted member is not assigned');
 select tst.fails($q$insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f3500000-0000-4000-8000-000000000002', 'a3500000-0000-4000-8000-000000000001')$q$, 'a direct insert of a deleted member is refused (the visit is still scheduled)');
 \echo 'T35 several people on a visit ok'
@@ -3667,6 +3709,136 @@ select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-00000000
 select tst.ok((select count(*) from public.jobs where id in ('e4600000-0000-4000-8000-000000000001', 'e4600000-0000-4000-8000-000000000002') and status = 'completed') = 2, 'only the office closed, nothing else');
 \echo 'T46 wave 3c: «Работа выполнена» (S10) ok'
 
+-- ---------------------------------------------------------------- T44: wave 4b-1 — «do not service» (docs/specs/04 §12): nothing new for the client
+:as_super
+create function tst.dns(p_sql text, p_msg text) returns void language plpgsql as $$
+begin
+  begin
+    execute p_sql;
+  exception when others then
+    if sqlstate = 'P0001' and sqlerrm = 'customer_do_not_service' then
+      raise notice 'EXPECTED [%] % -> %', p_msg, sqlstate, sqlerrm;
+      return;
+    end if;
+    raise exception 'FAILED (expected customer_do_not_service, got % %): % — %', sqlstate, sqlerrm, p_msg, p_sql;
+  end;
+  raise exception 'FAILED (expected customer_do_not_service): % — %', p_msg, p_sql;
+end $$;
+grant execute on function tst.dns(text, text) to authenticated, anon;
+:as_owner_a
+do $$
+declare v_ver uuid; v_ver2 uuid; v_tok text;
+begin
+  insert into public.customers (id, company_id, display_name) values
+    ('c4400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T44 Closed'),
+    ('c4400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T44 Open');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d4400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', '44 Closed St', 'Pasadena'),
+    ('d4400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000002', '44 Open St', 'Pasadena');
+  insert into public.leads (id, company_id, source_id, contact_name, phone, customer_id) values
+    ('14400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T44 lead', '+13235554401', 'c4400000-0000-4000-8000-000000000001');
+  insert into public.leads (id, company_id, source_id, contact_name, phone, property_id) values
+    ('14400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T44 lead at the address', '+13235554402', 'd4400000-0000-4000-8000-000000000001');
+  -- what was open before the mark: a job with a visit, a sent estimate with a link, a draft
+  insert into public.jobs (id, company_id, title, customer_id, property_id) values
+    ('e4400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T44 open job', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001'),
+    ('e4400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T44 other job', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000002');
+  insert into public.visits (id, company_id, job_id, kind) values
+    ('f4400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4400000-0000-4000-8000-000000000001', 'install');
+  insert into public.estimates (id, company_id, customer_id, property_id, title) values
+    ('0e440000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001', 'T44 sent'),
+    ('0e440000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001', 'T44 draft'),
+    ('0e440000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000002', 'T44 other');
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', '0e440000-0000-4000-8000-000000000001', 1) returning id into v_ver;
+  update public.estimates set current_version_id = v_ver where id = '0e440000-0000-4000-8000-000000000001';
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', '0e440000-0000-4000-8000-000000000002', 1) returning id into v_ver2;
+  update public.estimates set current_version_id = v_ver2 where id = '0e440000-0000-4000-8000-000000000002';
+  v_tok := public.send_estimate('0e440000-0000-4000-8000-000000000001', 'tok_t44_0123456789abcdef');
+  perform tst.ok(v_tok = 'tok_t44_0123456789abcdef', 'an ordinary client: the estimate is sent');
+  -- the mark
+  update public.customers set status = 'do_not_service', do_not_service_reason = 'T44 rude' where id = 'c4400000-0000-4000-8000-000000000001';
+  perform tst.ok((select public_token is null and link_revoked_at is not null from public.estimates where id = '0e440000-0000-4000-8000-000000000001'), 'the open link is revoked on the mark');
+  perform tst.ok((select count(*) from public.activities where subject_id = '0e440000-0000-4000-8000-000000000001' and meta ->> 'why' = 'do_not_service') = 1, 'the revoke is in the estimate history');
+end $$;
+-- nothing new: job, estimate, visit (by job, by lead, by property), move, send, a new link
+:as_office_a
+select tst.dns($q$insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 new job', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001')$q$, 'no new job for a «do not service» client');
+select tst.dns($q$insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001', 'T44 new')$q$, 'no new estimate');
+select tst.dns($q$insert into public.visits (company_id, job_id, kind) values ('ca000000-0000-0000-0000-000000000000', 'e4400000-0000-4000-8000-000000000001', 'service')$q$, 'no new visit on the open job');
+select tst.dns($q$insert into public.visits (company_id, lead_id, kind) values ('ca000000-0000-0000-0000-000000000000', '14400000-0000-4000-8000-000000000001', 'inspection')$q$, 'no inspection by the client''s lead');
+select tst.dns($q$insert into public.visits (company_id, lead_id, kind) values ('ca000000-0000-0000-0000-000000000000', '14400000-0000-4000-8000-000000000002', 'inspection')$q$, 'no inspection at the client''s property (lead without a client)');
+-- moving a job onto the client: a job's client never changes («Работы» t14, their test)
+select tst.dns($q$update public.estimates set customer_id = 'c4400000-0000-4000-8000-000000000001', property_id = 'd4400000-0000-4000-8000-000000000001' where id = '0e440000-0000-4000-8000-000000000003'$q$, 'an estimate is not moved onto the client');
+select tst.dns($q$select public.send_estimate('0e440000-0000-4000-8000-000000000002')$q$, 'the old draft is not sent');
+select tst.dns($q$select public.send_estimate('0e440000-0000-4000-8000-000000000001')$q$, 'the revoked estimate gets no new link');
+:as_super
+do $$ begin
+  perform tst.dns($q$select tst.set_token('0e440000-0000-4000-8000-000000000001', 'tok_t44_new_0123456789ab')$q$, 'not even a definer gives the client a new link');
+end $$;
+-- security-check 06.11: no signature, no revival, no restore, the property owner counts, the open is editable
+:as_super
+do $$ begin
+  perform set_config('app.signing_estimate', '0e440000-0000-4000-8000-000000000001', true);
+  perform tst.dns($q$update public.estimates set status = 'awaiting_countersign' where id = '0e440000-0000-4000-8000-000000000001'$q$, 'no signature (on site / countersign) for the client, even from a signing function');
+  update public.estimates set status = 'expired' where id = '0e440000-0000-4000-8000-000000000001';
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+:as_office_a
+select tst.dns($q$update public.estimates set status = 'viewed' where id = '0e440000-0000-4000-8000-000000000001'$q$, 'an expired estimate is not revived into «viewed»');
+-- a job of another client at the client's property: «Работы» t14 refuses it first (the address is not a property of
+-- that client, 22023) — still refused; t44 stays the guard for estimates and visits
+do $$ begin
+  begin
+    insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 at their address', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000001');
+    raise exception 'FAILED: a job of another client at the client''s property was made';
+  exception when others then
+    perform tst.ok(sqlstate = '22023' or sqlerrm = 'customer_do_not_service', 'no job of another client at the client''s property: ' || sqlerrm);
+  end;
+end $$;
+select tst.dns($q$insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000001', 'T44 at their address')$q$, 'no estimate of another client at the client''s property');
+:as_super
+update public.estimates set deleted_at = now() where id = '0e440000-0000-4000-8000-000000000002';
+select tst.dns($q$update public.estimates set deleted_at = null where id = '0e440000-0000-4000-8000-000000000002'$q$, 'a deleted estimate is not restored for the client (any path, the app cannot even see it)');
+:as_office_a
+-- the open job moves to another address of the same client: its visit follows, nothing refused
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d4400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', '44 Second St', 'Pasadena');
+update public.jobs set property_id = 'd4400000-0000-4000-8000-000000000003' where id = 'e4400000-0000-4000-8000-000000000001';
+select tst.ok((select property_id from public.visits where id = 'f4400000-0000-4000-8000-000000000001') = 'd4400000-0000-4000-8000-000000000003', 'the open job and its visit move to another address of the client');
+update public.visits set property_id = 'd4400000-0000-4000-8000-000000000001' where id = 'f4400000-0000-4000-8000-000000000001';
+-- another company does not learn that our client is marked: RLS answers, not the mark
+:as_owner_b
+do $$ begin
+  begin
+    insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 spy', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001');
+    raise exception 'FAILED: another company inserted a job';
+  exception when others then
+    perform tst.ok(sqlerrm <> 'customer_do_not_service' and sqlerrm not like 'FAILED%', 'another company gets RLS, not the mark: ' || sqlerrm);
+  end;
+end $$;
+-- the open stays: the visit moves on, the job is edited, the draft is edited
+:as_office_a
+update public.visits set status = 'en_route' where id = 'f4400000-0000-4000-8000-000000000001';
+update public.jobs set title = 'T44 open job, edited' where id = 'e4400000-0000-4000-8000-000000000001';
+update public.estimates set title = 'T44 draft, edited' where id = '0e440000-0000-4000-8000-000000000002';
+select tst.ok((select status from public.visits where id = 'f4400000-0000-4000-8000-000000000001') = 'en_route', 'the open visit goes on');
+select tst.ok((select title from public.jobs where id = 'e4400000-0000-4000-8000-000000000001') = 'T44 open job, edited', 'the open job is edited');
+select tst.ok((select status from public.estimates where id = '0e440000-0000-4000-8000-000000000002') = 'draft', 'the draft stays a draft');
+-- another client: everything works
+insert into public.visits (company_id, job_id, kind) values ('ca000000-0000-0000-0000-000000000000', 'e4400000-0000-4000-8000-000000000002', 'service');
+select tst.dns($q$update public.visits set job_id = 'e4400000-0000-4000-8000-000000000001' where id = (select id from public.visits where job_id = 'e4400000-0000-4000-8000-000000000002' limit 1)$q$, 'a visit is not moved onto the client''s job');
+insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 job for the open client', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000002');
+-- back to active: work again
+:as_owner_a
+update public.customers set status = 'active', do_not_service_reason = null where id = 'c4400000-0000-4000-8000-000000000001';
+:as_office_a
+insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 job after the mark is off', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001');
+:as_super
+select tst.ok((select count(*) from public.jobs where customer_id = 'c4400000-0000-4000-8000-000000000001') = 2, 'only the job after the mark was lifted');
+reset role; set role anon;
+select tst.ok(public.portal_estimate('tok_t44_0123456789abcdef') is null, 'the client''s old link opens nothing');
+\echo 'T44 wave 4b-1: «do not service» — nothing new, the open stays, links revoked ok'
+
 -- ---------------------------------------------------------------- T47: a direct insert into jobs keeps the checks of create_job (t14, security check 06.11)
 :as_owner_a
 do $$ begin
@@ -3763,5 +3935,459 @@ end $$;
 :as_super
 select tst.ok(tst.cnt($q$select 1 from public.jobs where id = 'e4700000-0000-4000-8000-000000000009'$q$) = 0, 'no refused job was made');
 \echo 'T47 direct insert into jobs keeps the create_job checks ok'
+
+
+-- ---------------------------------------------------------------- T52: API rights — what anon and authenticated may touch (security audit 06.11, items 4–5)
+-- auth_stub.sql gives the Supabase default privileges before the migrations, so this checks the real picture.
+reset role; reset request.jwt.claim.sub;
+do $$
+declare bad text;
+begin
+  select string_agg(c.relname || ':' || p, ', ') into bad
+    from pg_class c, unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'v', 'm', 'p', 'f')
+     and has_table_privilege('anon', c.oid, p);
+  perform tst.ok(bad is null, 'anon has no rights on public tables: ' || coalesce(bad, ''));
+
+  select string_agg(c.relname || ':' || p, ', ') into bad
+    from pg_class c, unnest(array['TRUNCATE','REFERENCES','TRIGGER']) p
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'v', 'm', 'p', 'f')
+     and has_table_privilege('authenticated', c.oid, p);
+  perform tst.ok(bad is null, 'authenticated has no TRUNCATE / REFERENCES / TRIGGER: ' || coalesce(bad, ''));
+
+  select string_agg(c.relname, ', ') into bad
+    from pg_class c
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'v', 'm', 'p', 'f')
+     and has_table_privilege('authenticated', c.oid, 'DELETE')
+     and c.relname not in ('customer_tags', 'job_tags', 'visit_assignees',
+                           'estimate_options', 'estimate_line_items', 'estimate_line_costs');
+  perform tst.ok(bad is null, 'authenticated deletes only where it is meant to (links, estimate draft lines): ' || coalesce(bad, ''));
+
+  select string_agg(c.relname, ', ') into bad
+    from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'S'
+     and (has_sequence_privilege('anon', c.oid, 'USAGE') or has_sequence_privilege('anon', c.oid, 'UPDATE'));
+  perform tst.ok(bad is null, 'anon uses no sequences: ' || coalesce(bad, ''));
+
+  select string_agg(p.proname, ', ') into bad
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')
+     and p.proname not in ('portal_estimate', 'portal_accept', 'portal_pay_simulated', 'uuid_generate_v7');
+  perform tst.ok(bad is null, 'anon runs only the client-link functions in public: ' || coalesce(bad, ''));
+
+  -- schemas public and app: no function runs for PUBLIC (a forgotten revoke), but the id helper of column defaults
+  select string_agg(n.nspname || '.' || p.proname, ', ') into bad
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname in ('public', 'app')
+     and exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where a.grantee = 0 and a.privilege_type = 'EXECUTE')
+     and p.proname <> 'uuid_generate_v7';
+  perform tst.ok(bad is null, 'no function in public / app runs for PUBLIC (revoke all … from public): ' || coalesce(bad, ''));
+
+  select string_agg(p.proname, ', ') into bad
+    from pg_proc p where p.pronamespace = 'app'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE');
+  perform tst.ok(bad is null and not has_schema_privilege('anon', 'app', 'USAGE'), 'anon reaches nothing in schema app: ' || coalesce(bad, ''));
+
+  select string_agg(p.proname, ', ') into bad
+    from pg_proc p where p.pronamespace = 'app'::regnamespace and p.prorettype = 'trigger'::regtype
+     and has_function_privilege('authenticated', p.oid, 'EXECUTE');
+  perform tst.ok(bad is null, 'authenticated cannot call trigger functions of app: ' || coalesce(bad, ''));
+
+  -- what the app reads and writes on the six tables still works
+  -- has_table_privilege with a list is true if ANY right is held: check each one
+  select string_agg(t || ':' || p, ', ') into bad
+    from unnest(array['catalog_items', 'company_secrets', 'company_licenses', 'company_contacts', 'notes']) t,
+         unnest(array['SELECT', 'INSERT', 'UPDATE']) p
+   where not has_table_privilege('authenticated', 'public.' || t, p);
+  perform tst.ok(bad is null, 'the app keeps select / insert / update it uses: ' || coalesce(bad, ''));
+  perform tst.ok(has_table_privilege('authenticated', 'public.notifications', 'SELECT')
+             and has_column_privilege('authenticated', 'public.notifications', 'read_at', 'UPDATE')
+             and not has_column_privilege('authenticated', 'public.notifications', 'kind', 'UPDATE')
+             and not has_table_privilege('authenticated', 'public.notifications', 'INSERT')
+             and not has_table_privilege('authenticated', 'public.notifications', 'DELETE'),
+             'notices: read, and only read_at changes');
+end $$;
+-- a table or function added later gets nothing by default
+begin;
+create table public.t52_probe (id int);
+create function public.t52_probe_fn() returns int language sql as 'select 1';
+do $$ begin
+  perform tst.ok(not has_table_privilege('anon', 'public.t52_probe', 'SELECT')
+             and not has_table_privilege('authenticated', 'public.t52_probe', 'SELECT')
+             and not has_table_privilege('authenticated', 'public.t52_probe', 'TRUNCATE'),
+             'a new public table gets no rights for anon / authenticated without a grant');
+  perform tst.ok(not has_function_privilege('anon', 'public.t52_probe_fn()', 'EXECUTE')
+             and not has_function_privilege('authenticated', 'public.t52_probe_fn()', 'EXECUTE'),
+             'a new public function runs for nobody until its migration grants it (global default, 20261106100000)');
+end $$;
+rollback;
+\echo 'T52 API rights: anon and authenticated only what is granted ok'
+
+
+-- ---------------------------------------------------------------- T53: the money of a sent invoice does not change directly (security audit 06.11, item 1)
+:as_owner_a
+insert into public.customers (id, company_id, display_name) values ('c5300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T53 Client');
+:as_sales_a
+-- as the app makes it (invoice.issue / visit.pay): inserted already sent, subtotal = total
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('15300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T53 sent', 10000, 10000, now());
+select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', -100, -100)$q$, 'an invoice is not born with a negative total');
+select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'draft', -1, 0)$q$, 'an invoice is not born with a negative subtotal');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('15310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'cash', 4000, 'succeeded', 't53-pay-1');
+select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'T53: a payment still lowers the balance');
+select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set a negative total on a sent invoice');
+select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set the total below what is paid');
+select tst.fails($q$update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the total of a sent invoice does not change at all');
+do $$ begin
+  update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001';
+  raise exception 'FAILED: the total of a sent invoice changed';
+exception when insufficient_privilege then null;   -- the freeze (42501), not some other error
+end $$;
+select tst.fails($q$update public.invoices set tax_cents = 500 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the tax of a sent invoice does not change');
+select tst.fails($q$update public.invoices set discount_cents = 500 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the discount of a sent invoice does not change');
+select tst.fails($q$update public.invoices set customer_id = (select id from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000' and id <> 'c5300000-0000-4000-8000-000000000001' limit 1) where id = '15300000-0000-4000-8000-000000000001'$q$, 'a sent invoice does not move to another client');
+select tst.fails($q$update public.invoices set kind = 'final' where id = '15300000-0000-4000-8000-000000000001'$q$, 'the kind of a sent invoice does not change');
+select tst.fails($q$update public.invoices set sent_at = null where id = '15300000-0000-4000-8000-000000000001'$q$, 'the sent time of a sent invoice does not change');
+-- the mark of the payment recalc cannot be set by the app's role
+do $$ begin
+  perform set_config('app.invoice_recalc', 'on', true);
+  begin
+    update public.invoices set total_cents = 4000, subtotal_cents = 4000 where id = '15300000-0000-4000-8000-000000000001';
+    raise exception 'FAILED: the recalc mark opened the amounts for authenticated';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('app.invoice_recalc', '', true);
+end $$;
+-- what still changes on a sent invoice
+update public.invoices set title = 'T53 renamed', due_date = current_date + 30, reminders_paused = true where id = '15300000-0000-4000-8000-000000000001';
+select tst.ok((select title = 'T53 renamed' and reminders_paused from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'title, due date and reminders of a sent invoice still change');
+update public.invoices set paid_cents = 10000, payment_status = 'paid' where id = '15300000-0000-4000-8000-000000000001';
+select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'paid stays with the payments (direct change ignored)');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('15310000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'check', 6000, 'succeeded', 't53-pay-2');
+select tst.ok((select paid_cents = 10000 and payment_status = 'paid' and total_cents = 10000 from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'the last payment closes the invoice (recalc passes the guard)');
+-- a draft still changes, but not below what is paid; once sent it is frozen
+insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values
+  ('15300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'draft', 5000, 5000);
+update public.invoices set subtotal_cents = 6000, total_cents = 6000 where id = '15300000-0000-4000-8000-000000000002';
+select tst.ok((select total_cents = 6000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'), 'a draft invoice still changes its amounts');
+select tst.fails($q$update public.invoices set total_cents = -1 where id = '15300000-0000-4000-8000-000000000002'$q$, 'a draft does not go negative');
+-- a paid draft: the total does not go below what is paid (check_violation, not the freeze)
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('15310000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000002', 'c5300000-0000-4000-8000-000000000001', 'cash', 3000, 'succeeded', 't53-pay-3');
+do $$ begin
+  update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
+  raise exception 'FAILED: a draft went below what is paid';
+exception when check_violation then null;
+end $$;
+update public.invoices set status = 'sent', sent_at = now() where id = '15300000-0000-4000-8000-000000000002';
+select tst.fails($q$update public.invoices set subtotal_cents = 7000, total_cents = 7000 where id = '15300000-0000-4000-8000-000000000002'$q$, 'after sending, the draft amounts are frozen');
+-- an old row whose total is already below what is paid (made before this guard): its due date still changes
+:as_super
+do $$ begin
+  perform set_config('app.invoice_recalc', 'on', true);   -- as the server recalc: the only way to make such a row now
+  update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
+  perform set_config('app.invoice_recalc', '', true);
+end $$;
+:as_sales_a
+update public.invoices set due_date = current_date + 7 where id = '15300000-0000-4000-8000-000000000002';
+select tst.ok((select due_date = current_date + 7 and total_cents = 1000 and paid_cents = 3000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'),
+              'an old invoice with total below paid still takes a new due date');
+-- void still works for the owner (no payments)
+:as_owner_a
+insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents, sent_at) values
+  ('15300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 2500, 2500, now());
+update public.invoices set status = 'void', void_reason = 'T53 wrong amount' where id = '15300000-0000-4000-8000-000000000003';
+select tst.ok((select status = 'void' from public.invoices where id = '15300000-0000-4000-8000-000000000003'), 'the owner voids a sent invoice to reissue it');
+\echo 'T53 money of a sent invoice is frozen, payments and void still work ok'
+
+
+-- ---------------------------------------------------------------- T54: the simulated card payment only for a demo company (security audit 06.11, item 2)
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
+select x.id::uuid, j.company_id, '', j.customer_id, j.id, 'progress', 'sent', 'T54 progress', 5400, 5400, now()
+  from public.jobs j join public.estimates e on e.id = j.estimate_id,
+       (values ('15400000-0000-4000-8000-000000000001'), ('15400000-0000-4000-8000-000000000002')) x(id)
+ where e.public_token = 'tok_inv_0123456789abcdef';
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb;
+begin
+  r := public.portal_estimate('tok_inv_0123456789abcdef');
+  perform tst.ok((r ->> 'simulated_pay')::boolean, 'a demo company: the page shows the card button');
+  perform tst.ok(r ? 'doc_language', 'the page keeps the client language (T19)');
+  perform tst.fails_like($q$select * from app.company_flags$q$, 'permission denied%', 'anon does not read the demo flags');
+  r := public.portal_pay_simulated('tok_inv_0123456789abcdef', '15400000-0000-4000-8000-000000000002');
+  perform tst.ok((select (x ->> 'paid')::bigint from jsonb_array_elements(r -> 'invoices') x where x ->> 'id' = '15400000-0000-4000-8000-000000000002') = 5400,
+                 'a demo company: the client pays by the simulated card');
+end $$;
+-- the company cannot switch the simulation on for itself
+:as_owner_a
+select tst.fails_like($q$select * from app.company_flags$q$, 'permission denied%', 'the owner does not read the demo flags');
+select tst.fails_like($q$insert into app.company_flags (company_id, simulated_payments) values ('ca000000-0000-0000-0000-000000000000', true)$q$, 'permission denied%', 'the owner does not switch the demo on');
+select tst.fails_like($q$select app.company_simulates_payments('ca000000-0000-0000-0000-000000000000')$q$, 'permission denied%', 'the flag function is not callable from the app');
+-- a revoked link takes no payment, even in a demo company
+:as_super
+do $$ declare v uuid := (select id from public.estimates where public_token = 'tok_inv_0123456789abcdef'); begin
+  perform set_config('app.signing_estimate', v::text, true);   -- as revoke_estimate_link does
+  update public.estimates set link_revoked_at = now() where id = v;
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails_like($q$select public.portal_pay_simulated('tok_inv_0123456789abcdef', '15400000-0000-4000-8000-000000000001')$q$, 'this link is closed', 'a revoked link takes no simulated payment');
+-- switched off again: no payment either
+:as_super
+do $$ declare v uuid := (select id from public.estimates where public_token = 'tok_inv_0123456789abcdef'); begin
+  perform set_config('app.signing_estimate', v::text, true);   -- as revoke_estimate_link does
+  update public.estimates set link_revoked_at = null where id = v;
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+update app.company_flags set simulated_payments = false where company_id = 'ca000000-0000-0000-0000-000000000000';
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails_like($q$select public.portal_pay_simulated('tok_inv_0123456789abcdef', '15400000-0000-4000-8000-000000000001')$q$, 'card payments are not available yet', 'the demo switched off takes no payment');
+:as_super
+select tst.ok((select paid_cents = 0 from public.invoices where id = '15400000-0000-4000-8000-000000000001'), 'T54: nothing was paid by the refused calls');
+\echo 'T54 simulated card payment only for a demo company ok'
+
+
+-- ---------------------------------------------------------------- T55: storage files by the files rule; app functions not for PUBLIC (security audit 06.11, items 3, 12)
+:as_owner_a
+insert into public.customers (id, company_id, display_name) values ('c5500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T55 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city, address_state) values
+  ('d5500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c5500000-0000-4000-8000-000000000001', '55 Oak St', 'Austin', 'TX');
+insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'document');
+:as_tech_a
+insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo');
+:as_super
+insert into storage.objects (bucket_id, name) values
+  ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'),
+  ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000002.jpg');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/%'$q$) = 1, 'a tech lists only the files he sees (his own photo), not the office document');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000002.jpg'$q$) = 1, 'a tech reads his own photo');
+-- pointing storage_key of his own row at the office document opens nothing (the object name decides)
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf' where id = 'f5500000-0000-4000-8000-000000000002';
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'$q$) = 0, 'storage_key does not open someone else''s object');
+-- upload: the app inserts the row, then the object; a repeat upload (upsert) updates it
+insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg'$q$) = 1, 'a tech uploads a photo of his row before storage_key is written');
+-- as Supabase Storage does it for upsert: true
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg')
+  on conflict (bucket_id, name) do update set updated_at = now() returning id \gset t55_
+select tst.ok((select updated_at is not null from storage.objects where id = :'t55_id'), 'a repeat upload of his own photo (upsert) updates the object');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.html')$q$, 'one files row takes no object of another kind (.html)');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003')$q$, 'an object without an extension is refused');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.png')$q$, 'one files row takes no second object (.png)');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'CA000000-0000-0000-0000-000000000000/F5500000-0000-4000-8000-000000000003.jpg')$q$, 'an upper-case name is refused (one row, one object)');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.JPG')$q$, 'an upper-case extension is refused');
+-- once the upload is recorded, the author does not replace the photo (before / after is evidence)
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg', upload_status = 'uploaded'
+ where id = 'f5500000-0000-4000-8000-000000000003';
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg') on conflict (bucket_id, name) do update set updated_at = now()$q$, 'the author does not re-upload over a recorded photo');
+select tst.blocked($q$update storage.objects set name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg' where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg'$q$, 'the author does not update a recorded photo');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg'$q$) = 1, 'the author still reads his recorded photo');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf')$q$, 'a tech does not write the office document');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-0000000000aa.jpg')$q$, 'a tech does not write an object without his files row');
+select tst.blocked($q$update storage.objects set bucket_id = 'files' where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'$q$, 'a tech does not overwrite the office document');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/x/../f5500000-0000-4000-8000-000000000003.jpg')$q$, 'an odd path is refused');
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/f55%'$q$) = 3, 'the office sees every file of the company');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/%'$q$) = 0, 'another company sees none of our files');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-0000000000bb.jpg')$q$, 'another company does not write into ours');
+-- 12: leads and contacts still work for the app's role after PUBLIC lost EXECUTE on app functions
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.leads$q$) > 0 and tst.cnt($q$select 1 from public.contacts$q$) > 0, 'leads and contacts still read (can_see_lead / can_see_contact for authenticated)');
+\echo 'T55 storage files by the files rule, app functions not for PUBLIC ok'
+
+-- ---------------------------------------------------------------- T48: wave 7-2 — «Команда и приглашение» (S21; docs/specs/19 §2 п.3–4)
+-- An invitation by email before the person has an account; the invited person sees nothing until accepting; a wrong email,
+-- a cancelled or expired link does not let in; a disabled person sees nothing again; only owner/admin invite and disable.
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4800000-0000-4000-8000-000000000001', 'new48@a.test',   '{"full_name":"Nora New"}'),
+  ('a4800000-0000-4000-8000-000000000002', 'other48@a.test', '{"full_name":"Oscar Other"}');
+\set as_new48   'reset role; set request.jwt.claim.sub = ''a4800000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_other48 'reset role; set request.jwt.claim.sub = ''a4800000-0000-4000-8000-000000000002''; set role authenticated;'
+select tst.ok((select status from public.memberships where status not in ('invited', 'active', 'disabled', 'deleted') limit 1) is null, 'membership statuses: invited / active / disabled / deleted');
+-- who may invite
+:as_sales_a
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'x48@a.test', 'tech')$q$, 'sales do not invite');
+:as_tech_a
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'x48@a.test', 'tech')$q$, 'the tech does not invite');
+:as_owner_b
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'x48@a.test', 'tech')$q$, 'another company does not invite into ours');
+:as_owner_a
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'x48@a.test', 'owner')$q$, 'nobody is invited as owner');
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'not-an-email', 'tech')$q$, 'not an email');
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'office@a.test', 'tech')$q$, 'already on the team');
+select public.invite_member('ca000000-0000-0000-0000-000000000000', '  New48@A.test ', 'tech', 'Nora New') ->> 'token' as t48_token \gset
+select tst.ok((select count(*) from public.invitations where email = 'new48@a.test' and status = 'pending' and role = 'tech') = 1, 'the invitation is pending, email normalised');
+:as_super
+select tst.ok((select count(*) from public.invitations where token_hash = :'t48_token') = 0, 'the link token itself is not stored');
+-- the invited person sees nothing of the company, not even the invitation
+:as_new48
+select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 0, 'invited: no company before accepting');
+select tst.ok((select count(*) from public.customers) = 0, 'invited: no clients before accepting');
+select tst.ok((select count(*) from public.invitations) = 0, 'invited: the invitations list is the owner''s');
+select tst.blocked($q$update public.invitations set status = 'accepted'$q$, 'nobody writes invitations directly');
+-- the link opened by another account does not let in
+:as_other48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_token'), 'another email cannot accept');
+select tst.ok((select count(*) from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000002') = 0, 'and is not on the team');
+reset role; set role anon;
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_token'), 'anon cannot accept');
+-- the profile email is not a way in: it cannot be changed, and accept reads the sign-in email
+:as_other48
+select tst.fails($q$update public.users set email = 'new48@a.test' where id = 'a4800000-0000-4000-8000-000000000002'$q$, 'nobody changes their own email in public.users');
+select tst.ok((select count(*) from public.users where id = 'a4800000-0000-4000-8000-000000000002' and full_name = 'Oscar Other') = 1, 'own profile still readable');
+update public.users set full_name = 'Oscar O.' where id = 'a4800000-0000-4000-8000-000000000002';
+select tst.ok((select full_name from public.users where id = 'a4800000-0000-4000-8000-000000000002') = 'Oscar O.', 'own name still editable');
+-- a wrong token, then the right one
+:as_new48
+select tst.fails($q$select public.accept_invitation('0000000000000000000000000000000000000000')$q$, 'a wrong link');
+select tst.ok((public.accept_invitation(:'t48_token') ->> 'role') = 'tech', 'the invited person joins with the invited role');
+select tst.ok((select status from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000') = 'active', 'active member now');
+select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 1, 'sees the company after accepting');
+select tst.ok((public.accept_invitation(:'t48_token') ->> 'repeat')::boolean, 'opening the link again changes nothing');
+select tst.blocked($q$update public.memberships set role = 'admin' where user_id = 'a4800000-0000-4000-8000-000000000001'$q$, 'still cannot raise one''s own role');
+:as_owner_a
+select tst.ok((select status from public.invitations where email = 'new48@a.test') = 'accepted', 'the invitation is accepted');
+-- cancel: the link stops working
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'other48@a.test', 'sales') ->> 'id' as t48_inv2 \gset
+select public.resend_invitation(:'t48_inv2') ->> 'token' as t48_token2 \gset
+select public.revoke_invitation(:'t48_inv2');
+:as_other48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_token2'), 'a cancelled invitation does not let in');
+-- expired: does not let in; «Отправить ещё раз» gives a new link
+:as_owner_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'other48@a.test', 'sales') ->> 'id' as t48_inv3 \gset
+select public.resend_invitation(:'t48_inv3') ->> 'token' as t48_old \gset
+:as_super
+update public.invitations set expires_at = now() - interval '1 minute' where id = :'t48_inv3';
+:as_other48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_old'), 'an expired invitation does not let in');
+:as_owner_a
+select tst.ok((select status = 'pending' and expires_at < now() from public.invitations where id = :'t48_inv3'), 'the list sees it expired by its date');
+select public.resend_invitation(:'t48_inv3') ->> 'token' as t48_new \gset
+:as_other48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_old'), 'the old link is dead after «send again»');
+select tst.ok((public.accept_invitation(:'t48_new') ->> 'role') = 'sales', 'the new link lets in');
+-- disable: the person sees nothing again; their records stay; bring back
+:as_sales_a
+select tst.fails($q$select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000001', 'disabled')$q$, 'sales do not disable');
+:as_owner_a
+select tst.fails($q$select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'disabled')$q$, 'not yourself');
+select tst.fails($q$select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000001', 'deleted')$q$, '«deleted» is not set here (S22)');
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000001', 'disabled');
+:as_new48
+select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 0, 'disabled: no company');
+select tst.ok((select count(*) from public.customers) = 0, 'disabled: no clients');
+:as_owner_a
+select tst.ok((select status = 'disabled' and suspended_at is not null from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000001'), 'disabled with its time, the row stays');
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000001', 'active');
+:as_new48
+select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 1, 'brought back: sees the company again');
+:as_super
+-- already on the team: a second invitation is not a way to change one's role; a switched-off person's old link does not bring them back
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a4800000-0000-4000-8000-000000000003', 'late48@a.test', '{"full_name":"Lee Late"}');
+\set as_late48 'reset role; set request.jwt.claim.sub = ''a4800000-0000-4000-8000-000000000003''; set role authenticated;'
+:as_owner_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'late48@a.test', 'office') ->> 'token' as t48_late \gset
+:as_super
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000003', 'tech', 'active');
+:as_late48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_late'), 'an active member cannot re-role through an old invitation');
+:as_owner_a
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000003', 'disabled');
+:as_late48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_late'), 'a switched-off person does not come back by an old link');
+:as_owner_a
+select tst.ok((select role = 'tech' and status = 'disabled' from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000003'), 'role and status unchanged');
+-- the flag that lets accept_invitation through the guard does nothing for a client session
+:as_new48
+select set_config('app.accepting_invite', 'on', false);
+select tst.blocked($q$update public.memberships set role = 'admin' where user_id = 'a4800000-0000-4000-8000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'the flag does not open the role guard');
+select set_config('app.accepting_invite', '', false);
+-- audit №13: no direct membership for any user_id, not even by the owner — only accept_invitation makes one
+:as_owner_a
+select tst.fails($q$insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000002', 'admin', 'active')$q$, 'the owner does not add a person without their consent');
+-- review #193: a direct update moves nothing — not the person, not the status, not a removed membership
+:as_office_a
+select tst.fails($q$update public.memberships set user_id = 'a4800000-0000-4000-8000-000000000002' where user_id = 'a4800000-0000-4000-8000-000000000003'$q$, 'an admin does not move a membership to another person');
+select tst.fails($q$update public.memberships set status = 'active' where user_id = 'a4800000-0000-4000-8000-000000000003'$q$, 'an admin does not wake a switched-off person by a direct update');
+select tst.fails($q$select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'disabled')$q$, 'an admin does not switch off the owner');
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'sign48@a.test', 'tech', null, true)$q$, 'an admin does not give the right to sign by an invitation');
+:as_owner_a
+select tst.fails($q$update public.memberships set status = 'disabled' where user_id = 'a0000000-0000-0000-0000-000000000001'$q$, 'the owner does not switch themselves off directly');
+select tst.fails($q$update public.memberships set deleted_at = null, status = 'active' where user_id = 'a3500000-0000-4000-8000-000000000001'$q$, 'a removed membership is not brought back directly');
+select tst.ok((select count(*) from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and role = 'owner' and status = 'active') >= 1, 'the company still has an active owner');
+-- a second owner switches the first off: allowed while one active owner stays; and back
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a4800000-0000-4000-8000-000000000004', 'owner2@a.test', '{"full_name":"Olga Owner"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000004', 'owner', 'active');
+reset role; set request.jwt.claim.sub = 'a4800000-0000-4000-8000-000000000004'; set role authenticated;
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'disabled');
+select tst.ok((select count(*) from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and role = 'owner' and status = 'active') = 1, 'one active owner left');
+select tst.fails($q$select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000004', 'disabled')$q$, 'the last active owner is not switched off');
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'active');
+:as_super
+delete from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000004';
+-- a removed person is invited again and joins again
+update public.memberships set status = 'deleted', deleted_at = now() where user_id = 'a4800000-0000-4000-8000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'other48@a.test', 'tech') ->> 'token' as t48_again \gset
+:as_other48
+select tst.ok((public.accept_invitation(:'t48_again') ->> 'role') = 'tech', 'a removed person joins again by a new invitation');
+select tst.ok((select status = 'active' and deleted_at is null and role = 'tech' from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000002'), 'active again, with the new role');
+-- the sign-in email must be confirmed (Supabase keeps email_confirmed_at; the local stub adds it here)
+:as_super
+alter table auth.users add column if not exists email_confirmed_at timestamptz;
+update auth.users set email_confirmed_at = now();
+insert into auth.users (id, email, raw_user_meta_data) values ('a4800000-0000-4000-8000-000000000005', 'unconf48@a.test', '{"full_name":"Una Unconfirmed"}');
+:as_owner_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'unconf48@a.test', 'tech') ->> 'token' as t48_unconf \gset
+reset role; set request.jwt.claim.sub = 'a4800000-0000-4000-8000-000000000005'; set role authenticated;
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_unconf'), 'an unconfirmed email does not accept');
+:as_super
+update auth.users set email_confirmed_at = now() where id = 'a4800000-0000-4000-8000-000000000005';
+reset role; set request.jwt.claim.sub = 'a4800000-0000-4000-8000-000000000005'; set role authenticated;
+select tst.ok((public.accept_invitation(:'t48_unconf') ->> 'role') = 'tech', 'confirmed — accepts');
+:as_super
+alter table auth.users drop column email_confirmed_at;
+-- an invitation dies with its inviter's right: an admin moved down — the admin-made link does not let in
+:as_office_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'down48@a.test', 'admin') ->> 'token' as t48_down \gset
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a4800000-0000-4000-8000-000000000006', 'down48@a.test', '{"full_name":"Dan Down"}');
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+reset role; set request.jwt.claim.sub = 'a4800000-0000-4000-8000-000000000006'; set role authenticated;
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_down'), 'the inviter is no longer an admin: the link is dead');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select tst.fails($q$update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002'$q$, 'no direct role change (two owners could demote each other)');
+-- LEG-19: location sharing — only the person themselves
+:as_owner_a
+select tst.fails($q$update public.memberships set share_location = true where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'the owner does not switch on a tech''s location');
+:as_tech_a
+select public.set_share_location('ca000000-0000-0000-0000-000000000000', true);
+select tst.ok((select share_location from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000'), 'the tech switches it on for themselves');
+:as_owner_a
+select tst.ok((select share_location from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000') = false, 'nobody else''s row changed');
+:as_tech_a
+select public.set_share_location('ca000000-0000-0000-0000-000000000000', false);
+:as_super
+select tst.ok((select share_location from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000') = false, 'and off again');
+-- an admin switched off: the invitations they sent stop working
+:as_office_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'z48@a.test', 'tech') ->> 'id' as t48_byadmin \gset
+:as_owner_a
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002', 'disabled');
+select tst.ok((select status from public.invitations where id = :'t48_byadmin') = 'revoked', 'a switched-off admin''s invitations are revoked');
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002', 'active');
+:as_super
+\echo 'T48 wave 7-2: invitations and team (S21) ok'
 
 \echo 'ALL TESTS PASSED'

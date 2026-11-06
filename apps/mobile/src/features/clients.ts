@@ -21,6 +21,19 @@ export const clientStatusChip: Record<CustomerStatus, { s: StatusName; l: DictKe
 };
 export const statusOf = (c: Customer): CustomerStatus => c.status ?? "active";
 
+/**
+ * «Do not service» (docs/specs/04 §12): nothing new for the client — no job, estimate, visit, no sending of an old draft.
+ * The server refuses the same (trigger t44_no_service_guard, db T44); the open stays. No client (a new lead) = can serve.
+ * Used by the client and property screens, the estimate client picker and the job form («Работы и выезды»).
+ */
+export function canServe(db: Pick<DB, "customers">, customerId: ID | undefined | null): boolean {
+  if (!customerId) return true;
+  const c = db.customers.find((x) => x.id === customerId);
+  return !c || statusOf(c) !== "do_not_service";
+}
+/** Clients among these that are marked «do not service» (a new lead with their phone gets the red mark, 04 §4). */
+export const notServed = (cs: readonly Customer[]): Customer[] => cs.filter((c) => statusOf(c) === "do_not_service");
+
 /** System tags are shown in the user's language; the company's own tags as typed. */
 const SYSTEM_TAG: Record<string, DictKey> = {
   vip: "tag.vip",

@@ -93,6 +93,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
         const cid = one(params.id);
         return { section: "clients", kind: cid ? "client.editTitle" : "clients.new", up: cid ? toClient(cid) : { href: "/clients", label: K("tab.clients") } };
       }
+      // wave 4b-2 (13 §3.16): the import is under Clients, not a client card
+      if (id === "import") return { section: "clients", kind: "client.import.title", up: { href: "/clients", label: K("tab.clients") } };
       // wave 4 (13 §3.3): a row's list of the client (/client/<id>?s=jobs) sits under its client
       if (one(params.s)) return { section: "clients", kind: "client.card", up: toClient(id) };
       return { section: "clients", kind: "client.card", up: { href: "/clients", label: K("tab.clients") } };
