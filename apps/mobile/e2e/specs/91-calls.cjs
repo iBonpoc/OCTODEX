@@ -36,15 +36,12 @@ exports.run = async (h) => {
   await h.expectText(/Angela Rossi.*Не ответил/, "the call is in «Звонки» with its outcome");
   await h.expectText(/2 мин/, "and its minutes");
 
-  // «Отменить» (rule 5): the call leaves the list and the queue, the lead is back to its attempts
-  const queued = () => p.evaluate(() => JSON.parse(localStorage.getItem("octo.queue.v1") || "[]").length);
-  const q0 = await queued();
+  // «Отменить» (rule 5): the call leaves the list, the lead is back to its attempts (the queue — spec 95, offline)
   await h.click("Отменить"); await p.waitForTimeout(500);
   db = await h.db();
   l2 = db.leads.find((l) => l.id === "l2");
   h.expect(!db.activities.some((x) => x.kind === "call" && x.subjectId === "l2"), "«Отменить»: the call is gone");
   h.expect(l2.status === "new" && (l2.callAttempts ?? 0) === 0, `«Отменить»: the lead is back to no attempts (${l2.callAttempts})`);
-  h.expect((await queued()) === q0 - 1, "«Отменить»: the call left the queue");
   h.expect((await p.getByText("2 мин").locator("visible=true").count()) === 0, "«Отменить»: not in the list");
   // again, to keep for the filters below
   await record();
@@ -61,14 +58,17 @@ exports.run = async (h) => {
   await sheet.getByText("Angela Rossi", { exact: true }).first().click(); await p.waitForTimeout(300);
   await sheet.getByText("Поговорили", { exact: true }).last().click();
   // a double tap writes one call, never two
-  await sheet.getByRole("button", { name: "Сохранить звонок" }).dblclick(); await p.waitForTimeout(600);
+  // two taps on the button itself before the sheet closes (a mouse double click would land on the tab bar under it)
+  await sheet.getByRole("button", { name: "Сохранить звонок" }).evaluate((el) => { el.click(); el.click(); }); await p.waitForTimeout(600);
   db = await h.db();
   l2 = db.leads.find((l) => l.id === "l2");
   h.expect(l2.status === "replied", `«Поговорили» moves the new lead to replied (S2) (${l2.status})`);
   h.expect(db.activities.filter((x) => x.kind === "call" && x.subjectId === "l2" && x.meta && x.meta.outcome === "answered").length === 1, "a double tap: one call");
 
   // chips by outcome, the card opens the lead
-  await h.clickText("Не ответил · 1");
+  // the phone: the toast covers the chips for its 5 s — wait until it is gone
+  await p.getByRole("button", { name: "Отменить", exact: true }).last().waitFor({ state: "hidden", timeout: 8000 }).catch(() => {});
+  await p.getByText("Не ответил · 1", { exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(350);
   h.expect((await p.getByText("Поговорили", { exact: true }).locator("visible=true").count()) === 0, "the chip shows only missed calls");
   await h.shot("list");
   await p.locator('[data-testid^="comms-"]:visible').first().click(); await p.waitForTimeout(700);
