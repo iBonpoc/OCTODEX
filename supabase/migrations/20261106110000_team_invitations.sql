@@ -124,6 +124,11 @@ $$;
 create or replace function app.tg_membership_guard()
 returns trigger language plpgsql set search_path = '' as $$
 begin
+  -- LEG-19: sharing the location is the person's own choice — never switched on for them (no bypass, not even for triggers)
+  if auth.uid() is not null and new.share_location
+     and (tg_op = 'INSERT' or old.share_location is distinct from new.share_location) and auth.uid() is distinct from new.user_id then
+    raise exception 'only the person switches on sharing their location' using errcode = '42501';
+  end if;
   if auth.uid() is null or pg_trigger_depth() > 1
      or (current_setting('app.accepting_invite', true) = 'on' and current_user <> 'authenticated') then
     return new;      -- system / onboarding (company trigger) / accept_invitation
@@ -296,5 +301,19 @@ revoke insert on public.memberships from authenticated;
 revoke update on public.memberships from authenticated;
 -- not role: two owners demoting each other at once could leave the company without one (security-check 2); a role
 -- changes with its own function when the app gets that screen
-grant update (title, his_registration_number, can_sign_contracts, color, share_location)
+grant update (title, his_registration_number, can_sign_contracts, color)
   on public.memberships to authenticated;
+
+-- LEG-19: the person switches their own location sharing on or off (a subcontractor never shares — the table check)
+create or replace function public.set_share_location(p_company_id uuid, p_on boolean)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if not app.is_member(p_company_id) then
+    raise exception 'not on the team' using errcode = '42501';
+  end if;
+  update public.memberships set share_location = coalesce(p_on, false)
+   where company_id = p_company_id and user_id = auth.uid() and status = 'active' and deleted_at is null;
+end;
+$$;
+revoke all on function public.set_share_location(uuid, boolean) from public, anon;
+grant execute on function public.set_share_location(uuid, boolean) to authenticated;

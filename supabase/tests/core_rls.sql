@@ -3944,6 +3944,18 @@ select tst.fails(format('select public.accept_invitation(%L)', :'t48_down'), 'th
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 :as_owner_a
 select tst.fails($q$update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002'$q$, 'no direct role change (two owners could demote each other)');
+-- LEG-19: location sharing — only the person themselves
+:as_owner_a
+select tst.fails($q$update public.memberships set share_location = true where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'the owner does not switch on a tech''s location');
+:as_tech_a
+select public.set_share_location('ca000000-0000-0000-0000-000000000000', true);
+select tst.ok((select share_location from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000'), 'the tech switches it on for themselves');
+:as_owner_a
+select tst.ok((select share_location from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000') = false, 'nobody else''s row changed');
+:as_tech_a
+select public.set_share_location('ca000000-0000-0000-0000-000000000000', false);
+:as_super
+select tst.ok((select share_location from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000') = false, 'and off again');
 -- an admin switched off: the invitations they sent stop working
 :as_office_a
 select public.invite_member('ca000000-0000-0000-0000-000000000000', 'z48@a.test', 'tech') ->> 'id' as t48_byadmin \gset
