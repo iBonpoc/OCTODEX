@@ -55,4 +55,6 @@ export function usePersistentState<T>(key: string, initial: T | (() => T), opts?
   return [state.value, setValue, ready] as const;
 }
 
+/** the day the demo was seeded (the phone's: the demo builds «today» from the phone's midnight; both move to the
+ *  company's midnight together in П4b-3 — docs/specs/03) */
 export const todayKey = () => new Date().toDateString();

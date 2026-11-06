@@ -1,9 +1,13 @@
 import type { DB, Visit } from "./types";
+import { dayKeyIn, daysBetween, dueDayKey, getZone } from "@/features/zone";
 
 /* ---------- selectors ---------- */
-export function isToday(iso: string): boolean {
+/** the same calendar day as now: of the zone when given (the company's), else of the phone — the screens that use it
+ *  (QuickActions, a new expense) move to the company's day together with «Сегодня» and «План» in П4b-2 */
+export function isToday(iso: string, now: number = Date.now(), tz?: string): boolean {
+  if (tz) return dayKeyIn(iso, tz) === dayKeyIn(now, tz);
   const d = new Date(iso);
-  const n = new Date();
+  const n = new Date(now);
   return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
 }
 
@@ -41,9 +45,12 @@ export function jobProfit(db: DB, jobId: string) {
   return { revenue, expenses, profit: revenue - expenses, marginPct: revenue ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null };
 }
 
-/** An invoice is overdue only after its due day has ended (due "today" is not overdue yet). */
-export function isOverdue(dueDate: string, now = Date.now()): boolean {
-  const end = new Date(dueDate);
-  end.setHours(23, 59, 59, 999);
-  return end.getTime() < now;
+/** An invoice is overdue only after its due day has ended (due "today" is not overdue yet). The due day is a calendar
+ *  day of the company, as on the server (companies.timezone): «YYYY-MM-DD» from the cloud is not read as UTC midnight. */
+export function isOverdue(dueDate: string, now = Date.now(), tz: string = getZone()): boolean {
+  return dueDayKey(dueDate, tz) < dayKeyIn(now, tz);
+}
+/** whole calendar days of the company past the due day (0 on the due day and before) */
+export function daysOverdue(dueDate: string, now = Date.now(), tz: string = getZone()): number {
+  return Math.max(0, daysBetween(dueDayKey(dueDate, tz), dayKeyIn(now, tz)));
 }

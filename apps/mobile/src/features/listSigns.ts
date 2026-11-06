@@ -4,6 +4,7 @@
  * Thresholds are the same as «Требует внимания» (features/attention.ts) so a card and the attention list agree.
  * Unit-tested in test/listSigns.test.ts: when each sign appears and when it goes away.
  */
+import { dayKeyIn, daysBetween, dueDayKey, getZone } from "./zone";
 import { timing } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
 import type { DB, Estimate, Invoice, Lead, Visit } from "@/data/types";
@@ -17,12 +18,6 @@ export interface Sign {
 
 const DAY = 86_400_000;
 const days = (iso: string, now: number) => Math.max(0, Math.floor((now - new Date(iso).getTime()) / DAY));
-/** end of the due day, local time (same as selectors.isOverdue) */
-const endOfDay = (iso: string) => {
-  const d = new Date(iso);
-  d.setHours(23, 59, 59, 999);
-  return d.getTime();
-};
 
 /** Estimate sent and not answered: from estimateWarnDays (warn), from estimateBadDays (bad). Goes away when it is approved or declined. */
 export function estimateSigns(e: Pick<Estimate, "status" | "sentAt">, now = Date.now()): Sign[] {
@@ -33,11 +28,11 @@ export function estimateSigns(e: Pick<Estimate, "status" | "sentAt">, now = Date
 }
 
 /** Invoice with a balance: overdue N days (bad) after the due day; due today / tomorrow (warn). Goes away when fully paid. */
-export function invoiceSigns(i: Pick<Invoice, "totalCents" | "paidCents" | "dueDate">, now = Date.now()): Sign[] {
+export function invoiceSigns(i: Pick<Invoice, "totalCents" | "paidCents" | "dueDate">, now = Date.now(), tz: string = getZone()): Sign[] {
   if (i.paidCents >= i.totalCents || !i.dueDate) return [];
-  const end = endOfDay(i.dueDate);
-  if (end < now) return [{ key: "card.sign.overdueDays", params: { d: Math.max(1, Math.ceil((now - end) / DAY)) }, tone: "bad" }];
-  const left = Math.floor((end - now) / DAY);
+  // calendar days of the company (the same rule as selectors.isOverdue and the server), not hours from the phone's midnight
+  const left = daysBetween(dayKeyIn(now, tz), dueDayKey(i.dueDate, tz));
+  if (left < 0) return [{ key: "card.sign.overdueDays", params: { d: -left }, tone: "bad" }];
   if (left === 0) return [{ key: "card.sign.dueToday", tone: "warn" }];
   if (left === 1) return [{ key: "card.sign.dueTomorrow", tone: "warn" }];
   return [];
