@@ -1,6 +1,6 @@
 /**
  * Wave 7б-2 (docs/specs/03 §12, Б1): the location rules of the app. The server repeats every check
- * (migration 20261106170000, T56–T57); here — when the phone sends, when it asks, the hint and the office line.
+ * (migration 20261106210000, T56–T57); here — when the phone sends, when it asks, the hint and the office line.
  */
 import { describe, expect, it, vi } from "vitest";
 

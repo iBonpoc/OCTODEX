@@ -4371,7 +4371,7 @@ select tst.fails($q$update public.memberships set role = 'office' where user_id 
 :as_owner_a
 select tst.fails($q$update public.memberships set share_location = true where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'the owner does not switch on a tech''s location');
 :as_tech_a
--- 7б-2 (170000): set_share_location no longer switches on (it did, without the notice); the tech switches on with the notice
+-- 7б-2 (210000): set_share_location no longer switches on (it did, without the notice); the tech switches on with the notice
 select tst.fails($q$select public.set_share_location('ca000000-0000-0000-0000-000000000000', true)$q$, 'the old function does not switch on without the notice');
 :as_super
 insert into app.company_flags (company_id, location_sharing) values ('ca000000-0000-0000-0000-000000000000', true) on conflict (company_id) do update set location_sharing = true;

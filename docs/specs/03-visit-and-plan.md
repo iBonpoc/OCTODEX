@@ -713,7 +713,7 @@ scheduled / en_route ──► cancelled (с причиной)
    - Перед PR — `security-check`.
    - **Этап 0 «Работ» №4 (06.11, после `map-keeper` и `security-check`) — решение:**
      - Инспекция дополнена: 110000 (#193) уже даёт `set_share_location(p_company_id, p_on)` и сторож «включает только сам» на INSERT и UPDATE до пропуска по глубине. Не хватает: `location_notice_ack_at`, выключения owner/admin, сброса при смене роли, флага компании, `user_locations`. Включение через `set_share_location(true)` сейчас идёт без отметки уведомления — **ошибка, тест падал бы до исправления**.
-     - Миграция `20261106170000_location_consent.sql`:
+     - Миграция `20261106210000_location_consent.sql`:
        - `memberships.location_notice_ack_at`; флаг компании `app.company_flags.location_sharing` (по умолчанию выкл, включает оператор SQL до ответа адвоката по AB 1331); `public.company_location_sharing(p_company_id)` — член получает флаг, не член — `false` без ошибки.
        - `public.set_location_consent(p_company_id, p_on)` — только для себя, активный член, не сабик, при включении флаг компании обязателен; ставит `location_notice_ack_at = now()`. Флаг проверяет только эта функция (сторож — invoker, ему `app.company_flags` не читать).
        - `set_share_location` (правило 16): на `true` — отказ (старая сборка не даст согласие без уведомления), `false` выключает; удалить вторым шагом.

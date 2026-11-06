@@ -1,6 +1,6 @@
 /**
  * Wave 7б-2 (docs/specs/03 §12, Б1): the tech's location — only with their consent, only while the app is open and only
- * during their own visit. The server repeats every check (migration 20261106170000); these rules decide what the app
+ * during their own visit. The server repeats every check (migration 20261106210000); these rules decide what the app
  * shows and when it asks the phone for a point. Thresholds are product rules, not design: kept here, not in tokens.
  */
 import type { DB, ID, LocationState, Visit, VisitPoint, VisitStep } from "@/data/types";

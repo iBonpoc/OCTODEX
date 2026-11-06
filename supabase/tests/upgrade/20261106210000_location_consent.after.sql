@@ -17,4 +17,4 @@ end $$;
 -- clean up: the main tests count users
 delete from public.memberships where user_id = 'cf560000-0000-0000-0000-0000000000aa';
 delete from auth.users where id = 'cf560000-0000-0000-0000-0000000000aa';
-\echo 'upgrade 20261106170000_location_consent ok'
+\echo 'upgrade 20261106210000_location_consent ok'
