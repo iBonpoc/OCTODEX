@@ -52,11 +52,10 @@ exports.run = async (h) => {
   body = await h.text();
   h.expect(!/Голосовая заметка/.test(body), "no «Голосовая заметка» until it works");
   h.expect(!/волн[еыа]/i.test(body), "no «Появится в волне N»");
-  for (const it of ["Фото", "Новый лид", "Смета", "Расход по чеку"]) h.expect(body.includes(it), `«＋» has «${it}»`);
+  // wave 2c (13 v2 §2.4): the technician's home set is Лид · Расход; «Фото» lives in the «＋» of his visit (e2e 59)
+  for (const it of ["Новый лид", "Расход по чеку"]) h.expect(body.includes(it), `«＋» has «${it}»`);
+  h.expect(!/Фото/.test(await h.sheet().innerText()), "no «Фото» without a visit (it is on the visit)");
   await h.shot("quick");
-  // «Фото» with no open visit today: a toast, not silence (failed before: nothing happened)
-  await h.click("Фото");
-  await h.expectText(/Сегодня открытых выездов нет/, "«Фото» without a visit says why");
 
   // the receipt screen no longer promises a wave
   await h.go("/expense/new");

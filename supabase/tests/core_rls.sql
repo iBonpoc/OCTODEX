@@ -3098,7 +3098,16 @@ select tst.ok((public.assign_visit('f3900000-0000-4000-8000-000000000001', array
 select tst.ok(tst.cnt($q$select 1 from public.activities where body like 'T39 %'$q$) = 6, 'the office sees the whole feed');
 update public.jobs set status = 'cancelled' where id = 'e3900000-0000-4000-8000-000000000004';
 select tst.ok((select description from public.jobs where id = 'e3900000-0000-4000-8000-000000000001') = 'Two downspouts', 'jobs.description is kept');
--- job types: a new company has the five common ones, in order
+-- job types: a new company has the five common ones, in order; the office reads them but does not change the list
+:as_super
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 5, 'the office reads the job types');
+select tst.fails($q$insert into public.job_types (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'T39 office type')$q$, 'the office does not add job types (13 §5а: owner, admin)');
+select tst.blocked($q$update public.job_types set position = 9 where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'the office does not change job types');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
 select tst.ok((select array_agg(seed_key order by position) from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000')
               = array['install', 'repair', 'service', 'warranty', 'other'], 'a new company gets the five job types');
 insert into public.job_types (id, company_id, name, position) values ('a3920000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Gutter guards', 5);

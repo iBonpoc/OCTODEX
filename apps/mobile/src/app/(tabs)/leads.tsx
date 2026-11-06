@@ -35,13 +35,15 @@ export default function Sales() {
   useEffect(() => {
     if (want === "leads" || want === "estimates" || want === "invoices") setTab(want);
   }, [want]);
-  const { db } = useStore();
+  const { db, role } = useStore();
   const newLeads = db.leads.filter((l) => l.status === "new").length;
   return (
     <Screen
       title={t(tab === "estimates" ? "sales.estimates" : tab === "invoices" ? "sales.invoices" : "sales.leads")}
       help={t("help.inbox")}
       hintKey="inbox"
+      // sales: this is «Главная» (13а §2) — the bell, the sync badge and the profile on the right
+      home={role === "sales" && tab === "leads"}
       right={
         tab === "leads" ? (
           <Button label={t("quick.lead")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/lead/new")} />

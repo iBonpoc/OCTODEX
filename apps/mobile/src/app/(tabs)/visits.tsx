@@ -60,7 +60,7 @@ export default function Visits() {
   };
 
   return (
-    <Screen title={t("visits.title")} help={t("help.visits")} hintKey="visits" subtitle={`${day(new Date().toISOString())} · ${t("visits.count", { n: d.visits.length })}`}>
+    <Screen title={t("visits.title")} help={t("help.visits")} hintKey="visits" fab="home" home subtitle={`${day(new Date().toISOString())} · ${t("visits.count", { n: d.visits.length })}`}>
       {d.visits.length === 0 ? (
         <Empty icon="calendar" title={t("visits.empty")} hint={t("visits.emptyHint")} />
       ) : (

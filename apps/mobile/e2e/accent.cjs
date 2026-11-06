@@ -1,6 +1,6 @@
 /**
  * Rule 2 / unslop 05.11: at most one visible yellow (acc) element on a screen — the main action — besides the «＋» of
- * the tab bar. Used by the specs of the screens already fixed (11, 12, 21); 08-layouts gets it when all screens are.
+ * the shell (the floating «＋», «＋ Создать» in the menu). Used by the specs of the screens already fixed (11, 12, 21); 08-layouts gets it when all screens are.
  */
 const ACC = "rgb(251, 255, 0)"; // design-tokens: acc #FBFF00 (both themes)
 
@@ -14,7 +14,8 @@ exports.accentCount = (page, within) =>
       if (st.backgroundColor !== acc || st.visibility === "hidden" || st.display === "none" || Number(st.opacity) === 0) continue;
       const r = el.getBoundingClientRect();
       if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > innerHeight) continue;
-      if (el.closest('[aria-label="Создать"], [aria-label="Create"], [aria-label="Crear"]')) continue; // «＋» of the tab bar
+      // «＋ Создать» of the menu and the screen's floating «＋» (13 v2 §2.4, §2.5): the accent of the shell, not of the screen
+      if (el.closest('[aria-label="Создать"], [aria-label="Create"], [aria-label="Crear"], [data-testid="fab"]')) continue;
       if (seen.some((s) => s.contains(el) || el.contains(s))) continue;
       seen.push(el);
     }

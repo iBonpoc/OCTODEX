@@ -67,7 +67,7 @@ export default function VisitScreen() {
   const addr = property ? encodeURIComponent(`${property.address}, ${property.city}`) : "";
 
   return (
-    <Screen title={customer?.name ?? t("visit.title")} back={back} subtitle={`${time(v.start)} · ${job?.title ?? ""}`}>
+    <Screen title={customer?.name ?? t("visit.title")} back={back} subtitle={`${time(v.start)} · ${job?.title ?? ""}`} fab="visit" fabCtx={{ visitId: v.id, customerId: customer?.id, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <StatusChip status={st.status} label={t(st.label)} />
