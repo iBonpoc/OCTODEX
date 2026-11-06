@@ -2,17 +2,11 @@
  * ☰ = only places to go (docs/specs/13 §2.3); My settings = account, theme, language, tips, «Для проверки» in the demo.
  * The old «Ещё» address (/more) opens the role's home with ☰ open. Same steps at every width.
  */
-/** the visible ☰ (the tab navigator keeps visited tabs mounted, hidden, with their own ☰) */
-const menuButton = async (p) => {
-  const all = p.getByRole("button", { name: "Меню", exact: true });
-  // a screen opened by a tab may still be rendering: wait up to 3 s
-  for (let t = 0; t < 15; t++, await p.waitForTimeout(200))
-    for (let i = (await all.count()) - 1; i >= 0; i--) if (await all.nth(i).isVisible()) return all.nth(i);
-  throw new Error("no visible ☰");
-};
+const { menuApi } = require("../menu.cjs");
 exports.run = async (h) => {
   const p = h.page;
-  const menu = () => p.getByRole("dialog", { name: "Меню" });
+  const m = menuApi(h);
+  const menu = m.menu;
   await h.go("/more");
   h.expect(new URL(p.url()).pathname === "/today", `/more → the director's home (${p.url()})`);
   await menu().waitFor({ timeout: 3000 });
@@ -45,12 +39,11 @@ exports.run = async (h) => {
   // My settings is a ☰ root (13а §3): ☰ instead of «back»; Company settings: same name in the menu and on the screen
   await h.go("/settings");
   h.expect((await p.getByRole("button", { name: /^Назад/ }).count()) === 0, "no «back» on My settings");
-  await (await menuButton(p)).click();
-  await menu().waitFor({ timeout: 3000 });
+  await m.open();
   await menu().getByRole("button", { name: "Настройки компании", exact: true }).click();
   await p.waitForTimeout(600);
   h.expect(p.url().endsWith("/company"), `company opened: ${p.url()}`);
   await h.expectText(/Настройки компании/, "company screen title");
-  h.expect((await menu().count()) === 0, "☰ closed after a choice");
+  h.expect(await m.closedAfterChoice(), "☰ closed after a choice (the 1280 side menu stays)");
   await h.shot("settings");
 };

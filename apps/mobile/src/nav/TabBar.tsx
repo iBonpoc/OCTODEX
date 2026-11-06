@@ -15,11 +15,10 @@ import { roleHome } from "./roles";
 import { goTo } from "./go";
 import { activeSection } from "./hierarchy";
 import { sectionHref, tabs, type SectionId } from "./sections";
-import { useNavMenu } from "./NavMenu";
 
 /**
  * Phone: floating glass pill at the bottom (56 + safe area), the 5 tabs of docs/specs/13 §2.1 — the same for every role.
- * Tablet/desktop (until the side menu of wave 2b): the same pill at the top, with ☰ first.
+ * Tablet/desktop: none — the side menu (SideNav, 13 §2.5) takes its place.
  * Active item gets the liquid fill (160ms stretch + 420ms settle): raised surface + ink frame.
  * A screen without a tab (Leads, Jobs… from ☰) lights none; the ☰ menu marks it instead.
  */
@@ -37,25 +36,13 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   return <NavPill current={sec} onGo={go} />;
 }
 
-/**
- * Tablet/desktop: the same top pill on inner screens (client, job, estimate…), so another section is one tap away;
- * the section the screen belongs to is highlighted (spec 10, Н1). Drawn by Screen inside its pinned header, so on
- * iPad it slides with its screen (push, swipe back) and comes first in the keyboard order. Phone: none (iOS).
- */
-export function StackNavPill({ pathname, params }: { pathname: string; params: Record<string, string | string[] | undefined> }) {
-  // the screen's own address (from Screen), not the app's: during «back» the app's address still points at the card above
-  const store = useStore();
-  return <NavPill inline current={activeSection(pathname, params, store.db, store.role)} onGo={(id) => goTo(sectionHref(id, store.role))} />;
-}
-
-function NavPill({ current, onGo: go, inline }: { current: SectionId | undefined; onGo: (id: SectionId) => void; inline?: boolean }) {
+function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: (id: SectionId) => void }) {
   const { role } = useStore();
   const { t } = useI18n();
   const { c } = useTheme();
   const { wide } = useDevice();
   const nav = useNavInsets();
   const reduce = useReducedMotion();
-  const menu = useNavMenu();
   /** on a phone the floating bar would sit on top of the keyboard and cover the field: hide it while typing */
   const kb = useKeyboardHeight();
   const items = tabs(role);
@@ -124,31 +111,20 @@ function NavPill({ current, onGo: go, inline }: { current: SectionId | undefined
     );
   };
 
-  // tablet/desktop until wave 2b (side menu): ☰ first in the top pill; phone: ☰ sits in each screen's header
-  const menuBtn = (
-    <Press
-      key="menu"
-      onPress={menu.open}
-      visibleHeight={component.button.md}
-      accessibilityRole="button"
-      accessibilityLabel={t("nav.menu")}
-      aria-haspopup="dialog"
-      style={{ alignItems: "center", justifyContent: "center", height: itemH, width: itemH, borderRadius: radius.pill }}
-    >
-      <Icon name="menu" s={size.iconSm} color={c.ink} />
-    </Press>
-  );
+  const ordered = items.map(renderItem);
 
-  const ordered = wide ? [menuBtn, ...items.map(renderItem)] : items.map(renderItem);
-
-  if (kb > 0 && !wide) return null;
+  // 820/1280: the side menu instead; phone: hidden while typing
+  if (wide || kb > 0) return null;
 
   return (
     <>
       <View
         pointerEvents="box-none"
         style={{
-          ...(inline ? {} : { position: "absolute", left: 0, right: 0, ...(wide ? { top: nav.safeTop + space[3] } : { bottom: nav.tabBottom }) }),
+          position: "absolute",
+          left: 0,
+          right: 0,
+          bottom: nav.tabBottom,
           alignItems: "center",
           paddingHorizontal: space[4],
         }}

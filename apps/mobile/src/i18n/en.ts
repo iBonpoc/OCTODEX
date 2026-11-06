@@ -32,6 +32,8 @@ export const en: Dict = {
   "quick.photo": "Photo",
   "quick.receipt": "Receipt expense",
   // nav.* — app shell (docs/specs/13)
+  "nav.expand": "Expand menu",
+  "nav.collapse": "Collapse menu",
   "nav.home": "Home",
   "nav.plan": "Plan",
   "nav.messages": "Messages",

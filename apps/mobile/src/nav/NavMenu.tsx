@@ -14,6 +14,8 @@ import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { activeSection } from "./hierarchy";
 import { hasSection, menuGroups, sectionHref, sectionOfHref, type MenuGroup, type SectionId } from "./sections";
 import { QuickActions } from "./QuickActions";
+import { contentWidth, openKey } from "./shell";
+import { usePersistentState } from "@/data/persist";
 import { openSection } from "./go";
 
 /**
@@ -26,8 +28,13 @@ interface NavMenuCtx {
   /** `refocus` = false when an item was chosen: the new screen puts the focus on its own title */
   close: (refocus?: boolean) => void;
   isOpen: boolean;
+  /** «＋ Создать»: the quick actions */
+  create: () => void;
+  /** 1280: the side menu is open (pushes the content), remembered per person on this device (13а §8) */
+  sideOpen: boolean;
+  toggleSide: () => void;
 }
-const Ctx = createContext<NavMenuCtx>({ open: () => {}, close: () => {}, isOpen: false });
+const Ctx = createContext<NavMenuCtx>({ open: () => {}, close: () => {}, isOpen: false, create: () => {}, sideOpen: false, toggleSide: () => {} });
 export const useNavMenu = () => useContext(Ctx);
 
 export function NavMenuProvider({ children }: { children: ReactNode }) {
@@ -45,7 +52,14 @@ export function NavMenuProvider({ children }: { children: ReactNode }) {
     opener.current = null;
     if (refocus && el && Platform.OS === "web") requestAnimationFrame(() => el.isConnected && el.focus?.());
   }, []);
-  const value = useMemo(() => ({ open, close, isOpen }), [open, close, isOpen]);
+  const { db } = useStore();
+  const [sideOpen, setSideOpen] = usePersistentState<boolean>(openKey(db.me), false);
+  const toggleSide = useCallback(() => setSideOpen((v) => !v), [setSideOpen]);
+  const create = useCallback(() => {
+    setOpen(false);
+    setQuick(true);
+  }, []);
+  const value = useMemo(() => ({ open, close, isOpen, create, sideOpen, toggleSide }), [open, close, isOpen, create, sideOpen, toggleSide]);
   return (
     <Ctx.Provider value={value}>
       {children}
@@ -53,10 +67,7 @@ export function NavMenuProvider({ children }: { children: ReactNode }) {
         visible={isOpen}
         onClose={close}
         onChoose={() => close(false)}
-        onCreate={() => {
-          setOpen(false);
-          setQuick(true);
-        }}
+        onCreate={create}
       />
       <QuickActions visible={quick} onClose={() => setQuick(false)} />
     </Ctx.Provider>
@@ -82,7 +93,23 @@ export function MenuButton() {
   );
 }
 
-const GROUP_TITLE: Partial<Record<MenuGroup, DictKey>> = { work: "nav.group.work", docs: "nav.group.docs", money: "nav.group.money" };
+/** the ☰ item for the screen on display: the exact list on /leads (?tab), else its section (also for sales' home) */
+export function useMenuCurrent(): SectionId | undefined {
+  const { db, role } = useStore();
+  const pathname = usePathname();
+  const params = useGlobalSearchParams();
+  const own = sectionOfHref(pathname + (params.tab ? `?tab=${String(params.tab)}` : ""));
+  return own && own !== "home" && hasSection(role, own) ? own : activeSection(pathname, params, db, role);
+}
+
+/** the width the screen's own content gets on this device (window minus the side menu) */
+export function useContentWidth(): number {
+  const { width } = useWindowDimensions();
+  const { device } = useDevice();
+  return contentWidth(width, device, useNavMenu().sideOpen);
+}
+
+export const GROUP_TITLE: Partial<Record<MenuGroup, DictKey>> = { work: "nav.group.work", docs: "nav.group.docs", money: "nav.group.money" };
 
 function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; onClose: () => void; onChoose: () => void; onCreate: () => void }) {
   const { t } = useI18n();
@@ -94,11 +121,7 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
   const store = useStore();
   const { db, role, mode, companyName } = store;
   const auth = useAuth();
-  const pathname = usePathname();
-  const params = useGlobalSearchParams();
-  // the menu marks the exact list on screen (/leads?tab=invoices → «Счета»), also for sales whose home it is
-  const own = sectionOfHref(pathname + (params.tab ? `?tab=${String(params.tab)}` : ""));
-  const current = own && own !== "home" && hasSection(role, own) ? own : activeSection(pathname, params, db, role);
+  const current = useMenuCurrent();
   const me = db.members.find((m) => m.id === db.me);
   const go = (id: SectionId) => {
     onChoose();
