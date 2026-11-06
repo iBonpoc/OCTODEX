@@ -996,7 +996,7 @@ export const en: Dict = {
   "client.stHint.prospect": "Has an estimate, not signed yet. Becomes active on signature.",
   "client.stHint.active": "Regular client: shown in the list, jobs can be scheduled.",
   "client.stHint.archived": "Hidden from \"All\"; history and documents are kept.",
-  "client.stHint.do_not_service": "New leads and jobs of this client get a warning. Give a reason.",
+  "client.stHint.do_not_service": "No new jobs, estimates or visits for this client; open estimate links close. A new lead with their phone gets a red mark. Give a reason.",
   "client.statusTitle": "Client status",
   "client.statusSaved": "Status changed",
   "client.reason": "Reason: {r}",
@@ -1740,4 +1740,8 @@ export const en: Dict = {
   "job3.q.laterToday": "Later today ({time})",
   "job3.q.tomorrow": "Tomorrow morning ({time})",
   "job3.q.monday": "On Monday ({time})",
+  // wave 4b-1 «Лиды и клиенты»: do not service
+  "client.noServiceHint": "No new jobs, estimates or visits",
+  "lead.noService": "Do not service: {name}",
+  "lead.noServiceHint": "This phone or email belongs to a client marked «Do not service»",
 };

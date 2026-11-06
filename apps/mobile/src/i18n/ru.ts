@@ -995,7 +995,7 @@ export const ru = {
   "client.stHint.prospect": "Есть смета, ещё не подписал. Станет клиентом сам после подписи.",
   "client.stHint.active": "Обычный клиент: видно в списке, можно планировать работы.",
   "client.stHint.archived": "Скрыт из списка «Все», история и документы сохраняются.",
-  "client.stHint.do_not_service": "Новые лиды и работы этого клиента будут с предупреждением. Укажите причину.",
+  "client.stHint.do_not_service": "Новые работы, сметы и выезды этому клиенту не назначить, открытые ссылки на сметы закроются. Новый лид с его телефоном — с красной меткой. Укажите причину.",
   "client.statusTitle": "Статус клиента",
   "client.statusSaved": "Статус изменён",
   "client.reason": "Причина: {r}",
@@ -1739,6 +1739,10 @@ export const ru = {
   "job3.q.laterToday": "Позже сегодня ({time})",
   "job3.q.tomorrow": "Завтра утром ({time})",
   "job3.q.monday": "В понедельник ({time})",
+  // wave 4b-1 «Лиды и клиенты»: do not service
+  "client.noServiceHint": "Новые работы, сметы и выезды не назначаются",
+  "lead.noService": "Не обслуживаем: {name}",
+  "lead.noServiceHint": "Этот телефон или email — у клиента с пометкой «Не обслуживаем»",
 } as const;
 
 export type DictKey = keyof typeof ru;

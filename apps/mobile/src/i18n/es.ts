@@ -996,7 +996,7 @@ export const es: Dict = {
   "client.stHint.prospect": "Tiene presupuesto, aún sin firmar. Se activa al firmar.",
   "client.stHint.active": "Cliente normal: aparece en la lista, se pueden programar trabajos.",
   "client.stHint.archived": "Oculto de «Todos»; se guardan historial y documentos.",
-  "client.stHint.do_not_service": "Nuevos leads y trabajos tendrán aviso. Indique el motivo.",
+  "client.stHint.do_not_service": "No se pueden asignar trabajos, presupuestos ni visitas nuevos; los enlaces abiertos de presupuestos se cierran. Un lead nuevo con su teléfono tendrá una marca roja. Indique el motivo.",
   "client.statusTitle": "Estado del cliente",
   "client.statusSaved": "Estado cambiado",
   "client.reason": "Motivo: {r}",
@@ -1740,4 +1740,8 @@ export const es: Dict = {
   "job3.q.laterToday": "Más tarde hoy ({time})",
   "job3.q.tomorrow": "Mañana temprano ({time})",
   "job3.q.monday": "El lunes ({time})",
+  // wave 4b-1 «Лиды и клиенты»: do not service
+  "client.noServiceHint": "Sin trabajos, presupuestos ni visitas nuevos",
+  "lead.noService": "No atender: {name}",
+  "lead.noServiceHint": "Este teléfono o email es de un cliente marcado «No atender»",
 };
