@@ -47,8 +47,8 @@ exports.run = async (h) => {
   // Главная: only what works
   await plus().click();
   let body = await sheetText();
-  for (const it of ["Новый лид", "Новый клиент", "Смета", "Расход по чеку"]) h.expect(body.includes(it), `Главная «＋» has «${it}»`);
-  for (const it of ["Фото", "Задача", "Работа", "Голосовая"]) h.expect(!body.includes(it), `Главная «＋» has no «${it}» yet`);
+  for (const it of ["Новый лид", "Новый клиент", "Новая работа", "Смета", "Расход по чеку"]) h.expect(body.includes(it), `Главная «＋» has «${it}»`);
+  for (const it of ["Фото", "Задача", "Голосовая"]) h.expect(!body.includes(it), `Главная «＋» has no «${it}» yet`);
   await h.shot("home-sheet");
   await sheet().getByTestId("fab-client").click();
   await p.waitForTimeout(700);
@@ -86,9 +86,12 @@ exports.run = async (h) => {
   await p.waitForTimeout(700);
   h.expect(path(h) === "/client/edit", `Clients «＋» → /client/edit (${p.url()})`);
 
-  // Client: «Смета» tied to the client
+  // Client: «Новая работа» and «Смета», both tied to the client
   await h.go("/client/c1");
   await plus().click();
+  body = await sheetText();
+  h.expect(body.includes("Новая работа") && body.includes("Смета"), "client «＋»: job and estimate");
+  await sheet().getByTestId("fab-estimate").click();
   await p.waitForTimeout(700);
   h.expect(path(h) === "/estimate/new" && new URL(p.url()).searchParams.get("customerId") === "c1", `client «＋» → estimate for c1 (${p.url()})`);
 
@@ -121,7 +124,7 @@ exports.run = async (h) => {
   h.expect((await vis("home-bell").count()) === 0, "tech: no bell (client and money notices are the office's)");
   await plus().click();
   body = await sheetText();
-  h.expect(body.includes("Новый лид") && body.includes("Расход по чеку") && !body.includes("Новый клиент") && !body.includes("Смета"), "tech Главная «＋»: Лид · Расход");
+  h.expect(body.includes("Новый лид") && body.includes("Расход по чеку") && !body.includes("Новый клиент") && !body.includes("Смета") && !body.includes("Новая работа"), "tech Главная «＋»: Лид · Расход");
   await closeSheet();
   const tdb = await h.db();
   const mine = tdb.visits.find((v) => v.kind !== "inspection" && ((v.assigneeIds ?? []).includes(tdb.me) || v.techId === tdb.me));

@@ -1,11 +1,15 @@
-import { View } from "react-native";
+import { useState } from "react";
+import { Platform, View } from "react-native";
 import { router } from "expo-router";
 import { space, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
+import { usePersistentState } from "@/data/persist";
 import { setupProgress, stepTitle } from "./companySetup";
+import { firstSteps, firstStepsLeft } from "./firstSteps";
 import { Button, ProgressBar } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
+import { Sheet } from "@/ui/overlays";
 import { Card, RowView } from "@/ui/surfaces";
 
 /** "Company setup 3 of 8" on Today until everything is filled in. */
@@ -30,31 +34,62 @@ export function CompanySetupCard() {
   );
 }
 
-/** First steps of the core workflow: catalog → lead → estimate sent → signed. Hidden when all done. */
+/** opened from the home screen: the browser shows the app without its bars (docs/specs/12) */
+function isStandalone(): boolean {
+  if (Platform.OS !== "web" || typeof window === "undefined") return false;
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  return !!nav.standalone || !!window.matchMedia?.("(display-mode: standalone)").matches;
+}
+
+/**
+ * «Первые шаги» on the owner's Главная (13 §3.11 п.2): профиль компании · первая работа · пригласить команду ·
+ * установить на телефон (browser only). Hidden when all done or when the owner hides it (13 §5а).
+ */
 export function FirstStepsCard() {
-  const { db } = useStore();
+  const { db, role } = useStore();
   const { t } = useI18n();
-  const steps = [
-    { done: db.catalog.length > 0, label: t("first.catalog"), go: () => router.push("/catalog") },
-    { done: db.leads.length > 0, label: t("first.lead"), go: () => router.push("/lead/new") },
-    { done: db.estimates.some((e) => e.status !== "draft"), label: t("first.estimate"), go: () => router.push("/estimate/new") },
-    { done: db.estimates.some((e) => e.status === "approved"), label: t("first.signed"), go: () => router.navigate("/clients") },
-  ];
-  if (steps.every((s) => s.done)) return null;
+  const [hidden, setHidden] = usePersistentState<boolean>("octo.firstSteps.hidden.v1", false);
+  const [howTo, setHowTo] = useState(false);
+  const steps = firstSteps(db, role, { web: Platform.OS === "web", standalone: isStandalone() });
+  if (hidden || !steps.length || firstStepsLeft(steps) === 0) return null;
+  const done = steps.length - firstStepsLeft(steps);
   return (
+    <View testID="first-steps">
     <Card>
-      <T v="heading">{t("first.title")}</T>
+      <RowView style={{ justifyContent: "space-between" }}>
+        <T v="heading">{t("first.title")}</T>
+        <Button label={t("first.hide")} size="sm" variant="ghost" onPress={() => setHidden(true)} />
+      </RowView>
+      <ProgressBar value={done} max={steps.length} label={t("co.progress", { done, total: steps.length })} />
       <View style={{ gap: space[1] }}>
-        {steps.map((s, i) => (
-          <RowView key={i} style={{ minHeight: size.controlMdPhone }}>
+        {steps.map((s) => (
+          <View key={s.id} testID={`first-${s.id}`}>
+          <RowView style={{ minHeight: size.controlMdPhone }}>
             <Icon name={s.done ? "check" : "chevronRight"} s={size.iconSm} />
             <T v="body" tone={s.done ? "mut" : "ink"} style={{ flex: 1 }}>
-              {i + 1}. {s.label}
+              {t(s.label)}
             </T>
-            {!s.done ? <Button label={t("first.go")} size="sm" variant="secondary" onPress={s.go} /> : null}
+            {!s.done ? (
+              <Button label={t("first.go")} size="sm" variant="secondary" onPress={() => (s.href ? router.push(s.href) : setHowTo(true))} />
+            ) : (
+              <T v="caption" tone="mut">
+                {t("first.done")}
+              </T>
+            )}
           </RowView>
+          </View>
         ))}
       </View>
+      <Sheet visible={howTo} onClose={() => setHowTo(false)} title={t("first.install")}>
+        <View style={{ gap: space[2] }}>
+          <T v="body">{t("first.install.ios")}</T>
+          <T v="body">{t("first.install.android")}</T>
+          <T v="caption" tone="mut">
+            {t("first.install.note")}
+          </T>
+        </View>
+      </Sheet>
     </Card>
+    </View>
   );
 }

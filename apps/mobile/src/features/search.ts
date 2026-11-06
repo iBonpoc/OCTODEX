@@ -2,7 +2,7 @@
  * «Искать везде» (docs/specs/15-flows.md §3.2, 13 v2 §2.2): one pure function over the local database, works offline.
  * Unit-tested in test/search.test.ts.
  *
- * - a number: the exact start (`EST-12`); bare digits (`12`) — any prefix (CLT, LEA, EST, INV, RCT; JOB when Job.number comes);
+ * - a number: the exact start (`EST-12`); bare digits (`12`) — any prefix (CLT, LEA, JOB, EST, INV, RCT);
  * - a phone: by digits, from 3, of every person of a client and a lead;
  * - a name, an address, an email: anywhere in it, any case;
  * - closed leads and archived clients are found too, below the open ones, marked;
@@ -122,13 +122,18 @@ export function searchAll(db: DB, query: string, role: Role): Record<SearchGroup
     if (w) out.leads.push({ group: "leads", id: l.id, title: l.name, subtitle: l.service ?? l.city, number: l.number, href: `/lead/${l.id}`, why: w, closed: !isOpenLead(l) });
   }
 
-  // jobs: by title, client and address (JOB-… numbers come with Job.number, wave П); the tech — jobs of his visits
+  // jobs: by number (JOB-0001), title, client and address; the tech — jobs of his visits
   const myJobs = new Set(db.visits.filter((v) => isAssigned(v, db.me)).map((v) => v.jobId));
   for (const j of db.jobs) {
     const p = propOf(j.propertyId);
-    if (!p || !clientIds.has(p.customerId) || (tech && !myJobs.has(j.id)) || !text) continue;
-    const w: Why | undefined = why(has(j.title, needle), "title") ?? why(has(nameOf(p.customerId), needle), "client") ?? why(has(`${p.address} ${p.city}`, needle), "address");
-    if (w) out.jobs.push({ group: "jobs", id: j.id, title: j.title, subtitle: `${nameOf(p.customerId)} · ${addrOf(p.id) ?? ""}`, href: `/job/${j.id}`, why: w });
+    const cid = j.customerId ?? p?.customerId ?? "";
+    if (!p || !clientIds.has(cid) || (tech && !myJobs.has(j.id))) continue;
+    const w: Why | undefined =
+      why(numberMatches(j.number, needle), "number") ??
+      why(text && has(j.title, needle), "title") ??
+      why(text && has(nameOf(cid), needle), "client") ??
+      why(text && has(`${p.address} ${p.city}`, needle), "address");
+    if (w) out.jobs.push({ group: "jobs", id: j.id, title: j.title, subtitle: `${nameOf(cid)} · ${addrOf(p.id) ?? ""}`, number: j.number, href: `/job/${j.id}`, why: w });
   }
 
   for (const e of db.estimates) {
