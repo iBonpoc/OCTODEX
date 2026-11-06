@@ -1,3 +1,4 @@
+import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
@@ -51,7 +52,7 @@ export default function Team() {
     const tech = m.roles.includes("tech");
     const vs = tech && !m.pending ? todayVisits(db, m.id) : [];
     const { current, next } = crewNow(vs);
-    const st = current ? visitStatus(current) : next ? visitStatus(next) : null;
+    const st = current ? visitStatus(current, Date.now(), lateAfterOf(db)) : next ? visitStatus(next, Date.now(), lateAfterOf(db)) : null;
     const now = current ? visitContext(db, current) : null;
     const status = m.pending ? { tone: "neutral" as const, label: t("team.pending") } : st ? { tone: st.status, label: t(st.label) } : undefined;
     return (

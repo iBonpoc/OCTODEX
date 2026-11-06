@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import { pct, periodNumbers, periodRange } from "../src/features/metrics";
 import type { DB } from "../src/data/types";
@@ -88,5 +88,20 @@ describe("the numbers on «Сегодня» use the same money as the lists (lis
     const d = db();
     const n = periodNumbers(d, "today", TODAY);
     expect(n.awaitingCents).toBe(d.invoices.reduce((s, i) => s + invoiceBalance(i).owesCents, 0));
+  });
+});
+
+/** e2e 51 failed on CI after 00:00 UTC: the demo signed / was paid «180 / 140 / 60 min ago» = yesterday by then, so
+ *  «Сегодня» showed $0. The demo's «today» money stays today at any hour (seed todayMinutesAgo). */
+describe("demo «today» money just after midnight", () => {
+  afterEach(() => vi.useRealTimers());
+  it("00:30 on the phone: signed and received today are still there", () => {
+    vi.useFakeTimers();
+    const t = new Date(); t.setHours(0, 30, 0, 0);
+    vi.setSystemTime(t);
+    const n = periodNumbers(makeSeed(), "today");
+    expect(n.signed).toBeGreaterThan(0);
+    expect(n.signedCents).toBe(518000);
+    expect(n.receivedCents).toBeGreaterThan(0);
   });
 });

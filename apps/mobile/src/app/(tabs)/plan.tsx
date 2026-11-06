@@ -1,3 +1,4 @@
+import { lateAfterOf } from "@/features/scheduleSettings";
 import { useState, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 import { router } from "expo-router";
@@ -199,7 +200,7 @@ function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: D
                   const p = db.properties.find((x) => x.id === job?.propertyId);
                   const c = db.customers.find((x) => x.id === p?.customerId);
                   const tech = db.members.find((m) => m.id === v.techId);
-                  const st = visitStatus(v);
+                  const st = visitStatus(v, Date.now(), lateAfterOf(db));
                   return (
                     <ItemCard
                       key={v.id}

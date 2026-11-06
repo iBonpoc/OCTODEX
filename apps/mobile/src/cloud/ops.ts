@@ -6,7 +6,7 @@
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION } from "@octo/estimating-engine";
 import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
-import { companyToDb, contactToDb, licenseToDb } from "./companyMap";
+import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
 
@@ -452,7 +452,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
     case "company.save": {
-      const { data: stored } = await supabase.from("companies").select("brand, contract_settings, estimate_settings, payment_settings, onboarding_state").eq("id", c).maybeSingle();
+      const { data: stored } = await supabase.from("companies").select(COMPANY_STORED_COLUMNS.join(", ")).eq("id", c).maybeSingle();
       await run(supabase.from("companies").update(companyToDb(op.company, (stored ?? {}) as Record<string, unknown>)).eq("id", c));
       if (op.einChanged) {
         const ein = op.company.ein?.trim() || null;
