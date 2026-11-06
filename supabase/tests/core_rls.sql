@@ -3337,6 +3337,48 @@ select tst.fails($q$insert into public.job_line_items (company_id, job_id, name,
 select tst.fails($q$select public.set_job_tags('e4100000-0000-4000-8000-000000000001', '{}')$q$, 'anon does not set job tags');
 \echo 'T41 wave П-2a: exempt client, job lines, job tags ok'
 
+-- ---------------------------------------------------------------- T45: wave 8 — money lists and reports (docs/specs/18-money-reports.md §9)
+-- Sums by method and by person = the engine on the same numbers (packages/estimating-engine/test/reports.test.ts «T45 fixture»);
+-- a refund — owner/admin only; the tech and another company do not read these payments; a reminder (S20) is an event of the
+-- client's feed written by the office, not by the tech.
+:as_super
+insert into public.customers (id, company_id, display_name) values ('c4500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T45 Kim');
+insert into public.invoices (id, company_id, number, customer_id, kind, status, due_date, subtotal_cents, total_cents) values
+  ('14500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T45-0001', 'c4500000-0000-4000-8000-000000000001', 'standalone', 'sent', current_date - 9, 30000, 30000);
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, received_by) values
+  ('94500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '14500000-0000-4000-8000-000000000001', 'c4500000-0000-4000-8000-000000000001', 'zelle', 10000, 'succeeded', 't45-1', 'a0000000-0000-0000-0000-000000000001'),
+  ('94500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '14500000-0000-4000-8000-000000000001', 'c4500000-0000-4000-8000-000000000001', 'cash', 5000, 'succeeded', 't45-2', 'a0000000-0000-0000-0000-000000000002'),
+  ('94500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '14500000-0000-4000-8000-000000000001', 'c4500000-0000-4000-8000-000000000001', 'zelle', 4000, 'succeeded', 't45-3', 'a0000000-0000-0000-0000-000000000002');
+-- a refund: not sales (staff, but not owner/admin), the owner may. (office_a is an admin by now, see T35/T37)
+:as_sales_a
+select tst.blocked($q$update public.payments set refunded_cents = 1000, status = 'partially_refunded' where id = '94500000-0000-4000-8000-000000000003'$q$, 'sales does not refund');
+:as_owner_a
+update public.payments set refunded_cents = 1000, status = 'partially_refunded' where id = '94500000-0000-4000-8000-000000000003';
+select tst.ok((select paid_cents = 18000 and balance_cents = 12000 from public.invoices where id = '14500000-0000-4000-8000-000000000001'), 'paid = net of the refund (10000 + 5000 + 3000), balance 12000');
+-- staff reads the report (office_a, an admin by now): collected by method and by person, net of refunds (= engine: zelle 13000 ×2, cash 5000 ×1; owner 10000, office 8000)
+:as_office_a
+select tst.ok((select string_agg(method || ':' || net || ':' || n, ',' order by net desc, method) = 'zelle:13000:2,cash:5000:1'
+               from (select method, sum(amount_cents - refunded_cents) as net, count(*) as n from public.payments
+                     where invoice_id = '14500000-0000-4000-8000-000000000001' and status in ('succeeded', 'partially_refunded') group by method) x),
+              'collected by method = the engine (totalsBy)');
+select tst.ok((select string_agg(net::text, ',' order by net desc) = '10000,8000'
+               from (select received_by, sum(amount_cents - refunded_cents) as net from public.payments
+                     where invoice_id = '14500000-0000-4000-8000-000000000001' and status in ('succeeded', 'partially_refunded') group by received_by) x),
+              'collected by person = the engine (totalsBy)');
+-- «Напомнить» (S20): the office logs a reminder in the client's feed, linked to the invoice
+insert into public.activities (id, company_id, subject_type, subject_id, kind, direction, actor_id, meta) values
+  ('a4500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'customer', 'c4500000-0000-4000-8000-000000000001', 'sms', 'out', 'a0000000-0000-0000-0000-000000000002',
+   '{"invoiceId": "14500000-0000-4000-8000-000000000001", "reminder": "1"}');
+select tst.ok(tst.cnt($q$select 1 from public.activities where subject_id = 'c4500000-0000-4000-8000-000000000001' and meta ->> 'reminder' = '1'$q$) = 1, 'the office logs a reminder');
+-- the tech: not his payments, no reminders
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.payments where invoice_id = '14500000-0000-4000-8000-000000000001'$q$) = 0, 'the tech does not read payments he did not take');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, actor_id, meta) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c4500000-0000-4000-8000-000000000001', 'sms', 'out', 'a0000000-0000-0000-0000-000000000003', '{"invoiceId": "14500000-0000-4000-8000-000000000001", "reminder": "1"}')$q$, 'the tech does not send reminders');
+-- another company
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.payments where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'another company does not read our payments');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, meta) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c4500000-0000-4000-8000-000000000001', 'sms', 'out', '{"reminder": "1"}')$q$, 'another company does not log reminders for our client');
+\echo 'T45 wave 8: collected by method and person, refund rights, reminders ok'
 -- ---------------------------------------------------------------- T42: wave П-2b — tasks with a time, events and days off, own fields
 :as_owner_a
 do $$ begin
