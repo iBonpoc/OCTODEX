@@ -39,9 +39,9 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
     expect(ids("clients", "director")).toEqual(["client"]);
     expect(ids("clients", "tech")).toEqual([]);
   });
-  it("Звонки: office — Лид · Клиент; tech — Лид", () => {
-    expect(ids("calls", "dispatcher")).toEqual(["lead", "client"]);
-    expect(ids("calls", "tech")).toEqual(["lead"]);
+  it("Звонки: office — Записать звонок · Лид · Клиент; tech — Записать звонок · Лид", () => {
+    expect(ids("calls", "dispatcher")).toEqual(["call", "lead", "client"]);
+    expect(ids("calls", "tech")).toEqual(["call", "lead"]);
   });
   it("Клиент: the job and the estimate are tied to the client; nothing to tie to — no item", () => {
     const [jb, it] = fabItems("client", "director", { customerId: "c1" });
@@ -78,7 +78,7 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
         }
   });
   it("no «coming in wave N» items: Note, File are not offered yet (Task — wave 6)", () => {
-    for (const s of SETS) for (const r of ROLES) for (const it of fabItems(s, r, FULL)) expect(["lead", "client", "job", "estimate", "expense", "visit", "planAdd", "planEvent", "planTimeOff", "photo", "task"]).toContain(it.id);
+    for (const s of SETS) for (const r of ROLES) for (const it of fabItems(s, r, FULL)) expect(["lead", "client", "job", "estimate", "expense", "visit", "planAdd", "planEvent", "planTimeOff", "photo", "task", "call"]).toContain(it.id);
   });
 });
 

@@ -9,6 +9,8 @@ import { canServe, canSeeClientMoney, statusChoices, clientMoneyOf, clientStatus
 import { clientCounts, clientRecords, clientRowsFor, isClientSection, type ClientRow } from "@/features/clientRows";
 import { billingLine } from "@/features/clientForm";
 import { ClientSection, PersonRows } from "@/features/client/ClientSections";
+import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
+import { callPlaceForClient } from "@/features/comms/comms";
 import { StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
 import { propertyTitle } from "@/features/properties";
 import { sourceName } from "@/features/leads";
@@ -47,6 +49,8 @@ export default function ClientScreen() {
   const toast = useToast();
   const [sheet, setSheet] = useState<null | "tags" | "status">(null);
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
+  /** wave 6-2: after «Позвонить» — «Чем кончился?» (the call goes to the client; a technician — to his job) */
+  const [calling, setCalling] = useState<CallPreset | null>(null);
   const statusRef = useRef<React.ComponentRef<typeof View>>(null);
   const c = visibleClients(db, role).find((x) => x.id === id);
   const toCard = () => router.replace(`/client/${id}`);
@@ -143,7 +147,16 @@ export default function ClientScreen() {
       ) : null}
 
       <RowView>
-        {tel ? <IconButton icon="phone" label={t("client.call")} onPress={() => Linking.openURL(`tel:${tel}`)} /> : null}
+        {tel ? (
+          <IconButton
+            icon="phone"
+            label={t("client.call")}
+            onPress={() => {
+              Linking.openURL(`tel:${tel}`).catch(() => {});
+              setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), contactId: main?.id });
+            }}
+          />
+        ) : null}
         {tel ? <IconButton icon="sms" label={t("visit.message")} onPress={() => Linking.openURL(smsHref(tel) ?? "").catch(() => {})} /> : null}
         {mail ? <IconButton icon="mail" label={t("client.email")} onPress={() => Linking.openURL(mail).catch(() => {})} /> : null}
         {props[0] ? (
@@ -172,7 +185,7 @@ export default function ClientScreen() {
         <>
           <SectionTitle title={t("client.contacts")} />
           <Card>
-            <PersonRows p={main} />
+            <PersonRows p={main} onCall={(x) => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), contactId: x.id })} />
           </Card>
         </>
       ) : null}
@@ -233,6 +246,7 @@ export default function ClientScreen() {
       />
       <TagsSheet visible={sheet === "tags"} customer={c} onClose={() => setSheet(null)} />
       <StatusSheet visible={sheet === "status"} customer={c} preset="do_not_service" onClose={() => setSheet(null)} />
+      <CallSheet preset={calling} onClose={() => setCalling(null)} />
     </Screen>
   );
 }

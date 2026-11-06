@@ -124,7 +124,9 @@ export type Op =
     }
   /** columns of public.leads already in DB names (mapped by the store) */
   | { k: "lead.update"; id: string; cols: Record<string, unknown> }
-  | { k: "lead.touch"; activityId: string; leadId: string; kind: "call" | "sms" | "email" | "marketplace" | "reply"; at: string; outcome?: CallOutcome }
+  // wave 6-2: a call carries its outcome, and may carry the person, minutes and a note (the app never sends a call without an outcome)
+  | { k: "lead.touch"; activityId: string; leadId: string; kind: "call" | "sms" | "email" | "marketplace" | "reply"; at: string; outcome?: CallOutcome; contactId?: string; durationMin?: number; note?: string }
+  | { k: "activity.call"; activityId: string; subjectType: "customer" | "job"; subjectId: string; at: string; outcome: CallOutcome; contactId?: string; durationMin?: number; note?: string }
   | { k: "invoice.remind"; activityId: string; customerId: string; invoiceId: string; channel: "sms" | "email"; at: string }
   | { k: "lead.close"; leadId: string; status: "lost" | "declined"; reason: string; text?: string; activityId: string; from: string }
   | { k: "lead.reopen"; leadId: string; activityId: string; from: string }
@@ -276,6 +278,19 @@ async function uploadPhoto(companyId: string, fileId: string, uri: string) {
 }
 
 /** task.save → the time columns (wave П-2b); an end without a start is not sent (the server refuses it) */
+/** the columns of an outgoing event: the outcome and minutes of a call in meta, the person, the note as the body (20 §3) */
+export function callCols(op: { at: string; outcome?: CallOutcome; contactId?: string; durationMin?: number; note?: string }): Record<string, unknown> {
+  const meta: Record<string, string> = {};
+  if (op.outcome) meta.outcome = op.outcome;
+  if (op.durationMin && op.durationMin > 0) meta.duration_min = String(Math.round(op.durationMin));
+  return {
+    direction: "out", at: op.at, meta,
+    // a person the app made up for an old client / lead (`<id>-main`) is not a contact row: never sent (20 §3)
+    ...(op.contactId && !op.contactId.endsWith("-main") ? { contact_id: op.contactId } : {}),
+    ...(op.note?.trim() ? { body: op.note.trim() } : {}),
+  };
+}
+
 export function taskTimeCols(t: { startsAt?: string; endsAt?: string; allDay?: boolean; description?: string }) {
   return {
     starts_at: t.startsAt ?? null, ends_at: t.startsAt ? t.endsAt ?? null : null, all_day: !!t.allDay, description: t.description?.trim() || null,
@@ -418,7 +433,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "lead.touch":
       // the server sets first_response_at and moves new → contacted (trigger on activities)
       // an unanswered call / voicemail only counts an attempt (meta.outcome, migration 20261104130000)
-      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: op.kind, direction: "out", at: op.at, meta: op.outcome ? { outcome: op.outcome } : {} }));
+      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: op.kind, ...callCols(op) }));
+    case "activity.call":
+      // wave 6-2: a call on a client or a job (RLS: staff; a tech only on the job of his visit, with that job's person)
+      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: op.subjectType, subject_id: op.subjectId, kind: "call", ...callCols(op) }));
     case "invoice.remind":
       // S20 (wave 8): a reminder is an outgoing event in the client's feed, linked to the invoice by meta (no migration: check and RLS allow it)
       return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "customer", subject_id: op.customerId, kind: op.channel, direction: "out", at: op.at, meta: { invoiceId: op.invoiceId, reminder: "1" } }));

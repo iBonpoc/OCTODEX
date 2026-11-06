@@ -13,6 +13,7 @@ import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, PermanentError, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
+import { callNext, callOp, leadTouchNext, leadTouchOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { readyToSend } from "@/cloud/outboxTiming";
@@ -66,6 +67,8 @@ import {
   type Source,
   type LeadStatus,
   type CallOutcome,
+  type CallInput,
+  type LeadTouchKind,
   type LeadInterest,
   type CustomerStatus,
   type Person,
@@ -116,9 +119,12 @@ interface StoreCtx {
   /** "I replied" (no call/SMS from the app): stops the reply timer */
   replyLead: (id: ID) => Undo;
   /** call / SMS / email / marketplace from the card: history line + first response + new → in touch */
-  touchLead: (id: ID, kind: "call" | "sms" | "email" | "marketplace" | "reply") => Undo;
+  /** SMS / email / marketplace / reply; a call goes only through callResult / logCall with its outcome (20 §3) */
+  touchLead: (id: ID, kind: LeadTouchKind) => Undo;
   /** after a call from the card: answered = in touch; no answer / voicemail = one more attempt, the reply timer keeps going */
   callResult: (id: ID, outcome: CallOutcome) => Undo;
+  /** wave 6-2: a call on a lead, a client or a job, with its outcome, person, minutes and a note */
+  logCall: (c: CallInput) => Undo;
   setLeadInterest: (id: ID, interest: LeadInterest | undefined) => Undo;
   /** "call me in 3 months": hidden until the date, keeps its funnel status */
   snoozeLead: (id: ID, until: string, reason?: string) => Undo;
@@ -516,31 +522,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? outbox.map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
-  const touchLead = (id: ID, kind: "call" | "sms" | "email" | "marketplace" | "reply", outcome?: CallOutcome): Undo => {
-    const activityId = uid();
-    const at = new Date().toISOString();
-    const missed = kind === "call" && (outcome === "no_answer" || outcome === "voicemail");
-    return mutate(
-      "lead.touch",
-      (d) => {
-        const l = d.leads.find((x) => x.id === id);
-        const toReplied = l?.status === "new" && !missed;
-        return {
-          ...d,
-          leads: d.leads.map((x) =>
-            x.id !== id ? x
-            : missed ? { ...x, callAttempts: (x.callAttempts ?? 0) + 1, lastOutboundAt: at, lastActivityAt: at }
-            : { ...x, firstResponseAt: x.firstResponseAt ?? at, status: toReplied ? "replied" : x.status, callAttempts: 0, lastOutboundAt: at, lastActivityAt: at },
-          ),
-          activities: [
-            { id: activityId, subjectType: "lead", subjectId: id, kind, at, actorId: d.me, ...(outcome ? { meta: { outcome } } : {}) },
-            ...(toReplied ? [{ id: uid(), subjectType: "lead" as const, subjectId: id, kind: "status" as const, meta: { from: "new", to: "replied" }, at, actorId: d.me }] : []),
-            ...d.activities,
-          ],
-        };
-      },
-      { k: "lead.touch", activityId, leadId: id, kind, at, ...(outcome ? { outcome } : {}) },
-    );
+  /** wave 6-2: the change and the op are pure (features/comms/contactEvents.ts); a call always has its outcome */
+  const touchLead = (id: ID, t: LeadTouch): Undo => {
+    const ids = { activityId: uid(), statusId: uid(), at: new Date().toISOString() };
+    return mutate("lead.touch", (d) => leadTouchNext(d, id, t, ids), leadTouchOp(id, t, ids));
   };
 
   /** The lead's client and property; makes a prospect client + property the first time (S3). */
@@ -686,9 +671,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               { k: "visit.step", visitId, to: "done" },
         );
       },
-      replyLead: (id) => touchLead(id, "reply"),
-      touchLead: (id, kind) => touchLead(id, kind),
-      callResult: (id, outcome) => touchLead(id, "call", outcome),
+      replyLead: (id) => touchLead(id, { kind: "reply" }),
+      touchLead: (id, kind) => touchLead(id, { kind }),
+      callResult: (id, outcome) => touchLead(id, { kind: "call", call: { outcome } }),
+      logCall: (c) => {
+        const ids = { activityId: uid(), statusId: uid(), at: new Date().toISOString() };
+        return mutate(c.subjectType === "lead" ? "lead.touch" : "activity.call", (d) => callNext(d, c, ids), callOp(c, ids));
+      },
       setLeadInterest: (id, interest) => patchLead(id, { interest }),
       snoozeLead: (id, until, reason) => patchLead(id, { snoozedUntil: until, snoozeReason: reason?.trim() || undefined }),
       unsnoozeLead: (id) => patchLead(id, { snoozedUntil: undefined, snoozeReason: undefined }),
