@@ -31,8 +31,11 @@ exports.run = async (h) => {
   await h.go("/client/c1");
   await row("Задачи");
   await h.expectText(/Задач нет/, "tasks: empty state");
-  await p.getByPlaceholder("Новая задача").fill("Call in spring about painting");
-  await h.click("Добавить");
+  // wave 6: the one task form (TaskSheet) — the client is already «к чему»
+  await h.click("Новая задача");
+  await h.expectText(/К чему.*Sarah Mitchell/, "the form is tied to the client");
+  await h.sheet().getByPlaceholder("Например: перезвонить и уточнить объём").fill("Call in spring about painting");
+  await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500);
   await h.expectText(/Call in spring about painting/, "task added");
   await h.click("Готово");
   await h.expectText(/Выполненные · 1[\s\S]*Call in spring about painting/, "done task stays, under Done");
