@@ -59,6 +59,7 @@ exports.run = async (h) => {
   await p.getByRole("radio", { name: "Показывать выполненные", exact: true }).last().click(); await p.waitForTimeout(400);
   await h.expectText(/T67 call the supplier/, "«Показывать выполненные» shows it");
   await h.expectText(/Выполнено/, "as done");
+  await expectOneAccent(h, "the Plan feed with done ones shown");
 
   // the Day keeps its own block of its day; the top one is not shown twice
   await h.clickText("День"); await p.waitForTimeout(300);
