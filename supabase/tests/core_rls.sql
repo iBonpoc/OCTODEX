@@ -3692,6 +3692,12 @@ select tst.fails(format('select public.accept_invitation(%L)', :'t48_token'), 'a
 select tst.ok((select count(*) from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000002') = 0, 'and is not on the team');
 reset role; set role anon;
 select tst.fails(format('select public.accept_invitation(%L)', :'t48_token'), 'anon cannot accept');
+-- the profile email is not a way in: it cannot be changed, and accept reads the sign-in email
+:as_other48
+select tst.fails($q$update public.users set email = 'new48@a.test' where id = 'a4800000-0000-4000-8000-000000000002'$q$, 'nobody changes their own email in public.users');
+select tst.ok((select count(*) from public.users where id = 'a4800000-0000-4000-8000-000000000002' and full_name = 'Oscar Other') = 1, 'own profile still readable');
+update public.users set full_name = 'Oscar O.' where id = 'a4800000-0000-4000-8000-000000000002';
+select tst.ok((select full_name from public.users where id = 'a4800000-0000-4000-8000-000000000002') = 'Oscar O.', 'own name still editable');
 -- a wrong token, then the right one
 :as_new48
 select tst.fails($q$select public.accept_invitation('0000000000000000000000000000000000000000')$q$, 'a wrong link');
@@ -3737,6 +3743,35 @@ select tst.ok((select status = 'disabled' and suspended_at is not null from publ
 select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000001', 'active');
 :as_new48
 select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 1, 'brought back: sees the company again');
+:as_super
+-- already on the team: a second invitation is not a way to change one's role; a switched-off person's old link does not bring them back
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a4800000-0000-4000-8000-000000000003', 'late48@a.test', '{"full_name":"Lee Late"}');
+\set as_late48 'reset role; set request.jwt.claim.sub = ''a4800000-0000-4000-8000-000000000003''; set role authenticated;'
+:as_owner_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'late48@a.test', 'office') ->> 'token' as t48_late \gset
+:as_super
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000003', 'tech', 'active');
+:as_late48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_late'), 'an active member cannot re-role through an old invitation');
+:as_owner_a
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000003', 'disabled');
+:as_late48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_late'), 'a switched-off person does not come back by an old link');
+:as_owner_a
+select tst.ok((select role = 'tech' and status = 'disabled' from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000003'), 'role and status unchanged');
+-- the flag that lets accept_invitation through the guard does nothing for a client session
+:as_new48
+select set_config('app.accepting_invite', 'on', false);
+select tst.blocked($q$update public.memberships set role = 'admin' where user_id = 'a4800000-0000-4000-8000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'the flag does not open the role guard');
+select set_config('app.accepting_invite', '', false);
+-- an admin switched off: the invitations they sent stop working
+:as_office_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'z48@a.test', 'tech') ->> 'id' as t48_byadmin \gset
+:as_owner_a
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002', 'disabled');
+select tst.ok((select status from public.invitations where id = :'t48_byadmin') = 'revoked', 'a switched-off admin''s invitations are revoked');
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002', 'active');
 :as_super
 \echo 'T48 wave 7-2: invitations and team (S21) ok'
 

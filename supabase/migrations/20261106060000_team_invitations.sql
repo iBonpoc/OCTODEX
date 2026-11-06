@@ -124,7 +124,8 @@ $$;
 create or replace function app.tg_membership_guard()
 returns trigger language plpgsql set search_path = '' as $$
 begin
-  if auth.uid() is null or pg_trigger_depth() > 1 or current_setting('app.accepting_invite', true) = 'on' then
+  if auth.uid() is null or pg_trigger_depth() > 1
+     or (current_setting('app.accepting_invite', true) = 'on' and current_user <> 'authenticated') then
     return new;      -- system / onboarding (company trigger) / accept_invitation
   end if;
   if (new.role = 'owner' or (tg_op = 'UPDATE' and old.role = 'owner'))
@@ -146,7 +147,8 @@ begin
     new.can_sign_contracts := false;                    -- a subcontractor never signs for the company
   end if;
   if tg_op = 'UPDATE' and new.can_sign_contracts is distinct from old.can_sign_contracts
-     and auth.uid() is not null and current_setting('app.accepting_invite', true) is distinct from 'on'
+     and auth.uid() is not null
+     and not (current_setting('app.accepting_invite', true) = 'on' and current_user <> 'authenticated')
      and not app.has_role(new.company_id, array['owner']) then
     raise exception 'only the owner gives or takes the right to sign contracts' using errcode = '42501';
   end if;
@@ -160,6 +162,8 @@ declare
   i public.invitations;
   v_me uuid := auth.uid();
   v_email text;
+  v_unconfirmed boolean;
+  m public.memberships;
 begin
   if v_me is null then
     raise exception 'sign in first' using errcode = '42501';
@@ -171,7 +175,12 @@ begin
   if i.id is null or i.status in ('revoked') then
     raise exception 'no such invitation' using errcode = '22023';
   end if;
-  select lower(email) into v_email from public.users where id = v_me;
+  -- the sign-in email (auth.users), confirmed — never public.users.email, which is the person's own profile row
+  select lower(u.email), (to_jsonb(u) ? 'email_confirmed_at') and (to_jsonb(u) ->> 'email_confirmed_at') is null
+    into v_email, v_unconfirmed from auth.users u where u.id = v_me;
+  if v_unconfirmed then
+    raise exception 'confirm your email first' using errcode = '42501';
+  end if;
   if v_email is distinct from i.email then
     raise exception 'this invitation is for another email' using errcode = '42501';
   end if;
@@ -186,12 +195,16 @@ begin
   if i.status = 'expired' or i.expires_at < now() then
     raise exception 'the invitation has expired' using errcode = '22023';
   end if;
+  -- already on the team (active or switched off): an old link neither brings a person back nor changes the role
+  select * into m from public.memberships where company_id = i.company_id and user_id = v_me and deleted_at is null and status in ('active', 'disabled');
+  if m.id is not null then
+    raise exception 'already on the team' using errcode = '23505';
+  end if;
   perform set_config('app.accepting_invite', 'on', true);
   insert into public.memberships (company_id, user_id, role, status, can_sign_contracts, invited_by)
   values (i.company_id, v_me, i.role, 'active', i.can_sign_contracts, i.invited_by)
   on conflict (company_id, user_id) do update
-    set role = excluded.role, status = 'active', can_sign_contracts = excluded.can_sign_contracts, suspended_at = null, deleted_at = null
-    where public.memberships.role <> 'owner';
+    set role = excluded.role, status = 'active', can_sign_contracts = excluded.can_sign_contracts, suspended_at = null, deleted_at = null;
   perform set_config('app.accepting_invite', '', true);
   update public.invitations set status = 'accepted', accepted_by = v_me, accepted_at = now(), updated_at = now() where id = i.id;
   update public.users set last_active_company_id = i.company_id where id = v_me;
@@ -223,6 +236,11 @@ begin
   -- the person's records stay with the company; only the access changes
   update public.memberships set status = p_status, suspended_at = case when p_status = 'disabled' then now() end
    where id = m.id;
+  -- a person switched off: the invitations they sent stop working too
+  if p_status = 'disabled' then
+    update public.invitations set status = 'revoked', updated_at = now()
+     where company_id = p_company_id and invited_by = p_user_id and status = 'pending';
+  end if;
 end;
 $$;
 
@@ -236,3 +254,7 @@ grant execute on function public.resend_invitation(uuid) to authenticated;
 grant execute on function public.revoke_invitation(uuid) to authenticated;
 grant execute on function public.accept_invitation(text) to authenticated;
 grant execute on function public.set_member_status(uuid, uuid, text) to authenticated;
+
+-- ---- 6. The sign-in email is not the person's to edit in public.users (it was: users_update + a table-wide grant) ----
+revoke update on public.users from authenticated;
+grant update (full_name, phone, locale, avatar_file_id, last_active_company_id) on public.users to authenticated;

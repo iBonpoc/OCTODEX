@@ -38,6 +38,8 @@ export default function AcceptInvite() {
         await auth.reloadMemberships();
         router.replace("/");
       } catch (e) {
+        // a dead link is not kept for the next sign-in (security-check 7-2)
+        await AsyncStorage.removeItem("octo.invite.token.v1").catch(() => {});
         setState("error");
         setErr((e as Error).message);
       }
