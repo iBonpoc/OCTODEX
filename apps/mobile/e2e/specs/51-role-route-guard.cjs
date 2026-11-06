@@ -27,7 +27,7 @@ exports.run = async (h) => {
   h.expect((await p.getByRole("button", { name: /^index$/i }).count()) === 0 && (await p.getByText(/^index$/).count()) === 0, "no «index» tab");
 
   // Today's company money, as the director sees it (so the check below means something)
-const MONEY = [/Подписано\s+\$5,180/, /Ждёт оплаты\s+\$2,800/, /Требует внимания/];
+  const MONEY = [/Подписано\s+\$5,180/, /Ждёт оплаты\s+\$2,800/, /Требует внимания/];
   await setRole(h, "director");
   await h.go("/today");
   const own = await p.evaluate(() => document.body.innerText);
