@@ -40,6 +40,8 @@ export interface PortalData {
   invoices: { id: string; number?: string; title?: string; kind: string; totalCents: number; paidCents: number; dueDate?: string }[];
   /** the client's language for this page and its PDF (rule 7); from the server: portal_estimate.doc_language */
   lang: DocLang;
+  /** «Pay by card» (simulated until Stripe): only for a demo company (portal_estimate.simulated_pay, audit 06.11) */
+  simulatedPay: boolean;
   /* ---- wave E2a (docs/specs/07 §2.2) ---- */
   /** YYYY-MM-DD: the link works until this day while unsigned */
   validUntil?: string;
@@ -59,11 +61,12 @@ type Raw = {
   deposit_paid?: boolean;
   invoices?: { id: string; number?: string; title?: string; kind: string; total: number; paid: number; due_date?: string }[];
   doc_language?: string;
+  simulated_pay?: boolean;
   valid_until?: string | null;
   countersign?: { signer_name: string; signer_title?: string | null; his?: string | null; signed_at: string; signature_svg?: string } | null;
 };
 
-function fromRaw(r: Raw): PortalData {
+export function fromRaw(r: Raw): PortalData {
   const p = r.property ?? {};
   return {
     source: "cloud",
@@ -94,6 +97,8 @@ function fromRaw(r: Raw): PortalData {
       : null,
     depositPaid: !!r.deposit_paid,
     lang: r.doc_language === "es" || r.doc_language === "ru" ? r.doc_language : "en",
+    // an older server has no field: keep the button as before; a newer one says false for a real company
+    simulatedPay: r.simulated_pay !== false,
     invoices: (r.invoices ?? []).map((i) => ({ id: i.id, number: i.number, title: i.title ?? undefined, kind: i.kind, totalCents: Number(i.total), paidCents: Number(i.paid), dueDate: i.due_date })),
   };
 }
@@ -139,6 +144,7 @@ export function portalFromEstimate(db: DB, e: Estimate, companyName: string): Po
       : null,
     depositPaid: !!e.depositPaidAt,
     lang: docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }),
+    simulatedPay: true, // the demo on this phone
     invoices: (() => {
       const job = db.jobs.find((x) => x.estimateId === e.id);
       return job

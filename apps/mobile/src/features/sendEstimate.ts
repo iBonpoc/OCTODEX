@@ -8,6 +8,9 @@ import { WEB_APP_URL } from "@/config/backend";
 import { tFor, type DocLang } from "@/i18n/translate";
 import { docMoney } from "./docPdf";
 import { mailtoHref, smsHref } from "./contactLinks";
+import { canServe } from "./clients";
+import { exemptDoc } from "./estimateDoc";
+import type { DB, Estimate, EstimateDoc } from "@/data/types";
 
 export function clientLink(token: string): string {
   const origin = Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL;
@@ -56,4 +59,20 @@ export function estimateMessage(lang: DocLang, m: { company: string; name: strin
  */
 export async function sendSignedCopy(_estimateId: string): Promise<{ sent: false; reason: "mail_not_connected" }> {
   return { sent: false, reason: "mail_not_connected" };
+}
+
+/**
+ * Before «Отправить» (docs/specs/04 §12):
+ * - a «do not service» client gets nothing new — not even an old draft (the server refuses too, db T44);
+ * - a draft saved WITH tax for a client who became «Без налога» later is saved again without tax first, otherwise the
+ *   server refuses to lock the taxed version (22023) and the send is dropped from the queue (wave 4a, exemptDoc).
+ * Only a draft is re-saved: a sent version is locked and never changes.
+ */
+export type BeforeSend = { ok: false; reason: "no_service" } | { ok: true; resave?: EstimateDoc };
+export function beforeSend(db: Pick<DB, "customers">, e: Pick<Estimate, "customerId" | "status" | "doc">): BeforeSend {
+  if (!canServe(db, e.customerId)) return { ok: false, reason: "no_service" };
+  if (e.status !== "draft" || !e.doc) return { ok: true };
+  const c = db.customers.find((x) => x.id === e.customerId);
+  const doc = exemptDoc(e.doc, c?.taxExempt);
+  return doc === e.doc ? { ok: true } : { ok: true, resave: doc };
 }
