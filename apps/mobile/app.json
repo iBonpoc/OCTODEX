@@ -12,7 +12,8 @@
       "infoPlist": {
         "NSCameraUsageDescription": "Фото до и после работы прикрепляются к выезду.",
         "NSPhotoLibraryUsageDescription": "Фото работ прикрепляются к выезду.",
-        "ITSAppUsesNonExemptEncryption": false
+        "ITSAppUsesNonExemptEncryption": false,
+        "NSLocationWhenInUseUsageDescription": "Only during your visit and only with your consent: the office sees how far you are from the job address."
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -26,7 +27,10 @@
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
-      "package": "com.octodex.app"
+      "package": "com.octodex.app",
+      "blockedPermissions": [
+        "android.permission.ACCESS_BACKGROUND_LOCATION"
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png",
@@ -48,6 +52,15 @@
         {
           "photosPermission": "Фото работ прикрепляются к выезду.",
           "cameraPermission": "Фото до и после работы прикрепляются к выезду."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Only during your visit and only with your consent: the office sees how far you are from the job address.",
+          "isIosBackgroundLocationEnabled": false,
+          "isAndroidBackgroundLocationEnabled": false,
+          "isAndroidForegroundServiceEnabled": false
         }
       ],
       "expo-sharing"

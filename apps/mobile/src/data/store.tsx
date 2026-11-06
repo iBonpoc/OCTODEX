@@ -12,7 +12,8 @@ import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
-import { applyOp, PermanentError, type Op, type OutboxItem } from "@/cloud/ops";
+import { applyOp, PermanentError, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
+import { keepLast } from "@/features/location";
 import { readyToSend } from "@/cloud/outboxTiming";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
 import { leadStatusToDb } from "@/cloud/statusMap";
@@ -39,6 +40,7 @@ import { eventProblems } from "@/features/planFeed";
 import {
   type CalendarEvent,
   type MemberPrefs,
+  type VisitPoint,
   MEMBER_PREFS_DEFAULT,
   type CatalogItem,
   type Company,
@@ -140,6 +142,10 @@ interface StoreCtx {
   removeCalendarEvent: (id: ID) => Undo;
   /** wave 7б-1: my personal settings, the same on every device (locally at once, then public.set_my_prefs) */
   setPrefs: (patch: Partial<MemberPrefs>) => Undo;
+  /** wave 7б-2: my consent to share my location (on — only after the notice); off forgets my points here */
+  setLocationConsent: (on: boolean) => Undo;
+  /** wave 7б-2: a point of mine on an open visit: kept as the last one and sent at once (never queued) */
+  recordVisitPoint: (p: VisitPoint, source: "status_change" | "foreground") => void;
   /** company lead sources: add / edit / hide (sources with leads are never deleted) */
   saveSource: (s: Omit<Source, "id"> & { id?: ID }) => { id: ID; undo: Undo };
   /**
@@ -763,6 +769,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setPrefs: (patch) => {
         const prefs: MemberPrefs = { ...MEMBER_PREFS_DEFAULT, ...dbRef.current.prefs, ...patch };
         return mutate("me.prefs", (d) => ({ ...d, prefs }), { k: "me.prefs", prefs });
+      },
+      setLocationConsent: (on) => {
+        const now = new Date().toISOString();
+        return mutate(
+          "me.location",
+          (d) => ({
+            ...d,
+            location: { allowed: d.location?.allowed === true, on, ackAt: on ? now : d.location?.ackAt },
+            visitPoints: on ? d.visitPoints : (d.visitPoints ?? []).filter((x) => x.userId !== d.me),
+          }),
+          { k: "me.location", on },
+        );
+      },
+      recordVisitPoint: (p, source) => {
+        const next = { ...dbRef.current, visitPoints: keepLast(dbRef.current.visitPoints, p) };
+        dbRef.current = next;
+        setDb(next);
+        if (modeRef.current === "cloud" && onlineRef.current) void sendVisitPoint({ ...p, source }).catch(() => false);
       },
       removeCalendarEvent: (id) =>
         mutate("calendarEvent.remove", (d) => ({ ...d, calendarEvents: (d.calendarEvents ?? []).filter((x) => x.id !== id) }), { k: "calendarEvent.remove", id }),

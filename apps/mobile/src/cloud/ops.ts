@@ -138,6 +138,8 @@ export type Op =
   | { k: "calendarEvent.remove"; id: string }
   /** wave 7б-1: my personal settings in this company (public.set_my_prefs: only for yourself) */
   | { k: "me.prefs"; prefs: MemberPrefs }
+  /** wave 7б-2: my location consent (public.set_location_consent: only for yourself; on — after the notice) */
+  | { k: "me.location"; on: boolean }
   | { k: "customField.save"; field: CustomField; isNew: boolean }
   | { k: "customFieldValue.save"; value: CustomFieldValue; isNew: boolean }
   | { k: "customFieldValue.remove"; id: string }
@@ -465,6 +467,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "me.prefs":
       return run(supabase.rpc("set_my_prefs", { p_company_id: c, p_plan_show_done: op.prefs.planShowDone }));
+    case "me.location":
+      return run(supabase.rpc("set_location_consent", { p_company_id: c, p_on: op.on }));
     case "calendarEvent.remove":
       return run(supabase.from("calendar_events").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "customField.save": {
@@ -907,4 +911,13 @@ async function createCustomer(
   await run(ins("contacts", { id: op.contactId, company_id: c, customer_id: op.customerId, name: op.name, phone: op.phone, email: op.email ?? null, is_primary: true }));
   await run(supabase.from("customers").update({ primary_contact_id: op.contactId }).eq("id", op.customerId));
   await run(ins("properties", { id: op.propertyId, company_id: c, customer_id: op.customerId, address_line1: op.address || op.city || "—", address_city: op.city || "—", stories: 1 }));
+}
+
+/** wave 7б-2: a location point goes straight away, never through the offline queue — an old point is worthless, and the
+ *  server skips one older than 5 min anyway. user_id and company_id come from the server (migration 20261106170000). */
+export async function sendVisitPoint(p: { visitId: string; lat: number; lng: number; accuracyM?: number; at: string; source: "status_change" | "foreground" }): Promise<boolean> {
+  const { error } = await supabase.from("user_locations").insert({
+    visit_id: p.visitId, lat: p.lat, lng: p.lng, accuracy_m: p.accuracyM ?? null, source: p.source, recorded_at: p.at,
+  });
+  return !error;
 }

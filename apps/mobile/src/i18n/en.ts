@@ -1882,4 +1882,22 @@ export const en: Dict = {
   // wave 7б-1 «Работы и выезды»: personal settings
   "pref7b.plan": "Plan",
   "pref7b.showDoneHint": "Completed visits, jobs and tasks in the Plan. This setting is yours and the same on all your devices.",
+  // wave 7б-2 (docs/specs/03 §12): location consent and points
+  "loc7b.title": "Location",
+  "loc7b.noticeTitle": "Share your location during visits?",
+  "loc7b.notice": "Only while the app is open and your visit is under way (On the way and On site). The office sees how far you are from the address and when the last point came. Points are kept 30 days. Turn it off any time in My settings — the points are then deleted.",
+  "loc7b.agree": "I agree",
+  "loc7b.notNow": "Not now",
+  "loc7b.on": "Share during visits",
+  "loc7b.off": "Don't share",
+  "loc7b.hint": "Only while the app is open and only during your visit. The office sees the distance to the address. Kept 30 days; turning it off deletes the points.",
+  "loc7b.sharing": "Sharing location",
+  "loc7b.near": "You're at the address — mark On site?",
+  "loc7b.office": "{who} · {mi} mi from the address · {min} min ago",
+  "loc7b.officeNoGeo": "{who} · {min} min ago",
+  "loc7b.officeStale": "{who} · not updated for a while ({min} min)",
+  "loc7b.officeOff": "{who} isn't sharing location",
+  "loc7b.denied": "No location access. Allow it in the phone settings.",
+  "loc7b.agreed": "Location on for your visits",
+  "loc7b.stopped": "Location off, points deleted",
 };

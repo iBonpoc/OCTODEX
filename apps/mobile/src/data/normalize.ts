@@ -41,6 +41,9 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     customFields: Array.isArray(d.customFields) ? d.customFields : [],
     customFieldValues: Array.isArray(d.customFieldValues) ? d.customFieldValues : [],
     prefs: { ...MEMBER_PREFS_DEFAULT, planShowDone: d.prefs?.planShowDone === true },
+    // wave 7б-2: off unless saved — in the demo too, as for every company until the lawyer's answer on AB 1331
+    location: { allowed: d.location?.allowed === true, on: d.location?.on === true, ...(d.location?.ackAt ? { ackAt: d.location.ackAt } : {}) },
+    visitPoints: Array.isArray(d.visitPoints) ? d.visitPoints : [],
     ...withJobFields(withoutLateFlag(inspectionsWithoutJobs(d)), d.properties ?? [], d.cancelledJobs, mode),
     tasks: Array.isArray(d.tasks) ? d.tasks : [],
     activities: Array.isArray(d.activities) ? d.activities : [],

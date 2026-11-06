@@ -1882,4 +1882,22 @@ export const es: Dict = {
   // wave 7б-1 «Работы и выезды»: personal settings
   "pref7b.plan": "Plan",
   "pref7b.showDoneHint": "Visitas, trabajos y tareas completados en el Plan. Este ajuste es tuyo y es el mismo en todos tus dispositivos.",
+  // wave 7б-2 (docs/specs/03 §12): location consent and points
+  "loc7b.title": "Ubicación",
+  "loc7b.noticeTitle": "¿Compartir tu ubicación durante las visitas?",
+  "loc7b.notice": "Solo con la app abierta y mientras tu visita está en curso (En camino y En el sitio). La oficina ve qué tan lejos estás de la dirección y cuándo llegó el último punto. Los puntos se guardan 30 días. Puedes apagarlo cuando quieras en Mis ajustes; entonces los puntos se borran.",
+  "loc7b.agree": "Acepto",
+  "loc7b.notNow": "Ahora no",
+  "loc7b.on": "Compartir durante visitas",
+  "loc7b.off": "No compartir",
+  "loc7b.hint": "Solo con la app abierta y solo durante tu visita. La oficina ve la distancia a la dirección. Se guarda 30 días; al apagarlo se borran los puntos.",
+  "loc7b.sharing": "Compartiendo ubicación",
+  "loc7b.near": "Estás en la dirección: ¿marcar En el sitio?",
+  "loc7b.office": "{who} · {mi} mi de la dirección · hace {min} min",
+  "loc7b.officeNoGeo": "{who} · hace {min} min",
+  "loc7b.officeStale": "{who} · sin actualizar hace rato ({min} min)",
+  "loc7b.officeOff": "{who} no comparte su ubicación",
+  "loc7b.denied": "Sin acceso a la ubicación. Permítelo en los ajustes del teléfono.",
+  "loc7b.agreed": "Ubicación activada para tus visitas",
+  "loc7b.stopped": "Ubicación apagada, puntos borrados",
 };
