@@ -14,4 +14,4 @@ do $$ begin
     raise exception 'upgrade: member_prefs writes only through set_my_prefs, anon reads nothing';
   end if;
 end $$;
-\echo 'upgrade 20261106090000_member_prefs ok'
+\echo 'upgrade 20261106130000_member_prefs ok'
