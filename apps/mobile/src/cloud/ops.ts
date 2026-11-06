@@ -147,6 +147,8 @@ export type Op =
   | { k: "tag.save"; tag: Tag }
   | { k: "serviceCategory.save"; category: ServiceCategory; isNew: boolean }
   | { k: "job.category"; id: string; serviceCategoryId: string | null }
+  /** wave 3b (S17): a job without an estimate, one server function (public.create_job; a repeat returns the same job) */
+  | { k: "job.create"; id: string; customerId: string; propertyId: string; title: string; description: string | null; jobTypeId: string | null; serviceCategoryId: string | null }
   // wave П-1 (13 §5): description and type of a job; the company's list of job types
   | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null; taxEnabled?: boolean; taxRateBps?: number }
   // wave П-2a: tags and own lines of a job (the server counts line and job totals)
@@ -481,6 +483,13 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       });
       return run(Promise.resolve({ error }));
     }
+    case "job.create":
+      return run(
+        supabase.rpc("create_job", {
+          p_job_id: op.id, p_customer_id: op.customerId, p_property_id: op.propertyId, p_title: op.title,
+          p_description: op.description, p_job_type_id: op.jobTypeId, p_service_category_id: op.serviceCategoryId,
+        }),
+      );
     case "job.schedule": {
       await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, scope: op.scope, notes: op.note ?? null }));
       await advanceJob(op.jobId, "scheduled");

@@ -23,6 +23,7 @@ import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
+import { withNewJob, type NewJobInput } from "@/features/newJob";
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { inheritCategory } from "@/features/serviceCategories";
 import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
@@ -163,7 +164,7 @@ interface StoreCtx {
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
   convertLead: (leadId: ID, reasonText: string) => Undo;
   /** New client entered by hand (not from a lead): active client with one property. */
-  addCustomer: (c: { name: string; phone: string; email?: string; sourceId: ID; address: string; city: string }) => { id: ID; undo: Undo };
+  addCustomer: (c: { name: string; phone: string; email?: string; sourceId: ID; address: string; city: string }) => { id: ID; propertyId: ID; undo: Undo };
   /** wave П-1: also the name parts and the address for invoices (billing null = same as the property) */
   updateCustomer: (id: ID, patch: CustomerPatch) => Undo;
   /** people of a client (several phones / emails each); the first person is the main one */
@@ -175,6 +176,9 @@ interface StoreCtx {
   /** directions of the business (docs/specs/11-trade.md): add, rename, reorder, archive / bring back — never delete */
   saveServiceCategory: (c: Partial<Omit<ServiceCategory, "id">> & { id?: ID }) => { id: ID; undo: Undo };
   setJobCategory: (id: ID, serviceCategoryId?: ID) => Undo;
+  /** wave 3b «Новая работа» (S17, docs/specs/17-job.md §7.3): a job without an estimate, waiting for a date;
+   *  the client and the address exist already (addCustomer / saveProperty first). Server: public.create_job */
+  addJob: (x: NewJobInput) => { id: ID; undo: Undo };
   /** for the estimate screen (chat «Сметы и модуль Gutters») */
   setEstimateCategory: (id: ID, serviceCategoryId?: ID) => Undo;
   updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
@@ -1022,7 +1026,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }),
           { k: "customer.create", ...ids, ...x },
         );
-        return { id: ids.customerId, undo };
+        return { id: ids.customerId, propertyId: ids.propertyId, undo };
       },
       saveCustomerPeople,
       setCustomerTags: (id, tagIds) =>
@@ -1044,6 +1048,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => ({ ...d, serviceCategories: prev ? d.serviceCategories.map((x) => (x.id === id ? next : x)) : [...d.serviceCategories, next] }),
           { k: "serviceCategory.save", category: next, isNew: !prev },
         );
+        return { id, undo };
+      },
+      addJob: (x) => {
+        const id = uid();
+        const undo = mutate("job.create", (d) => withNewJob(d, id, x, modeRef.current === "demo"), {
+          k: "job.create", id, customerId: x.customerId, propertyId: x.propertyId, title: x.title.trim(),
+          description: x.description?.trim() || null, jobTypeId: x.jobTypeId ?? null, serviceCategoryId: x.serviceCategoryId ?? null,
+        });
         return { id, undo };
       },
       setJobCategory: (id, serviceCategoryId) =>

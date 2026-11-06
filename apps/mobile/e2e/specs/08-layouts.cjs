@@ -3,7 +3,7 @@ const SCREENS = [
   "/today", "/figures/leads?period=month", "/triage", "/leads", "/visits", "/plan", "/messages", "/calls", "/clients", "/notifications",
   "/lead/l1", "/lead/new", "/client/c1", "/property/p1", "/client/edit?id=c1", "/client/edit",
   "/estimate/new?id=e6", "/estimate/e5", "/estimate/signature", "/estimates", "/p/demo0handyman0estimate0000000001",
-  "/jobs", "/job/j1", "/job/schedule?jobId=j1", "/visit/v1",
+  "/jobs", "/job/j1", "/job/new", "/job/schedule?jobId=j1", "/visit/v1",
   "/money", "/invoice/i5", "/receipt/pay5", "/expense/new",
   "/catalog", "/catalog/cat-haul", "/company", "/company/profile", "/company/schedule", "/company/licenses", "/company/trades", "/team", "/settings",
 ];

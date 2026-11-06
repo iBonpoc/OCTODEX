@@ -3337,4 +3337,48 @@ select tst.fails($q$insert into public.job_line_items (company_id, job_id, name,
 select tst.fails($q$select public.set_job_tags('e4100000-0000-4000-8000-000000000001', '{}')$q$, 'anon does not set job tags');
 \echo 'T41 wave П-2a: exempt client, job lines, job tags ok'
 
+-- ---------------------------------------------------------------- T43: wave 3b — a job without an estimate (S17), sales do not plan a job
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name, status, do_not_service_reason) values
+    ('c4300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T43 Prospect', 'prospect', null),
+    ('c4300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T43 Banned', 'do_not_service', 'T43');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city, address_state) values
+    ('d4300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4300000-0000-4000-8000-000000000001', '43 Oak St', 'Austin', 'TX'),
+    ('d4300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4300000-0000-4000-8000-000000000002', '43 Elm St', 'Austin', 'TX');
+end $$;
+-- a job type of company B (the office of A cannot read it, so it is taken here)
+:as_super
+select id as t43_btype from public.job_types where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1 \gset
+-- the office creates: a number from the server, status draft («ждёт даты»), the prospect becomes active
+:as_office_a
+select tst.ok((public.create_job('e4300000-0000-4000-8000-000000000001', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', '  Gutter repair  ', 'Back side', (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'repair')) ->> 'number') like 'JOB-%', 'the office creates a job, the server numbers it');
+select tst.ok((select status = 'draft' and title = 'Gutter repair' and description = 'Back side' and job_type_id is not null and estimate_id is null from public.jobs where id = 'e4300000-0000-4000-8000-000000000001'), 'a new job waits for a date, its fields are saved');
+select tst.ok((select status from public.customers where id = 'c4300000-0000-4000-8000-000000000001') = 'active', 'a prospect with a job becomes active');
+-- a repeat with the same id (offline replay) is the same job
+select tst.ok((public.create_job('e4300000-0000-4000-8000-000000000001', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'Other') ->> 'repeat')::boolean, 'a repeat returns the same job');
+select tst.ok(tst.cnt($q$select 1 from public.jobs where id = 'e4300000-0000-4000-8000-000000000001' and title = 'Gutter repair'$q$) = 1, 'a repeat changes nothing');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000009', 'c4300000-0000-4000-8000-000000000002', 'd4300000-0000-4000-8000-000000000002', 'X')$q$, 'a «do not service» client takes no new job');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000009', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000002', 'X')$q$, 'the address must be a property of this client');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000009', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', '   ')$q$, 'a job needs a name');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000009', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'X', null, $q$ || quote_literal(:'t43_btype') || $q$)$q$, 'a job type of another company is refused');
+-- the office plans it (S9): a visit of the job
+insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values ('f4300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4300000-0000-4000-8000-000000000001', 'install', now() + interval '1 day', now() + interval '1 day 1 hour');
+select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'f4300000-0000-4000-8000-000000000001'$q$) = 1, 'the office puts a visit on the job');
+-- sales: create without a date, never a visit of a job
+:as_sales_a
+select tst.ok((public.create_job('e4300000-0000-4000-8000-000000000002', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'Sales job') ->> 'number') like 'JOB-%', 'sales create a job without a date');
+select tst.fails($q$insert into public.visits (company_id, job_id, kind, starts_at, ends_at) values ('ca000000-0000-0000-0000-000000000000', 'e4300000-0000-4000-8000-000000000002', 'install', now() + interval '1 day', now() + interval '1 day 1 hour')$q$, 'sales do not put a visit on a job');
+-- the tech and another company create nothing
+:as_tech_a
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000003', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'Tech job')$q$, 'the tech does not create a job');
+:as_owner_b
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000004', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'B job')$q$, 'another company does not create a job for our client');
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000001', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'B job')$q$, 'another company does not read our job through a repeat');
+reset role; set role anon;
+select tst.fails($q$select public.create_job('e4300000-0000-4000-8000-000000000005', 'c4300000-0000-4000-8000-000000000001', 'd4300000-0000-4000-8000-000000000001', 'anon')$q$, 'anon does not create a job');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.jobs where id in ('e4300000-0000-4000-8000-000000000003', 'e4300000-0000-4000-8000-000000000004', 'e4300000-0000-4000-8000-000000000005', 'e4300000-0000-4000-8000-000000000009')$q$) = 0, 'no refused job was made');
+\echo 'T43 wave 3b: a job without an estimate (S17) ok'
+
 \echo 'ALL TESTS PASSED'
