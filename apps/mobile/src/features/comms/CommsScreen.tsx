@@ -18,7 +18,7 @@ const outcome: Record<CallOutcome, { tone: CardStatus["tone"]; label: DictKey }>
 export function CommsScreen({ kind }: { kind: CommsKind }) {
   const { t, time, day } = useI18n();
   const { db, role } = useStore();
-  const items = commsLog(db, role, kind);
+  const items = commsLog(db, role, kind, t("acct.deletedName"));
   const calls = kind === "calls";
   return (
     <Screen fab={calls ? "calls" : undefined} title={t(calls ? "nav.calls" : "nav.messages")} subtitle={t(calls ? "nav.calls.hint" : "nav.messages.hint")}>

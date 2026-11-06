@@ -2,7 +2,8 @@ import { useEffect, useState } from "react";
 import { Linking, View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { assigneesOf, canPlan, dayVisits } from "@/features/schedule";
+import { assigneesOf, canPlan, dayVisits, keepableAssignees } from "@/features/schedule";
+import { memberName } from "@/features/team";
 import { isoDayKey, todayKey } from "@/features/calendar";
 import { sourceName } from "@/features/leads";
 import { smsWithBody } from "@/features/sms";
@@ -21,7 +22,8 @@ export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose:
   // only the office assigns (owner / admin / office ↔ director / dispatcher); sales and techs never see the sheet
   const v = canPlan([role]) ? db.visits.find((x) => x.id === visitId) : undefined;
   const [picked, setPicked] = useState<ID[]>([]);
-  useEffect(() => setPicked(v ? assigneesOf(v) : []), [visitId]); // eslint-disable-line react-hooks/exhaustive-deps
+  // only people at work stay picked: a switched-off or deleted person is not in the list and the server would refuse (S22)
+  useEffect(() => setPicked(v ? keepableAssignees(assigneesOf(v), db.members) : []), [visitId]); // eslint-disable-line react-hooks/exhaustive-deps
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
   // the day of the visit on the company's calendar (П4b)
   const day = v ? isoDayKey(v.start) : todayKey();
@@ -30,7 +32,7 @@ export function AssignSheet({ visitId, onClose }: { visitId: ID | null; onClose:
     if (!visitId) return;
     const undo = assignVisit(visitId, ids);
     onClose();
-    const names = ids.map((id) => db.members.find((m) => m.id === id)?.name ?? "").filter(Boolean).join(", ");
+    const names = ids.map((id) => memberName(db, id, t) ?? "").filter(Boolean).join(", ");
     toast.show(online ? (ids.length ? t("toast.assigned", { name: names }) : t("toast.unassigned")) : t("offline.queued"), undo);
   };
   return (

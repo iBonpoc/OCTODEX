@@ -1974,6 +1974,8 @@ export const ru = {
   // wave 7б-1 «Работы и выезды»: personal settings
   "pref7b.plan": "План",
   "pref7b.showDoneHint": "Выполненные выезды, работы и задачи в Плане. Настройка ваша и одинакова на всех ваших устройствах.",
+  // wave 7а-2b «Каркас»: account deletion (S22)
+  "acct.deletedName": "Удалённый пользователь",
 } as const;
 
 export type DictKey = keyof typeof ru;

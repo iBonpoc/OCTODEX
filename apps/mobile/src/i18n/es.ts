@@ -1975,4 +1975,6 @@ export const es: Dict = {
   // wave 7б-1 «Работы и выезды»: personal settings
   "pref7b.plan": "Plan",
   "pref7b.showDoneHint": "Visitas, trabajos y tareas completados en el Plan. Este ajuste es tuyo y es el mismo en todos tus dispositivos.",
+  // wave 7а-2b «Каркас»: account deletion (S22)
+  "acct.deletedName": "Usuario eliminado",
 };

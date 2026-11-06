@@ -23,6 +23,7 @@ import { visitStatus } from "@/features/visits";
 import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, CardList, Empty, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { memberLabel, memberName } from "@/features/team";
 
 type Tab = "details" | "money" | "history";
 
@@ -66,7 +67,7 @@ export default function JobScreen() {
   const dueCents = invoices.reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0);
   const openInvoice = invoices.find((i) => i.totalCents > i.paidCents);
   const team = [...new Set(visits.flatMap((v) => v.assigneeIds ?? (v.techId ? [v.techId] : [])))]
-    .map((mid) => db.members.find((m) => m.id === mid)?.name)
+    .map((mid) => memberName(db, mid, t))
     .filter(Boolean)
     .join(", ");
   const typeLabel = jobTypeLabel(db, j, t);
@@ -188,7 +189,7 @@ export default function JobScreen() {
                 key={v.id}
                 status={vs.status}
                 title={`${day(v.start)} · ${time(v.start)}`}
-                subtitle={[tech?.name ?? t("sch.noTech"), `${v.durationMin} ${t("sch.min")}`].join(" · ")}
+                subtitle={[memberLabel(tech, t) ?? t("sch.noTech"), `${v.durationMin} ${t("sch.min")}`].join(" · ")}
                 right={<StatusChip status={vs.status} label={t(vs.label)} />}
                 onPress={() => router.push(`/visit/${v.id}`)}
               />

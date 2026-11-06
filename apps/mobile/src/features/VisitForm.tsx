@@ -26,6 +26,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
+import { memberName } from "@/features/team";
 
 export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string };
 
@@ -329,7 +330,7 @@ export function WhenWho({ visitId }: { visitId: ID }) {
   if (!v) return null;
   const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
   const people = assigneesOf(v);
-  const who = people.length ? people.map((id) => db.members.find((m) => m.id === id)?.name ?? "").filter(Boolean).join(", ") : t("vf.dispatcherAssigns");
+  const who = people.length ? people.map((id) => memberName(db, id, t) ?? "").filter(Boolean).join(", ") : t("vf.dispatcherAssigns");
   const open = canReschedule(v);
   return (
     <Card>

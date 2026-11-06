@@ -20,7 +20,8 @@ import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip } from "
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { assigneesOf, canPlan, canReschedule, isAssigned, planFilter, type PlanWho } from "@/features/schedule";
+import { assigneesOf, canPlan, canReschedule, isAssigned, keepableAssignees, liveAssignees, planFilter, type PlanWho } from "@/features/schedule";
+import { memberLabel, memberName } from "@/features/team";
 import { FeedView, PlanAddSheet, PlanWhoChips, UnassignedSoon, WaitingJobs } from "@/features/PlanParts";
 import { daysFrom, planItems } from "@/features/planFeed";
 import { EventSheet, type EventSheetState } from "@/features/EventForm";
@@ -145,9 +146,9 @@ function DayView({ date, visits, who, onAdd }: { date: DayKey; visits: Visit[]; 
   // a card dragged from one person's column onto another: that person is replaced, the others stay (wave П3a)
   const drop = (v: Visit, from: string, to: string) => {
     if (from === to) return;
-    const m = db.members.find((x) => x.id === to);
-    const list = [...assigneesOf(v).filter((x) => x !== from && x !== to), to];
-    toast.show(online ? t("toast.assigned", { name: m?.name ?? "" }) : t("offline.queued"), assignVisit(v.id, from === "none" ? [to] : list));
+    // the others stay — but only people at work: a switched-off or deleted person left on the list makes the server refuse (S22)
+    const list = [...keepableAssignees(assigneesOf(v), db.members).filter((x) => x !== from && x !== to), to];
+    toast.show(online ? t("toast.assigned", { name: memberName(db, to, t) ?? "" }) : t("offline.queued"), assignVisit(v.id, from === "none" ? [to] : list));
   };
   const drag = (v: Visit, card: ReactNode, from: string = v.techId ?? "none") =>
     canAssign && canReschedule(v) ? (
@@ -157,7 +158,8 @@ function DayView({ date, visits, who, onAdd }: { date: DayKey; visits: Visit[]; 
     ) : (
       <View key={v.id}>{card}</View>
     );
-  const unassigned = visits.filter((v) => !v.techId);
+  // nobody who can come — nobody at all, or only a deleted account (S22): otherwise the visit fell out of every column
+  const unassigned = visits.filter((v) => !liveAssignees(v, db.members).length);
   const only = role === "tech" || who === "me" ? db.me : who === "all" ? null : who;
   const people = db.members.filter((m) => m.roles.includes("tech") && !m.pending && (!only || m.id === only));
   return (
@@ -234,14 +236,15 @@ function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: D
                   const p = db.properties.find((x) => x.id === job?.propertyId);
                   const c = db.customers.find((x) => x.id === p?.customerId);
                   const tech = db.members.find((m) => m.id === v.techId);
-                  const st = visitStatus(v, Date.now(), lateAfterOf(db));
+                  // nobody, or only a deleted account (S22): «Не назначено» — visitStatus decides, one rule
+                  const st = visitStatus(v, Date.now(), lateAfterOf(db), db.members);
                   return (
                     <ItemCard
                       key={v.id}
-                      status={tech ? st.status : "warn"}
+                      status={st.status}
                       title={`${time(v.start)} · ${c?.name ?? "—"}`}
-                      subtitle={[job?.title, tech?.name ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
-                      right={<RowView>{overlapSigns(db, v).map((s) => <StatusChip key={s.key} status={s.tone} label={t(s.key, s.params)} />)}<StatusChip status={tech ? st.status : "warn"} label={tech ? t(st.label) : t("st.unassigned")} /></RowView>}
+                      subtitle={[job?.title, memberLabel(tech, t) ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
+                      right={<RowView>{overlapSigns(db, v).map((s) => <StatusChip key={s.key} status={s.tone} label={t(s.key, s.params)} />)}<StatusChip status={st.status} label={t(st.label)} /></RowView>}
                       onPress={() => router.push(`/visit/${v.id}`)}
                     />
                   );

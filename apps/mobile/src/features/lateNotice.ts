@@ -19,7 +19,7 @@ export function lateNotices(db: DB, role: Role, now: number = Date.now()): Notic
   const sch = scheduleSettingsOf(db.company);
   for (const v of db.visits) {
     // the same window as «Требует внимания» (today), so the item and the notice agree
-    const late = lateToday(v, now, sch, tz);
+    const late = lateToday(v, now, sch, tz, db.members);
     if (!late) continue;
     const { client, tech } = visitWho(db, v);
     out.push({

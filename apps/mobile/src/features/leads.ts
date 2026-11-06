@@ -10,6 +10,7 @@ import { getZone } from "@/features/zone";
 import type { StatusName } from "@octo/design-tokens";
 import { LEAD_SETTINGS_DEFAULT, type LeadSettings } from "./leadSettings";
 import { DECLINE_REASONS, LOST_REASONS, type Customer, type DB, type Lead, type LeadStatus, type Person, type LostReason, type Role, type Source, type SourceKind, type Task } from "@/data/types";
+import { memberName } from "./team";
 import type { DictKey } from "@/i18n";
 import { leadPeopleOf, peopleOf, phonesOfPeople } from "@/data/people";
 
@@ -241,7 +242,8 @@ export interface TimelineEntry {
  * Everything about the lead in time order (newest first): received, calls / SMS / emails, status changes,
  * assignment, notes, estimate visits, estimates sent / opened / signed.
  */
-export function leadTimeline(db: DB, l: Lead, viewer?: string): TimelineEntry[] {
+/** `deletedWord` — «Удалённый пользователь» in the viewer's language (a person who deleted their account, S22) */
+export function leadTimeline(db: DB, l: Lead, viewer?: string, deletedWord = ""): TimelineEntry[] {
   const out: TimelineEntry[] = [{ id: `rcv-${l.id}`, at: l.receivedAt, icon: "inbox", key: "tl.received", params: { source: sourceName(db, l.sourceId) }, body: l.message || undefined }];
   for (const a of db.activities.filter((x) => x.subjectType === "lead" && x.subjectId === l.id)) {
     const base = { id: a.id, at: a.at, actorId: a.actorId, body: a.body };
@@ -250,7 +252,7 @@ export function leadTimeline(db: DB, l: Lead, viewer?: string): TimelineEntry[] 
     else if (a.kind === "email") out.push({ ...base, icon: "mail", key: "tl.email" });
     else if (a.kind === "marketplace") out.push({ ...base, icon: "send", key: "tl.marketplace", params: { source: sourceName(db, l.sourceId) } });
     else if (a.kind === "reply") out.push({ ...base, icon: "check", key: "tl.reply" });
-    else if (a.kind === "assigned") out.push({ ...base, icon: "user", key: "tl.assigned", params: { name: db.members.find((m) => m.id === a.meta?.to)?.name ?? "—" } });
+    else if (a.kind === "assigned") out.push({ ...base, icon: "user", key: "tl.assigned", params: { name: memberName(db, a.meta?.to as string | undefined, deletedWord) || "—" } });
     else if (a.kind === "edited") out.push({ ...base, icon: "pencil", key: "tl.edited" });
     else if (a.kind === "status") {
       const to = (a.meta?.to ?? "") as LeadStatus;
