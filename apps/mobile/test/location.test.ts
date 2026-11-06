@@ -19,7 +19,7 @@ import { normalizeDB } from "../src/data/normalize";
 import { makeSeed } from "../src/data/seed";
 import type { DB, Visit, VisitPoint, VisitStep } from "../src/data/types";
 import {
-  distanceM, isSharingStep, keepLast, lastPoint, milesOf, nearAddress, officeLines, shouldAskConsent, shouldShare, stepPending, NEAR_M, OFFICE_WINDOW_MS, STALE_MS,
+  distanceM, isSharingStep, keepLast, lastPoint, milesOf, nearAddress, notSharing, officeLines, shouldAskConsent, shouldShare, stepPending, NEAR_M, OFFICE_WINDOW_MS, STALE_MS,
 } from "../src/features/location";
 
 const HOME = { lat: 34.1478, lng: -118.1445 }; // Pasadena
@@ -76,7 +76,7 @@ describe("the hint «You are at the address»", () => {
 });
 
 describe("what the office sees", () => {
-  const db = (points: VisitPoint[]): Pick<DB, "visitPoints"> => ({ visitPoints: points });
+  const db = (points: VisitPoint[], members: DB["members"] = []): Pick<DB, "visitPoints" | "members"> => ({ visitPoints: points, members });
   it("«2.1 mi from the address · 3 min ago» per person", () => {
     const far = point({ lat: HOME.lat + 0.03 }); // ~3.3 km
     const [line] = officeLines(db([far]), visit("en_route"), HOME, NOW);
@@ -95,6 +95,20 @@ describe("what the office sees", () => {
   });
   it("a person taken off the visit has no line", () => {
     expect(officeLines(db([point({ userId: "gone" })]), visit("en_route", ["me"]), HOME, NOW)).toEqual([]);
+  });
+  it("a person switched off or deleted (pending) is not followed: no line, not «не делится» (7а-2b, review #217)", () => {
+    const gone = { id: "gone", name: "Gone", initials: "G", kind: "employee", roles: ["tech"], pending: true, disabled: true, sharesLocation: false } as DB["members"][number];
+    const mike = { id: "mike", name: "Mike", initials: "M", kind: "employee", roles: ["tech"], sharesLocation: false } as DB["members"][number];
+    const v = visit("en_route", ["gone", "mike"]);
+    expect(officeLines(db([point({ userId: "gone" })], [gone, mike]), v, HOME, NOW)).toEqual([]);
+    const all = { members: [gone, mike], me: "me", location: { allowed: true, on: true } };
+    expect(notSharing(all, v, [])).toEqual(["mike"]);
+  });
+  it("«не делится»: me by my consent, others by their membership, unknown — not said", () => {
+    const anna = { id: "anna", name: "Anna", initials: "A", kind: "employee", roles: ["tech"] } as DB["members"][number];
+    const v = visit("en_route", ["me", "anna"]);
+    expect(notSharing({ members: [anna], me: "me", location: { allowed: true, on: false } }, v, [])).toEqual(["me"]);
+    expect(notSharing({ members: [anna], me: "me", location: { allowed: true, on: true } }, v, [])).toEqual([]);
   });
   it("miles never read 0.0", () => {
     expect(milesOf(10)).toBe("0.1");
