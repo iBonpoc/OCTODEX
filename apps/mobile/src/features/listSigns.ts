@@ -51,10 +51,10 @@ export function leadSigns(l: Pick<Lead, "status" | "callAttempts">): Sign[] {
   return [{ key: "card.sign.missedCalls", params: { n }, tone: "warn" }];
 }
 
-/** Visit late: start + 15 min passed, nobody on site (docs/specs/03 П3c). «On the way» does not clear it; on site, a closed
+/** Visit late: start + the company's «late» minutes (15 by default) passed, nobody on site (docs/specs/03 П3c). «On the way» does not clear it; on site, a closed
  *  visit or a ticked checklist item do. The one rule of features/schedule.ts lateKind (same as visits.tsx and attention.ts). */
-export function visitSigns(v: Parameters<typeof lateKind>[0], now: number = Date.now()): Sign[] {
-  const late = lateKind(v, now);
+export function visitSigns(v: Parameters<typeof lateKind>[0], now: number = Date.now(), lateAfterMin?: number): Sign[] {
+  const late = lateKind(v, now, lateAfterMin);
   return late ? [{ key: late === "en_route" ? "late.enRoute" : "late.notLeft", tone: "warn" }] : [];
 }
 

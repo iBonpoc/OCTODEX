@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Role } from "../src/data/types";
-import { canOpen, effectiveRole, roleHome, roleNav, routeKey, routeRoles } from "../src/nav/roles";
+import { canOpen, canSeeProfit, effectiveRole, roleHome, roleNav, routeKey, routeRoles } from "../src/nav/roles";
 
 const ROLES: Role[] = ["tech", "dispatcher", "director", "sales"];
 const APP = path.join(__dirname, "../src/app");
@@ -58,5 +58,18 @@ describe("effective role (bug: «/» opened My visits for the owner and the offi
   it("a role they have stays (the owner switched to Technician on purpose)", () => {
     expect(effectiveRole("tech", ["director", "dispatcher", "tech"])).toBe("tech");
     expect(effectiveRole("sales", ROLES)).toBe("sales");
+  });
+});
+
+describe("«Прибыль» by right (docs/specs/13 §3.4, §4)", () => {
+  it("the technician never sees a job's profit; the office does", () => {
+    expect(canSeeProfit("tech")).toBe(false);
+    for (const r of ["dispatcher", "director", "sales"] as Role[]) expect(canSeeProfit(r)).toBe(true);
+  });
+  it("job and visit screens both ask canSeeProfit before showing jobProfit (failed before: the visit showed it to the tech)", () => {
+    for (const f of ["job/[id].tsx", "visit/[id].tsx"]) {
+      const src = fs.readFileSync(path.join(APP, f), "utf8");
+      expect(src, f).toMatch(/canSeeProfit\(store\.role\)/);
+    }
   });
 });

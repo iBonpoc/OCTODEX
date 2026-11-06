@@ -5,7 +5,7 @@ const SCREENS = [
   "/estimate/new?id=e6", "/estimate/e5", "/estimate/signature", "/estimates", "/p/demo0handyman0estimate0000000001",
   "/jobs", "/job/j1", "/job/schedule?jobId=j1", "/visit/v1",
   "/money", "/invoice/i5", "/receipt/pay5", "/expense/new",
-  "/catalog", "/catalog/cat-haul", "/company", "/company/profile", "/company/licenses", "/company/trades", "/team", "/settings",
+  "/catalog", "/catalog/cat-haul", "/company", "/company/profile", "/company/schedule", "/company/licenses", "/company/trades", "/team", "/settings",
 ];
 /**
  * Screens already on the new list cards (step 10а, docs/specs/06-list-cards.md): also checked for straight edges and equal

@@ -3,16 +3,18 @@
  * «sign the contract» only for those who may sign; «expired» for director and office, instead of «no reply»;
  * «declined by the company» until the lead is changed or closed; no «remind the client» once the client signed.
  */
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { dayIn } from "../src/features/scheduleSettings";
 import { attentionHref, buildAttention } from "../src/features/attention";
 import { makeSeed } from "../src/data/seed";
 import type { DB, Estimate } from "../src/data/types";
 
 const ago = (days: number) => new Date(Date.now() - days * 86400000).toISOString();
-const day = (offset: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() + offset);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+/** a calendar day of the COMPANY (Los Angeles in the demo), offset from its today: «valid until» is the company's date
+ *  (П4a; the server decides by companies.timezone too), not the machine's — a run after 00:00 UTC must not shift it */
+const day = (offset: number, now: number = Date.now()) => {
+  const d = new Date((dayIn(now, "America/Los_Angeles") + offset) * 86_400_000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
 };
 
 function withEstimate(patch: Partial<Estimate>): { d: DB; id: string } {
@@ -66,6 +68,7 @@ describe("the client signed → «sign the contract»", () => {
 });
 
 describe("past «valid until» → «expired»", () => {
+  afterEach(() => vi.useRealTimers());
   it("neutral, for director and office; replaces «no reply N days»", () => {
     const { d, id } = withEstimate({ validUntil: day(-1) });
     for (const role of ["director", "dispatcher"] as const) {
@@ -81,6 +84,15 @@ describe("past «valid until» → «expired»", () => {
   it("the last day is still valid: «no reply» as before", () => {
     const { d, id } = withEstimate({ validUntil: day(0) });
     expect(of(d, id).map((i) => i.kind)).toEqual(["estimate"]);
+  });
+  it("just after midnight UTC (still the evening before in Los Angeles): the company's yesterday is expired, its today is not", () => {
+    // 00:30 UTC Nov 6 = 4:30 PM Nov 5 in Los Angeles. Before П4a the machine's day decided: «Nov 5» was already «yesterday».
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-06T00:30:00.000Z"));
+    const expired = (validUntil: string) => of(withEstimate({ validUntil }).d, "eA", "director").some((i) => i.kind === "estimateExpired");
+    expect(expired("2026-11-04")).toBe(true);
+    expect(expired("2026-11-05")).toBe(false); // the company's today: the last valid day
+    expect(day(0)).toBe("2026-11-05");
   });
   it("a revoked link is not «expired»; a signed estimate never is", () => {
     expect(of(withEstimate({ validUntil: day(-3), linkRevokedAt: ago(1) }).d, "eA").some((i) => i.kind === "estimateExpired")).toBe(false);

@@ -18,6 +18,8 @@ permissions:
   contents: read
   pull-requests: write
 
+# eas-cli pinned to 27.4.1 (05.11.2026): 27.5.0 was published broken (ETARGET @expo/turtle-spawn@27.5.0).
+# Raise the pin deliberately after checking a new version, never back to @latest.
 jobs:
   preview:
     # PRs from forks get no secrets — skip them.
@@ -44,7 +46,7 @@ jobs:
         working-directory: apps/mobile
         run: |
           set -o pipefail
-          npx eas-cli@latest deploy --non-interactive | tee deploy.log
+          npx eas-cli@27.4.1 deploy --non-interactive | tee deploy.log
           # the unique deployment URL looks like https://<project>--<id>.expo.app (never the production octodex.expo.app)
           url="$(grep -oE 'https://[a-z0-9-]+--[a-z0-9-]+\.expo\.app' deploy.log | head -1)"
           # a preview without a working link is a failed preview — never a green step with a dead link

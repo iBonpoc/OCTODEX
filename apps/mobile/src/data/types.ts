@@ -498,6 +498,10 @@ export interface Company {
   cancelEmail?: string;
   /** lead thresholds set by the company (features/leadSettings.ts fills the gaps with defaults) */
   leadSettings?: Partial<import("@/features/leadSettings").LeadSettings>;
+  /** schedule settings (docs/specs/03 §6.1, П4a; features/scheduleSettings.ts fills the gaps with defaults) */
+  scheduleSettings?: Partial<import("@/features/scheduleSettings").ScheduleSettings>;
+  /** working hours by weekday (companies.business_hours; missing = Mon–Sat 8:00–18:00) */
+  businessHours?: Partial<import("@/features/scheduleSettings").BusinessHours>;
   estimate: { validDays: number; depositBps: number | null; terms?: string };
   payment: { zelle?: string; checkPayableTo?: string };
   licenses: CompanyLicense[];

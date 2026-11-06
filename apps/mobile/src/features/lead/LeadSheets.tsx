@@ -2,8 +2,8 @@
  * Lead card sheets of wave L2 (docs/14-leads-spec.md §7.3): call result, "what next?", estimate visit booking,
  * snooze, status, "lost or wait?". Every action goes through the store (undo toast, offline queue).
  */
+import { scheduleSettingsOf } from "@/features/scheduleSettings";
 import { VisitFormSheet } from "@/features/VisitForm";
-import { SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { uid } from "@/features/estimateDoc";
 import { useMemo, useState } from "react";
 import { Linking, View } from "react-native";
@@ -115,7 +115,7 @@ export function BookSheet({ l, visible, onClose }: { l: Lead; visible: boolean; 
       onClose={onClose}
       title={t("lead.next.book")}
       saveLabel={t("lead.next.book")}
-      init={{ durationMin: SCHEDULE_DEFAULTS.inspectionMin, techId: initialTech, propertyId: l.propertyId }}
+      init={{ durationMin: scheduleSettingsOf(db.company).inspectionMin, techId: initialTech, propertyId: l.propertyId }}
       onSave={(v) => {
         const visitId = uid();
         const undo = store.bookLead(l.id, { ...v, visitId });

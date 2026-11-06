@@ -2,6 +2,7 @@
  * Properties inside a client (wave C2, docs/specs/04 §3, §7.3). Pure — tested in test/properties.test.ts.
  */
 import { isAssigned, isOpenVisit } from "@/features/schedule";
+import { dayIn } from "@/features/scheduleSettings";
 import type { DB, Estimate, Job, Person, Property, Role, Visit } from "@/data/types";
 import { peopleOf } from "@/data/people";
 import { visitPropertyId } from "@/data/selectors";
@@ -40,17 +41,8 @@ export function propertyNow(db: DB, propertyId: string, now = Date.now()): Prope
   return { estimates, jobs, nextVisit };
 }
 
-/** Calendar day number of a moment in a time zone (the company's: the server decides by it too). */
-export function dayIn(t: number, timeZone: string): number {
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date(t));
-  } catch {
-    parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date(t));
-  }
-  const n = (k: string) => Number(parts.find((p) => p.type === k)?.value ?? 0);
-  return Math.floor(Date.UTC(n("year"), n("month") - 1, n("day")) / 86_400_000);
-}
+/** Calendar day number of a moment in a time zone — lives with the schedule settings (one rule for the whole app) */
+export { dayIn };
 /**
  * May this person see the gate code? The office always; a tech only on the day of a visit of theirs at the property
  * or the day before, by the company's time zone, and not for a visit that is over (paid, completed, no-show).
