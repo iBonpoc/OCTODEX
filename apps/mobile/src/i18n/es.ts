@@ -74,6 +74,9 @@ export const es: Dict = {
   "nav.notices.emptyHint": "Aparecerá aquí cuando un cliente abra o firme un presupuesto, pague una factura o un técnico llegue tarde.",
   "nav.notices.readAll": "Marcar como leídas",
   "nav.notices.earlier": "Leídas",
+  "nav.more": "Más",
+  "nav.more.online": "En línea · todo guardado",
+  "nav.more.hint": "Todas las secciones de la app",
 
   "st.scheduled": "Programada",
   "st.en_route": "En camino",

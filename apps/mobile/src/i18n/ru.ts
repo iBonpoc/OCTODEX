@@ -73,6 +73,9 @@ export const ru = {
   "nav.notices.emptyHint": "Здесь появится, когда клиент откроет или подпишет смету, оплатит счёт или мастер опоздает.",
   "nav.notices.readAll": "Отметить прочитанными",
   "nav.notices.earlier": "Прочитанные",
+  "nav.more": "Ещё",
+  "nav.more.online": "Онлайн · всё сохранено",
+  "nav.more.hint": "Все разделы приложения",
 
   "st.scheduled": "Запланирован",
   "st.en_route": "В пути",

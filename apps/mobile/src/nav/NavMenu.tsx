@@ -20,8 +20,8 @@ import { usePersistentState } from "@/data/persist";
 import { openSection } from "./go";
 
 /**
- * ☰ — the app menu (docs/specs/13 §2.3, 13а §3): slides in from the left, groups split by a line, items by rights.
- * One provider for the whole app (root _layout): any screen opens it with useNavMenu().open(); the old /more opens it too.
+ * The full menu as a drawer (docs/specs/13 v2 §2.3, §2.5): only on 820 — ☰ on the side rail opens it over the content.
+ * The phone has the «Ещё» tab instead (variant Б, founder 06.11); 1280 opens the side menu in place.
  * «＋ Создать» on top opens the home «＋» set (13 v2 §2.4; each screen has its own «＋», Fab.tsx).
  */
 interface NavMenuCtx {
@@ -34,12 +34,10 @@ interface NavMenuCtx {
   /** 1280: the side menu is open (pushes the content), remembered per person on this device (13а §8) */
   sideOpen: boolean;
   toggleSide: () => void;
-  /** open the 1280 side menu (the old /more address); waits for the remembered choice to load first */
-  openSide: () => void;
   /** the remembered choice has loaded from the device */
   sideReady: boolean;
 }
-const Ctx = createContext<NavMenuCtx>({ open: () => {}, close: () => {}, isOpen: false, create: () => {}, sideOpen: false, toggleSide: () => {}, openSide: () => {}, sideReady: false });
+const Ctx = createContext<NavMenuCtx>({ open: () => {}, close: () => {}, isOpen: false, create: () => {}, sideOpen: false, toggleSide: () => {}, sideReady: false });
 export const useNavMenu = () => useContext(Ctx);
 
 export function NavMenuProvider({ children }: { children: ReactNode }) {
@@ -60,14 +58,13 @@ export function NavMenuProvider({ children }: { children: ReactNode }) {
   const { db } = useStore();
   const [sideOpen, setSideOpen, sideReady] = usePersistentState<boolean>(openKey(db.me), false);
   const toggleSide = useCallback(() => setSideOpen((v) => !v), [setSideOpen]);
-  const openSide = useCallback(() => setSideOpen(true), [setSideOpen]);
   const create = useCallback(() => {
     setOpen(false);
     setQuick(true);
   }, []);
   const value = useMemo(
-    () => ({ open, close, isOpen, create, sideOpen, toggleSide, openSide, sideReady }),
-    [open, close, isOpen, create, sideOpen, toggleSide, openSide, sideReady],
+    () => ({ open, close, isOpen, create, sideOpen, toggleSide, sideReady }),
+    [open, close, isOpen, create, sideOpen, toggleSide, sideReady],
   );
   return (
     <Ctx.Provider value={value}>
@@ -80,25 +77,6 @@ export function NavMenuProvider({ children }: { children: ReactNode }) {
       />
       <FabSheet set="home" visible={quick} onClose={() => setQuick(false)} />
     </Ctx.Provider>
-  );
-}
-
-/** ☰ in the header of a tab or menu root (phone; 36 visible, 44 to tap). */
-export function MenuButton() {
-  const { t } = useI18n();
-  const { c } = useTheme();
-  const menu = useNavMenu();
-  return (
-    <Press
-      onPress={menu.open}
-      visibleHeight={component.dockBtn}
-      accessibilityRole="button"
-      accessibilityLabel={t("nav.menu")}
-      aria-haspopup="dialog"
-      style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
-    >
-      <Icon name="menu" s={size.iconMd} color={c.ink} />
-    </Press>
   );
 }
 

@@ -8,8 +8,8 @@ import path from "node:path";
 
 const APP = path.resolve(__dirname, "../src/app");
 /** Sign-in and the company picker need a real account; the redirect index and 404 have no content of their own. */
-// inbox and more: redirects of the old «Продажи» and «Ещё» addresses (docs/specs/13а §2)
-const NOT_A_SCREEN = new Set(["index", "inbox", "more", "+not-found", "auth/sign-in", "auth/company"]);
+// inbox: the redirect of the old «Продажи» address (docs/specs/13а §2); «Ещё» (/more) is a screen again (variant Б)
+const NOT_A_SCREEN = new Set(["index", "inbox", "+not-found", "auth/sign-in", "auth/company"]);
 
 function routes(dir = APP, base = ""): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
