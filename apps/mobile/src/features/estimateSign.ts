@@ -6,6 +6,8 @@
  *   S8b an employee signs for the company   → approved; lead won, client active, job "waiting for a date", deposit invoice.
  * Founder 05.11: the deal counts only when both signed; every employee may sign in their own name; no auto-signing.
  */
+import { addDays } from "./calendar";
+import { dayKeyIn, getZone } from "./zone";
 import type { DB, Estimate, EstimateApproval, EstimateCountersign, ID, Member } from "@/data/types";
 import { summarize } from "./estimateDoc";
 
@@ -96,19 +98,19 @@ export function companySigned(
   };
 }
 
-/** "Valid until" for a send today: the company's days, 7 by default (founder 05.11). Local calendar day, YYYY-MM-DD. */
-export function validUntilFor(company: Pick<NonNullable<DB["company"]>, "estimate"> | null, now: Date): string {
+/** "Valid until" for a send today: the company's days, 7 by default (founder 05.11). A calendar day of the COMPANY
+ *  (its time zone, as the server's app.company timezone — docs/specs/03 П4b), YYYY-MM-DD. */
+export function validUntilFor(company: (Pick<NonNullable<DB["company"]>, "estimate"> & { timezone?: string }) | null, now: Date): string {
   const days = Math.max(1, company?.estimate.validDays ?? 7);
-  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + days);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  return addDays(dayKeyIn(now.getTime(), company?.timezone || getZone()), days);
 }
 
 /** The client link is open: not revoked, and signed (by the client or both) or not past "valid until" — the limit is for an unsigned estimate. */
-export function linkOpen(e: Pick<Estimate, "status" | "validUntil" | "linkRevokedAt" | "token">, now: Date): boolean {
+export function linkOpen(e: Pick<Estimate, "status" | "validUntil" | "linkRevokedAt" | "token">, now: Date, tz: string = getZone()): boolean {
   if (!e.token || e.linkRevokedAt) return false;
   if (e.status === "approved" || e.status === "awaiting_countersign" || !e.validUntil) return true;
-  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
-  return e.validUntil >= today;
+  // «valid until» is the company's calendar day (the server decides the same way), not the phone's
+  return e.validUntil >= dayKeyIn(now.getTime(), tz);
 }
 
 /** The current saved signature of an employee. */

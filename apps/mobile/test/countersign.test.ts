@@ -141,12 +141,20 @@ describe("HIS (CA salesperson registration): a warning, never a block", () => {
 
 describe("the client link: valid until, revoked (founder 05.11)", () => {
   it("valid until = today + the company's days; 7 by default", () => {
-    const now = new Date(2026, 10, 5, 23, 30);
+    const now = new Date("2026-11-05T23:30:00-08:00"); // 11:30 PM in Los Angeles (the demo company)
     expect(validUntilFor(null, now)).toBe("2026-11-12");
     expect(validUntilFor({ estimate: { validDays: 3, depositBps: null } }, now)).toBe("2026-11-08");
   });
+  it("«today» is the company's day (П4b): 11:30 PM in LA is already Nov 6 in New York and in UTC", () => {
+    const now = new Date("2026-11-06T07:30:00.000Z");
+    expect(validUntilFor({ estimate: { validDays: 7, depositBps: null }, timezone: "America/Los_Angeles" }, now)).toBe("2026-11-12");
+    expect(validUntilFor({ estimate: { validDays: 7, depositBps: null }, timezone: "America/New_York" }, now)).toBe("2026-11-13");
+    // the last valid day is open until the company's midnight
+    expect(linkOpen({ status: "sent", validUntil: "2026-11-05", token: "t" }, now, "America/Los_Angeles")).toBe(true);
+    expect(linkOpen({ status: "sent", validUntil: "2026-11-05", token: "t" }, now, "America/New_York")).toBe(false);
+  });
   it("unsigned: open through the last day, closed the day after; signed (client or both): always; revoked or no token: never", () => {
-    const now = new Date(2026, 10, 12, 20, 0);
+    const now = new Date("2026-11-12T20:00:00-08:00");
     expect(linkOpen({ status: "sent", validUntil: "2026-11-12", token: "t" }, now)).toBe(true);
     expect(linkOpen({ status: "sent", validUntil: "2026-11-11", token: "t" }, now)).toBe(false);
     expect(linkOpen({ status: "awaiting_countersign", validUntil: "2026-11-11", token: "t" }, now)).toBe(true); // the client signed: keeps the page
