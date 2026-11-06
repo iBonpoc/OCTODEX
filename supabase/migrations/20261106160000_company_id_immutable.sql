@@ -45,9 +45,15 @@ alter policy member_signatures_update on public.member_signatures
 
 -- 3 ------------------------------------------------------------------------------------------------
 -- The row being updated is still in the statement's snapshot with its old values when WITH CHECK runs.
+-- !! Must stay STABLE: a volatile SQL function takes a fresh snapshot and would see the new name (T59 (5) catches it).
+-- Answers only about objects the caller may write anyway (not an oracle for other companies' objects).
+-- Side effects: Storage «move» is always refused now (the app never moves); «copy» is an insert, checked as one.
+-- Safe only while authenticated has no DELETE policy on storage.objects (T59 (5) checks it): with one, a single
+-- statement «delete B/x; update A/y set id, name = B/x» would pass the snapshot check.
 create or replace function app.file_object_kept(p_id uuid, p_bucket text, p_name text)
 returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (select 1 from storage.objects o where o.id = p_id and o.bucket_id = p_bucket and o.name = p_name);
+  select app.can_write_file_object(p_name)
+     and exists (select 1 from storage.objects o where o.id = p_id and o.bucket_id = p_bucket and o.name = p_name);
 $$;
 revoke all on function app.file_object_kept(uuid, text, text) from public, anon;
 grant execute on function app.file_object_kept(uuid, text, text) to authenticated;

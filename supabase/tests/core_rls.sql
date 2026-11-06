@@ -4542,6 +4542,10 @@ insert into storage.objects (bucket_id, name) values ('files', 'cb000000-0000-00
 select tst.ok((select updated_at is not null from storage.objects where name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg'), 'a repeat upload (upsert, same name) still works');
 :as_super
 select tst.ok((select count(*) from storage.objects where name like 'c5900000-0000-4000-8000-000000000000/%') = 0, 'nothing landed in the other company');
+-- the snapshot check holds only while the app's roles cannot delete objects (files are deleted by the server)
+select tst.ok(not exists (select 1 from pg_policy p where p.polrelid = 'storage.objects'::regclass and p.polcmd in ('d', '*')
+                            and (p.polroles @> array['authenticated'::regrole::oid] or p.polroles @> array[0::oid] or p.polroles @> array['anon'::regrole::oid])),
+              'no DELETE policy on storage.objects for the app''s roles');
 \echo 'T59 a row never moves to another company ok'
 
 \echo 'ALL TESTS PASSED'
