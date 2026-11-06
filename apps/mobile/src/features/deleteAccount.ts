@@ -115,27 +115,44 @@ export function readDeleteAnswer(status: number | null, body: unknown): DeleteAn
 /** the tries after «Удалить навсегда»: a lost answer or a pending sign-in close is repeated (the RPC answers repeat) */
 export const DELETE_PAUSES_MS: readonly number[] = [1000, 2000, 4000];
 export type DeleteOutcome = { ok: true } | { ok: false; key: AccountErrorKey; companyId?: string };
+/** is my profile deleted on the server: «gone» (deleted_at is set), «alive», or «unknown» (no answer) */
+export type AccountState = "gone" | "alive" | "unknown";
 /**
- * Calls `call` until it is done: 500 / network / auth pending → again after a pause; a 401 after an unknown or pending
- * answer means the sign-in is already closed — success. Our own refusal (400, the first 401) stops at once.
+ * Calls `call` until it is settled (§6.12; review 7а-2b №1, №5). The answer may be lost although the data is gone, and
+ * a repeat then gets 401 (the sign-in is closed) — so after anything unclear (no answer, 500, 401) the app ASKS the
+ * server whether its profile is deleted (`verify`), it never guesses from a status:
+ * - 200 deleted (auth done) → done; auth pending → once more (the RPC answers repeat, the function closes the sign-in),
+ *   pending to the end is still done (the data is closed; the next sign-in finishes it);
+ * - 400 — our refusal (the RPC refuses only a person who is not deleted) → its reason, even after a 500;
+ * - 401 or no answer / 500 → verify: gone → done; alive after a 401 → «sign in»; else a pause and again;
+ * - out of tries → verify once more: gone → done, else «try again» / «no connection» (never «failed for good»).
  */
 export async function deleteWithRepeat(
   call: () => Promise<{ status: number | null; body: unknown }>,
+  verify: () => Promise<AccountState>,
   sleep: (ms: number) => Promise<void> = (ms) => new Promise((r) => setTimeout(r, ms)),
   pauses: readonly number[] = DELETE_PAUSES_MS,
 ): Promise<DeleteOutcome> {
-  let doneOnce = false; // the data is gone (deleted: true) or may be (500)
+  let pending = false;
+  let lastNet = false;
+  const check = () => verify().catch((): AccountState => "unknown");
   for (let i = 0; ; i++) {
     const r = await call().catch(() => ({ status: null, body: null }));
     const a = readDeleteAnswer(r.status, r.body);
+    lastNet = r.status === null;
     if (a.kind === "done" && !a.pending) return { ok: true };
-    if (a.kind === "refused") {
-      if (doneOnce && r.status === 401) return { ok: true };
-      if (!doneOnce) return { ok: false, key: a.key, ...(a.companyId ? { companyId: a.companyId } : {}) };
+    if (a.kind === "done") pending = true;
+    else if (r.status === 400 && a.kind === "refused") return { ok: false, key: a.key, ...(a.companyId ? { companyId: a.companyId } : {}) };
+    else {
+      // 401, 500, no answer: the server says what happened to the profile
+      const st = await check();
+      if (st === "gone") return { ok: true };
+      if (st === "alive" && r.status === 401) return { ok: false, key: "acct.err.signIn" };
     }
-    if (a.kind === "done") doneOnce = true; // pending: the data is closed, the sign-in not yet
-    if (a.kind === "unknown" && r.status !== null) doneOnce = true;
-    if (i >= pauses.length) return a.kind === "done" ? { ok: true } : { ok: false, key: r.status === null ? "acct.err.network" : "acct.err.retry" };
+    if (i >= pauses.length) {
+      if (pending || (await check()) === "gone") return { ok: true };
+      return { ok: false, key: lastNet ? "acct.err.network" : "acct.err.retry" };
+    }
     await sleep(pauses[i]!);
   }
 }
@@ -150,4 +167,19 @@ export async function wipeDevice(store: { getAllKeys: () => Promise<readonly str
   const all = [...new Set([...keys, ...DEVICE_KEYS])];
   await store.multiRemove(all).catch(() => {});
   return all;
+}
+
+/* ---------- the repeat on sign-in: when to ask «is this profile deleted» (review 7а-2b №2, №3) ---------- */
+/**
+ * What AuthProvider does on an auth event. «first» — ask the server first (a deleted profile is finished quietly) and
+ * only then the consent and the memberships; «plain» — the consent and the memberships as before; «none» — nothing.
+ * Once per person: supabase-js also sends SIGNED_IN on start and on every return to the browser tab, and INITIAL_SESSION
+ * on start (the start itself goes through getSession, which asks first).
+ */
+export type AuthEventPlan = "first" | "plain" | "none";
+export function authEventPlan(event: string, uid: string | null, checkedUid: string | null): AuthEventPlan {
+  if (!uid) return "none";
+  if (event === "INITIAL_SESSION") return "none";
+  if (uid !== checkedUid) return "first";
+  return "plain";
 }

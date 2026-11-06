@@ -2030,6 +2030,10 @@ export const ru = {
   "acct.err.network": "Нет связи с сервером",
   "acct.err.code": "Код не подошёл",
   "acct.err.failed": "Не удалось удалить аккаунт — попробуйте позже",
+  "acct.retry": "Повторить удаление",
+  "acct.sure.closes": "Компания «{name}» закроется для всех ({n} чел.).",
+  "acct.sure.closesAlone": "Компания «{name}» закроется.",
+  "acct.co.closeHintAlone": "Кроме вас в компании никого нет. Скачайте нужные документы до закрытия. Записи хранятся по сроку закона.",
 } as const;
 
 export type DictKey = keyof typeof ru;

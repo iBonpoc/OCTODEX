@@ -7,6 +7,7 @@ import { LEGAL_RETRY_MS, legalState, legalTickets, PENDING_LEGAL_KEY, resolveLeg
 import { supabase } from "./client";
 import { acceptLegal, legalStatus } from "./legal";
 import { finishDeletedAccount } from "./account";
+import { authEventPlan } from "@/features/deleteAccount";
 
 /** Where email links (confirm / magic link) return. Must be in Supabase Auth → URL Configuration. */
 const redirectTo = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL);
@@ -103,9 +104,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
    * old session) — finish the deletion quietly BEFORE the consent check: its legal_status says «not ok» and the gate
    * would send it to «Условия» for ever. No network — false (nothing is blocked).
    */
+  const checkedUid = useRef<string | null>(null);
   const finishedDeleted = useCallback(async (s: Session) => {
+    checkedUid.current = s.user.id;
     const gone = await finishDeletedAccount(s.user.id).catch(() => false);
-    if (gone) setAccountDeleted(true);
+    if (gone) {
+      checkedUid.current = null;
+      setAccountDeleted(true);
+    }
     return gone;
   }, []);
 
@@ -124,18 +130,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     });
     const { data: sub } = supabase.auth.onAuthStateChange((e, s) => {
       setSession(s);
-      if (s && e === "SIGNED_IN") {
-        // the gate waits (legalChecked stays false) until we know the profile is alive
+      const plan = authEventPlan(e, s?.user.id ?? null, checkedUid.current);
+      if (s && plan === "first") {
+        // a new person signed in: the consent is asked only after we know the profile is alive (the gate follows
+        // `legal`, which stays «unknown» — never blocking — until then)
+        setLegal("unknown");
         setLegalChecked(false);
         void finishedDeleted(s).then((gone) => {
           if (gone) return;
           checkLegal(s.user.email);
           reloadMemberships();
         });
-      } else if (s) {
+      } else if (s && plan === "plain") {
         checkLegal(s.user.email);
         reloadMemberships();
+      } else if (s) {
+        // INITIAL_SESSION: the start goes through getSession above (it asks first)
       } else {
+        checkedUid.current = null;
         setMemberships([]);
         setLegal("unknown");
         setLegalChecked(false);

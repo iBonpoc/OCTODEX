@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  accountErrorKey, CONFIRM_WORD, deleteBlock, deleteWithRepeat, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
+  accountErrorKey, authEventPlan, CONFIRM_WORD, deleteBlock, deleteWithRepeat, type AccountState, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
 } from "../src/features/deleteAccount";
 
 const ROOT = path.resolve(__dirname, "../../..");
@@ -101,32 +101,63 @@ describe("unit:deleteAccount — the answer and the repeat (§6.12)", () => {
     expect(readDeleteAnswer(500, { error: "account deletion failed" })).toEqual({ kind: "unknown" });
     expect(readDeleteAnswer(null, null)).toEqual({ kind: "unknown" });
   });
-  const run = async (answers: { status: number | null; body: unknown }[]) => {
+  /** answers in turn; `states` — what the server says about the profile when asked (verify), in turn */
+  const run = async (answers: { status: number | null; body: unknown }[], states: AccountState[] = ["unknown"]) => {
     let i = 0;
-    const calls: number[] = [];
-    const out = await deleteWithRepeat(async () => {
-      calls.push(i);
-      const a = answers[Math.min(i++, answers.length - 1)]!;
-      if (a.status === null) throw new Error("Failed to fetch");
-      return a;
-    }, async () => {});
-    return { out, n: calls.length };
+    let j = 0;
+    const out = await deleteWithRepeat(
+      async () => {
+        const a = answers[Math.min(i++, answers.length - 1)]!;
+        if (a.status === null) throw new Error("Failed to fetch");
+        return a;
+      },
+      async () => states[Math.min(j++, states.length - 1)]!,
+      async () => {},
+    );
+    return { out, n: i, asked: j };
   };
   const done = { status: 200, body: { deleted: true, auth: "done" } };
   const pending = { status: 200, body: { deleted: true, auth: "pending" } };
   const lost = { status: 500, body: { error: "account deletion failed" } };
-  it("done at once — one call", async () => expect(await run([done])).toEqual({ out: { ok: true }, n: 1 }));
-  it("500 (the answer lost) → again → repeat answers done", async () => expect(await run([lost, done])).toEqual({ out: { ok: true }, n: 2 }));
-  it("pending → again → done", async () => expect(await run([pending, done])).toEqual({ out: { ok: true }, n: 2 }));
-  it("500 → 401: the sign-in is closed already — success", async () => expect(await run([lost, { status: 401, body: {} }])).toEqual({ out: { ok: true }, n: 2 }));
-  it("pending for ever → still a success (the data is closed; the next sign-in finishes it)", async () => expect((await run([pending])).out).toEqual({ ok: true }));
-  it("our refusal (400 OD001) — no repeat", async () => {
-    expect(await run([{ status: 400, body: { error: "type the word to confirm" } }])).toEqual({ out: { ok: false, key: "acct.err.word" }, n: 1 });
+  const net = { status: null, body: null };
+  const gate401 = { status: 401, body: { error: "sign in first" } };
+  it("done at once — one call, nothing asked", async () => expect(await run([done])).toEqual({ out: { ok: true }, n: 1, asked: 0 }));
+  it("500 (the answer lost) → asked: gone → done", async () => expect((await run([lost], ["gone"])).out).toEqual({ ok: true }));
+  it("500 → asked: unknown → again → repeat answers done", async () => expect(await run([lost, done], ["unknown"])).toMatchObject({ out: { ok: true }, n: 2 }));
+  it("pending → again → done", async () => expect(await run([pending, done])).toMatchObject({ out: { ok: true }, n: 2 }));
+  it("pending for ever → still done (the data is closed; the next sign-in finishes it)", async () => expect((await run([pending])).out).toEqual({ ok: true }));
+  it("review №1: no answer → 401 (the sign-in is closed) → asked: gone → done, the device is wiped", async () => {
+    expect((await run([net, gate401], ["unknown", "gone"])).out).toEqual({ ok: true });
   });
-  it("the first 401 — not signed in, no repeat", async () => expect(await run([{ status: 401, body: {} }])).toEqual({ out: { ok: false, key: "acct.err.signIn" }, n: 1 }));
-  it("500 for ever → «try again», not «failed for good»; no network → «нет связи»", async () => {
-    expect((await run([lost])).out).toEqual({ ok: false, key: "acct.err.retry" });
-    expect((await run([{ status: null, body: null }])).out).toEqual({ ok: false, key: "acct.err.network" });
+  it("review №5: 500 (the RPC really failed) → 401 → asked: alive → «войдите», never a false «удалён»", async () => {
+    expect((await run([lost, gate401], ["alive", "alive"])).out).toEqual({ ok: false, key: "acct.err.signIn" });
+  });
+  it("review №5: a 400 after a 500 is the real reason", async () => {
+    expect((await run([lost, { status: 400, body: { error: "the company keeps at least one active owner", detail: "co-9" } }], ["alive"])).out).toEqual({ ok: false, key: "acct.err.lastOwner", companyId: "co-9" });
+  });
+  it("our refusal (400 OD001) — no repeat, nothing asked", async () => {
+    expect(await run([{ status: 400, body: { error: "type the word to confirm" } }])).toEqual({ out: { ok: false, key: "acct.err.word" }, n: 1, asked: 0 });
+  });
+  it("the first 401 and the profile alive — «войдите»", async () => expect((await run([gate401], ["alive"])).out).toEqual({ ok: false, key: "acct.err.signIn" }));
+  it("500 for ever → «try again», no network for ever → «нет связи» (never «failed for good»)", async () => {
+    expect((await run([lost], ["unknown"])).out).toEqual({ ok: false, key: "acct.err.retry" });
+    expect((await run([net], ["unknown"])).out).toEqual({ ok: false, key: "acct.err.network" });
+  });
+  it("out of tries but the last ask says gone → done", async () => {
+    expect((await run([lost], ["unknown", "unknown", "unknown", "unknown", "gone"])).out).toEqual({ ok: true });
+  });
+});
+
+describe("unit:deleteAccount — when the sign-in asks «is it deleted» (review №2, №3)", () => {
+  it("once per person: a new SIGNED_IN asks first; the same person again (tab focus, refresh) — as before", () => {
+    expect(authEventPlan("SIGNED_IN", "u1", null)).toBe("first");
+    expect(authEventPlan("SIGNED_IN", "u1", "u1")).toBe("plain");
+    expect(authEventPlan("TOKEN_REFRESHED", "u1", "u1")).toBe("plain");
+    expect(authEventPlan("SIGNED_IN", "u2", "u1")).toBe("first");
+  });
+  it("INITIAL_SESSION does nothing (the start asks first through getSession); signed out — nothing", () => {
+    expect(authEventPlan("INITIAL_SESSION", "u1", null)).toBe("none");
+    expect(authEventPlan("SIGNED_OUT", null, "u1")).toBe("none");
   });
 });
 

@@ -2031,4 +2031,8 @@ export const es: Dict = {
   "acct.err.network": "Sin conexión con el servidor",
   "acct.err.code": "El código no es válido",
   "acct.err.failed": "No se pudo eliminar la cuenta; inténtalo más tarde",
+  "acct.retry": "Reintentar la eliminación",
+  "acct.sure.closes": "«{name}» se cierra para todos ({n} personas).",
+  "acct.sure.closesAlone": "«{name}» se cierra.",
+  "acct.co.closeHintAlone": "No hay nadie más en la empresa. Descarga antes los documentos que necesites. Los registros se guardan el plazo legal.",
 };

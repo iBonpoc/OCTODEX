@@ -5,7 +5,7 @@
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/config/backend";
-import { deleteWithRepeat, lastOwnerCompanies, RETRY_CODES, wipeDevice, type DeleteOutcome, type MembershipRow, type OwnedCompany } from "@/features/deleteAccount";
+import { deleteWithRepeat, lastOwnerCompanies, RETRY_CODES, wipeDevice, type AccountState, type DeleteOutcome, type MembershipRow, type OwnedCompany } from "@/features/deleteAccount";
 import { supabase } from "./client";
 
 /** the code to my own email: a fresh sign-in for this session (the server asks for one ≤ 10 min old) */
@@ -51,18 +51,37 @@ async function callDelete(confirm: string, closeCompanies: string[]): Promise<{ 
   const { data } = await supabase.auth.getSession();
   const jwt = data.session?.access_token;
   if (!jwt) return { status: 401, body: { error: "sign in first" } };
-  const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
-    method: "POST",
-    headers: { Authorization: `Bearer ${jwt}`, apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
-    body: JSON.stringify(closeCompanies.length ? { confirm, closeCompanies } : { confirm }),
-  });
-  const body = await res.json().catch(() => null);
-  return { status: res.status, body };
+  // a hung request (the line dropped mid-answer; OkHttp on Android waits for ever) becomes «no answer» → verify, repeat
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), CALL_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${jwt}`, apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify(closeCompanies.length ? { confirm, closeCompanies } : { confirm }),
+      signal: ctl.signal,
+    });
+    const body = await res.json().catch(() => null);
+    return { status: res.status, body };
+  } finally {
+    clearTimeout(timer);
+  }
+}
+const CALL_TIMEOUT_MS = 20_000;
+
+/** is my profile deleted on the server — the truth after a lost answer (deleted_at is set by the RPC, in one transaction) */
+async function myAccountState(): Promise<AccountState> {
+  const { data: s } = await supabase.auth.getSession();
+  const me = s.session?.user.id;
+  if (!me) return "unknown";
+  const { data, error } = await supabase.from("users").select("deleted_at").eq("id", me).maybeSingle();
+  if (error || !data) return "unknown";
+  return (data as { deleted_at: string | null }).deleted_at ? "gone" : "alive";
 }
 
 /** «Удалить навсегда»: the edge function, repeated on a lost answer (§6.12); after success the device is wiped and signed out */
 export async function deleteAccount(confirm: string, closeCompanies: string[]): Promise<DeleteOutcome> {
-  const out = await deleteWithRepeat(() => callDelete(confirm, closeCompanies));
+  const out = await deleteWithRepeat(() => callDelete(confirm, closeCompanies), myAccountState);
   if (out.ok) await finishOnDevice();
   return out;
 }
@@ -82,7 +101,7 @@ export async function finishOnDevice(): Promise<void> {
 export async function finishDeletedAccount(me: string): Promise<boolean> {
   const { data, error } = await supabase.from("users").select("deleted_at").eq("id", me).maybeSingle();
   if (error || !data || !(data as { deleted_at: string | null }).deleted_at) return false;
-  await deleteWithRepeat(() => callDelete("DELETE", []));
+  await deleteWithRepeat(() => callDelete("DELETE", []), myAccountState);
   await finishOnDevice();
   return true;
 }

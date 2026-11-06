@@ -2031,4 +2031,8 @@ export const en: Dict = {
   "acct.err.network": "No connection to the server",
   "acct.err.code": "The code did not work",
   "acct.err.failed": "Could not delete the account — try later",
+  "acct.retry": "Try the deletion again",
+  "acct.sure.closes": "«{name}» closes for everyone ({n} people).",
+  "acct.sure.closesAlone": "«{name}» closes.",
+  "acct.co.closeHintAlone": "Nobody else is in the company. Download the documents you need first. Records are kept for the legal period.",
 };
