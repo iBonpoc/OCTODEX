@@ -1,11 +1,12 @@
 import { timing, type StatusName } from "@octo/design-tokens";
-import { daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
+import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
 import type { DB, ID, Role } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
 import { leadSettingsOf } from "./leadSettings";
 import { canCountersign } from "./estimateSign";
 import { assigneesOf, canPlan, dayDiffIn, isOpenVisit, lateToday, visitWho } from "./schedule";
-import { companyTz, dayIn, scheduleSettingsOf } from "./scheduleSettings";
+import { companyTz, scheduleSettingsOf } from "./scheduleSettings";
+import { dayKeyIn } from "./zone";
 import type { DictKey } from "@/i18n";
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
@@ -101,8 +102,8 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   }
   for (const i of db.invoices) {
     if (i.paidCents >= i.totalCents) continue;
-    const d = daysSince(i.dueDate);
-    if (!isOverdue(i.dueDate)) continue;
+    if (!isOverdue(i.dueDate, now, tz)) continue;
+    const d = daysOverdue(i.dueDate, now, tz);
     const c = db.customers.find((x) => x.id === i.customerId);
     out.push({ id: `inv-${i.id}`, kind: "overdue", refId: i.id, name: c?.name ?? "", label: "att.overdue", params: { name: c?.name ?? "" }, chip: "st.overdue", status: "bad", amountCents: i.totalCents - i.paidCents, score: 800 + d });
   }
@@ -140,8 +141,3 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   return out.sort((a, b) => b.score - a.score);
 }
 
-/** YYYY-MM-DD of a moment in a time zone */
-function dayKeyIn(t: number, tz: string): string {
-  const d = new Date(dayIn(t, tz) * 86_400_000);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-}

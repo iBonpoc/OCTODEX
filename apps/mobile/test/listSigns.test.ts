@@ -1,16 +1,15 @@
 /** Computed signs on list cards (map §5 «вычисляемые»): when each appears and when it goes away. */
+import { addDays } from "../src/features/calendar";
 import { describe, expect, it } from "vitest";
 import { timing } from "@octo/design-tokens";
 import { MISSED_CALLS_MIN, estimateSigns, invoiceSigns, leadSigns, overlapSigns, visitSigns } from "@/features/listSigns";
 import type { Visit } from "@/data/types";
 
-const NOW = new Date("2026-11-05T15:00:00").getTime();
+// 3 PM on Nov 5 in Los Angeles (the demo company), whatever the machine's zone
+const NOW = new Date("2026-11-05T15:00:00-08:00").getTime();
 const ago = (d: number) => new Date(NOW - d * 86_400_000).toISOString();
-const day = (offset: number) => {
-  const d = new Date(NOW);
-  d.setDate(d.getDate() + offset);
-  return d.toISOString().slice(0, 10) + "T12:00:00";
-};
+/** a due day as the cloud stores it: a calendar day of the company (П4b — not the machine's day, not UTC midnight) */
+const day = (offset: number) => addDays("2026-11-05", offset);
 
 describe("estimate: no reply N days", () => {
   it("appears from estimateWarnDays (warn), turns bad at estimateBadDays", () => {
@@ -35,6 +34,13 @@ describe("invoice: overdue / due soon", () => {
     expect(invoiceSigns(inv(day(0)), NOW)).toEqual([{ key: "card.sign.dueToday", tone: "warn" }]);
     expect(invoiceSigns(inv(day(1)), NOW)).toEqual([{ key: "card.sign.dueTomorrow", tone: "warn" }]);
     expect(invoiceSigns(inv(day(5)), NOW)).toEqual([]);
+  });
+  it("the due day is the company's: 11:30 PM in Los Angeles is still «due today» (bug: UTC midnight + the phone's hours)", () => {
+    const late = new Date("2026-11-06T07:30:00.000Z").getTime(); // 11:30 PM Nov 5 in LA, already Nov 6 in UTC
+    expect(invoiceSigns(inv("2026-11-05"), late, "America/Los_Angeles")).toEqual([{ key: "card.sign.dueToday", tone: "warn" }]);
+    expect(invoiceSigns(inv("2026-11-04"), late, "America/Los_Angeles")[0]).toMatchObject({ params: { d: 1 } });
+    // a full moment (the demo, a just-made invoice) is read on the company's calendar
+    expect(invoiceSigns(inv("2026-11-05T20:00:00.000Z"), late, "America/Los_Angeles")).toEqual([{ key: "card.sign.dueToday", tone: "warn" }]);
   });
   it("goes away when fully paid; a partial payment keeps it", () => {
     expect(invoiceSigns(inv(day(-12), 10000), NOW)).toEqual([]);

@@ -29,6 +29,7 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
+import { setZone } from "@/features/zone";
 import {
   type CatalogItem,
   type Company,
@@ -271,6 +272,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const d = normalizeDB(saved.db, mode);
     return mode === "cloud" ? withGateCodes(d, gateCodes) : d;
   }, [saved.db, mode, gateCodes]);
+  // the company's time zone for the whole app (docs/specs/03 П4b): set during render, before any screen reads a day
+  setZone(db.company?.timezone);
   const setDb = useCallback(
     (next: DB) => {
       if (mode !== "cloud") return setSaved({ day: todayKey(), db: next });

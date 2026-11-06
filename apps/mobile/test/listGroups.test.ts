@@ -1,9 +1,11 @@
 /** Estimate list groups: the contractor's turn first (spec 06, PR4). */
+import { addDays } from "../src/features/calendar";
 import { describe, expect, it } from "vitest";
 import { timing } from "@octo/design-tokens";
 import { estimateGroup, inEstimateFilter, inListFilter, invoiceGroup } from "@/features/listGroups";
 
-const NOW = new Date("2026-11-05T15:00:00").getTime();
+// 3 PM on Nov 5 in Los Angeles (the demo company), whatever the machine's zone
+const NOW = new Date("2026-11-05T15:00:00-08:00").getTime();
 const ago = (d: number) => new Date(NOW - d * 86_400_000).toISOString();
 
 describe("estimate groups", () => {

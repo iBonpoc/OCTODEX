@@ -5,6 +5,7 @@
  * (app.valid_schedule_settings / app.valid_business_hours, migration 20261105370000). Pure — tested in test/scheduleSettings.test.ts.
  */
 import type { Company, VisitKind } from "@/data/types";
+import { DEFAULT_ZONE, validZone } from "./zone";
 
 export interface ScheduleSettings {
   /** default length of a visit by kind, minutes (15–720, a multiple of 15) */
@@ -104,7 +105,8 @@ export const lateAfterOf = (db: { company: Pick<Company, "scheduleSettings"> | n
 export const tzLabel = (z: string) => (z.split("/")[1] ?? z).replace(/_/g, " ");
 
 /** the company time zone; old data without one — Los Angeles (as the gate code and the server) */
-export const companyTz = (company: Pick<Company, "timezone"> | null | undefined) => company?.timezone || "America/Los_Angeles";
+export const companyTz = (company: Pick<Company, "timezone"> | null | undefined) =>
+  company?.timezone && validZone(company.timezone) ? company.timezone : DEFAULT_ZONE; // the same rule as zone.ts setZone
 
 /** «3:05 PM» of a moment on the company's clock (en-US); an unknown zone — Los Angeles */
 export function companyTime(iso: string, tz: string): string {
@@ -126,14 +128,5 @@ export function clientDate(iso: string, tz: string): string {
   }
 }
 
-/** Calendar day number of a moment in a time zone (the company's: the server decides by it too). */
-export function dayIn(t: number, timeZone: string): number {
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date(t));
-  } catch {
-    parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date(t));
-  }
-  const n = (k: string) => Number(parts.find((p) => p.type === k)?.value ?? 0);
-  return Math.floor(Date.UTC(n("year"), n("month") - 1, n("day")) / 86_400_000);
-}
+/** Calendar day number of a moment in a time zone — one rule for the app (features/zone.ts) */
+export { dayIn } from "./zone";
