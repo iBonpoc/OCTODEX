@@ -38,7 +38,7 @@ exports.run = async (h) => {
   await screen().waitFor({ timeout: 3000 });
   h.expect((await p.locator('[data-testid="more-profile"]:visible').count()) === 1, "the profile card");
   h.expect(/Онлайн · всё сохранено/.test(await p.locator('[data-testid="more-sync"]:visible').innerText()), "the connection status");
-  for (const id of ["leads", "jobs", "calls", "estimates", "invoices", "catalog", "money", "team", "company", "settings"]) h.expect((await tile(id).count()) === 1, `director: tile «${id}»`);
+  for (const id of ["leads", "jobs", "calls", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings"]) h.expect((await tile(id).count()) === 1, `director: tile «${id}»`);
   for (const id of ["home", "plan", "messages", "clients", "more"]) h.expect((await tile(id).count()) === 0, `the tab «${id}» is not repeated`);
   await h.shot("more");
 
@@ -59,7 +59,7 @@ exports.run = async (h) => {
   await setRole(h, "tech");
   await h.go("/more");
   await screen().waitFor({ timeout: 3000 });
-  for (const id of ["invoices", "money", "team", "company", "leads"]) h.expect((await tile(id).count()) === 0, `tech: no tile «${id}»`);
+  for (const id of ["invoices", "payments", "reports", "money", "team", "company", "leads"]) h.expect((await tile(id).count()) === 0, `tech: no tile «${id}»`);
   for (const id of ["jobs", "estimates", "catalog", "calls", "settings"]) h.expect((await tile(id).count()) === 1, `tech: tile «${id}»`);
   await setRole(h, "director");
 

@@ -31,6 +31,17 @@ describe("unit:search — numbers", () => {
     expect(ids("INV-0102").invoices.length).toBe(1);
     expect(ids("RCT-0104").payments.length).toBe(1);
   });
+  it("JOB-0001 → the job (failed before: jobs were searched by text only)", () => {
+    const r = searchAll(db, "JOB-0001", "director");
+    expect(r.jobs.map((h) => h.id)).toEqual(["j1"]);
+    expect(r.jobs[0]).toMatchObject({ number: "JOB-0001", why: { kind: "number" }, href: "/job/j1" });
+    expect(ids("job-2").jobs).toEqual(["j2"]);
+    expect(searchAll(db, "0003", "director").jobs.some((h) => h.number === "JOB-0003")).toBe(true);
+  });
+  it("the technician finds by number only the jobs of his visits", () => {
+    const mine = new Set(db.visits.filter((v) => (v.assigneeIds ?? []).includes(db.me) || v.techId === db.me).map((v) => v.jobId));
+    for (const j of db.jobs.filter((x) => x.number)) expect(searchAll(db, j.number!, "tech").jobs.length, j.number).toBe(mine.has(j.id) ? 1 : 0);
+  });
   it("bare digits search every prefix at once", () => {
     const r = searchAll(db, "0103", "director");
     expect(r.invoices.some((h) => h.number === "INV-0103")).toBe(true);

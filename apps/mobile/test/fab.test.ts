@@ -21,14 +21,15 @@ const routeExists = (href: string) => {
 };
 
 describe("unit:fab — the sets (13 §2.4, only what works)", () => {
-  it("Главная / «＋ Создать»: office — Лид · Клиент · Смета · Расход; tech — Лид · Расход", () => {
-    for (const r of ["director", "dispatcher", "sales"] as Role[]) expect(ids("home", r), r).toEqual(["lead", "client", "estimate", "expense"]);
+  it("Главная / «＋ Создать»: office — Лид · Клиент · Работа · Смета · Расход; tech — Лид · Расход", () => {
+    for (const r of ["director", "dispatcher", "sales"] as Role[]) expect(ids("home", r), r).toEqual(["lead", "client", "job", "estimate", "expense"]);
+    expect(fabItems("home", "director").find((i) => i.id === "job")!.href).toBe("/job/new");
     expect(ids("home", "tech")).toEqual(["lead", "expense"]);
   });
-  it("План: planners — Лид · Записать в план; sales — Лид; tech — no «＋» (Р7)", () => {
-    expect(ids("plan", "director")).toEqual(["lead", "planAdd"]);
-    expect(ids("plan", "dispatcher")).toEqual(["lead", "planAdd"]);
-    expect(ids("plan", "sales")).toEqual(["lead"]);
+  it("План: planners — Лид · Работа · Записать в план; sales — Лид · Работа (без даты, S17); tech — no «＋» (Р7)", () => {
+    expect(ids("plan", "director")).toEqual(["lead", "job", "planAdd"]);
+    expect(ids("plan", "dispatcher")).toEqual(["lead", "job", "planAdd"]);
+    expect(ids("plan", "sales")).toEqual(["lead", "job"]);
     expect(ids("plan", "tech")).toEqual([]);
   });
   it("Клиенты: office — Клиент; tech — none", () => {
@@ -39,9 +40,11 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
     expect(ids("calls", "dispatcher")).toEqual(["lead", "client"]);
     expect(ids("calls", "tech")).toEqual(["lead"]);
   });
-  it("Клиент: the estimate is tied to the client; nothing to tie to — no item", () => {
-    const [it] = fabItems("client", "director", { customerId: "c1" });
+  it("Клиент: the job and the estimate are tied to the client; nothing to tie to — no item", () => {
+    const [jb, it] = fabItems("client", "director", { customerId: "c1" });
+    expect(jb).toMatchObject({ id: "job", href: "/job/new?customerId=c1" });
     expect(it).toMatchObject({ id: "estimate", href: "/estimate/new?customerId=c1" });
+    expect(fabItems("client", "director", { customerId: "c1", propertyId: "p1" })[0]!.href).toBe("/job/new?customerId=c1&propertyId=p1");
     expect(ids("client", "director")).toEqual([]);
     expect(ids("client", "tech", { customerId: "c1" })).toEqual([]);
   });
@@ -71,8 +74,8 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
           expect(canOpen(r, it.href), `${s} ${r} ${it.href}`).toBe(true);
         }
   });
-  it("no «coming in wave N» items: Job, Task, Note, File, Event are not offered yet", () => {
-    for (const s of SETS) for (const r of ROLES) for (const it of fabItems(s, r, FULL)) expect(["lead", "client", "estimate", "expense", "visit", "planAdd", "photo"]).toContain(it.id);
+  it("no «coming in wave N» items: Task, Note, File, Event are not offered yet", () => {
+    for (const s of SETS) for (const r of ROLES) for (const it of fabItems(s, r, FULL)) expect(["lead", "client", "job", "estimate", "expense", "visit", "planAdd", "photo"]).toContain(it.id);
   });
 });
 
