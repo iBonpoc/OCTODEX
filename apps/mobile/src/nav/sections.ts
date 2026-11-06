@@ -136,7 +136,7 @@ export function sectionOfHref(href: string): SectionId | undefined {
 /* ---------- «＋» by screen (13 v2 §2.4, 13а §9) ---------- */
 
 /** the screens that declare a «＋»: `<Screen fab="client" fabCtx={{ customerId }}>`; «＋ Создать» in ☰ = "home" */
-export type FabSet = "home" | "plan" | "calls" | "clients" | "client" | "job" | "visit" | "tasks";
+export type FabSet = "home" | "plan" | "calls" | "clients" | "client" | "job" | "visit" | "tasks" | "messages";
 /** what the new thing is tied to (the screen's own object) */
 export interface FabCtx {
   customerId?: string;
@@ -147,14 +147,14 @@ export interface FabCtx {
   /** the visit is an inspection (estimate from the visit) */
   inspection?: boolean;
 }
-export type FabId = "lead" | "client" | "job" | "estimate" | "expense" | "visit" | "planAdd" | "planEvent" | "planTimeOff" | "photo" | "task" | "call";
+export type FabId = "lead" | "client" | "job" | "estimate" | "expense" | "visit" | "planAdd" | "planEvent" | "planTimeOff" | "photo" | "task" | "call" | "message";
 export interface FabItem {
   id: FabId;
   label: DictKey;
   icon: IconKey;
   /** a screen to open; undefined = an action the screen or the «＋» itself does (`act`) */
   href?: string;
-  act?: "planAdd" | "planEvent" | "planTimeOff" | "photo" | "task" | "call";
+  act?: "planAdd" | "planEvent" | "planTimeOff" | "photo" | "task" | "call" | "message";
 }
 
 const TECH: readonly Role[] = ["tech"];
@@ -190,6 +190,7 @@ const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey }> = {
   photo: { label: "quick.photo", icon: "camera" },
   task: { label: "task.new", icon: "check" },
   call: { label: "w6.call.title", icon: "phone" },
+  message: { label: "w6.msg.new", icon: "sms" },
 };
 
 const lead: FabDef = { id: "lead", href: () => "/lead/new" };
@@ -221,6 +222,8 @@ export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
   ],
   // wave 6-2: «Записать звонок» first — the sheet asks «к чему» itself
   calls: [{ id: "call", act: "call" }, lead, client],
+  // wave 6-3: the sheet asks «кому» itself
+  messages: [{ id: "message", act: "message" }],
   // wave 6: the task form asks «к чему» itself (13 §2.4: nothing loose)
   tasks: [{ id: "task", act: "task" }],
   clients: [client],

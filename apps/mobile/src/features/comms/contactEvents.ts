@@ -4,9 +4,10 @@
  * Unit-tested in test/calls.test.ts.
  */
 import type { Op } from "@/cloud/ops";
-import type { Activity, CallInput, DB, ID, LeadTouchKind } from "@/data/types";
+import type { Activity, CallInput, DB, ID, LeadTouchKind, MessageInput } from "@/data/types";
 
-export type LeadTouch = { kind: LeadTouchKind } | { kind: "call"; call: Omit<CallInput, "subjectType" | "subjectId"> };
+/** a contact on a lead; an SMS / email (6-3) may carry its person and its text */
+export type LeadTouch = { kind: LeadTouchKind; contactId?: ID; text?: string } | { kind: "call"; call: Omit<CallInput, "subjectType" | "subjectId"> };
 export interface EventIds {
   activityId: ID;
   /** the «new → replied» line of a lead (S2) */
@@ -29,10 +30,11 @@ export function leadTouchNext(d: DB, leadId: ID, t: LeadTouch, ids: EventIds): D
   const l = d.leads.find((x) => x.id === leadId);
   const toReplied = l?.status === "new" && !missed;
   const at = ids.at;
-  const contactId = realPersonId(call?.contactId);
+  const contactId = realPersonId(call ? call.contactId : t.kind !== "call" ? t.contactId : undefined);
+  const body = (call ? call.note : t.kind !== "call" ? t.text : undefined)?.trim();
   const event: Activity = {
     id: ids.activityId, subjectType: "lead", subjectId: leadId, kind: t.kind, at, actorId: d.me, direction: "out",
-    ...(call ? { meta: metaOf(call) } : {}), ...(contactId ? { contactId } : {}), ...(call?.note?.trim() ? { body: call.note.trim() } : {}),
+    ...(call ? { meta: metaOf(call) } : {}), ...(contactId ? { contactId } : {}), ...(body ? { body } : {}),
   };
   return {
     ...d,
@@ -54,6 +56,7 @@ export function leadTouchOp(leadId: ID, t: LeadTouch, ids: EventIds): Op {
   return {
     k: "lead.touch", activityId: ids.activityId, leadId, kind: t.kind, at: ids.at,
     ...(call ? { outcome: call.outcome, contactId: realPersonId(call.contactId), durationMin: call.durationMin, note: call.note } : {}),
+    ...(t.kind !== "call" && (t.contactId || t.text) ? { contactId: realPersonId(t.contactId), note: t.text } : {}),
   };
 }
 
@@ -74,4 +77,20 @@ export function callOp(c: CallInput, ids: EventIds): Op {
   const { subjectType, subjectId, ...call } = c;
   if (subjectType === "lead") return leadTouchOp(subjectId, { kind: "call", call }, ids);
   return { k: "activity.call", activityId: ids.activityId, subjectType, subjectId, at: ids.at, ...call, contactId: realPersonId(call.contactId) };
+}
+
+/** an SMS / email (6-3): on a lead — a lead contact (S2 as before); on a client or a job — an event of that kind */
+export function messageNext(d: DB, m: MessageInput, ids: EventIds): DB {
+  if (m.subjectType === "lead") return leadTouchNext(d, m.subjectId, { kind: m.channel, contactId: m.contactId, text: m.text }, ids);
+  const contactId = realPersonId(m.contactId);
+  const event: Activity = {
+    id: ids.activityId, subjectType: m.subjectType, subjectId: m.subjectId, kind: m.channel, at: ids.at, actorId: d.me, direction: "out",
+    ...(contactId ? { contactId } : {}), ...(m.text.trim() ? { body: m.text.trim() } : {}),
+  };
+  return { ...d, activities: [event, ...d.activities] };
+}
+
+export function messageOp(m: MessageInput, ids: EventIds): Op {
+  if (m.subjectType === "lead") return leadTouchOp(m.subjectId, { kind: m.channel, contactId: m.contactId, text: m.text }, ids);
+  return { k: "activity.message", activityId: ids.activityId, subjectType: m.subjectType, subjectId: m.subjectId, at: ids.at, channel: m.channel, text: m.text.trim(), contactId: realPersonId(m.contactId) };
 }

@@ -5401,4 +5401,47 @@ select tst.ok(tst.cnt($q$select 1 from public.activities where body like 'T62 %'
 select tst.ok((select status = 'contacted' from public.leads where id = '16200000-0000-4000-8000-000000000003'), 'his answered call moved his new lead (S2)');
 \echo 'T62 calls: outcome, minutes, person; the tech on his job and lead only ok'
 
+-- ---------------------------------------------------------------- T63: wave 6-3 — messages (docs/specs/20 «6-3»)
+-- An SMS / email opened in the phone's app is an outgoing event (kind sms | email, direction out); the tech writes it on
+-- the job of his visit and on his own lead, never on a client or someone else's lead; another company sees none.
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c6300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T63 Client');
+  insert into public.contacts (id, company_id, customer_id, name, is_primary) values
+    ('c6310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6300000-0000-4000-8000-000000000001', 'T63 Ana', true);
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d6300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6300000-0000-4000-8000-000000000001', '63 Text St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e6300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T63 job', 'c6300000-0000-4000-8000-000000000001', 'd6300000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('f6300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e6300000-0000-4000-8000-000000000001', now() + interval '1 day');
+  insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+    ('16300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T63 tech lead', '+13235556301', 'a0000000-0000-0000-0000-000000000003'),
+    ('16300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T63 not his', '+13235556302', null);
+end $$;
+select tst.ok((public.assign_visit('f6300000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added')::int = 1, 'T63 the tech is on the visit');
+insert into public.activities (company_id, subject_type, subject_id, kind, direction, contact_id, body) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c6300000-0000-4000-8000-000000000001', 'sms', 'out', 'c6310000-0000-4000-8000-000000000001', 'T63 office sms');
+select tst.ok((select kind = 'sms' and direction = 'out' and contact_id = 'c6310000-0000-4000-8000-000000000001' and actor_id = 'a0000000-0000-0000-0000-000000000001'
+                 from public.activities where body = 'T63 office sms'), 'the office writes an SMS on a client: sms, out, the person, in its own name');
+:as_tech_a
+insert into public.activities (company_id, subject_type, subject_id, kind, direction, contact_id, body) values
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e6300000-0000-4000-8000-000000000001', 'sms', 'out', 'c6310000-0000-4000-8000-000000000001', 'T63 tech job sms');
+insert into public.activities (company_id, subject_type, subject_id, kind, direction, body) values
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e6300000-0000-4000-8000-000000000001', 'email', 'out', 'T63 tech job email');
+insert into public.activities (company_id, subject_type, subject_id, kind, direction, body) values
+  ('ca000000-0000-0000-0000-000000000000', 'lead', '16300000-0000-4000-8000-000000000001', 'sms', 'out', 'T63 tech lead sms');
+select tst.ok(tst.cnt($q$select 1 from public.activities where body in ('T63 tech job sms', 'T63 tech job email', 'T63 tech lead sms') and direction = 'out'$q$) = 3,
+  'the tech writes SMS and email on the job of his visit and on his own lead, and sees them');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, body) values ('ca000000-0000-0000-0000-000000000000', 'customer', 'c6300000-0000-4000-8000-000000000001', 'sms', 'out', 'T63 x')$q$,
+  'the tech does not write a message on a client');
+select tst.fails($q$insert into public.activities (company_id, subject_type, subject_id, kind, direction, body) values ('ca000000-0000-0000-0000-000000000000', 'lead', '16300000-0000-4000-8000-000000000002', 'email', 'out', 'T63 y')$q$,
+  'the tech does not write a message on a lead that is not his');
+select tst.ok(tst.cnt($q$select 1 from public.activities where body = 'T63 office sms'$q$) = 1, 'the tech sees the messages on the client of his visit');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.activities where body like 'T63 %'$q$) = 0, 'another company sees none of the messages');
+:as_super
+select tst.ok((select status = 'contacted' from public.leads where id = '16300000-0000-4000-8000-000000000001'), 'an SMS to his new lead is the first answer (S2)');
+\echo 'T63 messages: sms / email out; the tech on his job and lead only ok'
+
 \echo 'ALL TESTS PASSED'

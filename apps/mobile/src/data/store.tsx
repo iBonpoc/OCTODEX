@@ -13,7 +13,7 @@ import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, PermanentError, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
-import { callNext, callOp, leadTouchNext, leadTouchOp, type LeadTouch } from "@/features/comms/contactEvents";
+import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { readyToSend } from "@/cloud/outboxTiming";
@@ -68,6 +68,7 @@ import {
   type LeadStatus,
   type CallOutcome,
   type CallInput,
+  type MessageInput,
   type LeadTouchKind,
   type LeadInterest,
   type CustomerStatus,
@@ -125,6 +126,8 @@ interface StoreCtx {
   callResult: (id: ID, outcome: CallOutcome) => Undo;
   /** wave 6-2: a call on a lead, a client or a job, with its outcome, person, minutes and a note */
   logCall: (c: CallInput) => Undo;
+  /** wave 6-3: an SMS / email opened in the phone's app — the event, written at «Отправить» */
+  logMessage: (m: MessageInput) => Undo;
   setLeadInterest: (id: ID, interest: LeadInterest | undefined) => Undo;
   /** "call me in 3 months": hidden until the date, keeps its funnel status */
   snoozeLead: (id: ID, until: string, reason?: string) => Undo;
@@ -674,6 +677,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       replyLead: (id) => touchLead(id, { kind: "reply" }),
       touchLead: (id, kind) => touchLead(id, { kind }),
       callResult: (id, outcome) => touchLead(id, { kind: "call", call: { outcome } }),
+      logMessage: (m) => {
+        const ids = { activityId: uid(), statusId: uid(), at: new Date().toISOString() };
+        return mutate(m.subjectType === "lead" ? "lead.touch" : "activity.message", (d) => messageNext(d, m, ids), messageOp(m, ids));
+      },
       logCall: (c) => {
         const ids = { activityId: uid(), statusId: uid(), at: new Date().toISOString() };
         return mutate(c.subjectType === "lead" ? "lead.touch" : "activity.call", (d) => callNext(d, c, ids), callOp(c, ids));

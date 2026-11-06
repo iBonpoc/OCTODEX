@@ -384,6 +384,17 @@ export type CallOutcome = "answered" | "no_answer" | "voicemail";
  * Wave 6-2 (docs/specs/20 §3, §5): a call written down by hand or after «Позвонить». The outcome is required: the server
  * counts a call without one as answered (a new lead would move to «replied» by itself). Duration in minutes → meta.duration_min.
  */
+/**
+ * Wave 6-3 (docs/specs/20 «6-3»): an SMS or an email opened in the phone's own app with a text; written as an event at
+ * «Отправить» — OCTODEX does not know whether it was sent. The text only: never the phone number or the address.
+ */
+export interface MessageInput {
+  subjectType: "lead" | "customer" | "job";
+  subjectId: ID;
+  contactId?: ID;
+  channel: "sms" | "email";
+  text: string;
+}
 export interface CallInput {
   subjectType: "lead" | "customer" | "job";
   subjectId: ID;
