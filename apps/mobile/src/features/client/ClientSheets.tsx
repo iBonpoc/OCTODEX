@@ -8,7 +8,7 @@ import * as Crypto from "expo-crypto";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
-import { clientStatusChip, statusOf, tagLabel } from "@/features/clients";
+import { clientStatusChip, statusChoices, statusOf, tagLabel } from "@/features/clients";
 import type { Customer, CustomerStatus, Person, PersonRole, PhoneLabel } from "@/data/types";
 import { DOC_LANG_LABEL, DOC_LANGS, useI18n, type DictKey, type DocLang } from "@/i18n";
 import { Labeled } from "@/features/fields";
@@ -265,7 +265,8 @@ export function StatusSheet({ visible, customer, onClose, preset }: { visible: b
     }
   }, [visible, customer, preset]);
   // prospect becomes active by itself (signature / manual win); here the office moves between the other three
-  const options: CustomerStatus[] = cur === "prospect" ? ["prospect", "archived", "do_not_service"] : ["active", "archived", "do_not_service"];
+  // the mark is the director's and the office's (04 §12.8)
+  const options = statusChoices(cur, store.role);
   const dirty = st !== cur || (st === "do_not_service" && reason !== (customer.statusReason ?? ""));
   const ok = st !== "do_not_service" || reason.trim().length >= 2;
   const save = () => {
