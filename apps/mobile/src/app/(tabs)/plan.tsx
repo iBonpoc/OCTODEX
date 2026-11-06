@@ -15,7 +15,7 @@ import { overlapSigns } from "@/features/listSigns";
 import { AssignSheet } from "@/features/sheets";
 import { DndProvider, Draggable, DropZone, useDragFrom } from "@/features/dnd";
 import { useToast } from "@/ui/overlays";
-import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip, Toggle } from "@/ui/controls";
+import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip } from "@/ui/controls";
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -93,12 +93,15 @@ export default function Plan() {
 
       {mode === "feed" ? (
         <>
-          <RowView style={{ justifyContent: "space-between" }}>
-            <T v="body" style={{ flex: 1 }}>
-              {t("plan5.showDone")}
-            </T>
-            <Toggle on={showDone} onChange={setShowDone} label={t("plan5.showDone")} />
-          </RowView>
+          {/* chips, not a switch: a switch that is on is yellow, and the screen keeps one yellow (rule 2) */}
+          <ChoiceChips
+            value={showDone ? "show" : "hide"}
+            onChange={(k) => setShowDone(k === "show")}
+            items={[
+              { key: "hide", label: t("plan5.hideDone") },
+              { key: "show", label: t("plan5.showDone") },
+            ]}
+          />
           <FeedView days={feedDays} items={feedItems} />
         </>
       ) : mode === "day" ? (

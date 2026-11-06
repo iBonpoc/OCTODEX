@@ -1754,4 +1754,5 @@ export const en: Dict = {
   "plan5.done": "Done",
   "plan5.company": "Whole company",
   "plan5.days": "{from} – {to}",
+  "plan5.hideDone": "Hide completed",
 };

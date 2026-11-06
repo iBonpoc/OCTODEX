@@ -1753,6 +1753,7 @@ export const ru = {
   "plan5.done": "Выполнено",
   "plan5.company": "Вся компания",
   "plan5.days": "{from} – {to}",
+  "plan5.hideDone": "Скрыть выполненные",
 } as const;
 
 export type DictKey = keyof typeof ru;
