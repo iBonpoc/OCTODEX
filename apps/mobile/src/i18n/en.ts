@@ -2099,6 +2099,8 @@ export const en: Dict = {
   "w6.msg.openClient": "Open client",
   "w6.msg.openLead": "Open lead",
   "w6.msg.empty": "No messages with this person yet",
+  "w6.msg.job": "Which job",
+  "w6.msg.noApp": "Could not open: check the number or the email",
   "w6.msgc.onMyWay": "Hi {name}, this is {company}. I'm on my way to you.",
   "w6.msgc.visitReminder": "Hi {name}, this is {company}. A reminder about our visit on {date} at {time}.",
   "w6.msgc.estimateSent": "Hi {name}, this is {company}. We sent you estimate {number}.",

@@ -11,7 +11,7 @@ import { docLanguageFor, leadPeopleOf, peopleForLead, peopleOf } from "@/data/pe
 import { canSeeLead } from "@/features/leads";
 import { docDay, docTime } from "@/features/docPdf";
 import { realPersonId } from "./contactEvents";
-import { callPlaceForClient, commsLog, techScope, type CommsEntry } from "./comms";
+import { callPlaceForClient, commsLog, techJobsAt, techScope, type CommsEntry } from "./comms";
 
 /** whose people: a client or a lead without a client */
 export interface Owner {
@@ -46,12 +46,21 @@ export const ownerName = (db: DB, o: Owner): string =>
   (o.type === "customer" ? db.customers.find((x) => x.id === o.id)?.name : db.leads.find((x) => x.id === o.id)?.name) ?? "";
 export const ownerHref = (o: Owner): string => (o.type === "customer" ? `/client/${o.id}` : `/lead/${o.id}`);
 
+/** may this role see whose people / messages: the office — everyone; the technician — his visits' clients and his leads */
+export function ownerVisible(db: DB, role: Role, o: Owner): boolean {
+  if (role !== "tech") return o.type === "customer" || canSeeLead(role, db.me, db.leads.find((l) => l.id === o.id) ?? ({} as never));
+  const mine = techScope(db);
+  return o.type === "customer" ? mine.customers.has(o.id) : mine.leads.has(o.id);
+}
+
 /** the key of a thread (URL-safe): p-<person> | c-<client> | l-<lead> */
 export function threadKey(db: DB, e: Pick<CommsEntry, "subjectType" | "subjectId" | "contactId">): string | undefined {
   const person = realPersonId(e.contactId);
   if (person) return `p-${person}`;
   const o = ownerOf(db, e);
-  return o ? `${o.type === "customer" ? "c" : "l"}-${o.id}` : undefined;
+  if (o) return `${o.type === "customer" ? "c" : "l"}-${o.id}`;
+  // a job without a client keeps its own thread (never lost from the tab)
+  return e.subjectType === "job" ? `j-${e.subjectId}` : undefined;
 }
 
 export interface MessageThread {
@@ -100,12 +109,16 @@ export function messageThreads(db: DB, role: Role, deletedWord = ""): MessageThr
     .sort((a, b) => b.items[0]!.at.localeCompare(a.items[0]!.at));
 }
 
-/** one thread by its key (it may be empty: «Написать» to someone not written to yet) */
+/**
+ * One thread by its key (it may be empty: «Написать» to someone not written to yet). Someone the role may not see —
+ * nothing: no name, no owner, so no «Написать» and no «Открыть» (#227 review).
+ */
 export function messageThread(db: DB, role: Role, key: string, deletedWord = ""): MessageThread {
   const found = messageThreads(db, role, deletedWord).find((x) => x.key === key);
   if (found) return found;
   const t = threadTarget(db, key);
-  return { key, items: [], owner: t.owner, person: t.person, title: t.person?.name || (t.owner ? ownerName(db, t.owner) : "") };
+  if (!t.owner || !ownerVisible(db, role, t.owner)) return { key, items: [], title: "" };
+  return { key, items: [], owner: t.owner, person: t.person, title: t.person?.name || ownerName(db, t.owner) };
 }
 
 /** a person one may write to: whose, and how (phone for SMS, address for email) */
@@ -142,9 +155,14 @@ export function messagePeople(db: DB, role: Role, query = ""): Addressee[] {
  * the technician — his lead, or his one job at that client (undefined = he cannot write here: the button is not offered).
  */
 export function messageSubject(db: DB, role: Role, owner: Owner): Pick<MessageInput, "subjectType" | "subjectId"> | undefined {
+  if (!ownerVisible(db, role, owner)) return undefined;
   if (owner.type === "lead") return { subjectType: "lead", subjectId: owner.id };
   return callPlaceForClient(db, role, owner.id);
 }
+
+/** the technician with several of his jobs at this client picks the one the message is about (else [] — nothing to pick) */
+export const messageJobChoices = (db: DB, role: Role, owner: Owner) =>
+  role === "tech" && owner.type === "customer" && ownerVisible(db, role, owner) ? techJobsAt(db, owner.id) : [];
 
 /** the language the client reads (rule 7): the person's → the client's / lead's → the company's → en */
 export const messageLanguage = (db: DB, owner: Owner, person?: Person): DocLang =>

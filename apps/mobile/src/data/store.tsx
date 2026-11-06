@@ -528,7 +528,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   /** wave 6-2: the change and the op are pure (features/comms/contactEvents.ts); a call always has its outcome */
   const touchLead = (id: ID, t: LeadTouch): Undo => {
     const ids = { activityId: uid(), statusId: uid(), at: new Date().toISOString() };
-    return mutate("lead.touch", (d) => leadTouchNext(d, id, t, ids), leadTouchOp(id, t, ids));
+    return mutate("lead.touch", (d) => leadTouchNext(d, id, t, ids), leadTouchOp(dbRef.current, id, t, ids));
   };
 
   /** The lead's client and property; makes a prospect client + property the first time (S3). */
@@ -679,11 +679,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       callResult: (id, outcome) => touchLead(id, { kind: "call", call: { outcome } }),
       logMessage: (m) => {
         const ids = { activityId: uid(), statusId: uid(), at: new Date().toISOString() };
-        return mutate(m.subjectType === "lead" ? "lead.touch" : "activity.message", (d) => messageNext(d, m, ids), messageOp(m, ids));
+        return mutate(m.subjectType === "lead" ? "lead.touch" : "activity.message", (d) => messageNext(d, m, ids), messageOp(dbRef.current, m, ids));
       },
       logCall: (c) => {
         const ids = { activityId: uid(), statusId: uid(), at: new Date().toISOString() };
-        return mutate(c.subjectType === "lead" ? "lead.touch" : "activity.call", (d) => callNext(d, c, ids), callOp(c, ids));
+        return mutate(c.subjectType === "lead" ? "lead.touch" : "activity.call", (d) => callNext(d, c, ids), callOp(dbRef.current, c, ids));
       },
       setLeadInterest: (id, interest) => patchLead(id, { interest }),
       snoozeLead: (id, until, reason) => patchLead(id, { snoozedUntil: until, snoozeReason: reason?.trim() || undefined }),

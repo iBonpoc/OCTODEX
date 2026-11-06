@@ -6,7 +6,7 @@ import { Button } from "@/ui/controls";
 import { ListCard } from "@/ui/listCard";
 import { CardList, Empty, RowView, Screen } from "@/ui/surfaces";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
-import { messageSubject, messageThread, ownerHref, ownerName } from "@/features/comms/messages";
+import { messageJobChoices, messageSubject, messageThread, ownerHref, ownerName } from "@/features/comms/messages";
 
 /**
  * One conversation (docs/specs/20 «6-3»): the person's SMS and emails, newest first — each one a card with the text and
@@ -18,7 +18,8 @@ export default function MessageThreadScreen() {
   const { db, role } = useStore();
   const [writing, setWriting] = useState<MessagePreset | null>(null);
   const th = messageThread(db, role, key ?? "", t("acct.deletedName"));
-  const canWrite = !!th.owner && !!th.person && !!messageSubject(db, role, th.owner);
+  // a client's / lead's conversation without a person: «Написать» asks whom of their people (#227 review)
+  const canWrite = !!th.owner && (!!messageSubject(db, role, th.owner) || messageJobChoices(db, role, th.owner).length > 1);
   return (
     <Screen title={th.title || t("w6.msg.thread")} subtitle={th.owner && ownerName(db, th.owner) !== th.title ? ownerName(db, th.owner) : undefined}>
       <RowView style={{ flexWrap: "wrap" }}>
@@ -43,7 +44,7 @@ export default function MessageThreadScreen() {
               title={m.note || t(m.kind === "email" ? "nav.comms.email" : "nav.comms.sms")}
               when={`${day(m.at)} · ${time(m.at)}`}
               lead={{ kind: "icon", icon: m.kind === "email" ? "mail" : "sms" }}
-              tags={[t(m.kind === "email" ? "nav.comms.email" : "nav.comms.sms"), t("w6.msg.openedAt", { time: time(m.at) }), ...(m.by ? [m.by] : [])]}
+              tags={[t(m.kind === "email" ? "nav.comms.email" : "nav.comms.sms"), ...(m.direction !== "in" ? [t("w6.msg.openedAt", { time: time(m.at) })] : []), ...(m.by ? [m.by] : [])]}
             />
           ))}
         </CardList>

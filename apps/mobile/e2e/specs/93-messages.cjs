@@ -45,9 +45,12 @@ exports.run = async (h) => {
   db = await h.db();
   h.expect(!db.activities.some((a) => a.kind === "sms" && a.contactId === PERSON), "«Отменить»: the event is gone");
 
-  // again, then the conversation
+  // again — with a double tap on «Отправить» (two taps on the button itself: a mouse double click lands on the tab bar
+  // under the closing sheet): one event, never two
   sheet = await write();
-  await sheet.getByRole("button", { name: "Отправить", exact: true }).click(); await p.waitForTimeout(600);
+  await sheet.getByRole("button", { name: "Отправить", exact: true }).evaluate((el) => { el.click(); el.click(); }); await p.waitForTimeout(600);
+  db = await h.db();
+  h.expect(db.activities.filter((a) => a.kind === "sms" && a.contactId === PERSON).length === 1, "a double tap: one message");
   await p.getByRole("button", { name: "Отменить", exact: true }).last().waitFor({ state: "hidden", timeout: 8000 }).catch(() => {});
   await p.getByTestId(`thread-p-${PERSON}`).locator("visible=true").first().click(); await p.waitForTimeout(800);
   h.expect(new URL(p.url()).pathname === `/messages/p-${PERSON}`, `the card opens the conversation (${p.url()})`);

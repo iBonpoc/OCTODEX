@@ -21,6 +21,18 @@ export interface EventIds {
  */
 export const realPersonId = (id: ID | undefined): ID | undefined => (id && !id.endsWith("-main") ? id : undefined);
 
+/**
+ * The person an event may name as contact_id (FK to public.contacts): only a row of `contacts` — a person of a client
+ * (customer.people) or of a lead (lead.people, wave L2). Never a made-up `<id>-main`, never a `lead_contacts` row
+ * (lead.contacts — old extra people of a lead, another table): the insert would fail and the event be dropped (#227 review).
+ */
+export function contactRowId(d: Pick<DB, "customers" | "leads">, id: ID | undefined): ID | undefined {
+  const real = realPersonId(id);
+  if (!real) return undefined;
+  const known = d.customers.some((c) => c.people?.some((p) => p.id === real)) || d.leads.some((l) => l.people?.some((p) => p.id === real));
+  return known ? real : undefined;
+}
+
 const metaOf = (c: { outcome: string; durationMin?: number }) => ({ outcome: c.outcome, ...(c.durationMin && c.durationMin > 0 ? { duration_min: String(Math.round(c.durationMin)) } : {}) });
 
 /** a call or a contact on a lead: missed calls count an attempt; anything else is the first answer (S2: new → replied) */
@@ -30,7 +42,7 @@ export function leadTouchNext(d: DB, leadId: ID, t: LeadTouch, ids: EventIds): D
   const l = d.leads.find((x) => x.id === leadId);
   const toReplied = l?.status === "new" && !missed;
   const at = ids.at;
-  const contactId = realPersonId(call ? call.contactId : t.kind !== "call" ? t.contactId : undefined);
+  const contactId = contactRowId(d, call ? call.contactId : t.kind !== "call" ? t.contactId : undefined);
   const body = (call ? call.note : t.kind !== "call" ? t.text : undefined)?.trim();
   const event: Activity = {
     id: ids.activityId, subjectType: "lead", subjectId: leadId, kind: t.kind, at, actorId: d.me, direction: "out",
@@ -51,12 +63,12 @@ export function leadTouchNext(d: DB, leadId: ID, t: LeadTouch, ids: EventIds): D
   };
 }
 
-export function leadTouchOp(leadId: ID, t: LeadTouch, ids: EventIds): Op {
+export function leadTouchOp(d: Pick<DB, "customers" | "leads">, leadId: ID, t: LeadTouch, ids: EventIds): Op {
   const call = t.kind === "call" ? t.call : undefined;
   return {
     k: "lead.touch", activityId: ids.activityId, leadId, kind: t.kind, at: ids.at,
-    ...(call ? { outcome: call.outcome, contactId: realPersonId(call.contactId), durationMin: call.durationMin, note: call.note } : {}),
-    ...(t.kind !== "call" && (t.contactId || t.text) ? { contactId: realPersonId(t.contactId), note: t.text } : {}),
+    ...(call ? { outcome: call.outcome, contactId: contactRowId(d, call.contactId), durationMin: call.durationMin, note: call.note } : {}),
+    ...(t.kind !== "call" && (t.contactId || t.text) ? { contactId: contactRowId(d, t.contactId), note: t.text } : {}),
   };
 }
 
@@ -64,7 +76,7 @@ export function leadTouchOp(leadId: ID, t: LeadTouch, ids: EventIds): Op {
 export function callNext(d: DB, c: CallInput, ids: EventIds): DB {
   const { subjectType, subjectId, ...call } = c;
   if (subjectType === "lead") return leadTouchNext(d, subjectId, { kind: "call", call }, ids);
-  const contactId = realPersonId(call.contactId);
+  const contactId = contactRowId(d, call.contactId);
   const event: Activity = {
     id: ids.activityId, subjectType, subjectId, kind: "call", at: ids.at, actorId: d.me, direction: "out", meta: metaOf(call),
     ...(contactId ? { contactId } : {}), ...(call.note?.trim() ? { body: call.note.trim() } : {}),
@@ -73,16 +85,16 @@ export function callNext(d: DB, c: CallInput, ids: EventIds): DB {
 }
 
 /** …and the op: lead.touch for a lead (the server's S2 trigger), activity.call for a client or a job */
-export function callOp(c: CallInput, ids: EventIds): Op {
+export function callOp(d: Pick<DB, "customers" | "leads">, c: CallInput, ids: EventIds): Op {
   const { subjectType, subjectId, ...call } = c;
-  if (subjectType === "lead") return leadTouchOp(subjectId, { kind: "call", call }, ids);
-  return { k: "activity.call", activityId: ids.activityId, subjectType, subjectId, at: ids.at, ...call, contactId: realPersonId(call.contactId) };
+  if (subjectType === "lead") return leadTouchOp(d, subjectId, { kind: "call", call }, ids);
+  return { k: "activity.call", activityId: ids.activityId, subjectType, subjectId, at: ids.at, ...call, contactId: contactRowId(d, call.contactId) };
 }
 
 /** an SMS / email (6-3): on a lead — a lead contact (S2 as before); on a client or a job — an event of that kind */
 export function messageNext(d: DB, m: MessageInput, ids: EventIds): DB {
   if (m.subjectType === "lead") return leadTouchNext(d, m.subjectId, { kind: m.channel, contactId: m.contactId, text: m.text }, ids);
-  const contactId = realPersonId(m.contactId);
+  const contactId = contactRowId(d, m.contactId);
   const event: Activity = {
     id: ids.activityId, subjectType: m.subjectType, subjectId: m.subjectId, kind: m.channel, at: ids.at, actorId: d.me, direction: "out",
     ...(contactId ? { contactId } : {}), ...(m.text.trim() ? { body: m.text.trim() } : {}),
@@ -90,7 +102,7 @@ export function messageNext(d: DB, m: MessageInput, ids: EventIds): DB {
   return { ...d, activities: [event, ...d.activities] };
 }
 
-export function messageOp(m: MessageInput, ids: EventIds): Op {
-  if (m.subjectType === "lead") return leadTouchOp(m.subjectId, { kind: m.channel, contactId: m.contactId, text: m.text }, ids);
-  return { k: "activity.message", activityId: ids.activityId, subjectType: m.subjectType, subjectId: m.subjectId, at: ids.at, channel: m.channel, text: m.text.trim(), contactId: realPersonId(m.contactId) };
+export function messageOp(d: Pick<DB, "customers" | "leads">, m: MessageInput, ids: EventIds): Op {
+  if (m.subjectType === "lead") return leadTouchOp(d, m.subjectId, { kind: m.channel, contactId: m.contactId, text: m.text }, ids);
+  return { k: "activity.message", activityId: ids.activityId, subjectType: m.subjectType, subjectId: m.subjectId, at: ids.at, channel: m.channel, text: m.text.trim(), contactId: contactRowId(d, m.contactId) };
 }

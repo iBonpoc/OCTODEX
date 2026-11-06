@@ -12,7 +12,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Divider, ListRow } from "@/ui/surfaces";
 import {
-  firstEmail, firstPhone, messageLanguage, messagePeople, messageSubject, messageTemplates, messageText, ownerName, TEMPLATE_LABEL,
+  firstEmail, firstPhone, messageJobChoices, messageLanguage, messagePeople, messageSubject, messageTemplates, messageText, ownerName, ownerPeople, TEMPLATE_LABEL,
   type MessageTemplate, type Owner,
 } from "./messages";
 
@@ -54,9 +54,12 @@ function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose:
   const [channel, setChannel] = useState<"sms" | "email">(phone ? "sms" : "email");
   const [tpl, setTpl] = useState<MessageTemplate | null>(null);
   const [text, setText] = useState("");
+  const [jobId, setJobId] = useState<string | null>(null);
   const sent = useRef(false);
 
-  const subject = to ? messageSubject(db, role, to.owner) : undefined;
+  // the technician with several of his jobs at this client picks one (else the one job / the lead / the client itself)
+  const jobs = to ? messageJobChoices(db, role, to.owner) : [];
+  const subject = to ? (jobs.length > 1 ? (jobId ? { subjectType: "job" as const, subjectId: jobId } : undefined) : messageSubject(db, role, to.owner)) : undefined;
   const lang = to ? messageLanguage(db, to.owner, to.person) : undefined;
   const templates = to ? messageTemplates(db, to.owner) : [];
   const ch = channel === "sms" && !phone ? "email" : channel === "email" && !email ? "sms" : channel;
@@ -73,16 +76,27 @@ function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose:
 
   const send = () => {
     if (sent.current || !ok || !to || !subject || !address) return;
-    sent.current = true;
     const body = text.trim();
     const url = ch === "sms" ? smsWithBody(address, body) : mailtoHref(address, { body });
-    if (url) Linking.openURL(url).catch(() => {});
+    // nothing to open (a broken number / address): nothing is written either
+    if (!url) {
+      toast.show(t("w6.msg.noApp"));
+      return;
+    }
+    sent.current = true;
+    Linking.openURL(url).catch(() => {});
     const undo = store.logMessage({ ...subject, contactId: to.person.id, channel: ch, text: body });
     toast.show(store.online ? t("w6.msg.opened") : t("offline.queued"), undo);
     onClose();
   };
 
-  const people = to ? [] : messagePeople(db, role, query).slice(0, 20);
+  // «Написать» in a client's / lead's conversation without a person: only that client's / lead's people
+  const people = to
+    ? []
+    : (preset.owner
+        ? ownerPeople(db, preset.owner).filter((p) => p.phones.length || p.emails.length).map((p) => ({ owner: preset.owner!, person: p, label: p.name || ownerName(db, preset.owner!) }))
+        : messagePeople(db, role, query)
+      ).slice(0, 20);
   return (
     <Sheet visible onClose={onClose} title={t("w6.msg.new")} dirty={text.trim().length > 0} onSave={ok ? send : undefined}>
       <View style={{ gap: space[3] }}>
@@ -95,7 +109,7 @@ function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose:
             />
           ) : (
             <View style={{ gap: space[2] }} testID="msg-people">
-              <TextField type="search" icon="search" value={query} onChangeText={setQuery} placeholder={t("w6.msg.toSearch")} />
+              {preset.owner ? null : <TextField type="search" icon="search" value={query} onChangeText={setQuery} placeholder={t("w6.msg.toSearch")} />}
               <ScrollView style={{ maxHeight: component.sheetListMax }} keyboardShouldPersistTaps="handled">
                 {people.length === 0 ? (
                   <T v="caption" tone="mut">{t("w6.task.subjectNone")}</T>
@@ -111,9 +125,14 @@ function MessageSheetBody({ preset, onClose }: { preset: MessagePreset; onClose:
             </View>
           )}
         </Field>
-        {to && !subject ? <T v="caption" tone="warn">{`⚠ ${t("w6.msg.cannot")}`}</T> : null}
+        {to && jobs.length > 1 ? (
+          <Field label={t("w6.msg.job")}>
+            <ChoiceChips<string> value={jobId ?? ""} onChange={setJobId} items={jobs.map((j) => ({ key: j.id, label: j.label }))} />
+          </Field>
+        ) : null}
+        {to && !subject && jobs.length <= 1 ? <T v="caption" tone="warn">{`⚠ ${t("w6.msg.cannot")}`}</T> : null}
         {to && !phone && !email ? <T v="caption" tone="warn">{`⚠ ${t("w6.msg.noAddress")}`}</T> : null}
-        {to && subject && (phone || email) ? (
+        {to && (subject || jobs.length > 1) && (phone || email) ? (
           <>
             {phone && email ? (
               <Field label={t("w6.msg.channel")}>

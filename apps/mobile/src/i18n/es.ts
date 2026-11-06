@@ -2099,6 +2099,8 @@ export const es: Dict = {
   "w6.msg.openClient": "Abrir cliente",
   "w6.msg.openLead": "Abrir prospecto",
   "w6.msg.empty": "Aún no hay mensajes con esta persona",
+  "w6.msg.job": "Qué trabajo",
+  "w6.msg.noApp": "No se pudo abrir: revise el número o el correo",
   "w6.msgc.onMyWay": "Hola {name}, le escribe {company}. Voy en camino.",
   "w6.msgc.visitReminder": "Hola {name}, le escribe {company}. Le recordamos nuestra visita el {date} a las {time}.",
   "w6.msgc.estimateSent": "Hola {name}, le escribe {company}. Le enviamos el presupuesto {number}.",

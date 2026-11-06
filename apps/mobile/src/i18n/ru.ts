@@ -2098,6 +2098,8 @@ export const ru = {
   "w6.msg.openClient": "Открыть клиента",
   "w6.msg.openLead": "Открыть лид",
   "w6.msg.empty": "Сообщений с этим человеком ещё нет",
+  "w6.msg.job": "По какой работе",
+  "w6.msg.noApp": "Не удалось открыть: проверьте номер или почту",
   "w6.msgc.onMyWay": "Здравствуйте, {name}! Это {company}. Я еду к вам.",
   "w6.msgc.visitReminder": "Здравствуйте, {name}! Это {company}. Напоминаем о визите {date} в {time}.",
   "w6.msgc.estimateSent": "Здравствуйте, {name}! Это {company}. Мы отправили вам смету {number}.",

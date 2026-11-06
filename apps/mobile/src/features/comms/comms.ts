@@ -36,6 +36,8 @@ export interface CommsEntry {
   subjectType: Activity["subjectType"];
   subjectId: string;
   contactId?: string;
+  /** out = from OCTODEX; in = a reply (with the own number, later) */
+  direction?: "in" | "out";
 }
 
 /** the outcome of a call: a sign of the event, icon + word (map §5, 20 §4) */
@@ -63,7 +65,7 @@ export function commsLog(db: DB, role: Role, kind: CommsKind, deletedWord = ""):
       const person = a.contactId ? peopleOfSubject(db, a.subjectType, a.subjectId).find((p) => p.id === a.contactId)?.name : undefined;
       return {
         id: a.id, kind: a.kind, at: a.at, who: s.who, href: s.href, by: memberName(db, a.actorId, deletedWord),
-        subjectType: a.subjectType, subjectId: a.subjectId, ...(a.contactId ? { contactId: a.contactId } : {}),
+        subjectType: a.subjectType, subjectId: a.subjectId, ...(a.contactId ? { contactId: a.contactId } : {}), ...(a.direction ? { direction: a.direction } : {}),
         ...(outcome ? { outcome } : {}), ...(person ? { person } : {}), ...(minutes > 0 ? { durationMin: minutes } : {}), ...(a.body ? { note: a.body } : {}),
       };
     });
@@ -166,9 +168,16 @@ export function callPlaces(db: DB, role: Role, query = ""): CallPlace[] {
  */
 export function callPlaceForClient(db: DB, role: Role, customerId: string): Pick<CallPlace, "subjectType" | "subjectId"> | undefined {
   if (role !== "tech") return { subjectType: "customer", subjectId: customerId };
-  const mine = techScope(db);
-  const jobs = db.jobs.filter((j) => mine.jobs.has(j.id) && (j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId) === customerId);
+  const jobs = techJobsAt(db, customerId);
   return jobs.length === 1 ? { subjectType: "job", subjectId: jobs[0]!.id } : undefined;
+}
+
+/** the technician's jobs at a client that the server opens to him (techVisitCounts), for «which job» when there are several */
+export function techJobsAt(db: DB, customerId: string): { id: string; label: string }[] {
+  const mine = techScope(db);
+  return db.jobs
+    .filter((j) => mine.jobs.has(j.id) && (j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId) === customerId)
+    .map((j) => ({ id: j.id, label: j.title || j.number || j.id }));
 }
 
 /** a call can be saved: something to tie it to and an outcome (the server counts a call without one as answered) */

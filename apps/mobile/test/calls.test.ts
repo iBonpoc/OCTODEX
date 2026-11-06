@@ -142,14 +142,14 @@ describe("calls: what the store does (callNext / callOp — the store wraps them
     const next = callNext(d, input, ids);
     expect(next.activities[0]).toMatchObject({ id: "act-1", subjectType: "customer", subjectId: c.id, kind: "call", direction: "out", meta: { outcome: "answered", duration_min: "3" } });
     expect(next.activities.length).toBe(d.activities.length + 1);
-    expect(callOp(input, ids)).toMatchObject({ k: "activity.call", activityId: "act-1", subjectType: "customer", subjectId: c.id, outcome: "answered" });
+    expect(callOp(d, input, ids)).toMatchObject({ k: "activity.call", activityId: "act-1", subjectType: "customer", subjectId: c.id, outcome: "answered" });
   });
   it("a job: op activity.call on the job", () => {
     const j = d.jobs[0]!;
-    expect(callOp({ subjectType: "job", subjectId: j.id, outcome: "voicemail" }, ids)).toMatchObject({ k: "activity.call", subjectType: "job", subjectId: j.id });
+    expect(callOp(d, { subjectType: "job", subjectId: j.id, outcome: "voicemail" }, ids)).toMatchObject({ k: "activity.call", subjectType: "job", subjectId: j.id });
   });
   it("a lead: op lead.touch with the outcome; «Поговорили» moves a new lead to replied (S2), «Не ответил» counts an attempt", () => {
-    expect(callOp({ subjectType: "lead", subjectId: l.id, outcome: "no_answer" }, ids)).toMatchObject({ k: "lead.touch", leadId: l.id, kind: "call", outcome: "no_answer" });
+    expect(callOp(d, { subjectType: "lead", subjectId: l.id, outcome: "no_answer" }, ids)).toMatchObject({ k: "lead.touch", leadId: l.id, kind: "call", outcome: "no_answer" });
     const missed = callNext(d, { subjectType: "lead", subjectId: l.id, outcome: "no_answer" }, ids);
     expect(missed.leads.find((x) => x.id === l.id)).toMatchObject({ status: "new", callAttempts: (l.callAttempts ?? 0) + 1 });
     const got = callNext(d, { subjectType: "lead", subjectId: l.id, outcome: "answered" }, ids);
@@ -166,10 +166,10 @@ describe("calls: what the store does (callNext / callOp — the store wraps them
     const input = { subjectType: "customer" as const, subjectId: c.id, outcome: "answered" as const, contactId: `${c.id}-main` };
     expect(realPersonId(`${c.id}-main`)).toBeUndefined();
     expect(realPersonId("4b1f0c4e-1111-4222-8333-444455556666")).toBe("4b1f0c4e-1111-4222-8333-444455556666");
-    expect(callOp(input, ids)).not.toHaveProperty("contactId", `${c.id}-main`);
-    expect((callOp(input, ids) as { contactId?: string }).contactId).toBeUndefined();
+    expect(callOp(d, input, ids)).not.toHaveProperty("contactId", `${c.id}-main`);
+    expect((callOp(d, input, ids) as { contactId?: string }).contactId).toBeUndefined();
     expect(callNext(d, input, ids).activities[0]!.contactId).toBeUndefined();
-    expect((callOp({ subjectType: "lead", subjectId: l.id, outcome: "no_answer", contactId: `${l.id}-main` }, ids) as { contactId?: string }).contactId).toBeUndefined();
+    expect((callOp(d, { subjectType: "lead", subjectId: l.id, outcome: "no_answer", contactId: `${l.id}-main` }, ids) as { contactId?: string }).contactId).toBeUndefined();
     expect(callCols({ at: "t", outcome: "answered", contactId: "c9-main" })).not.toHaveProperty("contact_id");
   });
 });
