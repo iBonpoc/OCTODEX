@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { Activity, DB } from "../src/data/types";
-import { commsLog } from "../src/nav/comms";
+import { commsLog } from "../src/features/comms/comms";
 
 const base = makeSeed();
 const other = base.members.find((m) => m.id !== base.me)!.id;
