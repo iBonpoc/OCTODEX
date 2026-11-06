@@ -48,3 +48,5 @@ create index concurrently if not exists company_contacts_user_id_fk_idx on publi
 create index concurrently if not exists visits_company_id_property_id_fk_idx on public.visits (company_id, property_id);
 create index concurrently if not exists users_last_active_company_id_fk_idx on public.users (last_active_company_id);
 create index concurrently if not exists companies_lead_default_assignee_id_fk_idx on public.companies (lead_default_assignee_id);
+create index concurrently if not exists legal_acceptance_user_id_fk_idx on public.legal_acceptance (user_id);
+create index concurrently if not exists legal_acceptance_company_id_fk_idx on public.legal_acceptance (company_id);
