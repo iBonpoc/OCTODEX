@@ -263,20 +263,23 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const lastPayment = new Map<string, Row>();
   for (const p of payments) if (p.invoice_id) lastPayment.set(s(p.invoice_id), p);
   const mappedInvoices: Invoice[] = invoices
-    .filter((i) => i.status !== "void")
+    // a draft is not sent, so not a debt (wave 8): it stays out like a void one until the app has drafts
+    .filter((i) => i.status === "sent")
     .map((i) => ({
       id: s(i.id),
       customerId: s(i.customer_id),
       jobId: s(i.job_id),
       totalCents: n(i.total_cents),
       paidCents: n(i.paid_cents),
-      dueDate: s(i.due_date) || s(i.created_at),
+      // no due date = due on receipt: from the day it was sent
+      dueDate: s(i.due_date) || s(i.sent_at) || s(i.created_at),
       paidAt: n(i.paid_cents) >= n(i.total_cents) && lastPayment.get(s(i.id)) ? s(lastPayment.get(s(i.id))?.received_at) : undefined,
       method: (lastPayment.get(s(i.id))?.method as Invoice["method"]) ?? undefined,
       kind: i.kind === "deposit" ? "deposit" : i.kind === "progress" ? "progress" : "final",
       number: s(i.number) || undefined,
       title: (i.title as string | null) ?? undefined,
       sentAt: (i.sent_at as string | null) ?? undefined,
+      subtotalCents: i.subtotal_cents == null ? undefined : n(i.subtotal_cents),
     }));
 
   const mappedLeads: Lead[] = leads.map((l) => ({
@@ -447,11 +450,13 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     invoices: mappedInvoices,
     expenses: mappedExpenses,
     payments: payments
-      .filter((p) => p.invoice_id && ["succeeded", "partially_refunded", "refunded"].includes(s(p.status)))
+      // a fully refunded payment brought nothing: it is not in the list of payments (wave 8); partial — net, with refundedCents
+      .filter((p) => p.invoice_id && ["succeeded", "partially_refunded"].includes(s(p.status)) && n(p.amount_cents) - n(p.refunded_cents) > 0)
       .map((p) => ({
         id: s(p.id), invoiceId: s(p.invoice_id), customerId: s(p.customer_id), amountCents: n(p.amount_cents) - n(p.refunded_cents),
         method: (["card", "cash", "check", "zelle"].includes(s(p.method)) ? s(p.method) : "card") as Payment["method"],
         at: s(p.received_at), receiptNumber: (p.receipt_number as string | null) ?? undefined, reference: (p.reference as string | null) ?? undefined,
+        receivedBy: (p.received_by as string | null) ?? undefined, refundedCents: n(p.refunded_cents) || undefined,
       }))
       .sort((a, b) => b.at.localeCompare(a.at)),
     company: companyRows[0] ? companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows) : null,
