@@ -3,7 +3,8 @@
  * then sent to the OCTODEX database when online (offline-first, docs/06-architecture, ADR-003).
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
-// due_date is the company's calendar day (features/zone.ts, docs/specs/03 П4b), not the UTC date of the phone
+// due_date is the company's calendar day (features/zone.ts, docs/specs/03 П4b), not the UTC date of the phone; it is the
+// day the invoice was made (op.dueDate, set when the op is queued), not the day the op reaches the server
 import { companyToday } from "@/features/zone";
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION } from "@octo/estimating-engine";
@@ -19,7 +20,8 @@ export type Op =
   | { k: "photo.remove"; id: string }
   | { k: "visit.checklist"; visitId: string; checklist: { id: string; label: string; done: boolean }[] }
   | { k: "visit.sign"; visitId: string; svg: string }
-  | { k: "visit.pay"; visitId: string; jobId: string; customerId: string; invoiceId: string; paymentId: string; amountCents: number; method: PaymentMethod }
+  /** dueDate: the company's day when the invoice was made (offline at 11:50 PM it stays that day); older queued ops have none */
+  | { k: "visit.pay"; visitId: string; jobId: string; customerId: string; invoiceId: string; paymentId: string; amountCents: number; method: PaymentMethod; dueDate?: string }
   | { k: "lead.reply"; leadId: string }
   | {
       k: "lead.book";
@@ -103,7 +105,7 @@ export type Op =
       invoiceId?: string;
     }
   | { k: "payment.record"; id: string; invoiceId: string; customerId: string; amountCents: number; method: PaymentMethod; reference?: string }
-  | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number }
+  | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number; dueDate?: string }
   | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[] }
   | { k: "company.save"; company: Company; einChanged: boolean }
   | { k: "license.save"; license: CompanyLicense }
@@ -179,6 +181,8 @@ export type Op =
       title: string;
       totalCents: number;
       depositCents: number;
+      /** the company's day the deposit invoice was made (see visit.pay) */
+      dueDate?: string;
     }
   | { k: "invoice.pay"; invoiceId: string; paymentId: string; customerId: string; amountCents: number; method: PaymentMethod }
   | { k: "expense.add"; id: string; jobId: string | null; vendor: string; category: ExpenseCategory; amountCents: number };
@@ -297,7 +301,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       await run(
         ins("invoices", {
           id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: realJob(op.jobId), kind: "final", status: "sent",
-          subtotal_cents: op.amountCents, total_cents: op.amountCents, due_date: companyToday(), sent_at: new Date().toISOString(),
+          subtotal_cents: op.amountCents, total_cents: op.amountCents, due_date: op.dueDate ?? companyToday(), sent_at: new Date().toISOString(),
         }),
       );
       await run(
@@ -504,7 +508,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(
         ins("invoices", {
           id: op.id, company_id: c, number: "", customer_id: op.customerId, job_id: op.jobId, kind: op.kind, status: "sent", title: op.title,
-          subtotal_cents: op.totalCents, total_cents: op.totalCents, due_date: companyToday(), sent_at: new Date().toISOString(),
+          subtotal_cents: op.totalCents, total_cents: op.totalCents, due_date: op.dueDate ?? companyToday(), sent_at: new Date().toISOString(),
         }),
       );
     case "lead.prospect": {
@@ -695,7 +699,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (!depInv) await run(
         ins("invoices", {
           id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: jobId, kind: "deposit", status: "sent",
-          subtotal_cents: op.depositCents, total_cents: op.depositCents, due_date: companyToday(), sent_at: new Date().toISOString(),
+          subtotal_cents: op.depositCents, total_cents: op.depositCents, due_date: op.dueDate ?? companyToday(), sent_at: new Date().toISOString(),
         }),
       );
       return run(

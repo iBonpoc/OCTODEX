@@ -30,7 +30,7 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
-import { setZone } from "@/features/zone";
+import { companyToday, setZone } from "@/features/zone";
 import {
   type CatalogItem,
   type Company,
@@ -620,7 +620,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             };
           },
           v.amountDueCents > 0 && customerId
-            ? { k: "visit.pay", visitId, jobId: v.jobId!, customerId, invoiceId, paymentId, amountCents: v.amountDueCents, method }
+            ? { k: "visit.pay", visitId, jobId: v.jobId!, customerId, invoiceId, paymentId, amountCents: v.amountDueCents, method, dueDate: companyToday(Date.parse(now)) }
             : undefined,
         );
       },
@@ -856,7 +856,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               { id, customerId, jobId, kind, title, totalCents: amountCents, paidCents: 0, dueDate: now, sentAt: now, number: modeRef.current === "demo" ? nextInvoiceNumber(d) : undefined },
             ],
           }),
-          { k: "invoice.issue", id, jobId, customerId, kind, title, totalCents: amountCents },
+          { k: "invoice.issue", id, jobId, customerId, kind, title, totalCents: amountCents, dueDate: companyToday(Date.parse(now)) },
         );
       },
       sendEstimate: (id, tk) => {
@@ -1228,7 +1228,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }),
           {
             k: "estimate.deposit", id, jobId, invoiceId, paymentId, method, customerId: e.customerId, propertyId: e.propertyId,
-            title: e.title, totalCents: e.totalCents, depositCents: e.depositCents,
+            title: e.title, totalCents: e.totalCents, depositCents: e.depositCents, dueDate: companyToday(Date.parse(now)),
           },
         );
       },
