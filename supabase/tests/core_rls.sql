@@ -494,8 +494,8 @@ select set_config('app.signing_estimate', '', false);
 :as_office_a   -- теперь admin
 do $$ begin
   perform tst.fails($q$update public.memberships set role = 'owner' where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'admin grants owner');
-  perform tst.fails($q$update public.memberships set status = 'suspended' where user_id = 'a0000000-0000-0000-0000-000000000001'$q$, 'admin suspends owner');
-  update public.memberships set status = 'suspended' where user_id = 'a0000000-0000-0000-0000-000000000004';
+  perform tst.fails($q$update public.memberships set status = 'disabled' where user_id = 'a0000000-0000-0000-0000-000000000001'$q$, 'admin suspends owner');
+  update public.memberships set status = 'disabled' where user_id = 'a0000000-0000-0000-0000-000000000004';
 end $$;
 :as_tech2_a    -- отключён: не видит ничего
 do $$ begin
@@ -3654,5 +3654,90 @@ select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-00000000
 :as_super
 select tst.ok((select count(*) from public.jobs where id in ('e4600000-0000-4000-8000-000000000001', 'e4600000-0000-4000-8000-000000000002') and status = 'completed') = 2, 'only the office closed, nothing else');
 \echo 'T46 wave 3c: «Работа выполнена» (S10) ok'
+
+-- ---------------------------------------------------------------- T48: wave 7-2 — «Команда и приглашение» (S21; docs/specs/19 §2 п.3–4)
+-- An invitation by email before the person has an account; the invited person sees nothing until accepting; a wrong email,
+-- a cancelled or expired link does not let in; a disabled person sees nothing again; only owner/admin invite and disable.
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4800000-0000-4000-8000-000000000001', 'new48@a.test',   '{"full_name":"Nora New"}'),
+  ('a4800000-0000-4000-8000-000000000002', 'other48@a.test', '{"full_name":"Oscar Other"}');
+\set as_new48   'reset role; set request.jwt.claim.sub = ''a4800000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_other48 'reset role; set request.jwt.claim.sub = ''a4800000-0000-4000-8000-000000000002''; set role authenticated;'
+select tst.ok((select status from public.memberships where status not in ('invited', 'active', 'disabled', 'deleted') limit 1) is null, 'membership statuses: invited / active / disabled / deleted');
+-- who may invite
+:as_sales_a
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'x48@a.test', 'tech')$q$, 'sales do not invite');
+:as_tech_a
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'x48@a.test', 'tech')$q$, 'the tech does not invite');
+:as_owner_b
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'x48@a.test', 'tech')$q$, 'another company does not invite into ours');
+:as_owner_a
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'x48@a.test', 'owner')$q$, 'nobody is invited as owner');
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'not-an-email', 'tech')$q$, 'not an email');
+select tst.fails($q$select public.invite_member('ca000000-0000-0000-0000-000000000000', 'office@a.test', 'tech')$q$, 'already on the team');
+select public.invite_member('ca000000-0000-0000-0000-000000000000', '  New48@A.test ', 'tech', 'Nora New') ->> 'token' as t48_token \gset
+select tst.ok((select count(*) from public.invitations where email = 'new48@a.test' and status = 'pending' and role = 'tech') = 1, 'the invitation is pending, email normalised');
+:as_super
+select tst.ok((select count(*) from public.invitations where token_hash = :'t48_token') = 0, 'the link token itself is not stored');
+-- the invited person sees nothing of the company, not even the invitation
+:as_new48
+select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 0, 'invited: no company before accepting');
+select tst.ok((select count(*) from public.customers) = 0, 'invited: no clients before accepting');
+select tst.ok((select count(*) from public.invitations) = 0, 'invited: the invitations list is the owner''s');
+select tst.blocked($q$update public.invitations set status = 'accepted'$q$, 'nobody writes invitations directly');
+-- the link opened by another account does not let in
+:as_other48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_token'), 'another email cannot accept');
+select tst.ok((select count(*) from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000002') = 0, 'and is not on the team');
+reset role; set role anon;
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_token'), 'anon cannot accept');
+-- a wrong token, then the right one
+:as_new48
+select tst.fails($q$select public.accept_invitation('0000000000000000000000000000000000000000')$q$, 'a wrong link');
+select tst.ok((public.accept_invitation(:'t48_token') ->> 'role') = 'tech', 'the invited person joins with the invited role');
+select tst.ok((select status from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000') = 'active', 'active member now');
+select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 1, 'sees the company after accepting');
+select tst.ok((public.accept_invitation(:'t48_token') ->> 'repeat')::boolean, 'opening the link again changes nothing');
+select tst.blocked($q$update public.memberships set role = 'admin' where user_id = 'a4800000-0000-4000-8000-000000000001'$q$, 'still cannot raise one''s own role');
+:as_owner_a
+select tst.ok((select status from public.invitations where email = 'new48@a.test') = 'accepted', 'the invitation is accepted');
+-- cancel: the link stops working
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'other48@a.test', 'sales') ->> 'id' as t48_inv2 \gset
+select public.resend_invitation(:'t48_inv2') ->> 'token' as t48_token2 \gset
+select public.revoke_invitation(:'t48_inv2');
+:as_other48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_token2'), 'a cancelled invitation does not let in');
+-- expired: does not let in; «Отправить ещё раз» gives a new link
+:as_owner_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'other48@a.test', 'sales') ->> 'id' as t48_inv3 \gset
+select public.resend_invitation(:'t48_inv3') ->> 'token' as t48_old \gset
+:as_super
+update public.invitations set expires_at = now() - interval '1 minute' where id = :'t48_inv3';
+:as_other48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_old'), 'an expired invitation does not let in');
+:as_owner_a
+select tst.ok((select status = 'pending' and expires_at < now() from public.invitations where id = :'t48_inv3'), 'the list sees it expired by its date');
+select public.resend_invitation(:'t48_inv3') ->> 'token' as t48_new \gset
+:as_other48
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_old'), 'the old link is dead after «send again»');
+select tst.ok((public.accept_invitation(:'t48_new') ->> 'role') = 'sales', 'the new link lets in');
+-- disable: the person sees nothing again; their records stay; bring back
+:as_sales_a
+select tst.fails($q$select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000001', 'disabled')$q$, 'sales do not disable');
+:as_owner_a
+select tst.fails($q$select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'disabled')$q$, 'not yourself');
+select tst.fails($q$select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000001', 'deleted')$q$, '«deleted» is not set here (S22)');
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000001', 'disabled');
+:as_new48
+select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 0, 'disabled: no company');
+select tst.ok((select count(*) from public.customers) = 0, 'disabled: no clients');
+:as_owner_a
+select tst.ok((select status = 'disabled' and suspended_at is not null from public.memberships where user_id = 'a4800000-0000-4000-8000-000000000001'), 'disabled with its time, the row stays');
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000001', 'active');
+:as_new48
+select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 1, 'brought back: sees the company again');
+:as_super
+\echo 'T48 wave 7-2: invitations and team (S21) ok'
 
 \echo 'ALL TESTS PASSED'
