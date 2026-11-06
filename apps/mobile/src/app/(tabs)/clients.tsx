@@ -6,10 +6,10 @@ import { canMarkNoService, clientHistory, clientMoneyOf, clientStatusChip, match
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { invoiceSigns } from "@/features/listSigns";
 import { useI18n } from "@/i18n";
-import { Button, ChoiceChips, MultiChips, TextField } from "@/ui/controls";
-import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { Button, ChoiceChips, IconButton, MultiChips, TextField } from "@/ui/controls";
+import { CardList, Empty, ListRow, Screen } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
-import { useToast } from "@/ui/overlays";
+import { Sheet, useToast } from "@/ui/overlays";
 import { CardGrid, ListCard, ListCardHeader, StatusPicker } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -52,6 +52,8 @@ export default function Clients() {
   const toast = useToast();
   const store = useStore();
   const [picking, setPicking] = useState<Customer | null>(null);
+  /** «…» of the list (13 §3.3): «Импорт из CSV» — the office's */
+  const [more, setMore] = useState(false);
   /** archive: one tap with «Undo»; «do not service» needs a reason → the client's page (existing form) */
   const pickStatus = (c: Customer, s: CustomerStatus) => {
     setPicking(null);
@@ -103,6 +105,7 @@ export default function Clients() {
       hintKey="clients"
       subtitle={t("clients.count", { n: count("all") })}
       fab="clients"
+      right={office ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
     >
       <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.search")} icon="search" />
       <ChoiceChips<Filter>
@@ -150,6 +153,9 @@ export default function Clients() {
           onPick={(k) => pickStatus(picking, k as CustomerStatus)}
         />
       ) : null}
+      <Sheet visible={more} onClose={() => setMore(false)} title={t("clients.title")}>
+        <ListRow title={t("client.import.menu")} onPress={() => { setMore(false); router.push("/client/import"); }} />
+      </Sheet>
     </Screen>
   );
 }

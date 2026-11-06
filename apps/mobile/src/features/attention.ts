@@ -92,7 +92,8 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     for (const v of db.visits) {
       if (!isOpenVisit(v) || !assigneesOf(v).length) continue;
       const dd = dayDiffIn(v.start, now, tz);
-      if (dd !== 0 && dd !== 1) continue;
+      // yesterday too: a visit of 11:50 PM is still running late after the company's midnight (lateToday decides)
+      if (dd !== 0 && dd !== 1 && dd !== -1) continue;
       const { client, tech } = visitWho(db, v);
       const late = lateToday(v, now, sch, tz);
       if (late)

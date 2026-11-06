@@ -89,7 +89,8 @@ export default function Today() {
   // every number opens exactly the records it counts, for the same period (founder 05.11); back → Today
   const open = (f: Figure) => router.push(`/figures/${f}?period=${period}`);
   const attention = buildAttention(db, role);
-  const techs = db.members.filter((m) => m.roles.includes("tech"));
+  // invited or switched off people are not a crew (7-2)
+  const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
   // the screen's own width: on 820/1280 the side menu takes the left (useContentWidth, 13 §2.5)
   const screenW = useContentWidth();
   const tileW = Math.floor((Math.min(screenW, layout.contentMax) - space[4] * 2 - space[2] * 2) / 3);

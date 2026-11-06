@@ -2,7 +2,7 @@
  * Wave 2c-1 of the app shell (docs/specs/13 v2 §2.2, §2.4, §2.5, §3.14; 13а §9):
  * - «＋» by screen and role: phone — a floating button bottom-right above the tabs; 820/1280 — «＋» in the header, no floating one;
  * - only what works: Главная — Лид · Клиент · Смета · Расход (tech: Лид · Расход); one item = straight to its screen;
- * - Plan: planners — Лид · Записать в план; the technician has no «＋» on Plan;
+ * - Plan: planners — Работа · Лид · Записать в план · Событие · Выходной; the technician has no «＋» on Plan;
  * - Client: «Смета» tied to the client; Job: «Выезд» to this job; tech visit: Фото · Лид · Расход;
  * - «Главная»: the bell with the unread count → /notifications → a card opens its estimate; the profile → My settings.
  */
@@ -109,10 +109,20 @@ exports.run = async (h) => {
   await plus().click();
   body = await sheetText();
   h.expect(body.includes("Новый лид") && body.includes("Записать в план"), "Plan «＋»: lead and «Записать в план»");
+  for (const it of ["Новая работа", "Событие", "Выходной"]) h.expect(body.includes(it), `Plan «＋» has «${it}»`);
   await sheet().getByTestId("fab-planAdd").click();
   await p.waitForTimeout(600);
   await h.expectText(/Осмотр|осмотр/, "«Записать в план» opens the Plan's sheet");
   await closeSheet();
+  // «Событие» and «Выходной» open the Plan's event sheet straight away (wave 5, #187/#188)
+  for (const [id, text] of [["fab-planEvent", /Целый день|Весь день/], ["fab-planTimeOff", /Целый день|Весь день/]]) {
+    await plus().click();
+    await sheetText();
+    await sheet().getByTestId(id).click();
+    await p.waitForTimeout(600);
+    await h.expectText(text, `${id} opens the event sheet`);
+    await closeSheet();
+  }
 
   // the technician: no «＋» on Plan and Clients; Главная — Лид · Расход; his visit — Фото · Лид · Расход
   await setRole(h, "tech");
