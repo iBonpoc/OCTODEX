@@ -380,6 +380,20 @@ export const LEAD_INTERESTS = ["hot", "warm", "cold"] as const;
 export type LeadInterest = (typeof LEAD_INTERESTS)[number];
 /** what happened on a call from the lead card */
 export type CallOutcome = "answered" | "no_answer" | "voicemail";
+/**
+ * Wave 6-2 (docs/specs/20 §3, §5): a call written down by hand or after «Позвонить». The outcome is required: the server
+ * counts a call without one as answered (a new lead would move to «replied» by itself). Duration in minutes → meta.duration_min.
+ */
+export interface CallInput {
+  subjectType: "lead" | "customer" | "job";
+  subjectId: ID;
+  contactId?: ID;
+  outcome: CallOutcome;
+  durationMin?: number;
+  note?: string;
+}
+/** what a lead's contact button writes without asking: everything but a call (a call always asks «Чем кончился?») */
+export type LeadTouchKind = "sms" | "email" | "marketplace" | "reply";
 
 /** A to-do with a date on a lead, client, job or estimate ("next step"). */
 export interface Task {

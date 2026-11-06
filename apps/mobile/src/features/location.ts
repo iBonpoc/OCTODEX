@@ -4,6 +4,7 @@
  * shows and when it asks the phone for a point. Thresholds are product rules, not design: kept here, not in tokens.
  */
 import type { DB, ID, LocationState, Visit, VisitPoint, VisitStep } from "@/data/types";
+import { assigneesOf, liveAssignees } from "./schedule";
 
 /** «you are at the address»: this close to Property.geo, with a fix at least this precise */
 export const NEAR_M = 150;
@@ -21,7 +22,7 @@ export const LOCATION_OFF: LocationState = { allowed: false, on: false };
 const SHARING_STEPS: VisitStep[] = ["en_route", "on_site", "working", "signed"];
 export const isSharingStep = (step: VisitStep) => SHARING_STEPS.includes(step);
 
-export const assigneesOf = (v: Visit): ID[] => v.assigneeIds ?? (v.techId ? [v.techId] : []);
+export { assigneesOf };
 
 /** the phone sends a point now: the company allows it, the person agreed, it is their visit and it is under way */
 export function shouldShare(loc: LocationState | undefined, v: Visit, me: ID): boolean {
@@ -76,10 +77,11 @@ export interface OfficeLocationLine {
 
 /** what the office sees on an open visit, per person: «on the way · 2.1 mi from the address · 3 min ago»; a person who
  *  does not share has no line (the screen says «not sharing») */
-export function officeLines(db: Pick<DB, "visitPoints">, v: Visit, geo: { lat: number; lng: number } | undefined, now: number): OfficeLocationLine[] {
+export function officeLines(db: Pick<DB, "visitPoints" | "members">, v: Visit, geo: { lat: number; lng: number } | undefined, now: number): OfficeLocationLine[] {
   if (!isSharingStep(v.step)) return [];
   const out: OfficeLocationLine[] = [];
-  for (const userId of assigneesOf(v)) {
+  // only the people who can still come (7а-2b): someone switched off or deleted is not followed on the visit
+  for (const userId of liveAssignees(v, db.members)) {
     const p = lastPoint(db.visitPoints, v.id, userId);
     if (!p) continue;
     const age = now - Date.parse(p.at);
@@ -97,4 +99,13 @@ export function keepLast(points: VisitPoint[] | undefined, p: VisitPoint): Visit
 /** the visit's step still waits in the offline queue: a point now would be refused («not under way») */
 export function stepPending(outbox: { op: { k: string; visitId?: string } }[], visitId: ID): boolean {
   return outbox.some((x) => x.op.k === "visit.step" && x.op.visitId === visitId);
+}
+
+/** the people on an open visit the office reads as «не делится геопозицией»: on the visit (still at work), no line,
+ *  and known not to share (me — by my consent; others — by their membership; unknown → not said) */
+export function notSharing(db: Pick<DB, "members" | "me" | "location">, v: Visit, lines: OfficeLocationLine[]): ID[] {
+  const on = (db.location ?? LOCATION_OFF).on;
+  return liveAssignees(v, db.members).filter(
+    (id) => !lines.some((l) => l.userId === id) && (id === db.me ? !on : db.members.find((m) => m.id === id)?.sharesLocation === false),
+  );
 }

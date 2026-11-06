@@ -6,7 +6,7 @@ import type { DB, Role, Task } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { StatusName } from "@octo/design-tokens";
 import { isOverdueTask, canSeeLead } from "@/features/leads";
-import { isAssigned } from "@/features/schedule";
+import { techVisitCounts } from "@/features/comms/comms";
 
 export type TaskState = "open" | "overdue" | "done";
 export type TaskFilter = TaskState;
@@ -114,7 +114,8 @@ export function taskPlaces(db: DB, role: Role, query = ""): (TaskSubject & { sub
   const add = (subjectType: Task["subjectType"], subjectId: string) => out.push({ ...taskSubject(db, { subjectType, subjectId }), subjectId });
   if (role === "tech") {
     for (const l of db.leads) if (canSeeLead(role, db.me, l)) add("lead", l.id);
-    const props = new Set(db.visits.filter((v) => isAssigned(v, db.me)).map((v) => db.jobs.find((j) => j.id === v.jobId)?.propertyId).filter((x): x is string => !!x));
+    // the same window as the server (is_property_assignee → tech_visit_counts)
+    const props = new Set(db.visits.filter((v) => techVisitCounts(db, v)).map((v) => db.jobs.find((j) => j.id === v.jobId)?.propertyId).filter((x): x is string => !!x));
     for (const p of db.properties) if (props.has(p.id)) add("property", p.id);
   } else {
     for (const c of db.customers) add("customer", c.id);
