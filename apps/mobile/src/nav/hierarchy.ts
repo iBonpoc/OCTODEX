@@ -102,6 +102,11 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       return { section: "clients", kind: "prop.card", up: cid ? toClient(cid) : { href: "/clients", label: K("tab.clients") } };
     }
     case "job":
+      if (id === "new") {
+        // «Новая работа» (S17): back to the client it was started from, else to Jobs
+        const cid = one(params.customerId);
+        return { section: cid ? "clients" : "jobs", kind: "job3.newJob", up: cid && client(cid) ? toClient(cid) : { href: "/jobs", label: K("jobs.title") } };
+      }
       if (id === "schedule") {
         const jid = one(params.jobId);
         return { section: "clients", kind: "sch.title", up: jid ? toJob(jid) : { href: "/jobs", label: K("jobs.title") } };
@@ -120,6 +125,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       return id
         ? { section: "company", kind: SETUP_STEPS.includes(id as SetupStep) ? stepTitle(id as SetupStep) : id === "schedule" ? "schs.title" : "co.title", up: { href: "/company", label: K("co.title") } }
         : { section: "company" };
+    case "reports":
+      // «Ещё» → Отчёты: the list is a root, a report goes up to it
+      return id ? { section: "reports", kind: "rpt.title", up: { href: "/reports", label: K("rpt.title") } } : { section: "reports" };
     case "expense": {
       const jid = one(params.jobId);
       return { section: "money", kind: "exp.title", up: jid ? toJob(jid) : { href: "/money", label: K("money.title") } };

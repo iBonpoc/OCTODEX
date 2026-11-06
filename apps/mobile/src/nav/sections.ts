@@ -21,6 +21,7 @@ export type SectionId =
   | "invoices"
   | "catalog"
   | "payments"
+  | "reports"
   | "money"
   | "team"
   | "company"
@@ -59,7 +60,9 @@ export const SECTIONS: readonly Section[] = [
   { id: "catalog", label: "nav.catalog", icon: "note", group: "docs" },
   // owner, admin, office (13 §4): not the technician, not sales
   { id: "payments", label: "mny.payments.title", icon: "dollar", group: "money", roles: PLANNERS },
-  { id: "money", label: "nav.money", icon: "wallet", group: "money", roles: PLANNERS },
+  { id: "reports", label: "rpt.title", icon: "chart", group: "money", roles: PLANNERS },
+  // «Расходы» (13 §2.3): the /money screen
+  { id: "money", label: "nav.expenses", icon: "wallet", group: "money", roles: PLANNERS },
   { id: "team", label: "nav.team", icon: "users", group: "bottom", roles: ["director"] },
   { id: "company", label: "nav.companySettings", icon: "home2", group: "bottom", roles: ["director"] },
   { id: "settings", label: "nav.mySettings", icon: "sliders", group: "bottom" },
@@ -138,7 +141,7 @@ export interface FabCtx {
   /** the visit is an inspection (estimate from the visit) */
   inspection?: boolean;
 }
-export type FabId = "lead" | "client" | "estimate" | "expense" | "visit" | "planAdd" | "photo";
+export type FabId = "lead" | "client" | "job" | "estimate" | "expense" | "visit" | "planAdd" | "photo";
 export interface FabItem {
   id: FabId;
   label: DictKey;
@@ -171,6 +174,7 @@ const q = (o: Record<string, string | undefined>) => {
 const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey }> = {
   lead: { label: "quick.lead", icon: "user" },
   client: { label: "clients.new", icon: "users" },
+  job: { label: "job3.newJob", icon: "wrench" },
   estimate: { label: "quick.estimate", icon: "invoice" },
   expense: { label: "quick.receipt", icon: "wallet" },
   visit: { label: "sch.title", icon: "calendar" },
@@ -180,6 +184,8 @@ const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey }> = {
 
 const lead: FabDef = { id: "lead", href: () => "/lead/new" };
 const client: FabDef = { id: "client", roles: OFFICE, href: () => "/client/edit" };
+// «Новая работа» one form (S17): tied to the screen's client and property when it has them; not the technician
+const job: FabDef = { id: "job", roles: OFFICE, href: (c) => `/job/new${q({ customerId: c.customerId, propertyId: c.propertyId })}` };
 const expense = (roles?: readonly Role[]): FabDef => ({ id: "expense", roles, href: () => "/expense/new" });
 const estimate = (roles: readonly Role[] | undefined, needs?: FabDef["needs"]): FabDef => ({
   id: "estimate",
@@ -189,16 +195,16 @@ const estimate = (roles: readonly Role[] | undefined, needs?: FabDef["needs"]): 
 });
 
 /**
- * Only what works (13 §2.4; 14-app-store п. 7): Job (S17), Invoice without a job, Task, Event, Day off, Note, File,
+ * Only what works (13 §2.4; 14-app-store п. 7): Invoice without a job, Task, Event, Day off, Note, File,
  * Property, «Record a call», «New message» come with waves 3–6. «Lead» from a client — when lead/new takes customerId.
  */
 export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
-  home: [lead, client, estimate(OFFICE), expense()],
+  home: [lead, client, job, estimate(OFFICE), expense()],
   // the schedule is the planners' (docs/specs/03 Р7): no «＋» on Plan for the technician
-  plan: [{ ...lead, roles: OFFICE }, { id: "planAdd", roles: PLANNERS, act: "planAdd" }],
+  plan: [{ ...lead, roles: OFFICE }, job, { id: "planAdd", roles: PLANNERS, act: "planAdd" }],
   calls: [lead, client],
   clients: [client],
-  client: [estimate(OFFICE, (c) => !!c.customerId)],
+  client: [{ ...job, needs: (c) => !!c.customerId }, estimate(OFFICE, (c) => !!c.customerId)],
   job: [
     { id: "visit", roles: PLANNERS, needs: (c) => !!c.jobId, href: (c) => `/job/schedule${q({ jobId: c.jobId })}` },
     estimate(OFFICE, (c) => !!c.customerId),

@@ -47,6 +47,8 @@ describe("navigation hierarchy: back = one level up", () => {
   it("«Ещё» → Счета → Счёт: the list is a root; an invoice without a job goes up to the list", () => {
     expect(navContext("/invoice", { f: "owed" }, db, "director")).toEqual({ section: "invoices" });
     expect(navContext("/payments", {}, db, "dispatcher")).toEqual({ section: "payments" });
+    expect(navContext("/reports", {}, db, "dispatcher")).toEqual({ section: "reports" });
+    expect(navContext("/reports/revenue", {}, db, "director")).toMatchObject({ section: "reports", up: { href: "/reports" } });
     const loose = { ...db, invoices: [{ ...db.invoices[0]!, id: "iLoose", jobId: "no-such-job" }] };
     expect(navContext("/invoice/iLoose", {}, loose, "director")).toMatchObject({ section: "invoices", up: { href: "/invoice", label: { key: "nav.invoices" } } });
     // the technician has no invoices list: his invoice sits under his Home
@@ -60,6 +62,12 @@ describe("navigation hierarchy: back = one level up", () => {
     const noCust = { ...db, jobs: db.jobs.map((j) => (j.id === job.id ? { ...j, customerId: undefined } : j)) };
     const viaProp = db.properties.find((p) => p.id === job.propertyId)!.customerId;
     expect(navContext(`/job/${job.id}`, {}, noCust, "director").up?.href).toBe(`/client/${viaProp}`);
+  });
+  it("«Новая работа» (S17) goes back to the client it was started from, else to Jobs", () => {
+    const cust = db.customers[0]!;
+    expect(navContext("/job/new", { customerId: cust.id, propertyId: "p1" }, db, "director")).toMatchObject({ section: "clients", kind: "job3.newJob", up: { href: `/client/${cust.id}` } });
+    expect(navContext("/job/new", {}, db, "dispatcher")).toMatchObject({ section: "jobs", kind: "job3.newJob", up: { href: "/jobs" } });
+    expect(navContext("/job/new", { customerId: "nobody" }, db, "director").up?.href).toBe("/jobs");
   });
   it("new estimate goes back to the lead or client it was started from", () => {
     const lead = db.leads[0]!;

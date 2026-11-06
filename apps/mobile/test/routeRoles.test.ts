@@ -27,7 +27,7 @@ describe("route-guard: who may open a screen", () => {
     }
   });
   it("the technician: no company money, Sales, Triage, Company or Team", () => {
-    for (const p of ["/today", "/money", "/figures/profit?period=month", "/triage", "/inbox?tab=leads", "/leads?tab=invoices", "/payments", "/payments?p=week", "/team", "/company", "/company/hours"])
+    for (const p of ["/today", "/money", "/figures/profit?period=month", "/triage", "/inbox?tab=leads", "/leads?tab=invoices", "/payments", "/payments?p=week", "/reports", "/reports/revenue", "/team", "/company", "/company/hours"])
       expect(canOpen("tech", p), p).toBe(false);
   });
   it("the technician keeps his own work, estimates, catalog, and invoices/receipts for a payment on site", () => {
@@ -47,6 +47,8 @@ describe("route-guard: who may open a screen", () => {
     for (const r of ["dispatcher", "director"] as const) expect(canOpen(r, "/payments"), r).toBe(true);
     for (const r of ["sales", "tech"] as const) expect(canOpen(r, "/payments"), r).toBe(false);
     for (const r of ["dispatcher", "director", "sales"] as const) expect(canOpen(r, "/invoice?f=owed"), r).toBe(true);
+    for (const r of ["dispatcher", "director"] as const) expect(canOpen(r, "/reports/revenue"), r).toBe(true);
+    for (const r of ["sales", "tech"] as const) expect(canOpen(r, "/reports"), r).toBe(false);
   });
   it("address → key", () => {
     expect(routeKey("/")).toBe("");

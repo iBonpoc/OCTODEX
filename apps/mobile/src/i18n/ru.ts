@@ -44,6 +44,7 @@ export const ru = {
   "nav.invoices": "Счета",
   "nav.catalog": "Каталог",
   "nav.money": "Деньги",
+  "nav.expenses": "Расходы",
   "nav.team": "Команда",
   "nav.companySettings": "Настройки компании",
   "nav.mySettings": "Мои настройки",

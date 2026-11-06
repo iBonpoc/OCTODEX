@@ -27,6 +27,8 @@ export const routeRoles: Record<string, readonly Role[]> = {
   money: OFFICE,
   // Payments: owner, admin, office — not the technician, not sales (13 §4)
   payments: PLANNERS,
+  // Reports: owner, admin, office (looks) — not sales, not the technician (13 §4; 18 §5)
+  reports: PLANNERS,
   figures: OFFICE,
   triage: OFFICE,
   leads: OFFICE,
