@@ -140,6 +140,9 @@ describe("loadCompanyDB — money fields (wave П-2a)", () => {
       { id: "li1", jobId: "j1", position: 0, name: "Gutter section", description: "5 in K-style", catalogItemId: "cat1", quantity: "2.5", unitPriceCents: 1999, taxable: true, totalCents: 4998 },
       { id: "li2", jobId: "j1", position: 1, name: "Labor", description: undefined, catalogItemId: undefined, quantity: "3", unitPriceCents: 4500, taxable: false, totalCents: 13500 },
     ]);
+  });
+});
+
 describe("loadCompanyDB on a database without the wave П-1 migration (PR preview)", () => {
   it("files and the feed are read with the old columns, nothing is dropped", async () => {
     missing.add("files.customer_id");
