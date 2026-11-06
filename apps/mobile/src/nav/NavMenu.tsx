@@ -7,7 +7,7 @@ import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useAuth } from "@/cloud/auth";
 import { useI18n, type DictKey } from "@/i18n";
-import { useTheme } from "@/theme/ThemeProvider";
+import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Glass } from "@/ui/overlays";
 import { Avatar } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
@@ -90,6 +90,7 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
   const { width: winW } = useWindowDimensions();
+  const { wide } = useDevice();
   const store = useStore();
   const { db, role, mode, companyName } = store;
   const auth = useAuth();
@@ -137,7 +138,7 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
           </View>
           <ScrollView contentContainerStyle={{ paddingHorizontal: space[3], paddingVertical: space[2], gap: space[1] }}>
             <MenuRow icon="plus" label={t("nav.create")} onPress={onCreate} accent />
-            {menuGroups(role).map((g) => (
+            {menuGroups(role, wide).map((g) => (
               <View key={g.group} style={{ gap: space[1] }}>
                 {g.group !== "top" ? <View style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[2], marginHorizontal: space[2] }} /> : null}
                 {GROUP_TITLE[g.group] ? (
@@ -150,7 +151,7 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
                 ))}
               </View>
             ))}
-            {/* profile: name, role (or company) — opens My settings, where the role is switched when there are several */}
+            {/* profile: name, role (or company) — opens My settings (13 v2 §4: one role per person, no «Сменить роль») */}
             <View style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[2], marginHorizontal: space[2] }} />
             <Press
               onPress={() => go("settings")}
@@ -165,7 +166,7 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
                   {me?.name ?? auth.email ?? t("settings.title")}
                 </T>
                 <T v="caption" tone="mut" numberOfLines={1}>
-                  {store.availableRoles.length > 1 ? `${who} · ${t("nav.switchRole")}` : who}
+                  {who}
                 </T>
               </View>
             </Press>

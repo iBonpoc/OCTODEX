@@ -48,7 +48,6 @@ export const en: Dict = {
   "nav.mySettings": "My settings",
   "nav.menu": "Menu",
   "nav.create": "Create",
-  "nav.switchRole": "switch role",
   "nav.group.work": "Work",
   "nav.group.docs": "Documents",
   "nav.group.money": "Money",

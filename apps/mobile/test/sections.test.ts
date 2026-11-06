@@ -28,7 +28,7 @@ describe("bottom tabs: the same 5 for every role (13 §2.1)", () => {
 
 describe("☰ by rights (13 §4)", () => {
   it("owner/admin: everything", () => {
-    expect(menu("director")).toEqual(["home", "messages", "calls", "plan", "leads", "jobs", "clients", "estimates", "invoices", "catalog", "money", "team", "company", "settings"]);
+    expect(menu("director")).toEqual(["home", "plan", "leads", "jobs", "clients", "estimates", "invoices", "catalog", "money", "team", "company", "settings"]);
   });
   it("office: no Team, no Company settings", () => {
     const m = menu("dispatcher");
@@ -46,6 +46,10 @@ describe("☰ by rights (13 §4)", () => {
     for (const id of ["leads", "invoices", "money", "team", "company"]) expect(m, id).not.toContain(id);
     expect(m).toContain("estimates");
     expect(sectionHref("estimates", "tech")).toBe("/estimates");
+  });
+  it("phone ☰ «Верх» = Создать · Главная; on 820/1280 the menu also has Messages and Calls (13 v2 §2.3, §2.5)", () => {
+    expect(menuGroups("director")[0]!.items.map((s) => s.id)).toEqual(["home"]);
+    expect(menuGroups("director", true)[0]!.items.map((s) => s.id)).toEqual(["home", "messages", "calls"]);
   });
   it("every item a role is shown, it may open (the route guard agrees)", () => {
     for (const r of ROLES) for (const id of menu(r)) expect(canOpen(r, sectionHref(id, r)), `${r} ${id}`).toBe(true);

@@ -33,9 +33,17 @@ export interface Section {
   group: MenuGroup;
   /** a bottom tab (phone) — the same 5 for every role */
   tab?: boolean;
+  /** listed in ☰ only on 820/1280 (on the phone it is a bottom tab; 13 v2 §2.3 «Верх» = Создать · Главная) */
+  wideOnly?: boolean;
   /** who sees it (13 §4); undefined = everyone */
   roles?: readonly Role[];
 }
+
+/**
+ * The «Звонки» tab (13 v2 §2.1; open question to the founder, 06.11): 4 tabs until the company has its own number?
+ * One switch: false hides the tab and the ☰ item; «Записать звонок» stays in the lead and client actions.
+ */
+export const SHOW_CALLS_TAB = true;
 
 const OFFICE: readonly Role[] = ["director", "dispatcher", "sales"];
 const PLANNERS: readonly Role[] = ["director", "dispatcher"];
@@ -44,8 +52,8 @@ const PLANNERS: readonly Role[] = ["director", "dispatcher"];
 export const SECTIONS: readonly Section[] = [
   { id: "home", label: "nav.home", icon: "home", group: "top", tab: true },
   { id: "plan", label: "nav.plan", icon: "calendar", group: "work", tab: true },
-  { id: "messages", label: "nav.messages", icon: "sms", group: "top", tab: true },
-  { id: "calls", label: "nav.calls", icon: "phone", group: "top", tab: true },
+  { id: "messages", label: "nav.messages", icon: "sms", group: "top", tab: true, wideOnly: true },
+  ...(SHOW_CALLS_TAB ? [{ id: "calls" as const, label: "nav.calls" as const, icon: "phone" as const, group: "top" as const, tab: true, wideOnly: true }] : []),
   { id: "leads", label: "nav.leads", icon: "inbox", group: "work", roles: OFFICE },
   { id: "jobs", label: "nav.jobs", icon: "wrench", group: "work" },
   { id: "clients", label: "nav.clients", icon: "users", group: "work", tab: true },
@@ -81,11 +89,11 @@ const visible = (s: Section, role: Role) => (!s.roles || s.roles.includes(role))
 /** The 5 bottom tabs: the same set for every role (13 §2.1) — what is inside is filtered by rights. */
 export const tabs = (_role: Role): Section[] => SECTIONS.filter((s) => s.tab);
 
-/** ☰ groups for this role, in order; a group with nothing the role may open is left out (13 §2.3). */
-export function menuGroups(role: Role): { group: MenuGroup; items: Section[] }[] {
+/** ☰ groups for this role, in order; a group with nothing the role may open is left out (13 §2.3). `wide` = 820/1280. */
+export function menuGroups(role: Role, wide = false): { group: MenuGroup; items: Section[] }[] {
   const order: MenuGroup[] = ["top", "work", "docs", "money", "bottom"];
   return order
-    .map((group) => ({ group, items: SECTIONS.filter((s) => s.group === group && visible(s, role)) }))
+    .map((group) => ({ group, items: SECTIONS.filter((s) => s.group === group && (wide || !s.wideOnly) && visible(s, role)) }))
     .filter((g) => g.items.length > 0);
 }
 
@@ -93,7 +101,7 @@ export function menuGroups(role: Role): { group: MenuGroup; items: Section[] }[]
 const HOME_ROUTES = new Set(["today", "triage", "visits", ""]);
 
 /** the role has this section as a tab or in its ☰ */
-export const hasSection = (role: Role, id: SectionId) => tabs(role).some((s) => s.id === id) || menuGroups(role).some((g) => g.items.some((s) => s.id === id));
+export const hasSection = (role: Role, id: SectionId) => tabs(role).some((s) => s.id === id) || menuGroups(role, true).some((g) => g.items.some((s) => s.id === id));
 
 /** Which section a top-level route belongs to (the tab or menu item lit for it). */
 export function sectionOfRoute(route: string): SectionId | undefined {

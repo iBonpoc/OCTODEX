@@ -47,7 +47,6 @@ export const ru = {
   "nav.mySettings": "Мои настройки",
   "nav.menu": "Меню",
   "nav.create": "Создать",
-  "nav.switchRole": "сменить роль",
   "nav.group.work": "Работа",
   "nav.group.docs": "Документы",
   "nav.group.money": "Деньги",
