@@ -12,6 +12,7 @@ import { ToastProvider } from "@/ui/overlays";
 import { HintsProvider } from "@/ui/hints";
 import { NoticeWatcher } from "@/features/notices";
 import { GuardedScreen, RouteGuard } from "@/nav/RouteGuard";
+import { NavMenuProvider } from "@/nav/NavMenu";
 
 function Shell() {
   const { c, name } = useTheme();
@@ -19,9 +20,11 @@ function Shell() {
     <View style={{ flex: 1, backgroundColor: c.page }}>
       <StatusBar style={name === "dark" ? "light" : "dark"} />
       <ToastProvider>
-        <NoticeWatcher />
-        <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }} screenLayout={(props) => <GuardedScreen {...props} />} />
-        <RouteGuard />
+        <NavMenuProvider>
+          <NoticeWatcher />
+          <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }} screenLayout={(props) => <GuardedScreen {...props} />} />
+          <RouteGuard />
+        </NavMenuProvider>
       </ToastProvider>
     </View>
   );

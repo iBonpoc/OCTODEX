@@ -13,11 +13,11 @@ exports.run = async (h) => {
   const cust = db.customers[0];
   await h.go(`/client/${cust.id}`);
   await h.expectText(/Клиент/, "current level at the end of the trail");
-  h.expect(await trail().getByRole("button", { name: "Перейти: Сегодня" }).count() === 1, "home crumb");
+  h.expect(await trail().getByRole("button", { name: "Перейти: Главная" }).count() === 1, "home crumb");
   h.expect(await trail().getByRole("button", { name: "Назад: Клиенты" }).count() === 1, "parent crumb = back");
   await h.shot("client-trail");
   // jump straight home, skipping a level
-  await trail().getByRole("button", { name: "Перейти: Сегодня" }).click();
+  await trail().getByRole("button", { name: "Перейти: Главная" }).click();
   await p.waitForTimeout(600);
   h.expect(/\/today$/.test(p.url()), `home crumb → Today (${p.url()})`);
 

@@ -25,7 +25,7 @@ exports.run = async (h) => {
   // Н3а: the screen title is a real heading (all widths)
   h.expect((await p.locator('[role="heading"][aria-level="1"]:visible').count()) === 1, "title is a level-1 heading");
   if (!wide) {
-    h.expect((await tab("Продажи").count()) === 0 && (await tab("Ещё").count()) === 0, "phone: no tab bar on an inner screen");
+    h.expect((await tab("Главная").count()) === 0 && (await tab("Клиенты").count()) === 0, "phone: no tab bar on an inner screen");
     h.expect((await roundBack().count()) === 0, "phone: no round back");
     h.expect(!/Esc/.test(await h.text()), "phone: no Esc hint");
     // the trail scrolls away with the page, as before (not pinned)
@@ -41,24 +41,24 @@ exports.run = async (h) => {
   h.expect((await tab("Клиенты").count()) === 1, "pill on the client card");
   h.expect((await tab("Клиенты").getAttribute("aria-selected")) === "true", "Clients highlighted");
   await h.shot("client-pill");
-  // another section in one tap
-  await tab("Продажи").click();
+  // another section in one tap (the 5 tabs of 13 §2.1)
+  await tab("План").click();
   await p.waitForTimeout(600);
-  h.expect(/\/inbox/.test(p.url()), `pill → Sales from a client (${p.url()})`);
+  h.expect(/\/plan/.test(p.url()), `pill → Plan from a client (${p.url()})`);
+  h.expect((await tab("План").getAttribute("aria-selected")) === "true", "Plan highlighted");
 
-  // a tab opened from «More» (owner has no Plan/Triage in the bar): exactly one pill, the trail is not covered
-  for (const route of ["/plan", "/triage"]) {
-    await h.go(route);
-    h.expect((await tab("Ещё").count()) === 1, `${route}: exactly one pill`);
-    h.expect((await tab("Ещё").getAttribute("aria-selected")) === "true", `${route}: More highlighted`);
-    const pill = await tab("Ещё").boundingBox();
-    const crumb = await p.getByRole("button", { name: "Назад: Ещё", exact: true }).locator("visible=true").first().boundingBox();
-    h.expect(!!crumb && crumb.y >= pill.y + pill.height, `${route}: trail below the pill (${crumb && crumb.y} vs ${pill.y + pill.height})`);
-  }
+  // another role's home (the owner opens Triage): exactly one pill, «Главная» lit, the trail is not covered
+  await h.go("/triage");
+  h.expect((await tab("Главная").count()) === 1, "/triage: exactly one pill");
+  h.expect((await tab("Главная").getAttribute("aria-selected")) === "true", "/triage: Home highlighted");
+  const pill = await tab("Главная").boundingBox();
+  const crumb = await p.getByRole("button", { name: "Назад: Главная", exact: true }).locator("visible=true").first().boundingBox();
+  h.expect(!!crumb && crumb.y >= pill.y + pill.height, `/triage: trail below the pill (${crumb && crumb.y} vs ${pill.y + pill.height})`);
 
-  // estimate → Sales highlighted
+  // estimate: a ☰ section, no tab lit (the ☰ marks it); the pill still has ☰
   await h.go(`/estimate/${db.estimates[0].id}`);
-  h.expect((await tab("Продажи").getAttribute("aria-selected")) === "true", "Sales highlighted on an estimate");
+  h.expect((await p.locator('[role="tab"][aria-selected="true"]:visible').count()) === 0, "no tab lit on an estimate");
+  h.expect((await p.getByRole("button", { name: "Меню", exact: true }).locator("visible=true").count()) === 1, "☰ in the pill on an estimate");
 
   // Н2: «‹» goes one level up: job → client → clients
   await h.go(`/job/${job.id}`);

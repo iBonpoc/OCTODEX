@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
+import { useGlobalSearchParams, usePathname } from "expo-router";
 import { View, type LayoutChangeEvent } from "react-native";
 import type { BottomTabBarProps } from "expo-router/js-tabs";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
-import * as Haptics from "expo-haptics";
 import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
@@ -11,26 +11,30 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { Glass } from "@/ui/overlays";
 import { useNavInsets } from "@/ui/surfaces";
 import { useKeyboardHeight } from "@/ui/keyboard";
-import { roleNav, type TabRoute } from "./roles";
-import { QuickActions } from "./QuickActions";
+import { roleHome } from "./roles";
 import { goTo } from "./go";
-import { sectionTab } from "./hierarchy";
+import { activeSection } from "./hierarchy";
+import { sectionHref, tabs, type SectionId } from "./sections";
+import { useNavMenu } from "./NavMenu";
 
 /**
- * Phone: floating glass pill at the bottom (56 + safe area), 4 items + center "＋".
- * Tablet/desktop: the same pill at the top (HANDOFF "верхняя пилюля").
- * Active item gets the liquid fill (160ms stretch + 420ms settle): raised surface + ink frame; yellow stays for «＋» only (rule 2).
+ * Phone: floating glass pill at the bottom (56 + safe area), the 5 tabs of docs/specs/13 §2.1 — the same for every role.
+ * Tablet/desktop (until the side menu of wave 2b): the same pill at the top, with ☰ first.
+ * Active item gets the liquid fill (160ms stretch + 420ms settle): raised surface + ink frame.
+ * A screen without a tab (Leads, Jobs… from ☰) lights none; the ☰ menu marks it instead.
  */
 export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
-  const { role } = useStore();
-  const name = state.routes[state.index]?.name as TabRoute | undefined;
-  // a tab the role has no button for (Plan, Triage opened from «More») lights «More», where it was opened from
-  const current = name && !roleNav[role].some((n) => n.route === name) ? "more" : name;
-  const go = (route: TabRoute) => {
-    const r = state.routes.find((x) => x.name === route);
+  const store = useStore();
+  const pathname = usePathname();
+  const params = useGlobalSearchParams();
+  const sec = activeSection(pathname, params, store.db, store.role);
+  const go = (id: SectionId) => {
+    const name = id === "home" ? roleHome[store.role] : id;
+    const r = state.routes.find((x) => x.name === name);
     if (r) navigateToTab(r.key);
+    else goTo(sectionHref(id, store.role));
   };
-  return <NavPill current={current} onGo={go} />;
+  return <NavPill current={sec} onGo={go} />;
 }
 
 /**
@@ -41,20 +45,20 @@ export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
 export function StackNavPill({ pathname, params }: { pathname: string; params: Record<string, string | string[] | undefined> }) {
   // the screen's own address (from Screen), not the app's: during «back» the app's address still points at the card above
   const store = useStore();
-  return <NavPill inline current={sectionTab(pathname, params, store.db, store.role)} onGo={(route) => goTo(`/${route}`)} />;
+  return <NavPill inline current={activeSection(pathname, params, store.db, store.role)} onGo={(id) => goTo(sectionHref(id, store.role))} />;
 }
 
-function NavPill({ current, onGo: go, inline }: { current: TabRoute | undefined; onGo: (route: TabRoute) => void; inline?: boolean }) {
+function NavPill({ current, onGo: go, inline }: { current: SectionId | undefined; onGo: (id: SectionId) => void; inline?: boolean }) {
   const { role } = useStore();
   const { t } = useI18n();
   const { c } = useTheme();
   const { wide } = useDevice();
   const nav = useNavInsets();
   const reduce = useReducedMotion();
-  const [quick, setQuick] = useState(false);
+  const menu = useNavMenu();
   /** on a phone the floating bar would sit on top of the keyboard and cover the field: hide it while typing */
   const kb = useKeyboardHeight();
-  const items = roleNav[role];
+  const items = tabs(role);
 
   const [layouts, setLayouts] = useState<Record<string, { x: number; w: number }>>({});
   const left = useSharedValue(0);
@@ -86,11 +90,12 @@ function NavPill({ current, onGo: go, inline }: { current: TabRoute | undefined;
 
   const itemH = wide ? component.button.md : size.tabbarH - space[2] * 2;
   const renderItem = (it: (typeof items)[number]) => {
-    const sel = it.route === current;
+    const sel = it.id === current;
     return (
       <Press
-        key={it.route}
-        onPress={() => go(it.route)}
+        key={it.id}
+        testID={`tab-${it.id}`}
+        onPress={() => go(it.id)}
         accessibilityRole="tab"
         accessibilityState={{ selected: sel }}
         aria-selected={sel}
@@ -98,7 +103,7 @@ function NavPill({ current, onGo: go, inline }: { current: TabRoute | undefined;
         containerStyle={wide ? undefined : { flex: 1 }}
         onLayout={(e: LayoutChangeEvent) => {
           const { x, width: w } = e.nativeEvent.layout;
-          setLayouts((p) => (p[it.route]?.x === x && p[it.route]?.w === w ? p : { ...p, [it.route]: { x, w } }));
+          setLayouts((p) => (p[it.id]?.x === x && p[it.id]?.w === w ? p : { ...p, [it.id]: { x, w } }));
         }}
         style={{
           flex: wide ? undefined : 1,
@@ -119,35 +124,22 @@ function NavPill({ current, onGo: go, inline }: { current: TabRoute | undefined;
     );
   };
 
-  const plus = (
+  // tablet/desktop until wave 2b (side menu): ☰ first in the top pill; phone: ☰ sits in each screen's header
+  const menuBtn = (
     <Press
-      key="plus"
-      onPress={() => {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
-        setQuick(true);
-      }}
-      visibleHeight={component.fab}
+      key="menu"
+      onPress={menu.open}
+      visibleHeight={component.button.md}
       accessibilityRole="button"
-      accessibilityLabel={t("tab.add")}
-      containerStyle={wide ? undefined : { flex: 1 }}
-      style={{ alignItems: "center", justifyContent: "center", height: itemH }}
+      accessibilityLabel={t("nav.menu")}
+      aria-haspopup="dialog"
+      style={{ alignItems: "center", justifyContent: "center", height: itemH, width: itemH, borderRadius: radius.pill }}
     >
-      <View
-        style={{
-          width: component.fab,
-          height: component.fab,
-          borderRadius: radius.pill,
-          backgroundColor: c.acc,
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        <Icon name="plus" s={size.iconMd} color={c.onAcc} />
-      </View>
+      <Icon name="menu" s={size.iconSm} color={c.ink} />
     </Press>
   );
 
-  const ordered = wide ? [...items.map(renderItem), plus] : [...items.slice(0, 2).map(renderItem), plus, ...items.slice(2).map(renderItem)];
+  const ordered = wide ? [menuBtn, ...items.map(renderItem)] : items.map(renderItem);
 
   if (kb > 0 && !wide) return null;
 
@@ -183,7 +175,6 @@ function NavPill({ current, onGo: go, inline }: { current: TabRoute | undefined;
           </View>
         </Glass>
       </View>
-      <QuickActions visible={quick} onClose={() => setQuick(false)} />
     </>
   );
 }

@@ -3,6 +3,8 @@
  * Same grid and stroke (24x24, 1.75, round). To be adopted into the DS (BACKLOG).
  */
 export const extraIcons = {
+  // ☰ — the app menu (docs/specs/13 §2.2)
+  menu: "M4 7h16M4 12h16M4 17h16",
   navigate: "M3 11l18-8-8 18-2-8z",
   image: "M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1zM3 16l5-5 4 4 3-3 6 6M15.5 9.5h.01",
   signature: "M3 17c3-1 4-9 7-9 2 0 0 7 2 7 1.5 0 2-3 3.5-3S17 15 21 15M3 21h18",

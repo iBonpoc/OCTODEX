@@ -14,9 +14,13 @@ export default function TabsLayout() {
       <Tabs.Screen name="visits" />
       <Tabs.Screen name="triage" />
       <Tabs.Screen name="today" />
-      <Tabs.Screen name="inbox" />
       <Tabs.Screen name="plan" />
+      <Tabs.Screen name="messages" />
+      <Tabs.Screen name="calls" />
       <Tabs.Screen name="clients" />
+      <Tabs.Screen name="leads" />
+      {/* old addresses: «Продажи» (/inbox → /leads) and «Ещё» (/more → ☰), docs/specs/13а §2 */}
+      <Tabs.Screen name="inbox" />
       <Tabs.Screen name="more" />
     </Tabs>
   );
