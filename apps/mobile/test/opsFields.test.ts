@@ -118,3 +118,36 @@ describe("ops: wave П-2a money fields", () => {
     expect(Object.keys(calls[0]!.row)).toEqual(["deleted_at"]);
   });
 });
+
+describe("ops: wave П-2b time and own fields", () => {
+  it("a task carries its time; an end without a start is not sent", async () => {
+    await applyOp({ k: "task.save", task: { id: "t1", subjectType: "job", subjectId: "j1", title: "x", startsAt: "2026-11-07T17:00:00Z", endsAt: "2026-11-07T18:00:00Z", allDay: false, description: " Call " } }, "co", "u");
+    await applyOp({ k: "task.save", task: { id: "t2", subjectType: "job", subjectId: "j1", title: "y", endsAt: "2026-11-07T18:00:00Z" } }, "co", "u");
+    expect(calls[0]!.row).toMatchObject({ starts_at: "2026-11-07T17:00:00Z", ends_at: "2026-11-07T18:00:00Z", all_day: false, description: "Call" });
+    expect(calls[1]!.row).toMatchObject({ starts_at: null, ends_at: null, all_day: false, description: null });
+  });
+  it("an event: new with its company, an edit by id; removing marks it", async () => {
+    const ev = { id: "e1", kind: "time_off" as const, userId: "u", startsAt: "2026-11-10T08:00:00Z", endsAt: "2026-11-11T08:00:00Z", allDay: true };
+    await applyOp({ k: "calendarEvent.save", isNew: true, event: ev }, "co", "u");
+    await applyOp({ k: "calendarEvent.save", isNew: false, event: { ...ev, allDay: false } }, "co", "u");
+    await applyOp({ k: "calendarEvent.remove", id: "e1" }, "co", "u");
+    expect(calls[0]).toMatchObject({ table: "calendar_events", how: "upsert", row: { id: "e1", company_id: "co", kind: "time_off", user_id: "u", title: null, all_day: true } });
+    expect(calls[1]).toMatchObject({ table: "calendar_events", how: "update", id: "e1", row: { all_day: false } });
+    expect(Object.keys(calls[2]!.row)).toEqual(["deleted_at"]);
+  });
+  it("an own field: entity and type only when new", async () => {
+    const f = { id: "f1", entity: "job" as const, label: " Crew size ", type: "number" as const, options: [], searchable: false, position: 1 };
+    await applyOp({ k: "customField.save", isNew: true, field: f }, "co", "u");
+    await applyOp({ k: "customField.save", isNew: false, field: f }, "co", "u");
+    expect(calls[0]!.row).toMatchObject({ entity: "job", type: "number", label: "Crew size" });
+    expect(calls[1]!.row).not.toHaveProperty("type");
+    expect(calls[1]!.row).not.toHaveProperty("entity");
+  });
+  it("a value: new names its field and record; an edit brings a cleared one back", async () => {
+    const v = { id: "v1", fieldId: "f1", entityId: "j1", value: 3 };
+    await applyOp({ k: "customFieldValue.save", isNew: true, value: v }, "co", "u");
+    await applyOp({ k: "customFieldValue.save", isNew: false, value: { ...v, value: 4 } }, "co", "u");
+    expect(calls[0]!.row).toEqual({ id: "v1", company_id: "co", field_id: "f1", entity_id: "j1", value: 3 });
+    expect(calls[1]).toEqual({ table: "custom_field_values", how: "update", id: "v1", row: { value: 4, deleted_at: null } });
+  });
+});

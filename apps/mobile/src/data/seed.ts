@@ -153,6 +153,9 @@ export function makeSeed(): DB {
     jobTypes: SEED_JOB_TYPES,
     files: [],
     jobLines: [],
+    calendarEvents: [],
+    customFields: [],
+    customFieldValues: [],
     tasks: [
       { id: "t1", subjectType: "lead", subjectId: "l3", title: "Send the painting estimate", dueAt: hoursFromNow(20), assigneeId: "m-alex" },
     ],

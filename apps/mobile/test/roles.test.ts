@@ -20,7 +20,7 @@ describe("roles: the app follows the server", () => {
   });
   it("sales lands on the Sales lists (/leads) and has the same 5 tabs, Plan to look at", () => {
     expect(roleHome.sales).toBe("leads");
-    expect(tabs("sales").map((i) => i.id)).toEqual(["home", "plan", "messages", "calls", "clients"]);
+    expect(tabs("sales").map((i) => i.id)).toEqual(["home", "plan", "messages", "clients", "more"]);
     expect(menuGroups("sales").flatMap((g) => g.items.map((i) => i.id))).toContain("leads");
   });
 });

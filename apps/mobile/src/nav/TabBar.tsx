@@ -20,13 +20,15 @@ import { sectionHref, tabs, type SectionId } from "./sections";
  * Phone: floating glass pill at the bottom (56 + safe area), the 5 tabs of docs/specs/13 §2.1 — the same for every role.
  * Tablet/desktop: none — the side menu (SideNav, 13 §2.5) takes its place.
  * Active item gets the liquid fill (160ms stretch + 420ms settle): raised surface + ink frame.
- * A screen without a tab (Leads, Jobs… from ☰) lights none; the ☰ menu marks it instead.
+ * A screen without a tab (Leads, Jobs… from «Ещё») lights «Ещё».
  */
 export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
   const store = useStore();
   const pathname = usePathname();
   const params = useGlobalSearchParams();
-  const sec = activeSection(pathname, params, store.db, store.role);
+  const own = activeSection(pathname, params, store.db, store.role);
+  // a section that is not a tab (Leads, Jobs… opened from «Ещё») lights «Ещё» (13 v2 §2.1, variant Б)
+  const sec = own && !tabs(store.role).some((s) => s.id === own) ? "more" : own;
   const go = (id: SectionId) => {
     const name = id === "home" ? roleHome[store.role] : id;
     const r = state.routes.find((x) => x.name === name);

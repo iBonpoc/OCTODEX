@@ -1,3 +1,4 @@
+import { findJob } from "@/data/jobs";
 import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -12,7 +13,6 @@ import { docLanguageFor } from "@/data/people";
 import { saveEstimatePdf } from "@/features/estimatePdf";
 import { Labeled, MoneyField } from "@/features/fields";
 import { openEmail, openSms } from "@/features/sendEstimate";
-import { findJob } from "@/data/jobs";
 import { invoiceBalance } from "@/features/invoiceStatus";
 import { reminderMessage, remindersOf } from "@/features/invoiceRemind";
 import { DOC_LANG_LABEL } from "@/i18n/translate";
