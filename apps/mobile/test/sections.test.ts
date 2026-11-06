@@ -28,11 +28,11 @@ describe("bottom tabs: the same 5 for every role (13 v2 §2.1, variant Б)", () 
 
 describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, §4)", () => {
   it("owner/admin «Ещё»: everything but the tabs", () => {
-    expect(menu("director")).toEqual(["leads", "jobs", "calls", "estimates", "invoices", "catalog", "money", "team", "company", "settings"]);
+    expect(menu("director")).toEqual(["leads", "jobs", "calls", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings"]);
   });
   it("the side menu: the tabs too, but never «Ещё» itself", () => {
     const side = menuGroups("director", true).flatMap((g) => g.items.map((i) => i.id));
-    expect(side).toEqual(["home", "messages", "plan", "leads", "jobs", "clients", "calls", "estimates", "invoices", "catalog", "money", "team", "company", "settings"]);
+    expect(side).toEqual(["home", "messages", "plan", "leads", "jobs", "clients", "calls", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings"]);
     expect(side).not.toContain("more");
   });
   it("office: no Team, no Company settings", () => {
@@ -40,17 +40,32 @@ describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, �
     expect(m).not.toContain("team");
     expect(m).not.toContain("company");
     expect(m).toContain("money");
+    expect(m).toContain("payments");
+    expect(m).toContain("reports");
   });
   it("sales: no Payments/Reports (Money), Team, Company settings", () => {
     const m = menu("sales");
-    for (const id of ["money", "team", "company"]) expect(m, id).not.toContain(id);
+    for (const id of ["money", "payments", "reports", "team", "company"]) expect(m, id).not.toContain(id);
+    expect(m).toContain("invoices");
     expect(m).toContain("leads");
   });
   it("tech: no Leads, Invoices, Money, Team, Company settings; his estimates on /estimates", () => {
     const m = menu("tech");
-    for (const id of ["leads", "invoices", "money", "team", "company"]) expect(m, id).not.toContain(id);
+    for (const id of ["leads", "invoices", "payments", "reports", "money", "team", "company"]) expect(m, id).not.toContain(id);
     expect(m).toContain("estimates");
     expect(sectionHref("estimates", "tech")).toBe("/estimates");
+  });
+  it("«Счета» opens the one invoices list /invoice (18 §1), «Оплаты» — /payments; both in their groups", () => {
+    for (const r of ["director", "dispatcher", "sales"] as const) expect(sectionHref("invoices", r), r).toBe("/invoice");
+    expect(sectionHref("payments", "director")).toBe("/payments");
+    expect(sectionOfHref("/invoice")).toBe("invoices");
+    expect(sectionOfHref("/invoice?f=owed")).toBe("invoices");
+    expect(sectionOfHref("/payments?p=week")).toBe("payments");
+    // «Деньги»: Оплаты · Отчёты · Расходы (13 §2.3); «Расходы» is the /money screen
+    expect(menuGroups("director").find((g) => g.group === "money")!.items.map((s) => s.id)).toEqual(["payments", "reports", "money"]);
+    expect(sectionHref("reports", "director")).toBe("/reports");
+    expect(SECTIONS.find((s) => s.id === "money")!.label).toBe("nav.expenses");
+    expect(sectionOfHref("/reports")).toBe("reports");
   });
   it("«Ещё» has no «Верх» group (Главная and Сообщения are tabs); the side menu starts with Главная · Сообщения", () => {
     expect(menuGroups("director")[0]!.group).toBe("work");

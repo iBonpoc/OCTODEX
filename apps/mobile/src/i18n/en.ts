@@ -45,6 +45,7 @@ export const en: Dict = {
   "nav.invoices": "Invoices",
   "nav.catalog": "Catalog",
   "nav.money": "Money",
+  "nav.expenses": "Expenses",
   "nav.team": "Team",
   "nav.companySettings": "Company settings",
   "nav.mySettings": "My settings",

@@ -23,7 +23,9 @@ exports.run = async (h) => {
   // money tiles
   await h.go("/today");
   await p.getByRole("button", { name: /^Ждёт оплаты/ }).first().click(); await p.waitForTimeout(500);
-  h.expect(/\/figures\/awaiting/.test(p.url()), "awaiting opens unpaid invoices");
-  await p.getByRole("button", { name: /Сегодня/ }).first().click(); await p.waitForTimeout(500);
+  // «Ждёт оплаты» is the one path to debts (18 §1): the invoices list on «Не оплачен · Просрочен», the same sum
+  h.expect(new URL(p.url()).pathname === "/invoice" && p.url().includes("f=owed"), `awaiting opens unpaid invoices (${p.url()})`);
+  await h.expectText(/Не оплачен · Просрочен · \d+/, "the owed chip is on");
+  await p.goBack(); await p.waitForTimeout(500);
   h.expect(/\/today/.test(p.url()), "back → Today");
 };
