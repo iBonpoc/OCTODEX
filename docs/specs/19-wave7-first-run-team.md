@@ -372,15 +372,15 @@
 - **«Удалённый пользователь»:**
   - `repo.ts`: вторым запросом через `pages()` — `memberships` компании со `status = 'deleted'` (`user_id, role`; без `users`: `shares_company` строку не отдаёт) → `Member{deleted: true, pending: true, name: ""}`. Ошибка запроса не ломает загрузку (как приглашения).
   - `types.ts`: `Member.deleted?: true` (всегда вместе с `pending`: пикеры, назначение и подпись их уже не берут).
-  - `store.tsx`: одно место — у `deleted` имя и инициалы из `t("acct.deletedName")` («Удалённый пользователь» / «Deleted user» / «Usuario eliminado»), так ~30 экранов с `members.find(...).name` получают его без правок.
+  - Имя — не в данных (решение руководителя 06.11: переведённая строка в `db.members` ушла бы в кэш на старом языке и в PDF клиенту). Хелпер `memberName(db, id, t)` в `features/team.ts`: удалённый → `t("acct.deletedName")` («Удалённый пользователь» / «Deleted user» / «Usuario eliminado»), иначе `name`. Механическая замена `members.find(...).name` там, где имя показывается. В документах клиенту (PDF, портал) имя подписавшего берётся из `signer_name` подписи и остаётся; если найдётся место, где туда идёт имя участника, — тот же ключ через `tFor(docLanguageFor(...))`, на языке клиента (файлы «Смет» — по согласованию).
   - `statusMap.ts`: `membershipStatus` (`invited → pending`, `active`, `disabled`, `deleted`) + строка Membership в `storyMap.test.ts`.
   - `team.tsx`: `deleted` скрыты. `schedule.ts` `unassignedSoon`: исполнители-удалённые не считаются → визит «не назначен» в «Требует внимания» и над «Планом».
-- **Файлы:** `settings/delete-account.tsx`, `settings/index.tsx`, `features/deleteAccount.ts`, `cloud/account.ts`, `cloud/auth.tsx`, `team.tsx`; общие — `repo.ts`, `types.ts`, `statusMap.ts`, `store.tsx`, `schedule.ts` (`unassignedSoon`), i18n `acct.*`, `08-layouts` SCREENS. Миграций нет. Тексты клиенту не меняются.
+- **Файлы:** `settings/delete-account.tsx`, `settings/index.tsx`, `features/deleteAccount.ts`, `cloud/account.ts`, `cloud/auth.tsx`, `team.tsx`; общие — `repo.ts`, `types.ts`, `statusMap.ts`, экраны с именем участника (замена на `memberName`), `schedule.ts` (`unassignedSoon`), i18n `acct.*`, `08-layouts` SCREENS. Миграций нет. Тексты клиенту не меняются.
 
 **Тесты.**
 - unit `test/deleteAccount.test.ts`: слово по языку и нормализация (` удалить ` → да, `DELETE` при ru → нет); `accountErrorKey` на все ответы сервера (сообщения взяты из миграции 200000 и `handler.ts` — по тексту); `lastOwnerCompanies` (я owner + другой active owner → нет; я owner один → да; disabled/deleted owner не считается; admin-кандидаты только active); `canDelete` (очередь, сеть, код, слово, решения по компаниям); разбор ответа функции (`repeat`, `pending`, 400 с `detail`, 500).
-- unit `repo`/`store`: `deleted` членство → `Member{deleted, pending}`; имя по языку; `unassignedSoon`: визит только с удалённым → в списке.
+- unit: `deleted` членство → `Member{deleted, pending}`; `memberName` по языку; `unassignedSoon`: визит только с удалённым → в списке.
 - **e2e 97** (демо, 6 видов): «Мои настройки» → внизу «Удалить аккаунт» → экран: оба списка, плашка демо, шаги 2–5 неактивны; поле слова: чужое слово не включает, своё — включает только вместе с кодом (в демо остаётся неактивной); «Ещё → для проверки: без сети» → «Получить код» → тост «Нужна сеть»; изменение без сети → плашка «дождитесь отправки (1)». `SCREENS` 08-layouts += `/settings/delete-account`.
 - Облачную сторону проверяют T50 и `deleteAccountFn.test.ts` (#214) и ручной проход §6.8.
 
-**Вопросы.** Руководителю: (1) передача сразу в шаге 3 (рек.) или при «Удалить навсегда»; (2) `store.tsx` — одно место для имени удалённого (рек.) или правка экранов. Основателю — нет новых.
+**Вопросы.** Руководителю: (1) передача сразу в шаге 3 (рек.) или при «Удалить навсегда»; (2) имя — решено: `memberName` (06.11). Основателю — нет новых.
