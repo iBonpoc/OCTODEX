@@ -6,6 +6,10 @@ import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { MenuButton } from "@/nav/NavMenu";
 import { isTabScreen } from "@/nav/roles";
+import { Fab } from "@/nav/Fab";
+import { HomeHeader } from "@/nav/HomeHeader";
+import type { FabCtx, FabItem, FabSet } from "@/nav/sections";
+import { syncState } from "@/nav/shell";
 import { screenPath } from "./screenPath";
 import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
@@ -247,31 +251,38 @@ export function Empty({ icon, title, hint, action }: { icon: IconKey; title: str
   );
 }
 
-/* ---------- Offline badge (DS rule 11: queue counter visible) ---------- */
-export function OfflineBadge() {
+/* ---------- Sync badge (DS rule 11: queue counter visible; 13 v2 §2.2, §2.6) ----------
+ * Only while there is something to say: no network (warn) or the queue still going out (info). */
+export function SyncBadge({ compact }: { compact?: boolean }) {
   const { online, queue } = useStore();
   const { c } = useTheme();
   const { t } = useI18n();
-  if (online) return null;
+  const state = syncState(online, queue.length);
+  if (!state) return null;
+  const tone = state === "offline" ? c.status.warn : c.status.info;
+  const label = state === "offline" ? t("offline.badge", { n: queue.length }) : t("nav.sync.sending", { n: queue.length });
   return (
-    <RowView
+    <View
+      testID="sync-badge"
+      accessibilityLabel={label}
       style={{
-        alignSelf: "flex-start",
+        flexDirection: "row",
+        alignItems: "center",
+        alignSelf: compact ? "center" : "flex-start",
         height: component.chip.h,
         paddingHorizontal: component.chip.px,
         borderRadius: radius.pill,
-        backgroundColor: c.status.warn.fill,
+        backgroundColor: tone.fill,
         gap: space[1],
       }}
     >
-      <Icon name="wifiOff" s={size.iconSm} color={c.status.warn.on} />
-      <T v="caption" w="semibold" style={{ color: c.status.warn.on }}>
-        {t("offline.badge", { n: queue.length })}
+      <Icon name={state === "offline" ? "wifiOff" : "send"} s={size.iconSm} color={tone.on} />
+      <T v="caption" w="semibold" style={{ color: tone.on }} numberOfLines={1}>
+        {label}
       </T>
-    </RowView>
+    </View>
   );
 }
-
 /* ---------- Nav metrics shared by Screen and TabBar ---------- */
 export function useNavInsets() {
   const insets = useSafeAreaInsets();
@@ -384,6 +395,10 @@ export function Screen({
   tabs,
   tabKey,
   below,
+  fab,
+  fabCtx,
+  fabOn,
+  home,
 }: {
   title: string;
   help?: string;
@@ -402,6 +417,14 @@ export function Screen({
   tabs?: ReactNode;
   tabKey?: string;
   below?: ReactNode;
+  /** the screen's «＋» set (13 v2 §2.4): phone — floating bottom-right; 820/1280 — «＋» in the header */
+  fab?: FabSet;
+  /** what the new thing is tied to (the screen's client, job, visit…) */
+  fabCtx?: FabCtx;
+  /** «＋» items only this screen can do (Plan: its own «Записать в план» sheet) */
+  fabOn?: Partial<Record<NonNullable<FabItem["act"]>, () => void>>;
+  /** «Главная» of a role: the bell, the sync badge and the profile on the right (13 v2 §2.2, §3.14) */
+  home?: boolean;
 }) {
   const navInsets = useNavInsets();
   const kb = useKeyboardHeight();
@@ -466,6 +489,9 @@ export function Screen({
       };
     }, [pathname]),
   );
+  /** 820/1280: the screen's «＋» sits in its header, no floating button (13 v2 §2.5) */
+  const headerFab = fab && wide ? <Fab placement="header" set={fab} ctx={fabCtx} on={fabOn} /> : null;
+  const floatFab = !!fab && !wide;
   const addressRow = hasUp ? (
           <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, gap: space[2] }}>
             {pinned && up ? (
@@ -509,7 +535,12 @@ export function Screen({
                 </T>
               </RowView>
             ) : null}
-            {right}
+            {right || headerFab ? (
+              <RowView gap={space[2]} style={{ flexShrink: 0 }}>
+                {right}
+                {headerFab}
+              </RowView>
+            ) : null}
           </RowView>
   ) : null;
   const header = (
@@ -544,7 +575,13 @@ export function Screen({
             </View>
             {help ? <HelpButton title={title} text={help} /> : null}
           </RowView>
-          {right ? <View style={{ marginLeft: "auto" }}>{right}</View> : null}
+          {right || headerFab || home ? (
+            <RowView gap={space[2]} style={{ marginLeft: "auto" }}>
+              {right}
+              {headerFab}
+              {home ? <HomeHeader /> : null}
+            </RowView>
+          ) : null}
         </RowView>
       )}
       {subtitle ? (
@@ -552,7 +589,7 @@ export function Screen({
           {subtitle}
         </T>
       ) : null}
-      <OfflineBadge />
+      {home ? null : <SyncBadge />}
       {help && hintKey && !hints.seen(hintKey) ? (
         <Card style={{ borderColor: c.acc }}>
           <RowView style={{ alignItems: "flex-start" }}>
@@ -606,7 +643,7 @@ export function Screen({
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
           <ScrollView
             ref={scrollRef}
-            contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom, paddingHorizontal: space[4] }}
+            contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0), paddingHorizontal: space[4] }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             automaticallyAdjustKeyboardInsets
@@ -631,6 +668,9 @@ export function Screen({
       ) : (
         <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingHorizontal: space[4] }}>{content}</View>
       )}
+      {floatFab && !kb ? (
+        <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} bottom={isTabScreen(routeName) ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
+      ) : null}
     </View>
   );
 }

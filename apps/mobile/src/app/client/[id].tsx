@@ -369,6 +369,7 @@ export default function ClientScreen() {
     <Screen
       title={c.name}
       back={back}
+      fab="client" fabCtx={{ customerId: c.id }}
       right={office ? <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${c.id}`)} /> : undefined}
       tabKey={tab}
       tabs={

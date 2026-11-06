@@ -49,9 +49,10 @@ export default function Plan() {
       title={t("plan.title")}
       help={t("help.plan")}
       hintKey="plan"
+      fab="plan"
+      fabOn={planner ? { planAdd: () => setAdding(true) } : undefined}
       right={
         <RowView>
-        {planner ? <IconButton icon="plus" label={t("plan.add")} onPress={() => setAdding(true)} /> : null}
         <Segmented
           value={mode}
           onChange={setMode}

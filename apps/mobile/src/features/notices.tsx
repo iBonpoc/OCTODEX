@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
 import { View } from "react-native";
-import { router, usePathname } from "expo-router";
+import { router, usePathname, type Href } from "expo-router";
+import { noticeHref } from "@/nav/notices";
 import { useStore } from "@/data/store";
 import type { Notice } from "@/data/types";
 import { useI18n } from "@/i18n";
@@ -42,17 +43,15 @@ export function NoticeWatcher() {
 }
 
 
-/** Unread notices on the office «Today» (spec 06, PR9): one list card per event; «Pick a date» inside the card. */
-export function NoticesCard() {
-  const { db, readNotices, role } = useStore();
+/** One notice as a list card (spec 06, PR9) — «Сегодня» and the bell's screen (/notifications) draw the same card. */
+export function useNoticeCard() {
+  const { db } = useStore();
   const { t, day, money } = useI18n();
   const text = useNoticeText();
-  // П3c: «running late» first — computed, not read by «Понятно», gone when the tech is on site (docs/specs/03)
-  const late = lateNotices(db, role);
-  const server = db.notices.filter((n) => !n.read).slice(0, 5);
-  const unread = [...late, ...server];
-  // amounts and client events are for the office only (spec 06 §7.6)
-  if (role === "tech" || !unread.length) return null;
+  const go = (n: Notice) => {
+    const href = noticeHref(n);
+    return href ? () => router.push(href as Href) : undefined;
+  };
   const lateCard = (n: Notice) => (
     <ListCard
       key={n.id}
@@ -61,10 +60,10 @@ export function NoticesCard() {
       lead={{ kind: "icon", icon: NOTICE_ICON[n.kind], tone: "warn" }}
       status={{ tone: "warn", label: t(n.late === "en_route" ? "late.enRoute" : "late.notLeft") }}
       density="rich"
-      onPress={() => router.push(`/visit/${n.visitId}`)}
+      onPress={go(n)}
     />
   );
-  const card = (n: Notice) => {
+  return (n: Notice) => {
     if (n.kind === "visit.late") return lateCard(n);
     const est = n.estimateId ? db.estimates.find((e) => e.id === n.estimateId) : undefined;
     const c = est ? db.customers.find((x) => x.id === est.customerId) : undefined;
@@ -90,10 +89,23 @@ export function NoticesCard() {
         contact={{ phone: c?.phone, email: c?.email, addr }}
         action={needsDate ? { label: t("sch.title"), icon: "calendar", onPress: () => router.push(`/job/schedule?jobId=${n.jobId}`) } : undefined}
         density="rich"
-        onPress={n.estimateId ? () => router.push(`/estimate/${n.estimateId}`) : undefined}
+        onPress={go(n)}
       />
     );
   };
+}
+
+/** Unread notices on the office «Today» (spec 06, PR9): one list card per event; «Pick a date» inside the card. */
+export function NoticesCard() {
+  const { db, readNotices, role } = useStore();
+  const { t } = useI18n();
+  const card = useNoticeCard();
+  // П3c: «running late» first — computed, not read by «Понятно», gone when the tech is on site (docs/specs/03)
+  const late = lateNotices(db, role);
+  const server = db.notices.filter((n) => !n.read).slice(0, 5);
+  const unread = [...late, ...server];
+  // amounts and client events are for the office only (spec 06 §7.6)
+  if (role === "tech" || !unread.length) return null;
   return (
     <View>
       <SectionTitle title={`${t("notice.title")} · ${unread.length}`} right={server.length ? <Button label={t("common.gotIt")} variant="ghost" size="sm" onPress={readNotices} /> : undefined} />
