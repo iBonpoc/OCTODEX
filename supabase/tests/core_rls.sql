@@ -3655,4 +3655,78 @@ select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-00000000
 select tst.ok((select count(*) from public.jobs where id in ('e4600000-0000-4000-8000-000000000001', 'e4600000-0000-4000-8000-000000000002') and status = 'completed') = 2, 'only the office closed, nothing else');
 \echo 'T46 wave 3c: «Работа выполнена» (S10) ok'
 
+-- ---------------------------------------------------------------- T44: wave 4b-1 — «do not service» (docs/specs/04 §12): nothing new for the client
+:as_owner_a
+do $$
+declare v_ver uuid; v_ver2 uuid; v_tok text;
+begin
+  insert into public.customers (id, company_id, display_name) values
+    ('c4400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T44 Closed'),
+    ('c4400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T44 Open');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d4400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', '44 Closed St', 'Pasadena'),
+    ('d4400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000002', '44 Open St', 'Pasadena');
+  insert into public.leads (id, company_id, source_id, contact_name, phone, customer_id) values
+    ('14400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T44 lead', '+13235554401', 'c4400000-0000-4000-8000-000000000001');
+  insert into public.leads (id, company_id, source_id, contact_name, phone, property_id) values
+    ('14400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T44 lead at the address', '+13235554402', 'd4400000-0000-4000-8000-000000000001');
+  -- what was open before the mark: a job with a visit, a sent estimate with a link, a draft
+  insert into public.jobs (id, company_id, title, customer_id, property_id) values
+    ('e4400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T44 open job', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001'),
+    ('e4400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T44 other job', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000002');
+  insert into public.visits (id, company_id, job_id, kind) values
+    ('f4400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4400000-0000-4000-8000-000000000001', 'install');
+  insert into public.estimates (id, company_id, customer_id, property_id, title) values
+    ('0e440000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001', 'T44 sent'),
+    ('0e440000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001', 'T44 draft'),
+    ('0e440000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000002', 'T44 other');
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', '0e440000-0000-4000-8000-000000000001', 1) returning id into v_ver;
+  update public.estimates set current_version_id = v_ver where id = '0e440000-0000-4000-8000-000000000001';
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', '0e440000-0000-4000-8000-000000000002', 1) returning id into v_ver2;
+  update public.estimates set current_version_id = v_ver2 where id = '0e440000-0000-4000-8000-000000000002';
+  v_tok := public.send_estimate('0e440000-0000-4000-8000-000000000001', 'tok_t44_0123456789abcdef');
+  perform tst.ok(v_tok = 'tok_t44_0123456789abcdef', 'an ordinary client: the estimate is sent');
+  -- the mark
+  update public.customers set status = 'do_not_service', do_not_service_reason = 'T44 rude' where id = 'c4400000-0000-4000-8000-000000000001';
+  perform tst.ok((select public_token is null and link_revoked_at is not null from public.estimates where id = '0e440000-0000-4000-8000-000000000001'), 'the open link is revoked on the mark');
+  perform tst.ok((select count(*) from public.activities where subject_id = '0e440000-0000-4000-8000-000000000001' and meta ->> 'why' = 'do_not_service') = 1, 'the revoke is in the estimate history');
+end $$;
+-- nothing new: job, estimate, visit (by job, by lead, by property), move, send, a new link
+:as_office_a
+select tst.fails($q$insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 new job', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001')$q$, 'no new job for a «do not service» client');
+select tst.fails($q$insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001', 'T44 new')$q$, 'no new estimate');
+select tst.fails($q$insert into public.visits (company_id, job_id, kind) values ('ca000000-0000-0000-0000-000000000000', 'e4400000-0000-4000-8000-000000000001', 'service')$q$, 'no new visit on the open job');
+select tst.fails($q$insert into public.visits (company_id, lead_id, kind) values ('ca000000-0000-0000-0000-000000000000', '14400000-0000-4000-8000-000000000001', 'inspection')$q$, 'no inspection by the client''s lead');
+select tst.fails($q$insert into public.visits (company_id, lead_id, kind) values ('ca000000-0000-0000-0000-000000000000', '14400000-0000-4000-8000-000000000002', 'inspection')$q$, 'no inspection at the client''s property (lead without a client)');
+select tst.fails($q$update public.jobs set customer_id = 'c4400000-0000-4000-8000-000000000001', property_id = 'd4400000-0000-4000-8000-000000000001' where id = 'e4400000-0000-4000-8000-000000000002'$q$, 'a job is not moved onto the client');
+select tst.fails($q$update public.estimates set customer_id = 'c4400000-0000-4000-8000-000000000001', property_id = 'd4400000-0000-4000-8000-000000000001' where id = '0e440000-0000-4000-8000-000000000003'$q$, 'an estimate is not moved onto the client');
+select tst.fails($q$select public.send_estimate('0e440000-0000-4000-8000-000000000002')$q$, 'the old draft is not sent');
+select tst.fails($q$select public.send_estimate('0e440000-0000-4000-8000-000000000001')$q$, 'the revoked estimate gets no new link');
+:as_super
+do $$ begin
+  perform tst.fails($q$select tst.set_token('0e440000-0000-4000-8000-000000000001', 'tok_t44_new_0123456789ab')$q$, 'not even a definer gives the client a new link');
+end $$;
+-- the open stays: the visit moves on, the job is edited, the draft is edited
+:as_office_a
+update public.visits set status = 'en_route' where id = 'f4400000-0000-4000-8000-000000000001';
+update public.jobs set title = 'T44 open job, edited' where id = 'e4400000-0000-4000-8000-000000000001';
+update public.estimates set title = 'T44 draft, edited' where id = '0e440000-0000-4000-8000-000000000002';
+select tst.ok((select status from public.visits where id = 'f4400000-0000-4000-8000-000000000001') = 'en_route', 'the open visit goes on');
+select tst.ok((select title from public.jobs where id = 'e4400000-0000-4000-8000-000000000001') = 'T44 open job, edited', 'the open job is edited');
+select tst.ok((select status from public.estimates where id = '0e440000-0000-4000-8000-000000000002') = 'draft', 'the draft stays a draft');
+-- another client: everything works
+insert into public.visits (company_id, job_id, kind) values ('ca000000-0000-0000-0000-000000000000', 'e4400000-0000-4000-8000-000000000002', 'service');
+select tst.fails($q$update public.visits set job_id = 'e4400000-0000-4000-8000-000000000001' where id = (select id from public.visits where job_id = 'e4400000-0000-4000-8000-000000000002' limit 1)$q$, 'a visit is not moved onto the client''s job');
+insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 job for the open client', 'c4400000-0000-4000-8000-000000000002', 'd4400000-0000-4000-8000-000000000002');
+-- back to active: work again
+:as_owner_a
+update public.customers set status = 'active', do_not_service_reason = null where id = 'c4400000-0000-4000-8000-000000000001';
+:as_office_a
+insert into public.jobs (company_id, title, customer_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'T44 job after the mark is off', 'c4400000-0000-4000-8000-000000000001', 'd4400000-0000-4000-8000-000000000001');
+:as_super
+select tst.ok((select count(*) from public.jobs where customer_id = 'c4400000-0000-4000-8000-000000000001') = 2, 'only the job after the mark was lifted');
+reset role; set role anon;
+select tst.ok(public.portal_estimate('tok_t44_0123456789abcdef') is null, 'the client''s old link opens nothing');
+\echo 'T44 wave 4b-1: «do not service» — nothing new, the open stays, links revoked ok'
+
 \echo 'ALL TESTS PASSED'
