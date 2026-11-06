@@ -41,3 +41,17 @@ alter table storage.objects enable row level security;
 create or replace function storage.foldername(name text) returns text[] language sql immutable as $$
   select string_to_array(name, '/')
 $$;
+
+-- As in Supabase: objects that role postgres creates in public get ALL for anon, authenticated, service_role
+-- (security audit 06.11, item 5: without these lines the rights tests were falsely green).
+-- Only once, before the migrations (a mark on schema auth): core_rls.sql includes this file again after them,
+-- when the migrations have already revoked these defaults.
+do $$
+begin
+  if obj_description('auth'::regnamespace, 'pg_namespace') is distinct from 'octo-stub: supabase default privileges' then
+    comment on schema auth is 'octo-stub: supabase default privileges';
+    alter default privileges for role postgres in schema public grant all on tables to anon, authenticated, service_role;
+    alter default privileges for role postgres in schema public grant all on functions to anon, authenticated, service_role;
+    alter default privileges for role postgres in schema public grant all on sequences to anon, authenticated, service_role;
+  end if;
+end $$;

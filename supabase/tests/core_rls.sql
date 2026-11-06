@@ -3764,4 +3764,74 @@ end $$;
 select tst.ok(tst.cnt($q$select 1 from public.jobs where id = 'e4700000-0000-4000-8000-000000000009'$q$) = 0, 'no refused job was made');
 \echo 'T47 direct insert into jobs keeps the create_job checks ok'
 
+
+-- ---------------------------------------------------------------- T52: API rights — what anon and authenticated may touch (security audit 06.11, items 4–5)
+-- auth_stub.sql gives the Supabase default privileges before the migrations, so this checks the real picture.
+reset role; reset request.jwt.claim.sub;
+do $$
+declare bad text;
+begin
+  select string_agg(c.relname || ':' || p, ', ') into bad
+    from pg_class c, unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'v', 'm', 'p', 'f')
+     and has_table_privilege('anon', c.oid, p);
+  perform tst.ok(bad is null, 'anon has no rights on public tables: ' || coalesce(bad, ''));
+
+  select string_agg(c.relname || ':' || p, ', ') into bad
+    from pg_class c, unnest(array['TRUNCATE','REFERENCES','TRIGGER']) p
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'v', 'm', 'p', 'f')
+     and has_table_privilege('authenticated', c.oid, p);
+  perform tst.ok(bad is null, 'authenticated has no TRUNCATE / REFERENCES / TRIGGER: ' || coalesce(bad, ''));
+
+  select string_agg(c.relname, ', ') into bad
+    from pg_class c
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'v', 'm', 'p', 'f')
+     and has_table_privilege('authenticated', c.oid, 'DELETE')
+     and c.relname not in ('customer_tags', 'job_tags', 'visit_assignees',
+                           'estimate_options', 'estimate_line_items', 'estimate_line_costs');
+  perform tst.ok(bad is null, 'authenticated deletes only where it is meant to (links, estimate draft lines): ' || coalesce(bad, ''));
+
+  select string_agg(c.relname, ', ') into bad
+    from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'S'
+     and (has_sequence_privilege('anon', c.oid, 'USAGE') or has_sequence_privilege('anon', c.oid, 'UPDATE'));
+  perform tst.ok(bad is null, 'anon uses no sequences: ' || coalesce(bad, ''));
+
+  select string_agg(p.proname, ', ') into bad
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')
+     and p.proname not in ('portal_estimate', 'portal_accept', 'portal_pay_simulated', 'uuid_generate_v7');
+  perform tst.ok(bad is null, 'anon runs only the client-link functions in public: ' || coalesce(bad, ''));
+
+  -- what the app reads and writes on the six tables still works
+  -- has_table_privilege with a list is true if ANY right is held: check each one
+  select string_agg(t || ':' || p, ', ') into bad
+    from unnest(array['catalog_items', 'company_secrets', 'company_licenses', 'company_contacts', 'notes']) t,
+         unnest(array['SELECT', 'INSERT', 'UPDATE']) p
+   where not has_table_privilege('authenticated', 'public.' || t, p);
+  perform tst.ok(bad is null, 'the app keeps select / insert / update it uses: ' || coalesce(bad, ''));
+  perform tst.ok(has_table_privilege('authenticated', 'public.notifications', 'SELECT')
+             and has_column_privilege('authenticated', 'public.notifications', 'read_at', 'UPDATE')
+             and not has_column_privilege('authenticated', 'public.notifications', 'kind', 'UPDATE')
+             and not has_table_privilege('authenticated', 'public.notifications', 'INSERT')
+             and not has_table_privilege('authenticated', 'public.notifications', 'DELETE'),
+             'notices: read, and only read_at changes');
+end $$;
+-- a table or function added later gets nothing by default
+begin;
+create table public.t52_probe (id int);
+create function public.t52_probe_fn() returns int language sql as 'select 1';
+do $$ begin
+  perform tst.ok(not has_table_privilege('anon', 'public.t52_probe', 'SELECT')
+             and not has_table_privilege('authenticated', 'public.t52_probe', 'SELECT')
+             and not has_table_privilege('authenticated', 'public.t52_probe', 'TRUNCATE'),
+             'a new public table gets no rights for anon / authenticated without a grant');
+  perform tst.ok(not exists (select 1 from aclexplode((select proacl from pg_proc where proname = 't52_probe_fn')) a
+                              where a.grantee in ('anon'::regrole, 'authenticated'::regrole)),
+             'a new public function gets no explicit grant for anon / authenticated');
+  -- EXECUTE for PUBLIC is Postgres's global default and cannot be revoked per schema: a new public function IS callable
+  -- by anon until its migration revokes it — the allow-list check above catches any such function.
+end $$;
+rollback;
+\echo 'T52 API rights: anon and authenticated only what is granted ok'
+
 \echo 'ALL TESTS PASSED'

@@ -17,9 +17,9 @@
 **Варианты.** а) только тест — красный main; б) тест + миграция в одном PR (рек.); в) убрать default privileges только в заглушке — ложь.
 **Решение (б).**
 - `auth_stub.sql`: 3 строки `alter default privileges in schema public grant all on tables / functions / sequences to anon, authenticated, service_role` — до миграций, как в Supabase.
-- Миграция `…_api_grants.sql`: `revoke all` на 6 таблиц от anon, authenticated; минимальные grant: `catalog_items` s/i/u, `notifications` select + update(read_at), `company_secrets` s/i/u, `company_licenses` s/i/u, `company_contacts` s/i/u, `notes` s/i/u (DELETE нигде не нужен — удаление мягкое). `alter default privileges for role postgres in schema public revoke all on tables, functions, sequences from anon, authenticated` и `alter default privileges for role postgres in schema public, app revoke execute on functions from public` (Postgres сам даёт EXECUTE роли PUBLIC, anon её наследует) — новые объекты без явного grant закрыты.
-- Тест Tn «права API»: (1) anon не имеет ни одного права на таблицы `public`; (2) у authenticated нигде нет TRUNCATE/REFERENCES/TRIGGER и DELETE только там, где он задуман (список); (3) anon исполняет в `public` только `portal_estimate`, `portal_accept`, `portal_pay_simulated` (+ `uuid_generate_v7`); (4) новая таблица после миграции не получает прав anon/authenticated (default privileges сняты).
-- Падало до исправления: T2 «anon reads catalog» и новый Tn на базе со строками Supabase.
+- Миграция `…_api_grants.sql`: `revoke all` на 6 таблиц от anon, authenticated; минимальные grant: `catalog_items` s/i/u, `notifications` select + update(read_at), `company_secrets` s/i/u, `company_licenses` s/i/u, `company_contacts` s/i/u, `notes` s/i/u (DELETE нигде не нужен — удаление мягкое). `alter default privileges for role postgres in schema public revoke all on tables, functions, sequences from anon, authenticated` — новые объекты без явного grant закрыты. EXECUTE для PUBLIC на новые функции — общая настройка Postgres, по схеме её не снять (а глобальный revoke сломал бы функции-помощники тестов и RLS-функции, которым забыли grant); поэтому новый `public`-функционал, доступный anon, ловит T52 по белому списку.
+- Тест T52 «права API»: (1) anon не имеет ни одного права на таблицы `public`; (2) у authenticated нигде нет TRUNCATE/REFERENCES/TRIGGER и DELETE только там, где он задуман (список); (3) anon исполняет в `public` только `portal_estimate`, `portal_accept`, `portal_pay_simulated` (+ `uuid_generate_v7`); (4) новая таблица после миграции не получает прав anon/authenticated (default privileges сняты).
+- Падало до исправления: T2 «anon reads catalog» и T52 на базе со строками Supabase.
 
 ## 2. PR-2 «Суммы счёта» (пункт 1)
 **Варианты.** а) пересчёт сервером из строк — строк счёта нет, это E3/«Деньги» (позже); б) заморозка сумм не в draft + CHECK (рек.); в) суммы только через RPC — ломает офлайн-insert старых версий.
@@ -40,4 +40,4 @@
 - **13.** `memberships_insert` → только через RPC принятия приглашения — согласовать с «Каркасом» №3 (7-2, T48); если закрывает он — пункт снимаю. Учесть: проверка роли в `core.sql:1224` пропускается при глубине > 1.
 
 ## 5. Тесты базы и миграции
-Номера тестов и время миграций — у руководителя (предложение: T52–T55; миграции `20261106060000`, `…070000`, `…080000`, `…090000`). Каждая миграция — на чистой базе и с upgrade-данными. Перед каждым PR — агент `security-check`.
+Номера (руководитель, 06.11): тесты T52–T55; миграции `20261106070000` (PR-1), `…080000`, `…090000`, `…100000`. Каждая миграция — на чистой базе и с upgrade-данными. Перед каждым PR — агент `security-check`.
