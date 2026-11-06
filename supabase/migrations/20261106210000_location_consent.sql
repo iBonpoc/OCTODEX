@@ -147,6 +147,9 @@ $$;
 revoke all on function app.tg_user_location_fill() from public, anon, authenticated;
 create trigger t10_user_location_fill before insert on public.user_locations
   for each row execute function app.tg_user_location_fill();
+-- a point never moves to another company (T59; nobody may update a point at all, this is the second lock)
+create trigger t11_company_id_immutable before update on public.user_locations
+  for each row execute function app.tg_company_id_immutable();
 
 -- who reads a point: the person — their own; while they share and the company allows it: office — an open visit, the
 -- last 12 hours; owner / admin — 30 days. A tech never sees someone else's points.
@@ -261,3 +264,15 @@ begin
 end;
 $$;
 revoke all on function app.purge_user_locations() from public, anon, authenticated;
+
+-- ---- 7. Account deletion (S22, «Каркас» 200000): the person's points go everywhere, the notice mark goes ----
+-- (the memberships themselves go to «deleted» in delete_account, which switches sharing off by t19)
+create or replace function app.erase_personal_rows(p_user uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  delete from public.member_prefs where user_id = p_user;
+  delete from public.user_locations where user_id = p_user;
+  update public.memberships set location_notice_ack_at = null where user_id = p_user and location_notice_ack_at is not null;
+end;
+$$;
+revoke all on function app.erase_personal_rows(uuid) from public, anon, authenticated;

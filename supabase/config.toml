@@ -4,3 +4,7 @@ project_id = "octodex"
 # Keep «Confirm email» on in the hosted project too (Authentication → Providers → Email).
 [auth.email]
 enable_confirmations = true
+
+# 7а-2a (S22): «Удалить аккаунт» — only with a valid user JWT (the person deletes themselves; the uid is never in the body).
+[functions.delete-account]
+verify_jwt = true
