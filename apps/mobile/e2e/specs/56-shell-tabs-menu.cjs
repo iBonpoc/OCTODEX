@@ -9,10 +9,10 @@ const WIDE_PLACES = ["Главная", "План", "Сообщения", "Кли
 const HOME = { director: "/today", dispatcher: "/triage", sales: "/leads", tech: "/visits" };
 /** ☰ by role (13 §4): [must have, must not have] */
 const MENU = {
-  director: [["Лиды", "Работы", "Звонки", "Сметы", "Счета", "Каталог", "Деньги", "Команда", "Настройки компании", "Мои настройки"], []],
-  dispatcher: [["Лиды", "Работы", "Сметы", "Счета", "Деньги", "Мои настройки"], ["Команда", "Настройки компании"]],
-  sales: [["Лиды", "Сметы", "Счета", "Мои настройки"], ["Деньги", "Команда", "Настройки компании"]],
-  tech: [["Работы", "Сметы", "Каталог", "Мои настройки"], ["Лиды", "Счета", "Деньги", "Команда", "Настройки компании"]],
+  director: [["Лиды", "Работы", "Звонки", "Сметы", "Счета", "Каталог", "Оплаты", "Деньги", "Команда", "Настройки компании", "Мои настройки"], []],
+  dispatcher: [["Лиды", "Работы", "Сметы", "Счета", "Оплаты", "Деньги", "Мои настройки"], ["Команда", "Настройки компании"]],
+  sales: [["Лиды", "Сметы", "Счета", "Мои настройки"], ["Оплаты", "Деньги", "Команда", "Настройки компании"]],
+  tech: [["Работы", "Сметы", "Каталог", "Мои настройки"], ["Лиды", "Счета", "Оплаты", "Деньги", "Команда", "Настройки компании"]],
 };
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 const path = (h) => new URL(h.page.url()).pathname;
@@ -57,28 +57,31 @@ exports.run = async (h) => {
     if (m.tablet) h.expect((await menu().count()) === 0, `${role}: the drawer closes`);
   }
 
-  // ☰ → «Счета» opens the invoices list on /leads and marks it in the menu
+  // «Счета» opens the one invoices list /invoice (18 §1: «Не оплачен · Просрочен» first) and marks it in the menu
   await setRole(h, "director");
   await h.go("/today");
   await openMenu();
   await menu().getByRole("button", { name: "Счета", exact: true }).click();
   await p.waitForTimeout(700);
-  h.expect(p.url().includes("/leads?tab=invoices"), `☰ Счета → /leads?tab=invoices (${p.url()})`);
-  await h.expectText(/Нужно действие · \d+/, "the invoices list is open");
+  h.expect(path(h) === "/invoice", `Счета → /invoice (${p.url()})`);
+  await h.expectText(/Не оплачен · Просрочен · \d+/, "the invoices list is open on its first chip");
   await openMenu();
   if (phone) h.expect(await lit("Ещё"), "phone: «Ещё» is lit on a section from it");
   else h.expect((await menu().locator('[aria-current="page"]').innerText()).includes("Счета"), "«Счета» is marked as the current item");
   await m.close();
 
-  // the list switched by its own segment, then ☰ «Счета» again: the list follows (failed before: the address kept ?tab)
-  await h.clickText("Сметы");
-  await p.waitForTimeout(400);
-  h.expect(p.url().includes("tab=estimates"), `the segment writes the address (${p.url()})`);
+  // the Sales list switched by its own segment, then «Сметы» again: the list follows (failed before: the address kept ?tab)
   await openMenu();
-  if (!phone) h.expect((await menu().locator('[aria-current="page"]').innerText()).includes("Сметы"), "the menu marks «Сметы» after the segment");
-  await menu().getByRole("button", { name: "Счета", exact: true }).click();
+  await menu().getByRole("button", { name: "Сметы", exact: true }).click();
   await p.waitForTimeout(600);
-  await h.expectText(/Нужно действие · \d+/, "☰ «Счета» switches the list back");
+  h.expect(p.url().includes("tab=estimates"), `Сметы → /leads?tab=estimates (${p.url()})`);
+  await h.clickText("Счета");
+  await p.waitForTimeout(400);
+  h.expect(p.url().includes("tab=invoices"), `the segment writes the address (${p.url()})`);
+  await openMenu();
+  await menu().getByRole("button", { name: "Сметы", exact: true }).click();
+  await p.waitForTimeout(600);
+  await h.expectText(/Открытые · \d+/, "«Сметы» switches the list back");
 
   // a ☰ item opened from a tab goes on top: browser / system back returns (failed before: replace closed the app)
   await h.go("/today");

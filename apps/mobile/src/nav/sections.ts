@@ -20,6 +20,7 @@ export type SectionId =
   | "estimates"
   | "invoices"
   | "catalog"
+  | "payments"
   | "money"
   | "team"
   | "company"
@@ -56,7 +57,8 @@ export const SECTIONS: readonly Section[] = [
   { id: "estimates", label: "nav.estimates", icon: "invoice", group: "docs" },
   { id: "invoices", label: "nav.invoices", icon: "wallet", group: "docs", roles: OFFICE },
   { id: "catalog", label: "nav.catalog", icon: "note", group: "docs" },
-  // sales: without Payments and Reports (13 §4) — «Money» holds them today
+  // owner, admin, office (13 §4): not the technician, not sales
+  { id: "payments", label: "mny.payments.title", icon: "dollar", group: "money", roles: PLANNERS },
   { id: "money", label: "nav.money", icon: "wallet", group: "money", roles: PLANNERS },
   { id: "team", label: "nav.team", icon: "users", group: "bottom", roles: ["director"] },
   { id: "company", label: "nav.companySettings", icon: "home2", group: "bottom", roles: ["director"] },
@@ -75,7 +77,8 @@ export function sectionHref(id: SectionId, role: Role): string {
       // the technician has no Sales lists: his own estimates screen
       return role === "tech" ? "/estimates" : "/leads?tab=estimates";
     case "invoices":
-      return "/leads?tab=invoices";
+      // the one path to debts (18 §1): the list opens on «Не оплачен · Просрочен»
+      return "/invoice";
     default:
       return `/${id}`;
   }
@@ -107,6 +110,7 @@ export const hasSection = (role: Role, id: SectionId) => tabs(role).some((s) => 
 export function sectionOfRoute(route: string): SectionId | undefined {
   if (HOME_ROUTES.has(route) || route === "figures") return "home";
   if (route === "inbox") return "leads";
+  if (route === "invoice") return "invoices";
   return SECTIONS.some((s) => s.id === route) ? (route as SectionId) : undefined;
 }
 

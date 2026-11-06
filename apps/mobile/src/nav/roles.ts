@@ -12,17 +12,21 @@ export const roleHome: Record<Role, HomeRoute> = { tech: "visits", dispatcher: "
 
 const ALL: readonly Role[] = ["tech", "dispatcher", "director", "sales"];
 const OFFICE: readonly Role[] = ["dispatcher", "director", "sales"];
+const PLANNERS: readonly Role[] = ["dispatcher", "director"];
 
 /**
  * Who may open a screen (route-guard; docs/specs/03 §8.1, docs/specs/05 §2, §4.2).
  * Key = the first part of the address (`/company/hours` → "company"); a screen not listed is open to every role.
  * The technician sees only his own work: no company money (Today, Money, figures), no Sales and lead prices,
  * no Triage; Company settings and Team — director (owner/admin) only. The server limits the data the same way (RLS);
- * this table only keeps the screens closed. Invoices and receipts stay open: the tech takes a payment on site.
+ * this table only keeps the screens closed. Invoices and receipts stay open: the tech takes a payment on site
+ * (the /invoice list itself shows «Нет доступа» to him — canSeeInvoiceList).
  */
 export const routeRoles: Record<string, readonly Role[]> = {
   today: OFFICE,
   money: OFFICE,
+  // Payments: owner, admin, office — not the technician, not sales (13 §4)
+  payments: PLANNERS,
   figures: OFFICE,
   triage: OFFICE,
   leads: OFFICE,

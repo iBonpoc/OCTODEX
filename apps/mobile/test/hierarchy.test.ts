@@ -42,13 +42,30 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext(`/visit/${v.id}`, {}, db, "dispatcher").up?.href).toBe(`/job/${job.id}`);
     expect(navContext(`/visit/${v.id}`, {}, db, "tech")).toMatchObject({ section: "home", up: { href: "/visits" } });
   });
+  it("«Ещё» → Счета → Счёт: the list is a root; an invoice without a job goes up to the list", () => {
+    expect(navContext("/invoice", { f: "owed" }, db, "director")).toEqual({ section: "invoices" });
+    expect(navContext("/payments", {}, db, "dispatcher")).toEqual({ section: "payments" });
+    const loose = { ...db, invoices: [{ ...db.invoices[0]!, id: "iLoose", jobId: "no-such-job" }] };
+    expect(navContext("/invoice/iLoose", {}, loose, "director")).toMatchObject({ section: "invoices", up: { href: "/invoice", label: { key: "nav.invoices" } } });
+    // the technician has no invoices list: his invoice sits under his Home
+    expect(navContext("/invoice/iLoose", {}, loose, "tech").up?.href).toBe("/visits");
+  });
+  it("a job goes up to its own client (Job.customerId), else to the client of its property", () => {
+    const job = db.jobs[0]!;
+    const other = db.customers.find((c) => c.id !== db.properties.find((p) => p.id === job.propertyId)!.customerId)!;
+    const withCust = { ...db, jobs: db.jobs.map((j) => (j.id === job.id ? { ...j, customerId: other.id } : j)) };
+    expect(navContext(`/job/${job.id}`, {}, withCust, "director").up?.href).toBe(`/client/${other.id}`);
+    const noCust = { ...db, jobs: db.jobs.map((j) => (j.id === job.id ? { ...j, customerId: undefined } : j)) };
+    const viaProp = db.properties.find((p) => p.id === job.propertyId)!.customerId;
+    expect(navContext(`/job/${job.id}`, {}, noCust, "director").up?.href).toBe(`/client/${viaProp}`);
+  });
   it("new estimate goes back to the lead or client it was started from", () => {
     const lead = db.leads[0]!;
     expect(navContext("/estimate/new", { leadId: lead.id }, db, "director").up?.href).toBe(`/lead/${lead.id}`);
     expect(navContext("/estimate/new", { customerId: db.customers[0]!.id }, db, "director").up?.href).toBe(`/client/${db.customers[0]!.id}`);
   });
-  it("☰ roots (Jobs, Money, Team, Catalog, Company, Settings, Estimates) have ☰, not «back»; Catalog → item, Company → section", () => {
-    for (const p of ["/jobs", "/money", "/team", "/catalog", "/company", "/settings", "/estimates"]) {
+  it("☰ roots (Jobs, Payments, Money, Team, Catalog, Company, Settings, Estimates) have ☰, not «back»; Catalog → item, Company → section", () => {
+    for (const p of ["/jobs", "/payments", "/money", "/team", "/catalog", "/company", "/settings", "/estimates"]) {
       const c = navContext(p, {}, db, "director");
       expect(c.up, p).toBeUndefined();
       expect(c.section, p).toBe(p.slice(1));

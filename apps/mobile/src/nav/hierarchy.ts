@@ -36,11 +36,15 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
   const homeRoot = { href: `/${roleHome[role]}`, label: K("nav.home") };
   const leadsRoot = role === "tech" ? homeRoot : { href: "/leads?tab=leads", label: K("nav.leads") };
   const estList = role === "tech" ? { href: "/estimates", label: K("nav.estimates") } : { href: "/leads?tab=estimates", label: K("nav.estimates") };
-  const invList = role === "tech" ? homeRoot : { href: "/leads?tab=invoices", label: K("nav.invoices") };
+  const invList = role === "tech" ? homeRoot : { href: "/invoice", label: K("nav.invoices") };
   const lead = (lid: string) => db.leads.find((l) => l.id === lid);
   const client = (cid: string) => db.customers.find((c) => c.id === cid);
   const job = (jid: string) => findJob(db, jid);
-  const custOfJob = (jid: string) => db.properties.find((p) => p.id === job(jid)?.propertyId)?.customerId ?? "";
+  // the job's own client; an older job without customerId — through its property
+  const custOfJob = (jid: string) => {
+    const j = job(jid);
+    return j?.customerId ?? db.properties.find((p) => p.id === j?.propertyId)?.customerId ?? "";
+  };
   const toLead = (lid: string) => ({ href: `/lead/${lid}`, label: X(lead(lid)?.name ?? "", "lead.card") });
   const toClient = (cid: string) => ({ href: `/client/${cid}`, label: X(client(cid)?.name ?? "", "clients.title") });
   const toJob = (jid: string) => ({ href: `/job/${jid}`, label: X(job(jid)?.title ?? "", "jobs.title") });
@@ -68,6 +72,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       return { section: "estimates", kind: "est.detail", up };
     }
     case "invoice": {
+      // «Ещё» → Счета: the list is a root, the end of the chain «Счета › Счёт»
+      if (!id) return { section: "invoices" };
       const inv = db.invoices.find((x) => x.id === id);
       const j = inv ? job(inv.jobId) : undefined;
       const up = j?.estimateId ? toEstimate(j.estimateId) : j ? toJob(j.id) : invList;
@@ -123,6 +129,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       // a number opened from "Today": back goes to Today, whatever tab the role has
       return { section: "home", up: { href: "/today", label: K("today.title") } };
     case "jobs":
+    case "payments":
     case "money":
     case "team":
     case "settings":
