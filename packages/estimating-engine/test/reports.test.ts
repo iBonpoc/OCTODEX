@@ -81,3 +81,20 @@ describe("centsToDecimal (CSV)", () => {
   it.each([[0, "0.00"], [5, "0.05"], [184000, "1840.00"], [184050, "1840.50"], [-2500, "-25.00"], [-7, "-0.07"]])("%i → %s", (c, s) => expect(centsToDecimal(c)).toBe(s));
   it("a fraction is a bug", () => expect(() => centsToDecimal(1.5)).toThrow());
 });
+
+describe("T45 fixture — the same numbers as supabase/tests/core_rls.sql T45", () => {
+  // zelle 10000 (owner), cash 5000 (office), zelle 4000 − 1000 refunded (office)
+  const pays = [
+    { method: "zelle", by: "owner", net: 10000 },
+    { method: "cash", by: "office", net: 5000 },
+    { method: "zelle", by: "office", net: 3000 },
+  ];
+  it("by method: zelle 13000 ×2, cash 5000 ×1", () =>
+    expect(totalsBy(pays.map((p) => ({ key: p.method, cents: p.net })))).toEqual([{ key: "zelle", cents: 13000, count: 2 }, { key: "cash", cents: 5000, count: 1 }]));
+  it("by person: owner 10000, office 8000", () =>
+    expect(totalsBy(pays.map((p) => ({ key: p.by, cents: p.net }))).map((x) => x.cents)).toEqual([10000, 8000]));
+  it("the invoice: paid 18000, owes 12000", () => {
+    const [r] = owedByClient([{ customerId: "kim", totalCents: 30000, paidCents: sumCents(pays.map((p) => p.net)), daysOverdue: 9 }]);
+    expect(r).toMatchObject({ owesCents: 12000, overdueCents: 12000, buckets: { d1_30: 12000 } });
+  });
+});

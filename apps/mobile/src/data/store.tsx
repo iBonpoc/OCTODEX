@@ -115,6 +115,8 @@ interface StoreCtx {
   unsnoozeLead: (id: ID) => Undo;
   /** a reminder went to the client: starts the "lost or wait?" countdown */
   markReminded: (id: ID) => Undo;
+  /** S20 (wave 8): «Напомнить» about an invoice — an outgoing SMS / email in the client's feed, linked to the invoice */
+  remindInvoice: (invoiceId: ID, channel: "sms" | "email") => Undo;
   /** answer "wait" to "lost or wait?": ask again in N days */
   waitMore: (id: ID, days: number) => Undo;
   updateLead: (id: ID, patch: LeadPatch) => Undo;
@@ -423,7 +425,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const amount = acceptPayment(inv, amountCents);
     if (amount <= 0) return () => {};
     const now = new Date().toISOString();
-    const payment: Payment = { id: uid(), invoiceId, customerId: inv.customerId, amountCents: amount, method, at: now, reference: reference?.trim() || undefined };
+    // who took it (wave 8): the person recording it; a client paying on /p/ is nobody on the team
+    const payment: Payment = { id: uid(), invoiceId, customerId: inv.customerId, amountCents: amount, method, at: now, reference: reference?.trim() || undefined, receivedBy: fromClient ? undefined : d0.me };
     const job = findJob(d0, inv.jobId);
     const est = inv.kind === "deposit" && job?.estimateId ? d0.estimates.find((e) => e.id === job.estimateId) : undefined;
     const fullyPaid = inv.paidCents + amount >= inv.totalCents;
@@ -631,6 +634,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       snoozeLead: (id, until, reason) => patchLead(id, { snoozedUntil: until, snoozeReason: reason?.trim() || undefined }),
       unsnoozeLead: (id) => patchLead(id, { snoozedUntil: undefined, snoozeReason: undefined }),
       markReminded: (id) => patchLead(id, { remindedAt: new Date().toISOString(), askAgainAt: undefined }),
+      remindInvoice: (invoiceId, channel) => {
+        const inv = dbRef.current.invoices.find((i) => i.id === invoiceId);
+        if (!inv) return () => {};
+        const activityId = uid();
+        const at = new Date().toISOString();
+        return mutate(
+          "invoice.remind",
+          (d) => ({ ...d, activities: [{ id: activityId, subjectType: "customer", subjectId: inv.customerId, kind: channel, direction: "out", meta: { invoiceId, reminder: "1" }, at, actorId: d.me }, ...d.activities] }),
+          { k: "invoice.remind", activityId, customerId: inv.customerId, invoiceId, channel, at },
+        );
+      },
       waitMore: (id, days) => patchLead(id, { askAgainAt: new Date(Date.now() + days * 86_400_000).toISOString() }),
       updateLead: (id, patch) => {
         const l0 = dbRef.current.leads.find((x) => x.id === id);

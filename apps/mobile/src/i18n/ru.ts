@@ -1573,6 +1573,17 @@ export const ru = {
   "rpt.name": "Название",
   "rpt.count": "Количество",
   "rpt.amount": "Сумма",
+  "mny.msg.overdue": "{company}: напоминаем, что счёт {number} просрочен на {days} дн. Остаток к оплате {amount} (срок был {date}). Как оплатить: {how}",
+  "mny.msg.due": "{company}: напоминаем о счёте {number} — остаток {amount}, оплатить до {date}. Как оплатить: {how}",
+  "mny.msg.subject": "Напоминание об оплате {number}",
+  "mny.remind": "Напомнить",
+  "mny.remind.title": "Напомнить клиенту",
+  "mny.remind.lang": "Язык клиента: {lang}",
+  "mny.remind.sms": "Напомнить по SMS",
+  "mny.remind.email": "Напомнить письмом",
+  "mny.remind.done": "Напоминание отмечено",
+  "mny.remind.last": "Напомнили {date}",
+  "mny.remind.none": "Нет телефона и почты клиента — напомнить нечем",
 } as const;
 
 export type DictKey = keyof typeof ru;

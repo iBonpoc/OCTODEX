@@ -125,6 +125,7 @@ export type Op =
   /** columns of public.leads already in DB names (mapped by the store) */
   | { k: "lead.update"; id: string; cols: Record<string, unknown> }
   | { k: "lead.touch"; activityId: string; leadId: string; kind: "call" | "sms" | "email" | "marketplace" | "reply"; at: string; outcome?: CallOutcome }
+  | { k: "invoice.remind"; activityId: string; customerId: string; invoiceId: string; channel: "sms" | "email"; at: string }
   | { k: "lead.close"; leadId: string; status: "lost" | "declined"; reason: string; text?: string; activityId: string; from: string }
   | { k: "lead.reopen"; leadId: string; activityId: string; from: string }
   | { k: "lead.assign"; leadId: string; userId: string; activityId: string }
@@ -396,6 +397,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // the server sets first_response_at and moves new → contacted (trigger on activities)
       // an unanswered call / voicemail only counts an attempt (meta.outcome, migration 20261104130000)
       return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: op.kind, direction: "out", at: op.at, meta: op.outcome ? { outcome: op.outcome } : {} }));
+    case "invoice.remind":
+      // S20 (wave 8): a reminder is an outgoing event in the client's feed, linked to the invoice by meta (no migration: check and RLS allow it)
+      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "customer", subject_id: op.customerId, kind: op.channel, direction: "out", at: op.at, meta: { invoiceId: op.invoiceId, reminder: "1" } }));
     case "lead.close":
       await run(supabase.from("leads").update({ status: op.status, lost_reason: op.reason, lost_reason_text: op.text ?? null }).eq("id", op.leadId));
       return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "status", meta: { from: op.from, to: op.status, reason: op.reason } }));

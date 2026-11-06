@@ -12,6 +12,10 @@ import { docLanguageFor } from "@/data/people";
 import { saveEstimatePdf } from "@/features/estimatePdf";
 import { Labeled, MoneyField } from "@/features/fields";
 import { openEmail, openSms } from "@/features/sendEstimate";
+import { findJob } from "@/data/jobs";
+import { invoiceBalance } from "@/features/invoiceStatus";
+import { reminderMessage, remindersOf } from "@/features/invoiceRemind";
+import { DOC_LANG_LABEL } from "@/i18n/translate";
 import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -30,6 +34,7 @@ export default function InvoiceScreen() {
   const [amount, setAmount] = useState(0);
   const [method, setMethod] = useState<PaymentMethod>("zelle");
   const [ref, setRef] = useState("");
+  const [remind, setRemind] = useState(false);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/money"));
   const inv = db.invoices.find((i) => i.id === id);
   if (!inv)
@@ -39,12 +44,24 @@ export default function InvoiceScreen() {
       </Screen>
     );
   const cust = db.customers.find((c) => c.id === inv.customerId);
-  const job = db.jobs.find((j) => j.id === inv.jobId);
-  const balance = Math.max(0, inv.totalCents - inv.paidCents);
+  // a cancelled job keeps its invoices (wave П-1): look in both lists
+  const job = findJob(db, inv.jobId);
+  const balance = invoiceBalance(inv).owesCents;
   const pays = db.payments.filter((p) => p.invoiceId === inv.id);
   const chip = invoiceChip(inv);
   const company = companyForPortal(db, store.companyName ?? "OCTODEX");
   const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }));
+  const lang = docLanguageFor(db, { customerId: inv.customerId });
+  const reminder = () => reminderMessage(db, inv, company.name, lang);
+  const lastReminder = remindersOf(db, inv.id)[0];
+  /** S20: open the phone's SMS / mail with the text in the client's language, and log it in the client's feed (undo 5 s) */
+  const sendReminder = (channel: "sms" | "email") => {
+    const m = reminder();
+    (channel === "sms" ? openSms(cust!.phone, m.text) : openEmail(cust!.email!, m.subject, m.text)).catch(() => {});
+    const undo = store.remindInvoice(inv.id, channel);
+    toast.show(store.online ? t("mny.remind.done") : t("offline.queued"), undo);
+    setRemind(false);
+  };
   const pdf = () =>
     saveEstimatePdf(invoiceHtml(db, inv, company, { lang: docLanguageFor(db, { customerId: inv.customerId }) }), `Invoice ${inv.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
 
@@ -88,6 +105,7 @@ export default function InvoiceScreen() {
         <T v="caption" tone="mut">
           {t("money.due", { date: day(inv.dueDate) })}
           {inv.sentAt ? ` · ${t("st.sent")} ${day(inv.sentAt)}` : ""}
+          {lastReminder ? ` · ${t("mny.remind.last", { date: day(lastReminder.at) })}` : ""}
         </T>
       </Card>
 
@@ -102,6 +120,8 @@ export default function InvoiceScreen() {
             }}
           />
         ) : null}
+        {/* reminders are the office's (S20); the tech takes the payment on site and does not chase debts */}
+        {balance > 0 && store.role !== "tech" && (cust?.phone || cust?.email) ? <Button label={t("mny.remind")} icon="bell" variant="secondary" onPress={() => setRemind(true)} /> : null}
         {balance > 0 && cust?.phone ? <Button label={t("ue.sendSms")} icon="message" variant="secondary" onPress={() => openSms(cust.phone, msg().text).catch(() => {})} /> : null}
         {balance > 0 && cust?.email ? (
           <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => openEmail(cust.email!, msg().subject, msg().text).catch(() => {})} />
@@ -127,6 +147,17 @@ export default function InvoiceScreen() {
           {t("rcpt.none")}
         </T>
       )}
+
+      <Sheet visible={remind} onClose={() => setRemind(false)} title={t("mny.remind.title")}>
+        <View style={{ gap: space[3] }}>
+          <T v="caption" tone="mut">{t("mny.remind.lang", { lang: DOC_LANG_LABEL[lang] })}</T>
+          <Card>
+            <T v="body">{reminder().text}</T>
+          </Card>
+          {cust?.phone ? <Button label={t("mny.remind.sms")} icon="sms" full onPress={() => sendReminder("sms")} /> : null}
+          {cust?.email ? <Button label={t("mny.remind.email")} icon="mail" variant={cust?.phone ? "secondary" : "primary"} full onPress={() => sendReminder("email")} /> : null}
+        </View>
+      </Sheet>
 
       <Sheet visible={pay} onClose={() => setPay(false)} title={t("inv.takePayment")}>
         <View style={{ gap: space[3] }}>
