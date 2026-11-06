@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from "expo-router";
 import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { peopleOf } from "@/data/people";
-import { canSeeClientMoney, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
+import { canServe, canSeeClientMoney, clientMoneyOf, clientStatusChip, noLateCallsNow, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { clientCounts, clientRecords, clientRowsFor, isClientSection, type ClientRow } from "@/features/clientRows";
 import { billingLine } from "@/features/clientForm";
 import { ClientSection, PersonRows } from "@/features/client/ClientSections";
@@ -61,7 +61,7 @@ export default function ClientScreen() {
   // a row's own list: the same address with ?s=<row>
   if (isClientSection(s) && rows.includes(s))
     return (
-      <Screen title={t(`client.row.${s}` as DictKey)} subtitle={c.name} back={back} fab="client" fabCtx={{ customerId: c.id }}>
+      <Screen title={t(`client.row.${s}` as DictKey)} subtitle={c.name} back={back} fab={canServe(db, c.id) ? "client" : undefined} fabCtx={{ customerId: c.id }}>
         <ClientSection c={c} s={s} />
       </Screen>
     );
@@ -103,7 +103,8 @@ export default function ClientScreen() {
     <Screen
       title={c.name}
       back={back}
-      fab="client"
+      // «do not service»: no «＋» (nothing new for the client, docs/specs/04 §12; the server refuses too)
+      fab={canServe(db, c.id) ? "client" : undefined}
       fabCtx={{ customerId: c.id }}
       right={office ? <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${c.id}`)} /> : undefined}
     >
@@ -134,9 +135,9 @@ export default function ClientScreen() {
           {t("client.cameFrom", { source: sourceName(db, c.sourceId) })}
         </T>
       ) : null}
-      {status === "do_not_service" && c.statusReason ? (
+      {status === "do_not_service" ? (
         <T v="caption" tone="mut">
-          {t("client.reason", { r: c.statusReason })}
+          {[c.statusReason ? t("client.reason", { r: c.statusReason }) : null, t("client.noServiceHint")].filter(Boolean).join(" · ")}
         </T>
       ) : null}
 
