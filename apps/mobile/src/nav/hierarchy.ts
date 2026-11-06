@@ -116,6 +116,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       const jid = one(params.jobId);
       return { section: "money", kind: "exp.title", up: jid ? toJob(jid) : { href: "/money", label: K("money.title") } };
     }
+    case "search":
+      // «Искать везде» (15-flows §3.2) opens over the home screen
+      return { section: "home", kind: "nav.search", up: homeRoot };
     case "notifications":
       // the bell on «Главная» (13 v2 §3.14)
       return { section: "home", kind: "notice.title", up: homeRoot };

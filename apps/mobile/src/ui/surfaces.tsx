@@ -7,6 +7,7 @@ import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { isTabScreen } from "@/nav/roles";
 import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
+import { SearchEntry } from "@/nav/SearchEntry";
 import type { FabCtx, FabItem, FabSet } from "@/nav/sections";
 import { syncState } from "@/nav/shell";
 import { screenPath } from "./screenPath";
@@ -600,6 +601,8 @@ export function Screen({
         </T>
       ) : null}
       {home ? null : <SyncBadge />}
+      {/* «Искать везде» on «Главная» (13 v2 §2.2) */}
+      {home ? <SearchEntry /> : null}
       {help && hintKey && !hints.seen(hintKey) ? (
         <Card style={{ borderColor: c.acc }}>
           <RowView style={{ alignItems: "flex-start" }}>
