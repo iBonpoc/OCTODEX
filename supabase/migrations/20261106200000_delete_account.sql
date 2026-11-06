@@ -25,14 +25,14 @@ alter table public.companies add column if not exists closed_at timestamptz;
 create or replace function app.tg_company_closed_guard()
 returns trigger language plpgsql set search_path = '' as $$
 begin
-  if new.closed_at is distinct from old.closed_at
+  if (case when tg_op = 'INSERT' then new.closed_at is not null else new.closed_at is distinct from old.closed_at end)
      and not (current_setting('app.accepting_invite', true) = 'on' and current_user <> 'authenticated') then
     raise exception 'a company is closed only with its last owner''s account' using errcode = '42501';
   end if;
   return new;
 end;
 $$;
-create trigger t06_company_closed_guard before update on public.companies
+create trigger t06_company_closed_guard before insert or update on public.companies
   for each row execute function app.tg_company_closed_guard();
 revoke all on function app.tg_company_closed_guard() from public, anon, authenticated;
 
@@ -143,28 +143,29 @@ revoke all on function app.tg_user_erased_guard() from public, anon, authenticat
 -- tasks and expenses let the assignee / author in without a membership — only while they are still on the team
 alter policy tasks_select on public.tasks
   using (app.is_staff(company_id)
-         or (app.is_member(company_id) and (assignee_id = (select auth.uid()) or created_by = (select auth.uid())))
+         or ((assignee_id = (select auth.uid()) or created_by = (select auth.uid())) and app.is_member(company_id))
          or (subject_type = 'lead' and app.task_subject_in_company('lead', subject_id, company_id) and app.can_see_lead(subject_id))
          or (subject_type = 'property' and app.can_see_property(subject_id, company_id)));
 alter policy tasks_update on public.tasks
   using (app.is_staff(company_id)
-         or (app.is_member(company_id) and (assignee_id = (select auth.uid()) or created_by = (select auth.uid())))
+         or ((assignee_id = (select auth.uid()) or created_by = (select auth.uid())) and app.is_member(company_id))
          or (subject_type = 'property' and app.can_see_property(subject_id, company_id)))
   with check (app.is_member(company_id) and app.task_subject_in_company(subject_type, subject_id, company_id));
 alter policy expenses_update on public.expenses
-  using (app.is_staff(company_id) or (app.is_member(company_id) and created_by = (select auth.uid())))
-  with check (app.is_staff(company_id) or (app.is_member(company_id) and created_by = (select auth.uid())));
+  using (app.is_staff(company_id) or (created_by = (select auth.uid()) and app.is_member(company_id)))
+  with check (app.is_staff(company_id) or (created_by = (select auth.uid()) and app.is_member(company_id)));
 
 -- ---- 3. The creator of a company sees it only before any membership (the moment of creating) ----
-create or replace function app.is_creator_without_membership(p_company_id uuid)
+-- created_by is read from the row itself (insert … returning checks the new row, which a query on companies would
+-- not see yet — review #214 №1); only the membership is looked up
+create or replace function app.has_any_membership(p_company_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (select 1 from public.companies c where c.id = p_company_id and c.created_by = auth.uid())
-     and not exists (select 1 from public.memberships m where m.company_id = p_company_id and m.user_id = auth.uid());
+  select exists (select 1 from public.memberships m where m.company_id = p_company_id and m.user_id = auth.uid());
 $$;
-revoke all on function app.is_creator_without_membership(uuid) from public, anon;
-grant execute on function app.is_creator_without_membership(uuid) to authenticated;
+revoke all on function app.has_any_membership(uuid) from public, anon;
+grant execute on function app.has_any_membership(uuid) to authenticated;
 alter policy companies_select on public.companies
-  using (app.is_member(id) or app.is_creator_without_membership(id));
+  using (app.is_member(id) or (created_by = (select auth.uid()) and not app.has_any_membership(id)));
 
 -- ---- 4. A fresh sign-in: from the signed token of THIS session (amr), not the account-wide last_sign_in_at ----
 -- ≤ 10 minutes. No claims / no amr → refused (fail closed). Anonymous (claim or auth.users.is_anonymous) → refused.
@@ -277,6 +278,12 @@ begin
        and not exists (select 1 from public.memberships o where o.company_id = mine.company_id and o.role = 'owner'
                          and o.status = 'active' and o.deleted_at is null and o.user_id <> v_me);
     foreach v_c in array v_last loop
+      -- an active admin is there: hand the company over first, it is never closed under them (review #214 №2)
+      if exists (select 1 from public.memberships a join public.users u on u.id = a.user_id
+                  where a.company_id = v_c and a.role = 'admin' and a.status = 'active' and a.deleted_at is null
+                    and u.deleted_at is null) then
+        raise exception 'transfer the company first' using errcode = 'OD001', detail = v_c::text;
+      end if;
       if not (v_c = any (coalesce(p_close_companies, '{}'))) then
         raise exception 'the company keeps at least one active owner' using errcode = 'OD001', detail = v_c::text;
       end if;
@@ -366,6 +373,7 @@ begin
   if v_me is null or not app.account_alive() or not app.signed_in_recently() then
     raise exception 'sign in again first' using errcode = 'OD001';
   end if;
+  perform set_config('lock_timeout', '5s', true);
   if p_to_user is null or p_to_user = v_me then
     raise exception 'no such person on the team' using errcode = 'OD001';
   end if;
@@ -385,6 +393,9 @@ begin
   update public.memberships set role = 'admin' where company_id = p_company_id and user_id = v_me;
   perform set_config('app.accepting_invite', '', true);
   return jsonb_build_object('company_id', p_company_id, 'owner', p_to_user);
+exception
+  when deadlock_detected or serialization_failure or lock_not_available or query_canceled then
+    raise exception 'try again' using errcode = 'OD001';
 end;
 $$;
 revoke all on function public.transfer_ownership(uuid, uuid) from public, anon;

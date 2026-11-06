@@ -18,7 +18,11 @@ export interface DeleteDeps {
   /** auth.admin.updateUserById(uid, {user_metadata: cleared}) then auth.admin.deleteUser(uid, true), service role */
   closeSignIn: (uid: string) => Promise<{ error?: { message: string } | null }>;
   log?: (msg: string) => void;
+  /** the pause between the tries of closeSignIn (ms); tests pass a no-op */
+  wait?: (ms: number) => Promise<void>;
 }
+/** what Supabase may keep about the person in user_metadata after a soft delete — cleared first (review #214 №3) */
+export const CLEARED_METADATA = { full_name: null, name: null, avatar_url: null, picture: null, locale: null, email: null, phone: null, email_verified: null, phone_verified: null, sub: null } as const;
 export interface DbError {
   message: string;
   code?: string;
@@ -86,7 +90,9 @@ export async function handleDelete(req: Req, deps: DeleteDeps): Promise<Res> {
   }
   // the data is closed; now the sign-in — a few tries (a «pending» account could sign in but do nothing — №1)
   let closed: { error?: { message: string } | null } = { error: { message: "not tried" } };
+  const wait = deps.wait ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)));
   for (let i = 0; i < CLOSE_TRIES && closed.error; i++) {
+    if (i > 0) await wait(300 * i);
     closed = await deps.closeSignIn(uid).catch((e: Error) => ({ error: { message: e.message } }));
   }
   if (closed.error) {

@@ -4690,6 +4690,18 @@ insert into public.tasks (id, company_id, subject_type, subject_id, title, assig
   ('d5000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Tom task 50', 'a5000000-0000-4000-8000-000000000001', 'a5000000-0000-4000-8000-000000000001');
 insert into public.company_contacts (company_id, name, user_id) values ('ca000000-0000-0000-0000-000000000000', 'Tom (contact)', 'a5000000-0000-4000-8000-000000000001');
 update public.companies set lead_default_assignee_id = 'a5000000-0000-4000-8000-000000000001' where id = 'ca000000-0000-0000-0000-000000000000';
+-- his business records: a visit he is assigned to, a payment he took, an expense he wrote (review #214 №4)
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f1a00000-0000-0000-0000-000000000003', 'a5000000-0000-4000-8000-000000000001');
+select id as t50_pay from public.payments where company_id = 'ca000000-0000-0000-0000-000000000000' order by id limit 1 \gset
+set session_replication_role = replica;
+update public.payments set received_by = 'a5000000-0000-4000-8000-000000000001' where id = :'t50_pay';
+set session_replication_role = origin;
+insert into public.expenses (id, company_id, vendor, amount_cents, category, created_by) values
+  ('e5000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Tom test vendor 50', 1000, 'materials', 'a5000000-0000-4000-8000-000000000001');
+:as_owner_a
+select (select count(*) from public.invoices) as t50_inv, (select count(*) from public.payments) as t50_pays, (select count(*) from public.visits) as t50_vis,
+       (select count(*) from public.visit_assignees) as t50_va, (select count(*) from public.expenses) as t50_exp \gset
+:as_super
 -- the journal is append-only: give Tom an IP for the fixture past the triggers
 set session_replication_role = replica;
 update public.legal_acceptance set ip = '203.0.113.50' where user_id = 'a5000000-0000-4000-8000-000000000001';
@@ -4728,8 +4740,17 @@ select tst.ok((select lead_default_assignee_id from public.companies where id = 
 select tst.ok((select status = 'revoked' and email like 'deleted+%@deleted.invalid' and name is null from public.invitations where id = :'t50_inv_tom'), 'an invitation to his email stops working and forgets the email');
 select tst.ok((select every(email = 'deleted+a5000000-0000-4000-8000-000000000001@deleted.invalid' and name is null) from public.invitations where accepted_by = 'a5000000-0000-4000-8000-000000000001'), 'the accepted invitation forgets his email');
 select tst.ok((select count(*) = 2 and every(ip is null and ip_raw is null) from public.legal_acceptance where user_id = 'a5000000-0000-4000-8000-000000000001'), 'the proof of consent stays, without the IP');
+-- the office still sees his records (invoices, payments, visits and his assignment, expenses), pointing to him
+:as_owner_a
+select tst.ok((select count(*) from public.invoices) = :t50_inv and (select count(*) from public.payments) = :t50_pays
+          and (select count(*) from public.visits) = :t50_vis and (select count(*) from public.visit_assignees) = :t50_va
+          and (select count(*) from public.expenses) = :t50_exp, 'the office sees the same invoices, payments, visits, assignments and expenses');
+select tst.ok((select received_by from public.payments where id = :'t50_pay') = 'a5000000-0000-4000-8000-000000000001', 'the payment still says who took it');
+select tst.ok((select count(*) from public.visit_assignees where user_id = 'a5000000-0000-4000-8000-000000000001') = 1, 'his visit assignment stays (the office reassigns)');
 -- his token (valid up to an hour): sees nothing, writes nothing
 :as_tom50
+select tst.blocked($q$update public.tasks set title = 'Tom edits' where id = 'd5000000-0000-4000-8000-000000000001'$q$, 'a deleted author does not edit his task');
+select tst.blocked($q$update public.expenses set amount_cents = 1 where id = 'e5000000-0000-4000-8000-000000000001'$q$, 'a deleted author does not edit his expense');
 select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 0, 'the deleted person no longer sees the company');
 select tst.ok((select count(*) from public.tasks where id = 'd5000000-0000-4000-8000-000000000001') = 0, 'nor his task');
 select tst.ok(not app.account_alive(), 'account_alive is false');
@@ -4744,7 +4765,9 @@ select tst.ok((select full_name from public.users where id = 'a5000000-0000-4000
 -- the last owner: refused; a transfer to the admin needs a fresh sign-in; then the old owner may leave
 :as_olga50
 select tst.fresh(1);
-select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%keeps at least one active owner%', 'the last active owner cannot just leave');
+select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%transfer the company first%', 'the last active owner with an admin: hand it over first');
+select tst.fails_like($q$select public.delete_account('DELETE', array['c5000000-0000-4000-8000-000000000001']::uuid[])$q$, '%transfer the company first%', 'an admin is there: no closing — hand it over first');
+select tst.ok((select closed_at from public.companies where id = 'c5000000-0000-4000-8000-000000000001') is null, 'and the company is not closed');
 select tst.ok((select status from public.memberships where user_id = 'a5000000-0000-4000-8000-000000000002') = 'active', 'and nothing changed');
 select tst.fails_like($q$select public.transfer_ownership('c5000000-0000-4000-8000-000000000001', 'a5000000-0000-4000-8000-000000000005')$q$, '%no such person on the team%', 'not to a person of another company');
 select tst.fails_like($q$select public.transfer_ownership('c5000000-0000-4000-8000-000000000001', 'a5000000-0000-4000-8000-000000000002')$q$, '%no such person on the team%', 'not to oneself');
@@ -4759,6 +4782,8 @@ select tst.ok((select role from public.memberships where user_id = 'a5000000-000
 :as_adam50
 select tst.fresh(1);
 select tst.fails_like($q$select public.transfer_ownership('c5000000-0000-4000-8000-000000000001', 'a5000000-0000-4000-8000-000000000001')$q$, '%no such person on the team%', 'not to a deleted person');
+-- right after the transfer (the race «transfer ∥ delete», step by step): the new owner is the last one, Olga is an admin
+select tst.fails_like($q$select public.delete_account('DELETE', array['c5000000-0000-4000-8000-000000000001']::uuid[])$q$, '%transfer the company first%', 'the new owner cannot close the company under the old one');
 :as_olga50
 select tst.fresh(1);
 select tst.ok((public.delete_account('ELIMINAR') ->> 'deleted')::boolean, 'now Olga (an admin) may leave');
@@ -4781,6 +4806,45 @@ select tst.fails_like($q$update public.companies set closed_at = null where id =
 :as_eve50
 select tst.ok((select count(*) from public.companies where id = 'c5000000-0000-4000-8000-000000000002') = 0, 'Eve no longer sees the closed company');
 select tst.ok(app.account_alive(), 'but her own account is alive');
+-- a switched-off author: no edits of his task or expense either (the is_member branch)
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a5000000-0000-4000-8000-000000000006', 'off50@a.test', '{"full_name":"Otto Off"}');
+select tst.agree('a5000000-0000-4000-8000-000000000006');
+:as_owner_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'off50@a.test', 'tech') ->> 'token' as t50_off \gset
+reset role; set request.jwt.claim.sub = 'a5000000-0000-4000-8000-000000000006'; set role authenticated;
+select public.accept_invitation(:'t50_off') is not null as t50_j4 \gset
+:as_super
+insert into public.tasks (id, company_id, subject_type, subject_id, title, created_by) values
+  ('d5000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000001', 'Otto task 50', 'a5000000-0000-4000-8000-000000000006');
+insert into public.expenses (id, company_id, vendor, amount_cents, category, created_by) values
+  ('e5000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'Otto vendor 50', 1000, 'materials', 'a5000000-0000-4000-8000-000000000006');
+:as_owner_a
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a5000000-0000-4000-8000-000000000006', 'disabled');
+reset role; set request.jwt.claim.sub = 'a5000000-0000-4000-8000-000000000006'; set role authenticated;
+select tst.blocked($q$update public.tasks set title = 'Otto edits' where id = 'd5000000-0000-4000-8000-000000000002'$q$, 'a switched-off author does not edit his task');
+select tst.blocked($q$update public.expenses set amount_cents = 1 where id = 'e5000000-0000-4000-8000-000000000002'$q$, 'a switched-off author does not edit his expense');
+-- two owners leave one after the other (the race, step by step): the first goes, the second is the last one
+:as_eve50
+insert into public.companies (name) values ('Twin Co') returning id as t50_twin \gset
+select tst.ok(:'t50_twin' is not null, 'insert … returning works for the creator (companies_select, review #214 №1)');
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a5000000-0000-4000-8000-000000000007', 'kim50@a.test', '{"full_name":"Kim Twin"}');
+select tst.agree('a5000000-0000-4000-8000-000000000007');
+:as_eve50
+select public.invite_member(:'t50_twin', 'kim50@a.test', 'admin') ->> 'token' as t50_kim \gset
+reset role; set request.jwt.claim.sub = 'a5000000-0000-4000-8000-000000000007'; set role authenticated;
+select public.accept_invitation(:'t50_kim') is not null as t50_j5 \gset
+:as_super
+update public.memberships set role = 'owner' where company_id = :'t50_twin' and user_id = 'a5000000-0000-4000-8000-000000000007';
+:as_eve50
+select tst.fresh(1);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'one of two owners leaves');
+reset role; set request.jwt.claim.sub = 'a5000000-0000-4000-8000-000000000007'; set role authenticated;
+select tst.fresh(1);
+select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%keeps at least one active owner%', 'the second owner is now the last one');
+:as_super
+select tst.ok((select count(*) from public.memberships where company_id = :'t50_twin' and role = 'owner' and status = 'active') = 1, 'the company always keeps an active owner');
 -- the consent journal: even with the erasing flag, a client edits nothing
 set app.erasing_user = 'on';
 select tst.blocked($q$update public.legal_acceptance set ip = null$q$, 'the flag does not open the journal to a client');

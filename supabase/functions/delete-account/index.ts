@@ -1,7 +1,7 @@
 // «Удалить аккаунт» — the Deno entry of the edge function (7а-2a, S22; docs/specs/19 §6.7). The logic is in handler.ts.
 // Deployed by .github/workflows/release.yml after the migrations; verify_jwt = true (supabase/config.toml).
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
-import { handleDelete } from "./handler.ts";
+import { CLEARED_METADATA, handleDelete } from "./handler.ts";
 
 const URL_ = Deno.env.get("SUPABASE_URL")!;
 const ANON = Deno.env.get("SUPABASE_ANON_KEY")!;
@@ -21,7 +21,7 @@ Deno.serve(async (req: Request) => {
       },
       closeSignIn: async (uid) => {
         // the sign-up name lives in user_metadata; the soft delete does not clear it (security-check №6)
-        const upd = await admin.auth.admin.updateUserById(uid, { user_metadata: { full_name: null, avatar_url: null, locale: null } });
+        const upd = await admin.auth.admin.updateUserById(uid, { user_metadata: { ...CLEARED_METADATA } });
         if (upd.error) return { error: { message: upd.error.message } };
         const { error } = await admin.auth.admin.deleteUser(uid, true);
         return { error: error ? { message: error.message } : null };
