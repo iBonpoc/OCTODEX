@@ -99,7 +99,7 @@
 | invited_by, invite_token_hash, invite_expires_at | → User, text, timestamp | Приглашение (7 дней, одноразовое) |
 | suspended_at | timestamp | Отключение: отзыв сессий, стирание кэша на устройстве |
 | home_base | Address + geo, nullable | Старт маршрута дня (PRD 08) |
-| share_location | bool | Согласие на передачу геопозиции (PRD 08). Для `subcontractor` всегда false. (v0.3.1, LEG-19) Передача только между clock-in и clock-out или во время визита; `location_notice_ack_at` — подтверждение уведомления сотрудником; история 90 дней; требования AB 1331 (Ch. 851, 2026) — проверить у адвоката |
+| share_location | bool | Согласие на передачу геопозиции (PRD 08). Для `subcontractor` всегда false. (v0.3.1, LEG-19) Передача только во время выезда (шаги `en_route` / `on_site` / `working` / `signed`, 7б-2); `location_notice_ack_at` — подтверждение уведомления сотрудником; история 30 дней; требования AB 1331 (Ch. 851, 2026) — проверить у адвоката |
 | his_registration_number | text | (v0.3.1, LEG-08) Регистрация Home Improvement Salesperson в CSLB; печатается в CA-договоре; пусто у отправителя договора → предупреждение (исключения: officer / qualifier из записи лицензии — `his_exempt_reason`) |
 | can_sign_contracts | bool | (v0.3.1, LEG-03) Право `sign_contracts`: countersign договоров от имени компании. По умолчанию true только у owner |
 | countersign_signature_file_id | → File | (v0.3.1) Загруженная подпись для автоподписи компании (`Company.contract_settings.auto_countersign`) |
@@ -798,7 +798,7 @@
 `WebhookEvent` (новая): `provider`, `event_id` (unique), `type`, `received_at`, `processed_at`, `status` — каждое событие Stripe/Twilio обрабатывается ровно один раз.
 
 ### UserLocation — последняя известная позиция (новая)
-`user_id`, `company_id`, `lat`, `lng`, `accuracy_m`, `recorded_at`, `source` (`status_change` / `foreground` / `manual`). Только при `Membership.share_location = true` и в рабочие часы; хранение 30 дней (TTL); видят owner/admin/office. У субподрядчиков не собирается.
+`user_id`, `company_id`, `lat`, `lng`, `accuracy_m`, `visit_id`, `recorded_at`, `source` (`status_change` / `foreground`). Только при `Membership.share_location = true` и во время выезда, при открытом приложении (фон — 7б-3); хранение 30 дней (TTL); видят owner/admin (30 дней) и office (открытый выезд, только назначенные) (7б-2, миграция 210000). У субподрядчиков не собирается.
 
 ### Device, SyncOperation, SyncConflict — офлайн-синхронизация (новые)
 `Device`: `user_id`, `platform`, `app_version`, `push_token`, `last_sync_at`, `revoked_at` (удалённое стирание).
@@ -1016,7 +1016,7 @@ erDiagram
 | LEG-16 налоги (PRD 19) | Ставки LA с 01.10.2026 — датированные заглушки; рекомендованный пресет CA `included_in_price` + предупреждение | Новых полей не нужно (`effective_from/to` уже есть с v0.3) |
 | LEG-17 платежи (PRD 09) | `Company.payment_settings.returned_check_fee`, `method_discount.legal_review_confirmed_at`; `InvoiceLineItem.kind` `returned_check_fee` | ACH-скидка — за флагом до ответа адвоката |
 | LEG-18 снимки (ADR-004) | Флаги провайдера адаптера; `Drawing.imagery_ref.provider` + `eagleview` / `hover`, `report_id` | Esri — после письменного подтверждения |
-| LEG-19 геопозиция (PRD 07, 08) | `Membership.location_notice_ack_at`; передача только в смену | AB 1331 — проверить у адвоката |
+| LEG-19 геопозиция (PRD 07, 08) | `Membership.location_notice_ack_at`; передача только во время выезда | AB 1331 — проверить у адвоката |
 | LEG-21 хранение | Сроки в описаниях `EstimateApproval`, `ESignConsent` (10 лет), `ConsentRecord` (5 лет) | Legal hold и полная таблица — `08-security` (позже) |
 
 ### 13.2 v0.3 — решения основателя 03.11.2026 (второй пакет)
