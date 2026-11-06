@@ -4390,7 +4390,12 @@ select tst.fails($q$update public.memberships set role = 'office' where user_id 
 :as_owner_a
 select tst.fails($q$update public.memberships set share_location = true where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'the owner does not switch on a tech''s location');
 :as_tech_a
-select public.set_share_location('ca000000-0000-0000-0000-000000000000', true);
+-- 7б-2 (210000): set_share_location no longer switches on (it did, without the notice); the tech switches on with the notice
+select tst.fails($q$select public.set_share_location('ca000000-0000-0000-0000-000000000000', true)$q$, 'the old function does not switch on without the notice');
+:as_super
+insert into app.company_flags (company_id, location_sharing) values ('ca000000-0000-0000-0000-000000000000', true) on conflict (company_id) do update set location_sharing = true;
+:as_tech_a
+select public.set_location_consent('ca000000-0000-0000-0000-000000000000', true);
 select tst.ok((select share_location from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000'), 'the tech switches it on for themselves');
 :as_owner_a
 select tst.ok((select share_location from public.memberships where user_id = 'a0000000-0000-0000-0000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000') = false, 'nobody else''s row changed');
@@ -4406,6 +4411,8 @@ select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a000000
 select tst.ok((select status from public.invitations where id = :'t48_byadmin') = 'revoked', 'a switched-off admin''s invitations are revoked');
 select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002', 'active');
 :as_super
+:as_super
+update app.company_flags set location_sharing = false where company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T48 wave 7-2: invitations and team (S21) ok'
 
 -- ---------------------------------------------------------------- T49: wave 7а-1 — согласие с Условиями и Политикой (clickwrap; docs/specs/19 §5)
@@ -4634,6 +4641,237 @@ delete from public.memberships where company_id = 'cb000000-0000-0000-0000-00000
 select tst.ok(tst.cnt($q$select 1 from public.member_prefs where company_id = 'cb000000-0000-0000-0000-000000000000'$q$) = 0, 'a membership removed for good takes its settings with it');
 \echo 'T51 personal settings (member_prefs) ok'
 
+-- ---------------------------------------------------------------- T56: wave 7б-2 — location consent: only the person, with the notice (LEG-19, AB 1331)
+\set as_off56 'reset role; set request.jwt.claim.sub = ''a5600000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_sub56 'reset role; set request.jwt.claim.sub = ''a5600000-0000-4000-8000-000000000002''; set role authenticated;'
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a5600000-0000-4000-8000-000000000001', 'office56@a.test', '{"full_name":"Olga Office"}'),
+  ('a5600000-0000-4000-8000-000000000002', 'sub56@a.test', '{"full_name":"Sam Sub"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a5600000-0000-4000-8000-000000000001', 'office', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a5600000-0000-4000-8000-000000000002', 'subcontractor', 'active');
+update public.memberships set share_location = false, location_notice_ack_at = null where company_id = 'ca000000-0000-0000-0000-000000000000';
+-- the company flag is off by default: nobody switches on, the app hides the section
+:as_tech_a
+select tst.ok(public.company_location_sharing('ca000000-0000-0000-0000-000000000000') = false, 'the flag is off by default');
+select tst.fails_like($q$select public.set_location_consent('ca000000-0000-0000-0000-000000000000', true)$q$, '%off for this company%', 'flag off: the tech cannot switch on');
+:as_owner_b
+select tst.ok(public.company_location_sharing('ca000000-0000-0000-0000-000000000000') = false, 'a stranger gets false, not an error');
+select tst.fails($q$select public.set_location_consent('ca000000-0000-0000-0000-000000000000', false)$q$, 'a stranger cannot touch the consent of another company');
+:as_super
+insert into app.company_flags (company_id, location_sharing) values ('ca000000-0000-0000-0000-000000000000', true)
+  on conflict (company_id) do update set location_sharing = true;
+:as_tech_a
+select tst.ok(public.company_location_sharing('ca000000-0000-0000-0000-000000000000'), 'a member sees the flag on');
+-- not without the notice: a direct update has no right, and the old function refuses
+select tst.fails($q$update public.memberships set share_location = true where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'no direct switch-on');
+select tst.fails($q$select public.set_share_location('ca000000-0000-0000-0000-000000000000', true)$q$, 'the old function does not switch on without the notice');
+select tst.fails($q$select public.set_location_consent(null, true)$q$, 'no company: refused');
+select public.set_location_consent('ca000000-0000-0000-0000-000000000000', true);
+:as_super
+select tst.ok((select share_location and location_notice_ack_at between now() - interval '1 minute' and now() from public.memberships
+  where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'), 'on, with the notice mark');
+select tst.ok(tst.cnt($q$select 1 from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and share_location$q$) = 1, 'nobody else switched on');
+-- the guard itself (whatever the path): on only by the person and only with ack = now(); ack only by the person
+:as_super
+update public.memberships set share_location = false where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+select tst.fails_like($q$update public.memberships set share_location = true, location_notice_ack_at = now() where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'$q$, '%only the person%', 'not even the operator switches on for a person');
+select tst.ok((select location_notice_ack_at is not null from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'), 'the old ack stays after going off');
+:as_owner_a
+select tst.fails($q$update public.memberships set location_notice_ack_at = now() where user_id = 'a0000000-0000-0000-0000-000000000003'$q$, 'the owner does not mark the notice for the tech');
+:as_super
+create function tst.t56_guard(p_sql text, p_as uuid) returns void language plpgsql as $$
+begin perform set_config('request.jwt.claim.sub', p_as::text, true); execute p_sql; end $$;
+select tst.fails_like($q$select tst.t56_guard($s$update public.memberships set share_location = true where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'$s$, 'a0000000-0000-0000-0000-000000000003')$q$,
+  '%only with the notice%', 'the person: an old ack is not enough, the notice is read again now');
+select tst.fails_like($q$select tst.t56_guard($s$update public.memberships set share_location = true, location_notice_ack_at = now() where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'$s$, 'a0000000-0000-0000-0000-000000000001')$q$,
+  '%only the person%', 'a trigger path with the owner''s identity does not switch on for the tech');
+select tst.fails_like($q$select tst.t56_guard($s$insert into public.memberships (company_id, user_id, role, status, share_location, location_notice_ack_at) values ('cb000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'tech', 'active', true, now())$s$, 'b0000000-0000-0000-0000-000000000001')$q$,
+  '%only the person%', 'an insert by another person does not come switched on');
+drop function tst.t56_guard(text, uuid);
+reset request.jwt.claim.sub;
+-- a subcontractor never: the function refuses, the role change resets instead of failing the check
+:as_sub56
+select tst.fails_like($q$select public.set_location_consent('ca000000-0000-0000-0000-000000000000', true)$q$, '%subcontractor%', 'a subcontractor cannot switch on');
+:as_tech_a
+select public.set_location_consent('ca000000-0000-0000-0000-000000000000', true);
+:as_super
+update public.memberships set role = 'subcontractor' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+select tst.ok((select not share_location from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'), 'moved to subcontractor: off by itself (before: the check failed)');
+update public.memberships set role = 'tech' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+-- disabled: off by itself; back to active: off until the person agrees again
+:as_tech_a
+select public.set_location_consent('ca000000-0000-0000-0000-000000000000', true);
+:as_owner_a
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'disabled');
+select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'active');
+:as_super
+select tst.ok((select not share_location from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'), 'disabled and back: off until agreed again (set_member_status still works)');
+-- the owner / admin switch off, never on; exactly this company
+:as_tech_a
+select public.set_location_consent('ca000000-0000-0000-0000-000000000000', true);
+:as_owner_b
+select tst.fails_like($q$select public.stop_member_location('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003')$q$, '%no such member%', 'another company''s owner cannot switch it off');
+select tst.fails_like($q$select public.stop_member_location('cb000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003')$q$, '%no such member%', 'not a member of B: «no such member», no hint');
+:as_tech2_a
+select tst.fails($q$select public.stop_member_location('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003')$q$, 'a tech cannot switch off a colleague');
+:as_office_a
+select public.stop_member_location('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003');
+select tst.fails($q$select public.stop_member_location('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001')$q$, 'an admin does not touch the owner''s row');
+:as_super
+select tst.ok((select not share_location from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'), 'the admin switched it off');
+-- rights (rule 18)
+select tst.ok(not has_function_privilege('anon', 'public.set_location_consent(uuid, boolean)', 'execute')
+  and not has_function_privilege('anon', 'public.stop_member_location(uuid, uuid)', 'execute')
+  and not has_function_privilege('anon', 'public.company_location_sharing(uuid)', 'execute'), 'anon: no location functions');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_membership_location()', 'execute')
+  and not has_function_privilege('authenticated', 'app.tg_membership_location_forget()', 'execute')
+  and not has_function_privilege('authenticated', 'app.tg_user_location_fill()', 'execute')
+  and not has_function_privilege('authenticated', 'app.company_shares_location(uuid)', 'execute')
+  and not has_function_privilege('authenticated', 'app.purge_user_locations()', 'execute'), 'trigger and operator functions: nobody calls them');
+select tst.ok(not exists (select 1 from pg_trigger t where t.tgrelid = 'public.user_locations'::regclass and not t.tgisinternal
+                            and t.tgfoid = 'app.tg_audit()'::regprocedure), 'points have no audit trigger: the journal never keeps coordinates');
+\echo 'T56 wave 7б-2: location consent only by the person, with the notice ok'
+
+-- ---------------------------------------------------------------- T57: wave 7б-2 — points: own open visit only, read by role, forgotten on going off
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c5700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T57 Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d5700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c5700000-0000-4000-8000-000000000001', '57 Geo St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e5700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T57 job', 'c5700000-0000-4000-8000-000000000001', 'd5700000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('f5700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e5700000-0000-4000-8000-000000000001', now()),
+    ('f5700000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e5700000-0000-4000-8000-000000000001', now()),
+    ('f5700000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e5700000-0000-4000-8000-000000000001', now()),
+    ('f5700000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e5700000-0000-4000-8000-000000000001', now());
+end $$;
+select (public.assign_visit(v, array['a0000000-0000-0000-0000-000000000003']::uuid[]) ->> 'added') from unnest(array['f5700000-0000-4000-8000-000000000001', 'f5700000-0000-4000-8000-000000000002', 'f5700000-0000-4000-8000-000000000004']::uuid[]) v;
+select (public.assign_visit('f5700000-0000-4000-8000-000000000003', array['a0000000-0000-0000-0000-000000000001']::uuid[]) ->> 'added');
+:as_tech_a
+update public.visits set status = 'en_route' where id = 'f5700000-0000-4000-8000-000000000001';
+-- without consent: refused
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 34.1, -118.1, now())$q$, '%sharing is off%', 'no consent: no point');
+select public.set_location_consent('ca000000-0000-0000-0000-000000000000', true);
+insert into public.user_locations (visit_id, lat, lng, accuracy_m, source, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 34.1234567, -118.7654321, 12, 'status_change', now());
+select tst.ok((select lat = 34.12346 and lng = -118.76543 and user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000' from public.user_locations), 'own point on own visit en route: saved, rounded, ids from the server');
+-- refusals
+select tst.fails($q$insert into public.user_locations (visit_id, lat, lng, recorded_at, user_id) values ('f5700000-0000-4000-8000-000000000001', 34.1, -118.1, now(), 'a0000000-0000-0000-0000-000000000001')$q$, 'no right to write user_id');
+select tst.fails($q$insert into public.user_locations (visit_id, lat, lng, recorded_at, company_id) values ('f5700000-0000-4000-8000-000000000001', 34.1, -118.1, now(), 'cb000000-0000-0000-0000-000000000000')$q$, 'no right to write company_id');
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000002', 34.1, -118.1, now())$q$, '%not under way%', 'own visit still scheduled: refused');
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000003', 34.1, -118.1, now())$q$, '%no such visit%', 'someone else''s visit: refused');
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f0000000-0000-4000-8000-000000000999', 34.1, -118.1, now())$q$, '%no such visit%', 'no visit: refused');
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 91, -118.1, now() + interval '40 seconds')$q$, 'not a valid point', 'latitude out of range: our text, not the row');
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, accuracy_m, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 34.1, -118.1, 6000, now() + interval '40 seconds')$q$, 'not a valid point', 'accuracy out of range');
+select tst.fails($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 'NaN', -118.1, now() + interval '40 seconds')$q$, 'NaN refused');
+select tst.fails($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', null, -118.1, now() + interval '40 seconds')$q$, 'no latitude refused');
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 34.1, -118.1, now() + interval '2 minutes')$q$, '%future%', 'a point from the future: refused');
+-- skipped silently (an offline phone must not stall): stale, or within 30 s of the last
+insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 34.2, -118.2, now() - interval '6 minutes');
+insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 34.2, -118.2, now() + interval '10 seconds');
+select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 1, 'stale and too-frequent points are skipped without an error');
+select tst.fails($q$update public.user_locations set lat = 0$q$, 'no update');
+select tst.fails($q$delete from public.user_locations$q$, 'no delete for a client');
+-- reading: the tech — own; another tech — nothing; office — the open visit; admin/owner — yes; company B — nothing
+:as_tech2_a
+select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 0, 'another tech does not see the point');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 0, 'sales do not see points');
+:as_off56
+select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 1, 'the office sees the point of the open visit');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 1, 'the admin sees it');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 0, 'company B sees nothing');
+reset role; set role anon;
+select tst.fails($q$select 1 from public.user_locations$q$, 'anon cannot read');
+-- the visit closed: the office loses it, the owner keeps it (30 days)
+:as_super
+-- an old point (the trigger would skip a stale one: put a fresh one in, then age it as the operator)
+update public.visits set status = 'en_route' where id = 'f5700000-0000-4000-8000-000000000002';
+:as_tech_a
+insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000002', 34.3, -118.3, now());
+:as_super
+update public.user_locations set recorded_at = now() - interval '31 days' where visit_id = 'f5700000-0000-4000-8000-000000000002';
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 1, 'the owner: points older than 30 days are not read');
+update public.visits set status = 'on_site' where id = 'f5700000-0000-4000-8000-000000000001';
+:as_super
+update public.visits set status = 'completed' where id = 'f5700000-0000-4000-8000-000000000001';
+:as_off56
+select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 0, 'visit completed: the office no longer sees it');
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.user_locations where visit_id = 'f5700000-0000-4000-8000-000000000001'$q$) = 1, 'the owner still does (history)');
+:as_tech_a
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 34.1, -118.1, now() + interval '45 seconds')$q$, '%not under way%', 'visit completed: no point');
+-- taken off the visit (S9b): the office stops reading the person there, and no new point
+:as_tech_a
+insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000002', 34.35, -118.35, now());
+:as_off56
+select tst.ok(tst.cnt($q$select 1 from public.user_locations where visit_id = 'f5700000-0000-4000-8000-000000000002'$q$) = 1, 'the office sees the point while the tech is on the visit');
+:as_office_a
+select public.assign_visit('f5700000-0000-4000-8000-000000000002', array['a0000000-0000-0000-0000-000000000001']::uuid[]);
+:as_tech_a
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000002', 34.1, -118.1, now())$q$, '%no such visit%', 'taken off the visit: no point');
+:as_off56
+select tst.ok(tst.cnt($q$select 1 from public.user_locations where visit_id = 'f5700000-0000-4000-8000-000000000002'$q$) = 0, 'taken off: the office no longer reads his points there');
+-- the company flag off: no writes, no reads by others
+:as_super
+update app.company_flags set location_sharing = false where company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 0, 'flag off: the owner reads nothing');
+:as_super
+update app.company_flags set location_sharing = true where company_id = 'ca000000-0000-0000-0000-000000000000';
+-- purge: only older than 30 days — run by an owner WITHOUT BYPASSRLS (force RLS on the table must not make it a no-op)
+create role t57_owner nologin nobypassrls;
+grant postgres to t57_owner;   -- the rules are «to postgres»: membership carries them, not the superuser bit
+grant usage on schema app, public to t57_owner;
+grant select, delete on public.user_locations to t57_owner;
+grant execute on function app.has_role(uuid, text[]) to t57_owner;
+alter function app.purge_user_locations() owner to t57_owner;
+select tst.ok(app.purge_user_locations() = 1 and tst.cnt($q$select 1 from public.user_locations where recorded_at < now() - interval '30 days'$q$) = 0
+  and tst.cnt($q$select 1 from public.user_locations$q$) = 2, 'purge removes only points older than 30 days, even without BYPASSRLS');
+-- the forget trigger too, for the rest of T57: going off (the tech; the admin) must delete without BYPASSRLS
+alter function app.tg_membership_location_forget() owner to t57_owner;
+-- going off forgets the points (the person; and through the admin)
+:as_tech_a
+select public.set_location_consent('ca000000-0000-0000-0000-000000000000', false);
+select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 0, 'consent revoked: own points gone');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.user_locations where user_id = 'a0000000-0000-0000-0000-000000000003'$q$) = 0, 'gone for real, not hidden');
+-- through the admin: the same path forgets the points
+:as_tech_a
+select public.set_location_consent('ca000000-0000-0000-0000-000000000000', true);
+:as_super
+update public.visits set status = 'en_route' where id = 'f5700000-0000-4000-8000-000000000004';
+:as_tech_a
+insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000004', 34.4, -118.4, now());
+:as_office_a
+select public.stop_member_location('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.user_locations where user_id = 'a0000000-0000-0000-0000-000000000003'$q$) = 0, 'switched off by the admin: points gone');
+select tst.ok(not exists (select 1 from pg_publication_tables where tablename = 'user_locations'), 'points are not in any realtime publication');
+select tst.ok(not has_table_privilege('authenticated', 'public.user_locations', 'update') and not has_table_privilege('authenticated', 'public.user_locations', 'delete')
+  and not has_column_privilege('authenticated', 'public.user_locations', 'user_id', 'insert') and not has_column_privilege('authenticated', 'public.user_locations', 'company_id', 'insert'), 'a client inserts only the point fields, never updates or deletes');
+-- account deletion (S22): erase_personal_rows takes the person's points everywhere and the notice mark
+:as_tech_a
+select public.set_location_consent('ca000000-0000-0000-0000-000000000000', true);
+insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000004', 34.6, -118.6, now());
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.user_locations where user_id = 'a0000000-0000-0000-0000-000000000003'$q$) = 1, 'a point before the erasure');
+select app.erase_personal_rows('a0000000-0000-0000-0000-000000000003');
+select tst.ok(tst.cnt($q$select 1 from public.user_locations where user_id = 'a0000000-0000-0000-0000-000000000003'$q$) = 0
+  and (select location_notice_ack_at is null from public.memberships where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003'), 'erasure: points and the notice mark gone');
+:as_tech_a
+select public.set_location_consent('ca000000-0000-0000-0000-000000000000', false);
+:as_super
+update public.visits set status = 'cancelled' where id in ('f5700000-0000-4000-8000-000000000002', 'f5700000-0000-4000-8000-000000000004');
+update app.company_flags set location_sharing = false where company_id = 'ca000000-0000-0000-0000-000000000000';
+alter function app.purge_user_locations() owner to postgres;
+alter function app.tg_membership_location_forget() owner to postgres;
+drop owned by t57_owner;
+drop role t57_owner;
+\echo 'T57 wave 7б-2: points on own open visit, read by role, forgotten on going off ok'
 -- ---------------------------------------------------------------- T50: wave 7а-2a — удаление аккаунта (S22; docs/specs/19 §6)
 -- delete_account as the person: a fresh sign-in (amr of the token), the word, never the last active owner (unless the
 -- company closes with the account); memberships → deleted, own rows wiped/unlinked, the profile anonymised, business
@@ -4885,7 +5123,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by', 'legal_acceptance.user_id', 'users.id',
     -- erased (app.erase_personal_rows)
-    'member_prefs.user_id',
+    'member_prefs.user_id', 'user_locations.user_id',
     -- unlinked (set to null)
     'company_contacts.user_id', 'companies.lead_default_assignee_id') \gset
 select tst.ok(:'t50_unclassified' = '', format('every person column is classified in T50 (kept / erased / unlinked): %s', :'t50_unclassified'));
@@ -4896,11 +5134,26 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by', 'legal_acceptance.user_id', 'users.id',
-    'member_prefs.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
+    'member_prefs.user_id', 'user_locations.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
  where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
 select tst.ok(:'t50_stale' = '', format('no stale entries in the T50 lists: %s', :'t50_stale'));
 \echo 'T50 wave 7а-2a: account deletion (S22) ok'
+-- T57 + S22 (security-check 7б-2): a person whose owner row is switched off, with the location notice mark — the
+-- erasure of the mark must not trip the owner guard and roll the whole deletion back
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a5700000-0000-4000-8000-000000000009', 'olddir57@b.test', '{"full_name":"Old Owner"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('cb000000-0000-0000-0000-000000000000', 'a5700000-0000-4000-8000-000000000009', 'owner', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a5700000-0000-4000-8000-000000000009', 'tech', 'active');
+update public.memberships set location_notice_ack_at = now() - interval '1 day' where user_id = 'a5700000-0000-4000-8000-000000000009';
+update public.memberships set status = 'disabled' where user_id = 'a5700000-0000-4000-8000-000000000009' and company_id = 'cb000000-0000-0000-0000-000000000000';
+reset role; set request.jwt.claim.sub = 'a5700000-0000-4000-8000-000000000009'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'a switched-off owner with a notice mark deletes the account');
+:as_super
+select tst.ok((select every(location_notice_ack_at is null and status = 'deleted') from public.memberships where user_id = 'a5700000-0000-4000-8000-000000000009'), 'the notice marks are gone in both companies');
+\echo 'T57 + S22: deletion with a switched-off owner row and a notice mark ok'
 :as_super
 -- ---------------------------------------------------------------- T59: a row never moves to another company (security #2, 19 §7.1)
 :as_super

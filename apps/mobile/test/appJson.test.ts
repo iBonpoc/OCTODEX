@@ -42,4 +42,11 @@ describe("app.json: permission texts", () => {
     expect(picker[1].cameraPermission).toBe(plist.NSCameraUsageDescription);
     expect(picker[1].photosPermission).toBe(plist.NSPhotoLibraryUsageDescription);
   });
+  it("the location plugin (7б-2) uses the same English base text and never the background", () => {
+    const loc = (app.plugins as unknown[]).find((p) => Array.isArray(p) && p[0] === "expo-location") as [string, Record<string, unknown>];
+    expect(loc[1].locationWhenInUsePermission).toBe(plist.NSLocationWhenInUseUsageDescription);
+    expect(loc[1].isIosBackgroundLocationEnabled).toBe(false);
+    expect(loc[1].isAndroidBackgroundLocationEnabled).toBe(false);
+    expect(Object.keys(plist).some((k) => /Always|Background/i.test(k) && /Location/.test(k))).toBe(false);
+  });
 });
