@@ -45,6 +45,9 @@ async function q<T = Row>(p: PromiseLike<{ data: unknown; error: { message: stri
   return (data ?? []) as T[];
 }
 
+const activityRowsOf = (companyId: string, cols: string) =>
+  q<Row>(supabase.from("activities").select(cols).eq("company_id", companyId).is("deleted_at", null).order("at", { ascending: false }).limit(2000));
+
 export async function loadCompanyDB(companyId: string, userId: string): Promise<DB> {
   const live = <T,>(table: string, cols = "*") => q<T>(supabase.from(table).select(cols).eq("company_id", companyId).is("deleted_at", null));
   const [mems, sources, customers, contacts, properties, jobs, visits, assignees, leads, estimates, versions, options, lines, approvals, invoices, payments, files, expenses, catalogRows, lineCosts, notifications] =
@@ -65,7 +68,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       q<Row>(supabase.from("estimate_approvals").select("estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method").eq("company_id", companyId)),
       live<Row>("invoices"),
       live<Row>("payments"),
-      live<Row>("files", "id, visit_id, job_id, customer_id, stage, storage_key, kind, created_at"),
+      // wave П-1: customer_id is new — on a database without the migration read the old columns (preview of a PR)
+      live<Row>("files", "id, visit_id, job_id, customer_id, stage, storage_key, kind, created_at").catch(() => live<Row>("files", "id, visit_id, job_id, stage, storage_key, kind, created_at")),
       live<Row>("expenses"),
       live<Row>("catalog_items"),
       // Costs are visible only to owner/admin/office: for others the query returns nothing.
@@ -87,7 +91,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     live<Row>("lead_costs", "lead_id, cost_cents").catch(() => [] as Row[]),
     live<Row>("lead_contacts", "id, lead_id, name, role, phone, email").catch(() => [] as Row[]),
     live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at").catch(() => [] as Row[]),
-    q<Row>(supabase.from("activities").select("id, subject_type, subject_id, kind, body, meta, at, actor_id, direction, contact_id").eq("company_id", companyId).is("deleted_at", null).order("at", { ascending: false }).limit(2000)).catch(() => [] as Row[]),
+    // wave П-1: contact_id is new — without the migration the feed is read without it, not dropped
+    activityRowsOf(companyId, "id, subject_type, subject_id, kind, body, meta, at, actor_id, direction, contact_id")
+      .catch(() => activityRowsOf(companyId, "id, subject_type, subject_id, kind, body, meta, at, actor_id, direction"))
+      .catch(() => [] as Row[]),
     // clients C1 (tags, several phones / emails per person); empty before the migration is applied
     live<Row>("tags", "id, name, is_active, is_system, position").catch(() => [] as Row[]),
     q<Row>(supabase.from("customer_tags").select("customer_id, tag_id").eq("company_id", companyId)).catch(() => [] as Row[]),

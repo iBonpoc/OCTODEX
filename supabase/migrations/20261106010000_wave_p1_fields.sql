@@ -196,11 +196,12 @@ alter table public.job_types enable row level security;
 alter table public.job_types force row level security;
 create policy job_types_select on public.job_types for select to authenticated
   using (app.is_member(company_id));
+-- company settings (13 §5а): the owner and the admin change the list
 create policy job_types_insert on public.job_types for insert to authenticated
-  with check (app.has_role(company_id, array['owner', 'admin', 'office']));
+  with check (app.has_role(company_id, array['owner', 'admin']));
 create policy job_types_update on public.job_types for update to authenticated
-  using (app.has_role(company_id, array['owner', 'admin', 'office']))
-  with check (app.has_role(company_id, array['owner', 'admin', 'office']));
+  using (app.has_role(company_id, array['owner', 'admin']))
+  with check (app.has_role(company_id, array['owner', 'admin']));
 
 revoke all on public.job_types from anon, authenticated;
 grant select on public.job_types to authenticated;

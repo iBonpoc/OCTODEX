@@ -5,10 +5,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const rows: Record<string, Record<string, unknown>[]> = {};
+/** columns the fake database does not have yet ("table.column"): a select naming one fails, as on a base without the migration */
+const missing = new Set<string>();
 function builder(table: string) {
   const b: Record<string, unknown> = {};
-  for (const m of ["select", "eq", "is", "order", "limit", "in", "not"]) b[m] = () => b;
-  b.then = (ok: (r: { data: unknown; error: null }) => unknown) => Promise.resolve({ data: rows[table] ?? [], error: null }).then(ok);
+  let cols = "";
+  b.select = (c?: string) => ((cols = c ?? "*"), b);
+  for (const m of ["eq", "is", "order", "limit", "in", "not"]) b[m] = () => b;
+  b.then = (ok: (r: { data: unknown; error: { message: string } | null }) => unknown) => {
+    const gone = cols.split(",").map((x) => x.trim()).find((c) => missing.has(`${table}.${c}`));
+    return Promise.resolve(gone ? { data: null, error: { message: `column ${table}.${gone} does not exist` } } : { data: rows[table] ?? [], error: null }).then(ok);
+  };
   return b;
 }
 vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => builder(t) } }));
@@ -16,6 +23,7 @@ import { loadCompanyDB } from "../src/cloud/repo";
 
 const CO = "co-1";
 beforeEach(() => {
+  missing.clear();
   for (const k of Object.keys(rows)) delete rows[k];
   rows.customers = [
     {
@@ -107,5 +115,15 @@ describe("loadCompanyDB — other fields (wave П-1)", () => {
   it("notice: leads to the invoice", async () => {
     const db = await loadCompanyDB(CO, "u1");
     expect(db.notices[0]).toMatchObject({ kind: "invoice.paid", invoiceId: "i1", jobId: "j1" });
+  });
+});
+describe("loadCompanyDB on a database without the wave П-1 migration (PR preview)", () => {
+  it("files and the feed are read with the old columns, nothing is dropped", async () => {
+    missing.add("files.customer_id");
+    missing.add("activities.contact_id");
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.files?.map((f) => f.id)).toEqual(["f1", "f2"]);
+    expect(db.visits[0]!.photos).toHaveLength(1);
+    expect(db.activities.map((a) => a.id)).toEqual(["a1"]);
   });
 });
