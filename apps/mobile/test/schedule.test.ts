@@ -8,7 +8,8 @@ import { canCancel, canPlan, canReschedule, hasPlannedInspection, isInspectionOf
 
 import { SCHEDULE_SETTINGS_DEFAULT } from "../src/features/scheduleSettings";
 
-const NOW = new Date("2026-11-05T18:00:00.000Z").getTime();
+const LA = "America/Los_Angeles";
+const NOW = new Date("2026-11-05T18:00:00.000Z").getTime(); // 10:00 AM in LA
 const at = (h: number) => new Date(NOW + h * 3_600_000).toISOString();
 const base: Visit = { id: "v", techId: "m1", start: at(2), durationMin: 60, step: "scheduled", scope: [], checklist: [], photos: [], amountDueCents: 0 };
 const V = (p: Partial<Visit>): Visit => ({ ...base, ...p });
@@ -30,10 +31,14 @@ describe("visit: what can happen to it", () => {
     expect(canPlan(["tech"])).toBe(false);
   });
   it("a new visit is never in the past, except earlier today", () => {
-    expect(startAllowed(at(1), NOW)).toBe(true);
-    expect(startAllowed(at(-1), NOW)).toBe(true);
-    expect(startAllowed(at(-30), NOW)).toBe(false);
-    expect(startAllowed("not a date", NOW)).toBe(false);
+    expect(startAllowed(at(1), NOW, LA)).toBe(true);
+    expect(startAllowed(at(-1), NOW, LA)).toBe(true);
+    expect(startAllowed(at(-30), NOW, LA)).toBe(false);
+    expect(startAllowed("not a date", NOW, LA)).toBe(false);
+    // «earlier today» is the company's today: 1:00 AM in LA is today there (09:00Z), whatever the phone says
+    expect(startAllowed("2026-11-05T09:00:00.000Z", NOW, LA)).toBe(true);
+    // 11:30 PM yesterday in LA (07:30Z today) is already the past, though it is «today» in UTC
+    expect(startAllowed("2026-11-05T07:30:00.000Z", NOW, LA)).toBe(false);
   });
   it("late (П3c): start + 15 min passed and nobody on site; «on the way» does not clear it", () => {
     const min = (m: number) => new Date(NOW - m * 60_000).toISOString();
@@ -137,31 +142,33 @@ describe("S10: an inspection ends with done", () => {
 describe("visit form: slots, load, warnings (§7.1)", () => {
   it("free slots skip a busy person's visits, the past and the end of the day", async () => {
     const { freeSlots, atMinute, SCHEDULE_DEFAULTS } = await import("../src/features/schedule");
-    const day = new Date("2026-11-06T00:00:00"); // tomorrow, local
-    const busy = V({ id: "b", techId: "m1", start: atMinute(day, 10 * 60), durationMin: 60 });
+    const day = "2026-11-06"; // tomorrow of the company (LA)
+    const busy = V({ id: "b", techId: "m1", start: atMinute(day, 10 * 60, LA), durationMin: 60 });
     const d = db({ visits: [busy] });
-    const now = new Date("2026-11-05T12:00:00").getTime();
-    const slots = freeSlots(d, "m1", day, 45, { now });
+    const now = new Date("2026-11-05T12:00:00-08:00").getTime();
+    const slots = freeSlots(d, "m1", day, 45, { now, tz: LA });
     expect(slots[0]).toBe(SCHEDULE_DEFAULTS.dayStartMin);
     expect(slots).not.toContain(10 * 60); // busy
     expect(slots).not.toContain(9 * 60 + 30); // would run into 10:00
     expect(slots).toContain(11 * 60);
     expect(slots.at(-1)! + 45).toBeLessThanOrEqual(SCHEDULE_DEFAULTS.dayEndMin);
-    expect(freeSlots(d, "m1", day, 45, { exceptId: "b", now })).toContain(10 * 60); // moving that very visit
-    expect(freeSlots(d, null, day, 45, { now })).toContain(10 * 60); // nobody yet: every slot
-    const today = new Date("2026-11-05T00:00:00");
-    expect(freeSlots(db({}), "m1", today, 45, { now }).every((m) => m >= 12 * 60)).toBe(true); // never in the past
+    expect(freeSlots(d, "m1", day, 45, { exceptId: "b", now, tz: LA })).toContain(10 * 60); // moving that very visit
+    expect(freeSlots(d, null, day, 45, { now, tz: LA })).toContain(10 * 60); // nobody yet: every slot
+    // never in the past: noon in LA, slots of today start at 12:00 of the company's clock
+    expect(freeSlots(db({}), "m1", "2026-11-05", 45, { now, tz: LA })).toEqual(expect.arrayContaining([12 * 60]));
+    expect(freeSlots(db({}), "m1", "2026-11-05", 45, { now, tz: LA }).every((m) => m >= 12 * 60)).toBe(true);
   });
   it("a person's day load and the form warnings", async () => {
     const { dayVisits, formWarnings, atMinute } = await import("../src/features/schedule");
-    const day = new Date("2026-11-06T00:00:00");
-    const d = db({ visits: [V({ id: "a", techId: "m1", start: atMinute(day, 14 * 60) }), V({ id: "b", techId: "m1", start: atMinute(day, 10 * 60) }), V({ id: "c", techId: "m2", start: atMinute(day, 10 * 60) })] });
-    expect(dayVisits(d, "m1", day).map((v) => v.id)).toEqual(["b", "a"]);
-    const now = new Date("2026-11-05T12:00:00").getTime();
-    expect(formWarnings(d, { techId: "m1", start: atMinute(day, 10 * 60 + 30), durationMin: 45 }, { now }).map((w) => w.key)).toEqual(["busy"]);
-    expect(formWarnings(d, { techId: "m1", start: atMinute(day, 19 * 60), durationMin: 45 }, { now }).map((w) => w.key)).toEqual(["outOfHours"]);
-    expect(formWarnings(d, { techId: null, start: "2026-11-01T15:00:00.000Z", durationMin: 45 }, { now }).map((w) => w.key)).toContain("past");
-    expect(formWarnings(d, { techId: "m1", start: atMinute(day, 8 * 60), durationMin: 45 }, { now })).toEqual([]);
+    const day = "2026-11-06";
+    const d = db({ visits: [V({ id: "a", techId: "m1", start: atMinute(day, 14 * 60, LA) }), V({ id: "b", techId: "m1", start: atMinute(day, 10 * 60, LA) }), V({ id: "c", techId: "m2", start: atMinute(day, 10 * 60, LA) })] });
+    expect(dayVisits(d, "m1", day, undefined, LA).map((v) => v.id)).toEqual(["b", "a"]);
+    const now = new Date("2026-11-05T12:00:00-08:00").getTime();
+    const opts = { now, tz: LA };
+    expect(formWarnings(d, { techId: "m1", start: atMinute(day, 10 * 60 + 30, LA), durationMin: 45 }, opts).map((w) => w.key)).toEqual(["busy"]);
+    expect(formWarnings(d, { techId: "m1", start: atMinute(day, 19 * 60, LA), durationMin: 45 }, opts).map((w) => w.key)).toEqual(["outOfHours"]);
+    expect(formWarnings(d, { techId: null, start: "2026-11-01T15:00:00.000Z", durationMin: 45 }, opts).map((w) => w.key)).toContain("past");
+    expect(formWarnings(d, { techId: "m1", start: atMinute(day, 8 * 60, LA), durationMin: 45 }, opts)).toEqual([]);
   });
 });
 
@@ -181,16 +188,15 @@ describe("several people on a visit (wave П3a, S9 / S9b; db:T35)", () => {
   });
   it("the second person's visits count for overlaps and free slots", async () => {
     const { freeSlots, atMinute } = await import("../src/features/schedule");
-    const day = new Date(NOW + 86_400_000);
-    day.setHours(0, 0, 0, 0);
+    const day = "2026-11-06";
     // m2 is the second person on a 10:00 visit
-    const d = db({ visits: [V({ id: "b", techId: "m1", assigneeIds: ["m1", "m2"], start: atMinute(day, 10 * 60), durationMin: 60 })] });
-    expect(overlaps(d, "m2", atMinute(day, 10 * 60 + 30), 30)).toHaveLength(1);
-    expect(overlaps(d, ["m3", "m2"], atMinute(day, 10 * 60), 30)).toHaveLength(1);
-    expect(overlaps(d, ["m3"], atMinute(day, 10 * 60), 30)).toHaveLength(0);
+    const d = db({ visits: [V({ id: "b", techId: "m1", assigneeIds: ["m1", "m2"], start: atMinute(day, 10 * 60, LA), durationMin: 60 })] });
+    expect(overlaps(d, "m2", atMinute(day, 10 * 60 + 30, LA), 30)).toHaveLength(1);
+    expect(overlaps(d, ["m3", "m2"], atMinute(day, 10 * 60, LA), 30)).toHaveLength(1);
+    expect(overlaps(d, ["m3"], atMinute(day, 10 * 60, LA), 30)).toHaveLength(0);
     // a slot is free only when everyone picked is free
-    expect(freeSlots(d, ["m3", "m2"], day, 30, { now: NOW })).not.toContain(10 * 60);
-    expect(freeSlots(d, ["m3"], day, 30, { now: NOW })).toContain(10 * 60);
+    expect(freeSlots(d, ["m3", "m2"], day, 30, { now: NOW, tz: LA })).not.toContain(10 * 60);
+    expect(freeSlots(d, ["m3"], day, 30, { now: NOW, tz: LA })).toContain(10 * 60);
   });
 });
 
@@ -221,8 +227,8 @@ describe("the Plan (wave П3b, S8b / S9a on the screen)", () => {
     expect(planFilter(v, "all", "m9")).toBe(true);
     expect(planFilter(v, "me", "m2")).toBe(true);
     expect(planFilter(v, "m3", "m2")).toBe(false);
-    expect(isWorkday(new Date(2026, 10, 7))).toBe(true); // a Saturday: Mon–Sat by default (§6.1, П4a)
-    expect(isWorkday(new Date(2026, 10, 8))).toBe(false); // a Sunday
-    expect(isWorkday(new Date(2026, 10, 9))).toBe(true);
+    expect(isWorkday("2026-11-07")).toBe(true); // a Saturday: Mon–Sat by default (§6.1, П4a)
+    expect(isWorkday("2026-11-08")).toBe(false); // a Sunday
+    expect(isWorkday("2026-11-09")).toBe(true);
   });
 });

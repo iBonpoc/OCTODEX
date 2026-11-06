@@ -5,7 +5,7 @@
  * (app.valid_schedule_settings / app.valid_business_hours, migration 20261105370000). Pure — tested in test/scheduleSettings.test.ts.
  */
 import type { Company, VisitKind } from "@/data/types";
-import { DEFAULT_ZONE, validZone } from "./zone";
+import { DEFAULT_ZONE, validZone, weekdayOf, type DayKey } from "./zone";
 
 export interface ScheduleSettings {
   /** default length of a visit by kind, minutes (15–720, a multiple of 15) */
@@ -79,8 +79,8 @@ export function businessHoursOf(company: Pick<Company, "businessHours"> | null |
   return out;
 }
 
-/** the hours of the weekday of this date (phone calendar day — the form is moved to the company time zone in П4b) */
-export const hoursOn = (hours: BusinessHours, d: Date): DayHours => hours[WEEK_DAYS[d.getDay()]!];
+/** the hours of the weekday of a calendar day of the company (a day key, not a phone date — П4b) */
+export const hoursOn = (hours: BusinessHours, day: DayKey): DayHours => hours[WEEK_DAYS[weekdayOf(day)]!];
 
 /** default length of a visit of this kind */
 export function durationFor(s: ScheduleSettings, kind: VisitKind | undefined): number {

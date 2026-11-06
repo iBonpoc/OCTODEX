@@ -11,6 +11,7 @@ import { Icon, T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 import { wasJustDragged } from "./dnd";
 import { assigneesOf, isAssigned, lateKind } from "@/features/schedule";
+import { isoDayKey, todayKey } from "@/features/calendar";
 import { overlapSigns } from "@/features/listSigns";
 
 /** Visit status → DS status color (4+1) and word. */
@@ -112,12 +113,10 @@ export function sortByStart(a: Visit, b: Visit) {
 }
 
 export function todayVisits(db: DB, techId?: string) {
-  const n = new Date();
+  // today of the company (П4b)
+  const today = todayKey();
   return db.visits
-    .filter((v) => {
-      const d = new Date(v.start);
-      return d.toDateString() === n.toDateString() && (techId === undefined || isAssigned(v, techId));
-    })
+    .filter((v) => isoDayKey(v.start) === today && (techId === undefined || isAssigned(v, techId)))
     .sort(sortByStart);
 }
 

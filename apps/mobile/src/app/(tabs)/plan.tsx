@@ -7,7 +7,8 @@ import { useStore } from "@/data/store";
 import type { Visit } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { usePersistentState } from "@/data/persist";
-import { addDays, addMonths, fromDayKey, isoDayKey, monthGrid, todayKey, weekDays, type DayKey } from "@/features/calendar";
+import { addDays, addMonths, isoDayKey, monthGrid, todayKey, weekDays, type DayKey } from "@/features/calendar";
+import { formatDayKey } from "@/features/zone";
 import { VisitCard, sortByStart, visitStatus } from "@/features/visits";
 import { overlapSigns } from "@/features/listSigns";
 import { AssignSheet } from "@/features/sheets";
@@ -27,7 +28,7 @@ type Mode = "day" | "week" | "month";
  * visit counts; tap a day → Day). Arrows move by day / week / month; "Today" jumps back.
  */
 export default function Plan() {
-  const { t, day, lang } = useI18n();
+  const { t, dayOf, lang } = useI18n();
   const { db, role } = useStore();
   const [mode, setMode] = usePersistentState<Mode>("octo.planMode.v1", "day");
   const [date, setDate] = useState<DayKey>(todayKey());
@@ -40,9 +41,9 @@ export default function Plan() {
   const visitsOn = (k: DayKey) => db.visits.filter((v) => isoDayKey(v.start) === k && mine(v)).sort(sortByStart);
   const step = (n: number) => setDate(mode === "day" ? addDays(date, n) : mode === "week" ? addDays(date, 7 * n) : addMonths(date, n));
   const week = weekDays(date);
-  const monthName = new Intl.DateTimeFormat(lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU", { month: "long", year: "numeric" }).format(fromDayKey(date));
-  const label =
-    mode === "day" ? day(fromDayKey(date).toISOString()) : mode === "week" ? `${day(fromDayKey(week[0]!).toISOString())} – ${day(fromDayKey(week[6]!).toISOString())}` : monthName;
+  // days of «План» are the company's calendar days (П4b): labels of day keys, no zone of their own
+  const monthName = formatDayKey(date, { month: "long", year: "numeric" }, lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU");
+  const label = mode === "day" ? dayOf(date) : mode === "week" ? `${dayOf(week[0]!)} – ${dayOf(week[6]!)}` : monthName;
 
   return (
     <Screen
@@ -84,7 +85,7 @@ export default function Plan() {
               nowrap
               items={week.map((k) => {
                 const n = visitsOn(k).length;
-                const name = k === todayKey() ? t("common.today") : day(fromDayKey(k).toISOString());
+                const name = k === todayKey() ? t("common.today") : dayOf(k);
                 return { key: k, label: n ? `${name} · ${n}` : name };
               })}
             />
@@ -180,7 +181,7 @@ function DayView({ date, visits, who, onAdd }: { date: DayKey; visits: Visit[]; 
 
 /** 7 days; each visit is a card (time · client · tech); tap the day title to open the Day view. */
 function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: DayKey) => Visit[]; openDay: (k: DayKey) => void }) {
-  const { t, day, time } = useI18n();
+  const { t, dayOf, time } = useI18n();
   const { db } = useStore();
   return (
     <Grid>
@@ -190,7 +191,7 @@ function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: D
         return (
           <View key={k} style={{ gap: space[2] }}>
             <SectionTitle
-              title={`${today ? `${t("common.today")} · ` : ""}${day(fromDayKey(k).toISOString())}`}
+              title={`${today ? `${t("common.today")} · ` : ""}${dayOf(k)}`}
               right={<Button label={vs.length ? t("plan.visits", { n: vs.length }) : t("plan.free")} size="sm" variant="ghost" onPress={() => openDay(k)} />}
             />
             {vs.length ? (
@@ -227,13 +228,13 @@ function MonthView({ date, visitsOn, openDay }: { date: DayKey; visitsOn: (k: Da
   const { c } = useTheme();
   const cells = monthGrid(date);
   const weeks = [0, 1, 2, 3, 4, 5].map((w) => cells.slice(w * 7, w * 7 + 7));
-  const wd = new Intl.DateTimeFormat(lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU", { weekday: "short" });
+  const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
   return (
     <Card>
       <View style={{ flexDirection: "row", gap: space[1] }}>
         {weeks[0]!.map((x) => (
           <T key={x.key} v="micro" tone="mut" center style={{ flex: 1 }}>
-            {wd.format(fromDayKey(x.key))}
+            {formatDayKey(x.key, { weekday: "short" }, loc)}
           </T>
         ))}
       </View>

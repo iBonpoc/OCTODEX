@@ -19,7 +19,8 @@ import { assigneesOf, atMinute, canPlan, canReschedule, dayVisits, formHours, fo
 import { arrivalWindow, businessHoursOf, clientDate, companyTime, companyTz, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { AssignSheet } from "@/features/sheets";
 import { DatePick, dayOffsetOf } from "@/features/DatePick";
-import { dayKeyOf } from "@/features/calendar";
+import { addDays, isoDayKey, todayKey } from "@/features/calendar";
+import { minuteIn } from "@/features/zone";
 import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -28,12 +29,8 @@ import { mailtoHref, smsHref } from "@/features/contactLinks";
 
 export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string };
 
-const startOfDay = (offset: number) => {
-  const d = new Date();
-  d.setHours(0, 0, 0, 0);
-  d.setDate(d.getDate() + offset);
-  return d;
-};
+/** a day of the company, `offset` days after its today (the form works on the company's calendar, П4b) */
+const dayAt = (offset: number) => addDays(todayKey(), offset);
 
 /** a labelled block that keeps its own height (Labeled grows with flex: 1 and collapses inside a wide screen) */
 function Field({ label, children }: { label: string; children: ReactNode }) {
@@ -50,8 +47,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 /** state of the form: day (0 = today), start minute, length, person, note; derived start and warnings */
 export function useVisitForm(init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID }) {
   const { db, role } = useStore();
-  const initStart = init.start ? new Date(init.start) : null;
-  const initDay = initStart ? Math.max(0, Math.round((new Date(initStart).setHours(0, 0, 0, 0) - startOfDay(0).getTime()) / 86_400_000)) : 1;
+  const initStart = init.start && !Number.isNaN(new Date(init.start).getTime()) ? init.start : null;
+  // the day and the minute of an existing start on the company's calendar and clock, not the phone's
+  const initDay = initStart ? Math.max(0, dayOffsetOf(isoDayKey(initStart))) : 1;
   const [dayOffset, setDayOffset] = useState(initDay);
   const [duration, setDuration] = useState(init.durationMin);
   // sales books without people: the office assigns (canPlan); a form for a visit that has people keeps them
@@ -68,12 +66,12 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
     setTouched(true);
   };
   const [note, setNote] = useState("");
-  const day = startOfDay(dayOffset);
+  const day = dayAt(dayOffset);
   // the company's hours of that weekday and its step (П4a; «Компания → Расписание»)
   const sch = scheduleSettingsOf(db.company);
   const hours = formHours(businessHoursOf(db.company), sch.stepMin, day);
   const slots = freeSlots(db, techIds, day, duration, { exceptId: init.exceptId, hours });
-  const [minute, setMinute] = useState<number | null>(initStart ? initStart.getHours() * 60 + initStart.getMinutes() : null);
+  const [minute, setMinute] = useState<number | null>(initStart ? minuteIn(initStart) : null);
   const startMin = minute ?? slots[0] ?? hours.dayStartMin;
   const start = atMinute(day, startMin);
   const warnings = formWarnings(db, { techId: techIds, start, durationMin: duration, exceptId: init.exceptId }, { hours });
@@ -89,15 +87,15 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
 export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof useVisitForm>; noteLabel?: boolean }) {
   const { db, role } = useStore();
   const planner = canPlan([role]);
-  const { t, day, time } = useI18n();
+  const { t, day, dayOf, time } = useI18n();
   const [calendar, setCalendar] = useState(false);
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
   const days = useMemo(() => {
-    const label = (i: number) => (i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : day(startOfDay(i).toISOString()));
+    const label = (i: number) => (i === 0 ? t("common.today") : i === 1 ? t("common.tomorrow") : dayOf(dayAt(i)));
     const list = Array.from({ length: SCHEDULE_DEFAULTS.formDays }, (_, i) => ({ key: String(i), label: label(i) }));
     // a day picked in «Другая дата» beyond the chips gets its own chip, so the choice is visible
     return f.dayOffset >= SCHEDULE_DEFAULTS.formDays ? [...list, { key: String(f.dayOffset), label: label(f.dayOffset) }] : list;
-  }, [t, day, f.dayOffset]);
+  }, [t, dayOf, f.dayOffset]);
   const range = (v: Visit) => `${time(v.start)}–${time(new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString())}`;
   const load = (id: ID) => {
     const vs = dayVisits(db, id, f.day, f.exceptId);
@@ -110,7 +108,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
         <Button label={t("vf.otherDate")} icon="calendar" size="sm" variant="ghost" onPress={() => setCalendar((x) => !x)} />
         {calendar ? (
           <DatePick
-            value={dayKeyOf(f.day)}
+            value={f.day}
             onPick={(k) => { f.setDayOffset(dayOffsetOf(k)); f.setMinute(null); setCalendar(false); }}
           />
         ) : null}
