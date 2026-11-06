@@ -63,6 +63,8 @@ import {
   type Source,
   type LeadStatus,
   type CallOutcome,
+  type CallLog,
+  type LeadTouchKind,
   type LeadInterest,
   type CustomerStatus,
   type Person,
@@ -113,9 +115,12 @@ interface StoreCtx {
   /** "I replied" (no call/SMS from the app): stops the reply timer */
   replyLead: (id: ID) => Undo;
   /** call / SMS / email / marketplace from the card: history line + first response + new → in touch */
-  touchLead: (id: ID, kind: "call" | "sms" | "email" | "marketplace" | "reply") => Undo;
+  /** SMS / email / marketplace / reply; a call goes only through callResult / logCall with its outcome (20 §3) */
+  touchLead: (id: ID, kind: LeadTouchKind) => Undo;
   /** after a call from the card: answered = in touch; no answer / voicemail = one more attempt, the reply timer keeps going */
   callResult: (id: ID, outcome: CallOutcome) => Undo;
+  /** wave 6-2: a call on a lead, a client or a job, with its outcome, person, minutes and a note */
+  logCall: (c: CallLog) => Undo;
   setLeadInterest: (id: ID, interest: LeadInterest | undefined) => Undo;
   /** "call me in 3 months": hidden until the date, keeps its funnel status */
   snoozeLead: (id: ID, until: string, reason?: string) => Undo;
@@ -482,10 +487,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? outbox.map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
-  const touchLead = (id: ID, kind: "call" | "sms" | "email" | "marketplace" | "reply", outcome?: CallOutcome): Undo => {
+  type Touch = { kind: LeadTouchKind } | { kind: "call"; call: Omit<CallLog, "subjectType" | "subjectId"> };
+  const touchLead = (id: ID, t: Touch): Undo => {
+    const kind = t.kind;
+    const call = t.kind === "call" ? t.call : undefined;
+    const outcome = call?.outcome;
     const activityId = uid();
     const at = new Date().toISOString();
     const missed = kind === "call" && (outcome === "no_answer" || outcome === "voicemail");
+    const meta = call ? { outcome: call.outcome, ...(call.durationMin ? { duration_min: String(call.durationMin) } : {}) } : undefined;
     return mutate(
       "lead.touch",
       (d) => {
@@ -499,13 +509,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             : { ...x, firstResponseAt: x.firstResponseAt ?? at, status: toReplied ? "replied" : x.status, callAttempts: 0, lastOutboundAt: at, lastActivityAt: at },
           ),
           activities: [
-            { id: activityId, subjectType: "lead", subjectId: id, kind, at, actorId: d.me, ...(outcome ? { meta: { outcome } } : {}) },
+            { id: activityId, subjectType: "lead", subjectId: id, kind, at, actorId: d.me, direction: "out", ...(meta ? { meta } : {}), ...(call?.contactId ? { contactId: call.contactId } : {}), ...(call?.note ? { body: call.note } : {}) },
             ...(toReplied ? [{ id: uid(), subjectType: "lead" as const, subjectId: id, kind: "status" as const, meta: { from: "new", to: "replied" }, at, actorId: d.me }] : []),
             ...d.activities,
           ],
         };
       },
-      { k: "lead.touch", activityId, leadId: id, kind, at, ...(outcome ? { outcome } : {}) },
+      { k: "lead.touch", activityId, leadId: id, kind, at, ...(call ? { outcome: call.outcome, contactId: call.contactId, durationMin: call.durationMin, note: call.note } : {}) },
     );
   };
 
@@ -652,9 +662,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               { k: "visit.step", visitId, to: "done" },
         );
       },
-      replyLead: (id) => touchLead(id, "reply"),
-      touchLead: (id, kind) => touchLead(id, kind),
-      callResult: (id, outcome) => touchLead(id, "call", outcome),
+      replyLead: (id) => touchLead(id, { kind: "reply" }),
+      touchLead: (id, kind) => touchLead(id, { kind }),
+      callResult: (id, outcome) => touchLead(id, { kind: "call", call: { outcome } }),
+      logCall: (c) => {
+        const { subjectType, subjectId, ...call } = c;
+        if (subjectType === "lead") return touchLead(subjectId, { kind: "call", call });
+        const activityId = uid();
+        const at = new Date().toISOString();
+        const meta = { outcome: call.outcome, ...(call.durationMin ? { duration_min: String(call.durationMin) } : {}) };
+        return mutate(
+          "activity.call",
+          (d) => ({
+            ...d,
+            activities: [
+              { id: activityId, subjectType, subjectId, kind: "call", at, actorId: d.me, direction: "out", meta, ...(call.contactId ? { contactId: call.contactId } : {}), ...(call.note ? { body: call.note } : {}) },
+              ...d.activities,
+            ],
+          }),
+          { k: "activity.call", activityId, subjectType, subjectId, at, ...call },
+        );
+      },
       setLeadInterest: (id, interest) => patchLead(id, { interest }),
       snoozeLead: (id, until, reason) => patchLead(id, { snoozedUntil: until, snoozeReason: reason?.trim() || undefined }),
       unsnoozeLead: (id) => patchLead(id, { snoozedUntil: undefined, snoozeReason: undefined }),

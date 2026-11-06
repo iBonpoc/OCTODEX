@@ -1975,4 +1975,20 @@ export const en: Dict = {
   // wave 7б-1 «Работы и выезды»: personal settings
   "pref7b.plan": "Plan",
   "pref7b.showDoneHint": "Completed visits, jobs and tasks in the Plan. This setting is yours and the same on all your devices.",
+  // wave 6-2 «Лиды и клиенты» (docs/specs/20): calls
+  "w6.call.title": "Log a call",
+  "w6.call.savedYes": "Call logged: got through",
+  "w6.call.savedNo": "Call logged: no answer",
+  "w6.call.to": "To",
+  "w6.call.toSearch": "Lead or client",
+  "w6.call.toSearchTech": "Job or lead",
+  "w6.call.person": "Who you talked to",
+  "w6.call.outcome": "How it went",
+  "w6.call.outcomeHint": "Pick how it went — a call is not saved without it",
+  "w6.call.minutes": "Length",
+  "w6.call.note": "Note",
+  "w6.call.notePh": "What you agreed on (optional)",
+  "w6.call.save": "Save call",
+  "w6.call.f.all": "All",
+  "w6.call.min": "{n} min",
 };

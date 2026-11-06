@@ -33,7 +33,11 @@ describe("comms log", () => {
     expect(msgs[0]).toMatchObject({ who: cust.name, href: `/client/${cust.id}` });
   });
   it("the technician sees only his own: what he made, and what is about his jobs and their clients", () => {
-    expect(commsLog(db, "tech", "calls").map((c) => c.id)).toEqual(["c1"]);
+    // wave 6-2 (map-keeper): his own leads (an inspection he was given or made) are his too — c2 is on such a lead
+    const hisLead = lead.assigneeId === base.me || lead.createdBy === base.me;
+    expect(commsLog(db, "tech", "calls").map((c) => c.id)).toEqual(hisLead ? ["c2", "c1"] : ["c1"]);
+    const notHisLead: DB = { ...db, leads: db.leads.map((l) => (l.id === lead.id ? { ...l, assigneeId: other, createdBy: other } : l)) };
+    expect(commsLog(notHisLead, "tech", "calls").map((c) => c.id)).toEqual(["c1"]);
     // s1 is an SMS to a client by someone else: his only if he has a visit at that client
     const hisJob = base.visits.find((v) => v.jobId && (v.techId === base.me || v.assigneeIds?.includes(base.me)))!.jobId!;
     const hisClient = base.properties.find((p) => p.id === base.jobs.find((j) => j.id === hisJob)!.propertyId)!.customerId!;
@@ -47,7 +51,7 @@ describe("comms log", () => {
         ...db.activities,
       ],
     };
-    expect(commsLog(d2, "tech", "calls").map((c) => c.id)).toEqual(["x2", "x1", "c1"]);
+    expect(commsLog({ ...d2, leads: notHisLead.leads }, "tech", "calls").map((c) => c.id)).toEqual(["x2", "x1", "c1"]);
     expect(commsLog(d2, "director", "calls").map((c) => c.id)).toContain("x3");
   });
 });

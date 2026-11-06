@@ -114,7 +114,7 @@ export default function LeadScreen() {
           {assignee ? t("lead.worksOn", { name: assignee.name }) : t("lead.unassigned")}
           {l.status === "won" ? ` · ${t(l.wonVia === "manual" ? "lead.wonManual" : "lead.wonApproval")}` : ""}
         </T>
-        <ContactActions l={l} onCall={isOpenLead(l) ? () => setSheet("call") : undefined} />
+        <ContactActions l={l} onCall={() => setSheet("call")} />
       </Card>
 
       {closed.length ? (
@@ -185,7 +185,7 @@ export default function LeadScreen() {
       {tab === "files" ? <LeadEstimates leadId={l.id} onNew={makeEstimate} part="files" /> : null}
 
       <ReplySheet leadId={sheet === "reply" ? l.id : null} onClose={() => setSheet(null)} />
-      <CallResultSheet key={`call-${sheet === "call"}`} l={l} visible={sheet === "call"} onClose={() => setSheet(null)} onAnswered={() => setSheet("next")} />
+      <CallResultSheet key={`call-${sheet === "call"}`} l={l} visible={sheet === "call"} onClose={() => setSheet(null)} onAnswered={() => (isOpenLead(l) ? setSheet("next") : undefined)} />
       <NextStepSheet office={role !== "tech"} l={l} visible={sheet === "next"} onClose={() => setSheet(null)} onBook={() => setSheet("book")} onEstimate={makeEstimate} onCloseLead={() => setSheet("close")} />
       <BookSheet key={`book-${sheet === "book"}`} l={l} visible={sheet === "book"} onClose={() => setSheet(null)} />
       <SnoozeSheet key={`snooze-${sheet === "snooze"}`} l={l} visible={sheet === "snooze"} onClose={() => setSheet(null)} />
