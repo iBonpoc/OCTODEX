@@ -6,7 +6,7 @@
 const phoneTz = process.env.TZ;
 process.env.TZ = "America/New_York";
 import { afterAll, describe, expect, it } from "vitest";
-import { daysFrom, groupByDay, itemTimes, planItems, spanDays, whoMatches } from "../src/features/planFeed";
+import { daysFrom, eventProblems, groupByDay, itemTimes, planItems, spanDays, whoMatches } from "../src/features/planFeed";
 import { unassignedSoon } from "../src/features/schedule";
 import type { CalendarEvent, DB, Task, Visit } from "../src/data/types";
 
@@ -146,5 +146,27 @@ describe("spans across days (code review of PR-A)", () => {
     expect(itemTimes({ allDay: false, at: "", start: "2026-11-06T20:00:00.000Z", end: "2026-11-07T02:00:00.000Z" }, time, "Весь день")).toEqual({ when: "– 02:00" });
     expect(itemTimes({ allDay: true, at: "", start: "x", end: "y" }, time, "Весь день")).toEqual({ when: "Весь день" });
     expect(itemTimes({ allDay: false, at: "x", start: "2026-11-06T20:00:00.000Z" }, time, "Весь день")).toEqual({ when: "20:00", until: undefined });
+  });
+});
+
+describe("eventProblems — the server's rules before saving (wave 5 PR-B)", () => {
+  const ok = { kind: "event" as const, title: "Crew meeting", startsAt: "2026-11-06T18:00:00.000Z", endsAt: "2026-11-06T19:00:00.000Z" };
+  it("a named event with an end after the start is fine", () => {
+    expect(eventProblems(ok)).toEqual([]);
+  });
+  it("an event needs a name; a day off does not, but needs a person", () => {
+    expect(eventProblems({ ...ok, title: "   " })).toEqual(["title"]);
+    expect(eventProblems({ ...ok, kind: "time_off", title: "" })).toEqual(["person"]);
+    expect(eventProblems({ ...ok, kind: "time_off", title: "", userId: "m-ivan" })).toEqual([]);
+  });
+  it("the end must be after the start; a broken time is refused", () => {
+    expect(eventProblems({ ...ok, endsAt: ok.startsAt })).toEqual(["time"]);
+    expect(eventProblems({ ...ok, endsAt: "2026-11-06T17:00:00.000Z" })).toEqual(["time"]);
+    expect(eventProblems({ ...ok, startsAt: "nope" })).toEqual(["time"]);
+  });
+  it("name up to 200, description up to 4000", () => {
+    expect(eventProblems({ ...ok, title: "x".repeat(201) })).toEqual(["long"]);
+    expect(eventProblems({ ...ok, description: "x".repeat(4001) })).toEqual(["long"]);
+    expect(eventProblems({ ...ok, title: "x".repeat(200), description: "x".repeat(4000) })).toEqual([]);
   });
 });

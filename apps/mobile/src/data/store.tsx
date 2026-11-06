@@ -35,7 +35,9 @@ import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigne
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
 import { companyToday, setZone } from "@/features/zone";
+import { eventProblems } from "@/features/planFeed";
 import {
+  type CalendarEvent,
   type CatalogItem,
   type Company,
   type CompanyContact,
@@ -131,6 +133,9 @@ interface StoreCtx {
   /** all people of a lead in one save (the first is the lead itself); once the lead has a client, its people are the client's */
   saveLeadPeople: (leadId: ID, people: Person[]) => Undo;
   saveTask: (t: Omit<Task, "id"> & { id?: ID }) => { id: ID; undo: Undo };
+  /** an event or a day off of the Plan (wave 5): nothing is saved while eventProblems finds something */
+  saveCalendarEvent: (e: Omit<CalendarEvent, "id"> & { id?: ID }) => { id: ID; undo: Undo } | null;
+  removeCalendarEvent: (id: ID) => Undo;
   /** company lead sources: add / edit / hide (sources with leads are never deleted) */
   saveSource: (s: Omit<Source, "id"> & { id?: ID }) => { id: ID; undo: Undo };
   /**
@@ -733,6 +738,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
         return { id, undo };
       },
+      saveCalendarEvent: (e) => {
+        if (eventProblems(e).length) return null;
+        const id = e.id ?? uid();
+        const event: CalendarEvent = { ...e, id, title: e.title?.trim() || undefined, description: e.description?.trim() || undefined };
+        const isNew = !(dbRef.current.calendarEvents ?? []).some((x) => x.id === id);
+        const undo = mutate(
+          "calendarEvent.save",
+          (d) => {
+            const list = d.calendarEvents ?? [];
+            return { ...d, calendarEvents: isNew ? [...list, event] : list.map((x) => (x.id === id ? event : x)) };
+          },
+          { k: "calendarEvent.save", event, isNew },
+        );
+        return { id, undo };
+      },
+      removeCalendarEvent: (id) =>
+        mutate("calendarEvent.remove", (d) => ({ ...d, calendarEvents: (d.calendarEvents ?? []).filter((x) => x.id !== id) }), { k: "calendarEvent.remove", id }),
       saveSource: (src) => {
         const id = src.id ?? uid();
         const position = src.position ?? Math.max(0, ...dbRef.current.sources.map((x) => x.position ?? 0)) + 1;

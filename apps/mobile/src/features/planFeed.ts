@@ -120,3 +120,23 @@ export function daysFrom(from: DayKey, to: DayKey): DayKey[] {
   const n = Math.max(0, Math.min(dayNumber(to) - dayNumber(from), 366));
   return Array.from({ length: n + 1 }, (_, i) => addDays(from, i));
 }
+
+/* ---------- events and days off (wave 5, PR-B) ---------- */
+
+export type EventProblem = "title" | "person" | "time" | "long";
+/**
+ * What stops an event or a day off from being saved — the same rules as the server (calendar_events checks): an event
+ * has a name, a day off is always someone's, the end is after the start (an all-day one ends at a later midnight);
+ * name ≤ 200, description ≤ 4000.
+ */
+export function eventProblems(e: Pick<CalendarEvent, "kind" | "title" | "userId" | "startsAt" | "endsAt" | "description">): EventProblem[] {
+  const out: EventProblem[] = [];
+  const title = e.title?.trim() ?? "";
+  if (e.kind === "event" && !title) out.push("title");
+  if (e.kind === "time_off" && !e.userId) out.push("person");
+  const a = new Date(e.startsAt).getTime();
+  const b = new Date(e.endsAt).getTime();
+  if (!(Number.isFinite(a) && Number.isFinite(b) && b > a)) out.push("time");
+  if (title.length > 200 || (e.description?.length ?? 0) > 4000) out.push("long");
+  return out;
+}
