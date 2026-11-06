@@ -92,6 +92,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
     case "property": {
       // C2: a property lives only inside its client
       const cid = db.properties.find((p) => p.id === id)?.customerId;
+      // wave 4a-2 (13 §3.3): a row's list of the property (/property/<id>?s=visits) sits under its property
+      if (one(params.s) && cid) return { section: "clients", kind: "prop.card", up: { href: `/property/${id}`, label: K("prop.card") } };
       return { section: "clients", kind: "prop.card", up: cid ? toClient(cid) : { href: "/clients", label: K("tab.clients") } };
     }
     case "job":

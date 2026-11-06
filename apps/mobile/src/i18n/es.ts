@@ -1549,4 +1549,6 @@ export const es: Dict = {
   "client.f.taxExemptNoteHint": "Ej.: número de certificado de reventa",
   "client.f.taxExemptHint": "Los nuevos presupuestos y facturas de este cliente no llevan impuesto sobre ventas. Los documentos firmados no cambian.",
   "ue.taxExemptClient": "El cliente está exento: este presupuesto no lleva impuesto sobre ventas.",
+  "prop.row.visits": "Visitas",
+  "prop.noVisits": "Aún no hay visitas en esta propiedad",
 };
