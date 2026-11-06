@@ -51,6 +51,15 @@ describe("needs attention: visits (П3c)", () => {
     expect(tm.chip).toBe("late.unassignedTomorrowChip");
     expect(got.find((i) => i.refId === "t")!.score).toBeGreaterThan(tm.score);
   });
+  it("wave 5: «Не назначено» comes from one rule (schedule.ts unassignedSoon) — ids, scores, today first by time; a late assigned visit is «late», not «un»", () => {
+    const got = run([
+      V("tLate", { techId: null, assigneeIds: [], start: min(120) }),
+      V("tm", { techId: null, assigneeIds: [], start: day(1) }),
+      V("tEarly", { techId: null, assigneeIds: [], start: min(30) }),
+      V("late", { start: min(-16) }),
+    ]);
+    expect(got.map((i) => [i.id, i.score])).toEqual([["un-tEarly", 900], ["un-tLate", 900], ["un-tm", 880], ["late-late", 850]]);
+  });
   it("«Опаздывает» by the rule: not left / on the way; gone on site; no flag", () => {
     const got = run([
       V("notLeft", { start: min(-16) }),
