@@ -46,6 +46,21 @@ begin
   raise exception 'FAILED (expected error): % — %', p_msg, p_sql;
 end $$;
 
+-- Оператор должен упасть именно с этой ошибкой (текст по LIKE), а не с какой-то другой
+create function tst.fails_like(p_sql text, p_like text, p_msg text) returns void language plpgsql as $$
+begin
+  begin
+    execute p_sql;
+  exception when others then
+    if sqlerrm not like p_like then
+      raise exception 'FAILED (wrong error): % — got [%] %, expected like %', p_msg, sqlstate, sqlerrm, p_like;
+    end if;
+    raise notice 'EXPECTED [%] % -> %', p_msg, sqlstate, sqlerrm;
+    return;
+  end;
+  raise exception 'FAILED (expected error): % — %', p_msg, p_sql;
+end $$;
+
 -- Запись должна упасть ИЛИ не затронуть ни одной строки (RLS молча отфильтровала)
 create function tst.blocked(p_sql text, p_msg text) returns void language plpgsql as $$
 declare n bigint;
@@ -754,7 +769,19 @@ end $$;
 \echo 'T11 contract → invoices → receipts ok'
 
 -- ---------------------------------------------------------------- T12: simulated card payment on the client page
+-- off for every company until the operator marks it a demo (security audit 06.11, item 2; T54)
 reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb; v_inv uuid;
+begin
+  r := public.portal_estimate('tok_inv_0123456789abcdef');
+  perform tst.ok((r ->> 'simulated_pay')::boolean is false, 'a real company: the page shows no card button');
+  select (x ->> 'id')::uuid into v_inv from jsonb_array_elements(r -> 'invoices') x where x ->> 'kind' = 'final';
+  perform tst.fails_like(format($q$select public.portal_pay_simulated('tok_inv_0123456789abcdef', %L)$q$, v_inv), 'card payments are not available yet', 'a real company takes no simulated card payment');
+end $$;
+reset role;
+insert into app.company_flags (company_id, simulated_payments) values ('ca000000-0000-0000-0000-000000000000', true);
+set role anon;
 do $$
 declare r jsonb; v_inv uuid;
 begin
@@ -1598,8 +1625,8 @@ end $$;
 do $$ begin
   perform tst.ok(
     (select array_agg(k order by k) from jsonb_object_keys(public.portal_estimate('tok_lang_0123456789abcdef')) k)
-    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language') x),
-    'answer keys = base keys + doc_language, nothing else');
+    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language' union all select 'simulated_pay') x),
+    'answer keys = base keys + doc_language + simulated_pay (T54), nothing else');
 end $$;
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin
@@ -3902,5 +3929,53 @@ insert into public.invoices (id, company_id, number, customer_id, kind, status, 
 update public.invoices set status = 'void', void_reason = 'T53 wrong amount' where id = '15300000-0000-4000-8000-000000000003';
 select tst.ok((select status = 'void' from public.invoices where id = '15300000-0000-4000-8000-000000000003'), 'the owner voids a sent invoice to reissue it');
 \echo 'T53 money of a sent invoice is frozen, payments and void still work ok'
+
+
+-- ---------------------------------------------------------------- T54: the simulated card payment only for a demo company (security audit 06.11, item 2)
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
+select x.id::uuid, j.company_id, '', j.customer_id, j.id, 'progress', 'sent', 'T54 progress', 5400, 5400, now()
+  from public.jobs j join public.estimates e on e.id = j.estimate_id,
+       (values ('15400000-0000-4000-8000-000000000001'), ('15400000-0000-4000-8000-000000000002')) x(id)
+ where e.public_token = 'tok_inv_0123456789abcdef';
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb;
+begin
+  r := public.portal_estimate('tok_inv_0123456789abcdef');
+  perform tst.ok((r ->> 'simulated_pay')::boolean, 'a demo company: the page shows the card button');
+  perform tst.ok(r ? 'doc_language', 'the page keeps the client language (T19)');
+  perform tst.fails_like($q$select * from app.company_flags$q$, 'permission denied%', 'anon does not read the demo flags');
+  r := public.portal_pay_simulated('tok_inv_0123456789abcdef', '15400000-0000-4000-8000-000000000002');
+  perform tst.ok((select (x ->> 'paid')::bigint from jsonb_array_elements(r -> 'invoices') x where x ->> 'id' = '15400000-0000-4000-8000-000000000002') = 5400,
+                 'a demo company: the client pays by the simulated card');
+end $$;
+-- the company cannot switch the simulation on for itself
+:as_owner_a
+select tst.fails_like($q$select * from app.company_flags$q$, 'permission denied%', 'the owner does not read the demo flags');
+select tst.fails_like($q$insert into app.company_flags (company_id, simulated_payments) values ('ca000000-0000-0000-0000-000000000000', true)$q$, 'permission denied%', 'the owner does not switch the demo on');
+select tst.fails_like($q$select app.company_simulates_payments('ca000000-0000-0000-0000-000000000000')$q$, 'permission denied%', 'the flag function is not callable from the app');
+-- a revoked link takes no payment, even in a demo company
+:as_super
+do $$ declare v uuid := (select id from public.estimates where public_token = 'tok_inv_0123456789abcdef'); begin
+  perform set_config('app.signing_estimate', v::text, true);   -- as revoke_estimate_link does
+  update public.estimates set link_revoked_at = now() where id = v;
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails_like($q$select public.portal_pay_simulated('tok_inv_0123456789abcdef', '15400000-0000-4000-8000-000000000001')$q$, 'this link is closed', 'a revoked link takes no simulated payment');
+-- switched off again: no payment either
+:as_super
+do $$ declare v uuid := (select id from public.estimates where public_token = 'tok_inv_0123456789abcdef'); begin
+  perform set_config('app.signing_estimate', v::text, true);   -- as revoke_estimate_link does
+  update public.estimates set link_revoked_at = null where id = v;
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+update app.company_flags set simulated_payments = false where company_id = 'ca000000-0000-0000-0000-000000000000';
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails_like($q$select public.portal_pay_simulated('tok_inv_0123456789abcdef', '15400000-0000-4000-8000-000000000001')$q$, 'card payments are not available yet', 'the demo switched off takes no payment');
+:as_super
+select tst.ok((select paid_cents = 0 from public.invoices where id = '15400000-0000-4000-8000-000000000001'), 'T54: nothing was paid by the refused calls');
+\echo 'T54 simulated card payment only for a demo company ok'
 
 \echo 'ALL TESTS PASSED'
