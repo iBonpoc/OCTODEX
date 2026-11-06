@@ -28,11 +28,11 @@ describe("bottom tabs: the same 5 for every role (13 v2 §2.1, variant Б)", () 
 
 describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, §4)", () => {
   it("owner/admin «Ещё»: everything but the tabs", () => {
-    expect(menu("director")).toEqual(["leads", "jobs", "calls", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings"]);
+    expect(menu("director")).toEqual(["leads", "jobs", "calls", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings", "help"]);
   });
   it("the side menu: the tabs too, but never «Ещё» itself", () => {
     const side = menuGroups("director", true).flatMap((g) => g.items.map((i) => i.id));
-    expect(side).toEqual(["home", "messages", "plan", "leads", "jobs", "clients", "calls", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings"]);
+    expect(side).toEqual(["home", "messages", "plan", "leads", "jobs", "clients", "calls", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings", "help"]);
     expect(side).not.toContain("more");
   });
   it("office: no Team, no Company settings", () => {

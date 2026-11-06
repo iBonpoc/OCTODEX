@@ -15,6 +15,7 @@ import { GuardedScreen, RouteGuard } from "@/nav/RouteGuard";
 import { NavMenuProvider } from "@/nav/NavMenu";
 import { SideNav } from "@/nav/SideNav";
 import { SlashToSearch } from "@/nav/SearchEntry";
+import { LegalGate } from "@/nav/LegalGate";
 
 function Shell() {
   const { c, name } = useTheme();
@@ -31,6 +32,7 @@ function Shell() {
             <View style={{ flex: 1 }}>
               <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }} screenLayout={(props) => <GuardedScreen {...props} />} />
               <RouteGuard />
+              <LegalGate />
             </View>
           </View>
         </NavMenuProvider>
