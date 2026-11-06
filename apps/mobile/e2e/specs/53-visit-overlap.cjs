@@ -1,3 +1,4 @@
+const { atMinute, todayKey } = require("../companyTime.cjs");
 /**
  * «Накладка» on visit cards (docs/specs/03 П3c п. 8; spec 06 §5 «Визиты»), every view (3 widths × 2 themes).
  * - two open visits of one person that cross by [start, end) → «Накладка» (warn) on both: «План» day and week, the tech's «Мои выезды»;
@@ -15,8 +16,8 @@ exports.run = async (h) => {
   const tpl = db.visits.find((v) => (v.assigneeIds?.length ? v.assigneeIds : [v.techId]).includes(me.id) && v.jobId);
   h.expect(tpl, "demo has a job visit of mine");
   const cust = db.customers.find((c) => c.id === db.properties.find((x) => x.id === db.jobs.find((j) => j.id === tpl.jobId)?.propertyId)?.customerId);
-  // two visits of mine today, early in the day, crossing: 00:30–02:30 and 01:30–03:30 (test data)
-  const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
+  // two visits of mine today of the company, early in its day, crossing: 00:30–02:30 and 01:30–03:30 (test data, П4b)
+  const at = (h, m) => atMinute(todayKey(), h * 60 + m);
   const put = (b) => p.evaluate(({ tpl, me, a, b }) => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
     const base = { ...tpl, techId: me, assigneeIds: [me], step: "scheduled", closed: false, durationMin: 120, checklist: [], photos: [], amountDueCents: 0 };

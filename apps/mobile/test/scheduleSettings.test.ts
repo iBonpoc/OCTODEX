@@ -55,8 +55,8 @@ describe("schedule settings of the company", () => {
 
 describe("the form follows the company's hours (П4a)", () => {
   const db = { visits: [] };
-  const sat = new Date(2026, 10, 7); // a Saturday, phone calendar (the company zone in the form — П4b)
-  const sun = new Date(2026, 10, 8);
+  const sat = "2026-11-07"; // a Saturday of the company's calendar (П4b: a day key, not a phone date)
+  const sun = "2026-11-08";
   const past = new Date(2026, 0, 1).getTime();
   it("working days by the hours: Saturday is one by default, a day off is not", () => {
     expect(isWorkday(sat)).toBe(true);
@@ -65,12 +65,12 @@ describe("the form follows the company's hours (П4a)", () => {
   });
   it("slots inside the day's hours on the company's step", () => {
     const h = formHours({ ...BUSINESS_HOURS_DEFAULT, sat: [540, 780] }, 60, sat);
-    expect(freeSlots(db, null, sat, 60, { now: past, hours: h })).toEqual([540, 600, 660, 720]);
+    expect(freeSlots(db, null, sat, 60, { now: past, hours: h, tz: "America/Los_Angeles" })).toEqual([540, 600, 660, 720]);
   });
   it("a day off: no slots, and «Вне рабочих часов» if a time is set by hand", () => {
     const h = formHours(BUSINESS_HOURS_DEFAULT, 30, sun);
-    expect(freeSlots(db, null, sun, 60, { now: past, hours: h })).toEqual([]);
-    const start = new Date(2026, 10, 8, 10, 0).toISOString();
-    expect(formWarnings(db, { techId: null, start, durationMin: 60 }, { now: past, hours: h }).map((w) => w.key)).toContain("outOfHours");
+    expect(freeSlots(db, null, sun, 60, { now: past, hours: h, tz: "America/Los_Angeles" })).toEqual([]);
+    const start = "2026-11-08T10:00:00-08:00"; // Sunday 10:00 AM in LA
+    expect(formWarnings(db, { techId: null, start, durationMin: 60 }, { now: past, hours: h, tz: "America/Los_Angeles" }).map((w) => w.key)).toContain("outOfHours");
   });
 });

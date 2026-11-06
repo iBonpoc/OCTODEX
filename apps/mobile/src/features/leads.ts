@@ -5,7 +5,8 @@
  *   Reply timer runs around the clock until the first answered call / SMS / email / "I replied".
  *   "Whose turn" (leadTurn) — the one question the card answers: reply / do the step / wait for the client / snoozed.
  */
-import { isInspectionOf, isOpenVisit, visitPropertyId } from "@/features/schedule";
+import { isInspectionOf, isOpenVisit, sameDayIn, visitPropertyId } from "@/features/schedule";
+import { getZone } from "@/features/zone";
 import type { StatusName } from "@octo/design-tokens";
 import { LEAD_SETTINGS_DEFAULT, type LeadSettings } from "./leadSettings";
 import { DECLINE_REASONS, LOST_REASONS, type Customer, type DB, type Lead, type LeadStatus, type Person, type LostReason, type Role, type Source, type SourceKind, type Task } from "@/data/types";
@@ -139,14 +140,14 @@ export function leadTurn(db: DB, l: Lead, st: LeadSettings = LEAD_SETTINGS_DEFAU
   const task = openTasks(db, l.id)[0];
   if (task) {
     const due = task.dueAt ? new Date(task.dueAt).getTime() : null;
-    const today = due !== null && new Date(due).toDateString() === new Date(now).toDateString();
+    const today = due !== null && sameDayIn(due, now, getZone());
     return { kind: "step", dueAt: task.dueAt, title: task.title, status: due === null ? "neutral" : due < now ? "bad" : today ? "info" : "neutral" };
   }
   // the estimate visit is the step: a planned one for any open lead (also a second visit after the estimate went out);
   // once it has passed with no estimate yet ("booked"), it is overdue after a day of grace
   const visit = db.visits.filter((v) => isInspectionOf(db, v, l)).sort((a, b) => b.start.localeCompare(a.start))[0];
   const vStart = visit ? new Date(visit.start).getTime() : null;
-  if (visit && vStart! > now) return { kind: "step", dueAt: visit.start, status: new Date(vStart!).toDateString() === new Date(now).toDateString() ? "info" : "neutral" };
+  if (visit && vStart! > now) return { kind: "step", dueAt: visit.start, status: sameDayIn(vStart!, now, getZone()) ? "info" : "neutral" };
   if (l.status === "booked") {
     if (!visit) return { kind: "step", status: "info" };
     return { kind: "step", dueAt: visit.start, status: now - vStart! >= DAY ? "bad" : "warn" };

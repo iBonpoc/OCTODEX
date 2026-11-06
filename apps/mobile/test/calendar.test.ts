@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { addDays, addMonths, dayKeyOf, fromDayKey, monthGrid, weekDays, weekStart } from "../src/features/calendar";
+import { addDays, addMonths, fromDayKey, monthGrid, weekDays, weekStart } from "../src/features/calendar";
 
 describe("calendar math for the Plan", () => {
   it("week starts on Monday, including Sunday dates", () => {
@@ -28,6 +28,8 @@ describe("calendar math for the Plan", () => {
     expect(g.find((c) => c.inMonth)!.key).toBe("2026-11-01");
   });
   it("day key round-trip", () => {
-    expect(dayKeyOf(fromDayKey("2026-11-04"))).toBe("2026-11-04");
+    // noon UTC of the day: the label formatted in UTC is that day on any machine zone
+    expect(fromDayKey("2026-11-04").toISOString()).toBe("2026-11-04T12:00:00.000Z");
+    expect(new Intl.DateTimeFormat("en-US", { timeZone: "UTC", weekday: "short", month: "short", day: "numeric" }).format(fromDayKey("2026-11-08"))).toBe("Sun, Nov 8");
   });
 });

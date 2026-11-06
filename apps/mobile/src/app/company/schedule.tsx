@@ -43,7 +43,8 @@ export default function CompanySchedule() {
   }
   const set = (p: Partial<ScheduleSettings>) => setS((x) => ({ ...x, ...p }));
   const setDay = (d: WeekDay, h: BusinessHours[WeekDay]) => setHours((x) => ({ ...x, [d]: h }));
-  const clock = (m: number) => time(atMinute(new Date(2026, 0, 5), m));
+  // a wall-clock label: a minute of a fixed day on the company clock, shown on the same clock (no DST that day)
+  const clock = (m: number) => time(atMinute("2026-01-05", m));
   const save = () => {
     const undo = store.saveCompany({ timezone: tz, scheduleSettings: s, businessHours: hours });
     toast.show(store.online ? t("co.saved") : t("offline.queued"), undo);

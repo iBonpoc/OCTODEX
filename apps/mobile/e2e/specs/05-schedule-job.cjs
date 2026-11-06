@@ -11,10 +11,8 @@ async function countersign(h, estimateId) {
   await h.page.getByRole("button", { name: "Подписать договор" }).last().click(); await h.page.waitForTimeout(700);
 }
 
-// a working day (П4a: by default Mon–Sat, Sunday off = no slots); the form counts days on the browser's calendar
-const workdayOffset = (from) => {
-  for (let o = from; ; o++) { const d = new Date(); d.setDate(d.getDate() + o); if (d.getDay() !== 0) return o; }
-};
+// a working day (П4a: by default Mon–Sat, Sunday off = no slots); the form counts days on the company's calendar (П4b)
+const { minuteOf, workdayOffset } = require("../companyTime.cjs");
 
 exports.run = async (h) => {
   await h.go("/p/demo0handyman0estimate0000000001");
@@ -37,7 +35,7 @@ exports.run = async (h) => {
   db = await h.db();
   const v = db.visits.find((x) => x.jobId === job.id);
   h.expect(v && v.techId === "m-ivan", "visit with the tech");
-  h.expect(new Date(v.start).getHours() === 13 && new Date(v.start).getMinutes() === 0, `the picked slot: ${v.start}`);
+  h.expect(minuteOf(v.start) === 13 * 60, `the picked slot, 1:00 PM of the company: ${v.start}`);
   h.expect(v.durationMin === 135, `length of the job (120 + 15): ${v.durationMin}`);
   h.expect(v.note === "Gate code at the office" && !v.scope.includes("Gate code at the office"), "note for the tech: its own field (wave П3b)");
   h.expect(!v.customerNotifiedAt, "«Не сейчас»: the client is not marked as told");

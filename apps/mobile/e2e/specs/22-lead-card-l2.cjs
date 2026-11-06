@@ -2,10 +2,8 @@
  * Lead card, wave L2 (docs/14-leads-spec.md §7.2–7.3): what is missing, interest, "what next?" → book an estimate visit with
  * date / time / tech (S4: no second client when the lead already has one), status sheet → snooze, "lost or wait?", tabs.
  */
-// a working day (П4a: by default Mon–Sat, Sunday off = no slots); the form counts days on the browser's calendar
-const workdayOffset = (from) => {
-  for (let o = from; ; o++) { const d = new Date(); d.setDate(d.getDate() + o); if (d.getDay() !== 0) return o; }
-};
+// a working day (П4a: by default Mon–Sat, Sunday off = no slots); the form counts days on the company's calendar (П4b)
+const { minuteOf, workdayOffset } = require("../companyTime.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -49,7 +47,7 @@ exports.run = async (h) => {
   // S4: an inspection is a visit of the lead at its property, without a job (docs/specs/03 §1)
   const visit = db.visits.find((v) => v.leadId === tom.id && !v.jobId && v.propertyId === tom.propertyId);
   h.expect(tom.status === "booked", "lead → estimate visit booked (S4)");
-  h.expect(visit && visit.techId === "m-ivan" && new Date(visit.start).getHours() === 10 && new Date(visit.start).getMinutes() === 30, `visit with the picked tech and time: ${visit && visit.start}`);
+  h.expect(visit && visit.techId === "m-ivan" && minuteOf(visit.start) === 10 * 60 + 30, `visit with the picked tech and time: ${visit && visit.start}`);
   h.expect(visit.note === "Dog in the yard", "note for the tech (its own field, wave П3b)");
   h.expect(db.customers.length === clients0, "no second client for the same lead");
 

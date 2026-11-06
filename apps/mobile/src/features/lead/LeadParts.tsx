@@ -23,6 +23,7 @@ import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ItemCard, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
+import { dayAtHour } from "./bookRules";
 
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 const tel = (p?: string) => (p ?? "").replace(/[^\d+]/g, "");
@@ -487,13 +488,8 @@ export function TasksBlock({ subjectType, subjectId }: { subjectType: Task["subj
     </View>
   );
 }
-/** today + n days at h:00 (local) */
-const at = (n: number, h: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() + n);
-  d.setHours(h, 0, 0, 0);
-  return d.toISOString();
-};
+/** today of the company + n days at h:00 of its clock (П4b) */
+const at = (n: number, h: number) => dayAtHour(n, h);
 const WHEN = [
   { key: "today", n: 0, h: 17 },
   { key: "tomorrow", n: 1, h: 9 },
