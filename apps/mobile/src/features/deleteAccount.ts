@@ -19,6 +19,7 @@ export type AccountErrorKey =
   | "acct.err.fresh"
   | "acct.err.word"
   | "acct.err.lastOwner"
+  | "acct.err.transferFirst"
   | "acct.err.noPerson"
   | "acct.err.retry"
   | "acct.err.network"
@@ -31,6 +32,8 @@ export function accountErrorKey(message: string | null | undefined, status?: num
   if (status === 401 || m.includes("sign in first") || m.includes("jwt")) return "acct.err.signIn";
   if (m.includes("type the word")) return "acct.err.word";
   if (m.includes("at least one active owner")) return "acct.err.lastOwner";
+  // an active admin is there: the company is handed over, never closed under them (review #214 №2)
+  if (m.includes("transfer the company first")) return "acct.err.transferFirst";
   if (m.includes("no such person on the team")) return "acct.err.noPerson";
   if (m.includes("try again") || m.includes("deadlock") || m.includes("could not serialize") || m.includes("could not obtain lock")) return "acct.err.retry";
   if (m.includes("failed to fetch") || m.includes("network") || m.includes("fetch failed") || m.includes("load failed")) return "acct.err.network";

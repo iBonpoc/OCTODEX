@@ -2026,6 +2026,7 @@ export const es: Dict = {
   "acct.err.fresh": "El código caducó; pide uno nuevo",
   "acct.err.word": "Escribe la palabra tal como aparece",
   "acct.err.lastOwner": "Primero decide qué pasa con la empresa",
+  "acct.err.transferFirst": "La empresa tiene un administrador; primero traspásala",
   "acct.err.noPerson": "Esta persona no está en el equipo",
   "acct.err.retry": "No funcionó; inténtalo de nuevo",
   "acct.err.network": "Sin conexión con el servidor",

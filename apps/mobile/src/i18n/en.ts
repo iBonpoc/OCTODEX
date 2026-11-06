@@ -2026,6 +2026,7 @@ export const en: Dict = {
   "acct.err.fresh": "The code is too old — get a new one",
   "acct.err.word": "Type the word exactly as shown",
   "acct.err.lastOwner": "First decide what happens to the company",
+  "acct.err.transferFirst": "The company has an admin — hand it over first",
   "acct.err.noPerson": "This person is not on the team",
   "acct.err.retry": "It did not work — try again",
   "acct.err.network": "No connection to the server",

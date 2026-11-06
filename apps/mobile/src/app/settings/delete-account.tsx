@@ -128,7 +128,7 @@ export default function DeleteAccount() {
     }
     if (out.key === "acct.err.retry" || out.key === "acct.err.network") setFailed(true);
     if (out.key === "acct.err.fresh") setFresh(false);
-    if (out.key === "acct.err.lastOwner") {
+    if (out.key === "acct.err.lastOwner" || out.key === "acct.err.transferFirst") {
       setBlocked(out.companyId ?? null);
       void loadCompanies();
     }
@@ -200,11 +200,16 @@ export default function DeleteAccount() {
                 ) : (
                   <T v="caption" tone="mut">{t("acct.co.noAdmins")}</T>
                 )}
-                <RowView style={{ justifyContent: "space-between" }}>
-                  <T v="body" style={{ flex: 1 }}>{t("acct.co.close")}</T>
-                  <Toggle label={t("acct.co.close")} on={!!closing[co.companyId]} onChange={(v) => setClosing((x) => ({ ...x, [co.companyId]: v }))} />
-                </RowView>
-                {closing[co.companyId] ? <T v="caption" tone="warn">{t(co.others ? "acct.co.closeHint" : "acct.co.closeHintAlone", { n: co.others })}</T> : null}
+                {/* with an active admin the server never closes it (review #214 №2): only «Передать компанию» */}
+                {co.admins.length ? null : (
+                  <>
+                    <RowView style={{ justifyContent: "space-between" }}>
+                      <T v="body" style={{ flex: 1 }}>{t("acct.co.close")}</T>
+                      <Toggle label={t("acct.co.close")} on={!!closing[co.companyId]} onChange={(v) => setClosing((x) => ({ ...x, [co.companyId]: v }))} />
+                    </RowView>
+                    {closing[co.companyId] ? <T v="caption" tone="warn">{t(co.others ? "acct.co.closeHint" : "acct.co.closeHintAlone", { n: co.others })}</T> : null}
+                  </>
+                )}
               </View>
             </Card>
           ))}

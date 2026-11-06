@@ -42,6 +42,7 @@ describe("unit:deleteAccount — the server's answers → the app's words", () =
     ["sign in again first", 400, "acct.err.fresh"],
     ["type the word to confirm", 400, "acct.err.word"],
     ["the company keeps at least one active owner", 400, "acct.err.lastOwner"],
+    ["transfer the company first", 400, "acct.err.transferFirst"],
     ["no such person on the team", undefined, "acct.err.noPerson"],
     ["try again", 400, "acct.err.retry"],
     ["account deletion failed", 500, "acct.err.failed"],
