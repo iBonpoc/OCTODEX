@@ -66,14 +66,14 @@ describe("visit: late (П3c, one rule — schedule.ts lateKind)", () => {
   const ago = (m: number) => new Date(NOW - m * 60_000).toISOString();
   const v = (p: object) => ({ start: ago(20), step: "scheduled" as const, techId: "m1", checklist: [], ...p });
   it("appears at start + 15 min; «on the way» keeps it with its own words", () => {
-    expect(visitSigns(v({ start: ago(14) }), NOW)).toEqual([]);
-    expect(visitSigns(v({}), NOW)).toEqual([{ key: "late.notLeft", tone: "warn" }]);
-    expect(visitSigns(v({ step: "en_route" }), NOW)).toEqual([{ key: "late.enRoute", tone: "warn" }]);
+    expect(visitSigns(v({ start: ago(14) }), [], NOW)).toEqual([]);
+    expect(visitSigns(v({}), [], NOW)).toEqual([{ key: "late.notLeft", tone: "warn" }]);
+    expect(visitSigns(v({ step: "en_route" }), [], NOW)).toEqual([{ key: "late.enRoute", tone: "warn" }]);
   });
   it("goes away on site, on a ticked checklist item, or with nobody on the visit", () => {
-    expect(visitSigns(v({ step: "on_site" }), NOW)).toEqual([]);
-    expect(visitSigns(v({ checklist: [{ id: "c", label: "x", done: true }] }), NOW)).toEqual([]);
-    expect(visitSigns(v({ techId: null, assigneeIds: [] }), NOW)).toEqual([]);
+    expect(visitSigns(v({ step: "on_site" }), [], NOW)).toEqual([]);
+    expect(visitSigns(v({ checklist: [{ id: "c", label: "x", done: true }] }), [], NOW)).toEqual([]);
+    expect(visitSigns(v({ techId: null, assigneeIds: [] }), [], NOW)).toEqual([]);
   });
 });
 

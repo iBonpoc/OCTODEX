@@ -23,7 +23,7 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
   const calls = kind === "calls";
   const [filter, setFilter] = useState<CallFilter>("all");
   const [logging, setLogging] = useState<CallPreset | null>(null);
-  const all = commsLog(db, role, kind);
+  const all = commsLog(db, role, kind, t("acct.deletedName"));
   const items = calls && filter !== "all" ? all.filter((x) => x.outcome === filter) : all;
   const count = (f: CallFilter) => (f === "all" ? all.length : all.filter((x) => x.outcome === f).length);
   const record = () => setLogging({});

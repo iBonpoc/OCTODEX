@@ -10,15 +10,17 @@ import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 import { wasJustDragged } from "./dnd";
-import { assigneesOf, isAssigned, lateKind } from "@/features/schedule";
+import { assigneesOf, isAssigned, lateKind, liveAssignees, type People } from "@/features/schedule";
 import { isoDayKey, todayKey } from "@/features/calendar";
 import { overlapSigns } from "@/features/listSigns";
+import { memberLabel } from "@/features/team";
 
 /** Visit status → DS status color (4+1) and word. */
-export function visitStatus(v: Visit, now: number = Date.now(), lateAfterMin?: number): { status: StatusName; label: DictKey } {
-  if (!assigneesOf(v).length) return { status: "warn", label: "st.unassigned" };
+export function visitStatus(v: Visit, members: People, now: number = Date.now(), lateAfterMin?: number): { status: StatusName; label: DictKey } {
+  // nobody who can come — nobody, or only someone switched off or deleted (S22): one rule everywhere (schedule.ts)
+  if (!liveAssignees(v, members).length) return { status: "warn", label: "st.unassigned" };
   // one rule for the chip, the list sign, «Требует внимания» and the office notice (docs/specs/03 П3c)
-  const late = lateKind(v, now, lateAfterMin);
+  const late = lateKind(v, members, now, lateAfterMin);
   if (late) return { status: "warn", label: late === "en_route" ? "late.enRoute" : "late.notLeft" };
   const map: Record<VisitStep, { status: StatusName; label: DictKey }> = {
     scheduled: { status: "neutral", label: "st.scheduled" },
@@ -44,7 +46,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
   const { t, time, money } = useI18n();
   const { c } = useTheme();
   const { job, property, customer, tech } = visitContext(db, v);
-  const st = visitStatus(v, Date.now(), lateAfterOf(db));
+  const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
   const people = assigneesOf(v).map((id) => db.members.find((m) => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m);
   const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
   return (
@@ -100,7 +102,7 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
         <RowView>
           {tech ? <Avatar initials={tech.initials} s={component.avatar.sm} sub={tech.kind === "sub"} /> : null}
           <T v="caption" tone="mut">
-            {people.length ? people.map((m) => m.name).join(", ") : t("plan.unassigned")}
+            {people.length ? people.map((m) => memberLabel(m, t)).join(", ") : t("plan.unassigned")}
           </T>
         </RowView>
       ) : null}

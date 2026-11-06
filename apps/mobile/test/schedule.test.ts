@@ -44,19 +44,19 @@ describe("visit: what can happen to it", () => {
     const min = (m: number) => new Date(NOW - m * 60_000).toISOString();
     const sec = (s: number) => new Date(NOW - s * 1000).toISOString();
     expect(SCHEDULE_SETTINGS_DEFAULT.lateAfterMin).toBe(15);
-    expect(lateKind(V({ start: sec(14 * 60 + 59) }), NOW)).toBeNull();
-    expect(lateKind(V({ start: min(15) }), NOW)).toBe("not_left");
-    expect(lateKind(V({ start: min(40), step: "en_route" }), NOW)).toBe("en_route");
-    expect(visitLate(V({ start: min(40), step: "en_route" }), NOW)).toBe(true);
-    for (const step of ["on_site", "working", "signed", "paid", "done"] as const) expect(lateKind(V({ start: min(40), step }), NOW)).toBeNull();
-    expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: true }] }), NOW)).toBeNull();
-    expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: false }] }), NOW)).toBe("not_left");
-    expect(lateKind(V({ start: min(40), techId: null, assigneeIds: [] }), NOW)).toBeNull(); // nobody on it: «Не назначено»
-    expect(lateKind(V({ start: min(40), techId: null, assigneeIds: ["m2"] }), NOW)).toBe("not_left");
-    expect(lateKind(V({ start: min(40), closed: true }), NOW)).toBeNull();
-    expect(lateKind(V({ start: min(40), kind: "inspection" }), NOW)).toBe("not_left");
-    expect(lateKind(V({ start: min(40) }), NOW, 60)).toBeNull(); // the threshold is a parameter (setting — П4)
-    expect(visitLate(V({ start: at(1) }), NOW)).toBe(false);
+    expect(lateKind(V({ start: sec(14 * 60 + 59) }), [], NOW)).toBeNull();
+    expect(lateKind(V({ start: min(15) }), [], NOW)).toBe("not_left");
+    expect(lateKind(V({ start: min(40), step: "en_route" }), [], NOW)).toBe("en_route");
+    expect(visitLate(V({ start: min(40), step: "en_route" }), [], NOW)).toBe(true);
+    for (const step of ["on_site", "working", "signed", "paid", "done"] as const) expect(lateKind(V({ start: min(40), step }), [], NOW)).toBeNull();
+    expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: true }] }), [], NOW)).toBeNull();
+    expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: false }] }), [], NOW)).toBe("not_left");
+    expect(lateKind(V({ start: min(40), techId: null, assigneeIds: [] }), [], NOW)).toBeNull(); // nobody on it: «Не назначено»
+    expect(lateKind(V({ start: min(40), techId: null, assigneeIds: ["m2"] }), [], NOW)).toBe("not_left");
+    expect(lateKind(V({ start: min(40), closed: true }), [], NOW)).toBeNull();
+    expect(lateKind(V({ start: min(40), kind: "inspection" }), [], NOW)).toBe("not_left");
+    expect(lateKind(V({ start: min(40) }), [], NOW, 60)).toBeNull(); // the threshold is a parameter (setting — П4)
+    expect(visitLate(V({ start: at(1) }), [], NOW)).toBe(false);
   });
   it("overlaps by time for the same person, not by count per day", () => {
     const d = db({ visits: [V({ id: "a", start: at(2), durationMin: 60 }), V({ id: "b", start: at(5), durationMin: 60 }), V({ id: "c", techId: "m2", start: at(2) })] });

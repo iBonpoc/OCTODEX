@@ -106,7 +106,7 @@ describe("the Feed by the company's days (phone New York, company Los Angeles)",
       V("assigned", { start: "2026-11-06T05:45:00.000Z" }),
       V("done", { start: "2026-11-06T05:40:00.000Z", techId: null, assigneeIds: [], step: "done" }),
     ];
-    expect(unassignedSoon({ visits }, now, LA).map((x) => [x.v.id, x.dd])).toEqual([["today", 0], ["tomorrow", 1]]);
+    expect(unassignedSoon({ visits, members: [] }, now, LA).map((x) => [x.v.id, x.dd])).toEqual([["today", 0], ["tomorrow", 1]]);
   });
 });
 

@@ -13,7 +13,8 @@ import { AssignSheet } from "@/features/sheets";
 import { groupByDay, itemTimes, type PlanItem } from "@/features/planFeed";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
-import { assigneesOf, daysSince, unassignedSoon, visitWho, waitingJobs, type PlanWho } from "@/features/schedule";
+import { daysSince, unassignedSoon, visitWho, waitingJobs, type PlanWho } from "@/features/schedule";
+import { memberName } from "@/features/team";
 import { VisitFormSheet } from "@/features/VisitForm";
 import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -213,7 +214,7 @@ export function FeedView({ days, items, onEvent }: { days: DayKey[]; items: Plan
 function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) => void }) {
   const { db } = useStore();
   const { t, time } = useI18n();
-  const names = x.people.map((id) => db.members.find((m) => m.id === id)?.name).filter(Boolean).join(", ");
+  const names = x.people.map((id) => memberName(db, id, t)).filter(Boolean).join(", ");
   // the title starts with the start of the day's part (short on a phone); the end goes to the subtitle
   const { when, until } = itemTimes(x, time, t("plan5.allDay"));
   if (x.kind === "visit") {
@@ -221,14 +222,14 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
     const job = findJob(db, v.jobId);
     const { client } = visitWho(db, v);
     const property = db.properties.find((p) => p.id === visitPropertyId(db, v));
-    const st = visitStatus(v, Date.now(), lateAfterOf(db));
-    const status = assigneesOf(v).length ? st.status : "warn";
+    const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
+    const status = st.status;
     return (
       <ItemCard
         status={status}
         title={`${when} · ${client || "—"}`}
         subtitle={[until, v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"), job?.number, property?.address, names || t("plan.unassigned")].filter(Boolean).join(" · ")}
-        right={<StatusChip status={status} label={assigneesOf(v).length ? t(st.label) : t("st.unassigned")} />}
+        right={<StatusChip status={status} label={t(st.label)} />}
         onPress={() => router.push(`/visit/${v.id}`)}
       />
     );

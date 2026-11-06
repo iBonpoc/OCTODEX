@@ -8,6 +8,7 @@ import { Button, IconButton, Segmented, StatusChip, TextField } from "@/ui/contr
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, RowView, SectionTitle } from "@/ui/surfaces";
+import { memberName } from "@/features/team";
 
 /** Notes on a lead / client / property / job: "team" (everyone) or "only me" (author). Pinned first. */
 export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { subjectType: NoteSubject; subjectId: string; extraSubjects?: { type: NoteSubject; id: string }[] }) {
@@ -31,7 +32,7 @@ export function NotesBlock({ subjectType, subjectId, extraSubjects = [] }: { sub
     <View style={{ gap: space[2] }}>
       <SectionTitle title={t("notes.title")} right={notes.length ? <T v="caption" tone="mut">{notes.length}</T> : undefined} />
       {notes.map((n) => {
-        const author = db.members.find((m) => m.id === n.authorId)?.name;
+        const author = memberName(db, n.authorId, t);
         const mine = n.authorId === db.me;
         return (
           <Card key={n.id} inner>

@@ -9,6 +9,7 @@ import { T } from "@/ui/primitives";
 import { Card, CardList, Empty, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
+import { memberName } from "@/features/team";
 
 const PERIOD: Record<PaymentPeriod, DictKey> = { today: "mny.p.today", week: "mny.p.week", month: "mny.p.month", all: "mny.p.all" };
 const METHODS: PaymentMethod[] = ["card", "cash", "check", "zelle"];
@@ -52,7 +53,7 @@ export default function Payments() {
         facts={{
           receipt: x.receiptNumber,
           method: [t(`pay.${x.method}` as DictKey), x.reference === "stripe-simulated" ? t("pay.testMode") : x.reference].filter(Boolean).join(" · "),
-          by: x.receivedBy ? db.members.find((y) => y.id === x.receivedBy)?.name : undefined,
+          by: memberName(db, x.receivedBy, t),
           links: inv?.number,
         }}
         // contact buttons only open the phone / mail: nothing is written

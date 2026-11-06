@@ -1987,6 +1987,9 @@ export const ru = {
   "w6.call.save": "Сохранить звонок",
   "w6.call.f.all": "Все",
   "w6.call.min": "{n} мин",
+  // wave 7а-2b «Каркас»: account deletion (S22)
+  "acct.deletedName": "Удалённый пользователь",
+  "acct.takenOff": "Сняты: {names}",
 } as const;
 
 export type DictKey = keyof typeof ru;

@@ -24,6 +24,8 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { useTheme } from "@/theme/ThemeProvider";
 import type { StatusName } from "@octo/design-tokens";
+import { memberLabel } from "@/features/team";
+import { liveAssignees } from "@/features/schedule";
 
 type Tab = "overview" | "history" | "tasks" | "estimates" | "files";
 type SheetName = "won" | "close" | "reply" | "call" | "next" | "book" | "snooze" | "status" | "low" | null;
@@ -66,7 +68,7 @@ export default function LeadScreen() {
   const servable = canServe(db, l.customerId);
   const estimates = db.estimates.filter((e) => e.leadId === l.id || (l.customerId && e.customerId === l.customerId));
   const assignee = db.members.find((m) => m.id === l.assigneeId);
-  const events = leadTimeline(db, l, db.me);
+  const events = leadTimeline(db, l, db.me, t("acct.deletedName"));
 
   const makeEstimate = () => {
     const target = store.leadEstimateTarget(l.id);
@@ -111,7 +113,7 @@ export default function LeadScreen() {
         </RowView>
         {replied !== null ? <T v="caption" tone="mut">{t("lead.repliedIn", { time: fmtWait(replied, t) })}</T> : null}
         <T v="caption" tone="mut">
-          {assignee ? t("lead.worksOn", { name: assignee.name }) : t("lead.unassigned")}
+          {assignee ? t("lead.worksOn", { name: memberLabel(assignee, t) ?? "" }) : t("lead.unassigned")}
           {l.status === "won" ? ` · ${t(l.wonVia === "manual" ? "lead.wonManual" : "lead.wonApproval")}` : ""}
         </T>
         <ContactActions l={l} onCall={() => setSheet("call")} />
@@ -260,9 +262,9 @@ function LeadVisits({ leadId }: { leadId: string }) {
           return (
             <ItemCard
               key={v.id}
-              status={v.techId ? "info" : "warn"}
+              status={liveAssignees(v, db.members).length ? "info" : "warn"}
               title={`${day(v.start)} · ${time(v.start)}`}
-              subtitle={[v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : t("st.inspection"), tech?.name ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
+              subtitle={[v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : t("st.inspection"), memberLabel(tech, t) ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
               onPress={() => router.push(`/visit/${v.id}`)}
             />
           );

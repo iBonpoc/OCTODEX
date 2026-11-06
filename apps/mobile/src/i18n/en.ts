@@ -1988,4 +1988,7 @@ export const en: Dict = {
   "w6.call.save": "Save call",
   "w6.call.f.all": "All",
   "w6.call.min": "{n} min",
+  // wave 7а-2b «Каркас»: account deletion (S22)
+  "acct.deletedName": "Deleted user",
+  "acct.takenOff": "Taken off: {names}",
 };

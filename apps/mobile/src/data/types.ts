@@ -24,6 +24,9 @@ export interface Member {
   expiresAt?: string;
   /** wave 7-2: switched off by the owner/admin (membership «disabled»); always together with `pending` */
   disabled?: boolean;
+  /** wave 7а-2b (S22): deleted their account (membership «deleted»); always together with `pending`. The name is not in the
+   *  data (the server no longer gives it): screens show `memberName` / `memberLabel` (features/team.ts) → «Удалённый пользователь». */
+  deleted?: boolean;
   /* ---- signing for the company (docs/specs/07 §2.2 А, wave E2a) ---- */
   /** may sign contracts for the company (everyone by default; the owner can take it away) */
   canSignContracts?: boolean;
@@ -58,6 +61,10 @@ export interface Source {
 /** prospect: has an estimate but has not signed yet (not in the main client list); archived / do_not_service: closed */
 export const CUSTOMER_STATUSES = ["prospect", "active", "archived", "do_not_service"] as const;
 export type CustomerStatus = (typeof CUSTOMER_STATUSES)[number];
+/** a person in the company (story map §5 Membership): at work, switched off (S21), deleted their account (S22).
+ *  The app keeps it on Member as flags (`pending` + `disabled` / `deleted`); an invitation is an Invitation, not a status here. */
+export const MEMBERSHIP_STATUSES = ["active", "disabled", "deleted"] as const;
+export type MembershipStatus = (typeof MEMBERSHIP_STATUSES)[number];
 export interface Customer {
   id: ID;
   /** CLT-0001, assigned by the server (demo: by the app) */

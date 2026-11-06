@@ -20,6 +20,7 @@ import { PropertyPeopleSheet } from "@/features/client/PropertySheets";
 import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { CardList, Empty, ItemCard } from "@/ui/surfaces";
+import { memberName } from "@/features/team";
 
 /** the row's name: shared with the client card where the word is the same */
 export function propertyRowLabel(row: PropertyRow): DictKey {
@@ -154,7 +155,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
             <ItemCard
               key={v.id}
               title={`${day(v.start)} · ${time(v.start)}`}
-              subtitle={[v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : t("prop.h.visit"), db.members.find((m) => m.id === v.techId)?.name].filter(Boolean).join(" · ")}
+              subtitle={[v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : t("prop.h.visit"), memberName(db, v.techId, t)].filter(Boolean).join(" · ")}
               left={<Icon name="calendar" />}
               onPress={() => router.push(`/visit/${v.id}`)}
             />
@@ -193,7 +194,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
               <ItemCard
                 key={`v${h.visit.id}`}
                 title={`${day(h.at)} · ${time(h.at)}`}
-                subtitle={[t("prop.h.visit"), db.members.find((m) => m.id === h.visit.techId)?.name].filter(Boolean).join(" · ")}
+                subtitle={[t("prop.h.visit"), memberName(db, h.visit.techId, t)].filter(Boolean).join(" · ")}
                 left={<Icon name="calendar" />}
                 onPress={() => router.push(`/visit/${h.visit.id}`)}
               />

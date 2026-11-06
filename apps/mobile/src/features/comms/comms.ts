@@ -12,6 +12,7 @@ import { canSeeLead } from "@/features/leads";
 import { isAssigned } from "@/features/schedule";
 import { addDays, todayKey } from "@/features/calendar";
 import { dayKeyIn } from "@/features/zone";
+import { memberName } from "@/features/team";
 
 export type CommsKind = "calls" | "messages";
 const KINDS: Record<CommsKind, readonly Activity["kind"][]> = { calls: ["call"], messages: ["sms", "email"] };
@@ -45,7 +46,7 @@ export const CALL_OUTCOMES: readonly CallOutcome[] = ["answered", "no_answer", "
  * Newest first. The technician sees only his own (13 §2.1: «мастер видит звонки и сообщения по своим выездам»):
  * what he made, and what was said about his jobs and their clients.
  */
-export function commsLog(db: DB, role: Role, kind: CommsKind): CommsEntry[] {
+export function commsLog(db: DB, role: Role, kind: CommsKind, deletedWord = ""): CommsEntry[] {
   const kinds = KINDS[kind];
   const mine = role === "tech" ? techScope(db) : undefined;
   return db.activities
@@ -57,7 +58,7 @@ export function commsLog(db: DB, role: Role, kind: CommsKind): CommsEntry[] {
       const minutes = Number(a.meta?.duration_min);
       const person = a.contactId ? peopleOfSubject(db, a.subjectType, a.subjectId).find((p) => p.id === a.contactId)?.name : undefined;
       return {
-        id: a.id, kind: a.kind, at: a.at, who: s.who, href: s.href, by: db.members.find((m) => m.id === a.actorId)?.name,
+        id: a.id, kind: a.kind, at: a.at, who: s.who, href: s.href, by: memberName(db, a.actorId, deletedWord),
         ...(outcome ? { outcome } : {}), ...(person ? { person } : {}), ...(minutes > 0 ? { durationMin: minutes } : {}), ...(a.body ? { note: a.body } : {}),
       };
     });
