@@ -80,6 +80,7 @@ exports.run = async (h) => {
   if (sub) {
     await cardOf(sub.name).click();
     await sheet("member-sheet").waitFor({ timeout: 3000 });
+    await h.expectText(new RegExp(`Субподрядчик: ${sub.name}`), "the subcontractor's own sheet");
     h.expect((await sheet("member-sheet").getByRole("button", { name: "Отключить" }).count()) === 1, "a subcontractor can be switched off");
     h.expect((await sheet("member-sheet").getByPlaceholder("Должность (под подписью)").count()) === 0, "no signing fields for a subcontractor");
     await p.keyboard.press("Escape");

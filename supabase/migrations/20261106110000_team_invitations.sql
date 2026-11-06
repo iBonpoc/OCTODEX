@@ -201,6 +201,12 @@ begin
   if i.status = 'expired' or i.expires_at < now() then
     raise exception 'the invitation has expired' using errcode = '22023';
   end if;
+  -- the person who invited still may: an owner/admin (switched off or moved down — the link is dead); the right to sign — an owner
+  if i.invited_by is null or not exists (
+       select 1 from public.memberships x where x.company_id = i.company_id and x.user_id = i.invited_by and x.status = 'active'
+          and x.deleted_at is null and x.role in ('owner', 'admin') and (not i.can_sign_contracts or x.role = 'owner')) then
+    raise exception 'no such invitation' using errcode = '22023';
+  end if;
   -- already on the team (active or switched off): an old link neither brings a person back nor changes the role
   select * into m from public.memberships where company_id = i.company_id and user_id = v_me and deleted_at is null and status in ('active', 'disabled');
   if m.id is not null then
@@ -236,8 +242,9 @@ begin
   if m.id is null or m.status not in ('active', 'disabled') then
     raise exception 'no such person on the team' using errcode = '22023';
   end if;
-  if m.role = 'owner' and not app.has_role(p_company_id, array['owner']) then
-    raise exception 'only the owner disables an owner' using errcode = '42501';
+  -- an owner or an admin is switched off or back on by an owner only
+  if m.role in ('owner', 'admin') and not app.has_role(p_company_id, array['owner']) then
+    raise exception 'only the owner switches an owner or an admin' using errcode = '42501';
   end if;
   -- the company always keeps an active owner: lock its owners, then count the others (two owners at once — review #193)
   if m.role = 'owner' and p_status = 'disabled' then
@@ -246,6 +253,10 @@ begin
                     and deleted_at is null and id <> m.id) then
       raise exception 'the company keeps at least one active owner' using errcode = '42501';
     end if;
+  end if;
+  -- the caller's own right, again after the locks (they may have been switched off meanwhile)
+  if not app.has_role(p_company_id, array['owner', 'admin']) then
+    raise exception 'only the owner or an admin' using errcode = '42501';
   end if;
   -- the person's records stay with the company; only the access changes
   perform set_config('app.accepting_invite', 'on', true);
@@ -283,5 +294,7 @@ revoke insert on public.memberships from authenticated;
 -- ---- 8. A direct update of memberships: only the fields the app edits (review #193) ----
 -- before: a table-wide update grant — an admin could move a membership to another user_id or wake a deleted one
 revoke update on public.memberships from authenticated;
-grant update (role, title, his_registration_number, can_sign_contracts, color, share_location, permissions_override)
+-- not role: two owners demoting each other at once could leave the company without one (security-check 2); a role
+-- changes with its own function when the app gets that screen
+grant update (title, his_registration_number, can_sign_contracts, color, share_location)
   on public.memberships to authenticated;

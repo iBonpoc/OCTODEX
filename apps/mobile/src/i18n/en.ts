@@ -1121,6 +1121,7 @@ export const en: Dict = {
   /* «Каркас», волна 7-2: команда и приглашение (S21, 19) */
   "team.role": "Role",
   "team.needOnline": "Needs the network: the server makes the invitation link",
+  "team.subHint": "A subcontractor does not sign contracts for the company. Only the access is here.",
   "team.err.otherEmail": "This invitation is for another email. Sign in with the address it was sent to.",
   "team.err.expired": "The link has expired. Ask for a new one.",
   "team.err.already": "This person is already on the team.",

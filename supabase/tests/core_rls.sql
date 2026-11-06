@@ -497,8 +497,12 @@ do $$ begin
   perform tst.fails($q$update public.estimates set status = 'approved' where id = '0e1a0000-0000-0000-0000-000000000001'$q$, 'direct approve without the company signature');
   -- admin/owner: роль owner может выдать только owner; свою роль менять нельзя
   perform tst.fails($q$update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000001'$q$, 'owner changes own role');
-  update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002';
+  -- 7-2: a role is not a field a client writes (a race of two owners could leave none) — the fixture moves the dispatcher up
+  perform tst.fails($q$update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002'$q$, 'no direct role change');
 end $$;
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002';
+:as_owner_a
 :as_super
 -- fixture for the tests below (as a signing function would: definer role + this estimate marked)
 select set_config('app.signing_estimate', '0e1a0000-0000-0000-0000-000000000001', false);
@@ -3928,6 +3932,18 @@ reset role; set request.jwt.claim.sub = 'a4800000-0000-4000-8000-000000000005'; 
 select tst.ok((public.accept_invitation(:'t48_unconf') ->> 'role') = 'tech', 'confirmed — accepts');
 :as_super
 alter table auth.users drop column email_confirmed_at;
+-- an invitation dies with its inviter's right: an admin moved down — the admin-made link does not let in
+:as_office_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'down48@a.test', 'admin') ->> 'token' as t48_down \gset
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a4800000-0000-4000-8000-000000000006', 'down48@a.test', '{"full_name":"Dan Down"}');
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+reset role; set request.jwt.claim.sub = 'a4800000-0000-4000-8000-000000000006'; set role authenticated;
+select tst.fails(format('select public.accept_invitation(%L)', :'t48_down'), 'the inviter is no longer an admin: the link is dead');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select tst.fails($q$update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002'$q$, 'no direct role change (two owners could demote each other)');
 -- an admin switched off: the invitations they sent stop working
 :as_office_a
 select public.invite_member('ca000000-0000-0000-0000-000000000000', 'z48@a.test', 'tech') ->> 'id' as t48_byadmin \gset

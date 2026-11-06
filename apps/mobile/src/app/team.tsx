@@ -328,7 +328,7 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
       </Sheet>
     );
   return (
-    <Sheet visible={!!member} onClose={close} title={member ? `${t("team.member.title")}: ${member.name}` : t("team.member.title")} dirty={dirty} onSave={save}>
+    <Sheet visible={!!member} onClose={close} title={member ? `${t(member.kind === "sub" ? "team.sub" : "team.member.title")}: ${member.name}` : t("team.member.title")} dirty={dirty} onSave={save}>
       <View testID="member-sheet" style={{ gap: space[3] }}>
         {member?.kind !== "sub" ? (
           <>
@@ -351,7 +351,7 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
           </>
         ) : (
           // a subcontractor never signs for the company: nothing to edit here, only the access
-          <T v="body">{t("team.sub")}</T>
+          <T v="body">{t("team.subHint")}</T>
         )}
         {switchable && member?.id !== store.db.me ? (
           !sure ? (

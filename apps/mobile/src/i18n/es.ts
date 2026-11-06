@@ -1121,6 +1121,7 @@ export const es: Dict = {
   /* «Каркас», волна 7-2: команда и приглашение (S21, 19) */
   "team.role": "Rol",
   "team.needOnline": "Necesita conexión: el servidor crea el enlace de invitación",
+  "team.subHint": "Un subcontratista no firma contratos por la empresa. Aquí solo el acceso.",
   "team.err.otherEmail": "Esta invitación es para otro email. Entre con la dirección a la que llegó.",
   "team.err.expired": "El enlace venció. Pida uno nuevo.",
   "team.err.already": "Esta persona ya está en el equipo.",
