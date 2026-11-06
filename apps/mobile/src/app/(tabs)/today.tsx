@@ -140,7 +140,7 @@ export default function Today() {
             {techs.map((m) => {
               const vs = todayVisits(db, m.id);
               const { current, next } = crewNow(vs);
-              const st = current ? visitStatus(current, Date.now(), lateAfterOf(db)) : next ? visitStatus(next, Date.now(), lateAfterOf(db)) : null;
+              const st = current ? visitStatus(current, db.members, Date.now(), lateAfterOf(db)) : next ? visitStatus(next, db.members, Date.now(), lateAfterOf(db)) : null;
               const where = (v: typeof current) => {
                 if (!v) return undefined;
                 const { customer, property } = visitContext(db, v);

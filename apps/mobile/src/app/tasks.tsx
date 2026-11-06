@@ -7,6 +7,7 @@ import { CardList, Empty, Screen } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
 import { useToast } from "@/ui/overlays";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
+import { memberName } from "@/features/team";
 import {
   defaultTaskScope, filterTasks, matchTask, SUBJECT_KIND, TASK_STATE, taskCounts, taskProgress, taskState, taskSubject, taskWhen, tasksOf,
   type TaskFilter, type TaskScope,
@@ -38,7 +39,7 @@ export default function Tasks() {
   const card = (x: Task) => {
     const st = TASK_STATE[taskState(x, now)];
     const s = taskSubject(db, x);
-    const who = db.members.find((m) => m.id === x.assigneeId)?.name;
+    const who = memberName(db, x.assigneeId, t);
     const when = taskWhen(x);
     return (
       <ListCard

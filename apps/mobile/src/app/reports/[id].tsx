@@ -10,6 +10,7 @@ import { Button, Segmented } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { Card, CardList, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { memberName } from "@/features/team";
 
 const TITLE: Record<ReportId, DictKey> = { owed: "rpt.owed.title", collected: "rpt.collected.title", sales: "rpt.sales.title", sources: "rpt.sources.title" };
 const PERIOD: Record<PaymentPeriod, DictKey> = { today: "mny.p.today", week: "mny.p.week", month: "mny.p.month", all: "mny.p.all" };
@@ -31,7 +32,7 @@ export default function Report() {
     );
   const p = asPaymentPeriod(pParam);
   const custName = (cid: string) => db.customers.find((c) => c.id === cid)?.name ?? "—";
-  const personName = (k: string) => (k === UNKNOWN ? t("rpt.unknownPerson") : (db.members.find((m) => m.id === k)?.name ?? "—"));
+  const personName = (k: string) => (k === UNKNOWN ? t("rpt.unknownPerson") : (memberName(db, k, t) ?? "—"));
   const sourceName = (k: string) => (k === REPEAT ? t("rpt.repeat") : (db.sources.find((s) => s.id === k)?.name ?? "—"));
   const method = (k: string) => t(`pay.${k}` as DictKey);
   const csvBtn = (rows: (string | number)[][], header: string[]) =>

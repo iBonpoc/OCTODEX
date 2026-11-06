@@ -4,7 +4,7 @@ import type { DB, ID, Role } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
 import { leadSettingsOf } from "./leadSettings";
 import { canCountersign } from "./estimateSign";
-import { assigneesOf, canPlan, dayDiffIn, isOpenVisit, lateToday, unassignedSoon, visitWho } from "./schedule";
+import { canPlan, liveAssignees, dayDiffIn, isOpenVisit, lateToday, unassignedSoon, visitWho } from "./schedule";
 import { companyTz, scheduleSettingsOf } from "./scheduleSettings";
 import { dayKeyIn } from "./zone";
 import { jobAwaitingClose } from "@/features/jobDone";
@@ -90,12 +90,12 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       });
     }
     for (const v of db.visits) {
-      if (!isOpenVisit(v) || !assigneesOf(v).length) continue;
+      if (!isOpenVisit(v) || !liveAssignees(v, db.members).length) continue;
       const dd = dayDiffIn(v.start, now, tz);
       // yesterday too: a visit of 11:50 PM is still running late after the company's midnight (lateToday decides)
       if (dd !== 0 && dd !== 1 && dd !== -1) continue;
       const { client, tech } = visitWho(db, v);
-      const late = lateToday(v, now, sch, tz);
+      const late = lateToday(v, db.members, now, sch, tz);
       if (late)
         out.push({ id: `late-${v.id}`, kind: "late", refId: v.id, name: tech, label: "att.late", params: { name: `${tech} → ${client}` }, chip: late === "en_route" ? "late.enRoute" : "late.notLeft", status: "warn", score: 850 });
     }

@@ -18,6 +18,7 @@ import { leadStatusView, needsNextStep, openTasks, sourceName, waitingMinutes, w
 import { ListCard, type CardSign } from "@/ui/listCard";
 import type { ContactAction, Density, FactKey } from "@/ui/listCardLayout";
 import type { DB } from "@/data/types";
+import { memberName } from "@/features/team";
 
 type T = ReturnType<typeof useI18n>["t"];
 
@@ -74,7 +75,7 @@ export function LeadListCard({ l, density, showResp, onStatus, onContact, onRepl
         addr,
         src: `${sourceName(db, l.sourceId)}${cost}`,
         svc: l.service ?? l.message,
-        resp: showResp ? db.members.find((m) => m.id === l.assigneeId)?.name : undefined,
+        resp: showResp ? memberName(db, l.assigneeId, t) : undefined,
         next: task ? [task.title, task.dueAt ? day(task.dueAt) : ""].filter(Boolean).join(" · ") : undefined,
       }}
       contact={{ phone: l.phone, email: l.email, addr }}
