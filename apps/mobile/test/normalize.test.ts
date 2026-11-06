@@ -68,6 +68,9 @@ function beforeWaveP1(): DB {
   delete d.cancelledJobs;
   delete d.files;
   delete d.jobLines;
+  delete d.calendarEvents;
+  delete d.customFields;
+  delete d.customFieldValues;
   d.jobs = (d.jobs as Record<string, unknown>[]).map(({ number: _n, customerId: _c, jobTypeId: _t, ...j }) => j);
   return d as unknown as DB;
 }
@@ -93,6 +96,9 @@ describe("wave П-1: old saved data without the new fields", () => {
     expect(db.cancelledJobs).toEqual([]);
     expect(db.files).toEqual([]);
     expect(db.jobLines).toEqual([]);
+    expect(db.calendarEvents).toEqual([]);
+    expect(db.customFields).toEqual([]);
+    expect(db.customFieldValues).toEqual([]);
   });
   it("today's data stays as it is", () => {
     const seed = makeSeed();

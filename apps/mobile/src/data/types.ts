@@ -375,6 +375,49 @@ export interface Task {
   dueAt?: string;
   assigneeId?: ID;
   doneAt?: string;
+  /** wave П-2b (13 §3.7): a task with a time shows in the Plan; end needs a start (server: tasks_time_order) */
+  startsAt?: string;
+  endsAt?: string;
+  allDay?: boolean;
+  description?: string;
+}
+
+/** An event or a day off (wave П-2b, server: calendar_events). userId absent = the whole company (an event only).
+ *  The office sees all; a tech sees his own and the company's. Not a status. */
+export type CalendarEventKind = "event" | "time_off";
+export interface CalendarEvent {
+  id: ID;
+  kind: CalendarEventKind;
+  userId?: ID;
+  title?: string;
+  description?: string;
+  startsAt: string;
+  endsAt: string;
+  allDay: boolean;
+}
+
+/** The company's own field of a client or a job (wave П-2b, 13 §3.10, server: custom_fields). */
+export const CUSTOM_FIELD_TYPES = ["text", "long_text", "number", "checkbox", "select", "date", "file", "multiselect"] as const;
+export type CustomFieldType = (typeof CUSTOM_FIELD_TYPES)[number];
+export interface CustomField {
+  id: ID;
+  entity: "customer" | "job";
+  label: string;
+  type: CustomFieldType;
+  /** choices of a list (select / multiselect) */
+  options: string[];
+  group?: string;
+  searchable: boolean;
+  position: number;
+  archivedAt?: string;
+}
+/** A value: string (text, long_text, select, date YYYY-MM-DD, file id), number, boolean, or string[] (multiselect). */
+export type CustomFieldValueData = string | number | boolean | string[];
+export interface CustomFieldValue {
+  id: ID;
+  fieldId: ID;
+  entityId: ID;
+  value: CustomFieldValueData;
 }
 
 /** History line: contact attempts, status changes, assignment, edits. Notes, estimates and visits join the timeline from their own tables. */
@@ -616,6 +659,8 @@ export interface Invoice {
   /** what the client sees: "Deposit", "Progress: rough-in", "Final balance" */
   title?: string;
   sentAt?: string;
+  /** before tax (server: invoices.subtotal_cents) — «revenue» in reports (PRD 14 §7, wave 8) */
+  subtotalCents?: number;
 }
 
 /** One payment = one receipt (number RCT-… assigned by the server; locally in demo). */
@@ -629,6 +674,10 @@ export interface Payment {
   receiptNumber?: string;
   /** check number, Zelle confirmation… */
   reference?: string;
+  /** who took it (server: payments.received_by = users.id) — «collected by person» (wave 8) */
+  receivedBy?: ID;
+  /** already taken off amountCents (amountCents is net); > 0 = partially refunded (wave 8) */
+  refundedCents?: number;
 }
 
 export type ExpenseCategory = "materials" | "fuel" | "dump" | "tools" | "other";
@@ -675,6 +724,10 @@ export interface DB {
   files?: FileItem[];
   /** wave П-2a: lines of jobs without an estimate (absent in old saved data → []) */
   jobLines?: JobLineItem[];
+  /** wave П-2b: events and days off; own fields and their values (absent in old saved data → []) */
+  calendarEvents?: CalendarEvent[];
+  customFields?: CustomField[];
+  customFieldValues?: CustomFieldValue[];
   /** directions of the business of the company (docs/specs/11-trade.md); archived ones stay for history */
   serviceCategories: ServiceCategory[];
   tasks: Task[];

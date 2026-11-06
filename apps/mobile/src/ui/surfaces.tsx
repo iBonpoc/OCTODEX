@@ -4,7 +4,6 @@ import { useCallback, useEffect, useRef, useState, type ComponentRef, type React
 import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
-import { MenuButton } from "@/nav/NavMenu";
 import { isTabScreen } from "@/nav/roles";
 import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
@@ -562,12 +561,23 @@ export function Screen({
           </RowView>
         </>
       ) : (
-        /* tab root: the big title is where you are; phone: ☰ on the left (docs/specs/13 §2.2).
+        /* tab root: the big title is where you are (docs/specs/13 §2.2; no ☰ since variant Б).
            The screen's actions wrap under the title when the row is too narrow (Plan at 390), never squeeze it. */
         <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, flexWrap: "wrap", rowGap: space[2] }}>
           <RowView style={{ flexGrow: 1, flexShrink: 0, maxWidth: "100%", gap: space[1] }}>
-            {/* only in the app's own places: a tab or a ☰ root — never on the client page /p or sign-in */}
-            {wide || !(menuRoot || isTabScreen(routeName)) ? null : <MenuButton />}
+            {/* phone, a section opened from «Ещё» outside the tabs (Jobs, Money, Catalog…): «‹ Ещё» — no ☰ any more (variant Б) */}
+            {!wide && menuRoot && !isTabScreen(routeName) ? (
+              <Press
+                testID="back-more"
+                onPress={() => go("/more")}
+                visibleHeight={component.dockBtn}
+                accessibilityRole="button"
+                accessibilityLabel={t("nav.more")}
+                style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}
+              >
+                <Icon name="chevronLeft" s={size.iconMd} color={c.ink} />
+              </Press>
+            ) : null}
             <View ref={titleRef} role="heading" aria-level={1} tabIndex={-1} style={[{ flexShrink: 1 }, noFocusRing]}>
               <T v="display" numberOfLines={1}>
                 {title}

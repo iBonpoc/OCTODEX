@@ -5,5 +5,6 @@ export * from "./estimate.js";
 export * from "./gutterEstimate.js";
 export * from "./custom.js";
 export * from "./contract.js";
+export * from "./reports.js";
 export * from "./jobLines.js";
 export const ENGINE_VERSION = "0.1.0";
