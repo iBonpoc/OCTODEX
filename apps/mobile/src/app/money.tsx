@@ -14,6 +14,7 @@ import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ItemCard, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
 import { dayKeyIn, getZone, zonedFormat } from "@/features/zone";
+import { memberName } from "@/features/team";
 
 /** desktop row columns for expenses */
 const EXP_COLUMNS: FactKey[] = ["work", "by"];
@@ -43,7 +44,7 @@ export default function Money() {
         value={`−${money(x.amountCents)}`}
         // category first, «no receipt» as a grey tag: not a status (map §5 has no expense status)
         tags={[t(`exp.cat.${x.category}`), ...(x.receiptUri ? [] : [t("card.tag.noReceipt")])]}
-        facts={{ work: job ? [job.title, client?.name].filter(Boolean).join(" · ") : t("card.noJob"), by: db.members.find((m) => m.id === x.memberId)?.name }}
+        facts={{ work: job ? [job.title, client?.name].filter(Boolean).join(" · ") : t("card.noJob"), by: memberName(db, x.memberId, t) }}
         density={device === "desktop" ? "row" : "rich"}
         columns={EXP_COLUMNS}
       />

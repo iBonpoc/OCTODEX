@@ -20,6 +20,21 @@ export const inviteLink = (origin: string, token: string) => `${origin.replace(/
 /** a usable email: something@domain.tld */
 export const validInviteEmail = (email: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim());
 
+/**
+ * The name of a person on screen (wave 7а-2b, S22). Someone who deleted their account has no name in the data (the
+ * server does not give it, and a translated word must not sit in the cache or reach a client's PDF): they are
+ * «Удалённый пользователь» in the viewer's language. `deleted` — `t` of the screen, or the ready word for pure code.
+ * Undefined for an unknown id, so `?? fallback` still works.
+ */
+export type DeletedWord = string | ((key: "acct.deletedName") => string);
+export function memberLabel(m: Pick<Member, "name" | "deleted"> | null | undefined, deleted: DeletedWord): string | undefined {
+  if (!m) return undefined;
+  if (m.deleted) return typeof deleted === "string" ? deleted : deleted("acct.deletedName");
+  return m.name;
+}
+export const memberName = (db: Pick<DB, "members">, id: string | null | undefined, deleted: DeletedWord): string | undefined =>
+  id ? memberLabel(db.members.find((m) => m.id === id), deleted) : undefined;
+
 export type TeamState = "active" | "pending" | "expired" | "disabled";
 export function teamState(m: Member, now = Date.now()): TeamState {
   if (m.disabled) return "disabled";
@@ -27,10 +42,11 @@ export function teamState(m: Member, now = Date.now()): TeamState {
   return "active";
 }
 
-/** «Команда»: the people at work first, then the invited, then the switched off */
+/** «Команда»: the people at work first, then the invited, then the switched off. Deleted accounts are not on the team
+ *  (S22): they stay in `members` only so old records find them. */
 export function teamList(db: DB, now = Date.now()): Member[] {
   const order: Record<TeamState, number> = { active: 0, pending: 1, expired: 1, disabled: 2 };
-  return db.members.map((m, i) => ({ m, i })).sort((a, b) => order[teamState(a.m, now)] - order[teamState(b.m, now)] || a.i - b.i).map((x) => x.m);
+  return db.members.filter((m) => !m.deleted).map((m, i) => ({ m, i })).sort((a, b) => order[teamState(a.m, now)] - order[teamState(b.m, now)] || a.i - b.i).map((x) => x.m);
 }
 
 /** who may be switched off by me: not myself, not the owner (unless I am the owner — the server checks the same) */

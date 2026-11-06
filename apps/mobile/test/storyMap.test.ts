@@ -7,8 +7,8 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { CUSTOMER_STATUSES, ESTIMATE_STATUSES, JOB_STATUSES, LEAD_STATUSES, VISIT_STATUSES } from "../src/data/types";
-import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, leadStatusToDb } from "../src/cloud/statusMap";
+import { CUSTOMER_STATUSES, ESTIMATE_STATUSES, JOB_STATUSES, LEAD_STATUSES, MEMBERSHIP_STATUSES, VISIT_STATUSES } from "../src/data/types";
+import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, leadStatusToDb, membershipDbOutOfList, membershipStatus } from "../src/cloud/statusMap";
 
 const ROOT = path.resolve(__dirname, "../../..");
 const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
@@ -87,6 +87,8 @@ describe("story map §5: statuses", () => {
     // a cancelled job has no app status: it leaves the list (wave П-1, 13 §5), it is not "done"
     { entity: "Job", app: JOB_STATUSES as readonly string[], table: "jobs", toApp: jobStatus as Record<string, string>, outOfList: jobDbCancelled },
     { entity: "Customer", app: CUSTOMER_STATUSES as readonly string[], table: "customers", toApp: customerStatus as Record<string, string> },
+    // wave 7а-2b (S22): an invited membership is not a person in the app (the invitation is), it leaves the list
+    { entity: "Membership", app: MEMBERSHIP_STATUSES as readonly string[], table: "memberships", toApp: membershipStatus as Record<string, string>, outOfList: membershipDbOutOfList },
   ];
   for (const c of cases) {
     it(`${c.entity}: the map lists exactly the app statuses`, () => {

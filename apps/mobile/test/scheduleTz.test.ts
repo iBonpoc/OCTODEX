@@ -48,25 +48,25 @@ describe("the company's day, not the phone's (phone New York, company Los Angele
   it("«Опаздывает» across the company's midnight: an 11:50 PM visit of 60 min is still late at 12:10 AM", () => {
     const now = new Date("2026-11-06T08:10:00.000Z").getTime(); // LA 12:10 AM Nov 6; NY 3:10 AM Nov 6
     const v = V("z", { start: "2026-11-06T07:50:00.000Z" }); // LA 11:50 PM Nov 5, planned till 12:50 AM Nov 6
-    expect(lateToday(v, now, { lateAfterMin: 15 }, LA)).toBe("not_left");
+    expect(lateToday(v, [], now, { lateAfterMin: 15 }, LA)).toBe("not_left");
     expect(visitItems([v], now).map((i) => i.refId)).toEqual(["z"]);
     expect(lateNotices({ ...base, company: company(), visits: [v] } as DB, "director", now).map((n) => n.visitId)).toEqual(["z"]);
     // it stays for the whole day it reaches, until «on site»
     const noon = new Date("2026-11-06T20:00:00.000Z").getTime(); // LA noon Nov 6
-    expect(lateToday(v, noon, { lateAfterMin: 15 }, LA)).toBe("not_left");
-    expect(lateToday({ ...v, step: "on_site" }, now, { lateAfterMin: 15 }, LA)).toBeNull();
+    expect(lateToday(v, [], noon, { lateAfterMin: 15 }, LA)).toBe("not_left");
+    expect(lateToday({ ...v, step: "on_site" }, [], now, { lateAfterMin: 15 }, LA)).toBeNull();
   });
   it("a visit without a length still reaches today through the threshold: 11:55 PM + 15 min", () => {
     const now = new Date("2026-11-06T08:12:00.000Z").getTime(); // LA 12:12 AM Nov 6
     const v = V("w", { start: "2026-11-06T07:55:00.000Z", durationMin: 0 }); // LA 11:55 PM Nov 5 → late at 12:10 AM
-    expect(lateToday(v, now, { lateAfterMin: 15 }, LA)).toBe("not_left");
+    expect(lateToday(v, [], now, { lateAfterMin: 15 }, LA)).toBe("not_left");
   });
   it("a visit that ended before the company's midnight is not «running late» today (a matter of «Работы»)", () => {
     const now = new Date("2026-11-06T08:10:00.000Z").getTime(); // LA 12:10 AM Nov 6
     const morning = V("m", { start: "2026-11-05T16:00:00.000Z" }); // LA 8:00 AM Nov 5, 60 min
     const evening = V("e", { start: "2026-11-06T06:30:00.000Z", durationMin: 90 }); // LA 10:30 PM – 12:00 AM: ends at midnight
-    expect(lateToday(morning, now, { lateAfterMin: 15 }, LA)).toBeNull();
-    expect(lateToday(evening, now, { lateAfterMin: 15 }, LA)).toBeNull();
+    expect(lateToday(morning, [], now, { lateAfterMin: 15 }, LA)).toBeNull();
+    expect(lateToday(evening, [], now, { lateAfterMin: 15 }, LA)).toBeNull();
     expect(visitItems([morning, evening], now)).toEqual([]);
     expect(lateNotices({ ...base, company: company(), visits: [morning, evening] } as DB, "director", now)).toEqual([]);
   });

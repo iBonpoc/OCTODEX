@@ -190,6 +190,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const sourceName = new Map(sources.map((r) => [s(r.id), s(r.name)]));
   // wave 7-2 (S21): pending invitations (RLS shows them to the owner and admins only); a failure here never breaks the load
   const invites = await pages<Row>(() => supabase.from("invitations").select("id, email, name, role, expires_at").eq("company_id", companyId).eq("status", "pending"), byId).catch(() => [] as Row[]);
+  // wave 7а-2b (S22): people who deleted their account — their records stay with the company; the name is not given
+  // (public.users is anonymised and not shared), screens say «Удалённый пользователь» (features/team.ts memberName).
+  // A failure here never breaks the load.
+  const gone = await pages<Row>(() => supabase.from("memberships").select("user_id, role").eq("company_id", companyId).eq("status", "deleted"), byId).catch(() => [] as Row[]);
   const all: Member[] = mems.map((m) => {
     const u = (Array.isArray(m.users) ? m.users[0] : m.users) as Row | null;
     const name = s(u?.full_name) || s(u?.email) || "—";
@@ -205,6 +209,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   });
   const members: Member[] = [
     ...all,
+    ...deletedMembers(gone, new Set(all.map((m) => m.id))),
     ...invites.map((r): Member => {
       const name = s(r.name) || s(r.email);
       return {
@@ -591,4 +596,17 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       };
     }),
   };
+}
+
+/** memberships «deleted» → people kept only so old records find them (S22): out of every picker (`pending`), off the team */
+export function deletedMembers(rows: readonly Row[], known: ReadonlySet<string> = new Set()): Member[] {
+  const seen = new Set(known);
+  const out: Member[] = [];
+  for (const r of rows) {
+    const id = s(r.user_id);
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, name: "", initials: "—", kind: r.role === "subcontractor" ? "sub" : "employee", roles: appRoles(r.role as DbRole), pending: true, deleted: true });
+  }
+  return out;
 }

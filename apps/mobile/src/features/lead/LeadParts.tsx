@@ -25,6 +25,7 @@ import { Card, CardList, Divider, Empty, ItemCard, ListRow, RowView, SectionTitl
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { dayAtHour } from "./bookRules";
 import { TaskSheet } from "@/features/tasks/TaskSheet";
+import { memberLabel, memberName } from "@/features/team";
 
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 const tel = (p?: string) => (p ?? "").replace(/[^\d+]/g, "");
@@ -199,7 +200,7 @@ export function LeadOverview({ l }: { l: Lead }) {
         ) : null}
         <Divider />
         <ListRow
-          title={assignee?.name ?? t("lead.unassigned")}
+          title={memberLabel(assignee, t) ?? t("lead.unassigned")}
           subtitle={t("lead.assignee")}
           left={assignee ? <Avatar initials={assignee.initials} /> : <Icon name="user" />}
           onPress={staff ? () => setEdit("assignee") : undefined}
@@ -458,7 +459,7 @@ export function TasksBlock({ subjectType, subjectId }: { subjectType: Task["subj
         key={x.id}
         status={x.doneAt ? "ok" : overdue ? "bad" : undefined}
         title={x.title}
-        subtitle={[x.dueAt ? `${day(x.dueAt)} ${time(x.dueAt)}` : t("task.noDate"), who?.name].filter(Boolean).join(" · ")}
+        subtitle={[x.dueAt ? `${day(x.dueAt)} ${time(x.dueAt)}` : t("task.noDate"), memberLabel(who, t)].filter(Boolean).join(" · ")}
         left={
           <IconButton
             icon={x.doneAt ? "check" : "clock"}
@@ -495,7 +496,7 @@ const at = (n: number, h: number) => dayAtHour(n, h);
 export function LeadHistory({ l }: { l: Lead }) {
   const { db } = useStore();
   const { t, day, time } = useI18n();
-  const items = leadTimeline(db, l, db.me);
+  const items = leadTimeline(db, l, db.me, t("acct.deletedName"));
   const text = (e: TimelineEntry) => {
     const p: Record<string, string> = { ...(e.params ?? {}) };
     if (p.status) p.status = t(p.status as DictKey);
@@ -514,7 +515,7 @@ export function LeadHistory({ l }: { l: Lead }) {
               <T v="body" w="medium">{text(e)}</T>
               {e.body ? <T v="body" tone="mut">{e.body}</T> : null}
               <T v="micro" tone="mut">
-                {[`${day(e.at)} ${time(e.at)}`, db.members.find((m) => m.id === e.actorId)?.name].filter(Boolean).join(" · ")}
+                {[`${day(e.at)} ${time(e.at)}`, memberName(db, e.actorId, t)].filter(Boolean).join(" · ")}
               </T>
             </View>
           </RowView>

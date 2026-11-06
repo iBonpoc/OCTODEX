@@ -7,7 +7,8 @@ import type { DB, Estimate, EstimateDoc } from "@/data/types";
 import { clientDoc } from "@/features/estimateDoc";
 import { docLanguageFor } from "@/data/people";
 import { linkOpen } from "@/features/estimateSign";
-import type { DocLang } from "@/i18n/translate";
+import { tFor, type DocLang } from "@/i18n/translate";
+import { memberName } from "@/features/team";
 import { supabase } from "./client";
 
 export interface PortalData {
@@ -139,7 +140,9 @@ export function portalFromEstimate(db: DB, e: Estimate, companyName: string): Po
     approval: e.approval
       ? {
           optionId: e.approval.optionId, addonIds: e.approval.addonIds, signerName: e.approval.signerName, signedAt: e.approval.at, signature: e.approval.signature, totalCents: e.approval.totalCents, depositCents: e.approval.depositCents,
-          channel: e.approval.channel, deviceUser: db.members.find((m) => m.id === e.approval!.deviceUserId)?.name,
+          channel: e.approval.channel,
+          // a person who deleted their account (S22): «Deleted user» in the CLIENT's language, never the app's (rule 7)
+          deviceUser: memberName(db, e.approval.deviceUserId, tFor(docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }))),
         }
       : null,
     depositPaid: !!e.depositPaidAt,

@@ -5,6 +5,7 @@
  * Pure (no React) — unit-tested in test/comms.test.ts.
  */
 import type { Activity, CallOutcome, DB, Role } from "@/data/types";
+import { memberName } from "@/features/team";
 
 export type CommsKind = "calls" | "messages";
 const KINDS: Record<CommsKind, readonly Activity["kind"][]> = { calls: ["call"], messages: ["sms", "email"] };
@@ -25,7 +26,7 @@ export interface CommsEntry {
  * Newest first. The technician sees only his own (13 §2.1: «мастер видит звонки и сообщения по своим выездам»):
  * what he made, and what was said about his jobs and their clients.
  */
-export function commsLog(db: DB, role: Role, kind: CommsKind): CommsEntry[] {
+export function commsLog(db: DB, role: Role, kind: CommsKind, deletedWord = ""): CommsEntry[] {
   const kinds = KINDS[kind];
   const mine = role === "tech" ? techScope(db) : undefined;
   return db.activities
@@ -34,7 +35,7 @@ export function commsLog(db: DB, role: Role, kind: CommsKind): CommsEntry[] {
     .map((a) => {
       const s = subject(db, a);
       const outcome = a.meta?.outcome as CallOutcome | undefined;
-      return { id: a.id, kind: a.kind, at: a.at, who: s.who, href: s.href, by: db.members.find((m) => m.id === a.actorId)?.name, ...(outcome ? { outcome } : {}) };
+      return { id: a.id, kind: a.kind, at: a.at, who: s.who, href: s.href, by: memberName(db, a.actorId, deletedWord), ...(outcome ? { outcome } : {}) };
     });
 }
 

@@ -3,7 +3,7 @@
  * the app shows a shorter one. Pure data — test/storyMap.test.ts checks that every status allowed by the migrations
  * has a translation here, so a new status in the database can't silently fall back to a default.
  */
-import type { CustomerStatus, EstimateStatus, JobStatus, LeadStatus } from "@/data/types";
+import type { CustomerStatus, EstimateStatus, JobStatus, LeadStatus, MembershipStatus } from "@/data/types";
 
 /** app lead status → public.leads.status (what the app writes) */
 export const leadStatusToDb: Record<LeadStatus, string> = {
@@ -66,3 +66,12 @@ export const customerStatus: Record<string, CustomerStatus> = {
   archived: "archived",
   do_not_service: "do_not_service",
 };
+
+/** memberships.status (wave 7а-2b, S22). `invited` is never loaded as a person: an invitation is public.invitations
+ *  (cloud/repo.ts), so it leaves the list like a cancelled job. */
+export const membershipStatus: Record<string, MembershipStatus> = {
+  active: "active",
+  disabled: "disabled",
+  deleted: "deleted",
+};
+export const membershipDbOutOfList: readonly string[] = ["invited"];
