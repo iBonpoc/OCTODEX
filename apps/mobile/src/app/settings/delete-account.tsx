@@ -9,7 +9,7 @@ import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { accountErrorKey, CONFIRM_WORD, deleteBlock, normalizeWord, wordOk, type AccountErrorKey, type OwnedCompany } from "@/features/deleteAccount";
+import { accountErrorKey, afterDelete, codeErrorKey, CONFIRM_WORD, deleteBlock, makeOnce, normalizeWord, wordOk, type AccountErrorKey, type OwnedCompany } from "@/features/deleteAccount";
 import { deleteAccount, myLastOwnerCompanies, sendDeleteCode, transferOwnership, verifyDeleteCode } from "@/cloud/account";
 
 /**
@@ -40,16 +40,7 @@ export default function DeleteAccount() {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false); // the server did not settle it: «Повторить удаление» (§6.12)
   // one action at a time: `busy` disables the buttons only after a render — two quick taps would both go (review №4)
-  const lock = useRef(false);
-  const once = (fn: () => Promise<unknown>) => async () => {
-    if (lock.current) return;
-    lock.current = true;
-    try {
-      await fn();
-    } finally {
-      lock.current = false;
-    }
-  };
+  const once = useRef(makeOnce()).current;
 
   const say = (k: AccountErrorKey) => toast.show(t(k));
   const needNet = () => {
@@ -89,10 +80,7 @@ export default function DeleteAccount() {
     const err = await verifyDeleteCode(email, code);
     setBusy(false);
     // a wrong or old code — «Код не подошёл»; no network or a rate limit — their own words (review №3)
-    if (err) {
-      const k = accountErrorKey(err);
-      return say(k === "acct.err.failed" || k === "acct.err.signIn" ? "acct.err.code" : k);
-    }
+    if (err) return say(codeErrorKey(err));
     setFresh(true);
     void loadCompanies();
   });
@@ -121,18 +109,19 @@ export default function DeleteAccount() {
     const closeCompanies = (companies ?? []).filter((c) => closing[c.companyId]).map((c) => c.companyId);
     const out = await deleteAccount(normalizeWord(word), closeCompanies);
     setBusy(false);
-    if (out.ok) {
-      // LegalGate takes the person to the sign-in screen and says «Аккаунт удалён»
-      auth.setAccountDeleted(true);
-      return;
+    const next = afterDelete(out);
+    // done: LegalGate takes the person to the sign-in screen and says «Аккаунт удалён»
+    if (next.done) return auth.setAccountDeleted(true);
+    setFailed(next.failed);
+    if (next.resetFresh) setFresh(false);
+    if (next.blocked) {
+      const id = next.blocked;
+      setBlocked(id);
+      // the server refused to close it: undecided again (review #220 №7)
+      setClosing((x) => ({ ...x, [id]: false }));
     }
-    if (out.key === "acct.err.retry" || out.key === "acct.err.network") setFailed(true);
-    if (out.key === "acct.err.fresh") setFresh(false);
-    if (out.key === "acct.err.lastOwner" || out.key === "acct.err.transferFirst") {
-      setBlocked(out.companyId ?? null);
-      void loadCompanies();
-    }
-    say(out.key);
+    if (next.reloadCompanies) void loadCompanies();
+    if (next.toast) say(next.toast);
   });
 
   return (
@@ -182,8 +171,9 @@ export default function DeleteAccount() {
           <>
             <T v="caption" tone="mut">{t("acct.code.hint", { email: email || "—" })}</T>
             <Button label={t("acct.code.send")} icon="mail" variant="secondary" disabled={busy || unsent > 0} onPress={getCode} />
-            <TextField type="code" value={code} onChangeText={setCode} placeholder={t("acct.code.placeholder")} label={t("acct.code.placeholder")} />
-            <Button label={t("acct.code.check")} icon="check" variant="secondary" disabled={!account || !codeSent || code.trim().length < 6 || busy} onPress={checkCode} />
+            {/* the demo has no account: no code field (review #220 №8) */}
+            {account ? <TextField type="code" value={code} onChangeText={setCode} placeholder={t("acct.code.placeholder")} label={t("acct.code.placeholder")} /> : null}
+            <Button label={t("acct.code.check")} icon="check" variant="secondary" disabled={!account || !codeSent || code.trim().length < 6 || busy || unsent > 0} onPress={checkCode} />
           </>
         )}
       </Card>
@@ -194,9 +184,14 @@ export default function DeleteAccount() {
           {companies.map((co) => (
             <Card key={co.companyId} status={blocked === co.companyId ? "warn" : undefined}>
               <View testID="acct-company" style={{ gap: space[2] }}>
+                {blocked === co.companyId ? (
+                  <RowView>
+                    <StatusChip status="warn" label={t("acct.co.decide")} />
+                  </RowView>
+                ) : null}
                 <T v="body" w="semibold">{t("acct.co.last", { name: co.name })}</T>
                 {co.admins.length ? (
-                  <Button label={t("acct.co.transfer")} icon="user" variant="secondary" disabled={!fresh || busy} onPress={() => setTransfer({ co })} />
+                  <Button label={t("acct.co.transfer")} icon="user" variant="secondary" disabled={!fresh || busy || unsent > 0} onPress={() => setTransfer({ co })} />
                 ) : (
                   <T v="caption" tone="mut">{t("acct.co.noAdmins")}</T>
                 )}
@@ -207,7 +202,12 @@ export default function DeleteAccount() {
                       <T v="body" style={{ flex: 1 }}>{t("acct.co.close")}</T>
                       <Toggle label={t("acct.co.close")} on={!!closing[co.companyId]} onChange={(v) => setClosing((x) => ({ ...x, [co.companyId]: v }))} />
                     </RowView>
-                    {closing[co.companyId] ? <T v="caption" tone="warn">{t(co.others ? "acct.co.closeHint" : "acct.co.closeHintAlone", { n: co.others })}</T> : null}
+                    {closing[co.companyId] ? (
+                      <RowView style={{ alignItems: "flex-start" }}>
+                        <StatusChip status="warn" label={t("acct.co.closes")} />
+                        <T v="caption" style={{ flex: 1 }}>{t(co.others ? "acct.co.closeHint" : "acct.co.closeHintAlone", { n: co.others })}</T>
+                      </RowView>
+                    ) : null}
                   </>
                 )}
               </View>
@@ -251,7 +251,10 @@ export default function DeleteAccount() {
         <View testID="acct-delete-sure" style={{ gap: space[2] }}>
           <T v="body">{t("acct.sure.text")}</T>
           {(companies ?? []).filter((c) => closing[c.companyId]).map((c) => (
-            <T key={c.companyId} v="body" tone="warn">{t(c.others ? "acct.sure.closes" : "acct.sure.closesAlone", { name: c.name, n: c.others })}</T>
+            <RowView key={c.companyId} style={{ alignItems: "flex-start" }}>
+              <StatusChip status="warn" label={t("acct.co.closes")} />
+              <T v="body" style={{ flex: 1 }}>{t(c.others ? "acct.sure.closes" : "acct.sure.closesAlone", { name: c.name, n: c.others })}</T>
+            </RowView>
           ))}
           <Button label={t("acct.sure.yes")} icon="trash" variant="danger" full disabled={busy} onPress={doDelete} />
           <Button label={t("common.cancel")} variant="ghost" full onPress={() => setSure(false)} />

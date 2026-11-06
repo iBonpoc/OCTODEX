@@ -40,7 +40,7 @@ export default function AcceptInvite() {
     tried.current = true;
     setState("joining");
     (async () => {
-      const r = await joinInvite(param, { store: AsyncStorage, accept: acceptInvitation, reload: auth.reloadMemberships });
+      const r = await joinInvite(param, { store: AsyncStorage, accept: acceptInvitation, reload: async () => void (await auth.reloadMemberships()) });
       if (r.kind === "joined") return router.replace("/");
       if (r.kind === "legal") {
         // the consent is missing (another device, an old app): ask here, the link is kept, then try again

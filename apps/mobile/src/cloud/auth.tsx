@@ -6,8 +6,8 @@ import { WEB_APP_URL } from "@/config/backend";
 import { LEGAL_RETRY_MS, legalState, legalTickets, PENDING_LEGAL_KEY, resolveLegal, type LegalState } from "@/features/legal";
 import { supabase } from "./client";
 import { acceptLegal, legalStatus } from "./legal";
-import { finishDeletedAccount } from "./account";
-import { authEventPlan } from "@/features/deleteAccount";
+import { finishDeletion, profileDeleted, wipeIfPending } from "./account";
+import { authEventPlan, goneChecker } from "@/features/deleteAccount";
 
 /** Where email links (confirm / magic link) return. Must be in Supabase Auth → URL Configuration. */
 const redirectTo = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL);
@@ -32,7 +32,7 @@ interface AuthCtx {
   signUpPassword: (email: string, password: string, name: string) => Promise<string | null>;
   createCompany: (name: string) => Promise<string | null>;
   signOut: () => Promise<void>;
-  reloadMemberships: () => Promise<void>;
+  reloadMemberships: () => Promise<unknown>;
   /**
    * The consent to the current Terms and Privacy (7а-1): "unknown" until asked or without the network (never blocks work),
    * "first" / "changed" — the gate asks. `legalChecked` — the check for this session has run (ok or failed).
@@ -56,6 +56,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [legal, setLegal] = useState<LegalState>("unknown");
   const [legalChecked, setLegalChecked] = useState(false);
   const [accountDeleted, setAccountDeleted] = useState(false);
+  const checkedUid = useRef<string | null>(null);
   const legalRun = useRef<Promise<void> | null>(null);
   // a slow old answer never overwrites a newer one (review #206 M1): checks and accepts take tickets
   const tickets = useRef(legalTickets()).current;
@@ -79,90 +80,96 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [tickets],
   );
 
-  const reloadMemberships = useCallback(async () => {
+  const reloadMemberships = useCallback(async (): Promise<Membership[] | null> => {
     const { data: s } = await supabase.auth.getSession();
     if (!s.session) {
       setMemberships([]);
-      return;
+      return [];
     }
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("memberships")
       .select("company_id, role, status, companies(name)")
       .eq("user_id", s.session.user.id)
       .eq("status", "active");
-    setMemberships(
-      (data ?? []).map((m: { company_id: string; role: DbRole; companies: { name: string } | { name: string }[] | null }) => ({
-        companyId: m.company_id,
-        role: m.role,
-        companyName: Array.isArray(m.companies) ? (m.companies[0]?.name ?? "") : (m.companies?.name ?? ""),
-      })),
-    );
+    const list = (data ?? []).map((m: { company_id: string; role: DbRole; companies: { name: string } | { name: string }[] | null }) => ({
+      companyId: m.company_id,
+      role: m.role,
+      companyName: Array.isArray(m.companies) ? (m.companies[0]?.name ?? "") : (m.companies?.name ?? ""),
+    }));
+    setMemberships(list);
+    // null — no answer (no network): «no memberships» is not known then
+    return error ? null : list;
   }, []);
 
   /**
-   * 7а-2b (§6.9, §6.11 п.4): a profile that is deleted but could still sign in (the sign-in close was «pending», or an
-   * old session) — finish the deletion quietly BEFORE the consent check: its legal_status says «not ok» and the gate
-   * would send it to «Условия» for ever. No network — false (nothing is blocked).
+   * 7а-2b (§6.9, §6.11 п.4; review #220): a profile that is deleted but could still sign in (the sign-in close was
+   * «pending», or an old session) is finished quietly BEFORE the consent check — its legal_status says «not ok» and the
+   * gate would send it to «Условия» for ever. Asked only without active memberships, once per person (goneChecker), with
+   * a short timeout; no answer → asked again with the consent retry below, never cached.
    */
-  const checkedUid = useRef<string | null>(null);
-  const finishedDeleted = useCallback(async (s: Session) => {
-    checkedUid.current = s.user.id;
-    const gone = await finishDeletedAccount(s.user.id).catch(() => false);
-    if (gone) {
-      checkedUid.current = null;
-      setAccountDeleted(true);
-    }
-    return gone;
-  }, []);
+  const gone = useRef(
+    goneChecker(
+      (uid) => profileDeleted(uid),
+      () => {
+        setSession(null);
+        setMemberships([]);
+        setAccountDeleted(true);
+        void finishDeletion();
+      },
+    ),
+  ).current;
+  /** a session is here: memberships, then «is it deleted» (only without them), then the consent */
+  const afterSession = useCallback(
+    async (s: Session) => {
+      const mems = await reloadMemberships();
+      const r = await gone.run(s.user.id, !!mems?.length);
+      if (r === false) await checkLegal(s.user.email);
+      return r;
+    },
+    [reloadMemberships, checkLegal, gone],
+  );
 
   useEffect(() => {
     let alive = true;
+    void wipeIfPending();
     supabase.auth.getSession().then(async ({ data }) => {
       if (!alive) return;
-      if (data.session && (await finishedDeleted(data.session))) {
-        setSession(null);
-        setReady(true);
-        return;
-      }
       setSession(data.session);
-      if (data.session) await Promise.all([checkLegal(data.session.user.email), reloadMemberships()]);
+      if (data.session) await afterSession(data.session);
       setReady(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((e, s) => {
-      setSession(s);
       const plan = authEventPlan(e, s?.user.id ?? null, checkedUid.current);
-      if (s && plan === "first") {
-        // a new person signed in: the consent is asked only after we know the profile is alive (the gate follows
-        // `legal`, which stays «unknown» — never blocking — until then)
-        setLegal("unknown");
-        setLegalChecked(false);
-        void finishedDeleted(s).then((gone) => {
-          if (gone) return;
-          checkLegal(s.user.email);
-          reloadMemberships();
-        });
-      } else if (s && plan === "plain") {
-        checkLegal(s.user.email);
-        reloadMemberships();
-      } else if (s) {
-        // INITIAL_SESSION: the start goes through getSession above (it asks first)
-      } else {
+      if (!s) {
+        setSession(null);
         checkedUid.current = null;
+        gone.forget();
         setMemberships([]);
         setLegal("unknown");
         setLegalChecked(false);
+        return;
       }
+      setSession(s);
+      if (plan === "none") return; // INITIAL_SESSION: the start goes through getSession above
+      if (plan === "first") {
+        // a new person: the consent waits for «alive» (the gate follows `legal`, «unknown» never blocks)
+        checkedUid.current = s.user.id;
+        setLegal("unknown");
+        setLegalChecked(false);
+      }
+      void afterSession(s);
     });
     return () => {
       alive = false;
       sub.subscription.unsubscribe();
     };
-  }, [reloadMemberships, checkLegal, finishedDeleted]);
+  }, [afterSession, gone]);
 
   // the answer is unknown (no network): ask again on coming back to the app, on «online», and every minute (M2)
   useEffect(() => {
     if (!session || legal !== "unknown") return;
-    const again = () => void checkLegal(sessionEmail.current);
+    // the «is it deleted» question goes first again (a start without the network left it unanswered — review #220 №1)
+    const again = () => void afterSession(session);
     const sub = AppState.addEventListener("change", (st) => st === "active" && again());
     const w = typeof window !== "undefined" && typeof window.addEventListener === "function" ? window : null;
     w?.addEventListener("online", again);
@@ -172,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       w?.removeEventListener("online", again);
       clearInterval(timer);
     };
-  }, [session, legal, checkLegal]);
+  }, [session, legal, afterSession]);
 
   const value = useMemo<AuthCtx>(
     () => ({

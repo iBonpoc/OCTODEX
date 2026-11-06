@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
 import {
-  accountErrorKey, authEventPlan, CONFIRM_WORD, deleteBlock, deleteWithRepeat, type AccountState, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
+  accountErrorKey, afterDelete, authEventPlan, codeErrorKey, CONFIRM_WORD, deleteBlock, deleteWithRepeat, goneChecker, makeOnce, WIPE_PENDING_KEY, type AccountState, type Gone, isDeviceKey, lastOwnerCompanies, normalizeWord, readDeleteAnswer, wipeDevice, wordOk,
 } from "../src/features/deleteAccount";
 
 const ROOT = path.resolve(__dirname, "../../..");
@@ -163,11 +163,123 @@ describe("unit:deleteAccount — when the sign-in asks «is it deleted» (review
 });
 
 describe("unit:deleteAccount — the device is wiped", () => {
+  const keys = ["octo.cloud.v1.co-1", "octo.cloud.v1.co-2", "octo.outbox.v1", "octo.queue.v1", "octo.role.v1", "octo.planWho.v1", "octo.nav.open.u1", "octo.invite.token.v1", "octo.legal.pending.v1", "octo.theme.v1", "octo.lang.v1", "octo.db.v5"];
+  const store = (fail = false) => {
+    const st = { removed: [] as string[], set: {} as Record<string, string>, gone: [] as string[] };
+    return {
+      st,
+      getAllKeys: async () => keys,
+      multiRemove: async (k: string[]) => {
+        if (fail) throw new Error("disk full");
+        st.removed = k;
+      },
+      setItem: async (k: string, v: string) => void (st.set[k] = v),
+      removeItem: async (k: string) => void st.gone.push(k),
+    };
+  };
   it("every company's cache, the outbox, the queue, the role, the Plan's person, the menu, the invite, the consent tick", async () => {
-    const keys = ["octo.cloud.v1.co-1", "octo.cloud.v1.co-2", "octo.outbox.v1", "octo.queue.v1", "octo.role.v1", "octo.planWho.v1", "octo.nav.open.u1", "octo.invite.token.v1", "octo.legal.pending.v1", "octo.theme.v1", "octo.lang.v1", "octo.db.v5"];
-    let removed: string[] = [];
-    await wipeDevice({ getAllKeys: async () => keys, multiRemove: async (k) => void (removed = k) });
-    expect(removed.sort()).toEqual(keys.filter(isDeviceKey).sort());
-    for (const k of ["octo.theme.v1", "octo.lang.v1", "octo.db.v5"]) expect(removed).not.toContain(k); // the device's own, not the person's
+    const s = store();
+    expect(await wipeDevice(s)).toBe(true);
+    expect(s.st.removed.sort()).toEqual(keys.filter(isDeviceKey).sort());
+    for (const k of ["octo.theme.v1", "octo.lang.v1", "octo.db.v5"]) expect(s.st.removed).not.toContain(k); // the device's own
+    expect(s.st.gone).toContain(WIPE_PENDING_KEY);
+  });
+  it("review #220 №6: a failed wipe is not swallowed — logged and marked for the next start", async () => {
+    const s = store(true);
+    const log: string[] = [];
+    expect(await wipeDevice(s, (m) => log.push(m))).toBe(false);
+    expect(log[0]).toMatch(/disk full/);
+    expect(s.st.set[WIPE_PENDING_KEY]).toBe("1");
+  });
+});
+
+describe("unit:deleteAccount — rate limits (review #220 №3)", () => {
+  it("Supabase's «only request this after N seconds» / «email rate limit exceeded» / 429 → their own words, in both places", () => {
+    for (const m of ["For security purposes, you can only request this after 52 seconds.", "email rate limit exceeded"]) {
+      expect(accountErrorKey(m)).toBe("acct.err.rateLimit");
+      expect(codeErrorKey(m)).toBe("acct.err.rateLimit");
+    }
+    expect(accountErrorKey("", 429)).toBe("acct.err.rateLimit");
+  });
+  it("«Проверить код»: a wrong or old code — «Код не подошёл»; no network — «нет связи»", () => {
+    expect(codeErrorKey("Token has expired or is invalid")).toBe("acct.err.code");
+    expect(codeErrorKey("something odd")).toBe("acct.err.code");
+    expect(codeErrorKey("Failed to fetch")).toBe("acct.err.network");
+  });
+});
+
+describe("unit:deleteAccount — «is it deleted» on start (review #220 №1, №5, №8)", () => {
+  const make = (answers: (Gone | Error)[]) => {
+    let i = 0;
+    const asked: string[] = [];
+    const goneFor: string[] = [];
+    const c = goneChecker(
+      async (uid) => {
+        asked.push(uid);
+        const a = answers[Math.min(i++, answers.length - 1)]!;
+        if (a instanceof Error) throw a;
+        return a;
+      },
+      (uid) => goneFor.push(uid),
+    );
+    return { c, asked, goneFor };
+  };
+  it("with active memberships nothing is asked (only without them, §6.10)", async () => {
+    const m = make([true]);
+    expect(await m.c.run("u1", true)).toBe(false);
+    expect(m.asked).toEqual([]);
+  });
+  it("a start without the network: «no answer» is not kept — the retry asks again and finds it deleted", async () => {
+    const m = make([null, new Error("timeout"), true]);
+    expect(await m.c.run("u1", false)).toBeNull();
+    expect(await m.c.run("u1", false)).toBeNull();
+    expect(await m.c.run("u1", false)).toBe(true);
+    expect(m.asked.length).toBe(3);
+    expect(m.goneFor).toEqual(["u1"]);
+  });
+  it("an event before getSession (web): one question at a time, one «удалён» (one toast)", async () => {
+    const m = make([true]);
+    const [a, b] = await Promise.all([m.c.run("u1", false), m.c.run("u1", false)]);
+    expect([a, b]).toEqual([true, true]);
+    expect(m.asked.length).toBe(1);
+    expect(m.goneFor).toEqual(["u1"]);
+    expect(await m.c.run("u1", false)).toBe(true); // kept: not asked again
+    expect(m.asked.length).toBe(1);
+  });
+  it("alive is kept (no question on every tab focus); after sign-out it is asked afresh", async () => {
+    const m = make([false, false]);
+    await m.c.run("u1", false);
+    await m.c.run("u1", false);
+    expect(m.asked.length).toBe(1);
+    m.c.forget();
+    await m.c.run("u1", false);
+    expect(m.asked.length).toBe(2);
+  });
+});
+
+describe("unit:deleteAccount — one tap, and what the screen does (review #220 №4)", () => {
+  it("two quick taps run the action once; after it ends — again", async () => {
+    const once = makeOnce();
+    let n = 0;
+    let release: () => void = () => {};
+    const act = once(() => new Promise<void>((r) => ((n += 1), (release = r))));
+    const a = act();
+    const b = act();
+    release();
+    await Promise.all([a, b]);
+    expect(n).toBe(1);
+    const c = act();
+    release();
+    await c;
+    expect(n).toBe(2);
+  });
+  it("the outcome → the screen: done; old code → back to the code; a company named → highlighted and undecided; unsettled → «Повторить»", () => {
+    expect(afterDelete({ ok: true })).toMatchObject({ done: true, toast: null });
+    expect(afterDelete({ ok: false, key: "acct.err.fresh" })).toMatchObject({ done: false, resetFresh: true, failed: false, blocked: null, toast: "acct.err.fresh" });
+    expect(afterDelete({ ok: false, key: "acct.err.transferFirst", companyId: "co-1" })).toMatchObject({ blocked: "co-1", reloadCompanies: true });
+    expect(afterDelete({ ok: false, key: "acct.err.lastOwner", companyId: "co-2" })).toMatchObject({ blocked: "co-2", reloadCompanies: true });
+    expect(afterDelete({ ok: false, key: "acct.err.retry" })).toMatchObject({ failed: true });
+    expect(afterDelete({ ok: false, key: "acct.err.network" })).toMatchObject({ failed: true });
+    expect(afterDelete({ ok: false, key: "acct.err.word" })).toMatchObject({ failed: false, resetFresh: false, blocked: null });
   });
 });

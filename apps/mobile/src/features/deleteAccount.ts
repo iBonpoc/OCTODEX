@@ -24,11 +24,14 @@ export type AccountErrorKey =
   | "acct.err.retry"
   | "acct.err.network"
   | "acct.err.code"
+  | "acct.err.rateLimit"
   | "acct.err.failed";
 /** the texts are the server's own (migration 200000 OD001, handler.ts) — matched as they are */
 export function accountErrorKey(message: string | null | undefined, status?: number): AccountErrorKey {
   const m = (message ?? "").toLowerCase();
   if (m.includes("sign in again")) return "acct.err.fresh";
+  // Supabase Auth: «For security purposes, you can only request this after N seconds», «email rate limit exceeded»
+  if (status === 429 || m.includes("rate limit") || m.includes("only request this after") || m.includes("too many")) return "acct.err.rateLimit";
   if (status === 401 || m.includes("sign in first") || m.includes("jwt")) return "acct.err.signIn";
   if (m.includes("type the word")) return "acct.err.word";
   if (m.includes("at least one active owner")) return "acct.err.lastOwner";
@@ -39,6 +42,11 @@ export function accountErrorKey(message: string | null | undefined, status?: num
   if (m.includes("failed to fetch") || m.includes("network") || m.includes("fetch failed") || m.includes("load failed")) return "acct.err.network";
   if (m.includes("token has expired") || m.includes("otp") || (m.includes("invalid") && m.includes("token"))) return "acct.err.code";
   return "acct.err.failed";
+}
+/** «Проверить код»: a wrong or old code — «Код не подошёл»; no network or a rate limit keep their own words */
+export function codeErrorKey(message: string | null | undefined): AccountErrorKey {
+  const k = accountErrorKey(message);
+  return k === "acct.err.failed" || k === "acct.err.signIn" ? "acct.err.code" : k;
 }
 /** Postgres codes of a lock conflict (transfer_ownership has no own «try again», review 7а-2 №5) */
 export const RETRY_CODES: readonly string[] = ["40P01", "40001", "55P03", "57014"];
@@ -165,11 +173,26 @@ export async function deleteWithRepeat(
 export const DEVICE_KEYS: readonly string[] = ["octo.outbox.v1", "octo.queue.v1", "octo.invite.token.v1", "octo.role.v1", "octo.planWho.v1", "octo.legal.pending.v1"];
 export const DEVICE_PREFIXES: readonly string[] = ["octo.cloud.v1.", "octo.nav.open."];
 export const isDeviceKey = (k: string) => DEVICE_KEYS.includes(k) || DEVICE_PREFIXES.some((p) => k.startsWith(p));
-export async function wipeDevice(store: { getAllKeys: () => Promise<readonly string[]>; multiRemove: (keys: string[]) => Promise<void> }): Promise<string[]> {
-  const keys = (await store.getAllKeys().catch(() => [] as readonly string[])).filter(isDeviceKey);
-  const all = [...new Set([...keys, ...DEVICE_KEYS])];
-  await store.multiRemove(all).catch(() => {});
-  return all;
+/** set when a wipe failed: the next start wipes again (review #220 №6) */
+export const WIPE_PENDING_KEY = "octo.wipe.pending.v1";
+export interface WipeStore {
+  getAllKeys: () => Promise<readonly string[]>;
+  multiRemove: (keys: string[]) => Promise<void>;
+  setItem: (k: string, v: string) => Promise<void>;
+  removeItem: (k: string) => Promise<void>;
+}
+/** true — wiped; false — it failed (logged, and marked for the next start) */
+export async function wipeDevice(store: WipeStore, log: (m: string) => void = () => {}): Promise<boolean> {
+  try {
+    const keys = (await store.getAllKeys()).filter(isDeviceKey);
+    await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])]);
+    await store.removeItem(WIPE_PENDING_KEY).catch(() => {});
+    return true;
+  } catch (e) {
+    log(`wipe failed: ${(e as Error).message}`);
+    await store.setItem(WIPE_PENDING_KEY, "1").catch(() => {});
+    return false;
+  }
 }
 
 /* ---------- the repeat on sign-in: when to ask «is this profile deleted» (review 7а-2b №2, №3) ---------- */
@@ -185,4 +208,86 @@ export function authEventPlan(event: string, uid: string | null, checkedUid: str
   if (event === "INITIAL_SESSION") return "none";
   if (uid !== checkedUid) return "first";
   return "plain";
+}
+
+/* ---------- «is this profile deleted» on start / sign-in — one coordinator (review #220 №1, №2, №5, №8) ---------- */
+/** true — deleted, false — alive, null — no answer (no network, a timeout): asked again later, never cached */
+export type Gone = boolean | null;
+/**
+ * One answer per person: a person with active memberships is alive (asked nothing — §6.10: only without them);
+ * otherwise `probe` (users.deleted_at) — once at a time (an event before getSession on the web gives ONE question and
+ * one toast), a definite answer is kept, «no answer» is not (the retry asks again, so a start without the network never
+ * leaves a half-deleted profile on the consent screen). `onGone` — once per person.
+ */
+export function goneChecker(probe: (uid: string) => Promise<Gone>, onGone: (uid: string) => void) {
+  const known = new Map<string, boolean>();
+  const flight = new Map<string, Promise<Gone>>();
+  return {
+    run(uid: string, hasMembers: boolean): Promise<Gone> {
+      if (known.has(uid)) return Promise.resolve(known.get(uid)!);
+      if (hasMembers) {
+        known.set(uid, false);
+        return Promise.resolve(false);
+      }
+      const f = flight.get(uid);
+      if (f) return f;
+      const p = probe(uid)
+        .catch((): Gone => null)
+        .then((r) => {
+          flight.delete(uid);
+          if (r !== null) {
+            known.set(uid, r);
+            if (r) onGone(uid);
+          }
+          return r;
+        });
+      flight.set(uid, p);
+      return p;
+    },
+    /** signed out: the next person (or the same after a new sign-in) is asked afresh */
+    forget() {
+      known.clear();
+    },
+  };
+}
+
+/* ---------- one action at a time (review #216/#220 №4: two quick taps before `busy` renders) ---------- */
+export function makeOnce() {
+  let running = false;
+  return <A extends unknown[]>(fn: (...a: A) => Promise<unknown>) =>
+    async (...a: A) => {
+      if (running) return;
+      running = true;
+      try {
+        await fn(...a);
+      } finally {
+        running = false;
+      }
+    };
+}
+
+/* ---------- what the screen does with the outcome (review #220 №4: the branches, testable) ---------- */
+export interface AfterDelete {
+  done: boolean;
+  /** the code is too old: back to «Получить код» */
+  resetFresh: boolean;
+  /** the company the server named: highlighted, and its «закрыть» mark cleared — it is undecided again */
+  blocked: string | null;
+  /** an unsettled answer: «Повторить удаление» instead of «Удалить навсегда» */
+  failed: boolean;
+  /** reload the companies (an owner or an admin changed meanwhile) */
+  reloadCompanies: boolean;
+  toast: AccountErrorKey | null;
+}
+export function afterDelete(out: DeleteOutcome): AfterDelete {
+  if (out.ok) return { done: true, resetFresh: false, blocked: null, failed: false, reloadCompanies: false, toast: null };
+  const company = out.key === "acct.err.lastOwner" || out.key === "acct.err.transferFirst";
+  return {
+    done: false,
+    resetFresh: out.key === "acct.err.fresh",
+    blocked: company ? (out.companyId ?? null) : null,
+    failed: out.key === "acct.err.retry" || out.key === "acct.err.network",
+    reloadCompanies: company,
+    toast: out.key,
+  };
 }
