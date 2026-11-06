@@ -65,3 +65,9 @@ export function platformTag(os: string): "ios" | "android" | "web" {
 /** the «Условия изменились» gate stays off these: signing in, the documents themselves, help, the client page */
 const GATE_FREE = ["/auth", "/legal", "/help", "/p"];
 export const gateFreePath = (path: string) => GATE_FREE.some((p) => path === p || path.startsWith(`${p}/`));
+
+/** «November 6, 2026» — the edition of a document (a calendar date, US format in every language, rule 7) */
+export function editionLabel(day: string): string {
+  const d = new Date(`${day}T12:00:00Z`);
+  return Number.isNaN(d.getTime()) ? day : new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(d);
+}

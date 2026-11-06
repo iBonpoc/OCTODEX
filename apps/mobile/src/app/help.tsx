@@ -2,7 +2,7 @@ import { Linking, Platform, View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { mailto, SUPPORT_EMAIL, SUPPORT_PLACEHOLDER } from "@/config/support";
-import { LEGAL_VERSIONS, legalHref } from "@/features/legal";
+import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
 import { useVersionLabel } from "@/features/version";
 import { useI18n } from "@/i18n";
 import { Button } from "@/ui/controls";
@@ -16,7 +16,7 @@ import { Card, Divider, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
  * Open without signing in.
  */
 export default function Help() {
-  const { t, dayOf } = useI18n();
+  const { t } = useI18n();
   const version = useVersionLabel();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   const open = (url: string) => Linking.openURL(url).catch(() => {});
@@ -51,9 +51,9 @@ export default function Help() {
         </T>
         <SectionTitle title={t("support.documents")} />
         <Card>
-          <ListRow title={t("legal.terms.title")} subtitle={t("legal.edition", { date: dayOf(LEGAL_VERSIONS.terms) })} onPress={() => router.push(legalHref("terms"))} />
+          <ListRow title={t("legal.terms.title")} subtitle={t("legal.edition", { date: editionLabel(LEGAL_VERSIONS.terms) })} onPress={() => router.push(legalHref("terms"))} />
           <Divider />
-          <ListRow title={t("legal.privacy.title")} subtitle={t("legal.edition", { date: dayOf(LEGAL_VERSIONS.privacy) })} onPress={() => router.push(legalHref("privacy"))} />
+          <ListRow title={t("legal.privacy.title")} subtitle={t("legal.edition", { date: editionLabel(LEGAL_VERSIONS.privacy) })} onPress={() => router.push(legalHref("privacy"))} />
         </Card>
         <T v="micro" tone="mut">
           {version}

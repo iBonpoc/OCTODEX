@@ -107,3 +107,12 @@ describe("what the app tells the server (the server checks ^[0-9A-Za-z.+ _-]{1,4
     expect(platformTag("windows")).toBe("web");
   });
 });
+
+describe("the edition date", () => {
+  it("is a US calendar date with the year, whatever the time zone", async () => {
+    const { editionLabel } = await import("@/features/legal");
+    expect(editionLabel("2026-11-06")).toBe("November 6, 2026");
+    expect(editionLabel("2027-01-01")).toBe("January 1, 2027");
+    expect(editionLabel("bad")).toBe("bad");
+  });
+});

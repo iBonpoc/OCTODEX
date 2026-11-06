@@ -1,7 +1,7 @@
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space } from "@octo/design-tokens";
-import { isLegalDoc, LEGAL_VERSIONS, type LegalDoc } from "@/features/legal";
+import { editionLabel, isLegalDoc, LEGAL_VERSIONS, type LegalDoc } from "@/features/legal";
 import { useI18n, type DictKey } from "@/i18n";
 import { StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -17,7 +17,7 @@ const SECTIONS: Record<LegalDoc, number> = { terms: 8, privacy: 7 };
  */
 export default function LegalDocument() {
   const { doc } = useLocalSearchParams<{ doc?: string }>();
-  const { t, dayOf, lang } = useI18n();
+  const { t, lang } = useI18n();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/help"));
   if (!isLegalDoc(doc))
     return (
@@ -32,7 +32,7 @@ export default function LegalDocument() {
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }}>
           <StatusChip status="warn" label={t("legal.draft")} />
           <T v="caption" tone="mut">
-            {t("legal.edition", { date: dayOf(LEGAL_VERSIONS[doc]) })}
+            {t("legal.edition", { date: editionLabel(LEGAL_VERSIONS[doc]) })}
           </T>
         </View>
         {lang !== "en" ? (

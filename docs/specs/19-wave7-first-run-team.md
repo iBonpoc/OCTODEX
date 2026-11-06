@@ -3,7 +3,8 @@
 > Этап 0 чата «Каркас приложения» №3, 06.11.2026. Источники: `13-app-structure.md` §3.11, §3.13, §5а, §8; `14-app-store.md` §1–§2; `15-flows.md` §1.8–§1.9, §4; `docs/legal/01-founder-protection.md` §8; сверка карты (помощник map-keeper).
 > Клетки карты: S0 (профиль компании), S17 (первая работа), **S21** и **S22** — в `docs/15-story-map.md` §4 их ещё нет, **Membership** нет в §5 (долг руководителя, до PR 7-2).
 
-## 1. Что есть сейчас (инспекция)
+## 1. Что было до волны 7 (инспекция №3)
+> После #185 (7-1) и #193 (7-2) часть пунктов устарела: есть `invitations`, `invite_member` / `accept_invitation` / `set_member_status`, статусы `invited | active | disabled | deleted`, S21 в карте. Актуальное по 7а-1 — §5.
 - Вход: `auth/sign-in.tsx` (email + пароль/код) → `auth/company.tsx` (название) → `company/profile?wizard=1`. Ссылки на политику и галочки нет.
 - Главная владельца: `CompanySetupCard` («Настройка компании N из 8») и `FirstStepsCard` (каталог, лид, смета, подписано) — не то, что в 13 §3.11.
 - Направления компании: `features/serviceCategories.ts`, `ServiceCategoryPicker`, шаг `trades` в мастере компании.
