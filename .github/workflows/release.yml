@@ -45,6 +45,11 @@ jobs:
         run: supabase migration list --remote
       - name: Apply new migrations
         run: supabase db push --remote --yes
+      # 7а-2a (S22): «Удалить аккаунт» closes the sign-in through Supabase Auth (docs/specs/19 §6.7). After the migrations
+      # (the function calls public.delete_account); a failed deploy stops the release — the app never ships ahead of it.
+      # verify_jwt = true comes from supabase/config.toml; SUPABASE_SERVICE_ROLE_KEY is provided to the function by Supabase.
+      - name: Deploy edge functions
+        run: supabase functions deploy delete-account --project-ref "$PROJECT_REF"
 
   publish:
     name: Publish (Expo Go + web)
