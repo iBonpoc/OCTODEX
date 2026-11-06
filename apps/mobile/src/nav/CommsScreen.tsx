@@ -21,7 +21,7 @@ export function CommsScreen({ kind }: { kind: CommsKind }) {
   const items = commsLog(db, role, kind);
   const calls = kind === "calls";
   return (
-    <Screen title={t(calls ? "nav.calls" : "nav.messages")} subtitle={t(calls ? "nav.calls.hint" : "nav.messages.hint")}>
+    <Screen fab={calls ? "calls" : undefined} title={t(calls ? "nav.calls" : "nav.messages")} subtitle={t(calls ? "nav.calls.hint" : "nav.messages.hint")}>
       {items.length === 0 ? (
         <Empty icon={calls ? "phone" : "sms"} title={t(calls ? "nav.calls.empty" : "nav.messages.empty")} hint={t(calls ? "nav.calls.emptyHint" : "nav.messages.emptyHint")} />
       ) : (

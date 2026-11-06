@@ -40,7 +40,7 @@ export default function JobScreen() {
   const addr = [p?.address, p?.city].filter(Boolean).join(", ");
   const showMoney = canSeeProfit(store.role);
   return (
-    <Screen title={j.title} back={back} subtitle={c?.name}>
+    <Screen title={j.title} back={back} subtitle={c?.name} fab="job" fabCtx={{ jobId: j.id, customerId: c?.id, propertyId: p?.id }}>
       <Card status={st.status}>
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="body" tone="mut" style={{ flex: 1 }}>
