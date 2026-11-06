@@ -243,6 +243,20 @@ export function daysSince(iso: string | undefined, now: number = Date.now()): nu
   return Number.isNaN(t) ? null : Math.max(0, Math.floor((now - t) / 86_400_000));
 }
 
+/**
+ * «Не назначено» (docs/specs/03 П3c, decision 7): open visits of the company's today (0) and tomorrow (1) with nobody on
+ * them. One rule for «Требует внимания» (attention.ts) and the block on top of the Plan (wave 5). Today first, by time.
+ */
+export function unassignedSoon(db: Pick<DB, "visits">, now: number = Date.now(), tz: string = getZone()): { v: Visit; dd: 0 | 1 }[] {
+  const out: { v: Visit; dd: 0 | 1 }[] = [];
+  for (const v of db.visits) {
+    if (!isOpenVisit(v) || assigneesOf(v).length) continue;
+    const dd = dayDiffIn(v.start, now, tz);
+    if (dd === 0 || dd === 1) out.push({ v, dd });
+  }
+  return out.sort((a, b) => a.dd - b.dd || a.v.start.localeCompare(b.v.start));
+}
+
 /** «Чей план»: "all", "me" or a person id; a tech always sees only his own */
 export type PlanWho = "all" | "me" | ID;
 export function planFilter(v: Visit, who: PlanWho, me: ID): boolean {

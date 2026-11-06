@@ -1740,4 +1740,18 @@ export const en: Dict = {
   "job3.q.laterToday": "Later today ({time})",
   "job3.q.tomorrow": "Tomorrow morning ({time})",
   "job3.q.monday": "On Monday ({time})",
+  // wave 5 «План» — Лента (Работы и выезды)
+  "plan5.feed": "Feed",
+  "plan5.emptyDay": "Nothing on this day",
+  "plan5.showDone": "Show completed",
+  "plan5.unassigned": "Unassigned · {n}",
+  "plan5.today": "Today",
+  "plan5.tomorrow": "Tomorrow",
+  "plan5.task": "Task",
+  "plan5.event": "Event",
+  "plan5.timeOff": "Time off",
+  "plan5.allDay": "All day",
+  "plan5.done": "Done",
+  "plan5.company": "Whole company",
+  "plan5.days": "{from} – {to}",
 };

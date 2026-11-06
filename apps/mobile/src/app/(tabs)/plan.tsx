@@ -15,17 +15,21 @@ import { overlapSigns } from "@/features/listSigns";
 import { AssignSheet } from "@/features/sheets";
 import { DndProvider, Draggable, DropZone, useDragFrom } from "@/features/dnd";
 import { useToast } from "@/ui/overlays";
-import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip } from "@/ui/controls";
+import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip, Toggle } from "@/ui/controls";
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { assigneesOf, canPlan, canReschedule, isAssigned, planFilter, type PlanWho } from "@/features/schedule";
-import { PlanAddSheet, PlanWhoChips, WaitingJobs } from "@/features/PlanParts";
+import { FeedView, PlanAddSheet, PlanWhoChips, UnassignedSoon, WaitingJobs } from "@/features/PlanParts";
+import { daysFrom, planItems } from "@/features/planFeed";
 
-type Mode = "day" | "week" | "month";
+/** the Feed shows a week from the picked day; the arrows move it by a week */
+const FEED_DAYS = 7;
+
+type Mode = "feed" | "day" | "week" | "month";
 
 /**
- * Plan: Day (by person, drag & drop between people), Week (7 days, each visit a card), Month (calendar with
+ * Plan: Feed (wave 5, 13 §3.2: everything by days — visits, tasks with a time, events, days off), Day (by person, drag & drop between people), Week (7 days, each visit a card), Month (calendar with
  * visit counts; tap a day → Day). Arrows move by day / week / month; "Today" jumps back.
  */
 export default function Plan() {
@@ -40,11 +44,13 @@ export default function Plan() {
   const [adding, setAdding] = useState(false);
   const mine = (v: Visit) => (role === "tech" ? isAssigned(v, db.me) : planFilter(v, whoNow, db.me));
   const visitsOn = (k: DayKey) => db.visits.filter((v) => isoDayKey(v.start) === k && mine(v)).sort(sortByStart);
-  const step = (n: number) => setDate(mode === "day" ? addDays(date, n) : mode === "week" ? addDays(date, 7 * n) : addMonths(date, n));
+  const step = (n: number) => setDate(mode === "feed" ? addDays(date, FEED_DAYS * n) : mode === "day" ? addDays(date, n) : mode === "week" ? addDays(date, 7 * n) : addMonths(date, n));
   const week = weekDays(date);
   // days of «План» are the company's calendar days (П4b): labels of day keys, no zone of their own
   const monthName = formatDayKey(date, { month: "long", year: "numeric" }, lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU");
-  const label = mode === "day" ? dayOf(date) : mode === "week" ? `${dayOf(week[0]!)} – ${dayOf(week[6]!)}` : monthName;
+  const feedDays = daysFrom(date, addDays(date, FEED_DAYS - 1));
+  const [showDone, setShowDone] = usePersistentState<boolean>("octo.planShowDone.v1", false);
+  const label = mode === "feed" ? t("plan5.days", { from: dayOf(feedDays[0]!), to: dayOf(feedDays[FEED_DAYS - 1]!) }) : mode === "day" ? dayOf(date) : mode === "week" ? `${dayOf(week[0]!)} – ${dayOf(week[6]!)}` : monthName;
 
   return (
     <Screen
@@ -59,6 +65,7 @@ export default function Plan() {
           value={mode}
           onChange={setMode}
           items={[
+            { key: "feed", label: t("plan5.feed") },
             { key: "day", label: t("plan.day") },
             { key: "week", label: t("plan.week") },
             { key: "month", label: t("plan.month") },
@@ -69,6 +76,8 @@ export default function Plan() {
     >
       {planner ? <PlanWhoChips who={whoNow} onChange={setWho} /> : null}
       {planner ? <WaitingJobs /> : null}
+      {/* «Не назначено» today and tomorrow on top (13 §3.2); the Day keeps its own block of its day (drag from it) */}
+      {planner && mode !== "day" ? <UnassignedSoon /> : null}
       <RowView style={{ justifyContent: "space-between" }}>
         <IconButton icon="chevronLeft" label={t("plan.prev")} onPress={() => step(-1)} />
         <T v="heading" style={{ flex: 1, textAlign: "center" }} numberOfLines={1}>
@@ -78,7 +87,17 @@ export default function Plan() {
         <IconButton icon="chevronRight" label={t("plan.next")} onPress={() => step(1)} />
       </RowView>
 
-      {mode === "day" ? (
+      {mode === "feed" ? (
+        <>
+          <RowView style={{ justifyContent: "space-between" }}>
+            <T v="body" style={{ flex: 1 }}>
+              {t("plan5.showDone")}
+            </T>
+            <Toggle on={showDone} onChange={setShowDone} label={t("plan5.showDone")} />
+          </RowView>
+          <FeedView days={feedDays} items={planItems(db, { from: feedDays[0]!, to: feedDays[FEED_DAYS - 1]! }, whoNow, role, { showDone })} />
+        </>
+      ) : mode === "day" ? (
         <>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
             <ChoiceChips

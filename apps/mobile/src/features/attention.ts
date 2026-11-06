@@ -4,7 +4,7 @@ import type { DB, ID, Role } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
 import { leadSettingsOf } from "./leadSettings";
 import { canCountersign } from "./estimateSign";
-import { assigneesOf, canPlan, dayDiffIn, isOpenVisit, lateToday, visitWho } from "./schedule";
+import { assigneesOf, canPlan, dayDiffIn, isOpenVisit, lateToday, unassignedSoon, visitWho } from "./schedule";
 import { companyTz, scheduleSettingsOf } from "./scheduleSettings";
 import { dayKeyIn } from "./zone";
 import { jobAwaitingClose } from "@/features/jobDone";
@@ -80,19 +80,20 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   const tz = companyTz(db.company);
   const sch = scheduleSettingsOf(db.company);
   if (canPlan([role])) {
-    for (const v of db.visits) {
-      if (!isOpenVisit(v)) continue;
-      const dd = dayDiffIn(v.start, now, tz);
+    // «Не назначено» today and tomorrow — the same rule as the block on top of the Plan (schedule.ts unassignedSoon)
+    for (const { v, dd } of unassignedSoon(db, now, tz)) {
       const today = dd === 0;
+      const { client } = visitWho(db, v);
+      out.push({
+        id: `un-${v.id}`, kind: "unassigned", refId: v.id, name: client, label: today ? "att.unassigned" : "late.unassignedTomorrow", params: { name: client },
+        chip: today ? "st.unassigned" : "late.unassignedTomorrowChip", status: "warn", score: today ? 900 : 880,
+      });
+    }
+    for (const v of db.visits) {
+      if (!isOpenVisit(v) || !assigneesOf(v).length) continue;
+      const dd = dayDiffIn(v.start, now, tz);
       if (dd !== 0 && dd !== 1) continue;
       const { client, tech } = visitWho(db, v);
-      if (!assigneesOf(v).length) {
-        out.push({
-          id: `un-${v.id}`, kind: "unassigned", refId: v.id, name: client, label: today ? "att.unassigned" : "late.unassignedTomorrow", params: { name: client },
-          chip: today ? "st.unassigned" : "late.unassignedTomorrowChip", status: "warn", score: today ? 900 : 880,
-        });
-        continue;
-      }
       const late = lateToday(v, now, sch, tz);
       if (late)
         out.push({ id: `late-${v.id}`, kind: "late", refId: v.id, name: tech, label: "att.late", params: { name: `${tech} → ${client}` }, chip: late === "en_route" ? "late.enRoute" : "late.notLeft", status: "warn", score: 850 });

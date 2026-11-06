@@ -1739,6 +1739,20 @@ export const ru = {
   "job3.q.laterToday": "Позже сегодня ({time})",
   "job3.q.tomorrow": "Завтра утром ({time})",
   "job3.q.monday": "В понедельник ({time})",
+  // wave 5 «План» — Лента (Работы и выезды)
+  "plan5.feed": "Лента",
+  "plan5.emptyDay": "На этот день ничего нет",
+  "plan5.showDone": "Показывать выполненные",
+  "plan5.unassigned": "Не назначено · {n}",
+  "plan5.today": "Сегодня",
+  "plan5.tomorrow": "Завтра",
+  "plan5.task": "Задача",
+  "plan5.event": "Событие",
+  "plan5.timeOff": "Выходной",
+  "plan5.allDay": "Весь день",
+  "plan5.done": "Выполнено",
+  "plan5.company": "Вся компания",
+  "plan5.days": "{from} – {to}",
 } as const;
 
 export type DictKey = keyof typeof ru;
