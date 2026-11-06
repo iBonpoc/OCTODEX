@@ -23,7 +23,7 @@ const ASKED_KEY = "octo.locationAsked.v1";
 
 /** the question before the first «On the way»: `ask(then)` runs `then` right away when there is nothing to ask */
 export function useConsentQuestion() {
-  const { db, setLocationConsent } = useStore();
+  const { db, setLocationConsent, online } = useStore();
   const toast = useToast();
   const { t } = useI18n();
   const [asked, setAsked, ready] = usePersistentState<boolean>(ASKED_KEY, false);
@@ -33,8 +33,10 @@ export function useConsentQuestion() {
     else then();
   };
   const answer = (on: boolean) => {
-    setAsked(true);
-    if (on) toast.show(t("loc7b.agreed"), setLocationConsent(true));
+    // offline: not now (switching on goes only online); asked again next time
+    if (on && !online) toast.show(t("loc7b.needOnline"));
+    else if (on) toast.show(t("loc7b.agreed"), setLocationConsent(true));
+    if (!on || online) setAsked(true);
     const then = pending;
     setPending(null);
     then?.();
@@ -58,7 +60,7 @@ export function LocationConsentSheet({ visible, onAnswer }: { visible: boolean; 
 
 /** «My settings → Location»: only when the company allows it; turning it off deletes the points (toast with Undo) */
 export function LocationSetting() {
-  const { db, setLocationConsent } = useStore();
+  const { db, setLocationConsent, online } = useStore();
   const toast = useToast();
   const { t } = useI18n();
   const [, setAsked] = usePersistentState<boolean>(ASKED_KEY, false);
@@ -75,6 +77,7 @@ export function LocationSetting() {
         onChange={(k) => {
           const on = k === "on";
           if (on === loc.on) return;
+          if (on && !online) return toast.show(t("loc7b.needOnline"));
           setAsked(true);
           toast.show(t(on ? "loc7b.agreed" : "loc7b.stopped"), setLocationConsent(on));
         }}

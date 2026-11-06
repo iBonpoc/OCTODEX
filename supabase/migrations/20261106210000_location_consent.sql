@@ -114,6 +114,11 @@ begin
      or not app.company_shares_location(v.company_id) then
     raise exception 'location sharing is off' using errcode = '42501';
   end if;
+  -- ranges here, with our own text: a failed table check would echo the whole row (ids, coordinates) to the phone
+  if new.lat is null or new.lng is null or not (new.lat between -90 and 90) or not (new.lng between -180 and 180)
+     or (new.accuracy_m is not null and not (new.accuracy_m between 0 and 5000)) then
+    raise exception 'not a valid point' using errcode = '22023';
+  end if;
   if v.status not in ('en_route', 'on_site') then
     raise exception 'the visit is not under way' using errcode = '22023';
   end if;
@@ -167,10 +172,15 @@ create policy user_locations_select on public.user_locations for select to authe
   using (app.can_read_location(company_id, user_id, visit_id, recorded_at));
 create policy user_locations_insert_own on public.user_locations for insert to authenticated
   with check (user_id = (select auth.uid()));
--- the deletes of the functions below pass force RLS by this rule too, not only by the owner's bypass (supabase/README);
--- no client has the delete right, so the rule opens nothing to one
-create policy user_locations_delete_forget on public.user_locations for delete
-  using (user_id = (select auth.uid()) or app.has_role(company_id, array['owner', 'admin']));
+-- the deletes of the functions below (forget on going off, purge from pg_cron, account deletion — often with no
+-- auth.uid()) must pass force RLS even if their owner has no BYPASSRLS (supabase/README, not checked on staging);
+-- no client has the delete right (T57), so the rule opens nothing to one
+-- A delete with a WHERE needs a select rule too: inside these security definer functions current_user is their owner,
+-- never a client role, so the server's own paths see and delete; a client (authenticated / anon) gets nothing from these
+create policy user_locations_select_server on public.user_locations for select
+  using (current_user not in ('authenticated', 'anon'));
+create policy user_locations_delete_server on public.user_locations for delete
+  using (current_user not in ('authenticated', 'anon'));
 
 -- ---- 4. Going off removes the points (one path for: the person, the owner/admin, a role change, disabling) ----
 create or replace function app.tg_membership_location_forget()

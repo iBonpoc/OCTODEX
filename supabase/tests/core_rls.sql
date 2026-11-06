@@ -4606,7 +4606,8 @@ select tst.fails($q$insert into public.user_locations (visit_id, lat, lng, recor
 select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000002', 34.1, -118.1, now())$q$, '%not under way%', 'own visit still scheduled: refused');
 select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000003', 34.1, -118.1, now())$q$, '%no such visit%', 'someone else''s visit: refused');
 select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f0000000-0000-4000-8000-000000000999', 34.1, -118.1, now())$q$, '%no such visit%', 'no visit: refused');
-select tst.fails($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 91, -118.1, now() + interval '40 seconds')$q$, 'latitude out of range');
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 91, -118.1, now() + interval '40 seconds')$q$, 'not a valid point', 'latitude out of range: our text, not the row');
+select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, accuracy_m, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 34.1, -118.1, 6000, now() + interval '40 seconds')$q$, 'not a valid point', 'accuracy out of range');
 select tst.fails($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 'NaN', -118.1, now() + interval '40 seconds')$q$, 'NaN refused');
 select tst.fails($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', null, -118.1, now() + interval '40 seconds')$q$, 'no latitude refused');
 select tst.fails_like($q$insert into public.user_locations (visit_id, lat, lng, recorded_at) values ('f5700000-0000-4000-8000-000000000001', 34.1, -118.1, now() + interval '2 minutes')$q$, '%future%', 'a point from the future: refused');
@@ -4660,8 +4661,15 @@ update app.company_flags set location_sharing = false where company_id = 'ca0000
 select tst.ok(tst.cnt($q$select 1 from public.user_locations$q$) = 0, 'flag off: the owner reads nothing');
 :as_super
 update app.company_flags set location_sharing = true where company_id = 'ca000000-0000-0000-0000-000000000000';
--- purge: only older than 30 days
-select tst.ok(app.purge_user_locations() = 1 and tst.cnt($q$select 1 from public.user_locations$q$) = 1, 'purge removes only points older than 30 days');
+-- purge: only older than 30 days — run by an owner WITHOUT BYPASSRLS (force RLS on the table must not make it a no-op)
+create role t57_owner nologin nobypassrls;
+grant usage on schema app, public to t57_owner;
+grant select, delete on public.user_locations to t57_owner;
+grant execute on function app.has_role(uuid, text[]) to t57_owner;
+alter function app.purge_user_locations() owner to t57_owner;
+select tst.ok(app.purge_user_locations() = 1 and tst.cnt($q$select 1 from public.user_locations$q$) = 1, 'purge removes only points older than 30 days, even without BYPASSRLS');
+-- the forget trigger too, for the rest of T57: going off (the tech; the admin) must delete without BYPASSRLS
+alter function app.tg_membership_location_forget() owner to t57_owner;
 -- going off forgets the points (the person; and through the admin)
 :as_tech_a
 select public.set_location_consent('ca000000-0000-0000-0000-000000000000', false);
@@ -4684,6 +4692,10 @@ select tst.ok(not has_table_privilege('authenticated', 'public.user_locations', 
   and not has_column_privilege('authenticated', 'public.user_locations', 'user_id', 'insert') and not has_column_privilege('authenticated', 'public.user_locations', 'company_id', 'insert'), 'a client inserts only the point fields, never updates or deletes');
 update public.visits set status = 'cancelled' where id in ('f5700000-0000-4000-8000-000000000002', 'f5700000-0000-4000-8000-000000000004');
 update app.company_flags set location_sharing = false where company_id = 'ca000000-0000-0000-0000-000000000000';
+alter function app.purge_user_locations() owner to postgres;
+alter function app.tg_membership_location_forget() owner to postgres;
+drop owned by t57_owner;
+drop role t57_owner;
 \echo 'T57 wave 7б-2: points on own open visit, read by role, forgotten on going off ok'
 
 \echo 'ALL TESTS PASSED'

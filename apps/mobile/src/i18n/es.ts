@@ -1899,5 +1899,6 @@ export const es: Dict = {
   "loc7b.officeOff": "{who} no comparte su ubicación",
   "loc7b.denied": "Sin acceso a la ubicación. Permítelo en los ajustes del teléfono.",
   "loc7b.agreed": "Ubicación activada para tus visitas",
+  "loc7b.needOnline": "Para activar la ubicación se necesita conexión",
   "loc7b.stopped": "Ubicación apagada, puntos borrados",
 };

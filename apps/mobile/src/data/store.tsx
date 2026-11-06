@@ -772,15 +772,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       setLocationConsent: (on) => {
         const now = new Date().toISOString();
-        return mutate(
-          "me.location",
-          (d) => ({
-            ...d,
-            location: { allowed: d.location?.allowed === true, on, ackAt: on ? now : d.location?.ackAt },
-            visitPoints: on ? d.visitPoints : (d.visitPoints ?? []).filter((x) => x.userId !== d.me),
-          }),
-          { k: "me.location", on },
-        );
+        const apply = (d: DB): DB => ({
+          ...d,
+          location: { allowed: d.location?.allowed === true, on, ackAt: on ? now : d.location?.ackAt },
+          visitPoints: on ? d.visitPoints : (d.visitPoints ?? []).filter((x) => x.userId !== d.me),
+        });
+        // switching ON goes straight to the server, never through the queue: the notice mark is the moment the person
+        // agreed, and a refusal (the company flag went off) must not leave «on» on the phone. The screens offer it only
+        // online. Switching off may wait in the queue.
+        if (on && modeRef.current === "cloud") {
+          const undo = mutate("me.location", apply);
+          const cid = company?.companyId;
+          if (cid && auth.userId) void applyOp({ k: "me.location", on: true }, cid, auth.userId).catch(() => undo());
+          return () => {
+            undo();
+            if (cid && auth.userId) void applyOp({ k: "me.location", on: false }, cid, auth.userId).catch(() => {});
+          };
+        }
+        return mutate("me.location", apply, { k: "me.location", on });
       },
       recordVisitPoint: (p, source) => {
         const next = { ...dbRef.current, visitPoints: keepLast(dbRef.current.visitPoints, p) };
