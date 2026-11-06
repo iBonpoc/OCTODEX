@@ -21,8 +21,8 @@ begin
   return new;
 end;
 $$;
-revoke all on function app.tg_customer_dns_who() from public, anon;
-grant execute on function app.tg_customer_dns_who() to authenticated;
+-- a trigger function: nobody calls it directly (T52), the trigger fires it all the same
+revoke all on function app.tg_customer_dns_who() from public, anon, authenticated;
 drop trigger if exists t45_customer_dns_who on public.customers;
 create trigger t45_customer_dns_who before insert or update of status on public.customers
   for each row execute function app.tg_customer_dns_who();
@@ -42,8 +42,8 @@ begin
   return null;
 end;
 $$;
-revoke all on function app.tg_customer_dns_trace() from public, anon;
-grant execute on function app.tg_customer_dns_trace() to authenticated;
+-- a trigger function: nobody calls it directly (T52), the trigger fires it all the same
+revoke all on function app.tg_customer_dns_trace() from public, anon, authenticated;
 drop trigger if exists t92_customer_dns_trace on public.customers;
 create trigger t92_customer_dns_trace after insert or update of status on public.customers
   for each row execute function app.tg_customer_dns_trace();
