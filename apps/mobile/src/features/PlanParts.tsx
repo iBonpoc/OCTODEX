@@ -3,7 +3,7 @@ import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import type { ID, Task } from "@/data/types";
+import type { CalendarEvent, CalendarEventKind, ID, Task } from "@/data/types";
 import { findJob } from "@/data/jobs";
 import { visitPropertyId } from "@/data/selectors";
 import { todayKey, type DayKey } from "@/features/calendar";
@@ -80,7 +80,7 @@ export function PlanWhoChips({ who, onChange }: { who: PlanWho; onChange: (w: Pl
 }
 
 /** «+»: what to put in the plan — an inspection at a property (the visit form) or a job from «Ждут даты» */
-export function PlanAddSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
+export function PlanAddSheet({ visible, onClose, onEvent }: { visible: boolean; onClose: () => void; onEvent?: (kind: CalendarEventKind) => void }) {
   const store = useStore();
   const { db } = store;
   const { t, day, time } = useI18n();
@@ -98,6 +98,14 @@ export function PlanAddSheet({ visible, onClose }: { visible: boolean; onClose: 
     <>
       <Sheet visible={visible && !propertyId} onClose={close} title={t("plan.addTitle")}>
         <View style={{ gap: space[3] }}>
+          {onEvent ? (
+            // wave 5: an event or a day off (the «＋» of the Plan will have them too — the shell's FAB set)
+            <View>
+              <ListRow title={t("plan5.addEvent")} onPress={() => { close(); onEvent("event"); }} />
+              <Divider />
+              <ListRow title={t("plan5.addTimeOff")} onPress={() => { close(); onEvent("time_off"); }} />
+            </View>
+          ) : null}
           {waiting.length ? (
             <View>
               <T v="heading">{t("plan.addJob")}</T>
@@ -178,7 +186,7 @@ export function UnassignedSoon() {
 }
 
 /** «Лента»: the days one under another, every item a card; an empty day says so */
-export function FeedView({ days, items }: { days: DayKey[]; items: PlanItem[] }) {
+export function FeedView({ days, items, onEvent }: { days: DayKey[]; items: PlanItem[]; onEvent?: (e: CalendarEvent) => void }) {
   const { t, dayOf } = useI18n();
   return (
     <View style={{ gap: space[4] }} testID="plan-feed">
@@ -188,7 +196,7 @@ export function FeedView({ days, items }: { days: DayKey[]; items: PlanItem[] })
           {list.length ? (
             <CardList>
               {list.map((x) => (
-                <FeedCard key={`${x.kind}:${x.id}:${day}`} x={x} />
+                <FeedCard key={`${x.kind}:${x.id}:${day}`} x={x} onEvent={onEvent} />
               ))}
             </CardList>
           ) : (
@@ -202,7 +210,7 @@ export function FeedView({ days, items }: { days: DayKey[]; items: PlanItem[] })
   );
 }
 
-function FeedCard({ x }: { x: PlanItem }) {
+function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) => void }) {
   const { db } = useStore();
   const { t, time } = useI18n();
   const names = x.people.map((id) => db.members.find((m) => m.id === id)?.name).filter(Boolean).join(", ");
@@ -245,6 +253,7 @@ function FeedCard({ x }: { x: PlanItem }) {
       title={`${when} · ${e.title || kind}`}
       subtitle={[until, kind, names || t("plan5.company")].filter(Boolean).join(" · ")}
       right={<StatusChip status="neutral" label={kind} />}
+      onPress={onEvent ? () => onEvent(e) : undefined}
     />
   );
 }

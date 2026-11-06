@@ -22,6 +22,7 @@ import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } 
 import { assigneesOf, canPlan, canReschedule, isAssigned, planFilter, type PlanWho } from "@/features/schedule";
 import { FeedView, PlanAddSheet, PlanWhoChips, UnassignedSoon, WaitingJobs } from "@/features/PlanParts";
 import { daysFrom, planItems } from "@/features/planFeed";
+import { EventSheet, type EventSheetState } from "@/features/EventForm";
 
 /** the Feed shows a week from the picked day; the arrows move it by a week */
 const FEED_DAYS = 7;
@@ -42,6 +43,7 @@ export default function Plan() {
   const [who, setWho] = usePersistentState<PlanWho>("octo.planWho.v1", "all");
   const whoNow: PlanWho = planner && (who === "all" || who === "me" || db.members.some((m) => m.id === who)) ? who : "all";
   const [adding, setAdding] = useState(false);
+  const [ev, setEv] = useState<EventSheetState>(null);
   const mine = (v: Visit) => (role === "tech" ? isAssigned(v, db.me) : planFilter(v, whoNow, db.me));
   const visitsOn = (k: DayKey) => db.visits.filter((v) => isoDayKey(v.start) === k && mine(v)).sort(sortByStart);
   const step = (n: number) => setDate(mode === "feed" ? addDays(date, FEED_DAYS * n) : mode === "day" ? addDays(date, n) : mode === "week" ? addDays(date, 7 * n) : addMonths(date, n));
@@ -102,7 +104,7 @@ export default function Plan() {
               { key: "show", label: t("plan5.showDone") },
             ]}
           />
-          <FeedView days={feedDays} items={feedItems} />
+          <FeedView days={feedDays} items={feedItems} onEvent={planner ? (e) => setEv({ kind: e.kind, event: e }) : undefined} />
         </>
       ) : mode === "day" ? (
         <>
@@ -125,7 +127,8 @@ export default function Plan() {
       ) : (
         <MonthView date={date} visitsOn={visitsOn} openDay={(k) => { setDate(k); setMode("day"); }} />
       )}
-      {planner ? <PlanAddSheet visible={adding} onClose={() => setAdding(false)} /> : null}
+      {planner ? <PlanAddSheet visible={adding} onClose={() => setAdding(false)} onEvent={(kind) => setEv({ kind, day: date })} /> : null}
+      {planner ? <EventSheet state={ev} onClose={() => setEv(null)} /> : null}
     </Screen>
   );
 }
