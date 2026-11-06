@@ -1,17 +1,31 @@
 import { useState } from "react";
+import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
+import type { BillingAddress } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { Labeled } from "@/features/fields";
 import { SourceField } from "@/features/lead/SourcePicker";
-import { Button, ChoiceChips, TextField } from "@/ui/controls";
+import {
+  billingOk,
+  displayName,
+  EMPTY_BILLING,
+  mainEmailOf,
+  mainPhonesOf,
+  nameOk,
+  namePartsOf,
+  phoneOk,
+  withMainContacts,
+  type NameParts,
+} from "@/features/clientForm";
+import { Button, ChoiceChips, IconButton, TextField } from "@/ui/controls";
 import { useToast } from "@/ui/overlays";
-import { Card, Empty, Screen } from "@/ui/surfaces";
+import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
 
-
 /**
- * Client contact details and main property address.
+ * The client form (docs/specs/13-app-structure.md §3.3 «Изменить», wave 4): first name, last name, company; the main
+ * person's phones («+ Number») and email; the main property address; source; the billing address (one per client).
  * Without `id` — a new client entered by hand (repeat customer, neighbor, phone call); it is active at once.
  */
 export default function EditClient() {
@@ -22,12 +36,14 @@ export default function EditClient() {
   const creating = !id;
   const c = id ? store.db.customers.find((x) => x.id === id) : undefined;
   const p = id ? store.db.properties.find((x) => x.customerId === id) : undefined;
-  const [name, setName] = useState(c?.name ?? "");
-  const [phone, setPhone] = useState(c?.phone ?? "");
-  const [email, setEmail] = useState(c?.email ?? "");
+  const [name, setName] = useState<NameParts>(c ? namePartsOf(c) : { first: "", last: "", company: "" });
+  const [phones, setPhones] = useState<string[]>(c ? (mainPhonesOf(c).length ? mainPhonesOf(c) : [""]) : [""]);
+  const [email, setEmail] = useState(c ? mainEmailOf(c) : "");
   const [address, setAddress] = useState(p?.address ?? "");
   const [city, setCity] = useState(p?.city ?? "");
-  const [sourceId, setSourceId] = useState(store.db.sources.find((x) => x.active && x.name === "Referral")?.id ?? store.db.sources[0]?.id ?? "");
+  const [sourceId, setSourceId] = useState(c?.sourceId ?? store.db.sources.find((x) => x.active && x.name === "Referral")?.id ?? store.db.sources[0]?.id ?? "");
+  const [billingOwn, setBillingOwn] = useState(!!c?.billing);
+  const [billing, setBilling] = useState<BillingAddress>(c?.billing ?? EMPTY_BILLING);
   const back = () => (router.canGoBack() ? router.back() : router.replace(id ? `/client/${id}` : "/clients"));
   if (!creating && !c) {
     return (
@@ -36,42 +52,74 @@ export default function EditClient() {
       </Screen>
     );
   }
-  const phoneOk = phone.replace(/\D/g, "").length >= 7;
-  const ok = name.trim().length >= 2 && (!creating || (phoneOk && (address.trim() || city.trim())));
+  const setPart = (k: keyof NameParts) => (v: string) => setName((x) => ({ ...x, [k]: v }));
+  const setPhone = (i: number) => (v: string) => setPhones((x) => x.map((n, j) => (j === i ? v : n)));
+  const setB = (k: keyof BillingAddress) => (v: string) => setBilling((x) => ({ ...x, [k]: v }));
+  const shown = displayName(name);
+  const filled = phones.filter((x) => x.trim());
+  const ok =
+    nameOk(name) &&
+    filled.every(phoneOk) &&
+    (!billingOwn || billingOk(billing)) &&
+    (creating ? phoneOk(phones[0] ?? "") && !!(address.trim() || city.trim()) : filled.length > 0 || !!email.trim());
+
   const save = () => {
+    const parts = { firstName: name.first, lastName: name.last, companyName: name.company };
     if (creating) {
-      const r = store.addCustomer({ name: name.trim(), phone: phone.trim(), email: email.trim() || undefined, sourceId, address: address.trim(), city: city.trim() });
-      toast.show(store.online ? t("clients.created", { name: name.trim() }) : t("offline.queued"), r.undo);
+      const r = store.addCustomer({ name: shown, phone: phones[0]!.trim(), email: email.trim() || undefined, sourceId, address: address.trim(), city: city.trim() });
+      const undos = [r.undo, store.updateCustomer(r.id, parts)];
+      toast.show(store.online ? t("clients.created", { name: shown }) : t("offline.queued"), () => undos.reverse().forEach((u) => u()));
       router.replace(`/client/${r.id}`);
       return;
     }
-    // phones and emails of an existing client are edited in the card ("People": several per person)
-    const undos = [store.updateCustomer(c!.id, { name: name.trim() })];
+    const undos = [
+      store.updateCustomer(c!.id, { name: shown, ...parts, ...(sourceId !== c!.sourceId ? { sourceId } : {}), billing: billingOwn ? billing : null }),
+    ];
+    const samePhones = JSON.stringify(filled.map((x) => x.trim())) === JSON.stringify(mainPhonesOf(c!));
+    if (!samePhones || email.trim() !== mainEmailOf(c!)) undos.push(store.saveCustomerPeople(c!.id, withMainContacts(c!, phones, email)));
     if (p && (address !== p.address || city !== p.city)) undos.push(store.updateProperty(p.id, { address: address.trim(), city: city.trim() }));
     toast.show(store.online ? t("co.saved") : t("offline.queued"), () => undos.reverse().forEach((u) => u()));
     back();
   };
+
   return (
     <Screen title={creating ? t("clients.new") : t("client.editTitle")} back={back}>
       <Card>
-        <Labeled label={t("lead.name")}>
-          <TextField type="name" value={name} onChangeText={setName} placeholder={t("lead.name")} icon="user" />
+        <Labeled label={t("client.f.first")}>
+          <TextField type="name" value={name.first} onChangeText={setPart("first")} placeholder={t("client.f.first")} icon="user" />
         </Labeled>
-        {creating ? (
-          <>
-            <Labeled label={t("co.phone")}>
-              <TextField type="phone" value={phone} onChangeText={setPhone} placeholder="(555) 555-0100" icon="phone" />
-            </Labeled>
-            <Labeled label={t("co.email")}>
-              <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
-            </Labeled>
-          </>
-        ) : (
+        <Labeled label={t("client.f.last")}>
+          <TextField type="name" value={name.last} onChangeText={setPart("last")} placeholder={t("client.f.last")} />
+        </Labeled>
+        <Labeled label={t("client.f.company")}>
+          <TextField type="text" value={name.company} onChangeText={setPart("company")} placeholder={t("client.f.companyHint")} label={t("client.f.company")} />
+        </Labeled>
+        {!nameOk(name) ? (
           <T v="caption" tone="mut">
-            {t("client.phonesInCard")}
+            {t("client.f.nameNeeded")}
           </T>
-        )}
+        ) : null}
       </Card>
+
+      <Card>
+        <Labeled label={t("client.f.phones")}>
+          <View>
+            {phones.map((n, i) => (
+              <RowView key={i}>
+                <View style={{ flex: 1 }}>
+                  <TextField type="phone" value={n} onChangeText={setPhone(i)} placeholder="(555) 555-0100" icon="phone" label={`${t("co.phone")} ${i + 1}`} />
+                </View>
+                {i > 0 ? <IconButton icon="close" label={`${t("person.removePhone")} ${i + 1}`} onPress={() => setPhones((x) => x.filter((_, j) => j !== i))} /> : null}
+              </RowView>
+            ))}
+          </View>
+        </Labeled>
+        {!creating ? <Button label={t("client.f.addPhone")} icon="plus" variant="ghost" size="sm" onPress={() => setPhones((x) => [...x, ""])} /> : null}
+        <Labeled label={t("co.email")}>
+          <TextField type="email" value={email} onChangeText={setEmail} placeholder="client@example.com" icon="message" />
+        </Labeled>
+      </Card>
+
       {p || creating ? (
         <Card>
           <Labeled label={t("co.street")}>
@@ -82,11 +130,51 @@ export default function EditClient() {
           </Labeled>
         </Card>
       ) : null}
-      {creating ? (
-        <Card>
-          <SourceField value={sourceId} onChange={setSourceId} />
-        </Card>
+
+      <Card>
+        <SourceField value={sourceId} onChange={setSourceId} />
+      </Card>
+
+      {!creating ? (
+        <>
+          <SectionTitle title={t("client.row.billing")} />
+          <Card>
+            <ChoiceChips<"same" | "own">
+              value={billingOwn ? "own" : "same"}
+              onChange={(v) => setBillingOwn(v === "own")}
+              items={[
+                { key: "same", label: t("client.row.billingSame") },
+                { key: "own", label: t("client.f.billingOwn") },
+              ]}
+            />
+            {billingOwn ? (
+              <>
+                <Labeled label={t("prop.street")}>
+                  <TextField type="street" value={billing.line1} onChangeText={setB("line1")} placeholder={t("prop.street")} icon="pin" label={`${t("client.row.billing")}: ${t("prop.street")}`} />
+                </Labeled>
+                <Labeled label={t("prop.unit")}>
+                  <TextField type="unit" value={billing.unit ?? ""} onChangeText={setB("unit")} placeholder={t("prop.unit")} />
+                </Labeled>
+                <Labeled label={t("co.city")}>
+                  <TextField type="city" value={billing.city} onChangeText={setB("city")} placeholder={t("co.city")} label={`${t("client.row.billing")}: ${t("co.city")}`} />
+                </Labeled>
+                <RowView>
+                  <Labeled label={t("co.state")}>
+                    <TextField type="state" value={billing.state ?? ""} onChangeText={setB("state")} placeholder="CA" label={t("co.state")} />
+                  </Labeled>
+                  <Labeled label={t("lead.missing.zip")}>
+                    <TextField type="zip" value={billing.zip ?? ""} onChangeText={setB("zip")} placeholder="91103" label={t("lead.missing.zip")} />
+                  </Labeled>
+                </RowView>
+              </>
+            ) : null}
+            <T v="caption" tone="mut">
+              {t("client.f.billingHint")}
+            </T>
+          </Card>
+        </>
       ) : null}
+
       <Button label={creating ? t("clients.create") : t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
     </Screen>
   );

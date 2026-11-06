@@ -24,6 +24,7 @@ import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
+import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
 import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
@@ -998,7 +999,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             ...d,
             customers: needCustomer
               ? [...d.customers, { id: ids.customerId, name: l.name, phone: l.phone, email: l.email, sourceId: l.sourceId, balanceCents: 0, status: "active", people: clientPeopleFromLead(l, ids.contactId) }]
-              : d.customers.map((c) => (c.id === ids.customerId ? { ...c, status: "active" } : c)),
+              : d.customers.map((c) => (c.id === ids.customerId ? { ...c, status: statusAfterManualWin(c.status) } : c)),
             properties: needCustomer ? [...d.properties, { id: ids.propertyId, customerId: ids.customerId, address: l.address ?? "", city: l.city, stories: 1 }] : d.properties,
             leads: d.leads.map((x) => (x.id === leadId ? { ...x, status: "won", wonVia: "manual", customerId: ids.customerId, propertyId: ids.propertyId, lastActivityAt: now } : x)),
             notes: [{ id: ids.noteId, subjectType: "customer", subjectId: ids.customerId, body: reasonText, visibility: "team", pinned: false, authorId: d.me, at: now }, ...d.notes],

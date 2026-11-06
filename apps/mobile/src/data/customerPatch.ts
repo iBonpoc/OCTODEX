@@ -12,6 +12,8 @@ export interface CustomerPatch {
   lastName?: string;
   companyName?: string;
   billing?: BillingAddress | null;
+  /** wave 4: where the client came from, changed in the client form */
+  sourceId?: string;
 }
 
 const clean = (v: string | undefined) => v?.trim() || undefined;
@@ -21,6 +23,7 @@ export function applyCustomerPatch(c: Customer, patch: CustomerPatch): Customer 
   if (patch.name !== undefined) next.name = patch.name;
   if (patch.phone !== undefined) next.phone = patch.phone;
   if (patch.email !== undefined) next.email = patch.email;
+  if (patch.sourceId) next.sourceId = patch.sourceId;
   if (patch.firstName !== undefined) next.firstName = clean(patch.firstName);
   if (patch.lastName !== undefined) next.lastName = clean(patch.lastName);
   if (patch.companyName !== undefined) next.companyName = clean(patch.companyName);

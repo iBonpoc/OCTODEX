@@ -1,12 +1,16 @@
 /**
- * Properties inside a client (wave C2, docs/specs/04 §7.3): "+ Property" on the client's tab, the property card
+ * Properties inside a client (wave C2, docs/specs/04 §7.3): "+ Property" in the client's row «Объекты», the property card
  * (address, now at the property, access notes + gate code, people of the property), and "‹ Client" above it.
  */
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/client/c1");
-  await p.getByText(/^Объекты · 2$/).last().click();
-  await p.waitForTimeout(300);
+  // the row «Объекты» counts the client's properties and opens their list (13 §3.3)
+  const rows = p.getByTestId("client-rows");
+  h.expect((await rows.innerText()).replace(/\s+/g, " ").includes("Объекты"), "row «Объекты» on the client");
+  await rows.getByRole("button", { name: "Объекты", exact: true }).click();
+  await p.waitForTimeout(400);
+  h.expect(p.url().includes("/client/c1?s=properties"), `row opens the properties (${p.url()})`);
 
   // + property
   await h.click("Добавить объект");
@@ -22,7 +26,12 @@ exports.run = async (h) => {
   let pr = db.properties.find((x) => x.address === "77 Maple Dr");
   h.expect(pr && pr.customerId === "c1" && pr.unit === "3" && pr.kind === "multi_family" && pr.label === "Сдаётся", `property saved: ${JSON.stringify(pr)}`);
   h.expect(pr.city === "Pasadena, CA 91105", `city line: ${pr.city}`);
-  await h.expectText(/Объекты · 3/, "tab counts three properties");
+  h.expect((await p.getByRole("button", { name: /^77 Maple Dr/ }).count()) >= 1, "the new property is in the list");
+  await h.go("/client/c1");
+  const propRow = (await rows.getByRole("button", { name: "Объекты", exact: true }).innerText()).trim();
+  h.expect(/\b3$/.test(propRow), `the row counts three properties (${propRow})`);
+  await rows.getByRole("button", { name: "Объекты", exact: true }).click();
+  await p.waitForTimeout(400);
 
   // the property card
   await p.getByRole("button", { name: /77 Maple Dr, #3/ }).first().click();

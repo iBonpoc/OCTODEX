@@ -1,0 +1,65 @@
+/**
+ * The client form (docs/specs/13-app-structure.md §3.3 «Изменить», wave 4): the parts of the name, the main person's
+ * phones and email, the billing address. Pure — tested in test/clientForm.test.ts.
+ */
+import { peopleOf } from "@/data/people";
+import type { BillingAddress, Customer, Person, PersonPhone } from "@/data/types";
+
+export interface NameParts {
+  first: string;
+  last: string;
+  company: string;
+}
+
+/** The parts the form starts with: the saved ones (П-1); an old client has only `name` — first word, the rest. */
+export function namePartsOf(c: Pick<Customer, "name" | "firstName" | "lastName" | "companyName">): NameParts {
+  if (c.firstName || c.lastName || c.companyName) return { first: c.firstName ?? "", last: c.lastName ?? "", company: c.companyName ?? "" };
+  const [first = "", ...rest] = c.name.trim().split(/\s+/);
+  return { first, last: rest.join(" "), company: "" };
+}
+
+/** The shown name: «First Last», or the company when there is no person's name (a business client). */
+export function displayName(p: NameParts): string {
+  const person = [p.first.trim(), p.last.trim()].filter(Boolean).join(" ");
+  return person || p.company.trim();
+}
+
+export const nameOk = (p: NameParts) => displayName(p).length >= 2;
+export const phoneOk = (v: string) => v.replace(/\D/g, "").length >= 7;
+
+/**
+ * The client's people with the main person's phones and primary email replaced by the form's. Labels of the phones
+ * that stay keep their label; the first phone is the primary one; empty lines are dropped.
+ */
+export function withMainContacts(c: Customer, phones: string[], email: string): Person[] {
+  const [main, ...others] = peopleOf(c);
+  if (!main) return [];
+  const nextPhones: PersonPhone[] = phones
+    .map((n) => n.trim())
+    .filter(Boolean)
+    .map((number, i) => ({ number, label: main.phones[i]?.label ?? "mobile", primary: i === 0 || undefined }));
+  const otherEmails = main.emails.filter((e) => !e.primary).filter((e) => e.address !== email.trim());
+  const nextEmails = email.trim() ? [{ address: email.trim(), primary: true }, ...otherEmails] : otherEmails.map((e, i) => ({ ...e, primary: i === 0 || undefined }));
+  return [{ ...main, phones: nextPhones, emails: nextEmails }, ...others];
+}
+
+/** The main person's phones as the form shows them (primary first). */
+export function mainPhonesOf(c: Customer): string[] {
+  const main = peopleOf(c)[0];
+  if (!main) return [];
+  return [...main.phones].sort((a, b) => Number(!!b.primary) - Number(!!a.primary)).map((p) => p.number);
+}
+export const mainEmailOf = (c: Customer): string => {
+  const main = peopleOf(c)[0];
+  return main?.emails.find((e) => e.primary)?.address ?? main?.emails[0]?.address ?? "";
+};
+
+export const EMPTY_BILLING: BillingAddress = { line1: "", unit: "", city: "", state: "CA", zip: "" };
+/** a billing address is saved only with a street and a city; otherwise invoices go to the property address */
+export const billingOk = (b: BillingAddress) => b.line1.trim().length > 0 && b.city.trim().length > 0;
+/** one line for the row «Адрес для счетов» */
+export function billingLine(b: BillingAddress): string {
+  const street = [b.line1.trim(), b.unit?.trim() ? `#${b.unit.trim()}` : ""].filter(Boolean).join(", ");
+  const place = [b.city.trim(), [b.state?.trim(), b.zip?.trim()].filter(Boolean).join(" ")].filter(Boolean).join(", ");
+  return [street, place].filter(Boolean).join(", ");
+}
