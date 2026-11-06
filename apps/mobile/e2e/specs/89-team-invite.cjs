@@ -21,13 +21,16 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Пригласить", exact: true }).locator("visible=true").first().click();
   const form = p.locator('[aria-modal="true"]').filter({ hasText: "Отправить приглашение" }).last();
   await form.waitFor({ timeout: 3000 });
-  for (const r of ["Мастер", "Продажи", "Диспетчер", "Директор"]) h.expect((await form.getByRole("radio", { name: r, exact: true }).count()) === 1, `one-choice role «${r}»`);
+  const radio = (r) => form.getByRole("radio", { name: r, exact: true }).locator("visible=true");
+  // the sheet slides in (820/1280: a side panel a moment later) — wait for its items, count only the visible ones
+  await radio("Мастер").first().waitFor({ timeout: 5000 });
+  for (const r of ["Мастер", "Продажи", "Диспетчер", "Директор"]) h.expect((await radio(r).count()) === 1, `one-choice role «${r}»`);
   const send = form.getByRole("button", { name: "Отправить приглашение" });
   await form.getByPlaceholder("Имя").fill("Nina Invite");
   await form.getByPlaceholder("Email").fill("nina@");
   h.expect(await send.isDisabled(), "a broken email does not send");
   await form.getByPlaceholder("Email").fill("nina@example.com");
-  await form.getByRole("radio", { name: "Продажи", exact: true }).click();
+  await radio("Продажи").click();
   await h.shot("invite-form");
   await send.click();
   await p.waitForTimeout(700);
