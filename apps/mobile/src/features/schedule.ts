@@ -92,14 +92,25 @@ export const visitLate = (v: Parameters<typeof lateKind>[0], now: number = Date.
   lateKind(v, now, lateAfterMin) !== null;
 
 /**
- * П3c, the office side (the item in «Требует внимания» and the notice): the same rule, for visits of today only —
- * an older visit that never started is a matter of «Работы» (step 7), not «running late» for ever. One window for both.
- * «Today» is the company's calendar day (П4a), the threshold the company's setting.
+ * П3c, the office side (the item in «Требует внимания» and the notice): the same rule, for visits that touch today —
+ * they start today or are planned to run past the company's midnight into today (an 11:50 PM visit is still late at
+ * 12:10 AM: the tech is late whatever the date; decided 06.11). An older visit that never started is a matter of «Работы»
+ * (step 7), not «running late» for ever. One window for both. «Today» is the company's calendar day (П4a), the
+ * threshold the company's setting.
  */
 export const lateToday = (
-  v: Parameters<typeof lateKind>[0], now: number = Date.now(),
+  v: Parameters<typeof lateKind>[0] & { durationMin?: number }, now: number = Date.now(),
   s: { lateAfterMin: number } = SCHEDULE_SETTINGS_DEFAULT, tz: string = "America/Los_Angeles",
-): LateKind | null => (sameDayIn(v.start, now, tz) ? lateKind(v, now, s.lateAfterMin) : null);
+): LateKind | null => (touchesTodayIn(v, now, s.lateAfterMin, tz) ? lateKind(v, now, s.lateAfterMin) : null);
+
+/** the visit's planned time (at least up to the moment it becomes late) reaches the company's today */
+function touchesTodayIn(v: { start: string; durationMin?: number }, now: number, lateAfterMin: number, tz: string): boolean {
+  const a = new Date(v.start).getTime();
+  if (Number.isNaN(a)) return false;
+  const today = dayIn(now, tz);
+  const end = a + Math.max(v.durationMin || 0, lateAfterMin) * 60_000;
+  return dayIn(a, tz) <= today && dayIn(end - 1, tz) >= today;
+}
 
 /** the same calendar day in a time zone (the company's) — not the phone's */
 export const sameDayIn = (a: string | number, b: string | number, tz: string) =>

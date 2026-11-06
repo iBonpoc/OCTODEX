@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { useI18n } from "@/i18n";
@@ -25,7 +25,9 @@ export default function SignIn() {
   const [err, setErr] = useState<string | null>(null);
   const okEmail = /^\S+@\S+\.\S+$/.test(email.trim());
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
-  const done = () => router.replace("/auth/company");
+  // an invitation link waits through sign-in (wave 7-2): back to it, not to «create a company»
+  const { next } = useLocalSearchParams<{ next?: string }>();
+  const done = () => router.replace(next === "invite" ? "/auth/invite" : "/auth/company");
 
   const act = async (fn: () => Promise<string | null>, onOk?: () => void) => {
     setBusy(true);

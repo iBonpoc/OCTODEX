@@ -1,11 +1,11 @@
 /** Every screen (all routes in src/app) at 390 / 820 / 1280 in dark and light: no horizontal overflow; screenshots in e2e/out. */
 const SCREENS = [
   "/today", "/figures/leads?period=month", "/triage", "/leads", "/visits", "/plan", "/messages", "/calls", "/clients", "/more", "/notifications", "/search?q=mitchell",
-  "/lead/l1", "/lead/new", "/client/c1", "/property/p1", "/client/edit?id=c1", "/client/edit",
+  "/lead/l1", "/lead/new", "/client/c1", "/property/p1", "/client/edit?id=c1", "/client/edit", "/client/import",
   "/estimate/new?id=e6", "/estimate/e5", "/estimate/signature", "/estimates", "/p/demo0handyman0estimate0000000001",
   "/jobs", "/job/j1", "/job/new", "/job/schedule?jobId=j1", "/visit/v1",
   "/money", "/invoice", "/invoice?f=paid", "/payments", "/reports", "/reports/owed", "/reports/collected?p=all", "/reports/sales", "/reports/sources?p=all", "/invoice/i5", "/receipt/pay5", "/expense/new",
-  "/catalog", "/catalog/cat-haul", "/company", "/company/profile", "/company/schedule", "/company/licenses", "/company/trades", "/team", "/settings", "/auth/trade",
+  "/catalog", "/catalog/cat-haul", "/company", "/company/profile", "/company/schedule", "/company/licenses", "/company/trades", "/team", "/settings", "/auth/trade", "/auth/invite?token=a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 ];
 /**
  * Screens already on the new list cards (step 10а, docs/specs/06-list-cards.md): also checked for straight edges and equal
