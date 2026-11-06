@@ -1,0 +1,7 @@
+{
+  "ios": {
+    "NSCameraUsageDescription": "Las fotos de antes y después del trabajo se adjuntan a la visita.",
+    "NSPhotoLibraryUsageDescription": "Las fotos del trabajo se adjuntan a la visita.",
+    "NSLocationWhenInUseUsageDescription": "Solo durante tu visita y solo con tu consentimiento: la oficina ve qué tan lejos estás de la dirección del trabajo."
+  }
+}

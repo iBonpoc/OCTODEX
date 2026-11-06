@@ -1,3 +1,4 @@
+import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { useAuth } from "@/cloud/auth";
@@ -11,7 +12,8 @@ import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
 import { usePlanShowDone } from "@/features/prefs";
 import { LocationSetting } from "@/features/LocationParts";
-import { Card, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
 
 /**
  * "My settings" (docs/specs/05-menu-and-settings.md §4.1): only what concerns me and this device.
@@ -129,6 +131,18 @@ export default function Settings() {
           </T>
         </Card>
       ) : null}
+
+      {/* 7а-1 (legal/01 §3.5 «Мои настройки → О приложении»): the documents with their editions, help */}
+      <SectionTitle title={t("settings.about")} />
+      <Card>
+        <View testID="settings-about">
+          <ListRow title={t("legal.terms.title")} subtitle={t("legal.edition", { date: editionLabel(LEGAL_VERSIONS.terms) })} onPress={() => router.push(legalHref("terms"))} />
+          <Divider />
+          <ListRow title={t("legal.privacy.title")} subtitle={t("legal.edition", { date: editionLabel(LEGAL_VERSIONS.privacy) })} onPress={() => router.push(legalHref("privacy"))} />
+          <Divider />
+          <ListRow title={t("support.title")} subtitle={t("support.subtitle")} onPress={() => router.push("/help")} />
+        </View>
+      </Card>
 
       {mode === "demo" ? (
         <>

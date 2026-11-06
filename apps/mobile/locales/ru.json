@@ -1,0 +1,7 @@
+{
+  "ios": {
+    "NSCameraUsageDescription": "Фото до и после работы прикрепляются к выезду.",
+    "NSPhotoLibraryUsageDescription": "Фото работ прикрепляются к выезду.",
+    "NSLocationWhenInUseUsageDescription": "Только во время вашего выезда и только с вашего согласия: офис видит, как далеко вы от адреса работы."
+  }
+}

@@ -103,6 +103,15 @@ begin
   return r;
 end;
 $$;
+-- fixtures: a person agrees to the current Terms and Privacy the way the app does (accept_legal under their JWT; 7а-1, T49)
+create function tst.agree(p_user uuid) returns void language plpgsql as $$
+declare v_old text := current_setting('request.jwt.claim.sub', true);
+begin
+  perform set_config('request.jwt.claim.sub', p_user::text, true);
+  perform public.accept_legal(jsonb_build_object('terms', app.legal_current_version('terms'), 'privacy', app.legal_current_version('privacy')), 'web', 'test');
+  perform set_config('request.jwt.claim.sub', coalesce(v_old, ''), true);
+end;
+$$;
 grant execute on all functions in schema tst to authenticated, anon;
 
 -- ---- Переключение пользователя (как PostgREST: роль + sub из JWT) -------------
@@ -129,7 +138,12 @@ do $$ begin
   perform tst.ok((select locale from public.users where email = 'owner@a.test') = 'ru', 'locale from metadata');
 end $$;
 
--- Компании создают их владельцы (онбординг): создатель автоматически owner
+-- Компании создают их владельцы (онбординг): создатель автоматически owner.
+-- Since 7а-1 a company needs the current Terms and Privacy accepted first (T49) — the owners agree the way the app does.
+:as_owner_a
+do $$ begin perform public.accept_legal('{"terms":"2026-11-06","privacy":"2026-11-06"}', 'web', 'test'); end $$;
+:as_owner_b
+do $$ begin perform public.accept_legal('{"terms":"2026-11-06","privacy":"2026-11-06"}', 'web', 'test'); end $$;
 :as_owner_a
 insert into public.companies (id, name) values ('ca000000-0000-0000-0000-000000000000', 'Bonpoc Gutters');
 :as_owner_b
@@ -4206,6 +4220,7 @@ select tst.ok(tst.cnt($q$select 1 from public.leads$q$) > 0 and tst.cnt($q$selec
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a4800000-0000-4000-8000-000000000001', 'new48@a.test',   '{"full_name":"Nora New"}'),
   ('a4800000-0000-4000-8000-000000000002', 'other48@a.test', '{"full_name":"Oscar Other"}');
+select tst.agree('a4800000-0000-4000-8000-000000000001'), tst.agree('a4800000-0000-4000-8000-000000000002');  -- 7а-1
 \set as_new48   'reset role; set request.jwt.claim.sub = ''a4800000-0000-4000-8000-000000000001''; set role authenticated;'
 \set as_other48 'reset role; set request.jwt.claim.sub = ''a4800000-0000-4000-8000-000000000002''; set role authenticated;'
 select tst.ok((select status from public.memberships where status not in ('invited', 'active', 'disabled', 'deleted') limit 1) is null, 'membership statuses: invited / active / disabled / deleted');
@@ -4291,6 +4306,7 @@ select tst.ok((select count(*) from public.companies where id = 'ca000000-0000-0
 -- already on the team: a second invitation is not a way to change one's role; a switched-off person's old link does not bring them back
 :as_super
 insert into auth.users (id, email, raw_user_meta_data) values ('a4800000-0000-4000-8000-000000000003', 'late48@a.test', '{"full_name":"Lee Late"}');
+select tst.agree('a4800000-0000-4000-8000-000000000003');  -- 7а-1
 \set as_late48 'reset role; set request.jwt.claim.sub = ''a4800000-0000-4000-8000-000000000003''; set role authenticated;'
 :as_owner_a
 select public.invite_member('ca000000-0000-0000-0000-000000000000', 'late48@a.test', 'office') ->> 'token' as t48_late \gset
@@ -4325,6 +4341,7 @@ select tst.ok((select count(*) from public.memberships where company_id = 'ca000
 -- a second owner switches the first off: allowed while one active owner stays; and back
 :as_super
 insert into auth.users (id, email, raw_user_meta_data) values ('a4800000-0000-4000-8000-000000000004', 'owner2@a.test', '{"full_name":"Olga Owner"}');
+select tst.agree('a4800000-0000-4000-8000-000000000004');  -- 7а-1
 insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000004', 'owner', 'active');
 reset role; set request.jwt.claim.sub = 'a4800000-0000-4000-8000-000000000004'; set role authenticated;
 select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'disabled');
@@ -4345,6 +4362,7 @@ select tst.ok((select status = 'active' and deleted_at is null and role = 'tech'
 alter table auth.users add column if not exists email_confirmed_at timestamptz;
 update auth.users set email_confirmed_at = now();
 insert into auth.users (id, email, raw_user_meta_data) values ('a4800000-0000-4000-8000-000000000005', 'unconf48@a.test', '{"full_name":"Una Unconfirmed"}');
+select tst.agree('a4800000-0000-4000-8000-000000000005');  -- 7а-1
 :as_owner_a
 select public.invite_member('ca000000-0000-0000-0000-000000000000', 'unconf48@a.test', 'tech') ->> 'token' as t48_unconf \gset
 reset role; set request.jwt.claim.sub = 'a4800000-0000-4000-8000-000000000005'; set role authenticated;
@@ -4360,6 +4378,7 @@ alter table auth.users drop column email_confirmed_at;
 select public.invite_member('ca000000-0000-0000-0000-000000000000', 'down48@a.test', 'admin') ->> 'token' as t48_down \gset
 :as_super
 insert into auth.users (id, email, raw_user_meta_data) values ('a4800000-0000-4000-8000-000000000006', 'down48@a.test', '{"full_name":"Dan Down"}');
+select tst.agree('a4800000-0000-4000-8000-000000000006');  -- 7а-1
 update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 reset role; set request.jwt.claim.sub = 'a4800000-0000-4000-8000-000000000006'; set role authenticated;
 select tst.fails(format('select public.accept_invitation(%L)', :'t48_down'), 'the inviter is no longer an admin: the link is dead');
@@ -4396,6 +4415,142 @@ select public.set_member_status('ca000000-0000-0000-0000-000000000000', 'a000000
 update app.company_flags set location_sharing = false where company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T48 wave 7-2: invitations and team (S21) ok'
 
+-- ---------------------------------------------------------------- T49: wave 7а-1 — согласие с Условиями и Политикой (clickwrap; docs/specs/19 §5)
+-- Without the current Terms and Privacy accepted: no company, no joining a team. The server sets who and when and checks
+-- the edition; the journal is appended to only; a person sees only their own rows; anon calls nothing.
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a4900000-0000-4000-8000-000000000001', 'new49@a.test',  '{"full_name":"Nina Fortynine"}'),
+  ('a4900000-0000-4000-8000-000000000002', 'gone49@a.test', '{"full_name":"Gus Gone"}');
+\set as_new49  'reset role; set request.jwt.claim.sub = ''a4900000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_gone49 'reset role; set request.jwt.claim.sub = ''a4900000-0000-4000-8000-000000000002''; set role authenticated;'
+\set v49 '{"terms":"2026-11-06","privacy":"2026-11-06"}'
+:as_owner_a
+select public.invite_member('ca000000-0000-0000-0000-000000000000', 'new49@a.test', 'tech') ->> 'token' as t49_token \gset
+-- before agreeing
+:as_new49
+select tst.ok(not (public.legal_status() ->> 'ok')::boolean, 'status: not accepted yet');
+select tst.ok(not (public.legal_status() -> 'terms' ->> 'ever')::boolean, 'status: first time (the gate says «accept», not «changed»)');
+select tst.ok((public.legal_status() -> 'terms' ->> 'current') = '2026-11-06', 'status: the current edition');
+select tst.fails_like($q$insert into public.companies (name) values ('No Consent Co')$q$, '%legal not accepted%', 'no company without the consent');
+select tst.fails_like(format('select public.accept_invitation(%L)', :'t49_token'), '%legal not accepted%', 'no joining a team without the consent');
+:as_super
+select tst.ok((select status from public.invitations where email = 'new49@a.test') = 'pending', 'the refused link is not burnt: still pending');
+select tst.ok((select count(*) from public.companies where name = 'No Consent Co') = 0, 'and no company appeared');
+-- the editions the app showed are checked strictly
+:as_new49
+select tst.fails_like($q$select public.accept_legal('{"terms":"2026-11-06"}', 'web', '1.0.0')$q$, '%terms and privacy%', 'both documents at once');
+select tst.fails_like($q$select public.accept_legal('{"terms":"2026-11-06","privacy":"2026-11-06","dpa":"2026-11-06"}', 'web', '1.0.0')$q$, '%terms and privacy%', 'no DPA without a company (and no other key)');
+select tst.fails_like($q$select public.accept_legal('{"terms":"2026-01-01","privacy":"2026-11-06"}', 'web', '1.0.0')$q$, '%legal version outdated%', 'an old edition is refused');
+select tst.fails_like($q$select public.accept_legal('{"terms":20261106,"privacy":"2026-11-06"}', 'web', '1.0.0')$q$, '%legal version outdated%', 'the edition is a string');
+select tst.fails_like($q$select public.accept_legal('[1,2]', 'web', '1.0.0')$q$, '%terms and privacy%', 'an object only');
+select tst.fails_like($q$select public.accept_legal('{"terms":"2026-11-06","privacy":"2026-11-06"}', 'symbian', '1.0.0')$q$, '%unknown platform%', 'a known platform only');
+select tst.fails_like($q$select public.accept_legal('{"terms":"2026-11-06","privacy":"2026-11-06"}', 'web', E'1.0\n<script>')$q$, '%bad app version%', 'the app version: no control characters');
+select tst.blocked($q$insert into public.legal_acceptance (user_id, doc, version, platform, app_version) values ('a4900000-0000-4000-8000-000000000001', 'terms', '2026-11-06', 'web', 'x')$q$, 'nobody writes the journal directly');
+select tst.ok(tst.cnt('select 1 from public.legal_acceptance') = 0, 'nothing written by the refused calls');
+-- an anonymous sign-in agrees to nothing
+set request.jwt.claims = '{"is_anonymous": true}';
+select tst.fails_like(format('select public.accept_legal(%L, %L, %L)', :'v49', 'web', '1.0.0'), '%sign in first%', 'an anonymous sign-in does not agree');
+reset request.jwt.claims;
+-- a date that does not exist is the same refusal (not a raw 22008)
+select tst.fails_like($q$select public.accept_legal('{"terms":"2026-02-30","privacy":"2026-11-06"}', 'web', '1.0.0')$q$, '%legal version outdated%', 'a date that does not exist');
+-- agree: without cf-connecting-ip there is no IP (X-Forwarded-For is only kept raw — who wrote which entry is unknown)
+set request.headers = '{"x-forwarded-for": "6.6.6.6, 203.0.113.7"}';
+select tst.ok((public.accept_legal(:'v49', 'ios', '1.0.0+219') ->> 'ok')::boolean, 'agreed: status ok');
+reset request.headers;
+select tst.ok(tst.cnt($q$select 1 from public.legal_acceptance where doc in ('terms', 'privacy') and version = '2026-11-06'$q$) = 2, 'two rows: Terms and Privacy');
+select tst.ok((select every(user_id = 'a4900000-0000-4000-8000-000000000001' and company_id is null and platform = 'ios' and app_version = '1.0.0+219'
+                and accepted_at > now() - interval '1 minute') from public.legal_acceptance), 'who, platform, version — by the server and the call');
+select tst.ok((select every(ip is null and ip_raw = 'xff=6.6.6.6, 203.0.113.7') from public.legal_acceptance), 'X-Forwarded-For alone: no IP, the raw header kept');
+select min(accepted_at)::text as t49_at from public.legal_acceptance \gset
+-- again (a double tap, a retry): no new rows, the time stays
+select public.accept_legal(:'v49', 'web', '1.0.1') is not null as t49_again \gset
+select tst.ok(tst.cnt('select 1 from public.legal_acceptance') = 2, 'again: still two rows');
+select tst.ok((select min(accepted_at)::text from public.legal_acceptance) = :'t49_at', 'again: the first time stays');
+-- the journal cannot be edited or wiped
+select tst.blocked($q$update public.legal_acceptance set version = '2027-01-01'$q$, 'no edits to the journal');
+select tst.blocked($q$delete from public.legal_acceptance$q$, 'no deletes from the journal');
+-- now the company and the team
+select tst.ok((select app.has_current_legal()), 'has_current_legal for the policy');
+insert into public.companies (id, name) values ('c4900000-0000-4000-8000-000000000001', 'Consent Co');
+select tst.ok(tst.cnt($q$select 1 from public.memberships where company_id = 'c4900000-0000-4000-8000-000000000001' and role = 'owner' and status = 'active'$q$) = 1, 'agreed: the company is created, the creator is its owner');
+select tst.ok((public.accept_invitation(:'t49_token') ->> 'role') = 'tech', 'agreed: the same link now lets in');
+-- an anonymous sign-in with consent rows still creates nothing and joins nothing
+select public.invite_member('c4900000-0000-4000-8000-000000000001', 'gone49@a.test', 'tech') ->> 'token' as t49_anon \gset
+set request.jwt.claims = '{"is_anonymous": true}';
+select tst.ok(not (select app.has_current_legal()), 'anonymous: no consent even with rows');
+select tst.fails_like($q$insert into public.companies (name) values ('Anon Co')$q$, '%legal not accepted%', 'anonymous: no company');
+select tst.fails_like(format('select public.accept_invitation(%L)', :'t49_anon'), '%legal not accepted%', 'anonymous: no joining');
+reset request.jwt.claims;
+-- other people's rows are not seen
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.legal_acceptance where user_id = 'a4900000-0000-4000-8000-000000000001'$q$) = 0, 'the owner of the team does not see the person''s consent rows');
+select tst.ok(tst.cnt('select 1 from public.legal_acceptance') = 2, 'only their own two');
+-- a superuser cannot edit the journal either (only the erasure of the person removes it)
+:as_super
+select tst.fails_like($q$update public.legal_acceptance set ip = null$q$, '%append-only%', 'even the server does not edit the journal');
+select tst.fails_like($q$delete from public.legal_acceptance$q$, '%append-only%', 'nor deletes from it directly');
+-- a new edition: the person has to accept again (simulated inside a transaction, rolled back)
+begin;
+create or replace function app.legal_current_version(p_doc text)
+returns date language sql stable set search_path = '' as $f$
+  select case p_doc when 'terms' then date '2026-12-01' when 'privacy' then date '2026-11-06' end;
+$f$;
+set local request.jwt.claim.sub = 'a4900000-0000-4000-8000-000000000001';
+set local role authenticated;
+select tst.ok(not (public.legal_status() ->> 'ok')::boolean and (public.legal_status() -> 'terms' ->> 'ever')::boolean, 'a new edition: not ok, but accepted before (the gate says «changed»)');
+select tst.fails_like($q$insert into public.companies (name) values ('Old Edition Co')$q$, '%legal not accepted%', 'a new edition: no new company until accepted again');
+select tst.fails_like(format('select public.accept_legal(%L, %L, %L)', :'v49', 'web', '1.0.0'), '%legal version outdated%', 'an old app with the old text is refused');
+select tst.ok((public.accept_legal('{"terms":"2026-12-01","privacy":"2026-11-06"}', 'web', '1.0.0') ->> 'ok')::boolean, 'the new edition accepted');
+rollback;
+-- erasing a person takes their consent rows with them (S22, App Store 5.1.1(v)); a direct delete still does not.
+-- On the way: Cloudflare's address wins over X-Forwarded-For; a broken header never blocks the consent.
+:as_gone49
+set request.headers = '{"cf-connecting-ip": "198.51.100.9", "x-forwarded-for": "6.6.6.6, 203.0.113.7"}';
+select public.accept_legal(:'v49', 'android', '1.0.0') is not null as t49_gone \gset
+reset request.headers;
+select tst.ok((select every(ip = '198.51.100.9'::inet and ip_raw = 'cf=198.51.100.9 | xff=6.6.6.6, 203.0.113.7') from public.legal_acceptance), 'the IP is cf-connecting-ip; both headers kept raw');
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a4900000-0000-4000-8000-000000000003', 'bad49@a.test', '{"full_name":"Bea Badheader"}');
+reset role; set request.jwt.claim.sub = 'a4900000-0000-4000-8000-000000000003'; set role authenticated;
+set request.headers = '{"cf-connecting-ip": "garbage", "x-forwarded-for": "1.2.3.4:5"}';
+select tst.ok((public.accept_legal(:'v49', 'web', '1.0.0') ->> 'ok')::boolean, 'a broken cf-connecting-ip does not block the consent');
+reset request.headers;
+select tst.ok((select every(ip is null and ip_raw = 'cf=garbage | xff=1.2.3.4:5') from public.legal_acceptance), 'no IP then, the raw headers kept');
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a4900000-0000-4000-8000-000000000004', 'long49@a.test', '{"full_name":"Lou Longheader"}');
+reset role; set request.jwt.claim.sub = 'a4900000-0000-4000-8000-000000000004'; set role authenticated;
+select set_config('request.headers', jsonb_build_object('cf-connecting-ip', '192.0.2.5/0', 'x-forwarded-for', repeat('9.9.9.9, ', 40))::text, false) is not null as t49_long \gset
+select tst.ok((public.accept_legal(:'v49', 'web', '1.0.0') ->> 'ok')::boolean, 'a 300-character header does not block the consent');
+reset request.headers;
+select tst.ok((select every(length(ip_raw) = 200 and ip = '192.0.2.5'::inet and masklen(ip) = 32) from public.legal_acceptance), 'the raw header is cut to 200; the IP has no mask');
+:as_gone49
+:as_super
+select tst.ok((select count(*) from public.legal_acceptance where user_id = 'a4900000-0000-4000-8000-000000000002') = 2, 'the second person agreed');
+delete from auth.users where id = 'a4900000-0000-4000-8000-000000000002';
+select tst.ok((select count(*) from public.legal_acceptance where user_id = 'a4900000-0000-4000-8000-000000000002') = 0, 'erased with the person');
+-- rights (rule 18, T52): anon calls nothing; the helpers are for the server only
+select tst.ok(not has_function_privilege('anon', 'public.accept_legal(jsonb,text,text)', 'EXECUTE'), 'anon: no accept_legal');
+select tst.ok(not has_function_privilege('anon', 'public.legal_status()', 'EXECUTE'), 'anon: no legal_status');
+select tst.ok(not has_function_privilege('anon', 'app.has_current_legal()', 'EXECUTE'), 'anon: no has_current_legal');
+select tst.ok(has_function_privilege('authenticated', 'app.has_current_legal()', 'EXECUTE'), 'authenticated: has_current_legal (the companies policy calls it)');
+select tst.ok(not has_function_privilege('authenticated', 'app.legal_current_version(text)', 'EXECUTE'), 'the editions function is internal');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_company_needs_legal()', 'EXECUTE'), 'trigger functions are internal');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_legal_acceptance_guard()', 'EXECUTE'), 'trigger functions are internal (journal)');
+select tst.ok(not has_table_privilege('anon', 'public.legal_acceptance', 'SELECT'), 'anon: no journal');
+select tst.ok(not has_table_privilege('authenticated', 'public.legal_acceptance', 'INSERT'), 'authenticated: no direct insert');
+select tst.ok(not has_table_privilege('authenticated', 'public.legal_acceptance', 'UPDATE'), 'authenticated: no update');
+select tst.ok(not has_table_privilege('authenticated', 'public.legal_acceptance', 'DELETE'), 'authenticated: no delete');
+reset role; set role anon;
+select tst.fails(format('select public.accept_legal(%L, %L, %L)', :'v49', 'web', '1.0.0'), 'anon cannot agree');
+:as_super
+-- every security definer function in public and app fixes its search_path (security-check 7а-1)
+select tst.ok(not exists (
+  select 1 from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where p.prosecdef and n.nspname in ('public', 'app')
+     and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%')), 'security definer functions set search_path');
+\echo 'T49 wave 7а-1: consent to the Terms and Privacy (clickwrap) ok'
+:as_super
 -- ---------------------------------------------------------------- T58: «do not service» — only the director or the office, with a trace (04 §12.8)
 :as_super
 create function tst.mark_dns(p_id uuid, p_status text) returns void language plpgsql security definer set search_path = '' as $$

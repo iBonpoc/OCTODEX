@@ -10,9 +10,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.octodex.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Фото до и после работы прикрепляются к выезду.",
-        "NSPhotoLibraryUsageDescription": "Фото работ прикрепляются к выезду.",
+        "NSCameraUsageDescription": "Photos before and after the work are attached to the visit.",
+        "NSPhotoLibraryUsageDescription": "Photos of the work are attached to the visit.",
         "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true,
         "NSLocationWhenInUseUsageDescription": "Only during your visit and only with your consent: the office sees how far you are from the job address."
       },
       "config": {
@@ -50,8 +51,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Фото работ прикрепляются к выезду.",
-          "cameraPermission": "Фото до и после работы прикрепляются к выезду."
+          "photosPermission": "Photos of the work are attached to the visit.",
+          "cameraPermission": "Photos before and after the work are attached to the visit."
         }
       ],
       [
@@ -77,6 +78,11 @@
     },
     "updates": {
       "url": "https://u.expo.dev/49d009d4-a05b-4911-b7da-1e47c4e10fba"
+    },
+    "locales": {
+      "en": "./locales/en.json",
+      "ru": "./locales/ru.json",
+      "es": "./locales/es.json"
     }
   }
 }

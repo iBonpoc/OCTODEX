@@ -1,0 +1,7 @@
+{
+  "ios": {
+    "NSCameraUsageDescription": "Photos before and after the work are attached to the visit.",
+    "NSPhotoLibraryUsageDescription": "Photos of the work are attached to the visit.",
+    "NSLocationWhenInUseUsageDescription": "Only during your visit and only with your consent: the office sees how far you are from the job address."
+  }
+}
