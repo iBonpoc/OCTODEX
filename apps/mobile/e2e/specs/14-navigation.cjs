@@ -53,10 +53,15 @@ exports.run = async (h) => {
   await p.waitForTimeout(500);
   h.expect(p.url().endsWith("/money"), `expense → money: ${p.url()}`);
 
-  // ☰ roots (13а §3): Catalog has ☰, no «back» and no trail; its item goes up to Catalog
+  // section roots (13а §3): Catalog has no «back» and no trail; its item goes up to Catalog
   await h.go("/catalog");
   h.expect((await p.getByRole("button", { name: /^Назад/ }).count()) === 0 && (await p.getByRole("toolbar", { name: "Где вы" }).count()) === 0, "catalog is a ☰ root");
-  // phone: ☰ in the header; 820/1280: the side menu with Catalog marked (13 §2.5)
+  // phone: «‹ Ещё» to the sections (variant Б, no ☰); 820/1280: the side menu with Catalog marked (13 §2.5)
   if (h.layout.width >= 820) h.expect((await p.getByTestId("side-catalog").getAttribute("aria-current")) === "page", "Catalog marked on the side menu");
-  else h.expect((await p.getByRole("button", { name: "Меню", exact: true }).count()) >= 1, "☰ on Catalog");
+  else {
+    h.expect((await p.getByRole("button", { name: "Меню", exact: true }).count()) === 0, "no ☰ on Catalog");
+    await p.getByTestId("back-more").locator("visible=true").click();
+    await p.waitForTimeout(600);
+    h.expect(new URL(p.url()).pathname === "/more", `«‹ Ещё» → /more (${p.url()})`);
+  }
 };

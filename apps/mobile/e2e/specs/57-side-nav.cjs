@@ -1,6 +1,6 @@
 /**
  * Wave 2b of the app shell (docs/specs/13 §2.5, 13а §8): the side menu on 820 and 1280.
- * - 390: no side menu, the bottom tabs and ☰ in the header;
+ * - 390: no side menu, the bottom tabs, no ☰ (variant Б: «Ещё» is a tab);
  * - 820: the rail (icons with labels) always on screen, ☰ on it opens the full menu over the content;
  * - 1280: the rail by default; ☰ opens the full menu in place and pushes the content; it is remembered after a reload;
  *   ☰ again folds it back;
@@ -19,7 +19,7 @@ exports.run = async (h) => {
   if (w < 820) {
     h.expect((await nav().count()) === 0, "390: no side menu");
     h.expect((await p.getByRole("tab", { name: "Главная", exact: true }).count()) === 1, "390: the bottom tabs");
-    h.expect((await p.getByRole("button", { name: "Меню", exact: true }).locator("visible=true").count()) === 1, "390: ☰ in the header");
+    h.expect((await p.getByRole("button", { name: "Меню", exact: true }).locator("visible=true").count()) === 0, "390: no ☰ in the header (variant Б)");
     return;
   }
 

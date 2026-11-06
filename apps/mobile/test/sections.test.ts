@@ -13,22 +13,27 @@ const files = new Set(
 );
 const menu = (r: Role) => menuGroups(r).flatMap((g) => g.items.map((i) => i.id));
 
-describe("bottom tabs: the same 5 for every role (13 §2.1)", () => {
-  it("Главная · План · Сообщения · Звонки · Клиенты", () => {
-    for (const r of ROLES) expect(tabs(r).map((s) => s.id), r).toEqual(["home", "plan", "messages", "calls", "clients"]);
+describe("bottom tabs: the same 5 for every role (13 v2 §2.1, variant Б)", () => {
+  it("Главная · План · Сообщения · Клиенты · Ещё", () => {
+    for (const r of ROLES) expect(tabs(r).map((s) => s.id), r).toEqual(["home", "plan", "messages", "clients", "more"]);
   });
-  it("no «Ещё» and no «Продажи» tab any more", () => {
-    for (const r of ROLES) expect(tabs(r).map((s) => s.label)).not.toContain("tab.more");
-    expect(SECTIONS.some((s) => s.label === "tab.sales" || s.label === "tab.more")).toBe(false);
+  it("no «Продажи» and no «Звонки» tab (until the own number)", () => {
+    for (const r of ROLES) expect(tabs(r).map((s) => s.id)).not.toContain("calls");
+    expect(SECTIONS.some((s) => s.label === "tab.sales")).toBe(false);
   });
   it("«Главная» opens the role's own home", () => {
     for (const r of ROLES) expect(sectionHref("home", r)).toBe(`/${roleHome[r]}`);
   });
 });
 
-describe("☰ by rights (13 §4)", () => {
-  it("owner/admin: everything", () => {
-    expect(menu("director")).toEqual(["home", "plan", "leads", "jobs", "clients", "estimates", "invoices", "catalog", "money", "team", "company", "settings"]);
+describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, §4)", () => {
+  it("owner/admin «Ещё»: everything but the tabs", () => {
+    expect(menu("director")).toEqual(["leads", "jobs", "calls", "estimates", "invoices", "catalog", "money", "team", "company", "settings"]);
+  });
+  it("the side menu: the tabs too, but never «Ещё» itself", () => {
+    const side = menuGroups("director", true).flatMap((g) => g.items.map((i) => i.id));
+    expect(side).toEqual(["home", "messages", "plan", "leads", "jobs", "clients", "calls", "estimates", "invoices", "catalog", "money", "team", "company", "settings"]);
+    expect(side).not.toContain("more");
   });
   it("office: no Team, no Company settings", () => {
     const m = menu("dispatcher");
@@ -47,9 +52,9 @@ describe("☰ by rights (13 §4)", () => {
     expect(m).toContain("estimates");
     expect(sectionHref("estimates", "tech")).toBe("/estimates");
   });
-  it("phone ☰ «Верх» = Создать · Главная; on 820/1280 the menu also has Messages and Calls (13 v2 §2.3, §2.5)", () => {
-    expect(menuGroups("director")[0]!.items.map((s) => s.id)).toEqual(["home"]);
-    expect(menuGroups("director", true)[0]!.items.map((s) => s.id)).toEqual(["home", "messages", "calls"]);
+  it("«Ещё» has no «Верх» group (Главная and Сообщения are tabs); the side menu starts with Главная · Сообщения", () => {
+    expect(menuGroups("director")[0]!.group).toBe("work");
+    expect(menuGroups("director", true)[0]!.items.map((s) => s.id)).toEqual(["home", "messages"]);
   });
   it("every item a role is shown, it may open (the route guard agrees)", () => {
     for (const r of ROLES) for (const id of menu(r)) expect(canOpen(r, sectionHref(id, r)), `${r} ${id}`).toBe(true);
@@ -58,7 +63,7 @@ describe("☰ by rights (13 §4)", () => {
     for (const r of ROLES) {
       const g = menuGroups(r);
       expect(g.every((x) => x.items.length > 0)).toBe(true);
-      expect(g[0]!.group).toBe("top");
+      expect(menuGroups(r, true)[0]!.group).toBe("top");
       expect(g.at(-1)!.group).toBe("bottom");
     }
   });
