@@ -36,7 +36,7 @@ import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
-import { todayKey, usePersistentState } from "./persist";
+import { onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import {
@@ -310,6 +310,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
   // gate codes (C2) stay in memory in the cloud: never written to the cache on the phone (security review of #62)
   const [gateCodes, setGateCodes] = useState<Record<string, string>>({});
+  const cacheKeyRef = useRef(cacheKey);
+  cacheKeyRef.current = cacheKey;
   const db = useMemo(() => {
     const d = normalizeDB(saved.db, mode);
     return mode === "cloud" ? withGateCodes(d, gateCodes) : d;
@@ -318,12 +320,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   setZone(db.company?.timezone);
   const setDb = useCallback(
     (next: DB) => {
-      if (mode !== "cloud") return setSaved({ day: todayKey(), db: next });
+      // bound to this render's cache: a late write for the company is dropped after sign-out (19 §6.12)
+      if (mode !== "cloud") return setSaved({ day: todayKey(), db: next }, cacheKey);
+      if (cacheKeyRef.current !== cacheKey) return;
       const { db: bare, codes } = splitGateCodes(next);
       setGateCodes(codes);
-      setSaved({ day: "cloud", db: bare });
+      setSaved({ day: "cloud", db: bare }, cacheKey);
     },
-    [setSaved, mode],
+    [setSaved, mode, cacheKey],
   );
   // nothing chosen yet → the first role this person has (owner → director); route-guard fix
   const [savedRole, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "director");
@@ -355,6 +359,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     try {
       const next = await loadCompanyDB(company.companyId, auth.userId);
+      // signed out (or another company) while it loaded: the answer is not for this store any more (19 §6.12)
+      if (modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
       if (!outboxRef.current.length) setDb(next);
       setSyncError(null);
     } catch (e) {
@@ -379,6 +385,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
     },
     [setDb, refresh],
+  );
+  // the device was wiped (account deletion): what lives only in memory goes too (19 §6.12)
+  useEffect(
+    () =>
+      onDeviceForgotten(() => {
+        setGateCodes({});
+        waitingPoints.current = {};
+      }),
+    [],
   );
   const sendWaitingPoints = useCallback(() => {
     if (!onlineRef.current) return;

@@ -40,7 +40,8 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
     removeItem: async (k: string) => void storage.delete(k),
   },
 }));
-import { callDelete, finishDeletion, myAccountState, profileDeleted } from "../src/cloud/account";
+import { callDelete, finishDeletion, finishOnDevice, myAccountState, profileDeleted, wipeIfPending } from "../src/cloud/account";
+import { onDeviceForgotten } from "../src/data/persist";
 
 beforeEach(() => {
   Object.assign(state, { hang: false, deletedAt: null, error: null, signedOut: 0, session: true });
@@ -99,5 +100,23 @@ describe("unit:accountCloud — the repeat on start finishes it and wipes the de
     await finishDeletion();
     expect([...storage.keys()]).toEqual(["octo.lang.v1"]);
     expect(state.signedOut).toBe(1);
+  });
+});
+
+describe("unit:accountCloud — the store in memory is forgotten with the device (19 §6.12, store debt)", () => {
+  it("after the wipe every device key held in memory is reset; a key of the phone itself is not", async () => {
+    const heard: string[] = [];
+    const off = onDeviceForgotten((wiped) => {
+      for (const k of ["octo.outbox.v1", "octo.role.v1", "octo.cloud.v1.c1", "octo.lang.v1"]) if (wiped(k)) heard.push(k);
+    });
+    await finishOnDevice();
+    expect(heard).toEqual(["octo.outbox.v1", "octo.role.v1", "octo.cloud.v1.c1"]);
+    heard.length = 0;
+    await wipeIfPending(); // nothing pending: nothing forgotten
+    expect(heard).toEqual([]);
+    storage.set("octo.wipe.pending.v1", "1");
+    await wipeIfPending();
+    expect(heard).toHaveLength(3);
+    off();
   });
 });
