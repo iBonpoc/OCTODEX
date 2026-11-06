@@ -43,6 +43,7 @@ export default function JobScreen() {
   const [tab, setTab] = useState<Tab>("details");
   const [filter, setFilter] = useState<JobHistoryFilter>("all");
   const [noteText, setNoteText] = useState("");
+  const [restSent, setRestSent] = useState(false);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/jobs"));
   const j = findJob(db, id);
   if (!j)
@@ -96,6 +97,9 @@ export default function JobScreen() {
     toast.show(store.online ? t("job3.done.closed") : t("offline.queued"), store.completeJob(j.id));
   };
   const invoiceRest = () => {
+    // one tap = one balance invoice (a double tap before the re-render made two)
+    if (restSent) return;
+    setRestSent(true);
     toast.show(store.online ? t("job3.done.invoiced") : t("offline.queued"), store.issueInvoice(j.id, "final", rest, t("job3.done.restTitle")));
   };
 
@@ -126,7 +130,7 @@ export default function JobScreen() {
           </RowView>
         </Card>
       ) : null}
-      {office && j.status === "done" && rest > 0 ? (
+      {office && j.status === "done" && rest > 0 && !restSent ? (
         <Button label={t("job3.done.invoiceRest", { amount: money(rest) })} icon="invoice" variant="primary" full onPress={invoiceRest} />
       ) : null}
 
@@ -167,7 +171,7 @@ export default function JobScreen() {
 
       <SectionTitle
         title={t("job3.schedule")}
-        right={<Button label={visits.length ? t("sch.another") : t("sch.title")} icon="calendar" size="sm" variant={visits.length ? "ghost" : "primary"} onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />}
+        right={j.status === "done" ? undefined : <Button label={visits.length ? t("sch.another") : t("sch.title")} icon="calendar" size="sm" variant={visits.length ? "ghost" : "primary"} onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />}
       />
       {next ? (
         <T v="body" tone="mut">

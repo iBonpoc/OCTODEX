@@ -17,6 +17,7 @@ describe("job status by its visits", () => {
   it("a second visit does not take a going job back to «scheduled» (failed before: scheduleJob always set scheduled)", () => {
     expect(jobStatusAfterSchedule("in_progress")).toBe("in_progress");
     expect(jobStatusAfterSchedule("unscheduled")).toBe("scheduled");
+    expect(jobStatusAfterSchedule("done")).toBe("done");
   });
   it("finished = paid, done or closed", () => {
     expect([V({ step: "paid" }), V({ step: "done" }), V({ step: "on_site", closed: true })].every(visitFinished)).toBe(true);

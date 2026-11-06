@@ -1603,6 +1603,7 @@ export const ru = {
   "job3.done.invoiceRest": "Создать счёт на остаток {amount}",
   "job3.done.restTitle": "Остаток по работе",
   "job3.done.invoiced": "Счёт на остаток создан",
+  "job3.done.noVisit": "Работа закрыта — новый выезд не ставится. Нужна ещё работа — создайте новую.",
   "job3.q.laterToday": "Позже сегодня ({time})",
   "job3.q.tomorrow": "Завтра утром ({time})",
   "job3.q.monday": "В понедельник ({time})",

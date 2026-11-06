@@ -29,7 +29,7 @@ exports.run = async (h) => {
   {
     const d = await h.db();
     const vj = d.visits.find((x) => x.id === id);
-    if (vj.jobId) h.expect(d.jobs.find((j) => j.id === vj.jobId)?.status === "in_progress", "«На месте» → the job is in progress");
+    h.expect(vj.jobId && d.jobs.find((j) => j.id === vj.jobId)?.status === "in_progress", "«На месте» → the job is in progress");
   }
   // photo before: the file picker on web
   const [chooser] = await Promise.all([p.waitForEvent("filechooser"), p.getByRole("button", { name: "Добавить фото" }).last().click()]);
@@ -78,7 +78,7 @@ exports.run = async (h) => {
   v = db.visits.find((x) => x.id === id);
   h.expect(v.step === "paid" && v.payment && v.payment.method === "cash", "paid in cash");
   // paying does not close the job: the office is asked «Работа выполнена?» (S10)
-  if (v.jobId) h.expect(db.jobs.find((j) => j.id === v.jobId)?.status === "in_progress", "the job is not closed by the payment");
+  h.expect(v.jobId && db.jobs.find((j) => j.id === v.jobId)?.status === "in_progress", "the job is not closed by the payment");
 
   await h.go("/visits");
   await h.expectText(new RegExp(`Готово ${doneBefore + 1} из ${mine.length}`), "progress grew");

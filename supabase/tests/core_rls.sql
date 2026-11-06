@@ -1366,9 +1366,6 @@ begin
     insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
   end loop;
   update public.jobs set status = 'cancelled' where id = 'e2000000-0000-4000-8000-000000000021';
-  update public.jobs set status = 'in_progress' where id = 'e2000000-0000-4000-8000-000000000022';
-  update public.jobs set status = 'completed' where id = 'e2000000-0000-4000-8000-000000000022';
-  update public.jobs set status = 'closed' where id = 'e2000000-0000-4000-8000-000000000022';
   update public.visit_assignees set deleted_at = now() where visit_id = 'f2000000-0000-4000-8000-000000000025';
   -- lead of the tech and a lead of nobody; estimates inside and outside the window; a task outside the window
   insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to)
@@ -1383,6 +1380,11 @@ begin
   insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'property', 'd2000000-0000-4000-8000-000000000015', 'T22 task of an old property');
 end $$;
 :as_super
+-- job 22: closed while its visit is still open — the app no longer lets the office do this (wave 3c, T46), so the old
+-- state is made by hand here
+update public.jobs set status = 'in_progress' where id = 'e2000000-0000-4000-8000-000000000022';
+update public.jobs set status = 'completed' where id = 'e2000000-0000-4000-8000-000000000022';
+update public.jobs set status = 'closed' where id = 'e2000000-0000-4000-8000-000000000022';
 -- created_at is kept by the standard trigger; an old row is made by hand
 alter table public.visits disable trigger user;
 update public.visits set created_at = now() - interval '20 days' where id = 'f2000000-0000-4000-8000-000000000024';
@@ -3415,9 +3417,11 @@ select tst.blocked($q$update public.jobs set status = 'completed' where id = 'e4
 -- sales do not close a job
 :as_sales_a
 select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'sales do not close a job');
+select tst.fails($q$update public.jobs set status = 'completed' where id = 'e4600000-0000-4000-8000-000000000001'$q$, 'sales do not close a job directly either');
 -- the office: not while a visit is open
 :as_office_a
 select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'not while a visit of the job is open');
+select tst.fails($q$update public.jobs set status = 'completed' where id = 'e4600000-0000-4000-8000-000000000001'$q$, 'not directly either while a visit is open');
 update public.visits set status = 'completed' where id = 'f4600000-0000-4000-8000-000000000001';
 select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000001') = 'in_progress', 'a finished visit (paid) does not close the job');
 select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'the second visit is still open');
@@ -3427,13 +3431,16 @@ select tst.ok((public.complete_job('e4600000-0000-4000-8000-000000000001') ->> '
 select tst.ok((select status = 'completed' and completed_at is not null from public.jobs where id = 'e4600000-0000-4000-8000-000000000001'), 'the job is completed, with its time');
 select tst.ok((public.complete_job('e4600000-0000-4000-8000-000000000001') ->> 'repeat')::boolean, 'a repeat changes nothing');
 select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000002')$q$, 'a job waiting for a date is not closed');
+-- a scheduled job with no visit open (the visit was cancelled) closes through «in progress»
+update public.jobs set status = 'scheduled' where id = 'e4600000-0000-4000-8000-000000000002';
+select tst.ok((public.complete_job('e4600000-0000-4000-8000-000000000002') ->> 'status') = 'completed', 'a scheduled job closes (through in progress)');
 -- another company and anon
 :as_owner_b
 select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000002')$q$, 'another company does not close our job');
 reset role; set role anon;
 select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000002')$q$, 'anon does not close a job');
 :as_super
-select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000002') = 'draft', 'refused closes changed nothing');
+select tst.ok((select count(*) from public.jobs where id in ('e4600000-0000-4000-8000-000000000001', 'e4600000-0000-4000-8000-000000000002') and status = 'completed') = 2, 'only the office closed, nothing else');
 \echo 'T46 wave 3c: «Работа выполнена» (S10) ok'
 
 \echo 'ALL TESTS PASSED'

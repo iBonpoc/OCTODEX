@@ -71,11 +71,16 @@ exports.run = async (h) => {
   h.expect(db.jobs.find((j) => j.id === job.id).status === "done", "«Да, выполнена» → done");
   await h.expectText(/Создать счёт на остаток \$480/, "offer to invoice the balance");
   await h.shot("done");
-  await p.getByRole("button", { name: /^Создать счёт на остаток/ }).last().click();
+  await p.getByRole("button", { name: /^Создать счёт на остаток/ }).last().dblclick();
   await p.waitForTimeout(400);
   db = await h.db();
+  h.expect(db.invoices.filter((i) => i.jobId === job.id).length === 1, "a double tap makes one balance invoice");
   const inv = db.invoices.find((i) => i.jobId === job.id);
   h.expect(inv && inv.kind === "final" && inv.totalCents === 48000, `balance invoice: ${JSON.stringify(inv)}`);
   await h.go(`/job/${job.id}`);
   h.expect(!/Создать счёт на остаток/.test(await h.text()), "nothing left to invoice → no offer");
+  // a closed job takes no new visit
+  h.expect(!/Ещё один выезд/.test(await h.text()), "no «Ещё один выезд» on a closed job");
+  await h.go(`/job/schedule?jobId=${job.id}`);
+  await h.expectText(/Работа закрыта — новый выезд не ставится/, "the visit form refuses a closed job");
 };

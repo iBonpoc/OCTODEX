@@ -1604,6 +1604,7 @@ export const en: Dict = {
   "job3.done.invoiceRest": "Invoice the balance {amount}",
   "job3.done.restTitle": "Job balance",
   "job3.done.invoiced": "Balance invoice created",
+  "job3.done.noVisit": "The job is closed — no new visit. Need more work? Create a new job.",
   "job3.q.laterToday": "Later today ({time})",
   "job3.q.tomorrow": "Tomorrow morning ({time})",
   "job3.q.monday": "On Monday ({time})",

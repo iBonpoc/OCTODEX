@@ -18,9 +18,10 @@ export function jobStatusAfterStep(status: JobStatus, step: VisitStep): JobStatu
   return step === "on_site" && status === "scheduled" ? "in_progress" : status;
 }
 
-/** the job's status after a visit is put on it (S9): a job already going stays going */
+/** the job's status after a visit is put on it (S9): a job already going stays going; a closed job takes no visit
+ *  (the visit form refuses it), so it stays closed here too */
 export function jobStatusAfterSchedule(status: JobStatus): JobStatus {
-  return status === "in_progress" ? "in_progress" : "scheduled";
+  return status === "in_progress" || status === "done" ? status : "scheduled";
 }
 
 /** «Работа выполнена?»: going, no visit open, at least one finished */
