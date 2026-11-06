@@ -23,7 +23,8 @@ export type SectionId =
   | "money"
   | "team"
   | "company"
-  | "settings";
+  | "settings"
+  | "more";
 export type MenuGroup = "top" | "work" | "docs" | "money" | "bottom";
 
 export interface Section {
@@ -31,19 +32,13 @@ export interface Section {
   label: DictKey;
   icon: IconKey;
   group: MenuGroup;
-  /** a bottom tab (phone) — the same 5 for every role */
+  /** a bottom tab (phone) — the same 5 for every role; a tab is not repeated in «Ещё» */
   tab?: boolean;
-  /** listed in ☰ only on 820/1280 (on the phone it is a bottom tab; 13 v2 §2.3 «Верх» = Создать · Главная) */
-  wideOnly?: boolean;
+  /** the phone's «Ещё» tab itself: never a section in «Ещё» or in the side menu */
+  phoneOnly?: boolean;
   /** who sees it (13 §4); undefined = everyone */
   roles?: readonly Role[];
 }
-
-/**
- * The «Звонки» tab (13 v2 §2.1; open question to the founder, 06.11): 4 tabs until the company has its own number?
- * One switch: false hides the tab and the ☰ item; «Записать звонок» stays in the lead and client actions.
- */
-export const SHOW_CALLS_TAB = true;
 
 const OFFICE: readonly Role[] = ["director", "dispatcher", "sales"];
 const PLANNERS: readonly Role[] = ["director", "dispatcher"];
@@ -52,11 +47,12 @@ const PLANNERS: readonly Role[] = ["director", "dispatcher"];
 export const SECTIONS: readonly Section[] = [
   { id: "home", label: "nav.home", icon: "home", group: "top", tab: true },
   { id: "plan", label: "nav.plan", icon: "calendar", group: "work", tab: true },
-  { id: "messages", label: "nav.messages", icon: "sms", group: "top", tab: true, wideOnly: true },
-  ...(SHOW_CALLS_TAB ? [{ id: "calls" as const, label: "nav.calls" as const, icon: "phone" as const, group: "top" as const, tab: true, wideOnly: true }] : []),
+  { id: "messages", label: "nav.messages", icon: "sms", group: "top", tab: true },
   { id: "leads", label: "nav.leads", icon: "inbox", group: "work", roles: OFFICE },
   { id: "jobs", label: "nav.jobs", icon: "wrench", group: "work" },
   { id: "clients", label: "nav.clients", icon: "users", group: "work", tab: true },
+  // «Звонки» is not a tab until the company has its own number (founder 06.11, variant Б; 13 v2 §2.1)
+  { id: "calls", label: "nav.calls", icon: "phone", group: "work" },
   { id: "estimates", label: "nav.estimates", icon: "invoice", group: "docs" },
   { id: "invoices", label: "nav.invoices", icon: "wallet", group: "docs", roles: OFFICE },
   { id: "catalog", label: "nav.catalog", icon: "note", group: "docs" },
@@ -65,6 +61,7 @@ export const SECTIONS: readonly Section[] = [
   { id: "team", label: "nav.team", icon: "users", group: "bottom", roles: ["director"] },
   { id: "company", label: "nav.companySettings", icon: "home2", group: "bottom", roles: ["director"] },
   { id: "settings", label: "nav.mySettings", icon: "sliders", group: "bottom" },
+  { id: "more", label: "nav.more", icon: "more", group: "bottom", tab: true, phoneOnly: true },
 ];
 
 /** Where a section opens for this role. Home = the role's own home screen; Sales lists live on /leads. */
@@ -89,11 +86,14 @@ const visible = (s: Section, role: Role) => (!s.roles || s.roles.includes(role))
 /** The 5 bottom tabs: the same set for every role (13 §2.1) — what is inside is filtered by rights. */
 export const tabs = (_role: Role): Section[] => SECTIONS.filter((s) => s.tab);
 
-/** ☰ groups for this role, in order; a group with nothing the role may open is left out (13 §2.3). `wide` = 820/1280. */
+/**
+ * The sections by group for this role, in order (13 v2 §2.3); a group with nothing the role may open is left out.
+ * Phone (`wide` = false): the tiles of «Ещё» — the tabs are not repeated there. 820/1280: the side menu — everything but «Ещё».
+ */
 export function menuGroups(role: Role, wide = false): { group: MenuGroup; items: Section[] }[] {
   const order: MenuGroup[] = ["top", "work", "docs", "money", "bottom"];
   return order
-    .map((group) => ({ group, items: SECTIONS.filter((s) => s.group === group && (wide || !s.wideOnly) && visible(s, role)) }))
+    .map((group) => ({ group, items: SECTIONS.filter((s) => s.group === group && !s.phoneOnly && (wide || !s.tab) && visible(s, role)) }))
     .filter((g) => g.items.length > 0);
 }
 

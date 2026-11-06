@@ -1,6 +1,6 @@
 /**
- * ☰ = only places to go (docs/specs/13 §2.3); My settings = account, theme, language, tips, «Для проверки» in the demo.
- * The old «Ещё» address (/more) opens the role's home with ☰ open. Same steps at every width.
+ * «Ещё» = only places to go (docs/specs/13 v2 §2.3, variant Б); My settings = account, theme, language, tips, «Для проверки» in the demo.
+ * /more is the «Ещё» screen of tiles at every width; on 820/1280 the same places are in the side menu.
  */
 const { menuApi } = require("../menu.cjs");
 exports.run = async (h) => {
@@ -8,16 +8,17 @@ exports.run = async (h) => {
   const m = menuApi(h);
   const menu = m.menu;
   await h.go("/more");
-  h.expect(new URL(p.url()).pathname === "/today", `/more → the director's home (${p.url()})`);
-  await menu().waitFor({ timeout: 3000 });
-  const more = await menu().innerText();
-  h.expect(/Работа/.test(more) && /Документы/.test(more) && /Настройки компании/.test(more) && /Команда/.test(more), "☰: groups + company");
-  // no switches in the menu
-  for (const s of ["Тема", "Сбросить тестовые данные", "Проверка: режим без сети"]) h.expect(!more.includes(s), `☰ has no "${s}"`);
-  h.expect((await menu().getByRole("switch").count()) === 0, "no toggles in ☰");
+  h.expect(new URL(p.url()).pathname === "/more", `/more is the «Ещё» screen (${p.url()})`);
+  const tiles = () => p.locator('[data-testid="more-screen"]:visible');
+  await tiles().waitFor({ timeout: 3000 });
+  const more = await tiles().innerText();
+  h.expect(/Работа/.test(more) && /Документы/.test(more) && /Настройки компании/.test(more) && /Команда/.test(more), "«Ещё»: groups + company");
+  // no switches in «Ещё»
+  for (const s of ["Тема", "Сбросить тестовые данные", "Проверка: режим без сети"]) h.expect(!more.includes(s), `«Ещё» has no "${s}"`);
+  h.expect((await tiles().getByRole("switch").count()) === 0, "no toggles in «Ещё»");
 
   // «Мои настройки» opens Settings
-  await menu().getByRole("button", { name: "Мои настройки", exact: true }).click();
+  await tiles().getByRole("button", { name: "Мои настройки", exact: true }).click();
   await p.waitForTimeout(700);
   h.expect(p.url().endsWith("/settings"), `settings opened: ${p.url()}`);
   await h.expectText(/Аккаунт[\s\S]*Вид и язык[\s\S]*Подсказки[\s\S]*Для проверки/, "settings groups in order");
@@ -36,7 +37,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(500);
   h.expect(p.url().endsWith("/today"), `director home: ${p.url()}`);
 
-  // My settings is a ☰ root (13а §3): ☰ instead of «back»; Company settings: same name in the menu and on the screen
+  // My settings is a section root (13а §3): no «back» (phone: «‹ Ещё»); Company settings: same name in the menu and on the screen
   await h.go("/settings");
   h.expect((await p.getByRole("button", { name: /^Назад/ }).count()) === 0, "no «back» on My settings");
   await m.open();

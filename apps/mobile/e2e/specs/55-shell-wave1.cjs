@@ -8,7 +8,6 @@
  */
 const setRole = (h, role) => h.page.evaluate((r) => localStorage.setItem("octo.role.v1", JSON.stringify(r)), role);
 
-const { menuApi } = require("../menu.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/more");
@@ -42,11 +41,10 @@ exports.run = async (h) => {
   body = await h.text();
   h.expect(!/Прибыль/.test(body), "tech: no «Прибыль» on the job card");
 
-  // «＋ Создать» (first in ☰ since wave 2a): only what works, no «wave N»
+  // the home «＋» (phone: floating; 820/1280: «＋ Создать» in the side menu): only what works, no «wave N»
   await h.go("/visits");
-  const m = menuApi(h);
-  await m.open();
-  await m.menu().getByRole("button", { name: "Создать", exact: true }).click();
+  if (h.layout.width >= 820) await p.getByTestId("side-nav").getByRole("button", { name: "Создать", exact: true }).click();
+  else await p.getByTestId("fab").locator("visible=true").click();
   await p.waitForTimeout(400);
   await h.expectText(/Быстрые действия/, "the «＋» sheet is open");
   body = await h.text();

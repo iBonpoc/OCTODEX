@@ -29,7 +29,7 @@ const measure = (page) =>
       for (const b of r.getClientRects()) if (b.height > 0 && b.width > 0) top = Math.min(top, b.top);
     }
     // the section tabs only (a segmented control has role="tab" too)
-    const names = ["Главная", "План", "Сообщения", "Звонки", "Клиенты"];
+    const names = ["Главная", "План", "Сообщения", "Клиенты", "Ещё"];
     const tabs = [...document.querySelectorAll('[role="tab"]')].filter((e) => names.includes(e.getAttribute("aria-label"))).map((e) => e.getBoundingClientRect()).filter((b) => b.height > 0);
     // the side menu (820/1280): its places and the profile at the bottom
     const nav = document.querySelector('[data-testid="side-nav"]');

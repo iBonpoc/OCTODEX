@@ -2,6 +2,7 @@ import { useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { figureItems, FIGURES, type Figure, type Period } from "@/features/metrics";
+import { invoiceList } from "@/features/moneyLists";
 import { EST_COLUMNS, EstimateListCard, INV_COLUMNS, InvoiceListCard, LEAD_COLUMNS, LeadListCard, PAY_COLUMNS, PaymentListCard } from "@/features/listCards";
 import { ListCardHeader } from "@/ui/listCard";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -32,7 +33,7 @@ export default function FigureScreen() {
   const count = items.leads.length + items.estimates.length + items.payments.length + items.invoices.length;
   const total =
     f === "received" ? money(items.payments.reduce((s, x) => s + x.amountCents, 0))
-    : f === "awaiting" ? money(items.invoices.reduce((s, i) => s + i.totalCents - i.paidCents, 0))
+    : f === "awaiting" ? money(invoiceList(db, "owed").owedCents)
     : f === "signed" ? money(items.estimates.reduce((s, e) => s + e.totalCents, 0))
     : null;
   const columns = items.leads.length ? LEAD_COLUMNS : items.estimates.length ? EST_COLUMNS : items.payments.length ? PAY_COLUMNS : INV_COLUMNS;
