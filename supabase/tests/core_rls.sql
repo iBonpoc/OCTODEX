@@ -18,6 +18,8 @@ set client_min_messages = warning;
 drop schema if exists tst cascade;
 create schema tst;
 grant usage on schema tst to authenticated, anon;
+-- migration 20261106100000 takes EXECUTE for PUBLIC off new functions of postgres; the helpers are for every test role
+alter default privileges for role postgres in schema tst grant execute on functions to public;
 
 create function tst.ok(p_cond boolean, p_msg text) returns void language plpgsql as $$
 begin
@@ -40,6 +42,21 @@ begin
   begin
     execute p_sql;
   exception when others then
+    raise notice 'EXPECTED [%] % -> %', p_msg, sqlstate, sqlerrm;
+    return;
+  end;
+  raise exception 'FAILED (expected error): % — %', p_msg, p_sql;
+end $$;
+
+-- Оператор должен упасть именно с этой ошибкой (текст по LIKE), а не с какой-то другой
+create function tst.fails_like(p_sql text, p_like text, p_msg text) returns void language plpgsql as $$
+begin
+  begin
+    execute p_sql;
+  exception when others then
+    if sqlerrm not like p_like then
+      raise exception 'FAILED (wrong error): % — got [%] %, expected like %', p_msg, sqlstate, sqlerrm, p_like;
+    end if;
     raise notice 'EXPECTED [%] % -> %', p_msg, sqlstate, sqlerrm;
     return;
   end;
@@ -471,8 +488,9 @@ do $$ begin
   perform tst.fails('delete from public.payments', 'superuser deletes payments');
   perform tst.fails('delete from public.status_events', 'superuser deletes status_events');
   perform tst.fails('update public.audit_log set action = $x$x$x$', 'superuser edits audit_log');
-  perform tst.ok((select count(*) from public.invoices) = 3, 'invoices intact');
-  perform tst.ok((select count(*) from public.payments) = 1, 'payments intact');
+  -- rows of the test companies (upgrade/*.sql leave their own: money rows are never deleted)
+  perform tst.ok((select count(*) from public.invoices where company_id in ('ca000000-0000-0000-0000-000000000000', 'cb000000-0000-0000-0000-000000000000')) = 3, 'invoices intact');
+  perform tst.ok((select count(*) from public.payments where company_id in ('ca000000-0000-0000-0000-000000000000', 'cb000000-0000-0000-0000-000000000000')) = 1, 'payments intact');
 end $$;
 \echo 'T5 money safety ok'
 
@@ -753,7 +771,19 @@ end $$;
 \echo 'T11 contract → invoices → receipts ok'
 
 -- ---------------------------------------------------------------- T12: simulated card payment on the client page
+-- off for every company until the operator marks it a demo (security audit 06.11, item 2; T54)
 reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb; v_inv uuid;
+begin
+  r := public.portal_estimate('tok_inv_0123456789abcdef');
+  perform tst.ok((r ->> 'simulated_pay')::boolean is false, 'a real company: the page shows no card button');
+  select (x ->> 'id')::uuid into v_inv from jsonb_array_elements(r -> 'invoices') x where x ->> 'kind' = 'final';
+  perform tst.fails_like(format($q$select public.portal_pay_simulated('tok_inv_0123456789abcdef', %L)$q$, v_inv), 'card payments are not available yet', 'a real company takes no simulated card payment');
+end $$;
+reset role;
+insert into app.company_flags (company_id, simulated_payments) values ('ca000000-0000-0000-0000-000000000000', true);
+set role anon;
 do $$
 declare r jsonb; v_inv uuid;
 begin
@@ -1597,8 +1627,8 @@ end $$;
 do $$ begin
   perform tst.ok(
     (select array_agg(k order by k) from jsonb_object_keys(public.portal_estimate('tok_lang_0123456789abcdef')) k)
-    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language') x),
-    'answer keys = base keys + doc_language, nothing else');
+    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language' union all select 'simulated_pay') x),
+    'answer keys = base keys + doc_language + simulated_pay (T54), nothing else');
 end $$;
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin
@@ -3893,5 +3923,269 @@ end $$;
 :as_super
 select tst.ok(tst.cnt($q$select 1 from public.jobs where id = 'e4700000-0000-4000-8000-000000000009'$q$) = 0, 'no refused job was made');
 \echo 'T47 direct insert into jobs keeps the create_job checks ok'
+
+
+-- ---------------------------------------------------------------- T52: API rights — what anon and authenticated may touch (security audit 06.11, items 4–5)
+-- auth_stub.sql gives the Supabase default privileges before the migrations, so this checks the real picture.
+reset role; reset request.jwt.claim.sub;
+do $$
+declare bad text;
+begin
+  select string_agg(c.relname || ':' || p, ', ') into bad
+    from pg_class c, unnest(array['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER']) p
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'v', 'm', 'p', 'f')
+     and has_table_privilege('anon', c.oid, p);
+  perform tst.ok(bad is null, 'anon has no rights on public tables: ' || coalesce(bad, ''));
+
+  select string_agg(c.relname || ':' || p, ', ') into bad
+    from pg_class c, unnest(array['TRUNCATE','REFERENCES','TRIGGER']) p
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'v', 'm', 'p', 'f')
+     and has_table_privilege('authenticated', c.oid, p);
+  perform tst.ok(bad is null, 'authenticated has no TRUNCATE / REFERENCES / TRIGGER: ' || coalesce(bad, ''));
+
+  select string_agg(c.relname, ', ') into bad
+    from pg_class c
+   where c.relnamespace = 'public'::regnamespace and c.relkind in ('r', 'v', 'm', 'p', 'f')
+     and has_table_privilege('authenticated', c.oid, 'DELETE')
+     and c.relname not in ('customer_tags', 'job_tags', 'visit_assignees',
+                           'estimate_options', 'estimate_line_items', 'estimate_line_costs');
+  perform tst.ok(bad is null, 'authenticated deletes only where it is meant to (links, estimate draft lines): ' || coalesce(bad, ''));
+
+  select string_agg(c.relname, ', ') into bad
+    from pg_class c where c.relnamespace = 'public'::regnamespace and c.relkind = 'S'
+     and (has_sequence_privilege('anon', c.oid, 'USAGE') or has_sequence_privilege('anon', c.oid, 'UPDATE'));
+  perform tst.ok(bad is null, 'anon uses no sequences: ' || coalesce(bad, ''));
+
+  select string_agg(p.proname, ', ') into bad
+    from pg_proc p
+   where p.pronamespace = 'public'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE')
+     and p.proname not in ('portal_estimate', 'portal_accept', 'portal_pay_simulated', 'uuid_generate_v7');
+  perform tst.ok(bad is null, 'anon runs only the client-link functions in public: ' || coalesce(bad, ''));
+
+  -- schemas public and app: no function runs for PUBLIC (a forgotten revoke), but the id helper of column defaults
+  select string_agg(n.nspname || '.' || p.proname, ', ') into bad
+    from pg_proc p join pg_namespace n on n.oid = p.pronamespace
+   where n.nspname in ('public', 'app')
+     and exists (select 1 from aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a where a.grantee = 0 and a.privilege_type = 'EXECUTE')
+     and p.proname <> 'uuid_generate_v7';
+  perform tst.ok(bad is null, 'no function in public / app runs for PUBLIC (revoke all … from public): ' || coalesce(bad, ''));
+
+  select string_agg(p.proname, ', ') into bad
+    from pg_proc p where p.pronamespace = 'app'::regnamespace and has_function_privilege('anon', p.oid, 'EXECUTE');
+  perform tst.ok(bad is null and not has_schema_privilege('anon', 'app', 'USAGE'), 'anon reaches nothing in schema app: ' || coalesce(bad, ''));
+
+  select string_agg(p.proname, ', ') into bad
+    from pg_proc p where p.pronamespace = 'app'::regnamespace and p.prorettype = 'trigger'::regtype
+     and has_function_privilege('authenticated', p.oid, 'EXECUTE');
+  perform tst.ok(bad is null, 'authenticated cannot call trigger functions of app: ' || coalesce(bad, ''));
+
+  -- what the app reads and writes on the six tables still works
+  -- has_table_privilege with a list is true if ANY right is held: check each one
+  select string_agg(t || ':' || p, ', ') into bad
+    from unnest(array['catalog_items', 'company_secrets', 'company_licenses', 'company_contacts', 'notes']) t,
+         unnest(array['SELECT', 'INSERT', 'UPDATE']) p
+   where not has_table_privilege('authenticated', 'public.' || t, p);
+  perform tst.ok(bad is null, 'the app keeps select / insert / update it uses: ' || coalesce(bad, ''));
+  perform tst.ok(has_table_privilege('authenticated', 'public.notifications', 'SELECT')
+             and has_column_privilege('authenticated', 'public.notifications', 'read_at', 'UPDATE')
+             and not has_column_privilege('authenticated', 'public.notifications', 'kind', 'UPDATE')
+             and not has_table_privilege('authenticated', 'public.notifications', 'INSERT')
+             and not has_table_privilege('authenticated', 'public.notifications', 'DELETE'),
+             'notices: read, and only read_at changes');
+end $$;
+-- a table or function added later gets nothing by default
+begin;
+create table public.t52_probe (id int);
+create function public.t52_probe_fn() returns int language sql as 'select 1';
+do $$ begin
+  perform tst.ok(not has_table_privilege('anon', 'public.t52_probe', 'SELECT')
+             and not has_table_privilege('authenticated', 'public.t52_probe', 'SELECT')
+             and not has_table_privilege('authenticated', 'public.t52_probe', 'TRUNCATE'),
+             'a new public table gets no rights for anon / authenticated without a grant');
+  perform tst.ok(not has_function_privilege('anon', 'public.t52_probe_fn()', 'EXECUTE')
+             and not has_function_privilege('authenticated', 'public.t52_probe_fn()', 'EXECUTE'),
+             'a new public function runs for nobody until its migration grants it (global default, 20261106100000)');
+end $$;
+rollback;
+\echo 'T52 API rights: anon and authenticated only what is granted ok'
+
+
+-- ---------------------------------------------------------------- T53: the money of a sent invoice does not change directly (security audit 06.11, item 1)
+:as_owner_a
+insert into public.customers (id, company_id, display_name) values ('c5300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T53 Client');
+:as_sales_a
+-- as the app makes it (invoice.issue / visit.pay): inserted already sent, subtotal = total
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('15300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T53 sent', 10000, 10000, now());
+select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', -100, -100)$q$, 'an invoice is not born with a negative total');
+select tst.fails($q$insert into public.invoices (company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values ('ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'draft', -1, 0)$q$, 'an invoice is not born with a negative subtotal');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('15310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'cash', 4000, 'succeeded', 't53-pay-1');
+select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'T53: a payment still lowers the balance');
+select tst.fails($q$update public.invoices set total_cents = -100 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set a negative total on a sent invoice');
+select tst.fails($q$update public.invoices set total_cents = 3000, subtotal_cents = 3000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'sales do not set the total below what is paid');
+select tst.fails($q$update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the total of a sent invoice does not change at all');
+do $$ begin
+  update public.invoices set total_cents = 20000, subtotal_cents = 20000 where id = '15300000-0000-4000-8000-000000000001';
+  raise exception 'FAILED: the total of a sent invoice changed';
+exception when insufficient_privilege then null;   -- the freeze (42501), not some other error
+end $$;
+select tst.fails($q$update public.invoices set tax_cents = 500 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the tax of a sent invoice does not change');
+select tst.fails($q$update public.invoices set discount_cents = 500 where id = '15300000-0000-4000-8000-000000000001'$q$, 'the discount of a sent invoice does not change');
+select tst.fails($q$update public.invoices set customer_id = (select id from public.customers where company_id = 'ca000000-0000-0000-0000-000000000000' and id <> 'c5300000-0000-4000-8000-000000000001' limit 1) where id = '15300000-0000-4000-8000-000000000001'$q$, 'a sent invoice does not move to another client');
+select tst.fails($q$update public.invoices set kind = 'final' where id = '15300000-0000-4000-8000-000000000001'$q$, 'the kind of a sent invoice does not change');
+select tst.fails($q$update public.invoices set sent_at = null where id = '15300000-0000-4000-8000-000000000001'$q$, 'the sent time of a sent invoice does not change');
+-- the mark of the payment recalc cannot be set by the app's role
+do $$ begin
+  perform set_config('app.invoice_recalc', 'on', true);
+  begin
+    update public.invoices set total_cents = 4000, subtotal_cents = 4000 where id = '15300000-0000-4000-8000-000000000001';
+    raise exception 'FAILED: the recalc mark opened the amounts for authenticated';
+  exception when insufficient_privilege then null;
+  end;
+  perform set_config('app.invoice_recalc', '', true);
+end $$;
+-- what still changes on a sent invoice
+update public.invoices set title = 'T53 renamed', due_date = current_date + 30, reminders_paused = true where id = '15300000-0000-4000-8000-000000000001';
+select tst.ok((select title = 'T53 renamed' and reminders_paused from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'title, due date and reminders of a sent invoice still change');
+update public.invoices set paid_cents = 10000, payment_status = 'paid' where id = '15300000-0000-4000-8000-000000000001';
+select tst.ok((select paid_cents = 4000 and payment_status = 'partially_paid' from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'paid stays with the payments (direct change ignored)');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('15310000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000001', 'c5300000-0000-4000-8000-000000000001', 'check', 6000, 'succeeded', 't53-pay-2');
+select tst.ok((select paid_cents = 10000 and payment_status = 'paid' and total_cents = 10000 from public.invoices where id = '15300000-0000-4000-8000-000000000001'), 'the last payment closes the invoice (recalc passes the guard)');
+-- a draft still changes, but not below what is paid; once sent it is frozen
+insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents) values
+  ('15300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'draft', 5000, 5000);
+update public.invoices set subtotal_cents = 6000, total_cents = 6000 where id = '15300000-0000-4000-8000-000000000002';
+select tst.ok((select total_cents = 6000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'), 'a draft invoice still changes its amounts');
+select tst.fails($q$update public.invoices set total_cents = -1 where id = '15300000-0000-4000-8000-000000000002'$q$, 'a draft does not go negative');
+-- a paid draft: the total does not go below what is paid (check_violation, not the freeze)
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('15310000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '15300000-0000-4000-8000-000000000002', 'c5300000-0000-4000-8000-000000000001', 'cash', 3000, 'succeeded', 't53-pay-3');
+do $$ begin
+  update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
+  raise exception 'FAILED: a draft went below what is paid';
+exception when check_violation then null;
+end $$;
+update public.invoices set status = 'sent', sent_at = now() where id = '15300000-0000-4000-8000-000000000002';
+select tst.fails($q$update public.invoices set subtotal_cents = 7000, total_cents = 7000 where id = '15300000-0000-4000-8000-000000000002'$q$, 'after sending, the draft amounts are frozen');
+-- an old row whose total is already below what is paid (made before this guard): its due date still changes
+:as_super
+do $$ begin
+  perform set_config('app.invoice_recalc', 'on', true);   -- as the server recalc: the only way to make such a row now
+  update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
+  perform set_config('app.invoice_recalc', '', true);
+end $$;
+:as_sales_a
+update public.invoices set due_date = current_date + 7 where id = '15300000-0000-4000-8000-000000000002';
+select tst.ok((select due_date = current_date + 7 and total_cents = 1000 and paid_cents = 3000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'),
+              'an old invoice with total below paid still takes a new due date');
+-- void still works for the owner (no payments)
+:as_owner_a
+insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents, sent_at) values
+  ('15300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'c5300000-0000-4000-8000-000000000001', 'standalone', 'sent', 2500, 2500, now());
+update public.invoices set status = 'void', void_reason = 'T53 wrong amount' where id = '15300000-0000-4000-8000-000000000003';
+select tst.ok((select status = 'void' from public.invoices where id = '15300000-0000-4000-8000-000000000003'), 'the owner voids a sent invoice to reissue it');
+\echo 'T53 money of a sent invoice is frozen, payments and void still work ok'
+
+
+-- ---------------------------------------------------------------- T54: the simulated card payment only for a demo company (security audit 06.11, item 2)
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
+select x.id::uuid, j.company_id, '', j.customer_id, j.id, 'progress', 'sent', 'T54 progress', 5400, 5400, now()
+  from public.jobs j join public.estimates e on e.id = j.estimate_id,
+       (values ('15400000-0000-4000-8000-000000000001'), ('15400000-0000-4000-8000-000000000002')) x(id)
+ where e.public_token = 'tok_inv_0123456789abcdef';
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb;
+begin
+  r := public.portal_estimate('tok_inv_0123456789abcdef');
+  perform tst.ok((r ->> 'simulated_pay')::boolean, 'a demo company: the page shows the card button');
+  perform tst.ok(r ? 'doc_language', 'the page keeps the client language (T19)');
+  perform tst.fails_like($q$select * from app.company_flags$q$, 'permission denied%', 'anon does not read the demo flags');
+  r := public.portal_pay_simulated('tok_inv_0123456789abcdef', '15400000-0000-4000-8000-000000000002');
+  perform tst.ok((select (x ->> 'paid')::bigint from jsonb_array_elements(r -> 'invoices') x where x ->> 'id' = '15400000-0000-4000-8000-000000000002') = 5400,
+                 'a demo company: the client pays by the simulated card');
+end $$;
+-- the company cannot switch the simulation on for itself
+:as_owner_a
+select tst.fails_like($q$select * from app.company_flags$q$, 'permission denied%', 'the owner does not read the demo flags');
+select tst.fails_like($q$insert into app.company_flags (company_id, simulated_payments) values ('ca000000-0000-0000-0000-000000000000', true)$q$, 'permission denied%', 'the owner does not switch the demo on');
+select tst.fails_like($q$select app.company_simulates_payments('ca000000-0000-0000-0000-000000000000')$q$, 'permission denied%', 'the flag function is not callable from the app');
+-- a revoked link takes no payment, even in a demo company
+:as_super
+do $$ declare v uuid := (select id from public.estimates where public_token = 'tok_inv_0123456789abcdef'); begin
+  perform set_config('app.signing_estimate', v::text, true);   -- as revoke_estimate_link does
+  update public.estimates set link_revoked_at = now() where id = v;
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails_like($q$select public.portal_pay_simulated('tok_inv_0123456789abcdef', '15400000-0000-4000-8000-000000000001')$q$, 'this link is closed', 'a revoked link takes no simulated payment');
+-- switched off again: no payment either
+:as_super
+do $$ declare v uuid := (select id from public.estimates where public_token = 'tok_inv_0123456789abcdef'); begin
+  perform set_config('app.signing_estimate', v::text, true);   -- as revoke_estimate_link does
+  update public.estimates set link_revoked_at = null where id = v;
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+update app.company_flags set simulated_payments = false where company_id = 'ca000000-0000-0000-0000-000000000000';
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails_like($q$select public.portal_pay_simulated('tok_inv_0123456789abcdef', '15400000-0000-4000-8000-000000000001')$q$, 'card payments are not available yet', 'the demo switched off takes no payment');
+:as_super
+select tst.ok((select paid_cents = 0 from public.invoices where id = '15400000-0000-4000-8000-000000000001'), 'T54: nothing was paid by the refused calls');
+\echo 'T54 simulated card payment only for a demo company ok'
+
+
+-- ---------------------------------------------------------------- T55: storage files by the files rule; app functions not for PUBLIC (security audit 06.11, items 3, 12)
+:as_owner_a
+insert into public.customers (id, company_id, display_name) values ('c5500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T55 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city, address_state) values
+  ('d5500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c5500000-0000-4000-8000-000000000001', '55 Oak St', 'Austin', 'TX');
+insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'document');
+:as_tech_a
+insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo');
+:as_super
+insert into storage.objects (bucket_id, name) values
+  ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'),
+  ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000002.jpg');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/%'$q$) = 1, 'a tech lists only the files he sees (his own photo), not the office document');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000002.jpg'$q$) = 1, 'a tech reads his own photo');
+-- pointing storage_key of his own row at the office document opens nothing (the object name decides)
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf' where id = 'f5500000-0000-4000-8000-000000000002';
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'$q$) = 0, 'storage_key does not open someone else''s object');
+-- upload: the app inserts the row, then the object; a repeat upload (upsert) updates it
+insert into public.files (id, company_id, kind) values ('f5500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo');
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg'$q$) = 1, 'a tech uploads a photo of his row before storage_key is written');
+-- as Supabase Storage does it for upsert: true
+insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg')
+  on conflict (bucket_id, name) do update set updated_at = now() returning id \gset t55_
+select tst.ok((select updated_at is not null from storage.objects where id = :'t55_id'), 'a repeat upload of his own photo (upsert) updates the object');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.html')$q$, 'one files row takes no object of another kind (.html)');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003')$q$, 'an object without an extension is refused');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.png')$q$, 'one files row takes no second object (.png)');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'CA000000-0000-0000-0000-000000000000/F5500000-0000-4000-8000-000000000003.jpg')$q$, 'an upper-case name is refused (one row, one object)');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.JPG')$q$, 'an upper-case extension is refused');
+-- once the upload is recorded, the author does not replace the photo (before / after is evidence)
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg', upload_status = 'uploaded'
+ where id = 'f5500000-0000-4000-8000-000000000003';
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg') on conflict (bucket_id, name) do update set updated_at = now()$q$, 'the author does not re-upload over a recorded photo');
+select tst.blocked($q$update storage.objects set name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg' where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg'$q$, 'the author does not update a recorded photo');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg'$q$) = 1, 'the author still reads his recorded photo');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf')$q$, 'a tech does not write the office document');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-0000000000aa.jpg')$q$, 'a tech does not write an object without his files row');
+select tst.blocked($q$update storage.objects set bucket_id = 'files' where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'$q$, 'a tech does not overwrite the office document');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/x/../f5500000-0000-4000-8000-000000000003.jpg')$q$, 'an odd path is refused');
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/f55%'$q$) = 3, 'the office sees every file of the company');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name like 'ca000000-0000-0000-0000-000000000000/%'$q$) = 0, 'another company sees none of our files');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-0000000000bb.jpg')$q$, 'another company does not write into ours');
+-- 12: leads and contacts still work for the app's role after PUBLIC lost EXECUTE on app functions
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.leads$q$) > 0 and tst.cnt($q$select 1 from public.contacts$q$) > 0, 'leads and contacts still read (can_see_lead / can_see_contact for authenticated)');
+\echo 'T55 storage files by the files rule, app functions not for PUBLIC ok'
 
 \echo 'ALL TESTS PASSED'
