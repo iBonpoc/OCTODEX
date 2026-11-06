@@ -57,6 +57,16 @@ beforeEach(() => {
     { id: "li2", job_id: "j1", position: 1, name: "Labor", quantity: "3.0000", unit_price_cents: 4500, taxable: false, line_total_cents: 13500 },
     { id: "li1", job_id: "j1", position: 0, name: "Gutter section", description: "5 in K-style", catalog_item_id: "cat1", quantity: "2.5000", unit_price_cents: 1999, taxable: true, line_total_cents: 4998 },
   ];
+  rows.tasks = [{ id: "tk1", subject_type: "job", subject_id: "j1", title: "Order gutters", due_at: null, starts_at: "2026-11-07T17:00:00Z", ends_at: "2026-11-07T18:00:00Z", all_day: false, description: "Call the supplier" }];
+  rows.calendar_events = [
+    { id: "ev2", kind: "time_off", user_id: "u2", title: null, starts_at: "2026-11-10T08:00:00Z", ends_at: "2026-11-11T08:00:00Z", all_day: true },
+    { id: "ev1", kind: "event", user_id: null, title: "Team meeting", description: "Safety", starts_at: "2026-11-08T16:00:00Z", ends_at: "2026-11-08T17:00:00Z", all_day: false },
+  ];
+  rows.custom_fields = [
+    { id: "cf2", entity: "job", label: "Crew size", type: "number", options: [], group_name: null, searchable: false, position: 1 },
+    { id: "cf1", entity: "customer", label: "Preferred day", type: "select", options: ["Mon", "Wed"], group_name: "Visits", searchable: true, position: 0 },
+  ];
+  rows.custom_field_values = [{ id: "cv1", field_id: "cf1", entity_id: "c1", value: "Wed" }, { id: "cv2", field_id: "cf2", entity_id: "j1", value: 3 }];
   rows.notifications = [
     { id: "n1", kind: "invoice.paid", estimate_id: null, job_id: "j1", invoice_id: "i1", visit_id: null, payload: { customer: "Mary Lee", total: 5000 }, created_at: "2026-11-05T13:00:00Z" },
   ];
@@ -151,5 +161,73 @@ describe("loadCompanyDB on a database without the wave П-1 migration (PR previe
     expect(db.files?.map((f) => f.id)).toEqual(["f1", "f2"]);
     expect(db.visits[0]!.photos).toHaveLength(1);
     expect(db.activities.map((a) => a.id)).toEqual(["a1"]);
+  });
+});
+
+describe("loadCompanyDB — time and own fields (wave П-2b)", () => {
+  it("a task with a time and a description", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.tasks[0]).toMatchObject({ startsAt: "2026-11-07T17:00:00Z", endsAt: "2026-11-07T18:00:00Z", allDay: false, description: "Call the supplier" });
+  });
+  it("events by time; a company event has no person", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.calendarEvents?.map((e) => e.id)).toEqual(["ev1", "ev2"]);
+    expect(db.calendarEvents?.[0]).toMatchObject({ kind: "event", userId: undefined, title: "Team meeting", allDay: false });
+    expect(db.calendarEvents?.[1]).toMatchObject({ kind: "time_off", userId: "u2", allDay: true });
+  });
+  it("own fields in order and their values", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.customFields?.map((f) => f.id)).toEqual(["cf1", "cf2"]);
+    expect(db.customFields?.[0]).toMatchObject({ entity: "customer", type: "select", options: ["Mon", "Wed"], group: "Visits", searchable: true });
+    expect(db.customFieldValues).toEqual([{ id: "cv1", fieldId: "cf1", entityId: "c1", value: "Wed" }, { id: "cv2", fieldId: "cf2", entityId: "j1", value: 3 }]);
+  });
+  it("tasks on a database without the migration are read with the old columns", async () => {
+    missing.add("tasks.starts_at");
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.tasks.map((t) => t.id)).toEqual(["tk1"]);
+  });
+});
+
+describe("loadCompanyDB — invoices and payments (wave 8, docs/specs/18-money-reports.md §3)", () => {
+  const inv = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+    id, company_id: CO, customer_id: "c1", job_id: "j1", kind: "final", status, number: `INV-${id}`,
+    subtotal_cents: 10000, total_cents: 10825, paid_cents: 0, due_date: "2026-11-10", sent_at: "2026-11-01T17:00:00Z", created_at: "2026-10-20T17:00:00Z", ...extra,
+  });
+  const pay = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+    id, company_id: CO, invoice_id: "i-sent", customer_id: "c1", method: "zelle", amount_cents: 5000, refunded_cents: 0, status,
+    received_by: "u7", received_at: "2026-11-02T18:00:00Z", ...extra,
+  });
+  beforeEach(() => {
+    rows.invoices = [
+      inv("i-sent", "sent"),
+      // a draft has no due date: before wave 8 it got created_at and looked overdue
+      inv("i-draft", "draft", { due_date: null, sent_at: null }),
+      inv("i-void", "void"),
+      inv("i-receipt", "sent", { due_date: null }),
+    ];
+    rows.payments = [
+      pay("p-ok", "succeeded"),
+      pay("p-part", "partially_refunded", { refunded_cents: 2000 }),
+      pay("p-back", "refunded", { refunded_cents: 5000 }),
+      pay("p-fail", "failed"),
+    ];
+  });
+  it("a draft is not a debt: only sent invoices are in the list", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.map((i) => i.id).sort()).toEqual(["i-receipt", "i-sent"]);
+  });
+  it("no due date = due on the day it was sent, not the day it was made", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.find((i) => i.id === "i-receipt")!.dueDate).toBe("2026-11-01T17:00:00Z");
+  });
+  it("subtotal before tax is read (revenue in reports)", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.find((i) => i.id === "i-sent")).toMatchObject({ subtotalCents: 10000, totalCents: 10825 });
+  });
+  it("payments: who took it; partial refund is net with refundedCents; full refund and failed are not listed", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.payments.map((p) => p.id).sort()).toEqual(["p-ok", "p-part"]);
+    expect(db.payments.find((p) => p.id === "p-ok")).toMatchObject({ amountCents: 5000, receivedBy: "u7", refundedCents: undefined });
+    expect(db.payments.find((p) => p.id === "p-part")).toMatchObject({ amountCents: 3000, refundedCents: 2000 });
   });
 });
