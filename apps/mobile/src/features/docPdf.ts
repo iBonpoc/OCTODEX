@@ -7,6 +7,7 @@
  * Money in $, dates US numeric (11/05/2026) in every language. Colours and sizes only from the `print` tokens;
  * the brand colour is the company's own setting and is used only if it is a plain hex colour.
  */
+import { findJob } from "@/data/jobs";
 import { print as P, type PrintStyleName } from "@octo/design-tokens";
 import { contractStatement } from "@octo/estimating-engine";
 import { licenseLine, type PortalData } from "@/cloud/portal";
@@ -119,7 +120,7 @@ export function invoiceHtml(db: DB, inv: Invoice, company: PortalData["company"]
   const money = docMoney;
   const day = docDay;
   const cust = db.customers.find((c) => c.id === inv.customerId);
-  const job = db.jobs.find((j) => j.id === inv.jobId);
+  const job = findJob(db, inv.jobId);
   const prop = db.properties.find((p) => p.id === job?.propertyId);
   const pays = db.payments.filter((p) => p.invoiceId === inv.id);
   const jobInvoices = db.invoices.filter((i) => i.jobId === inv.jobId);

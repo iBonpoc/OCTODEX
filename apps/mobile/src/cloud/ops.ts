@@ -7,8 +7,8 @@
 // day the invoice was made (op.dueDate, set when the op is queued), not the day the op reaches the server
 import { companyToday } from "@/features/zone";
 import { realJob } from "./inspectionBridge";
-import { ENGINE_VERSION } from "@octo/estimating-engine";
-import type { BillingAddress, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
+import { ENGINE_VERSION, jobLineQty } from "@octo/estimating-engine";
+import type { BillingAddress, CalendarEvent, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -131,7 +131,13 @@ export type Op =
   | { k: "lead.cost"; leadId: string; cents: number }
   | { k: "lead.contactSave"; leadId: string; contact: { id: string; name: string; role: string; phone?: string; email?: string } }
   | { k: "lead.contactRemove"; id: string }
-  | { k: "task.save"; task: { id: string; subjectType: string; subjectId: string; title: string; dueAt?: string; assigneeId?: string; doneAt?: string } }
+  | { k: "task.save"; task: { id: string; subjectType: string; subjectId: string; title: string; dueAt?: string; assigneeId?: string; doneAt?: string; startsAt?: string; endsAt?: string; allDay?: boolean; description?: string } }
+  // wave П-2b: events and days off; own fields (owner / admin) and their values (staff)
+  | { k: "calendarEvent.save"; event: CalendarEvent; isNew: boolean }
+  | { k: "calendarEvent.remove"; id: string }
+  | { k: "customField.save"; field: CustomField; isNew: boolean }
+  | { k: "customFieldValue.save"; value: CustomFieldValue; isNew: boolean }
+  | { k: "customFieldValue.remove"; id: string }
   | { k: "source.save"; source: { id: string; name: string; kind: string; phone?: string; email?: string; customerId?: string; note?: string; active: boolean; position?: number } }
   | {
       k: "customer.create";
@@ -139,7 +145,7 @@ export type Op =
       name: string; phone: string; email?: string; sourceId: string; address: string; city: string;
     }
   // wave П-1: name parts and the address for invoices (billing null = same as the property)
-  | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string; firstName?: string; lastName?: string; companyName?: string; billing?: BillingAddress | null }
+  | { k: "customer.update"; id: string; name?: string; phone?: string; email?: string; firstName?: string; lastName?: string; companyName?: string; billing?: BillingAddress | null; taxExempt?: boolean; taxExemptNote?: string }
   | { k: "customer.people"; id: string; people: Person[] }
   | { k: "lead.people"; id: string; people: Person[] }
   | { k: "customer.tags"; id: string; tagIds: string[] }
@@ -148,7 +154,13 @@ export type Op =
   | { k: "serviceCategory.save"; category: ServiceCategory; isNew: boolean }
   | { k: "job.category"; id: string; serviceCategoryId: string | null }
   // wave П-1 (13 §5): description and type of a job; the company's list of job types
-  | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null }
+  | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null; taxEnabled?: boolean; taxRateBps?: number }
+  // wave П-2a: tags and own lines of a job (the server counts line and job totals)
+  | { k: "job.tags"; id: string; tagIds: string[] }
+  | { k: "jobLine.save"; line: Omit<JobLineItem, "totalCents">; isNew: boolean }
+  | { k: "jobLine.remove"; id: string }
+  /** «Undo» of a removed line (rule 5) */
+  | { k: "jobLine.restore"; id: string }
   | { k: "jobType.save"; jobType: JobType; isNew: boolean }
   | { k: "estimate.category"; id: string; serviceCategoryId: string | null }
   | { k: "property.update"; id: string; address?: string; city?: string }
@@ -254,13 +266,22 @@ async function uploadPhoto(companyId: string, fileId: string, uri: string) {
   }
 }
 
+/** task.save → the time columns (wave П-2b); an end without a start is not sent (the server refuses it) */
+export function taskTimeCols(t: { startsAt?: string; endsAt?: string; allDay?: boolean; description?: string }) {
+  return {
+    starts_at: t.startsAt ?? null, ends_at: t.startsAt ? t.endsAt ?? null : null, all_day: !!t.allDay, description: t.description?.trim() || null,
+  };
+}
+
 /** customer.update → the customers columns it changes (wave П-1: first / last / company name, billing_address_*) */
-export function customerCols(op: Extract<Op, { k: "customer.update" }>): Record<string, string | null> {
-  const cols: Record<string, string | null> = {};
+export function customerCols(op: Extract<Op, { k: "customer.update" }>): Record<string, string | boolean | null> {
+  const cols: Record<string, string | boolean | null> = {};
   if (op.name !== undefined) cols.display_name = op.name;
   if (op.firstName !== undefined) cols.first_name = op.firstName.trim() || null;
   if (op.lastName !== undefined) cols.last_name = op.lastName.trim() || null;
   if (op.companyName !== undefined) cols.company_name = op.companyName.trim() || null;
+  if (op.taxExempt !== undefined) cols.tax_exempt = op.taxExempt;
+  if (op.taxExemptNote !== undefined) cols.tax_exempt_note = op.taxExemptNote.trim() || null;
   if (op.billing !== undefined) {
     const b = op.billing;
     Object.assign(cols, {
@@ -418,10 +439,37 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           {
             id: op.task.id, company_id: c, subject_type: op.task.subjectType, subject_id: op.task.subjectId, title: op.task.title,
             due_at: op.task.dueAt ?? null, assignee_id: op.task.assigneeId ?? null, done_at: op.task.doneAt ?? null, done_by: op.task.doneAt ? userId : null,
+            ...taskTimeCols(op.task),
           },
           { onConflict: "id" },
         ),
       );
+    case "calendarEvent.save": {
+      const x = op.event;
+      const cols = {
+        kind: x.kind, user_id: x.userId ?? null, title: x.title?.trim() || null, description: x.description?.trim() || null,
+        starts_at: x.startsAt, ends_at: x.endsAt, all_day: x.allDay,
+      };
+      return run(op.isNew ? ins("calendar_events", { id: x.id, company_id: c, ...cols }) : supabase.from("calendar_events").update(cols).eq("id", x.id));
+    }
+    case "calendarEvent.remove":
+      return run(supabase.from("calendar_events").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
+    case "customField.save": {
+      // what a field is (entity, type) is set once (column grants and t05_custom_field_guard, migration 20261106030000)
+      const x = op.field;
+      const common = { label: x.label.trim(), options: x.options, group_name: x.group?.trim() || null, searchable: x.searchable, position: x.position, archived_at: x.archivedAt ?? null };
+      return run(op.isNew ? ins("custom_fields", { id: x.id, company_id: c, entity: x.entity, type: x.type, ...common }) : supabase.from("custom_fields").update(common).eq("id", x.id));
+    }
+    case "customFieldValue.save": {
+      const x = op.value;
+      return run(
+        op.isNew
+          ? ins("custom_field_values", { id: x.id, company_id: c, field_id: x.fieldId, entity_id: x.entityId, value: x.value })
+          : supabase.from("custom_field_values").update({ value: x.value, deleted_at: null }).eq("id", x.id),
+      );
+    }
+    case "customFieldValue.remove":
+      return run(supabase.from("custom_field_values").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "source.save":
       return run(
         supabase.from("lead_sources").upsert(
@@ -559,8 +607,27 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const cols: Record<string, string | null> = {};
       if (op.description !== undefined) cols.description = op.description?.trim() || null;
       if (op.jobTypeId !== undefined) cols.job_type_id = op.jobTypeId;
+      const money: Record<string, boolean | number> = {};
+      if (op.taxEnabled !== undefined) money.tax_enabled = op.taxEnabled;
+      if (op.taxRateBps !== undefined) money.tax_rate_bps = op.taxRateBps;
+      if (Object.keys(money).length) return run(supabase.from("jobs").update({ ...cols, ...money }).eq("id", op.id));
       return Object.keys(cols).length ? run(supabase.from("jobs").update(cols).eq("id", op.id)) : undefined;
     }
+    case "job.tags":
+      return run(supabase.rpc("set_job_tags", { p_job_id: op.id, p_tag_ids: op.tagIds }));
+    case "jobLine.save": {
+      // a line stays on its job: only a new line names it (column grants, migration 20261106020000)
+      const l = op.line;
+      const cols = {
+        position: l.position, name: l.name.trim() || "—", description: l.description?.trim() || null,
+        catalog_item_id: l.catalogItemId ?? null, quantity: jobLineQty(l.quantity), unit_price_cents: l.unitPriceCents, taxable: l.taxable,
+      };
+      return run(op.isNew ? ins("job_line_items", { id: l.id, company_id: c, job_id: l.jobId, ...cols }) : supabase.from("job_line_items").update(cols).eq("id", l.id));
+    }
+    case "jobLine.remove":
+      return run(supabase.from("job_line_items").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
+    case "jobLine.restore":
+      return run(supabase.from("job_line_items").update({ deleted_at: null }).eq("id", op.id));
     case "jobType.save": {
       // seed_key is set once; afterwards only name, position and archive change (column grants, migration 20261106010000)
       const x = op.jobType;

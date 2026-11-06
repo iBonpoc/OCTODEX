@@ -7,6 +7,7 @@
  *   (docs/specs/13 §2.3, 13а §3: there is no «More» tab any more); Catalog → Item, Company → Section.
  * Pure function (no React) — unit-tested in test/hierarchy.test.ts.
  */
+import { findJob } from "@/data/jobs";
 import type { DB, Role } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import { SETUP_STEPS, stepTitle, type SetupStep } from "@/features/companySetup";
@@ -38,7 +39,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
   const invList = role === "tech" ? homeRoot : { href: "/leads?tab=invoices", label: K("nav.invoices") };
   const lead = (lid: string) => db.leads.find((l) => l.id === lid);
   const client = (cid: string) => db.customers.find((c) => c.id === cid);
-  const job = (jid: string) => db.jobs.find((j) => j.id === jid);
+  const job = (jid: string) => findJob(db, jid);
   const custOfJob = (jid: string) => db.properties.find((p) => p.id === job(jid)?.propertyId)?.customerId ?? "";
   const toLead = (lid: string) => ({ href: `/lead/${lid}`, label: X(lead(lid)?.name ?? "", "lead.card") });
   const toClient = (cid: string) => ({ href: `/client/${cid}`, label: X(client(cid)?.name ?? "", "clients.title") });

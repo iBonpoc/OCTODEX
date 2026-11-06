@@ -5,7 +5,7 @@
 import { companyFromDb } from "./companyMap";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -80,6 +80,32 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const signatureRows = await q<Row>(supabase.from("member_signatures").select("id, user_id, svg, name, title, created_at, revoked_at").eq("company_id", companyId)).catch(() => [] as Row[]);
   // wave П-1: the company's job types (no deleted_at, archived ones stay); empty before the migration
   const jobTypeRows = await q<Row>(supabase.from("job_types").select("id, seed_key, name, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]);
+  // wave П-2a: tags and own lines of jobs (RLS: what the job's reader sees); empty before the migration
+  const jobTagRows = await q<Row>(supabase.from("job_tags").select("job_id, tag_id").eq("company_id", companyId)).catch(() => [] as Row[]);
+  // wave П-2b: events and days off (RLS: the office all, a tech his own and the company's), own fields; empty before the migration
+  const [eventRows, fieldRows, valueRows] = await Promise.all([
+    live<Row>("calendar_events", "id, kind, user_id, title, description, starts_at, ends_at, all_day").catch(() => [] as Row[]),
+    q<Row>(supabase.from("custom_fields").select("id, entity, label, type, options, group_name, searchable, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]),
+    live<Row>("custom_field_values", "id, field_id, entity_id, value").catch(() => [] as Row[]),
+  ]);
+  const calendarEvents: CalendarEvent[] = eventRows
+    .map((r) => ({
+      id: s(r.id), kind: (r.kind === "time_off" ? "time_off" : "event") as CalendarEvent["kind"], userId: (r.user_id as string | null) ?? undefined,
+      title: (r.title as string | null) ?? undefined, description: (r.description as string | null) ?? undefined,
+      startsAt: s(r.starts_at), endsAt: s(r.ends_at), allDay: !!r.all_day,
+    }))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const customFields: CustomField[] = fieldRows
+    .map((r) => ({
+      id: s(r.id), entity: (r.entity === "job" ? "job" : "customer") as CustomField["entity"], label: s(r.label), type: s(r.type) as CustomField["type"],
+      options: Array.isArray(r.options) ? (r.options as unknown[]).map(String) : [], group: (r.group_name as string | null) ?? undefined,
+      searchable: !!r.searchable, position: n(r.position), archivedAt: (r.archived_at as string | null) ?? undefined,
+    }))
+    .sort((a, b) => a.entity.localeCompare(b.entity) || a.position - b.position);
+  const customFieldValues: CustomFieldValue[] = valueRows.map((r) => ({
+    id: s(r.id), fieldId: s(r.field_id), entityId: s(r.entity_id), value: r.value as CustomFieldValue["value"],
+  }));
+  const jobLineRows = await live<Row>("job_line_items", "id, job_id, position, name, description, catalog_item_id, quantity, unit_price_cents, taxable, line_total_cents").catch(() => [] as Row[]);
   const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows, tagRows, customerTagRows, phoneRows, emailRows, catRows, gateRows] = await Promise.all([
     q<Row>(supabase.from("companies").select("*").eq("id", companyId)),
     // EIN: owner/admin only — others get nothing
@@ -90,7 +116,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     // lead cost: owner/admin/office only — others get nothing
     live<Row>("lead_costs", "lead_id, cost_cents").catch(() => [] as Row[]),
     live<Row>("lead_contacts", "id, lead_id, name, role, phone, email").catch(() => [] as Row[]),
-    live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at").catch(() => [] as Row[]),
+    // wave П-2b: the time of a task is new — without the migration the old columns are read
+    live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at, starts_at, ends_at, all_day, description")
+      .catch(() => live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at"))
+      .catch(() => [] as Row[]),
     // wave П-1: contact_id is new — without the migration the feed is read without it, not dropped
     activityRowsOf(companyId, "id, subject_type, subject_id, kind, body, meta, at, actor_id, direction, contact_id")
       .catch(() => activityRowsOf(companyId, "id, subject_type, subject_id, kind, body, meta, at, actor_id, direction"))
@@ -263,20 +292,23 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const lastPayment = new Map<string, Row>();
   for (const p of payments) if (p.invoice_id) lastPayment.set(s(p.invoice_id), p);
   const mappedInvoices: Invoice[] = invoices
-    .filter((i) => i.status !== "void")
+    // a draft is not sent, so not a debt (wave 8): it stays out like a void one until the app has drafts
+    .filter((i) => i.status === "sent")
     .map((i) => ({
       id: s(i.id),
       customerId: s(i.customer_id),
       jobId: s(i.job_id),
       totalCents: n(i.total_cents),
       paidCents: n(i.paid_cents),
-      dueDate: s(i.due_date) || s(i.created_at),
+      // no due date = due on receipt: from the day it was sent
+      dueDate: s(i.due_date) || s(i.sent_at) || s(i.created_at),
       paidAt: n(i.paid_cents) >= n(i.total_cents) && lastPayment.get(s(i.id)) ? s(lastPayment.get(s(i.id))?.received_at) : undefined,
       method: (lastPayment.get(s(i.id))?.method as Invoice["method"]) ?? undefined,
       kind: i.kind === "deposit" ? "deposit" : i.kind === "progress" ? "progress" : "final",
       number: s(i.number) || undefined,
       title: (i.title as string | null) ?? undefined,
       sentAt: (i.sent_at as string | null) ?? undefined,
+      subtotalCents: i.subtotal_cents == null ? undefined : n(i.subtotal_cents),
     }));
 
   const mappedLeads: Lead[] = leads.map((l) => ({
@@ -326,6 +358,15 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     archivedAt: (l.archived_at as string | null) ?? undefined,
   }));
 
+  const tagsOfJob = new Map<string, string[]>();
+  for (const r of jobTagRows) tagsOfJob.set(s(r.job_id), [...(tagsOfJob.get(s(r.job_id)) ?? []), s(r.tag_id)]);
+  const jobLines: JobLineItem[] = jobLineRows
+    .map((r) => ({
+      id: s(r.id), jobId: s(r.job_id), position: n(r.position), name: s(r.name), description: (r.description as string | null) ?? undefined,
+      catalogItemId: (r.catalog_item_id as string | null) ?? undefined, quantity: s(Number(r.quantity)), unitPriceCents: n(r.unit_price_cents),
+      taxable: !!r.taxable, totalCents: n(r.line_total_cents),
+    }))
+    .sort((a, b) => a.jobId.localeCompare(b.jobId) || a.position - b.position);
   const toJob = (j: Row): Job => ({
     id: s(j.id),
     propertyId: s(j.property_id),
@@ -336,6 +377,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     customerId: (j.customer_id as string | null) ?? undefined,
     description: (j.description as string | null) ?? undefined,
     jobTypeId: (j.job_type_id as string | null) ?? undefined,
+    tagIds: tagsOfJob.get(s(j.id)) ?? [],
+    taxEnabled: j.tax_enabled == null ? undefined : !!j.tax_enabled,
+    taxRateBps: j.tax_rate_bps == null ? undefined : n(j.tax_rate_bps),
     status: jobStatus[s(j.status)] ?? "scheduled",
     amountCents: n(j.contract_total_cents),
     estimateId: (j.estimate_id as string | null) ?? undefined,
@@ -388,6 +432,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     tasks: taskRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Task["subjectType"], subjectId: s(r.subject_id), title: s(r.title),
       dueAt: (r.due_at as string | null) ?? undefined, assigneeId: (r.assignee_id as string | null) ?? undefined, doneAt: (r.done_at as string | null) ?? undefined,
+      startsAt: (r.starts_at as string | null) ?? undefined, endsAt: (r.ends_at as string | null) ?? undefined,
+      allDay: r.all_day == null ? undefined : !!r.all_day, description: (r.description as string | null) ?? undefined,
     })),
     activities: activityRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Activity["subjectType"], subjectId: s(r.subject_id), kind: s(r.kind) as Activity["kind"],
@@ -413,6 +459,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         lastName: (c.last_name as string | null) ?? undefined,
         companyName: (c.company_name as string | null) ?? undefined,
         billing: billingOf(c),
+        taxExempt: c.tax_exempt == null ? undefined : !!c.tax_exempt,
+        taxExemptNote: (c.tax_exempt_note as string | null) ?? undefined,
       };
     }),
     serviceCategories: catRows
@@ -440,6 +488,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     cancelledJobs,
     jobTypes,
     files: fileItems,
+    jobLines,
+    calendarEvents,
+    customFields,
+    customFieldValues,
     visits: mappedVisits,
     cancelledVisits,
     leads: mappedLeads,
@@ -447,11 +499,13 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     invoices: mappedInvoices,
     expenses: mappedExpenses,
     payments: payments
-      .filter((p) => p.invoice_id && ["succeeded", "partially_refunded", "refunded"].includes(s(p.status)))
+      // a fully refunded payment brought nothing: it is not in the list of payments (wave 8); partial — net, with refundedCents
+      .filter((p) => p.invoice_id && ["succeeded", "partially_refunded"].includes(s(p.status)) && n(p.amount_cents) - n(p.refunded_cents) > 0)
       .map((p) => ({
         id: s(p.id), invoiceId: s(p.invoice_id), customerId: s(p.customer_id), amountCents: n(p.amount_cents) - n(p.refunded_cents),
         method: (["card", "cash", "check", "zelle"].includes(s(p.method)) ? s(p.method) : "card") as Payment["method"],
         at: s(p.received_at), receiptNumber: (p.receipt_number as string | null) ?? undefined, reference: (p.reference as string | null) ?? undefined,
+        receivedBy: (p.received_by as string | null) ?? undefined, refundedCents: n(p.refunded_cents) || undefined,
       }))
       .sort((a, b) => b.at.localeCompare(a.at)),
     company: companyRows[0] ? companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows) : null,
