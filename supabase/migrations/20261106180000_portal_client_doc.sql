@@ -32,7 +32,13 @@ returns jsonb language sql immutable set search_path = '' as $$
                          from jsonb_array_elements(case when jsonb_typeof(o.value -> 'lines') = 'array' then o.value -> 'lines' else '[]'::jsonb end)
                               with ordinality l
                         where jsonb_typeof(l.value) = 'object'
-                          and (l.value -> 'clientVisible') is distinct from 'false'::jsonb), '[]'::jsonb))
+                          -- hidden BOM lines go whole (also «false» as a string or 0)
+                          and coalesce(lower(l.value ->> 'clientVisible'), 'true') not in ('false', '0')
+                          -- a line the page cannot draw goes whole too (the page would fail on it)
+                          and jsonb_typeof(l.value -> 'name') = 'string'
+                          and jsonb_typeof(l.value -> 'group') = 'string'
+                          and jsonb_typeof(l.value -> 'quantity') in ('string', 'number')
+                          and jsonb_typeof(l.value -> 'unitPriceCents') = 'number'), '[]'::jsonb))
                   order by o.ordinality)
            from jsonb_array_elements(case when jsonb_typeof(p -> 'options') = 'array' then p -> 'options' else '[]'::jsonb end)
                 with ordinality o
