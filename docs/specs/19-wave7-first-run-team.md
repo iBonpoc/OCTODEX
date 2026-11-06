@@ -337,11 +337,11 @@
 **7а-2b (приложение).** Если вход случился, а профиль уже удалён (`auth: pending` или старый вход), приложение само зовёт `delete-account`: RPC ответит `repeat`, функция закроет вход.
 
 **7а-3.**
-- Портал (`portal_*`, функции «Смет») у закрытой компании (`closed_at`) должен отказывать.
+- Портал (`portal_*`, функции «Смет») у закрытой компании (`closed_at`) должен отказывать. Проверку вписывать в тело `app.portal_estimate_base` из `20261106180000_portal_client_doc.sql` (с `app.client_doc`), иначе вернутся себестоимости в `calc_inputs` — T60 это поймает.
 - Удаление записей по `app.retention_years()`.
 - Выгрузка данных (CCPA).
 
-**Основателю и правовому чату:** `auth.audit_log_entries` (email, IP — GoTrue не чистит), `calendar_events` time_off с описанием, `company_contacts` с данными удалённого на PDF компании.
+**Основателю и правовому чату:** `audit_log.before` членств хранит прежние `title`, `his_registration_number`, `color` (запись истории остаётся намеренно — назвать на экране «что останется»); `auth.audit_log_entries` (email, IP — GoTrue не чистит), `calendar_events` time_off с описанием, `company_contacts` с данными удалённого на PDF компании.
 
 **Staging до первого выпуска** (§6.8 плюс):
 - `BYPASSRLS` у владельца функций (`supabase/README.md:100`);

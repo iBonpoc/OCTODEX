@@ -90,7 +90,7 @@ export async function handleDelete(req: Req, deps: DeleteDeps): Promise<Res> {
     closed = await deps.closeSignIn(uid).catch((e: Error) => ({ error: { message: e.message } }));
   }
   if (closed.error) {
-    deps.log?.(`delete-account: auth soft delete pending for ${uid}`);
+    deps.log?.("delete-account: auth soft delete pending");
     return json(200, { deleted: true, auth: "pending", result: r.data ?? null });
   }
   return json(200, { deleted: true, auth: "done", result: r.data ?? null });
