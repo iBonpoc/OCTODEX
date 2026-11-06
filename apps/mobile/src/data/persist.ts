@@ -1,4 +1,3 @@
-import { dayKeyIn, getZone } from "@/features/zone";
 import { useCallback, useEffect, useRef, useState } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
@@ -56,5 +55,6 @@ export function usePersistentState<T>(key: string, initial: T | (() => T), opts?
   return [state.value, setValue, ready] as const;
 }
 
-/** the day the demo was seeded: the company's calendar day (features/zone.ts), so a new day starts at the company's midnight */
-export const todayKey = () => dayKeyIn(Date.now(), getZone());
+/** the day the demo was seeded (the phone's: the demo builds «today» from the phone's midnight; both move to the
+ *  company's midnight together in П4b-3 — docs/specs/03) */
+export const todayKey = () => new Date().toDateString();

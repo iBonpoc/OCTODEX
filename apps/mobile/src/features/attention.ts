@@ -5,7 +5,8 @@ import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
 import { leadSettingsOf } from "./leadSettings";
 import { canCountersign } from "./estimateSign";
 import { assigneesOf, canPlan, dayDiffIn, isOpenVisit, lateToday, visitWho } from "./schedule";
-import { companyTz, dayIn, scheduleSettingsOf } from "./scheduleSettings";
+import { companyTz, scheduleSettingsOf } from "./scheduleSettings";
+import { dayKeyIn } from "./zone";
 import type { DictKey } from "@/i18n";
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
@@ -140,8 +141,3 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   return out.sort((a, b) => b.score - a.score);
 }
 
-/** YYYY-MM-DD of a moment in a time zone */
-function dayKeyIn(t: number, tz: string): string {
-  const d = new Date(dayIn(t, tz) * 86_400_000);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
-}

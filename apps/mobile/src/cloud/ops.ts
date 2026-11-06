@@ -4,7 +4,7 @@
  * Ops are idempotent where money is involved (payments carry idempotency_key = payment id).
  */
 // due_date is the company's calendar day (features/zone.ts, docs/specs/03 П4b), not the UTC date of the phone
-import { dayKeyIn, getZone } from "@/features/zone";
+import { companyToday } from "@/features/zone";
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION } from "@octo/estimating-engine";
 import type { CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
@@ -276,7 +276,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       await run(
         ins("invoices", {
           id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: realJob(op.jobId), kind: "final", status: "sent",
-          subtotal_cents: op.amountCents, total_cents: op.amountCents, due_date: dayKeyIn(Date.now(), getZone()), sent_at: new Date().toISOString(),
+          subtotal_cents: op.amountCents, total_cents: op.amountCents, due_date: companyToday(), sent_at: new Date().toISOString(),
         }),
       );
       await run(
@@ -483,7 +483,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(
         ins("invoices", {
           id: op.id, company_id: c, number: "", customer_id: op.customerId, job_id: op.jobId, kind: op.kind, status: "sent", title: op.title,
-          subtotal_cents: op.totalCents, total_cents: op.totalCents, due_date: dayKeyIn(Date.now(), getZone()), sent_at: new Date().toISOString(),
+          subtotal_cents: op.totalCents, total_cents: op.totalCents, due_date: companyToday(), sent_at: new Date().toISOString(),
         }),
       );
     case "lead.prospect": {
@@ -657,7 +657,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (!depInv) await run(
         ins("invoices", {
           id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: jobId, kind: "deposit", status: "sent",
-          subtotal_cents: op.depositCents, total_cents: op.depositCents, due_date: dayKeyIn(Date.now(), getZone()), sent_at: new Date().toISOString(),
+          subtotal_cents: op.depositCents, total_cents: op.depositCents, due_date: companyToday(), sent_at: new Date().toISOString(),
         }),
       );
       return run(

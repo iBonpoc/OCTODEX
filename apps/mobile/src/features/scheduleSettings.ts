@@ -5,6 +5,7 @@
  * (app.valid_schedule_settings / app.valid_business_hours, migration 20261105370000). Pure — tested in test/scheduleSettings.test.ts.
  */
 import type { Company, VisitKind } from "@/data/types";
+import { DEFAULT_ZONE, validZone } from "./zone";
 
 export interface ScheduleSettings {
   /** default length of a visit by kind, minutes (15–720, a multiple of 15) */
@@ -104,7 +105,8 @@ export const lateAfterOf = (db: { company: Pick<Company, "scheduleSettings"> | n
 export const tzLabel = (z: string) => (z.split("/")[1] ?? z).replace(/_/g, " ");
 
 /** the company time zone; old data without one — Los Angeles (as the gate code and the server) */
-export const companyTz = (company: Pick<Company, "timezone"> | null | undefined) => company?.timezone || "America/Los_Angeles";
+export const companyTz = (company: Pick<Company, "timezone"> | null | undefined) =>
+  company?.timezone && validZone(company.timezone) ? company.timezone : DEFAULT_ZONE; // the same rule as zone.ts setZone
 
 /** «3:05 PM» of a moment on the company's clock (en-US); an unknown zone — Los Angeles */
 export function companyTime(iso: string, tz: string): string {

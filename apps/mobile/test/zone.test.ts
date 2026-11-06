@@ -1,11 +1,16 @@
 /**
  * unit:zone — the company's time zone for the whole app (docs/specs/03 «П4b — этап 0», П4b-1). Every check passes the
- * zone explicitly, so the result does not depend on the machine (CI runs this file in several zones: see the last block).
+ * zone explicitly, so the result does not depend on the machine; the last block runs the key rules with the machine
+ * (process.env.TZ) in several zones — the phone of the office in Hawaii, Tokyo or New York.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it, vi } from "vitest";
 import {
-  dayKeyIn, daysBetween, DEFAULT_ZONE, dueDayKey, getZone, minuteIn, setZone, validZone, wallToInstant, weekdayOf,
+  companyToday, dayKeyIn, daysBetween, DEFAULT_ZONE, dueDayKey, getZone, minuteIn, setZone, validZone, wallToInstant, weekdayOf,
 } from "../src/features/zone";
+import { invoiceSigns } from "../src/features/listSigns";
+import { buildAttention } from "../src/features/attention";
+import { makeSeed } from "../src/data/seed";
+import type { DB } from "../src/data/types";
 import { addDays, addMonths, isoDayKey, monthGrid, todayKey, weekDays, weekStart } from "../src/features/calendar";
 import { isOverdue, isToday, daysOverdue } from "../src/data/selectors";
 
@@ -102,4 +107,50 @@ describe("deadlines are calendar days of the company (as the server)", () => {
     expect(isToday("2026-11-05T17:00:00.000Z", late, LA)).toBe(true);
     expect(isToday("2026-11-06T09:00:00.000Z", late, LA)).toBe(false);
   });
+});
+
+describe("the company's day for new invoices and «Требует внимания»", () => {
+  afterEach(() => { setZone(null); vi.useRealTimers(); });
+  it("a new invoice is due on the company's today (bug: the UTC date of the phone)", () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date("2026-11-06T07:30:00.000Z")); // 11:30 PM Nov 5 in LA, Nov 6 in UTC
+    setZone(LA);
+    expect(companyToday()).toBe("2026-11-05");
+    setZone(NY);
+    expect(companyToday()).toBe("2026-11-06");
+  });
+  it("overdue in «Требует внимания» by the company's day: Los Angeles vs New York", () => {
+    const late = new Date("2026-11-06T06:30:00.000Z").getTime(); // 10:30 PM Nov 5 in LA, 1:30 AM Nov 6 in NY
+    const base = makeSeed();
+    const inv = { ...base.invoices[0]!, id: "iZ", paidCents: 0, totalCents: 10000, dueDate: "2026-11-05" };
+    const items = (tz: string) => buildAttention({ ...base, company: { ...base.company!, timezone: tz }, invoices: [inv] } as DB, "director", late).filter((i) => i.refId === "iZ");
+    expect(items(LA)).toEqual([]); // still the due day in LA
+    expect(items(NY).map((i) => [i.kind, i.score])).toEqual([["overdue", 801]]); // 1 day past in NY
+    expect(invoiceSigns(inv, late, NY)[0]).toMatchObject({ key: "card.sign.overdueDays", params: { d: 1 } });
+    expect(invoiceSigns(inv, late, LA)).toEqual([{ key: "card.sign.dueToday", tone: "warn" }]);
+  });
+  it("isToday: the phone's day unless a zone is given (the screens move in П4b-2)", () => {
+    const now = new Date("2026-11-06T06:30:00.000Z").getTime();
+    expect(isToday("2026-11-05T20:00:00.000Z", now, LA)).toBe(true);
+    expect(isToday("2026-11-05T20:00:00.000Z", now, NY)).toBe(false);
+  });
+});
+
+describe("the same answers whatever the machine's zone", () => {
+  const machine = process.env.TZ;
+  afterAll(() => { if (machine === undefined) delete process.env.TZ; else process.env.TZ = machine; });
+  for (const tz of ["UTC", "Pacific/Honolulu", "Asia/Tokyo", "Pacific/Kiritimati", "America/New_York"]) {
+    it(`machine in ${tz}`, () => {
+      process.env.TZ = tz;
+      const late = new Date("2026-11-06T07:30:00.000Z").getTime();
+      expect(addDays("2026-03-07", 2)).toBe("2026-03-09");
+      expect(weekStart("2026-11-08")).toBe("2026-11-02");
+      expect(monthGrid("2026-11-15")[0]!.key).toBe("2026-10-26");
+      expect(wallToInstant("2026-03-08", 150, LA)).toBe("2026-03-08T10:30:00.000Z");
+      expect(isOverdue("2026-11-05", late, LA)).toBe(false);
+      expect(isOverdue("2026-11-04", late, LA)).toBe(true);
+      expect(invoiceSigns({ totalCents: 1, paidCents: 0, dueDate: "2026-11-06" }, late, LA)).toEqual([{ key: "card.sign.dueTomorrow", tone: "warn" }]);
+      expect(dayKeyIn(late, LA)).toBe("2026-11-05");
+    });
+  }
 });

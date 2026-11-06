@@ -12,8 +12,13 @@ let current = DEFAULT_ZONE;
 export const getZone = (): string => current;
 /** set by the store from db.company.timezone; an unknown zone keeps Los Angeles */
 export function setZone(tz: string | null | undefined): void {
-  current = tz && validZone(tz) ? tz : DEFAULT_ZONE;
+  // the store calls this on every render: check a zone only when it changes
+  const next = tz || DEFAULT_ZONE;
+  if (next === current) return;
+  current = validZone(next) ? next : DEFAULT_ZONE;
 }
+/** today of the company — the due day of a new invoice (cloud/ops.ts), as the server decides */
+export const companyToday = (now: number = Date.now()): DayKey => dayKeyIn(now, getZone());
 
 /** YYYY-MM-DD, a calendar day (no zone of its own) */
 export type DayKey = string;
