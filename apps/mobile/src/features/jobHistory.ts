@@ -8,6 +8,8 @@ import type { DB, Role, Visit } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { IconKey } from "@/ui/primitives";
 import { findJob } from "@/data/jobs";
+import { docLanguageFor } from "@/data/people";
+import { tFor } from "@/i18n/translate";
 import { canSeeProfit } from "@/nav/roles";
 
 export type JobHistoryFilter = "all" | "action" | "note" | "call";
@@ -69,3 +71,10 @@ export function nextOpenVisit(db: Pick<DB, "visits">, jobId: string): Visit | un
     .sort((a, b) => a.start.localeCompare(b.start))[0];
 }
 
+
+/** «В пути» SMS to the client: always in the CLIENT's language (rule 7), never the app's; `at` = the arrival time text */
+export function enRouteSms(db: DB, customerId: string | undefined, at: string): string {
+  const tc = tFor(docLanguageFor(db, { customerId }));
+  const c = db.customers.find((x) => x.id === customerId);
+  return tc("job3.etaSms", { name: (c?.name ?? "").split(" ")[0] ?? "", company: db.company?.name ?? "", time: at });
+}

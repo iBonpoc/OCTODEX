@@ -5,20 +5,19 @@ import { router, useLocalSearchParams } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { jobProfit, useStore } from "@/data/store";
 import { findJob } from "@/data/jobs";
-import { docLanguageFor } from "@/data/people";
 import type { DB, Job } from "@/data/types";
 import { canSeeProfit } from "@/nav/roles";
-import { tFor, useI18n, type DictKey } from "@/i18n";
+import { useI18n, type DictKey } from "@/i18n";
 import { ContractStatement } from "@/features/ContractStatement";
 import { jobStatusView } from "@/features/jobs";
-import { filterJobHistory, jobHistory, nextOpenVisit, type JobHistoryFilter } from "@/features/jobHistory";
-import { NotesBlock } from "@/features/NotesBlock";
+import { enRouteSms, filterJobHistory, jobHistory, nextOpenVisit, type JobHistoryFilter } from "@/features/jobHistory";
+import { canSeeGateCode } from "@/features/properties";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { smsWithBody } from "@/features/sms";
 import { useToast } from "@/ui/overlays";
 import { visitStatus } from "@/features/visits";
-import { Button, Segmented, StatusChip } from "@/ui/controls";
+import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, CardList, Empty, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
@@ -40,6 +39,7 @@ export default function JobScreen() {
   const toast = useToast();
   const [tab, setTab] = useState<Tab>("details");
   const [filter, setFilter] = useState<JobHistoryFilter>("all");
+  const [noteText, setNoteText] = useState("");
   const back = () => (router.canGoBack() ? router.back() : router.replace("/jobs"));
   const j = findJob(db, id);
   if (!j)
@@ -71,9 +71,14 @@ export default function JobScreen() {
   // «В пути»: until our own number the phone's SMS opens with a ready text in the CLIENT's language (rule 7)
   const enRoute = () => {
     if (!tel) return toast.show(t("job3.noPhone"));
-    const tc = tFor(docLanguageFor(db, { customerId: c?.id }));
-    const body = tc("job3.etaSms", { name: (c?.name ?? "").split(" ")[0] ?? "", company: db.company?.name ?? "", time: time(next?.start ?? new Date().toISOString()) });
-    Linking.openURL(smsWithBody(tel, body)).catch(() => {});
+    Linking.openURL(smsWithBody(tel, enRouteSms(db, c?.id, time(next?.start ?? new Date().toISOString())))).catch(() => {});
+  };
+  const gate = p ? canSeeGateCode(db, store.role, p.id) : false;
+  const addNote = () => {
+    const body = noteText.trim();
+    if (!body) return;
+    toast.show(store.online ? t("notes.added") : t("offline.queued"), store.addNote({ subjectType: "job", subjectId: j.id, body, visibility: "team" }));
+    setNoteText("");
   };
 
   const details = (
@@ -110,11 +115,11 @@ export default function JobScreen() {
         </RowView>
       </Card>
 
-      {p?.accessNotes || (p?.gateCode && store.role !== "tech") ? (
+      {p?.accessNotes || (p?.gateCode && gate) ? (
         <Card>
           <T v="heading">{t("job3.access")}</T>
           {p.accessNotes ? <T v="body">{p.accessNotes}</T> : null}
-          {p.gateCode && store.role !== "tech" ? (
+          {p.gateCode && gate ? (
             <T v="body" tabular>
               {t("prop.gate")}: {p.gateCode}
             </T>
@@ -272,7 +277,13 @@ export default function JobScreen() {
       ) : (
         <Empty icon="history" title={t("job3.h.empty")} />
       )}
-      <NotesBlock subjectType="job" subjectId={j.id} />
+      {/* the note goes into this history (one list, 17-job §7.1): only the field here, no second list */}
+      <RowView>
+        <View style={{ flex: 1 }}>
+          <TextField type="note" value={noteText} onChangeText={setNoteText} placeholder={t("notes.placeholder")} />
+        </View>
+        <Button label={t("notes.add")} icon="send" size="sm" variant="secondary" disabled={!noteText.trim()} onPress={addNote} />
+      </RowView>
     </>
   );
 

@@ -88,7 +88,9 @@ export function relatedOf(db: D, of: RelatedOf, role: Role): RelatedLink[] {
       break;
     }
   }
-  return out.filter((l) => canOpen(role, l.href) && !(role === "tech" && l.kind === "estimate"));
+  // the technician: no estimate (company money) and no lead behind a job (its estimates); the lead of an inspection
+  // he is on stays (15-flows §2 «Выезд → Лид у осмотра»)
+  return out.filter((l) => canOpen(role, l.href) && !(role === "tech" && (l.kind === "estimate" || (l.kind === "lead" && of.type !== "visit"))));
 }
 
 function label(db: D, kind: RelatedKind, id: string): string | null {

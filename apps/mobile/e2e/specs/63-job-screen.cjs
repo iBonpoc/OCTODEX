@@ -37,8 +37,10 @@ exports.run = async (h) => {
   await h.click("Добавить заметку");
   await p.getByRole("tab", { name: "Заметки", exact: true }).locator("visible=true").click();
   await h.expectText(/Заметка[\s\S]*Ключ у соседа/, "the note in the history under «Заметки»");
+  h.expect((await p.getByText("Ключ у соседа").locator("visible=true").count()) === 1, "the note is shown once (no second notes list)");
   await p.getByRole("tab", { name: "Звонки", exact: true }).locator("visible=true").click();
   await h.expectText(/Событий пока нет/, "no calls on this job");
+  h.expect(!/Ключ у соседа/.test(await h.text()), "«Звонки» does not show notes");
   await h.shot("history");
 
   // the technician: «К оплате», no profit; «Начать» opens his visit

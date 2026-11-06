@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import { relatedOf, type RelatedKind } from "../src/features/related";
-import { filterJobHistory, jobHistory, nextOpenVisit } from "../src/features/jobHistory";
+import { enRouteSms, filterJobHistory, jobHistory, nextOpenVisit } from "../src/features/jobHistory";
 import type { DB, Role } from "../src/data/types";
 
 const kinds = (d: DB, of: Parameters<typeof relatedOf>[1], role: Role = "director") => relatedOf(d, of, role).map((l) => l.kind);
@@ -31,8 +31,11 @@ describe("relatedOf: job", () => {
   it("job without an estimate: client and property only", () => {
     expect(kinds(makeSeed(), { type: "job", id: "j2" })).toEqual(["customer", "property"]);
   });
-  it("the technician: no estimate (company money)", () => {
-    expect(kinds(withLeadEstimate(), { type: "job", id: "j1" }, "tech")).toEqual(["lead", "customer", "property"]);
+  it("the technician: no estimate (company money) and no lead behind the job (its estimates)", () => {
+    expect(kinds(withLeadEstimate(), { type: "job", id: "j1" }, "tech")).toEqual(["customer", "property"]);
+  });
+  it("sales and the dispatcher see every parent", () => {
+    for (const role of ["sales", "dispatcher"] as Role[]) expect(kinds(withLeadEstimate(), { type: "job", id: "j1" }, role), role).toEqual(["lead", "customer", "property", "estimate"]);
   });
   it("a cancelled job is still found (findJob)", () => {
     const d = makeSeed();
@@ -64,6 +67,8 @@ describe("relatedOf: visit", () => {
     d.visits = d.visits.map((v) => (v.id === "v6" ? { ...v, leadId: "l1" } : v));
     expect(kinds(d, { type: "visit", id: "v6" })).toEqual(["lead", "customer", "property"]);
     expect(relatedOf(d, { type: "visit", id: "v6" }, "director")[0]).toMatchObject({ href: "/lead/l1", text: "LEA-0001" });
+    // the technician on the inspection keeps the lead link (15-flows §2 «Выезд → Лид у осмотра»)
+    expect(kinds(d, { type: "visit", id: "v6" }, "tech")).toEqual(["lead", "customer", "property"]);
   });
 });
 
@@ -123,5 +128,17 @@ describe("nextOpenVisit", () => {
     };
     expect(nextOpenVisit(d, "J")?.id).toBe("c");
     expect(nextOpenVisit({ visits: [d.visits[0]!] }, "J")).toBeUndefined();
+  });
+});
+
+describe("enRouteSms: «В пути» in the client's language, not the app's (rule 7)", () => {
+  it("es client → Spanish, en client → English, whatever the app language", () => {
+    const d = makeSeed();
+    const main = (name: string, language: "es" | "en") => [{ id: `m-${name}`, name, role: "main" as const, phones: [], emails: [], language }];
+    d.customers = d.customers.map((c) => (c.id === "c2" ? { ...c, people: main(c.name, "es") } : c.id === "c3" ? { ...c, people: main(c.name, "en") } : c));
+    const es = enRouteSms(d, "c2", "3:30 PM");
+    expect(es).toMatch(/^¡Hola, /);
+    expect(es).toContain("3:30 PM");
+    expect(enRouteSms(d, "c3", "9:00 AM")).toMatch(/^Hi .*on the way.*9:00 AM/);
   });
 });

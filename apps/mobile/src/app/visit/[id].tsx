@@ -69,8 +69,10 @@ export default function VisitScreen() {
   const makeEstimate = () => {
     if (v.leadId) {
       const target = store.leadEstimateTarget(v.leadId);
-      if (target) router.push(`/estimate/new?customerId=${target.customerId}&propertyId=${target.propertyId}&leadId=${v.leadId}`);
-    } else if (customer && property) router.push(`/estimate/new?customerId=${customer.id}&propertyId=${property.id}`);
+      if (target) return router.push(`/estimate/new?customerId=${target.customerId}&propertyId=${target.propertyId}&leadId=${v.leadId}`);
+    } else if (customer && property) return router.push(`/estimate/new?customerId=${customer.id}&propertyId=${property.id}`);
+    // nothing to tie the estimate to: say so instead of a silent button
+    router.push("/estimate/new");
   };
   const tel = customer?.phone.replace(/[^\d+]/g, "");
   const addr = property ? encodeURIComponent(`${property.address}, ${property.city}`) : "";
