@@ -4687,4 +4687,183 @@ select tst.ok(tst.cnt($q$select 1 from public.activities where body like 'T62 %'
 select tst.ok((select status = 'contacted' from public.leads where id = '16200000-0000-4000-8000-000000000003'), 'his answered call moved his new lead (S2)');
 \echo 'T62 calls: outcome, minutes, person; the tech on his job and lead only ok'
 
+-- ---------------------------------------------------------------- T59: a row never moves to another company (security #2, 19 §7.1)
+:as_super
+-- (1) guard: every table with company_id, in every non-system schema, has the immutable trigger
+do $$
+declare missing text;
+begin
+  select string_agg(n.nspname || '.' || c.relname, ', ' order by 1) into missing
+    from pg_class c join pg_namespace n on n.oid = c.relnamespace
+    join pg_attribute a on a.attrelid = c.oid and a.attname = 'company_id' and not a.attisdropped
+   where c.relkind in ('r', 'p')
+     and n.nspname not in ('pg_catalog', 'information_schema', 'tst') and n.nspname not like 'pg\_%'
+     -- exceptions, each with its reason:
+     and (n.nspname, c.relname) not in (
+       ('app', 'company_numbering'),   -- no API access; only app.next_document_number writes it, by company_id
+       ('app', 'company_flags'))       -- no API access; the operator sets it by SQL (#196)
+     and not exists (select 1 from pg_trigger t
+                      where t.tgrelid = c.oid and not t.tgisinternal and t.tgenabled <> 'D'
+                        and t.tgfoid = 'app.tg_company_id_immutable()'::regprocedure
+                        and t.tgtype & 1 = 1      -- for each row
+                        and t.tgtype & 2 = 2      -- before
+                        and t.tgtype & 16 = 16);  -- update
+  perform tst.ok(missing is null, 'every table with company_id keeps it immutable; missing: ' || coalesce(missing, '-'));
+end $$;
+-- fixture: owner_b also runs a second company (as an owner of two companies does)
+insert into public.companies (id, name) values ('c5900000-0000-4000-8000-000000000000', 'T59 Second');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('c5900000-0000-4000-8000-000000000000', 'b0000000-0000-0000-0000-000000000001', 'owner', 'active');
+-- (2) the EIN of one company does not move into the other (failed before: the row moved)
+:as_owner_b
+insert into public.company_secrets (company_id, ein) values ('cb000000-0000-0000-0000-000000000000', '98-7654321');
+select tst.fails_like($q$update public.company_secrets set company_id = 'c5900000-0000-4000-8000-000000000000' where company_id = 'cb000000-0000-0000-0000-000000000000'$q$,
+  '%company_id is immutable (company_secrets -)%', 'an owner of two companies does not move the EIN');
+select tst.ok((select count(*) from public.company_secrets where company_id = 'cb000000-0000-0000-0000-000000000000') = 1, 'the EIN stays with its company');
+update public.company_secrets set ein = '98-7654322' where company_id = 'cb000000-0000-0000-0000-000000000000';
+select tst.ok((select ein from public.company_secrets where company_id = 'cb000000-0000-0000-0000-000000000000') = '98-7654322', 'the EIN is still edited in place');
+-- (3) signatures: not moved; a former member does not touch his old signature (failed before: he revoked it)
+insert into public.member_signatures (id, company_id, user_id, svg, name) values
+  ('a5900000-0000-4000-8000-000000000001', 'c5900000-0000-4000-8000-000000000000', 'b0000000-0000-0000-0000-000000000001', '<svg/>', 'Owner B');
+select tst.fails($q$update public.member_signatures set company_id = 'cb000000-0000-0000-0000-000000000000' where id = 'a5900000-0000-4000-8000-000000000001'$q$, 'a signature does not move to another company');
+:as_super
+update public.memberships set status = 'disabled' where company_id = 'c5900000-0000-4000-8000-000000000000' and user_id = 'b0000000-0000-0000-0000-000000000001';
+:as_owner_b
+select tst.blocked($q$update public.member_signatures set revoked_at = now() where id = 'a5900000-0000-4000-8000-000000000001'$q$, 'a former member does not change his old signature');
+:as_super
+select tst.ok((select revoked_at is null from public.member_signatures where id = 'a5900000-0000-4000-8000-000000000001'), 'the old signature is untouched');
+update public.memberships set status = 'active' where company_id = 'c5900000-0000-4000-8000-000000000000' and user_id = 'b0000000-0000-0000-0000-000000000001';
+-- (4) tables without an id column say the right thing (before: «record old has no field id» or a foreign key error)
+select tst.fails_like($q$update public.customer_tags set company_id = 'cb000000-0000-0000-0000-000000000000' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%company_id is immutable (customer_tags -)%', 'customer_tags keep their company');
+select tst.fails_like($q$update public.notifications set company_id = 'cb000000-0000-0000-0000-000000000000' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$,
+  '%company_id is immutable (notifications %', 'notifications keep their company (even for a server function)');
+-- (5) Storage: an object is not renamed into another company (failed before: USING saw A, WITH CHECK saw B)
+:as_owner_b
+insert into storage.objects (bucket_id, name) values ('files', 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg');
+select tst.blocked($q$update storage.objects set name = 'c5900000-0000-4000-8000-000000000000/f5900000-0000-4000-8000-000000000001.jpg' where name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg'$q$,
+  'a staff member of two companies does not move a file between them');
+select tst.blocked($q$update storage.objects set name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000002.jpg' where name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg'$q$,
+  'nor renames it to another file of the company');
+insert into storage.objects (bucket_id, name) values ('files', 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg')
+  on conflict (bucket_id, name) do update set updated_at = now();
+select tst.ok((select updated_at is not null from storage.objects where name = 'cb000000-0000-0000-0000-000000000000/f5900000-0000-4000-8000-000000000001.jpg'), 'a repeat upload (upsert, same name) still works');
+:as_super
+select tst.ok((select count(*) from storage.objects where name like 'c5900000-0000-4000-8000-000000000000/%') = 0, 'nothing landed in the other company');
+-- the snapshot check holds only while the app's roles cannot delete objects (files are deleted by the server)
+select tst.ok(not exists (select 1 from pg_policy p where p.polrelid = 'storage.objects'::regclass and p.polcmd in ('d', '*')
+                            and (p.polroles @> array['authenticated'::regrole::oid] or p.polroles @> array[0::oid] or p.polroles @> array['anon'::regrole::oid])),
+              'no DELETE policy on storage.objects for the app''s roles');
+\echo 'T59 a row never moves to another company ok'
+-- ---------------------------------------------------------------- T60: our costs never reach the client page (security #2, 19 §7.2, audit item 8)
+:as_owner_a
+do $$
+declare v_cust uuid; v_prop uuid; v_e uuid; v_v uuid;
+begin
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'T60 Client') returning id into v_cust;
+  insert into public.properties (company_id, customer_id, address_line1, address_city) values ('ca000000-0000-0000-0000-000000000000', v_cust, '60 Cost St', 'Burbank') returning id into v_prop;
+  insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T60 costs') returning id into v_e;
+  -- what an old app, a module bug or a direct UPDATE could store: costs everywhere, a hidden BOM line, junk
+  insert into public.estimate_versions (company_id, estimate_id, version_no, calc_inputs) values ('ca000000-0000-0000-0000-000000000000', v_e, 1, $j${
+    "note": "Scope", "marginPct": "41.2", "internal": {"profit": 1},
+    "options": [
+      {"id": "o1", "name": "Standard", "recommended": true, "costCents": 5, "marginPct": "40", "lines": [
+        {"id": "l1", "name": "Install", "description": "Labor", "group": "labor", "quantity": "2", "unit": "hr", "unitPriceCents": 9000,
+         "unitCostCents": 4000, "catalogItemId": "cat-1", "vendor": "ABC Supply", "vendorTaxBps": 950, "markupBps": 3000, "purchaseTaxBps": 950,
+         "optional": false, "selected": false, "clientVisible": true},
+        {"id": "l2", "name": {"unitCostCents": 4000}, "group": "material", "quantity": 1, "unit": "ea", "unitPriceCents": 0,
+         "clientVisible": false, "unitMaterialCostCents": 1234},
+        {"id": "l3", "name": "Clean", "group": "service", "quantity": 1, "unit": "ea", "unitPriceCents": 9000, "optional": true, "selected": true, "unitCostCents": [1]},
+        {"id": "l4", "name": "Hidden as text", "group": "material", "quantity": 1, "unit": "ea", "unitPriceCents": 0, "clientVisible": "false"},
+        {"id": "l5", "name": "Hidden as zero", "group": "material", "quantity": 1, "unit": "ea", "unitPriceCents": 0, "clientVisible": 0},
+        {"id": "l6", "name": "Bad price", "group": "service", "quantity": 1, "unit": "ea", "unitPriceCents": [1, 2]},
+        {"id": "l7", "group": "service", "quantity": 1, "unit": "ea", "unitPriceCents": 100},
+        "junk"
+      ]},
+      42
+    ],
+    "settings": {"caHic": true, "markup": 3000, "discount": {"kind": "fixed", "cents": 1000, "costShare": 1},
+                 "tax": {"enabled": true, "rateBps": 950, "vendorTaxBps": 1, "groups": {"service": false, "labor": false, "material": true, "cost": true}},
+                 "deposit": {"kind": "pct", "bps": 1000, "costBasis": 1}}
+  }$j$::jsonb) returning id into v_v;
+  update public.estimates set current_version_id = v_v where id = v_e;
+  perform tst.set_token(v_e, 'tok_costs_0123456789abcdef');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare d jsonb := public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc';
+begin
+  -- failed before: the page gave the stored document as it is
+  perform tst.ok(d = $j${
+    "note": "Scope",
+    "options": [
+      {"id": "o1", "name": "Standard", "recommended": true, "lines": [
+        {"id": "l1", "name": "Install", "description": "Labor", "group": "labor", "quantity": "2", "unit": "hr", "unitPriceCents": 9000,
+         "optional": false, "selected": false},
+        {"id": "l3", "name": "Clean", "group": "service", "quantity": 1, "unit": "ea", "unitPriceCents": 9000, "optional": true, "selected": true}
+      ]}
+    ],
+    "settings": {"caHic": true, "discount": {"kind": "fixed", "cents": 1000},
+                 "tax": {"enabled": true, "rateBps": 950, "groups": {"service": false, "labor": false, "material": true}},
+                 "deposit": {"kind": "pct", "bps": 1000}}
+  }$j$::jsonb, 'the client gets only the listed fields of the estimate: ' || coalesce(d::text, 'null'));
+  perform tst.ok(d::text !~* '(cost|margin|markup|vendor|catalog|profit)', 'no cost, margin, markup, vendor or catalog word on the client page');
+end $$;
+-- a sent estimate is read through sent_version_id: the same cut
+:as_super
+update public.estimate_versions set locked_at = now(), sent_at = now() where id = (select current_version_id from public.estimates where title = 'T60 costs');
+update public.estimates set status = 'sent', sent_version_id = current_version_id where title = 'T60 costs';
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc')::text !~* 'cost' and
+              jsonb_array_length(public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc' -> 'options' -> 0 -> 'lines') = 2,
+              'the sent version is cut the same way');
+:as_super
+-- the stored document is untouched (locked versions keep their signed text), only the client's copy is cut
+select tst.ok((select calc_inputs -> 'options' -> 0 -> 'lines' -> 0 ->> 'unitCostCents' from public.estimate_versions v
+                 join public.estimates e on e.current_version_id = v.id where e.title = 'T60 costs') = '4000', 'the app still reads its own costs');
+select tst.ok(app.client_doc(null) is null and app.client_doc('"x"') is null and app.client_doc('{}') = '{"options": []}', 'odd documents give nothing or an empty one');
+-- rule 18: only the page function (security definer) calls them
+select tst.ok(not has_function_privilege('anon', 'app.client_doc(jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.client_doc(jsonb)', 'execute')
+          and not has_function_privilege('anon', 'app.jsonb_scalars(jsonb, text[])', 'execute')
+          and not has_function_privilege('authenticated', 'app.jsonb_scalars(jsonb, text[])', 'execute'), 'nobody calls the cutters directly');
+\echo 'T60 our costs never reach the client page ok'
+-- ---------------------------------------------------------------- T61: foreign keys have indexes, none is invalid (security #2, 19 §7.3, audit item 11)
+:as_super
+do $$
+declare missing text; bad text;
+begin
+  select string_agg(x.tbl || '(' || x.cols || ')', ', ' order by 1) into missing
+    from (select c.conrelid::regclass::text tbl, c.conrelid, c.conkey,
+                 (select string_agg(a.attname, ',' order by k.ord) from unnest(c.conkey) with ordinality k(n, ord)
+                    join pg_attribute a on a.attrelid = c.conrelid and a.attnum = k.n) cols
+            from pg_constraint c join pg_class t on t.oid = c.conrelid join pg_namespace n on n.oid = t.relnamespace
+           where c.contype = 'f' and n.nspname = 'public') x
+   where not exists (select 1 from pg_index i where i.indrelid = x.conrelid and i.indisvalid
+                        -- a partial index helps the key check only when its condition is «<the key column> IS NOT NULL»
+                        and (i.indpred is null or exists (select 1 from unnest(string_to_array(x.cols, ',')) k(col)
+                              where pg_get_expr(i.indpred, i.indrelid) = '(' || quote_ident(k.col) || ' IS NOT NULL)'))
+                        and (i.indkey::int2[])[0:cardinality(x.conkey) - 1] @> x.conkey
+                        and (i.indkey::int2[])[0:cardinality(x.conkey) - 1] <@ x.conkey)
+     and (x.tbl, x.cols) not in (
+       -- the parent is never deleted and its id never changes (soft delete, append-only or a guard trigger) —
+       -- until a company is deleted for real (CCPA, S22): that PR adds these indexes first (19 §7.3)
+       ('lead_sources', 'company_id,customer_id'), ('customers', 'company_id,lead_source_id'),
+       ('customers', 'company_id,merged_into_customer_id'), ('customers', 'company_id,primary_contact_id'),
+       ('leads', 'company_id,duplicate_of_lead_id'), ('leads', 'company_id,referred_from_visit_id'),
+       ('jobs', 'company_id,attributed_source_id'), ('job_line_items', 'company_id,catalog_item_id'),
+       ('estimate_approvals', 'company_id,member_signature_id'), ('service_categories', 'company_id,parent_id'),
+       -- estimate versions: locked versions are never deleted (t40); one current / sent pointer per estimate
+       ('estimates', 'company_id,current_version_id'), ('estimates', 'company_id,sent_version_id'),
+       ('estimate_versions', 'company_id,copied_from_version_id'), ('jobs', 'company_id,approved_version_id'),
+       ('invoices', 'company_id,source_estimate_version_id'));
+  perform tst.ok(missing is null, 'every foreign key has an index or a reason; missing: ' || coalesce(missing, '-'));
+  select string_agg(i.indexrelid::regclass::text, ', ') into bad from pg_index i
+    join pg_class c on c.oid = i.indrelid join pg_namespace n on n.oid = c.relnamespace
+   where n.nspname not in ('pg_catalog', 'information_schema') and not i.indisvalid;
+  perform tst.ok(bad is null, 'no invalid index (a failed concurrent build): ' || coalesce(bad, '-'));
+  perform tst.ok(exists (select 1 from pg_indexes where schemaname = 'public' and indexname = 'tasks_assignee_id_fk_idx'), 'the audit''s examples are indexed (tasks.assignee_id)');
+end $$;
+\echo 'T61 foreign keys have indexes ok'
+
 \echo 'ALL TESTS PASSED'
