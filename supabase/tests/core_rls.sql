@@ -3698,7 +3698,7 @@ select tst.fails($q$insert into public.estimates (company_id, customer_id, prope
 select tst.fails($q$insert into public.visits (company_id, job_id, kind) values ('ca000000-0000-0000-0000-000000000000', 'e4400000-0000-4000-8000-000000000001', 'service')$q$, 'no new visit on the open job');
 select tst.fails($q$insert into public.visits (company_id, lead_id, kind) values ('ca000000-0000-0000-0000-000000000000', '14400000-0000-4000-8000-000000000001', 'inspection')$q$, 'no inspection by the client''s lead');
 select tst.fails($q$insert into public.visits (company_id, lead_id, kind) values ('ca000000-0000-0000-0000-000000000000', '14400000-0000-4000-8000-000000000002', 'inspection')$q$, 'no inspection at the client''s property (lead without a client)');
-select tst.fails($q$update public.jobs set customer_id = 'c4400000-0000-4000-8000-000000000001', property_id = 'd4400000-0000-4000-8000-000000000001' where id = 'e4400000-0000-4000-8000-000000000002'$q$, 'a job is not moved onto the client');
+-- moving a job onto the client: a job's client never changes («Работы» t14, their test)
 select tst.fails($q$update public.estimates set customer_id = 'c4400000-0000-4000-8000-000000000001', property_id = 'd4400000-0000-4000-8000-000000000001' where id = '0e440000-0000-4000-8000-000000000003'$q$, 'an estimate is not moved onto the client');
 select tst.fails($q$select public.send_estimate('0e440000-0000-4000-8000-000000000002')$q$, 'the old draft is not sent');
 select tst.fails($q$select public.send_estimate('0e440000-0000-4000-8000-000000000001')$q$, 'the revoked estimate gets no new link');

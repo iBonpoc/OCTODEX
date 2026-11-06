@@ -1,5 +1,6 @@
 -- Wave 4b-1 «Do not service» (docs/specs/04-clients-and-properties.md §12, PRD CUST-US-13).
 -- A client marked do_not_service gets nothing NEW: no job, no estimate, no visit, no sending of an old draft,
+-- no move of an estimate or a visit onto them (a job's client is not changed at all — «Работы» t14),
 -- no new client link. What is already open stays as it is (jobs, visits, invoices, payments, signed copies).
 -- On the move into do_not_service the open (unsigned) estimate links of the client are revoked, so the client sees
 -- «link not valid» on /p/ and never reaches a signature that would have to create a job.
@@ -33,9 +34,7 @@ begin
       select p.customer_id into v_customer from public.properties p where p.id = new.property_id and p.company_id = new.company_id;
     end if;
   elsif tg_table_name = 'jobs' then
-    if tg_op = 'UPDATE' and new.customer_id is not distinct from old.customer_id then
-      return new;
-    end if;
+    -- insert only: a direct change of jobs.customer_id is refused by «Работы» (t14, migration 20261106046000)
     v_customer := new.customer_id;
   else -- estimates: a new one, a move to another client, a send (status → sent) or a new client link
     if tg_op = 'UPDATE'
@@ -57,7 +56,7 @@ revoke all on function app.tg_no_service_guard() from public, anon, authenticate
 
 -- t44_ sorts after t04_visit_property (fills visits.property_id first) and after t25_estimate_send_and_guard
 drop trigger if exists t44_no_service_guard on public.jobs;
-create trigger t44_no_service_guard before insert or update of customer_id on public.jobs
+create trigger t44_no_service_guard before insert on public.jobs
   for each row execute function app.tg_no_service_guard();
 drop trigger if exists t44_no_service_guard on public.estimates;
 create trigger t44_no_service_guard before insert or update of customer_id, status, public_token on public.estimates
