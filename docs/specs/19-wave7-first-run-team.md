@@ -85,3 +85,47 @@
 1. Основателю: адрес поддержки и адрес сайта для документов (пока плейсхолдер и страницы внутри приложения).
 2. Основателю: DPA в флажке владельца — сейчас или вместе с полным текстом? По умолчанию — позже, отдельной версией.
 3. Руководителю: общий флажок `Checkbox` в `src/ui` (файл «Лиды и клиенты») — сейчас локально в `features/legal.tsx`.
+
+### 5.6 Находки помощников (map-keeper, security-check, 06.11) → что меняется в решении
+**База.**
+- `app.has_current_legal()` — security definer, `stable`, `search_path = ''`, без аргументов. Права: `revoke all … from public, anon` и `grant execute … to authenticated`. Без этого гранта политика `companies_insert` падает у всех.
+- `app.legal_current_version(text)` — `stable`, а не `immutable`: иначе план кэшируется со старой версией. Исполнять её не может никто, кроме функций definer.
+- Политику меняем через `alter policy companies_insert … with check ((select auth.uid()) is not null and (select app.has_current_legal()))`. Плюс триггер `before insert` на `companies`: если не принято — `legal not accepted` (42501). Так приложение узнаёт причину по коду, а не по тексту RLS.
+- `accept_invitation` пересоздаётся целиком (`create or replace`, тело из 110000 без изменений). Проверка `legal not accepted` ставится сразу после `v_me is null`. `set_member_status` возвращает отключённого без нового согласия — так и задумано.
+- `accept_legal(p_versions jsonb, p_platform, p_app_version)`:
+  - объект строго с двумя ключами `terms` и `privacy`, значения — строки, сравнение через `is distinct from` с текущей версией, иначе `legal version outdated`;
+  - `user_id = auth.uid()`, при null — 42501; анонимный вход (`is_anonymous`) — отказ;
+  - `accepted_at = now()`;
+  - `app_version` по шаблону `^[0-9A-Za-z.+ _-]{1,40}$`, `platform` из списка;
+  - `company_id` не принимает, всегда null. DPA — позже, отдельной функцией только для owner.
+- Таблица:
+  - `check (doc <> 'dpa' or company_id is not null)`, `version` — `date`;
+  - уникальный индекс `(user_id, doc, version) where company_id is null` + `on conflict do nothing`: повтор и двойное нажатие не дают дубля;
+  - RLS `enable` + `force`, только select своих строк.
+- IP: берём `cf-connecting-ip`, иначе правый адрес `x-forwarded-for`. Разбор — в `begin … exception`: ошибка даёт null, согласие не срывается. Исходный заголовок — в `ip_raw` (≤ 200). IP — вспомогательное доказательство; `platform` и `app_version` сообщает клиент.
+- Удаление аккаунта: `user_id references public.users on delete cascade`. Триггер «только дописывать» пропускает только каскад (`pg_trigger_depth() > 0`) и системное стирание. Сколько хранить доказательство согласия после удаления (обезличить или удалить) — решаем в 7а-2 (S22).
+- Тесты базы:
+  - **T48:** перед каждым успешным `accept_invitation` — `accept_legal` под JWT принимающего.
+  - **T49:** без согласия — отказ; повтор даёт ровно 2 строки; anon не исполняет функции; у всех definer-функций в public/app задан `search_path`; удаление auth-пользователя с согласием проходит.
+  - **Upgrade-тест** `upgrade/20261106140000_legal_acceptance.{before,after}.sql`: старые членства работают, задним числом согласие не создаётся, новую компанию без согласия не создать.
+- Уже вошедших сервер к принятию не заставляет: для обычной работы это делает только шлюз в приложении.
+
+**Приложение.**
+- **Гонка на приглашении** (`auth/invite.tsx` вызывает `acceptInvitation`, как только есть сессия):
+  - Флажок на входе кладёт «принято, версии» в AsyncStorage (`pendingLegalKey`).
+  - `AuthProvider` при появлении сессии сначала отправляет `accept_legal`, потом `reloadMemberships`, и выставляет `legal: "ok" | "missing" | "unknown"`.
+  - `invite.tsx` ждёт `legal !== "unknown"`. При `missing` или `legal not accepted` ссылку **не стирает** и показывает флажок прямо на экране, затем снова принимает приглашение.
+  - `invite.tsx` и `features/team.ts` (`team.err.legal`) — в списке файлов.
+- То же покрывает подтверждение почты по ссылке из письма: отметка лежит на том же устройстве. Если устройство другое — шлюз с текстом **первого раза** («Примите Условия и Политику»), а не «Условия изменились».
+- `legal version outdated` → `legal.err.outdated`: «Обновите приложение».
+- `createCompany` больше не показывает сырой текст базы: `legal not accepted` → шлюз.
+
+**Тесты приложения.** e2e 96 идёт в демо. Облачный путь (согласие → компания, согласие → приглашение) проверяют T48/T49 и unit-тест `features/legal` (порядок: принять → потом приглашение; ссылка не стирается при `legal not accepted`). Пробел «нет облачного e2e» записывается в карту.
+
+**Вне 7а-1 (руководителю).**
+- Карта: S0 «согласие → компания» (T49, e2e 96); S21 — тесты T48, e2e 89, условие согласия; §5 Membership и Invitation как действующие строки; `storyMap.test.ts`.
+- 15-flows §1.8 (флажок) и §1.9 (invitations/revoked, только email).
+- «Powered by OCTODEX · Privacy» на `/p/` — чату портала.
+- Демо-аккаунт для проверки Apple (14-app-store п.7) — к подаче.
+- Отступление от legal §3.5 (DPA и `company_id` позже) — решение основателя.
+- §1–§2 этой спецификации частично устарели после #193 — поправлю в этом же PR.
