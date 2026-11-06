@@ -62,6 +62,12 @@ exports.run = async (h) => {
   for (const role of ["sales", "tech"]) {
     await p.evaluate((r) => localStorage.setItem("octo.role.v1", JSON.stringify(r)), role);
     await h.go("/reports");
-    await h.expectText(/Этот раздел для вашей роли закрыт/, `${role}: no reports`);
+    // the route guard (nav/roles.ts): back to the role's own home with «Нет доступа», none of the screen's data on the way
+    await p.waitForTimeout(600);
+    const home = role === "sales" ? "/leads" : "/visits";
+    h.expect(new URL(p.url()).pathname === home, `${role}: /reports → ${home} (${p.url()})`);
+    await h.expectText(/Нет доступа к этому экрану/, `${role}: toast «Нет доступа»`);
+    const body = await p.evaluate(() => document.body.innerText);
+    h.expect(!/Смет отправлено|Выгрузить CSV/.test(body), `${role}: no reports data on the screen`);
   }
 };

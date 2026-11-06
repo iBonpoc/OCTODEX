@@ -53,35 +53,50 @@ exports.run = async (h) => {
   h.expect(pr.accessNotes === "Dog in the yard" && pr.gateCode === "#4242", "access saved");
   await h.expectText(/Код ворот: #4242/, "office sees the gate code");
 
+  // rows of the property (4a-2, 13 §3.3): each opens its list at /property/<id>?s=<row>
+  const prow = async (name) => { await p.getByTestId("property-rows").getByRole("button", { name, exact: true }).click(); await p.waitForTimeout(500); };
+  const card = `/property/${pr.id}`;
+
   // people of the property: the client's spouse
-  await p.getByRole("button", { name: "Изменить: Люди объекта" }).click();
+  await prow("Люди объекта");
+  h.expect(p.url().includes(`${card}?s=people`), `people row opens its list (${p.url()})`);
+  await p.getByRole("button", { name: "Люди объекта", exact: true }).last().click();
   await p.waitForTimeout(300);
   await h.sheet().getByText(/^Tom Mitchell · /).click();
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   db = await h.db();
   h.expect(db.properties.find((x) => x.id === pr.id).contactIds.includes("pp-c1-2"), "Tom is a person of this property");
-  await h.expectText(/Tom Mitchell/, "person on the card");
+  await h.expectText(/Tom Mitchell/, "person in the list");
   await h.shot("property-card");
 
-  // tabs (C2b): a task and a note of the property; empty documents and files say so
-  await h.clickText("Задачи");
+  // a task and a note of the property; empty documents and files say so
+  await h.go(card);
+  await prow("Задачи");
   await h.click("Новая задача");
   await h.sheet().getByPlaceholder(/перезвонить/).fill("Fix the side gate latch");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).click();
   await p.waitForTimeout(400);
   db = await h.db();
   h.expect(db.tasks.some((x) => x.subjectType === "property" && x.subjectId === pr.id && x.title === "Fix the side gate latch"), "task of the property saved");
-  await h.expectText(/Fix the side gate latch/, "task on the tab");
+  await h.expectText(/Fix the side gate latch/, "task in the list");
+  await h.go(card);
+  h.expect(/\b1$/.test((await p.getByTestId("property-rows").getByRole("button", { name: "Задачи", exact: true }).innerText()).trim()), "row «Задачи» counts the open task");
   // notes of a property: codes go to "Access" (shown to the tech only on the day of the visit), not to notes
+  await prow("Заметки");
   await h.expectText(/Код ворот и пароли пишите в поле «Доступ»/, "notes: access hint on a property");
-  await h.clickText("Документы");
-  await h.expectText(/Смет и счетов по объекту нет/, "no documents yet");
-  await h.clickText("Файлы");
+  await h.go(card);
+  await prow("Сметы");
+  await h.expectText(/Смет нет/, "no estimates yet");
+  await h.go(card);
+  await prow("Файлы");
   await h.expectText(/Фото с визитов появятся здесь/, "no photos yet");
-  await h.clickText("История");
-  await h.expectText(/Здесь пока ничего не было|Заметка/, "history tab opens");
-  await h.clickText("Обзор");
+  await h.go(card);
+  await prow("История");
+  await h.expectText(/Здесь пока ничего не было|Заметка/, "history opens");
+  await p.getByRole("button", { name: /^Назад/ }).last().click();
+  await p.waitForTimeout(600);
+  h.expect(p.url().endsWith(card), `back from a row's list → the property (${p.url()})`);
 
   // a tech with no visit here today or tomorrow does not see the code, but sees the notes
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
