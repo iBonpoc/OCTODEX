@@ -187,3 +187,47 @@ describe("loadCompanyDB — time and own fields (wave П-2b)", () => {
     expect(db.tasks.map((t) => t.id)).toEqual(["tk1"]);
   });
 });
+
+describe("loadCompanyDB — invoices and payments (wave 8, docs/specs/18-money-reports.md §3)", () => {
+  const inv = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+    id, company_id: CO, customer_id: "c1", job_id: "j1", kind: "final", status, number: `INV-${id}`,
+    subtotal_cents: 10000, total_cents: 10825, paid_cents: 0, due_date: "2026-11-10", sent_at: "2026-11-01T17:00:00Z", created_at: "2026-10-20T17:00:00Z", ...extra,
+  });
+  const pay = (id: string, status: string, extra: Record<string, unknown> = {}) => ({
+    id, company_id: CO, invoice_id: "i-sent", customer_id: "c1", method: "zelle", amount_cents: 5000, refunded_cents: 0, status,
+    received_by: "u7", received_at: "2026-11-02T18:00:00Z", ...extra,
+  });
+  beforeEach(() => {
+    rows.invoices = [
+      inv("i-sent", "sent"),
+      // a draft has no due date: before wave 8 it got created_at and looked overdue
+      inv("i-draft", "draft", { due_date: null, sent_at: null }),
+      inv("i-void", "void"),
+      inv("i-receipt", "sent", { due_date: null }),
+    ];
+    rows.payments = [
+      pay("p-ok", "succeeded"),
+      pay("p-part", "partially_refunded", { refunded_cents: 2000 }),
+      pay("p-back", "refunded", { refunded_cents: 5000 }),
+      pay("p-fail", "failed"),
+    ];
+  });
+  it("a draft is not a debt: only sent invoices are in the list", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.map((i) => i.id).sort()).toEqual(["i-receipt", "i-sent"]);
+  });
+  it("no due date = due on the day it was sent, not the day it was made", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.find((i) => i.id === "i-receipt")!.dueDate).toBe("2026-11-01T17:00:00Z");
+  });
+  it("subtotal before tax is read (revenue in reports)", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.invoices.find((i) => i.id === "i-sent")).toMatchObject({ subtotalCents: 10000, totalCents: 10825 });
+  });
+  it("payments: who took it; partial refund is net with refundedCents; full refund and failed are not listed", async () => {
+    const db = await loadCompanyDB(CO, "u1");
+    expect(db.payments.map((p) => p.id).sort()).toEqual(["p-ok", "p-part"]);
+    expect(db.payments.find((p) => p.id === "p-ok")).toMatchObject({ amountCents: 5000, receivedBy: "u7", refundedCents: undefined });
+    expect(db.payments.find((p) => p.id === "p-part")).toMatchObject({ amountCents: 3000, refundedCents: 2000 });
+  });
+});

@@ -659,6 +659,8 @@ export interface Invoice {
   /** what the client sees: "Deposit", "Progress: rough-in", "Final balance" */
   title?: string;
   sentAt?: string;
+  /** before tax (server: invoices.subtotal_cents) — «revenue» in reports (PRD 14 §7, wave 8) */
+  subtotalCents?: number;
 }
 
 /** One payment = one receipt (number RCT-… assigned by the server; locally in demo). */
@@ -672,6 +674,10 @@ export interface Payment {
   receiptNumber?: string;
   /** check number, Zelle confirmation… */
   reference?: string;
+  /** who took it (server: payments.received_by = users.id) — «collected by person» (wave 8) */
+  receivedBy?: ID;
+  /** already taken off amountCents (amountCents is net); > 0 = partially refunded (wave 8) */
+  refundedCents?: number;
 }
 
 export type ExpenseCategory = "materials" | "fuel" | "dump" | "tools" | "other";
