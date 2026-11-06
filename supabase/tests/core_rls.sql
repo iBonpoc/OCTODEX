@@ -3190,4 +3190,151 @@ select tst.fails($q$insert into public.notifications (company_id, kind, invoice_
 select tst.fails($q$insert into public.notifications (company_id, kind, visit_id) values ('cb000000-0000-0000-0000-000000000000', 'invoice.paid', 'f3900000-0000-4000-8000-000000000001')$q$, 'a notice does not lead to a visit of another company');
 \echo 'T40 paid notice leads to its invoice ok'
 
+-- ---------------------------------------------------------------- T41: wave П-2a — no tax for an exempt client, lines of a job, job tags
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name, tax_exempt, tax_exempt_note) values
+    ('c4100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T41 Church', true, 'Cert 12-345'),
+    ('c4100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T41 Home', false, null);
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d4100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4100000-0000-4000-8000-000000000001', '41 Chapel St', 'Pasadena'),
+    ('d4100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4100000-0000-4000-8000-000000000002', '41 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e4100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T41 lines', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'draft', true, 1025),
+    ('e4100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T41 exempt', 'c4100000-0000-4000-8000-000000000001', 'd4100000-0000-4000-8000-000000000001', 'draft', true, 1025);
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('f4100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', now() + interval '1 day');
+  insert into public.visit_assignees (company_id, visit_id, user_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'f4100000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+-- the same numbers as packages/estimating-engine/test/jobLines.test.ts (test prices)
+:as_office_a
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a4110000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 0, 'Gutter section', 2.5, 1999, true),
+  ('a4110000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 1, 'Labor hours', 3, 4500, false),
+  ('a4110000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 2, 'Sealant', 0.3333, 1000, true);
+select tst.ok((select array_agg(line_total_cents order by position) from public.job_line_items where job_id = 'e4100000-0000-4000-8000-000000000001') = array[4998, 13500, 333]::bigint[], 'line totals half up (engine: 4998, 13500, 333)');
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 19377, 'job total = subtotal 18831 + tax 546 (engine jobLinesTotals)');
+update public.jobs set tax_enabled = false where id = 'e4100000-0000-4000-8000-000000000001';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 18831, 'tax off: total = subtotal (engine)');
+update public.jobs set tax_enabled = true, contract_total_cents = 1 where id = 'e4100000-0000-4000-8000-000000000001';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 19377, 'the phone cannot write another total over the lines');
+update public.job_line_items set deleted_at = now() where id = 'a4110000-0000-4000-8000-000000000002';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 5877, 'a removed line leaves the total (5331 + 546)');
+update public.job_line_items set deleted_at = null where id = 'a4110000-0000-4000-8000-000000000002';
+-- half a cent of tax rounds up, as in the engine (10 × 5% = 0.5 → 1)
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e4100000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'T41 half cent', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'draft', true, 500);
+  insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents, taxable) values
+    ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000005', 'Washer', 1, 10, true);
+end $$;
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000005') = 11, 'half a cent of tax rounds up (engine: 10 + 1)');
+update public.job_line_items set deleted_at = now() where job_id = 'e4100000-0000-4000-8000-000000000005';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000005') = 0, 'all lines removed: the total is 0');
+update public.job_line_items set deleted_at = null where job_id = 'e4100000-0000-4000-8000-000000000005';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000005') = 11, 'a line brought back (undo) brings its total back');
+-- an exempt client: no tax on the job, even if asked
+insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents, taxable) values
+  ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000002', 'Gutter section', 2.5, 1999, true);
+select tst.ok((select tax_enabled from public.jobs where id = 'e4100000-0000-4000-8000-000000000002') = false, 'a job of an exempt client is stored without tax');
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000002') = 4998, 'exempt: total without tax (engine)');
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 'T41 bad', 0, 100)$q$, 'quantity must be above zero');
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 'T41 bad', 1, -5)$q$, 'no negative price');
+select tst.fails($q$update public.job_line_items set job_id = 'e4100000-0000-4000-8000-000000000002' where id = 'a4110000-0000-4000-8000-000000000001'$q$, 'a line does not move to another job');
+select tst.fails($q$update public.job_line_items set line_total_cents = 1 where id = 'a4110000-0000-4000-8000-000000000001'$q$, 'the line total is not written by hand');
+select tst.ok(tst.cnt($q$select 1 from public.audit_log where entity_type = 'job_line_items' and entity_id = 'a4110000-0000-4000-8000-000000000002' and action = 'update'$q$) >= 1, 'line changes leave a trace');
+-- estimates for the checks below; the job of an estimate takes no lines of its own and keeps its total
+do $$ begin
+  insert into public.estimates (id, company_id, customer_id, property_id, title) values
+    ('0e410000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4100000-0000-4000-8000-000000000001', 'd4100000-0000-4000-8000-000000000001', 'T41 exempt estimate'),
+    ('0e410000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'T41 locked estimate'),
+    ('0e410000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'T41 draft estimate'),
+    ('0e410000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'T41 job estimate');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, estimate_id, contract_total_cents) values
+    ('e4100000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T41 from estimate', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'draft', '0e410000-0000-4000-8000-000000000004', 77700);
+end $$;
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000003', 'T41 bad', 1, 100)$q$, 'a job from an estimate has no own lines');
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000003') = 77700, 'the job of an estimate keeps its total');
+select tst.fails($q$update public.jobs set estimate_id = null where id = 'e4100000-0000-4000-8000-000000000003'$q$, 'a job from an estimate does not drop its estimate (to take own lines)');
+select tst.fails($q$update public.jobs set estimate_id = '0e410000-0000-4000-8000-000000000003' where id = 'e4100000-0000-4000-8000-000000000001'$q$, 'a job with own lines does not take an estimate (to write its total by hand)');
+-- an exempt client's open estimate version with tax is refused (the phone learns); a locked one is never changed
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps) values
+  ('0e411000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '0e410000-0000-4000-8000-000000000002', 1, true, 1025),
+  ('0e411000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '0e410000-0000-4000-8000-000000000003', 1, true, 1025);
+select tst.fails($q$insert into public.estimate_versions (company_id, estimate_id, version_no, tax_enabled, tax_rate_bps) values ('ca000000-0000-0000-0000-000000000000', '0e410000-0000-4000-8000-000000000001', 1, true, 1025)$q$, 'an estimate of an exempt client with tax is refused');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps) values
+  ('0e411000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '0e410000-0000-4000-8000-000000000001', 1, false, 1025);
+select tst.ok(tst.cnt($q$select 1 from public.estimate_versions where id = '0e411000-0000-4000-8000-000000000001' and not tax_enabled$q$) = 1, 'an estimate of an exempt client without tax is kept');
+select tst.fails($q$update public.estimate_versions set tax_enabled = true where id = '0e411000-0000-4000-8000-000000000001'$q$, 'the tax is not switched on later for an exempt client');
+select tst.ok((select tax_enabled from public.estimate_versions where id = '0e411000-0000-4000-8000-000000000002') = true, 'a client with tax keeps it');
+update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e411000-0000-4000-8000-000000000002';
+update public.customers set tax_exempt = true where id = 'c4100000-0000-4000-8000-000000000002';
+select tst.ok((select tax_enabled from public.estimate_versions where id = '0e411000-0000-4000-8000-000000000002') = true, 'a sent (locked) estimate keeps its tax when the client becomes exempt');
+-- a draft with tax made before the client became exempt is not sent with it (sending locks the version)
+select tst.fails($q$update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e411000-0000-4000-8000-000000000003'$q$, 'a draft with tax is not sent once the client is exempt');
+update public.estimate_versions set tax_enabled = false where id = '0e411000-0000-4000-8000-000000000003';
+update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e411000-0000-4000-8000-000000000003';
+select tst.ok((select locked_at is not null and not tax_enabled from public.estimate_versions where id = '0e411000-0000-4000-8000-000000000003'), 'with the tax off it is sent');
+select tst.ok(tst.cnt($q$select 1 from public.audit_log where entity_type = 'customers' and entity_id = 'c4100000-0000-4000-8000-000000000002' and (after ->> 'tax_exempt') = 'true'$q$) = 1, '«without tax» changes leave a trace');
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 19377, 'a job keeps its tax snapshot when the client becomes exempt');
+-- unrelated changes (status, description, a line's name) keep the snapshot: an invoice issued with tax still matches
+update public.jobs set status = 'scheduled', description = 'T41 moved on' where id = 'e4100000-0000-4000-8000-000000000001';
+update public.job_line_items set name = 'Gutter section 5in' where id = 'a4110000-0000-4000-8000-000000000001';
+select tst.ok((select tax_enabled and contract_total_cents = 19377 from public.jobs where id = 'e4100000-0000-4000-8000-000000000001'), 'status, description and a line edit keep the tax snapshot');
+update public.jobs set tax_rate_bps = 1000 where id = 'e4100000-0000-4000-8000-000000000001';
+select tst.ok((select not tax_enabled and contract_total_cents = 18831 from public.jobs where id = 'e4100000-0000-4000-8000-000000000001'), 'setting the tax again applies the exemption');
+update public.customers set tax_exempt = false where id = 'c4100000-0000-4000-8000-000000000002';
+-- job tags
+select public.set_job_tags('e4100000-0000-4000-8000-000000000001', array(select id from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and is_active and deleted_at is null order by position limit 2));
+select tst.ok(tst.cnt($q$select 1 from public.job_tags where job_id = 'e4100000-0000-4000-8000-000000000001'$q$) = 2, 'the office puts two tags on a job');
+select public.set_job_tags('e4100000-0000-4000-8000-000000000001', array(select id from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and is_active and deleted_at is null order by position limit 1));
+select tst.ok(tst.cnt($q$select 1 from public.job_tags where job_id = 'e4100000-0000-4000-8000-000000000001'$q$) = 1, 'set_job_tags replaces the set');
+-- a tag switched off later stays on the job when other tags change; a switched-off tag is not put on anew
+insert into public.tags (id, company_id, name, position) values
+  ('a4120000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T41 old tag', 90),
+  ('a4120000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T41 new tag', 91);
+select public.set_job_tags('e4100000-0000-4000-8000-000000000002', array['a4120000-0000-4000-8000-000000000001']::uuid[]);
+update public.tags set is_active = false where id = 'a4120000-0000-4000-8000-000000000001';
+select public.set_job_tags('e4100000-0000-4000-8000-000000000002', array['a4120000-0000-4000-8000-000000000001', 'a4120000-0000-4000-8000-000000000002']::uuid[]);
+select tst.ok(tst.cnt($q$select 1 from public.job_tags where job_id = 'e4100000-0000-4000-8000-000000000002'$q$) = 2, 'a switched-off tag stays when another is added');
+select tst.fails($q$select public.set_job_tags('e4100000-0000-4000-8000-000000000001', array['a4120000-0000-4000-8000-000000000001']::uuid[])$q$, 'a switched-off tag is not put on another job');
+-- a closed job keeps its lines
+update public.jobs set status = 'cancelled' where id = 'e4100000-0000-4000-8000-000000000002';
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000002', 'T41 late', 1, 100)$q$, 'a cancelled job takes no new lines');
+select tst.fails($q$update public.job_line_items set unit_price_cents = 1 where job_id = 'e4100000-0000-4000-8000-000000000002'$q$, 'the lines of a cancelled job do not change');
+:as_sales_a
+insert into public.job_line_items (company_id, job_id, position, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 3, 'T41 sales line', 1, 100);
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 18931, 'sales adds a line, the total follows');
+update public.job_line_items set deleted_at = now() where name = 'T41 sales line';
+:as_office_a
+:as_super
+select tst.fails($q$insert into public.job_tags (company_id, job_id, tag_id) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', (select id from public.tags where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1))$q$, 'a tag of another company does not go on our job');
+-- the tech: reads lines and tags of the job of his visit, changes nothing
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.job_line_items where job_id = 'e4100000-0000-4000-8000-000000000001' and deleted_at is null$q$) = 3, 'the tech reads the lines of the job of his visit');
+select tst.ok(tst.cnt($q$select 1 from public.job_line_items where job_id = 'e4100000-0000-4000-8000-000000000002'$q$) = 0, 'the tech does not see lines of another job');
+select tst.ok(tst.cnt($q$select 1 from public.job_tags where job_id = 'e4100000-0000-4000-8000-000000000001'$q$) = 1, 'the tech reads the tags of his job');
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 'T41 tech', 1, 100)$q$, 'the tech does not add lines');
+select tst.blocked($q$update public.job_line_items set unit_price_cents = 1 where job_id = 'e4100000-0000-4000-8000-000000000001'$q$, 'the tech does not change prices');
+select tst.blocked($q$update public.job_line_items set deleted_at = now() where job_id = 'e4100000-0000-4000-8000-000000000001'$q$, 'the tech does not remove lines');
+select tst.fails($q$insert into public.job_tags (company_id, job_id, tag_id) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', (select id from public.tags where company_id = 'ca000000-0000-0000-0000-000000000000' and is_active order by position desc limit 1))$q$, 'the tech does not put tags directly');
+select tst.blocked($q$delete from public.job_tags where job_id = 'e4100000-0000-4000-8000-000000000001'$q$, 'the tech does not take tags off directly');
+select tst.fails($q$select public.set_job_tags('e4100000-0000-4000-8000-000000000001', '{}')$q$, 'the tech does not change job tags');
+select tst.blocked($q$update public.customers set tax_exempt = false where id = 'c4100000-0000-4000-8000-000000000001'$q$, 'the tech does not change «without tax»');
+-- another company and anon
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.job_line_items where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'another company does not see our lines');
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 'T41 b', 1, 100)$q$, 'another company does not add lines to our job');
+select tst.fails($q$select public.set_job_tags('e4100000-0000-4000-8000-000000000001', '{}')$q$, 'another company does not set our job tags');
+select tst.blocked($q$update public.job_line_items set unit_price_cents = 1 where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'another company does not change our lines');
+select tst.ok(tst.cnt($q$select 1 from public.job_tags where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'another company does not see our job tags');
+select tst.fails($q$insert into public.job_tags (company_id, job_id, tag_id) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', (select id from public.tags where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1))$q$, 'another company does not put tags on our job');
+reset role; set role anon;
+select tst.fails($q$select 1 from public.job_line_items$q$, 'anon does not read job lines');
+select tst.fails($q$select 1 from public.job_tags$q$, 'anon does not read job tags');
+select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000001', 'anon', 1, 1)$q$, 'anon does not add job lines');
+select tst.fails($q$select public.set_job_tags('e4100000-0000-4000-8000-000000000001', '{}')$q$, 'anon does not set job tags');
+\echo 'T41 wave П-2a: exempt client, job lines, job tags ok'
+
 \echo 'ALL TESTS PASSED'
