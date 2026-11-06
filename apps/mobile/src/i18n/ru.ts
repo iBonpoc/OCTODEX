@@ -1576,6 +1576,8 @@ export const ru = {
   "client.f.taxExemptNoteHint": "Например, № сертификата перепродажи",
   "client.f.taxExemptHint": "Новые сметы и счета клиента без налога с продаж. Подписанные документы не меняются.",
   "ue.taxExemptClient": "Клиент без налога: налог с продаж на эту смету не начисляется.",
+  "prop.row.visits": "Выезды",
+  "prop.noVisits": "Выездов на этом объекте не было",
   /* ---- «Деньги и отчёты», wave 8 (docs/specs/18-money-reports.md) ---- */
   "mny.f.owed": "Не оплачен · Просрочен",
   "mny.f.paid": "Оплачен",
