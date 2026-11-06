@@ -13,16 +13,18 @@ on:
     branches: [main]
   workflow_dispatch:
 
-concurrency:
-  group: release
-  cancel-in-progress: false
+# One release at a time; the gate is outside the group so a skipped run never takes a queued release's place
+# (a newer queued release includes the older one's changes).
 
 # eas-cli pinned to 27.4.1 (05.11.2026): 27.5.0 was published broken (ETARGET @expo/turtle-spawn@27.5.0).
 # Raise the pin deliberately after checking a new version, never back to @latest.
 jobs:
-  # Which commit, and whether to release it at all: the checks of a push to main are green, it is still the newest
-  # commit of main (an older run finishing late must not ship over a newer one), and it changes more than docs
-  # (founder 05.11.2026: docs-only pushes do not release).
+  # Which commit, and whether to release it at all (review #221). Release the commit whose checks are green when
+  # 1) it is a push to main or the nightly run (the nightly one catches a release that was missed),
+  # 2) nothing newer than it on main changes the app (a newer app commit releases itself, newer docs do not count),
+  # 3) since the last released commit (tag `released`) something besides docs changed
+  #    (founder 05.11.2026: docs-only pushes do not release).
+  # So a docs PR merged right after an app PR never swallows the app's release.
   gate:
     name: Release this commit?
     runs-on: ubuntu-24.04
@@ -36,19 +38,30 @@ jobs:
           fetch-depth: 0
       - id: g
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then echo "sha=${{ github.sha }}" >> "$GITHUB_OUTPUT"; echo "go=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          no() { echo "$1 — no release"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          docs_only() { [ -z "$1" ] || ! echo "$1" | grep -qvE '^docs/|\.md$'; }
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            [ "${{ github.ref }}" = "refs/heads/main" ] || no "by hand only from main"
+            sha="$(git rev-parse origin/main)"; echo "sha=$sha" >> "$GITHUB_OUTPUT"; echo "go=true" >> "$GITHUB_OUTPUT"; exit 0
+          fi
           sha="${{ github.event.workflow_run.head_sha }}"; echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          if [ "${{ github.event.workflow_run.event }}" != "push" ] || [ "${{ github.event.workflow_run.conclusion }}" != "success" ]; then
-            echo "Checks: ${{ github.event.workflow_run.event }} / ${{ github.event.workflow_run.conclusion }} — no release"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
-          if [ "$(git rev-parse origin/main)" != "$sha" ]; then echo "$sha is no longer the newest main — its successor releases"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
-          files="$(git diff --name-only "$sha^1" "$sha")"
-          if [ -n "$files" ] && ! echo "$files" | grep -qvE '^docs/|\.md$'; then echo "docs only — no release"; echo "go=false" >> "$GITHUB_OUTPUT"; exit 0; fi
+          ev="${{ github.event.workflow_run.event }}"; res="${{ github.event.workflow_run.conclusion }}"
+          [ "$res" = "success" ] || no "checks $res"
+          [ "$ev" = "push" ] || [ "$ev" = "schedule" ] || no "checks event $ev"
+          docs_only "$(git diff --name-only "$sha" origin/main)" || no "a newer app commit on main releases itself"
+          if git rev-parse -q --verify refs/tags/released >/dev/null; then
+            git merge-base --is-ancestor "$sha" released && no "already released"
+            docs_only "$(git diff --name-only released "$sha")" && no "only docs since the last release"
+          fi
           echo "go=true" >> "$GITHUB_OUTPUT"
 
   migrate:
     name: Database migrations
     needs: gate
     if: needs.gate.outputs.go == 'true'
+    concurrency:
+      group: release
+      cancel-in-progress: false
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     env:
@@ -83,6 +96,11 @@ jobs:
   publish:
     name: Publish (Expo Go + web)
     needs: [gate, migrate]
+    concurrency:
+      group: release
+      cancel-in-progress: false
+    permissions:
+      contents: write   # moves the tag `released`
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
@@ -119,3 +137,7 @@ jobs:
       - name: Deploy the web app (octodex.expo.app)
         working-directory: apps/mobile
         run: npx eas-cli@27.4.1 deploy --prod --non-interactive
+      - name: Mark this commit released (tag `released`)
+        env:
+          SHA: ${{ needs.gate.outputs.sha }}
+        run: git tag -f released "$SHA" && git push -f origin refs/tags/released

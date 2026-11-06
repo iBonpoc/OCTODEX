@@ -97,6 +97,8 @@ jobs:
         run: |
           npx playwright install --with-deps chromium >/dev/null
           view="${{ matrix.view }}"
+          # 08-layouts checks all 6 views by itself: run it in one view only
+          [ "$view" = "390-dark" ] || export E2E_OWN_LAYOUTS=0
           node e2e/run.cjs --width="${view%-*}" --theme="${view#*-}" --shard=${{ matrix.part }}/2
       - uses: actions/upload-artifact@v4
         if: always()

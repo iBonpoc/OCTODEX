@@ -74,6 +74,7 @@ const server = http.createServer((req, res) => {
   const browser = await chromium.launch();
   // --shard=k/n: the k-th of n equal parts of the sorted list (CI runs the parts as parallel jobs, docs/ai/CHECKS.md §1)
   const [shardK, shardN] = (opt("shard") || "1/1").split("/").map(Number);
+  if (!(shardN >= 1 && shardK >= 1 && shardK <= shardN)) { console.error(`bad --shard=${opt("shard")} (want k/n)`); process.exit(2); }
   const specs = fs.readdirSync(path.join(__dirname, "specs")).filter((f) => f.endsWith(".cjs") && (!only.length || only.some((o) => f.includes(o)))).sort()
     .filter((_, i) => i % shardN === shardK - 1);
   let failed = 0;
@@ -81,7 +82,7 @@ const server = http.createServer((req, res) => {
   for (const layout of layouts)
   for (const file of specs) {
     // a spec that loops over widths/themes itself (08-layouts) runs once
-    if (require(path.join(__dirname, "specs", file)).ownLayouts && layout !== layouts[0]) continue;
+    if (require(path.join(__dirname, "specs", file)).ownLayouts && (layout !== layouts[0] || process.env.E2E_OWN_LAYOUTS === "0")) continue;
     runs++;
     await waitPastCompanyMidnight();
     const tag = `${file} @${layout.width} ${layout.theme}`;
@@ -115,6 +116,7 @@ const server = http.createServer((req, res) => {
   }
   await browser.close();
   server.close();
+  if (!runs) { console.error("no spec ran — check the spec filter / --shard"); process.exit(2); }
   console.log(failed ? `\n${failed} of ${runs} spec runs FAILED` : `\nALL ${runs} E2E SPEC RUNS PASSED (${layouts.map((l) => `${l.width} ${l.theme}`).join(", ")})`);
   process.exit(failed ? 1 : 0);
 })();
