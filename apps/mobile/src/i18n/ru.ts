@@ -1877,6 +1877,9 @@ export const ru = {
   "plan5.ev.problem.long": "Слишком длинный текст",
   "plan5.addEvent": "Событие",
   "plan5.addTimeOff": "Выходной",
+  // wave 7б-1 «Работы и выезды»: personal settings
+  "pref7b.plan": "План",
+  "pref7b.showDoneHint": "Выполненные выезды, работы и задачи в Плане. Настройка ваша и одинакова на всех ваших устройствах.",
 } as const;
 
 export type DictKey = keyof typeof ru;
