@@ -3950,7 +3950,6 @@ end $$;
 select tst.ok(tst.cnt($q$select 1 from public.jobs where id = 'e4700000-0000-4000-8000-000000000009'$q$) = 0, 'no refused job was made');
 \echo 'T47 direct insert into jobs keeps the create_job checks ok'
 
-
 -- ---------------------------------------------------------------- T52: API rights — what anon and authenticated may touch (security audit 06.11, items 4–5)
 -- auth_stub.sql gives the Supabase default privileges before the migrations, so this checks the real picture.
 reset role; reset request.jwt.claim.sub;
@@ -4535,5 +4534,46 @@ select tst.ok(not exists (
    where p.prosecdef and n.nspname in ('public', 'app')
      and not exists (select 1 from unnest(coalesce(p.proconfig, '{}')) c where c like 'search_path=%')), 'security definer functions set search_path');
 \echo 'T49 wave 7а-1: consent to the Terms and Privacy (clickwrap) ok'
+:as_super
+-- ---------------------------------------------------------------- T58: «do not service» — only the director or the office, with a trace (04 §12.8)
+:as_super
+create function tst.mark_dns(p_id uuid, p_status text) returns void language plpgsql security definer set search_path = '' as $$
+begin
+  -- a definer function as the app's RPCs are: auth.uid() inside is still the caller
+  update public.customers set status = p_status, do_not_service_reason = case when p_status = 'do_not_service' then 'via definer' end where id = p_id;
+end;
+$$;
+grant execute on function tst.mark_dns(uuid, text) to authenticated;
+:as_owner_a
+insert into public.customers (id, company_id, display_name) values
+  ('c5800000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T58 Client'),
+  ('c5800000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T58 Other');
+:as_sales_a
+select tst.fails($q$update public.customers set status = 'do_not_service', do_not_service_reason = 'sales' where id = 'c5800000-0000-4000-8000-000000000001'$q$, 'sales do not mark «do not service»');
+select tst.fails($q$select tst.mark_dns('c5800000-0000-4000-8000-000000000001', 'do_not_service')$q$, 'not through a definer function either: the role is the caller''s');
+select tst.fails($q$insert into public.customers (company_id, display_name, status, do_not_service_reason) values ('ca000000-0000-0000-0000-000000000000', 'T58 born banned', 'do_not_service', 'x')$q$, 'sales do not create a client already marked');
+update public.customers set status = 'archived' where id = 'c5800000-0000-4000-8000-000000000002';
+select tst.ok((select status from public.customers where id = 'c5800000-0000-4000-8000-000000000002') = 'archived', 'sales still archive a client');
+:as_tech_a
+select tst.blocked($q$update public.customers set status = 'do_not_service', do_not_service_reason = 'tech' where id = 'c5800000-0000-4000-8000-000000000001'$q$, 'the tech does not mark');
+:as_office_a
+select tst.mark_dns('c5800000-0000-4000-8000-000000000001', 'do_not_service');
+select tst.ok((select status from public.customers where id = 'c5800000-0000-4000-8000-000000000001') = 'do_not_service', 'the office marks (also through a definer function)');
+select tst.ok((select count(*) from public.activities where subject_type = 'customer' and subject_id = 'c5800000-0000-4000-8000-000000000001'
+                 and kind = 'status' and meta ->> 'action' = 'do_not_service_set' and meta ->> 'from' = 'active' and meta ->> 'reason' = 'via definer'
+                 and actor_id = 'a0000000-0000-0000-0000-000000000002') = 1, 'one line in the history: who, from → to, the reason');
+update public.customers set do_not_service_reason = 'T58 reason edited' where id = 'c5800000-0000-4000-8000-000000000001';
+:as_sales_a
+select tst.fails($q$update public.customers set status = 'active', do_not_service_reason = null where id = 'c5800000-0000-4000-8000-000000000001'$q$, 'sales do not lift the mark');
+:as_owner_a
+update public.customers set status = 'active', do_not_service_reason = null where id = 'c5800000-0000-4000-8000-000000000001';
+select tst.ok((select count(*) from public.activities where subject_id = 'c5800000-0000-4000-8000-000000000001' and meta ->> 'action' = 'do_not_service_lifted'
+                 and meta ->> 'to' = 'active' and meta ->> 'reason' is null and actor_id = 'a0000000-0000-0000-0000-000000000001') = 1, 'the director lifts it, also traced');
+select tst.ok((select count(*) from public.activities where subject_id = 'c5800000-0000-4000-8000-000000000002' and kind = 'status') = 0, 'archive leaves no «do not service» line');
+:as_super
+reset role; set role anon;
+select tst.fails($q$select tst.mark_dns('c5800000-0000-4000-8000-000000000001', 'do_not_service')$q$, 'anon does not mark');
+:as_super
+\echo 'T58 «do not service»: only the director or the office, with a trace ok'
 
 \echo 'ALL TESTS PASSED'
