@@ -3,7 +3,7 @@
  * The server counts the same totals (supabase app.job_lines_totals); test/jobLines.test.ts checks both on the same numbers.
  */
 import { computeOption, type TaxMode } from "./estimate.js";
-import type { DecLike } from "./decimal.js";
+import { D, dec, type DecLike } from "./decimal.js";
 
 export interface JobLine {
   quantity: DecLike;
@@ -24,11 +24,16 @@ export interface JobLinesTotals {
 /** The tax mode of a client's documents: an exempt client pays no sales tax (customers.tax_exempt). */
 export const taxModeFor = (taxExempt: boolean | undefined): TaxMode => (taxExempt ? "exempt" : "added_on_top");
 
-/** Line total floor(qty × price + 0.5); subtotal; tax on the taxable lines, half up; total = subtotal + tax. */
-export function jobLinesTotals(lines: JobLine[], tax: JobTax, taxExempt = false): JobLinesTotals {
+/** The quantity as the database keeps it: numeric(14,4), half away from zero. */
+export const jobLineQty = (q: DecLike): string => dec(q).toDecimalPlaces(4, D.ROUND_HALF_UP).toString();
+
+/** Line total floor(qty × price + 0.5) on the stored quantity; subtotal; tax on the taxable lines, half up;
+ *  total = subtotal + tax. The tax is the job's own snapshot (jobs.tax_enabled — the server switches it off for an
+ *  exempt client when the job is made or its tax is set), never the client's current flag. */
+export function jobLinesTotals(lines: JobLine[], tax: JobTax): JobLinesTotals {
   const r = computeOption(
-    lines.map((l, i) => ({ name: `line ${i + 1}`, quantity: l.quantity, unitPriceCents: l.unitPriceCents, taxable: !!l.taxable })),
-    { mode: taxModeFor(taxExempt), enabled: tax.enabled && !taxExempt, rateBps: tax.rateBps },
+    lines.map((l, i) => ({ name: `line ${i + 1}`, quantity: jobLineQty(l.quantity), unitPriceCents: l.unitPriceCents, taxable: !!l.taxable })),
+    { mode: "added_on_top", enabled: tax.enabled, rateBps: tax.rateBps },
   );
   return { subtotal: r.subtotal, tax: r.tax, total: r.total, lineTotals: r.lineTotals };
 }

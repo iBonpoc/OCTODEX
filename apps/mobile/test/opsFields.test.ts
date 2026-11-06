@@ -104,6 +104,14 @@ describe("ops: wave П-2a money fields", () => {
     });
     expect(JSON.stringify(calls)).not.toContain("line_total");
   });
+  it("a line removed by mistake comes back (Undo)", async () => {
+    await applyOp({ k: "jobLine.restore", id: "li1" }, "co", "u");
+    expect(calls).toEqual([{ table: "job_line_items", how: "update", id: "li1", row: { deleted_at: null } }]);
+  });
+  it("the quantity goes as the database keeps it (4 places), so the engine and the server count the same", async () => {
+    await applyOp({ k: "jobLine.save", isNew: false, line: { id: "li1", jobId: "j1", position: 0, name: "x", quantity: "1.00004", unitPriceCents: 12500, taxable: false } }, "co", "u");
+    expect(calls[0]!.row.quantity).toBe("1");
+  });
   it("a removed line is marked, not deleted", async () => {
     await applyOp({ k: "jobLine.remove", id: "li1" }, "co", "u");
     expect(calls[0]).toMatchObject({ table: "job_line_items", how: "update", id: "li1" });

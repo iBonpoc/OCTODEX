@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { jobLinesTotals, taxModeFor } from "../src/jobLines.js";
+import { jobLineQty, jobLinesTotals, taxModeFor } from "../src/jobLines.js";
 
 // The same numbers are checked in the database (supabase/tests/core_rls.sql T41, app.job_lines_totals). Test prices.
 const JOB_LINES_CASE = {
@@ -23,8 +23,10 @@ describe("job lines (a job without an estimate)", () => {
   it("tax off: total = subtotal", () => {
     expect(jobLinesTotals(JOB_LINES_CASE.lines, { enabled: false, rateBps: 1025 })).toMatchObject({ tax: 0, total: 18831 });
   });
-  it("an exempt client pays no tax even if the job has tax on", () => {
-    expect(jobLinesTotals(JOB_LINES_CASE.lines, { enabled: true, rateBps: 1025 }, true)).toMatchObject({ tax: 0, total: 18831 });
+  it("the quantity counts as stored (4 places, half up): 1.00004 × $125.00 = $125.00", () => {
+    expect(jobLinesTotals([{ quantity: "1.00004", unitPriceCents: 12500 }], { enabled: false, rateBps: 0 }).total).toBe(12500);
+    expect(jobLineQty("1.00005")).toBe("1.0001");
+    expect(jobLineQty("2.5")).toBe("2.5");
   });
   it("half a cent of tax rounds up", () => {
     // 100 × 5% = 5.0; 10 × 5% = 0.5 → 1

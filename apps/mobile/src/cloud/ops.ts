@@ -7,7 +7,7 @@
 // day the invoice was made (op.dueDate, set when the op is queued), not the day the op reaches the server
 import { companyToday } from "@/features/zone";
 import { realJob } from "./inspectionBridge";
-import { ENGINE_VERSION } from "@octo/estimating-engine";
+import { ENGINE_VERSION, jobLineQty } from "@octo/estimating-engine";
 import type { BillingAddress, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
@@ -153,6 +153,8 @@ export type Op =
   | { k: "job.tags"; id: string; tagIds: string[] }
   | { k: "jobLine.save"; line: Omit<JobLineItem, "totalCents">; isNew: boolean }
   | { k: "jobLine.remove"; id: string }
+  /** «Undo» of a removed line (rule 5) */
+  | { k: "jobLine.restore"; id: string }
   | { k: "jobType.save"; jobType: JobType; isNew: boolean }
   | { k: "estimate.category"; id: string; serviceCategoryId: string | null }
   | { k: "property.update"; id: string; address?: string; city?: string }
@@ -578,12 +580,14 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const l = op.line;
       const cols = {
         position: l.position, name: l.name.trim() || "—", description: l.description?.trim() || null,
-        catalog_item_id: l.catalogItemId ?? null, quantity: l.quantity, unit_price_cents: l.unitPriceCents, taxable: l.taxable,
+        catalog_item_id: l.catalogItemId ?? null, quantity: jobLineQty(l.quantity), unit_price_cents: l.unitPriceCents, taxable: l.taxable,
       };
       return run(op.isNew ? ins("job_line_items", { id: l.id, company_id: c, job_id: l.jobId, ...cols }) : supabase.from("job_line_items").update(cols).eq("id", l.id));
     }
     case "jobLine.remove":
       return run(supabase.from("job_line_items").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
+    case "jobLine.restore":
+      return run(supabase.from("job_line_items").update({ deleted_at: null }).eq("id", op.id));
     case "jobType.save": {
       // seed_key is set once; afterwards only name, position and archive change (column grants, migration 20261106010000)
       const x = op.jobType;
