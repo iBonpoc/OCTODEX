@@ -18,6 +18,11 @@ export interface Member {
   phone?: string;
   /** invited, has not joined yet */
   pending?: boolean;
+  /** wave 7-2 (S21): the invitation behind a pending person (cloud: public.invitations) and when its link stops working */
+  invitationId?: ID;
+  expiresAt?: string;
+  /** wave 7-2: switched off by the owner/admin (membership «disabled») — kept only in `DB.disabledMembers` */
+  disabled?: boolean;
   /* ---- signing for the company (docs/specs/07 §2.2 А, wave E2a) ---- */
   /** may sign contracts for the company (everyone by default; the owner can take it away) */
   canSignContracts?: boolean;
@@ -713,6 +718,8 @@ export interface DB {
   members: Member[];
   sources: Source[];
   tags: Tag[];
+  /** wave 7-2 (S21): people switched off — not in `members` (no pickers, no assignment), shown on «Команда» only */
+  disabledMembers?: Member[];
   /** cancelled visits (docs/specs/03 §5.2): out of the Plan and the day, kept in the lead's feed with the reason */
   cancelledVisits?: CancelledVisit[];
   /** wave П-1: cancelled jobs (server: jobs.status = cancelled) are not in `jobs`; kept here so invoices and the

@@ -216,6 +216,9 @@ interface StoreCtx {
   readNotices: () => void;
   /** invite a person (demo: added as pending; cloud: email invites come with the email service) */
   inviteMember: (m: { name: string; email?: string; phone?: string; roles: Role[]; kind: "employee" | "sub" }) => Undo;
+  /** wave 7-2 (S21), demo: cancel an invitation / switch a person off or back on (the cloud goes through cloud/team.ts) */
+  revokeInvite: (id: ID) => Undo;
+  setMemberDisabled: (id: ID, disabled: boolean) => Undo;
   /** company profile (owner/admin in the cloud) */
   saveCompany: (patch: Partial<Omit<Company, "id" | "licenses" | "contacts">>) => Undo;
   saveLicense: (l: CompanyLicense) => Undo;
@@ -1214,7 +1217,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       inviteMember: (m) => {
         if (modeRef.current !== "demo") return () => {};
         const initials = m.name.split(/\s+/).map((x) => x[0]).slice(0, 2).join("").toUpperCase() || "?";
-        return mutate("member.invite", (d) => ({ ...d, members: [...d.members, { id: uid(), ...m, initials, pending: true }] }));
+        const expiresAt = new Date(Date.now() + 7 * 864e5).toISOString();
+        return mutate("member.invite", (d) => ({ ...d, members: [...d.members, { id: uid(), ...m, initials, pending: true, expiresAt }] }));
+      },
+      revokeInvite: (id) => {
+        if (modeRef.current !== "demo" || !dbRef.current.members.some((m) => m.id === id && m.pending)) return () => {};
+        return mutate("member.revoke", (d) => ({ ...d, members: d.members.filter((m) => m.id !== id) }));
+      },
+      setMemberDisabled: (id, disabled) => {
+        if (modeRef.current !== "demo") return () => {};
+        const d0 = dbRef.current;
+        const m = disabled ? d0.members.find((x) => x.id === id && !x.pending) : (d0.disabledMembers ?? []).find((x) => x.id === id);
+        if (!m || m.id === d0.me) return () => {};
+        return mutate("member.status", (d) =>
+          disabled
+            ? { ...d, members: d.members.filter((x) => x.id !== id), disabledMembers: [...(d.disabledMembers ?? []), { ...m, disabled: true }] }
+            : { ...d, disabledMembers: (d.disabledMembers ?? []).filter((x) => x.id !== id), members: [...d.members, { ...m, disabled: undefined }] },
+        );
       },
       readNotices: () => {
         const ids = dbRef.current.notices.filter((n) => !n.read).map((n) => n.id);
