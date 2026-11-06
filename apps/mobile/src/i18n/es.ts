@@ -1944,4 +1944,7 @@ export const es: Dict = {
   "support.reportBody": "Qué pasó:\n\nQué esperaba:\n\n— {version} · {platform}",
   "support.noAdvice": "El soporte explica cómo funciona la aplicación. No damos asesoría legal ni fiscal.",
   "support.documents": "Documentos",
+  // wave 7б-1 «Работы и выезды»: personal settings
+  "pref7b.plan": "Plan",
+  "pref7b.showDoneHint": "Visitas, trabajos y tareas completados en el Plan. Este ajuste es tuyo y es el mismo en todos tus dispositivos.",
 };

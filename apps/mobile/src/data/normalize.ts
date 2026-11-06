@@ -13,7 +13,7 @@
 import { fromLegacyTrades } from "@/features/serviceCategories";
 import { nextJobNumber } from "./jobs";
 import { makeSeed, SEED_JOB_TYPES, SEED_SERVICE_CATEGORIES, SEED_SOURCES, SEED_TAGS } from "./seed";
-import type { Customer, DB, Job, Property, Visit } from "./types";
+import { MEMBER_PREFS_DEFAULT, type Customer, type DB, type Job, type Property, type Visit } from "./types";
 
 type Legacy = { source?: string; sourceId?: string };
 
@@ -40,6 +40,7 @@ export function normalizeDB(d: DB, mode: "demo" | "cloud"): DB {
     calendarEvents: Array.isArray(d.calendarEvents) ? d.calendarEvents : [],
     customFields: Array.isArray(d.customFields) ? d.customFields : [],
     customFieldValues: Array.isArray(d.customFieldValues) ? d.customFieldValues : [],
+    prefs: { ...MEMBER_PREFS_DEFAULT, planShowDone: d.prefs?.planShowDone === true },
     ...withJobFields(withoutLateFlag(inspectionsWithoutJobs(d)), d.properties ?? [], d.cancelledJobs, mode),
     tasks: Array.isArray(d.tasks) ? d.tasks : [],
     activities: Array.isArray(d.activities) ? d.activities : [],

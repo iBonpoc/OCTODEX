@@ -1943,6 +1943,9 @@ export const ru = {
   "support.reportBody": "Что случилось:\n\nЧто ожидали:\n\n— {version} · {platform}",
   "support.noAdvice": "Поддержка объясняет, как работает приложение. Юридических и налоговых советов мы не даём.",
   "support.documents": "Документы",
+  // wave 7б-1 «Работы и выезды»: personal settings
+  "pref7b.plan": "План",
+  "pref7b.showDoneHint": "Выполненные выезды, работы и задачи в Плане. Настройка ваша и одинакова на всех ваших устройствах.",
 } as const;
 
 export type DictKey = keyof typeof ru;
