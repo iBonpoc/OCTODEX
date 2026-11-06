@@ -47,6 +47,18 @@ const layouts = args.includes("--all-layouts")
 if (!args.includes("--no-build")) execSync("npx expo export --platform web", { cwd: APP, stdio: "inherit" });
 fs.mkdirSync(OUT, { recursive: true });
 
+// The demo is reseeded when the company's day changes (store.tsx, «day» of octo.db.v5): a spec running across the company's
+// midnight loses what it planted (e2e 65 on CI, 06.11). A spec that would start in the last minutes of the company's day
+// waits until just after its midnight. A spec longer than this window (08-layouts) can still cross it.
+const { addDays, atMinute, todayKey } = require("./companyTime.cjs");
+const DAY_GUARD_MS = 3 * 60_000;
+async function waitPastCompanyMidnight() {
+  const left = Date.parse(atMinute(addDays(todayKey(), 1), 0)) - Date.now();
+  if (left > DAY_GUARD_MS) return;
+  console.log(`  … ${Math.ceil(left / 1000)} s to the company's midnight: waiting for the demo's new day`);
+  await new Promise((r) => setTimeout(r, Math.max(0, left) + 5000));
+}
+
 const types = { ".js": "text/javascript", ".html": "text/html", ".css": "text/css", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".ttf": "font/ttf" };
 const server = http.createServer((req, res) => {
   let p = path.join(DIST, decodeURIComponent(req.url.split("?")[0]));
@@ -67,6 +79,7 @@ const server = http.createServer((req, res) => {
     // a spec that loops over widths/themes itself (08-layouts) runs once
     if (require(path.join(__dirname, "specs", file)).ownLayouts && layout !== layouts[0]) continue;
     runs++;
+    await waitPastCompanyMidnight();
     const tag = `${file} @${layout.width} ${layout.theme}`;
     const spec = require(path.join(__dirname, "specs", file));
     const t0 = Date.now();
