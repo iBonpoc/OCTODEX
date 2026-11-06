@@ -66,19 +66,36 @@ describe("delete-account: the order", () => {
     expect(JSON.parse(r.body)).toMatchObject({ deleted: true, auth: "done" });
     expect(calls).toEqual([`user user.jwt`, `rpc user.jwt УДАЛИТЬ ${C1}`, `close ${UID}`]);
   });
-  it("a refusal of the database (last owner, stale sign-in) → 400 with its words, the sign-in is NOT closed", async () => {
-    const { d, calls } = deps({ deleteAsUser: async () => ({ error: { message: "the company keeps at least one active owner" } }) });
+  it("our refusal (OD001: last owner, stale sign-in) → 400 with its words and which company; the sign-in is NOT closed", async () => {
+    const { d, calls } = deps({ deleteAsUser: async () => ({ error: { message: "the company keeps at least one active owner", code: "OD001", details: C1 } }) });
     const r = await handleDelete(req({}), d);
     expect(r.status).toBe(400);
-    expect(JSON.parse(r.body).error).toBe("the company keeps at least one active owner");
+    expect(JSON.parse(r.body)).toEqual({ error: "the company keeps at least one active owner", detail: C1 });
     expect(calls.some((c) => c.startsWith("close"))).toBe(false);
+  });
+  it("any other database or network error → 500 «account deletion failed», no internals", async () => {
+    for (const e of [{ message: "Could not find the function public.delete_account in the schema cache", code: "PGRST202" }, { message: "canceling statement due to statement timeout", code: "57014" }, { message: "fetch failed https://kgia.supabase.co" }]) {
+      const { d, calls } = deps({ deleteAsUser: async () => ({ error: e }) });
+      const r = await handleDelete(req({}), d);
+      expect(r.status).toBe(500);
+      expect(JSON.parse(r.body)).toEqual({ error: "account deletion failed" });
+      expect(r.body).not.toMatch(/schema|timeout|supabase|PGRST/);
+      expect(calls.some((c) => c.startsWith("close"))).toBe(false);
+    }
+  });
+  it("Auth failing for a moment is retried (up to 3) before «pending»", async () => {
+    let n = 0;
+    const { d } = deps({ closeSignIn: async () => (++n < 3 ? { error: { message: "busy" } } : { error: null }) });
+    const r = await handleDelete(req({}), d);
+    expect(JSON.parse(r.body)).toMatchObject({ auth: "done" });
+    expect(n).toBe(3);
   });
   it("Auth fails after the data is closed → 200 auth: pending; a repeat (RPC says repeat) closes the sign-in", async () => {
     let fail = true;
     const { d, logs } = deps({ closeSignIn: async () => (fail ? { error: { message: `boom ${SECRET}`.replace(SECRET, "x") } } : { error: null }) });
     const r1 = await handleDelete(req({}), d);
     expect(JSON.parse(r1.body)).toMatchObject({ deleted: true, auth: "pending" });
-    expect(logs.length).toBe(1);
+    expect(logs.length).toBe(1); // one «pending» line after 3 tries
     fail = false;
     const again = deps({ deleteAsUser: async () => ({ data: { deleted: true, repeat: true }, error: null }) });
     const r2 = await handleDelete(req({}), { ...again.d, closeSignIn: d.closeSignIn });
@@ -86,7 +103,7 @@ describe("delete-account: the order", () => {
   });
   it("a thrown client error is an answer, not a crash", async () => {
     const r = await handleDelete(req({}), deps({ deleteAsUser: async () => { throw new Error("network down"); } }).d);
-    expect(r.status).toBe(400);
+    expect(r.status).toBe(500);
   });
 });
 

@@ -4703,6 +4703,10 @@ select tst.fails_like($q$select public.delete_account('yes')$q$, '%type the word
 select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%sign in again first%', 'no amr in the token: refused (fail closed)');
 select tst.fresh(15);
 select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%sign in again first%', 'a sign-in 15 minutes ago is not fresh');
+select set_config('request.jwt.claims', jsonb_build_object('amr', jsonb_build_array(
+  jsonb_build_object('method', 'otp', 'timestamp', extract(epoch from now() - interval '1 hour')::bigint),
+  jsonb_build_object('method', 'token_refresh', 'timestamp', extract(epoch from now())::bigint)))::text, false) is not null as t50_r \gset
+select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%sign in again first%', 'a token refresh is not a fresh sign-in');
 set request.jwt.claims = '{"is_anonymous": true, "amr": []}';
 select tst.fails_like($q$select public.delete_account('DELETE')$q$, '%sign in first%', 'an anonymous sign-in deletes nothing');
 :as_super
@@ -4721,7 +4725,7 @@ select tst.ok((select count(*) from public.notes where body = 'Tom team 50') = 1
 select tst.ok((select assignee_id from public.tasks where id = 'd5000000-0000-4000-8000-000000000001') = 'a5000000-0000-4000-8000-000000000001', 'the task stays, pointing to the anonymised person');
 select tst.ok((select user_id from public.company_contacts where name = 'Tom (contact)') is null, 'the company contact is unlinked');
 select tst.ok((select lead_default_assignee_id from public.companies where id = 'ca000000-0000-0000-0000-000000000000') is null, 'new leads no longer go to him');
-select tst.ok((select status from public.invitations where id = :'t50_inv_tom') = 'revoked', 'an invitation to his email stops working');
+select tst.ok((select status = 'revoked' and email like 'deleted+%@deleted.invalid' and name is null from public.invitations where id = :'t50_inv_tom'), 'an invitation to his email stops working and forgets the email');
 select tst.ok((select every(email = 'deleted+a5000000-0000-4000-8000-000000000001@deleted.invalid' and name is null) from public.invitations where accepted_by = 'a5000000-0000-4000-8000-000000000001'), 'the accepted invitation forgets his email');
 select tst.ok((select count(*) = 2 and every(ip is null and ip_raw is null) from public.legal_acceptance where user_id = 'a5000000-0000-4000-8000-000000000001'), 'the proof of consent stays, without the IP');
 -- his token (valid up to an hour): sees nothing, writes nothing
@@ -4770,6 +4774,10 @@ select tst.ok((public.delete_account('DELETE', array['c5000000-0000-4000-8000-00
 select tst.ok((select closed_at is not null from public.companies where id = 'c5000000-0000-4000-8000-000000000002'), 'the company is closed (its records are kept)');
 select tst.ok((select every(status = 'deleted') from public.memberships where company_id = 'c5000000-0000-4000-8000-000000000002'), 'nobody works in it any more');
 select tst.ok(app.retention_years() = 7, 'records are kept 7 years by default');
+:as_adam50
+select tst.fails_like($q$update public.companies set closed_at = now() where id = 'c5000000-0000-4000-8000-000000000001'$q$, '%closed only with its last owner%', 'an owner does not close a company by hand');
+:as_super
+select tst.fails_like($q$update public.companies set closed_at = null where id = 'c5000000-0000-4000-8000-000000000002'$q$, '%closed only with its last owner%', 'nor reopen it (only delete_account sets it)');
 :as_eve50
 select tst.ok((select count(*) from public.companies where id = 'c5000000-0000-4000-8000-000000000002') = 0, 'Eve no longer sees the closed company');
 select tst.ok(app.account_alive(), 'but her own account is alive');
@@ -4810,6 +4818,17 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     -- unlinked (set to null)
     'company_contacts.user_id', 'companies.lead_default_assignee_id') \gset
 select tst.ok(:'t50_unclassified' = '', format('every person column is classified in T50 (kept / erased / unlinked): %s', :'t50_unclassified'));
+-- and the other way: every entry of the lists still exists (no stale classification)
+select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
+    'activities.actor_id', 'audit_log.actor_id', 'audit_log.on_behalf_of_user_id', 'calendar_events.user_id',
+    'email_outbox.requested_by', 'email_outbox.to_email_set_by', 'estimate_approvals.signer_user_id', 'estimates.owner_user_id',
+    'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
+    'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
+    'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by', 'legal_acceptance.user_id', 'users.id',
+    'member_prefs.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
+ where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
+                     and format('%s.%s', c.table_name, c.column_name) = e) \gset
+select tst.ok(:'t50_stale' = '', format('no stale entries in the T50 lists: %s', :'t50_stale'));
 \echo 'T50 wave 7а-2a: account deletion (S22) ok'
 
 \echo 'ALL TESTS PASSED'

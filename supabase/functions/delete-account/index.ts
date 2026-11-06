@@ -17,9 +17,12 @@ Deno.serve(async (req: Request) => {
         // the person's own client: the RPC runs with THEIR rights and auth.uid()
         const asUser = createClient(URL_, ANON, { global: { headers: { Authorization: `Bearer ${jwt}` } }, auth: { persistSession: false } });
         const { data, error } = await asUser.rpc("delete_account", { p_confirm: confirm, p_close_companies: closeCompanies });
-        return { data, error: error ? { message: error.message } : null };
+        return { data, error: error ? { message: error.message, code: error.code, details: error.details } : null };
       },
       closeSignIn: async (uid) => {
+        // the sign-up name lives in user_metadata; the soft delete does not clear it (security-check №6)
+        const upd = await admin.auth.admin.updateUserById(uid, { user_metadata: { full_name: null, avatar_url: null, locale: null } });
+        if (upd.error) return { error: { message: upd.error.message } };
         const { error } = await admin.auth.admin.deleteUser(uid, true);
         return { error: error ? { message: error.message } : null };
       },

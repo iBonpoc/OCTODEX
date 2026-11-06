@@ -14,11 +14,20 @@ export interface DeleteDeps {
   /** the verified user id of the bearer token (auth.getUser), or null */
   userOf: (jwt: string) => Promise<string | null>;
   /** public.delete_account(p_confirm, p_close_companies) with the person's JWT */
-  deleteAsUser: (jwt: string, confirm: string, closeCompanies: string[]) => Promise<{ data?: unknown; error?: { message: string } | null }>;
-  /** auth.admin.deleteUser(uid, true) with the service role */
+  deleteAsUser: (jwt: string, confirm: string, closeCompanies: string[]) => Promise<{ data?: unknown; error?: DbError | null }>;
+  /** auth.admin.updateUserById(uid, {user_metadata: cleared}) then auth.admin.deleteUser(uid, true), service role */
   closeSignIn: (uid: string) => Promise<{ error?: { message: string } | null }>;
   log?: (msg: string) => void;
 }
+export interface DbError {
+  message: string;
+  code?: string;
+  details?: string | null;
+}
+/** our own refusals in public.delete_account (SQLSTATE OD001): their words go to the app; anything else does not */
+export const OWN_ERROR = "OD001";
+/** Auth may fail for a moment: the sign-in close is tried this many times before «pending» */
+export const CLOSE_TRIES = 3;
 export interface Req {
   method: string;
   header: (name: string) => string | null;
@@ -65,15 +74,21 @@ export async function handleDelete(req: Req, deps: DeleteDeps): Promise<Res> {
   if (!uid) return json(401, { error: "sign in first" });
   const body = parseBody(await req.text().catch(() => ""));
   if (!body) return json(400, { error: "bad request" });
-  const r: { data?: unknown; error?: { message: string } | null } = await deps
+  const r: { data?: unknown; error?: DbError | null } = await deps
     .deleteAsUser(jwt, body.confirm, body.closeCompanies)
     .catch((e: Error) => ({ error: { message: e.message } }));
   if (r.error) {
-    // our refusals («sign in again first», «the company keeps at least one active owner», …) go as they are; the
-    // database already hides anything internal behind «account deletion failed»
-    return json(400, { error: r.error.message });
+    // our refusals («sign in again first», «the company keeps at least one active owner» + which company, …) go as
+    // they are; anything else (a missing function, the network, a timeout) never shows its internals (security-check №2)
+    if (r.error.code === OWN_ERROR) return json(400, { error: r.error.message, detail: r.error.details ?? null });
+    deps.log?.(`delete-account: rpc failed (${r.error.code ?? "no code"})`);
+    return json(500, { error: "account deletion failed" });
   }
-  const closed = await deps.closeSignIn(uid).catch((e: Error) => ({ error: { message: e.message } }));
+  // the data is closed; now the sign-in — a few tries (a «pending» account could sign in but do nothing — №1)
+  let closed: { error?: { message: string } | null } = { error: { message: "not tried" } };
+  for (let i = 0; i < CLOSE_TRIES && closed.error; i++) {
+    closed = await deps.closeSignIn(uid).catch((e: Error) => ({ error: { message: e.message } }));
+  }
   if (closed.error) {
     deps.log?.(`delete-account: auth soft delete pending for ${uid}`);
     return json(200, { deleted: true, auth: "pending", result: r.data ?? null });

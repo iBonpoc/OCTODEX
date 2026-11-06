@@ -21,6 +21,21 @@ revoke all on function app.retention_years() from public, anon, authenticated;
 -- ---- 1. A company closed with its last owner's account ----
 alter table public.companies add column if not exists closed_at timestamptz;
 
+-- closed only by delete_account (7а-3 erases by it): an owner or admin neither sets nor clears it (security-check №5)
+create or replace function app.tg_company_closed_guard()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if new.closed_at is distinct from old.closed_at
+     and not (current_setting('app.accepting_invite', true) = 'on' and current_user <> 'authenticated') then
+    raise exception 'a company is closed only with its last owner''s account' using errcode = '42501';
+  end if;
+  return new;
+end;
+$$;
+create trigger t06_company_closed_guard before update on public.companies
+  for each row execute function app.tg_company_closed_guard();
+revoke all on function app.tg_company_closed_guard() from public, anon, authenticated;
+
 -- ---- 2. The account is alive ----
 create or replace function app.account_alive()
 returns boolean language sql stable security definer set search_path = '' as $$
@@ -170,9 +185,16 @@ begin
   if exists (select 1 from auth.users u where u.id = auth.uid() and (to_jsonb(u) ->> 'is_anonymous') = 'true') then
     return false;
   end if;
+  -- a token refresh is not a sign-in (security-check 7а-2a №7)
   select max((e ->> 'timestamp')::bigint) into v_at
     from jsonb_array_elements(v_claims -> 'amr') e
-   where jsonb_typeof(e -> 'timestamp') = 'number';
+   where jsonb_typeof(e -> 'timestamp') = 'number' and coalesce(e ->> 'method', '') <> 'token_refresh';
+  -- the session of this token is still alive (a signed-out session's token does not delete)
+  if v_claims ? 'session_id' and to_regclass('auth.sessions') is not null then
+    if not exists (select 1 from auth.sessions s where s.id::text = v_claims ->> 'session_id') then
+      return false;
+    end if;
+  end if;
   return v_at is not null and v_at >= extract(epoch from now())::bigint - p_seconds and v_at <= extract(epoch from now())::bigint + 60;
 end;
 $$;
@@ -228,6 +250,10 @@ begin
     if v_me is null or app.is_anonymous_user() then
       raise exception 'sign in first' using errcode = 'OD001';
     end if;
+    -- a lock wait never hangs until the statement timeout (→ «try again»)
+    perform set_config('lock_timeout', '5s', true);
+    -- my profile row first: two taps at once — the second waits here and then sees the first one's result
+    perform 1 from public.users u where u.id = v_me for update;
     -- again (the answer was lost, or the sign-in is closed by Auth later): nothing changes, it is a success
     if exists (select 1 from public.users u where u.id = v_me and u.deleted_at is not null) then
       return jsonb_build_object('deleted', true, 'repeat', true);
@@ -266,16 +292,15 @@ begin
       update public.invitations set status = 'revoked', updated_at = now()
        where company_id = any (v_last) and status = 'pending';
     end if;
-    -- my memberships: deleted; what was about me goes
-    update public.memberships
-       set status = 'deleted', deleted_at = now(), share_location = false, title = null, his_registration_number = null, color = null
-     where user_id = v_me and status <> 'deleted';
     perform set_config('app.accepting_invite', '', true);
 
     -- invitations: the ones I sent and the ones to my email stop working; the accepted ones forget my email and name
     update public.invitations set status = 'revoked', updated_at = now()
-     where status = 'pending'
-       and (invited_by = v_me or email = (select lower(u.email) from auth.users u where u.id = v_me));
+     where status = 'pending' and invited_by = v_me;
+    -- the ones TO me: revoked and they forget my email and name (security-check №6)
+    update public.invitations set status = case when status = 'pending' then 'revoked' else status end,
+           email = v_gone, name = null, updated_at = now()
+     where email = (select lower(u.email) from auth.users u where u.id = v_me) and accepted_by is distinct from v_me;
     update public.invitations set email = v_gone, name = null, updated_at = now() where accepted_by = v_me;
     -- unlinked: the company keeps its contact row and its settings, not the link to me
     update public.company_contacts set user_id = null where user_id = v_me;
@@ -290,6 +315,13 @@ begin
     perform set_config('app.erasing_user', 'on', true);
     update public.legal_acceptance set ip = null, ip_raw = null where user_id = v_me and (ip is not null or ip_raw is not null);
     perform set_config('app.erasing_user', '', true);
+    -- my memberships: deleted; what was about me goes (last of the writes: until here I am still a member — the writes
+    -- above never depend on BYPASSRLS ordering, security-check 7а-2a №3)
+    perform set_config('app.accepting_invite', 'on', true);
+    update public.memberships
+       set status = 'deleted', deleted_at = now(), share_location = false, title = null, his_registration_number = null, color = null
+     where user_id = v_me and status <> 'deleted';
+    perform set_config('app.accepting_invite', '', true);
     -- the profile: anonymised (the business records point to it); the sign-in is closed by Auth (the edge function)
     update public.users
        set full_name = 'Deleted user', email = v_gone, phone = null, avatar_file_id = null, last_active_company_id = null,
@@ -299,6 +331,12 @@ begin
     -- postconditions: under FORCE RLS a write can pass with 0 rows — check, never trust (security-check 7а-2 №4)
     if exists (select 1 from public.memberships where user_id = v_me and status <> 'deleted')
        or exists (select 1 from public.member_prefs where user_id = v_me)
+       or exists (select 1 from public.company_contacts where user_id = v_me)
+       or exists (select 1 from public.companies where lead_default_assignee_id = v_me)
+       or exists (select 1 from public.notes where created_by = v_me and visibility = 'private')
+       or exists (select 1 from public.member_signatures where user_id = v_me and revoked_at is null)
+       or exists (select 1 from public.legal_acceptance where user_id = v_me and (ip is not null or ip_raw is not null))
+       or exists (select 1 from public.invitations where status = 'pending' and (invited_by = v_me or email = v_gone))
        or not exists (select 1 from public.users where id = v_me and deleted_at is not null and email = v_gone) then
       raise exception 'account deletion incomplete';
     end if;
@@ -306,10 +344,11 @@ begin
   exception
     when sqlstate 'OD001' then
       raise;
-    when deadlock_detected or serialization_failure or lock_not_available then
+    when deadlock_detected or serialization_failure or lock_not_available or query_canceled then
       raise exception 'try again' using errcode = 'OD001';
     when others then
-      raise warning 'delete_account failed: %', sqlstate;
+      -- SQLSTATE and the message (no DETAIL: it may hold values) — enough to read a staging failure
+      raise warning 'delete_account failed: % %', sqlstate, sqlerrm;
       raise exception 'account deletion failed' using errcode = 'OD002';
   end;
 end;
