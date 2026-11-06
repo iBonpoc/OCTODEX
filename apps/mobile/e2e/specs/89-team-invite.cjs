@@ -2,7 +2,7 @@
  * Wave 7-2 — «Команда» и приглашение (story map S21; docs/specs/13 §3.13, 19 §2 п.3–4). Demo mode; the server side is db T48.
  * - «Пригласить»: name, email, ONE role (Мастер · Продажи · Диспетчер · Директор) or «Субподрядчик» → a card «Приглашён»;
  * - the invited card: «Отправить ещё раз», «Отменить приглашение» (asks first) → the card is gone;
- * - a person: «Отключить» (asks first) → «Отключён», last in the list, out of the pickers; «Включить снова» brings them back;
+ * - a person (a subcontractor too): «Отключить» (asks first) → «Отключён», last in the list, out of the pickers; «Включить снова» brings them back;
  * - the invitation link page /auth/invite: no link → «не найдена»; signed out → «Войдите…» (demo explains).
  */
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
@@ -63,7 +63,8 @@ exports.run = async (h) => {
   await sheet("member-sheet").getByRole("button", { name: "Да, отключить" }).click();
   await p.waitForTimeout(600);
   db = await h.db();
-  h.expect(!db.members.some((m) => m.id === who.id) && (db.disabledMembers ?? []).some((m) => m.id === who.id), "out of the team list for pickers, kept as disabled");
+  const offM = db.members.find((m) => m.id === who.id);
+  h.expect(!!offM && offM.disabled && offM.pending, "kept (old records keep the name), switched off and out of the pickers");
   const last = cards().last();
   h.expect((await last.innerText()).includes(who.name) && (await last.innerText()).includes("Отключён"), "«Отключён», last in the list");
   await h.shot("disabled");
@@ -71,7 +72,19 @@ exports.run = async (h) => {
   await sheet("member-sheet").getByRole("button", { name: "Включить снова" }).click();
   await p.waitForTimeout(600);
   db = await h.db();
-  h.expect(db.members.some((m) => m.id === who.id) && !(db.disabledMembers ?? []).some((m) => m.id === who.id), "back on the team");
+  const backM = db.members.find((m) => m.id === who.id);
+  h.expect(!!backM && !backM.disabled && !backM.pending, "back on the team");
+
+  // a subcontractor's card opens too: nothing to sign, only «Отключить» (review #193)
+  const sub = db.members.find((m) => m.kind === "sub" && !m.pending);
+  if (sub) {
+    await cardOf(sub.name).click();
+    await sheet("member-sheet").waitFor({ timeout: 3000 });
+    h.expect((await sheet("member-sheet").getByRole("button", { name: "Отключить" }).count()) === 1, "a subcontractor can be switched off");
+    h.expect((await sheet("member-sheet").getByPlaceholder("Должность (под подписью)").count()) === 0, "no signing fields for a subcontractor");
+    await p.keyboard.press("Escape");
+    await p.waitForTimeout(400);
+  }
 
   // the invitation link page
   await h.go("/auth/invite");

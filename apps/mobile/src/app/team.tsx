@@ -20,7 +20,7 @@ import { useAuth } from "@/cloud/auth";
 import { inviteMember, resendInvitation, revokeInvitation, setMemberStatus } from "@/cloud/team";
 import { WEB_APP_URL } from "@/config/backend";
 import { copyText, shareText } from "@/features/sendEstimate";
-import { canDisable, dbRoleFor, INVITE_ROLES, inviteLink, teamList, teamState, validInviteEmail } from "@/features/team";
+import { canDisable, dbRoleFor, INVITE_ROLES, inviteLink, teamErrorKey, teamList, teamState, validInviteEmail } from "@/features/team";
 
 /** «Пригласить» → the link (cloud) to send by «Поделиться» or copy; email comes with the mail service (П1b) */
 type LinkFor = { name: string; link: string } | null;
@@ -73,7 +73,7 @@ export default function Team() {
       setLink({ name: who, link: inviteLink(origin, r.token) });
       store.refresh();
     } catch (e) {
-      toast.show(t("team.inviteFailed", { msg: (e as Error).message }));
+      toast.show(t(teamErrorKey((e as Error).message)));
     } finally {
       setBusy(false);
     }
@@ -112,7 +112,8 @@ export default function Team() {
         // a person on the team: call / SMS only (spec 06 §5)
         contact={m.id === db.me || state !== "active" ? undefined : { phone: m.phone }}
         edge={null}
-        onPress={!director ? undefined : m.pending ? () => setInviteOf(m) : m.kind === "employee" || m.disabled ? () => setEditing(m) : undefined}
+        // a switched-off person (also «pending») and anyone at work, subcontractors too, open the person's sheet
+        onPress={!director ? undefined : m.disabled ? () => setEditing(m) : m.pending ? () => setInviteOf(m) : () => setEditing(m)}
       />
     );
   };
@@ -210,7 +211,7 @@ function InviteSheet({ member, onClose, onLink, origin }: { member: Member | nul
     try {
       await f();
     } catch (e) {
-      toast.show(t("team.inviteFailed", { msg: (e as Error).message }));
+      toast.show(t(teamErrorKey((e as Error).message)));
     } finally {
       setBusy(false);
     }
@@ -312,7 +313,7 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
       store.refresh();
       close();
     } catch (e) {
-      toast.show(t("team.inviteFailed", { msg: (e as Error).message }));
+      toast.show(t(teamErrorKey((e as Error).message)));
     } finally {
       setBusy(false);
     }
@@ -329,6 +330,8 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
   return (
     <Sheet visible={!!member} onClose={close} title={member ? `${t("team.member.title")}: ${member.name}` : t("team.member.title")} dirty={dirty} onSave={save}>
       <View testID="member-sheet" style={{ gap: space[3] }}>
+        {member?.kind !== "sub" ? (
+          <>
         <TextField type="jobTitle" value={title} onChangeText={setTitle} placeholder={t("team.member.jobTitle")} />
         <TextField type="text" value={his} onChangeText={setHis} placeholder={t("team.member.his")} />
         {owner ? (
@@ -345,6 +348,11 @@ function MemberSheet({ member, onClose }: { member: Member | null; onClose: () =
           </T>
         ) : null}
         <Button label={t("team.member.save")} icon="check" full disabled={!dirty} onPress={save} />
+          </>
+        ) : (
+          // a subcontractor never signs for the company: nothing to edit here, only the access
+          <T v="body">{t("team.sub")}</T>
+        )}
         {switchable && member?.id !== store.db.me ? (
           !sure ? (
             <Button label={t("team.disable")} icon="close" variant="ghost" full disabled={busy} onPress={() => setSure(true)} />

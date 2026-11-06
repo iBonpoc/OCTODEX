@@ -166,11 +166,12 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       canSignContracts: m.can_sign_contracts !== false, title: (m.title as string | null) ?? undefined, hisNumber: (m.his_registration_number as string | null) ?? undefined,
       // E2b-2: only the owner gives or takes the right to sign (the app shows owner and admin both as director)
       isOwner: m.role === "owner",
-      ...(m.status === "disabled" ? { disabled: true } : {}),
+      // switched off: kept so old records keep the name; `pending` leaves them out of pickers and signing
+      ...(m.status === "disabled" ? { disabled: true, pending: true } : {}),
     };
   });
   const members: Member[] = [
-    ...all.filter((m) => !m.disabled),
+    ...all,
     ...invites.map((r): Member => {
       const name = s(r.name) || s(r.email);
       return {
@@ -179,7 +180,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       };
     }),
   ];
-  const disabledMembers = all.filter((m) => m.disabled);
+
   const primaryPhone = new Map<string, string>();
   const primaryEmail = new Map<string, string>();
   const clientContacts = contacts.filter((c) => !!c.customer_id);
@@ -436,7 +437,6 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   return {
     me: userId,
     members,
-    disabledMembers,
     sources: sources
       .map((r) => ({
         id: s(r.id), name: s(r.name), kind: (["marketplace", "ads", "person", "own"].includes(s(r.kind)) ? s(r.kind) : "own") as Source["kind"],

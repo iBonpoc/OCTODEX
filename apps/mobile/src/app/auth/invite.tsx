@@ -7,7 +7,7 @@ import { useAuth } from "@/cloud/auth";
 import { acceptInvitation } from "@/cloud/team";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { isInviteToken, rememberInvite, takeInvite } from "@/features/team";
+import { isInviteToken, rememberInvite, takeInvite, teamErrorKey } from "@/features/team";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, Screen } from "@/ui/surfaces";
@@ -41,7 +41,7 @@ export default function AcceptInvite() {
         // a dead link is not kept for the next sign-in (security-check 7-2)
         await AsyncStorage.removeItem("octo.invite.token.v1").catch(() => {});
         setState("error");
-        setErr((e as Error).message);
+        setErr(t(teamErrorKey((e as Error).message)));
       }
     })();
   }, [signedIn, param, auth, t]);

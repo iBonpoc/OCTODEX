@@ -30,12 +30,14 @@ export function teamState(m: Member, now = Date.now()): TeamState {
 /** «Команда»: the people at work first, then the invited, then the switched off */
 export function teamList(db: DB, now = Date.now()): Member[] {
   const order: Record<TeamState, number> = { active: 0, pending: 1, expired: 1, disabled: 2 };
-  return [...db.members, ...(db.disabledMembers ?? [])].map((m, i) => ({ m, i })).sort((a, b) => order[teamState(a.m, now)] - order[teamState(b.m, now)] || a.i - b.i).map((x) => x.m);
+  return db.members.map((m, i) => ({ m, i })).sort((a, b) => order[teamState(a.m, now)] - order[teamState(b.m, now)] || a.i - b.i).map((x) => x.m);
 }
 
 /** who may be switched off by me: not myself, not the owner (unless I am the owner — the server checks the same) */
 export function canDisable(db: DB, me: string, target: Member): boolean {
   if (target.id === me || target.pending) return false;
+  // the company keeps an active owner (the server checks the same)
+  if (target.isOwner && !db.members.some((m) => m.isOwner && !m.pending && m.id !== target.id)) return false;
   const mine = db.members.find((m) => m.id === me);
   if (!mine?.roles.includes("director")) return false;
   return !target.isOwner || !!mine.isOwner;
@@ -53,3 +55,17 @@ export async function takeInvite(store: { getItem: (k: string) => Promise<string
   return isInviteToken(v ?? undefined) ? v : null;
 }
 export const peekInviteKey = PENDING_KEY;
+
+/** a server refusal → the words of the app (rule 7: no raw server text on screen) */
+export type TeamErrorKey = "team.err.otherEmail" | "team.err.expired" | "team.err.already" | "team.err.confirm" | "team.err.noInvite" | "team.err.lastOwner" | "team.err.rights" | "team.err.generic";
+export function teamErrorKey(message: string): TeamErrorKey {
+  const m = message.toLowerCase();
+  if (m.includes("another email")) return "team.err.otherEmail";
+  if (m.includes("expired")) return "team.err.expired";
+  if (m.includes("already on the team") || m.includes("already accepted")) return "team.err.already";
+  if (m.includes("confirm your email")) return "team.err.confirm";
+  if (m.includes("no such invitation") || m.includes("invitation is")) return "team.err.noInvite";
+  if (m.includes("active owner")) return "team.err.lastOwner";
+  if (m.includes("only the owner") || m.includes("only owner") || m.includes("not yourself")) return "team.err.rights";
+  return "team.err.generic";
+}

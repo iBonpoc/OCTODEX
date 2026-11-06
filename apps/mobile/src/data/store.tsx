@@ -1249,13 +1249,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setMemberDisabled: (id, disabled) => {
         if (modeRef.current !== "demo") return () => {};
         const d0 = dbRef.current;
-        const m = disabled ? d0.members.find((x) => x.id === id && !x.pending) : (d0.disabledMembers ?? []).find((x) => x.id === id);
+        const m = d0.members.find((x) => x.id === id && (disabled ? !x.pending : !!x.disabled));
         if (!m || m.id === d0.me) return () => {};
-        return mutate("member.status", (d) =>
-          disabled
-            ? { ...d, members: d.members.filter((x) => x.id !== id), disabledMembers: [...(d.disabledMembers ?? []), { ...m, disabled: true }] }
-            : { ...d, disabledMembers: (d.disabledMembers ?? []).filter((x) => x.id !== id), members: [...d.members, { ...m, disabled: undefined }] },
-        );
+        // the person stays in `members` (old records keep the name); `pending` keeps them out of pickers
+        return mutate("member.status", (d) => ({
+          ...d,
+          members: d.members.map((x) => (x.id !== id ? x : disabled ? { ...x, disabled: true, pending: true } : { ...x, disabled: undefined, pending: undefined })),
+        }));
       },
       readNotices: () => {
         const ids = dbRef.current.notices.filter((n) => !n.read).map((n) => n.id);

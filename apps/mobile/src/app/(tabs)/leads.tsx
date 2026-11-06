@@ -86,7 +86,8 @@ function LeadsBoard() {
   const count = (x: LeadFilter) => filterLeads(db, role, { filter: x }).length;
   const usedSources = db.sources.filter((s) => db.leads.some((l) => l.sourceId === s.id));
   const office = role !== "tech";
-  const team = db.members.length > 1 && f !== "mine";
+  // only people at work make a team (invitations and switched-off people do not, 7-2)
+  const team = db.members.filter((m) => !m.pending).length > 1 && f !== "mine";
   const [picking, setPicking] = useState<Lead | null>(null);
   const [calling, setCalling] = useState<Lead | null>(null);
   /** the same records as the lead page (ContactActions): a call asks «did you get through?», SMS / email count as a reply */

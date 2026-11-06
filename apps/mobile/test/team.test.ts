@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { DB, Member } from "../src/data/types";
-import { canDisable, dbRoleFor, INVITE_ROLES, inviteLink, isInviteToken, rememberInvite, takeInvite, teamList, teamState, validInviteEmail } from "../src/features/team";
+import { canDisable, dbRoleFor, INVITE_ROLES, inviteLink, isInviteToken, rememberInvite, takeInvite, teamErrorKey, teamList, teamState, validInviteEmail } from "../src/features/team";
 
 const db = makeSeed() as DB;
 const NOW = Date.parse("2026-11-06T12:00:00Z");
@@ -40,8 +40,8 @@ describe("unit:team — the invitation", () => {
 describe("unit:team — the list and its states", () => {
   const pending: Member = { id: "inv-1", invitationId: "1", name: "Nina", initials: "N", kind: "employee", roles: ["tech"], pending: true, expiresAt: "2026-11-10T00:00:00Z" };
   const expired: Member = { ...pending, id: "inv-2", expiresAt: "2026-11-01T00:00:00Z" };
-  const off: Member = { id: "m-off", name: "Off", initials: "O", kind: "employee", roles: ["tech"], disabled: true };
-  const d: DB = { ...db, members: [pending, ...db.members, expired], disabledMembers: [off] };
+  const off: Member = { id: "m-off", name: "Off", initials: "O", kind: "employee", roles: ["tech"], disabled: true, pending: true };
+  const d: DB = { ...db, members: [off, pending, ...db.members, expired] };
   it("pending · expired by its date · disabled · active", () => {
     expect(teamState(pending, NOW)).toBe("pending");
     expect(teamState(expired, NOW)).toBe("expired");
@@ -52,6 +52,10 @@ describe("unit:team — the list and its states", () => {
     const ids = teamList(d, NOW).map((m) => m.id);
     expect(ids).toEqual([...db.members.map((m) => m.id), "inv-1", "inv-2", "m-off"]);
   });
+  it("a switched-off person keeps the name for old records and is out of every picker (pickers filter `pending`)", () => {
+    expect(d.members.find((m) => m.id === "m-off")!.name).toBe("Off");
+    expect(d.members.filter((m) => m.roles.includes("tech") && !m.pending).some((m) => m.id === "m-off")).toBe(false);
+  });
   it("switch off: the owner/admin, not oneself, not a pending one, the owner only by the owner", () => {
     const me = db.members.find((m) => m.id === db.me)!;
     const other = db.members.find((m) => m.id !== db.me && !m.pending)!;
@@ -61,7 +65,23 @@ describe("unit:team — the list and its states", () => {
     const ownerOther = { ...other, isOwner: true };
     const asAdmin: DB = { ...db, members: db.members.map((m) => (m.id === db.me ? { ...m, isOwner: false } : m)) };
     expect(canDisable(asAdmin, db.me, ownerOther)).toBe(false);
+    // the last active owner stays
+    const lone: DB = { ...db, members: db.members.map((m) => ({ ...m, isOwner: m.id === other.id })) };
+    expect(canDisable(lone, db.me, lone.members.find((m) => m.id === other.id)!)).toBe(false);
     const tech = db.members.find((m) => m.id !== db.me && !m.roles.includes("director"));
     if (tech) expect(canDisable(db, tech.id, other)).toBe(false);
+  });
+});
+
+describe("unit:team — server refusals in the app's words (rule 7)", () => {
+  it("each refusal of the team functions has its own message; anything else — a generic one", () => {
+    expect(teamErrorKey("this invitation is for another email")).toBe("team.err.otherEmail");
+    expect(teamErrorKey("the invitation has expired")).toBe("team.err.expired");
+    expect(teamErrorKey("already on the team")).toBe("team.err.already");
+    expect(teamErrorKey("confirm your email first")).toBe("team.err.confirm");
+    expect(teamErrorKey("no such invitation")).toBe("team.err.noInvite");
+    expect(teamErrorKey("the company keeps at least one active owner")).toBe("team.err.lastOwner");
+    expect(teamErrorKey("only the owner or an admin invites")).toBe("team.err.rights");
+    expect(teamErrorKey("Failed to fetch")).toBe("team.err.generic");
   });
 });

@@ -135,6 +135,12 @@ begin
   if tg_op = 'UPDATE' and old.user_id = auth.uid() and new.role is distinct from old.role then
     raise exception 'cannot change your own role' using errcode = '42501';
   end if;
+  -- review #193: a membership never moves to another person or company, and its status changes only in the functions
+  -- (accept_invitation, set_member_status) — not by a direct update of an owner/admin
+  if tg_op = 'UPDATE' and (new.user_id is distinct from old.user_id or new.company_id is distinct from old.company_id
+       or new.status is distinct from old.status or new.deleted_at is distinct from old.deleted_at) then
+    raise exception 'membership status and owner change only through the team functions' using errcode = '42501';
+  end if;
   return new;
 end;
 $$;
@@ -233,9 +239,19 @@ begin
   if m.role = 'owner' and not app.has_role(p_company_id, array['owner']) then
     raise exception 'only the owner disables an owner' using errcode = '42501';
   end if;
+  -- the company always keeps an active owner: lock its owners, then count the others (two owners at once — review #193)
+  if m.role = 'owner' and p_status = 'disabled' then
+    perform 1 from public.memberships where company_id = p_company_id and role = 'owner' for update;
+    if not exists (select 1 from public.memberships where company_id = p_company_id and role = 'owner' and status = 'active'
+                    and deleted_at is null and id <> m.id) then
+      raise exception 'the company keeps at least one active owner' using errcode = '42501';
+    end if;
+  end if;
   -- the person's records stay with the company; only the access changes
+  perform set_config('app.accepting_invite', 'on', true);
   update public.memberships set status = p_status, suspended_at = case when p_status = 'disabled' then now() end
    where id = m.id;
+  perform set_config('app.accepting_invite', '', true);
   -- a person switched off: the invitations they sent stop working too
   if p_status = 'disabled' then
     update public.invitations set status = 'revoked', updated_at = now()
@@ -263,3 +279,9 @@ grant update (full_name, phone, locale, avatar_file_id, last_active_company_id) 
 -- before: memberships_insert let an owner/admin add ANY user_id to the company without that person's consent
 drop policy if exists memberships_insert on public.memberships;
 revoke insert on public.memberships from authenticated;
+
+-- ---- 8. A direct update of memberships: only the fields the app edits (review #193) ----
+-- before: a table-wide update grant — an admin could move a membership to another user_id or wake a deleted one
+revoke update on public.memberships from authenticated;
+grant update (role, title, his_registration_number, can_sign_contracts, color, share_location, permissions_override)
+  on public.memberships to authenticated;
