@@ -615,7 +615,7 @@ Workiz выбран потому, что у него та же модель, ч�
 - **Параллельно после волны 2:** 3, 4, 6, 7 и 8 идут разными чатами, у каждого свои файлы:
   - каркас — `src/nav/**`, `(tabs)/_layout.tsx`, `(tabs)/index.tsx`, `today`, `triage`, `features/search.ts`, `settings/**`, `team.tsx`, `auth/**`;
   - работы — `job/**`, `visit/**`, `(tabs)/plan.tsx`, `features/schedule.ts`, `VisitForm.tsx`, `PlanParts.tsx`, `features/related.ts`;
-  - клиенты — `client/**`, `property/**`, `lead/**`, вкладки Сообщения и Звонки, задачи;
+  - клиенты — `client/**`, `property/**`, `lead/**`, вкладка «Сообщения» и экран «Звонки» (в «Ещё»), задачи;
   - деньги — `money.tsx`, `invoice/**`, `receipt/**`, `payments/**`, `reports/**`, `jobs.tsx` (после чата карточек);
   - сметы — по таблице `CLAUDE.md` (+ `p/[token].tsx`).
   - Экраны-списки, которые сейчас у чата карточек (`docs/specs/06-list-cards.md`), новые чаты трогают только после того, как он их вернёт.
