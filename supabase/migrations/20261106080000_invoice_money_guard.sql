@@ -3,8 +3,10 @@
 -- * An invoice that is not a draft keeps its amounts, tax, currency, client, job, kind, revision and sent time: only status
 --   (void), dates, reminders, title and the payment recalc change it. The app never updates these fields
 --   (it inserts invoices already "sent", cloud/ops.ts), so old app versions are not affected.
--- * A draft may change, but not below what is already paid.
--- * subtotal and total are never negative (CHECK, added NOT VALID, then validated without blocking writes).
+-- * A draft may change its total, but not below what is already paid (other fields of an old row stay editable).
+-- * subtotal and total are never negative (CHECK, added NOT VALID, then validated). Both run in the migration's one
+--   transaction, so the table stays locked until the validate ends: fine at today's size (production checked 06.11:
+--   no negative totals); on a large table the validate goes into a migration of its own.
 -- * "This is the payment recalc" is a transaction-local mark set by app.recalc_invoice_payment (security definer),
 --   not pg_trigger_depth(): any other trigger writing invoices would pass a depth check.
 
@@ -85,7 +87,7 @@ begin
       raise exception 'invoice % is sent: its amounts do not change (void it and issue a new one)', old.number
         using errcode = '42501';
     end if;
-    if new.total_cents < old.paid_cents then
+    if new.total_cents is distinct from old.total_cents and new.total_cents < old.paid_cents then
       raise exception 'invoice % total % is below what is paid %', old.number, new.total_cents, old.paid_cents
         using errcode = 'check_violation';
     end if;

@@ -3922,6 +3922,17 @@ exception when check_violation then null;
 end $$;
 update public.invoices set status = 'sent', sent_at = now() where id = '15300000-0000-4000-8000-000000000002';
 select tst.fails($q$update public.invoices set subtotal_cents = 7000, total_cents = 7000 where id = '15300000-0000-4000-8000-000000000002'$q$, 'after sending, the draft amounts are frozen');
+-- an old row whose total is already below what is paid (made before this guard): its due date still changes
+:as_super
+do $$ begin
+  perform set_config('app.invoice_recalc', 'on', true);   -- as the server recalc: the only way to make such a row now
+  update public.invoices set subtotal_cents = 1000, total_cents = 1000 where id = '15300000-0000-4000-8000-000000000002';
+  perform set_config('app.invoice_recalc', '', true);
+end $$;
+:as_sales_a
+update public.invoices set due_date = current_date + 7 where id = '15300000-0000-4000-8000-000000000002';
+select tst.ok((select due_date = current_date + 7 and total_cents = 1000 and paid_cents = 3000 from public.invoices where id = '15300000-0000-4000-8000-000000000002'),
+              'an old invoice with total below paid still takes a new due date');
 -- void still works for the owner (no payments)
 :as_owner_a
 insert into public.invoices (id, company_id, number, customer_id, kind, status, subtotal_cents, total_cents, sent_at) values
