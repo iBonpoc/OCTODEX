@@ -1,11 +1,12 @@
+const { dayKey, todayKey } = require("../companyTime.cjs");
 /** Plan: Day / Week / Month; arrows and «Сегодня»; tap a month day → Day; tech sees only own visits. */
 exports.run = async (h) => {
   const p = h.page;
   await h.go("/plan");
   const db = await h.db();
-  const today = new Date();
-  const key = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const todays = db.visits.filter((v) => key(new Date(v.start)) === key(today));
+  // days of the Plan are the company's (П4b), not the browser's
+  const today = todayKey();
+  const todays = db.visits.filter((v) => dayKey(v.start) === today);
   h.expect(todays.length > 0, "demo has visits today");
 
   // Week: today's visits are cards in the week list.
@@ -17,7 +18,7 @@ exports.run = async (h) => {
   // Month: a cell per day, today's cell shows the visit count; tap → Day view for that day.
   await h.clickText("Месяц");
   await p.waitForTimeout(300);
-  const cell = p.getByRole("button", { name: `${key(today)}: ${todays.length}` }).last();
+  const cell = p.getByRole("button", { name: `${today}: ${todays.length}` }).last();
   h.expect(await cell.isVisible(), "month cell with today's count");
   await h.shot("plan-month");
   await p.getByRole("button", { name: "Вперёд" }).last().click();

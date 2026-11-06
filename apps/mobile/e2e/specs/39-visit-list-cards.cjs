@@ -1,3 +1,4 @@
+const { dayKey, todayKey } = require("../companyTime.cjs");
 /**
  * Technician's «Visits» on the new list cards (step 10а, unslop 05.11), every view (3 widths × 2 themes).
  * - one grid for «Now / Next», «Today», «Later»: cards of a row share top and height, no full-width block or button;
@@ -12,7 +13,7 @@ exports.run = async (h) => {
   const p = h.page;
   await h.go("/visits");
   const db = await h.db();
-  const mine = db.visits.filter((v) => v.techId === db.me && new Date(v.start).toDateString() === new Date().toDateString());
+  const mine = db.visits.filter((v) => v.techId === db.me && dayKey(v.start) === todayKey()); // the company's today (П4b)
   h.expect(mine.length > 0, "tech has visits today");
   const cards = p.locator('[data-testid="list-card"]');
   h.expect((await cards.count()) >= mine.length, `every visit is a list card (${await cards.count()} ≥ ${mine.length})`);

@@ -1,3 +1,4 @@
+const { dueKey, todayKey } = require("../companyTime.cjs");
 /**
  * «Требует внимания» on the new list cards (step 10а, PR7), every view (3 widths × 2 themes).
  * - «Today»: one card per client with all their reasons (a lead without a client — its own card), debt only from overdue invoices;
@@ -14,8 +15,8 @@ exports.run = async (h) => {
   h.expect((await people.count()) >= 1 && (await people.count()) <= 3, `people cards on Today (${await people.count()})`);
 
   // the client with an overdue invoice: one card, «Должен $X», the overdue reason inside
-  const today = new Date(); today.setHours(0, 0, 0, 0);
-  const inv = db.invoices.find((i) => i.paidCents < i.totalCents && new Date(i.dueDate) < today);
+  const today = todayKey(); // overdue = due before the company's today (П4b)
+  const inv = db.invoices.find((i) => i.paidCents < i.totalCents && dueKey(i.dueDate) < today);
   if (inv) {
     const name = db.customers.find((c) => c.id === inv.customerId).name;
     const c = people.filter({ hasText: name });
