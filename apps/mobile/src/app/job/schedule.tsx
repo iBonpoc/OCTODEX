@@ -36,6 +36,14 @@ export default function ScheduleJob() {
       </Screen>
     );
   }
+  // a closed job takes no new visit: the server keeps it «completed» and the visit would hang open (17-job §4)
+  if (job.status === "done") {
+    return (
+      <Screen title={t("sch.title")} back={back}>
+        <Empty icon="check" title={t("job3.done.closed")} hint={t("job3.done.noVisit")} />
+      </Screen>
+    );
+  }
   const already = db.visits.filter((v) => v.jobId === job.id);
 
   const save = () => {

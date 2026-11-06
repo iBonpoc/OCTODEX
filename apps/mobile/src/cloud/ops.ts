@@ -125,6 +125,7 @@ export type Op =
   /** columns of public.leads already in DB names (mapped by the store) */
   | { k: "lead.update"; id: string; cols: Record<string, unknown> }
   | { k: "lead.touch"; activityId: string; leadId: string; kind: "call" | "sms" | "email" | "marketplace" | "reply"; at: string; outcome?: CallOutcome }
+  | { k: "invoice.remind"; activityId: string; customerId: string; invoiceId: string; channel: "sms" | "email"; at: string }
   | { k: "lead.close"; leadId: string; status: "lost" | "declined"; reason: string; text?: string; activityId: string; from: string }
   | { k: "lead.reopen"; leadId: string; activityId: string; from: string }
   | { k: "lead.assign"; leadId: string; userId: string; activityId: string }
@@ -153,6 +154,10 @@ export type Op =
   | { k: "tag.save"; tag: Tag }
   | { k: "serviceCategory.save"; category: ServiceCategory; isNew: boolean }
   | { k: "job.category"; id: string; serviceCategoryId: string | null }
+  /** wave 3b (S17): a job without an estimate, one server function (public.create_job; a repeat returns the same job) */
+  /** wave 3c (S10): the office closes the job (public.complete_job; a repeat on a closed job changes nothing) */
+  | { k: "job.complete"; id: string }
+  | { k: "job.create"; id: string; customerId: string; propertyId: string; title: string; description: string | null; jobTypeId: string | null; serviceCategoryId: string | null }
   // wave П-1 (13 §5): description and type of a job; the company's list of job types
   | { k: "job.update"; id: string; description?: string | null; jobTypeId?: string | null; taxEnabled?: boolean; taxRateBps?: number }
   // wave П-2a: tags and own lines of a job (the server counts line and job totals)
@@ -302,7 +307,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (op.to === "en_route") return run(supabase.from("visits").update(op.at ? { status: op.to, en_route_at: op.at } : { status: op.to }).eq("id", op.visitId));
       if (op.to === "on_site") return run(supabase.from("visits").update({ status: op.to }).eq("id", op.visitId));
       if (op.to === "working") return run(supabase.from("visits").update({ work_started_at: new Date().toISOString() }).eq("id", op.visitId));
-      // an inspection ends on site: completed (S10)
+      // an inspection ends on site: completed (S10); a job visit with nothing to pay ends here too
       if (op.to === "done") return run(supabase.from("visits").update({ status: "completed" }).eq("id", op.visitId).eq("status", "on_site"));
       return;
     }
@@ -320,7 +325,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "visit.sign":
       return run(supabase.from("visits").update({ signed_at: new Date().toISOString(), signature_svg: op.svg }).eq("id", op.visitId));
     case "visit.pay": {
-      await advanceJob(op.jobId, "in_progress");
+      // the job is not moved here: «На месте» starts it (visit trigger), the office closes it (complete_job) — S10
       await run(
         ins("invoices", {
           id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: realJob(op.jobId), kind: "final", status: "sent",
@@ -334,7 +339,6 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         }),
       );
       await run(supabase.from("visits").update({ status: "completed" }).eq("id", op.visitId));
-      await advanceJob(op.jobId, "completed");
       return;
     }
     case "lead.reply":
@@ -411,6 +415,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // the server sets first_response_at and moves new → contacted (trigger on activities)
       // an unanswered call / voicemail only counts an attempt (meta.outcome, migration 20261104130000)
       return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: op.kind, direction: "out", at: op.at, meta: op.outcome ? { outcome: op.outcome } : {} }));
+    case "invoice.remind":
+      // S20 (wave 8): a reminder is an outgoing event in the client's feed, linked to the invoice by meta (no migration: check and RLS allow it)
+      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "customer", subject_id: op.customerId, kind: op.channel, direction: "out", at: op.at, meta: { invoiceId: op.invoiceId, reminder: "1" } }));
     case "lead.close":
       await run(supabase.from("leads").update({ status: op.status, lost_reason: op.reason, lost_reason_text: op.text ?? null }).eq("id", op.leadId));
       return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: "status", meta: { from: op.from, to: op.status, reason: op.reason } }));
@@ -523,6 +530,15 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       });
       return run(Promise.resolve({ error }));
     }
+    case "job.complete":
+      return run(supabase.rpc("complete_job", { p_job_id: op.id }));
+    case "job.create":
+      return run(
+        supabase.rpc("create_job", {
+          p_job_id: op.id, p_customer_id: op.customerId, p_property_id: op.propertyId, p_title: op.title,
+          p_description: op.description, p_job_type_id: op.jobTypeId, p_service_category_id: op.serviceCategoryId,
+        }),
+      );
     case "job.schedule": {
       await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, scope: op.scope, notes: op.note ?? null }));
       await advanceJob(op.jobId, "scheduled");

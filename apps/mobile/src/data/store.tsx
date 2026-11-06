@@ -23,6 +23,8 @@ import { makeSeed } from "./seed";
 import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
+import { withNewJob, type NewJobInput } from "@/features/newJob";
+import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/features/jobDone";
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
@@ -116,6 +118,8 @@ interface StoreCtx {
   unsnoozeLead: (id: ID) => Undo;
   /** a reminder went to the client: starts the "lost or wait?" countdown */
   markReminded: (id: ID) => Undo;
+  /** S20 (wave 8): «Напомнить» about an invoice — an outgoing SMS / email in the client's feed, linked to the invoice */
+  remindInvoice: (invoiceId: ID, channel: "sms" | "email") => Undo;
   /** answer "wait" to "lost or wait?": ask again in N days */
   waitMore: (id: ID, days: number) => Undo;
   updateLead: (id: ID, patch: LeadPatch) => Undo;
@@ -164,7 +168,7 @@ interface StoreCtx {
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
   convertLead: (leadId: ID, reasonText: string) => Undo;
   /** New client entered by hand (not from a lead): active client with one property. */
-  addCustomer: (c: { name: string; phone: string; email?: string; sourceId: ID; address: string; city: string }) => { id: ID; undo: Undo };
+  addCustomer: (c: { name: string; phone: string; email?: string; sourceId: ID; address: string; city: string }) => { id: ID; propertyId: ID; undo: Undo };
   /** wave П-1: also the name parts and the address for invoices (billing null = same as the property) */
   updateCustomer: (id: ID, patch: CustomerPatch) => Undo;
   /** people of a client (several phones / emails each); the first person is the main one */
@@ -176,6 +180,11 @@ interface StoreCtx {
   /** directions of the business (docs/specs/11-trade.md): add, rename, reorder, archive / bring back — never delete */
   saveServiceCategory: (c: Partial<Omit<ServiceCategory, "id">> & { id?: ID }) => { id: ID; undo: Undo };
   setJobCategory: (id: ID, serviceCategoryId?: ID) => Undo;
+  /** wave 3b «Новая работа» (S17, docs/specs/17-job.md §7.3): a job without an estimate, waiting for a date;
+   *  the client and the address exist already (addCustomer / saveProperty first). Server: public.create_job */
+  addJob: (x: NewJobInput) => { id: ID; undo: Undo };
+  /** wave 3c (S10): «Да, выполнена» / «Завершить работу» — office only, no open visit; server public.complete_job */
+  completeJob: (jobId: ID) => Undo;
   /** for the estimate screen (chat «Сметы и модуль Gutters») */
   setEstimateCategory: (id: ID, serviceCategoryId?: ID) => Undo;
   updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
@@ -424,7 +433,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const amount = acceptPayment(inv, amountCents);
     if (amount <= 0) return () => {};
     const now = new Date().toISOString();
-    const payment: Payment = { id: uid(), invoiceId, customerId: inv.customerId, amountCents: amount, method, at: now, reference: reference?.trim() || undefined };
+    // who took it (wave 8): the person recording it; a client paying on /p/ is nobody on the team
+    const payment: Payment = { id: uid(), invoiceId, customerId: inv.customerId, amountCents: amount, method, at: now, reference: reference?.trim() || undefined, receivedBy: fromClient ? undefined : d0.me };
     const job = findJob(d0, inv.jobId);
     const est = inv.kind === "deposit" && job?.estimateId ? d0.estimates.find((e) => e.id === job.estimateId) : undefined;
     const fullyPaid = inv.paidCents + amount >= inv.totalCents;
@@ -569,7 +579,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const { step, at } = stepChange(v, new Date().toISOString());
         return mutate(
           "visit.step",
-          (d) => patchVisit(d, id, (x) => ({ ...x, step, enRouteAt: at ?? x.enRouteAt, closed: step === "done" ? true : x.closed })),
+          (d) => {
+            const next = patchVisit(d, id, (x) => ({ ...x, step, enRouteAt: at ?? x.enRouteAt, closed: step === "done" ? true : x.closed }));
+            // S10: the first visit «На месте» starts the job (the server: the visit trigger, migration 20261106045000)
+            return v?.jobId ? { ...next, jobs: next.jobs.map((j) => (j.id === v.jobId ? { ...j, status: jobStatusAfterStep(j.status, step) } : j)) } : next;
+          },
           { k: "visit.step", visitId: id, to: step, ...(at ? { at } : {}) },
         );
       },
@@ -611,7 +625,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const next = patchVisit(d, visitId, (x) => ({ ...x, step: "paid", payment: { method, amountCents: x.amountDueCents, at: now } }));
             return {
               ...next,
-              jobs: next.jobs.map((j) => (j.id === v.jobId ? { ...j, status: "done" } : j)),
+              // paying does not close the job: «Работа выполнена?» goes to the office (S10, 17-job §4)
               invoices: customerId
                 ? [
                     ...next.invoices,
@@ -622,7 +636,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           },
           v.amountDueCents > 0 && customerId
             ? { k: "visit.pay", visitId, jobId: v.jobId!, customerId, invoiceId, paymentId, amountCents: v.amountDueCents, method, dueDate: companyToday(Date.parse(now)) }
-            : undefined,
+            : // nothing to pay: the visit still ends on the server (it stayed open there and the stores drifted)
+              { k: "visit.step", visitId, to: "done" },
         );
       },
       replyLead: (id) => touchLead(id, "reply"),
@@ -632,6 +647,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       snoozeLead: (id, until, reason) => patchLead(id, { snoozedUntil: until, snoozeReason: reason?.trim() || undefined }),
       unsnoozeLead: (id) => patchLead(id, { snoozedUntil: undefined, snoozeReason: undefined }),
       markReminded: (id) => patchLead(id, { remindedAt: new Date().toISOString(), askAgainAt: undefined }),
+      remindInvoice: (invoiceId, channel) => {
+        const inv = dbRef.current.invoices.find((i) => i.id === invoiceId);
+        if (!inv) return () => {};
+        const activityId = uid();
+        const at = new Date().toISOString();
+        return mutate(
+          "invoice.remind",
+          (d) => ({ ...d, activities: [{ id: activityId, subjectType: "customer", subjectId: inv.customerId, kind: channel, direction: "out", meta: { invoiceId, reminder: "1" }, at, actorId: d.me }, ...d.activities] }),
+          { k: "invoice.remind", activityId, customerId: inv.customerId, invoiceId, channel, at },
+        );
+      },
       waitMore: (id, days) => patchLead(id, { askAgainAt: new Date(Date.now() + days * 86_400_000).toISOString() }),
       updateLead: (id, patch) => {
         const l0 = dbRef.current.leads.find((x) => x.id === id);
@@ -1023,7 +1049,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }),
           { k: "customer.create", ...ids, ...x },
         );
-        return { id: ids.customerId, undo };
+        return { id: ids.customerId, propertyId: ids.propertyId, undo };
       },
       saveCustomerPeople,
       setCustomerTags: (id, tagIds) =>
@@ -1047,6 +1073,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
         return { id, undo };
       },
+      addJob: (x) => {
+        const id = uid();
+        const undo = mutate("job.create", (d) => withNewJob(d, id, x, modeRef.current === "demo"), {
+          k: "job.create", id, customerId: x.customerId, propertyId: x.propertyId, title: x.title.trim(),
+          description: x.description?.trim() || null, jobTypeId: x.jobTypeId ?? null, serviceCategoryId: x.serviceCategoryId ?? null,
+        });
+        return { id, undo };
+      },
+      completeJob: (jobId) => mutate("job.complete", (d) => withJobDone(d, jobId), { k: "job.complete", id: jobId }),
       setJobCategory: (id, serviceCategoryId) =>
         mutate("job.category", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, serviceCategoryId } : j)) }), { k: "job.category", id, serviceCategoryId: serviceCategoryId ?? null }),
       setEstimateCategory: (id, serviceCategoryId) =>
@@ -1126,7 +1161,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           "job.schedule",
           (d) => ({
             ...d,
-            jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: "scheduled" } : j)),
+            // a second visit does not take a job that is going back to «scheduled» (S10, 15-flows §1.15)
+            jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: jobStatusAfterSchedule(j.status) } : j)),
             visits: [
               ...d.visits,
               { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },
