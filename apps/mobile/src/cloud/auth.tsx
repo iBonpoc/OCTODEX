@@ -53,11 +53,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const legalRun = useRef<Promise<void> | null>(null);
 
   /** a tick remembered on the sign-in screen goes to the server first; otherwise just ask where the person stands */
-  const checkLegal = useCallback(() => {
+  const checkLegal = useCallback((email: string | null | undefined) => {
     if (legalRun.current) return legalRun.current;
     legalRun.current = (async () => {
       try {
-        if (await peekAgreement(AsyncStorage)) {
+        if (await peekAgreement(AsyncStorage, email)) {
           setLegal(legalState(await acceptLegal()));
           await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
         } else setLegal(legalState(await legalStatus()));
@@ -97,13 +97,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(async ({ data }) => {
       if (!alive) return;
       setSession(data.session);
-      if (data.session) await Promise.all([checkLegal(), reloadMemberships()]);
+      if (data.session) await Promise.all([checkLegal(data.session.user.email), reloadMemberships()]);
       setReady(true);
     });
     const { data: sub } = supabase.auth.onAuthStateChange((_e, s) => {
       setSession(s);
       if (s) {
-        checkLegal();
+        checkLegal(s.user.email);
         reloadMemberships();
       } else {
         setMemberships([]);
@@ -163,6 +163,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return error?.message ?? null;
       },
       signOut: async () => {
+        await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
         await supabase.auth.signOut();
         setMemberships([]);
       },

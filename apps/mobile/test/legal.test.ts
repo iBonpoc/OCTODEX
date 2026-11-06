@@ -13,6 +13,7 @@ import {
   LEGAL_VERSIONS,
   peekAgreement,
   PENDING_LEGAL_KEY,
+  PENDING_LEGAL_TTL_MS,
   platformTag,
   rememberAgreement,
 } from "@/features/legal";
@@ -68,19 +69,36 @@ describe("the gate's state from legal_status()", () => {
 });
 
 describe("the tick waits through sign-in", () => {
-  it("is remembered with the editions and read back", async () => {
+  const T0 = Date.parse("2026-11-06T12:00:00Z");
+  it("is remembered with the editions, the email and the time, and read back by that email", async () => {
     const s = memory();
-    expect(await peekAgreement(s)).toBeNull();
-    await rememberAgreement(s, "2026-11-06T12:00:00Z");
-    expect(JSON.parse(s.m.get(PENDING_LEGAL_KEY)!).versions).toEqual(LEGAL_VERSIONS);
-    expect(await peekAgreement(s)).toEqual(LEGAL_VERSIONS);
+    expect(await peekAgreement(s, "owner@a.test", T0)).toBeNull();
+    await rememberAgreement(s, " Owner@A.test ", "2026-11-06T12:00:00Z");
+    const v = JSON.parse(s.m.get(PENDING_LEGAL_KEY)!);
+    expect(v.versions).toEqual(LEGAL_VERSIONS);
+    expect(v.email).toBe("owner@a.test");
+    expect(await peekAgreement(s, "OWNER@a.test", T0 + 60_000)).toEqual(LEGAL_VERSIONS);
+  });
+  it("another person's session on the same device does not use it (a shared tablet)", async () => {
+    const s = memory();
+    await rememberAgreement(s, "a@a.test", "2026-11-06T12:00:00Z");
+    expect(await peekAgreement(s, "b@a.test", T0)).toBeNull();
+    expect(await peekAgreement(s, null, T0)).toBeNull();
+    expect(await peekAgreement(s, "", T0)).toBeNull();
+  });
+  it("an old tick is no tick (TTL), nor one from the future", async () => {
+    const s = memory();
+    await rememberAgreement(s, "a@a.test", "2026-11-06T12:00:00Z");
+    expect(await peekAgreement(s, "a@a.test", T0 + PENDING_LEGAL_TTL_MS)).toEqual(LEGAL_VERSIONS);
+    expect(await peekAgreement(s, "a@a.test", T0 + PENDING_LEGAL_TTL_MS + 1)).toBeNull();
+    expect(await peekAgreement(s, "a@a.test", T0 - 1)).toBeNull();
   });
   it("a tick for another edition, or a broken value, is no tick", async () => {
     const s = memory();
-    s.m.set(PENDING_LEGAL_KEY, JSON.stringify({ versions: { terms: "2025-01-01", privacy: LEGAL_VERSIONS.privacy } }));
-    expect(await peekAgreement(s)).toBeNull();
+    s.m.set(PENDING_LEGAL_KEY, JSON.stringify({ versions: { terms: "2025-01-01", privacy: LEGAL_VERSIONS.privacy }, email: "a@a.test", at: "2026-11-06T12:00:00Z" }));
+    expect(await peekAgreement(s, "a@a.test", T0)).toBeNull();
     s.m.set(PENDING_LEGAL_KEY, "{not json");
-    expect(await peekAgreement(s)).toBeNull();
+    expect(await peekAgreement(s, "a@a.test", T0)).toBeNull();
   });
 });
 

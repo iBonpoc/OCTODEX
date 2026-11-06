@@ -5,7 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { space } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { LegalAgree } from "@/features/LegalAgree";
-import { legalErrorKey, rememberAgreement } from "@/features/legal";
+import { legalErrorKey, PENDING_LEGAL_KEY, rememberAgreement } from "@/features/legal";
 import { useI18n } from "@/i18n";
 import { Button, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -47,8 +47,10 @@ export default function SignIn() {
   const act = async (fn: () => Promise<string | null>, onOk?: () => void) => {
     setBusy(true);
     setErr(null);
-    await rememberAgreement(AsyncStorage).catch(() => {});
+    await rememberAgreement(AsyncStorage, email).catch(() => {});
     const e = await fn();
+    // a failed sign-in leaves no tick behind (security-check 7а-1); a sent code keeps it until the code is typed
+    if (e) await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
     setBusy(false);
     if (e) setErr(e);
     else onOk?.();

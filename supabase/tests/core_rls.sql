@@ -4438,8 +4438,8 @@ select tst.fails_like($q$select public.accept_legal('{"terms":"2026-11-06","priv
 select tst.fails_like($q$select public.accept_legal('{"terms":"2026-01-01","privacy":"2026-11-06"}', 'web', '1.0.0')$q$, '%legal version outdated%', 'an old edition is refused');
 select tst.fails_like($q$select public.accept_legal('{"terms":20261106,"privacy":"2026-11-06"}', 'web', '1.0.0')$q$, '%legal version outdated%', 'the edition is a string');
 select tst.fails_like($q$select public.accept_legal('[1,2]', 'web', '1.0.0')$q$, '%terms and privacy%', 'an object only');
-select tst.fails($q$select public.accept_legal('{"terms":"2026-11-06","privacy":"2026-11-06"}', 'symbian', '1.0.0')$q$, 'a known platform only');
-select tst.fails($q$select public.accept_legal('{"terms":"2026-11-06","privacy":"2026-11-06"}', 'web', E'1.0\n<script>')$q$, 'the app version: no control characters');
+select tst.fails_like($q$select public.accept_legal('{"terms":"2026-11-06","privacy":"2026-11-06"}', 'symbian', '1.0.0')$q$, '%unknown platform%', 'a known platform only');
+select tst.fails_like($q$select public.accept_legal('{"terms":"2026-11-06","privacy":"2026-11-06"}', 'web', E'1.0\n<script>')$q$, '%bad app version%', 'the app version: no control characters');
 select tst.blocked($q$insert into public.legal_acceptance (user_id, doc, version, platform, app_version) values ('a4900000-0000-4000-8000-000000000001', 'terms', '2026-11-06', 'web', 'x')$q$, 'nobody writes the journal directly');
 select tst.ok(tst.cnt('select 1 from public.legal_acceptance') = 0, 'nothing written by the refused calls');
 -- an anonymous sign-in agrees to nothing
@@ -4467,6 +4467,13 @@ select tst.ok((select app.has_current_legal()), 'has_current_legal for the polic
 insert into public.companies (id, name) values ('c4900000-0000-4000-8000-000000000001', 'Consent Co');
 select tst.ok(tst.cnt($q$select 1 from public.memberships where company_id = 'c4900000-0000-4000-8000-000000000001' and role = 'owner' and status = 'active'$q$) = 1, 'agreed: the company is created, the creator is its owner');
 select tst.ok((public.accept_invitation(:'t49_token') ->> 'role') = 'tech', 'agreed: the same link now lets in');
+-- an anonymous sign-in with consent rows still creates nothing and joins nothing
+select public.invite_member('c4900000-0000-4000-8000-000000000001', 'gone49@a.test', 'tech') ->> 'token' as t49_anon \gset
+set request.jwt.claims = '{"is_anonymous": true}';
+select tst.ok(not (select app.has_current_legal()), 'anonymous: no consent even with rows');
+select tst.fails_like($q$insert into public.companies (name) values ('Anon Co')$q$, '%legal not accepted%', 'anonymous: no company');
+select tst.fails_like(format('select public.accept_invitation(%L)', :'t49_anon'), '%legal not accepted%', 'anonymous: no joining');
+reset request.jwt.claims;
 -- other people's rows are not seen
 :as_owner_a
 select tst.ok(tst.cnt($q$select 1 from public.legal_acceptance where user_id = 'a4900000-0000-4000-8000-000000000001'$q$) = 0, 'the owner of the team does not see the person''s consent rows');
@@ -4488,9 +4495,21 @@ select tst.fails_like($q$insert into public.companies (name) values ('Old Editio
 select tst.fails_like(format('select public.accept_legal(%L, %L, %L)', :'v49', 'web', '1.0.0'), '%legal version outdated%', 'an old app with the old text is refused');
 select tst.ok((public.accept_legal('{"terms":"2026-12-01","privacy":"2026-11-06"}', 'web', '1.0.0') ->> 'ok')::boolean, 'the new edition accepted');
 rollback;
--- erasing a person takes their consent rows with them (S22, App Store 5.1.1(v)); a direct delete still does not
+-- erasing a person takes their consent rows with them (S22, App Store 5.1.1(v)); a direct delete still does not.
+-- On the way: Cloudflare's address wins over X-Forwarded-For; a broken header never blocks the consent.
 :as_gone49
+set request.headers = '{"cf-connecting-ip": "198.51.100.9", "x-forwarded-for": "6.6.6.6, 203.0.113.7"}';
 select public.accept_legal(:'v49', 'android', '1.0.0') is not null as t49_gone \gset
+reset request.headers;
+select tst.ok((select every(ip = '198.51.100.9'::inet) from public.legal_acceptance), 'cf-connecting-ip wins over X-Forwarded-For');
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a4900000-0000-4000-8000-000000000003', 'bad49@a.test', '{"full_name":"Bea Badheader"}');
+reset role; set request.jwt.claim.sub = 'a4900000-0000-4000-8000-000000000003'; set role authenticated;
+set request.headers = '{"x-forwarded-for": "garbage, 1.2.3.4:5"}';
+select tst.ok((public.accept_legal(:'v49', 'web', '1.0.0') ->> 'ok')::boolean, 'a broken X-Forwarded-For does not block the consent');
+reset request.headers;
+select tst.ok((select every(ip is null and ip_raw = 'garbage, 1.2.3.4:5') from public.legal_acceptance), 'no IP then, the raw header kept');
+:as_gone49
 :as_super
 select tst.ok((select count(*) from public.legal_acceptance where user_id = 'a4900000-0000-4000-8000-000000000002') = 2, 'the second person agreed');
 delete from auth.users where id = 'a4900000-0000-4000-8000-000000000002';
