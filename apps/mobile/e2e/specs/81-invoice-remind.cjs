@@ -17,9 +17,8 @@ exports.run = async (h) => {
   // the client speaks Spanish; the app stays in Russian
   await p.evaluate((cid) => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
-    // the client's main person speaks Spanish (docLanguageFor: person → client → lead → company)
+    // the client's main person speaks Spanish: the language lives on the person (docLanguageFor: person → client's main person → lead → company)
     const c = raw.db.customers.find((x) => x.id === cid);
-    c.language = "es";
     if (!c.people?.length) c.people = [{ id: `${c.id}-main`, name: c.name, role: "main", phones: [{ number: c.phone, label: "mobile", primary: true }], emails: [] }];
     for (const person of c.people) person.language = "es";
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
