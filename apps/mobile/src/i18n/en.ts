@@ -1548,4 +1548,5 @@ export const en: Dict = {
   "client.f.taxExemptNote": "Certificate or reason",
   "client.f.taxExemptNoteHint": "E.g. resale certificate number",
   "client.f.taxExemptHint": "New estimates and invoices of this client have no sales tax. Signed documents do not change.",
+  "ue.taxExemptClient": "The client is tax exempt: no sales tax on this estimate.",
 };

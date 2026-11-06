@@ -1547,6 +1547,7 @@ export const ru = {
   "client.f.taxExemptNote": "Сертификат или причина",
   "client.f.taxExemptNoteHint": "Например, № сертификата перепродажи",
   "client.f.taxExemptHint": "Новые сметы и счета клиента без налога с продаж. Подписанные документы не меняются.",
+  "ue.taxExemptClient": "Клиент без налога: налог с продаж на эту смету не начисляется.",
 } as const;
 
 export type DictKey = keyof typeof ru;
