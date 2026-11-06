@@ -59,7 +59,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.app == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 30
+    timeout-minutes: 45  # 89+ спек на медленной машине доходят до 30 мин (#216, 06.11)
     strategy:
       fail-fast: false
       matrix:
