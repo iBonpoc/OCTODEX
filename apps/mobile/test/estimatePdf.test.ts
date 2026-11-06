@@ -14,7 +14,7 @@ vi.mock("@/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
 
 import { estimateFileName, estimateHtml } from "../src/features/estimatePdf";
-import { docDay, invoiceHtml, invoiceMessage, receiptHtml, receiptMessage } from "../src/features/docPdf";
+import { docDay, esc, invoiceHtml, invoiceMessage, receiptHtml, receiptMessage } from "../src/features/docPdf";
 import { estimateMessage } from "../src/features/sendEstimate";
 import { portalFromEstimate } from "../src/cloud/portal";
 import { translate, DOC_LANGS, type DocLang, type Lang } from "../src/i18n/translate";
@@ -256,4 +256,18 @@ describe("invoice and receipt SMS / email: in the client's language for every ap
           expect(rm.text).toBe(translate(client, "rcpt.sendText", { company: company.name, amount: rm.text.match(/\$[\d,.]+/)![0], number: pay.receiptNumber ?? "", date: docDay(pay.at) }));
         }
       });
+});
+
+describe("invoice of a cancelled job (wave 3a, findJob)", () => {
+  it("keeps the address and the contract line: the job lives in cancelledJobs, not in jobs", () => {
+    const db = makeSeed();
+    const inv = db.invoices.find((i) => i.kind !== "deposit" && db.jobs.some((j) => j.id === i.jobId))!;
+    const job = db.jobs.find((j) => j.id === inv.jobId)!;
+    const prop = db.properties.find((p) => p.id === job.propertyId)!;
+    const d = { ...db, jobs: db.jobs.filter((j) => j.id !== job.id), cancelledJobs: [job] };
+    const company = portalFromEstimate(d, { ...dbWith().e, customerId: inv.customerId }, "Acme").company;
+    const ih = invoiceHtml(d, inv, company, { lang: "en" });
+    expect(ih).toContain(esc(prop.address));
+    expect(ih).toContain(esc(job.title));
+  });
 });

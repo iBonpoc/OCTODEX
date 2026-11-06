@@ -9,6 +9,8 @@ import { canSeeProfit } from "@/nav/roles";
 import type { PaymentMethod } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { WhenWho } from "@/features/VisitForm";
+import { NotesBlock } from "@/features/NotesBlock";
+import { RelatedBlock } from "@/features/RelatedBlock";
 import { canPlan } from "@/features/schedule";
 import { useTheme } from "@/theme/ThemeProvider";
 import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
@@ -63,11 +65,19 @@ export default function VisitScreen() {
     toast.show(queuedHint() ?? t("check.added"), store.addCheckItem(v.id, label));
     setExtra("");
   };
+  const isInspection = v.kind === "inspection" || (!v.jobId && !!v.leadId);
+  const makeEstimate = () => {
+    if (v.leadId) {
+      const target = store.leadEstimateTarget(v.leadId);
+      if (target) router.push(`/estimate/new?customerId=${target.customerId}&propertyId=${target.propertyId}&leadId=${v.leadId}`);
+    } else if (customer && property) router.push(`/estimate/new?customerId=${customer.id}&propertyId=${property.id}`);
+  };
   const tel = customer?.phone.replace(/[^\d+]/g, "");
   const addr = property ? encodeURIComponent(`${property.address}, ${property.city}`) : "";
 
   return (
     <Screen title={customer?.name ?? t("visit.title")} back={back} subtitle={`${time(v.start)} · ${job?.title ?? ""}`} fab="visit" fabCtx={{ visitId: v.id, customerId: customer?.id, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
+      <RelatedBlock of={{ type: "visit", id: v.id }} />
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
           <StatusChip status={st.status} label={t(st.label)} />
@@ -81,21 +91,13 @@ export default function VisitScreen() {
         <RowView gap={space[1]}>
           <Icon name="pin" s={size.iconSm} color={c.mut} />
           <T v="body" tone="mut" style={{ flex: 1 }}>
-            {[property?.address, property?.city].filter(Boolean).join(", ")} · {t("visit.stories", { n: property?.stories ?? 1 })}
+            {[property?.address, property?.city].filter(Boolean).join(", ")}
           </T>
         </RowView>
         <RowView>
           <IconButton icon="phone" label={t("visit.call")} onPress={() => tel && Linking.openURL(`tel:${tel}`)} />
           <IconButton icon="message" label={t("visit.message")} onPress={() => tel && Linking.openURL(`sms:${tel}`)} />
           <IconButton icon="navigate" label={t("visit.navigate")} onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${addr}`)} />
-          {customer && property ? (
-            <Button
-              label={t("quick.estimate")}
-              icon="invoice"
-              variant="secondary"
-              onPress={() => router.push(`/estimate/new?customerId=${customer.id}&propertyId=${property.id}`)}
-            />
-          ) : null}
         </RowView>
       </Card>
 
@@ -286,6 +288,11 @@ export default function VisitScreen() {
         </Card>
       ) : null}
 
+      {v.step === "done" && isInspection ? (
+        // after an inspection the main action is the estimate, lead and property filled in (13 §3.9, 17-job §7.2)
+        <Button label={t("job3.makeEstimate")} icon="invoice" variant="primary" full onPress={makeEstimate} />
+      ) : null}
+
       {v.step === "paid" || v.step === "done" ? (
         <Card status="ok">
           <RowView>
@@ -320,6 +327,7 @@ export default function VisitScreen() {
           ) : null}
         </Card>
       ) : null}
+      {job ? <NotesBlock subjectType="job" subjectId={job.id} /> : v.leadId ? <NotesBlock subjectType="lead" subjectId={v.leadId} /> : null}
     </Screen>
   );
 }
