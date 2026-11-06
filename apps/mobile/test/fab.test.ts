@@ -77,8 +77,8 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
           expect(canOpen(r, it.href), `${s} ${r} ${it.href}`).toBe(true);
         }
   });
-  it("no «coming in wave N» items: Task, Note, File, Event are not offered yet", () => {
-    for (const s of SETS) for (const r of ROLES) for (const it of fabItems(s, r, FULL)) expect(["lead", "client", "job", "estimate", "expense", "visit", "planAdd", "planEvent", "planTimeOff", "photo"]).toContain(it.id);
+  it("no «coming in wave N» items: Note, File are not offered yet (Task — wave 6)", () => {
+    for (const s of SETS) for (const r of ROLES) for (const it of fabItems(s, r, FULL)) expect(["lead", "client", "job", "estimate", "expense", "visit", "planAdd", "planEvent", "planTimeOff", "photo", "task"]).toContain(it.id);
   });
 });
 
