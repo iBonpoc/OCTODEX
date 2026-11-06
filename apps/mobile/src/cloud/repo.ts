@@ -322,8 +322,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const toJob = (j: Row): Job => ({
     id: s(j.id),
     propertyId: s(j.property_id),
-    // the job's own name only: the number is its own field (wave П-1); a screen shows «Job JOB-0001» itself
-    title: s(j.title),
+    // the number is its own field (wave П-1); until the screens of wave 3 show «Job JOB-0001» themselves, a job without
+    // a name still shows its number (decision of the director, #160)
+    title: s(j.title) || s(j.number),
     number: s(j.number) || undefined,
     customerId: (j.customer_id as string | null) ?? undefined,
     description: (j.description as string | null) ?? undefined,

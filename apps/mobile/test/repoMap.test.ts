@@ -56,11 +56,11 @@ describe("loadCompanyDB — jobs (wave П-1)", () => {
     expect(db.jobs.find((j) => j.id === "j3")).toBeUndefined();
     expect(db.cancelledJobs?.map((j) => j.id)).toEqual(["j3"]);
   });
-  it("the number is its own field and never stands in for the title", async () => {
+  it("the number is its own field; a job without a name shows its number until wave 3", async () => {
     const db = await loadCompanyDB(CO, "u1");
     const j1 = db.jobs.find((j) => j.id === "j1")!;
     expect(j1.number).toBe("JOB-0001");
-    expect(j1.title).toBe("");
+    expect(j1.title).toBe("JOB-0001");
     expect(db.jobs.find((j) => j.id === "j2")!.title).toBe("Gutter cleaning");
   });
   it("client, description and job type of a job", async () => {
