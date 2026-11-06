@@ -10,9 +10,10 @@
       "supportsTablet": true,
       "bundleIdentifier": "com.octodex.app",
       "infoPlist": {
-        "NSCameraUsageDescription": "Фото до и после работы прикрепляются к выезду.",
-        "NSPhotoLibraryUsageDescription": "Фото работ прикрепляются к выезду.",
-        "ITSAppUsesNonExemptEncryption": false
+        "NSCameraUsageDescription": "Photos before and after the work are attached to the visit.",
+        "NSPhotoLibraryUsageDescription": "Photos of the work are attached to the visit.",
+        "ITSAppUsesNonExemptEncryption": false,
+        "CFBundleAllowMixedLocalizations": true
       },
       "config": {
         "usesNonExemptEncryption": false
@@ -46,8 +47,8 @@
       [
         "expo-image-picker",
         {
-          "photosPermission": "Фото работ прикрепляются к выезду.",
-          "cameraPermission": "Фото до и после работы прикрепляются к выезду."
+          "photosPermission": "Photos of the work are attached to the visit.",
+          "cameraPermission": "Photos before and after the work are attached to the visit."
         }
       ],
       "expo-sharing"
@@ -64,6 +65,11 @@
     },
     "updates": {
       "url": "https://u.expo.dev/49d009d4-a05b-4911-b7da-1e47c4e10fba"
+    },
+    "locales": {
+      "en": "./locales/en.json",
+      "ru": "./locales/ru.json",
+      "es": "./locales/es.json"
     }
   }
 }
