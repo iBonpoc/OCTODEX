@@ -22,7 +22,14 @@ exports.menuApi = (h) => {
         await p.waitForTimeout(300);
         return;
       }
-      if (phone) await p.getByRole("tab", { name: "Ещё", exact: true }).click();
+      if (phone) {
+        // a tab screen: the «Ещё» tab; a section outside the tabs (My settings…): its «‹ Ещё»
+        const tab = p.getByRole("tab", { name: "Ещё", exact: true }).locator("visible=true");
+        const back = p.getByTestId("back-more").locator("visible=true");
+        if (await tab.count()) await tab.click();
+        else if (await back.count()) await back.click();
+        else await h.go("/more");
+      }
       else await toggle().click();
       await menu().waitFor({ timeout: 3000 });
     },
