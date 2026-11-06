@@ -25,9 +25,9 @@ export const canCreateJob = (role: Role) => role !== "tech";
 /** who may give the new job a date and people (sales only «Назначить позже», 13 §5 S17) */
 export const canDateNewJob = (role: Role) => role === "director" || role === "dispatcher";
 
-/** a client a new job may be made for. «Не обслуживать» clients are left out (until canServe of features/clients.ts,
- *  PR 4b «Лиды и клиенты», replaces this one rule); archived ones too */
-export const servable = (c: Pick<Customer, "status">) => c.status !== "do_not_service" && c.status !== "archived";
+/** a client a new job may be made for: not «Не обслуживать» — the same one rule as public.create_job (until canServe
+ *  of features/clients.ts, PR 4b «Лиды и клиенты», replaces it) */
+export const servable = (c: Pick<Customer, "status">) => c.status !== "do_not_service";
 
 export type NewJobProblem = "noClient" | "noAddress" | "noTitle" | "titleLong" | "notServed";
 export function newJobProblems(d: Pick<DB, "customers" | "properties">, x: Partial<NewJobInput>): NewJobProblem[] {

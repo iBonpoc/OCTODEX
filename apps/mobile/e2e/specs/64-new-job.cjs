@@ -66,12 +66,14 @@ exports.run = async (h) => {
   await p.getByPlaceholder("Улица, дом, офис").last().fill("64 Birch Ln");
   await p.getByPlaceholder("Pasadena, CA 91103").last().fill("Pasadena, CA 91104");
   await p.getByPlaceholder("Например: ремонт водостока").last().fill("Fascia patch");
-  await h.click("Создать работу");
+  // a double tap makes one client and one job
+  await p.getByRole("button", { name: "Создать работу", exact: true }).last().dblclick();
   await p.waitForTimeout(700);
   db = await h.db();
   const nora = db.customers.find((c) => c.name === "Nora Quinn");
   const j2 = db.jobs.find((j) => j.title === "Fascia patch");
   h.expect(nora && nora.status === "active", "a new client from the form is active");
+  h.expect(db.customers.filter((c) => c.name === "Nora Quinn").length === 1 && db.jobs.filter((j) => j.title === "Fascia patch").length === 1, "a double tap: one client, one job");
   h.expect(j2 && j2.customerId === nora.id && j2.status === "unscheduled" && !db.visits.some((x) => x.jobId === j2.id), "the job waits for a date");
   h.expect(db.properties.find((x) => x.id === j2.propertyId)?.address === "64 Birch Ln", "the address is the new client's property");
 

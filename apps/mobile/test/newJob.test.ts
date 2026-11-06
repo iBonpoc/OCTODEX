@@ -53,11 +53,11 @@ describe("newJobProblems and rights", () => {
     expect(newJobProblems(d, { ...input(d), title: "   " })).toContain("noTitle");
     expect(newJobProblems(d, { ...input(d), title: "x".repeat(201) })).toContain("titleLong");
   });
-  it("a «do not service» or archived client takes no job", () => {
+  it("a «do not service» client takes no job (as create_job); an archived one may come back with a job", () => {
     const d = base();
     d.customers = d.customers.map((c) => (c.id === "c2" ? { ...c, status: "do_not_service" } : c));
     expect(newJobProblems(d, input(d))).toContain("notServed");
-    expect(servable({ status: "archived" })).toBe(false);
+    expect(servable({ status: "archived" })).toBe(true);
     expect(servable({ status: "active" })).toBe(true);
     expect(servable({ status: undefined })).toBe(true);
   });

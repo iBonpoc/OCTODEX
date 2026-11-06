@@ -5,8 +5,7 @@
 --   job is active, like Jobber; «prospect» comes only from a lead, S3). The direction follows S16 (the trigger
 --   t15_service_category_inherit already does it when none is given). A repeat with the same id (offline queue replay)
 --   returns the same job and changes nothing.
--- * Sales do not plan (13 §5 S17 «продажи — только без даты», 03 §8.1): a visit of a JOB is put only by the office;
---   so far sales could insert one straight into public.visits (visits_insert lets any staff in).
+-- * The job is made without a date; a date is a visit (S9, job.schedule) — the same path as a job from an estimate.
 
 create or replace function public.create_job(
   p_job_id uuid, p_customer_id uuid, p_property_id uuid, p_title text,
@@ -25,7 +24,7 @@ begin
   -- offline replay: the same id again is the same job
   select * into j from public.jobs where id = p_job_id;
   if found then
-    if j.company_id <> v_company then
+    if j.company_id <> v_company or j.customer_id <> p_customer_id then
       raise exception 'only the office or sales create a job' using errcode = '42501';
     end if;
     return jsonb_build_object('id', j.id, 'number', j.number, 'repeat', true);
@@ -40,6 +39,7 @@ begin
     raise exception 'a job needs a name (up to 200 characters)' using errcode = '22023';
   end if;
   if p_job_type_id is not null and not exists (select 1 from public.job_types t where t.id = p_job_type_id and t.company_id = v_company and t.archived_at is null) then
+    -- an archived type is not chosen anew
     raise exception 'unknown job type' using errcode = '22023';
   end if;
 
@@ -54,17 +54,3 @@ end;
 $$;
 revoke all on function public.create_job(uuid, uuid, uuid, text, text, uuid, uuid) from public, anon, authenticated;
 grant execute on function public.create_job(uuid, uuid, uuid, text, text, uuid, uuid) to authenticated;
-
--- sales do not put a visit on a job (a date for a job is planning); inspections stay as they are
-create or replace function app.tg_visit_job_by_office()
-returns trigger language plpgsql security definer set search_path = '' as $$
-begin
-  if new.job_id is not null and auth.uid() is not null and not app.has_role(new.company_id, array['owner', 'admin', 'office']) then
-    raise exception 'only the office plans a job' using errcode = '42501';
-  end if;
-  return new;
-end;
-$$;
-revoke all on function app.tg_visit_job_by_office() from public, anon, authenticated;
-create trigger t05_visit_job_by_office before insert on public.visits
-  for each row execute function app.tg_visit_job_by_office();

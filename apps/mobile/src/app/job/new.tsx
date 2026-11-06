@@ -55,6 +55,8 @@ export default function NewJob() {
   const [when, setWhen] = useState<"later" | "date">("later");
   const [notifyId, setNotifyId] = useState<string | null>(null);
   const [createdId, setCreatedId] = useState<string | null>(null);
+  // one tap = one job: the button stays off once saved (a double tap made two clients and two jobs)
+  const [saved, setSaved] = useState(false);
 
   const newClient = customerId === NEW;
   const newAddress = newClient || propertyId === NEW;
@@ -81,10 +83,11 @@ export default function NewJob() {
   const addressOk = newAddress ? !!address.trim() : !!propertyId;
   const titleOk = !!title.trim() && title.trim().length <= 200;
   const dateOk = when === "later" || !f.past;
-  const ok = clientOk && addressOk && titleOk && dateOk;
+  const ok = clientOk && addressOk && titleOk && dateOk && !saved;
 
   const save = () => {
     if (!ok) return;
+    setSaved(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     const undos: (() => void)[] = [];
     let cid = client?.id;
@@ -102,7 +105,14 @@ export default function NewJob() {
     if (!cid || !pid) return;
     const job = store.addJob({ customerId: cid, propertyId: pid, title, description, jobTypeId: jobTypeId || undefined, serviceCategoryId: categoryId });
     undos.push(job.undo);
-    const undoAll = () => undos.reverse().forEach((u) => u());
+    // «Отменить» takes back everything this form made and leaves the job's screen (it would show an empty job)
+    const undoAll = () => {
+      undos.reverse().forEach((u) => u());
+      setNotifyId(null);
+      setCreatedId(null);
+      setSaved(false);
+      router.replace("/job/new");
+    };
     if (dating && when === "date") {
       const visitId = uid();
       undos.push(store.scheduleJob(job.id, { ...f.value, visitId }));
