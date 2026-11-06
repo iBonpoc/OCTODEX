@@ -12,8 +12,10 @@ import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
-import { applyOp, PermanentError, type Op, type OutboxItem } from "@/cloud/ops";
+import { applyOp, PermanentError, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, type LeadTouch } from "@/features/comms/contactEvents";
+import { keepLast, stepPending } from "@/features/location";
+import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { readyToSend } from "@/cloud/outboxTiming";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
 import { leadStatusToDb } from "@/cloud/statusMap";
@@ -40,6 +42,7 @@ import { eventProblems } from "@/features/planFeed";
 import {
   type CalendarEvent,
   type MemberPrefs,
+  type VisitPoint,
   MEMBER_PREFS_DEFAULT,
   type CatalogItem,
   type Company,
@@ -146,6 +149,11 @@ interface StoreCtx {
   removeCalendarEvent: (id: ID) => Undo;
   /** wave 7б-1: my personal settings, the same on every device (locally at once, then public.set_my_prefs) */
   setPrefs: (patch: Partial<MemberPrefs>) => Undo;
+  /** wave 7б-2: my consent to share my location (on — only after the notice, online); off forgets my points here.
+   *  Changes only the consent: «Отменить» never takes back anything else (features/locationConsent.ts) */
+  setLocationConsent: (on: boolean) => ConsentChange;
+  /** wave 7б-2: a point of mine on an open visit: kept as the last one and sent at once (never queued) */
+  recordVisitPoint: (p: VisitPoint, source: "status_change" | "foreground") => void;
   /** company lead sources: add / edit / hide (sources with leads are never deleted) */
   saveSource: (s: Omit<Source, "id"> & { id?: ID }) => { id: ID; undo: Undo };
   /**
@@ -353,6 +361,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
   }, [company, auth.userId, setDb]);
 
+  // wave 7б-2: points waiting for their visit's step to reach the server (one per visit, the newest)
+  const waitingPoints = useRef<Record<string, { p: VisitPoint; source: "status_change" | "foreground" }>>({});
+  const sendPoint = useCallback(
+    (p: VisitPoint, source: "status_change" | "foreground") => {
+      void sendVisitPoint({ ...p, source }).then((r) => {
+        // the server no longer takes my points (the company flag went off, I was switched off): stop on the phone too
+        if (r === "off") {
+          const off = withConsent(dbRef.current, false, dbRef.current.location?.ackAt);
+          dbRef.current = off;
+          setDb(off);
+          void refresh();
+        }
+      });
+    },
+    [setDb, refresh],
+  );
+  const sendWaitingPoints = useCallback(() => {
+    if (!onlineRef.current) return;
+    for (const [visitId, w] of Object.entries(waitingPoints.current)) {
+      if (stepPending(outboxRef.current, visitId)) continue;
+      const { [visitId]: _sent, ...rest } = waitingPoints.current;
+      waitingPoints.current = rest;
+      sendPoint(w.p, w.source);
+    }
+  }, [sendPoint]);
   const flushing = useRef(false);
   const flush = useCallback(async () => {
     if (flushing.current || modeRef.current !== "cloud" || !company || !auth.userId || !onlineRef.current) return;
@@ -385,10 +418,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       }
     } finally {
       flushing.current = false;
+      sendWaitingPoints();
     }
     // a dropped op left the phone ahead of the server: reload the truth
     if ((sentAny && !outboxRef.current.length) || dropped) await refresh();
-  }, [company, auth.userId, setOutbox, refresh]);
+  }, [company, auth.userId, setOutbox, refresh, sendWaitingPoints]);
 
   useEffect(() => {
     if (mode !== "cloud") return;
@@ -752,6 +786,47 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setPrefs: (patch) => {
         const prefs: MemberPrefs = { ...MEMBER_PREFS_DEFAULT, ...dbRef.current.prefs, ...patch };
         return mutate("me.prefs", (d) => ({ ...d, prefs }), { k: "me.prefs", prefs });
+      },
+      setLocationConsent: (on) => {
+        const put = (d: DB) => {
+          dbRef.current = d;
+          setDb(d);
+        };
+        const cid = company?.companyId;
+        return changeConsent(
+          {
+            get: () => dbRef.current,
+            set: put,
+            cloud: modeRef.current === "cloud",
+            sendNow: (v) => (cid && auth.userId ? applyOp({ k: "me.location", on: v }, cid, auth.userId) : Promise.reject(new Error("no company"))),
+            enqueue: (op) => {
+              const oid = uid();
+              outboxRef.current = [...outboxRef.current, { id: oid, op, at: new Date().toISOString(), tries: 0 }];
+              setOutbox(outboxRef.current);
+              return () => {
+                // only while it waits in the «Отменить» window (it has not left the phone)
+                if (!outboxRef.current.some((x) => x.id === oid)) return false;
+                outboxRef.current = outboxRef.current.filter((x) => x.id !== oid);
+                setOutbox(outboxRef.current);
+                return true;
+              };
+            },
+          },
+          on,
+        );
+      },
+      recordVisitPoint: (p, source) => {
+        const next = { ...dbRef.current, visitPoints: keepLast(dbRef.current.visitPoints, p) };
+        dbRef.current = next;
+        setDb(next);
+        if (modeRef.current !== "cloud") return;
+        // the step («on the way») waits in the queue for its «Отменить» window: the server would refuse a point for a
+        // visit that is not under way yet — keep the point and send it once the step has left (flush)
+        if (stepPending(outboxRef.current, p.visitId) || !onlineRef.current) {
+          waitingPoints.current = { ...waitingPoints.current, [p.visitId]: { p, source } };
+          return;
+        }
+        sendPoint(p, source);
       },
       removeCalendarEvent: (id) =>
         mutate("calendarEvent.remove", (d) => ({ ...d, calendarEvents: (d.calendarEvents ?? []).filter((x) => x.id !== id) }), { k: "calendarEvent.remove", id }),

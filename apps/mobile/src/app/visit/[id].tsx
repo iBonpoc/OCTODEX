@@ -16,6 +16,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
 import { PhotoStrip } from "@/features/PhotoStrip";
+import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
 import { Button, IconButton, Segmented, StatusChip, Steps, TextField } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -34,6 +35,9 @@ export default function VisitScreen() {
   const [method, setMethod] = useState<PaymentMethod>("card");
   const [extra, setExtra] = useState("");
   const v = db.visits.find((x) => x.id === id);
+  // wave 7б-2: the location question comes before the first «On the way» on my own visit (docs/specs/03 §12)
+  const consent = useConsentQuestion(v);
+
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
 
   if (!v)
@@ -104,6 +108,7 @@ export default function VisitScreen() {
       </Card>
 
       {office ? <WhenWho visitId={v.id} /> : null}
+      {office ? <OfficeLocation v={v} geo={property?.geo} /> : null}
 
       {/* the note for the tech from the visit form (docs/specs/03 §7.3, wave П3b): everyone on the visit sees it */}
       {v.note ? (
@@ -143,9 +148,12 @@ export default function VisitScreen() {
         </Card>
       ) : null}
 
+      <TechLocation v={v} geo={property?.geo} />
+      {consent.sheet}
+
       {/* Step actions */}
       {v.step === "scheduled" ? (
-        <Button label={t("step.en_route")} icon="navigate" full onPress={() => advance(t("visit.etaSent"))} />
+        <Button label={t("step.en_route")} icon="navigate" full onPress={() => consent.ask(() => advance(t("visit.etaSent")))} />
       ) : null}
       {v.step === "en_route" ? (
         <Button label={t("step.on_site")} icon="pin" full onPress={() => advance(t("toast.step", { step: t("step.on_site") }))} />
