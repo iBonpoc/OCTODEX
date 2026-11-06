@@ -107,7 +107,7 @@ export default function Today() {
       <View style={{ flexDirection: "row", gap: space[2] }}>
         <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} onPress={() => open("signed")} width={tileW} />
         <Kpi label={t("today.received")} cents={n.receivedCents} icon="wallet" hint={t("today.nPayments", { n: n.payments })} onPress={() => open("received")} width={tileW} />
-        <Kpi label={t("today.awaiting")} cents={n.awaitingCents} icon="invoice" hint={t("today.allTime")} onPress={() => open("awaiting")} width={tileW} />
+        <Kpi label={t("today.awaiting")} cents={n.awaitingCents} icon="invoice" hint={t("today.allTime")} onPress={() => router.push("/invoice?f=owed")} width={tileW} />
       </View>
       <Card>
         <SectionTitle title={t("today.funnel")} />
