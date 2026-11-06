@@ -1,5 +1,5 @@
 /**
- * «Команда» → «Пригласить»: the roles are Мастер · Продажи · Диспетчер · Директор (sales since #111;
+ * «Команда» → «Пригласить»: one role of Мастер · Продажи · Диспетчер · Директор (sales since #111;
  * failed before: «Продажи» could not be given to a new person). The invited person's card shows the role as a tag.
  */
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
@@ -13,14 +13,14 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Пригласить", exact: true }).locator("visible=true").first().click();
   const sheet = p.locator('[aria-modal="true"]').filter({ hasText: "Отправить приглашение" }).last();
   await sheet.waitFor({ timeout: 3000 });
-  const chip = (name) => sheet.getByRole("checkbox", { name, exact: true }).locator("visible=true");
+  const chip = (name) => sheet.getByRole("radio", { name, exact: true }).locator("visible=true");
   // the sheet slides in: wait for its items (820/1280 render it as a side panel a moment later)
   await chip("Мастер").first().waitFor({ timeout: 5000 });
   for (const r of ["Мастер", "Продажи", "Диспетчер", "Директор"]) h.expect((await chip(r).count()) === 1, `role «${r}» in the invite`);
 
   await sheet.getByPlaceholder("Имя").fill("Sam Seller");
   await sheet.getByPlaceholder("Email").fill("sam@example.com");
-  await chip("Мастер").click();
+  // one role per person (7-2): «Продажи» replaces the default «Мастер»
   await chip("Продажи").click();
   await h.shot("invite-sales");
   await sheet.getByRole("button", { name: "Отправить приглашение" }).click();
