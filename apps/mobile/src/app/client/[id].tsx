@@ -10,6 +10,7 @@ import { clientCounts, clientRecords, clientRowsFor, isClientSection, type Clien
 import { billingLine } from "@/features/clientForm";
 import { ClientSection, PersonRows } from "@/features/client/ClientSections";
 import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
+import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { callPlaceForClient } from "@/features/comms/comms";
 import { StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
 import { propertyTitle } from "@/features/properties";
@@ -51,6 +52,7 @@ export default function ClientScreen() {
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   /** wave 6-2: after «Позвонить» — «Чем кончился?» (the call goes to the client; a technician — to his job) */
   const [calling, setCalling] = useState<CallPreset | null>(null);
+  const [writing, setWriting] = useState<MessagePreset | null>(null);
   const statusRef = useRef<React.ComponentRef<typeof View>>(null);
   const c = visibleClients(db, role).find((x) => x.id === id);
   const toCard = () => router.replace(`/client/${id}`);
@@ -157,7 +159,8 @@ export default function ClientScreen() {
             }}
           />
         ) : null}
-        {tel ? <IconButton icon="sms" label={t("visit.message")} onPress={() => Linking.openURL(smsHref(tel) ?? "").catch(() => {})} /> : null}
+        {/* wave 6-3: «Новое сообщение» to the main person — a ready text in the client's language, the event is written */}
+        {main ? <IconButton icon="sms" label={t("visit.message")} onPress={() => setWriting({ owner: { type: "customer", id: c.id }, person: main })} /> : null}
         {mail ? <IconButton icon="mail" label={t("client.email")} onPress={() => Linking.openURL(mail).catch(() => {})} /> : null}
         {props[0] ? (
           <IconButton
@@ -247,6 +250,7 @@ export default function ClientScreen() {
       <TagsSheet visible={sheet === "tags"} customer={c} onClose={() => setSheet(null)} />
       <StatusSheet visible={sheet === "status"} customer={c} preset="do_not_service" onClose={() => setSheet(null)} />
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
+      <MessageSheet preset={writing} onClose={() => setWriting(null)} />
     </Screen>
   );
 }

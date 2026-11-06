@@ -30,8 +30,14 @@ export interface CommsEntry {
   /** wave 6-2: the person the call was with, and its minutes */
   person?: string;
   durationMin?: number;
-  /** the note written with the call */
+  /** the note written with the call; the text of an SMS / email (6-3) */
   note?: string;
+  /** what it is about and the person's id (6-3: messages grouped by person) */
+  subjectType: Activity["subjectType"];
+  subjectId: string;
+  contactId?: string;
+  /** out = from OCTODEX; in = a reply (with the own number, later) */
+  direction?: "in" | "out";
 }
 
 /** the outcome of a call: a sign of the event, icon + word (map §5, 20 §4) */
@@ -59,6 +65,7 @@ export function commsLog(db: DB, role: Role, kind: CommsKind, deletedWord = ""):
       const person = a.contactId ? peopleOfSubject(db, a.subjectType, a.subjectId).find((p) => p.id === a.contactId)?.name : undefined;
       return {
         id: a.id, kind: a.kind, at: a.at, who: s.who, href: s.href, by: memberName(db, a.actorId, deletedWord),
+        subjectType: a.subjectType, subjectId: a.subjectId, ...(a.contactId ? { contactId: a.contactId } : {}), ...(a.direction ? { direction: a.direction } : {}),
         ...(outcome ? { outcome } : {}), ...(person ? { person } : {}), ...(minutes > 0 ? { durationMin: minutes } : {}), ...(a.body ? { note: a.body } : {}),
       };
     });
@@ -86,10 +93,12 @@ function subject(db: DB, a: Activity): { who: string; href?: string } {
 }
 
 /** the jobs the technician has a visit on, their clients, and his own leads (inspections he was given or made, map §2) */
-function techScope(db: DB, now = Date.now()): { jobs: Set<string>; customers: Set<string>; leads: Set<string> } {
+export function techScope(db: DB, now = Date.now()): { jobs: Set<string>; customers: Set<string>; leads: Set<string> } {
   const jobs = new Set(db.visits.filter((v) => v.jobId && techVisitCounts(db, v, now)).map((v) => v.jobId!));
-  const props = new Set(db.jobs.filter((j) => jobs.has(j.id)).map((j) => j.propertyId));
-  const customers = new Set(db.properties.filter((p) => props.has(p.id)).map((p) => p.customerId).filter((c): c is string => !!c));
+  // a job's client: its own (wave П-1) or its property's
+  const customers = new Set(
+    db.jobs.filter((j) => jobs.has(j.id)).map((j) => j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId).filter((c): c is string => !!c),
+  );
   const leads = new Set(db.leads.filter((l) => canSeeLead("tech", db.me, l)).map((l) => l.id));
   return { jobs, customers, leads };
 }
@@ -159,9 +168,16 @@ export function callPlaces(db: DB, role: Role, query = ""): CallPlace[] {
  */
 export function callPlaceForClient(db: DB, role: Role, customerId: string): Pick<CallPlace, "subjectType" | "subjectId"> | undefined {
   if (role !== "tech") return { subjectType: "customer", subjectId: customerId };
-  const mine = techScope(db);
-  const jobs = db.jobs.filter((j) => mine.jobs.has(j.id) && (j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId) === customerId);
+  const jobs = techJobsAt(db, customerId);
   return jobs.length === 1 ? { subjectType: "job", subjectId: jobs[0]!.id } : undefined;
+}
+
+/** the technician's jobs at a client that the server opens to him (techVisitCounts), for «which job» when there are several */
+export function techJobsAt(db: DB, customerId: string): { id: string; label: string }[] {
+  const mine = techScope(db);
+  return db.jobs
+    .filter((j) => mine.jobs.has(j.id) && (j.customerId ?? db.properties.find((p) => p.id === j.propertyId)?.customerId) === customerId)
+    .map((j) => ({ id: j.id, label: j.title || j.number || j.id }));
 }
 
 /** a call can be saved: something to tie it to and an outcome (the server counts a call without one as answered) */

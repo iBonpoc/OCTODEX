@@ -126,6 +126,7 @@ export type Op =
   | { k: "lead.update"; id: string; cols: Record<string, unknown> }
   // wave 6-2: a call carries its outcome, and may carry the person, minutes and a note (the app never sends a call without an outcome)
   | { k: "lead.touch"; activityId: string; leadId: string; kind: "call" | "sms" | "email" | "marketplace" | "reply"; at: string; outcome?: CallOutcome; contactId?: string; durationMin?: number; note?: string }
+  | { k: "activity.message"; activityId: string; subjectType: "customer" | "job"; subjectId: string; at: string; channel: "sms" | "email"; text: string; contactId?: string }
   | { k: "activity.call"; activityId: string; subjectType: "customer" | "job"; subjectId: string; at: string; outcome: CallOutcome; contactId?: string; durationMin?: number; note?: string }
   | { k: "invoice.remind"; activityId: string; customerId: string; invoiceId: string; channel: "sms" | "email"; at: string }
   | { k: "lead.close"; leadId: string; status: "lost" | "declined"; reason: string; text?: string; activityId: string; from: string }
@@ -434,6 +435,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // the server sets first_response_at and moves new → contacted (trigger on activities)
       // an unanswered call / voicemail only counts an attempt (meta.outcome, migration 20261104130000)
       return run(ins("activities", { id: op.activityId, company_id: c, subject_type: "lead", subject_id: op.leadId, kind: op.kind, ...callCols(op) }));
+    case "activity.message":
+      // wave 6-3: an SMS / email opened in the phone's app, on a client or a job (RLS: like a call); the text is the body
+      return run(ins("activities", { id: op.activityId, company_id: c, subject_type: op.subjectType, subject_id: op.subjectId, kind: op.channel, ...callCols({ at: op.at, contactId: op.contactId, note: op.text }) }));
     case "activity.call":
       // wave 6-2: a call on a client or a job (RLS: staff; a tech only on the job of his visit, with that job's person)
       return run(ins("activities", { id: op.activityId, company_id: c, subject_type: op.subjectType, subject_id: op.subjectId, kind: "call", ...callCols(op) }));
