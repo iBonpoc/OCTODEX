@@ -7,8 +7,8 @@
 --    upload; a subcontractor does not see his own files rows, but must be able to upload).
 --    The row is found by the id in the object NAME, never by files.storage_key: the author can change storage_key
 --    of his own row and would point it at someone else's object.
---    Writing: the staff, or the author of the files row (the app inserts the row first, then uploads, cloud/ops.ts
---    photo.add). The app uploads with upsert: true — a repeat upload needs UPDATE on storage.objects, which had
+--    Writing: the staff, or the author of the files row until the upload is recorded (the app inserts the row first,
+--    then uploads, then writes storage_key, cloud/ops.ts photo.add). The app uploads with upsert: true — a repeat upload needs UPDATE on storage.objects, which had
 --    no policy at all (a repeat upload failed).
 -- 12. Functions of schema app had EXECUTE for PUBLIC when a later migration forgot to revoke it. Revoked for all;
 --    the ones RLS policies of leads and contacts call get EXECUTE for authenticated back (no change for the app).
@@ -17,14 +17,17 @@ create or replace function app.file_object_parts(p_name text, out company_id uui
 language plpgsql immutable set search_path = '' as $$
 declare
   parts text[] := string_to_array(p_name, '/');
-  uuid_re constant text := '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$';
   base text;
 begin
   if coalesce(array_length(parts, 1), 0) <> 2 then return; end if;
-  -- <file id>.<ext>: one known extension, so one files row cannot hold any number of objects (fid, fid.html, …)
-  if parts[2] !~* '^[0-9a-f-]{36}\.(jpg|jpeg|png|heic|webp|pdf)$' then return; end if;
+  -- exactly <company id>/<file id>.<ext>, lower case (as the app writes it: ids from the database / expo-crypto
+  -- randomUUID are lower case), one known extension: one files row holds one object (no FID.jpg, fid.PDF, fid.html …)
+  if parts[1] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+     or parts[2] !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\.(jpg|jpeg|png|heic|webp|pdf)$' then
+    return;
+  end if;
   base := split_part(parts[2], '.', 1);
-  if parts[1] ~ uuid_re and base ~ uuid_re then
+  if parts[1] = parts[1]::uuid::text and base = base::uuid::text then
     company_id := parts[1]::uuid;
     file_id := base::uuid;
   end if;
@@ -57,7 +60,14 @@ begin
   return app.is_staff(p.company_id)
       or exists (select 1 from public.files f
                   where f.id = p.file_id and f.company_id = p.company_id and f.deleted_at is null
-                    and app.is_member(f.company_id) and f.created_by = auth.uid());
+                    and app.is_member(f.company_id) and f.created_by = auth.uid()
+                    -- the author uploads until the row records the upload: a stored photo is not replaced
+                    -- (a «before / after» photo is evidence); a failed upload can be repeated
+                    and f.storage_key is null and f.upload_status is distinct from 'uploaded')
+         -- one row, one object: no second object of the same file under another extension
+         and not exists (select 1 from storage.objects o
+                          where o.bucket_id = 'files' and o.name <> p_name
+                            and o.name like p.company_id::text || '/' || p.file_id::text || '.%');
 end;
 $$;
 revoke all on function app.can_read_file_object(text), app.can_write_file_object(text) from public, anon;
@@ -75,6 +85,9 @@ create policy files_bucket_update on storage.objects for update to authenticated
   with check (bucket_id = 'files' and app.can_write_file_object(name));
 
 -- 12 ------------------------------------------------------------------------------------------------
+-- new functions of role postgres in any schema: no EXECUTE for PUBLIC unless the migration grants it
+-- (global on purpose: a per-schema default cannot take back the PUBLIC right, Postgres docs / T52)
+alter default privileges for role postgres revoke execute on functions from public;
 revoke execute on all functions in schema app from public;
 revoke execute on all functions in schema app from anon;
 -- called inside RLS policies of leads, contacts, phones and e-mails by the app's role (they had it through PUBLIC)

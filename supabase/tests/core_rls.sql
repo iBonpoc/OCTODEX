@@ -18,6 +18,8 @@ set client_min_messages = warning;
 drop schema if exists tst cascade;
 create schema tst;
 grant usage on schema tst to authenticated, anon;
+-- migration 20261106100000 takes EXECUTE for PUBLIC off new functions of postgres; the helpers are for every test role
+alter default privileges for role postgres in schema tst grant execute on functions to public;
 
 create function tst.ok(p_cond boolean, p_msg text) returns void language plpgsql as $$
 begin
@@ -3870,11 +3872,9 @@ do $$ begin
              and not has_table_privilege('authenticated', 'public.t52_probe', 'SELECT')
              and not has_table_privilege('authenticated', 'public.t52_probe', 'TRUNCATE'),
              'a new public table gets no rights for anon / authenticated without a grant');
-  perform tst.ok(not exists (select 1 from aclexplode((select proacl from pg_proc where proname = 't52_probe_fn')) a
-                              where a.grantee in ('anon'::regrole, 'authenticated'::regrole)),
-             'a new public function gets no explicit grant for anon / authenticated');
-  -- EXECUTE for PUBLIC is Postgres's global default and cannot be revoked per schema: a new public function IS callable
-  -- by anon until its migration revokes it — the allow-list check above catches any such function.
+  perform tst.ok(not has_function_privilege('anon', 'public.t52_probe_fn()', 'EXECUTE')
+             and not has_function_privilege('authenticated', 'public.t52_probe_fn()', 'EXECUTE'),
+             'a new public function runs for nobody until its migration grants it (global default, 20261106100000)');
 end $$;
 rollback;
 \echo 'T52 API rights: anon and authenticated only what is granted ok'
@@ -4035,6 +4035,15 @@ insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-00
 select tst.ok((select updated_at is not null from storage.objects where id = :'t55_id'), 'a repeat upload of his own photo (upsert) updates the object');
 select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.html')$q$, 'one files row takes no object of another kind (.html)');
 select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003')$q$, 'an object without an extension is refused');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.png')$q$, 'one files row takes no second object (.png)');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'CA000000-0000-0000-0000-000000000000/F5500000-0000-4000-8000-000000000003.jpg')$q$, 'an upper-case name is refused (one row, one object)');
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.JPG')$q$, 'an upper-case extension is refused');
+-- once the upload is recorded, the author does not replace the photo (before / after is evidence)
+update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg', upload_status = 'uploaded'
+ where id = 'f5500000-0000-4000-8000-000000000003';
+select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg') on conflict (bucket_id, name) do update set updated_at = now()$q$, 'the author does not re-upload over a recorded photo');
+select tst.blocked($q$update storage.objects set name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg' where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg'$q$, 'the author does not update a recorded photo');
+select tst.ok(tst.cnt($q$select 1 from storage.objects where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000003.jpg'$q$) = 1, 'the author still reads his recorded photo');
 select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf')$q$, 'a tech does not write the office document');
 select tst.fails($q$insert into storage.objects (bucket_id, name) values ('files', 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-0000000000aa.jpg')$q$, 'a tech does not write an object without his files row');
 select tst.blocked($q$update storage.objects set bucket_id = 'files' where name = 'ca000000-0000-0000-0000-000000000000/f5500000-0000-4000-8000-000000000001.pdf'$q$, 'a tech does not overwrite the office document');

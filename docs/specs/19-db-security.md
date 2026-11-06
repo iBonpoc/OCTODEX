@@ -45,6 +45,7 @@
 
 ## 6. Остаток после PR-3
 - На телефоне сотрудника (`/p/` из локального стора) кнопка «Pay by card» остаётся и пишет «card, stripe-simulated» через стор — это в правах сотрудника (он и так принимает оплату), но выглядит как карта. Решать вместе со Stripe (направление «Деньги»).
-- PR-4 (сделано): объект `<company>/<file id>.<jpg|jpeg|png|heic|webp|pdf>`; читает staff, техник по правилу `files_select`, любой член — свой загруженный объект; пишет staff или автор строки; upsert — политика UPDATE. Политики DELETE на storage.objects нет (как и раньше): удаление файлов — сервером (service role), вместе с удалением аккаунта.
+- PR-4 (сделано): объект `<company>/<file id>.<jpg|jpeg|png|heic|webp|pdf>` строго в нижнем регистре; автор пишет только пока загрузка не записана (`storage_key is null`, не `uploaded`) — записанное фото «до/после» не подменить; читает staff, техник по правилу `files_select`, любой член — свой загруженный объект; пишет staff или автор строки; upsert — политика UPDATE. Политики DELETE на storage.objects нет (как и раньше): удаление файлов — сервером (service role), вместе с удалением аккаунта.
 - У субподрядчика `files_select` не показывает его же строки: после загрузки `update files set storage_key` затрагивает 0 строк, фото остаётся pending — «Работам»/«Каркасу», вне этой находки.
-- Новая функция в `app` снова получит EXECUTE для PUBLIC (общая настройка Postgres, по схеме не снимается): T52 ловит; правило «revoke all … from public» — в CLAUDE.md (руководитель).
+- Новые функции роли postgres во всех схемах без EXECUTE для PUBLIC (глобальный `alter default privileges for role postgres revoke execute on functions from public`); функцию, которую зовёт приложение или RLS, миграция обязана `grant … to authenticated` — иначе падают тесты.
+- Долг (позже): у bucket `files` нет `allowed_mime_types` / `file_size_limit` (F4); `storage_key` пишет клиент — сервер должен выводить его сам триггером (F5).
