@@ -1908,4 +1908,7 @@ export const es: Dict = {
   "w6.task.emptySearch": "No se encontraron tareas",
   "w6.task.emptyDone": "Aún no hay tareas hechas",
   "w6.task.emptyHint": "Una tarea se relaciona con un cliente, prospecto, trabajo o propiedad. Con hora aparece en el Plan.",
+  // wave 7б-1 «Работы и выезды»: personal settings
+  "pref7b.plan": "Plan",
+  "pref7b.showDoneHint": "Visitas, trabajos y tareas completados en el Plan. Este ajuste es tuyo y es el mismo en todos tus dispositivos.",
 };

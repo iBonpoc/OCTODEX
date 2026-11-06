@@ -8,7 +8,7 @@
 import { companyToday } from "@/features/zone";
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION, jobLineQty } from "@octo/estimating-engine";
-import type { BillingAddress, CalendarEvent, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
+import type { BillingAddress, CalendarEvent, MemberPrefs, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb } from "./repo";
@@ -136,6 +136,8 @@ export type Op =
   // wave П-2b: events and days off; own fields (owner / admin) and their values (staff)
   | { k: "calendarEvent.save"; event: CalendarEvent; isNew: boolean }
   | { k: "calendarEvent.remove"; id: string }
+  /** wave 7б-1: my personal settings in this company (public.set_my_prefs: only for yourself) */
+  | { k: "me.prefs"; prefs: MemberPrefs }
   | { k: "customField.save"; field: CustomField; isNew: boolean }
   | { k: "customFieldValue.save"; value: CustomFieldValue; isNew: boolean }
   | { k: "customFieldValue.remove"; id: string }
@@ -461,6 +463,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       };
       return run(op.isNew ? ins("calendar_events", { id: x.id, company_id: c, ...cols }) : supabase.from("calendar_events").update(cols).eq("id", x.id));
     }
+    case "me.prefs":
+      return run(supabase.rpc("set_my_prefs", { p_company_id: c, p_plan_show_done: op.prefs.planShowDone }));
     case "calendarEvent.remove":
       return run(supabase.from("calendar_events").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "customField.save": {

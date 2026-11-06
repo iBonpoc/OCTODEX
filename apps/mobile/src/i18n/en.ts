@@ -1908,4 +1908,7 @@ export const en: Dict = {
   "w6.task.emptySearch": "No tasks found",
   "w6.task.emptyDone": "No done tasks yet",
   "w6.task.emptyHint": "A task is tied to a client, lead, job or property. With a time it shows in the Plan.",
+  // wave 7б-1 «Работы и выезды»: personal settings
+  "pref7b.plan": "Plan",
+  "pref7b.showDoneHint": "Completed visits, jobs and tasks in the Plan. This setting is yours and the same on all your devices.",
 };

@@ -38,6 +38,8 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import {
   type CalendarEvent,
+  type MemberPrefs,
+  MEMBER_PREFS_DEFAULT,
   type CatalogItem,
   type Company,
   type CompanyContact,
@@ -136,6 +138,8 @@ interface StoreCtx {
   /** an event or a day off of the Plan (wave 5): nothing is saved while eventProblems finds something */
   saveCalendarEvent: (e: Omit<CalendarEvent, "id"> & { id?: ID }) => { id: ID; undo: Undo } | null;
   removeCalendarEvent: (id: ID) => Undo;
+  /** wave 7б-1: my personal settings, the same on every device (locally at once, then public.set_my_prefs) */
+  setPrefs: (patch: Partial<MemberPrefs>) => Undo;
   /** company lead sources: add / edit / hide (sources with leads are never deleted) */
   saveSource: (s: Omit<Source, "id"> & { id?: ID }) => { id: ID; undo: Undo };
   /**
@@ -755,6 +759,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { k: "calendarEvent.save", event, isNew },
         );
         return { id, undo };
+      },
+      setPrefs: (patch) => {
+        const prefs: MemberPrefs = { ...MEMBER_PREFS_DEFAULT, ...dbRef.current.prefs, ...patch };
+        return mutate("me.prefs", (d) => ({ ...d, prefs }), { k: "me.prefs", prefs });
       },
       removeCalendarEvent: (id) =>
         mutate("calendarEvent.remove", (d) => ({ ...d, calendarEvents: (d.calendarEvents ?? []).filter((x) => x.id !== id) }), { k: "calendarEvent.remove", id }),

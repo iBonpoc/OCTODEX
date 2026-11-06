@@ -4430,4 +4430,53 @@ select tst.fails($q$select tst.mark_dns('c5800000-0000-4000-8000-000000000001', 
 :as_super
 \echo 'T58 «do not service»: only the director or the office, with a trace ok'
 
+-- ---------------------------------------------------------------- T51: wave 7б-1 — personal settings (member_prefs), only your own
+:as_tech_a
+select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', true);
+select tst.ok((select plan_show_done from public.member_prefs where company_id = 'ca000000-0000-0000-0000-000000000000') = true, 'the tech saves «show done» for himself');
+select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', false);
+select tst.ok(tst.cnt($q$select 1 from public.member_prefs$q$) = 1 and (select not plan_show_done from public.member_prefs), 'a second save changes the same row, no copy');
+select tst.fails($q$insert into public.member_prefs (company_id, user_id, plan_show_done) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', true)$q$, 'no direct insert (not even for another person)');
+select tst.fails($q$update public.member_prefs set plan_show_done = true$q$, 'no direct update');
+select tst.fails($q$delete from public.member_prefs$q$, 'no delete');
+:as_owner_a
+select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', true);
+select tst.ok(tst.cnt($q$select 1 from public.member_prefs$q$) = 1 and (select user_id from public.member_prefs) = 'a0000000-0000-0000-0000-000000000001', 'the owner sees only his own row, not the tech''s');
+:as_owner_b
+select tst.fails($q$select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', true)$q$, 'not a member: cannot save in another company');
+select tst.ok(tst.cnt($q$select 1 from public.member_prefs$q$) = 0, 'another company sees no settings');
+reset role; set role anon;
+select tst.fails($q$select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', true)$q$, 'anon cannot save');
+select tst.fails($q$select 1 from public.member_prefs$q$, 'anon cannot read');
+select tst.ok(not has_function_privilege('anon', 'public.set_my_prefs(uuid, boolean)', 'execute'), 'anon has no right to the function at all');
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.member_prefs where user_id = 'a0000000-0000-0000-0000-000000000003'$q$) = 0, 'the owner does not read the tech''s row even by its id');
+select tst.fails($q$select public.set_my_prefs(null, true)$q$, 'no company: refused');
+:as_super
+select tst.ok((select plan_show_done from public.member_prefs where user_id = 'a0000000-0000-0000-0000-000000000003') = false
+  and (select plan_show_done from public.member_prefs where user_id = 'a0000000-0000-0000-0000-000000000001') = true, 'each person keeps their own value');
+select tst.ok(not has_table_privilege('authenticated', 'public.member_prefs', 'insert') and not has_table_privilege('authenticated', 'public.member_prefs', 'update')
+  and not has_table_privilege('authenticated', 'public.member_prefs', 'delete'), 'authenticated may only read the table');
+-- a person who is not an active member any more: no writes, the old row is not read (tech2 is disabled since an early
+-- test: active for a moment to save, then disabled again)
+update public.memberships set status = 'active' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000004';
+:as_tech2_a
+select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', true);
+:as_super
+update public.memberships set status = 'disabled' where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000004';
+:as_tech2_a
+select tst.fails($q$select public.set_my_prefs('ca000000-0000-0000-0000-000000000000', false)$q$, 'a disabled member cannot save');
+select tst.ok(tst.cnt($q$select 1 from public.member_prefs$q$) = 0, 'a disabled member does not read his old row');
+:as_super
+-- a person in two companies: the settings of one do not show in the other
+insert into public.memberships (company_id, user_id, role, status) values ('cb000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'tech', 'active');
+:as_tech_a
+select public.set_my_prefs('cb000000-0000-0000-0000-000000000000', true);
+select tst.ok((select plan_show_done from public.member_prefs where company_id = 'cb000000-0000-0000-0000-000000000000') = true
+  and (select plan_show_done from public.member_prefs where company_id = 'ca000000-0000-0000-0000-000000000000') = false, 'two companies, two separate settings');
+:as_super
+delete from public.memberships where company_id = 'cb000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+select tst.ok(tst.cnt($q$select 1 from public.member_prefs where company_id = 'cb000000-0000-0000-0000-000000000000'$q$) = 0, 'a membership removed for good takes its settings with it');
+\echo 'T51 personal settings (member_prefs) ok'
+
 \echo 'ALL TESTS PASSED'

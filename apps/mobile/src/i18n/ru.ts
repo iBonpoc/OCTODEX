@@ -1907,6 +1907,9 @@ export const ru = {
   "w6.task.emptySearch": "Задач не найдено",
   "w6.task.emptyDone": "Выполненных задач пока нет",
   "w6.task.emptyHint": "Задача привязана к клиенту, лиду, работе или объекту. С временем она видна в Плане.",
+  // wave 7б-1 «Работы и выезды»: personal settings
+  "pref7b.plan": "План",
+  "pref7b.showDoneHint": "Выполненные выезды, работы и задачи в Плане. Настройка ваша и одинакова на всех ваших устройствах.",
 } as const;
 
 export type DictKey = keyof typeof ru;
