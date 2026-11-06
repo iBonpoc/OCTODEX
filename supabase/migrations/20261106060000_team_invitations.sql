@@ -258,3 +258,8 @@ grant execute on function public.set_member_status(uuid, uuid, text) to authenti
 -- ---- 6. The sign-in email is not the person's to edit in public.users (it was: users_update + a table-wide grant) ----
 revoke update on public.users from authenticated;
 grant update (full_name, phone, locale, avatar_file_id, last_active_company_id) on public.users to authenticated;
+
+-- ---- 7. A membership is born only by accepting an invitation (or the company's owner trigger) — audit №13 ----
+-- before: memberships_insert let an owner/admin add ANY user_id to the company without that person's consent
+drop policy if exists memberships_insert on public.memberships;
+revoke insert on public.memberships from authenticated;

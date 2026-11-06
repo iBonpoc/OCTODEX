@@ -117,10 +117,13 @@ do $$ begin
                  'creator becomes active owner');
 end $$;
 
+-- fixture: the team (since 7-2 nobody inserts a membership directly — people join by an invitation, T48)
+:as_super
 insert into public.memberships (company_id, user_id, role, status) values
   ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000002', 'office', 'active'),
   ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'tech',   'active'),
   ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000004', 'tech',   'active');
+:as_owner_a
 
 insert into public.lead_sources (id, company_id, name, kind) values
   ('1a000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Thumbtack (test)', 'marketplace');
@@ -1134,9 +1137,8 @@ select tst.ok((select gate_code from public.property_secrets where property_id =
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a0000000-0000-0000-0000-000000000005', 'sales@a.test', '{"full_name":"Sam Sales"}'),
   ('b0000000-0000-0000-0000-000000000002', 'tech@b.test', '{"full_name":"Rival Tech"}');
-:as_owner_a
+-- fixture (7-2: memberships are not inserted by clients)
 insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000005', 'sales', 'active');
-:as_owner_b
 insert into public.memberships (company_id, user_id, role, status) values ('cb000000-0000-0000-0000-000000000000', 'b0000000-0000-0000-0000-000000000002', 'tech', 'active');
 :as_owner_a
 do $$
@@ -2435,10 +2437,12 @@ select tst.ok((select status from public.visits where id = 'f3400000-0000-4000-8
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a3500000-0000-4000-8000-000000000001', 'tech35@a.test', '{"full_name":"Tess Second"}'),
   ('a3500000-0000-4000-8000-000000000002', 'gone35@a.test', '{"full_name":"Gus Gone"}');
-:as_owner_a
+-- fixture (since 7-2 a membership is born only by accepting an invitation, or the company's owner trigger)
+:as_super
 insert into public.memberships (company_id, user_id, role, status) values
   ('ca000000-0000-0000-0000-000000000000', 'a3500000-0000-4000-8000-000000000001', 'tech', 'active'),
   ('ca000000-0000-0000-0000-000000000000', 'a3500000-0000-4000-8000-000000000002', 'tech', 'invited');
+:as_owner_a
 do $$ begin
   insert into public.customers (id, company_id, display_name) values ('c3500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T35 Client');
   insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c3500000-0000-4000-8000-000000000001', '35 Crew St', 'Pasadena');
@@ -3765,6 +3769,9 @@ select tst.ok((select role = 'tech' and status = 'disabled' from public.membersh
 select set_config('app.accepting_invite', 'on', false);
 select tst.blocked($q$update public.memberships set role = 'admin' where user_id = 'a4800000-0000-4000-8000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'the flag does not open the role guard');
 select set_config('app.accepting_invite', '', false);
+-- audit №13: no direct membership for any user_id, not even by the owner — only accept_invitation makes one
+:as_owner_a
+select tst.fails($q$insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a4800000-0000-4000-8000-000000000002', 'admin', 'active')$q$, 'the owner does not add a person without their consent');
 -- an admin switched off: the invitations they sent stop working
 :as_office_a
 select public.invite_member('ca000000-0000-0000-0000-000000000000', 'z48@a.test', 'tech') ->> 'id' as t48_byadmin \gset
