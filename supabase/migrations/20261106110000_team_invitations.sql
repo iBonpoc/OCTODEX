@@ -317,3 +317,7 @@ end;
 $$;
 revoke all on function public.set_share_location(uuid, boolean) from public, anon;
 grant execute on function public.set_share_location(uuid, boolean) to authenticated;
+
+-- trigger functions are never called by a client (T52: no EXECUTE for PUBLIC / anon on public and app functions)
+revoke all on function app.tg_membership_guard() from public, anon, authenticated;
+revoke all on function app.tg_membership_sign_guard() from public, anon, authenticated;
