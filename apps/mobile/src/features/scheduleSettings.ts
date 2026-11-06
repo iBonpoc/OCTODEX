@@ -126,14 +126,5 @@ export function clientDate(iso: string, tz: string): string {
   }
 }
 
-/** Calendar day number of a moment in a time zone (the company's: the server decides by it too). */
-export function dayIn(t: number, timeZone: string): number {
-  let parts: Intl.DateTimeFormatPart[];
-  try {
-    parts = new Intl.DateTimeFormat("en-US", { timeZone, year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date(t));
-  } catch {
-    parts = new Intl.DateTimeFormat("en-US", { timeZone: "America/Los_Angeles", year: "numeric", month: "numeric", day: "numeric" }).formatToParts(new Date(t));
-  }
-  const n = (k: string) => Number(parts.find((p) => p.type === k)?.value ?? 0);
-  return Math.floor(Date.UTC(n("year"), n("month") - 1, n("day")) / 86_400_000);
-}
+/** Calendar day number of a moment in a time zone — one rule for the app (features/zone.ts) */
+export { dayIn } from "./zone";

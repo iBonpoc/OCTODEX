@@ -29,6 +29,7 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { todayKey, usePersistentState } from "./persist";
+import { setZone } from "@/features/zone";
 import {
   type CatalogItem,
   type Company,
@@ -256,7 +257,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const mode: Mode = company && auth.userId ? "cloud" : "demo";
   const cacheKey = mode === "cloud" ? `octo.cloud.v1.${company!.companyId}` : "octo.db.v5";
 
-  // Demo data is reseeded each new day (dates are relative to "today"). Cloud data is a cache of the server.
+  // Demo data is reseeded each new day of the company (dates are relative to "today"). Cloud data is a cache of the server.
   const [saved, setSaved, dbReady] = usePersistentState<{ day: string; db: DB }>(
     cacheKey,
     () => (mode === "cloud" ? { day: "cloud", db: emptyDB(auth.userId ?? "") } : { day: todayKey(), db: makeSeed() }),
@@ -271,6 +272,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const d = normalizeDB(saved.db, mode);
     return mode === "cloud" ? withGateCodes(d, gateCodes) : d;
   }, [saved.db, mode, gateCodes]);
+  // the company's time zone for the whole app (docs/specs/03 П4b): set during render, before any screen reads a day
+  setZone(db.company?.timezone);
   const setDb = useCallback(
     (next: DB) => {
       if (mode !== "cloud") return setSaved({ day: todayKey(), db: next });

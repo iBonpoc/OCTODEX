@@ -1,10 +1,10 @@
 import type { DB, Visit } from "./types";
+import { dayKeyIn, daysBetween, dueDayKey, getZone } from "@/features/zone";
 
 /* ---------- selectors ---------- */
-export function isToday(iso: string): boolean {
-  const d = new Date(iso);
-  const n = new Date();
-  return d.getFullYear() === n.getFullYear() && d.getMonth() === n.getMonth() && d.getDate() === n.getDate();
+/** the same calendar day as now — of the company (features/zone.ts), not the phone */
+export function isToday(iso: string, now: number = Date.now(), tz: string = getZone()): boolean {
+  return dayKeyIn(iso, tz) === dayKeyIn(now, tz);
 }
 
 /** The property of a visit: its own (an inspection has no job, docs/specs/03 §3.1), else its job's. */
@@ -41,9 +41,12 @@ export function jobProfit(db: DB, jobId: string) {
   return { revenue, expenses, profit: revenue - expenses, marginPct: revenue ? Math.round(((revenue - expenses) / revenue) * 1000) / 10 : null };
 }
 
-/** An invoice is overdue only after its due day has ended (due "today" is not overdue yet). */
-export function isOverdue(dueDate: string, now = Date.now()): boolean {
-  const end = new Date(dueDate);
-  end.setHours(23, 59, 59, 999);
-  return end.getTime() < now;
+/** An invoice is overdue only after its due day has ended (due "today" is not overdue yet). The due day is a calendar
+ *  day of the company, as on the server (companies.timezone): «YYYY-MM-DD» from the cloud is not read as UTC midnight. */
+export function isOverdue(dueDate: string, now = Date.now(), tz: string = getZone()): boolean {
+  return dueDayKey(dueDate, tz) < dayKeyIn(now, tz);
+}
+/** whole calendar days of the company past the due day (0 on the due day and before) */
+export function daysOverdue(dueDate: string, now = Date.now(), tz: string = getZone()): number {
+  return Math.max(0, daysBetween(dueDayKey(dueDate, tz), dayKeyIn(now, tz)));
 }
