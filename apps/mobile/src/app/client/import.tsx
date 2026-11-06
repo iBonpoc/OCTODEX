@@ -182,11 +182,6 @@ export default function ImportClients() {
           ) : null}
           <Button label={t("client.import.run", { n: plan.add.length })} icon="check" full onPress={run} disabled={!canImport} />
           {!store.online ? <StatusChip status="warn" label={t("client.import.offline")} /> : null}
-          {store.db.customers.length >= 1000 ? (
-            <T v="caption" tone="mut">
-              {t("client.import.manyClients")}
-            </T>
-          ) : null}
         </>
       ) : null}
 

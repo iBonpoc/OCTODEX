@@ -1,7 +1,7 @@
 /**
  * The one list of the app's sections (docs/specs/13 §2.1, §2.3, §4; 13а §3): the 5 bottom tabs and the ☰ menu.
  * Replaces roleNav. Pure (no React) — unit-tested in test/sections.test.ts.
- * Only what works: a section without a screen (Tasks, Payments, Reports, Map, Phone, Modules) is not listed
+ * Only what works: a section without a screen (Map, Phone, Modules) is not listed
  * until its screen exists (the test checks every href has a route file).
  */
 import type { Role } from "@/data/types";
@@ -15,6 +15,7 @@ export type SectionId =
   | "messages"
   | "calls"
   | "clients"
+  | "tasks"
   | "leads"
   | "jobs"
   | "estimates"
@@ -56,6 +57,8 @@ export const SECTIONS: readonly Section[] = [
   { id: "clients", label: "nav.clients", icon: "users", group: "work", tab: true },
   // «Звонки» is not a tab until the company has its own number (founder 06.11, variant Б; 13 v2 §2.1)
   { id: "calls", label: "nav.calls", icon: "phone", group: "work" },
+  // wave 6 (20 §7): every role; the technician sees his own (RLS)
+  { id: "tasks", label: "task.title", icon: "check", group: "work" },
   { id: "estimates", label: "nav.estimates", icon: "invoice", group: "docs" },
   { id: "invoices", label: "nav.invoices", icon: "wallet", group: "docs", roles: OFFICE },
   { id: "catalog", label: "nav.catalog", icon: "note", group: "docs" },
@@ -133,7 +136,7 @@ export function sectionOfHref(href: string): SectionId | undefined {
 /* ---------- «＋» by screen (13 v2 §2.4, 13а §9) ---------- */
 
 /** the screens that declare a «＋»: `<Screen fab="client" fabCtx={{ customerId }}>`; «＋ Создать» in ☰ = "home" */
-export type FabSet = "home" | "plan" | "calls" | "clients" | "client" | "job" | "visit";
+export type FabSet = "home" | "plan" | "calls" | "clients" | "client" | "job" | "visit" | "tasks";
 /** what the new thing is tied to (the screen's own object) */
 export interface FabCtx {
   customerId?: string;
@@ -144,14 +147,14 @@ export interface FabCtx {
   /** the visit is an inspection (estimate from the visit) */
   inspection?: boolean;
 }
-export type FabId = "lead" | "client" | "job" | "estimate" | "expense" | "visit" | "planAdd" | "planEvent" | "planTimeOff" | "photo";
+export type FabId = "lead" | "client" | "job" | "estimate" | "expense" | "visit" | "planAdd" | "planEvent" | "planTimeOff" | "photo" | "task";
 export interface FabItem {
   id: FabId;
   label: DictKey;
   icon: IconKey;
   /** a screen to open; undefined = an action the screen or the «＋» itself does (`act`) */
   href?: string;
-  act?: "planAdd" | "planEvent" | "planTimeOff" | "photo";
+  act?: "planAdd" | "planEvent" | "planTimeOff" | "photo" | "task";
 }
 
 const TECH: readonly Role[] = ["tech"];
@@ -185,6 +188,7 @@ const FAB_LOOK: Record<FabId, { label: DictKey; icon: IconKey }> = {
   planEvent: { label: "plan5.addEvent", icon: "clock" },
   planTimeOff: { label: "plan5.addTimeOff", icon: "sun" },
   photo: { label: "quick.photo", icon: "camera" },
+  task: { label: "task.new", icon: "check" },
 };
 
 const lead: FabDef = { id: "lead", href: () => "/lead/new" };
@@ -215,6 +219,8 @@ export const FAB_SETS: Record<FabSet, readonly FabDef[]> = {
     { id: "planTimeOff", roles: PLANNERS, act: "planTimeOff" },
   ],
   calls: [lead, client],
+  // wave 6: the task form asks «к чему» itself (13 §2.4: nothing loose)
+  tasks: [{ id: "task", act: "task" }],
   clients: [client],
   client: [{ ...job, needs: (c) => !!c.customerId }, estimate(OFFICE, (c) => !!c.customerId)],
   job: [
