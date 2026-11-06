@@ -139,9 +139,11 @@ insert into public.leads (company_id, source_id, contact_name, phone, cost_cents
 
 -- номер, присланный клиентом, игнорируется
 insert into public.jobs (id, company_id, number, title, customer_id, property_id, status) values
-  ('e1a00000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'HACK-9', 'Seamless gutters', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'scheduled');
+  ('e1a00000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'HACK-9', 'Seamless gutters', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'draft');
 insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
-  ('e1a00000-0000-0000-0000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'HOA cleaning', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'scheduled');
+  ('e1a00000-0000-0000-0000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'HOA cleaning', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'draft');
+-- a job is born «draft» (t14, 20261106046000); the fixtures are scheduled by the allowed move
+update public.jobs set status = 'scheduled' where id in ('e1a00000-0000-0000-0000-000000000001', 'e1a00000-0000-0000-0000-000000000002');
 
 insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
   ('f1a00000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e1a00000-0000-0000-0000-000000000001', now(), now() + interval '3 hours'),
@@ -1099,7 +1101,7 @@ begin
     v_v := ('f2000000-0000-4000-8000-00000000000' || k)::uuid;
     insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Gate St', 'Pasadena', 1);
     insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#' || k || '42');
-    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Gate job ' || k, v_c, v_p, 'scheduled');
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Gate job ' || k, v_c, v_p, 'draft'); update public.jobs set status = 'scheduled' where id = v_j;
     insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j, now() + (plan[k][1] || ' days')::interval);
     insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
     if plan[k][2] = 'cancelled' then perform public.cancel_visit(v_v, 'we_cancelled'); end if;
@@ -1150,7 +1152,7 @@ begin
     v_v := ('f2000000-0000-4000-8000-0000000000' || lpad(k::text, 2, '0'))::uuid;
     insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Gate St', 'Pasadena', 1);
     insert into public.property_secrets (company_id, property_id, gate_code) values ('ca000000-0000-0000-0000-000000000000', v_p, '#' || k || '42');
-    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Gate job ' || k, v_c, v_p, 'scheduled');
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Gate job ' || k, v_c, v_p, 'draft'); update public.jobs set status = 'scheduled' where id = v_j;
     insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j, case when k = 6 then now() + interval '2 days' else now() end);
     insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
   end loop;
@@ -1302,7 +1304,7 @@ begin
     v_j := ('e2000000-0000-4000-8000-0000000000' || k)::uuid;
     v_v := ('f2000000-0000-4000-8000-0000000000' || k)::uuid;
     insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Window St', 'Pasadena', 1);
-    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Window job ' || k, v_c, v_p, 'scheduled');
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Window job ' || k, v_c, v_p, 'draft'); update public.jobs set status = 'scheduled' where id = v_j;
     insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j,
       case k when 15 then now() - interval '15 days' when 18 then now() - interval '10 days' else now() + interval '1 day' end);
     insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
@@ -1360,7 +1362,7 @@ begin
     v_j := ('e2000000-0000-4000-8000-0000000000' || k)::uuid;
     v_v := ('f2000000-0000-4000-8000-0000000000' || k)::uuid;
     insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' Edge St', 'Pasadena', 1);
-    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Edge job ' || k, v_c, v_p, 'scheduled');
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'Edge job ' || k, v_c, v_p, 'draft'); update public.jobs set status = 'scheduled' where id = v_j;
     insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j,
       case when k in (23, 24) then null else now() + interval '1 day' end);
     insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
@@ -1444,7 +1446,7 @@ begin
     insert into public.customers (id, company_id, display_name) values (v_c, 'ca000000-0000-0000-0000-000000000000', 'T26 Client ' || k);
     insert into public.contacts (company_id, customer_id, name, role, is_primary) values ('ca000000-0000-0000-0000-000000000000', v_c, 'T26 Person ' || k, 'main', true);
     insert into public.properties (id, company_id, customer_id, address_line1, address_city, stories) values (v_p, 'ca000000-0000-0000-0000-000000000000', v_c, k || ' T26 St', 'Pasadena', 1);
-    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'T26 job ' || k, v_c, v_p, 'scheduled');
+    insert into public.jobs (id, company_id, title, customer_id, property_id, status) values (v_j, 'ca000000-0000-0000-0000-000000000000', 'T26 job ' || k, v_c, v_p, 'draft'); update public.jobs set status = 'scheduled' where id = v_j;
     insert into public.visits (id, company_id, job_id, starts_at) values (v_v, 'ca000000-0000-0000-0000-000000000000', v_j,
       case k when 1 then now() - interval '15 days' else now() + interval '1 day' end);
     insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', v_v, 'a0000000-0000-0000-0000-000000000003');
@@ -2307,7 +2309,8 @@ select tst.ok(tst.cnt($q$select 1 from public.customers where id = 'c3200000-000
 select tst.ok(tst.cnt($q$select 1 from public.notes where body like 'T33%'$q$) = 0, 'cancelled inspection: notes hidden');
 \echo 'T33 tech and inspections ok'
 -- T33 (security check of П1a): the client a tech sees is the client of the job, not whoever owns the property
-:as_owner_a
+-- (a job at someone else's property cannot be inserted by the app any more — t14, T47; the old data is made as super)
+:as_super
 do $$ begin
   insert into public.customers (id, company_id, display_name) values ('c3300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T33 Job Client');
   insert into public.customers (id, company_id, display_name) values ('c3300000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T33 Landlord');
@@ -3654,5 +3657,60 @@ select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-00000000
 :as_super
 select tst.ok((select count(*) from public.jobs where id in ('e4600000-0000-4000-8000-000000000001', 'e4600000-0000-4000-8000-000000000002') and status = 'completed') = 2, 'only the office closed, nothing else');
 \echo 'T46 wave 3c: «Работа выполнена» (S10) ok'
+
+-- ---------------------------------------------------------------- T47: a direct insert into jobs keeps the checks of create_job (t14, security check 06.11)
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values
+    ('c4700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T47 One'),
+    ('c4700000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T47 Two'),
+    ('c4700000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T47 Gone');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city, address_state) values
+    ('d4700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c4700000-0000-4000-8000-000000000001', '47 Oak St', 'Austin', 'TX'),
+    ('d4700000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4700000-0000-4000-8000-000000000002', '47 Elm St', 'Austin', 'TX'),
+    ('d4700000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4700000-0000-4000-8000-000000000003', '47 Ash St', 'Austin', 'TX');
+  update public.customers set deleted_at = now() where id = 'c4700000-0000-4000-8000-000000000003';
+  insert into public.estimates (id, company_id, customer_id, property_id, title) values
+    ('0e470000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000002', 'T47 of Two');
+  update public.job_types set archived_at = now() where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty';
+end $$;
+:as_super
+select id as t47_btype from public.job_types where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1 \gset
+-- sales insert a row themselves (the jobs_insert policy lets them; the app does it in lead.book / estimate.deposit)
+:as_sales_a
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, type) values
+  ('e4700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'Estimate visit', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', 'inspection');
+select tst.ok((select status = 'draft' and number like 'JOB-%' from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'a direct insert as the app makes it (lead.book) still works');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000002')$q$, 'directly: the address must be a property of this client');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000003', 'd4700000-0000-4000-8000-000000000003')$q$, 'directly: a deleted client takes no job');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, job_type_id) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty'))$q$, 'directly: an archived job type is refused');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, job_type_id) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', $q$ || quote_literal(:'t47_btype') || $q$)$q$, 'directly: a job type of another company is refused');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', 'scheduled')$q$, 'directly: a job is not born «scheduled» (no date yet)');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', 'in_progress')$q$, 'directly: a job is not born «in progress»');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, cancelled_at) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', now())$q$, 'directly: a job is not born with a cancel time');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, estimate_id) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', '0e470000-0000-4000-8000-000000000002')$q$, 'directly: the estimate of another client is refused');
+-- the office: the same refusals for any staff role, the server function still works
+:as_office_a
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000001')$q$, 'the office: the address must be of this client too');
+select tst.ok((public.create_job('e4700000-0000-4000-8000-000000000002', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000002', 'T47 by function') ->> 'number') like 'JOB-%', 'create_job still creates a job');
+-- an estimate signed on site and countersigned still makes its job (execute_estimate is a server function)
+:as_owner_a
+do $$
+declare v uuid; o uuid;
+begin
+  insert into public.estimate_versions (company_id, estimate_id, version_no) values ('ca000000-0000-0000-0000-000000000000', '0e470000-0000-4000-8000-000000000002', 1) returning id into v;
+  update public.estimates set current_version_id = v where id = '0e470000-0000-4000-8000-000000000002';
+  insert into public.estimate_options (company_id, version_id, name) values ('ca000000-0000-0000-0000-000000000000', v, 'Only') returning id into o;
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', o, 'labor', 'Fix (test price)', 1, 4700);
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = v;
+  update public.estimates set status = 'sent', sent_version_id = v where id = '0e470000-0000-4000-8000-000000000002';
+  perform tst.ok(public.sign_estimate_on_site('0e470000-0000-4000-8000-000000000002', 'T47 Two', 'M0 0 L2 2') = 'awaiting_countersign', 'T47: the client signs on site');
+  perform tst.ok(public.countersign_estimate('0e470000-0000-4000-8000-000000000002', 'M0 0 L3 3') = 'approved', 'T47: the company signs');
+  perform tst.ok((select status = 'draft' and contract_total_cents = 4700 from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002'), 'a signed estimate still makes its job, waiting for a date');
+  update public.job_types set archived_at = null where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty';
+end $$;
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.jobs where id = 'e4700000-0000-4000-8000-000000000009'$q$) = 0, 'no refused job was made');
+\echo 'T47 direct insert into jobs keeps the create_job checks ok'
 
 \echo 'ALL TESTS PASSED'
