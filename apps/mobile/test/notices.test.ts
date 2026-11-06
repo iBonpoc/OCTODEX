@@ -43,11 +43,14 @@ describe("unit:notices — visit.late", () => {
   it("the same window as «Требует внимания»: yesterday's visit is not «running late» today", () => {
     expect(lateNotices(db([V("a", { start: min(-24 * 60) })]), "director", NOW)).toEqual([]);
   });
-  it("after midnight a 11:50 PM visit is gone from both the notice and the item (one window)", () => {
+  // decided 06.11: the tech is late whatever the date (before, an 11:50 PM visit was gone at the company's midnight)
+  it("after midnight an 11:50 PM visit running into today is still late; one that ended before midnight is gone (one window)", () => {
     // the company's midnight (Los Angeles, PST): 00:05 on Nov 6 = 08:05 UTC — whatever the phone's zone (П4a)
     const mid = new Date("2026-11-06T08:05:00.000Z");
-    const late = new Date(mid.getTime() - 15 * 60_000).toISOString(); // 11:50 PM yesterday
-    expect(lateNotices(db([V("a", { start: late })]), "director", mid.getTime())).toEqual([]);
+    const late = new Date(mid.getTime() - 15 * 60_000).toISOString(); // 11:50 PM yesterday, 60 min → till 12:50 AM
+    expect(lateNotices(db([V("a", { start: late, durationMin: 60 })]), "director", mid.getTime()).map((n) => n.visitId)).toEqual(["a"]);
+    const ended = new Date(mid.getTime() - 125 * 60_000).toISOString(); // 10:00 PM yesterday, 60 min → till 11:00 PM
+    expect(lateNotices(db([V("b", { start: ended, durationMin: 60 })]), "director", mid.getTime())).toEqual([]);
   });
   it("the tech's name from everyone on it when techId is empty; the lead's name for an inspection without a client", () => {
     const lead = base.leads.find((l) => !l.customerId) ?? base.leads[0]!;
