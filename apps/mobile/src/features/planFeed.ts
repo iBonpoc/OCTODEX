@@ -8,10 +8,12 @@ import { dayKeyIn, dayNumber, getZone, type DayKey } from "./zone";
 import { assigneesOf, isOpenVisit, type PlanWho } from "./schedule";
 
 export type PlanItemKind = "visit" | "task" | "event" | "timeOff";
+/** `at` — the sort key of the item on its day: "" when it began on an earlier day (it runs from the day's start) */
+type Base = { id: ID; day: DayKey; start: string; allDay: boolean; people: ID[]; at: string };
 export type PlanItem =
-  | { kind: "visit"; id: ID; day: DayKey; start: string; end: string; allDay: false; people: ID[]; done: boolean; visit: Visit }
-  | { kind: "task"; id: ID; day: DayKey; start: string; end?: string; allDay: boolean; people: ID[]; done: boolean; task: Task }
-  | { kind: "event" | "timeOff"; id: ID; day: DayKey; start: string; end: string; allDay: boolean; people: ID[]; done: false; event: CalendarEvent };
+  | (Base & { kind: "visit"; end: string; done: boolean; visit: Visit })
+  | (Base & { kind: "task"; end?: string; done: boolean; task: Task })
+  | (Base & { kind: "event" | "timeOff"; end: string; done: false; event: CalendarEvent });
 
 /** the company days a span covers: the day of its start to the day of its last moment (an end at midnight is not a day) */
 export function spanDays(startIso: string, endIso: string | undefined, tz: string = getZone()): DayKey[] {
@@ -48,46 +50,65 @@ export function planItems(
   const tz = opts.tz ?? getZone();
   const whoNow: PlanWho = role === "tech" ? "me" : who;
   const inRange = (d: DayKey) => d >= range.from && d <= range.to;
+  // a cheap cut before the days are counted: anything wholly more than a day outside the range is skipped
+  const lo = new Date(`${range.from}T00:00:00Z`).getTime() - 2 * 86_400_000;
+  const hi = new Date(`${range.to}T00:00:00Z`).getTime() + 3 * 86_400_000;
+  const near = (startIso: string, endIso?: string) => {
+    const a = new Date(startIso).getTime();
+    const b = endIso ? new Date(endIso).getTime() : a;
+    return a < hi && Math.max(a, b) > lo;
+  };
+  const at = (startIso: string, day: DayKey) => (dayKeyIn(startIso, tz) < day ? "" : new Date(startIso).toISOString());
   const out: PlanItem[] = [];
   for (const v of db.visits) {
     const done = !isOpenVisit(v);
     if (done && !opts.showDone) continue;
-    const day = dayKeyIn(v.start, tz);
-    if (!inRange(day)) continue;
+    const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
+    if (!near(v.start, end)) continue;
     const people = assigneesOf(v);
     if (!whoMatches(people, whoNow, db.me)) continue;
-    const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
-    out.push({ kind: "visit", id: v.id, day, start: v.start, end, allDay: false, people, done, visit: v });
+    // a visit past midnight is on both days, like a task or an event
+    for (const day of spanDays(v.start, end, tz))
+      if (inRange(day)) out.push({ kind: "visit", id: v.id, day, start: v.start, end, allDay: false, people, done, visit: v, at: at(v.start, day) });
   }
   for (const t of db.tasks ?? []) {
     if (!t.startsAt) continue;   // only a task with a time is in the Plan (13 §3.7); a due date alone stays in «Задачи»
     const done = !!t.doneAt;
     if (done && !opts.showDone) continue;
+    if (!near(t.startsAt, t.endsAt)) continue;
     const people = t.assigneeId ? [t.assigneeId] : [];
     if (!whoMatches(people, whoNow, db.me)) continue;
     for (const day of spanDays(t.startsAt, t.endsAt, tz))
-      if (inRange(day)) out.push({ kind: "task", id: t.id, day, start: t.startsAt, end: t.endsAt, allDay: !!t.allDay, people, done, task: t });
+      if (inRange(day)) out.push({ kind: "task", id: t.id, day, start: t.startsAt, end: t.endsAt, allDay: !!t.allDay, people, done, task: t, at: at(t.startsAt, day) });
   }
   for (const e of db.calendarEvents ?? []) {
+    if (!near(e.startsAt, e.endsAt)) continue;
     const people = e.userId ? [e.userId] : [];
     if (!whoMatches(people, whoNow, db.me, e.kind === "event" && !e.userId)) continue;
     const kind = e.kind === "time_off" ? "timeOff" : "event";
     for (const day of spanDays(e.startsAt, e.endsAt, tz))
-      if (inRange(day)) out.push({ kind, id: e.id, day, start: e.startsAt, end: e.endsAt, allDay: e.allDay, people, done: false, event: e });
+      if (inRange(day)) out.push({ kind, id: e.id, day, start: e.startsAt, end: e.endsAt, allDay: e.allDay, people, done: false, event: e, at: at(e.startsAt, day) });
   }
   return out.sort(
     (a, b) =>
       a.day.localeCompare(b.day) ||
       Number(b.allDay) - Number(a.allDay) ||
-      // a span that began on an earlier day is «from the start of this day»
-      (a.allDay ? 0 : startOn(a, tz).localeCompare(startOn(b, tz))) ||
+      // a span that began on an earlier day is «from the start of this day» (at = "")
+      (a.allDay ? 0 : a.at.localeCompare(b.at)) ||
       KIND_ORDER[a.kind] - KIND_ORDER[b.kind] ||
       a.id.localeCompare(b.id),
   );
 }
 
-/** the start of an item on its day: its own start, or the day's beginning when it began before */
-const startOn = (x: PlanItem, tz: string): string => (dayKeyIn(x.start, tz) < x.day ? "" : new Date(x.start).toISOString());
+/**
+ * The time words of a card on its day: `when` leads the title (the start, «Весь день», or «– end» on a day it carries
+ * over to), `until` goes to the subtitle («– end» on the day it began). `time` formats a moment in the company's clock.
+ */
+export function itemTimes(x: Pick<PlanItem, "allDay" | "at" | "start" | "end">, time: (iso: string) => string, allDayLabel: string): { when: string; until?: string } {
+  if (x.allDay) return { when: allDayLabel };
+  if (x.at === "") return { when: x.end ? `– ${time(x.end)}` : time(x.start) };
+  return { when: time(x.start), until: x.end ? `– ${time(x.end)}` : undefined };
+}
 
 /** the items grouped by day, every day of the list present (an empty day shows «На этот день ничего нет») */
 export function groupByDay(items: PlanItem[], days: DayKey[]): { day: DayKey; items: PlanItem[] }[] {

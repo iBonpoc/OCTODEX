@@ -6,11 +6,11 @@ import { useStore } from "@/data/store";
 import type { ID, Task } from "@/data/types";
 import { findJob } from "@/data/jobs";
 import { visitPropertyId } from "@/data/selectors";
-import { isoDayKey, todayKey, type DayKey } from "@/features/calendar";
+import { todayKey, type DayKey } from "@/features/calendar";
 import { lateAfterOf, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { visitStatus } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
-import { groupByDay, type PlanItem } from "@/features/planFeed";
+import { groupByDay, itemTimes, type PlanItem } from "@/features/planFeed";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { assigneesOf, daysSince, unassignedSoon, visitWho, waitingJobs, type PlanWho } from "@/features/schedule";
@@ -207,9 +207,7 @@ function FeedCard({ x }: { x: PlanItem }) {
   const { t, time } = useI18n();
   const names = x.people.map((id) => db.members.find((m) => m.id === id)?.name).filter(Boolean).join(", ");
   // the title starts with the start of the day's part (short on a phone); the end goes to the subtitle
-  const began = isoDayKey(x.start) === x.day;
-  const when = x.allDay ? t("plan5.allDay") : began ? time(x.start) : x.end ? `– ${time(x.end)}` : time(x.start);
-  const until = !x.allDay && began && x.end ? `– ${time(x.end)}` : undefined;
+  const { when, until } = itemTimes(x, time, t("plan5.allDay"));
   if (x.kind === "visit") {
     const v = x.visit;
     const job = findJob(db, v.jobId);

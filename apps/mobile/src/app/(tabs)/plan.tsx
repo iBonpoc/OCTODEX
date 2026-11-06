@@ -1,6 +1,6 @@
 import { findJob } from "@/data/jobs";
 import { lateAfterOf } from "@/features/scheduleSettings";
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 import { router } from "expo-router";
 import { component, space } from "@octo/design-tokens";
@@ -48,8 +48,12 @@ export default function Plan() {
   const week = weekDays(date);
   // days of «План» are the company's calendar days (П4b): labels of day keys, no zone of their own
   const monthName = formatDayKey(date, { month: "long", year: "numeric" }, lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU");
-  const feedDays = daysFrom(date, addDays(date, FEED_DAYS - 1));
+  const feedDays = useMemo(() => daysFrom(date, addDays(date, FEED_DAYS - 1)), [date]);
   const [showDone, setShowDone] = usePersistentState<boolean>("octo.planShowDone.v1", false);
+  const feedItems = useMemo(
+    () => (mode === "feed" ? planItems(db, { from: feedDays[0]!, to: feedDays[FEED_DAYS - 1]! }, whoNow, role, { showDone }) : []),
+    [mode, db.visits, db.tasks, db.calendarEvents, db.me, feedDays, whoNow, role, showDone],   // eslint-disable-line react-hooks/exhaustive-deps
+  );
   const label = mode === "feed" ? t("plan5.days", { from: dayOf(feedDays[0]!), to: dayOf(feedDays[FEED_DAYS - 1]!) }) : mode === "day" ? dayOf(date) : mode === "week" ? `${dayOf(week[0]!)} – ${dayOf(week[6]!)}` : monthName;
 
   return (
@@ -95,7 +99,7 @@ export default function Plan() {
             </T>
             <Toggle on={showDone} onChange={setShowDone} label={t("plan5.showDone")} />
           </RowView>
-          <FeedView days={feedDays} items={planItems(db, { from: feedDays[0]!, to: feedDays[FEED_DAYS - 1]! }, whoNow, role, { showDone })} />
+          <FeedView days={feedDays} items={feedItems} />
         </>
       ) : mode === "day" ? (
         <>

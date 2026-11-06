@@ -6,7 +6,7 @@
 const phoneTz = process.env.TZ;
 process.env.TZ = "America/New_York";
 import { afterAll, describe, expect, it } from "vitest";
-import { daysFrom, groupByDay, planItems, spanDays, whoMatches } from "../src/features/planFeed";
+import { daysFrom, groupByDay, itemTimes, planItems, spanDays, whoMatches } from "../src/features/planFeed";
 import { unassignedSoon } from "../src/features/schedule";
 import type { CalendarEvent, DB, Task, Visit } from "../src/data/types";
 
@@ -118,5 +118,33 @@ describe("the same Feed for a company in Honolulu (phone in New York)", () => {
   });
   it("an all-day event from Honolulu midnight to midnight is one day there", () => {
     expect(spanDays("2026-11-06T10:00:00.000Z", "2026-11-07T10:00:00.000Z", HNL)).toEqual(["2026-11-06"]);
+  });
+});
+
+describe("spans across days (code review of PR-A)", () => {
+  it("a visit past midnight is on both days; on the second it runs from the day's start, above the morning", () => {
+    const d = db({
+      visits: [
+        V("night", { start: "2026-11-07T04:00:00.000Z", durationMin: 360 }), // LA Nov 6 8:00 PM → Nov 7 2:00 AM
+        V("morning", { start: "2026-11-07T16:00:00.000Z" }), // LA Nov 7 8:00 AM
+      ],
+    });
+    const items = planItems(d, week, "all", "director", { tz: LA });
+    expect(items.map((x) => [x.id, x.day, x.at === ""])).toEqual([
+      ["night", "2026-11-06", false],
+      ["night", "2026-11-07", true],
+      ["morning", "2026-11-07", false],
+    ]);
+  });
+  it("an event that began before the range shows on the range's days only", () => {
+    const d = db({ calendarEvents: [Ev("trip", { allDay: true, startsAt: "2026-11-02T08:00:00.000Z", endsAt: "2026-11-07T08:00:00.000Z" })] });
+    expect(planItems(d, week, "all", "director", { tz: LA }).map((x) => x.day)).toEqual(["2026-11-05", "2026-11-06"]);
+  });
+  it("itemTimes: the start leads the title and the end goes below; a carried-over day shows «– end»; all day says so", () => {
+    const time = (iso: string) => iso.slice(11, 16);
+    expect(itemTimes({ allDay: false, at: "x", start: "2026-11-06T20:00:00.000Z", end: "2026-11-06T21:00:00.000Z" }, time, "Весь день")).toEqual({ when: "20:00", until: "– 21:00" });
+    expect(itemTimes({ allDay: false, at: "", start: "2026-11-06T20:00:00.000Z", end: "2026-11-07T02:00:00.000Z" }, time, "Весь день")).toEqual({ when: "– 02:00" });
+    expect(itemTimes({ allDay: true, at: "", start: "x", end: "y" }, time, "Весь день")).toEqual({ when: "Весь день" });
+    expect(itemTimes({ allDay: false, at: "x", start: "2026-11-06T20:00:00.000Z" }, time, "Весь день")).toEqual({ when: "20:00", until: undefined });
   });
 });
