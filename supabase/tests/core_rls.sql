@@ -78,6 +78,14 @@ begin
   perform set_config('app.signing_estimate', '', true);
 end;
 $$;
+-- fixtures: a job of an estimate as the server makes it (execute_estimate is security definer; the app cannot insert one, t14)
+create function tst.server_job(p_sql text) returns uuid language plpgsql security definer set search_path = '' as $$
+declare r uuid;
+begin
+  execute p_sql into r;
+  return r;
+end;
+$$;
 grant execute on all functions in schema tst to authenticated, anon;
 
 -- ---- Переключение пользователя (как PostgREST: роль + sub из JWT) -------------
@@ -1973,8 +1981,8 @@ begin
   perform tst.ok((select service_category_id from public.estimates where id = v_e) = v_roof, 'estimate ← lead');
   insert into public.estimates (company_id, customer_id, property_id, lead_id, service_category_id, title) values ('ca000000-0000-0000-0000-000000000000', v_c, v_p, v_lead2, v_gut, 'T27 e2') returning id into v_e2;
   perform tst.ok((select service_category_id from public.estimates where id = v_e2) = v_gut, 'an explicit direction is kept');
-  -- job ← estimate (an app insert like estimate.approve; portal_accept and countersign insert the same way)
-  insert into public.jobs (company_id, title, customer_id, property_id, estimate_id) values ('ca000000-0000-0000-0000-000000000000', 'T27 job', v_c, v_p, v_e) returning id into v_j;
+  -- job ← estimate (portal_accept and countersign insert it in a server function; the app cannot, t14)
+  v_j := tst.server_job(format($q$insert into public.jobs (company_id, title, customer_id, property_id, estimate_id) values ('ca000000-0000-0000-0000-000000000000', 'T27 job', %L, %L, %L) returning id$q$, v_c, v_p, v_e));
   perform tst.ok((select service_category_id from public.jobs where id = v_j) = v_roof, 'job ← estimate');
   -- a change never goes back or forward
   update public.estimates set service_category_id = v_gut where id = v_e;
@@ -1989,7 +1997,7 @@ begin
   -- a job of an estimate "without a direction" gets none
   insert into public.estimates (company_id, customer_id, property_id, lead_id, title) values ('ca000000-0000-0000-0000-000000000000', v_c, v_p, v_lead, 'T27 e5') returning id into v_e2;
   update public.estimates set service_category_id = null where id = v_e2;
-  insert into public.jobs (company_id, title, customer_id, property_id, estimate_id) values ('ca000000-0000-0000-0000-000000000000', 'T27 job none', v_c, v_p, v_e2) returning id into v_j;
+  v_j := tst.server_job(format($q$insert into public.jobs (company_id, title, customer_id, property_id, estimate_id) values ('ca000000-0000-0000-0000-000000000000', 'T27 job none', %L, %L, %L) returning id$q$, v_c, v_p, v_e2));
   perform tst.ok((select service_category_id from public.jobs where id = v_j) is null, 'estimate without a direction → job without one');
   -- archive: not chosen anew, stays where it is, a job may still take its estimate's
   update public.service_categories set archived_at = now() where id = v_roof;
@@ -1999,8 +2007,8 @@ begin
   perform tst.ok((select service_category_id from public.leads where id = v_lead2) = v_roof, 'archived direction stays on an edited lead');
   insert into public.estimates (company_id, customer_id, property_id, lead_id, title) values ('ca000000-0000-0000-0000-000000000000', v_c, v_p, v_lead2, 'T27 e6') returning id into v_e2;
   perform tst.ok((select service_category_id from public.estimates where id = v_e2) = v_roof, 'estimate of the lead keeps the archived direction of its lead');
-  insert into public.jobs (company_id, title, customer_id, property_id, estimate_id, service_category_id) values ('ca000000-0000-0000-0000-000000000000', 'T27 job arch', v_c, v_p, v_e2, v_roof) returning id into v_j;
-  perform tst.ok((select service_category_id from public.jobs where id = v_j) = v_roof, 'the app may send the archived direction of the parent');
+  v_j := tst.server_job(format($q$insert into public.jobs (company_id, title, customer_id, property_id, estimate_id, service_category_id) values ('ca000000-0000-0000-0000-000000000000', 'T27 job arch', %L, %L, %L, %L) returning id$q$, v_c, v_p, v_e2, v_roof));
+  perform tst.ok((select service_category_id from public.jobs where id = v_j) = v_roof, 'a job may take the archived direction of its parent');
   -- only one active now: a new lead gets it
   insert into public.leads (company_id, source_id, contact_name, phone) values ('ca000000-0000-0000-0000-000000000000', v_src, 'T27 Three', '(818) 555-2703') returning id into v_lead;
   perform tst.ok((select service_category_id from public.leads where id = v_lead) = v_gut, 'archived ones do not count for "only direction"');
@@ -2215,7 +2223,8 @@ do $$
 declare v_c2 uuid; v_p2 uuid; v_j uuid := 'e3200000-0000-4000-8000-000000000001';
 begin
   insert into public.customers (id, company_id, display_name) values ('c3200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T32 Tenant Owner') returning id into v_c2;
-  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', v_c2, '32 Moved St', 'Pasadena') returning id into v_p2;
+  -- another property of the job's own client (a job moves only within its client, t14)
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', (select customer_id from public.jobs where id = v_j), '32 Moved St', 'Pasadena') returning id into v_p2;
   -- the job moves to another property: its visits follow
   update public.jobs set property_id = v_p2 where id = v_j;
   perform tst.ok((select property_id from public.visits where id = 'f3200000-0000-4000-8000-000000000003') = v_p2, 'job moved: its visit follows');
@@ -3256,8 +3265,8 @@ do $$ begin
     ('0e410000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'T41 locked estimate'),
     ('0e410000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'T41 draft estimate'),
     ('0e410000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'T41 job estimate');
-  insert into public.jobs (id, company_id, title, customer_id, property_id, status, estimate_id, contract_total_cents) values
-    ('e4100000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T41 from estimate', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'draft', '0e410000-0000-4000-8000-000000000004', 77700);
+  perform tst.server_job($q$insert into public.jobs (id, company_id, title, customer_id, property_id, status, estimate_id, contract_total_cents) values
+    ('e4100000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T41 from estimate', 'c4100000-0000-4000-8000-000000000002', 'd4100000-0000-4000-8000-000000000002', 'draft', '0e410000-0000-4000-8000-000000000004', 77700) returning id$q$);
 end $$;
 select tst.fails($q$insert into public.job_line_items (company_id, job_id, name, quantity, unit_price_cents) values ('ca000000-0000-0000-0000-000000000000', 'e4100000-0000-4000-8000-000000000003', 'T41 bad', 1, 100)$q$, 'a job from an estimate has no own lines');
 select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000003') = 77700, 'the job of an estimate keeps its total');
@@ -3689,6 +3698,23 @@ select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id,
 select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, status) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', 'in_progress')$q$, 'directly: a job is not born «in progress»');
 select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, cancelled_at) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', now())$q$, 'directly: a job is not born with a cancel time');
 select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, estimate_id) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', '0e470000-0000-4000-8000-000000000002')$q$, 'directly: the estimate of another client is refused');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, contract_total_cents) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', 100)$q$, 'directly: the app does not set the total of a job');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, recurring_plan_id, occurrence_date) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', gen_random_uuid(), current_date)$q$, 'directly: no recurring plan slot');
+select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id, deleted_at) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000001', 'd4700000-0000-4000-8000-000000000001', now())$q$, 'directly: a job is not born deleted');
+-- a replay with the same id (offline queue, upsert … do nothing) passes and changes nothing, even after the client is gone
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, type) values
+  ('e4700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'Changed', 'c4700000-0000-4000-8000-000000000003', 'd4700000-0000-4000-8000-000000000003', 'inspection')
+  on conflict (id) do nothing;
+select tst.ok((select title = 'Estimate visit' and customer_id = 'c4700000-0000-4000-8000-000000000001' from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'a replay changes nothing');
+select tst.fails($q$insert into public.jobs (id, company_id, number, title, customer_id, property_id) values ('e4700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'X', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000002') on conflict (id) do update set customer_id = excluded.customer_id, property_id = excluded.property_id$q$, 'a replay as an update does not move the job to another client');
+-- an update does not move the job around either
+select tst.fails($q$update public.jobs set property_id = 'd4700000-0000-4000-8000-000000000002' where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'update: the address must be a property of this client');
+select tst.fails($q$update public.jobs set customer_id = 'c4700000-0000-4000-8000-000000000002', property_id = 'd4700000-0000-4000-8000-000000000002' where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'update: the client of a job does not change');
+update public.jobs set contract_total_cents = 1 where id = 'e4700000-0000-4000-8000-000000000001';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') is null, 'update: the total of a job does not change directly');
+select tst.fails($q$update public.jobs set job_type_id = (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty') where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'update: an archived job type is refused');
+update public.jobs set description = 'T47 note', job_type_id = (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'repair') where id = 'e4700000-0000-4000-8000-000000000001';
+select tst.ok((select description = 'T47 note' and job_type_id is not null from public.jobs where id = 'e4700000-0000-4000-8000-000000000001'), 'update: what the app changes still changes (job.update)');
 -- the office: the same refusals for any staff role, the server function still works
 :as_office_a
 select tst.fails($q$insert into public.jobs (id, company_id, title, customer_id, property_id) values ('e4700000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'X', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000001')$q$, 'the office: the address must be of this client too');
@@ -3707,6 +3733,9 @@ begin
   perform tst.ok(public.sign_estimate_on_site('0e470000-0000-4000-8000-000000000002', 'T47 Two', 'M0 0 L2 2') = 'awaiting_countersign', 'T47: the client signs on site');
   perform tst.ok(public.countersign_estimate('0e470000-0000-4000-8000-000000000002', 'M0 0 L3 3') = 'approved', 'T47: the company signs');
   perform tst.ok((select status = 'draft' and contract_total_cents = 4700 from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002'), 'a signed estimate still makes its job, waiting for a date');
+  perform tst.fails($q$insert into public.jobs (company_id, title, customer_id, property_id, estimate_id, contract_total_cents) values ('ca000000-0000-0000-0000-000000000000', 'squat', 'c4700000-0000-4000-8000-000000000002', 'd4700000-0000-4000-8000-000000000002', '0e470000-0000-4000-8000-000000000002', 100)$q$, 'a job of an estimate is never inserted by the app');
+  update public.jobs set contract_total_cents = 100 where estimate_id = '0e470000-0000-4000-8000-000000000002';
+  perform tst.ok((select contract_total_cents from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002') = 4700, 'the signed price of a job does not change directly');
   update public.job_types set archived_at = null where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty';
 end $$;
 :as_super
