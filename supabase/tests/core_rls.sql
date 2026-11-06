@@ -3403,6 +3403,23 @@ do $$ begin
   insert into public.visit_assignees (company_id, visit_id, user_id) values
     ('ca000000-0000-0000-0000-000000000000', 'f4600000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
 end $$;
+-- a job on hold stays on hold when its visit gets on site (only the office resumes it)
+:as_owner_a
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e4600000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T46 held', 'c4600000-0000-4000-8000-000000000001', 'd4600000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, kind, starts_at, ends_at) values
+    ('f4600000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e4600000-0000-4000-8000-000000000003', 'install', now(), now() + interval '1 hour');
+  update public.jobs set status = 'scheduled' where id = 'e4600000-0000-4000-8000-000000000003';
+  update public.jobs set status = 'in_progress' where id = 'e4600000-0000-4000-8000-000000000003';
+  update public.jobs set status = 'on_hold' where id = 'e4600000-0000-4000-8000-000000000003';
+  insert into public.visit_assignees (company_id, visit_id, user_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'f4600000-0000-4000-8000-000000000003', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+:as_tech_a
+update public.visits set status = 'on_site' where id = 'f4600000-0000-4000-8000-000000000003';
+:as_owner_a
+select tst.ok((select status from public.jobs where id = 'e4600000-0000-4000-8000-000000000003') = 'on_hold', 'the tech on site does not resume a held job');
 -- the technician (who may not update jobs) gets on site: the job starts anyway
 :as_tech_a
 update public.visits set status = 'en_route' where id = 'f4600000-0000-4000-8000-000000000001';
@@ -3418,6 +3435,7 @@ select tst.blocked($q$update public.jobs set status = 'completed' where id = 'e4
 :as_sales_a
 select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'sales do not close a job');
 select tst.fails($q$update public.jobs set status = 'completed' where id = 'e4600000-0000-4000-8000-000000000001'$q$, 'sales do not close a job directly either');
+select tst.fails($q$insert into public.jobs (company_id, title, customer_id, property_id, status) values ('ca000000-0000-0000-0000-000000000000', 'T46 born closed', 'c4600000-0000-4000-8000-000000000001', 'd4600000-0000-4000-8000-000000000001', 'completed')$q$, 'sales do not insert a job that is already closed');
 -- the office: not while a visit is open
 :as_office_a
 select tst.fails($q$select public.complete_job('e4600000-0000-4000-8000-000000000001')$q$, 'not while a visit of the job is open');
