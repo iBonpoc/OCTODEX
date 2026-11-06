@@ -15,6 +15,7 @@ import { activeSection } from "./hierarchy";
 import { hasSection, menuGroups, sectionHref, sectionOfHref, type MenuGroup, type SectionId } from "./sections";
 import { QuickActions } from "./QuickActions";
 import { contentWidth, openKey } from "./shell";
+import { roleHome, routeKey } from "./roles";
 import { usePersistentState } from "@/data/persist";
 import { openSection } from "./go";
 
@@ -33,8 +34,12 @@ interface NavMenuCtx {
   /** 1280: the side menu is open (pushes the content), remembered per person on this device (13а §8) */
   sideOpen: boolean;
   toggleSide: () => void;
+  /** open the 1280 side menu (the old /more address); waits for the remembered choice to load first */
+  openSide: () => void;
+  /** the remembered choice has loaded from the device */
+  sideReady: boolean;
 }
-const Ctx = createContext<NavMenuCtx>({ open: () => {}, close: () => {}, isOpen: false, create: () => {}, sideOpen: false, toggleSide: () => {} });
+const Ctx = createContext<NavMenuCtx>({ open: () => {}, close: () => {}, isOpen: false, create: () => {}, sideOpen: false, toggleSide: () => {}, openSide: () => {}, sideReady: false });
 export const useNavMenu = () => useContext(Ctx);
 
 export function NavMenuProvider({ children }: { children: ReactNode }) {
@@ -53,13 +58,17 @@ export function NavMenuProvider({ children }: { children: ReactNode }) {
     if (refocus && el && Platform.OS === "web") requestAnimationFrame(() => el.isConnected && el.focus?.());
   }, []);
   const { db } = useStore();
-  const [sideOpen, setSideOpen] = usePersistentState<boolean>(openKey(db.me), false);
+  const [sideOpen, setSideOpen, sideReady] = usePersistentState<boolean>(openKey(db.me), false);
   const toggleSide = useCallback(() => setSideOpen((v) => !v), [setSideOpen]);
+  const openSide = useCallback(() => setSideOpen(true), [setSideOpen]);
   const create = useCallback(() => {
     setOpen(false);
     setQuick(true);
   }, []);
-  const value = useMemo(() => ({ open, close, isOpen, create, sideOpen, toggleSide }), [open, close, isOpen, create, sideOpen, toggleSide]);
+  const value = useMemo(
+    () => ({ open, close, isOpen, create, sideOpen, toggleSide, openSide, sideReady }),
+    [open, close, isOpen, create, sideOpen, toggleSide, openSide, sideReady],
+  );
   return (
     <Ctx.Provider value={value}>
       {children}
@@ -98,7 +107,10 @@ export function useMenuCurrent(): SectionId | undefined {
   const { db, role } = useStore();
   const pathname = usePathname();
   const params = useGlobalSearchParams();
-  const own = sectionOfHref(pathname + (params.tab ? `?tab=${String(params.tab)}` : ""));
+  const tab = params.tab ? String(params.tab) : "";
+  // the role's own home (sales: the Sales lists) is «Главная» — unless a ☰ list on it was asked for by name
+  if (routeKey(pathname) === roleHome[role] && (!tab || tab === "leads")) return "home";
+  const own = sectionOfHref(pathname + (tab ? `?tab=${tab}` : ""));
   return own && own !== "home" && hasSection(role, own) ? own : activeSection(pathname, params, db, role);
 }
 

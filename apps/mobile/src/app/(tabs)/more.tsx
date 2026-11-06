@@ -14,11 +14,11 @@ export default function MoreRedirect() {
   useFocusEffect(
     useCallback(() => {
       // 1280: the side menu opens in place; phone and 820: the ☰ drawer
-      if (device === "desktop") {
-        if (!menu.sideOpen) menu.toggleSide();
-      } else menu.open();
+      if (device !== "desktop") menu.open();
+      // after the remembered choice has loaded, or it would overwrite this
+      else if (menu.sideReady) menu.openSide();
       // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []),
+    }, [menu.sideReady]),
   );
   return <Redirect href={`/${roleHome[role]}`} />;
 }
