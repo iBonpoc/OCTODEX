@@ -97,6 +97,9 @@ export const component = {
   sheetRadius: 24,
   modalW: 380,
   panelW: 360,
+  /** side menu on 820/1280 (docs/specs/13 §2.5): icon rail with labels / the open menu. Not in the DS css yet (BACKLOG). */
+  navRail: 72,
+  navMenu: 232,
   paletteW: 560,
   avatar: { sm: 28, md: 36 },
   /** company logo preview (settings, client page, PDF) */
