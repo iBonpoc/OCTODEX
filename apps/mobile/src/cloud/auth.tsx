@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
-import { Platform } from "react-native";
+import { AppState, Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { WEB_APP_URL } from "@/config/backend";
-import { legalState, peekAgreement, PENDING_LEGAL_KEY, type LegalState } from "@/features/legal";
+import { LEGAL_RETRY_MS, legalState, legalTickets, PENDING_LEGAL_KEY, resolveLegal, type LegalState } from "@/features/legal";
 import { supabase } from "./client";
 import { acceptLegal, legalStatus } from "./legal";
 
@@ -51,26 +51,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [legal, setLegal] = useState<LegalState>("unknown");
   const [legalChecked, setLegalChecked] = useState(false);
   const legalRun = useRef<Promise<void> | null>(null);
+  // a slow old answer never overwrites a newer one (review #206 M1): checks and accepts take tickets
+  const tickets = useRef(legalTickets()).current;
+  const sessionEmail = useRef<string | null>(null);
 
   /** a tick remembered on the sign-in screen goes to the server first; otherwise just ask where the person stands */
-  const checkLegal = useCallback((email: string | null | undefined) => {
-    if (legalRun.current) return legalRun.current;
-    legalRun.current = (async () => {
-      try {
-        if (await peekAgreement(AsyncStorage, email)) {
-          setLegal(legalState(await acceptLegal()));
-          await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
-        } else setLegal(legalState(await legalStatus()));
-      } catch {
-        // no network or an old server: never block the work; asked again with the next session event
-        setLegal("unknown");
-      } finally {
+  const checkLegal = useCallback(
+    (email: string | null | undefined) => {
+      sessionEmail.current = email ?? null;
+      if (legalRun.current) return legalRun.current;
+      const ticket = tickets.take();
+      legalRun.current = (async () => {
+        const st = await resolveLegal(email, { store: AsyncStorage, accept: acceptLegal, status: legalStatus });
+        // no network or an old server: «unknown» never blocks the work; asked again (the retry effect below)
+        if (tickets.isNewest(ticket)) setLegal(st);
         setLegalChecked(true);
         legalRun.current = null;
-      }
-    })();
-    return legalRun.current;
-  }, []);
+      })();
+      return legalRun.current;
+    },
+    [tickets],
+  );
 
   const reloadMemberships = useCallback(async () => {
     const { data: s } = await supabase.auth.getSession();
@@ -117,6 +118,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     };
   }, [reloadMemberships, checkLegal]);
 
+  // the answer is unknown (no network): ask again on coming back to the app, on «online», and every minute (M2)
+  useEffect(() => {
+    if (!session || legal !== "unknown") return;
+    const again = () => void checkLegal(sessionEmail.current);
+    const sub = AppState.addEventListener("change", (st) => st === "active" && again());
+    const w = typeof window !== "undefined" && typeof window.addEventListener === "function" ? window : null;
+    w?.addEventListener("online", again);
+    const timer = setInterval(again, LEGAL_RETRY_MS);
+    return () => {
+      sub.remove();
+      w?.removeEventListener("online", again);
+      clearInterval(timer);
+    };
+  }, [session, legal, checkLegal]);
+
   const value = useMemo<AuthCtx>(
     () => ({
       ready,
@@ -146,8 +162,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       legal,
       legalChecked,
       agree: async () => {
+        const ticket = tickets.take();
         try {
-          setLegal(legalState(await acceptLegal()));
+          const st = legalState(await acceptLegal());
+          if (tickets.isNewest(ticket)) setLegal(st);
+          setLegalChecked(true);
           await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
           return null;
         } catch (e) {
@@ -169,7 +188,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       reloadMemberships,
     }),
-    [ready, session, memberships, reloadMemberships, legal, legalChecked],
+    [ready, session, memberships, reloadMemberships, legal, legalChecked, tickets],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

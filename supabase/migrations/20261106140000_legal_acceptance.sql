@@ -102,9 +102,16 @@ begin
     raise exception 'legal versions: terms and privacy' using errcode = '22023';
   end if;
   foreach v_doc in array array['terms', 'privacy'] loop
-    if jsonb_typeof(p_versions -> v_doc) <> 'string'
-       or (p_versions ->> v_doc) !~ '^\d{4}-\d{2}-\d{2}$'
-       or (p_versions ->> v_doc)::date is distinct from app.legal_current_version(v_doc) then
+    if jsonb_typeof(p_versions -> v_doc) <> 'string' or (p_versions ->> v_doc) !~ '^\d{4}-\d{2}-\d{2}$' then
+      raise exception 'legal version outdated' using errcode = '22023';
+    end if;
+    -- a date that does not exist (2026-02-30) is the same refusal, not a raw 22008
+    begin
+      v_ver := (p_versions ->> v_doc)::date;
+    exception when others then
+      raise exception 'legal version outdated' using errcode = '22023';
+    end;
+    if v_ver is distinct from app.legal_current_version(v_doc) then
       raise exception 'legal version outdated' using errcode = '22023';
     end if;
   end loop;
@@ -114,14 +121,16 @@ begin
   if p_app_version is null or p_app_version !~ '^[0-9A-Za-z.+ _-]{1,40}$' then
     raise exception 'bad app version' using errcode = '22023';
   end if;
-  -- the IP: the address the Cloudflare / Supabase proxy saw, else the right-most X-Forwarded-For entry (the one the
-  -- trusted proxy added; the left ones the client can write itself). Best effort: a bad header never blocks the consent.
+  -- the IP: only cf-connecting-ip (Cloudflare in front of Supabase sets it and overwrites what a client sends). Which
+  -- X-Forwarded-For entry is the client depends on the proxies (not checked on staging yet), so it is never taken as the
+  -- IP — it is kept raw in ip_raw for reference. Best effort: a bad header never blocks the consent.
   begin
     v_headers := nullif(current_setting('request.headers', true), '')::jsonb;
-    v_raw := left(coalesce(v_headers ->> 'cf-connecting-ip', v_headers ->> 'x-forwarded-for'), 200);
-    if v_raw is not null then
-      v_ip := btrim(regexp_replace(v_raw, '^.*,', ''))::inet;
+    v_raw := left(concat_ws(' | ', 'cf=' || (v_headers ->> 'cf-connecting-ip'), 'xff=' || (v_headers ->> 'x-forwarded-for')), 200);
+    if v_raw = '' then
+      v_raw := null;
     end if;
+    v_ip := btrim(v_headers ->> 'cf-connecting-ip')::inet;
   exception when others then
     v_ip := null;
   end;

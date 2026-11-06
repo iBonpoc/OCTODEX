@@ -88,3 +88,41 @@ export function editionLabel(day: string): string {
   const d = new Date(`${day}T12:00:00Z`);
   return Number.isNaN(d.getTime()) ? day : new Intl.DateTimeFormat("en-US", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" }).format(d);
 }
+
+/**
+ * Answers come back out of order (a slow legal_status started before «Принять» must not overwrite the «ok» the accept
+ * gave — review #206 M1): every check and every accept takes a ticket; only the newest ticket's answer is applied.
+ */
+export function legalTickets() {
+  let last = 0;
+  return { take: () => ++last, isNewest: (t: number) => t === last };
+}
+
+/**
+ * Where the person stands after a session appears — the ORDER matters (review #206 V1): a tick remembered on the
+ * sign-in screen goes to the server first (accept), and only then may an invitation be accepted. Without a tick — just
+ * ask. A failure (no network) is «unknown» and the tick stays for the next try.
+ */
+export async function resolveLegal(
+  email: string | null | undefined,
+  deps: {
+    store: Pick<KV, "getItem" | "removeItem">;
+    accept: () => Promise<LegalStatus>;
+    status: () => Promise<LegalStatus>;
+    now?: number;
+  },
+): Promise<LegalState> {
+  try {
+    if (await peekAgreement(deps.store, email, deps.now)) {
+      const s = legalState(await deps.accept());
+      await deps.store.removeItem(PENDING_LEGAL_KEY).catch(() => {});
+      return s;
+    }
+    return legalState(await deps.status());
+  } catch {
+    return "unknown";
+  }
+}
+
+/** while the answer is unknown (no network), ask again — on coming back to the app, on «online», and every minute */
+export const LEGAL_RETRY_MS = 60 * 1000;

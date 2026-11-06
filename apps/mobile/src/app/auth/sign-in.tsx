@@ -44,16 +44,21 @@ export default function SignIn() {
     go();
   };
 
-  const act = async (fn: () => Promise<string | null>, onOk?: () => void) => {
+  // busy until the whole step is over (sign-in AND the consent on the server): a second tap gives no false error (M7)
+  const act = async (fn: () => Promise<string | null>, onOk?: () => void | Promise<void>) => {
     setBusy(true);
     setErr(null);
-    await rememberAgreement(AsyncStorage, email).catch(() => {});
-    const e = await fn();
-    // a failed sign-in leaves no tick behind (security-check 7а-1); a sent code keeps it until the code is typed
-    if (e) await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
-    setBusy(false);
-    if (e) setErr(e);
-    else onOk?.();
+    try {
+      await rememberAgreement(AsyncStorage, email).catch(() => {});
+      const e = await fn();
+      // a failed sign-in leaves no tick behind (security-check 7а-1); a sent code keeps it until the code is typed
+      if (e) {
+        await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
+        setErr(e);
+      } else await onOk?.();
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -72,7 +77,7 @@ export default function SignIn() {
                     {t("auth.codeSent", { email: email.trim() })}
                   </T>
                   <TextField type="code" value={code} onChangeText={setCode} placeholder={t("auth.code")} />
-                  <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || code.trim().length < 6 || busy} onPress={() => act(() => auth.verifyCode(email.trim(), code.trim()), () => void done())} />
+                  <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || code.trim().length < 6 || busy} onPress={() => act(() => auth.verifyCode(email.trim(), code.trim()), done)} />
                 </>
               )}
             </>
@@ -82,7 +87,7 @@ export default function SignIn() {
               {mode === "signup" ? <TextField type="name" value={name} onChangeText={setName} placeholder={t("auth.name")} icon="user" /> : null}
               <TextField type={mode === "signup" ? "newPassword" : "password"} value={password} onChangeText={setPassword} placeholder={t("auth.password")} />
               {mode === "password" ? (
-                <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || !okEmail || password.length < 6 || busy} onPress={() => act(() => auth.signInPassword(email.trim(), password), () => void done())} />
+                <Button label={t("auth.signIn")} icon="check" full disabled={!agreed || !okEmail || password.length < 6 || busy} onPress={() => act(() => auth.signInPassword(email.trim(), password), done)} />
               ) : (
                 <Button
                   label={t("auth.signUp")}

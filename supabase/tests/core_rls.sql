@@ -4445,14 +4445,16 @@ select tst.ok(tst.cnt('select 1 from public.legal_acceptance') = 0, 'nothing wri
 set request.jwt.claims = '{"is_anonymous": true}';
 select tst.fails_like(format('select public.accept_legal(%L, %L, %L)', :'v49', 'web', '1.0.0'), '%sign in first%', 'an anonymous sign-in does not agree');
 reset request.jwt.claims;
--- agree: the IP is the right-most X-Forwarded-For entry (the left ones the client writes itself)
+-- a date that does not exist is the same refusal (not a raw 22008)
+select tst.fails_like($q$select public.accept_legal('{"terms":"2026-02-30","privacy":"2026-11-06"}', 'web', '1.0.0')$q$, '%legal version outdated%', 'a date that does not exist');
+-- agree: without cf-connecting-ip there is no IP (X-Forwarded-For is only kept raw — who wrote which entry is unknown)
 set request.headers = '{"x-forwarded-for": "6.6.6.6, 203.0.113.7"}';
 select tst.ok((public.accept_legal(:'v49', 'ios', '1.0.0+219') ->> 'ok')::boolean, 'agreed: status ok');
 reset request.headers;
 select tst.ok(tst.cnt($q$select 1 from public.legal_acceptance where doc in ('terms', 'privacy') and version = '2026-11-06'$q$) = 2, 'two rows: Terms and Privacy');
 select tst.ok((select every(user_id = 'a4900000-0000-4000-8000-000000000001' and company_id is null and platform = 'ios' and app_version = '1.0.0+219'
                 and accepted_at > now() - interval '1 minute') from public.legal_acceptance), 'who, platform, version — by the server and the call');
-select tst.ok((select every(ip = '203.0.113.7'::inet and ip_raw = '6.6.6.6, 203.0.113.7') from public.legal_acceptance), 'the IP the proxy added, the raw header kept');
+select tst.ok((select every(ip is null and ip_raw = 'xff=6.6.6.6, 203.0.113.7') from public.legal_acceptance), 'X-Forwarded-For alone: no IP, the raw header kept');
 select min(accepted_at)::text as t49_at from public.legal_acceptance \gset
 -- again (a double tap, a retry): no new rows, the time stays
 select public.accept_legal(:'v49', 'web', '1.0.1') is not null as t49_again \gset
@@ -4500,14 +4502,14 @@ rollback;
 set request.headers = '{"cf-connecting-ip": "198.51.100.9", "x-forwarded-for": "6.6.6.6, 203.0.113.7"}';
 select public.accept_legal(:'v49', 'android', '1.0.0') is not null as t49_gone \gset
 reset request.headers;
-select tst.ok((select every(ip = '198.51.100.9'::inet) from public.legal_acceptance), 'cf-connecting-ip wins over X-Forwarded-For');
+select tst.ok((select every(ip = '198.51.100.9'::inet and ip_raw = 'cf=198.51.100.9 | xff=6.6.6.6, 203.0.113.7') from public.legal_acceptance), 'the IP is cf-connecting-ip; both headers kept raw');
 :as_super
 insert into auth.users (id, email, raw_user_meta_data) values ('a4900000-0000-4000-8000-000000000003', 'bad49@a.test', '{"full_name":"Bea Badheader"}');
 reset role; set request.jwt.claim.sub = 'a4900000-0000-4000-8000-000000000003'; set role authenticated;
-set request.headers = '{"x-forwarded-for": "garbage, 1.2.3.4:5"}';
-select tst.ok((public.accept_legal(:'v49', 'web', '1.0.0') ->> 'ok')::boolean, 'a broken X-Forwarded-For does not block the consent');
+set request.headers = '{"cf-connecting-ip": "garbage", "x-forwarded-for": "1.2.3.4:5"}';
+select tst.ok((public.accept_legal(:'v49', 'web', '1.0.0') ->> 'ok')::boolean, 'a broken cf-connecting-ip does not block the consent');
 reset request.headers;
-select tst.ok((select every(ip is null and ip_raw = 'garbage, 1.2.3.4:5') from public.legal_acceptance), 'no IP then, the raw header kept');
+select tst.ok((select every(ip is null and ip_raw = 'cf=garbage | xff=1.2.3.4:5') from public.legal_acceptance), 'no IP then, the raw headers kept');
 :as_gone49
 :as_super
 select tst.ok((select count(*) from public.legal_acceptance where user_id = 'a4900000-0000-4000-8000-000000000002') = 2, 'the second person agreed');

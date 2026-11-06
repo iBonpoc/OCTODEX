@@ -6,8 +6,9 @@ import { space } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { acceptInvitation } from "@/cloud/team";
 import { useStore } from "@/data/store";
-import { useI18n } from "@/i18n";
-import { isInviteToken, peekInviteKey, rememberInvite, takeInvite, teamErrorKey } from "@/features/team";
+import { useI18n, type DictKey } from "@/i18n";
+import { isInviteToken, rememberInvite } from "@/features/team";
+import { inviteStep, joinInvite } from "@/features/inviteFlow";
 import { LegalAgree } from "@/features/LegalAgree";
 import { legalErrorKey } from "@/features/legal";
 import { Button } from "@/ui/controls";
@@ -32,35 +33,24 @@ export default function AcceptInvite() {
   const [err, setErr] = useState("");
   const tried = useRef(false);
   const signedIn = !!auth.userId;
-  const needsLegal = auth.legal === "first" || auth.legal === "changed";
+  const step = inviteStep({ signedIn, legalChecked: auth.legalChecked, legal: auth.legal });
   useEffect(() => {
-    if (!signedIn || !auth.legalChecked || tried.current) return;
-    if (needsLegal) return setState("legal");
+    if (step === "legal" && !tried.current) return setState("legal");
+    if (step !== "join" || tried.current) return;
     tried.current = true;
+    setState("joining");
     (async () => {
-      const token = isInviteToken(param) ? param! : await takeInvite(AsyncStorage);
-      if (!token) return setState("error"), setErr(t("invite.noLink"));
-      setState("joining");
-      try {
-        await acceptInvitation(token);
-        await AsyncStorage.removeItem(peekInviteKey);
-        await auth.reloadMemberships();
-        router.replace("/");
-      } catch (e) {
-        const msg = (e as Error).message;
-        if (legalErrorKey(msg) === "legal.err.needed") {
-          // not a dead link: the consent is missing — keep the link, ask here, then try again
-          await rememberInvite(token, AsyncStorage).catch(() => {});
-          tried.current = false;
-          return setState("legal");
-        }
-        // a dead link is not kept for the next sign-in (security-check 7-2)
-        await AsyncStorage.removeItem(peekInviteKey).catch(() => {});
-        setState("error");
-        setErr(t(legalErrorKey(msg) ?? teamErrorKey(msg)));
+      const r = await joinInvite(param, { store: AsyncStorage, accept: acceptInvitation, reload: auth.reloadMemberships });
+      if (r.kind === "joined") return router.replace("/");
+      if (r.kind === "legal") {
+        // the consent is missing (another device, an old app): ask here, the link is kept, then try again
+        tried.current = false;
+        return setState("legal");
       }
+      setState("error");
+      setErr(t(r.kind === "noLink" ? "invite.noLink" : (r.key as DictKey)));
     })();
-  }, [signedIn, param, auth, t, needsLegal, round]);
+  }, [step, param, auth, t, round]);
   const agreeAndJoin = async () => {
     setBusy(true);
     const e = await auth.agree();
