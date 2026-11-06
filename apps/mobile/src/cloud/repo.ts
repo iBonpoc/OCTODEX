@@ -5,7 +5,7 @@
 import { companyFromDb } from "./companyMap";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -82,6 +82,29 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const jobTypeRows = await q<Row>(supabase.from("job_types").select("id, seed_key, name, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]);
   // wave П-2a: tags and own lines of jobs (RLS: what the job's reader sees); empty before the migration
   const jobTagRows = await q<Row>(supabase.from("job_tags").select("job_id, tag_id").eq("company_id", companyId)).catch(() => [] as Row[]);
+  // wave П-2b: events and days off (RLS: the office all, a tech his own and the company's), own fields; empty before the migration
+  const [eventRows, fieldRows, valueRows] = await Promise.all([
+    live<Row>("calendar_events", "id, kind, user_id, title, description, starts_at, ends_at, all_day").catch(() => [] as Row[]),
+    q<Row>(supabase.from("custom_fields").select("id, entity, label, type, options, group_name, searchable, position, archived_at").eq("company_id", companyId)).catch(() => [] as Row[]),
+    live<Row>("custom_field_values", "id, field_id, entity_id, value").catch(() => [] as Row[]),
+  ]);
+  const calendarEvents: CalendarEvent[] = eventRows
+    .map((r) => ({
+      id: s(r.id), kind: (r.kind === "time_off" ? "time_off" : "event") as CalendarEvent["kind"], userId: (r.user_id as string | null) ?? undefined,
+      title: (r.title as string | null) ?? undefined, description: (r.description as string | null) ?? undefined,
+      startsAt: s(r.starts_at), endsAt: s(r.ends_at), allDay: !!r.all_day,
+    }))
+    .sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+  const customFields: CustomField[] = fieldRows
+    .map((r) => ({
+      id: s(r.id), entity: (r.entity === "job" ? "job" : "customer") as CustomField["entity"], label: s(r.label), type: s(r.type) as CustomField["type"],
+      options: Array.isArray(r.options) ? (r.options as unknown[]).map(String) : [], group: (r.group_name as string | null) ?? undefined,
+      searchable: !!r.searchable, position: n(r.position), archivedAt: (r.archived_at as string | null) ?? undefined,
+    }))
+    .sort((a, b) => a.entity.localeCompare(b.entity) || a.position - b.position);
+  const customFieldValues: CustomFieldValue[] = valueRows.map((r) => ({
+    id: s(r.id), fieldId: s(r.field_id), entityId: s(r.entity_id), value: r.value as CustomFieldValue["value"],
+  }));
   const jobLineRows = await live<Row>("job_line_items", "id, job_id, position, name, description, catalog_item_id, quantity, unit_price_cents, taxable, line_total_cents").catch(() => [] as Row[]);
   const [companyRows, secrets, licenseRows, contactRows, noteRows, leadCosts, leadContacts, taskRows, activityRows, tagRows, customerTagRows, phoneRows, emailRows, catRows, gateRows] = await Promise.all([
     q<Row>(supabase.from("companies").select("*").eq("id", companyId)),
@@ -93,7 +116,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     // lead cost: owner/admin/office only — others get nothing
     live<Row>("lead_costs", "lead_id, cost_cents").catch(() => [] as Row[]),
     live<Row>("lead_contacts", "id, lead_id, name, role, phone, email").catch(() => [] as Row[]),
-    live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at").catch(() => [] as Row[]),
+    // wave П-2b: the time of a task is new — without the migration the old columns are read
+    live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at, starts_at, ends_at, all_day, description")
+      .catch(() => live<Row>("tasks", "id, subject_type, subject_id, title, due_at, assignee_id, done_at"))
+      .catch(() => [] as Row[]),
     // wave П-1: contact_id is new — without the migration the feed is read without it, not dropped
     activityRowsOf(companyId, "id, subject_type, subject_id, kind, body, meta, at, actor_id, direction, contact_id")
       .catch(() => activityRowsOf(companyId, "id, subject_type, subject_id, kind, body, meta, at, actor_id, direction"))
@@ -403,6 +429,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     tasks: taskRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Task["subjectType"], subjectId: s(r.subject_id), title: s(r.title),
       dueAt: (r.due_at as string | null) ?? undefined, assigneeId: (r.assignee_id as string | null) ?? undefined, doneAt: (r.done_at as string | null) ?? undefined,
+      startsAt: (r.starts_at as string | null) ?? undefined, endsAt: (r.ends_at as string | null) ?? undefined,
+      allDay: r.all_day == null ? undefined : !!r.all_day, description: (r.description as string | null) ?? undefined,
     })),
     activities: activityRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Activity["subjectType"], subjectId: s(r.subject_id), kind: s(r.kind) as Activity["kind"],
@@ -458,6 +486,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     jobTypes,
     files: fileItems,
     jobLines,
+    calendarEvents,
+    customFields,
+    customFieldValues,
     visits: mappedVisits,
     cancelledVisits,
     leads: mappedLeads,
