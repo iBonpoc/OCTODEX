@@ -69,7 +69,7 @@ describe("the app inserts no job (17-job §12.1)", () => {
 });
 
 describe("estimate.deposit refused by the server (review of #247)", () => {
-  it("«not signed on the server» is a refusal (P0001): the op is dropped, not tried again five times", async () => {
+  it("«not signed on the server» is a refusal (P0001), not «try later»: classify → refusal, so the queue counts it toward MAX_TRIES and does not hold it forever", async () => {
     const { PermanentError } = await import("../src/cloud/ops");
     const { supabase } = await import("../src/cloud/client");
     const spy = vi.spyOn(supabase, "rpc").mockResolvedValueOnce({ data: null, error: { message: "the deposit was not recorded: the estimate is not signed on the server", code: "P0001" } } as never);
@@ -78,7 +78,10 @@ describe("estimate.deposit refused by the server (review of #247)", () => {
       paymentId: "90000000-0000-4000-8000-000000000002", method: "cash", customerId: ids.customerId, propertyId: ids.propertyId,
       title: "Gutters", totalCents: 100000, depositCents: 30000,
     };
-    await expect(applyOp(op, "co-1", "u-1")).rejects.toBeInstanceOf(PermanentError);
+    const e = await applyOp(op, "co-1", "u-1").then(() => null, (x: unknown) => x);
+    expect(e).toBeInstanceOf(PermanentError);
+    const { classify } = await import("../src/data/outboxRetry");
+    expect(classify(e)).toBe("refusal");
     spy.mockRestore();
   });
 });

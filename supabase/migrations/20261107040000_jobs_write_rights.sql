@@ -55,9 +55,9 @@ begin
   select id into v_job from public.jobs where estimate_id = e.id and deleted_at is null;
   if v_job is null then
     -- the signature makes the job, and its op is ahead in the same queue (the queue goes strictly in order): no job here
-    -- means the signature never got through or the estimate was approved the old way. A «later» would hold the whole queue
-    -- five tries and then drop the deposit silently — so a plain refusal: the phone reloads the truth and the estimate shows
-    -- its deposit as due again (review of #247)
+    -- means the signature never got through or the estimate was approved the old way: waiting will not make the job. A
+    -- «later» (transient) is never dropped, so it would hold the whole queue forever; a refusal is counted (MAX_TRIES) and
+    -- then dropped, the phone reloads the truth and the estimate shows its deposit as due again (review of #247)
     raise exception 'the deposit was not recorded: the estimate is not signed on the server' using errcode = 'P0001';
   end if;
   select * into i from public.invoices
@@ -80,5 +80,7 @@ revoke all on function public.record_estimate_deposit(uuid, uuid, text) from pub
 grant execute on function public.record_estimate_deposit(uuid, uuid, text) to authenticated;
 
 -- ---- 2. UPDATE of a job by columns -------------------------------------------------------------------------------------
+-- only UPDATE is taken back: `revoke all` would also take SELECT (the app reads jobs) and INSERT (old builds still insert
+-- jobs until step 2). A column grant is not added on top of a table grant, so the table-wide UPDATE goes first.
 revoke update on public.jobs from anon, authenticated;
 grant update (status, title, description, job_type_id, tax_enabled, tax_rate_bps, service_category_id) on public.jobs to authenticated;
