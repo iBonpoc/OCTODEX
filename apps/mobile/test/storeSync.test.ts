@@ -68,6 +68,21 @@ const notNow = (status: number, code = "") => Object.assign(new Error(`status ${
 const appActive = { cb: null as null | (() => void) };
 vi.mock("@/data/appActive", () => ({ onAppActive: (cb: () => void) => ((appActive.cb = cb), () => (appActive.cb = null)) }));
 vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), backoffMs: () => retry.pause }));
+// a wipe that comes while an update of the outbox is still queued (not applied yet): fired from inside adoptLegacy
+const midAdopt = { fire: null as null | (() => void) };
+vi.mock("@/data/outboxOwner", async (orig) => {
+  const real = await orig<typeof import("../src/data/outboxOwner")>();
+  return {
+    ...real,
+    adoptLegacy: (items: Parameters<typeof real.adoptLegacy>[0], who: Parameters<typeof real.adoptLegacy>[1]) => {
+      const out = real.adoptLegacy(items, who);
+      const f = midAdopt.fire;
+      midAdopt.fire = null;
+      f?.();
+      return out;
+    },
+  };
+});
 
 import { render, settle, type Root } from "./support/miniReact";
 import { mineOf, StoreProvider } from "../src/data/store";
@@ -617,6 +632,18 @@ describe("unit:storeSync — the wipe and the outbox's own timing (review #244)"
     await wait(300);
     expect(stored().map((x) => x.id)).toEqual(["o-u2@c1#1", "o-nobody#1"]);
     expect(valueOf(r).queue).toHaveLength(2);
+  });
+  it("the wipe of u1 lands on top of u2's adoption that is not applied yet: what u2 adopted stays (onDeviceForgotten is functional)", async () => {
+    seedOutbox(owned(null, 1), owned(u1c1, 1));
+    signIn("u2", "c1");
+    // the wipe comes in the middle of the adoption: the outbox in the ref is still the one before it
+    midAdopt.fire = () => forgetDeviceState(wipedOnDelete, { userId: "u1" });
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(300);
+    expect(midAdopt.fire).toBeNull(); // it did fire
+    expect(stored().map((x) => [x.id, x.owner?.userId])).toEqual([["o-nobody#1", "u2"]]);
+    expect(valueOf(r).queue).toHaveLength(1);
   });
   // task 4 of «Лиды» №9: the adoption of old ops and a wipe that came before the outbox loaded
   it("race: the deleted person is still signed in when the outbox loads — their old ownerless ops are not adopted back", async () => {
