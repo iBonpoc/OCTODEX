@@ -104,7 +104,7 @@
 - `portal_accept` (копия 240000) и `portal_pay_simulated` (копия 090000): первой проверкой после поиска сметы → `company closed` (`42501`), раньше повтора и подписи.
 - `email_claim` (копия 350000): письмо закрытой компании → `expired`, `null` (статус уже есть в check).
 - В каждой — те же `revoke`/`grant`, что были (правило 18), `set search_path = ''`.
-- Приложение (файлы «Смет»: `p/[token].tsx`; `cloud/portal.ts` не меняется — статус проходит как есть): `status === "closed"` проверяется первым → карточка `neutral` «Компания «X» больше не работает с документами по этой ссылке», под `I18nOverride lang={data.lang}`; ключи `fr8.portal.closed` RU/EN/ES.
+- Приложение (файлы «Смет», PR #271): `p/[token].tsx`; `cloud/portal.ts` — на отказ `company closed` у подписи и оплаты перечитывает страницу (поправка security-check ниже), у `closed` нет «оплаты картой»: `status === "closed"` проверяется первым → карточка `neutral` «Компания «X» больше не работает с документами по этой ссылке», под `I18nOverride lang={data.lang}`; ключи `fr8.portal.closed` RU/EN/ES.
 - **T76**: закрытая компания — `portal_estimate` → `closed`, только имя, без телефона и `doc`; статус сметы не меняется, уведомлений нет; `portal_accept`, `portal_pay_simulated` → `company closed`, подписи и оплаты нет; `email_claim` → `null`, строка `expired`; открытая компания — всё как было (контроль). **e2e 113** (6 видов): `/p/<token>` неизвестного устройству токена, ответ `rpc/portal_estimate` подменён в браузере (`page.route`, без сети) на `closed` с `doc_language: es` → текст на испанском, нет кнопок подписи/оплаты.
 
 **Поправки security-check (07.11), входят в план:**
@@ -114,6 +114,9 @@
 - `email_claim`: проверка закрытой компании **до** `status = 'sending', attempts + 1` (после истечения 24 ч); T76 — `attempts` и `to_email` не меняются. Будущий отправщик (П1b) берёт письма только через `email_claim`.
 - T76 ещё: пустой `dba` → `name`; новых строк в `estimate_approvals`, `payments`, `email_outbox` нет; права прежние (anon — `portal_*`, `email_claim` — только service_role); upgrade-тест на текущей базе.
 - `my_closed_companies()`: без параметров; `auth.uid()` не null, `not app.is_anonymous_user()`, `app.account_alive()` (сам удалённый владелец с живым токеном не видит — его членство получает тот же `now()`); `co.closed_at is not null`; показ — 90 дней после закрытия. Критерий держится на одном `now()` в `delete_account` — комментарий в новой миграции и проверка `deleted_at = closed_at` в T77. Отключённые (`disabled`) при закрытии тоже становятся `deleted` → видят (это их компания); приглашения отозваны, не видят.
+
+**Итог PR #271 (а+б):** миграция меняет только функции (данные не трогает) — отдельного upgrade-теста нет, миграция проходит в `run.sh` на базе со всеми прежними данными. T76 после ревью дополнен: повтор подписи (`awaiting_countersign`) → `company closed`; смета, которую клиент не открывал, остаётся `sent`, уведомления нет; подпись на месте активным владельцем T76 (в жизни невозможно — `delete_account` удаляет всех членов той же транзакцией; тест берёт худший случай) → `company closed`.
+**Известный хвост для П1b (отправщик писем):** письма, которые в момент закрытия уже в `sending`, так и остаются в этом статусе (`email_claim` их больше не выдаёт, `email_finish` ждёт отправщика). Отправщику — по таймауту переводить `sending` закрытой компании в `expired`.
 
 **в — второй PR, миграция + T77:**
 - `public.my_closed_companies()` — `security definer`, `stable`, `search_path = ''`: мои членства `status = 'deleted'` и `deleted_at >= co.closed_at`, только `company_id`, `name` (dba/name), `closed_at`. `revoke all … from public, anon`, `grant execute … to authenticated`.
