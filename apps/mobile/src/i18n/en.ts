@@ -1842,7 +1842,6 @@ export const en: Dict = {
   "lead.noServiceHint": "This phone or email belongs to a client marked «Do not service»",
   // wave 5 «План» — Лента (Работы и выезды)
   "plan5.feed": "Feed",
-  "plan5.emptyDay": "Nothing on this day",
   "plan5.showDone": "Show completed",
   "plan5.unassigned": "Unassigned · {n}",
   "plan5.today": "Today",
@@ -1877,6 +1876,16 @@ export const en: Dict = {
   "plan5.ev.problem.long": "The text is too long",
   "plan5.addEvent": "Event",
   "plan5.addTimeOff": "Time off",
+  // «Работы» №6, 6-3 / 24 §B: Week and Month count the Feed's items; a run of empty days is one row
+  "plan5.planned": "Planned: {n}",
+  "plan5.freeRun": "{from} – {to} · Nothing scheduled",
+  "plan5.freeDay": "{day} · Nothing scheduled",
+  "plan5.freeToday": "Nothing today",
+  "plan5.freeA11y": "Nothing scheduled {from} – {to}. Add",
+  "plan5.lateEnRoute": "on the way",
+  "plan5.lateNotLeft": "not left yet",
+  "plan5.dayOffShort": "Off",
+  "plan5.dayOff": "Day off",
   /* «Каркас» №4, 7а-1: согласие, документы, помощь и поддержка (docs/specs/19 §5) */
   "legal.terms.title": "Terms of Service",
   "legal.privacy.title": "Privacy Policy",
