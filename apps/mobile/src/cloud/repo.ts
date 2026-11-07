@@ -5,7 +5,7 @@
 import { companyFromDb } from "./companyMap";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 
@@ -125,6 +125,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // wave 7б-1: my personal settings (RLS: only my own row); no row or no table yet → the defaults
   const prefRows = await pages<Row>(() => supabase.from("member_prefs").select("plan_show_done").eq("company_id", companyId).eq("user_id", userId), key("user_id")).catch(() => [] as Row[]);
   const prefs: MemberPrefs = { planShowDone: prefRows[0]?.plan_show_done === true };
+  // step 18 P4b: my push switches (RLS: only my own rows); no rows or no table yet → the defaults
+  const pushRows = await pages<Row>(() => supabase.from("push_prefs").select("kind, enabled").eq("company_id", companyId).eq("user_id", userId), key("kind")).catch(() => [] as Row[]);
+  const pushPrefs = pushPrefsFromRows(pushRows);
   // wave 7б-2 (migration 20261106210000): the company flag, who shares, the last points of open visits. Each read on its
   // own: before the migration (or if a read fails) the location stays off and the rest of the company still loads.
   const [locAllowed, shareRows, pointRows] = await Promise.all([
@@ -577,6 +580,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     jobLines,
     calendarEvents,
     prefs,
+    pushPrefs,
     location,
     visitPoints,
     customFields,
@@ -634,6 +638,16 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
 }
 
 /** memberships «deleted» → people kept only so old records find them (S22): out of every picker (`pending`), off the team */
+/** step 18 P4b: push_prefs rows → my switches; an unknown group (a newer server) or a broken row is left out */
+export function pushPrefsFromRows(rows: readonly Row[]): PushPrefs {
+  const out: PushPrefs = {};
+  for (const r of rows) {
+    const k = s(r.kind) as PushGroup;
+    if (PUSH_GROUPS.includes(k) && typeof r.enabled === "boolean") out[k] = r.enabled;
+  }
+  return out;
+}
+
 export function deletedMembers(rows: readonly Row[], known: ReadonlySet<string> = new Set()): Member[] {
   const seen = new Set(known);
   const out: Member[] = [];
