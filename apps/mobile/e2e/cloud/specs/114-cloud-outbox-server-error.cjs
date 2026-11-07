@@ -61,8 +61,9 @@ exports.run = async (h, { seed, admin }) => {
     ([items]) => localStorage.setItem("octo.outbox.v1", JSON.stringify(items)),
     [[
       { id: "q-stuck", op: { k: "calendarEvent.remove", id: stuckId }, at, tries: 0, owner, fails: 2, failSince: since },
-      // money: its confirmation warns (review #259 круг 3, п.5)
-      { id: "q-gone", op: { k: "expense.add", id: goneId, jobId: null, vendor: "Nightly 114", category: "materials", amountCents: 1234 }, at, tries: 0, owner, fails: 2, failSince: since },
+      // money: its confirmation warns (review #259 круг 3, п.5). Already stuck: an expense is not its own kind, it waits
+      // behind q-stuck and is never tried in this test — so it comes stuck from an earlier run
+      { id: "q-gone", op: { k: "expense.add", id: goneId, jobId: null, vendor: "Nightly 114", category: "materials", amountCents: 1234 }, at, tries: 0, owner, fails: 3, failSince: since, stuck: true },
     ]],
   );
   const timeout = async (route) => {

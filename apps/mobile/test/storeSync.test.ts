@@ -929,6 +929,19 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     const tagOps = (stored() as unknown as { op: { k: string }; made?: string[] }[]).filter((x) => x.op.k === "tag.save");
     expect(tagOps.map((x) => x.made)).toEqual([[id.toLowerCase()], []]);
   });
+  it("e2e 114's start: a timeout stuck one and a stuck expense waiting behind it — two cards, the expense not tried", async () => {
+    const since = new Date(Date.now() - 11 * 60_000).toISOString();
+    seedOutbox(
+      ev("S", 1, { fails: 2, failSince: since }),
+      q("G", { k: "expense.add", id: U(2), jobId: null, vendor: "V", category: "materials", amountCents: 1234 }, { stuck: true, fails: 3, failSince: since }),
+    );
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(timeout());
+    await settle();
+    expect(server.sends.map((x) => (x.op as { k: string }).k)).toEqual(["calendarEvent.remove"]);
+    expect(v(r).stuckOps.map((x) => [x.id, x.leavingMoney])).toEqual([["S", false], ["G", true]]);
+  });
   it("a stuck payment alone: money, though nothing else leaves", async () => {
     seedOutbox(q("P", { k: "payment.record", id: U(6), invoiceId: U(5), customerId: U(1), amountCents: 100, method: "cash" }, { stuck: true, fails: 3, failSince: AGO }));
     const r = await start();
