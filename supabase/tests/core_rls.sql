@@ -5461,6 +5461,21 @@ select tst.ok(tst.cnt($q$select 1 from public.activities where body like 'T63 %'
 select tst.ok((select status = 'contacted' from public.leads where id = '16300000-0000-4000-8000-000000000001'), 'an SMS to his new lead is the first answer (S2)');
 \echo 'T63 messages: sms / email out; the tech on his job and lead only ok'
 
+-- ---------------------------------------------------------------- T64: the stub gives no rights Supabase does not (docs/specs/21 §5)
+-- serverCatalog.test.ts trusts has_function_privilege of this database: a function created now (as postgres, like a
+-- migration) with no grant must not be callable by anon or authenticated, and PUBLIC must not have it (rule 18, T52);
+-- an explicit grant to authenticated gives it to authenticated only.
+:as_super
+create function public.t64_probe(p_a uuid) returns int language sql as $$ select 1 $$;
+select tst.ok(not has_function_privilege('authenticated', 'public.t64_probe(uuid)', 'EXECUTE'), 'T64 a new function: no EXECUTE for authenticated without a grant');
+select tst.ok(not has_function_privilege('anon', 'public.t64_probe(uuid)', 'EXECUTE'), 'T64 a new function: no EXECUTE for anon');
+select tst.ok(not exists (select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) x
+                          where p.oid = 'public.t64_probe(uuid)'::regprocedure and x.grantee = 0 and x.privilege_type = 'EXECUTE'), 'T64 a new function: no EXECUTE for PUBLIC');
+grant execute on function public.t64_probe(uuid) to authenticated;
+select tst.ok(has_function_privilege('authenticated', 'public.t64_probe(uuid)', 'EXECUTE')
+              and not has_function_privilege('anon', 'public.t64_probe(uuid)', 'EXECUTE'), 'T64 a grant to authenticated gives it to authenticated only');
+drop function public.t64_probe(uuid);
+\echo 'T64 the stub: a new function has no EXECUTE without a grant ok'
 
 -- ---------------------------------------------------------------- T69: 3b-2 — the own lines of a job never bring its total below what is invoiced
 -- (migration 20261107020000, engine jobLinesBelowInvoiced; test prices)

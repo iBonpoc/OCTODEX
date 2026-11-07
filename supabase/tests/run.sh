@@ -2,7 +2,8 @@
 # Одноразовый локальный Postgres 16: initdb во временный каталог → заглушка auth →
 # миграции → тесты RLS (ON_ERROR_STOP) → остановка и удаление.
 # Использование: supabase/tests/run.sh   (PGBIN, PGPORT, PG_RUN_USER можно переопределить;
-#                VERBOSE=1 — печатать текст каждой ожидаемой ошибки)
+#                VERBOSE=1 — печатать текст каждой ожидаемой ошибки;
+#                CATALOG_OUT=<файл> — записать каталог public после миграций, docs/specs/21 §5)
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -30,7 +31,7 @@ mkdir -p "$DATA" "$SOCK"
 [[ ${#RUN_AS[@]} -gt 0 ]] && chown -R "$RUN_USER" "$TMP"
 # Файлы миграций должны читаться пользователем сервера/psql
 WORK="$TMP/sql"; mkdir -p "$WORK"
-cp "$HERE"/auth_stub.sql "$HERE"/core_rls.sql "$WORK"/
+cp "$HERE"/auth_stub.sql "$HERE"/core_rls.sql "$HERE"/catalog.sql "$WORK"/
 cp "$ROOT"/migrations/*.sql "$WORK"/
 [[ ${#RUN_AS[@]} -gt 0 ]] && chown -R "$RUN_USER" "$WORK"
 
@@ -57,6 +58,12 @@ for m in $(ls "$WORK" | grep -E '^[0-9]+_.*\.sql$' | sort); do
   "${PSQL[@]}" -f "$WORK/$m"
   [[ -f "$a" ]] && { echo "== upgrade check after $m"; cp "$a" "$WORK/_after.sql"; [[ ${#RUN_AS[@]} -gt 0 ]] && chown "$RUN_USER" "$WORK/_after.sql"; "${PSQL[@]}" -f "$WORK/_after.sql"; }
 done
+# CATALOG_OUT=<file>: the live catalog of public after the migrations, before the tests add their rows (docs/specs/21 §5;
+# read by apps/mobile/test/serverCatalog.test.ts)
+if [[ -n "${CATALOG_OUT:-}" ]]; then
+  echo "== catalog -> $CATALOG_OUT"
+  "${PSQL[@]}" -At -f "$WORK/catalog.sql" > "$CATALOG_OUT"
+fi
 echo "== tests core_rls.sql"
 VERB=(); [[ "${VERBOSE:-}" == "1" ]] && VERB=(-v verbose=1)
 "${PSQL[@]}" "${VERB[@]}" -f "$WORK/core_rls.sql"
