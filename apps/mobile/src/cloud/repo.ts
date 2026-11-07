@@ -624,6 +624,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         markupBps: r.markup_bps === null || r.markup_bps === undefined ? undefined : n(r.markup_bps),
         components: ((r.components as { item_id: string; qty: string }[] | null) ?? []).map((x) => ({ itemId: x.item_id, qty: String(x.qty) })),
         placeholder: !!r.is_placeholder_price,
+        // C3 (docs/specs/33 П16): empty before the migration and for items without properties
+        ...catalogExtrasFromRow(r),
       })),
     memberSignatures: signatureRows.map((r) => ({
       id: s(r.id), userId: s(r.user_id), svg: s(r.svg), name: s(r.name), title: (r.title as string | null) ?? undefined,
@@ -660,5 +662,18 @@ export function deletedMembers(rows: readonly Row[], known: ReadonlySet<string> 
     seen.add(id);
     out.push({ id, name: "", initials: "—", kind: r.role === "subcontractor" ? "sub" : "employee", roles: appRoles(r.role as DbRole), pending: true, deleted: true });
   }
+  return out;
+}
+
+/** catalog_items.attributes / purchase_unit / pack_size → the item's own fields; a broken value is left out */
+export function catalogExtrasFromRow(r: Row): Pick<CatalogItem, "attributes" | "purchaseUnit" | "packSize"> {
+  const out: Pick<CatalogItem, "attributes" | "purchaseUnit" | "packSize"> = {};
+  const a = r.attributes;
+  if (a && typeof a === "object" && !Array.isArray(a)) {
+    const attrs = Object.fromEntries(Object.entries(a as Record<string, unknown>).filter((e): e is [string, string] => typeof e[1] === "string" && e[1] !== ""));
+    if (Object.keys(attrs).length) out.attributes = attrs;
+  }
+  if (typeof r.purchase_unit === "string" && r.purchase_unit.trim()) out.purchaseUnit = r.purchase_unit;
+  if (r.pack_size !== null && r.pack_size !== undefined && Number(r.pack_size) > 0) out.packSize = String(Number(r.pack_size));
   return out;
 }
