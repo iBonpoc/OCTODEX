@@ -1,0 +1,320 @@
+<title>План модуля водостоков</title>
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+/* План модуля Gutters для основателя (спека 33 v2). Токены «Наряда», обе темы, телефон прежде всего. */
+:root{
+  --acc:#FBFF00;--on-acc:#0B0C0F;--font:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r:24px;--ri:18px;--rf:12px;
+  --fs-display:28px;--fs-title:20px;--fs-heading:15px;--fs-body:14px;--fs-btn:12.5px;--fs-caption:11.5px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+  --c-lg:36px;--hit:44px;--tabbar-h:56px;--edge:3px;
+  --st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--st-on:#0B0C0F;
+  --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--in:rgba(255,255,255,.55);
+  --bd:rgba(20,22,30,.1);--sh:0 10px 28px rgba(60,50,40,.12);--ov:rgba(250,248,244,.94);
+  --st-ok-t:#176428;--st-info-t:#3647C4;--st-warn-t:#944600;--st-bad-t:#B4232A;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.97);
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.97);
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:400 var(--fs-body)/1.5 var(--font);
+  padding:max(var(--s6),env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(var(--s8),env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px))}
+main{max-width:860px;margin:0 auto;display:grid;gap:var(--s6)}
+h1{font-size:var(--fs-display);line-height:1.2;margin:0;text-wrap:balance}
+h2{font-size:var(--fs-title);margin:0 0 var(--s3)}
+h3{font-size:var(--fs-heading);margin:0 0 var(--s2)}
+p{margin:0 0 var(--s2)}
+.lede{color:var(--mut)}
+section{background:var(--surf);border:1px solid var(--bd);border-radius:var(--r);padding:var(--s5)}
+ul,ol{margin:0;padding-left:20px;display:grid;gap:6px}
+.mut{color:var(--mut)}
+.tag{display:inline-flex;align-items:center;gap:4px;font-size:var(--fs-caption);font-weight:600;border-radius:999px;padding:2px 9px}
+.tag.ok{background:var(--st-ok);color:var(--st-on)}.tag.warn{background:var(--st-warn);color:var(--st-on)}.tag.info{background:var(--st-info);color:var(--st-on)}
+.tag.neutral{border:1px solid var(--bd);background:var(--surf2)}
+table{width:100%;border-collapse:collapse;font-size:var(--fs-btn)}
+th,td{text-align:left;vertical-align:top;padding:8px 6px;border-bottom:1px solid var(--bd)}
+th{font-weight:600;color:var(--mut)}
+.tw{overflow-x:auto}
+.pick{border:2px solid var(--ink);border-radius:var(--ri);padding:var(--s3) var(--s4);margin-top:var(--s3)}
+.warnbox{position:relative;padding-left:var(--s4)}
+.warnbox::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:var(--edge);border-radius:2px;background:var(--st-warn)}
+.stage{display:grid;gap:var(--s4);grid-template-columns:1fr;align-items:start;border-top:1px solid var(--bd);padding-top:var(--s5);margin-top:var(--s5)}
+.stage:first-of-type{border-top:0;padding-top:0;margin-top:0}
+@media (min-width:760px){.stage{grid-template-columns:minmax(0,1fr) 300px}}
+.num{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:999px;background:var(--ink);color:var(--bg);font-weight:700;margin-right:6px}
+/* мини-экран телефона */
+.ph{width:300px;max-width:100%;justify-self:center;background:var(--bg);border:1px solid var(--bd);border-radius:28px;overflow:hidden;box-shadow:var(--sh);font-size:12px;position:relative}
+.ph .sb{height:28px;display:flex;justify-content:space-between;align-items:center;padding:0 18px;font-weight:600;font-size:11px}
+.ph .hd{display:flex;align-items:center;gap:8px;padding:2px 12px 8px;font-weight:700;font-size:15px}
+.ph .hd small{margin-left:auto;font-weight:600}
+.ph .cv{position:relative;margin:0 10px;border-radius:14px;border:1px solid var(--bd);background:var(--surf);height:250px;overflow:hidden}
+.ph svg{position:absolute;inset:0;width:100%;height:100%}
+.ph .tools{position:absolute;right:8px;top:8px;display:grid;gap:6px}
+.ph .tools span{width:36px;height:36px;border-radius:12px;background:var(--ov);border:1px solid var(--bd);display:grid;place-items:center;font-weight:700}
+.ph .tools span.on{box-shadow:inset 0 0 0 2px var(--ink)}
+.ph .tot{display:flex;justify-content:space-between;align-items:center;margin:8px 10px;padding:8px 12px;border-radius:14px;background:var(--surf2);border:1px solid var(--bd)}
+.ph .tot b{font-size:16px}
+.ph .cta{margin:0 10px 12px;height:36px;border-radius:999px;background:var(--acc);color:var(--on-acc);display:grid;place-items:center;font-weight:700}
+.ph .rows{margin:0 10px 10px;border-radius:14px;border:1px solid var(--bd);background:var(--surf)}
+.ph .r{display:flex;justify-content:space-between;gap:8px;padding:7px 10px;border-bottom:1px solid var(--bd)}
+.ph .r:last-child{border-bottom:0}
+.ph .grp{padding:6px 10px 2px;font-size:10px;font-weight:700;color:var(--mut);text-transform:uppercase;letter-spacing:.05em}
+.ph .chips{display:flex;gap:6px;flex-wrap:wrap;margin:0 10px 8px}
+.ph .chips span{border:1px solid var(--bd);border-radius:999px;padding:3px 8px;font-weight:600;background:var(--surf2)}
+.run{fill:none;stroke:var(--ink);stroke-width:4;stroke-linecap:round}
+.run.s2{stroke-dasharray:9 6}
+.roof{fill:none;stroke:var(--mut);stroke-width:1;opacity:.6}
+.foot{fill:var(--surf2);stroke:var(--mut);stroke-width:1}
+.lbl{font:600 10px var(--font);fill:var(--ink);paint-order:stroke;stroke:var(--bg);stroke-width:3px}
+.ds{fill:var(--bg);stroke:var(--ink);stroke-width:2}
+.no{font:700 9px var(--font);fill:var(--bg)}
+.nob{fill:var(--ink)}
+.bar{display:flex;gap:var(--s2);justify-content:flex-end;margin-bottom:var(--s2)}
+.bar button{font:inherit;color:inherit;border:1px solid var(--bd);background:var(--surf2);border-radius:999px;min-height:36px;padding:0 14px;cursor:pointer;font-weight:600}
+.bar button[aria-pressed="true"]{box-shadow:inset 0 0 0 2px var(--ink)}
+.q li{padding-bottom:var(--s2)}
+.q b{display:block}
+</style>
+<main>
+  <div class="bar" role="group" aria-label="Тема"><button data-t="light">Светлая</button><button data-t="dark">Тёмная</button></div>
+  <header>
+    <h1>Модуль водостоков: план</h1>
+    <p class="lede">По вашему письму от 7 ноября. Здесь — простыми словами: что уже есть в приложении, как делают другие, что я выбрал и почему, что войдёт в первую версию, по шагам — что вы увидите, и вопросы к вам. Технические подробности — в отдельном документе для разработки (спека 33). Ничего не строю до вашего «да».</p>
+  </header>
+
+  <section>
+    <h2>Коротко</h2>
+    <ul>
+      <li><b>Рисовать пальцем можно будет всегда</b> — даже без адреса и без связи. Это основа.</li>
+      <li><b>Дом по адресу находим сами, бесплатно и законно</b>: государство США бесплатно раздаёт лазерную съёмку домов с самолёта и снимки сверху. Из них мы сами считаем крышу: края, скаты, уклон, высоту. Один раз нашли — храним навсегда. Компаниям никаких ключей.</li>
+      <li><b>Это черновик, а не замер.</b> Длина карниза ошибается на 5–10% на простом доме, больше — под деревьями и на сложной крыше. Поэтому у каждой длины будет метка: «найдено», «нарисовано», «проверено рулеткой».</li>
+      <li><b>Смета, заказ поставщику и задание бригаде</b> — частично новые для всего приложения. Их делаем общими, чтобы потом пригодились кровле и заборам.</li>
+      <li><b>Строим по этапам</b>, и уже первый даёт пользу: нарисовал — получил смету из своего прайса.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>Что уже есть в приложении и чего нет</h2>
+    <div class="tw"><table>
+      <tr><th>Ваше желание</th><th>Сейчас</th><th>Как быть</th></tr>
+      <tr><td>Прайс-лист</td><td><span class="tag ok">✓ есть</span> позиции, цены, себестоимость, наборы</td><td>добавить свойства позиции (профиль, размер, цвет, материал) и кнопку «создать позиции сразу»</td></tr>
+      <tr><td>Смета, подпись клиента с телефона</td><td><span class="tag ok">✓ есть</span></td><td>добавить группы строк, пометку «цена вручную», проверку «чего не хватает»</td></tr>
+      <tr><td>Подписанная смета не меняется</td><td><span class="tag ok">✓ есть</span> внутри, но экрана версий нет</td><td>экран «что изменилось» и доп. работа</td></tr>
+      <tr><td>Доп. работа к подписанной смете</td><td><span class="tag warn">! нет</span></td><td>сделать для всего приложения</td></tr>
+      <tr><td>Заказ поставщику</td><td><span class="tag warn">! нет</span></td><td>сделать для всего приложения</td></tr>
+      <tr><td>Задание бригаде, «на месте оказалось иначе»</td><td><span class="tag neutral">— частично</span> выезды, фото, заметка, простой чек-лист</td><td>документ задания и отметки бригадира</td></tr>
+      <tr><td>Заявка без имени и телефона («замерить здесь»)</td><td><span class="tag warn">! нельзя</span> имя и телефон обязательны</td><td>разрешить черновик, имя добавить потом</td></tr>
+      <tr><td>Без интернета, «Отменить»</td><td><span class="tag ok">✓ есть</span></td><td>—</td></tr>
+      <tr><td>Двое правят одно — без потерь</td><td><span class="tag warn">! сейчас побеждает последняя правка</span></td><td>починить для всего приложения</td></tr>
+      <tr><td>PDF с логотипом</td><td><span class="tag ok">✓ есть</span> для сметы, счёта, квитанции</td><td>новые документы на той же шапке</td></tr>
+      <tr><td>Футы или метры</td><td><span class="tag warn">! нет</span></td><td>настройка у каждого человека</td></tr>
+      <tr><td>Платное дополнение $30</td><td><span class="tag warn">! нет</span> приём оплаты подписки не сделан</td><td>до этого модуль включаем вручную</td></tr>
+      <tr><td>Карта, поиск дома, ИИ</td><td><span class="tag warn">! нет</span></td><td>этапы 3 и «позже»</td></tr>
+    </table></div>
+  </section>
+
+  <section>
+    <h2>Как делают другие</h2>
+    <ul>
+      <li><b>EagleView, RoofSnap, Roofr, GAF</b> — заказываешь отчёт по снимкам: $11–90 за дом, ждёшь от получаса до суток. Высоту даунспотов вводишь руками.</li>
+      <li><b>Hover</b> — дом в 3D по фото с телефона. Хвалят точность и 3D для продажи. Ругают сбои загрузки, переснимать, ждать до суток, дорожает.</li>
+      <li><b>ArcSite</b> — рисуешь пальцем, детали считаются. Хвалят простоту. Ругают цену, после пробного срока рисунки заперты, сделан под планшет.</li>
+      <li><b>QuoteIQ</b> — обводишь крышу по спутнику, ~$30/мес. Отзывов почти нет.</li>
+      <li><b>JobNimbus, AccuLynx</b> — для кровли, мерят чужими отчётами; водостокам «некуда деться».</li>
+    </ul>
+    <p class="pick"><b>Где мы сильнее:</b> замер с телефона одной рукой, без ожидания и платы за каждый дом, без связи; рисунки компании никогда не запираются; детали считаются как у водосточника; задание бригаде с номерами линий и простой список местному поставщику — такого почти ни у кого нет.</p>
+  </section>
+
+  <section>
+    <h2>Что я выбрал и почему</h2>
+    <h3>Откуда брать дом</h3>
+    <div class="tw"><table>
+      <tr><th>Вариант</th><th>Плюсы</th><th>Минусы</th></tr>
+      <tr><td>Только рисовать пальцем</td><td>просто, бесплатно</td><td>нет цены по телефону утром, дольше у дома</td></tr>
+      <tr><td><b>Свой поиск дома по открытым данным США</b></td><td>бесплатно и законно, храним у себя навсегда, без ключей, потом пригодится кровле</td><td>это черновик, не замер; снимок сверху мутноват</td></tr>
+      <tr><td>Покупать отчёты EagleView/Hover</td><td>точнее</td><td>$11–90 и часы ожидания на каждый дом</td></tr>
+    </table></div>
+    <p class="pick"><b>Выбор: рисование пальцем + свой поиск дома.</b> Рисование работает всегда и везде. Поиск дома ускоряет и даёт цену «вилкой» до выезда. Чужие отчёты можно будет загрузить позже, если у подрядчика они есть.</p>
+    <p class="mut">Google и Mapbox не берём: их правила запрещают обводить их снимки и хранить результат. Открытые карты OpenStreetMap не храним: их правила заставили бы открыть всем нашу базу.</p>
+    <h3>Как связать со сметой</h3>
+    <p>Замер сам заполняет <b>обычную смету приложения</b>, строки по группам (жёлоб, углы и заглушки, крепёж, даунспоты, переходники, защита, низ, расходники, работа), с вашими ценами из прайса. Подпись, задаток, отправка — как у любой сметы. Своя отдельная «смета водостоков» была бы второй сметой рядом с первой — путаница и двойная работа.</p>
+  </section>
+
+  <section>
+    <h2>Где ваше желание — плохая идея или спорит с другим</h2>
+    <ul>
+      <li class="warnbox"><b>«Приложение само определяет, где жёлоб».</b> Определит — но как черновик. Под деревьями и на сложных крышах ему верить нельзя. Перед заказом материала — рулетка, приложение будет напоминать.</li>
+      <li class="warnbox"><b>Снимок дома сверху.</b> Бесплатные снимки — 30–60 см в точке: дом виден, но мелко, водостоков не разглядеть. Чёткие снимки только платные.</li>
+      <li class="warnbox"><b>Скриншот карты Google как подложка.</b> Правила Google запрещают обводить их снимки. Своё фото — можно. Скриншоты чужих карт приложение предлагать не будет; «линейку карты» ищем только на наших снимках (они уже в масштабе).</li>
+      <li class="warnbox"><b>Этажи разными цветами линий.</b> Спорит с правилом вашей же дизайн-системы «цвет — только для статуса». Предлагаю исключение только на рисунке (вопрос 3).</li>
+      <li class="warnbox"><b>Панель к любому краю экрана.</b> Сложно и мало пользы. Предлагаю три положения: внизу, под правую руку, под левую.</li>
+      <li class="warnbox"><b>Даунспоты «по дождям района».</b> Есть два честных способа считать дождь: осторожный (чаще выйдет 6″) и по строительным нормам (часто хватает 5″). По умолчанию — осторожный, компания меняет; приложение пишет, как посчитало.</li>
+      <li class="warnbox"><b>$30 в месяц.</b> Принимать оплату подписки приложение пока не умеет. Пока не научится — модуль включаем компаниям вручную.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>По шагам: что вы увидите</h2>
+
+    <div class="stage">
+      <div>
+        <h3><span class="num">1</span>Нарисовал — получил смету</h3>
+        <ul>
+          <li>В заявке и у дома клиента кнопка <b>«Замер»</b>; на главной — <b>«Замерить здесь»</b> (черновик без клиента).</li>
+          <li>Ведёте линию пальцем, отпускаете — вписываете длину. Прямые углы и 45° — по желанию.</li>
+          <li>У линии: профиль, размер, материал, этаж, защита, демонтаж, «применить ко всем». Цвета жёлоба, даунспотов, фитингов.</li>
+          <li>Углы и заглушки ставятся сами. Даунспот — тапом, сразу открывается его карточка: тип, высота, колена, что внизу.</li>
+          <li>Внизу всегда итог в долларах. Кнопка <b>«Смета»</b> — строки по группам с вашими ценами. Нет цены — пометка и кнопка «поставить цену». Не выбран цвет или тип — «чего не хватает».</li>
+          <li>Настройки модуля: что вы ставите (галочками), что подставлять, правила, цены работы по этажам, «создать позиции сразу».</li>
+          <li>Работает без связи. Список черновиков замеров.</li>
+        </ul>
+        <p class="mut"><b>От вас:</b> ваш прайс (или нажать «создать позиции» с тестовыми ценами и поправить) и 10–20 домов, где вы знаете длины по рулетке, — проверить расчёт.</p>
+      </div>
+      <div class="ph" role="img" aria-label="Экран рисунка: линии с номерами, даунспоты, итог внизу">
+        <div class="sb"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="hd">‹ Замер · 1418 Elm St <small class="tag neutral">без связи</small></div>
+        <div class="cv">
+          <svg viewBox="0 0 280 250">
+            <polyline class="run" points="40,60 200,60"/><polyline class="run" points="200,60 200,190"/>
+            <polyline class="run s2" points="40,190 200,190"/><polyline class="run" points="40,60 40,190"/>
+            <circle class="nob" cx="120" cy="60" r="9"/><text class="no" x="120" y="63" text-anchor="middle">1</text>
+            <circle class="nob" cx="200" cy="125" r="9"/><text class="no" x="200" y="128" text-anchor="middle">2</text>
+            <circle class="nob" cx="120" cy="190" r="9"/><text class="no" x="120" y="193" text-anchor="middle">3</text>
+            <circle class="nob" cx="40" cy="125" r="9"/><text class="no" x="40" y="128" text-anchor="middle">4</text>
+            <text class="lbl" x="120" y="48" text-anchor="middle">42′ 6″ · эт 1</text>
+            <text class="lbl" x="152" y="208" text-anchor="middle">42′ · эт 2</text>
+            <rect class="ds" x="194" y="182" width="12" height="12" rx="2"/><rect class="ds" x="34" y="52" width="12" height="12" rx="2"/>
+            <rect class="ds" x="34" y="182" width="12" height="12" rx="2"/>
+          </svg>
+          <div class="tools"><span class="on">／</span><span>▣</span><span>📷</span><span>↶</span></div>
+        </div>
+        <div class="tot"><span>156′ жёлоба · 3 даунспота</span><b>$3,270</b></div>
+        <div class="cta">Смета</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div>
+        <h3><span class="num">2</span>Поставщику и бригаде</h3>
+        <ul>
+          <li><b>«Заказ поставщику»</b> — список материалов без цен, кусками как покупаете (даунспоты по 10 футов, рулон по цвету). Отправляете сами: PDF, SMS, почта.</li>
+          <li><b>«Задание бригаде»</b> — рисунок с номерами линий, что ставить на каждой, фото, заметки, без цен.</li>
+          <li>Бригадир отмечает «сделано» и «на месте оказалось иначе» с фото.</li>
+          <li>PDF с вашим логотипом: рисунок для клиента, смета, заказ, задание.</li>
+        </ul>
+        <p class="mut"><b>От вас:</b> пример того, как вы сейчас отправляете заказ поставщику.</p>
+      </div>
+      <div class="ph" role="img" aria-label="Задание бригаде: линии по номерам, без цен">
+        <div class="sb"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="hd">‹ Задание бригаде <small class="tag info">● Чт 9:00</small></div>
+        <div class="grp">Линии</div>
+        <div class="rows">
+          <div class="r"><span><b>1</b> Перед · 6″ K · White</span><span>42′ 6″ ✓</span></div>
+          <div class="r"><span><b>2</b> Правая · 2 угла внеш.</span><span>36′</span></div>
+          <div class="r"><span><b>3</b> Зад · эт 2 · сетка</span><span>42′</span></div>
+          <div class="r"><span><b>4</b> Левая · демонтаж</span><span>36′</span></div>
+        </div>
+        <div class="grp">Даунспоты</div>
+        <div class="rows"><div class="r"><span>3 × 3×4 · 3 колена A · отвод 4′</span><span>📷 2</span></div></div>
+        <div class="cta">На месте иначе…</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div>
+        <h3><span class="num">3</span>Дом по адресу и «здесь, где я стою»</h3>
+        <ul>
+          <li>Утром в новой заявке с адресом уже есть: контур дома, этажи, сколько футов жёлоба и даунспотов, цена «вилкой».</li>
+          <li>Пока ищется — видно, что происходит, сколько прошло, можно отменить. Не нашлось — честно почему, и «нарисовать самому».</li>
+          <li>Не тот дом — «соседний». Гараж и сарай находятся тоже, лишнее удаляете.</li>
+          <li>Сразу черновик водостоков по краям крыши (не на фронтонах), углы, заглушки, даунспоты на углах.</li>
+          <li>Под рисунком снимок сверху. Скаты с площадью и уклоном. Предупреждение «здесь деревья — проверьте».</li>
+          <li>У каждой длины метка: <span class="tag neutral">найдено</span> <span class="tag neutral">нарисовано</span> <span class="tag ok">✓ рулетка</span>.</li>
+          <li>Подсказки водосточника: размер жёлоба и даунспотов по крыше и дождям района, «линия длинная для одного даунспота», куда уклон, где компенсатор, где отбойник.</li>
+          <li>Своё фото с масштабом — по отрезку известной длины.</li>
+        </ul>
+        <p class="mut"><b>От вас:</b> адреса 20 своих домов с рулеткой — проверить, насколько можно верить автоматике в вашем районе.</p>
+      </div>
+      <div class="ph" role="img" aria-label="Найденный дом: контур, скаты, уверенность">
+        <div class="sb"><span>9:41</span><span>●●● ▮</span></div>
+        <div class="hd">‹ 1418 Elm St <small class="tag ok">✓ найден</small></div>
+        <div class="cv">
+          <svg viewBox="0 0 280 250">
+            <polygon class="foot" points="40,60 200,60 200,190 40,190"/>
+            <polyline class="roof" points="40,60 120,125 200,60 M40,190 120,125 200,190"/>
+            <line class="roof" x1="40" y1="60" x2="120" y2="125"/><line class="roof" x1="200" y1="60" x2="120" y2="125"/>
+            <line class="roof" x1="40" y1="190" x2="120" y2="125"/><line class="roof" x1="200" y1="190" x2="120" y2="125"/>
+            <polyline class="run" points="40,60 200,60"/><polyline class="run" points="40,190 200,190"/>
+            <text class="lbl" x="120" y="48" text-anchor="middle">43′ найдено</text>
+            <text class="lbl" x="120" y="208" text-anchor="middle">43′ найдено</text>
+            <text class="lbl" x="120" y="100" text-anchor="middle">6/12 · 610 кв. фут</text>
+            <rect x="215" y="150" width="45" height="40" class="foot"/><text class="lbl" x="237" y="174" text-anchor="middle">гараж</text>
+          </svg>
+        </div>
+        <div class="chips"><span>2 этажа</span><span>~172′ жёлоба</span><span>4 даунспота</span></div>
+        <div class="tot"><span>Вилка</span><b>$3,100–3,700</b></div>
+        <div class="cta">Сделать черновик водостоков</div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div>
+        <h3><span class="num">4</span>Изменения и команда</h3>
+        <ul>
+          <li>Версии замера: первый, после рулетки, после монтажа.</li>
+          <li>Изменили рисунок — смета показывает, что изменилось, и спрашивает «обновить?». Ваши ручные цены и свои строки остаются.</li>
+          <li>Смета подписана — изменения только через «доп. работу», которую клиент подписывает отдельно.</li>
+          <li>Продавец замерил — офис сразу видит. Двое правили одно — показываем обе правки, ничего не теряется.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div>
+        <h3><span class="num">5</span>Платное подключение</h3>
+        <p>Компания без модуля видит его и кнопку «Подключить», платит. Нужен приём оплаты подписок во всём приложении — он идёт отдельным шагом.</p>
+      </div>
+    </div>
+
+    <div class="stage">
+      <div>
+        <h3>Позже</h3>
+        <ul>
+          <li>Объёмный дом — покрутить, показать клиенту.</li>
+          <li>ИИ «проверить рисунок» (видно, сколько стоит каждая проверка), голосом «сделай замер».</li>
+          <li>Три варианта цены из одного замера.</li>
+          <li>Загрузка отчётов EagleView/Hover. Чёткие снимки по штатам, где они бесплатные.</li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Вопросы к вам</h2>
+    <p class="mut">Только те, без которых нельзя решить. Можно ответить номерами.</p>
+    <ol class="q">
+      <li><b>Где вы и первые клиенты работаете?</b> Только Лос-Анджелес / вся Калифорния / разные штаты. От этого зависит, насколько чёткие бесплатные снимки и с какого района проверять точность.</li>
+      <li><b>Что важнее сначала после этапа 1:</b> а) поставщик и бригада (этап 2), б) дом по адресу (этап 3)?</li>
+      <li><b>Этажи на рисунке разными цветами</b> — разрешаете исключение из правила «цвет только для статуса» только на рисунке? Да / нет (тогда сплошная и пунктир с подписью «эт 2»).</li>
+      <li><b>Работа в смете у клиента:</b> а) отдельными строками (монтаж за фут, даунспот за штуку, демонтаж), б) внутри цены жёлоба и даунспотов, в) компания выбирает сама.</li>
+      <li><b>Заказ поставщику:</b> как отправляете сейчас (SMS, почта, звонок, на сайте поставщика) и у скольких поставщиков берёте?</li>
+      <li><b>Можете дать 10–20 адресов домов с длинами по рулетке?</b> Без этого мы не знаем, где автоматике можно верить.</li>
+      <li><b>До приёма оплаты подписок</b> первые компании получают модуль: а) бесплатно на пробу, б) включаем после оплаты другим способом?</li>
+    </ol>
+  </section>
+
+  <p class="mut">Технический документ: спека 33 (`docs/specs/33-gutters-module.md`). Данные: USGS 3DEP, USDA NAIP, Microsoft Building Footprints (CDLA-2.0), NOAA Atlas 14, US Census.</p>
+</main>
+<script>
+const set = t => { document.documentElement.dataset.theme = t; document.querySelectorAll('[data-t]').forEach(b => b.setAttribute('aria-pressed', b.dataset.t === t)); };
+document.querySelectorAll('[data-t]').forEach(b => b.onclick = () => set(b.dataset.t));
+const q = new URLSearchParams(location.search).get('theme');
+set(q || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'));
+</script>
