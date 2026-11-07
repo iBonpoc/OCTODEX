@@ -210,7 +210,8 @@ function DayView({ date, visits, who, onAdd }: { date: DayKey; visits: Visit[]; 
             {unassigned.map((v) => (
               <View key={v.id} style={{ gap: space[2] }}>
                 {drag(v, <VisitCard v={v} />, "none")}
-                <Button label={t("plan.assign")} icon="user" onPress={() => setAssign(v.id)} />
+                {/* secondary: the one yellow on the Day is «＋» (rule 2; two visits nobody is on gave two yellows) */}
+                <Button label={t("plan.assign")} icon="user" variant="secondary" onPress={() => setAssign(v.id)} />
               </View>
             ))}
           </Grid>
