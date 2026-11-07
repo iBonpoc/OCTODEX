@@ -90,3 +90,5 @@ e2e не нужны: экраны не меняются.
 - Имя «OCTODEX» в App Store занято → Apple ID приложения **6831904411**, имя в App Store Connect «OCTODEX (ea2bef)» (поменять до публикации; на iPhone под иконкой — OCTODEX из app.json). Сборка 1.0.0 (2) отправлена в TestFlight.
 - `ascAppId` = 6831904411 в `eas.json` → дальше Actions → «EAS build» → ios + ios_submit.
 - Первая попытка упала, потому что в поле Apple ID ввели `y`. Подсказка в инструкции §5.2.
+- **Задача основателя перед публикацией в App Store:** переименовать приложение в App Store Connect («OCTODEX (ea2bef)» → своё имя, запасное — GoRix). App Store Connect → приложение → App Information → Name. Пересборка не нужна.
+- Ключ APNs: проверить на expo.dev → octodex → Credentials → iOS → com.octodex.app → Push Key. Если его нет — 11-setup §5.6 (`eas credentials` с Mac).

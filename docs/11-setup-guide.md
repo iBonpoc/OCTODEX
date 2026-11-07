@@ -118,3 +118,14 @@
 
 Сменить ключ: шаг 1 заново, в шаге 3 замените `PUSH_FN_KEY`, в шаге 4 откройте `push_fn_key` в Vault → **Edit** → новое значение. Оба значения должны совпадать.
 Остановить отправку: `select cron.unschedule('send-push');` в SQL Editor (вернуть — напишите руководителю).
+
+### 5.6. Если нет ключа пушей (Push Key)
+Проверка: https://expo.dev/accounts/octodex-team/projects/octodex/credentials → **iOS** → `com.octodex.app` → строка **Push Key**. Если там пусто — один раз на Mac:
+1. Терминал → `cd ~/OCTODEX/apps/mobile`
+2. `npx eas-cli@27.4.1 credentials -p ios`
+3. **Which build profile?** — стрелками ↓ выбрать `testflight` → `Return`.
+4. **What do you want to do?** — стрелками выбрать строку со словами **Push Notifications** → `Return`, затем **Set up your project to use Push Notifications** → `Return`.
+5. Вход в Apple: `Y` → Apple ID (**вся почта**) → пароль → код с iPhone. **Только в Терминал.**
+6. **Generate a new Apple Push Notifications service key?** → `Return` (Yes).
+7. Появится «Push Key assigned» — готово. Выйти: стрелками **Exit** → `Return`.
+Новая сборка для этого не нужна: ключ используется сервером при отправке пуша.
