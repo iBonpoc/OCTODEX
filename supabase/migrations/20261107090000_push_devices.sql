@@ -22,7 +22,8 @@ create table public.push_devices (
   created_at      timestamptz not null default now(),
   last_seen_at    timestamptz not null default now(),
   revoked_at      timestamptz,
-  revoked_reason  text check (revoked_reason in ('signed_out', 'not_registered', 'account_deleted', 'too_many')),
+  -- (no «account_deleted»: account deletion removes the rows, app.erase_personal_rows)
+  revoked_reason  text check (revoked_reason in ('signed_out', 'not_registered', 'too_many')),
   check ((revoked_at is null) = (revoked_reason is null))
 );
 create index push_devices_user_idx on public.push_devices (user_id);
@@ -53,7 +54,9 @@ create or replace function app.push_devices_max()
 returns integer language sql immutable set search_path = '' as $$ select 10 $$;
 revoke all on function app.push_devices_max() from public, anon, authenticated;
 
--- the person's account is not deleted (a deleted account keeps a valid JWT for a while; security-check П1 №6)
+-- the person's account is not deleted (a deleted account keeps a valid JWT for a while; security-check П1 №6).
+-- security definer on purpose: it reads public.users past its RLS, so register_push_device works even when its owner
+-- has no BYPASSRLS (T80 checks that path); it returns only true / false
 create or replace function app.push_account_alive(p_uid uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (select 1 from public.users u where u.id = p_uid and u.deleted_at is null);
@@ -67,8 +70,7 @@ returns void language plpgsql security definer set search_path = '' as $$
 declare
   v_uid uuid := auth.uid();
 begin
-  -- a deleted account keeps a valid JWT for a while: it registers nothing (security-check П1 №6)
-  if v_uid is null or not app.push_account_alive(v_uid) then
+  if v_uid is null then
     raise exception 'not allowed' using errcode = '42501';
   end if;
   if p_token is null or length(p_token) > 255 or p_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{1,200}\]$' then
@@ -80,8 +82,13 @@ begin
   if p_app_version is not null and length(p_app_version) > 32 then
     raise exception 'app version too long' using errcode = '22023';
   end if;
-  -- one registration of a person at a time: two parallel calls must not leave more than the limit (№5)
+  -- one registration of a person at a time: two parallel calls must not leave more than the limit (№5); account deletion
+  -- takes the same lock, so a registration either finishes before the erase or sees the account deleted (review #272 №1)
   perform pg_advisory_xact_lock(hashtext('push_devices:' || v_uid::text));
+  -- a deleted account keeps a valid JWT for a while: it registers nothing (security-check П1 №6) — checked under the lock
+  if not app.push_account_alive(v_uid) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
   insert into public.push_devices as d (user_id, expo_token, platform, lang, app_version)
   values (v_uid, p_token, p_platform, case when p_lang in ('en', 'es', 'ru') then p_lang else 'en' end, p_app_version)
   on conflict (expo_token) do update
@@ -163,6 +170,7 @@ create or replace function app.push_recipients(p_company uuid, p_roles text[], p
 returns setof uuid language sql stable security definer set search_path = '' as $$
   select distinct m.user_id
     from public.memberships m
+    join public.users u on u.id = m.user_id and u.deleted_at is null
    where m.company_id = p_company and m.status = 'active' and m.deleted_at is null and m.role <> 'subcontractor'
      and (m.role = any (p_roles) or m.user_id = p_also);
 $$;
@@ -226,6 +234,8 @@ begin
   delete from public.member_prefs where user_id = p_user;
   delete from public.user_locations where user_id = p_user;
   -- Пуши П1: no phone of a deleted person gets anything again; queued pushes to them go too
+  -- the lock of register_push_device: a registration running now finishes first, a later one sees the account deleted
+  perform pg_advisory_xact_lock(hashtext('push_devices:' || p_user::text));
   delete from public.push_devices where user_id = p_user;
   delete from public.push_outbox where user_id = p_user;
   -- the deletion must really have erased them (security-check П1 №2): else the whole account deletion rolls back

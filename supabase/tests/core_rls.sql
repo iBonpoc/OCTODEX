@@ -5990,8 +5990,10 @@ select tst.blocked($q$delete from public.push_devices$q$, 'T80 no direct delete'
 :as_tech2_a
 select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 0, 'T80 another person sees no phones of Mike');
 select public.forget_push_device('ExponentPushToken[t80-mike-1]');
+select public.forget_push_device(null);
 :as_super
 select tst.ok((select revoked_at is null from public.push_devices where expo_token = 'ExponentPushToken[t80-mike-1]'), 'T80 forget does not touch another person''s token');
+select tst.ok(not exists (select 1 from public.push_devices where revoked_at is not null), 'T80 forget(null) is silent and changes nothing');
 :as_tech2_a
 -- the phone was handed over: Luis signs in on it — the token moves to Luis
 select public.register_push_device('ExponentPushToken[t80-mike-1]', 'android', 'en', null);
@@ -6052,6 +6054,24 @@ update public.users set deleted_at = now() where id = 'a0000000-0000-0000-0000-0
 select tst.fails_like($q$select public.register_push_device('ExponentPushToken[t80-gone]', 'android', 'en', null)$q$, 'not allowed', 'T80 a deleted account cannot register a phone');
 :as_super
 update public.users set deleted_at = null where id = 'a0000000-0000-0000-0000-000000000004';
+-- the whole path of account deletion (public.delete_account, S22), not only erase_personal_rows
+insert into auth.users (id, email, raw_user_meta_data) values ('a8000000-0000-4000-8000-000000000020', 'gone80@a.test', '{"full_name":"Gail Gone"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a8000000-0000-4000-8000-000000000020', 'admin', 'active');
+reset role; set request.jwt.claim.sub = 'a8000000-0000-4000-8000-000000000020'; set role authenticated;
+select public.register_push_device('ExponentPushToken[t80-gail]', 'android', 'en', null);
+:as_super
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08000000-0000-4000-8000-000000000020', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+select tst.ok(exists (select 1 from public.push_outbox where user_id = 'a8000000-0000-4000-8000-000000000020'), 'T80 Gail (admin) has a queued push');
+reset role; set request.jwt.claim.sub = 'a8000000-0000-4000-8000-000000000020'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T80 Gail deletes her account');
+select tst.fails_like($q$select public.register_push_device('ExponentPushToken[t80-gail-2]', 'android', 'en', null)$q$, 'not allowed', 'T80 after delete_account her JWT registers nothing');
+:as_super
+reset request.jwt.claims;
+select tst.ok(not exists (select 1 from public.push_devices where user_id = 'a8000000-0000-4000-8000-000000000020')
+          and not exists (select 1 from public.push_outbox where user_id = 'a8000000-0000-4000-8000-000000000020'), 'T80 delete_account erased her phones and queued pushes');
+delete from public.push_outbox where notification_id = '08000000-0000-4000-8000-000000000020';
+delete from public.notifications where id = '08000000-0000-4000-8000-000000000020';
 delete from public.push_devices;
 \echo 'T80 push_devices: own rows only, through the functions, the token follows the person signed in ok'
 
@@ -6118,10 +6138,31 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_notification_p
           and not has_function_privilege('authenticated', 'app.purge_push_outbox()', 'EXECUTE'), 'T81 nobody in the app executes the queue functions');
 select tst.fails_like($q$insert into public.push_outbox (company_id, user_id, kind, route) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'lead.new', 'https://evil.test')$q$,
           '%push_outbox_route_check%', 'T81 a route is only a path inside the app');
--- the same feed row inserted again does not queue a second push
-select tst.fails($q$insert into public.notifications (id, company_id, kind, estimate_id) values ('08100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003')$q$, 'T81 a repeat of the feed row is refused');
-select tst.ok((select count(*) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000001')
-          = (select count(distinct user_id) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000001'), 'T81 one push per person, no second one');
+-- one push per (feed row, person): the owner who is also the author of the estimate gets one, not two
+update public.estimates set owner_user_id = 'a0000000-0000-0000-0000-000000000001' where id = '0e730000-0000-4000-8000-000000000003';
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08100000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003');
+select tst.ok((select count(*) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000007' and user_id = 'a0000000-0000-0000-0000-000000000001') = 1,
+          'T81 the owner who is the author gets exactly one push');
+select tst.fails_like($q$insert into public.push_outbox (company_id, user_id, notification_id, kind, route) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', '08100000-0000-4000-8000-000000000007', 'estimate.client_signed', '/')$q$,
+          '%push_outbox_notification_id_user_id_key%', 'T81 a second push of the same row to the same person is refused by the table');
+-- the author who is a subcontractor, switched off or deleted gets nothing
+create temp table t81_author (who uuid, nid uuid);
+insert into t81_author values
+  ('a8100000-0000-4000-8000-000000000003', '08100000-0000-4000-8000-000000000011'),
+  ('a8100000-0000-4000-8000-000000000004', '08100000-0000-4000-8000-000000000012'),
+  ('a8100000-0000-4000-8000-000000000005', '08100000-0000-4000-8000-000000000013');
+update public.users set deleted_at = now() where id = 'a8100000-0000-4000-8000-000000000005';
+do $$ declare r record; begin
+  for r in select * from t81_author loop
+    update public.estimates set owner_user_id = r.who where id = '0e730000-0000-4000-8000-000000000003';
+    insert into public.notifications (id, company_id, kind, estimate_id) values (r.nid, 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003');
+    perform tst.ok(not exists (select 1 from public.push_outbox where notification_id = r.nid and user_id = r.who), 'T81 an author who is a subcontractor / switched off / deleted gets no push');
+    perform tst.ok(exists (select 1 from public.push_outbox where notification_id = r.nid and user_id = 'a0000000-0000-0000-0000-000000000001'), 'T81 the owner still gets it');
+  end loop;
+end $$;
+update public.users set deleted_at = null where id = 'a8100000-0000-4000-8000-000000000005';
+drop table t81_author;
 -- the trigger and the purge without BYPASSRLS (as T57)
 alter function app.tg_notification_push() owner to t80_owner;
 alter function app.purge_push_outbox() owner to t80_owner;
