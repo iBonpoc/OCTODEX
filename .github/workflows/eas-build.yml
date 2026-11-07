@@ -1,0 +1,100 @@
+# A phone build of the app by hand (docs/specs/27-push.md §2): pushes do not work in Expo Go (SDK 53+), they need our own build.
+# Actions → «EAS build» → Run workflow:
+#   * android — profile `preview`: an APK; the install link appears on expo.dev → octodex → Builds;
+#   * ios — profile `testflight`: a store build (needs the four Apple secrets below). The first run only builds: it registers
+#     the bundle id com.octodex.app and the certificates. Apple's API key cannot create the app itself, so the founder makes
+#     it once in App Store Connect (Apps → + → New App) and gives its number (Apple ID of the app, not a secret); it goes to
+#     eas.json submit.testflight.ascAppId; after that «ios_submit» sends each build to TestFlight.
+# Both builds take Expo updates from the channel `preview`, like Expo Go now (release.yml publishes there).
+# Secrets (repo → Settings → Secrets and variables → Actions), never printed:
+#   EXPO_TOKEN (already there);
+#   for ios: EXPO_ASC_API_KEY_P8 (the whole text of AuthKey_….p8), EXPO_ASC_KEY_ID, EXPO_ASC_ISSUER_ID, EXPO_APPLE_TEAM_ID.
+# Android's FCM key and google-services.json live in expo.dev (Credentials; Environment variables → GOOGLE_SERVICES_JSON), not here.
+# The build number (BUILD in src/config/version.ts) is not touched; the store build number is EAS's own (autoIncrement).
+# eas-cli pinned as in release.yml (27.4.1).
+name: EAS build
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Which phone"
+        type: choice
+        options: [android, ios]
+        default: android
+      ios_submit:
+        description: "ios only: send to TestFlight (only after the app exists in App Store Connect and its id is in eas.json)"
+        type: boolean
+        default: false
+      apple_team_type:
+        description: "ios only: the Apple team type (developer.apple.com → Membership details)"
+        type: choice
+        options: [INDIVIDUAL, COMPANY_OR_ORGANIZATION]
+        default: INDIVIDUAL
+
+permissions:
+  contents: read
+
+concurrency:
+  group: eas-build-${{ inputs.platform }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build ${{ inputs.platform }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Secrets are set
+        env:
+          P8: ${{ secrets.EXPO_ASC_API_KEY_P8 }}
+          KID: ${{ secrets.EXPO_ASC_KEY_ID }}
+          ISS: ${{ secrets.EXPO_ASC_ISSUER_ID }}
+          TEAM: ${{ secrets.EXPO_APPLE_TEAM_ID }}
+        run: |
+          if [ -z "$EXPO_TOKEN" ]; then echo "::error::Add EXPO_TOKEN in Settings → Secrets and variables → Actions"; exit 1; fi
+          if [ "${{ inputs.platform }}" = "ios" ]; then
+            for n in P8 KID ISS TEAM; do
+              if [ -z "${!n}" ]; then echo "::error::An Apple secret is missing (EXPO_ASC_API_KEY_P8, EXPO_ASC_KEY_ID, EXPO_ASC_ISSUER_ID, EXPO_APPLE_TEAM_ID)"; exit 1; fi
+            done
+          fi
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Expo account
+        working-directory: apps/mobile
+        run: npx eas-cli@27.4.1 whoami
+
+      - name: Android build (APK, preview)
+        if: inputs.platform == 'android'
+        working-directory: apps/mobile
+        # --no-wait: the build runs on EAS; its page (and the install link) is on expo.dev
+        run: npx eas-cli@27.4.1 build --platform android --profile preview --non-interactive --no-wait
+
+      - name: iOS build and TestFlight
+        if: inputs.platform == 'ios'
+        working-directory: apps/mobile
+        env:
+          P8: ${{ secrets.EXPO_ASC_API_KEY_P8 }}
+          EXPO_ASC_KEY_ID: ${{ secrets.EXPO_ASC_KEY_ID }}
+          EXPO_ASC_ISSUER_ID: ${{ secrets.EXPO_ASC_ISSUER_ID }}
+          EXPO_APPLE_TEAM_ID: ${{ secrets.EXPO_APPLE_TEAM_ID }}
+          EXPO_APPLE_TEAM_TYPE: ${{ inputs.apple_team_type }}
+        run: |
+          # the key goes to a private temp file only for this job, never to the log or the repo
+          umask 077
+          export EXPO_ASC_API_KEY_PATH="$RUNNER_TEMP/asc_key.p8"
+          printf '%s\n' "$P8" > "$EXPO_ASC_API_KEY_PATH"
+          unset P8
+          trap 'rm -f "$EXPO_ASC_API_KEY_PATH"' EXIT
+          if [ "${{ inputs.ios_submit }}" = "true" ]; then
+            # waits for the build, then EAS sends it to TestFlight (eas.json submit.testflight reads the same key)
+            npx eas-cli@27.4.1 build --platform ios --profile testflight --non-interactive --auto-submit-with-profile=testflight
+          else
+            npx eas-cli@27.4.1 build --platform ios --profile testflight --non-interactive
+          fi
