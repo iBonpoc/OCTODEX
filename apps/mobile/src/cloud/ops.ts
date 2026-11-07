@@ -221,7 +221,9 @@ export interface OutboxItem {
 
 
 /** Errors that will never succeed on retry (permission, constraint). Network errors are retried. */
-export class PermanentError extends Error {}
+export class PermanentError extends Error {
+  override name = "PermanentError";
+}
 
 async function run(p: PromiseLike<{ error: { message: string; code?: string } | null }>) {
   const { error } = await p;

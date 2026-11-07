@@ -110,11 +110,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const gone = useRef(
     goneChecker(
       (uid) => profileDeleted(uid),
-      () => {
+      (uid) => {
         setSession(null);
         setMemberships([]);
         setAccountDeleted(true);
-        void finishDeletion();
+        void finishDeletion(uid);
       },
     ),
   ).current;

@@ -20,12 +20,13 @@ import { deleteAccount, myLastOwnerCompanies, sendDeleteCode, transferOwnership,
  */
 export default function DeleteAccount() {
   const { t, lang } = useI18n();
-  const { online, queue, mode } = useStore();
+  const { online, unsentAll } = useStore();
   const auth = useAuth();
   const toast = useToast();
   const account = !!auth.session;
-  // only the cloud's unsent changes block it (signed in without a company the store is «demo»: its queue never goes out)
-  const unsent = mode === "cloud" ? queue.length : 0;
+  // only the cloud's unsent changes block it (signed in without a company the store is «demo»: its queue never goes out),
+  // the person's in EVERY company: the deletion removes them all (review #240 №4)
+  const unsent = unsentAll;
   const email = auth.email ?? "";
 
   const [codeSent, setCodeSent] = useState(false);

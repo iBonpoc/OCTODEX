@@ -173,7 +173,8 @@ export async function deleteWithRepeat(
 export const DEVICE_KEYS: readonly string[] = ["octo.outbox.v1", "octo.queue.v1", "octo.invite.token.v1", "octo.role.v1", "octo.planWho.v1", "octo.legal.pending.v1"];
 export const DEVICE_PREFIXES: readonly string[] = ["octo.cloud.v1.", "octo.nav.open."];
 export const isDeviceKey = (k: string) => DEVICE_KEYS.includes(k) || DEVICE_PREFIXES.some((p) => k.startsWith(p));
-/** set when a wipe failed: the next start wipes again (review #220 №6) */
+/** set when a wipe failed: the next start wipes again (review #220 №6); its value is the deleted person's id (or "1"
+ *  from older versions), so the repeat knows whose ops leave the shared outbox (review #240 №2) */
 export const WIPE_PENDING_KEY = "octo.wipe.pending.v1";
 export interface WipeStore {
   getAllKeys: () => Promise<readonly string[]>;
@@ -182,7 +183,7 @@ export interface WipeStore {
   removeItem: (k: string) => Promise<void>;
 }
 /** true — wiped; false — it failed (logged, and marked for the next start) */
-export async function wipeDevice(store: WipeStore, log: (m: string) => void = () => {}): Promise<boolean> {
+export async function wipeDevice(store: WipeStore, log: (m: string) => void = () => {}, userId?: string | null): Promise<boolean> {
   try {
     const keys = (await store.getAllKeys()).filter(isDeviceKey);
     await store.multiRemove([...new Set([...keys, ...DEVICE_KEYS])]);
@@ -190,7 +191,7 @@ export async function wipeDevice(store: WipeStore, log: (m: string) => void = ()
     return true;
   } catch (e) {
     log(`wipe failed: ${(e as Error).message}`);
-    await store.setItem(WIPE_PENDING_KEY, "1").catch(() => {});
+    await store.setItem(WIPE_PENDING_KEY, userId || "1").catch(() => {});
     return false;
   }
 }
