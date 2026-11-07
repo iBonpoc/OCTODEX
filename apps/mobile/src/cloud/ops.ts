@@ -12,7 +12,7 @@ import type { BillingAddress, CalendarEvent, MemberPrefs, CustomField, CustomFie
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
-import { isNetworkError } from "@/data/outboxRetry";
+import { classify } from "@/data/outboxRetry";
 
 export type Op =
   /** at: when the tech left (step en_route), phone time — visits.en_route_at (П3c) */
@@ -298,7 +298,7 @@ async function sourceRef(companyId: string, op: { sourceId?: string; source?: st
     (e: unknown) => {
       // a dropped connection is not «the company has no sources»: the op waits and is retried. A refusal keeps the old
       // way (the lead is saved without a source) — dropping the whole lead after MAX_TRIES would lose more.
-      if (isNetworkError(e)) throw e;
+      if (classify(e) !== "refusal") throw e;
       return [] as { id: string; name: string }[];
     },
   );
@@ -307,14 +307,23 @@ async function sourceRef(companyId: string, op: { sourceId?: string; source?: st
 }
 
 async function uploadPhoto(companyId: string, fileId: string, uri: string) {
+  let blob: Blob;
   try {
-    const blob = await (await fetch(uri)).blob();
+    blob = await (await fetch(uri)).blob();
+  } catch {
+    // the photo is gone from the phone: nothing to send again
+    return run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
+  }
+  try {
     const key = `${companyId}/${fileId}.jpg`;
     const { error } = await supabase.storage.from("files").upload(key, blob, { contentType: blob.type || "image/jpeg", upsert: true });
     if (error) throw error;
-    await supabase.from("files").update({ storage_key: key, upload_status: "uploaded", mime: blob.type || "image/jpeg", size: blob.size }).eq("id", fileId);
-  } catch {
-    await supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId);
+    await run(supabase.from("files").update({ storage_key: key, upload_status: "uploaded", mime: blob.type || "image/jpeg", size: blob.size }).eq("id", fileId));
+  } catch (e) {
+    // no network or the server's «not now»: the op stays in the queue and the upload is tried again (upsert: true);
+    // only a refusal marks the photo failed
+    if (classify(e) !== "refusal") throw e;
+    await run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
   }
 }
 
@@ -668,7 +677,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         const patch: Record<string, string | null> = {};
         if (op.phone !== undefined) patch.phone = op.phone || null;
         if (op.email !== undefined) patch.email = op.email || null;
-        const { data: primary } = await read(supabase.from("contacts").select("id").eq("customer_id", op.id).eq("is_primary", true).maybeSingle());
+        const { data: primary } = await read(supabase.from("contacts").select("id").eq("customer_id", op.id).eq("is_primary", true).is("deleted_at", null).maybeSingle());
         if (primary?.id) await run(supabase.from("contacts").update(patch).eq("id", primary.id));
         else await run(supabase.from("contacts").insert({ company_id: c, customer_id: op.id, name: op.name ?? "—", is_primary: true, ...patch }));
       }
@@ -959,8 +968,10 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   if (lines.length) await run(supabase.from("estimate_line_items").insert(lines));
   const costRows = lines.filter((l) => op.costs[l.id] !== undefined).map((l) => ({ line_item_id: l.id, company_id: c, unit_cost_cents: op.costs[l.id] }));
   if (costRows.length) {
-    // Tech without "view costs" cannot write costs; the estimate itself is still saved.
-    await supabase.from("estimate_line_costs").upsert(costRows, { onConflict: "line_item_id" });
+    // Tech without "view costs" cannot write costs (42501): the estimate itself is still saved. Any other failure
+    // (no network, the server's «not now») stops the op — a resend replaces the lines and writes the costs again.
+    const r = await supabase.from("estimate_line_costs").upsert(costRows, { onConflict: "line_item_id" });
+    if (r.error?.code !== "42501") await run(Promise.resolve(r));
   }
 }
 

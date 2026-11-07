@@ -13,6 +13,12 @@ const failing = new Set<string>();
 const serverErr: Record<string, { status: number; code: string }> = {};
 /** what a successful read of a table returns */
 const found: Record<string, unknown> = {};
+/** tables whose writes get an error answer (status 0 = dropped connection) */
+const writeErr: Record<string, { status: number; code: string; message?: string }> = {};
+/** filters asked of each table: `is` calls ([column, value]) */
+const isCalls: { table: string; col: string; val: unknown }[] = [];
+/** the photo upload: its answer */
+const upload: { error: unknown } = { error: null };
 /** what a successful head:true count of a table returns */
 const counts: Record<string, number> = {};
 
@@ -21,7 +27,9 @@ const chain = (table: string): Record<string, unknown> => {
   const result = () =>
     Promise.resolve(
       write
-        ? { data: null, error: null }
+        ? writeErr[table]
+          ? { data: null, status: writeErr[table]!.status, error: { message: writeErr[table]!.message ?? "denied", code: writeErr[table]!.code } }
+          : { data: null, error: null }
         : serverErr[table]
           ? { data: null, count: null, status: serverErr[table]!.status, error: { message: "upstream", code: serverErr[table]!.code } }
           : failing.has(table)
@@ -38,12 +46,22 @@ const chain = (table: string): Record<string, unknown> => {
       return c;
     };
   }
-  for (const k of ["select", "eq", "neq", "is", "in", "not", "order", "limit", "range"]) c[k] = () => c;
+  for (const k of ["select", "eq", "neq", "in", "not", "order", "limit", "range"]) c[k] = () => c;
+  c.is = (col: string, val: unknown) => {
+    isCalls.push({ table, col, val });
+    return c;
+  };
   c.maybeSingle = () => result();
   c.single = () => result();
   return c;
 };
-vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => chain(t), rpc: () => Promise.resolve({ data: null, error: null }) } }));
+vi.mock("../src/cloud/client", () => ({
+  supabase: {
+    from: (t: string) => chain(t),
+    rpc: () => Promise.resolve({ data: null, error: null }),
+    storage: { from: () => ({ upload: () => Promise.resolve({ data: null, error: upload.error }) }) },
+  },
+}));
 
 import { applyOp, type Op } from "../src/cloud/ops";
 import { classify } from "../src/data/outboxRetry";
@@ -58,6 +76,10 @@ afterEach(() => {
   for (const k of Object.keys(serverErr)) delete serverErr[k];
   for (const k of Object.keys(found)) delete found[k];
   for (const k of Object.keys(counts)) delete counts[k];
+  for (const k of Object.keys(writeErr)) delete writeErr[k];
+  isCalls.length = 0;
+  upload.error = null;
+  vi.unstubAllGlobals();
 });
 
 const deposit: Op = {
@@ -180,5 +202,64 @@ describe("unit:opsReadErrors — what is not an error, and a resend after a lost
     expect(writes.filter((w) => w.table === "invoices" && w.kind !== "update")).toEqual([]);
     // the job insert reuses the existing id (ON CONFLICT DO NOTHING), not the new one from the phone
     expect(writes.filter((w) => w.table === "jobs").map((w) => (w.row as { id: string }).id)).toEqual([J]);
+  });
+
+});
+
+describe("unit:opsReadErrors — review #248: deleted primary contact, costs, photo upload", () => {
+  it("the primary contact is looked up among the live ones (a deleted primary is not updated, no PGRST116 with two)", async () => {
+    await applyOp({ k: "customer.update", id: "c-1", email: "a@b.co" }, "co-1", "u-1");
+    expect(isCalls).toContainEqual({ table: "contacts", col: "deleted_at", val: null });
+  });
+
+  const save = (costs: Record<string, number>) =>
+    ({
+      k: "estimate.save", id: E, versionId: V, customerId: "c-1", propertyId: "p-1", title: "T", costs, totalCents: 1000, depositCents: 0, marginPct: null,
+      doc: {
+        settings: { tax: { enabled: false, groups: {}, rateBps: 0 }, deposit: { kind: "pct", value: "0" } },
+        options: [{ id: "o-1", name: "Good", lines: [{ id: "l-1", name: "Gutter (тестовые цены)", quantity: "1", unit: "ea", unitPriceCents: 1000, group: "material" }] }],
+      },
+    }) as unknown as Op;
+  it("costs: a dropped connection on the cost write stops the op (it is resent, the costs are not lost)", async () => {
+    found.estimates = { status: "draft", current_version_id: null };
+    writeErr.estimate_line_costs = { status: 0, code: "", message: "TypeError: Failed to fetch" };
+    await expect(applyOp(save({ "l-1": 400 }), "co-1", "u-1")).rejects.toThrow(/Failed to fetch/);
+  });
+  it("costs: the server's «not now» (503) stops the op too", async () => {
+    found.estimates = { status: "draft", current_version_id: null };
+    writeErr.estimate_line_costs = { status: 503, code: "PGRST002" };
+    const e = await applyOp(save({ "l-1": 400 }), "co-1", "u-1").then(() => null, (x: unknown) => x);
+    expect(classify(e)).toBe("transient");
+  });
+  it("costs: a tech without the right to costs (42501) — the estimate is still saved, the op does not fail", async () => {
+    found.estimates = { status: "draft", current_version_id: null };
+    writeErr.estimate_line_costs = { status: 403, code: "42501" };
+    await applyOp(save({ "l-1": 400 }), "co-1", "u-1");
+    expect(writes.some((w) => w.table === "estimate_line_items" && w.kind === "insert")).toBe(true);
+  });
+
+  const photo = { k: "photo.add", id: "f-1", visitId: "v-1", jobId: J, stage: "before", uri: "file:///p.jpg" } as unknown as Op;
+  const blobOk = () => vi.stubGlobal("fetch", () => Promise.resolve({ blob: () => Promise.resolve({ type: "image/jpeg", size: 10 }) }));
+  it("photo: the upload drops (no network) → the op is retried, the photo is not marked failed", async () => {
+    blobOk();
+    upload.error = Object.assign(new Error("TypeError: Failed to fetch"), { name: "StorageUnknownError" });
+    await expect(applyOp(photo, "co-1", "u-1")).rejects.toThrow(/Failed to fetch/);
+    expect(writes.filter((w) => w.table === "files" && w.kind === "update")).toEqual([]);
+  });
+  it("photo: the record of the uploaded file drops → the op is retried (not «uploaded» lost silently)", async () => {
+    blobOk();
+    writeErr.files = { status: 0, code: "", message: "TypeError: Failed to fetch" };
+    await expect(applyOp(photo, "co-1", "u-1")).rejects.toThrow(/Failed to fetch/);
+  });
+  it("photo: the storage refuses (403) → marked failed, the op is done", async () => {
+    blobOk();
+    upload.error = Object.assign(new Error("new row violates row-level security policy"), { status: 403 });
+    await applyOp(photo, "co-1", "u-1");
+    expect(writes.filter((w) => w.table === "files" && w.kind === "update").map((w) => (w.row as { upload_status: string }).upload_status)).toEqual(["failed"]);
+  });
+  it("photo: uploaded → recorded as uploaded", async () => {
+    blobOk();
+    await applyOp(photo, "co-1", "u-1");
+    expect(writes.filter((w) => w.table === "files" && w.kind === "update").map((w) => (w.row as { upload_status: string }).upload_status)).toEqual(["uploaded"]);
   });
 });
