@@ -35,7 +35,8 @@ export const routeRoles: Record<string, readonly Role[]> = {
   leads: OFFICE,
   inbox: OFFICE,
   team: ["director"],
-  company: ["director"],
+  // the office reads, the director changes (spec 26 §3; companies_update is owner / admin in the database)
+  company: ["director", "dispatcher"],
 };
 
 /** the first part of an address: "/company/hours?x=1" → "company", "/" → "" */

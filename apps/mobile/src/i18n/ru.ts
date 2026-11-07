@@ -2205,6 +2205,8 @@ export const ru = {
   "push.turnedOn": "Уведомления включены",
   "push.denied": "Телефон не разрешил уведомления",
   "push.failed": "Не удалось включить. Проверьте связь и попробуйте ещё раз",
+  // fix.co.* — company settings read-only for the office (spec 26 §3)
+  "fix.co.readOnly": "Только просмотр — менять может директор",
 } as const;
 
 export type DictKey = keyof typeof ru;

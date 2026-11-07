@@ -12,7 +12,7 @@ import { Labeled, PctField } from "@/features/fields";
 import { SETUP_STEPS, stepHint, stepTitle, type SetupStep } from "@/features/companySetup";
 import { tzLabel } from "@/features/scheduleSettings";
 import { ServiceCategoryEditor } from "@/features/ServiceCategoryPicker";
-import { Button, ChoiceChips, IconButton, Segmented, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, ReadOnly, Segmented, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
@@ -35,6 +35,8 @@ export default function CompanySection() {
   const step = SETUP_STEPS.includes(section) ? section : "profile";
   const idx = SETUP_STEPS.indexOf(step);
   const isWizard = wizard === "1";
+  // spec 26 §3 (07.11): the office sees the company settings, only the director changes them
+  const ro = store.role !== "director";
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company"));
 
   if (!c || !draft) {
@@ -70,9 +72,11 @@ export default function CompanySection() {
       back={back}
       subtitle={isWizard ? t("co.stepOf", { i: idx + 1, n: SETUP_STEPS.length }) : undefined}
     >
+      {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
       <T v="body" tone="mut">
         {t(stepHint(step))}
       </T>
+      <ReadOnly value={ro}>
 
       {step === "profile" ? (
         <Card>
@@ -198,14 +202,15 @@ export default function CompanySection() {
         </>
       ) : null}
 
-      {listSection ? (
+      </ReadOnly>
+      {ro ? null : listSection ? (
         isWizard ? (
           <Button label={SETUP_STEPS[idx + 1] ? t("co.next") : t("co.finish")} icon="chevronRight" full onPress={goNext} />
         ) : null
       ) : (
         <Button label={isWizard ? (SETUP_STEPS[idx + 1] ? t("co.saveNext") : t("co.finish")) : t("ue.save")} icon="check" full disabled={!draft.name.trim()} onPress={save} />
       )}
-      {isWizard ? <Button label={t("co.skip")} variant="ghost" full onPress={skip} /> : null}
+      {isWizard && !ro ? <Button label={t("co.skip")} variant="ghost" full onPress={skip} /> : null}
     </Screen>
   );
 }
@@ -230,6 +235,7 @@ function AddressFields({ value, onChange }: { value: Address; onChange: (a: Addr
 }
 
 function ContactsEditor() {
+  const ro = useReadOnly();
   const store = useStore();
   const { t } = useI18n();
   const toast = useToast();
@@ -276,7 +282,7 @@ function ContactsEditor() {
             <Toggle label={t("co.onDocsLong")} on={edit.onDocuments} onChange={(on) => setEdit({ ...edit, onDocuments: on })} />
           </RowView>
           <RowView style={{ justifyContent: "space-between" }}>
-            {list.some((x) => x.id === edit.id) ? (
+            {!ro && list.some((x) => x.id === edit.id) ? (
               <IconButton
                 icon="trash"
                 label={t("ue.removeLine")}
@@ -288,7 +294,7 @@ function ContactsEditor() {
             ) : (
               <Button label={t("common.close")} variant="ghost" size="sm" onPress={() => setEdit(null)} />
             )}
-            <Button
+            {ro ? null : <Button
               label={t("ue.save")}
               icon="check"
               disabled={!edit.name.trim()}
@@ -296,10 +302,10 @@ function ContactsEditor() {
                 store.saveContact({ ...edit, name: edit.name.trim() });
                 setEdit(null);
               }}
-            />
+            />}
           </RowView>
         </Card>
-      ) : (
+      ) : ro ? null : (
         <Button label={t("co.addPerson")} icon="plus" variant="secondary" full onPress={() => setEdit(blank())} />
       )}
     </>
@@ -314,6 +320,7 @@ const fromUs = (s: string): string | undefined => {
 };
 
 function LicensesEditor() {
+  const ro = useReadOnly();
   const store = useStore();
   const { t, day } = useI18n();
   const toast = useToast();
@@ -360,7 +367,7 @@ function LicensesEditor() {
             <Toggle label={t("co.onDocsLong")} on={edit.onDocuments} onChange={(on) => setEdit({ ...edit, onDocuments: on })} />
           </RowView>
           <RowView style={{ justifyContent: "space-between" }}>
-            {list.some((x) => x.id === edit.id) ? (
+            {!ro && list.some((x) => x.id === edit.id) ? (
               <IconButton
                 icon="trash"
                 label={t("ue.removeLine")}
@@ -372,7 +379,7 @@ function LicensesEditor() {
             ) : (
               <Button label={t("common.close")} variant="ghost" size="sm" onPress={() => setEdit(null)} />
             )}
-            <Button
+            {ro ? null : <Button
               label={t("ue.save")}
               icon="check"
               disabled={!edit.number.trim() || (!!edit.exp && !fromUs(edit.exp))}
@@ -386,10 +393,10 @@ function LicensesEditor() {
                 });
                 setEdit(null);
               }}
-            />
+            />}
           </RowView>
         </Card>
-      ) : (
+      ) : ro ? null : (
         <Button
           label={t("co.addLicense")}
           icon="plus"
@@ -403,6 +410,7 @@ function LicensesEditor() {
 }
 
 function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>) => void }) {
+  const ro = useReadOnly();
   const { t } = useI18n();
   const toast = useToast();
   const pick = async () => {
@@ -434,10 +442,10 @@ function BrandEditor({ draft, set }: { draft: Company; set: (p: Partial<Company>
             {t("co.noLogo")}
           </T>
         )}
-        <RowView>
+        {ro ? null : <RowView>
           <Button label={draft.brand.logo ? t("co.changeLogo") : t("co.pickLogo")} icon="camera" variant="secondary" onPress={pick} />
           {draft.brand.logo ? <Button label={t("cat.remove")} variant="ghost" onPress={() => set({ brand: { ...draft.brand, logo: undefined } })} /> : null}
-        </RowView>
+        </RowView>}
       </Card>
       <Card>
         <T v="heading">{t("co.color")}</T>

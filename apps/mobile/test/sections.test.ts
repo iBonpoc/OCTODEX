@@ -35,10 +35,10 @@ describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, �
     expect(side).toEqual(["home", "messages", "plan", "leads", "jobs", "clients", "calls", "tasks", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings", "help"]);
     expect(side).not.toContain("more");
   });
-  it("office: no Team, no Company settings", () => {
+  it("office: no Team; Company settings to read (spec 26 §3: only the director changes them)", () => {
     const m = menu("dispatcher");
     expect(m).not.toContain("team");
-    expect(m).not.toContain("company");
+    expect(m).toContain("company");
     expect(m).toContain("money");
     expect(m).toContain("payments");
     expect(m).toContain("reports");

@@ -2206,4 +2206,6 @@ export const es: Dict = {
   "push.turnedOn": "Notificaciones activadas",
   "push.denied": "El teléfono no permitió las notificaciones",
   "push.failed": "No se pudo activar. Revisa la conexión e inténtalo de nuevo",
+  // fix.co.* — company settings read-only for the office (spec 26 §3)
+  "fix.co.readOnly": "Solo lectura — los cambios los hace el director",
 };

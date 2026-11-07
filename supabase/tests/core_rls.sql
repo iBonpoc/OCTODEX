@@ -6300,4 +6300,20 @@ drop owned by t80_owner;
 drop role t80_owner;
 \echo 'T81 push_outbox: owner, admin and the author; payments to owner and admin; no text; server only ok'
 
+-- ---------------------------------------------------------------- T86: the office reads the company, only owner / admin change it
+-- Spec 26 §3 (decision 07.11, LOG): the office sees «Настройки компании» read-only in the app; the database is the guard.
+-- the person «office A» is an admin by now (earlier tests): make them office for this test, like T-tests above do
+:as_super
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+select tst.ok((select name from public.companies where id = 'ca000000-0000-0000-0000-000000000000') is not null, 'T86 the office reads the company');
+select tst.blocked($q$update public.companies set name = 'office-edit' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T86 the office cannot rename the company');
+select tst.blocked($q$update public.companies set doc_language = 'es' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T86 the office cannot change the client document language');
+select tst.blocked($q$update public.companies set lead_settings = '{"replyWarnMin": 1}'::jsonb where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T86 the office cannot change the lead settings');
+:as_owner_a
+select tst.ok((select name from public.companies where id = 'ca000000-0000-0000-0000-000000000000') <> 'office-edit', 'T86 the company is unchanged after the office tried');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T86 company settings: the office reads, owner / admin change ok'
+
 \echo 'ALL TESTS PASSED'
