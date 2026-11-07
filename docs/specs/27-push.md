@@ -51,7 +51,9 @@
 - Edge function `send-push` (service_role): `push_claim(n)` берёт строки атомарно (как `email_claim`), шлёт в Expo Push API пачками до 100, `push_finish` пишет итог.
 - Повтор: 5xx, 429, сетевые — до 5 раз с паузой 1, 2, 4, 8, 16 мин; `DeviceNotRegistered` → устройство `revoked_at`, `not_registered`.
 - Квитанции — через 15 минут (Expo хранит 24 ч).
-- Будит pg_cron раз в минуту (одно расписание с почтой П1b). Вызов функции из базы — HTTP, его делает только `pg_net`; решение руководителя нужно к P3.
+- Будит pg_cron раз в минуту (одно расписание с почтой П1b). Вызов функции из базы — HTTP, его делает только `pg_net` (решение руководителя 07.11: да, **один вызов из pg_cron, без триггеров**).
+- **Кто включает pg_net и pg_cron.** Миграция P3 (`20261107100000`): `create extension if not exists pg_net` и `pg_cron` (на Supabase оба доступны, ставятся в схему `extensions`) и `cron.schedule('send-push', '* * * * *', …)` — на прод уходит только через `release.yml`, как любая миграция; руками в панели ничего не включать. Расписание читает адрес функции и ключ из **Vault** и без них ничего не делает.
+- **Секреты в Vault кладёт оператор**, один раз, в Supabase → SQL Editor: `select vault.create_secret('<адрес send-push>', 'push_fn_url')` и `select vault.create_secret('<ключ>', 'push_fn_key')`. Значения — никогда в миграции, репозитории или чате. Токен доступа Expo — секрет функции: Supabase → Edge Functions → Secrets (`EXPO_ACCESS_TOKEN`).
 
 ## 5. Приложение (P2)
 - `expo-notifications` (`npx expo install`, проверка `CHECKS.md` §4), плагин в `app.json`, `google-services.json`.
