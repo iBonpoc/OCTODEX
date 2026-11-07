@@ -225,6 +225,8 @@ export const ru = {
   "vcard.photos": "Фото: {n}",
 
   "offline.badge": "Без сети · в очереди: {n}",
+  // «Лиды и клиенты» — очередь (docs/specs/23)
+  "sync.server.badge": "Сервер недоступен · в очереди: {n}",
   "offline.queued": "Без сети. Сохранено, отправится позже",
   "offline.synced": "Сеть есть. Очередь отправлена: {n}",
   "offline.toggle": "Проверка: режим без сети",
