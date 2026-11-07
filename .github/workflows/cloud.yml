@@ -1,0 +1,99 @@
+# The main scenarios against a REAL Supabase (docs/specs/21; docs/ai/CHECKS.md §3а): `supabase start` on the runner
+# (no hosted project, no secrets — the local stack's keys are the same for everyone), then
+#   cat   — the auth stub's catalog (supabase/tests/run.sh) = the real Supabase's (serverCatalog trusts the stub on PRs);
+#   seed  — people and companies through the API (scripts/cloud-seed.mjs);
+#   api-1 — two companies do not see each other through PostgREST and Storage;
+#   e2e 102 (and next 103, 104) — the app in a browser, built for the local stack, 390 dark (the director's exception);
+#   api-2 — «Удалить аккаунт»: the edge function + delete_account + Auth (S22).
+# Nightly at 10:47 UTC (after checks.yml's 10:17; 2:47 AM in Los Angeles), by hand, and on a PR that changes the server
+# or these scenarios. A red nightly opens (or adds to) the `nightly-red` issue, like checks.yml.
+name: Cloud scenarios
+
+on:
+  schedule:
+    - cron: '47 10 * * *'
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'supabase/**'
+      - 'scripts/cloud-seed.mjs'
+      - 'apps/mobile/e2e/cloud/**'
+      - 'apps/mobile/e2e/serve.cjs'
+      - 'apps/mobile/e2e/h.cjs'
+      - 'apps/mobile/src/cloud/**'
+      - '.github/workflows/cloud.yml'
+
+concurrency:
+  group: cloud-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  cloud:
+    name: Scenarios against a local Supabase
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - uses: supabase/setup-cli@v1
+        with:
+          # the same exact version as release.yml ("latest" asks the GitHub API and fails on its rate limit)
+          version: 3.0.0
+      - name: Start Supabase (db, auth, rest, storage, functions, mail)
+        run: |
+          supabase start -x studio,imgproxy,vector,logflare,supavisor,realtime,postgres-meta
+          supabase status -o env | grep -E '^(API_URL|ANON_KEY|SERVICE_ROLE_KEY|DB_URL|MAILPIT_URL)=' | tr -d '"' >> "$GITHUB_ENV"
+      - name: cat — the auth stub's catalog equals Supabase's
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 >/dev/null
+          sudo CATALOG_OUT="$RUNNER_TEMP/catalog.stub.json" bash supabase/tests/run.sh > /dev/null
+          psql "$DB_URL" -X -q -At -v ON_ERROR_STOP=1 -f supabase/tests/catalog.sql > "$RUNNER_TEMP/catalog.live.json"
+          node apps/mobile/e2e/cloud/api/catalog-diff.mjs "$RUNNER_TEMP/catalog.stub.json" "$RUNNER_TEMP/catalog.live.json"
+      - name: seed — people and companies through the API
+        run: node scripts/cloud-seed.mjs "$RUNNER_TEMP/seed.json"
+      - name: api-1 — two companies do not see each other
+        run: node apps/mobile/e2e/cloud/api/isolation.mjs "$RUNNER_TEMP/seed.json" "$RUNNER_TEMP/catalog.live.json"
+      - name: e2e — the app in a browser against the local Supabase
+        working-directory: apps/mobile
+        run: |
+          npx playwright install --with-deps chromium >/dev/null
+          node e2e/cloud/cloud.cjs "$RUNNER_TEMP/seed.json"
+      - name: api-2 — delete the account (edge function, S22)
+        run: node apps/mobile/e2e/cloud/api/delete-account.mjs "$RUNNER_TEMP/seed.json"
+      - name: Server logs on failure
+        if: failure()
+        run: |
+          mkdir -p "$RUNNER_TEMP/logs"
+          for c in $(docker ps -a --format '{{.Names}}' | grep '^supabase_'); do docker logs "$c" > "$RUNNER_TEMP/logs/$c.log" 2>&1 || true; done
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        # for reading a failure, not a test: a storage outage must not turn green red
+        continue-on-error: true
+        with:
+          name: cloud-failure
+          path: |
+            apps/mobile/e2e/out/
+            ${{ runner.temp }}/logs/
+
+  # A red nightly opens (or adds to) the same issue as checks.yml (docs/ai/CHECKS.md §3а).
+  nightly-alert:
+    name: Nightly alert
+    needs: cloud
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    permissions:
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Open or update the issue
+        run: |
+          url="${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          n=$(gh issue list -R "${{ github.repository }}" --state open --label nightly-red --json number -q '.[0].number')
+          if [ -n "$n" ]; then gh issue comment "$n" -R "${{ github.repository }}" --body "Cloud scenarios red: $url"
+          else gh label create nightly-red -R "${{ github.repository }}" --color B60205 2>/dev/null || true
+               gh issue create -R "${{ github.repository }}" --label nightly-red --title "Nightly checks red on main" --body "Cloud scenarios (real Supabase) failed: $url"; fi
