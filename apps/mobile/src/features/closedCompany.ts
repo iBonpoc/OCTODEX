@@ -56,3 +56,10 @@ export const closedDay = (iso: string): string => {
   const d = new Date(iso);
   return Number.isNaN(d.getTime()) ? "" : US_DAY.format(d);
 };
+
+/**
+ * a late answer of my_closed_companies counts only if it is the newest ask and the same person is still signed in on
+ * this phone (security-check #312: else a new person would see the closed company of the one before)
+ */
+export const closedAnswerCounts = (ticket: number, newest: number, askedFor: string, signedIn: string | null | undefined): boolean =>
+  ticket === newest && !!signedIn && signedIn === askedFor;

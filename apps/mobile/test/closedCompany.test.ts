@@ -1,6 +1,6 @@
 /** 7а-3 «в» (docs/specs/22 §3.6): the people of a closed company — what the phone shows and what it removes */
 import { describe, expect, it } from "vitest";
-import { closedDay, parseClosed, parseSeen, unseenClosed, unsentIn, withoutUnsentIn } from "../src/features/closedCompany";
+import { closedAnswerCounts, closedDay, parseClosed, parseSeen, unseenClosed, unsentIn, withoutUnsentIn } from "../src/features/closedCompany";
 import type { OwnedItem } from "../src/data/outboxOwner";
 
 const op = (id: string, owner?: { userId: string; companyId: string }): OwnedItem =>
@@ -44,5 +44,14 @@ describe("closed companies", () => {
   it("the day of the closing in the US format (rule 7)", () => {
     expect(closedDay("2026-11-05T18:00:00Z")).toBe("Nov 5, 2026");
     expect(closedDay("nonsense")).toBe("");
+  });
+  it("a late answer never reaches the next person on this phone (security-check #312)", () => {
+    expect(closedAnswerCounts(3, 3, "u1", "u1")).toBe(true);
+    // another person signed in meanwhile
+    expect(closedAnswerCounts(3, 3, "u1", "u2")).toBe(false);
+    // signed out
+    expect(closedAnswerCounts(3, 3, "u1", null)).toBe(false);
+    // a newer ask or a clearing came after it
+    expect(closedAnswerCounts(2, 3, "u1", "u1")).toBe(false);
   });
 });

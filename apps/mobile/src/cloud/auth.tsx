@@ -9,7 +9,7 @@ import { forgetThisPhone } from "@/features/pushNative";
 import { acceptLegal, legalStatus } from "./legal";
 import { finishDeletion, profileDeleted, wipeIfPending } from "./account";
 import { authEventPlan, goneChecker } from "@/features/deleteAccount";
-import { parseClosed, type ClosedCompany } from "@/features/closedCompany";
+import { closedAnswerCounts, parseClosed, type ClosedCompany } from "@/features/closedCompany";
 
 /** Where email links (confirm / magic link) return. Must be in Supabase Auth → URL Configuration. */
 const redirectTo = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL);
@@ -88,18 +88,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [tickets],
   );
 
-  /** no answer (no network, an old server without the function): none */
-  const askClosed = () => {
+  /**
+   * no answer (no network, an old server without the function): none. A late answer never reaches another person
+   * signed in meanwhile on this phone (security-check #312, like the legal tickets of review #206 M1): each ask and each
+   * clearing takes a ticket, only the newest answer for the same person counts.
+   */
+  const closedTicket = useRef(0);
+  const clearClosed = () => {
+    closedTicket.current += 1;
+    setClosedCompanies([]);
+  };
+  const askClosed = (uid: string) => {
+    const ticket = ++closedTicket.current;
+    const fresh = async () => closedAnswerCounts(ticket, closedTicket.current, uid, (await supabase.auth.getSession()).data.session?.user.id);
     supabase.rpc("my_closed_companies").then(
-      ({ data: rows, error: e }) => setClosedCompanies(e ? [] : parseClosed(rows)),
-      () => setClosedCompanies([]),
+      async ({ data: rows, error: e }) => {
+        if (await fresh()) setClosedCompanies(e ? [] : parseClosed(rows));
+      },
+      async () => {
+        if (await fresh()) setClosedCompanies([]);
+      },
     );
   };
   const reloadMemberships = useCallback(async (): Promise<Membership[] | null> => {
     const { data: s } = await supabase.auth.getSession();
     if (!s.session) {
       setMemberships([]);
-      setClosedCompanies([]);
+      clearClosed();
       return [];
     }
     const { data, error } = await supabase
@@ -114,8 +129,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }));
     setMemberships(list);
     // no company: was it closed by its owner? (only then; not waited for — the start never waits on it)
-    if (error || list.length) setClosedCompanies([]);
-    else askClosed();
+    if (error || list.length) clearClosed();
+    else askClosed(s.session.user.id);
     // null — no answer (no network): «no memberships» is not known then
     return error ? null : list;
   }, []);
@@ -164,7 +179,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         checkedUid.current = null;
         gone.forget();
         setMemberships([]);
-        setClosedCompanies([]);
+        clearClosed();
         setLegal("unknown");
         setLegalChecked(false);
         return;
@@ -255,7 +270,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await forgetThisPhone();
         await supabase.auth.signOut();
         setMemberships([]);
-        setClosedCompanies([]);
+        clearClosed();
       },
       reloadMemberships,
       accountDeleted,

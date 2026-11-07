@@ -19,6 +19,8 @@ function ClosedCard({ c }: { c: ClosedCompany }) {
   const { unsentIn, dropUnsentIn } = useStore();
   const toast = useToast();
   const [sure, setSure] = useState(false);
+  // «Убрать» refused: one of them is on its way to the server right now
+  const [busy, setBusy] = useState(false);
   const n = unsentIn(c.companyId);
   return (
     <Card status="warn">
@@ -36,9 +38,10 @@ function ClosedCard({ c }: { c: ClosedCompany }) {
         {n > 0 ? (
           <View testID={`closed-unsent-${c.companyId}`} style={{ gap: space[2] }}>
             <T v="caption">{t("fr9.closed.unsent", { n })}</T>
+            {busy ? <T v="caption">{t("sync.stuck.busy")}</T> : null}
             {!sure ? (
               <View testID={`closed-drop-${c.companyId}`}>
-                <Button label={t("fr9.closed.drop")} icon="trash" variant="ghost" onPress={() => setSure(true)} />
+                <Button label={t("fr9.closed.drop")} icon="trash" variant="ghost" onPress={() => (setBusy(false), setSure(true))} />
               </View>
             ) : (
               <View style={{ gap: space[2] }}>
@@ -49,9 +52,10 @@ function ClosedCard({ c }: { c: ClosedCompany }) {
                     icon="trash"
                     variant="secondary"
                     onPress={() => {
-                      dropUnsentIn(c.companyId);
+                      const ok = dropUnsentIn(c.companyId);
                       setSure(false);
-                      toast.show(t("fr9.closed.dropped"));
+                      setBusy(!ok);
+                      if (ok) toast.show(t("fr9.closed.dropped"));
                     }}
                   />
                   <Button label={t("fr9.closed.keep")} variant="ghost" onPress={() => setSure(false)} />

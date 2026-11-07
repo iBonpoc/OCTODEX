@@ -154,7 +154,8 @@ interface StoreCtx {
    * server refuses them now), and «Убрать» them (after a confirmation, rule 5). Other people's ops stay.
    */
   unsentIn: (companyId: ID) => number;
-  dropUnsentIn: (companyId: ID) => void;
+  /** false — one of them is being sent right now: nothing removed */
+  dropUnsentIn: (companyId: ID) => boolean;
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -806,9 +807,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   };
   const unsentInCompany = (companyId: ID) => unsentInOf(outbox, auth.userId ?? null, companyId).length;
-  const dropUnsentIn = (companyId: ID) => {
+  // like discardOp: refused while one of them is on its way to the server (it would get there although the card says no)
+  const dropUnsentIn = (companyId: ID): boolean => {
+    const gone = new Set(unsentInOf(outboxRef.current, auth.userId ?? null, companyId).map((o) => o.id));
+    if (inFlight.current && gone.has(inFlight.current)) return false;
     outboxRef.current = withoutUnsentIn(outboxRef.current, auth.userId ?? null, companyId);
     setOutbox(outboxRef.current);
+    gone.forEach((x) => opPause.current.delete(x));
+    return true;
   };
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? mineOf(outbox, who).map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;

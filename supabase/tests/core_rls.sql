@@ -7221,11 +7221,19 @@ reset request.jwt.claims;
 select tst.ok((select array_agg(a.n order by a.i) from pg_proc p, unnest(p.proargnames) with ordinality a(n, i)
                 where p.proname = 'my_closed_companies' and p.pronamespace = 'public'::regnamespace) = array['company_id', 'name', 'closed_at'],
               'T77 only company_id, name, closed_at');
--- 90 days after the closing: no more
+-- the 90-day edge: 89 days after the closing — still shown, 91 — no more
 alter table public.companies disable trigger t06_company_closed_guard;
-update public.companies set closed_at = closed_at - interval '91 days' where id = 'c7700000-0000-4000-8000-000000000001';
+update public.companies set closed_at = closed_at - interval '89 days' where id = 'c7700000-0000-4000-8000-000000000001';
 alter table public.companies enable trigger t06_company_closed_guard;
-update public.memberships set deleted_at = deleted_at - interval '91 days'
+update public.memberships set deleted_at = deleted_at - interval '89 days'
+ where company_id = 'c7700000-0000-4000-8000-000000000001' and user_id <> 'a7700000-0000-4000-8000-000000000001';
+:as_with77
+select tst.ok((select count(*) from public.my_closed_companies()) = 1, 'T77 closed 89 days ago: still shown');
+:as_super
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = closed_at - interval '2 days' where id = 'c7700000-0000-4000-8000-000000000001';
+alter table public.companies enable trigger t06_company_closed_guard;
+update public.memberships set deleted_at = deleted_at - interval '2 days'
  where company_id = 'c7700000-0000-4000-8000-000000000001' and user_id <> 'a7700000-0000-4000-8000-000000000001';
 :as_with77
 select tst.ok((select count(*) from public.my_closed_companies()) = 0, 'T77 closed more than 90 days ago: nothing');
