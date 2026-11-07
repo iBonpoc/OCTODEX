@@ -90,6 +90,7 @@ type Value = {
   online: boolean;
   link: "ok" | "offline" | "server";
   setOnline: (v: boolean) => number;
+  saveCompany: (patch: object) => () => void;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -656,3 +657,24 @@ describe("unit:storeSync — the wipe and the outbox's own timing (review #244)"
   });
 });
 
+describe("unit:storeSync — company.save carries «zone chosen» (docs/specs/22 §1.3)", () => {
+  const saved = async (patch: object) => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).saveCompany(patch);
+    await wait(1700); // the outbox tick
+    await settle();
+    const ops = server.sends.map((x) => x.op as { k: string; tzChanged?: boolean });
+    expect(ops.map((o) => o.k)).toEqual(["company.save"]);
+    return ops[0]!;
+  };
+  it("the name only: tzChanged false (the zone is not sent)", async () => {
+    expect((await saved({ name: "New name" })).tzChanged).toBe(false);
+  });
+  it("the zone chosen: tzChanged true", async () => {
+    expect((await saved({ timezone: "America/Chicago" })).tzChanged).toBe(true);
+  });
+});
