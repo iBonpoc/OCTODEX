@@ -4,7 +4,9 @@ import Svg, { Path } from "react-native-svg";
 import { radius, space, component } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { Button } from "@/ui/controls";
+import { Button, IconButton } from "@/ui/controls";
+import { useDevice } from "@/theme/ThemeProvider";
+import { SignatureFullscreen } from "./SignatureFullscreen";
 import { T } from "@/ui/primitives";
 import { RowView, useScrollLock } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
@@ -21,6 +23,9 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
   const dRef = useRef("");
   const [h, setH] = useState(0);
   const [w, setW] = useState(0);
+  // spec 29: on a phone the field can open on the whole screen, turned along the long side
+  const { device } = useDevice();
+  const [full, setFull] = useState(false);
   // the stroke owns the finger: the screen does not scroll under it (iOS), the browser does not take it (web)
   const lockScroll = useScrollLock();
   const lockRef = useRef(lockScroll);
@@ -78,16 +83,30 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
           </View>
         ) : null}
         <Svg width="100%" height="100%" pointerEvents="none">
-          <Path d={d} stroke={c.ink} strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+          <Path d={d} stroke={c.ink} strokeWidth={component.signStroke} fill="none" strokeLinecap="round" strokeLinejoin="round" />
         </Svg>
       </View>
       <T v="caption" tone="mut">
         {t("visit.signConsent")}
       </T>
       <RowView>
+        {device === "phone" ? <IconButton icon="expand" label={t("fix.sign.expand")} onPress={() => setFull(true)} /> : null}
         <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
         <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" onPress={() => onConfirm(normalizeSignature(d, w, h))} disabled={disabled || d.length < 20} />
       </RowView>
+      <SignatureFullscreen
+        visible={full}
+        d={d}
+        fieldW={w}
+        fieldH={h}
+        label={label ?? t("visit.signHere")}
+        onCancel={() => setFull(false)}
+        onDone={(path) => {
+          dRef.current = path;
+          setD(path);
+          setFull(false);
+        }}
+      />
     </View>
   );
 }
@@ -102,7 +121,7 @@ export function SignaturePreview({ svg, label }: { svg: string; label: string })
     >
       {/* the saved path lives in the 400 × 160 box (signaturePath.ts): drawn in that box, left-aligned, never cut */}
       <Svg width="100%" height="100%" viewBox={`0 0 ${SIG_BOX.w} ${SIG_BOX.h}`} preserveAspectRatio="xMinYMid meet" pointerEvents="none">
-        <Path d={fitSignature(svg)} stroke={c.ink} strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+        <Path d={fitSignature(svg)} stroke={c.ink} strokeWidth={component.signStroke} fill="none" strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
     </View>
   );

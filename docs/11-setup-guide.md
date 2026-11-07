@@ -71,11 +71,12 @@
 2. Вставить `npm run ios:first` и нажать `Return`. Первые минуты ставятся файлы проекта, это нормально.
 3. **Вход в Expo** (если спросит): почта и пароль аккаунта expo.dev.
 4. **Вход в Apple.** Вопрос «Do you want to log in to your Apple account?» → `Y` → `Return`. Дальше:
-   - **Apple ID** — почта аккаунта Apple Developer;
+   - **Apple ID** — **полностью почта** аккаунта Apple Developer (не `y`!);
    - **Password** — пароль Apple ID (буквы не видны при вводе, так и должно быть);
    - **код из 6 цифр** — придёт на iPhone, ввести в Терминал.
 5. **Все остальные вопросы — просто `Return`.** Это согласие по умолчанию: создать сертификат, профиль, ключ пушей (Push Notifications → **Yes**), ключ App Store Connect, приложение в App Store Connect.
-   - Если спросит имя приложения и скажет, что «OCTODEX» занято, ввести `GoRix` (решение основателя 07.11).
+   - Если «OCTODEX» занято, Expo сам даст имя вида «OCTODEX (ea2bef)» — так и вышло 07.11. Поменять: App Store Connect → приложение → App Information → Name (запасное — `GoRix`, решение основателя 07.11). На iPhone под иконкой всё равно OCTODEX.
+   - Роль ключа App Store Connect — `Return` (ADMIN).
 6. В конце появятся две ссылки: Build и Submission. Терминал можно закрыть: дальше всё идёт на серверах Expo и Apple.
 7. Через 20–40 минут придёт письмо от TestFlight. Если не придёт через час, проверить статус на https://expo.dev/accounts/octodex-team/projects/octodex/builds.
 
@@ -130,3 +131,13 @@
 - `claimed=1 … sent=1` — Expo принял пуш: проверьте, что уведомления OCTODEX разрешены в настройках iPhone;
 - `claimed=1 … failed=1` или `retry=1` — ошибка на стороне Expo или ключа `EXPO_ACCESS_TOKEN`;
 - `claimed=0` — телефон не записан: выключите и снова включите переключатель из шага 1.
+### 5.6. Если нет ключа пушей (Push Key)
+Проверка: https://expo.dev/accounts/octodex-team/projects/octodex/credentials → **iOS** → `com.octodex.app` → строка **Push Key**. Если там пусто — один раз на Mac:
+1. Терминал → `cd ~/OCTODEX/apps/mobile`
+2. `npx eas-cli@27.4.1 credentials -p ios`
+3. **Which build profile?** — стрелками ↓ выбрать `testflight` → `Return`.
+4. **What do you want to do?** — стрелками выбрать строку со словами **Push Notifications** → `Return`, затем **Set up your project to use Push Notifications** → `Return`.
+5. Вход в Apple: `Y` → Apple ID (**вся почта**) → пароль → код с iPhone. **Только в Терминал.**
+6. **Generate a new Apple Push Notifications service key?** → `Return` (Yes).
+7. Появится «Push Key assigned» — готово. Выйти: стрелками **Exit** → `Return`.
+Новая сборка для этого не нужна: ключ используется сервером при отправке пуша.

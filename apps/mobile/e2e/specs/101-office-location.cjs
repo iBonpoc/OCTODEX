@@ -1,7 +1,7 @@
 /**
  * Wave 7б-2 (docs/specs/03 §12, Б1; story map S23): what the office sees of the tech's location on an open visit.
  * «{tech} · в пути · 2.1 mi от адреса · 3 мин назад»; no geo on the property — only the minutes; the visit done — no line;
- * the tech takes consent back in «Мои настройки → Местоположение» → the points are gone and the office reads
+ * the tech takes consent back in «Настройки приложения → Местоположение» → the points are gone and the office reads
  * «{tech} не делится геопозицией»; the company flag off — no section and no line. A tech sees no office line.
  */
 const HOME = { lat: 34.1478, lng: -118.1445 };
@@ -52,7 +52,7 @@ exports.run = async (h) => {
   // the tech takes it back: points gone, the office reads «не делится»
   await plant({ geo: HOME, role: "tech" });
   await h.go("/settings");
-  await h.expectText(/Местоположение/, "«Мои настройки» has the section when the company allows it");
+  await h.expectText(/Местоположение/, "«Настройки приложения» has the section when the company allows it");
   await h.expectText(/Хранится 30 дней/, "it says how long and what turning off does");
   await p.getByRole("radio", { name: "Не делиться", exact: true }).last().click();
   await h.expectText(/Геопозиция выключена, точки удалены/, "a toast with Undo (rule 5)");
@@ -70,5 +70,5 @@ exports.run = async (h) => {
   const body = await h.text();
   h.expect(!officeLine.test(body) && !/не делится геопозицией/.test(body), "flag off: nothing about location on the visit");
   await h.go("/settings");
-  h.expect(!/Местоположение/.test(await h.text()), "flag off: no section in «Мои настройки»");
+  h.expect(!/Местоположение/.test(await h.text()), "flag off: no section in «Настройки приложения»");
 };

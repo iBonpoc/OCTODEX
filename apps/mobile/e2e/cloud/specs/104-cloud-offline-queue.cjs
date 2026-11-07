@@ -43,7 +43,8 @@ exports.run = async (h, { seed, admin, ctx }) => {
   const [lead] = await waitRows(admin, `leads?id=eq.${leadId}&select=id,company_id,contact_name`, (r) => r.length === 1, "the offline lead after the network came back", 30_000);
   h.expect(lead.company_id === A && lead.contact_name === name, `the offline lead reached the server (${JSON.stringify(lead)})`);
   h.expect((await admin(`leads?company_id=eq.${A}&contact_name=eq.${encodeURIComponent(name)}&select=id`)).length === 1, "exactly once (no double)");
-  await h.go("/settings");
+  // the sync state is in «Профиль и аккаунт» (spec 26)
+  await h.go("/settings/profile");
   await h.expectText(/Всё отправлено в базу/, "the queue is empty");
 };
 // offline: every request fails, and the app logs the failed sends
