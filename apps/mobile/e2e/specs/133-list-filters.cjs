@@ -20,6 +20,8 @@ const LISTS = [
   { path: "/catalog", search: "Поиск в каталоге" },
   // «Оплаты» (one rule, founder 07.11): the periods are the lane, the method in the sheet — both in the address (?p=, ?m=)
   { path: "/payments?p=all", search: "Клиент, RCT, INV", group: "Способ оплаты", inAddress: true },
+  // PR 4: «Работы» — «Мастер» (people of the nearest open visit, «Не назначен») and «Направление» in the sheet
+  { path: "/jobs", search: "Клиент, адрес, работа, JOB", group: "Мастер" },
 ];
 
 exports.run = async (h) => {
