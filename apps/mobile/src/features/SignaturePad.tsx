@@ -1,12 +1,12 @@
 import { useRef, useState } from "react";
-import { PanResponder, View, type LayoutChangeEvent } from "react-native";
+import { PanResponder, Platform, View, type LayoutChangeEvent } from "react-native";
 import Svg, { Path } from "react-native-svg";
 import { radius, space, component } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { RowView } from "@/ui/surfaces";
+import { RowView, useScrollLock } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 
 /** Finger signature. Output is SVG path data (stored with the visit; PDF in wave 3). */
@@ -18,12 +18,17 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
   const [d, setD] = useState("");
   const dRef = useRef("");
   const [h, setH] = useState(0);
+  // the stroke owns the finger: the screen does not scroll under it (iOS), the browser does not take it (web)
+  const lockScroll = useScrollLock();
+  const lockRef = useRef(lockScroll);
+  lockRef.current = lockScroll;
   const pan = useRef(
     PanResponder.create({
       onStartShouldSetPanResponder: () => true,
       onMoveShouldSetPanResponder: () => true,
       onPanResponderTerminationRequest: () => false,
       onPanResponderGrant: (e) => {
+        lockRef.current(true);
         const { locationX: x, locationY: y } = e.nativeEvent;
         dRef.current += `M${x.toFixed(1)} ${y.toFixed(1)} `;
         setD(dRef.current);
@@ -33,6 +38,8 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
         dRef.current += `L${x.toFixed(1)} ${y.toFixed(1)} `;
         setD(dRef.current);
       },
+      onPanResponderRelease: () => lockRef.current(false),
+      onPanResponderTerminate: () => lockRef.current(false),
     }),
   ).current;
   const clear = () => {
@@ -51,6 +58,8 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
           borderColor: c.bd,
           backgroundColor: c.in,
           overflow: "hidden",
+          // web: the browser does not scroll or zoom the page under a finger on the field
+          ...(Platform.OS === "web" ? ({ touchAction: "none" } as object) : null),
         }}
         accessibilityLabel={(label ?? t("visit.signHere"))}
         {...pan.panHandlers}
