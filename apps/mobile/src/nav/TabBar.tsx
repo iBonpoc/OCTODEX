@@ -44,7 +44,8 @@ export function TabBar() {
   if (session && (legal === "first" || legal === "changed") && gateFreePath(pathname)) return null;
   // a tab from a card: back down to the tabs (dismissTo — navigate would push a second copy of the tabs, review #274),
   // then the tab; on the tabs themselves — just the tab. «On the tabs» = the top of the stack is the tabs, not «nothing to
-  // dismiss»: after a role change from /settings the stack is [(tabs), settings, (tabs)] and dismissTo did nothing (e2e 134)
+  // dismiss»: after a card opened by a link ([card, (tabs)]) or the old role change ([(tabs), settings, (tabs)]) dismissTo did
+  // nothing (e2e 134)
   const leave = (href: Href) => {
     if (tabLeave(appStackRoutes(root)) === "dismissTo") router.dismissTo(href);
     else router.navigate(href);

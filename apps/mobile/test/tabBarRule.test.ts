@@ -55,6 +55,8 @@ describe("unit:tabBarRule — the bottom bar on the phone", () => {
     expect(tabLeave(["(tabs)", "settings/index", "(tabs)"])).toBe("navigate");
     // a deep link to /settings, then its role change: [settings, (tabs)]
     expect(tabLeave(["settings/index", "(tabs)"])).toBe("navigate");
+    // a card opened by a link (a push), then a tab: [card, (tabs)] — the next tab was a no-op too (e2e 134)
+    expect(tabLeave(["client/[id]", "(tabs)"])).toBe("navigate");
     // no tabs in the stack (a deep link to a card) or no state yet
     expect(tabLeave(["client/[id]", "job/[id]"])).toBe("navigate");
     expect(tabLeave([])).toBe("navigate");
