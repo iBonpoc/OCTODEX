@@ -1,3 +1,4 @@
+const { listSearch, listSearchClear } = require("../listSearch.cjs");
 /**
  * People of a lead (wave L2 part 2, docs/14-leads-spec.md §2, Р12): a second phone for the lead itself and a spouse with
  * their own phone, saved in one sheet; then the estimate makes the client (S3) and the people are the client's.
@@ -31,11 +32,9 @@ exports.run = async (h) => {
 
   // the spouse's phone finds this lead from the inbox search
   await h.go("/inbox?tab=leads");
-  const search = p.getByPlaceholder("Имя, телефон, адрес, услуга");
-  await search.fill("5550177");
-  await p.waitForTimeout(300);
+  await listSearch(p, "5550177");
   h.expect((await p.getByRole("button", { name: "Tom Becker" }).count()) === 1, "search by the spouse's phone");
-  await search.fill("");
+  await listSearchClear(p);
 
   // estimate → prospect client: the people go with the lead (S3)
   await h.go(`/lead/${tom.id}`);

@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ElementRef, type ReactNode } from "react";
-import { Platform, ScrollView, View } from "react-native";
-import { component, radius, size, space } from "@octo/design-tokens";
+import { Platform, ScrollView, TextInput, View } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
+import { component, font, motion, radius, size, space } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T } from "./primitives";
 import { Sheet } from "./overlays";
-import { Button, TextField } from "./controls";
-import { activeFilterCount, chosenFilters, filterLabel, visibleFilters, type FilterGroup, type FilterItem } from "./filterBarRules";
+import { Button } from "./controls";
+import { activeFilterCount, chosenFilters, filterLabel, searchAfter, searchState, visibleFilters, type FilterGroup, type FilterItem, type SearchState } from "./filterBarRules";
 
 export type { FilterGroup, FilterOption } from "./filterBarRules";
 
@@ -139,14 +140,36 @@ export function FilterBar<K extends string>({
     </Press>
   ) : null;
 
-  const field = search ? <TextField type="search" value={search.value} onChangeText={search.onChange} placeholder={search.placeholder} icon="search" /> : null;
   const sheetGroups = open === "*" ? shown : shown.filter((g) => g.key === open);
+  // the search is an icon (founder 07.11): a tap opens the field in the same row with focus; a blur or ✕ folds it back.
+  // Phone: the open field takes row 1 next to «Фильтр» and the lane drops to row 2 for that time (~100 pt would be left
+  // for the lane otherwise). Tablet and desktop: the field (panel-w) stays in the row with the lane.
+  const inline = device !== "phone";
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [rowW, setRowW] = useState(0);
+  const st = searchState(searchOpen, search?.value ?? "");
+  const fieldW = inline ? component.panelW : Math.max(0, rowW - (filterButton ? component.button.phone + space[2] : 0));
+  const searchEl = search ? (
+    <SearchToggle
+      state={st}
+      value={search.value}
+      placeholder={search.placeholder}
+      width={fieldW}
+      onChange={search.onChange}
+      onEvent={(ev) => {
+        const next = searchAfter(ev, search.value);
+        setSearchOpen(next.open);
+        if (next.q !== search.value) search.onChange(next.q);
+      }}
+    />
+  ) : null;
+  const rowOne = !inline && st === "open";
 
   return (
     <View style={{ gap: space[2] }} testID="filter-bar">
       {desktop ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
-          {field ? <View style={{ width: component.panelW }}>{field}</View> : null}
+          {searchEl}
           <View style={{ flex: 1, minWidth: 0 }}>{lane}</View>
           {shown.map((g) => {
             const n = g.options.filter((o) => o.on).length;
@@ -155,13 +178,13 @@ export function FilterBar<K extends string>({
         </View>
       ) : (
         <>
-          {field || filterButton ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-              <View style={{ flex: 1, minWidth: 0 }}>{field}</View>
-              {filterButton}
-            </View>
-          ) : null}
-          {lane}
+          {/* one row: the magnifier, the lane, «Фильтр»; on a phone the open field sends the lane to row 2 */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
+            {searchEl}
+            {rowOne ? null : <View style={{ flex: 1, minWidth: 0 }}>{lane}</View>}
+            {filterButton}
+          </View>
+          {rowOne ? lane : null}
         </>
       )}
       {chosen.length ? (
@@ -243,5 +266,93 @@ export function FilterRow({ label, count, on, onToggle }: { label: string; count
         </T>
       ) : null}
     </Press>
+  );
+}
+
+/**
+ * The search of a list as an icon (founder 07.11, spec 31 §6 п.2а). closed — a magnifier button; closedActive — the same,
+ * framed in ink (a search is on, the list stays searched); open — the field grows to `width` (motion.durBase, easeOut;
+ * at once with «Уменьшить движение»), takes the focus, ✕ inside empties and folds it.
+ */
+function SearchToggle({ state, value, placeholder, width, onChange, onEvent }: {
+  state: SearchState;
+  value: string;
+  placeholder: string;
+  width: number;
+  onChange: (s: string) => void;
+  onEvent: (ev: "tap" | "blur" | "clear") => void;
+}) {
+  const { c } = useTheme();
+  const { t } = useI18n();
+  const { wide } = useDevice();
+  const reduce = useReducedMotion();
+  const h = wide ? component.button.md : component.button.phone;
+  const fieldH = wide ? component.field.h : component.field.phone;
+  const open = state === "open";
+  const grow = useSharedValue(open ? 1 : 0);
+  useEffect(() => {
+    grow.value = withTiming(open ? 1 : 0, { duration: reduce ? 0 : motion.durBase, easing: Easing.bezier(...motion.easeOut) });
+  }, [open, reduce, grow]);
+  const target = Math.max(width, h);
+  // a blur folds the field a moment later: a press on ✕ blurs the field first (web), and must still reach ✕
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
+  const style = useAnimatedStyle(() => ({ width: interpolate(grow.value, [0, 1], [h, target]) }));
+  if (!open)
+    return (
+      <Press
+        onPress={() => onEvent("tap")}
+        visibleHeight={h}
+        accessibilityRole="button"
+        accessibilityLabel={state === "closedActive" ? t("card.filter.searchWith", { q: value.trim() }) : t("card.filter.search")}
+        testID="filter-search-toggle"
+        style={{
+          width: h,
+          height: h,
+          borderRadius: radius.pill,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: c.surf2,
+          // on: an ink frame, like a chosen filter — not a colour (rule 2)
+          borderWidth: state === "closedActive" ? component.selectedBorder : component.hairline,
+          borderColor: state === "closedActive" ? c.ink : c.bd,
+        }}
+      >
+        <Icon name="search" s={size.iconSm} color={c.ink} />
+      </Press>
+    );
+  return (
+    <Animated.View style={[{ height: fieldH, borderRadius: radius.field, borderWidth: component.hairline, borderColor: c.ink, backgroundColor: c.in, flexDirection: "row", alignItems: "center", paddingLeft: space[3], gap: space[2], overflow: "hidden" }, style]} testID="filter-search-open">
+      <Icon name="search" s={size.iconSm} color={c.mut} />
+      <TextInput
+        testID="filter-search-field"
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={c.mut}
+        autoFocus
+        onBlur={() => {
+          blurTimer.current = setTimeout(() => onEvent("blur"), motion.durFast);
+        }}
+        inputMode="search"
+        returnKeyType="search"
+        autoCorrect={false}
+        accessibilityLabel={placeholder}
+        style={{ flex: 1, minWidth: 0, height: fieldH, color: c.ink, fontFamily: font.families.regular, fontSize: font.size.body + 2, outlineStyle: "none" } as object}
+      />
+      <Press
+        onPress={() => {
+          if (blurTimer.current) clearTimeout(blurTimer.current);
+          onEvent("clear");
+        }}
+        visibleHeight={h}
+        accessibilityRole="button"
+        accessibilityLabel={t("card.filter.clearSearch")}
+        testID="filter-search-clear"
+        style={{ width: h, height: h, alignItems: "center", justifyContent: "center" }}
+      >
+        <Icon name="close" s={size.iconSm} color={c.mut} />
+      </Press>
+    </Animated.View>
   );
 }
