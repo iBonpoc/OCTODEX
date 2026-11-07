@@ -6,7 +6,7 @@ import type { DB, Role, Task } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { StatusName } from "@octo/design-tokens";
 import { isOverdueTask, canSeeLead } from "@/features/leads";
-import { techVisitCounts } from "@/features/comms/comms";
+import { techScope, techVisitCounts } from "@/features/comms/comms";
 
 export type TaskState = "open" | "overdue" | "done";
 export type TaskFilter = TaskState;
@@ -107,13 +107,16 @@ export const defaultTaskScope = (role: Role): TaskScope => (role === "tech" ? "m
 
 /**
  * What a new task may be tied to, for this role (the server's tasks_insert): the office — clients, leads, jobs,
- * properties; the technician — his leads and the properties of his visits (not a job, not a client: 20 §8, в5).
+ * properties; the technician — his leads, the jobs and the properties of his visits (not a client: 20 §8; his job —
+ * 20 §6-4, migration 20261107010000, the same window as his calls on a job: techVisitCounts).
  */
 export function taskPlaces(db: DB, role: Role, query = ""): (TaskSubject & { subjectId: string })[] {
   const out: (TaskSubject & { subjectId: string })[] = [];
   const add = (subjectType: Task["subjectType"], subjectId: string) => out.push({ ...taskSubject(db, { subjectType, subjectId }), subjectId });
   if (role === "tech") {
     for (const l of db.leads) if (canSeeLead(role, db.me, l)) add("lead", l.id);
+    const jobs = techScope(db).jobs;
+    for (const j of db.jobs) if (jobs.has(j.id)) add("job", j.id);
     // the same window as the server (is_property_assignee → tech_visit_counts)
     const props = new Set(db.visits.filter((v) => techVisitCounts(db, v)).map((v) => db.jobs.find((j) => j.id === v.jobId)?.propertyId).filter((x): x is string => !!x));
     for (const p of db.properties) if (props.has(p.id)) add("property", p.id);
