@@ -2155,6 +2155,13 @@ export const ru = {
   "job5.msg.allDay": "Здравствуйте, {name}! {company} приедет на работы {date}, в течение дня. Если день не подходит, ответьте на это сообщение.",
   "job5.allDaySaved": "Запланировано на {date}, весь день",
   "job5.allDayChip": "Весь день",
+  // fix.more.* — «Ещё» as rows with counters (spec 25, founder fixes chat)
+  "fix.more.groupCompany": "Компания",
+  "fix.more.leads": "Ждут: {n}",
+  "fix.more.tasks": "На сегодня: {n}",
+  "fix.more.jobs": "К плану: {n}",
+  "fix.more.estimates": "На подпись: {n}",
+  "fix.more.invoices": "Просрочено: {n}",
 } as const;
 
 export type DictKey = keyof typeof ru;

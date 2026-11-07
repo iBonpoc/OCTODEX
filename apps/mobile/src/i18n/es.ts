@@ -2156,4 +2156,11 @@ export const es: Dict = {
   "job5.msg.allDay": "¡Hola, {name}! {company} irá a hacer el trabajo el {date}, durante el día. Si el día no le conviene, responda a este mensaje.",
   "job5.allDaySaved": "Programado para el {date}, todo el día",
   "job5.allDayChip": "Todo el día",
+  // fix.more.* — «Ещё» as rows with counters (spec 25, founder fixes chat)
+  "fix.more.groupCompany": "Empresa",
+  "fix.more.leads": "Esperan: {n}",
+  "fix.more.tasks": "Para hoy: {n}",
+  "fix.more.jobs": "Por programar: {n}",
+  "fix.more.estimates": "Por firmar: {n}",
+  "fix.more.invoices": "Vencidas: {n}",
 };
