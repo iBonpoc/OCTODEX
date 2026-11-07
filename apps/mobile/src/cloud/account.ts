@@ -136,17 +136,19 @@ export async function wipeIfPending(): Promise<void> {
   const pending = await AsyncStorage.getItem(WIPE_PENDING_KEY).catch(() => null);
   if (!pending) return;
   // the deleted person's id was kept with the mark ("1" — an older version: whose is not known)
-  await wipeKeepingOthers(pending === "1" ? null : pending);
+  // never the session signed in now: after a failed wipe another person may have signed in (review #244, rule 6)
+  await wipeKeepingOthers(pending === "1" ? null : pending, false);
 }
 /**
  * The store in memory first (review #231): a pending write or a send still running cannot land after the wipe. The
  * outbox is not wiped whole: another person's unsent ops on this phone stay (rule 6) — only the deleted person's go,
  * and old ones without an owner (19 §6.12).
  */
-async function wipeKeepingOthers(userId?: string | null): Promise<void> {
-  const { data } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
-  // whose account: told by the caller (the start check knows it; the session may be gone already), else the session
-  const me = userId || data.session?.user.id || null;
+async function wipeKeepingOthers(userId: string | null | undefined, orSession = true): Promise<void> {
+  // whose account: told by the caller (the start check knows it; the session may be gone already), else — right after
+  // the deletion only — the session; unknown → null: only ops without an owner go
+  const session = orSession ? (await supabase.auth.getSession().catch(() => ({ data: { session: null } }))).data.session : null;
+  const me = userId || session?.user.id || null;
   const keep = othersOf(parseOutbox(await AsyncStorage.getItem(OUTBOX_KEY).catch(() => null)), me);
   forgetDeviceState(wipedOnDelete, { userId: me });
   await wipeDevice(deviceStore, warn, me);
