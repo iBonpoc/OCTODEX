@@ -5656,7 +5656,31 @@ begin
   perform tst.ok((r ->> 'repeat') = 'true', 'T73 a replay is the same payment');
   -- another phone, another id, the deposit already paid: nothing more is taken
   r := public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-000000000002', 'cash');
-  perform tst.ok((r ->> 'payment_id') is null, 'T73 a paid deposit takes no second payment');
+  perform tst.ok((r ->> 'payment_id') is null and (r ->> 'already_paid') = 'true', 'T73 a paid deposit takes no second payment (already_paid)');
+  -- an id taken by another payment of ours (not this deposit): refused, not a silent «done»
+  begin
+    perform public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001',
+      (select id from public.payments where company_id = 'ca000000-0000-0000-0000-000000000000' and invoice_id is distinct from '17300000-0000-4000-8000-000000000001' order by id limit 1), 'cash');
+    perform tst.ok(false, 'T73 FAILED: a payment id of another payment counted as the deposit');
+  exception when others then
+    perform tst.ok(sqlstate = '22023', 'T73 an id of another payment of ours: 22023 — ' || sqlstate);
+  end;
+end $$;
+-- our estimate, an id of another company's payment: the same 22023, nothing about whose
+:as_super
+insert into public.customers (id, company_id, display_name) values ('c7300000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'T73 B Client');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('a7300000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', null, 'c7300000-0000-4000-8000-0000000000b1', 'cash', 500, 'succeeded', 'a7300000-0000-4000-8000-0000000000b1');
+:as_office_a
+do $$
+declare r jsonb;
+begin
+  begin
+    perform public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-0000000000b1', 'cash');
+    perform tst.ok(false, 'T73 FAILED: another company''s payment id answered');
+  exception when others then
+    perform tst.ok(sqlstate = '22023' and sqlerrm = 'this payment id is taken', 'T73 another company''s payment id: the same answer as ours — ' || sqlerrm);
+  end;
   perform tst.ok((select count(*) = 2 from public.payments where invoice_id = '17300000-0000-4000-8000-000000000001'), 'T73 two payments on the invoice, no more');
 end $$;
 -- a replay of another company's payment id does not leak it

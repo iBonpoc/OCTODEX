@@ -34,13 +34,18 @@ begin
   if p_payment_id is null then
     raise exception 'a payment needs its id' using errcode = '22023';
   end if;
-  -- offline replay: the same payment again is the same payment
-  select * into p from public.payments where id = p_payment_id or idempotency_key = p_payment_id::text limit 1;
+  -- offline replay: the same payment again is the same payment — only a payment of THIS company on the deposit invoice of
+  -- THIS estimate counts; an id taken elsewhere is refused (22023), never a silent «done», never a hint about another company
+  select * into p from public.payments where company_id = e.company_id and (id = p_payment_id or idempotency_key = p_payment_id::text) limit 1;
   if p.id is not null then
-    if p.company_id <> e.company_id or p.customer_id <> e.customer_id then
-      raise exception 'only the office takes a deposit' using errcode = '42501';
+    if not exists (select 1 from public.invoices i2 join public.jobs j2 on j2.id = i2.job_id
+                    where i2.id = p.invoice_id and i2.kind = 'deposit' and j2.estimate_id = e.id) then
+      raise exception 'this payment id is taken' using errcode = '22023';
     end if;
-    return jsonb_build_object('payment_id', p.id, 'invoice_id', p.invoice_id, 'repeat', true);
+    return jsonb_build_object('payment_id', p.id, 'invoice_id', p.invoice_id, 'repeat', true, 'already_paid', false);
+  end if;
+  if exists (select 1 from public.payments where id = p_payment_id or idempotency_key = p_payment_id::text) then
+    raise exception 'this payment id is taken' using errcode = '22023';   -- the same answer as above: nothing about whose
   end if;
   if p_method is null or p_method not in ('card', 'cash', 'check', 'zelle', 'ach', 'other') then
     raise exception 'unknown payment method' using errcode = '22023';
@@ -58,12 +63,13 @@ begin
   end if;
   if i.balance_cents <= 0 then
     -- paid already (the client on the page, another phone): no second payment
-    return jsonb_build_object('payment_id', null, 'invoice_id', i.id, 'repeat', true);
+    -- already_paid: the phone's own payment of this op is not on the server (the store drops it on refresh)
+    return jsonb_build_object('payment_id', null, 'invoice_id', i.id, 'repeat', false, 'already_paid', true);
   end if;
 
   insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, received_by)
-  values (p_payment_id, e.company_id, i.id, e.customer_id, p_method, i.balance_cents, 'succeeded', p_payment_id::text, v_me);
-  return jsonb_build_object('payment_id', p_payment_id, 'invoice_id', i.id, 'repeat', false);
+  values (p_payment_id, i.company_id, i.id, i.customer_id, p_method, i.balance_cents, 'succeeded', p_payment_id::text, v_me);   -- the invoice's client
+  return jsonb_build_object('payment_id', p_payment_id, 'invoice_id', i.id, 'repeat', false, 'already_paid', false);
 end;
 $$;
 revoke all on function public.record_estimate_deposit(uuid, uuid, text) from public, anon, authenticated;
