@@ -19,7 +19,8 @@ import { assigneesOf, atMinute, canPlan, visitWhen, wholeDay, canReschedule, day
 import { arrivalWindow, businessHoursOf, clientDate, companyTime, companyTz, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { AssignSheet } from "@/features/sheets";
 import { DatePick, dayOffsetOf } from "@/features/DatePick";
-import { addDays, isoDayKey, todayKey } from "@/features/calendar";
+import { addDays, isoDayKey, todayKey, type DayKey } from "@/features/calendar";
+import { formDayOffset } from "@/features/planFeed";
 import { minuteIn } from "@/features/zone";
 import { Button, ChoiceChips, IconButton, Segmented, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -46,11 +47,12 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** state of the form: day (0 = today), start minute, length, person, note; derived start and warnings */
-export function useVisitForm(init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID; allDay?: boolean; allowAllDay?: boolean }) {
+export function useVisitForm(init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; day?: DayKey; exceptId?: ID; allDay?: boolean; allowAllDay?: boolean }) {
   const { db, role } = useStore();
   const initStart = init.start && !Number.isNaN(new Date(init.start).getTime()) ? init.start : null;
   // the day and the minute of an existing start on the company's calendar and clock, not the phone's
-  const initDay = initStart ? Math.max(0, dayOffsetOf(isoDayKey(initStart))) : 1;
+  // a day picked in the Plan opens that day with the form's own first free time (formDayOffset; never before today)
+  const initDay = formDayOffset({ start: initStart, day: init.day }, todayKey());
   const [dayOffset, setDayOffset] = useState(initDay);
   // an all-day visit has no length of its own: back to a time, it takes the company's usual job length
   const [initDur] = useState(init.allDay && init.allowAllDay ? scheduleSettingsOf(db.company).jobMin : init.durationMin);
@@ -228,7 +230,7 @@ export function VisitFormSheet({
   visible, onClose, title, saveLabel, init, onSave, withNote = true,
 }: {
   visible: boolean; onClose: () => void; title: string; saveLabel: string;
-  init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID; propertyId?: ID; jobId?: ID; allDay?: boolean; allowAllDay?: boolean };
+  init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; day?: DayKey; exceptId?: ID; propertyId?: ID; jobId?: ID; allDay?: boolean; allowAllDay?: boolean };
   onSave: (v: VisitFormValue) => ID | null; withNote?: boolean;
 }) {
   const f = useVisitForm(init);
