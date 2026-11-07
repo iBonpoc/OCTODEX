@@ -88,30 +88,37 @@ select app.attach_standard_triggers('public.gutter_measurement_revisions');
 -- a tech may not read every property of the company, yet may measure on a lead or a property he was given.
 create or replace function app.tg_gutter_measurement_refs()
 returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v_lead uuid;
+  v_property uuid;
 begin
   -- a stranger gets one answer whatever ids he sends: nobody probes whether a property or a lead is another
-  -- company's (security-check M2, item 1). The server (no JWT) writes as it is.
+  -- company's (security-check M2). The server (no JWT) writes as it is.
   if auth.uid() is not null and not (app.is_staff(new.company_id) or app.has_role(new.company_id, array['tech'])) then
     raise exception 'not allowed' using errcode = '42501';
   end if;
+  -- one text for every refusal below: nobody learns whether a lead or a property exists
   if new.property_id is not null and not exists (
        select 1 from public.properties p where p.id = new.property_id and p.company_id = new.company_id) then
-    raise exception 'the property is not of this company' using errcode = '42501';
+    raise exception 'this lead or property cannot be linked' using errcode = '42501';
   end if;
   if new.lead_id is not null and not exists (
        select 1 from public.leads l where l.id = new.lead_id and l.company_id = new.company_id) then
-    raise exception 'the lead is not of this company' using errcode = '42501';
+    raise exception 'this lead or property cannot be linked' using errcode = '42501';
   end if;
-  -- a tech links only to a lead or a property he sees; checked when the link is set or changed, so a tech who sees
-  -- the measurement through his lead still edits it although the property is not of his visits
+  -- a tech links only to a lead or a property he sees; checked only when the link is set or changed, so a tech who
+  -- sees the measurement through his lead still edits it although its property is not of his visits. The queue sends
+  -- a full rewrite (insert … on conflict do update): BEFORE INSERT runs first, so compare with the row it rewrites.
   if auth.uid() is not null and not app.is_staff(new.company_id) then
-    if new.lead_id is not null and new.lead_id is distinct from (case when tg_op = 'UPDATE' then old.lead_id end)
-       and not app.can_see_lead(new.lead_id) then
-      raise exception 'a tech links a measurement only to his own lead' using errcode = '42501';
+    if tg_op = 'UPDATE' then
+      v_lead := old.lead_id; v_property := old.property_id;
+    else
+      select m.lead_id, m.property_id into v_lead, v_property
+        from public.gutter_measurements m where m.id = new.id and m.company_id = new.company_id;
     end if;
-    if new.property_id is not null and new.property_id is distinct from (case when tg_op = 'UPDATE' then old.property_id end)
-       and not app.is_property_assignee(new.property_id) then
-      raise exception 'a tech links a measurement only to a property of his visits' using errcode = '42501';
+    if (new.lead_id is not null and new.lead_id is distinct from v_lead and not app.can_see_lead(new.lead_id))
+       or (new.property_id is not null and new.property_id is distinct from v_property and not app.is_property_assignee(new.property_id)) then
+      raise exception 'this lead or property cannot be linked' using errcode = '42501';
     end if;
   end if;
   return new;
@@ -169,7 +176,7 @@ returns boolean language sql stable security definer set search_path = '' as $$
                or (p_lead_id is not null and app.can_see_lead(p_lead_id))
                or (p_property_id is not null and app.is_property_assignee(p_property_id))));
 $$;
--- Elements and revisions follow their measurement.
+-- Elements and revisions follow their measurement (the office first: a quick path when it syncs everything).
 create or replace function app.gutter_sees_measurement(p_measurement_id uuid)
 returns boolean language sql stable security definer set search_path = '' as $$
   select exists (
@@ -207,14 +214,14 @@ create policy gutter_measurements_update on public.gutter_measurements for updat
               and app.module_active(company_id, 'gutters'));
 
 create policy gutter_measurement_elements_select on public.gutter_measurement_elements for select to authenticated
-  using (app.gutter_sees_measurement(measurement_id));
+  using (app.is_staff(company_id) or app.gutter_sees_measurement(measurement_id));
 create policy gutter_measurement_elements_insert on public.gutter_measurement_elements for insert to authenticated
-  with check (app.gutter_sees_measurement(measurement_id) and app.module_active(company_id, 'gutters'));
+  with check ((app.is_staff(company_id) or app.gutter_sees_measurement(measurement_id)) and app.module_active(company_id, 'gutters'));
 create policy gutter_measurement_elements_update on public.gutter_measurement_elements for update to authenticated
-  using (app.gutter_sees_measurement(measurement_id))
-  with check (app.gutter_sees_measurement(measurement_id) and app.module_active(company_id, 'gutters'));
+  using (app.is_staff(company_id) or app.gutter_sees_measurement(measurement_id))
+  with check ((app.is_staff(company_id) or app.gutter_sees_measurement(measurement_id)) and app.module_active(company_id, 'gutters'));
 
 create policy gutter_measurement_revisions_select on public.gutter_measurement_revisions for select to authenticated
-  using (app.gutter_sees_measurement(measurement_id));
+  using (app.is_staff(company_id) or app.gutter_sees_measurement(measurement_id));
 create policy gutter_measurement_revisions_insert on public.gutter_measurement_revisions for insert to authenticated
-  with check (app.gutter_sees_measurement(measurement_id) and app.module_active(company_id, 'gutters'));
+  with check ((app.is_staff(company_id) or app.gutter_sees_measurement(measurement_id)) and app.module_active(company_id, 'gutters'));
