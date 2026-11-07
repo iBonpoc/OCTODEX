@@ -56,8 +56,8 @@ exports.run = async (h) => {
   await h.expectText(/Задачи \(2\) · 0% готово/, "the progress is back");
 
   // filters and search
-  await h.clickText("Выполненные · 0");
-  await h.expectText(/Выполненных задач пока нет/, "no done tasks");
+  // spec 31: a chip with nothing behind it is hidden — «Выполненные · 0» is not on the lane
+  h.expect((await p.getByText("Выполненные · 0", { exact: true }).locator("visible=true").count()) === 0, "no empty «Выполненные» chip");
   await h.clickText("Открытые · 2");
   await p.getByPlaceholder("Искать задачу").fill("водосток"); await p.waitForTimeout(300);
   await h.expectText(new RegExp(TITLE), "the search finds it by the title");

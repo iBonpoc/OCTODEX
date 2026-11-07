@@ -1550,6 +1550,8 @@ export const ru = {
   "card.filter.done": "Выполненные",
   "card.filter.findPerson": "Найти человека",
   "card.filter.masters": "Мастер",
+  "card.filter.whose": "Чьи",
+  "card.filter.method": "Способ оплаты",
   "card.emptyFilter": "В этом отборе никого нет",
   "card.sign.noNextStep": "Нет следующего шага",
   "card.group.action": "Нужно действие",

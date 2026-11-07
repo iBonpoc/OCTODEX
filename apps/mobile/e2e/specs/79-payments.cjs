@@ -32,8 +32,11 @@ exports.run = async (h) => {
     const m = methods[0];
     const ofM = db.payments.filter((x) => x.method === m);
     const label = METHOD[m] ?? m;
-    await p.getByText(new RegExp(`^${label} · \\$`)).last().click();
-    await p.waitForTimeout(400);
+    // spec 31 §7: the method is in the «Фильтр» sheet (1280: «Способ оплаты ▾»), a row «Карта · $…»
+    const open = h.layout.width === 1280 ? p.getByTestId("filter-group-method") : p.getByTestId("filter-button");
+    await open.locator("visible=true").first().click(); await p.waitForTimeout(400);
+    await h.sheet().getByRole("checkbox", { name: new RegExp(`^${label} · \\$`) }).click();
+    await h.sheet().getByText("Готово", { exact: true }).click(); await p.waitForTimeout(400);
     h.expect((await cards.count()) === ofM.length, `${label}: ${ofM.length} payments`);
     h.expect(/[?&]m=/.test(p.url()), "the method is kept in the address");
   }

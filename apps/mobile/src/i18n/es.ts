@@ -1551,6 +1551,8 @@ export const es: Dict = {
   "card.filter.done": "Completados",
   "card.filter.findPerson": "Buscar persona",
   "card.filter.masters": "Técnico",
+  "card.filter.whose": "De quién",
+  "card.filter.method": "Forma de pago",
   "card.emptyFilter": "Nadie en este filtro",
   "card.sign.noNextStep": "Sin siguiente paso",
   "card.group.action": "Requiere acción",

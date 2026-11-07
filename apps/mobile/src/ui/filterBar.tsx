@@ -28,7 +28,8 @@ export function FilterBar<K extends string>({
 }: {
   /** row 1: the search field of the list */
   search?: { value: string; onChange: (s: string) => void; placeholder: string };
-  /** the lane: the first is the list's broad default, then the statuses in the order of the work */
+  /** the lane: the first is the list's broad default, then the statuses in the order of the work; empty — no lane
+   *  (a list whose main switch is elsewhere, e.g. the periods of «Оплаты») */
   items: FilterItem<K>[];
   value: K;
   onChange: (k: K) => void;
@@ -111,6 +112,8 @@ export function FilterBar<K extends string>({
 
   // phone / tablet: one square button next to the search, always visible (spec 31 §6 п.3)
   const sliders = <Icon name="sliders" s={size.iconSm} color={c.ink} />;
+  // alone in its row (no search, no lane — «Оплаты»): the button says what it is, on the left
+  const alone = !search && !items.length;
   const filterButton = shown.length ? (
     <Press
       onPress={() => setOpen("*")}
@@ -121,7 +124,7 @@ export function FilterBar<K extends string>({
       style={{
         height: component.button.phone,
         minWidth: component.button.phone,
-        paddingHorizontal: active ? space[2] : 0,
+        paddingHorizontal: alone ? space[3] : active ? space[2] : 0,
         borderRadius: radius.pill,
         flexDirection: "row",
         alignItems: "center",
@@ -133,7 +136,11 @@ export function FilterBar<K extends string>({
       }}
     >
       {sliders}
-      {active ? (
+      {alone ? (
+        <T v="button" w={active ? "bold" : undefined} style={{ color: c.ink }}>
+          {active ? `${t("fix.filters.button")} · ${active}` : t("fix.filters.button")}
+        </T>
+      ) : active ? (
         <T v="button" w="bold" tabular style={{ color: c.ink }}>
           {String(active)}
         </T>
@@ -149,7 +156,7 @@ export function FilterBar<K extends string>({
       {desktop ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
           {field ? <View style={{ width: component.panelW }}>{field}</View> : null}
-          <View style={{ flex: 1, minWidth: 0 }}>{lane}</View>
+          <View style={{ flex: 1, minWidth: 0 }}>{items.length ? lane : null}</View>
           {shown.map((g) => {
             const n = g.options.filter((o) => o.on).length;
             return pill(`g:${g.key}`, n ? `${g.title} · ${n}` : g.title, n > 0, () => setOpen(g.key), { role: "button", label: t("fix.filters.a11y", { n }) }, <Icon name="chevronDown" s={size.iconXs} color={c.ink} />, `filter-group-${g.key}`);
@@ -159,11 +166,11 @@ export function FilterBar<K extends string>({
         <>
           {field || filterButton ? (
             <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
-              <View style={{ flex: 1, minWidth: 0 }}>{field}</View>
+              {alone ? null : <View style={{ flex: 1, minWidth: 0 }}>{field}</View>}
               {filterButton}
             </View>
           ) : null}
-          {lane}
+          {items.length ? lane : null}
         </>
       )}
       {chosen.length ? (
