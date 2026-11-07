@@ -1559,6 +1559,7 @@ export const en: Dict = {
   "card.filter.show": "Show",
   "card.filter.done": "Done",
   "card.filter.searchPlan": "Client, address, job",
+  "card.filter.searchExpenses": "Vendor, job, client",
   "card.filter.whose": "Whose",
   "card.filter.method": "Payment method",
   "card.filter.searchJobs": "Client, address, work, JOB",

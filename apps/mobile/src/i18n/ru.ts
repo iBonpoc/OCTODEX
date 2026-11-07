@@ -1558,6 +1558,7 @@ export const ru = {
   "card.filter.show": "Показывать",
   "card.filter.done": "Выполненные",
   "card.filter.searchPlan": "Клиент, адрес, работа",
+  "card.filter.searchExpenses": "Поставщик, работа, клиент",
   "card.filter.whose": "Чьи",
   "card.filter.method": "Способ оплаты",
   "card.filter.searchJobs": "Клиент, адрес, работа, JOB",
