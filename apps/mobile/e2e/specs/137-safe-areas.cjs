@@ -194,6 +194,20 @@ exports.run = async (h) => {
     }
     await h.shot(`${c.name}-clients`);
 
+    // the status bar backdrop (spec 32 §7): scrolled, the list passes under the clock on glass, not bare;
+    // at the top of the scroll nothing is drawn there
+    if (c.t > 0 && !wide) {
+      const backdrop = () => p.evaluate(() => { const e = [...document.querySelectorAll('[data-testid="status-backdrop"]')].find((x) => x.getBoundingClientRect().height > 0); return e ? e.getBoundingClientRect().height : 0; });
+      h.expect((await backdrop()) === 0, `${c.name}: no backdrop at the top of the scroll`);
+      await p.mouse.move(c.w / 2, c.h / 2);
+      await p.mouse.wheel(0, 300);
+      await p.waitForFunction(() => [...document.querySelectorAll("div")].some((d) => d.scrollTop > 100), null, { timeout: 3000 });
+      await applied(p, c);
+      await h.shot(`${c.name}-scrolled`);
+      const bh = await backdrop();
+      if (Math.abs(bh - c.t) > 0.5) h.failures.push(`${c.name}: scrolled — the backdrop under the clock is ${bh}, not ${c.t}`);
+    }
+
     // «＋» on «Главная» (on «Клиенты» it opens the new client at once): the floating button (phone) or the header one → its sheet
     await h.go("/");
     await insets(p, c);
