@@ -18,12 +18,13 @@ export const badgeState = (online: boolean, link: Link, queued: number, stuck = 
 export function stuckKindKey(kind: string): DictKey {
   const head = kind.split(".")[0];
   switch (head) {
-    case "customer": case "contact": case "property": return "sync.kind.customer";
+    case "customer": case "property": return "sync.kind.customer";
+    case "contact": case "company": case "license": case "member": return "sync.kind.company";
     case "lead": return "sync.kind.lead";
-    case "estimate": return "sync.kind.estimate";
+    case "estimate": return kind === "estimate.deposit" ? "sync.kind.money" : "sync.kind.estimate";
     case "invoice": case "payment": case "expense": return "sync.kind.money";
     case "job": case "jobLine": return "sync.kind.job";
-    case "visit": case "photo": return "sync.kind.visit";
+    case "visit": case "photo": return kind === "visit.pay" ? "sync.kind.money" : "sync.kind.visit";
     case "task": case "calendarEvent": return "sync.kind.task";
     default: return "sync.kind.other";
   }

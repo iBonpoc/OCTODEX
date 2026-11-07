@@ -92,6 +92,8 @@ export interface StuckOp {
   since: string;
   error?: string;
   waiting: number;
+  /** being sent right now: «Повторить» / «Отменить изменение…» wait */
+  sending: boolean;
 }
 /** when and who for an estimate visit */
 export interface BookAt {
@@ -134,7 +136,7 @@ interface StoreCtx {
   /** «Повторить сейчас» */
   retryOp: (id: ID) => void;
   /** «Отменить изменение…» (after a confirmation): the op and the ops that wait for it leave the phone; then a reload */
-  discardOp: (id: ID) => void;
+  discardOp: (id: ID) => boolean;
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -438,8 +440,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   /* ---------- server sync ---------- */
   // per op, in memory: when it may be tried again after the server's error that may be its own (docs/specs/23 §3)
   const opPause = useRef(new Map<string, number>());
-  /** an op of this person that can still go (not stuck, not waiting for a stuck one) */
-  const pendingLive = () => liveOf(outboxRef.current, whoRef.current, (o) => !!o.stuck).length > 0;
+  /**
+   * an op of this person that is not stuck — also one waiting behind a stuck one: its change is only on the phone, a
+   * reload would wipe it from the screens (review #259 №4). Only stuck ops left: the server's truth comes back.
+   */
+  const pendingLive = () => mineOf(outboxRef.current, whoRef.current).some((o) => !o.stuck);
+  // the op being sent now: «Отменить изменение…» and «Повторить» wait for its answer (review #259 №5)
+  const inFlight = useRef<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  /** a network failure or a refusal ends a run of the server's errors: the 10 minutes count from the next one */
+  const clearFails = (id: string) => {
+    const cur = outboxRef.current.find((x) => x.id === id);
+    if (!cur || (cur.fails == null && cur.failSince == null)) return;
+    const { fails: _f, failSince: _s, ...rest } = cur;
+    outboxRef.current = outboxRef.current.map((x) => (x.id === id ? rest : x));
+    setOutbox(outboxRef.current);
+  };
   const failedOnce = (item: OwnedItem, msg: string) => {
     const now = Date.now();
     const cur = outboxRef.current.find((x) => x.id === item.id) ?? item;
@@ -542,17 +558,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // in order; what needs a held op waits; the toast's «Отменить» window first: an undone op never reaches the server
         const item = nextToSend(outboxRef.current, w, held, Date.now());
         if (!item) break;
+        inFlight.current = item.id;
+        setSendingId(item.id);
         try {
           await applyOp(item.op, w.companyId, w.userId);
+          inFlight.current = null;
+          setSendingId(null);
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
           if (stale(gen)) return;
           sentAny = true;
+          probed = false; // the server answered: a later 500 is again maybe that op's alone
           opPause.current.delete(item.id);
           answered();
           outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
           setOutbox(outboxRef.current);
           if (!still()) break;
         } catch (e) {
+          inFlight.current = null;
+          setSendingId(null);
           // a send that fails because the account is gone must not put the deleted person's op back (review #231)
           if (stale(gen)) return;
           const msg = e instanceof Error ? e.message : String(e);
@@ -561,6 +584,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // the next send waits longer (review #244)
           if (classify(e) !== "refusal") {
             if (needsSignIn(e)) void renewSession();
+            if (classify(e) === "network") clearFails(item.id);
             // an op already stuck failing again says nothing new about the server (after a restart every stuck op is
             // tried once: two of them must not read as «server unavailable»)
             const wasStuck = !!outboxRef.current.find((x) => x.id === item.id)?.stuck;
@@ -581,12 +605,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             continue;
           }
           // the server said «no»: a try; the last one drops it (never because of the network)
+          clearFails(item.id);
           if (item.tries + 1 >= MAX_TRIES) {
             // Will never succeed: drop it and reload the truth from the server.
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
           } else {
-            outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...item, tries: item.tries + 1, error: msg } : x));
+            outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...x, tries: item.tries + 1, error: msg } : x));
           }
           setOutbox(outboxRef.current);
           break;
@@ -711,26 +736,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     mode === "cloud"
       ? mineOf(outbox, who)
           .filter((o) => o.stuck)
-          .map((o) => ({ id: o.id, kind: o.op.k, since: o.failSince ?? o.at, error: o.error, waiting: dependentsOf(outbox, who, o.id).length }))
+          .map((o) => ({ id: o.id, kind: o.op.k, since: o.failSince ?? o.at, error: o.error, waiting: dependentsOf(outbox, who, o.id).length, sending: sendingId === o.id }))
       : [];
+  // «Повторить сейчас»: only its pause goes — it stays «stuck» (and its card stays) until the server takes it
+  // (review #259 №2); while it is being sent, nothing to do
   const retryOp = (id: ID) => {
-    outboxRef.current = outboxRef.current.map((x) => {
-      if (x.id !== id) return x;
-      const { stuck: _s, fails: _f, failSince: _since, ...rest } = x;
-      return rest;
-    });
-    setOutbox(outboxRef.current);
+    if (inFlight.current === id) return;
     opPause.current.delete(id);
     nextTry.current = 0;
     void flush();
   };
-  const discardOp = (id: ID) => {
+  const discardOp = (id: ID): boolean => {
     const gone = new Set([id, ...dependentsOf(outboxRef.current, whoRef.current, id).map((o) => o.id)]);
+    // one of them is on its way to the server: it would get there although the card says it will not (review #259 №5)
+    if (inFlight.current && gone.has(inFlight.current)) return false;
     outboxRef.current = outboxRef.current.filter((x) => !gone.has(x.id));
     setOutbox(outboxRef.current);
     gone.forEach((x) => opPause.current.delete(x));
     // the phone showed the change as done: the server's truth again
     void refresh();
+    return true;
   };
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? mineOf(outbox, who).map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
@@ -1607,7 +1632,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush],
   );
 
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady) return null;

@@ -1,7 +1,7 @@
 import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
 import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
-import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
+import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { isTabScreen } from "@/nav/roles";
@@ -263,7 +263,7 @@ export function SyncBadge({ compact }: { compact?: boolean }) {
   const tone = state === "sending" ? c.status.info : state === "stuck" ? c.status.bad : c.status.warn;
   const label =
     state === "offline" ? t("offline.badge", { n: queue.length }) : state === "server" ? t("sync.server.badge", { n: queue.length }) : state === "stuck" ? t("sync.stuck.badge", { n: stuckOps.length }) : t("nav.sync.sending", { n: queue.length });
-  return (
+  const chip = (
     <View
       testID="sync-badge"
       accessibilityLabel={label}
@@ -283,6 +283,14 @@ export function SyncBadge({ compact }: { compact?: boolean }) {
         {label}
       </T>
     </View>
+  );
+  // «Не отправлено»: the badge opens the cards with «Повторить» / «Отменить изменение…» (docs/specs/23 §3)
+  return state === "stuck" ? (
+    <Press accessibilityRole="button" accessibilityLabel={label} visibleHeight={component.chip.h} onPress={() => router.push("/settings")} containerStyle={{ alignSelf: compact ? "center" : "flex-start" }}>
+      {chip}
+    </Press>
+  ) : (
+    chip
   );
 }
 /* ---------- Nav metrics shared by Screen and TabBar ---------- */

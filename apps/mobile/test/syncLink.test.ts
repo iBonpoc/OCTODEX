@@ -36,10 +36,13 @@ describe("unit:syncLink — what the badge says", () => {
 
   it("what kind of change a stuck op is: by the op's kind; an unknown kind is «a change»", () => {
     expect(stuckKindKey("customer.update")).toBe("sync.kind.customer");
-    expect(stuckKindKey("estimate.deposit")).toBe("sync.kind.estimate");
+    expect(stuckKindKey("estimate.save")).toBe("sync.kind.estimate");
+    expect(stuckKindKey("estimate.deposit")).toBe("sync.kind.money"); // money, not «estimate» (review #259)
+    expect(stuckKindKey("visit.pay")).toBe("sync.kind.money");
+    expect(stuckKindKey("contact.save")).toBe("sync.kind.company"); // the company's contacts, not a client's
     expect(stuckKindKey("invoice.pay")).toBe("sync.kind.money");
     expect(stuckKindKey("visit.step")).toBe("sync.kind.visit");
     expect(stuckKindKey("whatever.x")).toBe("sync.kind.other");
-    for (const d of [ru, en, es] as Record<string, string>[]) for (const k of ["customer", "lead", "estimate", "money", "job", "visit", "task", "other"]) expect(d[`sync.kind.${k}`]).toBeTruthy();
+    for (const d of [ru, en, es] as Record<string, string>[]) for (const k of ["customer", "company", "lead", "estimate", "money", "job", "visit", "task", "other"]) expect(d[`sync.kind.${k}`]).toBeTruthy();
   });
 });

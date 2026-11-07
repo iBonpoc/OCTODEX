@@ -731,13 +731,13 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await settle();
     expect(sentIds()).toEqual([U(1), U(3)]);
   });
-  it("a barrier (company settings) behind X does not go, nor anything after it", async () => {
-    seedOutbox(ev("X", 1), q("B", { k: "company.save", company: {} }), ev("Z", 3));
+  it("behind X every op waits (company settings, «the job is done») — only an op that adds its own goes (review #259 Б1)", async () => {
+    seedOutbox(q("X", { k: "visit.step", visitId: U(1), step: "done" }), q("B", { k: "company.save", company: {} }), q("J", { k: "job.complete", id: U(2) }), ev("Z", 3));
     const r = await start();
     await pass(r);
     server.sends[0]!.d.reject(timeout());
     await settle();
-    expect(sentIds()).toEqual([U(1)]);
+    expect(server.sends.map((x) => (x.op as { k: string }).k)).toEqual(["visit.step", "calendarEvent.remove"]);
   });
   it("Y gets a 500 too: the server as a whole — «server unavailable», the queue pauses, both stay, no tries", async () => {
     seedOutbox(ev("X", 1), ev("Y", 2), ev("Z", 3));
@@ -800,8 +800,19 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await pass(r);
     expect(server.sends.length).toBe(before); // its 5-minute pause: not tried at once
   });
-  it("only stuck ops (and what waits for them) left: the reload is not held — the phone sees the server again", async () => {
+  it("an op waiting behind a stuck one holds the reload: its change is only on the phone (review #259 №4)", async () => {
     seedOutbox(ev("X", 1, { fails: 3, failSince: new Date(Date.now() - 20 * 60_000).toISOString(), stuck: true }), q("W", { k: "customer.tags", id: U(1), tagIds: [] }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)?.d.reject(timeout());
+    await settle();
+    const loads = server.loads.length;
+    void v(r).refresh();
+    await settle();
+    expect(server.loads.length).toBe(loads);
+  });
+  it("only stuck ops left: the reload is not held — the phone sees the server again", async () => {
+    seedOutbox(ev("X", 1, { fails: 3, failSince: new Date(Date.now() - 20 * 60_000).toISOString(), stuck: true }));
     const r = await start();
     // the start reload (stuck X tried once: a timeout again)
     await pass(r);
@@ -812,7 +823,7 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await settle();
     expect(server.loads.length).toBe(loads + 1);
     await wait(300);
-    expect(st().map((x) => x.id)).toEqual(["X", "W"]); // the ops stay (rule 6)
+    expect(st().map((x) => x.id)).toEqual(["X"]); // the op stays (rule 6)
   });
   it("an op that can still go holds the reload, as before", async () => {
     seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }), ev("Y", 2));
@@ -863,6 +874,65 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await settle();
     expect(sentIds()).toEqual([U(1), U(2), U(3)]);
     expect(v(r).link).toBe("ok");
+  });
+  it("X 500 → Y ok → Z 500: the server answered in between — Z is maybe its own, not «server unavailable» (review #259 №1)", async () => {
+    seedOutbox(ev("X", 1), ev("Y", 2), ev("Z", 3), ev("W", 4));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(notNow(500));
+    await settle();
+    server.sends[1]!.d.resolve();
+    await settle();
+    server.sends[2]!.d.reject(notNow(500));
+    await settle();
+    expect(sentIds()).toEqual([U(1), U(2), U(3), U(4)]); // W still tried
+    expect(v(r).link).toBe("ok");
+  });
+  it("«Повторить сейчас» that fails again: still stuck, the card stays (review #259 №2)", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(timeout());
+    await settle();
+    v(r).retryOp("X");
+    await settle();
+    server.sends.at(-1)!.d.reject(timeout());
+    await settle();
+    await wait(300);
+    expect(st()[0]).toMatchObject({ id: "X", stuck: true });
+    expect(v(r).stuckOps.map((x) => x.id)).toEqual(["X"]);
+  });
+  it("while it is being sent: «Повторить» sends nothing more, «Отменить изменение…» is refused (review #259 №5)", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r); // X on its way
+    const before = server.sends.length;
+    expect((v(r).stuckOps[0] as unknown as { sending: boolean }).sending).toBe(true);
+    v(r).retryOp("X");
+    await settle();
+    expect(server.sends.length).toBe(before);
+    expect((v(r) as unknown as { discardOp: (id: string) => boolean }).discardOp("X")).toBe(false);
+    await settle();
+    expect(st().map((x) => x.id)).toEqual(["X"]);
+    server.sends.at(-1)!.d.reject(timeout()); // the answer: not taken — still stuck, now it may be discarded
+    await settle();
+    expect((v(r) as unknown as { discardOp: (id: string) => boolean }).discardOp("X")).toBe(true);
+    await settle();
+    await wait(300);
+    expect(st()).toEqual([]);
+  });
+  it("a network failure ends a run of the server's errors: two 500s, an hour offline, one 500 — not stuck yet", async () => {
+    seedOutbox(ev("X", 1, { fails: 2, failSince: new Date(Date.now() - 60 * 60_000).toISOString() }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(new TypeError("Failed to fetch"));
+    await settle();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(timeout());
+    await settle();
+    await wait(300);
+    expect(st()[0]).toMatchObject({ fails: 1 });
+    expect(st()[0]!.stuck).toBeUndefined();
   });
   it("an older version's item (no failSince / fails) loads and goes as before", async () => {
     seedOutbox({ id: "old", op: { k: "calendarEvent.remove", id: U(9) }, at: AGO, tries: 0 });
