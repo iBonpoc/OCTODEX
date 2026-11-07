@@ -17,7 +17,7 @@ import {
   arrivalWindow, businessHoursOf, DURATION_RANGE, LATE_RANGE, scheduleSettingsOf, STEP_CHOICES, tzLabel, WINDOW_CHOICES,
   type BusinessHours, type ScheduleSettings, type WeekDay,
 } from "@/features/scheduleSettings";
-import { Button, ChoiceChips, IconButton, StatusChip, Stepper, Toggle } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, Toggle, useReadOnly } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
@@ -35,6 +35,8 @@ export default function CompanySchedule() {
   const [s, setS] = useState<ScheduleSettings>(() => scheduleSettingsOf(c));
   const [hours, setHours] = useState<BusinessHours>(() => businessHoursOf(c));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company"));
+  // spec 26 §3 (07.11): the office sees the schedule settings, only the director changes them
+  const ro = store.role !== "director";
   if (!c) {
     return (
       <Screen title={t("schs.title")} back={back}>
@@ -62,6 +64,8 @@ export default function CompanySchedule() {
 
   return (
     <Screen title={t("schs.title")} back={back} subtitle={t("schs.who")}>
+      {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
+      <ReadOnly value={ro}>
       <Card>
         <T v="heading">{t("co.timezone")}</T>
         <T v="caption" tone="mut">{t("schs.tzHint")}</T>
@@ -130,19 +134,21 @@ export default function CompanySchedule() {
         <T v="caption" tone="mut">{t("schs.lateHint")}</T>
       </Card>
 
-      <Button label={t("ue.save")} icon="check" full onPress={save} />
+      </ReadOnly>
+      {ro ? null : <Button label={t("ue.save")} icon="check" full onPress={save} />}
     </Screen>
   );
 }
 
 /** «Начало  −  8:00 AM  +»: one end of a working day, by 30 min */
 function HourRow({ day, label, value, onMinus, onPlus }: { day: string; label: string; value: string; onMinus: () => void; onPlus: () => void }) {
+  const ro = useReadOnly();
   return (
     <RowView style={{ gap: space[2] }}>
       <T v="body" tone="mut" style={{ flex: 1 }}>{label}</T>
-      <IconButton icon="minus" label={`${day} · ${label} −${HOUR_STEP}`} onPress={onMinus} />
+      {ro ? null : <IconButton icon="minus" label={`${day} · ${label} −${HOUR_STEP}`} onPress={onMinus} />}
       <T v="body" tabular>{value}</T>
-      <IconButton icon="plus" label={`${day} · ${label} +${HOUR_STEP}`} onPress={onPlus} />
+      {ro ? null : <IconButton icon="plus" label={`${day} · ${label} +${HOUR_STEP}`} onPress={onPlus} />}
     </RowView>
   );
 }

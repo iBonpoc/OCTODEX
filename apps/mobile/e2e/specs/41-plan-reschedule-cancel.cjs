@@ -47,6 +47,7 @@ exports.run = async (h) => {
   const gone = (db.cancelledVisits ?? []).find((x) => x.id === v.id);
   h.expect(gone && gone.cancelReason === "client_cancelled", "…but it is kept with its reason (§5.2)");
   h.expect(db.leads.find((x) => x.id === angela.id).status === "replied", "S4a: lead back to «На связи»");
+  await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(300);
   // the lead's feed shows the cancelled inspection with the reason
   await h.go(`/lead/${angela.id}`);
   await h.clickText("Переписка");
@@ -61,6 +62,8 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: "Отменить выезд", exact: true }).last().click(); await p.waitForTimeout(600);
   db = await h.db();
   h.expect(db.jobs.find((j) => j.id === "j2").status === "unscheduled", "S9a: job waits for a date again");
+  // «Сообщить клиенту об отмене?» comes after a cancel (e2e 132); answer «Не сейчас» to reach the toast
+  await h.sheet().getByRole("button", { name: "Не сейчас" }).click(); await p.waitForTimeout(400);
   // «Отменить» in the toast (5 s) brings the visit and the job back
   await p.getByRole("button", { name: "Отменить", exact: true }).last().click(); await p.waitForTimeout(500);
   db = await h.db();

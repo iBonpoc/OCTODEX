@@ -5,7 +5,7 @@
  * Now: tech and back to director, from «Ещё» → the profile and from a typed /settings/profile — every tab opens its screen.
  * The same dead tabs without a role change: a card opened by a link (a push, an address) → a tab → [card, (tabs)]; the
  * first tab worked, every next one did nothing. Since #289 the role change goes down with goTo, so the link case is
- * the one that fails without tabLeave.
+ * the one that fails without tabLeave; the screen's «‹ up» (goTo) had the same no-op there.
  * 820/1280: no bottom bar; the role change and the side menu still lead on.
  */
 exports.run = async (h) => {
@@ -55,6 +55,19 @@ exports.run = async (h) => {
   await role("Директор");
   h.expect(path() === "/today", `the director's home after the role change back (${path()})`);
   if (!wide) await walk("/today", "director");
+  if (!wide) {
+    // the same stack and the screen's own «‹ Ещё» (goTo): Leads from «Ещё» → back to «Ещё» (#286; before: dead)
+    const db = await h.db();
+    await h.go(`/client/${db.customers[0].id}`);
+    await p.getByRole("tab", { name: "Ещё", exact: true }).click();
+    await p.waitForTimeout(600);
+    await p.getByText("Лиды", { exact: true }).locator("visible=true").first().click();
+    await p.waitForTimeout(700);
+    h.expect(path() === "/leads", `a card by a link → «Ещё» → «Лиды» (${path()})`);
+    await p.getByRole("button", { name: "Ещё", exact: true }).locator("visible=true").first().click();
+    await p.waitForTimeout(700);
+    h.expect(path() === "/more", `«‹ Ещё» on Leads after a card by a link → /more (${path()})`);
+  }
   // a typed /settings/profile (no tabs under it), then the role change
   await h.go("/settings/profile");
   await role("Мастер");

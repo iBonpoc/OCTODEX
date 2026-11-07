@@ -28,6 +28,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { memberName } from "@/features/team";
+import { cancelNotice } from "@/features/cancelNotify";
 
 export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string; allDay?: boolean };
 
@@ -304,8 +305,44 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
   );
 }
 
+/** «Сообщить клиенту об отмене?» (§7.4, §13): the cancelled visit is read from `cancelledVisits`; a ready text in the
+ *  CLIENT's language. SMS / Email open the phone's app and write an `sms` / `email` event (spec 20, «Отменить» 5 s,
+ *  offline — the queue); «Скопировать» writes nothing (we do not know the channel). A tech never gets here (office only). */
+export function CancelNotifySheet({ visitId, onClose }: { visitId: ID | null; onClose: () => void }) {
+  const store = useStore();
+  const { t } = useI18n();
+  const toast = useToast();
+  const n = visitId ? cancelNotice(store.db, visitId) : null;
+  // the cancel was undone (the visit is back in the Plan) or never happened: close quietly
+  const missing = !!visitId && !n;
+  useEffect(() => {
+    if (!missing) return;
+    const id = setTimeout(onClose, 0);
+    return () => clearTimeout(id);
+  }, [missing, onClose]);
+  if (!n) return <Sheet visible={false} onClose={onClose}>{null}</Sheet>;
+  const sms = smsHref(n.phone, n.text, Platform.OS);
+  const mail = mailtoHref(n.email, { subject: store.db.company?.name ?? "", body: n.text });
+  const open = (url: string, channel: "sms" | "email") => {
+    Linking.openURL(url).catch(() => {});
+    const undo = n.subject ? store.logMessage({ ...n.subject, channel, text: n.text }) : undefined;
+    toast.show(store.online ? t("visitP2.notify.opened") : t("offline.queued"), undo);
+    onClose();
+  };
+  return (
+    <Sheet visible onClose={onClose} title={t("visitP2.notify.title")}>
+      <T v="body">{n.text}</T>
+      {!sms && !mail ? <T v="caption" tone="mut">{t("visitP2.notify.noContact")}</T> : null}
+      {sms ? <Button label={t("vf.notify.sms")} icon="sms" variant="secondary" full onPress={() => open(sms, "sms")} /> : null}
+      {mail ? <Button label={t("vf.notify.email")} icon="mail" variant="secondary" full onPress={() => open(mail, "email")} /> : null}
+      <Button label={t("vf.notify.copy")} icon="copy" variant="secondary" full onPress={() => { Clipboard.setStringAsync(n.text).catch(() => {}); toast.show(t("vf.notify.copied")); onClose(); }} />
+      <Button label={t("vf.notify.later")} variant="ghost" full onPress={onClose} />
+    </Sheet>
+  );
+}
+
 /** «Отменить выезд» (§7.4): a reason (5), a text for "other", what happens next; an ordinary button, «Не отменять» beside it */
-export function CancelVisitSheet({ visitId, onClose, onDone }: { visitId: ID | null; onClose: () => void; onDone?: () => void }) {
+export function CancelVisitSheet({ visitId, onClose, onDone }: { visitId: ID | null; onClose: () => void; onDone?: (visitId: ID) => void }) {
   const store = useStore();
   const { db } = store;
   const { t } = useI18n();
@@ -320,7 +357,7 @@ export function CancelVisitSheet({ visitId, onClose, onDone }: { visitId: ID | n
     if (!ok) return;
     toast.show(t("vc.done"), store.cancelVisit(visitId, reason, text));
     onClose();
-    onDone?.();
+    onDone?.(visitId);
   };
   return (
     <Sheet visible onClose={onClose} title={t("vc.title")} dirty={text.trim().length > 0}>
@@ -345,7 +382,7 @@ export function CancelVisitSheet({ visitId, onClose, onDone }: { visitId: ID | n
 
 /** «Когда и кто» on the visit card, for the office (§7.3): date, time – end, the person; «Перенести» · «Отменить выезд»
  *  (only before the tech is on site); «Клиенту сообщили …» or «Сообщить клиенту». */
-export function WhenWho({ visitId }: { visitId: ID }) {
+export function WhenWho({ visitId, onCancelled }: { visitId: ID; onCancelled?: (visitId: ID) => void }) {
   const store = useStore();
   const { db } = store;
   const { t, day, time } = useI18n();
@@ -389,8 +426,8 @@ export function WhenWho({ visitId }: { visitId: ID }) {
           }}
         />
       ) : null}
-      {/* a cancelled visit leaves the screens: back to where the office came from (the toast keeps «Отменить») */}
-      <CancelVisitSheet visitId={sheet === "cancel" ? v.id : null} onClose={() => setSheet(null)} onDone={() => (router.canGoBack() ? router.back() : router.replace("/plan"))} />
+      {/* a cancelled visit leaves the screens: the screen asks «Сообщить клиенту?» (it outlives this card), then goes back */}
+      <CancelVisitSheet visitId={sheet === "cancel" ? v.id : null} onClose={() => setSheet(null)} onDone={(id) => (onCancelled ? onCancelled(id) : router.canGoBack() ? router.back() : router.replace("/plan"))} />
       <NotifySheet visitId={sheet === "notify" ? v.id : null} onClose={() => setSheet(null)} />
       <AssignSheet visitId={sheet === "assign" ? v.id : null} onClose={() => setSheet(null)} />
     </Card>
