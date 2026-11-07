@@ -70,11 +70,12 @@ exports.run = async (h) => {
   await p.waitForTimeout(500);
   h.expect(new URL(p.url()).pathname === "/tasks", `row → /tasks (${p.url()})`);
 
-  // the technician: no «Компания», no money rows, no invoice counter
+  // the technician: no «Компания», no money rows, no invoice counter; «Лиды» — his own (#327)
   await setRole(h, "tech");
   await h.go("/more");
   h.expect((await p.locator('[data-testid="more-group-company"]').count()) === 0, "tech: no «Компания»");
-  for (const id of ["invoices", "payments", "reports", "money", "team", "company", "leads"]) h.expect((await row(id).count()) === 0, `tech: no row «${id}»`);
+  for (const id of ["invoices", "payments", "reports", "money", "team", "company"]) h.expect((await row(id).count()) === 0, `tech: no row «${id}»`);
+  h.expect((await row("leads").count()) === 1, "tech: row «leads» — his own leads (#327, e2e 127)");
   h.expect(!/Просрочено/.test(await h.text()), "tech: no overdue counter");
   await h.shot("tech");
 };

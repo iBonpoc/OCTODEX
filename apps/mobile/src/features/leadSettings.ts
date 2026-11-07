@@ -18,6 +18,8 @@ export interface LeadSettings {
   lostOrWaitDays: number;
   /** "wait" answer pushes the question by N days */
   waitMoreDays: number;
+  /** «Осмотр прошёл — сметы нет» in «Требует внимания» after N working days (docs/specs/03 §13.5), 1–10 */
+  inspectionNoEstimateDays: number;
 }
 
 export const LEAD_SETTINGS_DEFAULT: LeadSettings = {
@@ -28,7 +30,9 @@ export const LEAD_SETTINGS_DEFAULT: LeadSettings = {
   remindDays: 3,
   lostOrWaitDays: 14,
   waitMoreDays: 7,
+  inspectionNoEstimateDays: 1,
 };
+export const INSPECTION_NO_ESTIMATE_RANGE = { min: 1, max: 10 } as const;
 
 const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v) && v >= 0;
 
@@ -43,5 +47,7 @@ export function leadSettingsOf(company: Pick<Company, "leadSettings"> | null | u
     } else if (isNum(v)) (out[k] as number) = v;
   }
   if (out.replyBadMin < out.replyWarnMin) out.replyBadMin = out.replyWarnMin;
+  const r = INSPECTION_NO_ESTIMATE_RANGE;
+  out.inspectionNoEstimateDays = Math.min(r.max, Math.max(r.min, Math.round(out.inspectionNoEstimateDays)));
   return out;
 }

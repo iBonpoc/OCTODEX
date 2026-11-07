@@ -46,3 +46,20 @@ export const activeFilterCount = (groups: readonly FilterGroup[]): number => cho
 
 /** where a list keeps its filters on this device, until «Сбросить» (spec 31 §6 п.7); the search is not kept */
 export const filterStoreKey = (list: string): string => `octo.filter.${list}.v1`;
+
+/* ---------- the search as an icon (founder 07.11, spec 31 §6 п.2а) ---------- */
+
+/** closed — the magnifier; open — the field with focus; closedActive — the magnifier framed: a search is on */
+export type SearchState = "closed" | "open" | "closedActive";
+
+export function searchState(open: boolean, q: string): SearchState {
+  if (open) return "open";
+  return q.trim() ? "closedActive" : "closed";
+}
+
+/** what a tap / a blur / ✕ does: the field opens on a tap, closes on a blur (empty or not), ✕ empties and closes */
+export function searchAfter(ev: "tap" | "blur" | "clear", q: string): { open: boolean; q: string } {
+  if (ev === "tap") return { open: true, q };
+  if (ev === "clear") return { open: false, q: "" };
+  return { open: false, q };
+}

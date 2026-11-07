@@ -42,6 +42,8 @@ export interface Section {
   phoneOnly?: boolean;
   /** who sees it (13 §4); undefined = everyone */
   roles?: readonly Role[];
+  /** not for a subcontractor: in the app he is a «tech» (appRoles), so the role alone does not tell (P4c, PushSettings) */
+  noSub?: boolean;
 }
 
 const OFFICE: readonly Role[] = ["director", "dispatcher", "sales"];
@@ -52,7 +54,9 @@ export const SECTIONS: readonly Section[] = [
   { id: "home", label: "nav.home", icon: "home", group: "top", tab: true },
   { id: "plan", label: "nav.plan", icon: "calendar", group: "work", tab: true },
   { id: "messages", label: "nav.messages", icon: "sms", group: "top", tab: true },
-  { id: "leads", label: "nav.leads", icon: "inbox", group: "work", roles: OFFICE },
+  // the tech sees his own leads — assigned to him or brought by him (13 §2.3, §4; canSeeLead and RLS leads_select);
+  // a subcontractor does not (he never gets leads: features/leadAssignee.ts)
+  { id: "leads", label: "nav.leads", icon: "inbox", group: "work", roles: [...OFFICE, "tech"], noSub: true },
   { id: "jobs", label: "nav.jobs", icon: "wrench", group: "work" },
   { id: "clients", label: "nav.clients", icon: "users", group: "work", tab: true },
   // «Звонки» is not a tab until the company has its own number (founder 06.11, variant Б; 13 v2 §2.1)
@@ -94,7 +98,11 @@ export function sectionHref(id: SectionId, role: Role): string {
   }
 }
 
-const visible = (s: Section, role: Role) => (!s.roles || s.roles.includes(role)) && canOpen(role, sectionHref(s.id, role));
+const visible = (s: Section, role: Role, sub = false) =>
+  (!s.roles || s.roles.includes(role)) && !(sub && s.noSub) && canOpen(role, sectionHref(s.id, role));
+
+/** this person works in the company as a subcontractor (Member.kind; the app role is «tech» all the same) */
+export const meIsSub = (db: { me: string; members: readonly { id: string; kind: string }[] }) => db.members.some((m) => m.id === db.me && m.kind === "sub");
 
 /** The 5 bottom tabs: the same set for every role (13 §2.1) — what is inside is filtered by rights. */
 export const tabs = (_role: Role): Section[] => SECTIONS.filter((s) => s.tab);
@@ -103,10 +111,10 @@ export const tabs = (_role: Role): Section[] => SECTIONS.filter((s) => s.tab);
  * The sections by group for this role, in order (13 v2 §2.3); a group with nothing the role may open is left out.
  * Phone (`wide` = false): the tiles of «Ещё» — the tabs are not repeated there. 820/1280: the side menu — everything but «Ещё».
  */
-export function menuGroups(role: Role, wide = false): { group: MenuGroup; items: Section[] }[] {
+export function menuGroups(role: Role, wide = false, sub = false): { group: MenuGroup; items: Section[] }[] {
   const order: MenuGroup[] = ["top", "work", "docs", "money", "bottom"];
   return order
-    .map((group) => ({ group, items: SECTIONS.filter((s) => s.group === group && !s.phoneOnly && (wide || !s.tab) && visible(s, role)) }))
+    .map((group) => ({ group, items: SECTIONS.filter((s) => s.group === group && !s.phoneOnly && (wide || !s.tab) && visible(s, role, sub)) }))
     .filter((g) => g.items.length > 0);
 }
 

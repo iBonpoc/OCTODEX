@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState, type ComponentRef } from "react";
 import { Modal, PanResponder, Platform, View, useWindowDimensions } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Path } from "react-native-svg";
 import { component, radius, size, space } from "@octo/design-tokens";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/ui/controls";
+import { ALL_ORIENTATIONS } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
 import { fullCanvas, turnedToCanvas, uprightToCanvas } from "./signatureCanvas";
@@ -38,8 +40,11 @@ export function SignatureFullscreen({
   const { c } = useTheme();
   const { t } = useI18n();
   const win = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const bar = size.hitMin + space[2];
-  const cv = fullCanvas(win.width, win.height, fieldW, fieldH, space[4], bar);
+  // the canvas and «Отмена / Готово» keep clear of the notch, the Dynamic Island and the home indicator (docs/specs/32)
+  // the bar and its gap sit under the canvas: both count
+  const cv = fullCanvas(win.width, win.height, fieldW, fieldH, space[4], bar + space[2], insets);
   const k = fieldW > 0 ? cv.w / fieldW : 1;
   const [path, setPath] = useState("");
   const pathRef = useRef("");
@@ -94,8 +99,11 @@ export function SignatureFullscreen({
   const blockW = cv.w;
   const blockH = cv.h + space[2] + bar;
   return (
-    <Modal visible={visible} animationType="fade" onRequestClose={onCancel} supportedOrientations={["portrait", "landscape"]} statusBarTranslucent>
-      <View testID="sig-full" style={{ flex: 1, backgroundColor: c.bg, alignItems: "center", justifyContent: "center" }}>
+    <Modal visible={visible} animationType="fade" onRequestClose={onCancel} supportedOrientations={ALL_ORIENTATIONS} statusBarTranslucent>
+      <View
+        testID="sig-full"
+        style={{ flex: 1, backgroundColor: c.bg, alignItems: "center", justifyContent: "center", paddingTop: cv.pad.top, paddingBottom: cv.pad.bottom, paddingLeft: cv.pad.left, paddingRight: cv.pad.right }}
+      >
         <View
           testID={cv.rotate ? "sig-full-turned" : "sig-full-upright"}
           style={{ width: blockW, height: blockH, gap: space[2], transform: cv.rotate ? [{ rotate: "90deg" }] : [] }}

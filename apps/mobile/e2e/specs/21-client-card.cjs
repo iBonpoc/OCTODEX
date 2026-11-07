@@ -1,3 +1,4 @@
+const { listSearch, listSearchClear } = require("../listSearch.cjs");
 const { expectOneAccent } = require("../accent.cjs");
 /**
  * Client card C1 (docs/specs/04 §7.2): number, tags, owes / paid total, rows with counters (13 §3.3), people with several phones,
@@ -81,10 +82,10 @@ exports.run = async (h) => {
 
   // list: search by the spouse's new phone; the status shows on the card
   await h.go("/clients");
-  await p.getByPlaceholder("Имя, телефон или адрес").fill("555-0199");
+  await listSearch(p, "555-0199");
   await p.waitForTimeout(400);
   await h.expectText(/Sarah Mitchell/, "found by a second person's phone");
-  await p.getByPlaceholder("Имя, телефон или адрес").fill("");
+  await listSearchClear(p);
   // tags sit behind «Фильтр» in a sheet (spec 31: the button next to the search; 1280 — «Метки ▾» in the row)
   await p.getByRole("button", { name: /^Фильтры, включено: 0$/ }).click();
   await p.waitForTimeout(400);
