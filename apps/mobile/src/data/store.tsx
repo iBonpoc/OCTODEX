@@ -89,6 +89,7 @@ type Undo = () => void;
 /** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
 export type GuardedUndo = () => boolean;
 export type Mode = "demo" | "cloud";
+export type Link = "ok" | "offline" | "server";
 /** when and who for an estimate visit */
 export interface BookAt {
   /** the id of the new visit, when the caller needs it (the form shows «Сообщить клиенту?» for it) */
@@ -112,6 +113,11 @@ interface StoreCtx {
   setRole: (r: Role) => void;
   availableRoles: Role[];
   online: boolean;
+  /**
+   * why nothing goes out (docs/specs/23 §3): «ok»; «offline» — no answer at all (no network, the demo switch);
+   * «server» — the network is there, the server answers «not now» (5xx, 429, PGRST002…). `online` is false for both.
+   */
+  link: Link;
   setOnline: (v: boolean) => number;
   queue: QueuedAction[];
   /** the signed-in person's unsent ops in every company (the account deletion removes them all, review #240 №4) */
@@ -362,18 +368,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [online, setOnlineState] = useState(true);
   // the cloud: is the server answering (the switch «без сети» is the demo's) — a failed request says no, an answer yes;
   // without it the outbox waits longer and longer and never drops an op (rule 6, cloud e2e 104)
-  const [reachable, setReachable] = useState(true);
+  const [link, setLink] = useState<Link>("ok");
+  const reachable = link === "ok";
   const netFails = useRef(0);
   const nextTry = useRef(0);
   const answered = () => {
     netFails.current = 0;
     nextTry.current = 0;
-    setReachable(true);
+    setLink("ok");
   };
-  const unreachable = () => {
+  // a failure with no answer is «no network»; the server's «not now» is «server unavailable» (review #244 №3)
+  const failedAs = (e: unknown): Link => (classify(e) === "network" ? "offline" : "server");
+  const unreachable = (e: unknown) => {
     netFails.current += 1;
     nextTry.current = Date.now() + backoffMs(netFails.current);
-    setReachable(false);
+    setLink(failedAs(e));
   };
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
   const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, []);
@@ -438,7 +447,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       answered();
     } catch (e) {
       if (stale(gen)) return;
-      if (classify(e) !== "refusal") setReachable(false);
+      if (classify(e) !== "refusal") setLink(failedAs(e));
       setSyncError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -524,7 +533,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // the next send waits longer (review #244)
           if (classify(e) !== "refusal") {
             if (needsSignIn(e)) void renewSession();
-            unreachable();
+            unreachable(e);
             break;
           }
           // the server said «no»: a try; the last one drops it (never because of the network)
@@ -723,6 +732,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setRole,
       availableRoles,
       online: online && (mode !== "cloud" || reachable),
+      link: !online ? "offline" : mode === "cloud" ? link : "ok",
       queue: pendingQueue,
       unsentAll,
       syncError,
@@ -1573,7 +1583,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, reachable, pendingQueue.length, unsentAll, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, syncError, loading, mutate, setRole, setQueue, refresh, flush],
   );
 
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady) return null;

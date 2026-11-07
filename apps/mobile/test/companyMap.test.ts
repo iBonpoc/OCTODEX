@@ -24,7 +24,8 @@ describe("company ↔ database rows (П4a)", () => {
     const out = companyToDb(c, row);
     expect(out.schedule_settings).toEqual({ lateAfterMin: 30, inspectionMin: 60 });
     expect(out.business_hours).toEqual({ mon: [420, 960], sun: null });
-    expect(out.timezone).toBe("America/Denver");
+    // the zone is not sent when it is the stored one (docs/specs/22 §1)
+    expect(out.timezone).toBeUndefined();
   });
   it("a phone copy without the schedule keeps what is stored (no wipe to null / {})", () => {
     const c = { ...companyFromDb({ id: "c1", name: "Co" }, undefined, [], []), scheduleSettings: undefined, businessHours: undefined };

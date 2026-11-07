@@ -20,7 +20,7 @@ import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip } from "
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { canPlan, canReschedule, hiddenAssignees, isAssigned, liveAssignees, moveAssignee, planFilter, type PlanWho, visitWhen } from "@/features/schedule";
+import { canPlan, canReschedule, hiddenAssignees, isAssigned, liveAssignees, moveAssignee, planFilter, type PlanWho, visitWhen, visitWho } from "@/features/schedule";
 import { memberLabel, memberName } from "@/features/team";
 import { FeedView, PlanAddSheet, PlanWhoChips, UnassignedSoon, WaitingJobs } from "@/features/PlanParts";
 import { daysFrom, planItems } from "@/features/planFeed";
@@ -235,8 +235,8 @@ function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: D
               <CardList>
                 {vs.map((v) => {
                   const job = findJob(db, v.jobId);
-                  const p = db.properties.find((x) => x.id === job?.propertyId);
-                  const c = db.customers.find((x) => x.id === p?.customerId);
+                  // the client of the visit itself (an inspection has no job: the property's client or the lead), 24 §B
+                  const client = visitWho(db, v).client;
                   const tech = db.members.find((m) => m.id === v.techId);
                   // nobody, or only a deleted account (S22): «Не назначено» — visitStatus decides, one rule
                   const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
@@ -244,7 +244,7 @@ function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: D
                     <ItemCard
                       key={v.id}
                       status={st.status}
-                      title={`${visitWhen(v, time, t("plan5.allDay"), false)} · ${c?.name ?? "—"}`}
+                      title={`${visitWhen(v, time, t("plan5.allDay"), false)} · ${client || "—"}`}
                       subtitle={[job?.title, memberLabel(tech, t) ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
                       right={<RowView>{overlapSigns(db, v).map((s) => <StatusChip key={s.key} status={s.tone} label={t(s.key, s.params)} />)}<StatusChip status={st.status} label={t(st.label)} /></RowView>}
                       onPress={() => router.push(`/visit/${v.id}`)}
