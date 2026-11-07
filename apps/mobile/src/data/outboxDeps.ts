@@ -9,9 +9,10 @@
  * An op still in its «Отменить» window stops everything after it, as before. Other people's ops (another owner) never
  * hold this person's (as before the change: they are never sent by this person, and would hold them for good).
  *
- * Ids: the client-made UUIDs of the objects the op is about, found anywhere in it — but not the ids it only refers to
- * (REF_KEYS: the source, tags, people, categories, types, catalog items): two leads with the same source are not
- * related. Pure: test/outboxDeps.test.ts.
+ * Ids: the client-made UUIDs of the objects the op is about, found anywhere in it; the ids it only refers to (REF_KEYS:
+ * the source, tags, people, categories, types, catalog items) are kept apart — two leads with the same source are not
+ * related, but a lead waits for the held op that makes its new source (review #259 Б1-бис). What an op makes on the
+ * server — CREATES, one entry per kind. Pure: test/outboxDeps.test.ts.
  */
 import type { Op } from "@/cloud/ops";
 import { readyToSend } from "@/cloud/outboxTiming";
@@ -24,23 +25,88 @@ export const SELF_KINDS: ReadonlySet<Op["k"]> = new Set<Op["k"]>([
   "lead.add", "customer.create", "note.add", "activity.call", "activity.message", "task.save", "calendarEvent.save", "calendarEvent.remove",
 ]);
 
-/** fields that only refer to something shared (not the object the op changes) */
+/**
+ * Fields that only refer to something shared (not the object the op is about): two leads with the same source are not
+ * related. But a reference still ties the op to the op that CREATES what it refers to (review #259 Б1-бис): a new lead
+ * waits for its new source (leads.source_id → lead_sources), a job for its new category / type, a job line for its new
+ * catalog item. So the ids under these keys are kept apart (refsOf), not thrown away.
+ */
 export const REF_KEYS: ReadonlySet<string> = new Set([
-  "sourceId", "source", "tagIds", "tagId", "techId", "userId", "userIds", "assigneeId", "assigneeIds", "serviceCategoryId",
-  "jobTypeId", "categoryId", "catalogItemId", "createdBy", "ownerId", "doneBy",
+  "sourceId", "tagIds", "tagId", "techId", "userId", "userIds", "assigneeId", "assigneeIds", "serviceCategoryId",
+  "jobTypeId", "categoryId", "catalogItemId", "serviceItemId", "createdBy", "ownerId", "doneBy",
+  // the same in a lead's columns (cloud/leadCols.ts: lead.add / lead.update `cols`)
+  "source_id", "service_item_id", "service_category_id", "assigned_to",
 ]);
 
-/** the ids of the objects the op is about (lowercase), at any depth, without the REF_KEYS */
-export function uuidsOf(op: unknown): Set<string> {
-  const out = new Set<string>();
-  const walk = (v: unknown, depth: number) => {
+/** the ids in the op (lowercase), at any depth: `own` — the objects it is about, `refs` — under REF_KEYS */
+function idsOf(op: unknown): { own: Set<string>; refs: Set<string> } {
+  const own = new Set<string>();
+  const refs = new Set<string>();
+  const walk = (v: unknown, depth: number, ref: boolean) => {
     if (depth > 8 || v == null) return;
     if (typeof v === "string") {
-      if (UUID.test(v)) out.add(v.toLowerCase());
-    } else if (Array.isArray(v)) for (const x of v) walk(x, depth + 1);
-    else if (typeof v === "object") for (const [k, x] of Object.entries(v as Record<string, unknown>)) if (!REF_KEYS.has(k)) walk(x, depth + 1);
+      if (UUID.test(v)) (ref ? refs : own).add(v.toLowerCase());
+    } else if (Array.isArray(v)) for (const x of v) walk(x, depth + 1, ref);
+    else if (typeof v === "object") for (const [k, x] of Object.entries(v as Record<string, unknown>)) walk(x, depth + 1, ref || REF_KEYS.has(k));
   };
-  walk(op, 0);
+  walk(op, 0, false);
+  return { own, refs };
+}
+/** the ids of the objects the op is about (lowercase), at any depth, without the REF_KEYS */
+export const uuidsOf = (op: unknown): Set<string> => idsOf(op).own;
+/** the ids the op only refers to (under REF_KEYS) */
+export const refsOf = (op: unknown): Set<string> => idsOf(op).refs;
+/** every id in the op: its own and the ones it refers to */
+const allIdsOf = (op: unknown): Set<string> => {
+  const { own, refs } = idsOf(op);
+  refs.forEach((x) => own.add(x));
+  return own;
+};
+
+type Creates = { [K in Op["k"]]: (op: Extract<Op, { k: K }>) => (string | null | undefined)[] };
+const none = () => [];
+/**
+ * The objects each kind of op makes on the server (review #259 п.1, п.2): an op that refers to one of them cannot go
+ * without it, and leaves with it on «Отменить изменение…». Every kind is listed (TypeScript checks it): a new kind
+ * must say what it makes. An upsert with `isNew` makes only when new; an upsert without it counts as making (the
+ * phone cannot tell — the confirmation says how many changes leave with it). Ids it only changes or refers to — not.
+ */
+const CREATES: Creates = {
+  "visit.step": none, "photo.add": (o) => [o.id], "photo.remove": none, "visit.checklist": none, "visit.sign": none,
+  "visit.pay": (o) => [o.invoiceId, o.paymentId], "lead.reply": none,
+  "lead.book": (o) => [o.customerId, o.contactId, o.propertyId, o.jobId, o.visitId],
+  "visit.notified": none, "visit.inspection": (o) => [o.visitId], "visit.cancel": none, "visit.reschedule": none,
+  "lead.visit": (o) => [o.jobId, o.visitId], "lead.add": (o) => [o.id], "visit.assign": none,
+  "estimate.add": (o) => [o.id, o.versionId, o.optionId], "estimate.send": none, "estimate.save": (o) => [o.id, o.versionId],
+  "estimate.approve": (o) => [o.jobId, o.invoiceId], "payment.record": (o) => [o.id], "invoice.issue": (o) => [o.id],
+  "job.schedule": (o) => [o.visitId], "company.save": none, "license.save": (o) => [o.license.id], "license.remove": none,
+  "contact.save": (o) => [o.contact.id], "contact.remove": none,
+  "lead.prospect": (o) => [o.customerId, o.contactId, o.propertyId],
+  "lead.convert": (o) => (o.needCustomer ? [o.customerId, o.contactId, o.propertyId, o.noteId] : [o.noteId]),
+  "lead.update": none, "lead.touch": (o) => [o.activityId], "activity.message": (o) => [o.activityId],
+  "activity.call": (o) => [o.activityId], "invoice.remind": (o) => [o.activityId], "lead.close": (o) => [o.activityId],
+  "lead.reopen": (o) => [o.activityId], "lead.assign": (o) => [o.activityId], "lead.cost": none,
+  "lead.contactSave": (o) => [o.contact.id], "lead.contactRemove": none, "task.save": (o) => [o.task.id],
+  "calendarEvent.save": (o) => (o.isNew ? [o.event.id] : []), "calendarEvent.remove": none, "me.prefs": none, "me.location": none,
+  "customField.save": (o) => (o.isNew ? [o.field.id] : []), "customFieldValue.save": (o) => (o.isNew ? [o.value.id] : []),
+  "customFieldValue.remove": none, "source.save": (o) => [o.source.id],
+  "customer.create": (o) => [o.customerId, o.contactId, o.propertyId], "customer.update": none,
+  "customer.people": (o) => o.people.map((x) => x.id), "lead.people": (o) => o.people.map((x) => x.id),
+  "customer.tags": none, "customer.status": none, "tag.save": (o) => [o.tag.id],
+  "serviceCategory.save": (o) => (o.isNew ? [o.category.id] : []), "job.category": none, "job.complete": none,
+  "job.create": (o) => [o.id], "job.update": none, "job.tags": none, "jobLine.save": (o) => (o.isNew ? [o.line.id] : []),
+  "jobLine.remove": none, "jobLine.restore": none, "jobType.save": (o) => (o.isNew ? [o.jobType.id] : []),
+  "estimate.category": none, "property.update": none, "property.save": (o) => [o.property.id], "property.gate": none,
+  "note.add": (o) => [o.id], "note.update": none, "catalog.save": (o) => [o.item.id], "catalog.remove": none,
+  "notice.read": none, "estimate.sign": none, "estimate.countersign": (o) => [o.jobId, o.invoiceId], "estimate.revoke": none,
+  "estimate.decline": none, "estimate.reopen": none, "member.signature": (o) => [o.id], "member.update": none,
+  "estimate.deposit": (o) => [o.jobId, o.invoiceId, o.paymentId], "invoice.pay": (o) => [o.paymentId], "expense.add": (o) => [o.id],
+};
+/** the ids of the objects the op makes on the server (lowercase); an unknown kind (a newer version's) makes nothing known */
+export function createdBy(op: Op): Set<string> {
+  const f = (CREATES as Record<string, ((o: Op) => (string | null | undefined)[]) | undefined>)[op.k];
+  const out = new Set<string>();
+  for (const x of f ? f(op) : []) if (typeof x === "string" && UUID.test(x)) out.add(x.toLowerCase());
   return out;
 }
 
@@ -62,7 +128,8 @@ export function liveOf(items: readonly OwnedItem[], who: Owner | null, held: (o:
   for (const o of items) {
     if (!isMine(o, who)) continue;
     const ids = uuidsOf(o.op);
-    const shares = [...ids].some((x) => blocked.has(x));
+    // its own objects or what it refers to (a new source, category, type, catalog item) are held or waiting
+    const shares = [...allIdsOf(o.op)].some((x) => blocked.has(x));
     if (held(o) || (anyHeld && (shares || !mayPass(o.op)))) {
       anyHeld = true;
       ids.forEach((x) => blocked.add(x));
@@ -80,21 +147,29 @@ export function nextToSend(items: readonly OwnedItem[], who: Owner | null, held:
 }
 
 /**
- * The ops that need `id` and leave with it on «Отменить изменение…» (review #259 Б2): the person's later ops about
- * the same object, and those about the objects of these — never an op only because it stood behind it, never by a
- * shared source / tag / person. The others are free again once it is gone.
+ * The ops that leave with `id` on «Отменить изменение…» (review #259 Б2, п.1, п.2): the person's later ops that are
+ * about or refer to an object this op makes, and, along the chain, to an object one of those makes. An op that only
+ * changes something (customer.update) makes nothing: nothing leaves with it. Never an op only because it stood behind
+ * it, never by a shared source / tag / person. The others are free again once it is gone.
  */
 export function dependentsOf(items: readonly OwnedItem[], who: Owner | null, id: string): OwnedItem[] {
   const mine = mineOf(items, who);
   const at = mine.findIndex((o) => o.id === id);
   if (at < 0) return [];
-  const ids = uuidsOf(mine[at]!.op);
+  const made = createdBy(mine[at]!.op);
   const out: OwnedItem[] = [];
+  if (!made.size) return out;
   for (const o of mine.slice(at + 1)) {
-    const own = uuidsOf(o.op);
-    if (![...own].some((x) => ids.has(x))) continue;
+    if (![...allIdsOf(o.op)].some((x) => made.has(x))) continue;
     out.push(o);
-    own.forEach((x) => ids.add(x));
+    createdBy(o.op).forEach((x) => made.add(x));
   }
   return out;
+}
+
+/** the person's ops that wait for `id` alone: not live while it is held (they go when it goes, or after «Отменить»)  */
+export function waitingFor(items: readonly OwnedItem[], who: Owner | null, id: string): number {
+  const mine = mineOf(items, who);
+  if (!mine.some((o) => o.id === id)) return 0;
+  return mine.length - 1 - liveOf(mine, who, (o) => o.id === id).length;
 }

@@ -38,7 +38,7 @@ import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigne
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { backoffMs, classify, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
-import { dependentsOf, liveOf, nextToSend } from "./outboxDeps";
+import { dependentsOf, nextToSend, waitingFor } from "./outboxDeps";
 import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 export { mineOf, type OwnedItem } from "./outboxOwner";
@@ -94,8 +94,10 @@ export interface StuckOp {
   id: ID;
   kind: string;
   since: string;
-  error?: string;
+  /** the ops that wait for it now (they go when it goes) */
   waiting: number;
+  /** the ops that leave with it on «Отменить изменение…»: they need what it makes (docs/specs/23 §3) */
+  leaving: number;
   /** being sent right now: «Повторить» / «Отменить изменение…» wait */
   sending: boolean;
 }
@@ -460,11 +462,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // the op being sent now: «Отменить изменение…» and «Повторить» wait for its answer (review #259 №5)
   const inFlight = useRef<string | null>(null);
   const [sendingId, setSendingId] = useState<string | null>(null);
-  /** a network failure or a refusal ends a run of the server's errors: the 10 minutes count from the next one */
+  /**
+   * a network failure or a refusal ends a run of the server's errors: the 10 minutes count from the next one, and the
+   * card «не отправлено» goes (review #259 п.4) — a refused op is the refusals' now: after MAX_TRIES it is dropped
+   */
   const clearFails = (id: string) => {
     const cur = outboxRef.current.find((x) => x.id === id);
-    if (!cur || (cur.fails == null && cur.failSince == null)) return;
-    const { fails: _f, failSince: _s, ...rest } = cur;
+    if (!cur || (cur.fails == null && cur.failSince == null && !cur.stuck)) return;
+    const { fails: _f, failSince: _s, stuck: _st, ...rest } = cur;
     outboxRef.current = outboxRef.current.map((x) => (x.id === id ? rest : x));
     setOutbox(outboxRef.current);
   };
@@ -748,7 +753,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     mode === "cloud"
       ? mineOf(outbox, who)
           .filter((o) => o.stuck)
-          .map((o) => ({ id: o.id, kind: o.op.k, since: o.failSince ?? o.at, error: o.error, waiting: dependentsOf(outbox, who, o.id).length, sending: sendingId === o.id }))
+          .map((o) => ({
+            id: o.id,
+            kind: o.op.k,
+            since: o.failSince ?? o.at,
+            waiting: waitingFor(outbox, who, o.id),
+            leaving: dependentsOf(outbox, who, o.id).length,
+            sending: sendingId === o.id,
+          }))
       : [];
   // «Повторить сейчас»: only its pause goes — it stays «stuck» (and its card stays) until the server takes it
   // (review #259 №2); while it is being sent, nothing to do

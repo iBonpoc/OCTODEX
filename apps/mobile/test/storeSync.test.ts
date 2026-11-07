@@ -694,7 +694,9 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
   const st = () => stored() as unknown as S[];
   const sentIds = () => server.sends.map((s) => (s.op as { id: string }).id);
   const timeout = (code = "57014") => notNow(500, code);
-  type V = Value & { link: string; stuckOps: { id: string; kind: string; waiting: number }[]; retryOp: (id: string) => void; discardOp: (id: string) => void };
+  type V = Value & { link: string; stuckOps: { id: string; kind: string; waiting: number; leaving: number; sending: boolean }[]; retryOp: (id: string) => void; discardOp: (id: string) => boolean };
+  const src = (id: string, n: number, extra: object = {}) => q(id, { k: "source.save", source: { id: U(n), name: "Yelp", kind: "online", active: true } }, extra);
+  const newLead = (id: string, n: number, s: number) => q(id, { k: "lead.add", id: U(n), name: "A", phone: "1", city: "LA", sourceId: U(s), message: "" });
   const start = async () => {
     signIn("u1", "c1");
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
@@ -795,7 +797,7 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await settle();
     await wait(300);
     expect(st().find((x) => x.id === "X")).toMatchObject({ fails: 3, failSince: since, stuck: true, tries: 0 });
-    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", kind: "calendarEvent.remove", waiting: 1 })]);
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", kind: "calendarEvent.remove", waiting: 1, leaving: 0 })]);
     const before = server.sends.length;
     await pass(r);
     expect(server.sends.length).toBe(before); // its 5-minute pause: not tried at once
@@ -849,19 +851,55 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     expect(st()).toEqual([]);
     expect(v(r).stuckOps).toEqual([]);
   });
-  it("«Отменить изменение…»: the op and what waits for it leave; another person's ops stay; then a reload", async () => {
+  it("«Отменить изменение…»: the op and what needs what it makes leave; another person's ops stay; then a reload", async () => {
     seedOutbox(
-      ev("X", 1, { stuck: true, fails: 3, failSince: AGO }),
-      q("W", { k: "customer.tags", id: U(1), tagIds: [] }),
-      q("T", { k: "calendarEvent.remove", id: U(1) }, { owner: { userId: "u2", companyId: "c1" } }),
+      src("X", 1, { stuck: true, fails: 3, failSince: AGO }),
+      newLead("L", 2, 1), // needs the new source
+      q("W", { k: "customer.tags", id: U(5), tagIds: [] }), // only waited behind it
+      q("T", { k: "lead.add", id: U(3), name: "B", phone: "1", city: "LA", sourceId: U(1), message: "" }, { owner: { userId: "u2", companyId: "c1" } }),
     );
     const r = await start();
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", waiting: 2, leaving: 1 })]);
+    expect(v(r).discardOp("X")).toBe(true);
+    await settle();
+    await wait(300);
+    expect(st().map((x) => x.id)).toEqual(["W", "T"]);
+    // W is free again: it goes, and then the server's truth comes back
+    await pass(r);
+    expect(server.sends.map((x) => (x.op as { k: string }).k)).toEqual(["customer.tags"]);
     const loads = server.loads.length;
-    v(r).discardOp("X");
+    server.sends[0]!.d.resolve();
     await settle();
     await wait(300);
     expect(st().map((x) => x.id)).toEqual(["T"]);
     expect(server.loads.length).toBeGreaterThan(loads);
+  });
+  it("a stuck change of a client discarded: its new job, invoice and payment stay and go (review #259 п.2)", async () => {
+    seedOutbox(
+      q("X", { k: "customer.update", id: U(1), name: "B" }, { stuck: true, fails: 3, failSince: AGO }),
+      q("J", { k: "job.create", id: U(4), customerId: U(1), propertyId: U(3), title: "T", description: null, jobTypeId: null, serviceCategoryId: null }),
+      q("I", { k: "invoice.issue", id: U(5), jobId: U(4), customerId: U(1), kind: "final", title: "F", totalCents: 100 }),
+      q("P", { k: "payment.record", id: U(6), invoiceId: U(5), customerId: U(1), amountCents: 100, method: "cash" }),
+    );
+    const r = await start();
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", waiting: 3, leaving: 0 })]);
+    expect(v(r).discardOp("X")).toBe(true);
+    await settle();
+    await wait(300);
+    expect(st().map((x) => x.id)).toEqual(["J", "I", "P"]);
+  });
+  it("a new source gets a 500: the new lead with it waits — it does not go first and get 23503 (review #259 Б1-бис)", async () => {
+    seedOutbox(src("S", 1), newLead("L", 2, 1), newLead("M", 3, 9));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(timeout());
+    await settle();
+    expect(server.sends.map((x) => (x.op as { k: string }).k)).toEqual(["source.save", "lead.add"]);
+    expect((server.sends[1]!.op as { id: string }).id).toBe(U(3)); // M, with another source
+    server.sends[1]!.d.resolve();
+    await settle();
+    await wait(300);
+    expect(st().map((x) => x.id)).toEqual(["S", "L"]);
   });
   it("after a restart two stuck ops fail again: not «server unavailable», and the next op still goes", async () => {
     const st2 = { stuck: true, fails: 3, failSince: AGO };
@@ -894,12 +932,18 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await pass(r);
     server.sends.at(-1)!.d.reject(timeout());
     await settle();
+    const fails = st()[0]!.fails;
     v(r).retryOp("X");
     await settle();
+    // on its way: still «stuck», the card stays (not taken off and put back), the run of errors goes on
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", sending: true })]);
+    await wait(300);
+    expect(st()[0]).toMatchObject({ id: "X", stuck: true, fails, failSince: AGO });
     server.sends.at(-1)!.d.reject(timeout());
     await settle();
     await wait(300);
-    expect(st()[0]).toMatchObject({ id: "X", stuck: true });
+    // failSince is a minute ago: a «stuck» set again from scratch would not be stuck (10 minutes) — it never left
+    expect(st()[0]).toMatchObject({ id: "X", stuck: true, fails: fails! + 1, failSince: AGO });
     expect(v(r).stuckOps.map((x) => x.id)).toEqual(["X"]);
   });
   it("while it is being sent: «Повторить» sends nothing more, «Отменить изменение…» is refused (review #259 №5)", async () => {
@@ -933,6 +977,29 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await wait(300);
     expect(st()[0]).toMatchObject({ fails: 1 });
     expect(st()[0]!.stuck).toBeUndefined();
+  });
+  it("a stuck op refused by the server: no more «не отправлено» — a try, as any refusal (review #259 п.4)", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(refusal());
+    await settle();
+    await wait(300);
+    expect(st()[0]).toMatchObject({ id: "X", tries: 1 });
+    expect(st()[0]!.stuck).toBeUndefined();
+    expect(st()[0]!.fails).toBeUndefined();
+    expect(v(r).stuckOps).toEqual([]);
+  });
+  it("a stuck op and no network: no more «не отправлено» — it waits for the network", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(new TypeError("Failed to fetch"));
+    await settle();
+    await wait(300);
+    expect(st()[0]!.stuck).toBeUndefined();
+    expect(v(r).stuckOps).toEqual([]);
+    expect(v(r).link).toBe("offline");
   });
   it("an older version's item (no failSince / fails) loads and goes as before", async () => {
     seedOutbox({ id: "old", op: { k: "calendarEvent.remove", id: U(9) }, at: AGO, tries: 0 });

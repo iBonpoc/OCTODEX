@@ -17,6 +17,8 @@ function StuckCard({ op }: { op: StuckOp }) {
   const { t, day, time } = useI18n();
   const { retryOp, discardOp } = useStore();
   const [sure, setSure] = useState(false);
+  // «Отменить изменение…» refused: it (or one that leaves with it) is on its way to the server right now
+  const [busy, setBusy] = useState(false);
   return (
     <Card status="bad">
       <View testID={`stuck-${op.id}`} style={{ gap: space[2] }}>
@@ -30,27 +32,36 @@ function StuckCard({ op }: { op: StuckOp }) {
         <T v="caption" tone="mut">
           {t("sync.stuck.since", { when: `${day(op.since)} ${time(op.since)}` })}
           {op.waiting ? ` · ${t("sync.stuck.waiting", { n: op.waiting })}` : ""}
+          {op.leaving ? ` · ${t("sync.stuck.leaving", { n: op.leaving })}` : ""}
         </T>
-        {op.error ? (
-          <T v="caption" tone="mut" numberOfLines={2}>
-            {op.error}
-          </T>
+        {/* our own words: the server's text is English and technical (review #259) */}
+        <T v="caption" tone="mut">
+          {t("sync.stuck.note")}
+        </T>
+        {busy ? (
+          <View testID={`stuck-busy-${op.id}`}>
+            <T v="caption">{t("sync.stuck.busy")}</T>
+          </View>
         ) : null}
         {!sure ? (
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
             <Button label={t("sync.stuck.retry")} icon="refresh" variant="secondary" disabled={op.sending} onPress={() => retryOp(op.id)} />
-            <Button label={t("sync.stuck.discard")} icon="trash" variant="ghost" disabled={op.sending} onPress={() => setSure(true)} />
+            <Button label={t("sync.stuck.discard")} icon="trash" variant="ghost" disabled={op.sending} onPress={() => (setBusy(false), setSure(true))} />
           </View>
         ) : (
           <View testID={`stuck-confirm-${op.id}`} style={{ gap: space[2] }}>
-            <T v="body">{op.waiting ? t("sync.stuck.sureWaiting", { n: op.waiting }) : t("sync.stuck.sure")}</T>
+            <T v="body">{op.leaving ? t("sync.stuck.sureWaiting", { n: op.leaving }) : t("sync.stuck.sure")}</T>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
               <Button
                 label={t("sync.stuck.discardYes")}
                 icon="trash"
                 variant="secondary"
                 disabled={op.sending}
-                onPress={() => (discardOp(op.id) ? undefined : setSure(false))}
+                onPress={() => {
+                  if (discardOp(op.id)) return;
+                  setSure(false);
+                  setBusy(true);
+                }}
               />
               <Button label={t("sync.stuck.keep")} variant="ghost" onPress={() => setSure(false)} />
             </View>

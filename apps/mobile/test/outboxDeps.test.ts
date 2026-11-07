@@ -1,7 +1,7 @@
 /** Which queued op may go while an earlier one is held (docs/specs/23 §3; review #259 Б1, Б2). */
 import { describe, expect, it } from "vitest";
 import type { Op } from "../src/cloud/ops";
-import { dependentsOf, liveOf, mayPass, nextToSend, SELF_KINDS, uuidsOf } from "../src/data/outboxDeps";
+import { createdBy, dependentsOf, liveOf, mayPass, nextToSend, refsOf, SELF_KINDS, uuidsOf, waitingFor } from "../src/data/outboxDeps";
 import type { OwnedItem } from "../src/data/outboxOwner";
 import { classify, isStuck, maybeOpOnly, STUCK_AFTER_MS } from "../src/data/outboxRetry";
 
@@ -23,6 +23,20 @@ describe("unit:outboxDeps — ids of an op", () => {
   it("not what it only refers to: source, tags, people, categories, types, catalog items (Б2)", () => {
     const op = { k: "lead.add", id: u(1), sourceId: u(2), tagIds: [u(3)], techId: u(4), userId: u(5), assigneeIds: [u(6)], serviceCategoryId: u(7), jobTypeId: u(8), task: { assigneeId: u(9), catalogItemId: u(10) } };
     expect([...uuidsOf(op)]).toEqual([u(1)]);
+    expect([...refsOf(op)].sort()).toEqual([2, 3, 4, 5, 6, 7, 8, 9, 10].map(u));
+  });
+  it("a lead's columns refer the same way: source, category, catalog item, assignee", () => {
+    const op = { k: "lead.update", id: u(1), cols: { source_id: u(2), service_category_id: u(3), service_item_id: u(4), assigned_to: u(5) } };
+    expect([...uuidsOf(op)]).toEqual([u(1)]);
+    expect([...refsOf(op)].sort()).toEqual([u(2), u(3), u(4), u(5)]);
+  });
+  it("a source's own id is its object: source.save is about the source (review #259 Б1-бис)", () => {
+    expect([...uuidsOf({ k: "source.save", source: { id: u(1), name: "Yelp", kind: "online", active: true } })]).toEqual([u(1)]);
+  });
+  it("exactly these kinds may pass a held op (a new kind here must be reviewed: lead.update, estimate.save, jobLine.save, visit.pay may not)", () => {
+    expect([...SELF_KINDS].sort()).toEqual(
+      ["activity.call", "activity.message", "calendarEvent.remove", "calendarEvent.save", "customer.create", "lead.add", "note.add", "task.save"].sort(),
+    );
   });
   it("only ops that add something of their own may pass a held one", () => {
     expect(mayPass(lead(1) as Op)).toBe(true);
@@ -77,6 +91,42 @@ describe("unit:outboxDeps — every op waits behind a held one (Б1)", () => {
   });
 });
 
+describe("unit:outboxDeps — an op waits for the held op that makes what it refers to (review #259 Б1-бис, п.1)", () => {
+  const src = (id: number) => ({ k: "source.save", source: { id: u(id), name: "Yelp", kind: "online", active: true } });
+  it("a new source held: the new lead with it waits (else 23503 leads.source_id → lost); a lead with another source goes", () => {
+    const S = item(src(90));
+    const L = item(lead(1, 90));
+    const other = item(lead(2, 91));
+    expect(ids(liveOf([S, L, other], me, heldIs(S)))).toEqual([other.id]);
+  });
+  it("the same for a new client with the new source, and a note on the waiting lead", () => {
+    const S = item(src(90));
+    const C = item({ k: "customer.create", customerId: u(1), contactId: u(2), propertyId: u(3), name: "A", phone: "1", sourceId: u(90), address: "a", city: "LA" });
+    const N = item({ k: "note.add", id: u(4), subjectType: "customer", subjectId: u(1), body: "b", visibility: "team" });
+    expect(ids(liveOf([S, C, N], me, heldIs(S)))).toEqual([]);
+  });
+  it("two leads with the same source are still not related", () => {
+    const A = item(lead(1, 90));
+    const B = item(lead(2, 90));
+    expect(ids(liveOf([A, B], me, heldIs(A)))).toEqual([B.id]);
+  });
+});
+
+describe("unit:outboxDeps — what an op makes on the server", () => {
+  it("creators: their new objects; an upsert with isNew only when new; a change makes nothing", () => {
+    const set = (op: object) => [...createdBy(op as Op)].sort();
+    expect(set({ k: "customer.create", customerId: u(1), contactId: u(2), propertyId: u(3), sourceId: u(9) })).toEqual([u(1), u(2), u(3)]);
+    expect(set({ k: "job.create", id: u(4), customerId: u(1), propertyId: u(3), serviceCategoryId: u(8) })).toEqual([u(4)]);
+    expect(set({ k: "serviceCategory.save", category: { id: u(5) }, isNew: true })).toEqual([u(5)]);
+    expect(set({ k: "serviceCategory.save", category: { id: u(5) }, isNew: false })).toEqual([]);
+    expect(set({ k: "jobType.save", jobType: { id: u(6) }, isNew: false })).toEqual([]);
+    expect(set({ k: "lead.convert", leadId: u(1), needCustomer: false, customerId: u(2), contactId: u(3), propertyId: u(4), noteId: u(5) })).toEqual([u(5)]);
+    expect(set({ k: "customer.update", id: u(1), name: "B" })).toEqual([]);
+    expect(set({ k: "lead.update", id: u(1), cols: {} })).toEqual([]);
+    expect(set({ k: "some.newer.kind", id: u(1) })).toEqual([]);
+  });
+});
+
 describe("unit:outboxDeps — the next op and the «Отменить» window", () => {
   it("the first live op that is ready", () => {
     const X = item(lead(1));
@@ -105,6 +155,57 @@ describe("unit:outboxDeps — what leaves with a discarded op (Б2)", () => {
     const other = item({ k: "customer.update", id: u(9), name: "C" });
     const xs = [X, sameSource, touchX, noteOnX, noteEdit, prefs, other];
     expect(ids(dependentsOf(xs, me, X.id))).toEqual([touchX.id, noteOnX.id, noteEdit.id]);
+  });
+  it("a new client discarded: its job, the job's invoice and the invoice's payment leave; another client's stay", () => {
+    const C = item({ k: "customer.create", customerId: u(1), contactId: u(2), propertyId: u(3), name: "A", phone: "1", sourceId: u(90), address: "a", city: "LA" });
+    const J = item({ k: "job.create", id: u(4), customerId: u(1), propertyId: u(3), title: "T", description: null, jobTypeId: null, serviceCategoryId: null });
+    const I = item({ k: "invoice.issue", id: u(5), jobId: u(4), customerId: u(1), kind: "final", title: "F", totalCents: 100 });
+    const P = item({ k: "payment.record", id: u(6), invoiceId: u(5), customerId: u(1), amountCents: 100, method: "cash" });
+    const P2 = item({ k: "payment.record", id: u(7), invoiceId: u(20), customerId: u(1), amountCents: 100, method: "cash" }); // on its customer only
+    const other = item({ k: "job.create", id: u(8), customerId: u(21), propertyId: u(22), title: "T", description: null, jobTypeId: null, serviceCategoryId: null });
+    expect(ids(dependentsOf([C, J, I, P, P2, other], me, C.id))).toEqual([J.id, I.id, P.id, P2.id]);
+  });
+  it("a change of a client discarded: nothing leaves with it — the client is on the server (review #259 п.2)", () => {
+    const X = item({ k: "customer.update", id: u(1), name: "B" });
+    const J = item({ k: "job.create", id: u(4), customerId: u(1), propertyId: u(3), title: "T", description: null, jobTypeId: null, serviceCategoryId: null });
+    const I = item({ k: "invoice.issue", id: u(5), jobId: u(4), customerId: u(1), kind: "final", title: "F", totalCents: 100 });
+    const P = item({ k: "payment.record", id: u(6), invoiceId: u(5), customerId: u(1), amountCents: 100, method: "cash" });
+    const xs = [X, J, I, P];
+    expect(dependentsOf(xs, me, X.id)).toEqual([]);
+    // but they wait for it while it is held: same client
+    expect(waitingFor(xs, me, X.id)).toBe(3);
+  });
+  it("a new category / type / catalog item / source discarded: the jobs, lines and leads with it leave (review #259 п.1, Б1-бис)", () => {
+    const cat = item({ k: "serviceCategory.save", category: { id: u(30), name: "Gutters" }, isNew: true });
+    const type = item({ k: "jobType.save", jobType: { id: u(31), name: "Repair" }, isNew: true });
+    const cItem = item({ k: "catalog.save", item: { id: u(32), name: "Elbow" } });
+    const src = item({ k: "source.save", source: { id: u(33), name: "Yelp", kind: "online", active: true } });
+    const J = item({ k: "job.create", id: u(4), customerId: u(1), propertyId: u(3), title: "T", description: null, jobTypeId: u(31), serviceCategoryId: u(30) });
+    const line = item({ k: "jobLine.save", line: { id: u(5), jobId: u(40), catalogItemId: u(32), name: "Elbow" }, isNew: true });
+    const L = item({ k: "lead.add", id: u(6), name: "A", phone: "1", city: "LA", sourceId: u(33), message: "", cols: { service_category_id: u(30) } });
+    const xs = [cat, type, cItem, src, J, line, L];
+    expect(ids(dependentsOf(xs, me, cat.id))).toEqual([J.id, L.id]);
+    expect(ids(dependentsOf(xs, me, type.id))).toEqual([J.id]);
+    expect(ids(dependentsOf(xs, me, cItem.id))).toEqual([line.id]);
+    expect(ids(dependentsOf(xs, me, src.id))).toEqual([L.id]);
+    // the chain goes only through what the dependents MAKE: a job of an existing client leaves, the client's change stays
+    const jobK = item({ k: "job.create", id: u(50), customerId: u(51), propertyId: u(52), title: "T", description: null, jobTypeId: null, serviceCategoryId: u(30) });
+    const editK = item({ k: "customer.update", id: u(51), name: "K" });
+    const lineJ = item({ k: "jobLine.save", line: { id: u(53), jobId: u(50), name: "x" }, isNew: true });
+    expect(ids(dependentsOf([cat, jobK, editK, lineJ], me, cat.id))).toEqual([jobK.id, lineJ.id]);
+    // a renamed category (not new): the jobs with it stay
+    const ren = item({ k: "serviceCategory.save", category: { id: u(30), name: "Gutter" }, isNew: false });
+    expect(dependentsOf([ren, J], me, ren.id)).toEqual([]);
+  });
+  it("how many wait and how many leave are told apart: behind a stuck op everything waits, only what needs it leaves", () => {
+    const X = item({ k: "contact.save", contact: { id: u(1), name: "A" } });
+    const W = item({ k: "company.save", company: { name: "Acme" }, einChanged: false }); // waits: not its own kind
+    const D = item({ k: "contact.remove", id: u(1) }); // needs the contact
+    const F = item(lead(5)); // its own: goes past
+    const xs = [X, W, D, F];
+    expect(waitingFor(xs, me, X.id)).toBe(2);
+    expect(ids(dependentsOf(xs, me, X.id))).toEqual([D.id]);
+    expect(waitingFor(xs, me, "nope")).toBe(0);
   });
   it("nothing before it, nothing of another person", () => {
     const before = item({ k: "lead.update", id: u(1), name: "0" });
