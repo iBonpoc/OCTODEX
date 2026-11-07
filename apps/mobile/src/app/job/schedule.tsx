@@ -18,13 +18,14 @@ import { jobServable } from "@/features/jobs";
  * Only then a visit appears in the plan (founder decision 04.11: no automatic "tomorrow 9:00").
  */
 export default function ScheduleJob() {
-  const { jobId } = useLocalSearchParams<{ jobId: string }>();
+  // `day`: the Plan's «＋» of a free day → «Ждут даты» → this form opens on that day (its own first free time)
+  const { jobId, day: onDay } = useLocalSearchParams<{ jobId: string; day?: string }>();
   const store = useStore();
   const { db } = store;
   const { t, money, day, time } = useI18n();
   const toast = useToast();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
-  const f = useVisitForm({ durationMin: scheduleSettingsOf(db.company).jobMin, allowAllDay: true });
+  const f = useVisitForm({ durationMin: scheduleSettingsOf(db.company).jobMin, allowAllDay: true, day: onDay && /^\d{4}-\d{2}-\d{2}$/.test(onDay) ? onDay : undefined });
   const [notifyId, setNotifyId] = useState<string | null>(null);
 
   const job = db.jobs.find((j) => j.id === jobId);

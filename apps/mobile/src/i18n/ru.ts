@@ -1840,7 +1840,6 @@ export const ru = {
   "lead.noServiceHint": "Этот телефон или email — у клиента с пометкой «Не обслуживаем»",
   // wave 5 «План» — Лента (Работы и выезды)
   "plan5.feed": "Лента",
-  "plan5.emptyDay": "На этот день ничего нет",
   "plan5.showDone": "Показывать выполненные",
   "plan5.unassigned": "Не назначено · {n}",
   "plan5.today": "Сегодня",
@@ -1875,6 +1874,16 @@ export const ru = {
   "plan5.ev.problem.long": "Слишком длинный текст",
   "plan5.addEvent": "Событие",
   "plan5.addTimeOff": "Выходной",
+  // «Работы» №6, 6-3 / 24 §B: Week and Month count the Feed's items; a run of empty days is one row
+  "plan5.planned": "В плане: {n}",
+  "plan5.freeRun": "{from} – {to} · свободно",
+  "plan5.freeDay": "{day} · свободно",
+  "plan5.freeToday": "На сегодня ничего нет",
+  "plan5.freeA11y": "Свободно: {from} – {to}. Добавить",
+  "plan5.lateEnRoute": "в пути",
+  "plan5.lateNotLeft": "не выехал",
+  "plan5.dayOffShort": "вых.",
+  "plan5.dayOff": "выходной",
   /* «Каркас» №4, 7а-1: согласие, документы, помощь и поддержка (docs/specs/19 §5) */
   "legal.terms.title": "Условия использования",
   "legal.privacy.title": "Политика конфиденциальности",
