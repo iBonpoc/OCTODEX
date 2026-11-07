@@ -182,3 +182,28 @@ describe("unit:pushPrefs — the store (P4b, rule 6)", () => {
     expect(valueOf(r).db.pushPrefs).toEqual({ leads: false });
   });
 });
+
+import { pushGroupOn, pushGroupsFor } from "../src/features/pushPrefs";
+
+describe("unit:pushPrefs — who sees which group, and the defaults (P4c, §4.11)", () => {
+  it("director all five; office and sales without «payment»; a tech «visits» and «leads»; a subcontractor nothing", () => {
+    expect(pushGroupsFor(["director"], false)).toEqual(["signed", "payment", "visits", "leads", "viewed"]);
+    expect(pushGroupsFor(["dispatcher"], false)).toEqual(["signed", "visits", "leads", "viewed"]);
+    expect(pushGroupsFor(["sales"], false)).toEqual(["signed", "visits", "leads", "viewed"]);
+    expect(pushGroupsFor(["tech"], false)).toEqual(["visits", "leads"]);
+    expect(pushGroupsFor(["tech"], true)).toEqual([]);
+    expect(pushGroupsFor(["director", "dispatcher", "tech"], true)).toEqual([]);
+  });
+  it("several roles — the union, in the screen's order (owner / admin in the cloud: director + dispatcher + tech)", () => {
+    expect(pushGroupsFor(["tech", "dispatcher"], false)).toEqual(["signed", "visits", "leads", "viewed"]);
+    expect(pushGroupsFor(["director", "dispatcher", "tech"], false)).toEqual(["signed", "payment", "visits", "leads", "viewed"]);
+    expect(pushGroupsFor([], false)).toEqual([]);
+  });
+  it("nothing saved — on, except «Клиент открыл смету» (as app.push_enabled); what is saved wins", () => {
+    for (const g of ["signed", "payment", "visits", "leads"] as const) expect(pushGroupOn(undefined, g)).toBe(true);
+    expect(pushGroupOn(undefined, "viewed")).toBe(false);
+    expect(pushGroupOn({}, "viewed")).toBe(false);
+    expect(pushGroupOn({ viewed: true, leads: false }, "viewed")).toBe(true);
+    expect(pushGroupOn({ viewed: true, leads: false }, "leads")).toBe(false);
+  });
+});
