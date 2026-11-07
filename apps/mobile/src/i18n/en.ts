@@ -2168,6 +2168,11 @@ export const en: Dict = {
   // «Каркас» №8, 7а-3: the client page of a closed company (docs/specs/22 §3.5)
   "fr8.portal.closed": "{company} has closed — documents at this link are no longer available",
   "fr8.portal.closedChip": "Closed",
+  // «Каркас» №8: a tab pressed over an unsaved form (docs/specs/28)
+  "fr8.tab.leaveTitle": "Leave without saving?",
+  "fr8.tab.leaveText": "An unsaved form is open under this screen. Switching tabs will discard what you entered.",
+  "fr8.tab.stay": "Stay",
+  "fr8.tab.leave": "Leave without saving",
   "job5.byTime": "By time",
   "job5.allDaySummary": "{date} · all day · {who}",
   "job5.clientDay": "The client sees the date only, no time",

@@ -2167,6 +2167,11 @@ export const ru = {
   // «Каркас» №8, 7а-3: the client page of a closed company (docs/specs/22 §3.5)
   "fr8.portal.closed": "{company} закрыта — документы по этой ссылке больше недоступны",
   "fr8.portal.closedChip": "Закрыта",
+  // «Каркас» №8: a tab pressed over an unsaved form (docs/specs/28)
+  "fr8.tab.leaveTitle": "Выйти без сохранения?",
+  "fr8.tab.leaveText": "Под этим экраном открыта несохранённая форма. Если перейти на вкладку, введённое пропадёт.",
+  "fr8.tab.stay": "Остаться",
+  "fr8.tab.leave": "Выйти без сохранения",
   "job5.byTime": "По времени",
   "job5.allDaySummary": "{date} · весь день · {who}",
   "job5.clientDay": "Клиент увидит только дату, без времени",

@@ -19,7 +19,8 @@ exports.run = async (h) => {
   for (const name of ["Объекты", "Адрес для счетов", "Люди", "Работы", "Лиды", "Сметы", "Счета и квитанции", "Задачи", "Заметки", "Файлы", "История"]) {
     h.expect((await rows().getByRole("button", { name, exact: true }).count()) === 1, `row «${name}» on the client`);
   }
-  h.expect((await p.getByRole("tab").count()) === 0, "no tabs on the client card");
+  // the card shows rows, not section tabs; the phone's bottom bar (its 5 tabs) is on every card now (docs/specs/28)
+  h.expect((await p.getByRole("tab").count()) - (await p.getByTestId("tab-bar").getByRole("tab").count()) === 0, "no section tabs on the client card");
   await h.shot("rows");
 
   await row("Работы");
