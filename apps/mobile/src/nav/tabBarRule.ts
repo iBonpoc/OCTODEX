@@ -61,3 +61,14 @@ export function formsAbove(routes: readonly string[]): string[] {
   const tabsAt = routes.lastIndexOf("(tabs)");
   return routes.slice(tabsAt + 1).filter((r) => hidden.has(tabRouteKey(r)));
 }
+
+/**
+ * How a tab leaves the current screen (e2e 134): «dismissTo» — a card lies over the tabs, close it down to them;
+ * «navigate» — the tabs are on top already (or not in the stack at all), just switch the tab. dismissTo on the tabs
+ * themselves is a no-op: after a role change from /settings (navigate pushed a second copy of the tabs) every tab but «＋»
+ * stopped answering until the app was restarted (TestFlight 288). `routes` — the root stack's route names, bottom first.
+ */
+export function tabLeave(routes: readonly string[]): "dismissTo" | "navigate" {
+  const tabsAt = routes.lastIndexOf("(tabs)");
+  return tabsAt >= 0 && tabsAt < routes.length - 1 ? "dismissTo" : "navigate";
+}
