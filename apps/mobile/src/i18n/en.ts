@@ -48,7 +48,7 @@ export const en: Dict = {
   "nav.expenses": "Expenses",
   "nav.team": "Team",
   "nav.companySettings": "Company settings",
-  "nav.mySettings": "My settings",
+  "nav.mySettings": "App settings",
   "nav.menu": "Menu",
   "nav.create": "Create",
   "nav.group.work": "Work",
@@ -2185,4 +2185,6 @@ export const en: Dict = {
   "fix.more.jobs": "To schedule: {n}",
   "fix.more.estimates": "To sign: {n}",
   "fix.more.invoices": "Overdue: {n}",
+  // fix.settings.* — profile split from app settings (spec 26)
+  "fix.settings.profile": "Profile & account",
 };

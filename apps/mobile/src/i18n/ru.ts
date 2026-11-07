@@ -47,7 +47,7 @@ export const ru = {
   "nav.expenses": "Расходы",
   "nav.team": "Команда",
   "nav.companySettings": "Настройки компании",
-  "nav.mySettings": "Мои настройки",
+  "nav.mySettings": "Настройки приложения",
   "nav.menu": "Меню",
   "nav.create": "Создать",
   "nav.group.work": "Работа",
@@ -2184,6 +2184,8 @@ export const ru = {
   "fix.more.jobs": "К плану: {n}",
   "fix.more.estimates": "На подпись: {n}",
   "fix.more.invoices": "Просрочено: {n}",
+  // fix.settings.* — profile split from app settings (spec 26)
+  "fix.settings.profile": "Профиль и аккаунт",
 } as const;
 
 export type DictKey = keyof typeof ru;
