@@ -27,6 +27,7 @@ import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
+import { lineChangeRefusal, lineSaveUndo, taxBefore, withJobLine, withJobTax, withoutJobLine } from "@/features/jobLines";
 import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/features/jobDone";
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { statusAfterManualWin } from "@/features/clientRows";
@@ -79,9 +80,12 @@ import {
   type Tag,
   ServiceCategory,
   CancelReason,
+  JobLineItem,
 } from "./types";
 
 type Undo = () => void;
+/** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
+export type GuardedUndo = () => boolean;
 export type Mode = "demo" | "cloud";
 /** when and who for an estimate visit */
 export interface BookAt {
@@ -215,6 +219,14 @@ interface StoreCtx {
   addJob: (x: NewJobInput) => { id: ID; undo: Undo };
   /** wave 3c (S10): «Да, выполнена» / «Завершить работу» — office only, no open visit; server public.complete_job */
   completeJob: (jobId: ID) => Undo;
+  /** 3b-2 (17-job §11.1): own lines of a job without an estimate; the job total follows (engine). The screen checks
+   *  lineChangeRefusal first; the server refuses the same (t20, t19_job_total_floor). Undo of a removal restores it. */
+  /** «Отменить» of these runs the same check (lineChangeRefusal) and returns false when it is refused: nothing changes */
+  saveJobLine: (line: Omit<JobLineItem, "totalCents">, isNew: boolean) => GuardedUndo;
+  removeJobLine: (id: ID) => GuardedUndo;
+  setJobTax: (jobId: ID, tax: { taxEnabled: boolean; taxRateBps: number }) => GuardedUndo;
+  setJobTags: (jobId: ID, tagIds: ID[]) => Undo;
+  setJobType: (jobId: ID, jobTypeId: ID | null) => Undo;
   /** for the estimate screen (chat «Сметы и модуль Gutters») */
   setEstimateCategory: (id: ID, serviceCategoryId?: ID) => Undo;
   updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
@@ -1254,6 +1266,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { id, undo };
       },
       completeJob: (jobId) => mutate("job.complete", (d) => withJobDone(d, jobId), { k: "job.complete", id: jobId }),
+      saveJobLine: (line, isNew) => {
+        const back = lineSaveUndo(dbRef.current, line);
+        mutate("jobLine.save", (d) => withJobLine(d, line), { k: "jobLine.save", line, isNew });
+        // the save may already be on the server: «Отменить» is its own step back (a new line is removed, an edit undone)
+        return () => {
+          const now = dbRef.current;
+          const after = back.k === "remove" ? withoutJobLine(now, back.id) : withJobLine(now, back.line);
+          // e.g. an invoice went out after the raise: going back below it is refused here as on the server (t19)
+          if (lineChangeRefusal(now, after, line.jobId)) return false;
+          if (back.k === "remove") mutate("jobLine.remove", (d) => withoutJobLine(d, back.id), { k: "jobLine.remove", id: back.id });
+          else mutate("jobLine.save", (d) => withJobLine(d, back.line), { k: "jobLine.save", line: back.line, isNew: false });
+          return true;
+        };
+      },
+      removeJobLine: (id) => {
+        const line = (dbRef.current.jobLines ?? []).find((l) => l.id === id);
+        if (!line) return () => false;
+        mutate("jobLine.remove", (d) => withoutJobLine(d, id), { k: "jobLine.remove", id });
+        // the removal may already be on the server: «Отменить» puts the line back as its own step
+        return () => {
+          if (lineChangeRefusal(dbRef.current, withJobLine(dbRef.current, line), line.jobId)) return false;
+          mutate("jobLine.restore", (d) => withJobLine(d, line), { k: "jobLine.restore", id });
+          return true;
+        };
+      },
+      setJobTax: (jobId, tax) => {
+        const prev = taxBefore(dbRef.current, jobId);
+        mutate("job.update", (d) => withJobTax(d, jobId, tax), { k: "job.update", id: jobId, ...tax });
+        return () => {
+          if (lineChangeRefusal(dbRef.current, withJobTax(dbRef.current, jobId, prev), jobId)) return false;
+          mutate("job.update", (d) => withJobTax(d, jobId, prev), { k: "job.update", id: jobId, ...prev });
+          return true;
+        };
+      },
+      setJobTags: (jobId, tagIds) => {
+        // a tag switched off since cannot be put back (job_tags_insert): «Отменить» leaves it out
+        const active = new Set(dbRef.current.tags.filter((x) => x.active).map((x) => x.id));
+        const prev = (dbRef.current.jobs.find((j) => j.id === jobId)?.tagIds ?? []).filter((id) => active.has(id));
+        const put = (ids: ID[]) => mutate("job.tags", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, tagIds: ids } : j)) }), { k: "job.tags", id: jobId, tagIds: ids });
+        put(tagIds);
+        return () => void put(prev);
+      },
+      setJobType: (jobId, jobTypeId) => {
+        const prev = dbRef.current.jobs.find((j) => j.id === jobId)?.jobTypeId ?? null;
+        const put = (id: ID | null) => mutate("job.type", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, jobTypeId: id ?? undefined } : j)) }), { k: "job.update", id: jobId, jobTypeId: id });
+        put(jobTypeId);
+        return () => void put(prev);
+      },
       setJobCategory: (id, serviceCategoryId) =>
         mutate("job.category", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, serviceCategoryId } : j)) }), { k: "job.category", id, serviceCategoryId: serviceCategoryId ?? null }),
       setEstimateCategory: (id, serviceCategoryId) =>
