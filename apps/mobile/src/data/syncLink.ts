@@ -22,7 +22,8 @@ export function stuckKindKey(kind: string): DictKey {
     case "contact": case "company": case "license": case "member": return "sync.kind.company";
     case "lead": return "sync.kind.lead";
     case "estimate": return kind === "estimate.deposit" ? "sync.kind.money" : "sync.kind.estimate";
-    case "invoice": case "payment": case "expense": return "sync.kind.money";
+    case "invoice": case "payment": return "sync.kind.money";
+    case "expense": return "sync.kind.expense";
     case "job": case "jobLine": return "sync.kind.job";
     case "visit": case "photo": return kind === "visit.pay" ? "sync.kind.money" : "sync.kind.visit";
     case "task": case "calendarEvent": return "sync.kind.task";

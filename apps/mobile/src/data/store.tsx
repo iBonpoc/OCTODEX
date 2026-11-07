@@ -38,8 +38,8 @@ import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigne
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { backoffMs, classify, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
-import { dependentsOf, nextToSend, waitingFor } from "./outboxDeps";
-import { leavingSummary } from "./syncLink";
+import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
+import { leavingSummary, MONEY_KINDS } from "./syncLink";
 import type { DictKey } from "@/i18n";
 import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -685,7 +685,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let oid: string | null = null;
       if (modeRef.current === "cloud" && op) {
         oid = uid();
-        outboxRef.current = [...outboxRef.current, { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}) }];
+        // an upsert that cannot tell «new» by itself: what it makes is what was not on the phone before (outboxDeps)
+        const made = madeOnQueue(op, prev);
+        outboxRef.current = [
+          ...outboxRef.current,
+          { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}), ...(made ? { made } : {}) },
+        ];
         setOutbox(outboxRef.current);
       } else if (!onlineRef.current) {
         qid = uid();
@@ -758,7 +763,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // what leaves with a discarded op: by kind; money — also when the op itself is money
   const leavingOf = (self: OwnedItem, gone: OwnedItem[]) => {
     const sum = leavingSummary(gone.map((o) => o.op.k));
-    return { leaving: gone.length, leavingKinds: sum.kinds, leavingMoney: sum.money || leavingSummary([self.op.k]).money };
+    return { leaving: gone.length, leavingKinds: sum.kinds, leavingMoney: [self, ...gone].some((o) => isMoneyOp(o, MONEY_KINDS)) };
   };
   const unsentAll = mode === "cloud" ? unsentOf(outbox, who?.userId ?? null) : 0;
   const stuckOps: StuckOp[] =

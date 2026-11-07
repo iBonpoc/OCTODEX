@@ -61,11 +61,12 @@ exports.run = async (h, { seed, admin }) => {
     ([items]) => localStorage.setItem("octo.outbox.v1", JSON.stringify(items)),
     [[
       { id: "q-stuck", op: { k: "calendarEvent.remove", id: stuckId }, at, tries: 0, owner, fails: 2, failSince: since },
-      { id: "q-gone", op: { k: "calendarEvent.remove", id: goneId }, at, tries: 0, owner, fails: 2, failSince: since },
+      // money: its confirmation warns (review #259 круг 3, п.5)
+      { id: "q-gone", op: { k: "expense.add", id: goneId, jobId: null, vendor: "Nightly 114", category: "materials", amountCents: 1234 }, at, tries: 0, owner, fails: 2, failSince: since },
     ]],
   );
   const timeout = async (route) => {
-    if (route.request().method() === "GET" || !/calendar_events/.test(route.request().url())) return route.continue();
+    if (route.request().method() === "GET" || !/calendar_events|expenses/.test(route.request().url())) return route.continue();
     return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ code: "57014", message: "canceling statement due to statement timeout" }) });
   };
   await p.route("**/rest/v1/**", timeout);
@@ -96,6 +97,8 @@ exports.run = async (h, { seed, admin }) => {
   await p.waitForTimeout(300);
   h.expect((await p.getByTestId("stuck-confirm-q-gone").count()) > 0, "a second step before discarding (rule 5)");
   await h.expectText(/На сервер оно не попадёт/, "it says what discarding does");
+  h.expect((await p.getByTestId("stuck-money-q-gone").count()) > 0, "money: the «Деньги» chip in the second step");
+  await h.expectText(/Это деньги: счёт, оплата, задаток или расход/, "money: the warning in words");
   await p.getByTestId("stuck-confirm-q-gone").last().getByRole("button", { name: "Да, отменить" }).click();
   await p.waitForTimeout(700);
   h.expect((await p.getByTestId("stuck-q-gone").count()) === 0, "the discarded change is gone");

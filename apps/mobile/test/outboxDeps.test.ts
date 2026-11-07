@@ -1,7 +1,8 @@
 /** Which queued op may go while an earlier one is held (docs/specs/23 §3; review #259 Б1, Б2). */
 import { describe, expect, it } from "vitest";
 import type { Op } from "../src/cloud/ops";
-import { createdBy, dependentsOf, liveOf, mayPass, nextToSend, refsOf, SELF_KINDS, uuidsOf, waitingFor } from "../src/data/outboxDeps";
+import { createdBy, createdOf, dependentsOf, isMoneyOp, liveOf, madeOnQueue, mayPass, nextToSend, refsOf, SELF_KINDS, uuidsOf, waitingFor } from "../src/data/outboxDeps";
+import { MONEY_KINDS } from "../src/data/syncLink";
 import type { OwnedItem } from "../src/data/outboxOwner";
 import { classify, isStuck, maybeOpOnly, STUCK_AFTER_MS } from "../src/data/outboxRetry";
 
@@ -237,3 +238,68 @@ describe("unit:outboxRetry — is the error this op's alone; when it is «stuck�
     expect(isStuck(undefined, 9, now)).toBe(false);
   });
 });
+
+describe("unit:outboxDeps — what an upsert makes is decided when it is queued (review #259 круг 3, п.2, п.4)", () => {
+  const before = {
+    estimates: [{ id: u(1), versions: [{ id: u(2) }] }],
+    tags: [{ id: u(3), name: "VIP" }],
+    customers: [{ id: u(4), people: [{ id: u(5), name: "Ann" }] }],
+  };
+  it("an upsert without a flag makes by its kind what it writes (estimate.save, tag.save)", () => {
+    expect([...createdBy({ k: "estimate.save", id: u(1), versionId: u(6) } as unknown as Op)].sort()).toEqual([u(1), u(6)]);
+    expect([...createdBy({ k: "tag.save", tag: { id: u(7), name: "New" } } as unknown as Op)]).toEqual([u(7)]);
+  });
+  it("on the queue: only what was not on the phone — an existing estimate makes its new version only", () => {
+    expect(madeOnQueue({ k: "estimate.save", id: u(1), versionId: u(6) } as unknown as Op, before)).toEqual([u(6)]);
+    expect(madeOnQueue({ k: "estimate.save", id: u(8), versionId: u(9) } as unknown as Op, before)?.sort()).toEqual([u(8), u(9)]);
+    expect(madeOnQueue({ k: "tag.save", tag: { id: u(3), name: "VIP!" } } as unknown as Op, before)).toEqual([]);
+    expect(madeOnQueue({ k: "tag.save", tag: { id: u(7), name: "New" } } as unknown as Op, before)).toEqual([u(7)]);
+    // a client's people: only the new one (a call to Ann, already on the server, stays when the list is discarded)
+    expect(madeOnQueue({ k: "customer.people", id: u(4), people: [{ id: u(5) }, { id: u(10) }] } as unknown as Op, before)).toEqual([u(10)]);
+    // kinds that tell by themselves: by their kind
+    expect(madeOnQueue({ k: "lead.add", id: u(11) } as unknown as Op, before)).toBeUndefined();
+  });
+  it("an edit of an existing estimate discarded: its send, the approval with its invoice and the payment stay", () => {
+    const E = item({ k: "estimate.save", id: u(1), versionId: u(6), customerId: u(4), propertyId: u(12), title: "T" }, { made: [u(6)] });
+    const send = item({ k: "estimate.send", id: u(1), token: "t" });
+    const appr = item({ k: "estimate.approve", id: u(1), token: "t", optionId: u(13), addonIds: [], signer: "A", svg: "", channel: "on_site", jobId: u(14), invoiceId: u(15) });
+    const pay = item({ k: "payment.record", id: u(16), invoiceId: u(15), customerId: u(4), amountCents: 100, method: "cash" });
+    expect(dependentsOf([E, send, appr, pay], me, E.id)).toEqual([]);
+    // an older item without `made`: by its kind — all of them leave (careful: they may need the estimate)
+    const old = item({ k: "estimate.save", id: u(1), versionId: u(6), customerId: u(4), propertyId: u(12), title: "T" });
+    expect(ids(dependentsOf([old, send, appr, pay], me, old.id))).toEqual([send.id, appr.id, pay.id]);
+  });
+  it("a new tag discarded: the client's tags with it leave; an existing one renamed: they stay", () => {
+    const T = item({ k: "tag.save", tag: { id: u(7), name: "New" } }, { made: [u(7)] });
+    const ren = item({ k: "tag.save", tag: { id: u(3), name: "VIP!" } }, { made: [] });
+    const tagsOf = (id: number) => item({ k: "customer.tags", id: u(4), tagIds: [u(id)] });
+    const a = tagsOf(7);
+    expect(ids(dependentsOf([T, a], me, T.id))).toEqual([a.id]);
+    expect(dependentsOf([ren, tagsOf(3)], me, ren.id)).toEqual([]);
+    expect([...createdOf(ren)]).toEqual([]);
+  });
+});
+
+describe("unit:outboxDeps — a reference waits only for what the held op makes (review #259 круг 3, п.3)", () => {
+  const L = () => item({ k: "lead.add", id: u(2), name: "A", phone: "1", city: "LA", sourceId: u(90), message: "", cols: { service_category_id: u(30) } });
+  it("a category renamed (not new) held: the new lead with it goes", () => {
+    const ren = item({ k: "serviceCategory.save", category: { id: u(30), name: "Gutter" }, isNew: false });
+    const l = L();
+    expect(ids(liveOf([ren, l], me, heldIs(ren)))).toEqual([l.id]);
+  });
+  it("a new category held: the lead with it waits", () => {
+    const add = item({ k: "serviceCategory.save", category: { id: u(30), name: "Gutters" }, isNew: true });
+    expect(ids(liveOf([add, L()], me, heldIs(add)))).toEqual([]);
+  });
+});
+
+describe("unit:outboxDeps — money (review #259 круг 3, п.1)", () => {
+  it("an op that makes an invoice or a payment is money: the approval, the countersign with its deposit invoice", () => {
+    expect(isMoneyOp(item({ k: "estimate.approve", id: u(1), jobId: u(2), invoiceId: u(3) }), MONEY_KINDS)).toBe(true);
+    expect(isMoneyOp(item({ k: "estimate.countersign", id: u(1), jobId: u(2), invoiceId: u(3) }), MONEY_KINDS)).toBe(true);
+    expect(isMoneyOp(item({ k: "estimate.countersign", id: u(1), svg: "x" }), MONEY_KINDS)).toBe(false);
+    expect(isMoneyOp(item({ k: "expense.add", id: u(4), jobId: null }), MONEY_KINDS)).toBe(true);
+    expect(isMoneyOp(item({ k: "lead.update", id: u(5), cols: {} }), MONEY_KINDS)).toBe(false);
+  });
+});
+

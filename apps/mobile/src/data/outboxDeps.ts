@@ -102,6 +102,51 @@ const CREATES: Creates = {
   "estimate.decline": none, "estimate.reopen": none, "member.signature": (o) => [o.id], "member.update": none,
   "estimate.deposit": (o) => [o.jobId, o.invoiceId, o.paymentId], "invoice.pay": (o) => [o.paymentId], "expense.add": (o) => [o.id],
 };
+/**
+ * Upserts that do not say whether the object is new: their CREATES lists every id they write. When the op is queued, the
+ * store keeps only the ids that were not on the phone before (madeOnQueue → OwnedItem.made, review #259 круг 3): an edit
+ * of an existing estimate, tag, person makes nothing — what refers to them stays on «Отменить изменение…».
+ */
+export const UNSURE_KINDS: ReadonlySet<Op["k"]> = new Set<Op["k"]>([
+  "source.save", "tag.save", "catalog.save", "contact.save", "license.save", "property.save", "task.save", "lead.contactSave",
+  "customer.people", "lead.people", "estimate.save",
+]);
+
+/** is `id` an object on the phone (a top-level record, or one inside it: a client's person, an estimate's version) */
+function onPhone(db: object, id: string): boolean {
+  const low = id.toLowerCase();
+  const hit = (x: unknown) => !!x && typeof x === "object" && typeof (x as { id?: unknown }).id === "string" && (x as { id: string }).id.toLowerCase() === low;
+  for (const list of Object.values(db)) {
+    if (!Array.isArray(list)) continue;
+    for (const x of list) {
+      if (hit(x)) return true;
+      if (x && typeof x === "object")
+        for (const v of Object.values(x as Record<string, unknown>)) if (Array.isArray(v) && v.some(hit)) return true;
+    }
+  }
+  return false;
+}
+
+/** what an op of UNSURE_KINDS makes, by the phone's data before it (`before`); other kinds: undefined (by their kind) */
+export function madeOnQueue(op: Op, before: object): string[] | undefined {
+  if (!UNSURE_KINDS.has(op.k)) return undefined;
+  return [...createdBy(op)].filter((x) => !onPhone(before, x));
+}
+
+/** what the queued op makes: decided when it was queued, else by its kind */
+export const createdOf = (o: OwnedItem): Set<string> => (o.made ? new Set(o.made.map((x) => x.toLowerCase())) : createdBy(o.op));
+
+/**
+ * Does the op carry money (the confirmation warns, review #259 круг 3): a payment, an invoice, a deposit, an expense — and
+ * any op that makes an invoice or a payment (the client's approval, the company's countersign with its deposit invoice).
+ */
+export function isMoneyOp(o: OwnedItem, moneyKinds: ReadonlySet<string>): boolean {
+  if (moneyKinds.has(o.op.k)) return true;
+  const made = createdOf(o);
+  const op = o.op as { invoiceId?: unknown; paymentId?: unknown };
+  return [op.invoiceId, op.paymentId].some((x) => typeof x === "string" && made.has(x.toLowerCase()));
+}
+
 /** the ids of the objects the op makes on the server (lowercase); an unknown kind (a newer version's) makes nothing known */
 export function createdBy(op: Op): Set<string> {
   const f = (CREATES as Record<string, ((o: Op) => (string | null | undefined)[]) | undefined>)[op.k];
@@ -123,16 +168,19 @@ const isMine = (o: OwnedItem, who: Owner) => !o.owner || (o.owner.userId === who
 export function liveOf(items: readonly OwnedItem[], who: Owner | null, held: (o: OwnedItem) => boolean): OwnedItem[] {
   if (!who) return [];
   const out: OwnedItem[] = [];
+  // the objects of held / waiting ops (an op about one of them waits) and what they make (an op referring to one waits)
   const blocked = new Set<string>();
+  const made = new Set<string>();
   let anyHeld = false;
   for (const o of items) {
     if (!isMine(o, who)) continue;
     const ids = uuidsOf(o.op);
     // its own objects or what it refers to (a new source, category, type, catalog item) are held or waiting
-    const shares = [...allIdsOf(o.op)].some((x) => blocked.has(x));
+    const shares = [...ids].some((x) => blocked.has(x)) || [...refsOf(o.op)].some((x) => made.has(x));
     if (held(o) || (anyHeld && (shares || !mayPass(o.op)))) {
       anyHeld = true;
       ids.forEach((x) => blocked.add(x));
+      createdOf(o).forEach((x) => made.add(x));
       continue;
     }
     out.push(o);
@@ -156,13 +204,13 @@ export function dependentsOf(items: readonly OwnedItem[], who: Owner | null, id:
   const mine = mineOf(items, who);
   const at = mine.findIndex((o) => o.id === id);
   if (at < 0) return [];
-  const made = createdBy(mine[at]!.op);
+  const made = createdOf(mine[at]!);
   const out: OwnedItem[] = [];
   if (!made.size) return out;
   for (const o of mine.slice(at + 1)) {
     if (![...allIdsOf(o.op)].some((x) => made.has(x))) continue;
     out.push(o);
-    createdBy(o.op).forEach((x) => made.add(x));
+    createdOf(o).forEach((x) => made.add(x));
   }
   return out;
 }

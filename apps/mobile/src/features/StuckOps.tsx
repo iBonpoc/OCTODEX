@@ -58,7 +58,7 @@ function StuckCard({ op }: { op: StuckOp }) {
             {op.leavingMoney ? (
               <View testID={`stuck-money-${op.id}`} style={{ gap: space[1] }}>
                 <StatusChip status="warn" label={t("sync.stuck.moneyChip")} />
-                <T v="caption">{t("sync.stuck.money")}</T>
+                <T v="caption">{op.leaving ? t("sync.stuck.money") : t("sync.stuck.moneySelf")}</T>
               </View>
             ) : null}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>

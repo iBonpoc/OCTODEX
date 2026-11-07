@@ -913,6 +913,22 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
       expect.objectContaining({ id: "C", leaving: 4, leavingKinds: [{ key: "sync.kind.job", n: 1 }, { key: "sync.kind.money", n: 3 }], leavingMoney: true }),
     ]);
   });
+  it("a stuck estimate edit: the approval that makes its invoice leaves with it — money (review #259 круг 3, п.1)", async () => {
+    seedOutbox(
+      q("E", { k: "estimate.save", id: U(1), versionId: U(2), customerId: U(3), propertyId: U(4), title: "T" }, { stuck: true, fails: 3, failSince: AGO }),
+      q("A", { k: "estimate.approve", id: U(1), token: "t", optionId: U(5), addonIds: [], signer: "S", svg: "", channel: "on_site", jobId: U(6), invoiceId: U(7) }),
+    );
+    const r = await start();
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "E", leaving: 1, leavingKinds: [{ key: "sync.kind.estimate", n: 1 }], leavingMoney: true })]);
+  });
+  it("a tag saved on the phone: queued with what it makes — a new one its id, a renamed one nothing (review #259 круг 3)", async () => {
+    const r = await start();
+    const { id } = (v(r) as unknown as { saveTag: (t: object) => { id: string } }).saveTag({ name: "New tag" });
+    (v(r) as unknown as { saveTag: (t: object) => { id: string } }).saveTag({ id, name: "Renamed" });
+    await wait(300);
+    const tagOps = (stored() as unknown as { op: { k: string }; made?: string[] }[]).filter((x) => x.op.k === "tag.save");
+    expect(tagOps.map((x) => x.made)).toEqual([[id.toLowerCase()], []]);
+  });
   it("a stuck payment alone: money, though nothing else leaves", async () => {
     seedOutbox(q("P", { k: "payment.record", id: U(6), invoiceId: U(5), customerId: U(1), amountCents: 100, method: "cash" }, { stuck: true, fails: 3, failSince: AGO }));
     const r = await start();
