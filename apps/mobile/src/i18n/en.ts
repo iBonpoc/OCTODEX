@@ -291,6 +291,8 @@ export const en: Dict = {
   "inbox.book": "Book estimate visit",
   "inbox.empty": "No new requests",
   "inbox.emptyHint": "Requests from Thumbtack, Yelp, Google and your website land here.",
+  // leads.* («Лиды и клиенты»: «Лиды» мастера, спека 13 §2.3)
+  "leads.empty.tech": "Leads you brought in or that are assigned to you show up here.",
   "inbox.autoReply": "Hi! Thanks for reaching out. We can come by for a free estimate tomorrow. Does morning or afternoon work better?",
 
   "plan.title": "Schedule",
