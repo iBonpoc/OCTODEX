@@ -37,6 +37,7 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
+import { backoffMs, isNetworkError, MAX_TRIES } from "./outboxRetry";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
@@ -346,6 +347,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // nothing chosen yet → the first role this person has (owner → director); route-guard fix
   const [savedRole, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "director");
   const [online, setOnlineState] = useState(true);
+  // the cloud: is the server answering (the switch «без сети» is the demo's) — a failed request says no, an answer yes;
+  // without it the outbox waits longer and longer and never drops an op (rule 6, cloud e2e 104)
+  const [reachable, setReachable] = useState(true);
+  const netFails = useRef(0);
+  const nextTry = useRef(0);
+  const answered = () => {
+    netFails.current = 0;
+    nextTry.current = 0;
+    setReachable(true);
+  };
+  const unreachable = () => {
+    netFails.current += 1;
+    nextTry.current = Date.now() + backoffMs(netFails.current);
+    setReachable(false);
+  };
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
   const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, []);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -395,7 +411,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
       if (!mine(outboxRef.current).length) setDb(next);
       setSyncError(null);
+      answered();
     } catch (e) {
+      if (stale(gen)) return;
+      if (isNetworkError(e)) setReachable(false);
       setSyncError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -449,6 +468,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // time an answer comes (review #240 №1); another person or company signs in meanwhile → the loop stops
     const w = whoRef.current;
     if (flushing.current || modeRef.current !== "cloud" || !w || !onlineRef.current) return;
+    if (Date.now() < nextTry.current) return; // no network a moment ago: the pause before the next try
     const gen = deviceGeneration();
     if (stale(gen)) return;
     const still = () => sameOwner(whoRef.current, w);
@@ -465,6 +485,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
           if (stale(gen)) return;
           sentAny = true;
+          answered();
           outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
           setOutbox(outboxRef.current);
           if (!still()) break;
@@ -473,7 +494,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (stale(gen)) return;
           const msg = e instanceof Error ? e.message : String(e);
           setSyncError(msg);
-          if (e instanceof PermanentError || item.tries >= 5) {
+          // the server was not reached: not a try — the op stays as it is, the next send waits longer
+          if (isNetworkError(e)) {
+            unreachable();
+            break;
+          }
+          if (e instanceof PermanentError || item.tries >= MAX_TRIES) {
             // Will never succeed: drop it and reload the truth from the server.
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
@@ -500,9 +526,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (mine(outboxRef.current).length) flush();
     }, 1500);
     const poll = setInterval(refresh, 30_000);
+    // the network is back (the browser says so): no waiting out the pause — send now
+    const back = () => {
+      nextTry.current = 0;
+      if (mine(outboxRef.current).length) void flush();
+    };
+    const g = globalThis as { addEventListener?: (t: string, f: () => void) => void; removeEventListener?: (t: string, f: () => void) => void };
+    g.addEventListener?.("online", back);
     return () => {
       clearInterval(tick);
       clearInterval(poll);
+      g.removeEventListener?.("online", back);
     };
   }, [mode, refresh, flush]);
 
@@ -657,7 +691,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       role,
       setRole,
       availableRoles,
-      online,
+      online: online && (mode !== "cloud" || reachable),
       queue: pendingQueue,
       unsentAll,
       syncError,
@@ -1460,7 +1494,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, pendingQueue.length, unsentAll, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, reachable, pendingQueue.length, unsentAll, syncError, loading, mutate, setRole, setQueue, refresh, flush],
   );
 
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady) return null;

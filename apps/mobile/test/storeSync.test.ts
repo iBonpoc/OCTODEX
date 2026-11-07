@@ -56,6 +56,9 @@ vi.mock("@/cloud/ops", async (orig) => ({
 }));
 // the «Отменить» window is not what these tests are about: an op is ready at once
 vi.mock("@/cloud/outboxTiming", () => ({ SEND_AFTER_MS: 0, readyToSend: () => true }));
+// the pause after a network failure is tested in test/outboxRetry.test.ts: here the next try may go at once
+const retry = { pause: 0 };
+vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), backoffMs: () => retry.pause }));
 
 import { render, settle, type Root } from "./support/miniReact";
 import { mineOf, StoreProvider } from "../src/data/store";
@@ -75,6 +78,8 @@ type Value = {
   removeCalendarEvent: (id: string) => () => void;
   recordVisitPoint: (p: object, source: "status_change" | "foreground") => void;
   unsentAll: number;
+  online: boolean;
+  setOnline: (v: boolean) => number;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -320,7 +325,7 @@ describe("unit:storeSync — the company or the person changes while a send wait
     await as(r, "u2", "c1");
     answerLoads();
     valueOf(r).removeCalendarEvent("ev-of-u2");
-    server.sends[0]!.d.reject(new Error("Failed to fetch")); // u1's send fails after u2 signed in
+    server.sends[0]!.d.reject(new Error("upstream 503 from the server")); // u1's send fails after u2 signed in
     await settle();
     await wait(1700);
     await settle();
@@ -353,7 +358,7 @@ describe("unit:storeSync — another person's op at the head of the outbox (revi
     await settle();
     await wait(1700);
     await settle();
-    server.sends[0]!.d.reject(new Error("Failed to fetch"));
+    server.sends[0]!.d.reject(new Error("upstream 503 from the server"));
     await settle();
     await wait(300);
     expect(stored().map((x) => [x.id, x.tries])).toEqual([["o-u9@c1#1", 0], ["o-u1@c1#1", 1]]);
@@ -402,6 +407,81 @@ describe("unit:storeSync — the account deletion counts and removes the person'
     await settle();
     await wait(300);
     expect(stored().map((x) => x.id)).toEqual(["o-u9@c1#1"]);
+  });
+});
+
+describe("unit:storeSync — no network in the cloud: the op is never dropped (rule 6, cloud e2e 104)", () => {
+  it("20 network failures in a row: the op stays whole, its tries untouched; the server answers — it leaves", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).removeCalendarEvent("saved-offline");
+    for (let i = 0; i < 20; i++) {
+      valueOf(r).setOnline(true); // a flush now (the tick does the same every 1.5 s)
+      await settle();
+      const s = server.sends.at(-1)!;
+      expect((s.op as { id: string }).id).toBe("saved-offline");
+      s.d.reject(new TypeError(i % 2 ? "Failed to fetch" : "Network request failed"));
+      await settle();
+    }
+    expect(server.sends).toHaveLength(20);
+    expect(valueOf(r).queue).toHaveLength(1);
+    expect(valueOf(r).online).toBe(false); // the server is not answering: shown as «без сети»
+    await wait(300);
+    expect(stored().map((x) => [x.id, x.tries])).toEqual([[stored()[0]!.id, 0]]);
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.resolve();
+    await settle();
+    expect(valueOf(r).queue).toEqual([]);
+    expect(valueOf(r).online).toBe(true);
+  });
+  it("after a network failure the next try waits for its pause; the browser's «online» ends it", async () => {
+    const net = new EventTarget(); // the browser's window events (node has none)
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.addEventListener = net.addEventListener.bind(net);
+    g.removeEventListener = net.removeEventListener.bind(net);
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).removeCalendarEvent("waits");
+    valueOf(r).setOnline(true);
+    await settle();
+    retry.pause = 60_000;
+    server.sends.at(-1)!.d.reject(new TypeError("Failed to fetch"));
+    await settle();
+    valueOf(r).setOnline(true); // asked again at once: still in the pause
+    await settle();
+    expect(server.sends).toHaveLength(1);
+    expect(valueOf(r).queue).toHaveLength(1);
+    // the network is back (the browser's «online»): the pause is over, the op goes now
+    net.dispatchEvent(new Event("online"));
+    await settle();
+    expect(server.sends).toHaveLength(2);
+    retry.pause = 0;
+    root?.unmount();
+    root = null;
+    delete g.addEventListener;
+    delete g.removeEventListener;
+  });
+  it("a real refusal of the server is still counted and drops the op after the tries", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).removeCalendarEvent("refused");
+    for (let i = 0; i < 6; i++) {
+      valueOf(r).setOnline(true);
+      await settle();
+      server.sends.at(-1)!.d.reject(new Error("upstream 503 from the server"));
+      await settle();
+    }
+    expect(valueOf(r).queue).toEqual([]);
   });
 });
 
