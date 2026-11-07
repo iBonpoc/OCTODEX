@@ -51,6 +51,7 @@ import { eventProblems } from "@/features/planFeed";
 import {
   type CalendarEvent,
   type MemberPrefs,
+  type PushGroup,
   type VisitPoint,
   MEMBER_PREFS_DEFAULT,
   type CatalogItem,
@@ -206,6 +207,9 @@ interface StoreCtx {
   removeCalendarEvent: (id: ID) => Undo;
   /** wave 7б-1: my personal settings, the same on every device (locally at once, then public.set_my_prefs) */
   setPrefs: (patch: Partial<MemberPrefs>) => Undo;
+  /** step 18 P4b: my push switch of one group, the same on every device (locally at once, then public.set_push_kind
+   *  through the offline queue — rule 6) */
+  setPushKind: (kind: PushGroup, enabled: boolean) => Undo;
   /** wave 7б-2: my consent to share my location (on — only after the notice, online); off forgets my points here.
    *  Changes only the consent: «Отменить» never takes back anything else (features/locationConsent.ts) */
   setLocationConsent: (on: boolean) => ConsentChange;
@@ -1128,6 +1132,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const prefs: MemberPrefs = { ...MEMBER_PREFS_DEFAULT, ...dbRef.current.prefs, ...patch };
         return mutate("me.prefs", (d) => ({ ...d, prefs }), { k: "me.prefs", prefs });
       },
+      setPushKind: (kind, enabled) =>
+        mutate("me.pushKind", (d) => ({ ...d, pushPrefs: { ...d.pushPrefs, [kind]: enabled } }), { k: "me.pushKind", kind, enabled }),
       setLocationConsent: (on) => {
         const put = (d: DB) => {
           dbRef.current = d;
