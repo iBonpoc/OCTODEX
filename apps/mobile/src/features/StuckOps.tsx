@@ -82,7 +82,7 @@ function StuckCard({ op }: { op: StuckOp }) {
   );
 }
 
-/** the section in «Настройки»: nothing when nothing is stuck */
+/** the section in «Профиль и аккаунт» (spec 26): nothing when nothing is stuck */
 export function StuckOps() {
   const { t } = useI18n();
   const { stuckOps } = useStore();

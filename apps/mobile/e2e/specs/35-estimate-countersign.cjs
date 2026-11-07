@@ -110,7 +110,7 @@ exports.run = async (h) => {
   h.expect(db.members.find((m) => m.id === db.me).hisNumber === "HIS-77", "HIS saved");
 
   // 7. «Моя подпись» from the settings: a new saved signature
-  await h.go("/settings");
+  await h.go("/settings/profile");
   await h.page.getByRole("button", { name: "Моя подпись для договоров" }).last().click(); await h.page.waitForTimeout(800);
   await h.expectText(/Моя подпись/, "the signature screen");
   // security-check #98: the title comes from the profile, the employee cannot type another one here

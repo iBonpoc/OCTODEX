@@ -7,7 +7,7 @@
 import type { Role } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { IconKey } from "@/ui/primitives";
-import { canOpen, roleHome, routeKey } from "./roles";
+import { canOpen, isTabScreen, roleHome, routeKey } from "./roles";
 
 export type SectionId =
   | "home"
@@ -253,4 +253,17 @@ export function fabItems(set: FabSet, role: Role, ctx: FabCtx = {}): FabItem[] {
     out.push({ id: d.id, ...FAB_LOOK[d.id], href, act: d.act });
   }
   return out;
+}
+
+/**
+ * The address a tile of «Ещё» opens (docs/specs/28 §3, the director's decision 07.11). A section that lives on a tab
+ * screen but is not this role's home (office: Leads, Estimates on /leads) gets `from=more`: the screen then shows
+ * «‹ Ещё», and with the tabs' history the system back / Android back returns to «Ещё». The role's home (sales: Leads)
+ * stays as it is.
+ */
+export function moreHref(id: SectionId, role: Role): string {
+  const href = sectionHref(id, role);
+  const route = routeKey(href);
+  if (!isTabScreen(route) || route === roleHome[role]) return href;
+  return `${href}${href.includes("?") ? "&" : "?"}from=more`;
 }

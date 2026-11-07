@@ -93,3 +93,10 @@
 | Playwright-тест | написан, не запускался |
 | Перенос оставшихся серых подложек и теней в токены | не сделано |
 | Отступы вне шкалы (6, 10 px) | не сделано |
+
+## Из приложения — перенести в CSS «Наряда» (07.11.2026, спека 24/25)
+| Токен приложения | Значение | Куда в CSS |
+|---|---|---|
+| `component.chart` | h 120, barRadius 8, barMin 4, track 8, mutedOpacity 0.55 | `--chart-h`, `--bar-r`, `--bar-min`, `--track-h`, `--bar-muted-o` (значения прототипа; высота 130 → 120 под телефон) |
+| `motion.chartStagger` | 40 мс | `--chart-stagger` |
+| `component.menuListMax` | 560 | `--menu-list-max` (= `--palette-w`) |

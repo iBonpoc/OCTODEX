@@ -47,7 +47,7 @@ export const ru = {
   "nav.expenses": "Расходы",
   "nav.team": "Команда",
   "nav.companySettings": "Настройки компании",
-  "nav.mySettings": "Мои настройки",
+  "nav.mySettings": "Настройки приложения",
   "nav.menu": "Меню",
   "nav.create": "Создать",
   "nav.group.work": "Работа",
@@ -289,7 +289,6 @@ export const ru = {
   "today.awaiting": "Ждёт оплаты",
   "today.attention": "Требует внимания",
   "today.allClear": "Всё под контролем",
-  "today.share": "{n}%",
   "today.nEstimates": "Смет: {n}",
   "today.nPayments": "Платежей: {n}",
   "today.allTime": "Все открытые счета",
@@ -2192,6 +2191,14 @@ export const ru = {
   "fr7.noOwnerChip": "Без ответственного",
   "fr7.noAssigneeChip": "Без исполнителя",
   "fr7.handOver": "Передать",
+  // «Каркас» №8, 7а-3: the client page of a closed company (docs/specs/22 §3.5)
+  "fr8.portal.closed": "{company} закрыта — документы по этой ссылке больше недоступны",
+  "fr8.portal.closedChip": "Закрыта",
+  // «Каркас» №8: a tab pressed over an unsaved form (docs/specs/28)
+  "fr8.tab.leaveTitle": "Выйти без сохранения?",
+  "fr8.tab.leaveText": "Под этим экраном открыта несохранённая форма. Если перейти на вкладку, введённое пропадёт.",
+  "fr8.tab.stay": "Остаться",
+  "fr8.tab.leave": "Выйти без сохранения",
   "job5.byTime": "По времени",
   "job5.allDaySummary": "{date} · весь день · {who}",
   "job5.clientDay": "Клиент увидит только дату, без времени",
@@ -2212,6 +2219,35 @@ export const ru = {
   "fix.more.jobs": "К плану: {n}",
   "fix.more.estimates": "На подпись: {n}",
   "fix.more.invoices": "Просрочено: {n}",
+  // ---- push (docs/specs/27-push.md) ----
+  "push.title": "Уведомления",
+  "push.thisPhone": "Пуш-уведомления на этом телефоне",
+  "push.state.on": "Включены: подписанная смета, оплата. Без сумм и адресов в тексте.",
+  "push.state.off": "Выключены. Колокольчик в приложении работает всегда.",
+  "push.state.denied": "Запрещены в настройках телефона.",
+  "push.state.signed_out": "Войдите в аккаунт, чтобы получать пуши.",
+  "push.state.web": "Пуши приходят в приложении OCTODEX на телефоне. Здесь — колокольчик.",
+  "push.state.expo_go": "Пуши работают в установленном приложении OCTODEX, не в Expo Go.",
+  "push.openSettings": "Открыть настройки телефона",
+  "push.turnedOn": "Уведомления включены",
+  "push.denied": "Телефон не разрешил уведомления",
+  "push.failed": "Не удалось включить. Проверьте связь и попробуйте ещё раз",
+  // today2.* — «Сегодня»: «Получено» with columns, tiles, funnel bars (spec 24 A, founder fixes chat)
+  "today2.vsToday": "к вчерашнему дню",
+  "today2.vsWeek": "к прошлой неделе",
+  "today2.vsMonth": "к прошлому месяцу",
+  "today2.change": "{arrow} {amount} {vs}",
+  "today2.empty": "Появятся после первой оплаты",
+  "today2.chartA11y": "Получено: {list}",
+  "today2.nInvoices": "Счетов: {n}",
+  "today2.overdue": "Просрочено: {n}",
+  "today2.ofLeads": "{n}% от лидов",
+  "today2.ofSent": "{n}% от отправленных",
+  // fix.settings.* — profile split from app settings (spec 26)
+  "fix.settings.profile": "Профиль и аккаунт",
+  // fix.sign.* — the full-screen signature (spec 29)
+  "fix.sign.expand": "Развернуть на весь экран",
+  "fix.sign.done": "Готово",
 } as const;
 
 export type DictKey = keyof typeof ru;

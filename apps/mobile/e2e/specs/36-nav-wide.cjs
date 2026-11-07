@@ -1,7 +1,7 @@
 /**
  * Tablet and desktop navigation (spec 10, Н2–Н3; 13 §2.5): the side menu stays on inner screens with the section
  * marked (it replaced the top pill, wave 2b); a round «‹» goes one level up; Esc goes one level up (an open menu
- * closes first). Phone: unchanged — no tab bar on inner screens, no «‹».
+ * closes first). Phone: the bottom bar is on inner screens too (rule А, docs/specs/28) with the card's section lit; no «‹».
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -27,7 +27,8 @@ exports.run = async (h) => {
   // Н3а: the screen title is a real heading (all widths)
   h.expect((await p.locator('[role="heading"][aria-level="1"]:visible').count()) === 1, "title is a level-1 heading");
   if (!wide) {
-    h.expect((await tab("Главная").count()) === 0 && (await tab("Клиенты").count()) === 0, "phone: no tab bar on an inner screen");
+    // rule А (docs/specs/28): the bottom bar stays on a card, its section («Клиенты») lit
+    h.expect((await tab("Главная").count()) === 1 && (await p.locator('[role="tab"][aria-label="Клиенты"][aria-selected="true"]:visible').count()) === 1, "phone: the bottom bar on an inner screen, «Клиенты» lit");
     h.expect((await roundBack().count()) === 0, "phone: no round back");
     h.expect(!/Esc/.test(await h.text()), "phone: no Esc hint");
     // the trail scrolls away with the page, as before (not pinned)

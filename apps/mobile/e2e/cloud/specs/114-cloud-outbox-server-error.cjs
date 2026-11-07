@@ -4,7 +4,7 @@
  * 1. «Сервер недоступен»: every write gets 503 / PGRST002 → the header says «Сервер недоступен · в очереди: 1», not
  *    «Без сети»; the answer is let through → the lead reaches the server.
  * 2. «Не отправлено»: one change keeps getting a statement timeout (500 / 57014) for over 10 minutes (seeded with its
- *    first failure 11 minutes ago, so the test does not wait) → it is a card in «Мои настройки» and «Не отправлено: 1»;
+ *    first failure 11 minutes ago, so the test does not wait) → it is a card in «Профиль и аккаунт» and «Не отправлено: 1»;
  *    a lead typed meanwhile does not wait for it and reaches the server; «Повторить сейчас» with the server well again
  *    sends it; another stuck change is discarded with «Отменить изменение…» → «Да, отменить» (rule 5).
  */
@@ -71,12 +71,12 @@ exports.run = async (h, { seed, admin }) => {
     return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ code: "57014", message: "canceling statement due to statement timeout" }) });
   };
   await p.route("**/rest/v1/**", timeout);
-  await h.go("/settings");
+  await h.go("/settings/profile");
   // both cards: q-gone comes stuck at once, q-stuck only after its third timeout — wait for that one, not for the title
   const cards = async () => (await p.getByTestId("stuck-q-stuck").count()) > 0 && (await p.getByTestId("stuck-q-gone").count()) > 0;
   for (let i = 0; i < 40 && !(await cards()); i++) await p.waitForTimeout(500);
   t = await h.text();
-  h.expect(/Не отправлено: сервер отвечает ошибкой/.test(t), "the stuck changes are a section in «Мои настройки»");
+  h.expect(/Не отправлено: сервер отвечает ошибкой/.test(t), "the stuck changes are a section in «Профиль и аккаунт»");
   h.expect((await p.getByTestId("stuck-q-stuck").count()) > 0 && (await p.getByTestId("stuck-q-gone").count()) > 0, "each is its own card");
   h.expect(/Ошибка на сервере, не в телефоне/.test(t) && !/canceling statement/.test(t), "our own words on the card, not the server's English text");
 
@@ -85,7 +85,7 @@ exports.run = async (h, { seed, admin }) => {
   await newLead(h, "Nightly Lead 114 B");
   await p.evaluate(() => window.dispatchEvent(new Event("online")));
   await waitRows(admin, `leads?company_id=eq.${A}&contact_name=eq.Nightly Lead 114 B&select=id`, (r) => r.length === 1, "the lead typed while two changes were stuck", 30_000);
-  await h.go("/settings");
+  await h.go("/settings/profile");
   for (let i = 0; i < 20 && !/Не отправлено: 2/.test(t); i++) {
     await p.waitForTimeout(500);
     t = await h.text();
@@ -94,7 +94,7 @@ exports.run = async (h, { seed, admin }) => {
   await h.shot("stuck");
 
   // «Отменить изменение…» → the second step says what happens → «Да, отменить»
-  await h.go("/settings");
+  await h.go("/settings/profile");
   const gone = p.getByTestId("stuck-q-gone").last();
   await gone.getByRole("button", { name: "Отменить изменение…" }).click();
   await p.waitForTimeout(300);

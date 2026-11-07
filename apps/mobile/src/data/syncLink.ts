@@ -5,7 +5,7 @@ import type { Link } from "./store";
 /**
  * What the sync badge says (docs/specs/23 §3): nothing; «sending»; «offline» — no answer at all; «server» — the
  * network is there, the server answers «not now» (5xx, 429, PGRST002…); «stuck» — changes the server keeps answering
- * with an error (listed in «Настройки»). Pure: test/syncLink.test.ts.
+ * with an error (listed in «Профиль и аккаунт»). Pure: test/syncLink.test.ts.
  */
 export type BadgeState = "offline" | "server" | "stuck" | "sending" | null;
 export const badgeState = (online: boolean, link: Link, queued: number, stuck = 0): BadgeState => {
