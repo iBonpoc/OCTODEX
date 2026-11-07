@@ -1592,7 +1592,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const cur = dbRef.current.company;
         if (!cur) return () => {};
         const next = { ...cur, ...patch };
-        return mutate("company.save", (d) => ({ ...d, company: next }), { k: "company.save", company: next, einChanged: patch.ein !== undefined });
+        return mutate("company.save", (d) => ({ ...d, company: next }), { k: "company.save", company: next, einChanged: patch.ein !== undefined, tzChanged: patch.timezone !== undefined });
       },
       saveLicense: (l) =>
         mutate(
