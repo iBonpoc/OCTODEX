@@ -16,3 +16,31 @@ export function visibleFilters<K extends string>(items: FilterItem<K>[], value: 
 
 /** label on the chip: «Должны · 2»; without a count — just the word */
 export const filterLabel = (it: FilterItem<string>): string => (it.count === undefined ? it.label : `${it.label} · ${it.count}`);
+
+/* ---------- the «Фильтр» sheet (spec 31 §6 п.5–п.7) ---------- */
+
+/** one option of a group in the sheet: a source, a person, a tag; several can be on */
+export interface FilterOption {
+  key: string;
+  label: string;
+  /** how many objects it shows; 0 is shown in mut and can still be picked (the list does not jump when the status changes) */
+  count?: number;
+  on: boolean;
+}
+export interface FilterGroup {
+  key: string;
+  title: string;
+  options: FilterOption[];
+  onToggle: (key: string) => void;
+}
+
+/** what is on in the sheet, in the order of the groups — the line «Google ✕ · Мои ✕ · Сбросить» under the lane */
+export function chosenFilters(groups: readonly FilterGroup[]): { group: FilterGroup; option: FilterOption }[] {
+  return groups.flatMap((group) => group.options.filter((o) => o.on).map((option) => ({ group, option })));
+}
+
+/** the number on the «Фильтр» button */
+export const activeFilterCount = (groups: readonly FilterGroup[]): number => chosenFilters(groups).length;
+
+/** where a list keeps its filters on this device, until «Сбросить» (spec 31 §6 п.7); the search is not kept */
+export const filterStoreKey = (list: string): string => `octo.filter.${list}.v1`;

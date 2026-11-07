@@ -28,3 +28,24 @@ describe("visibleFilters", () => {
     expect(filterLabel({ key: "mine", label: "Мои" })).toBe("Мои");
   });
 });
+
+import { activeFilterCount, chosenFilters, filterStoreKey, type FilterGroup } from "../src/ui/filterBarRules";
+
+describe("the «Фильтр» sheet (spec 31 §6)", () => {
+  const toggle = () => undefined;
+  const groups: FilterGroup[] = [
+    { key: "src", title: "Источник", onToggle: toggle, options: [{ key: "g", label: "Google", count: 1, on: true }, { key: "y", label: "Yelp", count: 0, on: false }] },
+    { key: "tag", title: "Метки", onToggle: toggle, options: [{ key: "vip", label: "VIP", on: true }, { key: "hoa", label: "HOA", on: true }] },
+  ];
+  it("the chosen line lists what is on, group by group, in order", () => {
+    expect(chosenFilters(groups).map((x) => `${x.group.key}:${x.option.key}`)).toEqual(["src:g", "tag:vip", "tag:hoa"]);
+  });
+  it("the button counts what is on; nothing on — 0", () => {
+    expect(activeFilterCount(groups)).toBe(3);
+    expect(activeFilterCount([{ ...groups[0]!, options: groups[0]!.options.map((o) => ({ ...o, on: false })) }])).toBe(0);
+  });
+  it("each list keeps its filters under its own key", () => {
+    expect(filterStoreKey("clients")).toBe("octo.filter.clients.v1");
+    expect(filterStoreKey("leads")).not.toBe(filterStoreKey("clients"));
+  });
+});

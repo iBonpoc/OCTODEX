@@ -1494,6 +1494,8 @@ export const ru = {
   "card.val.price": "цена",
   "card.queued": "Не отправлено · ждёт сети",
   "card.tag.estimateSent": "Смета отправлена · {n}",
+  // card.filter.* — filters over a list (spec 31)
+  "card.filter.remove": "Убрать фильтр: {v}",
   "card.emptyFilter": "В этом отборе никого нет",
   "card.sign.noNextStep": "Нет следующего шага",
   "card.group.action": "Нужно действие",
