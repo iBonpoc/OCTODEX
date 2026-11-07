@@ -5,14 +5,14 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { NO_TAB_BAR, WITH_TAB_BAR, routeKey, showsTabBar } from "../src/nav/tabBarRule";
+import { NO_TAB_BAR, WITH_TAB_BAR, tabRouteKey, showsTabBar } from "../src/nav/tabBarRule";
 
 const APP = path.resolve(__dirname, "../src/app");
 function routes(dir = APP, base = ""): string[] {
   return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
     if (e.isDirectory()) return routes(path.join(dir, e.name), e.name.startsWith("(") ? base : `${base}${e.name}/`);
     if (!e.name.endsWith(".tsx") || e.name.startsWith("_")) return [];
-    return [routeKey(`${base}${e.name.replace(/\.tsx$/, "")}`)];
+    return [tabRouteKey(`${base}${e.name.replace(/\.tsx$/, "")}`)];
   });
 }
 
@@ -31,13 +31,13 @@ describe("unit:tabBarRule — the bottom bar on the phone", () => {
   it("the founder's screens (07.11) have it; forms and the signature do not", () => {
     for (const r of ["jobs", "tasks", "invoice", "catalog", "team", "company", "settings", "calls", "client/[id]", "job/[id]", "lead/[id]"])
       expect(showsTabBar(r), r).toBe(true);
-    for (const r of ["lead/new", "estimate/signature", "client/edit", "p/[token]", "auth/sign-in"]) expect(showsTabBar(r), r).toBe(false);
+    for (const r of ["lead/new", "estimate/signature", "client/edit", "p/[token]", "auth/sign-in", "catalog/[id]"]) expect(showsTabBar(r), r).toBe(false);
   });
   it("route names and segments are read the same", () => {
-    expect(routeKey("(tabs)/clients")).toBe("clients");
-    expect(routeKey("company/index")).toBe("company");
-    expect(routeKey("")).toBe("index");
-    expect(routeKey("(tabs)")).toBe("index");
+    expect(tabRouteKey("(tabs)/clients")).toBe("clients");
+    expect(tabRouteKey("company/index")).toBe("company");
+    expect(tabRouteKey("")).toBe("index");
+    expect(tabRouteKey("(tabs)")).toBe("index");
     expect(showsTabBar("(tabs)/plan")).toBe(true);
   });
 });

@@ -12,6 +12,8 @@
 /** creating or editing something, signing, signing in, the client page, the legal texts */
 export const NO_TAB_BAR = [
   "auth/company", "auth/invite", "auth/sign-in", "auth/terms", "auth/trade",
+  // a catalog item is a form («Новая позиция» / edit, «Сохранить»): a tab would drop what is not saved (review #274)
+  "catalog/[id]",
   "client/edit", "client/import",
   "company/[section]", "company/schedule",
   "estimate/new", "estimate/signature",
@@ -28,7 +30,7 @@ export const NO_TAB_BAR = [
 /** lists, cards, sections of «Ещё», settings pages: the bar stays */
 export const WITH_TAB_BAR = [
   "index", "inbox",
-  "calls", "catalog", "catalog/[id]", "client/[id]", "clients", "company",
+  "calls", "catalog", "client/[id]", "clients", "company",
   "estimate/[id]", "estimates", "figures/[metric]", "help",
   "invoice", "invoice/[id]", "job/[id]", "jobs", "lead/[id]", "leads",
   "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",
@@ -38,7 +40,7 @@ export const WITH_TAB_BAR = [
 const hidden = new Set<string>(NO_TAB_BAR);
 
 /** "(tabs)/clients" → "clients", "company/index" → "company", "" → "index" */
-export function routeKey(route: string): string {
+export function tabRouteKey(route: string): string {
   const k = route
     .split("/")
     .filter((s) => s && !(s.startsWith("(") && s.endsWith(")")))
@@ -48,4 +50,4 @@ export function routeKey(route: string): string {
 }
 
 /** the phone's bottom bar on this route (a route name like "client/[id]", or the segments joined) */
-export const showsTabBar = (route: string): boolean => !hidden.has(routeKey(route));
+export const showsTabBar = (route: string): boolean => !hidden.has(tabRouteKey(route));

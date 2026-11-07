@@ -11,6 +11,9 @@ import { Glass } from "@/ui/overlays";
 import { useNavInsets } from "@/ui/surfaces";
 import { useKeyboardHeight } from "@/ui/keyboard";
 import { showsTabBar } from "./tabBarRule";
+import { useTabBarHidden } from "./tabBarHide";
+import { useAuth } from "@/cloud/auth";
+import { gateFreePath } from "@/features/legal";
 import { activeSection } from "./hierarchy";
 import { sectionHref, tabs, type SectionId } from "./sections";
 
@@ -26,13 +29,22 @@ export function TabBar() {
   const params = useGlobalSearchParams();
   const segments = useSegments();
   const { wide } = useDevice();
+  const signing = useTabBarHidden();
+  const { session, legal } = useAuth();
   const own = activeSection(pathname, params, store.db, store.role);
   // a section that is not a tab (Leads, Jobs… opened from «Ещё») lights «Ещё» (13 v2 §2.1, variant Б)
   const sec = own && !tabs(store.role).some((s) => s.id === own) ? "more" : own;
   // every phone screen but forms, the signature, sign-in, /p and the legal texts (docs/specs/28)
-  if (wide || !showsTabBar(segments.join("/"))) return null;
-  // the 5 targets are tab screens: navigate pops the cards above the tabs and switches to the tab
-  const go = (id: SectionId) => router.navigate(sectionHref(id, store.role) as Href);
+  if (wide || signing || !showsTabBar(segments.join("/"))) return null;
+  // help and the documents before the consent is given (the gate is open over them): the app is closed — no bar
+  if (session && (legal === "first" || legal === "changed") && gateFreePath(pathname)) return null;
+  // a tab from a card: back down to the tabs (dismissTo — navigate would push a second copy of the tabs, review #274),
+  // then the tab; on the tabs themselves — just the tab
+  const go = (id: SectionId) => {
+    const href = sectionHref(id, store.role) as Href;
+    if (router.canDismiss()) router.dismissTo(href);
+    else router.navigate(href);
+  };
   return <NavPill current={sec} onGo={go} />;
 }
 

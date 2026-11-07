@@ -7,11 +7,14 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
+import { useHideTabBar } from "@/nav/tabBarHide";
 
 /** Finger signature. Output is SVG path data (stored with the visit; PDF in wave 3). */
 export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
+  // rule А (docs/specs/28): no bottom bar under the client's finger while a signature can be drawn here
+  useHideTabBar();
   const [d, setD] = useState("");
   const dRef = useRef("");
   const [h, setH] = useState(0);
