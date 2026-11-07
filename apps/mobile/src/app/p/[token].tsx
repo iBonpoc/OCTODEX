@@ -40,7 +40,8 @@ export default function ClientEstimatePage() {
 
   // E2b: past "valid until" the server answers only who to call — in the client's language
   // …and after the company declined: only who declined and who to call (the server sends nothing else)
-  if (data && (data.status === "expired" || data.status === "declined")) {
+  // 7а-3: the company was closed by its owner — first, only its name (docs/specs/22 §3.5)
+  if (data && (data.status === "closed" || data.status === "expired" || data.status === "declined")) {
     return (
       <I18nOverride lang={data.lang}>
         <ExpiredPage data={data} back={back} />
@@ -220,16 +221,21 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
   );
 }
 
-/** E2b: expired before the client signed, or declined by the company — only who to call, nothing of the estimate. */
+/** E2b: expired before the client signed, or declined by the company — only who to call, nothing of the estimate.
+ *  7а-3: closed by its owner — only the name (no phone: docs/specs/22 §3.3 q.1). */
 function ExpiredPage({ data, back }: { data: PortalData; back?: () => void }) {
   const { t } = useI18n();
   const company = data.company.name || "OCTODEX";
   const declined = data.status === "declined";
+  const closed = data.status === "closed";
+  const status = closed ? "neutral" : declined ? "bad" : "warn";
+  const label = closed ? t("fr8.portal.closedChip") : declined ? t("est.portal.declined", { company }) : t("est.portal.expired", { company });
   return (
     <Screen title={company} back={back}>
-      <Card status={declined ? "bad" : "warn"}>
-        <StatusChip status={declined ? "bad" : "warn"} label={declined ? t("est.portal.declined", { company }) : t("est.portal.expired", { company })} />
-        {data.company.phone ? <T v="body">{data.company.phone}</T> : null}
+      <Card status={status}>
+        <StatusChip status={status} label={label} />
+        {closed ? <T v="body">{t("fr8.portal.closed", { company })}</T> : null}
+        {data.company.phone && !closed ? <T v="body">{data.company.phone}</T> : null}
       </Card>
     </Screen>
   );
