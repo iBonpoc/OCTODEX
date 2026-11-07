@@ -67,6 +67,10 @@ exports.run = async (h, { seed }) => {
   await p.getByRole("button", { name: "Понятно" }).last().click();
   for (let i = 0; i < 10 && (await p.getByTestId("triage-top-rej-q-rej").count()) > 0; i++) await p.waitForTimeout(300);
   h.expect((await p.getByTestId("triage-top-rej-q-rej").count()) === 0, "«Понятно»: gone from «Разобрать»");
+  // the change is written to the phone a moment later (250 ms): wait for that before a page load, not seconds (CHECKS §9 №3)
+  const stored = () => p.evaluate(() => (localStorage.getItem("octo.cloud.v1.rejected") || "").includes("q-rej"));
+  for (let i = 0; i < 20 && (await stored()); i++) await p.waitForTimeout(200);
+  h.expect(!(await stored()), "«Понятно» is written to the phone");
   await h.go("/settings/profile");
   await p.waitForTimeout(500);
   h.expect((await p.getByTestId("rejected-q-rej").count()) === 0, "«Понятно»: and its card in the profile");
