@@ -98,6 +98,7 @@ import { makeSeed } from "../src/data/seed";
 import { madeOnQueue } from "../src/data/outboxDeps";
 import type { Company } from "../src/data/types";
 import { registerModule, type ModuleOpIn } from "../src/modules/registry";
+import { MAX_TRIES } from "../src/data/outboxRetry";
 import gutters from "../src/modules/gutters/module";
 import { coalesceAt, coalesced } from "../src/data/outboxCoalesce";
 import type { OwnedItem } from "../src/data/outboxOwner";
@@ -141,9 +142,12 @@ registerModule({
     await ctx.run(Promise.resolve({ error: null }));
   },
 });
+const DAY = 86_400_000;
 const ME = { userId: "u1", companyId: "c1" };
-const mop = (key: string | undefined, payload: Record<string, unknown>, module = "op_demo", made?: string[]): Op =>
-  ({ k: "module.op", module, kind: "element.save", payload, ...(key ? { coalesceKey: key } : {}), ...(made ? { made } : {}) }) as Op;
+const mop = (key: string | undefined, payload: Record<string, unknown>, module = "op_demo", made?: string[], kind = "element.save"): Op =>
+  ({ k: "module.op", module, kind, payload, ...(key ? { coalesceKey: key } : {}), ...(made ? { made } : {}) }) as Op;
+const L1 = "11111111-1111-4111-8111-111111111111";
+const L2 = "22222222-2222-4222-8222-222222222222";
 const item = (id: string, op: Op, owner: typeof ME | null = ME, extra: Partial<OwnedItem> = {}): OwnedItem =>
   ({ id, op, at: "2026-11-07T20:00:00Z", tries: 0, ...(owner ? { owner } : {}), ...extra }) as OwnedItem;
 
@@ -164,6 +168,24 @@ describe("unit:moduleOp — merging in the queue (outboxCoalesce)", () => {
     expect(coalesceAt([item("a", mop("el-1", {}), null)], mop("el-1", {}), ME, null)).toBe(-1);
     expect(coalesceAt(q, mop("el-1", {}), null, null)).toBe(-1);
   });
+  it("another kind of the same element never merges (a save never swallows another kind, review #354 Б4)", () => {
+    const q = [item("a", mop("el-1", { id: L1 }))];
+    expect(coalesceAt(q, mop("el-1", { id: L1 }, "op_demo", undefined, "element.style"), ME, null)).toBe(-1);
+  });
+  it("Б3: a later op makes what the newer one refers to → the newer goes to the end, never ahead of what it needs", () => {
+    // A: save L1 (makes L1); X: makes L2 (no key); B: save L1 referring to L2 — merged into A's place it would go before X
+    const q = [item("a", mop("el-L1", { id: L1 }, "op_demo", [L1])), item("x", mop(undefined, { id: L2 }, "op_demo", [L2], "element.add"))];
+    expect(coalesceAt(q, mop("el-L1", { id: L1, joinsId: L2 }), ME, null)).toBe(-1);
+    // nothing tied after it: merged in place
+    expect(coalesceAt(q, mop("el-L1", { id: L1 }), ME, null)).toBe(0);
+  });
+  it("Б4: an op after the older one that refers to what it makes keeps it — the newer goes to the end ([create, X(ref), save])", () => {
+    const q = [item("a", mop("el-L1", { id: L1 }, "op_demo", [L1])), item("x", mop(undefined, { downspoutOn: L1 }, "op_demo", undefined, "ds.add"))];
+    expect(coalesceAt(q, mop("el-L1", { id: L1, lengthIn: 120 }), ME, null)).toBe(-1);
+    // an unrelated op after it: merged in place
+    const free = [item("a", mop("el-L1", { id: L1 }, "op_demo", [L1])), item("y", mop(undefined, { id: L2 }, "op_demo", [L2], "element.add"))];
+    expect(coalesceAt(free, mop("el-L1", { id: L1, lengthIn: 120 }), ME, null)).toBe(0);
+  });
   it("merged: the newer change, tries from zero, what either makes stays made (lower case)", () => {
     const id = "6F9619FF-8B86-4011-B42D-00C04FC964FF";
     const older = item("a", mop("el-1", { x: 1 }, "op_demo", [id]), ME, { tries: 3, error: "x" } as Partial<OwnedItem>);
@@ -175,6 +197,16 @@ describe("unit:moduleOp — merging in the queue (outboxCoalesce)", () => {
     expect(m.op).toMatchObject({ payload: { x: 2 }, made: [id.toLowerCase()] });
     expect(m.made).toEqual([id.toLowerCase()]);
     expect(coalesced(item("a", mop("k", {})), newer)).toEqual(newer);
+  });
+});
+
+describe("unit:moduleOp — a row_version conflict is a refusal (review #354 Б1)", () => {
+  it("classify reads the hint before the code: the conflict is «no»; a plain 40001 stays «later»", async () => {
+    const { classify } = await import("../src/data/outboxRetry");
+    const { PermanentError, ServerError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    expect(classify(new PermanentError("changed by someone else", 409, "40001", "row_version_conflict"))).toBe("refusal");
+    expect(classify(Object.assign(new Error("x"), { code: "40001", hint: "row_version_conflict" }))).toBe("refusal");
+    expect(classify(new ServerError("could not serialize access", 409, "40001"))).toBe("transient");
   });
 });
 
@@ -254,6 +286,37 @@ describe("unit:moduleOp — the store (C2c, rule 5, rule 6, О2)", () => {
       { k: "module.op", module: "op_demo", kind: "element.save", payload: { x: 2 }, coalesceKey: "el-1" },
       { k: "module.op", module: "op_demo", kind: "element.save", payload: { y: 1 }, coalesceKey: "el-2" },
     ]);
+  });
+  it("cloud: a settings conflict is a try — after MAX_TRIES it leaves the queue and the truth is read again (Б2)", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve(makeSeed()));
+    await settle();
+    valueOf(r).enableModule("op_demo");
+    await settle();
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.resolve();
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve({ ...makeSeed(), company: { ...makeSeed().company!, modules: { op_demo: { enabled: true, trialEndsAt: new Date(Date.now() + DAY).toISOString(), settings: {}, rowVersion: 1 } } } }));
+    await settle();
+    const { PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    (valueOf(r) as unknown as { saveModuleSettings: (k: string, s: object) => unknown }).saveModuleSettings("op_demo", { a: 1 });
+    await settle();
+    let tries = 0;
+    for (let i = 0; i < MAX_TRIES + 3 && valueOf(r).queue.length; i++) {
+      appActive.cb?.();
+      await settle();
+      const last = server.sends.at(-1)!;
+      if ((last.op as { k: string }).k !== "module.saveSettings") continue;
+      tries += 1;
+      last.d.reject(new PermanentError("module settings changed by someone else", 409, "40001", "row_version_conflict"));
+      await settle();
+    }
+    expect(tries).toBe(MAX_TRIES);
+    expect(valueOf(r).queue).toEqual([]);
+    expect(server.loads.length).toBeGreaterThan(0); // the truth is read again
   });
   it("cloud: the op on its way to the server is never changed — the next move waits behind it", async () => {
     signIn("u1", "c1");

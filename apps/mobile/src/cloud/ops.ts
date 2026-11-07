@@ -243,6 +243,8 @@ export class ServerError extends Error {
     message: string,
     readonly status?: number,
     readonly code?: string,
+    /** the server's hint (e.g. row_version_conflict — outboxRetry.classify reads it before the code) */
+    readonly hint?: string,
   ) {
     super(message);
   }
@@ -263,8 +265,8 @@ async function run(p: PromiseLike<{ error: { message: string; code?: string; hin
   // «someone else changed it first» (40001 + hint row_version_conflict, module_save_settings): a retry never helps —
   // the server's «no», the queue drops it and reads the truth (spec 33 П15.3); a plain 40001 is a serialization retry
   const permanent = error.code ? /^(42|23|22|P0)/.test(error.code) || error.hint === "row_version_conflict" : false;
-  if (permanent) throw new PermanentError(error.message, status, error.code);
-  throw new ServerError(error.message, status, error.code);
+  if (permanent) throw new PermanentError(error.message, status, error.code, error.hint);
+  throw new ServerError(error.message, status, error.code, error.hint);
 }
 
 /**
