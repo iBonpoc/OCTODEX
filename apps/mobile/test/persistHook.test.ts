@@ -15,7 +15,7 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
   },
 }));
 import { render, settle } from "./support/miniReact";
-import { forgetDeviceState, usePersistentState } from "../src/data/persist";
+import { flushAllWriters, forgetDeviceState, usePersistentState } from "../src/data/persist";
 
 type Out = ReturnType<typeof usePersistentState<string>>;
 const Comp = ({ k }: { k: string }) => usePersistentState<string>(k, "init");
@@ -94,3 +94,39 @@ describe("unit:persistHook — the device is wiped (account deletion)", () => {
     root.unmount();
   });
 });
+
+describe("unit:persistHook — a change in the last 250 ms is not lost (rule 6, review #263)", () => {
+  const Now = ({ k }: { k: string }) => usePersistentState<string>(k, "init", { immediate: true });
+  it("immediate: written in the same turn as the change (the outbox)", async () => {
+    const root = render(Now, { k: "octo.outbox.v1" });
+    answerAll();
+    await settle();
+    (root.out as Out)[1]("op");
+    await settle();
+    expect(storage.get("octo.outbox.v1")).toBe(JSON.stringify("op")); // not 250 ms later
+    root.unmount();
+  });
+  it("the app is leaving: a waiting change is written at once", async () => {
+    const root = render(Comp, { k: "octo.db.v5" });
+    answerAll();
+    await settle();
+    (root.out as Out)[1]("edit");
+    await settle();
+    expect(storage.get("octo.db.v5")).toBeUndefined(); // still waiting its 250 ms
+    flushAllWriters();
+    await settle();
+    expect(storage.get("octo.db.v5")).toBe(JSON.stringify("edit"));
+    root.unmount();
+  });
+  it("unmounted with a waiting change: written then, not lost", async () => {
+    const root = render(Comp, { k: "octo.theme.v1" });
+    answerAll();
+    await settle();
+    (root.out as Out)[1]("dark");
+    await settle();
+    root.unmount();
+    await settle();
+    expect(storage.get("octo.theme.v1")).toBe(JSON.stringify("dark"));
+  });
+});
+

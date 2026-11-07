@@ -168,7 +168,7 @@ export default function Today() {
   }, [animate, shown]);
   const appearStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: (1 - shown.value) * space[2] }] }));
   const { t, day, time } = useI18n();
-  const { db, role } = useStore();
+  const { db, role, rejectedOps } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
   // the company's day and zone are part of the key: left open overnight (useTick re-renders), the numbers move to
   // the new day at midnight, not when db changes next (review #270); a new company zone re-sorts the payments
@@ -180,7 +180,8 @@ export default function Today() {
   const { device } = useDevice();
   // every number opens exactly the records it counts, for the same period (founder 05.11); back → Today
   const open = (f: Figure) => router.push(`/figures/${f}?period=${period}`);
-  const attention = buildAttention(db, role);
+  // a money change the server refused is first here too (docs/specs/23 §3)
+  const attention = buildAttention(db, role, undefined, { rejected: rejectedOps });
   // invited or switched off people are not a crew (7-2)
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
   const aw = awaitingCounts(db);

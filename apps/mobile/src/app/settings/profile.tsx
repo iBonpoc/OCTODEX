@@ -6,6 +6,7 @@ import type { Role } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { roleHome } from "@/nav/roles";
 import { goTo } from "@/nav/go";
+import { ClosedCompanies } from "@/features/ClosedCompany";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -54,6 +55,8 @@ export default function Profile() {
             <T v="caption" tone="mut">
               {auth.email} · {t("account.noCompany")}
             </T>
+            {/* 7а-3 «в»: the company was closed by its owner, and what still waits for it (docs/specs/22 §3.6) */}
+            <ClosedCompanies />
             <RowView style={{ flexWrap: "wrap" }}>
               <Button label={t("company.create")} icon="plus" onPress={() => router.push("/auth/company")} />
               <Button label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />

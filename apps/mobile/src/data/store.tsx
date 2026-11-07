@@ -36,19 +36,22 @@ import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
-import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
+import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { backoffMs, classify, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
+import { freshRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
-import { onAppActive } from "./appActive";
+import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
+import { unsentIn as unsentInOf, withoutUnsentIn } from "@/features/closedCompany";
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import {
   type CalendarEvent,
   type MemberPrefs,
+  type PushGroup,
   type VisitPoint,
   MEMBER_PREFS_DEFAULT,
   type CatalogItem,
@@ -148,6 +151,17 @@ interface StoreCtx {
   retryOp: (id: ID) => void;
   /** «Отменить изменение…» (after a confirmation): the op and the ops that wait for it leave the phone; then a reload */
   discardOp: (id: ID) => boolean;
+  /** the person's money changes the server refused: «не записано на сервере» until «Понятно» (docs/specs/23 §3) */
+  rejectedOps: RejectedOp[];
+  /** «Понятно»: the toast's «Отменить» puts it back (rule 5) */
+  dismissRejected: (id: ID) => Undo;
+  /**
+   * 7а-3 «в» (docs/specs/22 §3.6): the signed-in person's changes still waiting for a company closed by its owner (the
+   * server refuses them now), and «Убрать» them (after a confirmation, rule 5). Other people's ops stay.
+   */
+  unsentIn: (companyId: ID) => number;
+  /** false — one of them is being sent right now: nothing removed */
+  dropUnsentIn: (companyId: ID) => boolean;
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -193,6 +207,9 @@ interface StoreCtx {
   removeCalendarEvent: (id: ID) => Undo;
   /** wave 7б-1: my personal settings, the same on every device (locally at once, then public.set_my_prefs) */
   setPrefs: (patch: Partial<MemberPrefs>) => Undo;
+  /** step 18 P4b: my push switch of one group, the same on every device (locally at once, then public.set_push_kind
+   *  through the offline queue — rule 6) */
+  setPushKind: (kind: PushGroup, enabled: boolean) => Undo;
   /** wave 7б-2: my consent to share my location (on — only after the notice, online); off forgets my points here.
    *  Changes only the consent: «Отменить» never takes back anything else (features/locationConsent.ts) */
   setLocationConsent: (on: boolean) => ConsentChange;
@@ -409,8 +426,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     nextTry.current = Date.now() + backoffMs(netFails.current);
     setLink(failedAs(e));
   };
-  const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
-  const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, []);
+  // small and only on the phone until sent: written at once, not after 250 ms (rule 6 — a crash right after a change)
+  const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", [], { immediate: true });
+  const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, [], { immediate: true });
+  // money changes the server refused (docs/specs/23 §3): kept until «Понятно»
+  const [rejected, setRejected, rejectedReady] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true });
+  // the app is leaving (background, the tab hidden or closed): every state that waits to be written is written now
+  useEffect(() => onAppLeave(flushAllWriters), []);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const dbRef = useRef(db);
@@ -426,6 +448,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   whoRef.current = who;
   const mine = (items: readonly OwnedItem[]) => mineOf(items, whoRef.current);
   // a wipe that came while the outbox was still loading (the start repeat): applied to what the load brings
+  const rejectedReadyRef = useRef(rejectedReady);
+  rejectedReadyRef.current = rejectedReady;
+  const forgetRejectedOnLoad = useRef<{ userId: string | null } | null>(null);
+  useEffect(() => {
+    if (!rejectedReady || !forgetRejectedOnLoad.current) return;
+    const { userId } = forgetRejectedOnLoad.current;
+    forgetRejectedOnLoad.current = null;
+    setRejected((prev) => rejectedOthers(prev, userId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rejectedReady]);
   const outboxReadyRef = useRef(outboxReady);
   outboxReadyRef.current = outboxReady;
   const forgetOnLoad = useRef<{ userId: string | null } | null>(null);
@@ -543,6 +575,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!outboxReadyRef.current) forgetOnLoad.current = { userId: me };
         // a functional update: the latest outbox, also one that is set but not yet rendered
         setOutbox((prev) => (outboxRef.current = othersOf(prev, me)));
+        // the refused money changes: the deleted person's go, other people's stay (review #263 №2)
+        if (!rejectedReadyRef.current) forgetRejectedOnLoad.current = { userId: me };
+        setRejected((prev) => rejectedOthers(prev, me));
         setGateCodes({});
         waitingPoints.current = {};
       }),
@@ -631,9 +666,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // the server said «no»: a try; the last one drops it (never because of the network)
           clearFails(item.id);
           if (item.tries + 1 >= MAX_TRIES) {
-            // Will never succeed: drop it and reload the truth from the server.
+            // Will never succeed: drop it and reload the truth from the server. A money change is not dropped
+            // silently: it stays as «не записано на сервере» until the person says «Понятно» (docs/specs/23 §3)
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
+            const rej = rejectedOf(item, msg, Date.now(), w);
+            if (rej) setRejected((prev) => [...freshRejected(prev, Date.now()).filter((x) => x.id !== rej.id), rej]);
           } else {
             outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...x, tries: item.tries + 1, error: msg } : x));
           }
@@ -648,7 +686,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // a dropped op left the phone ahead of the server: reload the truth
     if (stale(gen) || !still()) return;
     if ((sentAny && !pendingLive()) || dropped) await refresh();
-  }, [setOutbox, refresh, sendWaitingPoints]);
+  }, [setOutbox, setRejected, refresh, sendWaitingPoints]);
 
   useEffect(() => {
     if (mode !== "cloud") return;
@@ -798,6 +836,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void refresh();
     return true;
   };
+  const rejectedOps = mode === "cloud" ? rejectedMine(rejected, who) : [];
+  const dismissRejected = (id: ID): Undo => {
+    const was = rejected.find((x) => x.id === id);
+    setRejected((prev) => prev.filter((x) => x.id !== id));
+    return () => {
+      if (was) setRejected((prev) => (prev.some((x) => x.id === was.id) ? prev : [...prev, was]));
+    };
+  };
+  const unsentInCompany = (companyId: ID) => unsentInOf(outbox, auth.userId ?? null, companyId).length;
+  // like discardOp: refused while one of them is on its way to the server (it would get there although the card says no)
+  const dropUnsentIn = (companyId: ID): boolean => {
+    const gone = new Set(unsentInOf(outboxRef.current, auth.userId ?? null, companyId).map((o) => o.id));
+    if (inFlight.current && gone.has(inFlight.current)) return false;
+    outboxRef.current = withoutUnsentIn(outboxRef.current, auth.userId ?? null, companyId);
+    setOutbox(outboxRef.current);
+    gone.forEach((x) => opPause.current.delete(x));
+    return true;
+  };
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? mineOf(outbox, who).map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
@@ -874,6 +930,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       stuckOps,
       retryOp,
       discardOp,
+      rejectedOps,
+      dismissRejected,
+      unsentIn: unsentInCompany,
+      dropUnsentIn,
       refresh,
       loading,
       setOnline: (v) => {
@@ -1075,6 +1135,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const prefs: MemberPrefs = { ...MEMBER_PREFS_DEFAULT, ...dbRef.current.prefs, ...patch };
         return mutate("me.prefs", (d) => ({ ...d, prefs }), { k: "me.prefs", prefs });
       },
+      setPushKind: (kind, enabled) =>
+        mutate("me.pushKind", (d) => ({ ...d, pushPrefs: { ...d.pushPrefs, [kind]: enabled } }), { k: "me.pushKind", kind, enabled }),
       setLocationConsent: (on) => {
         const put = (d: DB) => {
           dbRef.current = d;
@@ -1721,10 +1783,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, rejected, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush, auth.userId],
   );
 
-  if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady) return null;
+  if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady || !rejectedReady) return null;
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

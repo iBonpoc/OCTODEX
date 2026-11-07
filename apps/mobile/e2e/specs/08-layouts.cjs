@@ -15,10 +15,11 @@ const CARD_SCREENS = [{ path: "/clients", reference: (p) => p.getByTestId("filte
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 /** loops over all requested layouts itself (one browser context per layout) */
 exports.ownLayouts = true;
-exports.run = async (h, { browser, BASE, layouts }) => {
+exports.run = async (h, { browser, BASE, layouts, installClock }) => {
   for (const { theme, width } of layouts) {
     {
       const ctx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 }, reducedMotion: "reduce" });
+      await installClock(ctx);
       await ctx.addInitScript((th) => {
         localStorage.setItem("octo.lang.v1", JSON.stringify("ru")); localStorage.setItem("octo.role.v1", JSON.stringify("director"));
         localStorage.setItem("octo.theme.v1", JSON.stringify(th)); localStorage.setItem("octo.hints.v1", JSON.stringify(["today", "company", "clients", "estimate-builder", "inbox", "money", "jobs", "team", "catalog", "plan"]));

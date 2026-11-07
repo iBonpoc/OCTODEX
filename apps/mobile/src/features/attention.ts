@@ -10,6 +10,7 @@ import { dayKeyIn } from "./zone";
 import { jobAwaitingClose } from "@/features/jobDone";
 import { goneId } from "./team";
 import type { DictKey } from "@/i18n";
+import type { RejectedOp } from "@/data/outboxRejected";
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
   /* E2b-2 (docs/specs/07 «E2b — экраны подписи» §3, §7, §8) */
@@ -17,7 +18,9 @@ export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "la
   /* wave 3c (S10, S15): the last visit is over — is the job done? (docs/specs/17-job.md §4) */
   | "jobDone"
   /* docs/specs/22 §2 (S22c): the person on a lead / a task is not at work any more — the office hands it over */
-  | "leadOrphan" | "taskOrphan";
+  | "leadOrphan" | "taskOrphan"
+  /* docs/specs/23 §3 («Лиды и клиенты»): a money change the server refused — not written, the phone showed it */
+  | "rejected";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -33,6 +36,8 @@ export interface AttentionItem {
   score: number;
   /** taskOrphan: what refId is (the task's subject) */
   subject?: Task["subjectType"];
+  /** where it opens, when it is not the record of `refId` by its kind (a refused change: the record it was about) */
+  href?: string;
 }
 
 /** Where an attention item opens: its own record, never a general list. */
@@ -40,6 +45,7 @@ export function attentionHref(it: AttentionItem): string {
   switch (it.kind) {
     case "schedule": return `/job/schedule?jobId=${it.refId}`;
     case "jobDone": return `/job/${it.refId}`;
+    case "rejected": return it.href ?? "/settings/profile";
     case "taskOrphan": return `${SUBJECT_PATH[it.subject ?? "lead"]}/${it.refId}`;
     case "overdue": return `/invoice/${it.refId}`;
     case "estimate":
@@ -56,8 +62,17 @@ export function attentionHref(it: AttentionItem): string {
 const SUBJECT_PATH: Record<Task["subjectType"], string> = { lead: "/lead", customer: "/client", property: "/property", job: "/job", estimate: "/estimate" };
 
 /** "Требует внимания" / triage queue: everything that needs a human decision now, most urgent first. */
-export function buildAttention(db: DB, role: Role = "director", now: number = Date.now()): AttentionItem[] {
+/** a refused money change is always first: above every other score (a lead waiting N minutes is 1000 + N, review #263 №1) */
+export const REJECTED_SCORE = Number.MAX_SAFE_INTEGER;
+export function buildAttention(db: DB, role: Role = "director", now: number = Date.now(), extra: { rejected?: readonly RejectedOp[] } = {}): AttentionItem[] {
   const out: AttentionItem[] = [];
+  // a money change the server refused (the store's list — the signed-in person's own): first, the phone showed it as done
+  for (const r of extra.rejected ?? []) {
+    out.push({
+      id: `rej-${r.id}`, kind: "rejected", refId: r.id, name: "", label: `att.rejected.${r.what}`, params: {}, chip: "att.rejectedChip",
+      status: "bad", amountCents: r.amountCents, score: REJECTED_SCORE, href: r.href,
+    });
+  }
   // Leads by "whose turn" (docs/14-leads-spec.md §3.2, §7.4): reply · remind · lost or wait? · no step · back from snooze.
   const st = leadSettingsOf(db.company);
   // the client signed the estimate: the company owes the next step, «remind the client» would be wrong (E2b-2)
