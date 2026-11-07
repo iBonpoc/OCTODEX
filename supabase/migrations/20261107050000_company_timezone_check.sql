@@ -54,20 +54,23 @@ revoke all on function app.zone_name(text) from public, anon, authenticated;
 -- a nested call checks EXECUTE (the trigger function itself is not checked). Pure: reads the zone catalog only.
 grant execute on function app.zone_name(text) to authenticated, service_role;
 
--- ---- 1. The stored rows (before the trigger) ----
+-- ---- 1. The stored rows (before the trigger): only those that are not an allowed exact name, one update ----
+-- (07.11 on production: 0 such rows; the notice names each one for the founder)
 do $$
 declare
   r record;
-  v text;
 begin
-  for r in select id, timezone from public.companies order by id loop
-    v := coalesce(app.zone_name(r.timezone), 'America/Los_Angeles');
-    if v is distinct from r.timezone then
-      raise notice 'company % time zone: % -> %', r.id, r.timezone, v;
-      update public.companies set timezone = v where id = r.id;
-    end if;
+  for r in select id, timezone from public.companies c
+            where not exists (select 1 from pg_catalog.pg_timezone_names n
+                               where n.name = c.timezone and n.name ~ '^(UTC|[A-Z][A-Za-z_]+(/[A-Za-z0-9_+-]+)+)$'
+                                 and n.name !~ '^(posix|right|Etc|SystemV)/') loop
+    raise notice 'company % time zone: % -> %', r.id, r.timezone, coalesce(app.zone_name(r.timezone), 'America/Los_Angeles');
   end loop;
 end $$;
+update public.companies c set timezone = coalesce(app.zone_name(c.timezone), 'America/Los_Angeles')
+ where not exists (select 1 from pg_catalog.pg_timezone_names n
+                    where n.name = c.timezone and n.name ~ '^(UTC|[A-Z][A-Za-z_]+(/[A-Za-z0-9_+-]+)+)$'
+                      and n.name !~ '^(posix|right|Etc|SystemV)/');
 
 -- ---- 2. Every write from now on ----
 create or replace function app.tg_company_timezone()

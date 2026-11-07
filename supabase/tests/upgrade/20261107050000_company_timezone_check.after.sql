@@ -22,4 +22,22 @@ begin
     raise exception 'FAILED: upgrade 050000 a company kept a zone the server does not know';
   end if;
 end $$;
+-- clean up: the rows the companies' after-insert triggers seeded (lead sources, tags, job types, …), then the companies.
+-- Guard triggers of those tables (system rows) are skipped for this cleanup only; every child is deleted explicitly.
+do $$
+declare
+  r record;
+begin
+  set local session_replication_role = replica;
+  for r in select c.conrelid::regclass as tbl, a.attname as col
+             from pg_constraint c join pg_attribute a on a.attrelid = c.conrelid and a.attnum = c.conkey[1]
+            where c.contype = 'f' and c.confrelid = 'public.companies'::regclass loop
+    execute format('delete from %s where %I::text like %L', r.tbl, r.col, 'c7500000-0000-4000-8000-00000000000%');
+  end loop;
+  delete from public.companies where id::text like 'c7500000-0000-4000-8000-00000000000%';
+  set local session_replication_role = origin;
+  if exists (select 1 from public.companies where id::text like 'c7500000-0000-4000-8000-00000000000%') then
+    raise exception 'FAILED: upgrade 050000 cleanup left companies';
+  end if;
+end $$;
 \echo 'upgrade 20261107050000 stored time zones are exact names ok'

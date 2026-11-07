@@ -70,7 +70,9 @@ export function companyToDb(c: Company, stored: Row) {
     mailing_address_line1: n(c.mailingAddress?.line1), mailing_address_city: n(c.mailingAddress?.city),
     mailing_address_state: n(c.mailingAddress?.state), mailing_address_zip: n(c.mailingAddress?.zip),
     // the zone only when it was changed and the phone knows it (docs/specs/22 §1): the server refuses an unknown one
-    // (22023 = permanent: the whole company.save would be dropped from the queue with the other settings)
+    // (22023 = permanent: the whole company.save would be dropped from the queue with the other settings).
+    // Temporary: it compares with the server, not with what this phone last saw — a long-offline phone still overwrites
+    // another admin's new zone; the «zone chosen» flag of company.save closes it (claude/frame7-tz-flag, spec 22 §1.3).
     ...(zoneToSend(c.timezone, stored.timezone) ? { timezone: c.timezone } : {}),
     doc_language: c.docLanguage ?? "en",
     brand: { ...((stored.brand as Row) ?? {}), logo: c.brand.logo ?? null, color: c.brand.color ?? null },
@@ -93,5 +95,6 @@ export const contactToDb = (c: CompanyContact, companyId: string, position: numb
   is_primary: c.isPrimary, on_documents: c.onDocuments, position,
 });
 
-/** company.save sends the zone only when it differs from the stored one and is a zone this phone knows (docs/specs/22 §1) */
+/** company.save sends the zone only when it differs from the stored one and is a zone this phone knows (docs/specs/22 §1).
+ *  Temporary rule until the «zone chosen» flag of company.save (claude/frame7-tz-flag). */
 export const zoneToSend = (tz: string | undefined, stored: unknown): boolean => !!tz && tz !== stored && validZone(tz);
