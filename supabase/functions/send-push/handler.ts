@@ -95,6 +95,8 @@ export const TITLES: Record<string, Record<Lang, string>> = {
   "lead.new": { en: "New lead", es: "Nuevo cliente potencial", ru: "Новый лид" },
   "lead.assigned": { en: "Lead assigned to you", es: "Cliente potencial asignado a ti", ru: "Вам назначен лид" },
   "estimate.viewed": { en: "Estimate opened", es: "Presupuesto abierto", ru: "Смету открыли" },
+  "lead.reminder": { en: "Lead still waiting for a reply", es: "El cliente potencial sigue esperando respuesta", ru: "Лид ждёт ответа" },
+  "lead.escalation": { en: "Lead waiting over an hour", es: "Cliente potencial sin respuesta más de una hora", ru: "Лид без ответа больше часа" },
 };
 const FALLBACK: Record<Lang, string> = { en: "New notification", es: "Nueva notificación", ru: "Новое уведомление" };
 

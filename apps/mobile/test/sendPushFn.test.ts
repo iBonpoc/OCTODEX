@@ -5,7 +5,7 @@
  * 429 / 5xx / network → retry, other errors → failed with a short code, receipts, and no token or text in the logs.
  */
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import {
   BATCH, TITLES, handlePush, message, sameKey, words, code,
   type ClaimRow, type ExpoMessage, type HttpAnswer, type PushDeps, type Ticket,
@@ -84,9 +84,11 @@ describe("send-push: who may call it", () => {
 
 describe("send-push: the words", () => {
   // every kind the queue allows (push_outbox_kind_check, the latest migration that sets it) has its words
-  const mig = readFileSync(new URL("../../../supabase/migrations/20261107110000_push_kinds.sql", import.meta.url), "utf8");
+  const migDir = new URL("../../../supabase/migrations/", import.meta.url);
+  const mig = readdirSync(migDir).filter((f) => f.endsWith(".sql")).sort()
+    .map((f) => readFileSync(new URL(f, migDir), "utf8")).filter((t) => /push_outbox_kind_check\s+check/.test(t)).pop() ?? "";
   const kinds = [...(/push_outbox_kind_check\s+check \(kind in \(([^)]*)\)/.exec(mig)?.[1] ?? "").matchAll(/'([a-z_.]+)'/g)].map((m) => m[1]);
-  it("the queue's kinds are read from the migration", () => expect(kinds).toHaveLength(7));
+  it("the queue's kinds are read from the latest migration that sets them", () => expect(kinds).toHaveLength(9));
   it("has en, es and ru for every kind of the queue, with no numbers, sums or names", () => {
     for (const k of kinds) {
       for (const l of ["en", "es", "ru"] as const) {
@@ -101,6 +103,8 @@ describe("send-push: the words", () => {
     expect(words("unknown.kind", "en").title).toBe("New notification");
     expect(words("lead.assigned", "es").title).toBe("Cliente potencial asignado a ti");
     expect(words("estimate.viewed", "ru").title).toBe("Смету открыли");
+    expect(words("lead.reminder", "en").title).toBe("Lead still waiting for a reply");
+    expect(words("lead.escalation", "ru").title).toBe("Лид без ответа больше часа");
   });
   it("a message carries only the route — no amount, name or id other than the path", () => {
     const m = message(row("1", 1, "estimate.client_signed", "es"), { device_id: "d", token: tok(1), lang: "es" });

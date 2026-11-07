@@ -9,6 +9,7 @@ import { goTo } from "@/nav/go";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { StuckOps } from "@/features/StuckOps";
 
 /**
  * «Профиль и аккаунт» (spec 26, founder 07.11: the profile card and «Мои настройки» led to the same screen).
@@ -69,6 +70,9 @@ export default function Profile() {
         {/* E2b-2 (docs/specs/07): the employee's own signature for contracts */}
         <Button label={t("est.sig.settingsRow")} icon="pencil" variant="secondary" onPress={() => router.push("/estimate/signature")} />
       </Card>
+
+      {/* docs/specs/23 §3: changes the server keeps answering with an error — under the account and its sync, to retry or discard */}
+      <StuckOps />
 
       {availableRoles.length > 1 ? (
         <Card>

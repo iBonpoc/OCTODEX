@@ -10,7 +10,9 @@ import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
 
 /** Company profile: 8 sections with a done/not-done chip. Opens a section to edit. */
 export default function CompanyScreen() {
-  const { db } = useStore();
+  const { db, role } = useStore();
+  // spec 26 §3 (07.11): the office sees the company settings, only the director changes them
+  const ro = role !== "director";
   const { t } = useI18n();
   const c = db.company;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
@@ -36,7 +38,8 @@ export default function CompanyScreen() {
           </View>
           <StatusChip status={p.done === p.total ? "ok" : "warn"} label={t("co.progress", { done: p.done, total: p.total })} />
         </RowView>
-        {p.next ? <Button label={t("co.continue")} icon="chevronRight" onPress={() => router.push(`/company/${p.next}?wizard=1`)} /> : null}
+        {p.next && !ro ? <Button label={t("co.continue")} icon="chevronRight" onPress={() => router.push(`/company/${p.next}?wizard=1`)} /> : null}
+        {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
       </Card>
       <View style={{ gap: space[2] }}>
         {SETUP_STEPS.map((s) => {
