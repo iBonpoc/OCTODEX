@@ -60,5 +60,5 @@ export function visitSigns(v: Parameters<typeof lateKind>[0], members: People, n
  */
 export function overlapSigns(db: Pick<DB, "visits">, v: Visit): Sign[] {
   if (!isOpenVisit(v)) return [];
-  return overlaps(db, assigneesOf(v), v.start, v.durationMin, v.id).length ? [{ key: "card.sign.overlap", tone: "warn" }] : [];
+  return overlaps(db, assigneesOf(v), v.start, v.durationMin, v.id, !!v.allDay).length ? [{ key: "card.sign.overlap", tone: "warn" }] : [];
 }

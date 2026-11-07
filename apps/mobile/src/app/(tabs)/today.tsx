@@ -1,6 +1,6 @@
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { View } from "react-native";
-import { isOpenVisit } from "@/features/schedule";
+import { isOpenVisit, visitWhen } from "@/features/schedule";
 import { router } from "expo-router";
 import { useContentWidth } from "@/nav/NavMenu";
 import { component, font, layout, size, space } from "@octo/design-tokens";
@@ -158,7 +158,7 @@ export default function Today() {
                   facts={{
                     phone: m.phone,
                     now: where(current),
-                    next: next ? [time(next.start), visitContext(db, next).customer?.name].filter(Boolean).join(" · ") : undefined,
+                    next: next ? [visitWhen(next, time, t("plan5.allDay"), false), visitContext(db, next).customer?.name].filter(Boolean).join(" · ") : undefined,
                   }}
                   // a tech: call / SMS only (his address is not a place to go)
                   contact={{ phone: m.phone }}

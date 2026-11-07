@@ -5561,5 +5561,146 @@ select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_
 :as_super
 update public.memberships set status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T68 the tech''s job task: the office sees it, another company and a switched-off tech do not ok'
+-- ---------------------------------------------------------------- T69: 3b-2 — the own lines of a job never bring its total below what is invoiced
+-- (migration 20261107020000, engine jobLinesBelowInvoiced; test prices)
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c6900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T69 Home');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d6900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', '69 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e6900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T69 lines', 'c6900000-0000-4000-8000-000000000001', 'd6900000-0000-4000-8000-000000000001', 'draft', true, 1000);
+end $$;
+:as_office_a
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a6900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e6900000-0000-4000-8000-000000000001', 0, 'T69 labor', 2, 20000, false),
+  ('a6900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e6900000-0000-4000-8000-000000000001', 1, 'T69 part', 1, 10000, true);
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 51000, 'job total 40000 + 10000 + tax 1000');
+-- a draft is not issued (the app does not load it): it does not hold the total
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('06900000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000001', 'progress', 999999);
+select tst.ok((select status from public.invoices where id = '06900000-0000-4000-8000-000000000003') = 'draft', 'the big invoice is a draft');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
+  ('06900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000001', 'progress', 'sent', 50500);
+select tst.fails($q$update public.job_line_items set deleted_at = now() where id = 'a6900000-0000-4000-8000-000000000002'$q$, 'removing a line below what is invoiced is refused');
+select tst.fails($q$update public.job_line_items set quantity = 1 where id = 'a6900000-0000-4000-8000-000000000001'$q$, 'a smaller quantity below what is invoiced is refused');
+select tst.fails($q$update public.jobs set tax_enabled = false where id = 'e6900000-0000-4000-8000-000000000001'$q$, 'the tax switched off below what is invoiced is refused');
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 51000, 'the total stays after the refusals');
+select tst.ok(tst.cnt($q$select 1 from public.job_line_items where job_id = 'e6900000-0000-4000-8000-000000000001' and deleted_at is null$q$) = 2, 'the refused removal rolled back');
+-- down to exactly what is invoiced: fine; more lines: fine
+update public.job_line_items set unit_price_cents = 19800 where id = 'a6900000-0000-4000-8000-000000000001';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 50600, 'lower but above what is invoiced is fine');
+select tst.fails($q$update public.job_line_items set unit_price_cents = 19700 where id = 'a6900000-0000-4000-8000-000000000001'$q$, 'two dollars less crosses the floor');
+update public.job_line_items set unit_price_cents = 22500 where id = 'a6900000-0000-4000-8000-000000000001';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 56000, 'raising the total is fine');
+-- a lower tax rate counts the same: 39600 + 10000 + 1000 = 50600, rate 0 → 49600 < 50500
+update public.job_line_items set unit_price_cents = 19800 where id = 'a6900000-0000-4000-8000-000000000001';
+select tst.fails($q$update public.jobs set tax_rate_bps = 0 where id = 'e6900000-0000-4000-8000-000000000001'$q$, 'a lower tax rate below what is invoiced is refused');
+update public.job_line_items set unit_price_cents = 22500 where id = 'a6900000-0000-4000-8000-000000000001';
+-- old data: a job already invoiced above its total still takes changes that do not lower the total
+:as_super
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, contract_total_cents) values
+    ('e6900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T69 old', 'c6900000-0000-4000-8000-000000000001', 'd6900000-0000-4000-8000-000000000001', 'draft', 10000);
+  insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
+    ('06900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000002', 'final', 'sent', 20000);
+end $$;
+:as_office_a
+update public.jobs set title = 'T69 old renamed', description = 'still fine' where id = 'e6900000-0000-4000-8000-000000000002';
+select tst.ok((select title from public.jobs where id = 'e6900000-0000-4000-8000-000000000002') = 'T69 old renamed', 'old data over-invoiced: an edit that keeps the total passes');
+-- and its total may go up even while still below what is invoiced (10000 → 15000 < 20000): only going down is refused
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents) values
+  ('a6900000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e6900000-0000-4000-8000-000000000002', 0, 'T69 old line', 1, 15000);
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000002') = 15000, 'over-invoiced: the total goes up');
+select tst.fails($q$update public.job_line_items set unit_price_cents = 14000 where id = 'a6900000-0000-4000-8000-000000000003'$q$, 'over-invoiced: and does not go down again');
+-- a void invoice does not count
+:as_super
+update public.invoices set status = 'void', void_reason = 'T69 test', voided_at = now() where id = '06900000-0000-4000-8000-000000000001';
+:as_office_a
+update public.job_line_items set deleted_at = now() where id = 'a6900000-0000-4000-8000-000000000002';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 45000, 'with the invoice void the line can go');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_job_total_floor()', 'execute'), 'the trigger function is not callable');
+\echo 'T69 job lines never go below what is invoiced ok'
+
+-- ---------------------------------------------------------------- T70: 3b-3 — «Весь день» у выезда (migration 20261107030000)
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c7000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T70 Home');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d7000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7000000-0000-4000-8000-000000000001', '70 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e7000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T70 job', 'c7000000-0000-4000-8000-000000000001', 'd7000000-0000-4000-8000-000000000001', 'draft');
+end $$;
+:as_office_a
+-- the company is in Los Angeles (default): a whole day there is 08:00Z–08:00Z in winter
+insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) values
+  ('f7000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-01 00:00 America/Los_Angeles', '2026-12-02 00:00 America/Los_Angeles', true),
+  ('f7000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-03 00:00 America/Los_Angeles', '2026-12-05 00:00 America/Los_Angeles', true),
+  ('f7000000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-06 10:00 America/Los_Angeles', '2026-12-06 11:00 America/Los_Angeles', true),
+  ('f7000000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-07 00:00 UTC', '2026-12-08 00:00 UTC', true);
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000001'), 'a whole day at the company midnight stays «весь день»');
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000002'), 'two whole days stay «весь день»');
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000003'), 'a timed range is never «весь день»');
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000004'), 'UTC midnight is not the company midnight');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f7000000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'f7000000-0000-4000-8000-000000000001' and all_day$q$) = 1, 'the technician sees «весь день» of his visit');
+select tst.fails($q$update public.visits set all_day = false where id = 'f7000000-0000-4000-8000-000000000001'$q$, 'the technician does not change «весь день»');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_visit_all_day()', 'execute'), 'the normalizer is not callable');
+\echo 'T70 visits: all day only on whole days at the company midnight; the tech does not change it ok'
+
+-- ---------------------------------------------------------------- T71: 3b-3 — an old app version and «Весь день» (rule 16)
+:as_office_a
+-- an old app moves the all-day visit: it writes only starts_at / ends_at → the flag goes by itself
+update public.visits set starts_at = '2026-12-01 09:00 America/Los_Angeles', ends_at = '2026-12-01 10:00 America/Los_Angeles' where id = 'f7000000-0000-4000-8000-000000000001';
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000001'), 'an old app move to a time clears «весь день»');
+-- the new app moves a whole day to another day: stays
+update public.visits set starts_at = '2026-12-10 00:00 America/Los_Angeles', ends_at = '2026-12-11 00:00 America/Los_Angeles' where id = 'f7000000-0000-4000-8000-000000000002';
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000002'), 'a whole day moved to another whole day stays «весь день»');
+-- an old app inserts without the column: an ordinary visit
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f7000000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-12 00:00 America/Los_Angeles', '2026-12-13 00:00 America/Los_Angeles');
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000005'), 'without the column a visit is not «весь день»');
+-- a visit without an end cannot be all day
+update public.visits set all_day = true, ends_at = null where id = 'f7000000-0000-4000-8000-000000000005';
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000005'), 'no end — not «весь день»');
+-- the technician does not put the flag on a whole-day visit either
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f7000000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-14 00:00 America/Los_Angeles', '2026-12-15 00:00 America/Los_Angeles');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f7000000-0000-4000-8000-000000000006', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.fails($q$update public.visits set all_day = true where id = 'f7000000-0000-4000-8000-000000000006'$q$, 'the technician does not set «весь день» even on a whole day');
+-- another company does not touch our flag
+:as_owner_b
+select tst.blocked($q$update public.visits set all_day = false where id = 'f7000000-0000-4000-8000-000000000002'$q$, 'another company does not change our «весь день»');
+:as_super
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000002'), 'and it stays');
+-- the company's own zone, not Los Angeles: Honolulu midnight is 10:00Z; an empty zone falls back to Los Angeles
+update public.companies set timezone = 'Pacific/Honolulu' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) values
+  ('f7000000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-16 00:00 Pacific/Honolulu', '2026-12-17 00:00 Pacific/Honolulu', true),
+  ('f7000000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-16 00:00 America/Los_Angeles', '2026-12-17 00:00 America/Los_Angeles', true);
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000007'), 'a Honolulu company: its own midnight');
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000008'), 'a Honolulu company: Los Angeles midnight is not a whole day');
+:as_super
+update public.companies set timezone = 'Pacific Time' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) values
+  ('f7000000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-20 00:00 America/Los_Angeles', '2026-12-21 00:00 America/Los_Angeles', true);
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000009'), 'a zone Postgres does not know: the save goes through, Los Angeles');
+:as_super
+update public.companies set timezone = '' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+update public.visits set all_day = true, starts_at = '2026-12-18 00:00 America/Los_Angeles', ends_at = '2026-12-19 00:00 America/Los_Angeles' where id = 'f7000000-0000-4000-8000-000000000008';
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000008'), 'an empty zone: Los Angeles');
+:as_super
+update public.companies set timezone = 'America/Los_Angeles' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+\echo 'T71 an old app never leaves «весь день» on a timed visit ok'
 
 \echo 'ALL TESTS PASSED'
