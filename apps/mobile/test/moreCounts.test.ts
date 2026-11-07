@@ -30,8 +30,8 @@ describe("moreCounts", () => {
     const empty = { ...db, leads: [], invoices: [], estimates: [], jobs: [], tasks: [], visits: [] } as DB;
     expect(moreCounts(empty, "director", NOW, TZ)).toEqual({});
   });
-  it("tech: no counter on a section the tech does not have (Счета, Лиды — sections.ts), even when buildAttention lists it", () => {
-    expect(buildAttention(db, "tech", NOW).some((a) => a.kind === "overdue")).toBe(true);
+  it("tech: no counter on a section the tech does not have (Счета, Лиды — sections.ts); no overdue invoices for him at all", () => {
+    expect(buildAttention(db, "tech", NOW).some((a) => a.kind === "overdue")).toBe(false);
     const m = moreCounts(db, "tech", NOW, TZ);
     expect(m.invoices).toBeUndefined();
     expect(m.leads).toBeUndefined();
