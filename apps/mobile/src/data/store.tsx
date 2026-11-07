@@ -49,6 +49,7 @@ import { unsentIn as unsentInOf, withoutUnsentIn } from "@/features/closedCompan
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
+import { enabledLocally, moduleActive, moduleDef } from "@/modules/registry";
 import {
   type CalendarEvent,
   type MemberPrefs,
@@ -211,6 +212,12 @@ interface StoreCtx {
   /** step 18 P4b: my push switch of one group, the same on every device (locally at once, then public.set_push_kind
    *  through the offline queue — rule 6) */
   setPushKind: (kind: PushGroup, enabled: boolean) => Undo;
+  /** spec 33 П15 (C2a): owner / admin switch an add-on module on (the first time — the trial) or off; nothing of the
+   *  module is deleted by «off». Locally at once, then module_enable / module_disable through the queue (rule 6). */
+  enableModule: (key: string) => Undo;
+  disableModule: (key: string) => Undo;
+  /** the module's settings; null = not saved: the module is not active (trial over, not paid — founder О2) */
+  saveModuleSettings: (key: string, settings: Record<string, unknown>) => Undo | null;
   /** wave 7б-2: my consent to share my location (on — only after the notice, online); off forgets my points here.
    *  Changes only the consent: «Отменить» never takes back anything else (features/locationConsent.ts) */
   setLocationConsent: (on: boolean) => ConsentChange;
@@ -313,7 +320,7 @@ interface StoreCtx {
   revokeInvite: (id: ID) => Undo;
   setMemberDisabled: (id: ID, disabled: boolean) => Undo;
   /** company profile (owner/admin in the cloud) */
-  saveCompany: (patch: Partial<Omit<Company, "id" | "licenses" | "contacts">>) => Undo;
+  saveCompany: (patch: Partial<Omit<Company, "id" | "licenses" | "contacts" | "modules">>) => Undo;
   saveLicense: (l: CompanyLicense) => Undo;
   removeLicense: (id: ID) => Undo;
   saveContact: (c: CompanyContact) => Undo;
@@ -1138,6 +1145,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       setPushKind: (kind, enabled) =>
         mutate("me.pushKind", (d) => ({ ...d, pushPrefs: { ...d.pushPrefs, [kind]: enabled } }), { k: "me.pushKind", kind, enabled }),
+      // row_version mirrors the server (an insert is 1, each change +1), so the next saveSettings sends the right base
+      enableModule: (key) => {
+        const withModule = (d: DB): DB => {
+          if (!d.company) return d;
+          const cur = d.company.modules?.[key];
+          const next = { ...enabledLocally(cur, moduleDef(key)), rowVersion: cur ? cur.rowVersion + 1 : 1 };
+          return { ...d, company: { ...d.company, modules: { ...d.company.modules, [key]: next } } };
+        };
+        return mutate("module.enable", withModule, { k: "module.enable", module: key });
+      },
+      disableModule: (key) =>
+        mutate(
+          "module.disable",
+          (d) => {
+            const cur = d.company?.modules?.[key];
+            if (!d.company || !cur) return d;
+            return { ...d, company: { ...d.company, modules: { ...d.company.modules, [key]: { ...cur, enabled: false, rowVersion: cur.rowVersion + 1 } } } };
+          },
+          { k: "module.disable", module: key },
+        ),
+      saveModuleSettings: (key, settings) => {
+        const c = dbRef.current.company;
+        const cur = c?.modules?.[key];
+        if (!c || !cur || !moduleActive(c, key)) return null;
+        return mutate(
+          "module.saveSettings",
+          (d) => (d.company ? { ...d, company: { ...d.company, modules: { ...d.company.modules, [key]: { ...cur, settings, rowVersion: cur.rowVersion + 1 } } } } : d),
+          { k: "module.saveSettings", module: key, settings, baseRowVersion: cur.rowVersion },
+        );
+      },
       setLocationConsent: (on) => {
         const put = (d: DB) => {
           dbRef.current = d;
