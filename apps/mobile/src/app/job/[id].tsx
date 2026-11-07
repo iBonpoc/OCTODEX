@@ -201,7 +201,7 @@ export default function JobScreen() {
       />
       {next ? (
         <T v="body" tone="mut">
-          {t("job3.next", { date: day(next.start), time: time(next.start) })}
+          {t("job3.next", { date: day(next.start), time: visitWhen(next, time, t("plan5.allDay"), false) })}
         </T>
       ) : null}
       {visits.length ? (

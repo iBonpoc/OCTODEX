@@ -32,6 +32,20 @@ exports.run = async (h) => {
   await h.go("/job/j3");
   await h.expectText(/Весь день/, "the job's visit card says «Весь день»");
   h.expect((await p.getByText(/12:00 AM/).locator("visible=true").count()) === 0, "no «12:00 AM» on the job");
+  // Linda's timed visit of today is done: the next one of j3 is the all-day one
+  await p.evaluate(() => {
+    const k = "octo.db.v5";
+    const st = JSON.parse(localStorage.getItem(k));
+    st.db.visits = st.db.visits.map((x) => (x.id === "v3" ? { ...x, step: "done" } : x));
+    localStorage.setItem(k, JSON.stringify(st));
+  });
+  await h.go("/job/j3");
+  const nextLine = (await h.text()).split(" | ").find((l) => /^Ближайший выезд/.test(l)) || "";
+  h.expect(/Весь день/.test(nextLine) && !/12:00 AM/.test(nextLine), `«Ближайший выезд» says «Весь день» (${nextLine})`);
+
+  // «Сегодня» of the director (the crew cards: «Дальше: …»): no «12:00 AM»
+  await h.go("/today");
+  h.expect(!/12:00 AM/.test(await h.text()), "«Сегодня»: no «12:00 AM»");
 
   // the Plan: «Весь день», no hour, not «опаздывает», no «Накладка»
   await h.go("/plan");
