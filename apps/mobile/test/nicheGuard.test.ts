@@ -35,8 +35,6 @@ const KEYS = new Set([
   "draw.total",
   "est.length",
   "est.empty",
-  // LEGACY in the core: an English example of a job title — to be neutral (chat «Работы»; reported to the director 07.11)
-  "job3.new.titlePh",
 ]);
 
 function files(dir: string): string[] {

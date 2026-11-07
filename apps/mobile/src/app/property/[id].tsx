@@ -21,6 +21,7 @@ import { Icon, T, type IconKey } from "@/ui/primitives";
 import { Card, CardList, Empty, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { useToast } from "@/ui/overlays";
 import { VisitFormSheet } from "@/features/VisitForm";
+import { ModulePlaces } from "@/modules/ModulePlaces";
 import { uid } from "@/features/estimateDoc";
 
 const ROW_ICON: Record<PropertyRow, IconKey> = {
@@ -169,6 +170,9 @@ export default function PropertyScreen() {
           )}
         </RowView>
       </Card>
+
+      {/* add-on modules' place (docs/specs/33 П15): nothing unless a module is switched on */}
+      <ModulePlaces place="property" ctx={{ customerId: p.customerId, propertyId: p.id }} />
 
       {/* rows with counters (13 §3.3): details of this one property, each opens its own list */}
       <View testID="property-rows">
