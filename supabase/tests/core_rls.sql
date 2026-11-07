@@ -5627,6 +5627,101 @@ select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_job_total_floor()', 'execute'), 'the trigger function is not callable');
 \echo 'T69 job lines never go below what is invoiced ok'
 
+-- ---------------------------------------------------------------- T78: S26 — outside the office a task is assigned only to oneself
+-- (migration 20261107060000, docs/specs/23 §5): the tech on the job of his live visit (T67 data). Another person as the
+-- assignee becomes himself on insert and stays as it was on a change — not a refusal (older app versions); the office
+-- assigns anyone. An upsert of an existing office task (marking it done) keeps its assignee.
+:as_tech_a
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values
+  ('17800000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 for tech2', 'a0000000-0000-0000-0000-000000000004'),
+  ('17800000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 mine', 'a0000000-0000-0000-0000-000000000003'),
+  ('17800000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 nobody', null);
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000003',
+  'T78 the tech inserts a task «for tech2»: it is his');
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003', 'his own: his');
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000003') is null, 'nobody: nobody');
+update public.tasks set assignee_id = 'a0000000-0000-0000-0000-000000000004' where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003',
+  'the author does not hand his task to another person (the assignee stays)');
+update public.tasks set assignee_id = null where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000002') is null, 'he may leave it to nobody');
+update public.tasks set assignee_id = 'a0000000-0000-0000-0000-000000000003' where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003', 'and take it back');
+-- the app's task.save is an upsert: the same, through on conflict
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values
+  ('17800000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 mine', 'a0000000-0000-0000-0000-000000000004')
+  on conflict (id) do update set assignee_id = excluded.assignee_id;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003',
+  'an upsert does not hand it to another person either');
+-- the office assigns anyone; the tech marks the office's task on his property done (upsert) — its assignee stays
+:as_office_a
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values
+  ('17800000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'property', 'd6700000-0000-4000-8000-000000000001', 'T78 office for tech2', 'a0000000-0000-0000-0000-000000000004');
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004', 'the office assigns another person');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where id = '17800000-0000-4000-8000-000000000004'$q$) = 1, 'the tech sees the task of a property he is at');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, done_at) values
+  ('17800000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'property', 'd6700000-0000-4000-8000-000000000001', 'T78 office for tech2', 'a0000000-0000-0000-0000-000000000004', now())
+  on conflict (id) do update set done_at = excluded.done_at, assignee_id = excluded.assignee_id;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004'
+  and (select done_at from public.tasks where id = '17800000-0000-4000-8000-000000000004') is not null,
+  'he marks it done through the upsert; the office''s assignee stays');
+-- security-check M1: not the author, he sends another assignee (himself / nobody) with «done» in one upsert — not refused
+-- (t05 would refuse it; t04 puts the assignee back first), the done mark is saved, the assignee stays the office's
+update public.tasks set done_at = null where id = '17800000-0000-4000-8000-000000000004';
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, done_at) values
+  ('17800000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'property', 'd6700000-0000-4000-8000-000000000001', 'T78 office for tech2', 'a0000000-0000-0000-0000-000000000003', now())
+  on conflict (id) do update set done_at = excluded.done_at, assignee_id = excluded.assignee_id;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004'
+  and (select done_at from public.tasks where id = '17800000-0000-4000-8000-000000000004') is not null,
+  'not the author: «Кто = me» with «done» — saved done, the office''s assignee stays (no refusal)');
+update public.tasks set assignee_id = null where id = '17800000-0000-4000-8000-000000000004';
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004',
+  'not the author: «nobody» is not taken either (no refusal, the assignee stays)');
+-- the second unique key and «do nothing» behave the same (security-check)
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, done_by) values
+  ('17800000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 by key', 'a0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004')
+  on conflict (company_id, id) do update set assignee_id = excluded.assignee_id;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000005') = 'a0000000-0000-0000-0000-000000000003'
+  and (select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000005') is null,
+  'on conflict (company_id, id): his, no forged «done by»');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values
+  ('17800000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 by key', 'a0000000-0000-0000-0000-000000000004')
+  on conflict do nothing;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000005') = 'a0000000-0000-0000-0000-000000000003', 'on conflict do nothing changes nothing');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_task_who()', 'execute') and not has_function_privilege('anon', 'app.tg_task_who()', 'execute'),
+  'the trigger function is not callable');
+\echo 'T78 outside the office a task is assigned only to oneself ok'
+
+-- ---------------------------------------------------------------- T79: S26 — «done by» is set by the server
+:as_tech_a
+select tst.ok((select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000003',
+  'T79 done by the one who marked it (the upsert above)');
+update public.tasks set done_at = now(), done_by = 'a0000000-0000-0000-0000-000000000004' where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003',
+  'a forged «done by» is replaced by the one who marked it');
+update public.tasks set done_by = 'a0000000-0000-0000-0000-000000000004' where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003',
+  '«done by» alone never changes');
+update public.tasks set done_at = null where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000002') is null, '«Вернуть»: not done, nobody');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, done_at, done_by) values
+  ('17900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T79 done at once', now(), 'a0000000-0000-0000-0000-000000000002');
+select tst.ok((select done_by from public.tasks where id = '17900000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000003',
+  'inserted done with another person as «done by»: the one who inserted it');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, done_by) values
+  ('17900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T79 open', 'a0000000-0000-0000-0000-000000000003');
+select tst.ok((select done_by from public.tasks where id = '17900000-0000-4000-8000-000000000002') is null, 'an open task has nobody as «done by»');
+:as_office_a
+update public.tasks set done_at = now() where id = '17900000-0000-4000-8000-000000000002';
+select tst.ok((select done_by from public.tasks where id = '17900000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000002', 'the office marks it: the office');
+-- a change of the title by the author keeps «done by»
+:as_tech_a
+update public.tasks set title = 'T79 open renamed' where id = '17900000-0000-4000-8000-000000000002';
+select tst.ok((select done_by from public.tasks where id = '17900000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000002', 'another change keeps «done by»');
+\echo 'T79 «done by» is set by the server ok'
+
 -- ---------------------------------------------------------------- T70: 3b-3 — «Весь день» у выезда (migration 20261107030000)
 :as_owner_a
 do $$ begin

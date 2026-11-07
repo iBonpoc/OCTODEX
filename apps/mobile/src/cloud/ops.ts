@@ -520,7 +520,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         supabase.from("tasks").upsert(
           {
             id: op.task.id, company_id: c, subject_type: op.task.subjectType, subject_id: op.task.subjectId, title: op.task.title,
-            due_at: op.task.dueAt ?? null, assignee_id: op.task.assigneeId ?? null, done_at: op.task.doneAt ?? null, done_by: op.task.doneAt ? userId : null,
+            due_at: op.task.dueAt ?? null, assignee_id: op.task.assigneeId ?? null, done_at: op.task.doneAt ?? null, // done_by: the server (S26, 20261107060000)
             ...taskTimeCols(op.task),
           },
           { onConflict: "id" },
