@@ -190,7 +190,9 @@ export default function NewJob() {
       <SectionTitle title={t("job3.new.job")} />
       <Card>
         <Labeled label={t("job3.new.title")}>
-          <TextField type="title" value={title} onChangeText={setTitle} placeholder={t("job3.new.titlePh")} />
+          <View testID="job-new-title">
+            <TextField type="title" value={title} onChangeText={setTitle} placeholder={t("job3.new.titlePh")} />
+          </View>
         </Labeled>
         {types.length ? (
           <Labeled label={t("job3.type")}>

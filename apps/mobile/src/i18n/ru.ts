@@ -1852,7 +1852,7 @@ export const ru = {
   "job3.new.newAddress": "Новый адрес",
   "job3.new.job": "Работа",
   "job3.new.title": "Название",
-  "job3.new.titlePh": "Например: ремонт водостока",
+  "job3.new.titlePh": "Например: ремонт после осмотра",
   "job3.new.later": "Назначить позже",
   "job3.new.date": "Дата и время",
   "job3.new.salesLater": "Дату и мастеров назначит офис — работа будет ждать даты",

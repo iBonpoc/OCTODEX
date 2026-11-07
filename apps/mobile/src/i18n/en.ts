@@ -1853,7 +1853,7 @@ export const en: Dict = {
   "job3.new.newAddress": "New address",
   "job3.new.job": "Job",
   "job3.new.title": "Name",
-  "job3.new.titlePh": "E.g. gutter repair",
+  "job3.new.titlePh": "E.g. Repair after inspection",
   "job3.new.later": "Schedule later",
   "job3.new.date": "Date and time",
   "job3.new.salesLater": "The office picks the date and crew — the job will wait for a date",
