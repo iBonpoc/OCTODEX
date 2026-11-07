@@ -144,7 +144,12 @@ const TIME_OPTS: Intl.DateTimeFormatOptions = { hour: "numeric", minute: "2-digi
 const DAY_OPTS: Intl.DateTimeFormatOptions = { weekday: "short", month: "short", day: "numeric" };
 /** «10:30 AM» — a moment on the company's clock (useI18n().time), en-US in every app language */
 export const timeLabel = (iso: string, tz: string = getZone()): string => zonedFormat(tz, TIME_OPTS).format(new Date(iso));
-/** «Fri, Nov 6» — the company's day of a moment (useI18n().day) */
-export const dayLabel = (iso: string, locale = "en-US", tz: string = getZone()): string => zonedFormat(tz, DAY_OPTS, locale).format(new Date(iso));
 /** «Fri, Nov 6» — a calendar day of «План» and the form's chips (useI18n().dayOf) */
 export const dayKeyLabel = (k: DayKey, locale = "en-US"): string => formatDayKey(k, DAY_OPTS, locale);
+/**
+ * «Fri, Nov 6» — the company's day of a moment (useI18n().day). A calendar day «YYYY-MM-DD» (invoices.due_date,
+ * leads.timeframe_date and every other date column) is that day as it is: `new Date("2026-11-06")` is UTC midnight,
+ * which is Nov 5 in Los Angeles (found by e2e 103 against a real Supabase, 07.11).
+ */
+export const dayLabel = (iso: string, locale = "en-US", tz: string = getZone()): string =>
+  /^\d{4}-\d{2}-\d{2}$/.test(iso) ? dayKeyLabel(iso, locale) : zonedFormat(tz, DAY_OPTS, locale).format(new Date(iso));
