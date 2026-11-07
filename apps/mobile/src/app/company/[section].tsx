@@ -168,6 +168,15 @@ export default function CompanySection() {
       {step === "brand" ? <BrandEditor draft={draft} set={set} /> : null}
 
       {step === "trades" ? <ServiceCategoryEditor /> : null}
+      {/* add-on modules of a direction (docs/specs/33 П15): their own screen, not a step of the first-run setup */}
+      {step === "trades" && !wizard ? (
+        <View testID="trades-modules">
+          <Card onPress={() => router.push("/company/modules")} accessibilityLabel={t("mod.title")}>
+            <T v="body" w="semibold">{t("mod.title")}</T>
+            <T v="caption" tone="mut">{t("mod.tradesLink")}</T>
+          </Card>
+        </View>
+      ) : null}
 
       {step === "documents" ? (
         <>

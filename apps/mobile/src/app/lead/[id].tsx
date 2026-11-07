@@ -25,6 +25,7 @@ import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } 
 import { useTheme } from "@/theme/ThemeProvider";
 import type { StatusName } from "@octo/design-tokens";
 import { memberLabel } from "@/features/team";
+import { ModulePlaces } from "@/modules/ModulePlaces";
 import { liveAssignees } from "@/features/schedule";
 
 type Tab = "overview" | "history" | "tasks" | "estimates" | "files";
@@ -142,6 +143,8 @@ export default function LeadScreen() {
         <ItemCard title={turn.title} subtitle={turn.dueAt ? `${t("lead.nextTask")} · ${day(turn.dueAt)}` : t("lead.nextTask")} status={turn.status === "bad" ? "bad" : undefined} onPress={() => setTab("tasks")} />
       ) : null}
 
+      {/* add-on modules' place (docs/specs/33 П15): nothing unless a module is switched on */}
+      <ModulePlaces place="lead" ctx={{ leadId: l.id, customerId: l.customerId, propertyId: l.propertyId }} />
       <Segmented
         full
         value={tab}
