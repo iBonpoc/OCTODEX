@@ -4,7 +4,7 @@ import { EstimatesBoard } from "@/features/boards";
 import { Button } from "@/ui/controls";
 import { Screen } from "@/ui/surfaces";
 
-/** All estimates (for roles without the Sales tab). */
+/** «Сметы»: all estimates, a section of its own for every role (founder 07.11, spec 31 §7а). */
 export default function Estimates() {
   const { t } = useI18n();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));

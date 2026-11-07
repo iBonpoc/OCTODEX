@@ -522,7 +522,7 @@ export const en: Dict = {
   "money.paidOn": "Paid {date}",
   "money.deposit": "Deposit",
   "money.empty": "No invoices",
-  "help.money": "All invoices, overdue first. Take a payment in one step or send a reminder.",
+  "help.money": "All company expenses by month: fuel, materials, subcontractors. «Expense» adds a new one with a receipt. Client invoices are in «Invoices».",
   "more.money": "Money and invoices",
   "draw.title": "Photo drawing",
   "draw.photo": "House photo",
@@ -1541,6 +1541,12 @@ export const en: Dict = {
   "card.val.price": "price",
   "card.queued": "Not sent · waiting for network",
   "card.tag.estimateSent": "Estimate sent · {n}",
+  // card.filter.* — filters over a list (spec 31)
+  "card.filter.remove": "Remove filter: {v}",
+  "card.filter.people": "Assigned to",
+  "card.filter.sources": "Source",
+  "card.filter.searchEstimates": "Client, address, work, EST",
+  "card.filter.searchInvoices": "Client, address, work, INV",
   "card.emptyFilter": "Nobody in this filter",
   "card.sign.noNextStep": "No next step",
   "card.group.action": "Needs action",
@@ -1608,6 +1614,14 @@ export const en: Dict = {
   "late.unassignedTomorrowChip": "Unassigned · tomorrow",
   // route-guard (screens by role)
   "guard.noAccess": "No access to this screen — opened your home screen",
+  // co.leads («Лиды и клиенты»: «Компания → Лиды», docs/14-leads-spec.md §6.1, §6.4)
+  "co.leads.title": "Leads",
+  "co.leads.hint": "Who gets new leads.",
+  "co.leads.assignee": "Who gets new leads",
+  "co.leads.assigneeHint": "A new lead goes straight to this person. If they are switched off or leave the company, leads go to the owner.",
+  "co.leads.owner": "Owner (default)",
+  "co.leads.ownerNow": "Now: the owner — {name}",
+  "co.leads.change": "Change",
   // schs (П4a: «Компания → Расписание», docs/specs/03 §6.1)
   "schs.title": "Schedule",
   "schs.hint": "Time zone, working hours, visit lengths, the client's window, «Running late».",

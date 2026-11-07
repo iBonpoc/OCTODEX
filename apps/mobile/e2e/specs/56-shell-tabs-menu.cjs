@@ -71,19 +71,13 @@ exports.run = async (h) => {
   else h.expect((await menu().locator('[aria-current="page"]').innerText()).includes("Счета"), "«Счета» is marked as the current item");
   await m.close();
 
-  // the Sales list switched by its own segment, then «Сметы» again: the list follows (failed before: the address kept ?tab)
+  // «Сметы» is a section of its own (founder 07.11, spec 31 §7а): its own screen, no Leads · Estimates · Invoices switch
   await openMenu();
   await menu().getByRole("button", { name: "Сметы", exact: true }).click();
   await p.waitForTimeout(600);
-  h.expect(p.url().includes("tab=estimates"), `Сметы → /leads?tab=estimates (${p.url()})`);
-  // the visible segment (the «Ещё» screen stays mounted, hidden, with its own «Счета» tile)
-  await p.getByRole("tab", { name: "Счета", exact: true }).locator("visible=true").first().click();
-  await p.waitForTimeout(400);
-  h.expect(p.url().includes("tab=invoices"), `the segment writes the address (${p.url()})`);
-  await openMenu();
-  await menu().getByRole("button", { name: "Сметы", exact: true }).click();
-  await p.waitForTimeout(600);
-  await h.expectText(/Открытые · \d+/, "«Сметы» switches the list back");
+  h.expect(path(h) === "/estimates", `Сметы → /estimates (${p.url()})`);
+  await h.expectText(/Открытые · \d+/, "the estimates list is open");
+  h.expect((await p.getByRole("tab", { name: "Лиды", exact: true }).locator("visible=true").count()) === 0, "no Leads · Estimates · Invoices switch");
 
   // a ☰ item opened from a tab goes on top: browser / system back returns (failed before: replace closed the app)
   await h.go("/today");
@@ -109,9 +103,13 @@ exports.run = async (h) => {
   await h.go("/p/demo0handyman0estimate0000000001");
   h.expect((await p.getByRole("button", { name: "Меню", exact: true }).count()) === 0 && (await p.getByTestId("side-nav").count()) === 0, "no ☰ and no side menu on the client page");
 
-  // old addresses keep working: /inbox?tab=… → /leads?tab=…
+  // old addresses keep working: /inbox?tab=estimates → /leads?tab=estimates → the «Сметы» section (spec 31 §7а)
   await h.go("/inbox?tab=estimates");
-  h.expect(p.url().includes("/leads?tab=estimates"), `/inbox → /leads (${p.url()})`);
+  await p.waitForTimeout(600);
+  h.expect(path(h) === "/estimates", `/inbox?tab=estimates → /estimates (${p.url()})`);
+  await h.go("/leads?tab=invoices");
+  await p.waitForTimeout(600);
+  h.expect(path(h) === "/invoice", `/leads?tab=invoices → /invoice (${p.url()})`);
 
   // Calls: the demo's call to a lead, with who made it; the technician sees only his own
   const db = await h.db();

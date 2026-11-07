@@ -521,7 +521,7 @@ export const ru = {
   "money.paidOn": "Оплачено {date}",
   "money.deposit": "Депозит",
   "money.empty": "Счетов нет",
-  "help.money": "Все счета: просроченные сверху. Примите оплату в один шаг или отправьте напоминание.",
+  "help.money": "Все расходы компании по месяцам: бензин, материалы, субподряд. «Расход» — записать новый с чеком. Счета клиентов — в разделе «Счета».",
   "more.money": "Деньги и счета",
   "draw.title": "Чертёж по фото",
   "draw.photo": "Фото дома",
@@ -1540,6 +1540,12 @@ export const ru = {
   "card.val.price": "цена",
   "card.queued": "Не отправлено · ждёт сети",
   "card.tag.estimateSent": "Смета отправлена · {n}",
+  // card.filter.* — filters over a list (spec 31)
+  "card.filter.remove": "Убрать фильтр: {v}",
+  "card.filter.people": "Ответственный",
+  "card.filter.sources": "Источник",
+  "card.filter.searchEstimates": "Клиент, адрес, работа, EST",
+  "card.filter.searchInvoices": "Клиент, адрес, работа, INV",
   "card.emptyFilter": "В этом отборе никого нет",
   "card.sign.noNextStep": "Нет следующего шага",
   "card.group.action": "Нужно действие",
@@ -1607,6 +1613,14 @@ export const ru = {
   "late.unassignedTomorrowChip": "Не назначен · завтра",
   // route-guard (screens by role)
   "guard.noAccess": "Нет доступа к этому экрану — открыт ваш главный экран",
+  // co.leads («Лиды и клиенты»: «Компания → Лиды», docs/14-leads-spec.md §6.1, §6.4)
+  "co.leads.title": "Лиды",
+  "co.leads.hint": "Кому назначать новые лиды.",
+  "co.leads.assignee": "Кому назначать новые лиды",
+  "co.leads.assigneeHint": "Новый лид сразу попадает к этому человеку. Если его отключили или он ушёл из компании, лиды идут владельцу.",
+  "co.leads.owner": "Владелец (по умолчанию)",
+  "co.leads.ownerNow": "Сейчас: владелец — {name}",
+  "co.leads.change": "Изменить",
   // schs (П4a: «Компания → Расписание», docs/specs/03 §6.1)
   "schs.title": "Расписание",
   "schs.hint": "Часовой пояс, рабочие часы, длительность выездов, окно для клиента, «Опаздывает».",

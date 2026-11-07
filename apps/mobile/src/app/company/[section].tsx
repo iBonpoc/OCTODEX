@@ -54,8 +54,9 @@ export default function CompanySection() {
     else back();
   };
   const save = () => {
-    // the time zone and the schedule are saved by «Расписание» (П4a): a section opened before must not roll them back
-    const { licenses: _l, contacts: _c, id: _i, timezone: _tz, scheduleSettings: _s, businessHours: _h, ...patch } = draft;
+    // the time zone and the schedule are saved by «Расписание» (П4a), the lead assignee by «Продажи»: a section opened
+    // before must not roll them back
+    const { licenses: _l, contacts: _c, id: _i, timezone: _tz, scheduleSettings: _s, businessHours: _h, leadDefaultAssigneeId: _a, ...patch } = draft;
     const undo = store.saveCompany({ ...patch, skipped: draft.skipped.filter((s) => s !== step) });
     toast.show(store.online ? t("co.saved") : t("offline.queued"), undo);
     goNext();

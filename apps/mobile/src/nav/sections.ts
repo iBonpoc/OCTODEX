@@ -76,7 +76,7 @@ export const SECTIONS: readonly Section[] = [
   { id: "more", label: "nav.more", icon: "more", group: "bottom", tab: true, phoneOnly: true },
 ];
 
-/** Where a section opens for this role. Home = the role's own home screen; Sales lists live on /leads. */
+/** Where a section opens for this role. Home = the role's own home screen; Leads, Estimates, Invoices — each its own screen. */
 export function sectionHref(id: SectionId, role: Role): string {
   switch (id) {
     case "home":
@@ -84,8 +84,8 @@ export function sectionHref(id: SectionId, role: Role): string {
     case "leads":
       return "/leads?tab=leads";
     case "estimates":
-      // the technician has no Sales lists: his own estimates screen
-      return role === "tech" ? "/estimates" : "/leads?tab=estimates";
+      // a section of its own for every role (founder 07.11, spec 31 §7а); /leads holds the leads only
+      return "/estimates";
     case "invoices":
       // the one path to debts (18 §1): the list opens on «Не оплачен · Просрочен»
       return "/invoice";
@@ -258,7 +258,7 @@ export function fabItems(set: FabSet, role: Role, ctx: FabCtx = {}): FabItem[] {
 
 /**
  * The address a tile of «Ещё» opens (docs/specs/28 §3, the director's decision 07.11). A section that lives on a tab
- * screen but is not this role's home (office: Leads, Estimates on /leads) gets `from=more`: the screen then shows
+ * screen but is not this role's home (office: Leads) gets `from=more`: the screen then shows
  * «‹ Ещё», and with the tabs' history the system back / Android back returns to «Ещё». The role's home (sales: Leads)
  * stays as it is.
  */
