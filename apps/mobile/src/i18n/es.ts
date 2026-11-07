@@ -291,6 +291,8 @@ export const es: Dict = {
   "inbox.book": "Agendar visita",
   "inbox.empty": "No hay solicitudes nuevas",
   "inbox.emptyHint": "Las solicitudes de Thumbtack, Yelp, Google y su sitio llegan aquí.",
+  // leads.* («Лиды и клиенты»: «Лиды» мастера, спека 13 §2.3)
+  "leads.empty.tech": "Aquí aparecen los leads que usted registró o que le asignaron.",
   "inbox.autoReply": "¡Hola! Gracias por escribirnos. Podemos ir mañana para un presupuesto gratis. ¿Le queda mejor en la mañana o en la tarde?",
 
   "plan.title": "Agenda",
