@@ -290,6 +290,14 @@ const reId = (doc: EstimateDoc): EstimateDoc => ({
   ...doc,
   options: doc.options.map((o) => ({ ...o, id: uid(), lines: o.lines.map((l) => ({ ...l, id: uid() })) })),
 });
+/** an outbox op with whose it is (the outbox key is one for the phone) */
+export type OwnedItem = OutboxItem & { owner?: { userId: string; companyId: string } };
+/**
+ * The ops the signed-in person sends: theirs in this company, in order. Another person's (or another company's) wait
+ * for their owner and are never lost. Ops of older versions carry no owner: they go as before (once, after the update).
+ */
+export const mineOf = (items: readonly OwnedItem[], who: { userId: string; companyId: string } | null): OwnedItem[] =>
+  who ? items.filter((o) => !o.owner || (o.owner.userId === who.userId && o.owner.companyId === who.companyId)) : [];
 const costsOf = (doc: EstimateDoc): Record<string, number> =>
   Object.fromEntries(doc.options.flatMap((o) => o.lines.filter((l) => l.unitCostCents !== undefined).map((l) => [l.id, l.unitCostCents!])));
 
@@ -343,7 +351,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [savedRole, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "director");
   const [online, setOnlineState] = useState(true);
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
-  const [outbox, setOutbox, outboxReady] = usePersistentState<OutboxItem[]>("octo.outbox.v1", []);
+  const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>("octo.outbox.v1", []);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const dbRef = useRef(db);
@@ -352,6 +360,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   onlineRef.current = online;
   const outboxRef = useRef(outbox);
   outboxRef.current = outbox;
+  // the outbox key is one for the phone: each op knows whose it is, the signed-in person sends only theirs
+  // (review #231: after a plain sign-out the next person must never send someone else's ops in their company)
+  const who = mode === "cloud" ? { userId: auth.userId!, companyId: company!.companyId } : null;
+  const whoRef = useRef(who);
+  whoRef.current = who;
+  const mine = (items: readonly OwnedItem[]) => mineOf(items, whoRef.current);
   const modeRef = useRef(mode);
   modeRef.current = mode;
 
@@ -365,7 +379,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   /* ---------- server sync ---------- */
   const refresh = useCallback(async () => {
     if (modeRef.current !== "cloud" || !company || !auth.userId || !onlineRef.current) return;
-    if (outboxRef.current.length) return; // send pending changes first, then reload
+    if (mine(outboxRef.current).length) return; // send pending changes first, then reload
     const gen = deviceGeneration();
     if (stale(gen)) return;
     setLoading(true);
@@ -373,7 +387,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const next = await loadCompanyDB(company.companyId, auth.userId);
       // signed out, another company or the device wiped while it loaded: the answer is not for this store (19 §6.12)
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
-      if (!outboxRef.current.length) setDb(next);
+      if (!mine(outboxRef.current).length) setDb(next);
       setSyncError(null);
     } catch (e) {
       setSyncError(e instanceof Error ? e.message : String(e));
@@ -412,7 +426,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const sendWaitingPoints = useCallback(() => {
     if (!onlineRef.current) return;
     for (const [visitId, w] of Object.entries(waitingPoints.current)) {
-      if (stepPending(outboxRef.current, visitId)) continue;
+      if (stepPending(mine(outboxRef.current), visitId)) continue;
       const { [visitId]: _sent, ...rest } = waitingPoints.current;
       waitingPoints.current = rest;
       sendPoint(w.p, w.source);
@@ -428,7 +442,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     let dropped = false;
     try {
       for (;;) {
-        const item = outboxRef.current[0];
+        const item = mine(outboxRef.current)[0];
         // the toast's «Отменить» window first: an undone op never reaches the server
         if (!item || !readyToSend(item, Date.now())) break;
         try {
@@ -436,7 +450,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
           if (stale(gen)) return;
           sentAny = true;
-          outboxRef.current = outboxRef.current.slice(1);
+          outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
           setOutbox(outboxRef.current);
         } catch (e) {
           // a send that fails because the account is gone must not put the deleted person's op back (review #231)
@@ -445,10 +459,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           setSyncError(msg);
           if (e instanceof PermanentError || item.tries >= 5) {
             // Will never succeed: drop it and reload the truth from the server.
-            outboxRef.current = outboxRef.current.slice(1);
+            outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
           } else {
-            outboxRef.current = [{ ...item, tries: item.tries + 1, error: msg }, ...outboxRef.current.slice(1)];
+            outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...item, tries: item.tries + 1, error: msg } : x));
           }
           setOutbox(outboxRef.current);
           break;
@@ -460,14 +474,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     // a dropped op left the phone ahead of the server: reload the truth
     if (stale(gen)) return;
-    if ((sentAny && !outboxRef.current.length) || dropped) await refresh();
+    if ((sentAny && !mine(outboxRef.current).length) || dropped) await refresh();
   }, [company, auth.userId, setOutbox, refresh, sendWaitingPoints]);
 
   useEffect(() => {
     if (mode !== "cloud") return;
     refresh();
     const tick = setInterval(() => {
-      if (outboxRef.current.length) flush();
+      if (mine(outboxRef.current).length) flush();
     }, 1500);
     const poll = setInterval(refresh, 30_000);
     return () => {
@@ -488,7 +502,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let oid: string | null = null;
       if (modeRef.current === "cloud" && op) {
         oid = uid();
-        outboxRef.current = [...outboxRef.current, { id: oid, op, at: new Date().toISOString(), tries: 0 }];
+        outboxRef.current = [...outboxRef.current, { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}) }];
         setOutbox(outboxRef.current);
       } else if (!onlineRef.current) {
         qid = uid();
@@ -559,7 +573,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const pendingQueue: QueuedAction[] =
-    mode === "cloud" ? outbox.map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
+    mode === "cloud" ? mineOf(outbox, who).map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
   /** wave 6-2: the change and the op are pure (features/comms/contactEvents.ts); a call always has its outcome */
   const touchLead = (id: ID, t: LeadTouch): Undo => {
@@ -844,7 +858,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             sendNow: (v) => (cid && auth.userId ? applyOp({ k: "me.location", on: v }, cid, auth.userId) : Promise.reject(new Error("no company"))),
             enqueue: (op) => {
               const oid = uid();
-              outboxRef.current = [...outboxRef.current, { id: oid, op, at: new Date().toISOString(), tries: 0 }];
+              outboxRef.current = [...outboxRef.current, { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}) }];
               setOutbox(outboxRef.current);
               return () => {
                 // only while it waits in the «Отменить» window (it has not left the phone)
@@ -865,7 +879,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (modeRef.current !== "cloud") return;
         // the step («on the way») waits in the queue for its «Отменить» window: the server would refuse a point for a
         // visit that is not under way yet — keep the point and send it once the step has left (flush)
-        if (stepPending(outboxRef.current, p.visitId) || !onlineRef.current) {
+        if (stepPending(mine(outboxRef.current), p.visitId) || !onlineRef.current) {
           waitingPoints.current = { ...waitingPoints.current, [p.visitId]: { p, source } };
           return;
         }
