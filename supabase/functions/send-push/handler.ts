@@ -93,6 +93,8 @@ export const TITLES: Record<string, Record<Lang, string>> = {
   "visit.assigned": { en: "New visit assigned", es: "Nueva visita asignada", ru: "Назначен новый выезд" },
   "visit.rescheduled": { en: "Visit rescheduled", es: "Visita reprogramada", ru: "Выезд перенесён" },
   "lead.new": { en: "New lead", es: "Nuevo cliente potencial", ru: "Новый лид" },
+  "lead.assigned": { en: "Lead assigned to you", es: "Cliente potencial asignado a ti", ru: "Вам назначен лид" },
+  "estimate.viewed": { en: "Estimate opened", es: "Presupuesto abierto", ru: "Смету открыли" },
 };
 const FALLBACK: Record<Lang, string> = { en: "New notification", es: "Nueva notificación", ru: "Новое уведомление" };
 
