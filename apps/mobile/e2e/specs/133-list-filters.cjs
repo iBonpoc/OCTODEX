@@ -14,6 +14,9 @@ const LISTS = [
   // PR 3: «Сметы» and «Счета» — sections of their own with a search; nothing in the sheet yet (no «Фильтр» button)
   { path: "/estimates", search: "Клиент, адрес, работа, EST" },
   { path: "/invoice", search: "Клиент, адрес, работа, INV" },
+  // PR 5: «Задачи» («Только мои» in the sheet), «Каталог» (kinds, no sheet)
+  { path: "/tasks", search: "Искать задачу", group: "Чьи", card: '[data-testid^="task-"]' },
+  { path: "/catalog", search: "Поиск в каталоге" },
 ];
 
 exports.run = async (h) => {
@@ -37,7 +40,7 @@ exports.run = async (h) => {
     const rowsOver = h.layout.width === 1280 ? (Math.abs(field.y + field.height / 2 - (lane.y + lane.height / 2)) <= 8 ? 1 : 2) : lane.y > field.y + field.height - 1 ? 2 : 1;
     h.expect(rowsOver <= 2, `${L.path}: at most two rows over the list (${rowsOver})`);
     if (h.layout.width === 1280) h.expect(rowsOver === 1, `${L.path}: 1280 — the search and the lane in one row`);
-    const first = await vis(p.locator('[data-testid="list-card"]')).first().boundingBox();
+    const first = await vis(p.locator(L.card ?? '[data-testid="list-card"]')).first().boundingBox();
     if (h.layout.width === 390) h.expect(first && first.y < 844 * 0.4, `${L.path}: 390 — the first card in the top 40 % (${first && first.y})`);
 
     // no empty chip but the chosen one
@@ -60,7 +63,7 @@ exports.run = async (h) => {
     }
 
     // the sheet: an option on → the chosen line → the list narrows → ✕
-    const before = await vis(p.locator('[data-testid="list-card"]')).count();
+    const before = await vis(p.locator(L.card ?? '[data-testid="list-card"]')).count();
     const open = h.layout.width === 1280 ? vis(bar.getByTestId(/^filter-group-/)).first() : vis(bar.getByTestId("filter-button")).first();
     await open.click(); await p.waitForTimeout(400);
     const rows = h.sheet().getByRole("checkbox");
@@ -76,7 +79,7 @@ exports.run = async (h) => {
     const chosen = vis(p.getByTestId("filter-chosen")).first();
     h.expect((await chosen.getByRole("button", { name: `Убрать фильтр: ${name}` }).count()) === 1, `${L.path}: the chosen line «${name} ✕»`);
     h.expect((await vis(p.getByRole("button", { name: "Фильтры, включено: 1" })).count()) >= 1, `${L.path}: the button says how many are on`);
-    const after = await vis(p.locator('[data-testid="list-card"]')).count();
+    const after = await vis(p.locator(L.card ?? '[data-testid="list-card"]')).count();
     h.expect(after <= before && after <= n, `${L.path}: the list narrows (${before} → ${after}, option ${n})`);
     await h.shot(`${L.path.slice(1)}-chosen`);
 
@@ -89,6 +92,6 @@ exports.run = async (h) => {
     // ✕ takes it off
     await vis(p.getByTestId("filter-chosen")).first().getByRole("button", { name: `Убрать фильтр: ${name}` }).click(); await p.waitForTimeout(300);
     h.expect((await vis(p.getByTestId("filter-chosen")).count()) === 0, `${L.path}: ✕ — the line is gone`);
-    h.expect((await vis(p.locator('[data-testid="list-card"]')).count()) === before, `${L.path}: the list is whole again`);
+    h.expect((await vis(p.locator(L.card ?? '[data-testid="list-card"]')).count()) === before, `${L.path}: the list is whole again`);
   }
 };

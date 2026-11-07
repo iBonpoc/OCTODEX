@@ -4,7 +4,8 @@ import type { Payment, PaymentMethod } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { asPaymentPeriod, canSeePayments, PAYMENT_PERIODS, paymentsIn, type PaymentPeriod } from "@/features/moneyLists";
 import { useDevice } from "@/theme/ThemeProvider";
-import { ChoiceChips, Segmented } from "@/ui/controls";
+import { Segmented } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
 import { T } from "@/ui/primitives";
 import { Card, CardList, Empty, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
@@ -71,14 +72,22 @@ export default function Payments() {
         <T v="caption" tone="mut">{t("mny.collected", { n: all.items.length })}</T>
         <T v="display" tabular>{money(all.totalCents)}</T>
       </Card>
+      {/* spec 31 §7: the period stays the switch (5 segments, HIG ≤ 5); the method went to the sheet — one at a time,
+          it lives in the address (?m=) like the period */}
       {all.byMethod.length > 1 ? (
-        <ChoiceChips<string>
-          value={method ?? "all"}
-          onChange={(k) => router.setParams({ m: k === "all" ? "" : k })}
-          items={[
-            { key: "all", label: `${t("mny.method.all")} · ${moneyWhole(all.totalCents)}` },
-            ...all.byMethod.map((b) => ({ key: b.key, label: `${t(`pay.${b.key}` as DictKey)} · ${moneyWhole(b.cents)}` })),
+        <FilterBar<string>
+          items={[]}
+          value=""
+          onChange={() => undefined}
+          groups={[
+            {
+              key: "method",
+              title: t("card.filter.method"),
+              options: all.byMethod.map((b) => ({ key: b.key, label: `${t(`pay.${b.key}` as DictKey)} · ${moneyWhole(b.cents)}`, count: all.items.filter((x) => x.method === b.key).length, on: method === b.key })),
+              onToggle: (k) => router.setParams({ m: method === k ? "" : k }),
+            },
           ]}
+          onReset={() => router.setParams({ m: "" })}
         />
       ) : null}
       {v.items.length === 0 ? (

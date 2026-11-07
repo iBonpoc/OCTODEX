@@ -1546,6 +1546,8 @@ export const ru = {
   "card.filter.sources": "Источник",
   "card.filter.searchEstimates": "Клиент, адрес, работа, EST",
   "card.filter.searchInvoices": "Клиент, адрес, работа, INV",
+  "card.filter.whose": "Чьи",
+  "card.filter.method": "Способ оплаты",
   "card.emptyFilter": "В этом отборе никого нет",
   "card.sign.noNextStep": "Нет следующего шага",
   "card.group.action": "Нужно действие",

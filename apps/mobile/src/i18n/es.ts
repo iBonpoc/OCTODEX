@@ -1547,6 +1547,8 @@ export const es: Dict = {
   "card.filter.sources": "Origen",
   "card.filter.searchEstimates": "Cliente, dirección, trabajo, EST",
   "card.filter.searchInvoices": "Cliente, dirección, trabajo, INV",
+  "card.filter.whose": "De quién",
+  "card.filter.method": "Forma de pago",
   "card.emptyFilter": "Nadie en este filtro",
   "card.sign.noNextStep": "Sin siguiente paso",
   "card.group.action": "Requiere acción",
