@@ -7244,16 +7244,25 @@ insert into public.notifications (id, company_id, kind, estimate_id) values
   ('08900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e890000-0000-4000-8000-000000000002');
 select tst.ok((select count(*) from public.push_outbox where notification_id in ('08900000-0000-4000-8000-000000000001', '08900000-0000-4000-8000-000000000002')
                 and user_id = 'a8900000-0000-4000-8000-000000000001') = 2, 'T89 both signatures are queued for the author');
+insert into public.push_prefs (company_id, user_id, kind, enabled) values ('ca000000-0000-0000-0000-000000000000', 'a8900000-0000-4000-8000-000000000001', 'viewed', true);
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08900000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e890000-0000-4000-8000-000000000001');
+select tst.ok(exists (select 1 from public.push_outbox where notification_id = '08900000-0000-4000-8000-000000000003' and user_id = 'a8900000-0000-4000-8000-000000000001'),
+          'T89 «opened» is queued for the author who switched it on');
 update public.estimates set deleted_at = now() where id = '0e890000-0000-4000-8000-000000000001';
 select tst.ok(not (select app.push_still_recipient(o) from public.push_outbox o
                     where o.notification_id = '08900000-0000-4000-8000-000000000001' and o.user_id = 'a8900000-0000-4000-8000-000000000001'),
           'T89 the estimate deleted after the queue: the author no longer gets it');
 select tst.ok(not exists (select 1 from public.push_outbox o where o.notification_id = '08900000-0000-4000-8000-000000000001' and app.push_still_recipient(o)),
           'T89 …nor the owner or anyone else');
+select tst.ok(not (select app.push_still_recipient(o) from public.push_outbox o
+                    where o.notification_id = '08900000-0000-4000-8000-000000000003' and o.user_id = 'a8900000-0000-4000-8000-000000000001'),
+          'T89 «opened» about the deleted estimate is skipped too');
 select tst.ok((select bool_and(app.push_still_recipient(o)) from public.push_outbox o where o.notification_id = '08900000-0000-4000-8000-000000000002'),
           'T89 the estimate that is not deleted still goes to everyone queued');
 -- clean up
 delete from public.push_outbox;
+delete from public.push_prefs where user_id = 'a8900000-0000-4000-8000-000000000001';
 update public.estimates set deleted_at = now() where id::text like '0e890000-%';
 update public.memberships set status = 'disabled' where user_id = 'a8900000-0000-4000-8000-000000000001';
 \echo 'T89 no push about an estimate deleted after the queue ok'
