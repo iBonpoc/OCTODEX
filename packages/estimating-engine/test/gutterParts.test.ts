@@ -27,7 +27,7 @@ describe("computeGutterParts — one straight run", () => {
     expect(parts.find((p) => p.key === "coil.k.6.alu_032.white")!.use).toBe("purchase");
   });
   it("hidden hangers every 24 in; a left and a right end cap", () => {
-    expect(q(parts, "hanger.hidden.k.6")).toBe("20");
+    expect(q(parts, "hanger.hidden.aluminum.k.6")).toBe("20");
     expect(q(parts, "endcap.L.k.6.alu_032.white")).toBe("1");
     expect(q(parts, "endcap.R.k.6.alu_032.white")).toBe("1");
   });
@@ -35,11 +35,11 @@ describe("computeGutterParts — one straight run", () => {
     expect(q(parts, "ds.rect.3x4.alu.white")).toBe("10");
     expect(q(parts, "dsstick.rect.3x4.alu.white")).toBe("1");
     // П18.7: the strap is a kit — strap + 2 wall screws + 2 downspout screws
-    expect(q(parts, "ds_strap.rect.3x4")).toBe("2");
+    expect(q(parts, "ds_strap.aluminum.rect.3x4")).toBe("2");
     expect(q(parts, "screw.10x15")).toBe("4");
     expect(q(parts, "screw.8x05")).toBe("4");
-    expect(q(parts, "outlet.k.6.rect.3x4")).toBe("1");
-    expect(q(parts, "elbow.A.rect.3x4.white")).toBe("3");
+    expect(q(parts, "outlet.k.6.alu_032.white.rect.3x4")).toBe("1");
+    expect(q(parts, "elbow.A.rect.3x4.alu.white")).toBe("3");
     expect(q(parts, "bottom.extension.rect.3x4")).toBe("1");
   });
   it("labor is separate lines: install by story, downspout by story, tear-off (founder О4)", () => {
@@ -152,11 +152,11 @@ describe("downspouts", () => {
       corners: [],
       downspouts: [ds({ id: "d", runId: "1", shape: "round", size: "3", material: "copper", color: undefined, elbows: [{ style: "75", qty: 2 }, { style: "90", qty: 1 }], offsets: [{ lengthIn: 2, qty: 1 }, { lengthIn: 7, qty: 1 }], funnel: true, outletScreen: true, bottom: { kind: "drain", lengthIn: 60 } })],
     });
-    expect(q(parts, "elbow.75.round.3.-")).toBe("2");
-    expect(q(parts, "elbow.90.round.3.-")).toBe("1");
-    expect(parts.find((p) => p.key === "offset.7.round.3")!.attrs.custom).toBe("1");
-    expect(parts.find((p) => p.key === "offset.2.round.3")!.attrs.custom).toBeUndefined();
-    expect(q(parts, "funnel.round.3")).toBe("1");
+    expect(q(parts, "elbow.75.round.3.copper.-")).toBe("2");
+    expect(q(parts, "elbow.90.round.3.copper.-")).toBe("1");
+    expect(parts.find((p) => p.key === "offset.7.round.3.copper.-")!.attrs.custom).toBe("1");
+    expect(parts.find((p) => p.key === "offset.2.round.3.copper.-")!.attrs.custom).toBeUndefined();
+    expect(q(parts, "funnel.round.3.copper.-")).toBe("1");
     expect(q(parts, "outletscreen.round.3")).toBe("1");
     expect(q(parts, "bottom.drain.round.3")).toBe("5");
     expect(q(parts, "bottom.drain_adapter.round.3")).toBe("1");
@@ -189,8 +189,8 @@ describe("rules a company can change", () => {
   });
   it("company spacing by kit: spike every 30 in → 16 spikes and 16 ferrules", () => {
     const { parts } = computeGutterParts({ runs: [run({ id: "1", lengthIn: 480, hanger: "spike" })], corners: [], downspouts: [] }, { hangerSpacingIn: { spike: 30 } });
-    expect(q(parts, "spike.k.6")).toBe("16");
-    expect(q(parts, "ferrule.k.6")).toBe("16");
+    expect(q(parts, "spike.aluminum.k.6")).toBe("16");
+    expect(q(parts, "ferrule.aluminum.k.6")).toBe("16");
   });
   it("guards on part of a run", () => {
     const { parts } = computeGutterParts({ runs: [run({ id: "1", lengthIn: 480, guardsIn: 120, guardType: "micromesh" })], corners: [], downspouts: [] });
@@ -264,22 +264,22 @@ describe("П18: stock — material, gauge, finish; coil blank", () => {
 describe("П18.6: hanger kits", () => {
   it("hidden without a screw takes a #10 speed screw each", () => {
     const { parts } = one({ hanger: "hidden_noscrew" });
-    expect(q(parts, "hanger.hidden_noscrew.k.6")).toBe("20");
+    expect(q(parts, "hanger.hidden_noscrew.aluminum.k.6")).toBe("20");
     expect(q(parts, "screw.10x15")).toBe("20");
   });
   it("spike and ferrule in pairs", () => {
     const { parts } = one({ hanger: "spike" });
-    expect(q(parts, "spike.k.6")).toBe("20");
-    expect(q(parts, "ferrule.k.6")).toBe("20");
+    expect(q(parts, "spike.aluminum.k.6")).toBe("20");
+    expect(q(parts, "ferrule.aluminum.k.6")).toBe("20");
     expect(q(parts, "hanger.spike.k.6")).toBeUndefined();
   });
   it("+1 hanger per run (company) and the run's own spacing (snow, wind)", () => {
-    expect(q(one({}, [], { hangerExtraPerRun: 1 }).parts, "hanger.hidden.k.6")).toBe("21");
-    expect(q(one({ hangerSpacingIn: 18 }).parts, "hanger.hidden.k.6")).toBe("27");
+    expect(q(one({}, [], { hangerExtraPerRun: 1 }).parts, "hanger.hidden.aluminum.k.6")).toBe("21");
+    expect(q(one({ hangerSpacingIn: 18 }).parts, "hanger.hidden.aluminum.k.6")).toBe("27");
   });
   it("tile: T-bar strap with screws and a tile labor line", () => {
     const { parts } = one({ hanger: "tbar_strap" });
-    expect(q(parts, "hanger.tbar_strap.k.6")).toBe("20");
+    expect(q(parts, "hanger.tbar_strap.aluminum.k.6")).toBe("20");
     expect(q(parts, "screw.10x15")).toBe("40");
     expect(q(parts, "labor.tile")).toBe("40");
   });
@@ -297,8 +297,8 @@ describe("П18: half round, copper", () => {
   const hr = (hanger: string) => one({ profile: "half_round", material: "copper", color: undefined, lengthIn: 240, hanger });
   it("shank #10 on fascia + circle + bolt + 2 screws; caps without a side; solder instead of sealant; copper rivets", () => {
     const { parts } = hr("hr_shank_fascia");
-    expect(q(parts, "shank.half_round.10.6")).toBe("10");
-    expect(q(parts, "circle.half_round.6")).toBe("10");
+    expect(q(parts, "shank.copper.half_round.10.6")).toBe("10");
+    expect(q(parts, "circle.copper.half_round.6")).toBe("10");
     expect(q(parts, "bolt.10-24x075")).toBe("10");
     expect(q(parts, "screw.10x15")).toBe("20");
     expect(q(parts, "endcap.-.half_round.6.copper.-")).toBe("2");
@@ -310,7 +310,7 @@ describe("П18: half round, copper", () => {
     expect(q(parts, "rivet.42.copper.mill.-")).toBe("4");
   });
   it("shank #11 on rafters", () => {
-    expect(q(hr("hr_shank_rafter").parts, "shank.half_round.11.6")).toBe("10");
+    expect(q(hr("hr_shank_rafter").parts, "shank.copper.half_round.11.6")).toBe("10");
   });
   it("sectional half round: sections with waste, slip joints", () => {
     const { parts } = computeGutterParts({ runs: [run({ id: "1", lengthIn: 300, profile: "half_round" })], corners: [], downspouts: [] }, { seamless: false });
@@ -331,7 +331,7 @@ describe("П18: downspouts — style, sticks with offcuts, extension", () => {
   it("corrugated is its own downspout and elbow", () => {
     const { parts } = one({}, [{ dsStyle: "corrugated" }]);
     expect(q(parts, "ds.rect.3x4.corrugated.alu.white")).toBe("10");
-    expect(q(parts, "elbow.A.rect.3x4.corrugated.white")).toBe("3");
+    expect(q(parts, "elbow.A.rect.3x4.corrugated.alu.white")).toBe("3");
   });
   it("offcuts are shared first fit decreasing", () => {
     expect(downspoutSticks([144, 144, 144], 120)).toBe(4);
@@ -357,13 +357,13 @@ describe("П18: downspouts — style, sticks with offcuts, extension", () => {
 describe("П18.7: downspout wall fasteners by wall", () => {
   it("brick: brick hooks in the mortar, no screws", () => {
     const { parts } = one({}, [{ wall: "brick" }]);
-    expect(q(parts, "brick_hook.rect.3x4")).toBe("2");
-    expect(q(parts, "ds_strap.rect.3x4")).toBeUndefined();
+    expect(q(parts, "brick_hook.aluminum.rect.3x4")).toBe("2");
+    expect(q(parts, "ds_strap.aluminum.rect.3x4")).toBeUndefined();
     expect(q(parts, "screw.10x15")).toBeUndefined();
   });
   it("stucco: straps with masonry anchors", () => {
     const { parts } = one({}, [{ wall: "stucco" }]);
-    expect(q(parts, "ds_strap.rect.3x4")).toBe("2");
+    expect(q(parts, "ds_strap.aluminum.rect.3x4")).toBe("2");
     expect(q(parts, "anchor.masonry")).toBe("4");
     expect(q(parts, "screw.10x15")).toBe("4");
   });
@@ -373,8 +373,8 @@ describe("П18.7: downspout wall fasteners by wall", () => {
     expect(parts.find((p) => p.key === "flat_coil")!.unit).toBe("ft");
   });
   it("round on wood: hinged hooks; a 2nd story downspout gets 4", () => {
-    expect(q(one({}, [{ shape: "round", size: "3" }]).parts, "hinged_hook.round.3")).toBe("2");
-    expect(q(one({ story: 2 }, [{}]).parts, "ds_strap.rect.3x4")).toBe("4");
+    expect(q(one({}, [{ shape: "round", size: "3" }]).parts, "hinged_hook.aluminum.round.3")).toBe("2");
+    expect(q(one({ story: 2 }, [{}]).parts, "ds_strap.aluminum.rect.3x4")).toBe("4");
   });
   it("an unknown wall is advice", () => {
     expect(one({}, [{ wall: "glass" }]).advice).toContainEqual({ code: "wall_kit_unknown", downspoutId: "d0", wall: "glass" });
@@ -387,18 +387,18 @@ describe("П18: adapters, heads, Y", () => {
       { reducers: [{ to: "2x3", qty: 1 }], head: "conductor", diverter: true, eaveBox: "closed", bottom: { kind: "splash_block", color: "green" } },
       { bottom: { kind: "drain", lengthIn: 120, pipe: "4" } },
     ]);
-    expect(q(parts, "reducer.rect.3x4.2x3")).toBe("1");
-    expect(q(parts, "conductorhead.rect.3x4")).toBe("1");
-    expect(q(parts, "funnel.rect.3x4")).toBeUndefined();
-    expect(q(parts, "diverter.rect.3x4")).toBe("1");
-    expect(q(parts, "eavebox.closed.rect.3x4")).toBe("1");
+    expect(q(parts, "reducer.2x3.rect.3x4.alu.white")).toBe("1");
+    expect(q(parts, "conductorhead.rect.3x4.alu.white")).toBe("1");
+    expect(q(parts, "funnel.rect.3x4.alu.white")).toBeUndefined();
+    expect(q(parts, "diverter.rect.3x4.alu.white")).toBe("1");
+    expect(q(parts, "eavebox.closed.rect.3x4.alu.white")).toBe("1");
     expect(q(parts, "bottom.splash_block.rect.3x4.green")).toBe("1");
     expect(q(parts, "bottom.drain_adapter.rect.3x4.4")).toBe("1");
   });
   it("a Y joins two downspouts; different sizes are advice", () => {
     const base = { runs: [run({ id: "1", lengthIn: 480 })], corners: [] };
     const same = computeGutterParts({ ...base, downspouts: [ds({ id: "a", runId: "1" }), ds({ id: "b", runId: "1" })], wyes: [{ id: "y", dsIds: ["a", "b"] }] });
-    expect(q(same.parts, "wye.rect.3x4")).toBe("1");
+    expect(q(same.parts, "wye.rect.3x4.alu.white")).toBe("1");
     expect(same.advice).toEqual([]);
     const diff = computeGutterParts({ ...base, downspouts: [ds({ id: "a", runId: "1", size: "2x3" }), ds({ id: "b", runId: "1" })], wyes: [{ id: "y", dsIds: ["a", "b"] }, { id: "z", dsIds: ["a", "x"] }] });
     expect(diff.advice).toContainEqual({ code: "wye_sizes_differ", wyeId: "y" });
@@ -433,5 +433,128 @@ describe("П18.9: purchase units (core C3 pack_size)", () => {
   });
   it("a pack size of zero is an error", () => {
     expect(() => purchaseQty(1, 0)).toThrow();
+  });
+});
+
+/* ---------------- review of PR «M1 детали»: every case failed before the fix ---------------- */
+
+describe("bad input never gives Infinity or negative parts", () => {
+  it("spacing 0 on a run falls back to the kit; company zeros fall back to the defaults", () => {
+    const r = one({ hangerSpacingIn: 0 });
+    expect(q(r.parts, "hanger.hidden.aluminum.k.6")).toBe("20");
+    expect(r.advice).toContainEqual({ code: "input_fixed", id: "1", field: "hangerSpacingIn" });
+    const z = one({}, [{}], { dsStickIn: 0, dsFastenerSpacingIn: 0, jointsPerSealantTube: 0, hangerSpacingIn: { hidden: 0 } });
+    expect(q(z.parts, "dsstick.rect.3x4.alu.white")).toBe("1");
+    expect(q(z.parts, "ds_strap.aluminum.rect.3x4")).toBe("2");
+    expect(q(z.parts, "sealant")).toBe("1");
+    expect(q(z.parts, "hanger.hidden.aluminum.k.6")).toBe("20");
+    expect(z.parts.every((p) => /^\d+(\.\d+)?$/.test(p.qty))).toBe(true);
+  });
+  it("a negative length is 0 with advice; fractions are rounded to whole inches", () => {
+    const r = one({ lengthIn: -24 });
+    expect(r.parts.every((p) => !p.qty.startsWith("-"))).toBe(true);
+    expect(q(r.parts, "gutter.k.6.alu_032.white")).toBeUndefined();
+    expect(r.advice).toContainEqual({ code: "input_fixed", id: "1", field: "lengthIn" });
+    expect(q(one({ lengthIn: 479.6 }).parts, "gutter.k.6.alu_032.white")).toBe("40");
+  });
+  it("undefined in an override keeps the default", () => {
+    expect(q(one({}, [], { wastePct: undefined, dsStickIn: undefined }).parts, "coil.k.6.alu_032.white")).toBe("42");
+  });
+  it("purchaseQty refuses a negative quantity; downspoutSticks a bad stick", () => {
+    expect(() => purchaseQty(-1, 10)).toThrow();
+    expect(() => downspoutSticks([120], 0)).toThrow();
+  });
+});
+
+describe("partial company overrides merge by field", () => {
+  it("joints: changing endcap rivets keeps its sealant", () => {
+    const { parts } = one({}, [{}], { joints: { endcap: { rivets: 3 } } });
+    expect(q(parts, "rivet.42.aluminum.painted.white")).toBe("20");
+    expect(q(parts, "sealant")).toBe("1");
+  });
+  it("wall table: changing wood keeps stucco", () => {
+    const over = { wallKitByWall: { rect: { wood: "u_bracket" } } };
+    expect(q(one({}, [{}], over).parts, "u_bracket.aluminum.rect.3x4")).toBe("2");
+    expect(q(one({}, [{ wall: "stucco" }], over).parts, "ds_strap.aluminum.rect.3x4")).toBe("2");
+  });
+});
+
+describe("shared screws stay in one section", () => {
+  it("#8 screws from guards, wall straps and downspout joints: one line in consumables, whatever came first", () => {
+    const a = one({ guardsIn: 120, guardType: "micromesh" }, [{}], { dsJoin: "screw" });
+    const b = one({}, [{}], { dsJoin: "screw" });
+    expect(a.parts.find((p) => p.key === "screw.8x05")!.section).toBe("consumables");
+    expect(b.parts.find((p) => p.key === "screw.8x05")!.section).toBe("consumables");
+    // guards 9 + straps 4 + joints 10
+    expect(q(a.parts, "screw.8x05")).toBe("23");
+  });
+});
+
+describe("fittings carry metal and color", () => {
+  it("a copper and an aluminum 3 in round downspout do not share elbows, outlets or hangers", () => {
+    const { parts } = computeGutterParts({
+      runs: [run({ id: "1", lengthIn: 240 }), run({ id: "2", lengthIn: 240, profile: "k", material: "copper", color: undefined })],
+      corners: [],
+      downspouts: [ds({ id: "a", runId: "1", shape: "round", size: "3", material: "aluminum", color: undefined }), ds({ id: "b", runId: "2", shape: "round", size: "3", material: "copper", color: undefined })],
+    });
+    expect(q(parts, "elbow.A.round.3.aluminum.-")).toBe("3");
+    expect(q(parts, "elbow.A.round.3.copper.-")).toBe("3");
+    expect(q(parts, "outlet.k.6.copper.-.round.3")).toBe("1");
+    expect(q(parts, "hanger.hidden.copper.k.6")).toBe("10");
+    expect(q(parts, "hinged_hook.copper.round.3")).toBe("2");
+  });
+});
+
+describe("edge cases", () => {
+  it("guards without a type use the company's default kit", () => {
+    const r = one({ guardsIn: 120 });
+    expect(q(r.parts, "guardpiece.micromesh.k.6")).toBe("3");
+    expect(r.advice.some((a) => a.code === "guard_kit_unknown")).toBe(false);
+  });
+  it("two end outlets on one end: the second gets an ordinary outlet and advice", () => {
+    const r = one({ profile: "half_round", lengthIn: 240 }, [{ shape: "round", size: "3", endOutlet: "end" }, { shape: "round", size: "3", endOutlet: "end" }]);
+    expect(q(r.parts, "endoutlet.half_round.6.alu_032.white.round.3")).toBe("1");
+    expect(q(r.parts, "outlet.half_round.6.alu_032.white.round.3")).toBe("1");
+    expect(r.advice).toContainEqual({ code: "end_outlet_taken", downspoutId: "d1" });
+  });
+  it("a coil strap for a size without a strip length is advice", () => {
+    expect(one({}, [{ size: "4x5", wall: "coil_strap" }]).advice).toContainEqual({ code: "strip_size_unknown", downspoutId: "d0", size: "4x5" });
+  });
+  it("a Y on one downspout twice is advice, not a part", () => {
+    const r = computeGutterParts({ runs: [run({ id: "1", lengthIn: 480 })], corners: [], downspouts: [ds({ id: "a", runId: "1" })], wyes: [{ id: "y", dsIds: ["a", "a"] }] });
+    expect(keys(r.parts).some((k) => k.startsWith("wye."))).toBe(false);
+    expect(r.advice).toContainEqual({ code: "wye_same_downspout", wyeId: "y" });
+  });
+});
+
+describe("consumable rules a company can change", () => {
+  it("stucco: #8 screws into the downspout too", () => {
+    expect(q(one({}, [{ wall: "stucco" }]).parts, "screw.8x05")).toBe("4");
+  });
+  it("more than 8 sealant points → 2 tubes; points per tube is a setting", () => {
+    // 4 prefab corners (8) + 2 caps (2) + 1 outlet (1) = 11 points
+    const runs = [0, 1, 2, 3, 4].map((i) => run({ id: `r${i}`, lengthIn: 120, ends: [i === 0 ? { kind: "cap" } : { kind: "corner", cornerId: `c${i}` }, i === 4 ? { kind: "cap" } : { kind: "corner", cornerId: `c${i + 1}` }] }));
+    const corners = [1, 2, 3, 4].map((i) => ({ id: `c${i}`, kind: "out" as const, method: "prefab" as const, profile: "k" as const, size: "6", material: "alu_032", color: "white", story: 1 }));
+    const input = { runs, corners, downspouts: [ds({ id: "d", runId: "r0" })] };
+    expect(q(computeGutterParts(input).parts, "sealant")).toBe("2");
+    expect(q(computeGutterParts(input, { jointsPerSealantTube: 12 }).parts, "sealant")).toBe("1");
+  });
+  it("two painted colors with cut corners → two cans; touch-up off → none", () => {
+    const input: MeasurementInput = {
+      runs: [run({ id: "1", lengthIn: 120 }), run({ id: "2", lengthIn: 120, color: "brown" })],
+      corners: [
+        { id: "a", kind: "out", method: "cut", profile: "k", size: "6", material: "alu_032", color: "white", story: 1 },
+        { id: "b", kind: "out", method: "cut", profile: "k", size: "6", material: "alu_032", color: "brown", story: 1 },
+      ],
+      downspouts: [],
+    };
+    expect(q(computeGutterParts(input).parts, "paint.white")).toBe("1");
+    expect(q(computeGutterParts(input).parts, "paint.brown")).toBe("1");
+    expect(keys(computeGutterParts(input, { touchUpPaint: false }).parts).some((k) => k.startsWith("paint."))).toBe(false);
+  });
+  it("soldered materials are a setting: copper with sealant when the company does not solder", () => {
+    const { parts } = one({ profile: "half_round", material: "copper", color: undefined, hanger: "hr_shank_fascia" }, [], { solderedMaterials: [] });
+    expect(q(parts, "sealant")).toBe("1");
+    expect(q(parts, "solder")).toBeUndefined();
   });
 });
