@@ -167,7 +167,7 @@ interface StoreCtx {
   /** the office cancels a visit before the tech is on site; S4a / S9a roll the lead / job back (docs/specs/03 §4) */
   cancelVisit: (id: ID, reason: CancelReason, text?: string) => Undo;
   /** the office moves a visit (time, length) before the tech is on site; the status does not change */
-  rescheduleVisit: (id: ID, start: string, durationMin: number) => Undo;
+  rescheduleVisit: (id: ID, start: string, durationMin: number, allDay?: boolean) => Undo;
   /** «+ Осмотр» on a client / property (a returning client wants a new estimate): an inspection without a lead */
   addInspection: (propertyId: ID, at: BookAt) => { id: ID; undo: Undo };
   /** the office sent the client the time (an SMS / email app was opened with the text, or it was copied) */
@@ -252,7 +252,7 @@ interface StoreCtx {
   saveContact: (c: CompanyContact) => Undo;
   removeContact: (id: ID) => Undo;
   /** contractor picks date, time, duration and (optionally) the tech → a visit appears in the plan */
-  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null; assigneeIds?: ID[]; visitId?: ID; note?: string }) => Undo;
+  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null; assigneeIds?: ID[]; visitId?: ID; note?: string; allDay?: boolean }) => Undo;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -922,10 +922,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const at = new Date().toISOString();
         return mutate("visit.notified", (d) => patchVisit(d, visitId, (v) => ({ ...v, customerNotifiedAt: at })), { k: "visit.notified", visitId });
       },
-      rescheduleVisit: (id, start, durationMin) => {
+      rescheduleVisit: (id, start, durationMin, allDay) => {
         const v = dbRef.current.visits.find((x) => x.id === id);
         if (!v || !canReschedule(v) || durationMin <= 0) return () => {};
-        return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => ({ ...x, start, durationMin })), { k: "visit.reschedule", visitId: id, start, durationMin });
+        const ad = allDay ? true : undefined;
+        return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => ({ ...x, start, durationMin, allDay: ad })), { k: "visit.reschedule", visitId: id, start, durationMin, allDay: !!allDay });
       },
       addLead: (lead) => {
         const id = uid();
@@ -1269,11 +1270,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: jobStatusAfterSchedule(j.status) } : j)),
             visits: [
               ...d.visits,
-              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },
+              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, allDay: sch.allDay ? true : undefined, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },
             ],
             notices: d.notices.map((n) => (n.jobId === jobId ? { ...n, read: true } : n)),
           }),
-          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope },
+          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope, allDay: !!sch.allDay },
         );
       },
       saveCompany: (patch) => {

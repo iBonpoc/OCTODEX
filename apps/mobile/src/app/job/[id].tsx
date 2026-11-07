@@ -219,7 +219,7 @@ export default function JobScreen() {
               <ItemCard
                 key={v.id}
                 status={vs.status}
-                title={`${day(v.start)} · ${time(v.start)}`}
+                title={`${day(v.start)} · ${v.allDay ? t("job5.allDayChip") : time(v.start)}`}
                 subtitle={[memberLabel(tech, t) ?? t("sch.noTech"), `${v.durationMin} ${t("sch.min")}`].join(" · ")}
                 right={<StatusChip status={vs.status} label={t(vs.label)} />}
                 onPress={() => router.push(`/visit/${v.id}`)}

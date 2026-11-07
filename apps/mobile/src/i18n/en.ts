@@ -2109,4 +2109,10 @@ export const en: Dict = {
   "job5.h.enRoute": "On the way",
   "job5.noService": "This client is marked «Do not service»: no new visits or estimates",
   "job5.noServiceHint": "A visit already set can be finished or moved",
+  "job5.byTime": "By time",
+  "job5.allDaySummary": "{date} · all day · {who}",
+  "job5.clientDay": "The client sees the date only, no time",
+  "job5.msg.allDay": "Hi {name}! {company} will come to do the work on {date}, during the day. If the day does not work, just reply to this message.",
+  "job5.allDaySaved": "Scheduled for {date}, all day",
+  "job5.allDayChip": "All day",
 };

@@ -2108,6 +2108,12 @@ export const ru = {
   "job5.h.enRoute": "В пути",
   "job5.noService": "Клиент с пометкой «Не обслуживаем»: новых выездов и смет нет",
   "job5.noServiceHint": "Назначенный выезд можно доделать или перенести",
+  "job5.byTime": "По времени",
+  "job5.allDaySummary": "{date} · весь день · {who}",
+  "job5.clientDay": "Клиент увидит только дату, без времени",
+  "job5.msg.allDay": "Здравствуйте, {name}! {company} приедет на работы {date}, в течение дня. Если день не подходит, ответьте на это сообщение.",
+  "job5.allDaySaved": "Запланировано на {date}, весь день",
+  "job5.allDayChip": "Весь день",
 } as const;
 
 export type DictKey = keyof typeof ru;

@@ -2109,4 +2109,10 @@ export const es: Dict = {
   "job5.h.enRoute": "En camino",
   "job5.noService": "Cliente marcado «No atender»: sin nuevas visitas ni presupuestos",
   "job5.noServiceHint": "Una visita ya programada se puede terminar o mover",
+  "job5.byTime": "Por hora",
+  "job5.allDaySummary": "{date} · todo el día · {who}",
+  "job5.clientDay": "El cliente verá solo la fecha, sin hora",
+  "job5.msg.allDay": "¡Hola, {name}! {company} irá a hacer el trabajo el {date}, durante el día. Si el día no le conviene, responda a este mensaje.",
+  "job5.allDaySaved": "Programado para el {date}, todo el día",
+  "job5.allDayChip": "Todo el día",
 };

@@ -275,6 +275,8 @@ export interface Visit {
   payment?: { method: PaymentMethod; amountCents: number; at: string };
   /** when the tech left (step «on the way»), phone time (docs/specs/03 П3c; server: visits.en_route_at). «Late» itself is computed (features/schedule.ts lateKind) */
   enRouteAt?: string;
+  /** 3b-3 (17-job §11.1, server visits.all_day): the whole day, kept as 00:00–24:00 in the company zone; not «late», no time for the client */
+  allDay?: boolean;
   /** the visit ended without the client's payment step: completed or no-show on the server (cancelled visits are not loaded) */
   closed?: boolean;
   /** the property of the visit (docs/specs/03 §3.1, migration 20261105280000); an inspection has it without a job */

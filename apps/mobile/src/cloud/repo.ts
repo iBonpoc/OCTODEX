@@ -287,6 +287,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         kind: (v.kind as Visit["kind"] | null) ?? undefined,
         customerNotifiedAt: (v.customer_notified_at as string | null) ?? undefined,
         enRouteAt: (v.en_route_at as string | null) ?? undefined,
+        allDay: v.all_day === true ? true : undefined,
         note: (v.notes as string | null) || undefined,
         techId: assignee.get(s(v.id))?.[0] ?? null,
         assigneeIds: assignee.get(s(v.id)) ?? [],

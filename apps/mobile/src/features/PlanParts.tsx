@@ -173,7 +173,7 @@ export function UnassignedSoon() {
             <ItemCard
               key={v.id}
               status="warn"
-              title={`${dd === 0 ? t("plan5.today") : t("plan5.tomorrow")} · ${time(v.start)} · ${client}`}
+              title={`${dd === 0 ? t("plan5.today") : t("plan5.tomorrow")} · ${v.allDay ? t("plan5.allDay") : time(v.start)} · ${client}`}
               subtitle={[v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"), property?.address].filter(Boolean).join(" · ")}
               right={<Button label={t("plan.assign")} icon="user" size="sm" variant="secondary" onPress={() => setAssign(v.id)} />}
               onPress={() => router.push(`/visit/${v.id}`)}
