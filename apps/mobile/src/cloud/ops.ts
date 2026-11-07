@@ -577,7 +577,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
     case "company.save": {
-      const { data: stored } = await supabase.from("companies").select(COMPANY_STORED_COLUMNS.join(", ")).eq("id", c).maybeSingle();
+      const { data: stored } = await supabase.from("companies").select([...COMPANY_STORED_COLUMNS, "timezone"].join(", ")).eq("id", c).maybeSingle();
       await run(supabase.from("companies").update(companyToDb(op.company, (stored ?? {}) as Record<string, unknown>)).eq("id", c));
       if (op.einChanged) {
         const ein = op.company.ein?.trim() || null;

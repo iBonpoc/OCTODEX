@@ -2108,6 +2108,9 @@ export const ru = {
   "job5.h.enRoute": "В пути",
   "job5.noService": "Клиент с пометкой «Не обслуживаем»: новых выездов и смет нет",
   "job5.noServiceHint": "Назначенный выезд можно доделать или перенести",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.tzUnknownChip": "Пояс не распознан",
+  "fr7.tzUnknown": "Телефон не знает пояс «{tz}» — время показано по Los Angeles. Выберите пояс.",
 } as const;
 
 export type DictKey = keyof typeof ru;

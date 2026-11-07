@@ -1,6 +1,7 @@
 /** Company profile ↔ database rows (companies, company_secrets, company_licenses, company_contacts). */
 import { DOC_LANGS } from "@/i18n/translate";
 import type { Address, Company, CompanyContact, CompanyLicense, EntityType, LicenseKind } from "@/data/types";
+import { validZone } from "@/features/zone";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v === null || v === undefined ? "" : String(v));
@@ -68,7 +69,9 @@ export function companyToDb(c: Company, stored: Row) {
     address_line1: n(c.address.line1), address_city: n(c.address.city), address_state: n(c.address.state), address_zip: n(c.address.zip),
     mailing_address_line1: n(c.mailingAddress?.line1), mailing_address_city: n(c.mailingAddress?.city),
     mailing_address_state: n(c.mailingAddress?.state), mailing_address_zip: n(c.mailingAddress?.zip),
-    timezone: c.timezone,
+    // the zone only when it was changed and the phone knows it (docs/specs/22 §1): the server refuses an unknown one
+    // (22023 = permanent: the whole company.save would be dropped from the queue with the other settings)
+    ...(zoneToSend(c.timezone, stored.timezone) ? { timezone: c.timezone } : {}),
     doc_language: c.docLanguage ?? "en",
     brand: { ...((stored.brand as Row) ?? {}), logo: c.brand.logo ?? null, color: c.brand.color ?? null },
     contract_settings: { ...((stored.contract_settings as Row) ?? {}), insurance: c.insurance, cancel_email: n(c.cancelEmail) },
@@ -89,3 +92,6 @@ export const contactToDb = (c: CompanyContact, companyId: string, position: numb
   id: c.id, company_id: companyId, name: c.name.trim(), title: c.title || null, phone: c.phone || null, email: c.email || null,
   is_primary: c.isPrimary, on_documents: c.onDocuments, position,
 });
+
+/** company.save sends the zone only when it differs from the stored one and is a zone this phone knows (docs/specs/22 §1) */
+export const zoneToSend = (tz: string | undefined, stored: unknown): boolean => !!tz && tz !== stored && validZone(tz);

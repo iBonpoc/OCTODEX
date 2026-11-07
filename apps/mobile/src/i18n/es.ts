@@ -2109,4 +2109,7 @@ export const es: Dict = {
   "job5.h.enRoute": "En camino",
   "job5.noService": "Cliente marcado «No atender»: sin nuevas visitas ni presupuestos",
   "job5.noServiceHint": "Una visita ya programada se puede terminar o mover",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.tzUnknownChip": "Zona desconocida",
+  "fr7.tzUnknown": "El teléfono no conoce la zona «{tz}»: la hora se muestra en Los Ángeles. Elija una zona.",
 };

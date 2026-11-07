@@ -5562,4 +5562,25 @@ select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_
 update public.memberships set status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T68 the tech''s job task: the office sees it, another company and a switched-off tech do not ok'
 
+-- ---------------------------------------------------------------- T75: companies.timezone is checked when written (docs/specs/22 §1)
+:as_owner_a
+select tst.fails_like($q$update public.companies set timezone = 'Bad/Zone' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'unknown time zone', 'T75 an unknown zone is refused');
+select tst.fails_like($q$update public.companies set timezone = '' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'unknown time zone', 'an empty zone is refused');
+select tst.fails_like($q$update public.companies set timezone = 'UTC+3' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'unknown time zone', 'a POSIX string (at time zone takes it) is refused');
+select tst.fails_like($q$update public.companies set timezone = 'Factory' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'unknown time zone', 'a catalog name that is not Area/Location is refused');
+update public.companies set timezone = 'america/chicago' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'America/Chicago', 'another case is saved as the exact name');
+update public.companies set timezone = 'EST' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'America/New_York', 'an abbreviation of the explicit list: its zone with daylight time');
+update public.companies set timezone = 'Pacific/Kiritimati' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'Pacific/Kiritimati', 'an exact name stays as it is');
+update public.companies set phone = '+13235557500' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'Pacific/Kiritimati', 'saving another field keeps the zone');
+:as_super
+select tst.fails_like($q$insert into public.companies (name, timezone) values ('T75 bad', 'Bad/Zone')$q$, 'unknown time zone', 'a new company with an unknown zone is refused (any writer)');
+select tst.ok(not has_function_privilege('anon', 'app.tg_company_timezone()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_company_timezone()', 'EXECUTE'), 'nobody executes the trigger function');
+select tst.ok(not has_function_privilege('anon', 'app.zone_name(text)', 'EXECUTE'), 'anon does not execute zone_name');
+update public.companies set timezone = 'America/Los_Angeles', phone = null where id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T75 companies.timezone: unknown refused, case and abbreviations made exact ok'
+
 \echo 'ALL TESTS PASSED'
