@@ -32,7 +32,8 @@ exports.run = async (h) => {
   }
   h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…» on the screen");
   await p.evaluate(() => window.scrollTo(0, 0));
-  await checkCardAlignment(h, { reference: (pg) => pg.getByRole("radiogroup").first(), min: 1 });
+  // the line of the cards: the whole filter bar (spec 31: on 1280 the lane comes after the search)
+  await checkCardAlignment(h, { reference: (pg) => pg.getByTestId("filter-bar").locator("visible=true").first(), min: 1 });
   await h.shot("office");
 
   // the card opens the job
