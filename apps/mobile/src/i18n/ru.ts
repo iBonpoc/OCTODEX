@@ -225,6 +225,8 @@ export const ru = {
   "vcard.photos": "Фото: {n}",
 
   "offline.badge": "Без сети · в очереди: {n}",
+  // «Лиды и клиенты» — очередь (docs/specs/23)
+  "sync.server.badge": "Сервер недоступен · в очереди: {n}",
   "offline.queued": "Без сети. Сохранено, отправится позже",
   "offline.synced": "Сеть есть. Очередь отправлена: {n}",
   "offline.toggle": "Проверка: режим без сети",
@@ -2108,6 +2110,9 @@ export const ru = {
   "job5.h.enRoute": "В пути",
   "job5.noService": "Клиент с пометкой «Не обслуживаем»: новых выездов и смет нет",
   "job5.noServiceHint": "Назначенный выезд можно доделать или перенести",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.tzUnknownChip": "Пояс не распознан",
+  "fr7.tzUnknown": "Телефон не знает пояс «{tz}» — время показано по Los Angeles. Выберите пояс.",
   "job5.lines.title": "Позиции",
   "job5.lines.add": "Позиция",
   "job5.lines.edit": "Позиция",
@@ -2141,6 +2146,7 @@ export const ru = {
   "job5.tags.saved": "Метки сохранены",
   "job5.type.saved": "Тип работы изменён",
   // fix.* — founder fixes chat
+  "fix.client.overdue": "Просрочено {amount} · {d} дн",
   "fix.client.balance": "Баланс",
   /* «Каркас» №7 (docs/specs/22) */
   "fr7.leadOrphan": "{name}: ответственный не работает — передайте лид",
@@ -2155,6 +2161,20 @@ export const ru = {
   "job5.msg.allDay": "Здравствуйте, {name}! {company} приедет на работы {date}, в течение дня. Если день не подходит, ответьте на это сообщение.",
   "job5.allDaySaved": "Запланировано на {date}, весь день",
   "job5.allDayChip": "Весь день",
+  // fix.filters.* — one row of filters (founder fixes chat, 07.11)
+  "fix.filters.button": "Фильтры",
+  "fix.filters.title": "Фильтры",
+  "fix.filters.a11y": "Фильтры, включено: {n}",
+  "fix.filters.reset": "Сбросить",
+  "fix.filters.done": "Готово",
+  "fix.filters.tags": "Метки",
+  // fix.more.* — «Ещё» as rows with counters (spec 25, founder fixes chat)
+  "fix.more.groupCompany": "Компания",
+  "fix.more.leads": "Ждут: {n}",
+  "fix.more.tasks": "На сегодня: {n}",
+  "fix.more.jobs": "К плану: {n}",
+  "fix.more.estimates": "На подпись: {n}",
+  "fix.more.invoices": "Просрочено: {n}",
   // today2.* — «Сегодня»: «Получено» with columns, tiles, funnel bars (spec 24 A, founder fixes chat)
   "today2.vsToday": "к вчерашнему дню",
   "today2.vsWeek": "к прошлой неделе",

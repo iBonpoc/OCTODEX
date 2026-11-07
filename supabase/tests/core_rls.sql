@@ -1221,7 +1221,7 @@ begin
   perform public.cancel_visit('f2000000-0000-4000-8000-000000000008', 'no_show');
   update public.visit_assignees set deleted_at = now() where visit_id = 'f2000000-0000-4000-8000-000000000009';
   update public.visits set deleted_at = now() where id = 'f2000000-0000-4000-8000-000000000010';
-  update public.jobs set deleted_at = now() where id = 'e2000000-0000-4000-8000-000000000011';
+  perform tst.server_job($q$update public.jobs set deleted_at = now() where id = 'e2000000-0000-4000-8000-000000000011' returning id$q$);   -- no app path deletes a job (column grants, 20261107040000)
   update public.jobs set status = 'cancelled' where id = 'e2000000-0000-4000-8000-000000000012';
   update public.property_secrets set deleted_at = now() where property_id = 'd2000000-0000-4000-8000-000000000013';
 end $$;
@@ -2277,7 +2277,8 @@ begin
   -- another property of the job's own client (a job moves only within its client, t14)
   insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('d3200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', (select customer_id from public.jobs where id = v_j), '32 Moved St', 'Pasadena') returning id into v_p2;
   -- the job moves to another property: its visits follow
-  update public.jobs set property_id = v_p2 where id = v_j;
+  -- (the app does not move a job; a server path would — column grants, 20261107040000)
+  perform tst.server_job(format('update public.jobs set property_id = %L where id = %L returning id', v_p2, v_j));
   perform tst.ok((select property_id from public.visits where id = 'f3200000-0000-4000-8000-000000000003') = v_p2, 'job moved: its visit follows');
   -- a visit re-pointed to another lead without a new property takes the lead's
   insert into public.visits (id, company_id, job_id, starts_at) values ('f3200000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', v_j, now() + interval '4 days');
@@ -3287,7 +3288,9 @@ select tst.ok((select array_agg(line_total_cents order by position) from public.
 select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 19377, 'job total = subtotal 18831 + tax 546 (engine jobLinesTotals)');
 update public.jobs set tax_enabled = false where id = 'e4100000-0000-4000-8000-000000000001';
 select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 18831, 'tax off: total = subtotal (engine)');
-update public.jobs set tax_enabled = true, contract_total_cents = 1 where id = 'e4100000-0000-4000-8000-000000000001';
+update public.jobs set tax_enabled = true where id = 'e4100000-0000-4000-8000-000000000001';
+-- since 20261107040000 the phone has no right on the column at all (before, t14 dropped the number)
+select tst.fails($q$update public.jobs set contract_total_cents = 1 where id = 'e4100000-0000-4000-8000-000000000001'$q$, 'the phone cannot write the total of a job (no column grant)');
 select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 19377, 'the phone cannot write another total over the lines');
 update public.job_line_items set deleted_at = now() where id = 'a4110000-0000-4000-8000-000000000002';
 select tst.ok((select contract_total_cents from public.jobs where id = 'e4100000-0000-4000-8000-000000000001') = 5877, 'a removed line leaves the total (5331 + 546)');
@@ -3817,7 +3820,8 @@ select tst.dns($q$update public.estimates set deleted_at = null where id = '0e44
 -- the open job moves to another address of the same client: its visit follows, nothing refused
 insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
   ('d4400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c4400000-0000-4000-8000-000000000001', '44 Second St', 'Pasadena');
-update public.jobs set property_id = 'd4400000-0000-4000-8000-000000000003' where id = 'e4400000-0000-4000-8000-000000000001';
+-- (the app does not move a job; a server path would — column grants, 20261107040000)
+select tst.server_job($q$update public.jobs set property_id = 'd4400000-0000-4000-8000-000000000003' where id = 'e4400000-0000-4000-8000-000000000001' returning id$q$);
 select tst.ok((select property_id from public.visits where id = 'f4400000-0000-4000-8000-000000000001') = 'd4400000-0000-4000-8000-000000000003', 'the open job and its visit move to another address of the client');
 update public.visits set property_id = 'd4400000-0000-4000-8000-000000000001' where id = 'f4400000-0000-4000-8000-000000000001';
 -- another company does not learn that our client is marked: RLS answers, not the mark
@@ -3896,8 +3900,8 @@ select tst.fails($q$insert into public.jobs (id, company_id, number, title, cust
 -- an update does not move the job around either
 select tst.fails($q$update public.jobs set property_id = 'd4700000-0000-4000-8000-000000000002' where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'update: the address must be a property of this client');
 select tst.fails($q$update public.jobs set customer_id = 'c4700000-0000-4000-8000-000000000002', property_id = 'd4700000-0000-4000-8000-000000000002' where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'update: the client of a job does not change');
-update public.jobs set contract_total_cents = 1 where id = 'e4700000-0000-4000-8000-000000000001';
-select tst.ok((select contract_total_cents from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') is null, 'update: the total of a job does not change directly');
+select tst.fails($q$update public.jobs set contract_total_cents = 1 where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'update: the total of a job does not change directly (no column grant since 20261107040000)');
+select tst.ok((select contract_total_cents from public.jobs where id = 'e4700000-0000-4000-8000-000000000001') is null, 'update: the total stays the server''s');
 select tst.fails($q$update public.jobs set job_type_id = (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty') where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'update: an archived job type is refused');
 select tst.fails($q$update public.jobs set completed_at = now() where id = 'e4700000-0000-4000-8000-000000000001'$q$, 'update: no «completed» time without the status');
 update public.jobs set description = 'T47 note', job_type_id = (select id from public.job_types where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'repair') where id = 'e4700000-0000-4000-8000-000000000001';
@@ -3942,7 +3946,7 @@ begin
     from public.jobs j where j.estimate_id = '0e470000-0000-4000-8000-000000000002'
   on conflict (id) do nothing;
   perform tst.ok((select contract_total_cents = 4700 and title <> 'T47 deposit replay' from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002'), 'estimate.deposit replay passes and changes nothing');
-  update public.jobs set contract_total_cents = 100 where estimate_id = '0e470000-0000-4000-8000-000000000002';
+  perform tst.fails($q$update public.jobs set contract_total_cents = 100 where estimate_id = '0e470000-0000-4000-8000-000000000002'$q$, 'the signed price of a job: no column grant (20261107040000)');
   perform tst.ok((select contract_total_cents from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002') = 4700, 'the signed price of a job does not change directly');
   update public.job_types set archived_at = null where company_id = 'ca000000-0000-0000-0000-000000000000' and seed_key = 'warranty';
 end $$;
@@ -5623,6 +5627,101 @@ select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_job_total_floor()', 'execute'), 'the trigger function is not callable');
 \echo 'T69 job lines never go below what is invoiced ok'
 
+-- ---------------------------------------------------------------- T78: S26 — outside the office a task is assigned only to oneself
+-- (migration 20261107060000, docs/specs/23 §5): the tech on the job of his live visit (T67 data). Another person as the
+-- assignee becomes himself on insert and stays as it was on a change — not a refusal (older app versions); the office
+-- assigns anyone. An upsert of an existing office task (marking it done) keeps its assignee.
+:as_tech_a
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values
+  ('17800000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 for tech2', 'a0000000-0000-0000-0000-000000000004'),
+  ('17800000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 mine', 'a0000000-0000-0000-0000-000000000003'),
+  ('17800000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 nobody', null);
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000003',
+  'T78 the tech inserts a task «for tech2»: it is his');
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003', 'his own: his');
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000003') is null, 'nobody: nobody');
+update public.tasks set assignee_id = 'a0000000-0000-0000-0000-000000000004' where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003',
+  'the author does not hand his task to another person (the assignee stays)');
+update public.tasks set assignee_id = null where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000002') is null, 'he may leave it to nobody');
+update public.tasks set assignee_id = 'a0000000-0000-0000-0000-000000000003' where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003', 'and take it back');
+-- the app's task.save is an upsert: the same, through on conflict
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values
+  ('17800000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 mine', 'a0000000-0000-0000-0000-000000000004')
+  on conflict (id) do update set assignee_id = excluded.assignee_id;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003',
+  'an upsert does not hand it to another person either');
+-- the office assigns anyone; the tech marks the office's task on his property done (upsert) — its assignee stays
+:as_office_a
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values
+  ('17800000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'property', 'd6700000-0000-4000-8000-000000000001', 'T78 office for tech2', 'a0000000-0000-0000-0000-000000000004');
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004', 'the office assigns another person');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where id = '17800000-0000-4000-8000-000000000004'$q$) = 1, 'the tech sees the task of a property he is at');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, done_at) values
+  ('17800000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'property', 'd6700000-0000-4000-8000-000000000001', 'T78 office for tech2', 'a0000000-0000-0000-0000-000000000004', now())
+  on conflict (id) do update set done_at = excluded.done_at, assignee_id = excluded.assignee_id;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004'
+  and (select done_at from public.tasks where id = '17800000-0000-4000-8000-000000000004') is not null,
+  'he marks it done through the upsert; the office''s assignee stays');
+-- security-check M1: not the author, he sends another assignee (himself / nobody) with «done» in one upsert — not refused
+-- (t05 would refuse it; t04 puts the assignee back first), the done mark is saved, the assignee stays the office's
+update public.tasks set done_at = null where id = '17800000-0000-4000-8000-000000000004';
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, done_at) values
+  ('17800000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'property', 'd6700000-0000-4000-8000-000000000001', 'T78 office for tech2', 'a0000000-0000-0000-0000-000000000003', now())
+  on conflict (id) do update set done_at = excluded.done_at, assignee_id = excluded.assignee_id;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004'
+  and (select done_at from public.tasks where id = '17800000-0000-4000-8000-000000000004') is not null,
+  'not the author: «Кто = me» with «done» — saved done, the office''s assignee stays (no refusal)');
+update public.tasks set assignee_id = null where id = '17800000-0000-4000-8000-000000000004';
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004',
+  'not the author: «nobody» is not taken either (no refusal, the assignee stays)');
+-- the second unique key and «do nothing» behave the same (security-check)
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, done_by) values
+  ('17800000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 by key', 'a0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004')
+  on conflict (company_id, id) do update set assignee_id = excluded.assignee_id;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000005') = 'a0000000-0000-0000-0000-000000000003'
+  and (select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000005') is null,
+  'on conflict (company_id, id): his, no forged «done by»');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values
+  ('17800000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 by key', 'a0000000-0000-0000-0000-000000000004')
+  on conflict do nothing;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000005') = 'a0000000-0000-0000-0000-000000000003', 'on conflict do nothing changes nothing');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_task_who()', 'execute') and not has_function_privilege('anon', 'app.tg_task_who()', 'execute'),
+  'the trigger function is not callable');
+\echo 'T78 outside the office a task is assigned only to oneself ok'
+
+-- ---------------------------------------------------------------- T79: S26 — «done by» is set by the server
+:as_tech_a
+select tst.ok((select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000003',
+  'T79 done by the one who marked it (the upsert above)');
+update public.tasks set done_at = now(), done_by = 'a0000000-0000-0000-0000-000000000004' where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003',
+  'a forged «done by» is replaced by the one who marked it');
+update public.tasks set done_by = 'a0000000-0000-0000-0000-000000000004' where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000003',
+  '«done by» alone never changes');
+update public.tasks set done_at = null where id = '17800000-0000-4000-8000-000000000002';
+select tst.ok((select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000002') is null, '«Вернуть»: not done, nobody');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, done_at, done_by) values
+  ('17900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T79 done at once', now(), 'a0000000-0000-0000-0000-000000000002');
+select tst.ok((select done_by from public.tasks where id = '17900000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000003',
+  'inserted done with another person as «done by»: the one who inserted it');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, done_by) values
+  ('17900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T79 open', 'a0000000-0000-0000-0000-000000000003');
+select tst.ok((select done_by from public.tasks where id = '17900000-0000-4000-8000-000000000002') is null, 'an open task has nobody as «done by»');
+:as_office_a
+update public.tasks set done_at = now() where id = '17900000-0000-4000-8000-000000000002';
+select tst.ok((select done_by from public.tasks where id = '17900000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000002', 'the office marks it: the office');
+-- a change of the title by the author keeps «done by»
+:as_tech_a
+update public.tasks set title = 'T79 open renamed' where id = '17900000-0000-4000-8000-000000000002';
+select tst.ok((select done_by from public.tasks where id = '17900000-0000-4000-8000-000000000002') = 'a0000000-0000-0000-0000-000000000002', 'another change keeps «done by»');
+\echo 'T79 «done by» is set by the server ok'
+
 -- ---------------------------------------------------------------- T70: 3b-3 — «Весь день» у выезда (migration 20261107030000)
 :as_owner_a
 do $$ begin
@@ -5688,13 +5787,18 @@ insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) 
 select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000007'), 'a Honolulu company: its own midnight');
 select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000008'), 'a Honolulu company: Los Angeles midnight is not a whole day');
 :as_super
+-- a zone left from before t89 (20261107050000 refuses a new one): planted past the trigger
+alter table public.companies disable trigger t89_company_timezone;
 update public.companies set timezone = 'Pacific Time' where id = 'ca000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t89_company_timezone;
 :as_office_a
 insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) values
   ('f7000000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-20 00:00 America/Los_Angeles', '2026-12-21 00:00 America/Los_Angeles', true);
 select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000009'), 'a zone Postgres does not know: the save goes through, Los Angeles');
 :as_super
+alter table public.companies disable trigger t89_company_timezone;
 update public.companies set timezone = '' where id = 'ca000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t89_company_timezone;
 :as_office_a
 update public.visits set all_day = true, starts_at = '2026-12-18 00:00 America/Los_Angeles', ends_at = '2026-12-19 00:00 America/Los_Angeles' where id = 'f7000000-0000-4000-8000-000000000008';
 select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000008'), 'an empty zone: Los Angeles');
@@ -5702,5 +5806,169 @@ select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-
 update public.companies set timezone = 'America/Los_Angeles' where id = 'ca000000-0000-0000-0000-000000000000';
 :as_super
 \echo 'T71 an old app never leaves «весь день» on a timed visit ok'
+
+-- ---------------------------------------------------------------- T72: jobs — UPDATE by columns (17-job §12.1, 20261107040000, rule 16 step 1)
+:as_super
+do $$
+declare c text;
+begin
+  foreach c in array array['status', 'title', 'description', 'job_type_id', 'tax_enabled', 'tax_rate_bps', 'service_category_id'] loop
+    perform tst.ok(has_column_privilege('authenticated', 'public.jobs', c, 'UPDATE'), 'T72 the app may update jobs.' || c);
+  end loop;
+  foreach c in array array['company_id', 'customer_id', 'property_id', 'estimate_id', 'approved_version_id', 'option_id', 'number',
+                           'contract_total_cents', 'deleted_at', 'completed_at', 'closed_at', 'cancelled_at', 'created_by', 'recurring_plan_id'] loop
+    perform tst.ok(not has_column_privilege('authenticated', 'public.jobs', c, 'UPDATE'), 'T72 no update of jobs.' || c);
+  end loop;
+  perform tst.ok(not has_table_privilege('anon', 'public.jobs', 'UPDATE') and not has_table_privilege('anon', 'public.jobs', 'INSERT'), 'T72 anon writes no job');
+  -- step 1: old builds on phones still insert (step 2 revokes it once a minimal build exists)
+  perform tst.ok(has_table_privilege('authenticated', 'public.jobs', 'INSERT'), 'T72 step 1: INSERT stays for old builds');
+end $$;
+insert into public.customers (id, company_id, display_name) values ('c7200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T72 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d7200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7200000-0000-4000-8000-000000000001', '72 Grant St', 'Pasadena'),
+  ('d7200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7200000-0000-4000-8000-000000000001', '72 Other St', 'Pasadena');
+:as_office_a
+-- the server paths still make a job (security definer: the owner's rights, not the caller's)
+select tst.ok((public.create_job('e7200000-0000-4000-8000-000000000001', 'c7200000-0000-4000-8000-000000000001', 'd7200000-0000-4000-8000-000000000001', 'T72 job') ->> 'repeat') = 'false', 'T72 create_job still makes a job');
+update public.jobs set title = 'T72 renamed', description = 'T72 note', tax_enabled = true, tax_rate_bps = 950 where id = 'e7200000-0000-4000-8000-000000000001';
+select tst.ok((select title = 'T72 renamed' and description = 'T72 note' and tax_rate_bps = 950 from public.jobs where id = 'e7200000-0000-4000-8000-000000000001'), 'T72 the office edits the allowed columns');
+select tst.fails($q$update public.jobs set property_id = 'd7200000-0000-4000-8000-000000000002' where id = 'e7200000-0000-4000-8000-000000000001'$q$, 'T72 the address of a job is not moved by the app');
+select tst.fails($q$update public.jobs set deleted_at = now() where id = 'e7200000-0000-4000-8000-000000000001'$q$, 'T72 a job is not deleted by the app');
+select tst.fails($q$update public.jobs set number = 'JOB-X' where id = 'e7200000-0000-4000-8000-000000000001'$q$, 'T72 the number is the server''s');
+select tst.fails($q$update public.jobs set title = 'T72 x', contract_total_cents = 1 where id = 'e7200000-0000-4000-8000-000000000001'$q$, 'T72 one forbidden column refuses the whole update');
+select tst.ok((select title = 'T72 renamed' and property_id = 'd7200000-0000-4000-8000-000000000001' and deleted_at is null from public.jobs where id = 'e7200000-0000-4000-8000-000000000001'), 'T72 nothing of the refused updates went through');
+-- the signature paths ran above under the same grants (all migrations come first): T8 — the client on the page
+-- (portal_accept) and the company's countersign → execute_estimate; T47 — on site + countersign
+:as_super
+select tst.ok((select count(*) = 1 and bool_and(status = 'draft') from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000010'), 'T72 portal_accept + countersign made the job of the estimate (T8)');
+select tst.ok((select count(*) = 1 from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002'), 'T72 on-site signature + countersign made the job (T47)');
+\echo 'T72 jobs: update by columns, the server still makes jobs ok'
+
+-- ---------------------------------------------------------------- T73: record_estimate_deposit — the office takes the deposit of a signed estimate
+-- fixtures as the signature leaves them (execute_estimate: the job of the estimate and a «sent» deposit invoice; test prices)
+:as_super
+insert into public.customers (id, company_id, display_name) values ('c7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T73 Client');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('d7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', '73 Deposit St', 'Pasadena');
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('0e730000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 signed'),
+  ('0e730000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 not signed'),
+  ('0e730000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T73 no deposit');
+insert into public.jobs (id, company_id, number, title, customer_id, property_id, estimate_id) values
+  ('e7300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'T73 job', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e730000-0000-4000-8000-000000000001'),
+  ('e7300000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '', 'T73 job 3', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', '0e730000-0000-4000-8000-000000000003');
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('17300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '', 'c7300000-0000-4000-8000-000000000001', 'e7300000-0000-4000-8000-000000000001', 'deposit', 'sent', 'Deposit', 3000, 3000, now());
+:as_tech_a
+select tst.fails($q$select public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-0000000000f1', 'cash')$q$, 'T73 a tech does not take the deposit of an estimate');
+:as_owner_b
+select tst.fails($q$select public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-0000000000f2', 'cash')$q$, 'T73 another company does not');
+:as_super
+set role anon;
+select tst.fails($q$select public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-0000000000f3', 'cash')$q$, 'T73 anon has no EXECUTE');
+reset role;
+:as_office_a
+do $$
+declare r jsonb;
+begin
+  begin
+    perform public.record_estimate_deposit('0e730000-0000-4000-8000-000000000002', 'a7300000-0000-4000-8000-0000000000f4', 'cash');
+    raise exception 'FAILED: a deposit on an estimate without its job';
+  exception when others then
+    -- a plain refusal, not a «later»: the queue goes in order, so no job means the signature never got through (review #247)
+    perform tst.ok(sqlstate = 'P0001' and sqlerrm like 'the deposit was not recorded%', 'T73 not signed on the server: refused (P0001), no payment — ' || sqlstate);
+  end;
+  begin
+    perform public.record_estimate_deposit('0e730000-0000-4000-8000-000000000003', 'a7300000-0000-4000-8000-0000000000f5', 'cash');
+    raise exception 'FAILED: a deposit where none is due';
+  exception when others then
+    perform tst.ok(sqlstate = '22023', 'T73 no deposit invoice: refused (22023) — ' || sqlstate);
+  end;
+  begin
+    perform public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-0000000000f6', 'bitcoin');
+    raise exception 'FAILED: an unknown method';
+  exception when others then
+    perform tst.ok(sqlstate = '22023', 'T73 an unknown method is refused — ' || sqlstate);
+  end;
+  -- part of the deposit already paid (another phone): the office takes the rest, the sum is the server's
+  insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, received_by)
+  values ('a7300000-0000-4000-8000-000000000000', 'ca000000-0000-0000-0000-000000000000', '17300000-0000-4000-8000-000000000001', 'c7300000-0000-4000-8000-000000000001', 'cash', 1000, 'succeeded', 'a7300000-0000-4000-8000-000000000000', 'a0000000-0000-0000-0000-000000000002');
+  r := public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-000000000001', 'check');
+  perform tst.ok((r ->> 'repeat') = 'false' and (r ->> 'invoice_id') = '17300000-0000-4000-8000-000000000001', 'T73 the deposit is taken on the deposit invoice');
+  perform tst.ok((select amount_cents = 2000 and method = 'check' and status = 'succeeded' and received_by = 'a0000000-0000-0000-0000-000000000002'
+                    from public.payments where id = 'a7300000-0000-4000-8000-000000000001'), 'T73 the balance of the invoice (3000 − 1000), not a sum from the phone');
+  perform tst.ok((select balance_cents = 0 from public.invoices where id = '17300000-0000-4000-8000-000000000001'), 'T73 the deposit invoice is paid');
+  -- offline replay: the same payment id — no second payment
+  r := public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-000000000001', 'check');
+  perform tst.ok((r ->> 'repeat') = 'true', 'T73 a replay is the same payment');
+  -- another phone, another id, the deposit already paid: nothing more is taken
+  r := public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-000000000002', 'cash');
+  perform tst.ok((r ->> 'payment_id') is null and (r ->> 'already_paid') = 'true', 'T73 a paid deposit takes no second payment (already_paid)');
+  -- an id taken by another payment of ours (not this deposit): refused, not a silent «done»
+  begin
+    perform public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001',
+      (select id from public.payments where company_id = 'ca000000-0000-0000-0000-000000000000' and invoice_id is distinct from '17300000-0000-4000-8000-000000000001' order by id limit 1), 'cash');
+    perform tst.ok(false, 'T73 FAILED: a payment id of another payment counted as the deposit');
+  exception when others then
+    perform tst.ok(sqlstate = '22023', 'T73 an id of another payment of ours: 22023 — ' || sqlstate);
+  end;
+end $$;
+-- our estimate, an id of another company's payment: the same 22023, nothing about whose
+:as_super
+insert into public.customers (id, company_id, display_name) values ('c7300000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'T73 B Client');
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('a7300000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', null, 'c7300000-0000-4000-8000-0000000000b1', 'cash', 500, 'succeeded', 'a7300000-0000-4000-8000-0000000000b1');
+:as_office_a
+do $$
+declare r jsonb;
+begin
+  begin
+    perform public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-0000000000b1', 'cash');
+    perform tst.ok(false, 'T73 FAILED: another company''s payment id answered');
+  exception when others then
+    perform tst.ok(sqlstate = '22023' and sqlerrm = 'this payment id is taken', 'T73 another company''s payment id: the same answer as ours — ' || sqlerrm);
+  end;
+  perform tst.ok((select count(*) = 2 from public.payments where invoice_id = '17300000-0000-4000-8000-000000000001'), 'T73 two payments on the invoice, no more');
+end $$;
+-- a replay of another company's payment id does not leak it
+:as_owner_b
+select tst.fails($q$select public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-000000000001', 'check')$q$, 'T73 another company gets no answer by a known payment id');
+:as_sales_a
+select tst.ok((public.record_estimate_deposit('0e730000-0000-4000-8000-000000000001', 'a7300000-0000-4000-8000-000000000001', 'check') ->> 'repeat') = 'true', 'T73 sales may take a deposit (as payments_insert_staff)');
+\echo 'T73 record_estimate_deposit: the office, the server''s sum, one payment per id ok'
+-- ---------------------------------------------------------------- T75: companies.timezone is checked when written (docs/specs/22 §1)
+:as_owner_a
+select tst.fails_like($q$update public.companies set timezone = 'Bad/Zone' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'unknown time zone', 'T75 an unknown zone is refused');
+select tst.fails_like($q$update public.companies set timezone = '' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'unknown time zone', 'an empty zone is refused');
+select tst.fails_like($q$update public.companies set timezone = 'UTC+3' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'unknown time zone', 'a POSIX string (at time zone takes it) is refused');
+select tst.fails_like($q$update public.companies set timezone = 'Factory' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'unknown time zone', 'a catalog name that is not Area/Location is refused');
+update public.companies set timezone = 'america/chicago' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'America/Chicago', 'another case is saved as the exact name');
+update public.companies set timezone = 'EST' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'America/New_York', 'an abbreviation of the explicit list: its zone with daylight time');
+update public.companies set timezone = 'Pacific/Kiritimati' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'Pacific/Kiritimati', 'an exact name stays as it is');
+update public.companies set phone = '+13235557500' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'Pacific/Kiritimati', 'saving another field keeps the zone');
+:as_super
+select tst.fails_like($q$insert into public.companies (name, timezone) values ('T75 bad', 'Bad/Zone')$q$, 'unknown time zone', 'a new company with an unknown zone is refused (any writer)');
+select tst.ok(not has_function_privilege('anon', 'app.tg_company_timezone()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_company_timezone()', 'EXECUTE'), 'nobody executes the trigger function');
+select tst.ok(not has_function_privilege('anon', 'app.zone_name(text)', 'EXECUTE'), 'anon does not execute zone_name');
+-- an edge function (service_role) writes through the same check (app.zone_name is granted to it)
+reset role; set role service_role;
+update public.companies set timezone = 'mst' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'America/Phoenix', 'service_role: the same check (MST — Arizona, no daylight time)');
+select tst.fails_like($q$update public.companies set timezone = 'Bad/Zone' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'unknown time zone', 'service_role: an unknown zone is refused too');
+-- a zone the server stopped knowing (a tzdata change) stays in the row: saving another field still works (rule 16)
+:as_super
+alter table public.companies disable trigger t89_company_timezone;
+update public.companies set timezone = 'Gone/Zone' where id = 'ca000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t89_company_timezone;
+:as_owner_a
+update public.companies set phone = '+13235557501' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select phone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = '+13235557501', 'a stored zone the server does not know does not block saving another field');
+:as_super
+update public.companies set timezone = 'America/Los_Angeles', phone = null where id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T75 companies.timezone: unknown refused, case and abbreviations made exact ok'
 
 \echo 'ALL TESTS PASSED'

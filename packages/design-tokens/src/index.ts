@@ -110,6 +110,8 @@ export const component = {
   /* ---- app-only tokens (not in the DS css yet; same style, keep here so components never use raw numbers) ---- */
   /** company logo stored size, px (image processing) */
   logoPx: 256,
+  /** «Ещё» on 820/1280: one column of menu rows, not wider than the palette (spec 25) */
+  menuListMax: 560,
   /** charts of «Сегодня» (spec 24 A3; «Наряд» prototype column bars r8 / min 4 / muted .55, track 8; height 130 → 120 for the phone) */
   chart: { h: 120, barRadius: 8, barMin: 4, track: 8, mutedOpacity: 0.55 },
   /** compact row (lines of an estimate, small lists) */

@@ -226,6 +226,8 @@ export const es: Dict = {
   "vcard.photos": "Fotos: {n}",
 
   "offline.badge": "Sin conexión · en cola: {n}",
+  // «Лиды и клиенты» — очередь (docs/specs/23)
+  "sync.server.badge": "Servidor no disponible · en cola: {n}",
   "offline.queued": "Sin conexión. Guardado, se enviará después",
   "offline.synced": "Conectado. Cola enviada: {n}",
   "offline.toggle": "Prueba: modo sin conexión",
@@ -2109,6 +2111,9 @@ export const es: Dict = {
   "job5.h.enRoute": "En camino",
   "job5.noService": "Cliente marcado «No atender»: sin nuevas visitas ni presupuestos",
   "job5.noServiceHint": "Una visita ya programada se puede terminar o mover",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.tzUnknownChip": "Zona desconocida",
+  "fr7.tzUnknown": "El teléfono no conoce la zona «{tz}»: la hora se muestra en Los Ángeles. Elija una zona.",
   "job5.lines.title": "Partidas",
   "job5.lines.add": "Partida",
   "job5.lines.edit": "Partida",
@@ -2142,6 +2147,7 @@ export const es: Dict = {
   "job5.tags.saved": "Etiquetas guardadas",
   "job5.type.saved": "Tipo de trabajo cambiado",
   // fix.* — founder fixes chat
+  "fix.client.overdue": "Vencido {amount} · {d} d",
   "fix.client.balance": "Saldo",
   /* «Каркас» №7 (docs/specs/22) */
   "fr7.leadOrphan": "{name}: el responsable ya no trabaja — entregue el lead",
@@ -2156,6 +2162,20 @@ export const es: Dict = {
   "job5.msg.allDay": "¡Hola, {name}! {company} irá a hacer el trabajo el {date}, durante el día. Si el día no le conviene, responda a este mensaje.",
   "job5.allDaySaved": "Programado para el {date}, todo el día",
   "job5.allDayChip": "Todo el día",
+  // fix.filters.* — one row of filters (founder fixes chat, 07.11)
+  "fix.filters.button": "Filtros",
+  "fix.filters.title": "Filtros",
+  "fix.filters.a11y": "Filtros, activos: {n}",
+  "fix.filters.reset": "Restablecer",
+  "fix.filters.done": "Listo",
+  "fix.filters.tags": "Etiquetas",
+  // fix.more.* — «Ещё» as rows with counters (spec 25, founder fixes chat)
+  "fix.more.groupCompany": "Empresa",
+  "fix.more.leads": "Esperan: {n}",
+  "fix.more.tasks": "Para hoy: {n}",
+  "fix.more.jobs": "Por programar: {n}",
+  "fix.more.estimates": "Por firmar: {n}",
+  "fix.more.invoices": "Vencidas: {n}",
   // today2.* — «Сегодня»: «Получено» with columns, tiles, funnel bars (spec 24 A, founder fixes chat)
   "today2.vsToday": "vs. ayer",
   "today2.vsWeek": "vs. la semana pasada",

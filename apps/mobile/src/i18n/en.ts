@@ -226,6 +226,8 @@ export const en: Dict = {
   "vcard.photos": "Photos: {n}",
 
   "offline.badge": "Offline · queued: {n}",
+  // «Лиды и клиенты» — очередь (docs/specs/23)
+  "sync.server.badge": "Server unavailable · queued: {n}",
   "offline.queued": "Offline. Saved, will sync later",
   "offline.synced": "Back online. Queue sent: {n}",
   "offline.toggle": "Test: offline mode",
@@ -2109,6 +2111,9 @@ export const en: Dict = {
   "job5.h.enRoute": "On the way",
   "job5.noService": "This client is marked «Do not service»: no new visits or estimates",
   "job5.noServiceHint": "A visit already set can be finished or moved",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.tzUnknownChip": "Unknown zone",
+  "fr7.tzUnknown": "This phone does not know the zone «{tz}» — times are shown in Los Angeles. Choose a zone.",
   "job5.lines.title": "Line items",
   "job5.lines.add": "Line item",
   "job5.lines.edit": "Line item",
@@ -2142,6 +2147,7 @@ export const en: Dict = {
   "job5.tags.saved": "Tags saved",
   "job5.type.saved": "Job type changed",
   // fix.* — founder fixes chat
+  "fix.client.overdue": "{amount} overdue · {d} days",
   "fix.client.balance": "Balance",
   /* «Каркас» №7 (docs/specs/22) */
   "fr7.leadOrphan": "{name}: the owner is not at work — hand the lead over",
@@ -2156,6 +2162,20 @@ export const en: Dict = {
   "job5.msg.allDay": "Hi {name}! {company} will come to do the work on {date}, during the day. If the day does not work, just reply to this message.",
   "job5.allDaySaved": "Scheduled for {date}, all day",
   "job5.allDayChip": "All day",
+  // fix.filters.* — one row of filters (founder fixes chat, 07.11)
+  "fix.filters.button": "Filters",
+  "fix.filters.title": "Filters",
+  "fix.filters.a11y": "Filters, on: {n}",
+  "fix.filters.reset": "Reset",
+  "fix.filters.done": "Done",
+  "fix.filters.tags": "Tags",
+  // fix.more.* — «Ещё» as rows with counters (spec 25, founder fixes chat)
+  "fix.more.groupCompany": "Company",
+  "fix.more.leads": "Waiting: {n}",
+  "fix.more.tasks": "For today: {n}",
+  "fix.more.jobs": "To schedule: {n}",
+  "fix.more.estimates": "To sign: {n}",
+  "fix.more.invoices": "Overdue: {n}",
   // today2.* — «Сегодня»: «Получено» with columns, tiles, funnel bars (spec 24 A, founder fixes chat)
   "today2.vsToday": "vs yesterday",
   "today2.vsWeek": "vs last week",
