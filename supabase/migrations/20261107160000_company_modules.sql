@@ -7,7 +7,8 @@
 
 create table public.company_modules (
   company_id    uuid not null references public.companies (id) on delete cascade,
-  module_key    text not null check (module_key ~ '^[a-z][a-z0-9_]{1,30}$'),
+  -- the list of modules the app knows; a new module widens this check in its own migration
+  module_key    text not null check (module_key in ('gutters')),
   enabled       boolean not null default false,
   -- set once, on the first switch-on; switching off and on again never restarts the trial
   trial_ends_at timestamptz,
@@ -36,13 +37,15 @@ create policy company_modules_select on public.company_modules for select to aut
 insert into public.company_modules (company_id, module_key, enabled, settings)
 select id, 'gutters', false, gutter_settings
   from public.companies
- where gutter_settings is not null and gutter_settings <> '{}'::jsonb
+ where gutter_settings is not null and jsonb_typeof(gutter_settings) = 'object' and gutter_settings <> '{}'::jsonb
 on conflict do nothing;
 
 -- Is the module usable now: switched on, and in its trial or paid. Module tables call this in their RLS rules.
+-- Only for the caller's own company: nobody learns another company's modules (security-check #350, item 3).
+-- Server jobs (service_role) read public.company_modules directly.
 create or replace function app.module_active(p_company_id uuid, p_module_key text)
 returns boolean language sql stable security definer set search_path = '' as $$
-  select exists (
+  select app.is_member(p_company_id) and exists (
     select 1 from public.company_modules cm
      where cm.company_id = p_company_id
        and cm.module_key = p_module_key
@@ -52,7 +55,7 @@ returns boolean language sql stable security definer set search_path = '' as $$
 $$;
 -- rule 18: called from RLS rules and by the signed-in app (to show «Подключить»); never by anon
 revoke all on function app.module_active(uuid, text) from public, anon, authenticated;
-grant execute on function app.module_active(uuid, text) to authenticated, service_role;
+grant execute on function app.module_active(uuid, text) to authenticated;
 
 -- Owner / admin switches a module on. The first time it starts the 7-day trial (founder О2).
 create or replace function public.module_enable(p_company_id uuid, p_module_key text)
@@ -107,6 +110,9 @@ begin
   end if;
   if p_settings is null or jsonb_typeof(p_settings) <> 'object' then
     raise exception 'settings must be an object' using errcode = '22023';
+  end if;
+  if pg_column_size(p_settings) > 32768 then
+    raise exception 'module settings are too large (max 32 KB)' using errcode = '22023';
   end if;
   update public.company_modules
      set settings = p_settings, row_version = row_version + 1, updated_at = now(), updated_by = auth.uid()
