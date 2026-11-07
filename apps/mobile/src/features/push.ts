@@ -38,6 +38,14 @@ export function safeRoute(data: unknown): string | null {
   return typeof r === "string" && r.length <= 200 && ROUTE.test(r) ? r : null;
 }
 
+/** A tapped push waits until it can really open (review #278): the root navigator is mounted (a push before it —
+ *  «navigate before mounting the Root Layout»), the session is restored, the person is signed in (else the route guard
+ *  sends them to sign-in and the link is lost — it waits and opens after the sign-in) and the store has loaded. */
+export function routeNow(p: { route: string | null; navReady: boolean; authReady: boolean; signedIn: boolean; storeReady: boolean }): "none" | "wait" | "open" {
+  if (!p.route) return "none";
+  return p.navReady && p.authReady && p.signedIn && p.storeReady ? "open" : "wait";
+}
+
 export interface PushDeps {
   platform: "ios" | "android";
   permission: () => Promise<Permission>;

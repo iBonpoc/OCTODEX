@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import { readFileSync } from "node:fs";
 import path from "node:path";
-import { disable, enable, refresh, safeRoute, stateOf, supportOf, type Permission, type PushDeps } from "../src/features/push";
+import { disable, enable, refresh, routeNow, safeRoute, stateOf, supportOf, type Permission, type PushDeps } from "../src/features/push";
 
 function fake(o: { perm?: Permission; after?: Permission; token?: string | Error; registerErr?: string | null; saved?: string | null } = {}) {
   const log: string[] = [];
@@ -71,6 +71,21 @@ describe("push — where a tap goes (only our own screens)", () => {
     ]) expect(safeRoute({ route: bad })).toBeNull();
     expect(safeRoute(null)).toBeNull();
     expect(safeRoute("/notifications")).toBeNull();
+  });
+});
+
+describe("push — a tapped push waits until it can open (review #278)", () => {
+  const ready = { route: "/notifications", navReady: true, authReady: true, signedIn: true, storeReady: true };
+  it("everything ready: open", () => expect(routeNow(ready)).toBe("open"));
+  it("no push: nothing", () => expect(routeNow({ ...ready, route: null })).toBe("none"));
+  it("cold start: the navigator not mounted yet, the session not restored, the store loading — wait", () => {
+    expect(routeNow({ ...ready, navReady: false })).toBe("wait");
+    expect(routeNow({ ...ready, authReady: false })).toBe("wait");
+    expect(routeNow({ ...ready, storeReady: false })).toBe("wait");
+  });
+  it("not signed in: the link waits for the sign-in, then opens", () => {
+    expect(routeNow({ ...ready, signedIn: false })).toBe("wait");
+    expect(routeNow({ ...ready, signedIn: true })).toBe("open");
   });
 });
 
