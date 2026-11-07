@@ -81,7 +81,7 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext("/estimate/new", { customerId: db.customers[0]!.id }, db, "director").up?.href).toBe(`/client/${db.customers[0]!.id}`);
   });
   it("☰ roots (Jobs, Payments, Money, Team, Catalog, Company, Settings, Estimates) have ☰, not «back»; Catalog → item, Company → section", () => {
-    for (const p of ["/jobs", "/calls", "/payments", "/money", "/team", "/catalog", "/company", "/settings", "/estimates"]) {
+    for (const p of ["/jobs", "/calls", "/tasks", "/help", "/payments", "/money", "/team", "/catalog", "/company", "/settings", "/estimates"]) {
       const c = navContext(p, {}, db, "director");
       expect(c.up, p).toBeUndefined();
       expect(c.section, p).toBe(p.slice(1));
@@ -101,5 +101,17 @@ describe("navigation hierarchy: back = one level up", () => {
   it("client page and auth have no app navigation", () => {
     expect(navContext("/p/token", {}, db, "director")).toEqual({});
     expect(navContext("/auth/sign-in", {}, db, "director")).toEqual({});
+  });
+  it("LOG п.15: «Моя подпись» is not an estimate with the id «signature» — it sits under «Мои настройки»", () => {
+    expect(navContext("/estimate/signature", {}, db, "director")).toMatchObject({ section: "settings", kind: "est.sig.title", up: { href: "/settings" } });
+  });
+  it("LOG п.16: a conversation goes back to «Сообщения» (after a reload too); the list itself stays a tab root", () => {
+    expect(navContext("/messages/c:c1", {}, db, "director")).toMatchObject({ section: "messages", up: { href: "/messages" } });
+    expect(navContext("/messages", {}, db, "director").up).toBeUndefined();
+  });
+  it("LOG п.17: Tasks and Help are «Ещё» roots (above); «Удалить аккаунт» → «Мои настройки»; the legal texts → «Помощь»", () => {
+    expect(navContext("/settings/delete-account", {}, db, "tech")).toMatchObject({ section: "settings", kind: "acct.title", up: { href: "/settings" } });
+    expect(navContext("/legal/terms", {}, db, "tech")).toMatchObject({ section: "help", kind: "legal.terms.title", up: { href: "/help" } });
+    expect(navContext("/legal/privacy", {}, db, "director").kind).toBe("legal.privacy.title");
   });
 });

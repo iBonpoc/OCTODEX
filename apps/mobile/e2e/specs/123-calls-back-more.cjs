@@ -48,4 +48,14 @@ exports.run = async (h) => {
     h.expect(tb.y + tb.height <= bar.y + 1, `«Отменить» above the bar (${tb.y + tb.height} vs ${bar.y})`);
     await undo.click();
   }
+  // a conversation goes back to «Сообщения» (LOG п.16) — after a reload too (before: no way back)
+  // opened by its address (a link, a reload): the demo has no conversations of its own
+  await h.go("/messages/c-c1");
+  await p.reload();
+  await p.waitForTimeout(800);
+  const up = p.getByRole("button", { name: /Сообщения/ }).locator("visible=true").first();
+  h.expect((await up.count()) === 1, "the conversation has «‹ Сообщения» after a reload");
+  await up.click();
+  await p.waitForTimeout(600);
+  h.expect(path(h) === "/messages", `«‹ Сообщения» → /messages (${p.url()})`);
 };

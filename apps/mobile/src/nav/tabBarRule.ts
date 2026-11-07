@@ -21,11 +21,13 @@ export const NO_TAB_BAR = [
   "legal/[doc]",
   "p/[token]",
   "settings/delete-account",
+  // a wrong address: nothing to switch from (the walk of the fixes chat, 07.11)
+  "+not-found",
 ] as const;
 
 /** lists, cards, sections of «Ещё», settings pages: the bar stays */
 export const WITH_TAB_BAR = [
-  "+not-found", "index", "inbox",
+  "index", "inbox",
   "calls", "catalog", "catalog/[id]", "client/[id]", "clients", "company",
   "estimate/[id]", "estimates", "figures/[metric]", "help",
   "invoice", "invoice/[id]", "job/[id]", "jobs", "lead/[id]", "leads",
