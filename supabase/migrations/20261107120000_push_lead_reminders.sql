@@ -5,7 +5,7 @@
 -- * Only in the company's working hours (companies.business_hours in companies.timezone; missing — Mon–Sat 8:00–18:00,
 --   as the app): a lead at 17:55 reminds at 8:00 next working day (director 07.11, §4.9 №4); checked again at sending.
 -- * Its own pg_cron job «push-lead-reminders» every minute (spec §4.9 variant Б, security-check #305 №3): its own
---   transaction and statement_timeout, so a slow or broken reminder never stops push_claim (payments, signatures); every
+--   transaction and statement_timeout (in the job's command), so a slow or broken reminder never stops push_claim (payments, signatures); every
 --   lead in its own sub-transaction, so one bad lead never stops the others. The time is a parameter (CHECKS §9 №1).
 -- * The candidates are chosen in SQL: only leads that still have something to send, at most 20 per company and 500 in all
 --   per minute, newest first (security-check #305 №1). Indexes — 20261107120100 (concurrently, rule 16).
@@ -76,20 +76,25 @@ revoke all on function app.push_in_hours(uuid, timestamptz) from public, anon, a
 
 -- Put the due reminders in the queue; returns how many candidates it looked at. Run by pg_cron (its own job), as postgres.
 create or replace function app.push_lead_reminders(p_now timestamptz default now())
-returns integer language plpgsql security definer set search_path = '' set statement_timeout = '10s' as $$
+returns integer language plpgsql security definer set search_path = '' as $$
 declare
   c record;
   n integer := 0;
 begin
   for c in
     with due as (
-      -- 15 min: the assignee — not the author, not a subcontractor, not given to him less than 15 min ago
+      -- 15 min: the assignee — not the author, not a subcontractor, an active member with «leads» on, not given to him
+      -- less than 15 min ago (everything that would not be sent is cut BEFORE the limits: security-check #305 Б)
       select l.id, l.company_id, l.received_at, l.assigned_to as user_id, 'lead.reminder'::text as kind
         from public.leads l
        where l.status = 'new' and l.first_response_at is null and l.deleted_at is null and l.archived_at is null
          and l.received_at <= p_now - interval '15 minutes' and l.received_at > p_now - interval '24 hours'
          and l.assigned_to is not null and l.assigned_to is distinct from l.created_by
-         and not exists (select 1 from public.push_outbox o where o.source_id = l.id and o.kind = 'lead.reminder' and o.user_id = l.assigned_to)
+         and app.push_role(l.company_id, l.assigned_to) is distinct from 'subcontractor'
+         and app.push_member(l.company_id, l.assigned_to) and app.push_enabled(l.company_id, l.assigned_to, 'lead.reminder')
+         -- a reminder skipped only because the working day ended before it went is not «already sent»: it comes again
+         and not exists (select 1 from public.push_outbox o where o.source_id = l.id and o.kind = 'lead.reminder' and o.user_id = l.assigned_to
+                           and o.error is distinct from 'off_hours')
          and not exists (select 1 from public.push_outbox o where o.source_id = l.id and o.kind = 'lead.assigned' and o.user_id = l.assigned_to
                            and o.created_at > p_now - interval '15 minutes')
       union all
@@ -100,7 +105,9 @@ begin
        where l.status = 'new' and l.first_response_at is null and l.deleted_at is null and l.archived_at is null
          and l.received_at <= p_now - interval '60 minutes' and l.received_at > p_now - interval '24 hours'
          and m.user_id is distinct from l.assigned_to and m.user_id is distinct from l.created_by
-         and not exists (select 1 from public.push_outbox o where o.source_id = l.id and o.kind = 'lead.escalation' and o.user_id = m.user_id)
+         and app.push_member(l.company_id, m.user_id) and app.push_enabled(l.company_id, m.user_id, 'lead.escalation')
+         and not exists (select 1 from public.push_outbox o where o.source_id = l.id and o.kind = 'lead.escalation' and o.user_id = m.user_id
+                           and o.error is distinct from 'off_hours')
     ), open_now as (
       select d.*, row_number() over (partition by d.company_id order by d.received_at desc) as k
         from due d
@@ -110,9 +117,7 @@ begin
   loop
     n := n + 1;
     begin
-      if app.push_role(c.company_id, c.user_id) is distinct from 'subcontractor' then
-        perform app.push_enqueue(c.company_id, c.user_id, c.kind, '/lead/' || c.id::text, c.id);
-      end if;
+      perform app.push_enqueue(c.company_id, c.user_id, c.kind, '/lead/' || c.id::text, c.id);
     exception when others then
       -- one bad lead never stops the others; the reason goes to the server log (sqlstate only)
       raise warning 'push reminder: %', sqlstate;
@@ -156,7 +161,7 @@ begin
       return false;
     end if;
     select * into v_lead from public.leads l where l.id = p_row.source_id and l.company_id = p_row.company_id;
-    if v_lead.id is null or not app.push_lead_unanswered(v_lead) or not app.push_in_hours(p_row.company_id, now()) then
+    if v_lead.id is null or not app.push_lead_unanswered(v_lead) then
       return false;
     end if;
     return case when p_row.kind = 'lead.reminder' then v_lead.assigned_to = p_row.user_id
@@ -178,12 +183,83 @@ end;
 $$;
 revoke all on function app.push_still_recipient(public.push_outbox) from public, anon, authenticated;
 
+-- push_claim: the body of 20261107110000 plus «off_hours» for the reminders
+create or replace function public.push_claim(p_limit integer default 100)
+returns jsonb language plpgsql security definer set search_path = '' as $$
+declare
+  r       public.push_outbox;
+  v_dev   jsonb;
+  v_out   jsonb := '[]'::jsonb;
+  v_limit integer := greatest(1, least(coalesce(p_limit, 100), 500));
+begin
+  -- stuck in «sending» (the function died): back to the queue; with no tries left — failed
+  update public.push_outbox
+     set status = case when tries >= app.push_max_tries() then 'failed' else 'pending' end,
+         error = case when tries >= app.push_max_tries() then 'stuck' else error end,
+         next_try_at = now()
+   where status = 'sending' and next_try_at < now() - interval '10 minutes';
+  -- yesterday's payment is noise: a row older than 24 h is not sent
+  update public.push_outbox set status = 'skipped', error = 'expired'
+   where status = 'pending' and created_at < now() - interval '24 hours';
+
+  for r in
+    select * from public.push_outbox
+     where status = 'pending' and next_try_at <= now()
+     order by next_try_at, id
+     limit v_limit
+     for update skip locked
+  loop
+    -- the person switched this kind off after it was queued (П4)
+    if not app.push_enabled(r.company_id, r.user_id, r.kind) then
+      update public.push_outbox set status = 'skipped', error = 'off' where id = r.id;
+      continue;
+    end if;
+    -- a reminder that did not go before the working day ended: skipped as «off_hours» — the reminders job makes it
+    -- again the next working morning (security-check #305 В)
+    if r.kind in ('lead.reminder', 'lead.escalation') and not app.push_in_hours(r.company_id, now()) then
+      update public.push_outbox set status = 'skipped', error = 'off_hours' where id = r.id;
+      continue;
+    end if;
+    if not app.push_still_recipient(r) then
+      update public.push_outbox set status = 'skipped', error = 'not_member' where id = r.id;
+      continue;
+    end if;
+    -- the phones NOW: after a phone was handed over, the old owner's pushes never reach it
+    select jsonb_agg(jsonb_build_object('device_id', d.id, 'token', d.expo_token, 'lang', d.lang) order by d.last_seen_at desc)
+      into v_dev
+      from public.push_devices d
+     where d.user_id = r.user_id and d.revoked_at is null
+       -- a retry goes only to the phones it did not reach (security-check #287 №3): a phone with a ticket of this row
+       -- already got it
+       and not exists (select 1 from public.push_tickets t where t.outbox_id = r.id and t.device_id = d.id);
+    if v_dev is null then
+      if exists (select 1 from public.push_tickets t where t.outbox_id = r.id) then
+        -- every live phone got it on an earlier try
+        update public.push_outbox
+           set status = 'sent', sent_at = now(), error = null,
+               ticket_ids = (select array_agg(ticket_id order by ticket_id) from public.push_tickets where outbox_id = r.id)
+         where id = r.id;
+      else
+        update public.push_outbox set status = 'skipped', error = 'no_device' where id = r.id;
+      end if;
+      continue;
+    end if;
+    update public.push_outbox set status = 'sending', tries = tries + 1, next_try_at = now(), error = null where id = r.id;
+    v_out := v_out || jsonb_build_array(jsonb_build_object('id', r.id, 'kind', r.kind, 'route', r.route, 'devices', v_dev));
+  end loop;
+  return v_out;
+end;
+$$;
+revoke all on function public.push_claim(integer) from public, anon, authenticated;
+grant execute on function public.push_claim(integer) to service_role;
+
 -- Its own schedule, only where pg_cron exists (not in the local test database); a repeat makes no second one
 do $$
 begin
   if to_regnamespace('cron') is not null then
     execute 'select cron.unschedule(jobid) from cron.job where jobname = $1' using 'push-lead-reminders';
-    execute $q$select cron.schedule('push-lead-reminders', '* * * * *', 'select app.push_lead_reminders()')$q$;
+    -- the time limit is set in the job's own command: a «set» on the function does not stop a running statement (PG16)
+    execute $q$select cron.schedule('push-lead-reminders', '* * * * *', 'set statement_timeout = ''10s''; select app.push_lead_reminders()')$q$;
   end if;
 end;
 $$;
