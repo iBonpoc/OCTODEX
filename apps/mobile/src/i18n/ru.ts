@@ -2329,6 +2329,9 @@ export const ru = {
   "fr9.closed.keep": "Оставить",
   "fr9.closed.dropped": "Изменения убраны",
   "fr9.closed.ok": "Понятно",
+  // spec 33 П15: add-on modules (chat «Модуль Gutters»); a module's own words — mod.<key>.*
+  "mod.gutters.title": "Водостоки (Gutters)",
+  "mod.gutters.hint": "Замер дома пальцем на телефоне: линии водостоков, даунспоты, этажи → детали и смета из вашего прайса.",
 } as const;
 
 export type DictKey = keyof typeof ru;

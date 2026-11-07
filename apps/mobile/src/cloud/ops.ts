@@ -146,6 +146,11 @@ export type Op =
   | { k: "me.location"; on: boolean }
   /** step 18 P4b: my push switch of one group (public.set_push_kind: only for yourself, an active member) */
   | { k: "me.pushKind"; kind: PushGroup; enabled: boolean }
+  /** spec 33 П15 (C2a): owner / admin switch an add-on module on (the first time — the 7-day trial) or off; its settings
+   *  (only while it is active — founder О2; baseRowVersion = the version edited, a newer one is a conflict) */
+  | { k: "module.enable"; module: string }
+  | { k: "module.disable"; module: string }
+  | { k: "module.saveSettings"; module: string; settings: Record<string, unknown>; baseRowVersion: number }
   | { k: "customField.save"; field: CustomField; isNew: boolean }
   | { k: "customFieldValue.save"; value: CustomFieldValue; isNew: boolean }
   | { k: "customFieldValue.remove"; id: string }
@@ -542,6 +547,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.rpc("set_location_consent", { p_company_id: c, p_on: op.on }));
     case "me.pushKind":
       return run(supabase.rpc("set_push_kind", { p_company_id: c, p_kind: op.kind, p_enabled: op.enabled }));
+    case "module.enable":
+      return run(supabase.rpc("module_enable", { p_company_id: c, p_module_key: op.module }));
+    case "module.disable":
+      return run(supabase.rpc("module_disable", { p_company_id: c, p_module_key: op.module }));
+    case "module.saveSettings":
+      return run(supabase.rpc("module_save_settings", { p_company_id: c, p_module_key: op.module, p_settings: op.settings, p_base_row_version: op.baseRowVersion }));
     case "calendarEvent.remove":
       return run(supabase.from("calendar_events").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "customField.save": {

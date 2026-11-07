@@ -669,6 +669,9 @@ export interface Company {
   scheduleSettings?: Partial<import("@/features/scheduleSettings").ScheduleSettings>;
   /** working hours by weekday (companies.business_hours; missing = Mon–Sat 8:00–18:00) */
   businessHours?: Partial<import("@/features/scheduleSettings").BusinessHours>;
+  /** add-on modules by key (public.company_modules, docs/specs/33 П15; modules/registry.ts reads them). Written only
+   *  through module.enable / module.disable / module.saveSettings, never by company.save; absent = none on this phone. */
+  modules?: Record<string, import("@/modules/registry").CompanyModule>;
   estimate: { validDays: number; depositBps: number | null; terms?: string };
   payment: { zelle?: string; checkPayableTo?: string };
   licenses: CompanyLicense[];
