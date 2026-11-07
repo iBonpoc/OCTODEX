@@ -14,6 +14,7 @@ import { stuckKindKey } from "@/data/syncLink";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { CardList, Card, SectionTitle } from "@/ui/surfaces";
+import { useToast } from "@/ui/overlays";
 
 function StuckCard({ op }: { op: StuckOp }) {
   const { t, day, time } = useI18n();
@@ -91,6 +92,7 @@ function StuckCard({ op }: { op: StuckOp }) {
 function RejectedCard({ r }: { r: RejectedOp }) {
   const { t, money, day, time } = useI18n();
   const { dismissRejected } = useStore();
+  const toast = useToast();
   return (
     <Card status="bad">
       <View testID={`rejected-${r.id}`} style={{ gap: space[2] }}>
@@ -107,7 +109,7 @@ function RejectedCard({ r }: { r: RejectedOp }) {
         </T>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
           <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} />
-          <Button label={t("sync.rejected.ok")} icon="check" variant="ghost" onPress={() => dismissRejected(r.id)} />
+          <Button label={t("sync.rejected.ok")} icon="check" variant="ghost" onPress={() => toast.show(t("sync.rejected.dismissed"), dismissRejected(r.id))} />
         </View>
       </View>
     </Card>

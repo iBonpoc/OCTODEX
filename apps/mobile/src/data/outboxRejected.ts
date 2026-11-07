@@ -10,10 +10,12 @@
  */
 import type { Op } from "@/cloud/ops";
 import { isMoneyOp } from "./outboxDeps";
-import type { Owner, OwnedItem } from "./outboxOwner";
+import { REJECTED_KEY, type Owner, type OwnedItem } from "./outboxOwner";
 import { MONEY_KINDS } from "./syncLink";
 
-export const REJECTED_KEY = "octo.cloud.v1.rejected";
+export { REJECTED_KEY };
+/** a refused change older than this leaves the list by itself (review #263 №10) */
+export const REJECTED_KEEP_MS = 30 * 24 * 3600_000;
 
 export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense";
 export interface RejectedOp {
@@ -30,11 +32,15 @@ export interface RejectedOp {
   at: string;
 }
 
-/** a refused op → what to keep about it; null when it is not money */
-export function rejectedOf(item: OwnedItem, error: string, now: number): RejectedOp | null {
+/**
+ * a refused op → what to keep about it; null when it is not money. Whose: the op's owner, else the person signed in
+ * when it was refused (an op of an older version has none — never «everybody's», review #263 №6)
+ */
+export function rejectedOf(item: OwnedItem, error: string, now: number, who: Owner | null): RejectedOp | null {
   if (!isMoneyOp(item, MONEY_KINDS)) return null;
   const op = item.op;
-  const base = { id: item.id, ...(item.owner ? { owner: item.owner } : {}), kind: op.k, error, at: new Date(now).toISOString() };
+  const owner = item.owner ?? who ?? undefined;
+  const base = { id: item.id, ...(owner ? { owner } : {}), kind: op.k, error, at: new Date(now).toISOString() };
   switch (op.k) {
     case "estimate.deposit": return { ...base, what: "deposit", href: `/estimate/${op.id}`, amountCents: op.depositCents };
     // the client's approval / the company's countersign that makes the deposit invoice: the estimate it was about
@@ -48,6 +54,25 @@ export function rejectedOf(item: OwnedItem, error: string, now: number): Rejecte
   }
 }
 
-/** the signed-in person's, in this company (an old one without an owner — the person's, as in the outbox) */
-export const rejectedMine = (list: readonly RejectedOp[], who: Owner | null): RejectedOp[] =>
-  who ? list.filter((r) => !r.owner || (r.owner.userId === who.userId && r.owner.companyId === who.companyId)) : [];
+/** not older than REJECTED_KEEP_MS (a record without a readable time stays: never drop what cannot be dated) */
+export const freshRejected = (list: readonly RejectedOp[], now: number): RejectedOp[] =>
+  list.filter((r) => !(now - Date.parse(r.at) >= REJECTED_KEEP_MS));
+
+/** the signed-in person's, in this company, not older than 30 days (one without an owner — the person's, as in the outbox) */
+export const rejectedMine = (list: readonly RejectedOp[], who: Owner | null, now: number = Date.now()): RejectedOp[] =>
+  who ? freshRejected(list, now).filter((r) => !r.owner || (r.owner.userId === who.userId && r.owner.companyId === who.companyId)) : [];
+
+/** the account of `userId` is deleted: what stays — other people's (one without an owner goes, as in the outbox) */
+export const rejectedOthers = (list: readonly RejectedOp[], userId: string | null): RejectedOp[] =>
+  list.filter((r) => !!r.owner && r.owner.userId !== userId);
+
+/** the stored text → the list (a broken value → none) */
+export function parseRejected(raw: string | null): RejectedOp[] {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw) as unknown;
+    return Array.isArray(v) ? (v as RejectedOp[]) : [];
+  } catch {
+    return [];
+  }
+}

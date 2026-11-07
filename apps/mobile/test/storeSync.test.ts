@@ -1109,7 +1109,7 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
 
 describe("unit:storeSync — a money change the server refused stays visible (docs/specs/23 §3)", () => {
   const AGO = new Date(Date.now() - 60_000).toISOString();
-  type V = Value & { rejectedOps: { id: string; what: string; href: string }[]; dismissRejected: (id: string) => void };
+  type V = Value & { rejectedOps: { id: string; what: string; href: string; owner?: object }[]; dismissRejected: (id: string) => () => void };
   const v = (r: Root<P>) => valueOf(r) as unknown as V;
   const start = async () => {
     signIn("u1", "c1");
@@ -1129,12 +1129,44 @@ describe("unit:storeSync — a money change the server refused stays visible (do
     await wait(300);
     expect(stored()).toEqual([]);
     expect(v(r).rejectedOps).toEqual([expect.objectContaining({ id: "pay", what: "payment", href: "/invoice/i1" })]);
-    expect(JSON.parse(storage.get("octo.cloud.v1.rejected") ?? "[]")).toHaveLength(1); // survives a restart
-    v(r).dismissRejected("pay");
+    expect(JSON.parse(storage.get("octo.cloud.v1.rejected") ?? "[]")).toHaveLength(1);
+    // a restart: a new store reads it back and shows it (review #263 №5)
+    r.unmount();
+    const r2 = await start();
+    expect(v(r2).rejectedOps).toEqual([expect.objectContaining({ id: "pay", what: "payment" })]);
+    // «Понятно» — and the toast's «Отменить» puts it back (rule 5, review #263 №3)
+    const undo = v(r2).dismissRejected("pay");
+    await settle();
+    expect(v(r2).rejectedOps).toEqual([]);
+    undo();
+    await settle();
+    expect(v(r2).rejectedOps.map((x) => x.id)).toEqual(["pay"]);
+    v(r2).dismissRejected("pay");
     await settle();
     await wait(300);
-    expect(v(r).rejectedOps).toEqual([]);
+    expect(v(r2).rejectedOps).toEqual([]);
     expect(JSON.parse(storage.get("octo.cloud.v1.rejected") ?? "[]")).toEqual([]);
+  });
+  it("an op of an older version (no owner) is kept as the signed-in person's — never everybody's (review #263 №6)", async () => {
+    seedOutbox({ id: "pay", op: { k: "invoice.pay", invoiceId: "i1", paymentId: "p1", customerId: "c", amountCents: 300, method: "cash" }, at: AGO, tries: 4 });
+    const r = await start();
+    v(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.reject(refusal());
+    await settle();
+    await wait(300);
+    expect(JSON.parse(storage.get("octo.cloud.v1.rejected") ?? "[]")).toEqual([expect.objectContaining({ id: "pay", owner: u1c1 })]);
+  });
+  it("someone deletes their account on this phone: their refused changes go, another person's stay (review #263 №2)", async () => {
+    const other = { id: "o", owner: { userId: "u2", companyId: "c1" }, kind: "invoice.pay", what: "payment", href: "/invoice/i", error: "no", at: AGO };
+    const mine = { ...other, id: "m", owner: u1c1 };
+    storage.set("octo.cloud.v1.rejected", JSON.stringify([mine, other]));
+    const r = await start();
+    expect(v(r).rejectedOps.map((x) => x.id)).toEqual(["m"]);
+    forgetDeviceState(wipedOnDelete, { userId: "u1" });
+    await settle();
+    await wait(300);
+    expect(JSON.parse(storage.get("octo.cloud.v1.rejected") ?? "[]").map((x: { id: string }) => x.id)).toEqual(["o"]);
   });
   it("not money: dropped as before, nothing kept", async () => {
     seedOutbox({ id: "ev", op: { k: "calendarEvent.remove", id: "x" }, at: AGO, tries: 4, owner: u1c1 });
@@ -1156,9 +1188,11 @@ describe("unit:storeSync — a money change the server refused stays visible (do
     await settle();
     expect(v(r).rejectedOps).toEqual([]);
   });
-  it("another person's refused change is not shown to me", async () => {
-    storage.set("octo.cloud.v1.rejected", JSON.stringify([{ id: "x", owner: { userId: "u2", companyId: "c1" }, kind: "invoice.pay", what: "payment", href: "/invoice/i", error: "no", at: AGO }]));
+  it("another person's refused change is not shown to me; mine is (review #263 №5)", async () => {
+    const other = { id: "x", owner: { userId: "u2", companyId: "c1" }, kind: "invoice.pay", what: "payment", href: "/invoice/i", error: "no", at: AGO };
+    const otherCompany = { ...other, id: "y", owner: { userId: "u1", companyId: "c2" } };
+    storage.set("octo.cloud.v1.rejected", JSON.stringify([other, { ...other, id: "m", owner: u1c1 }, otherCompany]));
     const r = await start();
-    expect(v(r).rejectedOps).toEqual([]);
+    expect(v(r).rejectedOps.map((x) => x.id)).toEqual(["m"]);
   });
 });

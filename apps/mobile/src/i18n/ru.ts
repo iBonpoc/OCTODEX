@@ -253,6 +253,7 @@ export const ru = {
   "sync.rejected.title": "Сервер отказал",
   "sync.rejected.hint": "Сервер не принял это изменение. На телефоне снова данные сервера — проверьте и внесите заново, если нужно.",
   "sync.rejected.open": "Открыть",
+  "sync.rejected.dismissed": "Убрано из списка",
   "sync.rejected.ok": "Понятно",
   "sync.stuck.retry": "Повторить сейчас",
   "sync.stuck.discard": "Отменить изменение…",

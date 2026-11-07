@@ -254,6 +254,7 @@ export const en: Dict = {
   "sync.rejected.title": "The server refused",
   "sync.rejected.hint": "The server did not accept this change. The phone shows the server's data again — check it and enter it again if needed.",
   "sync.rejected.open": "Open",
+  "sync.rejected.dismissed": "Removed from the list",
   "sync.rejected.ok": "Got it",
   "sync.stuck.retry": "Retry now",
   "sync.stuck.discard": "Discard change…",

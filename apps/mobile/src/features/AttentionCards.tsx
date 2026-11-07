@@ -89,7 +89,7 @@ export function AttentionPeople({ items, max }: { items: AttentionItem[]; max: n
           key: it.id,
           tone: it.status,
           text: t(it.label, it.params),
-          detail: [addrOf(it), office && it.kind !== "overdue" && it.amountCents ? money(it.amountCents) : undefined].filter(Boolean).join(" · ") || undefined,
+          detail: [addrOf(it), (office || it.kind === "rejected") && it.kind !== "overdue" && it.amountCents ? money(it.amountCents) : undefined].filter(Boolean).join(" · ") || undefined,
           onPress: () => router.push(attentionHref(it)),
           action: verb(it),
         }))}
@@ -120,14 +120,16 @@ export function AttentionRows({ items }: { items: AttentionItem[] }) {
         const s = subjectOf(db, it);
         const who = s.customerId ? db.customers.find((c) => c.id === s.customerId) : undefined;
         const lead = s.leadId ? db.leads.find((x) => x.id === s.leadId) : undefined;
-        const name = who?.name ?? lead?.name ?? it.name;
+        // a reason with no client or lead (a refused money change): its status word, not empty initials
+        const name = who?.name ?? lead?.name ?? (it.name || t(it.chip, it.params));
         return (
           <ListCard
             key={it.id}
             title={t(it.label, it.params)}
             when={name}
             lead={{ kind: "initials", text: initials(name), dashed: !!lead }}
-            value={office && it.amountCents ? money(it.amountCents) : undefined}
+            // a refused change is the person's own money: its amount for every role, as on top of «Разобрать» (review #263 №8)
+            value={(office || it.kind === "rejected") && it.amountCents ? money(it.amountCents) : undefined}
             status={{ tone: it.status, label: t(it.chip, it.params) }}
             edge={it.status === "bad" || it.status === "warn" ? it.status : null}
             facts={{ phone: who?.phone ?? lead?.phone }}

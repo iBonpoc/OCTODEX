@@ -40,7 +40,7 @@ import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } fro
 import { backoffMs, classify, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { REJECTED_KEY, rejectedMine, rejectedOf, type RejectedOp } from "./outboxRejected";
+import { freshRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -151,7 +151,8 @@ interface StoreCtx {
   discardOp: (id: ID) => boolean;
   /** the person's money changes the server refused: «не записано на сервере» until «Понятно» (docs/specs/23 §3) */
   rejectedOps: RejectedOp[];
-  dismissRejected: (id: ID) => void;
+  /** «Понятно»: the toast's «Отменить» puts it back (rule 5) */
+  dismissRejected: (id: ID) => Undo;
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -432,6 +433,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   whoRef.current = who;
   const mine = (items: readonly OwnedItem[]) => mineOf(items, whoRef.current);
   // a wipe that came while the outbox was still loading (the start repeat): applied to what the load brings
+  const rejectedReadyRef = useRef(rejectedReady);
+  rejectedReadyRef.current = rejectedReady;
+  const forgetRejectedOnLoad = useRef<{ userId: string | null } | null>(null);
+  useEffect(() => {
+    if (!rejectedReady || !forgetRejectedOnLoad.current) return;
+    const { userId } = forgetRejectedOnLoad.current;
+    forgetRejectedOnLoad.current = null;
+    setRejected((prev) => rejectedOthers(prev, userId));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rejectedReady]);
   const outboxReadyRef = useRef(outboxReady);
   outboxReadyRef.current = outboxReady;
   const forgetOnLoad = useRef<{ userId: string | null } | null>(null);
@@ -549,6 +560,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!outboxReadyRef.current) forgetOnLoad.current = { userId: me };
         // a functional update: the latest outbox, also one that is set but not yet rendered
         setOutbox((prev) => (outboxRef.current = othersOf(prev, me)));
+        // the refused money changes: the deleted person's go, other people's stay (review #263 №2)
+        if (!rejectedReadyRef.current) forgetRejectedOnLoad.current = { userId: me };
+        setRejected((prev) => rejectedOthers(prev, me));
         setGateCodes({});
         waitingPoints.current = {};
       }),
@@ -641,8 +655,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // silently: it stays as «не записано на сервере» until the person says «Понятно» (docs/specs/23 §3)
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
-            const rej = rejectedOf(item, msg, Date.now());
-            if (rej) setRejected((prev) => [...prev.filter((x) => x.id !== rej.id), rej]);
+            const rej = rejectedOf(item, msg, Date.now(), w);
+            if (rej) setRejected((prev) => [...freshRejected(prev, Date.now()).filter((x) => x.id !== rej.id), rej]);
           } else {
             outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...x, tries: item.tries + 1, error: msg } : x));
           }
@@ -808,7 +822,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     return true;
   };
   const rejectedOps = mode === "cloud" ? rejectedMine(rejected, who) : [];
-  const dismissRejected = (id: ID) => setRejected((prev) => prev.filter((x) => x.id !== id));
+  const dismissRejected = (id: ID): Undo => {
+    const was = rejected.find((x) => x.id === id);
+    setRejected((prev) => prev.filter((x) => x.id !== id));
+    return () => {
+      if (was) setRejected((prev) => (prev.some((x) => x.id === was.id) ? prev : [...prev, was]));
+    };
+  };
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? mineOf(outbox, who).map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 

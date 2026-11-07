@@ -3,8 +3,8 @@
  * decision of the director 07.11; rule 6). The server's answer is replaced in the browser (page.route), the rest is the
  * real stack: an expense queued with four refusals already gets its fifth (403 / 42501) → it leaves the outbox, and
  * - «Профиль и аккаунт» shows the card «Расход не записан на сервере» (our own words, not the server's English text);
- * - «Требует внимания» has it first;
- * - «Понятно» takes it away from both.
+ * - «Требует внимания» has it first in «Разобрать» (by testID) and on «Главная»; «Открыть» opens the record;
+ * - «Понятно» in «Разобрать» takes it away from both.
  */
 const { signIn } = require("../signIn.cjs");
 
@@ -42,19 +42,33 @@ exports.run = async (h, { seed }) => {
   h.expect(!left.includes("q-rej"), `the refused op left the outbox (${left})`);
   await h.shot("profile");
 
-  // «Требует внимания»: first
+  // «Разобрать»: first — the top card itself, by its testID (CHECKS §9 №3)
   await h.go("/triage");
-  for (let i = 0; i < 20 && !/Расход не записан на сервере/.test(await h.text()); i++) await p.waitForTimeout(500);
-  h.expect(/Расход не записан на сервере/.test(await h.text()), "«Требует внимания» has it");
+  for (let i = 0; i < 20 && (await p.getByTestId("triage-top-rej-q-rej").count()) === 0; i++) await p.waitForTimeout(500);
+  h.expect((await p.getByTestId("triage-top-rej-q-rej").count()) > 0, "«Разобрать»: the refused expense is the top card");
   await h.shot("triage");
 
-  // «Понятно»: gone from both
-  await h.go("/settings/profile");
-  await p.getByTestId("rejected-q-rej").last().getByRole("button", { name: "Понятно" }).click();
-  for (let i = 0; i < 10 && (await p.getByTestId("rejected-q-rej").count()) > 0; i++) await p.waitForTimeout(300);
-  h.expect((await p.getByTestId("rejected-q-rej").count()) === 0, "«Понятно»: the card is gone");
+  // «Главная»: in «Требует внимания» too
+  await h.go("/today");
+  for (let i = 0; i < 20 && !/Расход не записан на сервере/.test(await h.text()); i++) await p.waitForTimeout(500);
+  h.expect(/Расход не записан на сервере/.test(await h.text()), "«Главная»: «Требует внимания» has it");
+
+  // «Открыть» on the top card of «Разобрать»: the record it was about (an expense without a job — the profile, where
+  // its card is); the page changes, so the press is seen
   await h.go("/triage");
+  for (let i = 0; i < 20 && (await p.getByTestId("triage-top-rej-q-rej").count()) === 0; i++) await p.waitForTimeout(500);
+  await p.getByRole("button", { name: "Открыть" }).first().click();
+  await p.waitForURL(/\/settings\/profile/, { timeout: 10_000 }).catch(() => {});
+  h.expect(/\/settings\/profile/.test(p.url()) && (await p.getByTestId("rejected-q-rej").count()) > 0, `«Открыть»: the record (${p.url()})`);
+
+  // «Понятно» in «Разобрать»: gone from both
+  await h.go("/triage");
+  for (let i = 0; i < 20 && (await p.getByTestId("triage-top-rej-q-rej").count()) === 0; i++) await p.waitForTimeout(500);
+  await p.getByRole("button", { name: "Понятно" }).last().click();
+  for (let i = 0; i < 10 && (await p.getByTestId("triage-top-rej-q-rej").count()) > 0; i++) await p.waitForTimeout(300);
+  h.expect((await p.getByTestId("triage-top-rej-q-rej").count()) === 0, "«Понятно»: gone from «Разобрать»");
+  await h.go("/settings/profile");
   await p.waitForTimeout(500);
-  h.expect(!/Расход не записан на сервере/.test(await h.text()), "«Понятно»: and from «Требует внимания»");
+  h.expect((await p.getByTestId("rejected-q-rej").count()) === 0, "«Понятно»: and its card in the profile");
   await p.unroute("**/rest/v1/**", refuse);
 };
