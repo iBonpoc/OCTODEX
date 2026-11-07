@@ -6725,6 +6725,14 @@ select tst.ok(not exists (select 1 from public.push_outbox where kind = 'lead.as
 update public.leads set assigned_to = 'a8400000-0000-4000-8000-000000000001' where id = '18400000-0000-4000-8000-000000000003';
 select tst.ok(not exists (select 1 from public.push_outbox where kind = 'lead.assigned' and user_id = 'a8400000-0000-4000-8000-000000000001'),
           'T84 a subcontractor gets no lead push');
+-- a lead given to the subcontractor at once: no push to him (the people of the flow still get it)
+:as_office_a
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('18400000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Sub', '+13235558405', 'a8400000-0000-4000-8000-000000000001');
+:as_super
+select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000005' and user_id = 'a8400000-0000-4000-8000-000000000001')
+          and exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000005' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T84 a lead given to the subcontractor at once: nothing to him, the owner still hears');
 -- a visit: the office puts Mike and the subcontractor on it (assign_visit), and itself
 insert into public.visits (id, company_id, lead_id, kind, legacy_no_property, starts_at, ends_at) values
   ('f8400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '18400000-0000-4000-8000-000000000001', 'inspection', true,
@@ -6733,8 +6741,8 @@ insert into public.visits (id, company_id, lead_id, kind, legacy_no_property, st
 select public.assign_visit('f8400000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003', 'a8400000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000002']::uuid[]);
 :as_super
 select tst.ok((select array_agg(user_id order by user_id) from public.push_outbox where kind = 'visit.assigned' and source_id = 'f8400000-0000-4000-8000-000000000001')
-          = array['a0000000-0000-0000-0000-000000000003', 'a8400000-0000-4000-8000-000000000001']::uuid[],
-          'T84 visit assigned: Mike and the subcontractor, not the office who assigned itself');
+          = array['a0000000-0000-0000-0000-000000000003']::uuid[],
+          'T84 visit assigned: Mike; not the office who assigned itself, not the subcontractor (he cannot open a visit yet)');
 select tst.ok((select bool_and(route = '/visit/f8400000-0000-4000-8000-000000000001') from public.push_outbox where kind = 'visit.assigned'), 'T84 the push leads to the visit');
 -- moved (by the office, who is on it too) while «assigned» still waits: no second push
 :as_office_a
@@ -6747,16 +6755,18 @@ update public.push_outbox set status = 'sent' where kind = 'visit.assigned';
 update public.visits set ends_at = ends_at + interval '30 minutes' where id = 'f8400000-0000-4000-8000-000000000001';
 :as_super
 select tst.ok((select array_agg(user_id order by user_id) from public.push_outbox where kind = 'visit.rescheduled')
-          = array['a0000000-0000-0000-0000-000000000003', 'a8400000-0000-4000-8000-000000000001']::uuid[],
-          'T84 a longer visit (only ends_at): «visit rescheduled» to everyone on it but the office');
+          = array['a0000000-0000-0000-0000-000000000003']::uuid[],
+          'T84 a longer visit (only ends_at): «visit rescheduled» to everyone on it but the office and the subcontractor');
 -- the same values again (an offline repeat) or a note: nothing new; moved again while waiting: still one
 update public.push_outbox set status = 'sent' where kind = 'visit.rescheduled';
 update public.visits set ends_at = ends_at, notes = 'gate code at the door' where id = 'f8400000-0000-4000-8000-000000000001';
-select tst.ok((select count(*) from public.push_outbox where kind = 'visit.rescheduled') = 2, 'T84 the same time again or a note: no push');
+select tst.ok((select count(*) from public.push_outbox where kind = 'visit.rescheduled') = 1, 'T84 the same time again or a note: no push');
 update public.visits set starts_at = starts_at + interval '1 day', ends_at = ends_at + interval '1 day' where id = 'f8400000-0000-4000-8000-000000000001';
 update public.visits set starts_at = starts_at + interval '1 hour', ends_at = ends_at + interval '1 hour' where id = 'f8400000-0000-4000-8000-000000000001';
-select tst.ok((select count(*) = count(distinct user_id) and count(*) = 3 from public.push_outbox where kind = 'visit.rescheduled' and status = 'pending'),
-          'T84 moved twice while waiting (not by a person on it): one push per person, all three');
+select tst.ok((select count(*) = count(distinct user_id) and count(*) = 2 from public.push_outbox where kind = 'visit.rescheduled' and status = 'pending'),
+          'T84 moved twice while waiting (not by a person on it): one push per person (Mike, the office)');
+select tst.ok(not exists (select 1 from public.push_outbox where user_id = 'a8400000-0000-4000-8000-000000000001' and kind like 'visit.%'),
+          'T84 a subcontractor on a visit gets no visit push (security-check #291 №1)');
 -- taken off and put back (assign_visit updates deleted_at back to null): a new «assigned» once the old one is gone
 :as_office_a
 select public.assign_visit('f8400000-0000-4000-8000-000000000001', array['a8400000-0000-4000-8000-000000000001']::uuid[]);
@@ -6804,6 +6814,9 @@ update public.leads set status = 'lost', lost_reason = 'price_too_high' where id
 -- lead 3 went to the subcontractor: its «new lead» to owner and office still stands (they handle the flow)
 -- lead 4 is handed from Mike to the office before sending
 update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = '18400000-0000-4000-8000-000000000004';
+-- a forged row: «visit assigned» to the owner of a visit he is not on → skipped at sending
+insert into public.push_outbox (company_id, user_id, kind, route, source_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'visit.assigned', '/visit/f8400000-0000-4000-8000-000000000002', 'f8400000-0000-4000-8000-000000000002');
 reset role; set role service_role;
 select public.push_claim(500);
 :as_super
@@ -6813,6 +6826,9 @@ select tst.ok((select bool_and(status = 'skipped' and error = 'not_member') from
 select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox
                where source_id = 'f8400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000003'),
           'T84 at sending: a person taken off the visit gets nothing');
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox
+               where kind = 'visit.assigned' and source_id = 'f8400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T84 at sending: a forged «visit assigned» of a visit the person is not on is skipped');
 select tst.ok((select count(*) = 2 and bool_and(status = 'sending') from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000003'
                and user_id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002')),
           'T84 at sending: the open lead still goes to the people of the flow');
@@ -6829,7 +6845,7 @@ insert into public.notifications (id, company_id, kind, estimate_id) values
 select tst.ok(not exists (select 1 from public.push_outbox where user_id = 'a8400000-0000-4000-8000-000000000001' and kind in ('estimate.client_signed', 'payment.received')),
           'T84 a subcontractor gets no signature or money push');
 update public.estimates set owner_user_id = null where id = '0e730000-0000-4000-8000-000000000003';
-\echo 'T84 visits and leads: assigned, moved, new, given; not the actor; a subcontractor only his visits; checked at sending ok'
+\echo 'T84 visits and leads: assigned, moved, new, given; not the actor; a subcontractor nothing yet; checked at sending ok'
 
 -- ---------------------------------------------------------------- T85: the switches by kind (docs/specs/27 §4.7)
 :as_super

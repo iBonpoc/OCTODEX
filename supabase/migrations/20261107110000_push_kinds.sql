@@ -7,7 +7,7 @@
 --    visit_assignees (a person put on a visit, or put back) → visit.assigned; visits (the time moved) → visit.rescheduled
 --    to everyone on it; leads (a new lead → owner, admin, office and its assignee; assigned_to changed → lead.assigned). The person who did it gets nothing.
 -- 4. app.push_still_recipient — the checks at sending time for the new kinds (a subcontractor gets «visits» of his own
---    visits only: director 07.11, §4.7 №3); push_claim — the 'off' check; erase_personal_rows — the switches go too.
+--    visits only — once he can open them: until then nothing, security-check #291); push_claim — the 'off' check; erase_personal_rows — the switches go too.
 -- Nothing is renamed or dropped (rule 16): the kind check is widened (only the server reads the queue).
 
 -- ---- 1. The queue ------------------------------------------------------------------------------------------------------
@@ -141,9 +141,14 @@ begin
     if v.id is null or v.deleted_at is not null or v.status not in ('scheduled', 'en_route') then
       return null;
     end if;
+    -- not a subcontractor: he cannot open a visit yet (visits_select lets in staff and the assigned tech only;
+    -- security-check #291 №1) — «visits» for him after he gets access to his own visits
+    if app.push_role(new.company_id, new.user_id) is not distinct from 'subcontractor' then
+      return null;
+    end if;
     perform app.push_enqueue(new.company_id, new.user_id, 'visit.assigned', '/visit/' || v.id::text, v.id);
   exception when others then
-    raise warning 'push queue: % %', sqlstate, sqlerrm;
+    raise warning 'push queue: %', sqlstate;
   end;
   return null;
 end;
@@ -171,14 +176,15 @@ begin
     end if;
     for r in select a.user_id from public.visit_assignees a
               where a.visit_id = new.id and a.company_id = new.company_id and a.deleted_at is null loop
-      if not exists (select 1 from public.push_outbox o
+      if app.push_role(new.company_id, r.user_id) is distinct from 'subcontractor'
+         and not exists (select 1 from public.push_outbox o
                       where o.user_id = r.user_id and o.kind = 'visit.assigned' and o.source_id = new.id
                         and o.status in ('pending', 'sending')) then
         perform app.push_enqueue(new.company_id, r.user_id, 'visit.rescheduled', '/visit/' || new.id::text, new.id);
       end if;
     end loop;
   exception when others then
-    raise warning 'push queue: % %', sqlstate, sqlerrm;
+    raise warning 'push queue: %', sqlstate;
   end;
   return null;
 end;
@@ -217,7 +223,7 @@ begin
       perform app.push_enqueue(new.company_id, new.assigned_to, 'lead.assigned', '/lead/' || new.id::text, new.id);
     end if;
   exception when others then
-    raise warning 'push queue: % %', sqlstate, sqlerrm;
+    raise warning 'push queue: %', sqlstate;
   end;
   return null;
 end;
@@ -263,7 +269,7 @@ begin
     on conflict (notification_id, user_id) do nothing;
   exception when others then
     -- the push never rolls back what happened (a signature, a payment); the reason goes to the server log only
-    raise warning 'push queue: % %', sqlstate, sqlerrm;
+    raise warning 'push queue: %', sqlstate;
   end;
   return null;
 end;
@@ -271,8 +277,8 @@ $$;
 revoke all on function app.tg_notification_push() from public, anon, authenticated;
 
 -- ---- 4. At sending time ------------------------------------------------------------------------------------------------
--- The body of 20261107100000 plus the kinds of П4. A subcontractor gets «visits» of the visits he is on — never leads,
--- signatures or money (app.push_recipients excludes him for those).
+-- The body of 20261107100000 plus the kinds of П4. A subcontractor gets nothing for now: not leads, signatures or money
+-- (app.push_recipients excludes him), and not «visits» until he can open his own visits (security-check #291 №1).
 create or replace function app.push_still_recipient(p_row public.push_outbox)
 returns boolean language plpgsql stable security definer set search_path = '' as $$
 declare
@@ -292,8 +298,9 @@ begin
   elsif p_row.kind = 'payment.received' then
     return p_row.user_id in (select app.push_recipients(p_row.company_id, array['owner', 'admin'], null));
   elsif p_row.kind in ('visit.assigned', 'visit.rescheduled') then
-    -- still on the visit, and the visit still ahead
+    -- still on the visit, and the visit still ahead; not a subcontractor (he cannot open the visit yet, §4.8)
     return app.push_member(p_row.company_id, p_row.user_id)
+       and app.push_role(p_row.company_id, p_row.user_id) is distinct from 'subcontractor'
        and exists (select 1 from public.visit_assignees a join public.visits v on v.id = a.visit_id and v.company_id = a.company_id
                     where a.visit_id = p_row.source_id and a.user_id = p_row.user_id and a.company_id = p_row.company_id
                       and a.deleted_at is null and v.deleted_at is null and v.status in ('scheduled', 'en_route'));
