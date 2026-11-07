@@ -18,7 +18,8 @@ exports.run = async (h) => {
   await h.go("/today");
   const chart = p.locator('[data-testid="received-chart"]:visible');
   for (const [period, want] of [["Неделя", [7]], ["Месяц", [4, 5, 6]], ["Сегодня", [7]]]) {
-    await p.getByRole("button", { name: period, exact: true }).first().click().catch(() => p.getByText(period, { exact: true }).first().click());
+    // the period switch is a tablist (Segmented): a tab, not the first «Сегодня» text on the page (title, menu)
+    await p.getByRole("tab", { name: period, exact: true }).first().click();
     await p.waitForTimeout(400);
     const n = await chart.locator(":scope > div").count();
     h.expect(want.includes(n), `${period}: ${want.join("/")} columns (${n})`);
