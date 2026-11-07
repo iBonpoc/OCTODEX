@@ -39,9 +39,13 @@ export const expenseCategoryToDb: Record<ExpenseCategory, string> = {
 const expenseCategoryFromDb = (c: string): ExpenseCategory =>
   c === "dump_fee" ? "dump" : (["materials", "fuel", "tools"].includes(c) ? c : "other") as ExpenseCategory;
 
-async function q<T = Row>(p: PromiseLike<{ data: unknown; error: { message: string } | null }>): Promise<T[]> {
-  const { data, error } = await p;
-  if (error) throw new Error(error.message);
+/**
+ * A failed read keeps the server's answer: its HTTP status and code go with the error, so the outbox and «без сети»
+ * tell a dropped connection, the server's «not now» (5xx, PGRST002…) and a refusal apart (outboxRetry.classify, #244).
+ */
+async function q<T = Row>(p: PromiseLike<{ data: unknown; error: { message: string; code?: string } | null; status?: number }>): Promise<T[]> {
+  const { data, error, status } = await p;
+  if (error) throw Object.assign(new Error(error.message), { status, code: error.code });
   return (data ?? []) as T[];
 }
 
