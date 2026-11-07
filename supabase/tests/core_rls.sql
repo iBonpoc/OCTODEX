@@ -5975,11 +5975,12 @@ update public.companies set timezone = 'America/Los_Angeles', phone = null where
 :as_tech_a
 select public.register_push_device('ExponentPushToken[t80-mike-1]', 'android', 'es', '1.0.0 · 270');
 select tst.ok(tst.cnt($q$select 1 from public.push_devices where revoked_at is null$q$) = 1, 'T80 the person sees their phone');
-select tst.ok((select lang from public.push_devices where expo_token = 'ExponentPushToken[t80-mike-1]') = 'es', 'T80 the interface language of the phone is kept');
+select tst.ok((select lang from public.push_devices) = 'es', 'T80 the interface language of the phone is kept');
+select tst.fails($q$select expo_token from public.push_devices$q$, 'T80 the token itself is never read back');
 select public.register_push_device('ExponentPushToken[t80-mike-1]', 'android', 'ru', null);
 select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 1 and (select lang from public.push_devices) = 'ru', 'T80 a repeat updates the same row (the language changed)');
 select public.register_push_device('ExpoPushToken[t80-mike-2]', 'ios', 'xx', null);
-select tst.ok((select lang from public.push_devices where expo_token = 'ExpoPushToken[t80-mike-2]') = 'en', 'T80 an unknown language becomes en');
+select tst.ok((select lang from public.push_devices where platform = 'ios') = 'en', 'T80 an unknown language becomes en');
 select tst.fails_like($q$select public.register_push_device('not a token', 'android', 'en', null)$q$, 'not a push token', 'T80 a wrong token is refused');
 select tst.fails_like($q$select public.register_push_device('ExponentPushToken[a b]', 'android', 'en', null)$q$, 'not a push token', 'T80 a token with a space is refused');
 select tst.fails_like($q$select public.register_push_device('ExponentPushToken[ok]', 'windows', 'en', null)$q$, 'unknown platform', 'T80 an unknown platform is refused');
@@ -5998,9 +5999,9 @@ select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 1, 'T80 the tok
 :as_tech_a
 select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 1, 'T80 Mike keeps only his other phone');
 select public.forget_push_device('ExpoPushToken[t80-mike-2]');
-select tst.ok((select revoked_reason from public.push_devices where expo_token = 'ExpoPushToken[t80-mike-2]') = 'signed_out', 'T80 sign out switches the own phone off');
+select tst.ok((select revoked_reason from public.push_devices where platform = 'ios') = 'signed_out', 'T80 sign out switches the own phone off');
 select public.register_push_device('ExpoPushToken[t80-mike-2]', 'ios', 'en', null);
-select tst.ok((select revoked_at is null from public.push_devices where expo_token = 'ExpoPushToken[t80-mike-2]'), 'T80 signing in again switches it on');
+select tst.ok((select revoked_at is null from public.push_devices where platform = 'ios'), 'T80 signing in again switches it on');
 -- not more than 10 live phones
 do $$ begin
   for i in 1..11 loop
@@ -6008,7 +6009,18 @@ do $$ begin
   end loop;
 end $$;
 select tst.ok(tst.cnt($q$select 1 from public.push_devices where revoked_at is null$q$) = 10, 'T80 not more than 10 live phones');
-select tst.ok((select revoked_reason from public.push_devices where expo_token = 'ExpoPushToken[t80-mike-2]') = 'too_many', 'T80 the phone seen longest ago goes off');
+select tst.ok((select revoked_reason from public.push_devices where platform = 'ios') = 'too_many', 'T80 the phone seen longest ago goes off');
+-- the table never grows without end: 30 more fake tokens leave at most 10 live + 10 switched-off rows
+do $$ begin
+  for i in 1..30 loop
+    perform public.register_push_device('ExponentPushToken[t80-flood-' || i || ']', 'android', 'en', null);
+  end loop;
+end $$;
+select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) <= 20 and tst.cnt($q$select 1 from public.push_devices where revoked_at is null$q$) = 10,
+          'T80 a flood of tokens keeps at most 20 rows of a person');
+:as_super
+select tst.ok((select revoked_at is null from public.push_devices where expo_token = 'ExponentPushToken[t80-flood-30]'), 'T80 the phone just registered is never the one switched off');
+:as_tech_a
 reset role; set role anon;
 select tst.fails($q$select public.register_push_device('ExponentPushToken[anon]', 'android', 'en', null)$q$, 'T80 anon cannot register');
 select tst.fails($q$select 1 from public.push_devices$q$, 'T80 anon cannot read the phones');
@@ -6017,9 +6029,29 @@ select tst.ok(not has_function_privilege('anon', 'public.forget_push_device(text
           and not has_function_privilege('anon', 'public.register_push_device(text, text, text, text)', 'EXECUTE'), 'T80 anon executes neither function');
 select tst.ok(not has_table_privilege('authenticated', 'public.push_devices', 'INSERT') and not has_table_privilege('authenticated', 'public.push_devices', 'UPDATE')
           and not has_table_privilege('authenticated', 'public.push_devices', 'DELETE'), 'T80 the app has only select on push_devices');
--- account deletion (S22) erases the phones
+-- the server's paths without BYPASSRLS (supabase/README: not checked on staging) — as T57: the rules «to postgres» carry them
+create role t80_owner nologin nobypassrls;
+grant postgres to t80_owner;
+grant usage on schema app, public to t80_owner;
+grant select, insert, update, delete on public.push_devices, public.push_outbox to t80_owner;
+grant execute on function app.push_account_alive(uuid) to t80_owner;
+alter function public.register_push_device(text, text, text, text) owner to t80_owner;
+alter function app.erase_personal_rows(uuid) owner to t80_owner;
+:as_tech2_a
+select public.register_push_device('ExponentPushToken[t80-luis-2]', 'ios', 'en', null);
+select tst.ok(tst.cnt($q$select 1 from public.push_devices where platform = 'ios'$q$) = 1, 'T80 registering works without BYPASSRLS');
+:as_super
+-- account deletion (S22) erases the phones — without BYPASSRLS too
 select app.erase_personal_rows('a0000000-0000-0000-0000-000000000003');
-select tst.ok((select count(*) from public.push_devices where user_id = 'a0000000-0000-0000-0000-000000000003') = 0, 'T80 account deletion erases the person''s phones');
+select tst.ok((select count(*) from public.push_devices where user_id = 'a0000000-0000-0000-0000-000000000003') = 0, 'T80 account deletion erases the person''s phones (no BYPASSRLS)');
+alter function public.register_push_device(text, text, text, text) owner to postgres;
+alter function app.erase_personal_rows(uuid) owner to postgres;
+-- a deleted account (its JWT still valid for a while) registers nothing
+update public.users set deleted_at = now() where id = 'a0000000-0000-0000-0000-000000000004';
+:as_tech2_a
+select tst.fails_like($q$select public.register_push_device('ExponentPushToken[t80-gone]', 'android', 'en', null)$q$, 'not allowed', 'T80 a deleted account cannot register a phone');
+:as_super
+update public.users set deleted_at = null where id = 'a0000000-0000-0000-0000-000000000004';
 delete from public.push_devices;
 \echo 'T80 push_devices: own rows only, through the functions, the token follows the person signed in ok'
 
@@ -6086,6 +6118,19 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_notification_p
           and not has_function_privilege('authenticated', 'app.purge_push_outbox()', 'EXECUTE'), 'T81 nobody in the app executes the queue functions');
 select tst.fails_like($q$insert into public.push_outbox (company_id, user_id, kind, route) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'lead.new', 'https://evil.test')$q$,
           '%push_outbox_route_check%', 'T81 a route is only a path inside the app');
+-- the same feed row inserted again does not queue a second push
+select tst.fails($q$insert into public.notifications (id, company_id, kind, estimate_id) values ('08100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003')$q$, 'T81 a repeat of the feed row is refused');
+select tst.ok((select count(*) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000001')
+          = (select count(distinct user_id) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000001'), 'T81 one push per person, no second one');
+-- the trigger and the purge without BYPASSRLS (as T57)
+alter function app.tg_notification_push() owner to t80_owner;
+alter function app.purge_push_outbox() owner to t80_owner;
+alter function app.erase_personal_rows(uuid) owner to t80_owner;
+grant execute on function app.push_recipients(uuid, text[], uuid) to t80_owner;
+insert into public.notifications (id, company_id, kind, invoice_id) values
+  ('08100000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+select tst.ok((select count(*) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000006')
+          = (select count(*) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000002'), 'T81 the queue works without BYPASSRLS (the same people as the deposit)');
 -- account deletion erases the person's queued pushes; the 30-day purge keeps fresh rows
 select app.erase_personal_rows('a8100000-0000-4000-8000-000000000002');
 select tst.ok(not exists (select 1 from public.push_outbox where user_id = 'a8100000-0000-4000-8000-000000000002'), 'T81 account deletion erases the person''s queue rows');
@@ -6093,10 +6138,17 @@ select tst.ok(app.purge_push_outbox() = 0 and exists (select 1 from public.push_
 update public.push_outbox set created_at = now() - interval '31 days';
 select tst.ok(app.purge_push_outbox() > 0, 'T81 the purge deletes rows older than 30 days');
 select tst.ok(not exists (select 1 from public.push_outbox), 'T81 nothing older than 30 days is left');
+alter function app.tg_notification_push() owner to postgres;
+alter function app.purge_push_outbox() owner to postgres;
+alter function app.erase_personal_rows(uuid) owner to postgres;
 delete from public.notifications where id::text like '08100000-%';
 update public.estimates set owner_user_id = null where id = '0e730000-0000-4000-8000-000000000003';
 update public.memberships set status = 'disabled' where user_id::text like 'a8100000-%' and status = 'active';
 drop table t81_who;
+delete from public.push_devices;
+reassign owned by t80_owner to postgres;
+drop owned by t80_owner;
+drop role t80_owner;
 \echo 'T81 push_outbox: owner, admin and the author; payments to owner and admin; no text; server only ok'
 
 \echo 'ALL TESTS PASSED'

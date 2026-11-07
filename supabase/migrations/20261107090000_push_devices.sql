@@ -30,14 +30,35 @@ create index push_devices_user_idx on public.push_devices (user_id);
 alter table public.push_devices enable row level security;
 alter table public.push_devices force row level security;
 revoke all on table public.push_devices from public, anon, authenticated;
-grant select on public.push_devices to authenticated;
+-- the token itself is never read back (security-check П1 №3): the phone knows its own; a person who once had the phone
+-- (a shared tablet) must not learn it and take the phone back with it
+grant select (id, user_id, platform, lang, app_version, created_at, last_seen_at, revoked_at, revoked_reason)
+  on public.push_devices to authenticated;
 create policy push_devices_select_own on public.push_devices for select to authenticated
   using (user_id = (select auth.uid()));
+-- the functions below (and account deletion, pg_cron) run as their owner postgres; under force RLS they must work even
+-- if postgres has no BYPASSRLS (supabase/README, not checked on staging; the same rules as user_locations, 210000).
+-- No client has these rights, so the rules open nothing to one.
+create policy push_devices_select_server on public.push_devices for select to postgres
+  using (current_user not in ('authenticated', 'anon'));
+create policy push_devices_insert_server on public.push_devices for insert to postgres
+  with check (current_user not in ('authenticated', 'anon'));
+create policy push_devices_update_server on public.push_devices for update to postgres
+  using (current_user not in ('authenticated', 'anon')) with check (current_user not in ('authenticated', 'anon'));
+create policy push_devices_delete_server on public.push_devices for delete to postgres
+  using (current_user not in ('authenticated', 'anon'));
 
 -- How many live phones one person may have; the oldest goes off when a new one comes (§4.1)
 create or replace function app.push_devices_max()
 returns integer language sql immutable set search_path = '' as $$ select 10 $$;
 revoke all on function app.push_devices_max() from public, anon, authenticated;
+
+-- the person's account is not deleted (a deleted account keeps a valid JWT for a while; security-check П1 №6)
+create or replace function app.push_account_alive(p_uid uuid)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from public.users u where u.id = p_uid and u.deleted_at is null);
+$$;
+revoke all on function app.push_account_alive(uuid) from public, anon, authenticated;
 
 -- Register this phone for the person signed in. The same token of another person moves to the one signed in now:
 -- a phone gets only the pushes of who is signed in on it. Errors never echo the token (it reaches the error log).
@@ -46,7 +67,8 @@ returns void language plpgsql security definer set search_path = '' as $$
 declare
   v_uid uuid := auth.uid();
 begin
-  if v_uid is null then
+  -- a deleted account keeps a valid JWT for a while: it registers nothing (security-check П1 №6)
+  if v_uid is null or not app.push_account_alive(v_uid) then
     raise exception 'not allowed' using errcode = '42501';
   end if;
   if p_token is null or length(p_token) > 255 or p_token !~ '^Expo(nent)?PushToken\[[A-Za-z0-9_-]{1,200}\]$' then
@@ -58,17 +80,25 @@ begin
   if p_app_version is not null and length(p_app_version) > 32 then
     raise exception 'app version too long' using errcode = '22023';
   end if;
+  -- one registration of a person at a time: two parallel calls must not leave more than the limit (№5)
+  perform pg_advisory_xact_lock(hashtext('push_devices:' || v_uid::text));
   insert into public.push_devices as d (user_id, expo_token, platform, lang, app_version)
   values (v_uid, p_token, p_platform, case when p_lang in ('en', 'es', 'ru') then p_lang else 'en' end, p_app_version)
   on conflict (expo_token) do update
     set user_id = excluded.user_id, platform = excluded.platform, lang = excluded.lang, app_version = excluded.app_version,
         last_seen_at = now(), revoked_at = null, revoked_reason = null,
         created_at = case when d.user_id = excluded.user_id then d.created_at else now() end;
-  -- not more than app.push_devices_max() live phones: the ones seen longest ago go off
+  -- not more than app.push_devices_max() live phones: the ones seen longest ago go off (never the one just registered)
   update public.push_devices set revoked_at = now(), revoked_reason = 'too_many'
    where id in (select id from public.push_devices
-                 where user_id = v_uid and revoked_at is null
-                 order by last_seen_at desc, created_at desc
+                 where user_id = v_uid and revoked_at is null and expo_token <> p_token
+                 order by last_seen_at desc, created_at desc, id desc
+                 offset app.push_devices_max() - 1);
+  -- the table never grows without end (№4): a person keeps at most twice the limit of rows, switched-off ones go first
+  delete from public.push_devices
+   where id in (select id from public.push_devices
+                 where user_id = v_uid and revoked_at is not null
+                 order by revoked_at desc, id desc
                  offset app.push_devices_max());
 end;
 $$;
@@ -116,6 +146,14 @@ alter table public.push_outbox enable row level security;
 alter table public.push_outbox force row level security;
 -- the server only (service_role / postgres): no rules for the app's roles, no rights
 revoke all on table public.push_outbox from public, anon, authenticated;
+create policy push_outbox_select_server on public.push_outbox for select to postgres
+  using (current_user not in ('authenticated', 'anon'));
+create policy push_outbox_insert_server on public.push_outbox for insert to postgres
+  with check (current_user not in ('authenticated', 'anon'));
+create policy push_outbox_update_server on public.push_outbox for update to postgres
+  using (current_user not in ('authenticated', 'anon')) with check (current_user not in ('authenticated', 'anon'));
+create policy push_outbox_delete_server on public.push_outbox for delete to postgres
+  using (current_user not in ('authenticated', 'anon'));
 -- a queued push never moves to another company (T59)
 create trigger t11_company_id_immutable before update on public.push_outbox
   for each row execute function app.tg_company_id_immutable();
@@ -174,6 +212,8 @@ declare n integer;
 begin
   delete from public.push_outbox where created_at < now() - interval '30 days';
   get diagnostics n = row_count;
+  -- switched-off phones are kept 30 days too (to see why a push did not come), then go
+  delete from public.push_devices where revoked_at < now() - interval '30 days';
   return n;
 end;
 $$;
@@ -188,6 +228,10 @@ begin
   -- Пуши П1: no phone of a deleted person gets anything again; queued pushes to them go too
   delete from public.push_devices where user_id = p_user;
   delete from public.push_outbox where user_id = p_user;
+  -- the deletion must really have erased them (security-check П1 №2): else the whole account deletion rolls back
+  if exists (select 1 from public.push_devices where user_id = p_user) or exists (select 1 from public.push_outbox where user_id = p_user) then
+    raise exception 'push rows of the person were not erased' using errcode = '42501';
+  end if;
   -- the owner guard (110000) checks a switched-off owner row as if the role changed; this is the system erasing the
   -- person's own mark, as delete_account's own memberships update does (security-check 7б-2: else the deletion rolls back)
   perform set_config('app.accepting_invite', 'on', true);
