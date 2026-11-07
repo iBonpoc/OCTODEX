@@ -177,6 +177,8 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
       visibleHeight={h}
       accessibilityRole="switch"
       accessibilityState={{ checked: on, disabled: ro }}
+      // web: a switch is read by aria-checked (as the radio below); without it the state is silent there (P4c)
+      {...({ "aria-checked": on } as object)}
       accessibilityLabel={label}
       style={{
         width: w,

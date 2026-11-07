@@ -2231,7 +2231,7 @@ export const en: Dict = {
   // ---- push (docs/specs/27-push.md) ----
   "push.title": "Notifications",
   "push.thisPhone": "Push notifications on this phone",
-  "push.state.on": "On: signed estimates, payments. No amounts or addresses in the text.",
+  "push.state.on": "On. Choose what to send below. No amounts or addresses in the text.",
   "push.state.off": "Off. The bell in the app always works.",
   "push.state.denied": "Turned off in the phone's settings.",
   "push.state.signed_out": "Sign in to get push notifications.",

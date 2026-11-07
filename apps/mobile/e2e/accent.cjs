@@ -16,6 +16,8 @@ exports.accentCount = (page, within) =>
       if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > innerHeight) continue;
       // «＋ Создать» of the menu and the screen's floating «＋» (13 v2 §2.4, §2.5): the accent of the shell, not of the screen
       if (el.closest('[aria-label="Создать"], [aria-label="Create"], [aria-label="Crear"], [data-testid="fab"]')) continue;
+      // a switch that is on (Наряд Toggle: on → acc) is the state of a setting, not the main action (spec 27 §4.11, P4c)
+      if (el.closest('[role="switch"]')) continue;
       if (seen.some((s) => s.contains(el) || el.contains(s))) continue;
       seen.push(el);
     }
