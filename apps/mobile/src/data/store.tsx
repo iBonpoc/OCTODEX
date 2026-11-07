@@ -16,7 +16,6 @@ import { applyOp, renewSession, sendVisitPoint, type Op, type OutboxItem } from 
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
-import { readyToSend } from "@/cloud/outboxTiming";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
@@ -38,7 +37,10 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
-import { backoffMs, classify, MAX_TRIES, needsSignIn } from "./outboxRetry";
+import { backoffMs, classify, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
+import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
+import { leavingSummary, MONEY_KINDS } from "./syncLink";
+import type { DictKey } from "@/i18n";
 import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 export { mineOf, type OwnedItem } from "./outboxOwner";
@@ -90,6 +92,20 @@ type Undo = () => void;
 export type GuardedUndo = () => boolean;
 export type Mode = "demo" | "cloud";
 export type Link = "ok" | "offline" | "server";
+export interface StuckOp {
+  id: ID;
+  kind: string;
+  since: string;
+  /** the ops that wait for it now (they go when it goes) */
+  waiting: number;
+  /** the ops that leave with it on «Отменить изменение…»: they need what it makes (docs/specs/23 §3) */
+  leaving: number;
+  /** what leaves with it, by kind, and whether money is among it (the confirmation names it, review #259) */
+  leavingKinds: { key: DictKey; n: number }[];
+  leavingMoney: boolean;
+  /** being sent right now: «Повторить» / «Отменить изменение…» wait */
+  sending: boolean;
+}
 /** when and who for an estimate visit */
 export interface BookAt {
   /** the id of the new visit, when the caller needs it (the form shows «Сообщить клиенту?» for it) */
@@ -123,6 +139,15 @@ interface StoreCtx {
   /** the signed-in person's unsent ops in every company (the account deletion removes them all, review #240 №4) */
   unsentAll: number;
   syncError: string | null;
+  /**
+   * the person's ops the server keeps answering with an error (docs/specs/23 §3): not dropped, shown as
+   * «не отправлено: сервер отвечает ошибкой», tried again every 5 minutes. `waiting` — the ops that wait for it.
+   */
+  stuckOps: StuckOp[];
+  /** «Повторить сейчас» */
+  retryOp: (id: ID) => void;
+  /** «Отменить изменение…» (after a confirmation): the op and the ops that wait for it leave the phone; then a reload */
+  discardOp: (id: ID) => boolean;
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -432,9 +457,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [mode, company?.role]);
 
   /* ---------- server sync ---------- */
+  // per op, in memory: when it may be tried again after the server's error that may be its own (docs/specs/23 §3)
+  const opPause = useRef(new Map<string, number>());
+  /**
+   * an op of this person that is not stuck — also one waiting behind a stuck one: its change is only on the phone, a
+   * reload would wipe it from the screens (review #259 №4). Only stuck ops left: the server's truth comes back.
+   */
+  const pendingLive = () => mineOf(outboxRef.current, whoRef.current).some((o) => !o.stuck);
+  // the op being sent now: «Отменить изменение…» and «Повторить» wait for its answer (review #259 №5)
+  const inFlight = useRef<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  /**
+   * a network failure or a refusal ends a run of the server's errors: the 10 minutes count from the next one, and the
+   * card «не отправлено» goes (review #259 п.4) — a refused op is the refusals' now: after MAX_TRIES it is dropped
+   */
+  const clearFails = (id: string) => {
+    const cur = outboxRef.current.find((x) => x.id === id);
+    if (!cur || (cur.fails == null && cur.failSince == null && !cur.stuck)) return;
+    const { fails: _f, failSince: _s, stuck: _st, ...rest } = cur;
+    outboxRef.current = outboxRef.current.map((x) => (x.id === id ? rest : x));
+    setOutbox(outboxRef.current);
+  };
+  const failedOnce = (item: OwnedItem, msg: string) => {
+    const now = Date.now();
+    const cur = outboxRef.current.find((x) => x.id === item.id) ?? item;
+    const fails = (cur.fails ?? 0) + 1;
+    const failSince = cur.failSince ?? new Date(now).toISOString();
+    const stuck = !!cur.stuck || isStuck(failSince, fails, now);
+    // the tries (refusals) are not touched: the server did not say «no»
+    const next: OwnedItem = { ...cur, fails, failSince, error: msg, ...(stuck ? { stuck: true as const } : {}) };
+    outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? next : x));
+    setOutbox(outboxRef.current);
+    opPause.current.set(item.id, now + (stuck ? STUCK_RETRY_MS : backoffMs(fails)));
+  };
   const refresh = useCallback(async () => {
     if (modeRef.current !== "cloud" || !company || !auth.userId || !onlineRef.current) return;
-    if (mine(outboxRef.current).length) return; // send pending changes first, then reload
+    // send pending changes first, then reload — an op the server keeps refusing «for now» (stuck) and what waits for it
+    // do not hold the reload (else the phone would never see the server again, docs/specs/23 §3)
+    if (pendingLive()) return;
     const gen = deviceGeneration();
     if (stale(gen)) return;
     setLoading(true);
@@ -442,7 +502,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const next = await loadCompanyDB(company.companyId, auth.userId);
       // signed out, another company or the device wiped while it loaded: the answer is not for this store (19 §6.12)
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
-      if (!mine(outboxRef.current).length) setDb(next);
+      if (!pendingLive()) setDb(next);
       setSyncError(null);
       answered();
     } catch (e) {
@@ -510,39 +570,72 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     flushing.current = true;
     let sentAny = false;
     let dropped = false;
+    // an op that got the server's error that may be its own (500, a timeout) waits for its pause; the next op that does
+    // not need it goes (docs/specs/23 §3). A second such error in one pass — the server as a whole: the queue pauses
+    let probed = false;
+    const failedNow = new Set<string>();
+    const held = (o: OwnedItem) => failedNow.has(o.id) || (opPause.current.get(o.id) ?? 0) > Date.now();
     try {
       for (;;) {
-        const item = mineOf(outboxRef.current, w)[0];
-        // the toast's «Отменить» window first: an undone op never reaches the server
-        if (!item || !readyToSend(item, Date.now())) break;
+        // in order; what needs a held op waits; the toast's «Отменить» window first: an undone op never reaches the server
+        const item = nextToSend(outboxRef.current, w, held, Date.now());
+        if (!item) break;
+        inFlight.current = item.id;
+        setSendingId(item.id);
         try {
           await applyOp(item.op, w.companyId, w.userId);
+          inFlight.current = null;
+          setSendingId(null);
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
           if (stale(gen)) return;
           sentAny = true;
+          probed = false; // the server answered: a later 500 is again maybe that op's alone
+          opPause.current.delete(item.id);
           answered();
           outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
           setOutbox(outboxRef.current);
           if (!still()) break;
         } catch (e) {
+          inFlight.current = null;
+          setSendingId(null);
           // a send that fails because the account is gone must not put the deleted person's op back (review #231)
           if (stale(gen)) return;
           const msg = e instanceof Error ? e.message : String(e);
-          setSyncError(msg);
+          // the server's error that may be this op's alone (500, a timeout) is told by its card «Не отправлено» in our own
+          // words — not again as the server's English text in «Ошибка синхронизации» (cloud e2e 114)
+          if (!maybeOpOnly(e)) setSyncError(msg);
           // no answer, or the server's «not now» (5xx, 429, an expired sign-in…): not a try — the op stays as it is,
           // the next send waits longer (review #244)
           if (classify(e) !== "refusal") {
             if (needsSignIn(e)) void renewSession();
-            unreachable(e);
-            break;
+            if (classify(e) === "network") clearFails(item.id);
+            // an op already stuck failing again says nothing new about the server (after a restart every stuck op is
+            // tried once: two of them must not read as «server unavailable»)
+            const wasStuck = !!outboxRef.current.find((x) => x.id === item.id)?.stuck;
+            if (maybeOpOnly(e) && wasStuck) {
+              failedOnce(item, msg);
+              failedNow.add(item.id);
+              continue;
+            }
+            if (!maybeOpOnly(e) || probed) {
+              if (maybeOpOnly(e)) failedOnce(item, msg);
+              unreachable(e);
+              break;
+            }
+            // maybe this op's alone: it waits (and after 10 minutes is shown as stuck); try the next op without it
+            failedOnce(item, msg);
+            probed = true;
+            failedNow.add(item.id);
+            continue;
           }
           // the server said «no»: a try; the last one drops it (never because of the network)
+          clearFails(item.id);
           if (item.tries + 1 >= MAX_TRIES) {
             // Will never succeed: drop it and reload the truth from the server.
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
           } else {
-            outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...item, tries: item.tries + 1, error: msg } : x));
+            outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...x, tries: item.tries + 1, error: msg } : x));
           }
           setOutbox(outboxRef.current);
           break;
@@ -554,7 +647,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     // a dropped op left the phone ahead of the server: reload the truth
     if (stale(gen) || !still()) return;
-    if ((sentAny && !mineOf(outboxRef.current, w).length) || dropped) await refresh();
+    if ((sentAny && !pendingLive()) || dropped) await refresh();
   }, [setOutbox, refresh, sendWaitingPoints]);
 
   useEffect(() => {
@@ -592,7 +685,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let oid: string | null = null;
       if (modeRef.current === "cloud" && op) {
         oid = uid();
-        outboxRef.current = [...outboxRef.current, { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}) }];
+        // an upsert that cannot tell «new» by itself: what it makes is what was not on the phone before (outboxDeps)
+        const made = madeOnQueue(op, prev);
+        outboxRef.current = [
+          ...outboxRef.current,
+          { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}), ...(made ? { made } : {}) },
+        ];
         setOutbox(outboxRef.current);
       } else if (!onlineRef.current) {
         qid = uid();
@@ -662,7 +760,44 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  // what leaves with a discarded op: by kind; money — also when the op itself is money
+  const leavingOf = (self: OwnedItem, gone: OwnedItem[]) => {
+    const sum = leavingSummary(gone.map((o) => o.op.k));
+    return { leaving: gone.length, leavingKinds: sum.kinds, leavingMoney: [self, ...gone].some((o) => isMoneyOp(o, MONEY_KINDS)) };
+  };
   const unsentAll = mode === "cloud" ? unsentOf(outbox, who?.userId ?? null) : 0;
+  const stuckOps: StuckOp[] =
+    mode === "cloud"
+      ? mineOf(outbox, who)
+          .filter((o) => o.stuck)
+          .map((o) => ({
+            id: o.id,
+            kind: o.op.k,
+            since: o.failSince ?? o.at,
+            waiting: waitingFor(outbox, who, o.id),
+            ...leavingOf(o, dependentsOf(outbox, who, o.id)),
+            sending: sendingId === o.id,
+          }))
+      : [];
+  // «Повторить сейчас»: only its pause goes — it stays «stuck» (and its card stays) until the server takes it
+  // (review #259 №2); while it is being sent, nothing to do
+  const retryOp = (id: ID) => {
+    if (inFlight.current === id) return;
+    opPause.current.delete(id);
+    nextTry.current = 0;
+    void flush();
+  };
+  const discardOp = (id: ID): boolean => {
+    const gone = new Set([id, ...dependentsOf(outboxRef.current, whoRef.current, id).map((o) => o.id)]);
+    // one of them is on its way to the server: it would get there although the card says it will not (review #259 №5)
+    if (inFlight.current && gone.has(inFlight.current)) return false;
+    outboxRef.current = outboxRef.current.filter((x) => !gone.has(x.id));
+    setOutbox(outboxRef.current);
+    gone.forEach((x) => opPause.current.delete(x));
+    // the phone showed the change as done: the server's truth again
+    void refresh();
+    return true;
+  };
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? mineOf(outbox, who).map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
@@ -736,6 +871,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       queue: pendingQueue,
       unsentAll,
       syncError,
+      stuckOps,
+      retryOp,
+      discardOp,
       refresh,
       loading,
       setOnline: (v) => {
@@ -1583,7 +1721,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush],
   );
 
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady) return null;

@@ -7,7 +7,7 @@ exports.run = async (h) => {
       await h.go(p);
       await h.expectText(/OCTODEX v1\.0\.0 · \d+/, `${role} ${p} renders with the version line`);
       // a screen this role may not open sends it home (route-guard, e2e 51)
-      const closed = role === "tech" ? ["/today", "/triage", "/leads", "/inbox", "/money", "/team", "/company"] : role === "dispatcher" ? ["/team", "/company"] : [];
+      const closed = role === "tech" ? ["/today", "/triage", "/leads", "/inbox", "/money", "/team", "/company"] : role === "dispatcher" ? ["/team"] : []; // the office opens /company read-only (spec 26 §3)
       if (closed.includes(p)) h.expect(!new URL(h.page.url()).pathname.startsWith(p), `${role} ${p} is closed`);
     }
   }

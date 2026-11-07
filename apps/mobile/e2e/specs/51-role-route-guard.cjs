@@ -54,13 +54,14 @@ exports.run = async (h) => {
     h.expect(at(h) === path, `tech opens ${path} (got ${at(h)})`);
   }
 
-  // Company settings and Team — director only
+  // Team — director only; company settings — the office opens them read-only (spec 26 §3, #307)
   await setRole(h, "dispatcher");
-  for (const path of ["/team", "/company"]) {
-    await h.go(path);
-    await p.waitForTimeout(500);
-    h.expect(at(h) === "/triage", `dispatcher ${path} → /triage (got ${at(h)})`);
-  }
+  await h.go("/team");
+  await p.waitForTimeout(500);
+  h.expect(at(h) === "/triage", `dispatcher /team → /triage (got ${at(h)})`);
+  await h.go("/company");
+  await h.expectText(/Только просмотр — менять может директор/, "dispatcher /company: read-only");
+  h.expect(at(h) === "/company", `dispatcher opens /company read-only (got ${at(h)})`);
   await setRole(h, "director");
   for (const path of ["/team", "/company", "/money", "/today"]) {
     await h.go(path);
