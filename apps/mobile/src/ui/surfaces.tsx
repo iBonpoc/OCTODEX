@@ -214,7 +214,8 @@ export function ItemCard({
   status?: StatusName;
 }) {
   return (
-    <Card status={status} style={{ paddingVertical: space[1] }}>
+    // a list card's coloured edge only for warn / bad (06 §7.3): ok / info say it with the chip, not the edge
+    <Card status={status === "warn" || status === "bad" ? status : undefined} style={{ paddingVertical: space[1] }}>
       <ListRow title={title} subtitle={subtitle} left={left} right={right} onPress={onPress} />
     </Card>
   );
