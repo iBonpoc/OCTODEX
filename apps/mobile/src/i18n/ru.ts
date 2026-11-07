@@ -1555,6 +1555,7 @@ export const ru = {
   "card.filter.searchInvoices": "Клиент, адрес, работа, INV",
   "card.filter.searchPayments": "Клиент, RCT, INV",
   "card.filter.findPerson": "Найти человека",
+  "card.filter.show": "Показывать",
   "card.filter.done": "Выполненные",
   "card.filter.searchPlan": "Клиент, адрес, работа",
   "card.filter.whose": "Чьи",

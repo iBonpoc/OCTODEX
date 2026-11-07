@@ -6,7 +6,7 @@
 const phoneTz = process.env.TZ;
 process.env.TZ = "America/New_York";
 import { afterAll, describe, expect, it } from "vitest";
-import { daysFrom, eventFields, eventProblems, eventRange, groupByDay, itemTimes, planItems, spanDays, whoMatches } from "../src/features/planFeed";
+import { daysFrom, eventFields, eventProblems, eventRange, groupByDay, itemTimes, matchPlanItem, matchVisit, planItems, spanDays, whoMatches } from "../src/features/planFeed";
 import { unassignedSoon } from "../src/features/schedule";
 import type { CalendarEvent, DB, Task, Visit } from "../src/data/types";
 
@@ -189,5 +189,35 @@ describe("the event form's fields (wave 5 PR-B, code review)", () => {
   });
   it("«all day» ends at the company's midnight after the last day", () => {
     expect(eventRange({ day: "2026-11-06", allDay: true, days: 2, startMin: 0, duration: 0 }, LA)).toEqual({ startsAt: "2026-11-06T08:00:00.000Z", endsAt: "2026-11-08T08:00:00.000Z" });
+  });
+});
+
+describe("the search of «План» (spec 31, one rule)", () => {
+  const full = {
+    ...db({
+      visits: [V("v1", { start: "2026-11-06T17:00:00.000Z", jobId: "j1" })],
+      tasks: [Tk("Call the supplier", { startsAt: "2026-11-06T18:00:00.000Z" })],
+      calendarEvents: [Ev("e1", { title: "Team meeting", startsAt: "2026-11-06T19:00:00.000Z", endsAt: "2026-11-06T20:00:00.000Z" })],
+    }),
+    jobs: [{ id: "j1", propertyId: "p1", customerId: "c1", title: "Seamless gutters" }],
+    properties: [{ id: "p1", customerId: "c1", address: "12 Oak St", city: "Pasadena, CA" }],
+    customers: [{ id: "c1", name: "Mitchell" }],
+    members: [],
+  } as unknown as DB;
+  const items = planItems(full, { from: "2026-11-05", to: "2026-11-07" }, "all", "owner", { tz: LA });
+  const found = (q: string) => items.filter((it) => matchPlanItem(full, it, q)).map((it) => it.kind);
+  it("a visit by its client, address, city and work; a task and an event by the title; no text — everything", () => {
+    expect(found("")).toEqual(["visit", "task", "event"]);
+    expect(found("mitch")).toEqual(["visit"]);
+    expect(found("oak st")).toEqual(["visit"]);
+    expect(found("pasadena")).toEqual(["visit"]);
+    expect(found(" SEAMLESS ")).toEqual(["visit"]);
+    expect(found("supplier")).toEqual(["task"]);
+    expect(found("meeting")).toEqual(["event"]);
+    expect(found("zzz")).toEqual([]);
+  });
+  it("the Day by person searches its visits the same way", () => {
+    expect(matchVisit(full, full.visits[0]!, "gutters")).toBe(true);
+    expect(matchVisit(full, full.visits[0]!, "meeting")).toBe(false);
   });
 });

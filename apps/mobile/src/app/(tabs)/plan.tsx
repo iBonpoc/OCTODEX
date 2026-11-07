@@ -21,7 +21,7 @@ import { memberName } from "@/features/team";
 import { DayCell, FeedView, PlanAddSheet, UnassignedSoon, WaitingJobs, WeekStrip } from "@/features/PlanParts";
 import { FilterBar } from "@/ui/filterBar";
 import type { FilterGroup } from "@/ui/filterBarRules";
-import { dayLoads, daysFrom, planItems, type DayLoad } from "@/features/planFeed";
+import { dayLoads, daysFrom, matchPlanItem, matchVisit, planItems, type DayLoad } from "@/features/planFeed";
 import { EventSheet, type EventSheetState } from "@/features/EventForm";
 
 /** the Feed shows a week from the picked day; the arrows move it by a week */
@@ -48,7 +48,7 @@ export default function Plan() {
   const [adding, setAdding] = useState(false);
   const [ev, setEv] = useState<EventSheetState>(null);
   const mine = (v: Visit) => (role === "tech" ? isAssigned(v, db.me) : planFilter(v, whoNow, db.me));
-  const visitsOn = (k: DayKey) => db.visits.filter((v) => isoDayKey(v.start) === k && mine(v)).sort(sortByStart);
+  const visitsOn = (k: DayKey) => db.visits.filter((v) => isoDayKey(v.start) === k && mine(v) && matchVisit(db, v, q)).sort(sortByStart);
   const step = (n: number) => setDate(mode === "feed" ? addDays(date, FEED_DAYS * n) : mode === "day" ? addDays(date, n) : mode === "week" ? addDays(date, 7 * n) : addMonths(date, n));
   const week = weekDays(date);
   // days of «План» are the company's calendar days (П4b): labels of day keys, no zone of their own
@@ -56,8 +56,9 @@ export default function Plan() {
   const feedDays = useMemo(() => daysFrom(date, addDays(date, FEED_DAYS - 1)), [date]);
   // wave 7б-1: a personal setting, the same on every device and in «Мои настройки → План»
   const [showDone, setShowDone] = usePlanShowDone();
-  // «Мастер» (variant Б of the director 07.11): a pill in the row «Мастер: Все ▾» opens the people at once — one at a time,
-  // a search at 10+; a tech sees only his own. «Показывать» → «Выполненные» is in «Фильтры» (not in the Day)
+  // spec 31, one rule (director 07.11): «Мастер» is the first group of «Фильтры» — one at a time, a search at 10+; the one
+  // picked is a chip «Мастер: Ivan ✕» under the row; nobody picked is everyone. A tech sees only his own (no group).
+  // «Выполненные» is in the sheet too (Feed, Week, Month — the Day by person shows the open visits to move)
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending && m.id !== db.me).sort((a, b) => a.name.localeCompare(b.name));
   const meTech = db.members.some((m) => m.id === db.me && m.roles.includes("tech"));
   const filterGroups: FilterGroup[] = [
@@ -67,25 +68,25 @@ export default function Plan() {
           title: t("card.filter.masters"),
           searchable: true,
           single: true,
-          pill: `${t("card.filter.masters")}: ${whoNow === "all" ? t("plan.who.all") : whoNow === "me" ? t("plan.who.me") : (techs.find((m) => m.id === whoNow)?.name ?? t("plan.who.all"))}`,
           options: [
-            { key: "all", label: t("plan.who.all"), on: whoNow === "all" },
             ...(meTech ? [{ key: "me", label: t("plan.who.me"), on: whoNow === "me" }] : []),
             ...techs.map((m) => ({ key: m.id, label: m.name, on: whoNow === m.id })),
           ],
-          onToggle: (k: string) => setWho(k),
+          onToggle: (k: string) => setWho(whoNow === k ? "all" : k),
         }]
       : []),
     ...(mode !== "day" ? [{ key: "done", title: t("card.filter.show"), options: [{ key: "done", label: t("card.filter.done"), on: showDone }], onToggle: () => setShowDone(!showDone) }] : []),
   ];
+  // the search (client, address, work; a task or an event by its title) — not kept, like every list's (spec 31 §6 п.7)
+  const [q, setQ] = useState("");
   // Feed, Week and Month show one thing: what planItems gives for their days (17-job §12.2, 24 §B) — visits (past midnight
   // on both days), tasks with a time, events, days off, «весь день»; «Чей план» and «Показывать выполненные» the same
   const range: DayKey[] = mode === "feed" ? feedDays : mode === "week" ? week : mode === "month" ? monthGrid(date).map((x) => x.key) : [];
   const from = range[0];
   const to = range[range.length - 1];
   const items = useMemo(
-    () => (from && to ? planItems(db, { from, to }, whoNow, role, { showDone }) : []),
-    [from, to, db.visits, db.tasks, db.calendarEvents, db.me, whoNow, role, showDone],   // eslint-disable-line react-hooks/exhaustive-deps
+    () => (from && to ? planItems(db, { from, to }, whoNow, role, { showDone }).filter((it) => matchPlanItem(db, it, q)) : []),
+    [from, to, db.visits, db.tasks, db.calendarEvents, db.me, whoNow, role, showDone, q],   // eslint-disable-line react-hooks/exhaustive-deps
   );
   // a day off is the day's only when one person's plan is shown (a tech's own, or a person picked)
   const loads = useMemo(() => dayLoads(items, db.members, role === "tech" || whoNow !== "all"), [items, db.members, role, whoNow]);
@@ -115,9 +116,15 @@ export default function Plan() {
         </RowView>
       }
     >
-      {/* spec 31 §7: «Чей план» and «Показывать выполненные» went to the «Фильтры» sheet — «Мастер» (a search at 10+
-          people) and «Показывать»; what is on is a line «Ivan Sokolov ✕» under it */}
-      {filterGroups.length ? <FilterBar<string> items={[]} value="" onChange={() => undefined} groups={filterGroups} onReset={() => setShowDone(false)} /> : null}
+      {/* spec 31, one rule: the magnifier, «Фильтры» (Мастер, Выполненные); what is on is a chip under the row */}
+      <FilterBar<string>
+        items={[]}
+        value=""
+        onChange={() => undefined}
+        search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchPlan") }}
+        groups={filterGroups}
+        onReset={() => { setWho("all"); setShowDone(false); }}
+      />
       {planner ? <WaitingJobs /> : null}
       {/* «Не назначено» today and tomorrow on top (13 §3.2); the Day keeps its own block of its day (drag from it);
           in the Week it goes under the strip (24 §B: whose plan → the arrows → the strip → «Не назначено» → the days) */}

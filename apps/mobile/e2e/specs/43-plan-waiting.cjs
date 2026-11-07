@@ -1,3 +1,4 @@
+const { planMaster, planMasterChosen } = require("../planFilters.cjs");
 const { dayKey, todayKey } = require("../companyTime.cjs");
 /**
  * The Plan tab for the office (docs/specs/03 §7.2, wave П3b; story map S8b / S9a — the screen side).
@@ -47,11 +48,12 @@ exports.run = async (h) => {
   await h.go("/plan");
   h.expect(!/Ждут даты/.test(await h.text()), "the job left «Ждут даты»");
 
-  // «Чей план»: Ivan → only his column; «Все» → everyone
-  await p.getByRole("radio", { name: "Ivan", exact: true }).click(); await p.waitForTimeout(300);
-  h.expect(!/Alex Petrov/.test(await h.text()) && /Ivan Sokolov/.test(await h.text()), "the chip shows one person");
-  await p.getByRole("radio", { name: "Все", exact: true }).click(); await p.waitForTimeout(300);
-  h.expect(/Alex Petrov/.test(await h.text()), "«Все» shows everyone again");
+  // «Мастер» in «Фильтры» (spec 31): Ivan → only his column, a chip «Мастер: Ivan Sokolov ✕»; ✕ → everyone
+  await planMaster(p, "Ivan");
+  h.expect((await planMasterChosen(p)) === "Мастер: Ivan Sokolov", "the chip says who is picked");
+  h.expect(!/Alex Petrov/.test(await h.text()) && /Ivan Sokolov/.test(await h.text()), "one person's column");
+  await planMaster(p, null);
+  h.expect(/Alex Petrov/.test(await h.text()), "✕ shows everyone again");
 
   // «+» → an inspection at a property; the form shows its address
   const visits0 = db.visits.length;
@@ -72,7 +74,7 @@ exports.run = async (h) => {
   // a tech: only his visits, no «Ждут даты», no chips, no «+»
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
   await h.go("/plan");
-  h.expect((await p.getByRole("radio", { name: "Все", exact: true }).count()) === 0, "tech: no «Чей план» chips");
+  h.expect((await p.getByTestId("filter-group-people").locator("visible=true").count()) === 0 && !/Мастер/.test(await h.text()), "tech: no «Мастер»");
   h.expect((await p.locator('[data-testid="fab"]:visible, [data-testid="fab-header"]:visible').count()) === 0, "tech: no «+»");
   h.expect(!/Ждут даты/.test(await h.text()), "tech: no «Ждут даты»");
 };

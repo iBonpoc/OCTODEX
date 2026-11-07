@@ -214,14 +214,22 @@ export function matchPlanItem(db: DB, it: PlanItem, q: string): boolean {
   if (!needle) return true;
   const words: (string | undefined)[] =
     it.kind === "visit"
-      ? (() => {
-          const { job, property, customer } = visitContext(db, it.visit);
-          return [customer?.name, property?.address, property?.city, job?.title];
-        })()
+      ? visitWords(db, it.visit)
       : it.kind === "task"
         ? [it.task.title]
         : it.kind === "event"
           ? [it.event.title]
           : [];
   return words.some((x) => (x ?? "").toLowerCase().includes(needle));
+}
+
+const visitWords = (db: DB, v: Visit): (string | undefined)[] => {
+  const { job, property, customer } = visitContext(db, v);
+  return [customer?.name, property?.address, property?.city, job?.title];
+};
+
+/** the same search for a visit of the Day by person */
+export function matchVisit(db: DB, v: Visit, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  return !needle || visitWords(db, v).some((x) => (x ?? "").toLowerCase().includes(needle));
 }
