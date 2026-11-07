@@ -92,6 +92,22 @@ export default function CompanyScreen() {
           </RowView>
         </Card>
       </View>
+      {/* add-on modules (docs/specs/33 П15): «Подключить», the trial */}
+      <View testID="company-modules">
+        <Card onPress={() => router.push("/company/modules")} accessibilityLabel={t("mod.title")}>
+          <RowView style={{ alignItems: "flex-start" }}>
+            <Icon name="sliders" />
+            <View style={{ flex: 1, gap: space[1] }}>
+              <T v="body" w="semibold">
+                {t("mod.title")}
+              </T>
+              <T v="caption" tone="mut">
+                {t("mod.hint")}
+              </T>
+            </View>
+          </RowView>
+        </Card>
+      </View>
     </Screen>
   );
 }

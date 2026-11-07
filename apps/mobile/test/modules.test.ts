@@ -298,3 +298,53 @@ describe("unit:modules — the store (C2a, rule 5, rule 6)", () => {
     expect(server.sends.at(-1)).toMatchObject({ op: { k: "module.saveSettings", module: "gutters", settings: { a: 1 }, baseRowVersion: 1 } });
   });
 });
+
+import { moduleView } from "../src/modules/moduleView";
+import { placeActions } from "../src/modules/registry";
+
+describe("unit:modules — «Компания → Модули» (C2b, founder О1–О2)", () => {
+  it("never on → «Не подключён», «Подключить» starts the trial; nothing to switch off", () => {
+    expect(moduleView(undefined, NOW)).toEqual({ status: "neutral", label: "mod.st.off", main: "start", canDisable: false, locked: false });
+  });
+  it("trial → info with days left; paid → ok; both can be switched off", () => {
+    expect(moduleView(cm({ trialEndsAt: iso(NOW + 3 * DAY) }), NOW)).toEqual({ status: "info", label: "mod.st.trial", n: 3, main: null, canDisable: true, locked: false });
+    expect(moduleView(cm({ trialEndsAt: iso(NOW - DAY), paidUntil: iso(NOW + DAY) }), NOW)).toMatchObject({ status: "ok", label: "mod.st.paid", main: null, canDisable: true });
+  });
+  it("trial over, unpaid → warn, locked, the main action is a payment (no new trial)", () => {
+    expect(moduleView(cm({ trialEndsAt: iso(NOW - DAY) }), NOW)).toEqual({ status: "warn", label: "mod.st.expired", main: "pay", canDisable: true, locked: true });
+  });
+  it("switched off: back on while the trial (or payment) runs; after it — only a payment", () => {
+    expect(moduleView(cm({ enabled: false, trialEndsAt: iso(NOW + DAY) }), NOW)).toMatchObject({ label: "mod.st.disabled", main: "resume", canDisable: false });
+    expect(moduleView(cm({ enabled: false, trialEndsAt: iso(NOW - DAY), paidUntil: iso(NOW + DAY) }), NOW)).toMatchObject({ main: "resume" });
+    expect(moduleView(cm({ enabled: false, trialEndsAt: iso(NOW - DAY) }), NOW)).toMatchObject({ label: "mod.st.disabled", main: "pay", locked: false });
+  });
+  it("every status label is in the dictionary (RU, EN, ES)", async () => {
+    const { ru } = await import("../src/i18n/ru");
+    for (const k of ["mod.st.off", "mod.st.disabled", "mod.st.trial", "mod.st.paid", "mod.st.expired"]) expect(ru, k).toHaveProperty([k]);
+  });
+});
+
+describe("unit:modules — places in core screens (C2b)", () => {
+  const demo = {
+    ...gutters,
+    key: "place_demo",
+    places: {
+      lead: (c: { leadId?: string }) => (c.leadId ? [{ id: "measure", labelKey: "mod.title" as const, icon: "pencil" as const, href: `/x?lead=${c.leadId}` }] : []),
+      home: (c: { role: string }) => (c.role === "tech" ? [] : [{ id: "here", labelKey: "mod.title" as const, icon: "pin" as const, href: "/x" }]),
+    },
+  };
+  registerModule(demo);
+  const on = { modules: { place_demo: cm({ trialEndsAt: iso(NOW + DAY) }) } };
+  it("an active module adds its actions, tagged with the module; the screen's object and role go to it", () => {
+    expect(placeActions("lead", on, { role: "director", leadId: "l1" }, NOW)).toEqual([{ id: "measure", labelKey: "mod.title", icon: "pencil", href: "/x?lead=l1", module: "place_demo" }]);
+    expect(placeActions("lead", on, { role: "director" }, NOW)).toEqual([]);
+    expect(placeActions("home", on, { role: "tech" }, NOW)).toEqual([]);
+    expect(placeActions("home", on, { role: "sales" }, NOW).map((a) => a.id)).toEqual(["here"]);
+    expect(placeActions("property", on, { role: "director" }, NOW)).toEqual([]);
+  });
+  it("not switched on, or the trial over → nothing in the screens (founder О2)", () => {
+    expect(placeActions("lead", {}, { role: "director", leadId: "l1" }, NOW)).toEqual([]);
+    expect(placeActions("lead", { modules: { place_demo: cm({ trialEndsAt: iso(NOW - DAY) }) } }, { role: "director", leadId: "l1" }, NOW)).toEqual([]);
+    expect(placeActions("lead", { modules: { place_demo: cm({ enabled: false, trialEndsAt: iso(NOW + DAY) }) } }, { role: "director", leadId: "l1" }, NOW)).toEqual([]);
+  });
+});
