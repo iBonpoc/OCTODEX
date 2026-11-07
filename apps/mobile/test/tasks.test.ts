@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { DB, Task } from "../src/data/types";
 import {
-  defaultTaskScope, filterTasks, matchTask, taskCounts, taskPlaces, taskProgress, taskState, taskSubject, taskWhen, tasksOf,
+  defaultTaskScope, filterTasks, taskAssignees, matchTask, taskCounts, taskPlaces, taskProgress, taskState, taskSubject, taskWhen, tasksOf,
 } from "../src/features/tasks/tasks";
 
 const NOW = Date.parse("2026-11-06T18:00:00Z");
@@ -115,3 +115,23 @@ describe("tasks: where a role may tie a new task (the server's tasks_insert)", (
     expect(taskPlaces(d, "director", "zzzz-nothing")).toEqual([]);
   });
 });
+
+describe("tasks: who a task may be for (S26, docs/specs/23 §5)", () => {
+  it("the office: everyone on the team (not the invited ones)", () => {
+    const d = makeSeed();
+    const team = d.members.filter((m) => !m.pending).map((m) => m.id);
+    expect(taskAssignees(d, "dispatcher").map((m) => m.id)).toEqual(team);
+    expect(taskAssignees(d, "director").map((m) => m.id)).toEqual(team);
+    expect(taskAssignees(d, "sales").map((m) => m.id)).toEqual(team);
+  });
+  it("the technician: only himself", () => {
+    const d = makeSeed();
+    expect(taskAssignees(d, "tech").map((m) => m.id)).toEqual([d.me]);
+  });
+  it("the technician opening a task the office gave to another person: that person is shown too (he cannot change it)", () => {
+    const d = makeSeed();
+    const other = d.members.find((m) => m.id !== d.me)!.id;
+    expect(taskAssignees(d, "tech", other).map((m) => m.id).sort()).toEqual([d.me, other].sort());
+  });
+});
+

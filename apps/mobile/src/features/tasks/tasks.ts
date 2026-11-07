@@ -102,6 +102,17 @@ export const taskCounts = (tasks: readonly Task[], now = Date.now()): Record<Tas
   done: tasks.filter((t) => t.doneAt).length,
 });
 
+/**
+ * Who a task may be for, for this role (S26, docs/specs/23 §5; the server: app.tg_task_who, migration 20261107060000):
+ * the office — anyone on the team; the technician — only himself. The task's current assignee stays in the list
+ * (an office task he opens shows who it is for; he cannot hand it to anyone else — the server keeps it).
+ */
+export function taskAssignees(db: DB, role: Role, current?: string | null): DB["members"] {
+  const team = db.members.filter((m) => !m.pending);
+  if (role !== "tech") return team;
+  return team.filter((m) => m.id === db.me || (!!current && m.id === current));
+}
+
 /** the default scope (20 §6): the technician starts on his own, the office on all */
 export const defaultTaskScope = (role: Role): TaskScope => (role === "tech" ? "mine" : "all");
 

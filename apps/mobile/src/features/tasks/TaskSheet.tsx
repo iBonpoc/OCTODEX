@@ -16,7 +16,7 @@ import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/contro
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Divider, ListRow, RowView } from "@/ui/surfaces";
-import { SUBJECT_KIND, taskPlaces, taskSubject } from "./tasks";
+import { SUBJECT_KIND, taskAssignees, taskPlaces, taskSubject } from "./tasks";
 
 /**
  * The one task form (docs/specs/13 §3.7, 20 §7): what it is tied to (on top, opens it), the title, the due date,
@@ -73,7 +73,8 @@ function TaskSheetBody({ value, onClose }: { value: TaskDraft; onClose: () => vo
   );
   const [calendar, setCalendar] = useState(false);
   const [placeQuery, setPlaceQuery] = useState("");
-  const people = db.members.filter((m) => !m.pending);
+  // the technician gives a task only to himself (S26); the office to anyone
+  const people = taskAssignees(db, role, value.assigneeId);
 
   const draft: Task = useMemo(() => {
     const range = mode === "none" ? undefined : eventRange({ day, allDay: mode === "allDay", days: 1, startMin, duration }, tz);
