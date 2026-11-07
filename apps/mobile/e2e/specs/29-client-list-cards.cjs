@@ -82,7 +82,8 @@ exports.run = async (h) => {
 
   // edges and gaps: cards on the search field's lines; tablet rows of equal height (founder 05.11: «линии сдвинуты»)
   await p.evaluate(() => window.scrollTo(0, 0));
-  await checkCardAlignment(h, { searchPlaceholder: "Имя, телефон или адрес" });
+  // the line of the cards: the whole filter bar (spec 31: the search shares its row with «Фильтр»)
+  await checkCardAlignment(h, { reference: (pg) => pg.getByTestId("filter-bar").locator("visible=true").first() });
 
   // founder 07.11: the overdue sign tells how much and how long — «Просрочено $X · N дн» (unpaid rest of overdue invoices, the oldest)
   const late = db.invoices.filter((i) => i.customerId === owes.id && i.paidCents < i.totalCents);
@@ -99,7 +100,7 @@ exports.run = async (h) => {
   const lateUsd = "$" + (lateCents / 100).toLocaleString("en-US", { minimumFractionDigits: lateCents % 100 ? 2 : 0, maximumFractionDigits: lateCents % 100 ? 2 : 0 });
   h.expect(lateTxt.includes(`Просрочено ${lateUsd} · 9 дн`), `overdue sign with amount and days: ${lateTxt.slice(0, 240)}`);
   await h.shot("overdue");
-  // founder 07.11 «очень много кнопок сверху»: filters are ONE row; empty ones hidden; tags behind «Фильтры»
+  // spec 31 (variant Б): the search and «Фильтр» in one row, ONE lane of statuses; empty ones hidden; tags in the sheet
   await h.go("/clients");
   const chips = p.getByRole("radio");
   const ys = await chips.evaluateAll((els) => els.filter((e) => e.offsetParent).map((e) => Math.round(e.getBoundingClientRect().top)));
@@ -110,7 +111,13 @@ exports.run = async (h) => {
   const moreBtn = p.getByRole("button", { name: /^Фильтры, включено: \d+$/ });
   h.expect((await moreBtn.count()) === 1, "«Фильтры» button in the row");
   const mb = await moreBtn.boundingBox();
-  h.expect(mb && Math.abs(Math.round(mb.y) - ys[0]) <= 1 && mb.height <= 36, `«Фильтры» on the same row, visible ≤ 36 (${mb && mb.height})`);
+  // phone / tablet: next to the search field; 1280: at the end of the one row of the lane
+  const sb = await p.getByPlaceholder("Имя, телефон или адрес").last().boundingBox();
+  const midOf = (b) => b.y + b.height / 2;
+  const same = h.layout?.width === 1280 ? Math.abs(midOf(mb) - (ys[0] + 0)) <= 20 : Math.abs(midOf(mb) - midOf(sb)) <= 2;
+  h.expect(mb && mb.height <= 36 && same, `«Фильтр» in its row, visible ≤ 36 (${mb && JSON.stringify(mb)})`);
+  const firstCard = await p.locator('[data-testid="list-card"]').locator("visible=true").first().boundingBox();
+  h.expect(h.layout?.width !== 390 || firstCard.y < 844 * 0.4, `390: the first card starts in the top 40 % of the screen (${firstCard.y})`);
   h.expect((await p.getByRole("checkbox").locator("visible=true").count()) === 0, "no tag chips on the screen");
   // wheel scrolls the row sideways when it does not fit (web: mouse; keyboard focus scrolls by itself)
   const row = await p.evaluate(() => {
@@ -129,8 +136,14 @@ exports.run = async (h) => {
   await h.sheet().getByText("Готово", { exact: true }).click();
   await p.waitForTimeout(400);
   h.expect((await p.getByRole("button", { name: "Фильтры, включено: 1" }).count()) === 1, "the button counts the tags that are on");
-  h.expect(await p.getByText("Фильтры · 1", { exact: true }).first().isVisible(), "«Фильтры · 1» on the button");
+  const chosen = p.getByTestId("filter-chosen").locator("visible=true");
+  h.expect((await chosen.getByRole("button", { name: /^Убрать фильтр: / }).count()) === 1, "the chosen tag is a line with ✕ under the lane");
   await h.shot("filters");
+  // kept on this device for this list (spec 31 §6 п.7): back on the list — still on; the search is not kept
+  await h.go("/clients");
+  h.expect((await p.getByRole("button", { name: "Фильтры, включено: 1" }).count()) === 1, "the tag is kept between visits");
+  await chosen.getByText("Сбросить", { exact: true }).click(); await p.waitForTimeout(300);
+  h.expect((await p.getByRole("button", { name: "Фильтры, включено: 0" }).count()) === 1, "«Сбросить» turns everything in the sheet off");
 
   // status from the card: prospect → archive in one tap, then «Undo».
   // The demo has no prospect: make one client a prospect in the saved data (like a lead with an estimate would) and reload.

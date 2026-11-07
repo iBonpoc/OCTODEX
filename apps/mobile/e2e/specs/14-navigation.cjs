@@ -43,13 +43,13 @@ exports.run = async (h) => {
   await back("Главная").click();
   await p.waitForTimeout(500);
   h.expect(p.url().endsWith("/today"), `triage → home: ${p.url()}`);
-  // Money and invoices: one name, the expense button lives here
+  // «Расходы»: one name with the menu (invoices are «Счета», spec 31 §7а), the expense button lives here
   await h.go("/money");
-  await h.expectText(/Деньги и счета/, "same name as in the menu");
+  await h.expectText(/Расходы/, "same name as in the menu");
   await p.getByRole("button", { name: "Расход", exact: true }).last().click();
   await p.waitForTimeout(500);
   h.expect(p.url().includes("/expense/new"), "expense from Money");
-  await back("Деньги и счета").click();
+  await back("Расходы").click();
   await p.waitForTimeout(500);
   h.expect(p.url().endsWith("/money"), `expense → money: ${p.url()}`);
 

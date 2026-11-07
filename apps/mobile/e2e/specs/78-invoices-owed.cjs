@@ -35,7 +35,7 @@ exports.run = async (h) => {
     h.expect(body.indexOf("Просрочено ·") < body.indexOf(name), "overdue group comes first");
     h.expect(/Просрочен \d+ дн/.test(body), "overdue sign in words");
   }
-  await checkCardAlignment(h, { reference: (pg) => pg.getByRole("radiogroup").first(), min: 1 });
+  await checkCardAlignment(h, { reference: (pg) => pg.getByTestId("filter-bar").locator("visible=true").first(), min: 1 });
   await h.shot("owed");
 
   // the default comes back from the address: Today «Ждёт оплаты» will open /invoice?f=owed

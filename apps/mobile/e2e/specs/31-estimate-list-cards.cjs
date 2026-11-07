@@ -11,7 +11,8 @@ exports.run = async (h) => {
   const p = h.page;
   await h.go("/estimates");
   const db = await h.db();
-  const filterRow = (pg) => pg.getByRole("radiogroup").first();
+  // the line of the cards: the whole filter bar (spec 31: on 1280 the lane comes after the search in one row)
+  const filterRow = (pg) => pg.getByTestId("filter-bar").locator("visible=true").first();
 
   // a sent or draft estimate with a property: its card shows the client, number, address and work
   const e = db.estimates.find((x) => (x.status === "sent" || x.status === "draft") && x.number && db.properties.some((pr) => pr.id === x.propertyId));

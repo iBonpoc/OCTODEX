@@ -19,9 +19,10 @@ exports.run = async (h) => {
   h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…» on the screen");
   await checkCardAlignment(h, { reference: (pg) => pg.locator('[data-testid="list-card"]').first(), min: 1 });
   await h.shot("awaiting");
-  await h.go("/money");
+  // «Счета» is the one invoices list (spec 31 §7а): the open ones are «Не оплачен · Просрочен»
+  await h.go("/invoice?f=owed");
   const money = await texts();
-  for (const c of fig) h.expect(money.includes(c), `invoice card is the same as in «Деньги»: ${c.slice(0, 160)}`);
+  for (const c of fig) h.expect(money.includes(c), `invoice card is the same as in «Счета»: ${c.slice(0, 160)}`);
 
   // «Подписано» (month) = the same estimate cards as in «Сметы» (filter «Все»)
   await h.go("/figures/signed?period=month");

@@ -28,7 +28,8 @@ exports.run = async (h) => {
   for (const s of [kevin.number, kevin.phone, "Thumbtack — $45", kevin.service]) h.expect(txt.includes(s), `card shows «${s}»: ${txt.slice(0, 160)}`);
   h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…» in the list");
   await p.evaluate(() => window.scrollTo(0, 0));
-  await checkCardAlignment(h, { searchPlaceholder: "Имя, телефон, адрес, услуга" });
+  // the line of the cards: the whole filter bar (spec 31: the search shares its row with «Фильтр»)
+  await checkCardAlignment(h, { reference: (pg) => pg.getByTestId("filter-bar").locator("visible=true").first() });
   await h.shot("list");
 
   // SMS (phone / tablet cards; desktop rows have call + reply only): card vs lead page write the same
