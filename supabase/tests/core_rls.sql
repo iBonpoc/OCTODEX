@@ -7232,4 +7232,30 @@ update public.estimates set deleted_at = now() where id::text like '0e880000-%';
 update public.memberships set status = 'disabled' where user_id::text like 'a8800000-%';
 \echo 'T88 the author of an estimate for pushes: who made it (owner_user_id first), not a tech; the same at sending time ok'
 
+-- ---------------------------------------------------------------- T89: no push about a deleted estimate (docs/specs/27 §4.12)
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a8900000-0000-4000-8000-000000000001', 'office89@a.test', '{"full_name":"Odette Office"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a8900000-0000-4000-8000-000000000001', 'office', 'active');
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e890000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T89 deleted later', 'a8900000-0000-4000-8000-000000000001'),
+  ('0e890000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T89 kept', 'a8900000-0000-4000-8000-000000000001');
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e890000-0000-4000-8000-000000000001'),
+  ('08900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e890000-0000-4000-8000-000000000002');
+select tst.ok((select count(*) from public.push_outbox where notification_id in ('08900000-0000-4000-8000-000000000001', '08900000-0000-4000-8000-000000000002')
+                and user_id = 'a8900000-0000-4000-8000-000000000001') = 2, 'T89 both signatures are queued for the author');
+update public.estimates set deleted_at = now() where id = '0e890000-0000-4000-8000-000000000001';
+select tst.ok(not (select app.push_still_recipient(o) from public.push_outbox o
+                    where o.notification_id = '08900000-0000-4000-8000-000000000001' and o.user_id = 'a8900000-0000-4000-8000-000000000001'),
+          'T89 the estimate deleted after the queue: the author no longer gets it');
+select tst.ok(not exists (select 1 from public.push_outbox o where o.notification_id = '08900000-0000-4000-8000-000000000001' and app.push_still_recipient(o)),
+          'T89 …nor the owner or anyone else');
+select tst.ok((select bool_and(app.push_still_recipient(o)) from public.push_outbox o where o.notification_id = '08900000-0000-4000-8000-000000000002'),
+          'T89 the estimate that is not deleted still goes to everyone queued');
+-- clean up
+delete from public.push_outbox;
+update public.estimates set deleted_at = now() where id::text like '0e890000-%';
+update public.memberships set status = 'disabled' where user_id = 'a8900000-0000-4000-8000-000000000001';
+\echo 'T89 no push about an estimate deleted after the queue ok'
+
 \echo 'ALL TESTS PASSED'
