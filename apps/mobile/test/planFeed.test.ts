@@ -204,7 +204,7 @@ describe("the search of «План» (spec 31, one rule)", () => {
     customers: [{ id: "c1", name: "Mitchell" }],
     members: [],
   } as unknown as DB;
-  const items = planItems(full, { from: "2026-11-05", to: "2026-11-07" }, "all", "owner", { tz: LA });
+  const items = planItems(full, { from: "2026-11-05", to: "2026-11-07" }, "all", "director", { tz: LA });
   const found = (q: string) => items.filter((it) => matchPlanItem(full, it, q)).map((it) => it.kind);
   it("a visit by its client, address, city and work; a task and an event by the title; no text — everything", () => {
     expect(found("")).toEqual(["visit", "task", "event"]);
