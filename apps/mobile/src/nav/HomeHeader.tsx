@@ -48,7 +48,7 @@ export function HomeHeader() {
         </Press>
       ) : null}
       {wide ? null : (
-        <Press testID="home-profile" onPress={() => router.push("/settings")} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("nav.profile")}>
+        <Press testID="home-profile" onPress={() => router.push("/settings/profile")} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("nav.profile")}>
           <Avatar initials={me?.initials ?? "··"} s={component.dockBtn} />
         </Press>
       )}

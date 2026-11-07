@@ -81,6 +81,8 @@ export const motion = {
   /** app-only: «Отменить» on a toast ignores taps this long after it shows — the second tap of a double tap
    *  must not undo what the first one made (reduced motion shows the toast at once, under the finger) */
   toastArmMs: 300,
+  /** app-only (spec 24 A4): delay between columns / bars growing one after another */
+  chartStagger: 40,
 } as const;
 
 export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8 } as const;
@@ -111,8 +113,12 @@ export const component = {
   /* ---- app-only tokens (not in the DS css yet; same style, keep here so components never use raw numbers) ---- */
   /** company logo stored size, px (image processing) */
   logoPx: 256,
+  /** a signature stroke, px (the pad, the full-screen pad, the preview) */
+  signStroke: 2.4,
   /** «Ещё» on 820/1280: one column of menu rows, not wider than the palette (spec 25) */
   menuListMax: 560,
+  /** charts of «Сегодня» (spec 24 A3; «Наряд» prototype column bars r8 / min 4 / muted .55, track 8; height 130 → 120 for the phone) */
+  chart: { h: 120, barRadius: 8, barMin: 4, track: 8, mutedOpacity: 0.55 },
   /** compact row (lines of an estimate, small lists) */
   rowCompact: 32,
   /** signature pad, receipt photo */

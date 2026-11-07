@@ -103,14 +103,17 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext("/auth/sign-in", {}, db, "director")).toEqual({});
   });
   it("LOG п.15: «Моя подпись» is not an estimate with the id «signature» — it sits under «Мои настройки»", () => {
-    expect(navContext("/estimate/signature", {}, db, "director")).toMatchObject({ section: "settings", kind: "est.sig.title", up: { href: "/settings" } });
+    expect(navContext("/estimate/signature", {}, db, "director")).toMatchObject({ section: "settings", kind: "est.sig.title", up: { href: "/settings/profile" } });
   });
   it("LOG п.16: a conversation goes back to «Сообщения» (after a reload too); the list itself stays a tab root", () => {
     expect(navContext("/messages/c:c1", {}, db, "director")).toMatchObject({ section: "messages", up: { href: "/messages" } });
     expect(navContext("/messages", {}, db, "director").up).toBeUndefined();
   });
   it("LOG п.17: Tasks and Help are «Ещё» roots (above); «Удалить аккаунт» → «Мои настройки»; the legal texts → «Помощь»", () => {
-    expect(navContext("/settings/delete-account", {}, db, "tech")).toMatchObject({ section: "settings", kind: "acct.title", up: { href: "/settings" } });
+    expect(navContext("/settings/delete-account", {}, db, "tech")).toMatchObject({ section: "settings", kind: "acct.title", up: { href: "/settings/profile" } });
+    // spec 26: «Профиль и аккаунт» — its own title in the trail, not «Удалить аккаунт»
+    expect(navContext("/settings/profile", {}, db, "director")).toMatchObject({ section: "settings", kind: "fix.settings.profile" });
+    expect(navContext("/settings/profile", {}, db, "director").up).toBeUndefined();
     expect(navContext("/legal/terms", {}, db, "tech")).toMatchObject({ section: "help", kind: "legal.terms.title", up: { href: "/help" } });
     expect(navContext("/legal/privacy", {}, db, "director").kind).toBe("legal.privacy.title");
   });

@@ -70,10 +70,10 @@ export function SideNav() {
           </View>
         ))}
       </ScrollView>
-      {/* profile → My settings */}
+      {/* profile → «Профиль и аккаунт» (spec 26) */}
       <Press
         testID="side-profile"
-        onPress={() => go("settings")}
+        onPress={() => openSection("/settings/profile")}
         visibleHeight={size.hitMin}
         accessibilityRole="button"
         accessibilityLabel={`${me?.name ?? auth.email ?? ""} · ${who}`}

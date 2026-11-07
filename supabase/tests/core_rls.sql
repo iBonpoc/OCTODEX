@@ -5127,7 +5127,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by', 'legal_acceptance.user_id', 'users.id',
     -- erased (app.erase_personal_rows)
-    'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id',
+    'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id', 'push_prefs.user_id',
     -- unlinked (set to null)
     'company_contacts.user_id', 'companies.lead_default_assignee_id') \gset
 select tst.ok(:'t50_unclassified' = '', format('every person column is classified in T50 (kept / erased / unlinked): %s', :'t50_unclassified'));
@@ -6299,6 +6299,651 @@ reassign owned by t80_owner to postgres;
 drop owned by t80_owner;
 drop role t80_owner;
 \echo 'T81 push_outbox: owner, admin and the author; payments to owner and admin; no text; server only ok'
+
+-- ---------------------------------------------------------------- T82: push_claim / push_finish — sending (docs/specs/27 §4.4–4.5)
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a8200000-0000-4000-8000-000000000001', 'admin82@a.test', '{"full_name":"Ada Admin"}'),
+  ('a8200000-0000-4000-8000-000000000002', 'sales82@a.test', '{"full_name":"Sue Sales"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000001', 'admin', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000002', 'sales', 'active');
+delete from public.push_outbox;
+insert into public.push_devices (id, user_id, expo_token, platform, lang) values
+  ('d8200000-0000-4000-8000-000000000001', 'a8200000-0000-4000-8000-000000000001', 'ExponentPushToken[t82-ada-1]', 'android', 'es'),
+  ('d8200000-0000-4000-8000-000000000002', 'a8200000-0000-4000-8000-000000000001', 'ExponentPushToken[t82-ada-2]', 'ios', 'ru'),
+  ('d8200000-0000-4000-8000-000000000003', 'a8200000-0000-4000-8000-000000000002', 'ExponentPushToken[t82-sue-1]', 'android', 'en'),
+  ('d8200000-0000-4000-8000-000000000009', 'a0000000-0000-0000-0000-000000000003', 'ExponentPushToken[t82-mike]', 'android', 'en');
+create temp table t82_claim (n int, v jsonb);
+grant select, insert on t82_claim to service_role;
+-- a payment: owner (no phone) and Ada (two phones)
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+reset role; set role service_role;
+insert into t82_claim select 1, public.push_claim(100);
+:as_super
+select tst.ok((select jsonb_array_length(v) from t82_claim where n = 1) = 1, 'T82 claim hands out only people with a live phone');
+select tst.ok((select v -> 0 ->> 'kind' = 'payment.received' and v -> 0 ->> 'route' = '/notifications' and jsonb_array_length(v -> 0 -> 'devices') = 2 from t82_claim where n = 1),
+          'T82 the row carries its kind, route and both phones of the person');
+select tst.ok((select bool_and(x ->> 'token' like 'ExponentPushToken[t82-ada-%' and x ->> 'lang' in ('es', 'ru')) from t82_claim, jsonb_array_elements(v -> 0 -> 'devices') x where n = 1),
+          'T82 the phones are Ada''s own, with their language');
+select tst.ok((select status = 'sending' and tries = 1 from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000001' and user_id = 'a8200000-0000-4000-8000-000000000001'),
+          'T82 a claimed row is «sending», tries 1');
+select tst.ok((select status = 'skipped' and error = 'no_device' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T82 a person without a live phone is skipped (no_device)');
+select tst.ok(not (select v::text ~ '(Owner|Ada|\$|total|customer)' from t82_claim where n = 1), 'T82 claim returns no names, sums or text');
+-- a second claim right away takes nothing (the row is «sending»)
+reset role; set role service_role;
+insert into t82_claim select 2, public.push_claim(100);
+:as_super
+select tst.ok((select v = '[]'::jsonb from t82_claim where n = 2), 'T82 a row in «sending» is not taken twice');
+-- retry: 1, 2, 4, 8 min, the fifth try fails for good
+create temp table t82_id as select id from public.push_outbox where user_id = 'a8200000-0000-4000-8000-000000000001';
+grant select on t82_id to service_role;
+reset role; set role service_role;
+select tst.ok(public.push_finish((select id from t82_id), 'retry', null, 'http_503') = 'pending', 'T82 retry puts the row back in the queue');
+:as_super
+select tst.ok((select status = 'pending' and error = 'http_503' and next_try_at between now() + interval '55 seconds' and now() + interval '65 seconds'
+               from public.push_outbox where id = (select id from t82_id)), 'T82 the first retry waits 1 min');
+reset role; set role service_role;
+select tst.ok(public.push_claim(100) = '[]'::jsonb, 'T82 a retry is not taken before its time');
+:as_super
+do $$ declare i int; v_next interval; begin
+  for i in 2..5 loop
+    update public.push_outbox set next_try_at = now() where id = (select id from t82_id);
+    perform public.push_claim(100);
+    if i < 5 then
+      perform tst.ok(public.push_finish((select id from t82_id), 'retry', null, 'http_429') = 'pending', 'T82 retry ' || i || ' goes back to the queue');
+      select next_try_at - now() into v_next from public.push_outbox where id = (select id from t82_id);
+      perform tst.ok(v_next between make_interval(mins => (2 ^ (i - 1))::int) - interval '5 seconds' and make_interval(mins => (2 ^ (i - 1))::int) + interval '5 seconds',
+                     'T82 retry ' || i || ' waits 2^(n-1) min');
+    else
+      perform tst.ok(public.push_finish((select id from t82_id), 'retry', null, 'http_429') = 'failed', 'T82 after 5 tries a retry is failed for good');
+    end if;
+  end loop;
+end $$;
+select tst.ok((select status = 'failed' and tries = 5 from public.push_outbox where id = (select id from t82_id)), 'T82 the row stops at 5 tries');
+reset role; set role service_role;
+select tst.ok(public.push_finish((select id from t82_id), 'sent', null, null) is null, 'T82 finish changes only a row in «sending»');
+select tst.fails_like($q$select public.push_finish(gen_random_uuid(), 'done', null, null)$q$, 'unknown status', 'T82 an unknown status is refused');
+-- sent: tickets of this person's phones only; the error is a code only
+:as_super
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'deposit.paid', null);
+truncate t82_id;
+insert into t82_id select id from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000002' and user_id = 'a8200000-0000-4000-8000-000000000001';
+reset role; set role service_role;
+select public.push_claim(100);
+select tst.ok(public.push_finish((select id from t82_id), 'sent',
+          '[{"ticket_id":"tkt-82-1","device_id":"d8200000-0000-4000-8000-000000000001"},{"ticket_id":"tkt-82-x","device_id":"d8200000-0000-4000-8000-000000000009"},{"ticket_id":"bad ticket","device_id":"d8200000-0000-4000-8000-000000000002"}]',
+          null) = 'sent', 'T82 sent');
+:as_super
+select tst.ok((select status = 'sent' and sent_at is not null and ticket_ids = array['tkt-82-1'] from public.push_outbox where id = (select id from t82_id)),
+          'T82 a sent row keeps its tickets');
+select tst.ok(not exists (select 1 from public.push_tickets where ticket_id in ('tkt-82-x', 'bad ticket')), 'T82 a ticket of another person''s phone or of a bad shape is not kept');
+-- the error is only a short code: never the text of Expo or a token
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+truncate t82_id;
+insert into t82_id select id from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000003' and user_id = 'a8200000-0000-4000-8000-000000000001';
+reset role; set role service_role;
+select public.push_claim(100);
+select tst.ok(public.push_finish((select id from t82_id), 'failed', null, '"ExponentPushToken[t82-ada-1]" is not a valid token') = 'failed', 'T82 failed');
+:as_super
+select tst.ok((select error = 'other' from public.push_outbox where id = (select id from t82_id)), 'T82 an error with text or a token is kept as «other»');
+-- checked again at sending time: the person switched off / deleted / the author changed / the phone handed over
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+update public.estimates set owner_user_id = 'a8200000-0000-4000-8000-000000000002' where id = '0e730000-0000-4000-8000-000000000003';
+insert into public.notifications (id, company_id, kind, estimate_id) values ('08200000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003');
+select tst.ok(exists (select 1 from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000005' and user_id = 'a8200000-0000-4000-8000-000000000002'),
+          'T82 the author (sales) is in the queue of a signature');
+update public.memberships set status = 'disabled' where user_id = 'a8200000-0000-4000-8000-000000000001';
+update public.estimates set owner_user_id = null where id = '0e730000-0000-4000-8000-000000000003';
+reset role; set role service_role;
+select public.push_claim(100);
+:as_super
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000004' and user_id = 'a8200000-0000-4000-8000-000000000001'),
+          'T82 a person switched off after the queue gets nothing (not_member)');
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000005' and user_id = 'a8200000-0000-4000-8000-000000000002'),
+          'T82 an author who is no longer the author gets nothing');
+update public.memberships set status = 'active' where user_id = 'a8200000-0000-4000-8000-000000000001';
+update public.users set deleted_at = now() where id = 'a8200000-0000-4000-8000-000000000001';
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+-- the queue did not take a deleted person; put one in by hand as if it was queued just before
+insert into public.push_outbox (company_id, user_id, notification_id, kind, route)
+  values ('ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000001', '08200000-0000-4000-8000-000000000006', 'payment.received', '/notifications')
+  on conflict do nothing;
+reset role; set role service_role;
+select public.push_claim(100);
+:as_super
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000006' and user_id = 'a8200000-0000-4000-8000-000000000001'),
+          'T82 a person deleted after the queue gets nothing');
+update public.users set deleted_at = null where id = 'a8200000-0000-4000-8000-000000000001';
+-- the phones are looked up at sending time: both of Ada's phones went to Mike → nothing to send to Ada
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+update public.push_devices set user_id = 'a0000000-0000-0000-0000-000000000003' where user_id = 'a8200000-0000-4000-8000-000000000001';
+reset role; set role service_role;
+select tst.ok(not (public.push_claim(100)::text like '%t82-ada%'), 'T82 a phone handed over gets none of the old owner''s pushes');
+:as_super
+select tst.ok((select status = 'skipped' and error = 'no_device' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000007' and user_id = 'a8200000-0000-4000-8000-000000000001'),
+          'T82 … and the row is skipped (no_device)');
+update public.push_devices set user_id = 'a8200000-0000-4000-8000-000000000001' where id in ('d8200000-0000-4000-8000-000000000001', 'd8200000-0000-4000-8000-000000000002');
+-- a closed company sends nothing
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = now() where id = 'ca000000-0000-0000-0000-000000000000';
+reset role; set role service_role;
+select public.push_claim(100);
+:as_super
+update public.companies set closed_at = null where id = 'ca000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t06_company_closed_guard;
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000008' and user_id = 'a8200000-0000-4000-8000-000000000001'),
+          'T82 a closed company sends nothing');
+-- older than 24 h → skipped; stuck in «sending» > 10 min → back to pending
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+update public.push_outbox set created_at = now() - interval '25 hours' where notification_id = '08200000-0000-4000-8000-000000000009';
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000010', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+update public.push_outbox set status = 'sending', tries = 1, next_try_at = now() - interval '11 minutes' where notification_id = '08200000-0000-4000-8000-000000000010';
+truncate t82_claim;
+reset role; set role service_role;
+insert into t82_claim select 3, public.push_claim(100);
+:as_super
+select tst.ok((select status = 'skipped' and error = 'expired' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000009' and user_id = 'a8200000-0000-4000-8000-000000000001'),
+          'T82 a row older than 24 h is skipped (expired)');
+select tst.ok((select status = 'sending' and tries = 2 from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000010' and user_id = 'a8200000-0000-4000-8000-000000000001'),
+          'T82 a row stuck in «sending» goes back to the queue and is taken again');
+update public.push_outbox set next_try_at = now() - interval '11 minutes', tries = 5 where notification_id = '08200000-0000-4000-8000-000000000010';
+reset role; set role service_role;
+select public.push_claim(100);
+:as_super
+select tst.ok((select status = 'failed' and error = 'stuck' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000010' and user_id = 'a8200000-0000-4000-8000-000000000001'),
+          'T82 a stuck row with no tries left is failed');
+-- the role was lowered after the queue: an admin who is now sales gets no payment push (security-check #287 №4а)
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000012', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+update public.memberships set role = 'sales' where user_id = 'a8200000-0000-4000-8000-000000000001';
+reset role; set role service_role;
+select public.push_claim(100);
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a8200000-0000-4000-8000-000000000001';
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000012' and user_id = 'a8200000-0000-4000-8000-000000000001'),
+          'T82 an admin lowered to sales after the queue gets no payment push');
+-- a subcontractor never gets one, even if a row got into the queue (№4б)
+insert into auth.users (id, email, raw_user_meta_data) values ('a8200000-0000-4000-8000-000000000003', 'sub82@a.test', '{"full_name":"Sid Sub"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000003', 'subcontractor', 'active');
+insert into public.push_devices (id, user_id, expo_token, platform, lang) values ('d8200000-0000-4000-8000-000000000004', 'a8200000-0000-4000-8000-000000000003', 'ExponentPushToken[t82-sid]', 'android', 'en');
+insert into public.push_outbox (company_id, user_id, kind, route) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000003', 'payment.received', '/notifications'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000003', 'lead.new', '/leads');
+reset role; set role service_role;
+select tst.ok(not (public.push_claim(100)::text like '%t82-sid%'), 'T82 a subcontractor is never sent a push');
+:as_super
+select tst.ok((select bool_and(status = 'skipped' and error = 'not_member') from public.push_outbox where user_id = 'a8200000-0000-4000-8000-000000000003'),
+          'T82 … his rows are skipped (not_member)');
+-- some phones reached, some not: a retry goes only to the others; when all live ones have a ticket — sent (№3)
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000013', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+create temp table t82_part as select id from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000013' and user_id = 'a8200000-0000-4000-8000-000000000001';
+create temp table t82_got (v jsonb);
+grant select on t82_part to service_role;
+grant select, insert on t82_got to service_role;
+reset role; set role service_role;
+insert into t82_got select x from jsonb_array_elements(public.push_claim(100)) x;
+select tst.ok((select jsonb_array_length(v -> 'devices') from t82_got where (v ->> 'id')::uuid = (select id from t82_part)) = 2, 'T82 partial: the first try goes to both phones');
+select tst.ok(public.push_finish((select id from t82_part), 'retry', '[{"ticket_id":"tkt-82-p1","device_id":"d8200000-0000-4000-8000-000000000001"}]', 'http_429') = 'pending',
+          'T82 partial: one phone reached, the row is retried');
+:as_super
+update public.push_outbox set next_try_at = now() where id = (select id from t82_part);
+truncate t82_got;
+reset role; set role service_role;
+insert into t82_got select x from jsonb_array_elements(public.push_claim(100)) x;
+select tst.ok((select array_agg(d ->> 'device_id') from t82_got, jsonb_array_elements(v -> 'devices') d where (v ->> 'id')::uuid = (select id from t82_part))
+          = array['d8200000-0000-4000-8000-000000000002'], 'T82 partial: the retry goes only to the phone not reached');
+select tst.ok(public.push_finish((select id from t82_part), 'sent', '[{"ticket_id":"tkt-82-p2","device_id":"d8200000-0000-4000-8000-000000000002"}]', null) = 'sent', 'T82 partial: sent');
+:as_super
+select tst.ok((select ticket_ids = array['tkt-82-p1', 'tkt-82-p2'] from public.push_outbox where id = (select id from t82_part)), 'T82 partial: the row keeps the tickets of both tries');
+-- the phone not reached went off before the retry: every live phone has a ticket → the claim marks it sent
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000014', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+truncate t82_part;
+insert into t82_part select id from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000014' and user_id = 'a8200000-0000-4000-8000-000000000001';
+reset role; set role service_role;
+select public.push_claim(100);
+select public.push_finish((select id from t82_part), 'retry', '[{"ticket_id":"tkt-82-p3","device_id":"d8200000-0000-4000-8000-000000000001"}]', 'http_503');
+:as_super
+update public.push_devices set revoked_at = now(), revoked_reason = 'signed_out' where id = 'd8200000-0000-4000-8000-000000000002';
+update public.push_outbox set next_try_at = now() where id = (select id from t82_part);
+reset role; set role service_role;
+select tst.ok(not (public.push_claim(100)::text like '%' || (select id from t82_part)::text || '%'), 'T82 partial: nothing is sent twice to the phone already reached');
+:as_super
+select tst.ok((select status = 'sent' and ticket_ids = array['tkt-82-p3'] from public.push_outbox where id = (select id from t82_part)), 'T82 partial: all live phones reached → sent');
+-- out of tries with one phone reached: sent (to it), the error stays
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000015', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+truncate t82_part;
+insert into t82_part select id from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000015' and user_id = 'a8200000-0000-4000-8000-000000000001';
+update public.push_devices set revoked_at = null, revoked_reason = null where id = 'd8200000-0000-4000-8000-000000000002';
+update public.push_outbox set tries = 4 where id = (select id from t82_part);
+reset role; set role service_role;
+select public.push_claim(100);
+select tst.ok(public.push_finish((select id from t82_part), 'retry', '[{"ticket_id":"tkt-82-p4","device_id":"d8200000-0000-4000-8000-000000000001"}]', 'http_503') = 'sent',
+          'T82 partial: the last try with one phone reached is sent, not failed');
+:as_super
+select tst.ok((select status = 'sent' and error = 'http_503' from public.push_outbox where id = (select id from t82_part)), 'T82 partial: … and keeps why not all phones got it');
+drop table t82_part;
+drop table t82_got;
+-- the limit of one claim
+insert into public.push_outbox (company_id, user_id, kind, route)
+  select 'ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000001', 'payment.received', '/notifications' from generate_series(1, 3);
+reset role; set role service_role;
+select tst.ok(jsonb_array_length(public.push_claim(2)) = 2, 'T82 claim takes not more than its limit');
+-- rights: service_role only (rule 18)
+:as_super
+select tst.ok(has_function_privilege('service_role', 'public.push_claim(integer)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.push_finish(uuid, text, jsonb, text)', 'EXECUTE'), 'T82 service_role executes claim and finish');
+select tst.ok(not has_function_privilege('authenticated', 'public.push_claim(integer)', 'EXECUTE') and not has_function_privilege('anon', 'public.push_claim(integer)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.push_finish(uuid, text, jsonb, text)', 'EXECUTE') and not has_function_privilege('anon', 'public.push_finish(uuid, text, jsonb, text)', 'EXECUTE'),
+          'T82 the app (anon, authenticated) executes neither');
+:as_owner_a
+select tst.fails($q$select public.push_claim(100)$q$, 'T82 the owner cannot claim pushes');
+select tst.fails($q$select public.push_finish(gen_random_uuid(), 'sent', null, null)$q$, 'T82 the owner cannot finish pushes');
+:as_super
+-- the server's path without BYPASSRLS (as T80)
+create role t82_owner nologin nobypassrls;
+grant postgres to t82_owner;
+grant usage on schema app, public to t82_owner;
+grant select, insert, update, delete on public.push_devices, public.push_outbox, public.push_tickets to t82_owner;
+grant select on public.notifications, public.estimates, public.memberships, public.users, public.companies to t82_owner;
+grant execute on all functions in schema app to t82_owner;
+alter function public.push_claim(integer) owner to t82_owner;
+alter function public.push_finish(uuid, text, jsonb, text) owner to t82_owner;
+update public.push_outbox set status = 'skipped' where status in ('pending', 'sending');
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000011', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+truncate t82_id;
+insert into t82_id select id from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000011' and user_id = 'a8200000-0000-4000-8000-000000000001';
+reset role; set role service_role;
+select tst.ok(public.push_claim(100)::text like '%t82-ada-1%', 'T82 claim works without BYPASSRLS');
+select tst.ok(public.push_finish((select id from t82_id), 'sent', '[{"ticket_id":"tkt-82-2","device_id":"d8200000-0000-4000-8000-000000000001"}]', null) = 'sent', 'T82 finish works without BYPASSRLS');
+:as_super
+alter function public.push_claim(integer) owner to postgres;
+alter function public.push_finish(uuid, text, jsonb, text) owner to postgres;
+drop table t82_claim;
+drop table t82_id;
+\echo 'T82 push_claim / push_finish: atomic, checked again at sending, retries 1-2-4-8, 5 tries, service_role only ok'
+
+-- ---------------------------------------------------------------- T83: receipts, DeviceNotRegistered, the kick, schedules (docs/specs/27 §4.5)
+:as_super
+insert into public.push_tickets (ticket_id, outbox_id, device_id, created_at)
+  select 'tkt-83-old', id, 'd8200000-0000-4000-8000-000000000001', now() - interval '20 minutes' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000011' and user_id = 'a8200000-0000-4000-8000-000000000001';
+insert into public.push_tickets (ticket_id, outbox_id, device_id, created_at)
+  select 'tkt-83-day', id, 'd8200000-0000-4000-8000-000000000002', now() - interval '25 hours' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000011' and user_id = 'a8200000-0000-4000-8000-000000000001';
+reset role; set role service_role;
+select tst.ok((select array_agg(x ->> 'ticket_id' order by x ->> 'ticket_id') from jsonb_array_elements(public.push_receipts_due(300)) x) = array['tkt-83-old'],
+          'T83 due receipts: older than 15 min, not checked, not older than 24 h');
+:as_super
+select tst.ok((select checked_at is not null from public.push_tickets where ticket_id = 'tkt-83-day'), 'T83 a ticket older than 24 h is closed without asking (Expo forgot it)');
+select tst.ok((select checked_at is null from public.push_tickets where ticket_id = 'tkt-82-2'), 'T83 a fresh ticket waits');
+reset role; set role service_role;
+select public.push_receipts_done(array['tkt-83-old'], array['d8200000-0000-4000-8000-000000000001']::uuid[]);
+:as_super
+select tst.ok((select checked_at is not null from public.push_tickets where ticket_id = 'tkt-83-old'), 'T83 a checked receipt is marked');
+select tst.ok((select revoked_reason = 'not_registered' and revoked_at is not null from public.push_devices where id = 'd8200000-0000-4000-8000-000000000001'),
+          'T83 DeviceNotRegistered switches the phone off');
+select tst.ok((select revoked_at is null from public.push_devices where id = 'd8200000-0000-4000-8000-000000000002'), 'T83 the person''s other phone stays on');
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+reset role; set role service_role;
+select tst.ok(not (public.push_claim(100)::text like '%t82-ada-1%'), 'T83 a switched-off phone is not sent to again');
+-- receipts_done touches only the ids it is given (№4в): unknown tickets and phones change nothing
+:as_super
+create temp table t83_before as
+  select (select count(*) from public.push_tickets where checked_at is null) as open_tickets,
+         (select count(*) from public.push_devices where revoked_at is null) as live_phones;
+reset role; set role service_role;
+select public.push_receipts_done(array['no-such-ticket'], array[gen_random_uuid()]);
+select public.push_receipts_done(null, null);
+:as_super
+select tst.ok((select open_tickets from t83_before) = (select count(*) from public.push_tickets where checked_at is null)
+          and (select live_phones from t83_before) = (select count(*) from public.push_devices where revoked_at is null),
+          'T83 receipts_done with unknown ids changes no other ticket or phone');
+drop table t83_before;
+-- the app re-registers the token: the phone is on again (P1)
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'public.push_receipts_due(integer)', 'EXECUTE') and not has_function_privilege('anon', 'public.push_receipts_due(integer)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.push_receipts_done(text[], uuid[])', 'EXECUTE') and not has_function_privilege('anon', 'public.push_receipts_done(text[], uuid[])', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.push_receipts_done(text[], uuid[])', 'EXECUTE'), 'T83 receipts: service_role only');
+select tst.ok(not has_function_privilege('authenticated', 'app.push_kick()', 'EXECUTE') and not has_function_privilege('anon', 'app.push_kick()', 'EXECUTE')
+          and not has_function_privilege('service_role', 'app.push_kick()', 'EXECUTE'), 'T83 nobody but the owner (pg_cron) runs the kick');
+select tst.ok(not has_table_privilege('authenticated', 'public.push_tickets', 'SELECT') and not has_table_privilege('anon', 'public.push_tickets', 'SELECT')
+          and not has_table_privilege('authenticated', 'public.push_tickets', 'INSERT'), 'T83 the app has no rights on push_tickets');
+:as_owner_a
+select tst.fails($q$select 1 from public.push_tickets$q$, 'T83 the owner cannot read tickets');
+select tst.fails($q$select public.push_receipts_done(array['x'], null)$q$, 'T83 the owner cannot mark receipts');
+:as_super
+-- pg_net on the hosting: the app's roles have no rights in schema net (security-check #287 №1); no pg_net here → skipped
+do $$ begin
+  if to_regnamespace('net') is null then
+    perform tst.ok(true, 'T83 no pg_net here: nothing to check in schema net');
+  else
+    perform tst.ok(not exists (select 1 from pg_proc p where p.pronamespace = 'net'::regnamespace
+                                and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE')))
+                   and not exists (select 1 from pg_class c where c.relnamespace = 'net'::regnamespace and c.relkind in ('r', 'v', 'p')
+                                    and (has_table_privilege('anon', c.oid, 'SELECT') or has_table_privilege('authenticated', c.oid, 'SELECT'))),
+                   'T83 anon and authenticated have no rights in schema net');
+  end if;
+end $$;
+-- the kick: no Vault and no pg_net here → silent
+select tst.ok(app.push_kick() = false, 'T83 the kick without Vault and pg_net does nothing');
+-- the kick with a stand-in Vault and pg_net (as on Supabase): only with both secrets, only https, the key in a header
+create schema vault;
+create table vault.decrypted_secrets (name text, decrypted_secret text, created_at timestamptz default now());
+create schema net;
+create table net.t83_calls (url text, body jsonb, headers jsonb, timeout_ms int);
+create function net.http_post(url text, body jsonb default '{}', params jsonb default '{}', headers jsonb default '{}', timeout_milliseconds int default 5000)
+returns bigint language sql as $$ insert into net.t83_calls values (url, body, headers, timeout_milliseconds) returning 1::bigint $$;
+select tst.ok(app.push_kick() = false and not exists (select 1 from net.t83_calls), 'T83 the kick without secrets is silent');
+insert into vault.decrypted_secrets (name, decrypted_secret) values ('push_fn_url', 'http://example.test/functions/v1/send-push'), ('push_fn_key', 'k83-0123456789abcdef');
+select tst.ok(app.push_kick() = false and not exists (select 1 from net.t83_calls), 'T83 the kick never calls a plain http address');
+update vault.decrypted_secrets set decrypted_secret = 'https://example.test/functions/v1/send-push' where name = 'push_fn_url';
+select tst.ok(app.push_kick() = true, 'T83 the kick with both secrets calls send-push');
+select tst.ok((select count(*) = 1 and bool_and(url = 'https://example.test/functions/v1/send-push' and body = '{}'::jsonb and headers ->> 'x-push-key' = 'k83-0123456789abcdef'
+               and timeout_ms = 5000) from net.t83_calls), 'T83 one POST, empty body, the key in x-push-key, 5 s');
+delete from vault.decrypted_secrets where name = 'push_fn_key';
+select tst.ok(app.push_kick() = false and (select count(*) from net.t83_calls) = 1, 'T83 without the key the kick is silent');
+drop schema net cascade;
+drop schema vault cascade;
+-- schedules: one of each, where pg_cron exists (not in this local database)
+do $$ declare n int; begin
+  if to_regnamespace('cron') is null then
+    perform tst.ok(true, 'T83 no pg_cron here: the migration made no schedule and did not fail');
+  else
+    execute $q$select count(*) from cron.job where jobname in ('send-push', 'push-purge')$q$ into n;
+    perform tst.ok(n = 2, 'T83 the schedules exist once each');
+  end if;
+end $$;
+-- the purge: tickets older than 2 days go
+update public.push_tickets set created_at = now() - interval '3 days' where ticket_id = 'tkt-83-day';
+select app.purge_push_outbox();
+select tst.ok(not exists (select 1 from public.push_tickets where ticket_id = 'tkt-83-day') and exists (select 1 from public.push_tickets where ticket_id = 'tkt-83-old'),
+          'T83 the purge deletes tickets older than 2 days only');
+-- account deletion erases the person's tickets with their phones and queue (cascade)
+select app.erase_personal_rows('a8200000-0000-4000-8000-000000000001');
+select tst.ok(not exists (select 1 from public.push_tickets t join public.push_devices d on d.id = t.device_id where d.user_id = 'a8200000-0000-4000-8000-000000000001')
+          and not exists (select 1 from public.push_tickets where ticket_id like 'tkt-8%'), 'T83 account deletion erases the person''s tickets');
+-- clean up
+delete from public.push_outbox;
+delete from public.push_devices;
+delete from public.notifications where id::text like '08200000-%' or id::text like '08300000-%';
+update public.memberships set status = 'disabled' where user_id::text like 'a8200000-%' and status = 'active';
+reassign owned by t82_owner to postgres;
+drop owned by t82_owner;
+drop role t82_owner;
+\echo 'T83 receipts, DeviceNotRegistered, the kick from Vault, schedules once ok'
+
+-- ---------------------------------------------------------------- T84: pushes of visits and leads (docs/specs/27 §4.7)
+:as_super
+delete from public.push_outbox;
+insert into auth.users (id, email, raw_user_meta_data) values ('a8400000-0000-4000-8000-000000000001', 'sub84@a.test', '{"full_name":"Sam Sub"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a8400000-0000-4000-8000-000000000001', 'subcontractor', 'active');
+-- a lead the owner gets (assigned to him), added by the office
+:as_office_a
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('18400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Lead', '+13235558401', 'a0000000-0000-0000-0000-000000000001');
+:as_super
+select tst.ok((select count(*) = 1 and bool_and(route = '/lead/18400000-0000-4000-8000-000000000001' and notification_id is null)
+               from public.push_outbox where kind = 'lead.new' and source_id = '18400000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T84 a new lead added by the office: a push to its assignee (the owner), once');
+select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000002'),
+          'T84 … not to the office who added it');
+-- the owner adds a lead for himself: nobody is told
+:as_owner_a
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('18400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Own', '+13235558402', 'a0000000-0000-0000-0000-000000000001');
+:as_super
+select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T84 the person who added the lead gets no push about it');
+select tst.ok(exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000002'),
+          'T84 a busy owner is not the only one: the office hears of the owner''s new lead (variant 2)');
+-- a lead given to the tech at once: the tech and the people of the flow; never the subcontractor
+:as_office_a
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('18400000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Tech', '+13235558404', 'a0000000-0000-0000-0000-000000000003');
+:as_super
+select tst.ok(exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000004' and user_id = 'a0000000-0000-0000-0000-000000000003')
+          and exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000004' and user_id = 'a0000000-0000-0000-0000-000000000001')
+          and not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000004' and user_id = 'a8400000-0000-4000-8000-000000000001'),
+          'T84 a lead given to the tech: the tech and the owner; not the subcontractor');
+-- a lead nobody holds (from outside: no auth.uid) → owner, admin, office; never tech or subcontractor
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('18400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Web', '+13235558403', null);
+select tst.ok(exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000003' and user_id = 'a0000000-0000-0000-0000-000000000001')
+          and exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000003' and user_id = 'a0000000-0000-0000-0000-000000000002')
+          and not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000003'
+                          and user_id in ('a0000000-0000-0000-0000-000000000003', 'a8400000-0000-4000-8000-000000000001')),
+          'T84 a lead nobody holds: owner and office, not a tech or a subcontractor');
+-- given to the tech → «lead assigned to you»; giving it to oneself — nothing; a subcontractor — nothing
+:as_office_a
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where id = '18400000-0000-4000-8000-000000000001';
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = '18400000-0000-4000-8000-000000000002';
+:as_super
+select tst.ok(exists (select 1 from public.push_outbox where kind = 'lead.assigned' and user_id = 'a0000000-0000-0000-0000-000000000003'
+                      and source_id = '18400000-0000-4000-8000-000000000001'), 'T84 a lead given to the tech: «lead assigned to you»');
+select tst.ok(not exists (select 1 from public.push_outbox where kind = 'lead.assigned' and user_id = 'a0000000-0000-0000-0000-000000000002'),
+          'T84 a lead someone takes himself: no push');
+update public.leads set assigned_to = 'a8400000-0000-4000-8000-000000000001' where id = '18400000-0000-4000-8000-000000000003';
+select tst.ok(not exists (select 1 from public.push_outbox where kind = 'lead.assigned' and user_id = 'a8400000-0000-4000-8000-000000000001'),
+          'T84 a subcontractor gets no lead push');
+-- a lead given to the subcontractor at once: no push to him (the people of the flow still get it)
+:as_office_a
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('18400000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Sub', '+13235558405', 'a8400000-0000-4000-8000-000000000001');
+:as_super
+select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000005' and user_id = 'a8400000-0000-4000-8000-000000000001')
+          and exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000005' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T84 a lead given to the subcontractor at once: nothing to him, the owner still hears');
+-- a visit: the office puts Mike and the subcontractor on it (assign_visit), and itself
+insert into public.visits (id, company_id, lead_id, kind, legacy_no_property, starts_at, ends_at) values
+  ('f8400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '18400000-0000-4000-8000-000000000001', 'inspection', true,
+   now() + interval '1 day', now() + interval '1 day 1 hour');
+:as_office_a
+select public.assign_visit('f8400000-0000-4000-8000-000000000001', array['a0000000-0000-0000-0000-000000000003', 'a8400000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000002']::uuid[]);
+:as_super
+select tst.ok((select array_agg(user_id order by user_id) from public.push_outbox where kind = 'visit.assigned' and source_id = 'f8400000-0000-4000-8000-000000000001')
+          = array['a0000000-0000-0000-0000-000000000003']::uuid[],
+          'T84 visit assigned: Mike; not the office who assigned itself, not the subcontractor (he cannot open a visit yet)');
+select tst.ok((select bool_and(route = '/visit/f8400000-0000-4000-8000-000000000001') from public.push_outbox where kind = 'visit.assigned'), 'T84 the push leads to the visit');
+-- moved (by the office, who is on it too) while «assigned» still waits: no second push
+:as_office_a
+update public.visits set starts_at = starts_at + interval '2 hours', ends_at = ends_at + interval '2 hours' where id = 'f8400000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok(not exists (select 1 from public.push_outbox where kind = 'visit.rescheduled'), 'T84 moved while «assigned» waits: no second push');
+-- sent; then moved (only the end): everyone on it but the one who moved it
+update public.push_outbox set status = 'sent' where kind = 'visit.assigned';
+:as_office_a
+update public.visits set ends_at = ends_at + interval '30 minutes' where id = 'f8400000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select array_agg(user_id order by user_id) from public.push_outbox where kind = 'visit.rescheduled')
+          = array['a0000000-0000-0000-0000-000000000003']::uuid[],
+          'T84 a longer visit (only ends_at): «visit rescheduled» to everyone on it but the office and the subcontractor');
+-- the same values again (an offline repeat) or a note: nothing new; moved again while waiting: still one
+update public.push_outbox set status = 'sent' where kind = 'visit.rescheduled';
+update public.visits set ends_at = ends_at, notes = 'gate code at the door' where id = 'f8400000-0000-4000-8000-000000000001';
+select tst.ok((select count(*) from public.push_outbox where kind = 'visit.rescheduled') = 1, 'T84 the same time again or a note: no push');
+update public.visits set starts_at = starts_at + interval '1 day', ends_at = ends_at + interval '1 day' where id = 'f8400000-0000-4000-8000-000000000001';
+update public.visits set starts_at = starts_at + interval '1 hour', ends_at = ends_at + interval '1 hour' where id = 'f8400000-0000-4000-8000-000000000001';
+select tst.ok((select count(*) = count(distinct user_id) and count(*) = 2 from public.push_outbox where kind = 'visit.rescheduled' and status = 'pending'),
+          'T84 moved twice while waiting (not by a person on it): one push per person (Mike, the office)');
+select tst.ok(not exists (select 1 from public.push_outbox where user_id = 'a8400000-0000-4000-8000-000000000001' and kind like 'visit.%'),
+          'T84 a subcontractor on a visit gets no visit push (security-check #291 №1)');
+-- taken off and put back (assign_visit updates deleted_at back to null): a new «assigned» once the old one is gone
+:as_office_a
+select public.assign_visit('f8400000-0000-4000-8000-000000000001', array['a8400000-0000-4000-8000-000000000001']::uuid[]);
+select public.assign_visit('f8400000-0000-4000-8000-000000000001', array['a8400000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003']::uuid[]);
+:as_super
+select tst.ok((select count(*) from public.push_outbox where kind = 'visit.assigned' and user_id = 'a0000000-0000-0000-0000-000000000003') = 2,
+          'T84 put back on the visit: a new «assigned» push');
+-- a direct row (old queues: op lead.visit) is caught too; a repeat while waiting is not doubled
+insert into public.visits (id, company_id, lead_id, kind, legacy_no_property, starts_at, ends_at) values
+  ('f8400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '18400000-0000-4000-8000-000000000001', 'inspection', true,
+   now() + interval '2 days', now() + interval '2 days 1 hour');
+:as_office_a
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f8400000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000003');
+:as_super
+update public.visit_assignees set deleted_at = now() where visit_id = 'f8400000-0000-4000-8000-000000000002';
+update public.visit_assignees set deleted_at = null where visit_id = 'f8400000-0000-4000-8000-000000000002';
+select tst.ok((select count(*) from public.push_outbox where source_id = 'f8400000-0000-4000-8000-000000000002') = 1, 'T84 a direct row is caught; a repeat while waiting is not doubled');
+-- a visit already done: no push
+insert into public.visits (id, company_id, lead_id, kind, legacy_no_property, starts_at, ends_at, status) values
+  ('f8400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '18400000-0000-4000-8000-000000000001', 'inspection', true,
+   now() - interval '2 days', now() - interval '2 days' + interval '1 hour', 'completed');
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f8400000-0000-4000-8000-000000000003', 'a0000000-0000-0000-0000-000000000003');
+select tst.ok(not exists (select 1 from public.push_outbox where source_id = 'f8400000-0000-4000-8000-000000000003'), 'T84 a done visit sends no push');
+-- a broken queue never rolls back the visit or the lead
+alter table public.push_outbox add constraint t84_broken check (false) not valid;
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('18400000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Broken', '+13235558409', null);
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f8400000-0000-4000-8000-000000000002', 'a0000000-0000-0000-0000-000000000002');
+alter table public.push_outbox drop constraint t84_broken;
+select tst.ok(exists (select 1 from public.leads where id = '18400000-0000-4000-8000-000000000009')
+          and exists (select 1 from public.visit_assignees where visit_id = 'f8400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000002'),
+          'T84 a broken queue does not roll back the lead or the visit');
+-- at sending time: phones for everyone, then the world changes before the claim
+insert into public.push_devices (user_id, expo_token, platform, lang) values
+  ('a0000000-0000-0000-0000-000000000001', 'ExponentPushToken[t84-owner]', 'android', 'en'),
+  ('a0000000-0000-0000-0000-000000000002', 'ExponentPushToken[t84-office]', 'android', 'en'),
+  ('a0000000-0000-0000-0000-000000000003', 'ExponentPushToken[t84-mike]', 'android', 'en'),
+  ('a8400000-0000-4000-8000-000000000001', 'ExponentPushToken[t84-sub]', 'android', 'en');
+delete from public.push_outbox where status = 'sent';
+update public.push_outbox set next_try_at = now() where status = 'pending';
+-- Mike is taken off visit 2 (directly, as an old queue would), visit 1 is cancelled for the subcontractor; lead 1 is closed
+update public.visit_assignees set deleted_at = now() where visit_id = 'f8400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000003';
+update public.visits set status = 'cancelled', cancel_reason = 'other', cancel_reason_text = 'T84' where id = 'f8400000-0000-4000-8000-000000000001';
+update public.leads set status = 'lost', lost_reason = 'price_too_high' where id = '18400000-0000-4000-8000-000000000001';
+-- lead 3 went to the subcontractor: its «new lead» to owner and office still stands (they handle the flow)
+-- lead 4 is handed from Mike to the office before sending
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = '18400000-0000-4000-8000-000000000004';
+-- a forged row: «visit assigned» to the owner of a visit he is not on → skipped at sending
+insert into public.push_outbox (company_id, user_id, kind, route, source_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'visit.assigned', '/visit/f8400000-0000-4000-8000-000000000002', 'f8400000-0000-4000-8000-000000000002');
+reset role; set role service_role;
+select public.push_claim(500);
+:as_super
+select tst.ok((select bool_and(status = 'skipped' and error = 'not_member') from public.push_outbox
+               where source_id in ('f8400000-0000-4000-8000-000000000001', '18400000-0000-4000-8000-000000000001')),
+          'T84 at sending: a cancelled visit and a closed lead send nothing');
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox
+               where source_id = 'f8400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000003'),
+          'T84 at sending: a person taken off the visit gets nothing');
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox
+               where kind = 'visit.assigned' and source_id = 'f8400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T84 at sending: a forged «visit assigned» of a visit the person is not on is skipped');
+select tst.ok((select count(*) = 2 and bool_and(status = 'sending') from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000003'
+               and user_id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002')),
+          'T84 at sending: the open lead still goes to the people of the flow');
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000004'
+               and user_id = 'a0000000-0000-0000-0000-000000000003' and kind = 'lead.new')
+          and (select status = 'sending' from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000004'
+               and user_id = 'a0000000-0000-0000-0000-000000000001' and kind = 'lead.new'),
+          'T84 at sending: the tech whose lead was handed on gets nothing, the owner still does');
+-- the subcontractor never gets money or signatures (payment, signature of his own estimate)
+update public.estimates set owner_user_id = 'a8400000-0000-4000-8000-000000000001' where id = '0e730000-0000-4000-8000-000000000003';
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003'),
+  ('08400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+select tst.ok(not exists (select 1 from public.push_outbox where user_id = 'a8400000-0000-4000-8000-000000000001' and kind in ('estimate.client_signed', 'payment.received')),
+          'T84 a subcontractor gets no signature or money push');
+update public.estimates set owner_user_id = null where id = '0e730000-0000-4000-8000-000000000003';
+\echo 'T84 visits and leads: assigned, moved, new, given; not the actor; a subcontractor nothing yet; checked at sending ok'
+
+-- ---------------------------------------------------------------- T85: the switches by kind (docs/specs/27 §4.7)
+:as_super
+delete from public.push_outbox;
+:as_tech_a
+select tst.ok((public.set_push_kind('ca000000-0000-0000-0000-000000000000', 'visits', false) ->> 'enabled') = 'false', 'T85 Mike switches «visits» off');
+select tst.ok(tst.cnt($q$select 1 from public.push_prefs where kind = 'visits' and not enabled$q$) = 1, 'T85 he reads his own switch');
+select tst.fails_like($q$select public.set_push_kind('ca000000-0000-0000-0000-000000000000', 'everything', false)$q$, 'unknown notification kind', 'T85 an unknown kind is refused');
+select tst.fails_like($q$select public.set_push_kind('cb000000-0000-0000-0000-000000000000', 'visits', false)$q$, 'only a member%', 'T85 not in another company');
+select tst.fails($q$insert into public.push_prefs (company_id, user_id, kind, enabled) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'leads', false)$q$, 'T85 no direct insert');
+select tst.blocked($q$update public.push_prefs set enabled = true$q$, 'T85 no direct update');
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.push_prefs$q$) = 0, 'T85 another person does not see Mike''s switches');
+:as_super
+-- switched off → not queued
+insert into public.visits (id, company_id, lead_id, kind, legacy_no_property, starts_at, ends_at) values
+  ('f8500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '18400000-0000-4000-8000-000000000003', 'inspection', true,
+   now() + interval '1 day', now() + interval '1 day 1 hour');
+insert into public.visit_assignees (company_id, visit_id, user_id) values ('ca000000-0000-0000-0000-000000000000', 'f8500000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+select tst.ok(not exists (select 1 from public.push_outbox where user_id = 'a0000000-0000-0000-0000-000000000003'), 'T85 a kind switched off is not queued');
+-- switched off after it was queued → skipped 'off' at sending
+:as_tech_a
+select public.set_push_kind('ca000000-0000-0000-0000-000000000000', 'visits', true);
+:as_super
+update public.visits set starts_at = starts_at + interval '1 hour' where id = 'f8500000-0000-4000-8000-000000000001';
+select tst.ok(exists (select 1 from public.push_outbox where user_id = 'a0000000-0000-0000-0000-000000000003' and kind = 'visit.rescheduled'), 'T85 switched on again: queued');
+:as_tech_a
+select public.set_push_kind('ca000000-0000-0000-0000-000000000000', 'visits', false);
+reset role; set role service_role;
+select public.push_claim(100);
+:as_super
+select tst.ok((select status = 'skipped' and error = 'off' from public.push_outbox where user_id = 'a0000000-0000-0000-0000-000000000003' and kind = 'visit.rescheduled'),
+          'T85 switched off after the queue: skipped (off)');
+-- «the client opened the estimate»: off by default; the author who switched it on gets it
+update public.estimates set owner_user_id = 'a0000000-0000-0000-0000-000000000001' where id = '0e730000-0000-4000-8000-000000000003';
+insert into public.notifications (id, company_id, kind, estimate_id) values ('08500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e730000-0000-4000-8000-000000000003');
+select tst.ok(not exists (select 1 from public.push_outbox where kind = 'estimate.viewed'), 'T85 «estimate opened» is off by default');
+:as_owner_a
+select public.set_push_kind('ca000000-0000-0000-0000-000000000000', 'viewed', true);
+:as_super
+insert into public.notifications (id, company_id, kind, estimate_id) values ('08500000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e730000-0000-4000-8000-000000000003');
+select tst.ok((select count(*) = 1 and bool_and(user_id = 'a0000000-0000-0000-0000-000000000001' and route = '/estimate/0e730000-0000-4000-8000-000000000003')
+               from public.push_outbox where kind = 'estimate.viewed'), 'T85 switched on: the author gets «estimate opened», nobody else');
+-- a payment with «payment» off for the owner: not queued for him
+:as_owner_a
+select public.set_push_kind('ca000000-0000-0000-0000-000000000000', 'payment', false);
+:as_super
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08500000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+select tst.ok(not exists (select 1 from public.push_outbox where notification_id = '08500000-0000-4000-8000-000000000003' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T85 «payment» off: the owner gets no payment push');
+-- the server's paths without BYPASSRLS (as T80): the switch, the enqueue and the lead trigger
+create role t85_owner nologin nobypassrls;
+grant postgres to t85_owner;
+grant usage on schema app, public to t85_owner;
+grant select, insert, update, delete on public.push_prefs, public.push_outbox to t85_owner;
+grant select on public.memberships, public.users, public.companies, public.leads to t85_owner;
+grant execute on all functions in schema app to t85_owner;
+alter function public.set_push_kind(uuid, text, boolean) owner to t85_owner;
+alter function app.push_enqueue(uuid, uuid, text, text, uuid) owner to t85_owner;
+alter function app.push_enabled(uuid, uuid, text) owner to t85_owner;
+alter function app.tg_lead_push() owner to t85_owner;
+:as_owner_a
+select tst.ok((public.set_push_kind('ca000000-0000-0000-0000-000000000000', 'leads', true) ->> 'enabled') = 'true', 'T85 the switch works without BYPASSRLS');
+:as_office_a
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('18500000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T85 Lead', '+13235558501', 'a0000000-0000-0000-0000-000000000001');
+:as_super
+select tst.ok(exists (select 1 from public.push_outbox where source_id = '18500000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T85 a new lead is queued without BYPASSRLS');
+alter function public.set_push_kind(uuid, text, boolean) owner to postgres;
+alter function app.push_enqueue(uuid, uuid, text, text, uuid) owner to postgres;
+alter function app.push_enabled(uuid, uuid, text) owner to postgres;
+alter function app.tg_lead_push() owner to postgres;
+reassign owned by t85_owner to postgres;
+drop owned by t85_owner;
+drop role t85_owner;
+-- rights; account deletion erases the switches
+select tst.ok(not has_function_privilege('anon', 'public.set_push_kind(uuid, text, boolean)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.set_push_kind(uuid, text, boolean)', 'EXECUTE')
+          and not has_table_privilege('anon', 'public.push_prefs', 'SELECT') and not has_table_privilege('authenticated', 'public.push_prefs', 'INSERT'),
+          'T85 rights: the app calls set_push_kind and reads its own rows only');
+select tst.ok(not has_function_privilege('authenticated', 'app.push_enqueue(uuid, uuid, text, text, uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.push_enabled(uuid, uuid, text)', 'EXECUTE'), 'T85 nobody in the app runs the queue helpers');
+reset role; set role anon;
+select tst.fails($q$select public.set_push_kind('ca000000-0000-0000-0000-000000000000', 'visits', true)$q$, 'T85 anon cannot set a switch');
+:as_super
+select app.erase_personal_rows('a0000000-0000-0000-0000-000000000003');
+select tst.ok(not exists (select 1 from public.push_prefs where user_id = 'a0000000-0000-0000-0000-000000000003'), 'T85 account deletion erases the person''s switches');
+-- clean up
+update public.estimates set owner_user_id = null where id = '0e730000-0000-4000-8000-000000000003';
+delete from public.push_outbox;
+delete from public.push_devices;
+delete from public.push_prefs;
+delete from public.notifications where id::text like '0840%' or id::text like '0850%';
+delete from public.visit_assignees where visit_id::text like 'f840%' or visit_id::text like 'f850%';
+delete from public.visits where id::text like 'f840%' or id::text like 'f850%';
+update public.memberships set status = 'disabled' where user_id = 'a8400000-0000-4000-8000-000000000001';
+\echo 'T85 switches by kind: own only, not queued when off, skipped when switched off later, «estimate opened» off by default ok'
 
 -- ---------------------------------------------------------------- T86: the office reads the company, only owner / admin change it
 -- Spec 26 §3 (decision 07.11, LOG): the office sees «Настройки компании» read-only in the app; the database is the guard.

@@ -48,7 +48,7 @@ export const en: Dict = {
   "nav.expenses": "Expenses",
   "nav.team": "Team",
   "nav.companySettings": "Company settings",
-  "nav.mySettings": "My settings",
+  "nav.mySettings": "App settings",
   "nav.menu": "Menu",
   "nav.create": "Create",
   "nav.group.work": "Work",
@@ -262,7 +262,6 @@ export const en: Dict = {
   "today.awaiting": "Awaiting payment",
   "today.attention": "Needs attention",
   "today.allClear": "All under control",
-  "today.share": "{n}%",
   "today.nEstimates": "Estimates: {n}",
   "today.nPayments": "Payments: {n}",
   "today.allTime": "All open invoices",
@@ -2206,6 +2205,22 @@ export const en: Dict = {
   "push.turnedOn": "Notifications on",
   "push.denied": "The phone did not allow notifications",
   "push.failed": "Could not turn on. Check the connection and try again",
+  // today2.* — «Сегодня»: «Получено» with columns, tiles, funnel bars (spec 24 A, founder fixes chat)
+  "today2.vsToday": "vs yesterday",
+  "today2.vsWeek": "vs last week",
+  "today2.vsMonth": "vs last month",
+  "today2.change": "{arrow} {amount} {vs}",
+  "today2.empty": "Shows up after the first payment",
+  "today2.chartA11y": "Received: {list}",
+  "today2.nInvoices": "Invoices: {n}",
+  "today2.overdue": "Overdue: {n}",
+  "today2.ofLeads": "{n}% of leads",
+  "today2.ofSent": "{n}% of sent",
+  // fix.settings.* — profile split from app settings (spec 26)
+  "fix.settings.profile": "Profile & account",
+  // fix.sign.* — the full-screen signature (spec 29)
+  "fix.sign.expand": "Full screen",
+  "fix.sign.done": "Done",
   // fix.co.* — company settings read-only for the office (spec 26 §3)
   "fix.co.readOnly": "View only — the director makes changes",
 };

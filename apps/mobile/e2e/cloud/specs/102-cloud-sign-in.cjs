@@ -20,10 +20,12 @@ async function expectCompany(h, name, notName) {
   // the sign-in leaves for the company: the app goes on to «/» once the memberships are in
   for (let i = 0; i < 40 && /\/auth\//.test(new URL(p.url()).pathname); i++) await p.waitForTimeout(250);
   h.expect(!/\/auth\//.test(new URL(p.url()).pathname), `signed in, left the auth screens (${p.url()})`);
-  await h.go("/settings");
+  // the account (company, email, sync) is in «Профиль и аккаунт» (spec 26)
+  await h.go("/settings/profile");
   await h.expectText(new RegExp(name), `company ${name} from the server`);
   const t = await h.text();
-  h.expect(!/Сбросить тестовые данные/.test(t), "cloud mode: no demo reset");
+  await h.go("/settings");
+  h.expect(!/Сбросить тестовые данные/.test(await h.text()), "cloud mode: no demo reset in «Настройки приложения»");
   if (notName) h.expect(!t.includes(notName), `nothing of ${notName}`);
 }
 
@@ -47,7 +49,7 @@ exports.run = async (h, { seed, mailpit }) => {
   await h.shot("a1-settings");
 
   // b1 with the code from the email, in a fresh browser (no session of a1)
-  const ctx = await p.context().browser().newContext({ viewport: { width: 390, height: 844 }, locale: "en-US" });
+  const ctx = await p.context().browser().newContext({ viewport: { width: 390, height: 844 }, locale: "en-US", reducedMotion: "reduce" });
   await ctx.addInitScript(() => {
     if (!localStorage.getItem("octo.lang.v1")) localStorage.setItem("octo.lang.v1", JSON.stringify("ru"));
   });

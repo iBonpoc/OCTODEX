@@ -584,7 +584,7 @@ export function Screen({
         <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, flexWrap: "wrap", rowGap: space[2] }}>
           <RowView style={{ flexGrow: 1, flexShrink: 0, maxWidth: "100%", gap: space[1] }}>
             {/* phone, a section opened from «Ещё» outside the tabs (Jobs, Money, Catalog…): «‹ Ещё» — no ☰ any more (variant Б) */}
-            {!wide && menuRoot && !isTabScreen(routeName) ? (
+            {!wide && menuRoot && (!isTabScreen(routeName) || params.from === "more") ? (
               <Press
                 testID="back-more"
                 onPress={() => go("/more")}

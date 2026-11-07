@@ -47,7 +47,7 @@ export const ru = {
   "nav.expenses": "Расходы",
   "nav.team": "Команда",
   "nav.companySettings": "Настройки компании",
-  "nav.mySettings": "Мои настройки",
+  "nav.mySettings": "Настройки приложения",
   "nav.menu": "Меню",
   "nav.create": "Создать",
   "nav.group.work": "Работа",
@@ -261,7 +261,6 @@ export const ru = {
   "today.awaiting": "Ждёт оплаты",
   "today.attention": "Требует внимания",
   "today.allClear": "Всё под контролем",
-  "today.share": "{n}%",
   "today.nEstimates": "Смет: {n}",
   "today.nPayments": "Платежей: {n}",
   "today.allTime": "Все открытые счета",
@@ -2205,6 +2204,22 @@ export const ru = {
   "push.turnedOn": "Уведомления включены",
   "push.denied": "Телефон не разрешил уведомления",
   "push.failed": "Не удалось включить. Проверьте связь и попробуйте ещё раз",
+  // today2.* — «Сегодня»: «Получено» with columns, tiles, funnel bars (spec 24 A, founder fixes chat)
+  "today2.vsToday": "к вчерашнему дню",
+  "today2.vsWeek": "к прошлой неделе",
+  "today2.vsMonth": "к прошлому месяцу",
+  "today2.change": "{arrow} {amount} {vs}",
+  "today2.empty": "Появятся после первой оплаты",
+  "today2.chartA11y": "Получено: {list}",
+  "today2.nInvoices": "Счетов: {n}",
+  "today2.overdue": "Просрочено: {n}",
+  "today2.ofLeads": "{n}% от лидов",
+  "today2.ofSent": "{n}% от отправленных",
+  // fix.settings.* — profile split from app settings (spec 26)
+  "fix.settings.profile": "Профиль и аккаунт",
+  // fix.sign.* — the full-screen signature (spec 29)
+  "fix.sign.expand": "Развернуть на весь экран",
+  "fix.sign.done": "Готово",
   // fix.co.* — company settings read-only for the office (spec 26 §3)
   "fix.co.readOnly": "Только просмотр — менять может директор",
 } as const;
