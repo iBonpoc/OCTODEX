@@ -11,12 +11,13 @@ import type { ContactAction } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
-import { EstimatesBoard, InvoicesBoard } from "@/features/boards";
 import { usePersistentState } from "@/data/persist";
 import { router, useLocalSearchParams } from "expo-router";
 import { useI18n, type DictKey } from "@/i18n";
 import { ReplySheet, useTick } from "@/features/sheets";
-import { Button, ChoiceChips, Segmented, TextField } from "@/ui/controls";
+import { Button } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
+import { filterStoreKey } from "@/ui/filterBarRules";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
@@ -25,48 +26,32 @@ import { CardList, Empty, Screen } from "@/ui/surfaces";
 
 const COLUMNS = LEAD_COLUMNS;
 
+/** the lane of «Лиды» (spec 31 §7): the broad default first, then in the order of the work; «Мои» is in the sheet */
+const LANE: readonly LeadFilter[] = ["open", "waiting", "snoozed", "won", "closed"];
+
 /** All requests in one place, with a "waiting N min" timer: whoever replies first wins the job. */
-/** Leads · Estimates · Invoices (☰ «Работа» and «Документы», docs/specs/13 §2.3): each list as cards with filters. Was the «Sales» tab (/inbox). */
-export default function Sales() {
+/**
+ * «Лиды» (☰ «Работа»): the leads only. Estimates and invoices are sections of their own, each its own screen
+ * (founder 07.11, spec 31 §7а): an old address /leads?tab=estimates|invoices goes there.
+ */
+export default function Leads() {
   const { t } = useI18n();
-  const [tab, setTab] = usePersistentState<"leads" | "estimates" | "invoices">("octo.salesTab.v1", "leads");
-  // "‹ Leads" / "‹ Estimates" from a card opens Sales on that list
   const want = useLocalSearchParams<{ tab?: string }>().tab;
   useEffect(() => {
-    if (want === "leads" || want === "estimates" || want === "invoices") setTab(want);
+    if (want === "estimates") router.replace("/estimates");
+    else if (want === "invoices") router.replace("/invoice");
   }, [want]);
-  const { db, role } = useStore();
-  const newLeads = db.leads.filter((l) => l.status === "new").length;
+  const { role } = useStore();
   return (
     <Screen
-      title={t(tab === "estimates" ? "sales.estimates" : tab === "invoices" ? "sales.invoices" : "sales.leads")}
+      title={t("sales.leads")}
       help={t("help.inbox")}
       hintKey="inbox"
       // sales: this is «Главная» (13а §2) — the bell, the sync badge and the profile on the right
-      home={role === "sales" && tab === "leads"}
-      right={
-        tab === "leads" ? (
-          <Button label={t("quick.lead")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/lead/new")} />
-        ) : tab === "estimates" ? (
-          <Button label={t("est.new")} icon="plus" size="sm" onPress={() => router.push("/estimate/new")} />
-        ) : undefined
-      }
+      home={role === "sales"}
+      right={<Button label={t("quick.lead")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/lead/new")} />}
     >
-      <Segmented
-        full
-        value={tab}
-        onChange={(k) => {
-          setTab(k);
-          // the address follows the list on screen, so ☰ «Сметы» / «Счета» always switch it (review of #144)
-          router.setParams({ tab: k });
-        }}
-        items={[
-          { key: "leads", label: newLeads ? `${t("sales.leads")} · ${newLeads}` : t("sales.leads") },
-          { key: "estimates", label: t("sales.estimates") },
-          { key: "invoices", label: t("sales.invoices") },
-        ]}
-      />
-      {tab === "leads" ? <LeadsBoard /> : tab === "estimates" ? <EstimatesBoard /> : <InvoicesBoard />}
+      <LeadsBoard />
     </Screen>
   );
 }
@@ -79,15 +64,25 @@ function LeadsBoard() {
   const toast = useToast();
   const { device } = useDevice();
   const [reply, setReply] = useState<string | null>(null);
-  const [f, setF] = usePersistentState<LeadFilter>("octo.leadFilter.v1", "open");
-  const [src, setSrc] = useState("");
+  // spec 31 §6 п.7: the status, the sources and the people are kept on this device for this list; the search is not.
+  // «Мои» is not a status any more: it is in the sheet («Ответственный»).
+  const key = filterStoreKey("leads");
+  const [keptF, setF] = usePersistentState<LeadFilter>(`${key}.status`, "open");
+  const [srcIds, setSrcIds] = usePersistentState<string[]>(`${key}.sources`, []);
+  const [whoIds, setWhoIds] = usePersistentState<string[]>(`${key}.people`, []);
   const [q, setQ] = useState("");
-  const leads = filterLeads(db, role, { filter: f, sourceId: src || undefined, q });
-  const count = (x: LeadFilter) => filterLeads(db, role, { filter: x }).length;
+  const f: LeadFilter = LANE.includes(keptF) ? keptF : "open";
+  const base = filterLeads(db, role, { filter: f });
   const usedSources = db.sources.filter((s) => db.leads.some((l) => l.sourceId === s.id));
-  const office = role !== "tech";
   // only people at work make a team (invitations and switched-off people do not, 7-2)
-  const team = db.members.filter((m) => !m.pending).length > 1 && f !== "mine";
+  const people = db.members.filter((m) => !m.pending);
+  const sources = srcIds.filter((id) => usedSources.some((s) => s.id === id));
+  const who = whoIds.filter((id) => people.some((m) => m.id === id));
+  const leads = filterLeads(db, role, { filter: f, q }).filter((l) => (!sources.length || sources.includes(l.sourceId ?? "")) && (!who.length || who.includes(l.assigneeId ?? "")));
+  const count = (x: LeadFilter) => filterLeads(db, role, { filter: x }).length;
+  const office = role !== "tech";
+  const team = people.length > 1 && !(who.length === 1 && who[0] === db.me);
+  const toggle = (ids: string[], set: (v: string[]) => void) => (id: string) => set(ids.includes(id) ? ids.filter((x) => x !== id) : [...ids, id]);
   const [picking, setPicking] = useState<Lead | null>(null);
   const [calling, setCalling] = useState<Lead | null>(null);
   /** the same records as the lead page (ContactActions): a call asks «did you get through?», SMS / email count as a reply */
@@ -130,15 +125,38 @@ function LeadsBoard() {
     ) : null;
   return (
     <>
-      <TextField type="search" value={q} onChangeText={setQ} placeholder={t("lead.search")} icon="search" />
-      <ChoiceChips<LeadFilter>
+      {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane of statuses; sources and people in the sheet */}
+      <FilterBar<LeadFilter>
+        search={{ value: q, onChange: setQ, placeholder: t("lead.search") }}
         value={f}
         onChange={setF}
-        items={(["open", "mine", "waiting", "snoozed", "won", "closed"] as const).map((k) => ({ key: k, label: `${t(`lead.f.${k}` as DictKey)} · ${count(k)}` }))}
+        items={LANE.map((k) => ({ key: k, label: t(`lead.f.${k}` as DictKey), count: count(k) }))}
+        groups={[
+          ...(people.length > 1
+            ? [{
+                key: "people",
+                title: t("card.filter.people"),
+                // «Мои» first, then the others by name
+                options: [...people].sort((a, b) => (a.id === db.me ? -1 : b.id === db.me ? 1 : a.name.localeCompare(b.name))).map((m) => ({
+                  key: m.id,
+                  label: m.id === db.me ? t("lead.f.mine") : m.name,
+                  count: base.filter((l) => l.assigneeId === m.id).length,
+                  on: who.includes(m.id),
+                })),
+                onToggle: toggle(who, setWhoIds),
+              }]
+            : []),
+          ...(usedSources.length > 1
+            ? [{
+                key: "sources",
+                title: t("card.filter.sources"),
+                options: usedSources.map((x) => ({ key: x.id, label: x.name, count: base.filter((l) => l.sourceId === x.id).length, on: sources.includes(x.id) })),
+                onToggle: toggle(sources, setSrcIds),
+              }]
+            : []),
+        ]}
+        onReset={() => { setSrcIds([]); setWhoIds([]); }}
       />
-      {usedSources.length > 1 ? (
-        <ChoiceChips<string> value={src} onChange={setSrc} items={[{ key: "", label: t("lead.allSources") }, ...usedSources.map((x) => ({ key: x.id, label: x.name }))]} />
-      ) : null}
       {leads.length === 0 ? (
         <Empty icon="inbox" title={t("inbox.empty")} hint={t("inbox.emptyHint")} />
       ) : (

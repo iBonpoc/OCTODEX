@@ -12,10 +12,11 @@ exports.run = async (h) => {
     }
   }
   await h.page.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
-  await h.go("/leads");
-  await h.clickText("Сметы");
+  // Estimates and Invoices are sections of their own (spec 31 §7а): no switch on /leads
+  await h.go("/estimates");
   await h.expectText(/Открытые · \d+/, "estimate filters");
-  await h.clickText("Счета");
+  // the invoice cards with groups (until 10в PR 3 they also live on /money)
+  await h.go("/money");
   await h.expectText(/Нужно действие · \d+ · \$1,840/, "overdue invoices group (list cards PR5)");
   await h.expectText(/Просрочен \d+ дн/, "overdue sign on the invoice card");
   await h.go("/jobs");

@@ -9,6 +9,8 @@
 const LISTS = [
   // PR 1: «Клиенты» — the tags in the sheet
   { path: "/clients", search: "Имя, телефон или адрес", group: "Метки" },
+  // PR 2: «Лиды» — no Leads · Estimates · Invoices switch; people («Мои») and sources in the sheet
+  { path: "/leads", search: "Имя, телефон, адрес, услуга", group: "Ответственный", noSwitch: true },
 ];
 
 exports.run = async (h) => {
@@ -18,6 +20,7 @@ exports.run = async (h) => {
     await h.go(L.path);
     const bar = vis(p.getByTestId("filter-bar")).first();
     await bar.waitFor();
+    if (L.noSwitch) h.expect((await vis(p.getByRole("tab", { name: /^(Сметы|Счета)$/ })).count()) === 0, `${L.path}: no switch of sub-lists over the list (spec 31 §7а)`);
 
     // rows over the list: the search row and the lane — the lane is one line
     const chips = vis(bar.getByRole("radio"));

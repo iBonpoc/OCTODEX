@@ -1496,6 +1496,8 @@ export const ru = {
   "card.tag.estimateSent": "Смета отправлена · {n}",
   // card.filter.* — filters over a list (spec 31)
   "card.filter.remove": "Убрать фильтр: {v}",
+  "card.filter.people": "Ответственный",
+  "card.filter.sources": "Источник",
   "card.emptyFilter": "В этом отборе никого нет",
   "card.sign.noNextStep": "Нет следующего шага",
   "card.group.action": "Нужно действие",
