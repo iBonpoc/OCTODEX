@@ -1877,10 +1877,13 @@ export const es: Dict = {
   "plan5.addTimeOff": "Día libre",
   // «Работы» №6, 6-3 / 24 §B: Week and Month count the Feed's items; a run of empty days is one row
   "plan5.planned": "En plan: {n}",
-  "plan5.freeRun": "{from} – {to} · libre",
-  "plan5.freeDay": "{day} · libre",
-  "plan5.freeToday": "Hoy · {day} · libre",
-  "plan5.dayOff": "día libre",
+  "plan5.freeRun": "{from} – {to} · Nada programado",
+  "plan5.freeDay": "{day} · Nada programado",
+  "plan5.freeToday": "Nada para hoy",
+  "plan5.freeA11y": "Nada programado {from} – {to}. Añadir",
+  "plan5.lateEnRoute": "en camino",
+  "plan5.lateNotLeft": "no ha salido",
+  "plan5.dayOff": "Día libre",
   /* «Каркас» №4, 7а-1: согласие, документы, помощь и поддержка (docs/specs/19 §5) */
   "legal.terms.title": "Términos del servicio",
   "legal.privacy.title": "Política de privacidad",

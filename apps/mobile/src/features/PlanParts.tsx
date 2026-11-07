@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { View } from "react-native";
+import { View, useWindowDimensions } from "react-native";
 import { router } from "expo-router";
-import { component, space } from "@octo/design-tokens";
+import { breakpoint, component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CalendarEvent, CalendarEventKind, ID, Task } from "@/data/types";
 import { findJob } from "@/data/jobs";
@@ -176,8 +176,9 @@ export function UnassignedSoon() {
             <ItemCard
               key={v.id}
               status="warn"
-              title={`${dd === 0 ? t("plan5.today") : t("plan5.tomorrow")} · ${v.allDay ? t("plan5.allDay") : time(v.start)} · ${client}`}
-              subtitle={[v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"), property?.address].filter(Boolean).join(" · ")}
+              // 24 §B: the name is not cut by «Сегодня ·» — the day goes to the subtitle
+              title={`${v.allDay ? t("plan5.allDay") : time(v.start)} · ${client}`}
+              subtitle={[dd === 0 ? t("plan5.today") : t("plan5.tomorrow"), v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"), property?.address].filter(Boolean).join(" · ")}
               right={<Button label={t("plan.assign")} icon="user" size="sm" variant="secondary" onPress={() => setAssign(v.id)} />}
               onPress={() => router.push(`/visit/${v.id}`)}
             />
@@ -200,32 +201,41 @@ export function FeedView({ days, items, onEvent, onAdd }: { days: DayKey[]; item
   return (
     <View style={{ gap: space[4] }} testID="plan-feed">
       {collapseEmpty(groupByDay(items, days), today).map((r) => {
-        if (r.kind === "day" && r.items.length)
+        if (r.kind === "day") {
+          // today stays its own day, with a header, even when empty («На сегодня ничего нет», 24 §B)
           return (
             <View key={r.day} style={{ gap: space[2] }}>
               <SectionTitle title={`${r.day === today ? `${t("common.today")} · ` : ""}${dayOf(r.day)}`} />
-              <CardList>
-                {r.items.map((x) => (
-                  <FeedCard key={`${x.kind}:${x.id}:${r.day}`} x={x} onEvent={onEvent} />
-                ))}
-              </CardList>
+              {r.items.length ? (
+                <CardList>
+                  {r.items.map((x) => (
+                    <FeedCard key={`${x.kind}:${x.id}:${r.day}`} x={x} onEvent={onEvent} />
+                  ))}
+                </CardList>
+              ) : (
+                <FreeRow label={t("plan5.freeToday")} a11y={t("plan5.freeA11y", { from: dayOf(r.day), to: dayOf(r.day) })} onAdd={onAdd ? () => onAdd(r.day) : undefined} />
+              )}
             </View>
           );
-        // a free row: a run of empty days, one empty day, or today with nothing
-        const from = r.kind === "day" ? r.day : r.from;
-        const to = r.kind === "day" ? r.day : r.to;
-        const label = from === today ? t("plan5.freeToday", { day: dayOf(from) }) : from === to ? t("plan5.freeDay", { day: dayOf(from) }) : t("plan5.freeRun", { from: dayOf(from), to: dayOf(to) });
-        return (
-          <View key={`free:${from}`} testID="plan-free">
-            <RowView style={{ justifyContent: "space-between", minHeight: component.rowCompact }}>
-              <T v="caption" tone="mut" style={{ flex: 1 }}>
-                {label}
-              </T>
-              {onAdd ? <IconButton icon="plus" label={t("plan.addTitle")} onPress={() => onAdd(from)} /> : null}
-            </RowView>
-          </View>
-        );
+        }
+        // a run of empty days, or one empty day
+        const label = r.from === r.to ? t("plan5.freeDay", { day: dayOf(r.from) }) : t("plan5.freeRun", { from: dayOf(r.from), to: dayOf(r.to) });
+        return <FreeRow key={`free:${r.from}`} label={label} a11y={t("plan5.freeA11y", { from: dayOf(r.from), to: dayOf(r.to) })} onAdd={onAdd ? () => onAdd(r.from) : undefined} />;
       })}
+    </View>
+  );
+}
+
+/** A free row: the words in mut, a quiet «＋» for the planner (not the accent: one yellow per screen — the FAB) */
+function FreeRow({ label, a11y, onAdd }: { label: string; a11y: string; onAdd?: () => void }) {
+  return (
+    <View testID="plan-free">
+      <RowView style={{ justifyContent: "space-between", minHeight: component.rowCompact }}>
+        <T v="caption" tone="mut" style={{ flex: 1 }}>
+          {label}
+        </T>
+        {onAdd ? <IconButton icon="plus" label={a11y} onPress={onAdd} /> : null}
+      </RowView>
     </View>
   );
 }
@@ -293,6 +303,7 @@ export function WeekStrip({ days, loads, date, onPick }: { days: DayKey[]; loads
 
 function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) => void }) {
   const { db } = useStore();
+  const phone = useWindowDimensions().width < breakpoint.tablet;
   const { t, time } = useI18n();
   const names = x.people.map((id) => memberName(db, id, t)).filter(Boolean).join(", ");
   // the title starts with the start of the day's part (short on a phone); the end goes to the subtitle
@@ -304,12 +315,17 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
     const property = db.properties.find((p) => p.id === visitPropertyId(db, v));
     const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
     const status = st.status;
+    // 24 §B: the long chip on the right cut the name — the chip says «Опаздывает», the detail goes to the subtitle; on a
+    // phone the overlap signs go to the subtitle too; the job number is the last part of the subtitle (it is cut first)
+    const late = st.label === "late.enRoute" ? t("plan5.lateEnRoute") : st.label === "late.notLeft" ? t("plan5.lateNotLeft") : null;
+    const signs = overlapSigns(db, v);
+    const signText = phone ? signs.map((o) => t(o.key, o.params)) : [];
     return (
       <ItemCard
         status={status}
         title={`${when} · ${client || "—"}`}
-        subtitle={[until, v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"), job?.number, property?.address, names || t("plan.unassigned")].filter(Boolean).join(" · ")}
-        right={<RowView>{overlapSigns(db, v).map((o) => <StatusChip key={o.key} status={o.tone} label={t(o.key, o.params)} />)}<StatusChip status={status} label={t(st.label)} /></RowView>}
+        subtitle={[until, late, ...signText, v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"), property?.address, names || t("plan.unassigned"), job?.number].filter(Boolean).join(" · ")}
+        right={<RowView>{phone ? null : signs.map((o) => <StatusChip key={o.key} status={o.tone} label={t(o.key, o.params)} />)}<StatusChip status={status} label={late ? t("st.late") : t(st.label)} /></RowView>}
         onPress={() => router.push(`/visit/${v.id}`)}
       />
     );

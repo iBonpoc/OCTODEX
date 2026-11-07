@@ -1,4 +1,4 @@
-const { addDays, atMinute, todayKey, weekday } = require("../companyTime.cjs");
+const { addDays, atMinute, minuteOf, todayKey, weekday } = require("../companyTime.cjs");
 /**
  * 6-3 (17-job §12.2) and 24 §B: «Неделя» and «Месяц» count what the Feed shows — a task with a time, an event, a day off,
  * not only visits — with the same «Показывать выполненные». The Week has a strip of 7 days (the Month's cell); a picked
@@ -79,4 +79,24 @@ exports.run = async (h) => {
   await p.waitForTimeout(300);
   h.expect((await p.getByTestId("plan-week-strip").locator("visible=true").count()) === 0, "a strip day leaves the Week");
   h.expect((await p.getByRole("radio", { name: /^Сегодня/ }).locator("visible=true").count()) > 0, "… for the Day: its day chips");
+
+  // 24 §B, the cut names: a late visit's chip says only «Опаздывает» (the detail is in the subtitle); a job number is the
+  // last part of a subtitle (cut first). Our own late visit: 40 minutes ago, not left (skipped in the company's first hour)
+  if (minuteOf(Date.now()) >= 60) {
+    await p.evaluate((start) => {
+      const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+      const prop = raw.db.properties[0];
+      raw.db.visits = [...raw.db.visits.filter((v) => v.id !== "v109late"), { id: "v109late", propertyId: prop.id, kind: "inspection", techId: raw.db.me, assigneeIds: [raw.db.me], start, durationMin: 60, step: "scheduled", scope: [], checklist: [], photos: [], amountDueCents: 0 }];
+      localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+    }, new Date(Date.now() - 40 * 60_000).toISOString());
+    await h.go("/plan"); await p.waitForTimeout(300);
+    await h.clickText("Неделя"); await p.waitForTimeout(300);
+    h.expect((await p.getByText("Опаздывает · не выехал", { exact: true }).locator("visible=true").count()) === 0, "no long «Опаздывает · не выехал» chip");
+    h.expect((await p.getByText("Опаздывает", { exact: true }).locator("visible=true").count()) > 0, "the chip says «Опаздывает»");
+    await h.expectText(/ · не выехал · /, "the detail is in the subtitle");
+  }
+  const subs = await p.getByTestId("plan-feed").locator("visible=true").first().innerText();
+  const withJob = subs.split("\n").filter((l) => /JOB-\d+/.test(l));
+  h.expect(withJob.every((l) => /JOB-\d+$/.test(l.trim())), "a job number ends its subtitle");
+
 };

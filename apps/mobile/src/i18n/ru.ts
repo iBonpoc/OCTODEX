@@ -1878,7 +1878,10 @@ export const ru = {
   "plan5.planned": "В плане: {n}",
   "plan5.freeRun": "{from} – {to} · свободно",
   "plan5.freeDay": "{day} · свободно",
-  "plan5.freeToday": "Сегодня · {day} · свободно",
+  "plan5.freeToday": "На сегодня ничего нет",
+  "plan5.freeA11y": "Свободно: {from} – {to}. Добавить",
+  "plan5.lateEnRoute": "в пути",
+  "plan5.lateNotLeft": "не выехал",
   "plan5.dayOff": "выходной",
   /* «Каркас» №4, 7а-1: согласие, документы, помощь и поддержка (docs/specs/19 §5) */
   "legal.terms.title": "Условия использования",

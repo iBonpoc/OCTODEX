@@ -44,7 +44,8 @@ exports.run = async (h) => {
   let body = await h.text();
   h.expect(body.indexOf("T67 call the supplier") < body.indexOf("T67 team meeting"), "today by time: 10:00 before 12:00");
   const soon = p.getByTestId("plan-unassigned-soon").last();
-  h.expect(new RegExp(`Завтра · 6:15 AM · ${client.name}`).test(await soon.innerText()), "«Не назначено» on top for the office: our visit tomorrow");
+  const soonText = await soon.innerText();
+  h.expect(new RegExp(`6:15 AM · ${client.name}`).test(soonText) && /Завтра · /.test(soonText), "«Не назначено» on top for the office: our visit tomorrow (the day in the subtitle, 24 §B)");
   await expectOneAccent(h, "the Plan feed (office)");
   await h.shot("plan-feed");
 
