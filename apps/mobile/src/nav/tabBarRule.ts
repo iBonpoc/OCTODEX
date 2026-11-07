@@ -34,7 +34,7 @@ export const WITH_TAB_BAR = [
   "estimate/[id]", "estimates", "figures/[metric]", "help",
   "invoice", "invoice/[id]", "job/[id]", "jobs", "lead/[id]", "leads",
   "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",
-  "receipt/[id]", "reports", "reports/[id]", "search", "settings", "tasks", "team", "today", "triage", "visit/[id]", "visits",
+  "receipt/[id]", "reports", "reports/[id]", "search", "settings", "settings/profile", "tasks", "team", "today", "triage", "visit/[id]", "visits",
 ] as const;
 
 const hidden = new Set<string>(NO_TAB_BAR);
