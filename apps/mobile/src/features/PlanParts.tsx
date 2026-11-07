@@ -64,25 +64,6 @@ export function WaitingJobs() {
   );
 }
 
-/** «Чей план»: Все · Я · people (techs of the company) */
-export function PlanWhoChips({ who, onChange }: { who: PlanWho; onChange: (w: PlanWho) => void }) {
-  const { db } = useStore();
-  const { t } = useI18n();
-  const people = db.members.filter((m) => m.roles.includes("tech") && !m.pending && m.id !== db.me);
-  const meTech = db.members.some((m) => m.id === db.me && m.roles.includes("tech"));
-  return (
-    <ChoiceChips
-      value={who}
-      onChange={onChange}
-      items={[
-        { key: "all", label: t("plan.who.all") },
-        ...(meTech ? [{ key: "me", label: t("plan.who.me") }] : []),
-        ...people.map((m) => ({ key: m.id, label: m.name.split(" ")[0] ?? m.name })),
-      ]}
-    />
-  );
-}
-
 /** «+»: what to put in the plan — an inspection at a property (the visit form) or a job from «Ждут даты» */
 export function PlanAddSheet({ visible, onClose, onEvent, day: onDay }: { visible: boolean; onClose: () => void; onEvent?: (kind: CalendarEventKind) => void; day?: DayKey }) {
   const store = useStore();

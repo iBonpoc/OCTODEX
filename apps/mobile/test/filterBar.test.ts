@@ -72,3 +72,20 @@ describe("the search as an icon (founder 07.11, spec 31 §6 п.2а)", () => {
     expect(searchAfter("clear", "mitch")).toEqual({ open: false, q: "" });
   });
 });
+
+import { chosenLabel, SEARCH_FROM, sheetOptions } from "../src/ui/filterBarRules";
+
+describe("one at a time and a long group (spec 31, «План» — director 07.11)", () => {
+  it("a chosen option of a one-at-a-time group says its group: «Мастер: Ivan»; the others just the option", () => {
+    expect(chosenLabel({ title: "Мастер", single: true }, { label: "Ivan" })).toBe("Мастер: Ivan");
+    expect(chosenLabel({ title: "Метки" }, { label: "VIP" })).toBe("VIP");
+  });
+  const people = (n: number, onAt = -1) => Array.from({ length: n }, (_, i) => ({ key: `m${i}`, label: i === 3 ? "Ivan Sokolov" : `Person ${i}`, on: i === onAt }));
+  it("the sheet searches a searchable group only past 10 rows; what is on stays", () => {
+    expect(sheetOptions({ options: people(SEARCH_FROM), searchable: true }, "ivan")).toHaveLength(SEARCH_FROM);
+    expect(sheetOptions({ options: people(12), searchable: false }, "ivan")).toHaveLength(12);
+    expect(sheetOptions({ options: people(12), searchable: true }, " IVAN ").map((o) => o.label)).toEqual(["Ivan Sokolov"]);
+    expect(sheetOptions({ options: people(12, 7), searchable: true }, "ivan").map((o) => o.key)).toEqual(["m3", "m7"]);
+    expect(sheetOptions({ options: people(12), searchable: true }, "")).toHaveLength(12);
+  });
+});

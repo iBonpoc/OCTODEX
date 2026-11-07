@@ -1,3 +1,4 @@
+const { planMaster, planShowDone } = require("../planFilters.cjs");
 const { addDays, atMinute, minuteOf, todayKey, weekday } = require("../companyTime.cjs");
 /**
  * 6-3 (17-job §12.2) and 24 §B: «Неделя» and «Месяц» count what the Feed shows — a task with a time, an event, a day off,
@@ -41,7 +42,7 @@ exports.run = async (h) => {
   }, [today, atMinute(today, 10 * 60), atMinute(today, 10 * 60 + 30), atMinute(today, 12 * 60), atMinute(today, 13 * 60), atMinute(tomorrow, 0), atMinute(addDays(tomorrow, 1), 0)]);
   await h.go("/plan");
   await p.waitForTimeout(300);
-  h.expect(!(await p.getByRole("radio", { name: "Показывать выполненные", checked: true }).count()), "«Показывать выполненные» is off");
+  h.expect((await p.getByRole("button", { name: "Убрать фильтр: Выполненные" }).locator("visible=true").count()) === 0, "«Выполненные» is off");
   const n1 = await countOf(today);
   h.expect(n1 === n0 + 2, `the Week counts the task and the event, not the done visit (${n0} → ${n1})`);
   await h.expectText(/T109 order gutters/, "the task is in the Week's day");
@@ -50,19 +51,19 @@ exports.run = async (h) => {
   await h.shot("week");
 
   // the same switch as the Feed: done ones counted when shown
-  await h.clickText("Показывать выполненные"); await p.waitForTimeout(300);
-  h.expect((await countOf(today)) === n0 + 3, "«Показывать выполненные»: the done visit counts too");
-  await h.clickText("Скрыть выполненные"); await p.waitForTimeout(300);
+  await planShowDone(p, true);
+  h.expect((await countOf(today)) === n0 + 3, "«Выполненные»: the done visit counts too");
+  await planShowDone(p, false);
 
   // Ivan's plan: tomorrow is his day off — said in a word, no colour
-  await p.getByRole("radio", { name: "Ivan", exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(300);
+  await planMaster(p, "Ivan");
   const strip = p.getByTestId("plan-week-strip").locator("visible=true").first();
   const tCell = strip.getByTestId(`plan-day-${tomorrow}`);
   h.expect((await tCell.count()) === 1, "the strip has the day off");
   h.expect(/вых\./.test(await tCell.innerText()), "Ivan's day off: «вых.» in the strip (the whole word does not fit a phone cell)");
   await h.shot("week-dayoff");
   h.expect(/выходной/.test(String(await tCell.getAttribute("aria-label"))), "… and the screen reader hears it");
-  await p.getByRole("radio", { name: "Все", exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(300);
+  await planMaster(p, null);
 
   // the Month: the same count, the picked day is an ink frame, not the accent
   await h.clickText("Месяц"); await p.waitForTimeout(300);
