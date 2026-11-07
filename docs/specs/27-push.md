@@ -101,6 +101,7 @@
 - ключ `x-push-key` виден ролям `postgres` и `supabase_admin` в `net.http_request_queue` (пока запрос в очереди pg_net) — это роли оператора;
 - телефон передали в окне между `push_claim` и ответом Expo (≤ ~20 с): пуш прежнего владельца уйдёт новому. В нём только путь в приложении — без входа прежнего владельца RLS ничего не покажет;
 - чужие вызовы функции получают 401, но считаются в лимит вызовов edge functions;
+- **права `net` на хостинге выдаёт `supabase_admin`, снять их мы не можем** (проверка боя руководителем 07.11 после выпуска #288, только чтение: у 12 функций `net` EXECUTE у PUBLIC, `usage` на схему у anon, 2 таблицы `net` читаются anon и authenticated; revoke из миграции `20261107100000` от `postgres` их не снял — стандартная настройка Supabase). Защита: схема `net` (и `cron`) не открыта в API (PostgREST), а `net.*` вызывает только `app.push_kick` (security definer). Обе вещи стережёт `apps/mobile/test/pushNetGuard.test.ts`;
 - без BYPASSRLS локально проверены очередь, `push_claim` и `push_finish` (T81, T82: владелец функций без BYPASSRLS); `push_recipients` на хостинге и квитанции (`push_receipts_*`) без BYPASSRLS — проверка на staging по supabase/README п.7.
 
 ### 4.7 P4 — этап 0 (07.11, чат «Уведомления (пуш)» №2; код — после «да» руководителя и влития #287)
