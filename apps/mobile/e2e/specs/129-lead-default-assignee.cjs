@@ -43,6 +43,8 @@ exports.run = async (h) => {
   await setRole(h, "director");
   await h.go("/company");
   await tid("company-leads").waitFor({ timeout: 5000 });
+  await tid("company-leads").scrollIntoViewIfNeeded();
+  await h.shot("company-card");
   await tid("company-leads").getByRole("button").click();
   await p.waitForURL(/\/company\/leads$/, { timeout: 5000 });
   await tid("lead-default-current").waitFor({ timeout: 5000 });
