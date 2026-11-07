@@ -88,7 +88,9 @@ type Value = {
   recordVisitPoint: (p: object, source: "status_change" | "foreground") => void;
   unsentAll: number;
   online: boolean;
+  link: "ok" | "offline" | "server";
   setOnline: (v: boolean) => number;
+  saveCompany: (patch: object) => () => void;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -439,6 +441,7 @@ describe("unit:storeSync — no network in the cloud: the op is never dropped (r
     expect(server.sends).toHaveLength(20);
     expect(valueOf(r).queue).toHaveLength(1);
     expect(valueOf(r).online).toBe(false); // the server is not answering: shown as «без сети»
+    expect(valueOf(r).link).toBe("offline"); // no answer at all — not «server unavailable»
     await wait(300);
     expect(stored().map((x) => [x.id, x.tries])).toEqual([[stored()[0]!.id, 0]]);
     valueOf(r).setOnline(true);
@@ -493,6 +496,9 @@ describe("unit:storeSync — no network in the cloud: the op is never dropped (r
     }
     expect(server.sends).toHaveLength(10);
     expect(valueOf(r).queue).toHaveLength(1);
+    // the network is there, the server says «not now»: «server unavailable», not «no network» (docs/specs/23 §3)
+    expect(valueOf(r).link).toBe("server");
+    expect(valueOf(r).online).toBe(false);
     await wait(300);
     expect(stored()[0]!.tries).toBe(0);
     valueOf(r).setOnline(true);
@@ -500,6 +506,7 @@ describe("unit:storeSync — no network in the cloud: the op is never dropped (r
     server.sends.at(-1)!.d.resolve();
     await settle();
     expect(valueOf(r).queue).toEqual([]);
+    expect(valueOf(r).link).toBe("ok");
   });
   it("an expired sign-in (401 / PGRST301): not a try — the session is renewed, then the op goes", async () => {
     signIn("u1", "c1");
@@ -536,11 +543,40 @@ describe("unit:storeSync — no network in the cloud: the op is never dropped (r
     server.loads.splice(0).forEach((d) => d.reject(new TypeError("Failed to fetch")));
     await settle();
     expect(valueOf(r).online).toBe(false);
+    expect(valueOf(r).link).toBe("offline");
     void valueOf(r).refresh();
     await settle();
     answerLoads();
     await settle();
     expect(valueOf(r).online).toBe(true);
+    expect(valueOf(r).link).toBe("ok");
+  });
+  it("a reload the server answers with 503 / PGRST002: «server unavailable»; a refusal (42501) is neither", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.reject(notNow(503, "PGRST002")));
+    await settle();
+    expect(valueOf(r).link).toBe("server");
+    expect(valueOf(r).online).toBe(false);
+    void valueOf(r).refresh();
+    await settle();
+    server.loads.splice(0).forEach((d) => d.reject(refusal()));
+    await settle();
+    expect(valueOf(r).link).toBe("server"); // a «no» says nothing about the link: unchanged
+    void valueOf(r).refresh();
+    await settle();
+    answerLoads();
+    await settle();
+    expect(valueOf(r).link).toBe("ok");
+  });
+  it("the demo switch «без сети»: link offline", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    expect(valueOf(r).link).toBe("ok");
+    valueOf(r).setOnline(false);
+    await settle();
+    expect(valueOf(r).link).toBe("offline");
   });
   it("a real refusal (42501) five times drops the op — and only then", async () => {
     signIn("u1", "c1");
@@ -583,5 +619,62 @@ describe("unit:storeSync — the wipe and the outbox's own timing (review #244)"
     expect(stored().map((x) => x.id)).toEqual(["o-u2@c1#1", "o-nobody#1"]);
     expect(valueOf(r).queue).toHaveLength(2);
   });
+  // task 4 of «Лиды» №9: the adoption of old ops and a wipe that came before the outbox loaded
+  it("race: the deleted person is still signed in when the outbox loads — their old ownerless ops are not adopted back", async () => {
+    seedOutbox(owned(null, 1), owned(u1c1, 1), owned({ userId: "u9", companyId: "c1" }, 1));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null })); // the read of the outbox is on its way
+    forgetDeviceState(wipedOnDelete, { userId: "u1" });
+    await settle();
+    await wait(300);
+    // the wipe first (the deleted person's and the ownerless), then the adoption — which finds nothing old to take
+    expect(stored().map((x) => x.id)).toEqual(["o-u9@c1#1"]);
+    expect(valueOf(r).queue).toEqual([]);
+  });
+  it("race: another person signed in when the outbox loads after a wipe of u1 — the ownerless ops (u1's) are gone, u2 adopts nothing", async () => {
+    seedOutbox(owned(null, 1), owned(u1c1, 1), owned({ userId: "u2", companyId: "c1" }, 1));
+    signIn("u2", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    forgetDeviceState(wipedOnDelete, { userId: "u1" });
+    await settle();
+    await wait(300);
+    expect(stored().map((x) => x.id)).toEqual(["o-u2@c1#1"]);
+    expect(stored()[0]!.owner).toEqual({ userId: "u2", companyId: "c1" });
+    expect(valueOf(r).queue).toHaveLength(1);
+  });
+  it("race: the adoption came first, then the wipe of another person — what u2 adopted stays u2's", async () => {
+    seedOutbox(owned(null, 1), owned(u1c1, 1));
+    signIn("u2", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(300);
+    expect(stored().find((x) => x.id === "o-nobody#1")?.owner).toEqual({ userId: "u2", companyId: "c1" });
+    forgetDeviceState(wipedOnDelete, { userId: "u1" });
+    await settle();
+    await wait(300);
+    expect(stored().map((x) => x.id)).toEqual(["o-nobody#1"]);
+    expect(valueOf(r).queue).toHaveLength(1);
+  });
 });
 
+describe("unit:storeSync — company.save carries «zone chosen» (docs/specs/22 §1.3)", () => {
+  const saved = async (patch: object) => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).saveCompany(patch);
+    await wait(1700); // the outbox tick
+    await settle();
+    const ops = server.sends.map((x) => x.op as { k: string; tzChanged?: boolean });
+    expect(ops.map((o) => o.k)).toEqual(["company.save"]);
+    return ops[0]!;
+  };
+  it("the name only: tzChanged false (the zone is not sent)", async () => {
+    expect((await saved({ name: "New name" })).tzChanged).toBe(false);
+  });
+  it("the zone chosen: tzChanged true", async () => {
+    expect((await saved({ timezone: "America/Chicago" })).tzChanged).toBe(true);
+  });
+});

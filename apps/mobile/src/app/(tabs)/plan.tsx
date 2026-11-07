@@ -1,5 +1,3 @@
-import { findJob } from "@/data/jobs";
-import { lateAfterOf } from "@/features/scheduleSettings";
 import { useMemo, useState, type ReactNode } from "react";
 import { ScrollView, View } from "react-native";
 import { router } from "expo-router";
@@ -11,19 +9,17 @@ import { usePersistentState } from "@/data/persist";
 import { usePlanShowDone } from "@/features/prefs";
 import { addDays, addMonths, isoDayKey, monthGrid, todayKey, weekDays, type DayKey } from "@/features/calendar";
 import { formatDayKey } from "@/features/zone";
-import { VisitCard, sortByStart, visitStatus } from "@/features/visits";
-import { overlapSigns } from "@/features/listSigns";
+import { VisitCard, sortByStart } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
 import { DndProvider, Draggable, DropZone, useDragFrom } from "@/features/dnd";
 import { useToast } from "@/ui/overlays";
-import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip } from "@/ui/controls";
-import { Press, T } from "@/ui/primitives";
-import { useTheme } from "@/theme/ThemeProvider";
-import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { canPlan, canReschedule, hiddenAssignees, isAssigned, liveAssignees, moveAssignee, planFilter, type PlanWho, visitWhen } from "@/features/schedule";
-import { memberLabel, memberName } from "@/features/team";
-import { FeedView, PlanAddSheet, PlanWhoChips, UnassignedSoon, WaitingJobs } from "@/features/PlanParts";
-import { daysFrom, planItems } from "@/features/planFeed";
+import { Avatar, Button, ChoiceChips, IconButton, Segmented } from "@/ui/controls";
+import { T } from "@/ui/primitives";
+import { Card, Empty, Grid, RowView, Screen } from "@/ui/surfaces";
+import { canPlan, canReschedule, hiddenAssignees, isAssigned, liveAssignees, moveAssignee, planFilter, type PlanWho } from "@/features/schedule";
+import { memberName } from "@/features/team";
+import { DayCell, FeedView, PlanAddSheet, PlanWhoChips, UnassignedSoon, WaitingJobs, WeekStrip } from "@/features/PlanParts";
+import { dayLoads, daysFrom, planItems, type DayLoad } from "@/features/planFeed";
 import { EventSheet, type EventSheetState } from "@/features/EventForm";
 
 /** the Feed shows a week from the picked day; the arrows move it by a week */
@@ -32,8 +28,10 @@ const FEED_DAYS = 7;
 type Mode = "feed" | "day" | "week" | "month";
 
 /**
- * Plan: Feed (wave 5, 13 §3.2: everything by days — visits, tasks with a time, events, days off), Day (by person, drag & drop between people), Week (7 days, each visit a card), Month (calendar with
- * visit counts; tap a day → Day). Arrows move by day / week / month; "Today" jumps back.
+ * Plan: Feed (wave 5, 13 §3.2: everything by days — visits, tasks with a time, events, days off), Day (by person, drag &
+ * drop between people), Week (a strip of 7 days, then the days as in the Feed), Month (6 × 7 cells). Feed, Week and Month
+ * show one thing — planItems, the same filters (17-job §12.2, 24 §B); a cell counts the day's items, yellow only for a
+ * visit nobody is on; tap a cell → Day. Arrows move by day / week / month; "Today" jumps back.
  */
 export default function Plan() {
   const { t, dayOf, lang } = useI18n();
@@ -56,10 +54,19 @@ export default function Plan() {
   const feedDays = useMemo(() => daysFrom(date, addDays(date, FEED_DAYS - 1)), [date]);
   // wave 7б-1: a personal setting, the same on every device and in «Мои настройки → План»
   const [showDone, setShowDone] = usePlanShowDone();
-  const feedItems = useMemo(
-    () => (mode === "feed" ? planItems(db, { from: feedDays[0]!, to: feedDays[FEED_DAYS - 1]! }, whoNow, role, { showDone }) : []),
-    [mode, db.visits, db.tasks, db.calendarEvents, db.me, feedDays, whoNow, role, showDone],   // eslint-disable-line react-hooks/exhaustive-deps
+  // Feed, Week and Month show one thing: what planItems gives for their days (17-job §12.2, 24 §B) — visits (past midnight
+  // on both days), tasks with a time, events, days off, «весь день»; «Чей план» and «Показывать выполненные» the same
+  const range: DayKey[] = mode === "feed" ? feedDays : mode === "week" ? week : mode === "month" ? monthGrid(date).map((x) => x.key) : [];
+  const from = range[0];
+  const to = range[range.length - 1];
+  const items = useMemo(
+    () => (from && to ? planItems(db, { from, to }, whoNow, role, { showDone }) : []),
+    [from, to, db.visits, db.tasks, db.calendarEvents, db.me, whoNow, role, showDone],   // eslint-disable-line react-hooks/exhaustive-deps
   );
+  // a day off is the day's only when one person's plan is shown (a tech's own, or a person picked)
+  const loads = useMemo(() => dayLoads(items, db.members, role === "tech" || whoNow !== "all"), [items, db.members, role, whoNow]);
+  const [addDay, setAddDay] = useState<DayKey | undefined>(undefined);
+  const addOn = planner ? (k: DayKey) => { setAddDay(k); setAdding(true); } : undefined;
   const label = mode === "feed" ? t("plan5.days", { from: dayOf(feedDays[0]!), to: dayOf(feedDays[FEED_DAYS - 1]!) }) : mode === "day" ? dayOf(date) : mode === "week" ? `${dayOf(week[0]!)} – ${dayOf(week[6]!)}` : monthName;
 
   return (
@@ -86,8 +93,9 @@ export default function Plan() {
     >
       {planner ? <PlanWhoChips who={whoNow} onChange={setWho} /> : null}
       {planner ? <WaitingJobs /> : null}
-      {/* «Не назначено» today and tomorrow on top (13 §3.2); the Day keeps its own block of its day (drag from it) */}
-      {planner && mode !== "day" ? <UnassignedSoon /> : null}
+      {/* «Не назначено» today and tomorrow on top (13 §3.2); the Day keeps its own block of its day (drag from it);
+          in the Week it goes under the strip (24 §B: whose plan → the arrows → the strip → «Не назначено» → the days) */}
+      {planner && (mode === "feed" || mode === "month") ? <UnassignedSoon /> : null}
       <RowView style={{ justifyContent: "space-between" }}>
         <IconButton icon="chevronLeft" label={t("plan.prev")} onPress={() => step(-1)} />
         <T v="heading" style={{ flex: 1, textAlign: "center" }} numberOfLines={1}>
@@ -96,22 +104,26 @@ export default function Plan() {
         {date !== todayKey() ? <Button label={t("common.today")} size="sm" variant="secondary" onPress={() => setDate(todayKey())} /> : null}
         <IconButton icon="chevronRight" label={t("plan.next")} onPress={() => step(1)} />
       </RowView>
+      {mode === "week" ? <WeekStrip days={week} loads={loads} date={date} onPick={(k) => { setDate(k); setMode("day"); }} /> : null}
+      {planner && mode === "week" ? <UnassignedSoon /> : null}
 
-      {mode === "feed" ? (
-        <>
-          {/* chips, not a switch: a switch that is on is yellow, and the screen keeps one yellow (rule 2) */}
-          <ChoiceChips
-            value={showDone ? "show" : "hide"}
-            onChange={(k) => setShowDone(k === "show")}
-            items={[
-              { key: "hide", label: t("plan5.hideDone") },
-              { key: "show", label: t("plan5.showDone") },
-            ]}
-          />
-          <FeedView days={feedDays} items={feedItems} onEvent={planner ? (e) => setEv({ kind: e.kind, event: e }) : undefined} />
-        </>
+      {mode !== "day" ? (
+        // chips, not a switch: a switch that is on is yellow, and the screen keeps one yellow (rule 2); the same personal
+        // setting in Feed, Week and Month (13 §5а) — the Day by person shows the open visits to move
+        <ChoiceChips
+          value={showDone ? "show" : "hide"}
+          onChange={(k) => setShowDone(k === "show")}
+          items={[
+            { key: "hide", label: t("plan5.hideDone") },
+            { key: "show", label: t("plan5.showDone") },
+          ]}
+        />
+      ) : null}
+      {mode === "feed" || mode === "week" ? (
+        <FeedView days={mode === "feed" ? feedDays : week} items={items} onEvent={planner ? (e) => setEv({ kind: e.kind, event: e }) : undefined} onAdd={addOn} />
       ) : mode === "day" ? (
         <>
+          {/* the chips count visits: the Day by person shows the visits only */}
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
             <ChoiceChips
               value={date}
@@ -124,14 +136,12 @@ export default function Plan() {
               })}
             />
           </ScrollView>
-          <DayView date={date} visits={visitsOn(date)} who={whoNow} onAdd={planner ? () => setAdding(true) : undefined} />
+          <DayView date={date} visits={visitsOn(date)} who={whoNow} onAdd={planner ? () => { setAddDay(date); setAdding(true); } : undefined} />
         </>
-      ) : mode === "week" ? (
-        <WeekView days={week} visitsOn={visitsOn} openDay={(k) => { setDate(k); setMode("day"); }} />
       ) : (
-        <MonthView date={date} visitsOn={visitsOn} openDay={(k) => { setDate(k); setMode("day"); }} />
+        <MonthView date={date} loads={loads} openDay={(k) => { setDate(k); setMode("day"); }} />
       )}
-      {planner ? <PlanAddSheet visible={adding} onClose={() => setAdding(false)} onEvent={(kind) => setEv({ kind, day: date })} /> : null}
+      {planner ? <PlanAddSheet visible={adding} day={addDay} onClose={() => { setAdding(false); setAddDay(undefined); }} onEvent={(kind) => setEv({ kind, day: addDay ?? date })} /> : null}
       {planner ? <EventSheet state={ev} onClose={() => setEv(null)} /> : null}
     </Screen>
   );
@@ -216,55 +226,9 @@ function DayView({ date, visits, who, onAdd }: { date: DayKey; visits: Visit[]; 
   );
 }
 
-/** 7 days; each visit is a card (time · client · tech); tap the day title to open the Day view. */
-function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: DayKey) => Visit[]; openDay: (k: DayKey) => void }) {
-  const { t, dayOf, time } = useI18n();
-  const { db } = useStore();
-  return (
-    <Grid>
-      {days.map((k) => {
-        const vs = visitsOn(k);
-        const today = k === todayKey();
-        return (
-          <View key={k} style={{ gap: space[2] }}>
-            <SectionTitle
-              title={`${today ? `${t("common.today")} · ` : ""}${dayOf(k)}`}
-              right={<Button label={vs.length ? t("plan.visits", { n: vs.length }) : t("plan.free")} size="sm" variant="ghost" onPress={() => openDay(k)} />}
-            />
-            {vs.length ? (
-              <CardList>
-                {vs.map((v) => {
-                  const job = findJob(db, v.jobId);
-                  const p = db.properties.find((x) => x.id === job?.propertyId);
-                  const c = db.customers.find((x) => x.id === p?.customerId);
-                  const tech = db.members.find((m) => m.id === v.techId);
-                  // nobody, or only a deleted account (S22): «Не назначено» — visitStatus decides, one rule
-                  const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
-                  return (
-                    <ItemCard
-                      key={v.id}
-                      status={st.status}
-                      title={`${visitWhen(v, time, t("plan5.allDay"), false)} · ${c?.name ?? "—"}`}
-                      subtitle={[job?.title, memberLabel(tech, t) ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
-                      right={<RowView>{overlapSigns(db, v).map((s) => <StatusChip key={s.key} status={s.tone} label={t(s.key, s.params)} />)}<StatusChip status={st.status} label={t(st.label)} /></RowView>}
-                      onPress={() => router.push(`/visit/${v.id}`)}
-                    />
-                  );
-                })}
-              </CardList>
-            ) : null}
-          </View>
-        );
-      })}
-    </Grid>
-  );
-}
-
-/** Month calendar: weekday header, 6 weeks × 7 days, number of visits per day; unassigned visits mark the day. */
-function MonthView({ date, visitsOn, openDay }: { date: DayKey; visitsOn: (k: DayKey) => Visit[]; openDay: (k: DayKey) => void }) {
+/** Month calendar: weekday header, 6 weeks × 7 days; each day is the same cell as the Week strip (24 §B). */
+function MonthView({ date, loads, openDay }: { date: DayKey; loads: Map<DayKey, DayLoad>; openDay: (k: DayKey) => void }) {
   const { lang } = useI18n();
-  const { db } = useStore();
-  const { c } = useTheme();
   const cells = monthGrid(date);
   const weeks = [0, 1, 2, 3, 4, 5].map((w) => cells.slice(w * 7, w * 7 + 7));
   const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
@@ -279,38 +243,9 @@ function MonthView({ date, visitsOn, openDay }: { date: DayKey; visitsOn: (k: Da
       </View>
       {weeks.map((row) => (
         <View key={row[0]!.key} style={{ flexDirection: "row", gap: space[1] }}>
-          {row.map((x) => {
-            const vs = visitsOn(x.key);
-            const unassigned = vs.some((v) => !liveAssignees(v, db.members).length);
-            const today = x.key === todayKey();
-            const selected = x.key === date;
-            return (
-              <Press
-                key={x.key}
-                onPress={() => openDay(x.key)}
-                visibleHeight={component.rowCompact}
-                accessibilityRole="button"
-                accessibilityLabel={`${x.key}: ${vs.length}`}
-                containerStyle={{ flex: 1, minWidth: 0 }}
-                style={{
-                  minHeight: component.rowCompact + space[4],
-                  borderRadius: component.checkbox.radius,
-                  borderWidth: selected ? component.selectedBorder : component.hairline,
-                  borderColor: selected ? c.acc : c.bd,
-                  backgroundColor: today ? c.surf2 : c.in,
-                  opacity: x.inMonth ? 1 : component.dimOpacity,
-                  alignItems: "center",
-                  justifyContent: "center",
-                  gap: space[1],
-                }}
-              >
-                <T v="caption" w={today ? "bold" : "regular"} tabular>
-                  {Number(x.key.slice(8))}
-                </T>
-                {vs.length ? <StatusChip status={unassigned ? "warn" : "info"} label={String(vs.length)} soft /> : null}
-              </Press>
-            );
-          })}
+          {row.map((x) => (
+            <DayCell key={x.key} day={x.key} load={loads.get(x.key)} selected={x.key === date} dim={!x.inMonth} onPress={() => openDay(x.key)} />
+          ))}
         </View>
       ))}
     </Card>

@@ -12,6 +12,7 @@ import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
 import { usePlanShowDone } from "@/features/prefs";
 import { LocationSetting } from "@/features/LocationParts";
+import { PushSettingsSection } from "@/features/PushSettings";
 import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
 
@@ -133,6 +134,7 @@ export default function Settings() {
       ) : null}
 
       {/* 7а-1 (legal/01 §3.5 «Мои настройки → О приложении»): the documents with their editions, help */}
+      <PushSettingsSection />
       <SectionTitle title={t("settings.about")} />
       <Card>
         <View testID="settings-about">

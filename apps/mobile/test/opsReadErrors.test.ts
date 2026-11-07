@@ -65,6 +65,7 @@ vi.mock("../src/cloud/client", () => ({
 
 import { applyOp, type Op } from "../src/cloud/ops";
 import { classify } from "../src/data/outboxRetry";
+import { companyFromDb } from "../src/cloud/companyMap";
 
 const J = "11111111-1111-4111-8111-111111111111";
 const E = "22222222-2222-4222-8222-222222222222";
@@ -88,24 +89,19 @@ const deposit: Op = {
 };
 
 describe("unit:opsReadErrors — a failed read inside an op stops the op", () => {
-  it("deposit: the existing deposit invoice could not be read → no second deposit invoice, no payment", async () => {
-    failing.add("invoices");
-    await expect(applyOp(deposit, "co-1", "u-1")).rejects.toThrow(/Failed to fetch/);
-    expect(writes.filter((w) => w.table === "invoices" || w.table === "payments")).toEqual([]);
-  });
-  it("deposit: the job of the estimate could not be read → no second job", async () => {
-    failing.add("jobs");
-    await expect(applyOp(deposit, "co-1", "u-1")).rejects.toThrow(/Failed to fetch/);
-    expect(writes.filter((w) => w.table === "jobs")).toEqual([]);
-  });
-  it("deposit: the approved version could not be read → the job is not made without it", async () => {
-    failing.add("estimates");
-    await expect(applyOp(deposit, "co-1", "u-1")).rejects.toThrow(/Failed to fetch/);
+  // estimate.deposit is one server function since 17-job §12.1 (#247): no reads in the op, nothing written by the app;
+  // the rpc's own failure keeps its status and code for the queue
+  it("deposit: the rpc gets no answer (dropped connection) → a network failure, nothing written", async () => {
+    const { supabase } = await import("../src/cloud/client");
+    const spy = vi.spyOn(supabase, "rpc").mockResolvedValueOnce({ data: null, error: { message: "TypeError: Failed to fetch", code: "" }, status: 0 } as never);
+    const e = await applyOp(deposit, "co-1", "u-1").then(() => null, (x: unknown) => x);
+    expect(classify(e)).toBe("network");
     expect(writes).toEqual([]);
+    spy.mockRestore();
   });
-  it("deposit, control: reads succeed → the job, the invoice and the payment are written", async () => {
+  it("deposit, control: one rpc, no job, invoice or payment written by the app", async () => {
     await applyOp(deposit, "co-1", "u-1");
-    expect(writes.some((w) => w.table === "invoices")).toBe(true);
+    expect(writes).toEqual([]);
   });
 
   it("phone of a customer: the primary contact could not be read → no second primary contact", async () => {
@@ -146,12 +142,20 @@ describe("unit:opsReadErrors — a failed read inside an op stops the op", () =>
     expect(writes).toEqual([]);
   });
 
-  it("a server error on a read keeps its status and code, so the queue knows it is temporary (classify, #244)", async () => {
-    serverErr.invoices = { status: 503, code: "PGRST002" };
+  it("a server error keeps its status and code, so the queue knows it is temporary (classify, #244)", async () => {
+    serverErr.contacts = { status: 503, code: "PGRST002" };
+    const e = await applyOp({ k: "customer.update", id: "c-1", phone: "+15551234567" }, "co-1", "u-1").then(() => null, (x: unknown) => x);
+    expect(e).toMatchObject({ status: 503, code: "PGRST002" });
+    expect(classify(e)).toBe("transient");
+    expect(writes.filter((w) => w.table === "contacts")).toEqual([]);
+  });
+  it("deposit: a server error of the rpc keeps its status and code (transient)", async () => {
+    const { supabase } = await import("../src/cloud/client");
+    const spy = vi.spyOn(supabase, "rpc").mockResolvedValueOnce({ data: null, error: { message: "upstream", code: "PGRST002" }, status: 503 } as never);
     const e = await applyOp(deposit, "co-1", "u-1").then(() => null, (x: unknown) => x);
     expect(e).toMatchObject({ status: 503, code: "PGRST002" });
     expect(classify(e)).toBe("transient");
-    expect(writes.filter((w) => w.table === "invoices")).toEqual([]);
+    spy.mockRestore();
   });
 
   it("lead booked, control: the server refuses the sources read → the client is still saved (without a source)", async () => {
@@ -194,14 +198,14 @@ describe("unit:opsReadErrors — what is not an error, and a resend after a lost
     expect(writes.filter((w) => w.table === "contacts").map((w) => w.kind)).toEqual(["update"]);
   });
 
-  it("deposit resent after a lost answer: the job and the deposit invoice exist → no second invoice, the job is not duplicated", async () => {
-    found.estimates = { current_version_id: V };
-    found.jobs = { id: J };
-    found.invoices = { id: "inv-old" };
-    await applyOp({ ...deposit, jobId: "job-new-id" } as Op, "co-1", "u-1");
-    expect(writes.filter((w) => w.table === "invoices" && w.kind !== "update")).toEqual([]);
-    // the job insert reuses the existing id (ON CONFLICT DO NOTHING), not the new one from the phone
-    expect(writes.filter((w) => w.table === "jobs").map((w) => (w.row as { id: string }).id)).toEqual([J]);
+  it("deposit resent after a lost answer: the same payment id goes to the server again (it answers «repeat»), nothing written here", async () => {
+    const { supabase } = await import("../src/cloud/client");
+    const spy = vi.spyOn(supabase, "rpc");
+    await applyOp(deposit, "co-1", "u-1");
+    await applyOp(deposit, "co-1", "u-1");
+    expect(spy.mock.calls.map((c) => (c[1] as { p_payment_id: string }).p_payment_id)).toEqual(["pay-1", "pay-1"]);
+    expect(writes).toEqual([]);
+    spy.mockRestore();
   });
 
 });
@@ -261,5 +265,26 @@ describe("unit:opsReadErrors — review #248: deleted primary contact, costs, ph
     blobOk();
     await applyOp(photo, "co-1", "u-1");
     expect(writes.filter((w) => w.table === "files" && w.kind === "update").map((w) => (w.row as { upload_status: string }).upload_status)).toEqual(["uploaded"]);
+  });
+});
+
+describe("unit:opsReadErrors — company.save: the «zone chosen» flag reaches the write (docs/specs/22 §1.3)", () => {
+  const company = { ...companyFromDb({ id: "co-1", name: "Co", timezone: "America/Chicago" }, undefined, [], []), timezone: "America/Chicago" };
+  const sent = () => writes.find((w) => w.table === "companies" && w.kind === "update")?.row as Record<string, unknown>;
+  it("not chosen (tzChanged: false): another admin's zone on the server is not overwritten", async () => {
+    found.companies = { timezone: "America/New_York" };
+    await applyOp({ k: "company.save", company, einChanged: false, tzChanged: false }, "co-1", "u-1");
+    expect(sent()).toBeDefined();
+    expect("timezone" in sent()).toBe(false);
+  });
+  it("chosen (tzChanged: true): sent, even when the server already has it", async () => {
+    found.companies = { timezone: "America/Chicago" };
+    await applyOp({ k: "company.save", company, einChanged: false, tzChanged: true }, "co-1", "u-1");
+    expect(sent().timezone).toBe("America/Chicago");
+  });
+  it("an op of an older build (no flag): as before — sent when it differs from the server", async () => {
+    found.companies = { timezone: "America/New_York" };
+    await applyOp({ k: "company.save", company, einChanged: false }, "co-1", "u-1");
+    expect(sent().timezone).toBe("America/Chicago");
   });
 });

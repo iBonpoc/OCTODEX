@@ -226,6 +226,8 @@ export const es: Dict = {
   "vcard.photos": "Fotos: {n}",
 
   "offline.badge": "Sin conexión · en cola: {n}",
+  // «Лиды и клиенты» — очередь (docs/specs/23)
+  "sync.server.badge": "Servidor no disponible · en cola: {n}",
   "offline.queued": "Sin conexión. Guardado, se enviará después",
   "offline.synced": "Conectado. Cola enviada: {n}",
   "offline.toggle": "Prueba: modo sin conexión",
@@ -1840,7 +1842,6 @@ export const es: Dict = {
   "lead.noServiceHint": "Este teléfono o email es de un cliente marcado «No atender»",
   // wave 5 «План» — Лента (Работы и выезды)
   "plan5.feed": "Lista",
-  "plan5.emptyDay": "No hay nada este día",
   "plan5.showDone": "Mostrar completados",
   "plan5.unassigned": "Sin asignar · {n}",
   "plan5.today": "Hoy",
@@ -1875,6 +1876,16 @@ export const es: Dict = {
   "plan5.ev.problem.long": "El texto es demasiado largo",
   "plan5.addEvent": "Evento",
   "plan5.addTimeOff": "Día libre",
+  // «Работы» №6, 6-3 / 24 §B: Week and Month count the Feed's items; a run of empty days is one row
+  "plan5.planned": "En plan: {n}",
+  "plan5.freeRun": "{from} – {to} · Nada programado",
+  "plan5.freeDay": "{day} · Nada programado",
+  "plan5.freeToday": "Nada para hoy",
+  "plan5.freeA11y": "Nada programado {from} – {to}. Añadir",
+  "plan5.lateEnRoute": "en camino",
+  "plan5.lateNotLeft": "no ha salido",
+  "plan5.dayOffShort": "Libre",
+  "plan5.dayOff": "Día libre",
   /* «Каркас» №4, 7а-1: согласие, документы, помощь и поддержка (docs/specs/19 §5) */
   "legal.terms.title": "Términos del servicio",
   "legal.privacy.title": "Política de privacidad",
@@ -2109,6 +2120,9 @@ export const es: Dict = {
   "job5.h.enRoute": "En camino",
   "job5.noService": "Cliente marcado «No atender»: sin nuevas visitas ni presupuestos",
   "job5.noServiceHint": "Una visita ya programada se puede terminar o mover",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.tzUnknownChip": "Zona desconocida",
+  "fr7.tzUnknown": "El teléfono no conoce la zona «{tz}»: la hora se muestra en Los Ángeles. Elija una zona.",
   "job5.lines.title": "Partidas",
   "job5.lines.add": "Partida",
   "job5.lines.edit": "Partida",
@@ -2142,6 +2156,7 @@ export const es: Dict = {
   "job5.tags.saved": "Etiquetas guardadas",
   "job5.type.saved": "Tipo de trabajo cambiado",
   // fix.* — founder fixes chat
+  "fix.client.overdue": "Vencido {amount} · {d} d",
   "fix.client.balance": "Saldo",
   /* «Каркас» №7 (docs/specs/22) */
   "fr7.leadOrphan": "{name}: el responsable ya no trabaja — entregue el lead",
@@ -2150,10 +2165,45 @@ export const es: Dict = {
   "fr7.noOwnerChip": "Sin responsable",
   "fr7.noAssigneeChip": "Sin responsable",
   "fr7.handOver": "Entregar",
+  // «Каркас» №8, 7а-3: the client page of a closed company (docs/specs/22 §3.5)
+  "fr8.portal.closed": "{company} cerró — los documentos de este enlace ya no están disponibles",
+  "fr8.portal.closedChip": "Cerrada",
+  // «Каркас» №8: a tab pressed over an unsaved form (docs/specs/28)
+  "fr8.tab.leaveTitle": "¿Salir sin guardar?",
+  "fr8.tab.leaveText": "Hay un formulario sin guardar debajo de esta pantalla. Si cambia de pestaña, se perderá lo que escribió.",
+  "fr8.tab.stay": "Quedarse",
+  "fr8.tab.leave": "Salir sin guardar",
   "job5.byTime": "Por hora",
   "job5.allDaySummary": "{date} · todo el día · {who}",
   "job5.clientDay": "El cliente verá solo la fecha, sin hora",
   "job5.msg.allDay": "¡Hola, {name}! {company} irá a hacer el trabajo el {date}, durante el día. Si el día no le conviene, responda a este mensaje.",
   "job5.allDaySaved": "Programado para el {date}, todo el día",
   "job5.allDayChip": "Todo el día",
+  // fix.filters.* — one row of filters (founder fixes chat, 07.11)
+  "fix.filters.button": "Filtros",
+  "fix.filters.title": "Filtros",
+  "fix.filters.a11y": "Filtros, activos: {n}",
+  "fix.filters.reset": "Restablecer",
+  "fix.filters.done": "Listo",
+  "fix.filters.tags": "Etiquetas",
+  // fix.more.* — «Ещё» as rows with counters (spec 25, founder fixes chat)
+  "fix.more.groupCompany": "Empresa",
+  "fix.more.leads": "Esperan: {n}",
+  "fix.more.tasks": "Para hoy: {n}",
+  "fix.more.jobs": "Por programar: {n}",
+  "fix.more.estimates": "Por firmar: {n}",
+  "fix.more.invoices": "Vencidas: {n}",
+  // ---- push (docs/specs/27-push.md) ----
+  "push.title": "Notificaciones",
+  "push.thisPhone": "Notificaciones push en este teléfono",
+  "push.state.on": "Activadas: presupuestos firmados, pagos. Sin montos ni direcciones en el texto.",
+  "push.state.off": "Desactivadas. La campana en la app siempre funciona.",
+  "push.state.denied": "Desactivadas en los ajustes del teléfono.",
+  "push.state.signed_out": "Inicia sesión para recibir notificaciones push.",
+  "push.state.web": "Las notificaciones push llegan en la app OCTODEX del teléfono. Aquí, la campana.",
+  "push.state.expo_go": "Las notificaciones push funcionan en la app OCTODEX instalada, no en Expo Go.",
+  "push.openSettings": "Abrir ajustes del teléfono",
+  "push.turnedOn": "Notificaciones activadas",
+  "push.denied": "El teléfono no permitió las notificaciones",
+  "push.failed": "No se pudo activar. Revisa la conexión e inténtalo de nuevo",
 };

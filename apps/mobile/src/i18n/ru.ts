@@ -225,6 +225,8 @@ export const ru = {
   "vcard.photos": "Фото: {n}",
 
   "offline.badge": "Без сети · в очереди: {n}",
+  // «Лиды и клиенты» — очередь (docs/specs/23)
+  "sync.server.badge": "Сервер недоступен · в очереди: {n}",
   "offline.queued": "Без сети. Сохранено, отправится позже",
   "offline.synced": "Сеть есть. Очередь отправлена: {n}",
   "offline.toggle": "Проверка: режим без сети",
@@ -1839,7 +1841,6 @@ export const ru = {
   "lead.noServiceHint": "Этот телефон или email — у клиента с пометкой «Не обслуживаем»",
   // wave 5 «План» — Лента (Работы и выезды)
   "plan5.feed": "Лента",
-  "plan5.emptyDay": "На этот день ничего нет",
   "plan5.showDone": "Показывать выполненные",
   "plan5.unassigned": "Не назначено · {n}",
   "plan5.today": "Сегодня",
@@ -1874,6 +1875,16 @@ export const ru = {
   "plan5.ev.problem.long": "Слишком длинный текст",
   "plan5.addEvent": "Событие",
   "plan5.addTimeOff": "Выходной",
+  // «Работы» №6, 6-3 / 24 §B: Week and Month count the Feed's items; a run of empty days is one row
+  "plan5.planned": "В плане: {n}",
+  "plan5.freeRun": "{from} – {to} · свободно",
+  "plan5.freeDay": "{day} · свободно",
+  "plan5.freeToday": "На сегодня ничего нет",
+  "plan5.freeA11y": "Свободно: {from} – {to}. Добавить",
+  "plan5.lateEnRoute": "в пути",
+  "plan5.lateNotLeft": "не выехал",
+  "plan5.dayOffShort": "вых.",
+  "plan5.dayOff": "выходной",
   /* «Каркас» №4, 7а-1: согласие, документы, помощь и поддержка (docs/specs/19 §5) */
   "legal.terms.title": "Условия использования",
   "legal.privacy.title": "Политика конфиденциальности",
@@ -2108,6 +2119,9 @@ export const ru = {
   "job5.h.enRoute": "В пути",
   "job5.noService": "Клиент с пометкой «Не обслуживаем»: новых выездов и смет нет",
   "job5.noServiceHint": "Назначенный выезд можно доделать или перенести",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.tzUnknownChip": "Пояс не распознан",
+  "fr7.tzUnknown": "Телефон не знает пояс «{tz}» — время показано по Los Angeles. Выберите пояс.",
   "job5.lines.title": "Позиции",
   "job5.lines.add": "Позиция",
   "job5.lines.edit": "Позиция",
@@ -2141,6 +2155,7 @@ export const ru = {
   "job5.tags.saved": "Метки сохранены",
   "job5.type.saved": "Тип работы изменён",
   // fix.* — founder fixes chat
+  "fix.client.overdue": "Просрочено {amount} · {d} дн",
   "fix.client.balance": "Баланс",
   /* «Каркас» №7 (docs/specs/22) */
   "fr7.leadOrphan": "{name}: ответственный не работает — передайте лид",
@@ -2149,12 +2164,47 @@ export const ru = {
   "fr7.noOwnerChip": "Без ответственного",
   "fr7.noAssigneeChip": "Без исполнителя",
   "fr7.handOver": "Передать",
+  // «Каркас» №8, 7а-3: the client page of a closed company (docs/specs/22 §3.5)
+  "fr8.portal.closed": "{company} закрыта — документы по этой ссылке больше недоступны",
+  "fr8.portal.closedChip": "Закрыта",
+  // «Каркас» №8: a tab pressed over an unsaved form (docs/specs/28)
+  "fr8.tab.leaveTitle": "Выйти без сохранения?",
+  "fr8.tab.leaveText": "Под этим экраном открыта несохранённая форма. Если перейти на вкладку, введённое пропадёт.",
+  "fr8.tab.stay": "Остаться",
+  "fr8.tab.leave": "Выйти без сохранения",
   "job5.byTime": "По времени",
   "job5.allDaySummary": "{date} · весь день · {who}",
   "job5.clientDay": "Клиент увидит только дату, без времени",
   "job5.msg.allDay": "Здравствуйте, {name}! {company} приедет на работы {date}, в течение дня. Если день не подходит, ответьте на это сообщение.",
   "job5.allDaySaved": "Запланировано на {date}, весь день",
   "job5.allDayChip": "Весь день",
+  // fix.filters.* — one row of filters (founder fixes chat, 07.11)
+  "fix.filters.button": "Фильтры",
+  "fix.filters.title": "Фильтры",
+  "fix.filters.a11y": "Фильтры, включено: {n}",
+  "fix.filters.reset": "Сбросить",
+  "fix.filters.done": "Готово",
+  "fix.filters.tags": "Метки",
+  // fix.more.* — «Ещё» as rows with counters (spec 25, founder fixes chat)
+  "fix.more.groupCompany": "Компания",
+  "fix.more.leads": "Ждут: {n}",
+  "fix.more.tasks": "На сегодня: {n}",
+  "fix.more.jobs": "К плану: {n}",
+  "fix.more.estimates": "На подпись: {n}",
+  "fix.more.invoices": "Просрочено: {n}",
+  // ---- push (docs/specs/27-push.md) ----
+  "push.title": "Уведомления",
+  "push.thisPhone": "Пуш-уведомления на этом телефоне",
+  "push.state.on": "Включены: подписанная смета, оплата. Без сумм и адресов в тексте.",
+  "push.state.off": "Выключены. Колокольчик в приложении работает всегда.",
+  "push.state.denied": "Запрещены в настройках телефона.",
+  "push.state.signed_out": "Войдите в аккаунт, чтобы получать пуши.",
+  "push.state.web": "Пуши приходят в приложении OCTODEX на телефоне. Здесь — колокольчик.",
+  "push.state.expo_go": "Пуши работают в установленном приложении OCTODEX, не в Expo Go.",
+  "push.openSettings": "Открыть настройки телефона",
+  "push.turnedOn": "Уведомления включены",
+  "push.denied": "Телефон не разрешил уведомления",
+  "push.failed": "Не удалось включить. Проверьте связь и попробуйте ещё раз",
 } as const;
 
 export type DictKey = keyof typeof ru;

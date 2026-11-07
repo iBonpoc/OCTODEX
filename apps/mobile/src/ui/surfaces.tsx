@@ -1,15 +1,18 @@
 import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
-import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { isTabScreen } from "@/nav/roles";
+import { showsTabBar } from "@/nav/tabBarRule";
+import { useAuth } from "@/cloud/auth";
+import { useTabBarHidden } from "@/nav/tabBarHide";
 import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
 import { SearchEntry } from "@/nav/SearchEntry";
 import type { FabCtx, FabItem, FabSet } from "@/nav/sections";
-import { syncState } from "@/nav/shell";
+import { badgeState } from "@/data/syncLink";
 import { screenPath } from "./screenPath";
 import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
@@ -254,13 +257,15 @@ export function Empty({ icon, title, hint, action }: { icon: IconKey; title: str
 /* ---------- Sync badge (DS rule 11: queue counter visible; 13 v2 §2.2, §2.6) ----------
  * Only while there is something to say: no network (warn) or the queue still going out (info). */
 export function SyncBadge({ compact }: { compact?: boolean }) {
-  const { online, queue } = useStore();
+  const { online, link, queue } = useStore();
   const { c } = useTheme();
   const { t } = useI18n();
-  const state = syncState(online, queue.length);
+  // the network is there, the server answers «not now» (5xx, 429): not «no network» (docs/specs/23 §3)
+  const state = badgeState(online, link, queue.length);
   if (!state) return null;
-  const tone = state === "offline" ? c.status.warn : c.status.info;
-  const label = state === "offline" ? t("offline.badge", { n: queue.length }) : t("nav.sync.sending", { n: queue.length });
+  const tone = state === "sending" ? c.status.info : c.status.warn;
+  const label =
+    state === "offline" ? t("offline.badge", { n: queue.length }) : state === "server" ? t("sync.server.badge", { n: queue.length }) : t("nav.sync.sending", { n: queue.length });
   return (
     <View
       testID="sync-badge"
@@ -276,7 +281,7 @@ export function SyncBadge({ compact }: { compact?: boolean }) {
         gap: space[1],
       }}
     >
-      <Icon name={state === "offline" ? "wifiOff" : "send"} s={size.iconSm} color={tone.on} />
+      <Icon name={state === "offline" ? "wifiOff" : state === "server" ? "alert" : "send"} s={size.iconSm} color={tone.on} />
       <T v="caption" w="semibold" style={{ color: tone.on }} numberOfLines={1}>
         {label}
       </T>
@@ -383,6 +388,14 @@ function Breadcrumbs({ trail, current, go }: { trail: Crumb[]; current?: string;
 const noFocusRing = (Platform.OS === "web" ? { outlineStyle: "none" } : {}) as ViewStyle;
 
 /* ---------- Screen: background, header with title + "?" + offline badge, scroll ---------- */
+/**
+ * Lock the screen's scroll while a finger draws (signature, founder 07.11: «страница скроллится вместе с пальцем —
+ * подписать нельзя»). On iOS the native scroll takes the gesture from a JS responder inside it; the pad asks the
+ * screen to stop scrolling for the stroke. Outside a Screen it is a no-op.
+ */
+const ScrollLockCtx = createContext<(locked: boolean) => void>(() => {});
+export const useScrollLock = () => useContext(ScrollLockCtx);
+
 export function Screen({
   title,
   help,
@@ -437,7 +450,11 @@ export function Screen({
   const params = useLocalSearchParams();
   const pathname = screenPath(useRoute().name, params);
   const routeName = useRoute().name;
-  const nav = navContext(pathname, params, store.db, store.role);
+  const auth = useAuth();
+  /** the bar is away while a signature is drawn (docs/specs/28): «＋» goes down to its place */
+  const barAway = useTabBarHidden();
+  // the legal texts: «‹ Помощь» only inside the open app; from sign-in / the consent gate their own «back» (review #274)
+  const nav = navContext(pathname, params, store.db, store.role, { appOpen: !!auth.session && auth.legal !== "first" && auth.legal !== "changed" });
   const up = nav.up;
   /** a ☰ root (Leads, Jobs, Catalog…, docs/specs/13а §3): a root like a tab — ☰, not the screen's own «back» */
   const menuRoot = !up && !!nav.section;
@@ -632,6 +649,7 @@ export function Screen({
   );
   const { height: winH } = useWindowDimensions();
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const [scrollLocked, setScrollLocked] = useState(false);
   const tabsY = useRef(0);
   const offset = useRef(0);
   useEffect(() => {
@@ -656,6 +674,7 @@ export function Screen({
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
           <ScrollView
             ref={scrollRef}
+            scrollEnabled={!scrollLocked}
             contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0), paddingHorizontal: space[4] }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
@@ -664,7 +683,7 @@ export function Screen({
             scrollEventThrottle={16}
             onScroll={tabs ? (e) => (offset.current = e.nativeEvent.contentOffset.y) : undefined}
           >
-            {content}
+            <ScrollLockCtx.Provider value={setScrollLocked}>{content}</ScrollLockCtx.Provider>
             {tabs ? (
               <View
                 onLayout={(e) => (tabsY.current = e.nativeEvent.layout.y)}
@@ -682,7 +701,7 @@ export function Screen({
         <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingHorizontal: space[4] }}>{content}</View>
       )}
       {floatFab && !kb ? (
-        <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} bottom={isTabScreen(routeName) ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
+        <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} bottom={showsTabBar(routeName) && !barAway ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
       ) : null}
     </View>
   );
