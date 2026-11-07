@@ -73,7 +73,7 @@ const refusal = () => Object.assign(new Error("new row violates row-level securi
 const notNow = (status: number, code = "") => Object.assign(new Error(`status ${status}`), { name: "ServerError", status, code });
 // the phone's «back in the app» (react-native's AppState does not load in node)
 const appActive = { cb: null as null | (() => void) };
-vi.mock("@/data/appActive", () => ({ onAppActive: (cb: () => void) => ((appActive.cb = cb), () => (appActive.cb = null)) }));
+vi.mock("@/data/appActive", () => ({ onAppActive: (cb: () => void) => ((appActive.cb = cb), () => (appActive.cb = null)), onAppLeave: () => () => {} }));
 vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), backoffMs: () => retry.pause }));
 // a wipe that comes while an update of the outbox is still queued (not applied yet): fired from inside adoptLegacy
 const midAdopt = { fire: null as null | (() => void) };

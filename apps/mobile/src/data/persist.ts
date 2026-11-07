@@ -40,7 +40,13 @@ export interface Writer {
   keyChanged: (key: string) => void;
   /** the device is being wiped: the pending write is dropped */
   forget: () => void;
+  /** the app is leaving (background, the tab hidden or closed): the pending write is written now (rule 6) */
+  flush: () => void;
 }
+/**
+ * `ms` — how long a change waits for the next one before it is written (one write for a burst of changes). 0 — written
+ * at once, in the same turn (the outbox: a change the phone has only there must survive a crash, review #263).
+ */
 export function createWriter(setItem: SetItem, ms = 250, gen: () => number = deviceGeneration): Writer {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let pending: { key: string; raw: string; gen: number } | null = null;
@@ -56,7 +62,8 @@ export function createWriter(setItem: SetItem, ms = 250, gen: () => number = dev
     schedule: (key, raw) => {
       if (timer) clearTimeout(timer);
       pending = { key, raw, gen: gen() };
-      timer = setTimeout(write, ms);
+      if (ms <= 0) write();
+      else timer = setTimeout(write, ms);
     },
     keyChanged: (key) => {
       if (pending && pending.key !== key) write();
@@ -66,7 +73,19 @@ export function createWriter(setItem: SetItem, ms = 250, gen: () => number = dev
       timer = null;
       pending = null;
     },
+    flush: () => {
+      if (pending) write();
+    },
   };
+}
+
+/* ---------- «the app is leaving»: every pending write now (review #263, the lost 250 ms) ---------- */
+const live = new Set<Writer>();
+/** the writers of the persistent states that are mounted */
+export const liveWriters = (): ReadonlySet<Writer> => live;
+/** the app goes to the background / the tab is hidden or closed: write what waits (the store calls it, appActive.ts) */
+export function flushAllWriters(): void {
+  for (const w of [...live]) w.flush();
 }
 
 /** the hook's state; `forgotten` — reset by a wipe: not written until the next real change */
@@ -90,11 +109,21 @@ export function applyUpdate<T>(s: Slot<T>, next: T | ((prev: T) => T), forKey?: 
  * The setter takes an optional key: the update is applied only while the state still holds that key.
  * Unit-tested with its effects: test/persistHook.test.ts.
  */
-export function usePersistentState<T>(key: string, initial: T | (() => T), opts?: { validate?: (v: T) => boolean }) {
+export function usePersistentState<T>(key: string, initial: T | (() => T), opts?: { validate?: (v: T) => boolean; immediate?: boolean }) {
   const init = () => (typeof initial === "function" ? (initial as () => T)() : initial);
   const [state, setState] = useState<Slot<T>>(() => ({ key, value: init(), loaded: false }));
   const writer = useRef<Writer | null>(null);
-  if (!writer.current) writer.current = createWriter((k, raw) => AsyncStorage.setItem(k, raw));
+  // `immediate`: written in the same turn — for small state the phone must not lose (the outbox); else after 250 ms
+  if (!writer.current) writer.current = createWriter((k, raw) => AsyncStorage.setItem(k, raw), opts?.immediate ? 0 : 250);
+  useEffect(() => {
+    const w = writer.current!;
+    live.add(w);
+    return () => {
+      // unmounted: what waits is written now (a screen left within 250 ms of a change)
+      w.flush();
+      live.delete(w);
+    };
+  }, []);
   const validate = useRef(opts?.validate);
   validate.current = opts?.validate;
   const initRef = useRef(init);
