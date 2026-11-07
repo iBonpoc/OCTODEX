@@ -11,7 +11,8 @@ import { Glass, Sheet } from "@/ui/overlays";
 import { Button } from "@/ui/controls";
 import { useNavInsets } from "@/ui/surfaces";
 import { useKeyboardHeight } from "@/ui/keyboard";
-import { formsAbove, showsTabBar, tabLeave } from "./tabBarRule";
+import { appStackRoutes, formsAbove, showsTabBar, tabLeave } from "./tabBarRule";
+import { setNavState } from "./go";
 import { useTabBarHidden } from "./tabBarHide";
 import { useAuth } from "@/cloud/auth";
 import { gateFreePath } from "@/features/legal";
@@ -34,6 +35,8 @@ export function TabBar() {
   const { session, legal } = useAuth();
   const { t } = useI18n();
   const root = useRootNavigationState();
+  // goTo (a plain function, no hooks) reads the stack from here: the shell always renders the bar, at every width
+  setNavState(root);
   const [ask, setAsk] = useState<Href | null>(null);
   const own = activeSection(pathname, params, store.db, store.role);
   // a section that is not a tab (Leads, Jobs… opened from «Ещё») lights «Ещё» (13 v2 §2.1, variant Б)
@@ -76,17 +79,6 @@ export function TabBar() {
       </Sheet>
     </>
   );
-}
-
-type NavState = { routeNames?: readonly string[]; routes?: readonly { name: string; state?: NavState }[]; index?: number } | undefined;
-/** the route names of the app's own stack (app/_layout: the one that has «(tabs)»), bottom first; expo-router wraps it
- *  in its «__root» navigator */
-function appStackRoutes(state: NavState): string[] {
-  for (let s = state, depth = 0; s && depth < 4; depth++) {
-    if (s.routeNames?.includes("(tabs)")) return (s.routes ?? []).map((r) => r.name);
-    s = s.routes?.[s.index ?? 0]?.state;
-  }
-  return [];
 }
 
 function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: (id: SectionId) => void }) {
