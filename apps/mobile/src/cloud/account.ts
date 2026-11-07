@@ -126,17 +126,17 @@ const warn = (m: string) => console.warn(`delete-account: ${m}`);
 
 /** the account is gone: nothing of it stays on this phone (a failed wipe is repeated on the next start) */
 export async function finishOnDevice(): Promise<void> {
-  await wipeDevice(deviceStore, warn);
-  // the store in memory too: the outbox, the role, the company's cache are not written back (19 §6.12)
+  // the store in memory first (review #231): a pending write or a send still running cannot land after the wipe
   forgetDeviceState(isDeviceKey);
+  await wipeDevice(deviceStore, warn);
   // the session is closed on the server already: only forget it here
   await supabase.auth.signOut({ scope: "local" }).catch(() => {});
 }
 /** a wipe failed last time: once more (AuthProvider, on start) */
 export async function wipeIfPending(): Promise<void> {
   if (!(await AsyncStorage.getItem(WIPE_PENDING_KEY).catch(() => null))) return;
-  await wipeDevice(deviceStore, warn);
   forgetDeviceState(isDeviceKey);
+  await wipeDevice(deviceStore, warn);
 }
 
 /**
