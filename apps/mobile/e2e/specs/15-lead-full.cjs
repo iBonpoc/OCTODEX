@@ -1,3 +1,4 @@
+const { listSearch, listSearchClear } = require("../listSearch.cjs");
 /** Full lead: quick lead (duplicate warning, a new person source), call → history, task, contact edit, declined → reopen, filters, tech access. */
 exports.run = async (h) => {
   const p = h.page;
@@ -100,10 +101,10 @@ exports.run = async (h) => {
 
   // list filters and search
   await h.go("/inbox?tab=leads");
-  await p.getByPlaceholder("Имя, телефон, адрес, услуга").fill("0111");
+  await listSearch(p, "0111");
   await p.waitForTimeout(300);
   h.expect((await p.getByRole("button", { name: "Maria Lopez" }).count()) === 1, "found by phone");
-  await p.getByPlaceholder("Имя, телефон, адрес, услуга").fill("");
+  await listSearchClear(p);
   await p.getByText(/^Без ответа · \d+$/).last().click();
   await p.waitForTimeout(300);
   h.expect((await p.getByRole("button", { name: "Maria Lopez" }).count()) === 0, "replied lead is not in 'no reply'");

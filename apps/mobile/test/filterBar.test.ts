@@ -49,3 +49,23 @@ describe("the «Фильтр» sheet (spec 31 §6)", () => {
     expect(filterStoreKey("leads")).not.toBe(filterStoreKey("clients"));
   });
 });
+
+import { searchAfter, searchState } from "../src/ui/filterBarRules";
+
+describe("the search as an icon (founder 07.11, spec 31 §6 п.2а)", () => {
+  it("closed with nothing typed — the plain magnifier", () => expect(searchState(false, "")).toBe("closed"));
+  it("closed with text — the magnifier is marked: the list is still searched", () => {
+    expect(searchState(false, "mitch")).toBe("closedActive");
+    expect(searchState(false, "   ")).toBe("closed");
+  });
+  it("open — the field, whatever is typed", () => {
+    expect(searchState(true, "")).toBe("open");
+    expect(searchState(true, "mitch")).toBe("open");
+  });
+  it("a tap opens with the same text; a blur closes and keeps it; ✕ empties and closes", () => {
+    expect(searchAfter("tap", "mitch")).toEqual({ open: true, q: "mitch" });
+    expect(searchAfter("blur", "")).toEqual({ open: false, q: "" });
+    expect(searchAfter("blur", "mitch")).toEqual({ open: false, q: "mitch" });
+    expect(searchAfter("clear", "mitch")).toEqual({ open: false, q: "" });
+  });
+});

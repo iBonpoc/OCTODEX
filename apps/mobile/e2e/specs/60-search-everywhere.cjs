@@ -1,3 +1,4 @@
+const { listSearch } = require("../listSearch.cjs");
 /**
  * Wave 2c-2 of the app shell — «Искать везде» (docs/specs/15-flows.md §1.7, §3.2; 13 v2 §2.2):
  * - the line on «Главная» opens /search with the cursor in the field; on 820/1280 the key «/» opens it from a screen;
@@ -88,7 +89,8 @@ exports.run = async (h) => {
     await p.waitForTimeout(700);
     h.expect(path(h) === "/search", `«/» opens the search (${p.url()})`);
     await h.go("/clients");
-    await p.getByPlaceholder("Имя, телефон или адрес").locator("visible=true").click();
+    // the list's search is an icon now (spec 31 §6 п.2а): open it — the field gets the focus
+    await listSearch(p, "");
     await p.keyboard.press("/");
     await p.waitForTimeout(500);
     h.expect(path(h) === "/clients", "«/» in a field is just a character");
