@@ -22,6 +22,15 @@
 Архив 06.11: «Лиды и клиенты» №3, №4, №5; «Каркас» №1, №2, №3; «Безопасность базы»; руководитель №2; «Работы и выезды» №3; «Лиды и клиенты» №6; «Безопасность базы» №2; «Правовая безопасность»; «Аудит и свод»; «Общие поля»; «Работы и выезды» №1, №2; «Деньги и отчёты» №1; «Иконка / логотип»; «Каркас» №4; «Аудит базы» (итог — `docs/audit/db-2026-11-06.md`); «Каркас» №5; «Лиды и клиенты» №7; «Работы и выезды» №4.
 
 ## Памятки-передачи 07.11 (руководитель №4)
+### Памятка «Уведомления (пуш)» №2 (session_015CqH68voRsmGog696cFSju, архив после #309)
+- Влито: #287 (P3: send-push, claim/finish, квитанции, pg_cron), #291 (P4a: выезды, лиды, «открыли смету», push_prefs/set_push_kind), #294 (сторож net), #305 (напоминания 15/60 мин, задание pg_cron push-lead-reminders, индексы 120100).
+- Спека 27 §4.6–4.10 — решения и принятые риски.
+- Дальше P4b (общие файлы, после #259 — уже в main; перед началом написать «Лидам» №10): тип PushPrefs в types.ts; загрузка push_prefs в repo.ts (company_id, kind, enabled); op setPushKind в ops.ts и store.tsx → rpc set_push_kind(p_company_id, p_kind, p_enabled); i18n push.kind.* для signed, payment, visits, leads, viewed.
+- P4c: переключатели в PushSettings.tsx; группы по роли (мастер — «Выезды» и «Лиды»; субподрядчик — ничего, пока не видит выезды); работает и на вебе; e2e 125 на 6 видах.
+- Файлы: docs/specs/27-push.md, миграции 090000–120100, src/features/push*.ts(x), PushBridge, PushSettings, test/push*.test.ts, sendPushFn.test.ts, pushNetGuard.test.ts, supabase/functions/send-push, e2e 124–125; база T80–T85, T87.
+- Ждёт основателя: секреты (11-setup §6) и «первый пуш» (§6.1).
+- Открыто: лавина пушей при массовом переносе выездов (§4.8); пуши о выездах субподрядчику — после доступа к его выездам; шаг 2: тихие часы и «выезд отменён».
+
 ### Памятка «Выпуск iOS (TestFlight)» №1 (session_015CqH68rP2HtS74ExY9Wfru, архив после #293)
 - Влито: #282 (ios:first, eas-build.yml только с EXPO_TOKEN, privacyManifests, тексты разрешений EN/RU/ES, easBuild.test.ts, спека 30), #290 (ascAppId 6831904411, 11-setup §5.6).
 - У основателя: сертификат, профиль, ключ ASC «[Expo] EAS Submit», Push Key. OCTODEX 1.0.0 (2) стоит из TestFlight.
