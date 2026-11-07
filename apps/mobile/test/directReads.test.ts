@@ -60,7 +60,7 @@ const reads = walk(SRC)
 
 describe("unit:directReads — list reads outside repo.ts are paged or small (04 §12.5)", () => {
   it("the parser sees the reads at all (not blind)", () => {
-    expect(reads.length).toBeGreaterThanOrEqual(15);
+    expect(reads.length).toBeGreaterThanOrEqual(14);   // 14 since 17-job §12.1: estimate.deposit is one rpc, no reads
     expect(reads.some((r) => r.one)).toBe(true);
   });
   it("every list read goes through pages() or is listed as small, with its reason", () => {

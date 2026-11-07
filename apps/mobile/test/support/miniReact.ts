@@ -82,18 +82,21 @@ export async function settle(rounds = 25) {
 export function useState<T>(init: T | (() => T)): [T, (n: T | ((p: T) => T)) => void] {
   const r = root();
   const i = r.i++;
+  type H = { v: T; q: (T | ((p: T) => T))[]; set?: (n: T | ((p: T) => T)) => void };
   if (r.hooks[i] === undefined) {
-    const h = { v: typeof init === "function" ? (init as () => T)() : init } as { v: T; set?: (n: T | ((p: T) => T)) => void };
+    const h = { v: typeof init === "function" ? (init as () => T)() : init, q: [] } as H;
+    // like React: an update is queued and applied at the next render, in order — a functional update sees the
+    // updates queued before it, never runs at the moment of the call (code that reads a ref right after
+    // setState(fn) must not be tested as if fn had already run — review #244 №5)
     h.set = (n) => {
-      const nv = typeof n === "function" ? (n as (p: T) => T)(h.v) : n;
-      if (Object.is(nv, h.v)) return;
-      h.v = nv;
+      h.q.push(n);
       r.schedule();
     };
     r.hooks[i] = h;
   }
-  const h = r.hooks[i] as { v: T; set: (n: T | ((p: T) => T)) => void };
-  return [h.v, h.set];
+  const h = r.hooks[i] as H;
+  for (const n of h.q.splice(0)) h.v = typeof n === "function" ? (n as (p: T) => T)(h.v) : n;
+  return [h.v, h.set!];
 }
 export function useRef<T>(init: T): { current: T } {
   const r = root();

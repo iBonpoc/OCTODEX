@@ -421,13 +421,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       await run(
         ins("properties", { id: op.propertyId, company_id: c, customer_id: op.customerId, address_line1: op.address || op.city || "—", address_city: op.city || "—", stories: 1 }),
       );
-      await run(
-        ins("jobs", { id: op.jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, title: "Estimate visit", type: "inspection", number: "" }),
-      );
+      // an inspection is a visit of the lead at the property, without a job (as visit.inspection, 20261105280000); the app
+      // inserts no job any more (17-job §12.1, 20261107040000) — op.jobId of an old queue is not used
       const end = new Date(new Date(op.start).getTime() + 45 * 60000).toISOString();
       await run(
         ins("visits", {
-          id: op.visitId, company_id: c, job_id: op.jobId, lead_id: op.leadId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.message ? [op.message] : [],
+          id: op.visitId, company_id: c, lead_id: op.leadId, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.message ? [op.message] : [],
         }),
       );
       return run(supabase.from("leads").update({ status: "inspection_scheduled", customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));
@@ -455,11 +454,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.from("visits").update({ starts_at: op.start, ends_at: end, all_day: !!op.allDay }).eq("id", op.visitId));
     }
     case "lead.visit": {
-      await run(
-        ins("jobs", { id: op.jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, title: "Estimate visit", type: "inspection", number: "" }),
-      );
+      // the same as lead.book: an inspection without a job (17-job §12.1); op.jobId of an old queue is not used
       const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
-      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, lead_id: op.leadId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
+      await run(ins("visits", { id: op.visitId, company_id: c, lead_id: op.leadId, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
       // upsert: a replay after a partial failure must not die on unique (visit_id, user_id)
       if (op.techId) await run(supabase.from("visit_assignees").upsert({ company_id: c, visit_id: op.visitId, user_id: op.techId }, { onConflict: "visit_id,user_id", ignoreDuplicates: true }));
       // booking a visit is an answer to the client (same as the app); only the first one counts
@@ -625,7 +622,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
     case "company.save": {
-      const { data: stored } = await read(supabase.from("companies").select(COMPANY_STORED_COLUMNS.join(", ")).eq("id", c).maybeSingle());
+      const { data: stored } = await read(supabase.from("companies").select([...COMPANY_STORED_COLUMNS, "timezone"].join(", ")).eq("id", c).maybeSingle());
       await run(supabase.from("companies").update(companyToDb(op.company, (stored ?? {}) as Record<string, unknown>)).eq("id", c));
       if (op.einChanged) {
         const ein = op.company.ein?.trim() || null;
@@ -847,34 +844,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const { error, status } = await supabase.rpc("revoke_estimate_link", { p_estimate_id: op.id });
       return run(Promise.resolve({ error, status }));
     }
-    case "estimate.deposit": {
-      const { data } = await read(supabase.from("estimates").select("current_version_id").eq("id", op.id).maybeSingle());
-      // The job may already exist (created when the client approved): reuse it.
-      const { data: existing } = await read(supabase.from("jobs").select("id").eq("estimate_id", op.id).maybeSingle());
-      const jobId = (existing?.id as string | undefined) ?? op.jobId;
-      await run(
-        ins("jobs", {
-          id: jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, estimate_id: op.id,
-          approved_version_id: data?.current_version_id ?? null, title: op.title, contract_total_cents: op.totalCents, number: "",
-        }),
-      );
-      // The job stays "waiting for a date" until the contractor schedules it (job.schedule).
-      // A deposit invoice may already exist (created when the client signed): pay it instead of creating another.
-      const { data: depInv } = await read(supabase.from("invoices").select("id").eq("job_id", jobId).eq("kind", "deposit").neq("status", "void").maybeSingle());
-      const invoiceId = (depInv?.id as string | undefined) ?? op.invoiceId;
-      if (!depInv) await run(
-        ins("invoices", {
-          id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: jobId, kind: "deposit", status: "sent",
-          subtotal_cents: op.depositCents, total_cents: op.depositCents, due_date: op.dueDate ?? companyToday(), sent_at: new Date().toISOString(),
-        }),
-      );
-      return run(
-        ins("payments", {
-          id: op.paymentId, company_id: c, invoice_id: invoiceId, customer_id: op.customerId, method: op.method,
-          amount_cents: op.depositCents, status: "succeeded", idempotency_key: op.paymentId, received_by: userId,
-        }),
-      );
-    }
+    case "estimate.deposit":
+      // one server function (17-job §12.1, 20261107040000): the job and the deposit invoice are the signature's; the payment is
+      // the balance of that invoice as the server knows it; a replay with the same payment id changes nothing. Not signed on
+      // the server → P0001, a refusal: the op is dropped, the phone reloads and the estimate shows its deposit as due again
+      // (never a silent «received»). The app inserts no job any more.
+      return run(supabase.rpc("record_estimate_deposit", { p_estimate_id: op.id, p_payment_id: op.paymentId, p_method: op.method }));
     case "invoice.pay":
       return run(
         ins("payments", {
