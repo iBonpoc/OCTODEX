@@ -32,6 +32,7 @@ const server = {
   loads: [] as Deferred<unknown>[],
   sends: [] as { op: unknown; companyId: string; userId: string; d: Deferred<void> }[],
   points: [] as Deferred<string>[],
+  renewed: 0,
 };
 vi.mock("@/cloud/repo", async (orig) => ({
   ...(await orig<object>()),
@@ -48,6 +49,7 @@ vi.mock("@/cloud/ops", async (orig) => ({
     server.sends.push({ op, companyId, userId, d });
     return d.promise;
   },
+  renewSession: async () => void (server.renewed += 1),
   sendVisitPoint: () => {
     const d = deferred<string>();
     server.points.push(d);
@@ -56,6 +58,16 @@ vi.mock("@/cloud/ops", async (orig) => ({
 }));
 // the «Отменить» window is not what these tests are about: an op is ready at once
 vi.mock("@/cloud/outboxTiming", () => ({ SEND_AFTER_MS: 0, readyToSend: () => true }));
+// the pause after a network failure is tested in test/outboxRetry.test.ts: here the next try may go at once
+const retry = { pause: 0 };
+/** the server's «no»: a permission code (a try) */
+const refusal = () => Object.assign(new Error("new row violates row-level security policy"), { name: "PermanentError", status: 403, code: "42501" });
+/** the server's «not now» */
+const notNow = (status: number, code = "") => Object.assign(new Error(`status ${status}`), { name: "ServerError", status, code });
+// the phone's «back in the app» (react-native's AppState does not load in node)
+const appActive = { cb: null as null | (() => void) };
+vi.mock("@/data/appActive", () => ({ onAppActive: (cb: () => void) => ((appActive.cb = cb), () => (appActive.cb = null)) }));
+vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), backoffMs: () => retry.pause }));
 
 import { render, settle, type Root } from "./support/miniReact";
 import { mineOf, StoreProvider } from "../src/data/store";
@@ -75,6 +87,8 @@ type Value = {
   removeCalendarEvent: (id: string) => () => void;
   recordVisitPoint: (p: object, source: "status_change" | "foreground") => void;
   unsentAll: number;
+  online: boolean;
+  setOnline: (v: boolean) => number;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -85,6 +99,7 @@ beforeEach(() => {
   server.loads.length = 0;
   server.sends.length = 0;
   server.points.length = 0;
+  server.renewed = 0;
   signOut();
 });
 afterEach(() => {
@@ -320,7 +335,7 @@ describe("unit:storeSync — the company or the person changes while a send wait
     await as(r, "u2", "c1");
     answerLoads();
     valueOf(r).removeCalendarEvent("ev-of-u2");
-    server.sends[0]!.d.reject(new Error("Failed to fetch")); // u1's send fails after u2 signed in
+    server.sends[0]!.d.reject(refusal()); // u1's send fails after u2 signed in
     await settle();
     await wait(1700);
     await settle();
@@ -353,7 +368,7 @@ describe("unit:storeSync — another person's op at the head of the outbox (revi
     await settle();
     await wait(1700);
     await settle();
-    server.sends[0]!.d.reject(new Error("Failed to fetch"));
+    server.sends[0]!.d.reject(refusal());
     await settle();
     await wait(300);
     expect(stored().map((x) => [x.id, x.tries])).toEqual([["o-u9@c1#1", 0], ["o-u1@c1#1", 1]]);
@@ -402,6 +417,171 @@ describe("unit:storeSync — the account deletion counts and removes the person'
     await settle();
     await wait(300);
     expect(stored().map((x) => x.id)).toEqual(["o-u9@c1#1"]);
+  });
+});
+
+describe("unit:storeSync — no network in the cloud: the op is never dropped (rule 6, cloud e2e 104)", () => {
+  it("20 network failures in a row: the op stays whole, its tries untouched; the server answers — it leaves", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).removeCalendarEvent("saved-offline");
+    for (let i = 0; i < 20; i++) {
+      valueOf(r).setOnline(true); // a flush now (the tick does the same every 1.5 s)
+      await settle();
+      const s = server.sends.at(-1)!;
+      expect((s.op as { id: string }).id).toBe("saved-offline");
+      s.d.reject(new TypeError(i % 2 ? "Failed to fetch" : "Network request failed"));
+      await settle();
+    }
+    expect(server.sends).toHaveLength(20);
+    expect(valueOf(r).queue).toHaveLength(1);
+    expect(valueOf(r).online).toBe(false); // the server is not answering: shown as «без сети»
+    await wait(300);
+    expect(stored().map((x) => [x.id, x.tries])).toEqual([[stored()[0]!.id, 0]]);
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.resolve();
+    await settle();
+    expect(valueOf(r).queue).toEqual([]);
+    expect(valueOf(r).online).toBe(true);
+  });
+  it("after a network failure the next try waits for its pause; the browser's «online» ends it", async () => {
+    const net = new EventTarget(); // the browser's window events (node has none)
+    const g = globalThis as unknown as Record<string, unknown>;
+    g.addEventListener = net.addEventListener.bind(net);
+    g.removeEventListener = net.removeEventListener.bind(net);
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).removeCalendarEvent("waits");
+    valueOf(r).setOnline(true);
+    await settle();
+    retry.pause = 60_000;
+    server.sends.at(-1)!.d.reject(new TypeError("Failed to fetch"));
+    await settle();
+    valueOf(r).setOnline(true); // asked again at once: still in the pause
+    await settle();
+    expect(server.sends).toHaveLength(1);
+    expect(valueOf(r).queue).toHaveLength(1);
+    // the network is back (the browser's «online»): the pause is over, the op goes now
+    net.dispatchEvent(new Event("online"));
+    await settle();
+    expect(server.sends).toHaveLength(2);
+    retry.pause = 0;
+    root?.unmount();
+    root = null;
+    delete g.addEventListener;
+    delete g.removeEventListener;
+  });
+  it("503 ten times in a row (a Supabase hiccup): the op stays whole, its tries untouched; the server answers — it leaves", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).removeCalendarEvent("during-503");
+    for (let i = 0; i < 10; i++) {
+      valueOf(r).setOnline(true);
+      await settle();
+      server.sends.at(-1)!.d.reject(i % 3 === 2 ? notNow(429) : i % 3 === 1 ? notNow(400, "40001") : notNow(503));
+      await settle();
+    }
+    expect(server.sends).toHaveLength(10);
+    expect(valueOf(r).queue).toHaveLength(1);
+    await wait(300);
+    expect(stored()[0]!.tries).toBe(0);
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.resolve();
+    await settle();
+    expect(valueOf(r).queue).toEqual([]);
+  });
+  it("an expired sign-in (401 / PGRST301): not a try — the session is renewed, then the op goes", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).removeCalendarEvent("jwt");
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.reject(notNow(401, "PGRST301"));
+    await settle();
+    expect(server.renewed).toBe(1);
+    expect(valueOf(r).queue).toHaveLength(1);
+    // back in the app (the phone has no «online»): the pause is over, the op goes
+    retry.pause = 60_000;
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.reject(new TypeError("Network request failed"));
+    await settle();
+    const before = server.sends.length;
+    appActive.cb?.();
+    await settle();
+    retry.pause = 0;
+    expect(server.sends.length).toBe(before + 1);
+    server.sends.at(-1)!.d.resolve();
+    await settle();
+    expect(valueOf(r).queue).toEqual([]);
+  });
+  it("a reload without the network: shown as «без сети» (online false)", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.reject(new TypeError("Failed to fetch")));
+    await settle();
+    expect(valueOf(r).online).toBe(false);
+    void valueOf(r).refresh();
+    await settle();
+    answerLoads();
+    await settle();
+    expect(valueOf(r).online).toBe(true);
+  });
+  it("a real refusal (42501) five times drops the op — and only then", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).removeCalendarEvent("refused");
+    await settle();
+    for (let i = 0; i < 5; i++) {
+      expect(valueOf(r).queue).toHaveLength(1); // still there before the 5th «no»
+      valueOf(r).setOnline(true);
+      await settle();
+      server.sends.at(-1)!.d.reject(refusal());
+      await settle();
+    }
+    expect(valueOf(r).queue).toEqual([]);
+    expect(server.sends).toHaveLength(5);
+  });
+});
+
+describe("unit:storeSync — the wipe and the outbox's own timing (review #244)", () => {
+  it("a wipe while the outbox is still loading (the start repeat) is applied to what the load brings", async () => {
+    seedOutbox(owned(u1c1, 1), owned({ userId: "u9", companyId: "c1" }, 1));
+    root = render(StoreProvider as (p: P) => unknown, { children: null }); // the read of the outbox is on its way
+    forgetDeviceState(wipedOnDelete, { userId: "u1" });
+    await settle();
+    await wait(300);
+    expect(stored().map((x) => x.id)).toEqual(["o-u9@c1#1"]);
+  });
+  it("«whose is not known» (null) never means the person signed in now: their ops stay", async () => {
+    seedOutbox(owned({ userId: "u2", companyId: "c1" }, 1), owned(null, 1));
+    signIn("u2", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    // the adoption gave the ownerless op to u2 first; then an old "1" wipe repeat (whose: not known)
+    forgetDeviceState(wipedOnDelete, { userId: null });
+    await settle();
+    await wait(300);
+    expect(stored().map((x) => x.id)).toEqual(["o-u2@c1#1", "o-nobody#1"]);
+    expect(valueOf(r).queue).toHaveLength(2);
   });
 });
 

@@ -10,7 +10,7 @@ import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Card, RowView } from "@/ui/surfaces";
 import { wasJustDragged } from "./dnd";
-import { assigneesOf, isAssigned, lateKind, liveAssignees, type People } from "@/features/schedule";
+import { assigneesOf, isAssigned, lateKind, liveAssignees, type People, visitWhen } from "@/features/schedule";
 import { isoDayKey, todayKey } from "@/features/calendar";
 import { overlapSigns } from "@/features/listSigns";
 import { memberLabel } from "@/features/team";
@@ -48,16 +48,15 @@ export function VisitCard({ v, showTech }: { v: Visit; showTech?: boolean }) {
   const { job, property, customer, tech } = visitContext(db, v);
   const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
   const people = assigneesOf(v).map((id) => db.members.find((m) => m.id === id)).filter((m): m is NonNullable<typeof m> => !!m);
-  const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
   return (
     <Card
       status={st.status}
       onPress={() => !wasJustDragged() && router.push(`/visit/${v.id}`)}
-      accessibilityLabel={`${customer?.name ?? ""}, ${time(v.start)}`}
+      accessibilityLabel={`${customer?.name ?? ""}, ${visitWhen(v, time, t("plan5.allDay"), false)}`}
     >
       <RowView style={{ justifyContent: "space-between" }}>
         <T v="caption" tone="mut" tabular>
-          {time(v.start)} – {time(end)}
+          {visitWhen(v, time, t("plan5.allDay"))}
         </T>
         <StatusChip status={st.status} label={t(st.label)} />
       </RowView>

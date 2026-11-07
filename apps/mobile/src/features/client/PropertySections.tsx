@@ -3,6 +3,7 @@
  * the property, leads, jobs, estimates, invoices, visits, tasks, notes, files, history. One object — one card (rule 12).
  * The contents of the old tabs (docs/specs/04 §7.3, C2b) moved here unchanged.
  */
+import { visitWhen } from "@/features/schedule";
 import { useState } from "react";
 import { Linking } from "react-native";
 import { router } from "expo-router";
@@ -154,7 +155,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
           {r.visits.map((v) => (
             <ItemCard
               key={v.id}
-              title={`${day(v.start)} · ${time(v.start)}`}
+              title={`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"), false)}`}
               subtitle={[v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : t("prop.h.visit"), memberName(db, v.techId, t)].filter(Boolean).join(" · ")}
               left={<Icon name="calendar" />}
               onPress={() => router.push(`/visit/${v.id}`)}
@@ -176,7 +177,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
             <ItemCard
               key={photo.id}
               title={photo.kind === "after" ? t("prop.photoAfter") : t("prop.photoBefore")}
-              subtitle={`${day(visit.start)} · ${time(visit.start)}`}
+              subtitle={`${day(visit.start)} · ${visitWhen(visit, time, t("plan5.allDay"), false)}`}
               left={<Icon name="image" />}
               onPress={() => router.push(`/visit/${visit.id}`)}
             />

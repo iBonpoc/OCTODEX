@@ -66,6 +66,7 @@ export default function Clients() {
   const card = (c: Customer) => {
     const props = db.properties.filter((p) => p.customerId === c.id);
     const money = office ? clientMoneyOf(db, c.id) : null;
+    const figure = !money ? null : money.owesCents > 0 ? { cents: money.owesCents, label: "client.owes" as const } : money.paidTotalCents > 0 ? { cents: money.paidTotalCents, label: "client.paidTotal" as const } : null;
     const st = statusOf(c);
     const open = db.estimates.filter((e) => e.customerId === c.id && e.status === "sent").length;
     const last = clientHistory(db, c.id, role)[0];
@@ -77,8 +78,9 @@ export default function Clients() {
         key={c.id}
         title={c.name}
         lead={{ kind: "initials", text: initials(c.name), dashed: st === "prospect" }}
-        value={money && money.owesCents > 0 ? moneyFmt(money.owesCents) : undefined}
-        valueLabel={money && money.owesCents > 0 ? t("client.owes") : undefined}
+        // founder 07.11: one money figure in one place — the debt if any, otherwise the paid total
+        value={figure ? moneyFmt(figure.cents) : undefined}
+        valueLabel={figure ? t(figure.label) : undefined}
         // an active client has no chip (spec 06 §5); prospects, archive, «do not service» do — tappable when it can change
         status={st !== "active" ? { tone: clientStatusChip[st].s, label: t(clientStatusChip[st].l), onPress: office && canChangeStatus("customer", st) ? () => setPicking(c) : undefined } : undefined}
         signs={overdue.length ? [{ tone: "bad", label: t("card.sign.overdueDays", { d: Math.max(...overdue.map((x) => x.params?.d ?? 0)) }) }] : undefined}
@@ -90,7 +92,6 @@ export default function Clients() {
           addr: addr && props.length > 1 ? `${addr} · ${t("clients.properties", { n: props.length })}` : addr,
           last: last ? [t(last.title), last.detail, day(last.at)].filter(Boolean).join(" · ") : undefined,
         }}
-        figures={money && money.paidTotalCents > 0 ? [{ label: t("client.paidTotal"), value: moneyFmt(money.paidTotalCents) }] : undefined}
         contact={{ phone: c.phone, email: c.email, addr }}
         density={device === "desktop" ? "row" : "rich"}
         columns={COLUMNS}
@@ -131,7 +132,7 @@ export default function Clients() {
         <CardGrid>{list.map(card)}</CardGrid>
       ) : (
         <>
-          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={COLUMNS} value={office ? t("client.owes") : undefined} /> : null}
+          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={COLUMNS} value={office ? t("fix.client.balance") : undefined} /> : null}
           {groups.map(([letter, cs]) => (
           <View key={letter} style={{ gap: space[2] }}>
             <T v="caption" w="semibold" tone="mut">{letter}</T>

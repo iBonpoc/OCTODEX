@@ -12,7 +12,7 @@ import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
-import { applyOp, PermanentError, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
+import { applyOp, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
@@ -27,16 +27,19 @@ import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
+import { lineChangeRefusal, lineSaveUndo, taxBefore, withJobLine, withJobTax, withoutJobLine } from "@/features/jobLines";
 import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/features/jobDone";
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
-import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
+import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
+import { backoffMs, classify, MAX_TRIES, needsSignIn } from "./outboxRetry";
+import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
@@ -79,9 +82,12 @@ import {
   type Tag,
   ServiceCategory,
   CancelReason,
+  JobLineItem,
 } from "./types";
 
 type Undo = () => void;
+/** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
+export type GuardedUndo = () => boolean;
 export type Mode = "demo" | "cloud";
 /** when and who for an estimate visit */
 export interface BookAt {
@@ -171,7 +177,7 @@ interface StoreCtx {
   /** the office cancels a visit before the tech is on site; S4a / S9a roll the lead / job back (docs/specs/03 §4) */
   cancelVisit: (id: ID, reason: CancelReason, text?: string) => Undo;
   /** the office moves a visit (time, length) before the tech is on site; the status does not change */
-  rescheduleVisit: (id: ID, start: string, durationMin: number) => Undo;
+  rescheduleVisit: (id: ID, start: string, durationMin: number, allDay?: boolean) => Undo;
   /** «+ Осмотр» on a client / property (a returning client wants a new estimate): an inspection without a lead */
   addInspection: (propertyId: ID, at: BookAt) => { id: ID; undo: Undo };
   /** the office sent the client the time (an SMS / email app was opened with the text, or it was copied) */
@@ -215,6 +221,14 @@ interface StoreCtx {
   addJob: (x: NewJobInput) => { id: ID; undo: Undo };
   /** wave 3c (S10): «Да, выполнена» / «Завершить работу» — office only, no open visit; server public.complete_job */
   completeJob: (jobId: ID) => Undo;
+  /** 3b-2 (17-job §11.1): own lines of a job without an estimate; the job total follows (engine). The screen checks
+   *  lineChangeRefusal first; the server refuses the same (t20, t19_job_total_floor). Undo of a removal restores it. */
+  /** «Отменить» of these runs the same check (lineChangeRefusal) and returns false when it is refused: nothing changes */
+  saveJobLine: (line: Omit<JobLineItem, "totalCents">, isNew: boolean) => GuardedUndo;
+  removeJobLine: (id: ID) => GuardedUndo;
+  setJobTax: (jobId: ID, tax: { taxEnabled: boolean; taxRateBps: number }) => GuardedUndo;
+  setJobTags: (jobId: ID, tagIds: ID[]) => Undo;
+  setJobType: (jobId: ID, jobTypeId: ID | null) => Undo;
   /** for the estimate screen (chat «Сметы и модуль Gutters») */
   setEstimateCategory: (id: ID, serviceCategoryId?: ID) => Undo;
   updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
@@ -256,7 +270,7 @@ interface StoreCtx {
   saveContact: (c: CompanyContact) => Undo;
   removeContact: (id: ID) => Undo;
   /** contractor picks date, time, duration and (optionally) the tech → a visit appears in the plan */
-  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null; assigneeIds?: ID[]; visitId?: ID; note?: string }) => Undo;
+  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null; assigneeIds?: ID[]; visitId?: ID; note?: string; allDay?: boolean }) => Undo;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -346,6 +360,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // nothing chosen yet → the first role this person has (owner → director); route-guard fix
   const [savedRole, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "director");
   const [online, setOnlineState] = useState(true);
+  // the cloud: is the server answering (the switch «без сети» is the demo's) — a failed request says no, an answer yes;
+  // without it the outbox waits longer and longer and never drops an op (rule 6, cloud e2e 104)
+  const [reachable, setReachable] = useState(true);
+  const netFails = useRef(0);
+  const nextTry = useRef(0);
+  const answered = () => {
+    netFails.current = 0;
+    nextTry.current = 0;
+    setReachable(true);
+  };
+  const unreachable = () => {
+    netFails.current += 1;
+    nextTry.current = Date.now() + backoffMs(netFails.current);
+    setReachable(false);
+  };
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
   const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, []);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -362,14 +391,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const whoRef = useRef(who);
   whoRef.current = who;
   const mine = (items: readonly OwnedItem[]) => mineOf(items, whoRef.current);
+  // a wipe that came while the outbox was still loading (the start repeat): applied to what the load brings
+  const outboxReadyRef = useRef(outboxReady);
+  outboxReadyRef.current = outboxReady;
+  const forgetOnLoad = useRef<{ userId: string | null } | null>(null);
+  useEffect(() => {
+    if (!outboxReady || !forgetOnLoad.current) return;
+    const { userId } = forgetOnLoad.current;
+    forgetOnLoad.current = null;
+    setOutbox((prev) => (outboxRef.current = othersOf(prev, userId)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outboxReady]);
   // ops of older versions (no owner) belong to the first person signed in once the outbox is loaded (review #240 №3)
   useEffect(() => {
-    if (!outboxReady || !who) return;
-    const adopted = adoptLegacy(outboxRef.current, who);
-    if (adopted !== outboxRef.current) {
-      outboxRef.current = [...adopted];
-      setOutbox(outboxRef.current);
-    }
+    if (!outboxReady || !who || forgetOnLoad.current) return;
+    // a functional update: never over a filter of a wipe that is set but not yet rendered (review #244 №5)
+    setOutbox((prev) => {
+      const adopted = adoptLegacy(prev, who);
+      return (outboxRef.current = adopted === prev ? prev : [...adopted]);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outboxReady, who?.userId, who?.companyId]);
   const modeRef = useRef(mode);
@@ -395,7 +435,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
       if (!mine(outboxRef.current).length) setDb(next);
       setSyncError(null);
+      answered();
     } catch (e) {
+      if (stale(gen)) return;
+      if (classify(e) !== "refusal") setReachable(false);
       setSyncError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -426,9 +469,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         wipedKey.current = cacheKeyRef.current;
         // the outbox keeps other people's ops (rule 6): only the deleted person's go (and old ones without an owner).
         // The deleted person comes with the wipe: the sign-in may already be gone from the store (review #240 №2)
-        const me = info.userId ?? whoRef.current?.userId ?? null;
-        outboxRef.current = othersOf(outboxRef.current, me);
-        setOutbox(outboxRef.current);
+        // told by the wipe (even «not known» = null: never the person signed in now, review #244), else the sign-in
+        const me = "userId" in info ? (info.userId ?? null) : (whoRef.current?.userId ?? null);
+        if (!outboxReadyRef.current) forgetOnLoad.current = { userId: me };
+        // a functional update: the latest outbox, also one that is set but not yet rendered
+        setOutbox((prev) => (outboxRef.current = othersOf(prev, me)));
         setGateCodes({});
         waitingPoints.current = {};
       }),
@@ -449,6 +494,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // time an answer comes (review #240 №1); another person or company signs in meanwhile → the loop stops
     const w = whoRef.current;
     if (flushing.current || modeRef.current !== "cloud" || !w || !onlineRef.current) return;
+    if (Date.now() < nextTry.current) return; // no network a moment ago: the pause before the next try
     const gen = deviceGeneration();
     if (stale(gen)) return;
     const still = () => sameOwner(whoRef.current, w);
@@ -465,6 +511,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
           if (stale(gen)) return;
           sentAny = true;
+          answered();
           outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
           setOutbox(outboxRef.current);
           if (!still()) break;
@@ -473,7 +520,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (stale(gen)) return;
           const msg = e instanceof Error ? e.message : String(e);
           setSyncError(msg);
-          if (e instanceof PermanentError || item.tries >= 5) {
+          // no answer, or the server's «not now» (5xx, 429, an expired sign-in…): not a try — the op stays as it is,
+          // the next send waits longer (review #244)
+          if (classify(e) !== "refusal") {
+            if (needsSignIn(e)) void renewSession();
+            unreachable();
+            break;
+          }
+          // the server said «no»: a try; the last one drops it (never because of the network)
+          if (item.tries + 1 >= MAX_TRIES) {
             // Will never succeed: drop it and reload the truth from the server.
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
@@ -500,9 +555,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (mine(outboxRef.current).length) flush();
     }, 1500);
     const poll = setInterval(refresh, 30_000);
+    // the network is back (the browser says so): no waiting out the pause — send now
+    const back = () => {
+      nextTry.current = 0;
+      if (mine(outboxRef.current).length) void flush();
+    };
+    const g = globalThis as { addEventListener?: (t: string, f: () => void) => void; removeEventListener?: (t: string, f: () => void) => void };
+    g.addEventListener?.("online", back);
+    const offActive = onAppActive(back); // the phone: back in the app
     return () => {
       clearInterval(tick);
       clearInterval(poll);
+      g.removeEventListener?.("online", back);
+      offActive();
     };
   }, [mode, refresh, flush]);
 
@@ -657,7 +722,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       role,
       setRole,
       availableRoles,
-      online,
+      online: online && (mode !== "cloud" || reachable),
       queue: pendingQueue,
       unsentAll,
       syncError,
@@ -990,10 +1055,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const at = new Date().toISOString();
         return mutate("visit.notified", (d) => patchVisit(d, visitId, (v) => ({ ...v, customerNotifiedAt: at })), { k: "visit.notified", visitId });
       },
-      rescheduleVisit: (id, start, durationMin) => {
+      rescheduleVisit: (id, start, durationMin, allDay) => {
         const v = dbRef.current.visits.find((x) => x.id === id);
         if (!v || !canReschedule(v) || durationMin <= 0) return () => {};
-        return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => ({ ...x, start, durationMin })), { k: "visit.reschedule", visitId: id, start, durationMin });
+        return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => rescheduled(x, start, durationMin, allDay)), { k: "visit.reschedule", visitId: id, start, durationMin, allDay: !!allDay });
       },
       addLead: (lead) => {
         const id = uid();
@@ -1254,6 +1319,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { id, undo };
       },
       completeJob: (jobId) => mutate("job.complete", (d) => withJobDone(d, jobId), { k: "job.complete", id: jobId }),
+      saveJobLine: (line, isNew) => {
+        const back = lineSaveUndo(dbRef.current, line);
+        mutate("jobLine.save", (d) => withJobLine(d, line), { k: "jobLine.save", line, isNew });
+        // the save may already be on the server: «Отменить» is its own step back (a new line is removed, an edit undone)
+        return () => {
+          const now = dbRef.current;
+          const after = back.k === "remove" ? withoutJobLine(now, back.id) : withJobLine(now, back.line);
+          // e.g. an invoice went out after the raise: going back below it is refused here as on the server (t19)
+          if (lineChangeRefusal(now, after, line.jobId)) return false;
+          if (back.k === "remove") mutate("jobLine.remove", (d) => withoutJobLine(d, back.id), { k: "jobLine.remove", id: back.id });
+          else mutate("jobLine.save", (d) => withJobLine(d, back.line), { k: "jobLine.save", line: back.line, isNew: false });
+          return true;
+        };
+      },
+      removeJobLine: (id) => {
+        const line = (dbRef.current.jobLines ?? []).find((l) => l.id === id);
+        if (!line) return () => false;
+        mutate("jobLine.remove", (d) => withoutJobLine(d, id), { k: "jobLine.remove", id });
+        // the removal may already be on the server: «Отменить» puts the line back as its own step
+        return () => {
+          if (lineChangeRefusal(dbRef.current, withJobLine(dbRef.current, line), line.jobId)) return false;
+          mutate("jobLine.restore", (d) => withJobLine(d, line), { k: "jobLine.restore", id });
+          return true;
+        };
+      },
+      setJobTax: (jobId, tax) => {
+        const prev = taxBefore(dbRef.current, jobId);
+        mutate("job.update", (d) => withJobTax(d, jobId, tax), { k: "job.update", id: jobId, ...tax });
+        return () => {
+          if (lineChangeRefusal(dbRef.current, withJobTax(dbRef.current, jobId, prev), jobId)) return false;
+          mutate("job.update", (d) => withJobTax(d, jobId, prev), { k: "job.update", id: jobId, ...prev });
+          return true;
+        };
+      },
+      setJobTags: (jobId, tagIds) => {
+        // a tag switched off since cannot be put back (job_tags_insert): «Отменить» leaves it out
+        const active = new Set(dbRef.current.tags.filter((x) => x.active).map((x) => x.id));
+        const prev = (dbRef.current.jobs.find((j) => j.id === jobId)?.tagIds ?? []).filter((id) => active.has(id));
+        const put = (ids: ID[]) => mutate("job.tags", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, tagIds: ids } : j)) }), { k: "job.tags", id: jobId, tagIds: ids });
+        put(tagIds);
+        return () => void put(prev);
+      },
+      setJobType: (jobId, jobTypeId) => {
+        const prev = dbRef.current.jobs.find((j) => j.id === jobId)?.jobTypeId ?? null;
+        const put = (id: ID | null) => mutate("job.type", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, jobTypeId: id ?? undefined } : j)) }), { k: "job.update", id: jobId, jobTypeId: id });
+        put(jobTypeId);
+        return () => void put(prev);
+      },
       setJobCategory: (id, serviceCategoryId) =>
         mutate("job.category", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, serviceCategoryId } : j)) }), { k: "job.category", id, serviceCategoryId: serviceCategoryId ?? null }),
       setEstimateCategory: (id, serviceCategoryId) =>
@@ -1337,11 +1450,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: jobStatusAfterSchedule(j.status) } : j)),
             visits: [
               ...d.visits,
-              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },
+              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, allDay: sch.allDay ? true : undefined, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },
             ],
             notices: d.notices.map((n) => (n.jobId === jobId ? { ...n, read: true } : n)),
           }),
-          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope },
+          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope, allDay: !!sch.allDay },
         );
       },
       saveCompany: (patch) => {
@@ -1460,7 +1573,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, pendingQueue.length, unsentAll, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, reachable, pendingQueue.length, unsentAll, syncError, loading, mutate, setRole, setQueue, refresh, flush],
   );
 
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady) return null;
