@@ -2330,4 +2330,6 @@ export const en: Dict = {
   "fr9.closed.keep": "Keep",
   "fr9.closed.dropped": "Changes removed",
   "fr9.closed.ok": "Got it",
+  "mod.gutters.title": "Gutters",
+  "mod.gutters.hint": "Measure the house with your finger on the phone: gutter runs, downspouts, stories → parts and an estimate from your price list.",
 };

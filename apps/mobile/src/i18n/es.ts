@@ -2330,4 +2330,6 @@ export const es: Dict = {
   "fr9.closed.keep": "Conservar",
   "fr9.closed.dropped": "Cambios quitados",
   "fr9.closed.ok": "Entendido",
+  "mod.gutters.title": "Canaletas (Gutters)",
+  "mod.gutters.hint": "Mida la casa con el dedo en el teléfono: tramos de canaleta, bajantes, pisos → piezas y un presupuesto con su lista de precios.",
 };
