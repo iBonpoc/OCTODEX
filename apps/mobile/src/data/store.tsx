@@ -36,7 +36,7 @@ import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
-import { todayKey, usePersistentState } from "./persist";
+import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import {
@@ -310,6 +310,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   );
   // gate codes (C2) stay in memory in the cloud: never written to the cache on the phone (security review of #62)
   const [gateCodes, setGateCodes] = useState<Record<string, string>>({});
+  const cacheKeyRef = useRef(cacheKey);
+  cacheKeyRef.current = cacheKey;
+  // the device was wiped (account deletion, 19 §6.12): no send and no reload until the store holds another key
+  // (sign-out → the demo, or the next person's company); every async step also drops its result if the generation moved
+  const wipedKey = useRef<string | null>(null);
+  const stale = (gen: number) => gen !== deviceGeneration() || wipedKey.current === cacheKeyRef.current;
+  const lastKey = useRef(cacheKey);
+  if (lastKey.current !== cacheKey) {
+    // another key (sign-out, the next person's company): the block of the wiped one is over
+    lastKey.current = cacheKey;
+    wipedKey.current = null;
+  }
   const db = useMemo(() => {
     const d = normalizeDB(saved.db, mode);
     return mode === "cloud" ? withGateCodes(d, gateCodes) : d;
@@ -318,12 +330,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   setZone(db.company?.timezone);
   const setDb = useCallback(
     (next: DB) => {
-      if (mode !== "cloud") return setSaved({ day: todayKey(), db: next });
+      // bound to this render's cache: a late write for the company is dropped after sign-out (19 §6.12)
+      if (mode !== "cloud") return setSaved({ day: todayKey(), db: next }, cacheKey);
+      if (cacheKeyRef.current !== cacheKey) return;
       const { db: bare, codes } = splitGateCodes(next);
       setGateCodes(codes);
-      setSaved({ day: "cloud", db: bare });
+      setSaved({ day: "cloud", db: bare }, cacheKey);
     },
-    [setSaved, mode],
+    [setSaved, mode, cacheKey],
   );
   // nothing chosen yet → the first role this person has (owner → director); route-guard fix
   const [savedRole, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "director");
@@ -352,9 +366,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const refresh = useCallback(async () => {
     if (modeRef.current !== "cloud" || !company || !auth.userId || !onlineRef.current) return;
     if (outboxRef.current.length) return; // send pending changes first, then reload
+    const gen = deviceGeneration();
+    if (stale(gen)) return;
     setLoading(true);
     try {
       const next = await loadCompanyDB(company.companyId, auth.userId);
+      // signed out, another company or the device wiped while it loaded: the answer is not for this store (19 §6.12)
+      if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
       if (!outboxRef.current.length) setDb(next);
       setSyncError(null);
     } catch (e) {
@@ -368,9 +386,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const waitingPoints = useRef<Record<string, { p: VisitPoint; source: "status_change" | "foreground" }>>({});
   const sendPoint = useCallback(
     (p: VisitPoint, source: "status_change" | "foreground") => {
+      const gen = deviceGeneration();
       void sendVisitPoint({ ...p, source }).then((r) => {
         // the server no longer takes my points (the company flag went off, I was switched off): stop on the phone too
-        if (r === "off") {
+        if (r === "off" && !stale(gen)) {
           const off = withConsent(dbRef.current, false, dbRef.current.location?.ackAt);
           dbRef.current = off;
           setDb(off);
@@ -379,6 +398,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       });
     },
     [setDb, refresh],
+  );
+  // the device was wiped (account deletion): what lives only in memory goes too (19 §6.12)
+  useEffect(
+    () =>
+      onDeviceForgotten(() => {
+        wipedKey.current = cacheKeyRef.current;
+        setGateCodes({});
+        waitingPoints.current = {};
+      }),
+    [],
   );
   const sendWaitingPoints = useCallback(() => {
     if (!onlineRef.current) return;
@@ -392,6 +421,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const flushing = useRef(false);
   const flush = useCallback(async () => {
     if (flushing.current || modeRef.current !== "cloud" || !company || !auth.userId || !onlineRef.current) return;
+    const gen = deviceGeneration();
+    if (stale(gen)) return;
     flushing.current = true;
     let sentAny = false;
     let dropped = false;
@@ -402,10 +433,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!item || !readyToSend(item, Date.now())) break;
         try {
           await applyOp(item.op, company.companyId, auth.userId);
+          // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
+          if (stale(gen)) return;
           sentAny = true;
           outboxRef.current = outboxRef.current.slice(1);
           setOutbox(outboxRef.current);
         } catch (e) {
+          // a send that fails because the account is gone must not put the deleted person's op back (review #231)
+          if (stale(gen)) return;
           const msg = e instanceof Error ? e.message : String(e);
           setSyncError(msg);
           if (e instanceof PermanentError || item.tries >= 5) {
@@ -424,6 +459,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       sendWaitingPoints();
     }
     // a dropped op left the phone ahead of the server: reload the truth
+    if (stale(gen)) return;
     if ((sentAny && !outboxRef.current.length) || dropped) await refresh();
   }, [company, auth.userId, setOutbox, refresh, sendWaitingPoints]);
 
