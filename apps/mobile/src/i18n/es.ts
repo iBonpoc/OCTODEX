@@ -2165,6 +2165,14 @@ export const es: Dict = {
   "fr7.noOwnerChip": "Sin responsable",
   "fr7.noAssigneeChip": "Sin responsable",
   "fr7.handOver": "Entregar",
+  // «Каркас» №8, 7а-3: the client page of a closed company (docs/specs/22 §3.5)
+  "fr8.portal.closed": "{company} cerró — los documentos de este enlace ya no están disponibles",
+  "fr8.portal.closedChip": "Cerrada",
+  // «Каркас» №8: a tab pressed over an unsaved form (docs/specs/28)
+  "fr8.tab.leaveTitle": "¿Salir sin guardar?",
+  "fr8.tab.leaveText": "Hay un formulario sin guardar debajo de esta pantalla. Si cambia de pestaña, se perderá lo que escribió.",
+  "fr8.tab.stay": "Quedarse",
+  "fr8.tab.leave": "Salir sin guardar",
   "job5.byTime": "Por hora",
   "job5.allDaySummary": "{date} · todo el día · {who}",
   "job5.clientDay": "El cliente verá solo la fecha, sin hora",
@@ -2185,6 +2193,19 @@ export const es: Dict = {
   "fix.more.jobs": "Por programar: {n}",
   "fix.more.estimates": "Por firmar: {n}",
   "fix.more.invoices": "Vencidas: {n}",
+  // ---- push (docs/specs/27-push.md) ----
+  "push.title": "Notificaciones",
+  "push.thisPhone": "Notificaciones push en este teléfono",
+  "push.state.on": "Activadas: presupuestos firmados, pagos. Sin montos ni direcciones en el texto.",
+  "push.state.off": "Desactivadas. La campana en la app siempre funciona.",
+  "push.state.denied": "Desactivadas en los ajustes del teléfono.",
+  "push.state.signed_out": "Inicia sesión para recibir notificaciones push.",
+  "push.state.web": "Las notificaciones push llegan en la app OCTODEX del teléfono. Aquí, la campana.",
+  "push.state.expo_go": "Las notificaciones push funcionan en la app OCTODEX instalada, no en Expo Go.",
+  "push.openSettings": "Abrir ajustes del teléfono",
+  "push.turnedOn": "Notificaciones activadas",
+  "push.denied": "El teléfono no permitió las notificaciones",
+  "push.failed": "No se pudo activar. Revisa la conexión e inténtalo de nuevo",
   // fix.settings.* — profile split from app settings (spec 26)
   "fix.settings.profile": "Perfil y cuenta",
 };

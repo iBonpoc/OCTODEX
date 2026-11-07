@@ -10,6 +10,7 @@ import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { LINE_GROUPS, activeLines } from "@octo/estimating-engine";
 import { print as P } from "@octo/design-tokens";
+import { SIG_BOX, fitSignature } from "./signaturePath";
 import type { DictKey } from "@/i18n";
 import { tFor } from "@/i18n/translate";
 import type { PortalData } from "@/cloud/portal";
@@ -63,7 +64,7 @@ export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
     .join("");
   const a = p.approval;
   const sigSvg = (path: string) =>
-    `<svg viewBox="0 0 400 160" width="200" height="80"><path d="${esc(path)}" stroke="${P.ink}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+    `<svg viewBox="0 0 ${SIG_BOX.w} ${SIG_BOX.h}" width="200" height="80"><path d="${esc(fitSignature(path))}" stroke="${P.ink}" stroke-width="2.4" fill="none" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
   const company = p.company.name || "OCTODEX";
   // E2b-2: the employee signs in their own name «for the company», with the title and the HIS number when given
   const cs = p.countersign;

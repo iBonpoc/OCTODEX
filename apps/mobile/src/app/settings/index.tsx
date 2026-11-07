@@ -9,6 +9,7 @@ import { useToast } from "@/ui/overlays";
 import { useHints } from "@/ui/hints";
 import { usePlanShowDone } from "@/features/prefs";
 import { LocationSetting } from "@/features/LocationParts";
+import { PushSettingsSection } from "@/features/PushSettings";
 import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
 
@@ -59,7 +60,6 @@ export default function Settings() {
           ]}
         />
       </Card>
-      {/* «Уведомления» go here (spec 26, push №1 adds its PushSettingsSection when a switch really works) */}
       {/* wave 7б-2: location during visits — only when the company allows it (docs/specs/03 §12) */}
       <LocationSetting />
       <Card>
@@ -70,7 +70,9 @@ export default function Settings() {
         <Button label={t("more.showHints")} icon="help" variant="secondary" onPress={hints.reset} />
       </Card>
 
-      {/* 7а-1 (legal/01 §3.5 «Мои настройки → О приложении»): the documents with their editions, help */}
+      {/* «Уведомления» (spec 27 §5, push №1): its own group, shown only where the switch works */}
+      <PushSettingsSection />
+      {/* 7а-1 (legal/01 §3.5 «О приложении»): the documents with their editions, help */}
       <SectionTitle title={t("settings.about")} />
       <Card>
         <View testID="settings-about">
