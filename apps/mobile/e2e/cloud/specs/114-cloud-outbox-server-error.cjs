@@ -72,7 +72,9 @@ exports.run = async (h, { seed, admin }) => {
   };
   await p.route("**/rest/v1/**", timeout);
   await h.go("/settings");
-  for (let i = 0; i < 40 && !/Не отправлено: сервер отвечает ошибкой/.test(await h.text()); i++) await p.waitForTimeout(500);
+  // both cards: q-gone comes stuck at once, q-stuck only after its third timeout — wait for that one, not for the title
+  const cards = async () => (await p.getByTestId("stuck-q-stuck").count()) > 0 && (await p.getByTestId("stuck-q-gone").count()) > 0;
+  for (let i = 0; i < 40 && !(await cards()); i++) await p.waitForTimeout(500);
   t = await h.text();
   h.expect(/Не отправлено: сервер отвечает ошибкой/.test(t), "the stuck changes are a section in «Мои настройки»");
   h.expect((await p.getByTestId("stuck-q-stuck").count()) > 0 && (await p.getByTestId("stuck-q-gone").count()) > 0, "each is its own card");
