@@ -12,7 +12,7 @@ import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
-import { applyOp, PermanentError, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
+import { applyOp, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
@@ -37,7 +37,8 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
-import { backoffMs, isNetworkError, MAX_TRIES } from "./outboxRetry";
+import { backoffMs, classify, MAX_TRIES, needsSignIn } from "./outboxRetry";
+import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
@@ -392,11 +393,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // ops of older versions (no owner) belong to the first person signed in once the outbox is loaded (review #240 №3)
   useEffect(() => {
     if (!outboxReady || !who || forgetOnLoad.current) return;
-    const adopted = adoptLegacy(outboxRef.current, who);
-    if (adopted !== outboxRef.current) {
-      outboxRef.current = [...adopted];
-      setOutbox(outboxRef.current);
-    }
+    // a functional update: never over a filter of a wipe that is set but not yet rendered (review #244 №5)
+    setOutbox((prev) => {
+      const adopted = adoptLegacy(prev, who);
+      return (outboxRef.current = adopted === prev ? prev : [...adopted]);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outboxReady, who?.userId, who?.companyId]);
   const modeRef = useRef(mode);
@@ -425,7 +426,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       answered();
     } catch (e) {
       if (stale(gen)) return;
-      if (isNetworkError(e)) setReachable(false);
+      if (classify(e) !== "refusal") setReachable(false);
       setSyncError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -507,12 +508,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (stale(gen)) return;
           const msg = e instanceof Error ? e.message : String(e);
           setSyncError(msg);
-          // the server was not reached: not a try — the op stays as it is, the next send waits longer
-          if (isNetworkError(e)) {
+          // no answer, or the server's «not now» (5xx, 429, an expired sign-in…): not a try — the op stays as it is,
+          // the next send waits longer (review #244)
+          if (classify(e) !== "refusal") {
+            if (needsSignIn(e)) void renewSession();
             unreachable();
             break;
           }
-          if (e instanceof PermanentError || item.tries >= MAX_TRIES) {
+          // the server said «no»: a try; the last one drops it (never because of the network)
+          if (item.tries + 1 >= MAX_TRIES) {
             // Will never succeed: drop it and reload the truth from the server.
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
@@ -546,10 +550,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     };
     const g = globalThis as { addEventListener?: (t: string, f: () => void) => void; removeEventListener?: (t: string, f: () => void) => void };
     g.addEventListener?.("online", back);
+    const offActive = onAppActive(back); // the phone: back in the app
     return () => {
       clearInterval(tick);
       clearInterval(poll);
       g.removeEventListener?.("online", back);
+      offActive();
     };
   }, [mode, refresh, flush]);
 

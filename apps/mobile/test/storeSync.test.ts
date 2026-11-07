@@ -32,6 +32,7 @@ const server = {
   loads: [] as Deferred<unknown>[],
   sends: [] as { op: unknown; companyId: string; userId: string; d: Deferred<void> }[],
   points: [] as Deferred<string>[],
+  renewed: 0,
 };
 vi.mock("@/cloud/repo", async (orig) => ({
   ...(await orig<object>()),
@@ -48,6 +49,7 @@ vi.mock("@/cloud/ops", async (orig) => ({
     server.sends.push({ op, companyId, userId, d });
     return d.promise;
   },
+  renewSession: async () => void (server.renewed += 1),
   sendVisitPoint: () => {
     const d = deferred<string>();
     server.points.push(d);
@@ -58,6 +60,13 @@ vi.mock("@/cloud/ops", async (orig) => ({
 vi.mock("@/cloud/outboxTiming", () => ({ SEND_AFTER_MS: 0, readyToSend: () => true }));
 // the pause after a network failure is tested in test/outboxRetry.test.ts: here the next try may go at once
 const retry = { pause: 0 };
+/** the server's «no»: a permission code (a try) */
+const refusal = () => Object.assign(new Error("new row violates row-level security policy"), { name: "PermanentError", status: 403, code: "42501" });
+/** the server's «not now» */
+const notNow = (status: number, code = "") => Object.assign(new Error(`status ${status}`), { name: "ServerError", status, code });
+// the phone's «back in the app» (react-native's AppState does not load in node)
+const appActive = { cb: null as null | (() => void) };
+vi.mock("@/data/appActive", () => ({ onAppActive: (cb: () => void) => ((appActive.cb = cb), () => (appActive.cb = null)) }));
 vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), backoffMs: () => retry.pause }));
 
 import { render, settle, type Root } from "./support/miniReact";
@@ -90,6 +99,7 @@ beforeEach(() => {
   server.loads.length = 0;
   server.sends.length = 0;
   server.points.length = 0;
+  server.renewed = 0;
   signOut();
 });
 afterEach(() => {
@@ -325,7 +335,7 @@ describe("unit:storeSync — the company or the person changes while a send wait
     await as(r, "u2", "c1");
     answerLoads();
     valueOf(r).removeCalendarEvent("ev-of-u2");
-    server.sends[0]!.d.reject(new Error("upstream 503 from the server")); // u1's send fails after u2 signed in
+    server.sends[0]!.d.reject(refusal()); // u1's send fails after u2 signed in
     await settle();
     await wait(1700);
     await settle();
@@ -358,7 +368,7 @@ describe("unit:storeSync — another person's op at the head of the outbox (revi
     await settle();
     await wait(1700);
     await settle();
-    server.sends[0]!.d.reject(new Error("upstream 503 from the server"));
+    server.sends[0]!.d.reject(refusal());
     await settle();
     await wait(300);
     expect(stored().map((x) => [x.id, x.tries])).toEqual([["o-u9@c1#1", 0], ["o-u1@c1#1", 1]]);
@@ -468,20 +478,87 @@ describe("unit:storeSync — no network in the cloud: the op is never dropped (r
     delete g.addEventListener;
     delete g.removeEventListener;
   });
-  it("a real refusal of the server is still counted and drops the op after the tries", async () => {
+  it("503 ten times in a row (a Supabase hiccup): the op stays whole, its tries untouched; the server answers — it leaves", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).removeCalendarEvent("during-503");
+    for (let i = 0; i < 10; i++) {
+      valueOf(r).setOnline(true);
+      await settle();
+      server.sends.at(-1)!.d.reject(i % 3 === 2 ? notNow(429) : i % 3 === 1 ? notNow(400, "40001") : notNow(503));
+      await settle();
+    }
+    expect(server.sends).toHaveLength(10);
+    expect(valueOf(r).queue).toHaveLength(1);
+    await wait(300);
+    expect(stored()[0]!.tries).toBe(0);
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.resolve();
+    await settle();
+    expect(valueOf(r).queue).toEqual([]);
+  });
+  it("an expired sign-in (401 / PGRST301): not a try — the session is renewed, then the op goes", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).removeCalendarEvent("jwt");
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.reject(notNow(401, "PGRST301"));
+    await settle();
+    expect(server.renewed).toBe(1);
+    expect(valueOf(r).queue).toHaveLength(1);
+    // back in the app (the phone has no «online»): the pause is over, the op goes
+    retry.pause = 60_000;
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.reject(new TypeError("Network request failed"));
+    await settle();
+    const before = server.sends.length;
+    appActive.cb?.();
+    await settle();
+    retry.pause = 0;
+    expect(server.sends.length).toBe(before + 1);
+    server.sends.at(-1)!.d.resolve();
+    await settle();
+    expect(valueOf(r).queue).toEqual([]);
+  });
+  it("a reload without the network: shown as «без сети» (online false)", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.reject(new TypeError("Failed to fetch")));
+    await settle();
+    expect(valueOf(r).online).toBe(false);
+    void valueOf(r).refresh();
+    await settle();
+    answerLoads();
+    await settle();
+    expect(valueOf(r).online).toBe(true);
+  });
+  it("a real refusal (42501) five times drops the op — and only then", async () => {
     signIn("u1", "c1");
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
     await settle();
     answerLoads();
     await settle();
     valueOf(r).removeCalendarEvent("refused");
-    for (let i = 0; i < 6; i++) {
+    await settle();
+    for (let i = 0; i < 5; i++) {
+      expect(valueOf(r).queue).toHaveLength(1); // still there before the 5th «no»
       valueOf(r).setOnline(true);
       await settle();
-      server.sends.at(-1)!.d.reject(new Error("upstream 503 from the server"));
+      server.sends.at(-1)!.d.reject(refusal());
       await settle();
     }
     expect(valueOf(r).queue).toEqual([]);
+    expect(server.sends).toHaveLength(5);
   });
 });
 
