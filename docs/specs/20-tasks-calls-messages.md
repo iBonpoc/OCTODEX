@@ -185,3 +185,5 @@
 
 **Карта (предложение руководителю, §4–§5).** Стыка задач в §4 нет (20 §1 просил «Задача → План / выполнена»): S26 — человек (М — свои лиды, объекты, после PR-2б работы); открыта → выполнена → «Вернуть», «Отменить»; лента Плана; тесты e2e:90-tasks, unit:tasks, db:T67–T68. В S4/S5/S17 добавить db:T44, e2e:74-do-not-service, e2e:85; в S24 — e2e:84, unit:comms. §5 Task: «Вернуть», вычисляемая «просрочена» (`isOverdueTask`), привязки lead / customer / job / estimate / property; признак события «итог звонка».
 
+
+**6-4 PR-2а сделано:** `CallSheet` + `callPlacesAtClient` (мастер с 2+ работами у клиента: только эти работы и его лиды там, без поиска; `CallPreset.customerId` из «Позвонить» у клиента); `lead_sources` в `ops.ts` через `pages()`; сторож `test/directReads.test.ts` (список чтений «меньше 1000» с причиной: memberships ×2, estimate_options) — долг 04 §12.5 закрыт; `property/[id]` — «＋» набора `client` с клиентом и объектом, только при `canServe`, кнопка «Новая смета» убрана, «Осмотр» — только при `canServe`. Тесты: unit `calls.test.ts`, `fab.test.ts`, `directReads.test.ts`; e2e 84, 85.
