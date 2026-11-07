@@ -12,7 +12,8 @@ async function signIn(h, user) {
   await p.getByPlaceholder("Пароль").last().fill(user.password);
   await h.click("Войти");
   for (let i = 0; i < 40 && /\/auth\//.test(new URL(p.url()).pathname); i++) await p.waitForTimeout(250);
-  await h.go("/settings");
+  // the account (company, email, sync) is in «Профиль и аккаунт» (spec 26)
+  await h.go("/settings/profile");
   await h.expectText(new RegExp(user.company), `signed in to ${user.company}`);
 }
 

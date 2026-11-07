@@ -48,7 +48,7 @@ export const en: Dict = {
   "nav.expenses": "Expenses",
   "nav.team": "Team",
   "nav.companySettings": "Company settings",
-  "nav.mySettings": "My settings",
+  "nav.mySettings": "App settings",
   "nav.menu": "Menu",
   "nav.create": "Create",
   "nav.group.work": "Work",
@@ -2220,4 +2220,9 @@ export const en: Dict = {
   "today2.overdue": "Overdue: {n}",
   "today2.ofLeads": "{n}% of leads",
   "today2.ofSent": "{n}% of sent",
+  // fix.settings.* — profile split from app settings (spec 26)
+  "fix.settings.profile": "Profile & account",
+  // fix.sign.* — the full-screen signature (spec 29)
+  "fix.sign.expand": "Full screen",
+  "fix.sign.done": "Done",
 };

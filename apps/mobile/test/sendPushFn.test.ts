@@ -83,7 +83,10 @@ describe("send-push: who may call it", () => {
 });
 
 describe("send-push: the words", () => {
-  const kinds = ["estimate.client_signed", "payment.received", "visit.assigned", "visit.rescheduled", "lead.new"];
+  // every kind the queue allows (push_outbox_kind_check, the latest migration that sets it) has its words
+  const mig = readFileSync(new URL("../../../supabase/migrations/20261107110000_push_kinds.sql", import.meta.url), "utf8");
+  const kinds = [...(/push_outbox_kind_check\s+check \(kind in \(([^)]*)\)/.exec(mig)?.[1] ?? "").matchAll(/'([a-z_.]+)'/g)].map((m) => m[1]);
+  it("the queue's kinds are read from the migration", () => expect(kinds).toHaveLength(7));
   it("has en, es and ru for every kind of the queue, with no numbers, sums or names", () => {
     for (const k of kinds) {
       for (const l of ["en", "es", "ru"] as const) {
@@ -96,6 +99,8 @@ describe("send-push: the words", () => {
     expect(words("estimate.client_signed", "ru").title).toBe("Смета подписана");
     expect(words("payment.received", "de").title).toBe("Payment received");
     expect(words("unknown.kind", "en").title).toBe("New notification");
+    expect(words("lead.assigned", "es").title).toBe("Cliente potencial asignado a ti");
+    expect(words("estimate.viewed", "ru").title).toBe("Смету открыли");
   });
   it("a message carries only the route — no amount, name or id other than the path", () => {
     const m = message(row("1", 1, "estimate.client_signed", "es"), { device_id: "d", token: tok(1), lang: "es" });
