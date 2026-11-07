@@ -9,7 +9,7 @@ import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
 import { SearchEntry } from "@/nav/SearchEntry";
 import type { FabCtx, FabItem, FabSet } from "@/nav/sections";
-import { syncState } from "@/nav/shell";
+import { badgeState } from "@/data/syncLink";
 import { screenPath } from "./screenPath";
 import { breadcrumbs, collapseCrumbs, navContext, type Crumb, type Label } from "@/nav/hierarchy";
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindowDimensions, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
@@ -254,13 +254,15 @@ export function Empty({ icon, title, hint, action }: { icon: IconKey; title: str
 /* ---------- Sync badge (DS rule 11: queue counter visible; 13 v2 §2.2, §2.6) ----------
  * Only while there is something to say: no network (warn) or the queue still going out (info). */
 export function SyncBadge({ compact }: { compact?: boolean }) {
-  const { online, queue } = useStore();
+  const { online, link, queue } = useStore();
   const { c } = useTheme();
   const { t } = useI18n();
-  const state = syncState(online, queue.length);
+  // the network is there, the server answers «not now» (5xx, 429): not «no network» (docs/specs/23 §3)
+  const state = badgeState(online, link, queue.length);
   if (!state) return null;
-  const tone = state === "offline" ? c.status.warn : c.status.info;
-  const label = state === "offline" ? t("offline.badge", { n: queue.length }) : t("nav.sync.sending", { n: queue.length });
+  const tone = state === "sending" ? c.status.info : c.status.warn;
+  const label =
+    state === "offline" ? t("offline.badge", { n: queue.length }) : state === "server" ? t("sync.server.badge", { n: queue.length }) : t("nav.sync.sending", { n: queue.length });
   return (
     <View
       testID="sync-badge"
@@ -276,7 +278,7 @@ export function SyncBadge({ compact }: { compact?: boolean }) {
         gap: space[1],
       }}
     >
-      <Icon name={state === "offline" ? "wifiOff" : "send"} s={size.iconSm} color={tone.on} />
+      <Icon name={state === "offline" ? "wifiOff" : state === "server" ? "alert" : "send"} s={size.iconSm} color={tone.on} />
       <T v="caption" w="semibold" style={{ color: tone.on }} numberOfLines={1}>
         {label}
       </T>
