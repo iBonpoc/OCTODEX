@@ -2,6 +2,8 @@
   "ios": {
     "NSCameraUsageDescription": "Photos before and after the work are attached to the visit.",
     "NSPhotoLibraryUsageDescription": "Photos of the work are attached to the visit.",
-    "NSLocationWhenInUseUsageDescription": "Only during your visit and only with your consent: the office sees how far you are from the job address."
+    "NSLocationWhenInUseUsageDescription": "Only during your visit and only with your consent: the office sees how far you are from the job address.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "OCTODEX never uses your location in the background: only while the app is open, during your visit and with your consent.",
+    "NSLocationAlwaysUsageDescription": "OCTODEX never uses your location in the background: only while the app is open, during your visit and with your consent."
   }
 }

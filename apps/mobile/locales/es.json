@@ -2,6 +2,8 @@
   "ios": {
     "NSCameraUsageDescription": "Las fotos de antes y después del trabajo se adjuntan a la visita.",
     "NSPhotoLibraryUsageDescription": "Las fotos del trabajo se adjuntan a la visita.",
-    "NSLocationWhenInUseUsageDescription": "Solo durante tu visita y solo con tu consentimiento: la oficina ve qué tan lejos estás de la dirección del trabajo."
+    "NSLocationWhenInUseUsageDescription": "Solo durante tu visita y solo con tu consentimiento: la oficina ve qué tan lejos estás de la dirección del trabajo.",
+    "NSLocationAlwaysAndWhenInUseUsageDescription": "OCTODEX nunca usa su ubicación en segundo plano: solo con la app abierta, durante su visita y con su consentimiento.",
+    "NSLocationAlwaysUsageDescription": "OCTODEX nunca usa su ubicación en segundo plano: solo con la app abierta, durante su visita y con su consentimiento."
   }
 }
