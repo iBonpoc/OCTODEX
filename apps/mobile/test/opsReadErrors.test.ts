@@ -65,6 +65,7 @@ vi.mock("../src/cloud/client", () => ({
 
 import { applyOp, type Op } from "../src/cloud/ops";
 import { classify } from "../src/data/outboxRetry";
+import { companyFromDb } from "../src/cloud/companyMap";
 
 const J = "11111111-1111-4111-8111-111111111111";
 const E = "22222222-2222-4222-8222-222222222222";
@@ -264,5 +265,26 @@ describe("unit:opsReadErrors — review #248: deleted primary contact, costs, ph
     blobOk();
     await applyOp(photo, "co-1", "u-1");
     expect(writes.filter((w) => w.table === "files" && w.kind === "update").map((w) => (w.row as { upload_status: string }).upload_status)).toEqual(["uploaded"]);
+  });
+});
+
+describe("unit:opsReadErrors — company.save: the «zone chosen» flag reaches the write (docs/specs/22 §1.3)", () => {
+  const company = { ...companyFromDb({ id: "co-1", name: "Co", timezone: "America/Chicago" }, undefined, [], []), timezone: "America/Chicago" };
+  const sent = () => writes.find((w) => w.table === "companies" && w.kind === "update")?.row as Record<string, unknown>;
+  it("not chosen (tzChanged: false): another admin's zone on the server is not overwritten", async () => {
+    found.companies = { timezone: "America/New_York" };
+    await applyOp({ k: "company.save", company, einChanged: false, tzChanged: false }, "co-1", "u-1");
+    expect(sent()).toBeDefined();
+    expect("timezone" in sent()).toBe(false);
+  });
+  it("chosen (tzChanged: true): sent, even when the server already has it", async () => {
+    found.companies = { timezone: "America/Chicago" };
+    await applyOp({ k: "company.save", company, einChanged: false, tzChanged: true }, "co-1", "u-1");
+    expect(sent().timezone).toBe("America/Chicago");
+  });
+  it("an op of an older build (no flag): as before — sent when it differs from the server", async () => {
+    found.companies = { timezone: "America/New_York" };
+    await applyOp({ k: "company.save", company, einChanged: false }, "co-1", "u-1");
+    expect(sent().timezone).toBe("America/Chicago");
   });
 });

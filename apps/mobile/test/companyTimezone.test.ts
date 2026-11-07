@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { companyFromDb, companyToDb, zoneToSend } from "../src/cloud/companyMap";
-import { US_TIMEZONES, zoneChoices } from "../src/features/companySetup";
+import { US_TIMEZONES, zoneChoices, zonePatch } from "../src/features/companySetup";
 import { validZone } from "../src/features/zone";
 
 const row = { id: "c1", name: "Co", timezone: "America/Denver" };
@@ -45,5 +45,11 @@ describe("company time zone (spec 22 §1)", () => {
     // an op of an older build (no flag): as before — when it differs from the server
     expect(zoneToSend("America/Chicago", "America/New_York", undefined)).toBe(true);
     expect(zoneToSend("America/Chicago", "America/Chicago", undefined)).toBe(false);
+  });
+  it("«Расписание» (spec 22 §1.3): the zone is in the patch only when another chip was chosen", () => {
+    expect(zonePatch("America/Denver", "America/Denver")).toEqual({});
+    expect(zonePatch("America/Chicago", "America/Denver")).toEqual({ timezone: "America/Chicago" });
+    // a company without a stored zone: the chip shown first is a choice too
+    expect(zonePatch("America/Los_Angeles", undefined)).toEqual({ timezone: "America/Los_Angeles" });
   });
 });

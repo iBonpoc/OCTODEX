@@ -10,7 +10,7 @@ import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { zoneChoices } from "@/features/companySetup";
+import { zoneChoices, zonePatch } from "@/features/companySetup";
 import { validZone } from "@/features/zone";
 import { atMinute } from "@/features/schedule";
 import {
@@ -48,7 +48,7 @@ export default function CompanySchedule() {
   const clock = (m: number) => time(atMinute("2026-01-05", m));
   const save = () => {
     // the zone only when it was chosen here: saving the hours does not send it (docs/specs/22 §1.3)
-    const undo = store.saveCompany({ ...(tz !== c.timezone ? { timezone: tz } : {}), scheduleSettings: s, businessHours: hours });
+    const undo = store.saveCompany({ ...zonePatch(tz, c.timezone), scheduleSettings: s, businessHours: hours });
     toast.show(store.online ? t("co.saved") : t("offline.queued"), undo);
     back();
   };
