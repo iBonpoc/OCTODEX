@@ -20,7 +20,7 @@ import { canPlan } from "@/features/schedule";
 import { completeBlock, jobAwaitingClose } from "@/features/jobDone";
 import { contractStatement } from "@octo/estimating-engine";
 import { RelatedBlock } from "@/features/RelatedBlock";
-import { JobLinesBlock } from "@/features/JobLinesBlock";
+import { JobLinesBlock, canEditJobLines } from "@/features/JobLinesBlock";
 import { JobTypeTags } from "@/features/JobTypeTags";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { smsWithBody } from "@/features/sms";
@@ -228,7 +228,7 @@ export default function JobScreen() {
       )}
 
       <Card>
-        <JobTypeTags job={j} canEdit={office} />
+        <JobTypeTags job={j} canEdit={canEditJobLines(store.role)} />
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="body" tone="mut">
             {t("job3.team")}
@@ -304,6 +304,8 @@ export default function JobScreen() {
           ))}
         </CardList>
       ) : null}
+      {/* the technician reads the job's own lines (what to do), changes nothing (server: app.is_staff) */}
+      <JobLinesBlock job={j} />
     </>
   );
 

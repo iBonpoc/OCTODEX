@@ -4,7 +4,7 @@
  * estimate approved later would make a second job). Owner / admin / office / sales change them; the technician only
  * reads (server: app.is_staff). A change below what is invoiced is refused here and on the server (db T69).
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
 import { dec, roundCents } from "@octo/estimating-engine";
@@ -12,7 +12,7 @@ import { useStore } from "@/data/store";
 import { uid } from "@/features/estimateDoc";
 import type { Job, JobLineItem, Role } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { caContractWarning, lineChangeRefusal, linesEditable, linesOf, nextLinePosition, totalOf, withJobLine, withJobTax, withoutJobLine, type LineRefusal } from "@/features/jobLines";
+import { caContractWarning, jobClientExempt, lineChangeRefusal, linesEditable, linesOf, nextLinePosition, percentToBps, totalOf, withJobLine, withJobTax, withoutJobLine, type LineRefusal } from "@/features/jobLines";
 import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -46,10 +46,13 @@ export function JobLinesBlock({ job }: { job: Job }) {
   const [draft, setDraft] = useState<Draft | null>(null);
   const [orig, setOrig] = useState<Draft | null>(null);
   const [rate, setRate] = useState((job.taxRateBps ?? 0) / 100 + "");
+  // a rate that came from the server (another phone, a sync) shows here too
+  useEffect(() => setRate((job.taxRateBps ?? 0) / 100 + ""), [job.taxRateBps]);
   if (job.estimateId) return null;
   const lines = linesOf(db, job.id);
   const editable = linesEditable(job) && canEditJobLines(store.role);
-  const totals = totalOf(lines, job);
+  const exempt = jobClientExempt(db, job);
+  const totals = totalOf(lines, exempt ? { taxEnabled: false, taxRateBps: 0 } : job);
   const warn = caContractWarning(db, job.id);
   const done = (msg: string, undo: () => void) => toast.show(store.online ? msg : t("offline.queued"), undo);
   const refuse = (after: typeof db): boolean => {
@@ -85,8 +88,9 @@ export function JobLinesBlock({ job }: { job: Job }) {
     setDraft(null);
   };
   const setTax = (taxEnabled: boolean, rateText = rate) => {
-    const pct = rateText.replace(/[^0-9.]/g, "");
-    const taxRateBps = pct ? Math.min(10_000, roundCents(dec(pct).mul(100))) : 0;
+    const parsed = taxEnabled ? percentToBps(rateText) : (job.taxRateBps ?? 0);
+    if (parsed === null) return toast.show(t("job5.lines.err.rate"));
+    const taxRateBps = parsed;
     if (refuse(withJobTax(db, job.id, { taxEnabled, taxRateBps }))) return;
     done(t("job5.lines.taxSaved"), store.setJobTax(job.id, { taxEnabled, taxRateBps }));
   };
@@ -117,7 +121,7 @@ export function JobLinesBlock({ job }: { job: Job }) {
             <T v="body" tone="mut">{t("job5.lines.subtotal")}</T>
             <T v="body" tabular>{money(totals.subtotal)}</T>
           </RowView>
-          {job.taxEnabled ? (
+          {job.taxEnabled && !exempt ? (
             <RowView style={{ justifyContent: "space-between" }}>
               <T v="body" tone="mut">{t("job5.lines.tax", { rate: (job.taxRateBps ?? 0) / 100 })}</T>
               <T v="body" tabular>{money(totals.tax)}</T>
@@ -131,7 +135,10 @@ export function JobLinesBlock({ job }: { job: Job }) {
       ) : (
         <T v="caption" tone="mut">{t("job5.lines.empty")}</T>
       )}
-      {editable && lines.length ? (
+      {editable && lines.length && exempt ? (
+        <T v="caption" tone="mut">{t("job5.lines.exempt")}</T>
+      ) : null}
+      {editable && lines.length && !exempt ? (
         <Card>
           <Toggle on={!!job.taxEnabled} onChange={(on) => setTax(on)} label={t("job5.lines.taxToggle")} />
           {job.taxEnabled ? (

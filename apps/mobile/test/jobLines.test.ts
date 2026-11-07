@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
-import { caContractWarning, lineChangeRefusal, linesEditable, linesOf, nextLinePosition, withJobLine, withJobTax, withoutJobLine } from "../src/features/jobLines";
+import { caContractWarning, jobClientExempt, lineChangeRefusal, lineSaveUndo, linesEditable, linesOf, nextLinePosition, percentToBps, taxBefore, withJobLine, withJobTax, withoutJobLine } from "../src/features/jobLines";
 import type { DB, JobLineItem } from "../src/data/types";
 
 const line = (x: Partial<JobLineItem> & { id: string; jobId: string }): Omit<JobLineItem, "totalCents"> => ({
@@ -67,5 +67,34 @@ describe("job lines in the app", () => {
     // no own lines (a job from an estimate, or not filled yet) — no warning
     d = withoutJobLine(d, "l1");
     expect(caContractWarning(d, "j3")).toBe(false);
+  });
+  it("an exempt client: no tax on the job, the total and the CA check use the untaxed total (server t18)", () => {
+    let d: DB = makeSeed();
+    d.customers = d.customers.map((c) => (c.id === "c3" ? { ...c, taxExempt: true } : c));
+    expect(jobClientExempt(d, d.jobs.find((j) => j.id === "j3")!)).toBe(true);
+    d = withJobLine(d, line({ id: "l1", jobId: "j3", quantity: "5", unitPriceCents: 10_000, taxable: true }));
+    d = withJobTax(d, "j3", { taxEnabled: true, taxRateBps: 1000 });
+    const j = d.jobs.find((x) => x.id === "j3")!;
+    expect(j.taxEnabled).toBe(false);
+    expect(j.amountCents).toBe(50_000);
+    // with tax it would be $550 and warned; exempt it is exactly $500.00 — not over
+    expect(caContractWarning(d, "j3")).toBe(false);
+  });
+  it("percentToBps: a typed rate, never a throw", () => {
+    expect(percentToBps("8.25")).toBe(825);
+    expect(percentToBps(" 10 %")).toBe(1000);
+    expect(percentToBps("0")).toBe(0);
+    expect(percentToBps("100")).toBe(10_000);
+    for (const bad of ["7..5", "1.2.3", "", ".", "abc", "101", "-1", "8.25.1"]) expect(percentToBps(bad)).toBeNull();
+  });
+  it("«Отменить» is a step back: a new line → remove, an edit → the old line; the tax before", () => {
+    const d0 = withJobLine(makeSeed(), line({ id: "l1", jobId: "j3", quantity: "2" }));
+    expect(lineSaveUndo(d0, { id: "l-new" })).toEqual({ k: "remove", id: "l-new" });
+    const back = lineSaveUndo(d0, { id: "l1" });
+    expect(back).toEqual({ k: "save", line: expect.objectContaining({ id: "l1", quantity: "2", unitPriceCents: 10_000 }) });
+    expect("totalCents" in (back as { line: object }).line).toBe(false);
+    const d1 = withJobTax(d0, "j3", { taxEnabled: true, taxRateBps: 825 });
+    expect(taxBefore(d0, "j3")).toEqual({ taxEnabled: false, taxRateBps: 0 });
+    expect(taxBefore(d1, "j3")).toEqual({ taxEnabled: true, taxRateBps: 825 });
   });
 });

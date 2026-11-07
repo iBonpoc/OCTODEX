@@ -4,11 +4,11 @@
  * Refused before the store: a job from an estimate (its lines are the estimate's, t20), a job that is done, and a change
  * that brings the total below what is already invoiced (engine jobLinesBelowInvoiced, db T69).
  */
-import { caWrittenContractRequired, jobLinesBelowInvoiced, jobLinesTotals } from "@octo/estimating-engine";
+import { caWrittenContractRequired, dec, jobLinesBelowInvoiced, jobLinesTotals, roundCents } from "@octo/estimating-engine";
 import type { DB, ID, Job, JobLineItem } from "@/data/types";
 import { findJob } from "@/data/jobs";
 
-type D = Pick<DB, "jobs" | "jobLines" | "invoices">;
+type D = Pick<DB, "jobs" | "jobLines" | "invoices" | "customers" | "properties">;
 
 export const linesOf = (d: Pick<DB, "jobLines">, jobId: ID): JobLineItem[] =>
   (d.jobLines ?? []).filter((l) => l.jobId === jobId).sort((a, b) => a.position - b.position);
@@ -16,6 +16,12 @@ export const linesOf = (d: Pick<DB, "jobLines">, jobId: ID): JobLineItem[] =>
 export const nextLinePosition = (d: Pick<DB, "jobLines">, jobId: ID): number => Math.max(-1, ...linesOf(d, jobId).map((l) => l.position)) + 1;
 
 const taxOf = (j: Pick<Job, "taxEnabled" | "taxRateBps">) => ({ enabled: !!j.taxEnabled, rateBps: j.taxRateBps ?? 0 });
+
+/** «Без налога» client of the job (customers.tax_exempt): the server switches the job's tax off (t18_job_money), so do we */
+export function jobClientExempt(d: Pick<DB, "customers" | "properties">, j: Pick<Job, "customerId" | "propertyId">): boolean {
+  const cid = j.customerId ?? d.properties.find((p) => p.id === j.propertyId)?.customerId;
+  return !!d.customers.find((c) => c.id === cid)?.taxExempt;
+}
 
 /** the job's total from these lines and tax (engine) */
 export function totalOf(lines: Pick<JobLineItem, "quantity" | "unitPriceCents" | "taxable">[], tax: Pick<Job, "taxEnabled" | "taxRateBps">) {
@@ -30,7 +36,7 @@ function recount(d: D, jobId: ID): D {
   const j = d.jobs.find((x) => x.id === jobId);
   if (!j || j.estimateId) return d;
   const lines = linesOf(d, jobId);
-  const t = totalOf(lines, j);
+  const t = totalOf(lines, jobClientExempt(d, j) ? { taxEnabled: false, taxRateBps: 0 } : j);
   const totals = new Map(lines.map((l, i) => [l.id, t.lineTotals[i] ?? 0]));
   return {
     ...d,
@@ -53,7 +59,33 @@ export function withoutJobLine<T extends D>(d: T, id: ID): T {
 }
 
 export function withJobTax<T extends D>(d: T, jobId: ID, tax: { taxEnabled: boolean; taxRateBps: number }): T {
-  return recount({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, ...tax } : j)) }, jobId) as T;
+  const j = d.jobs.find((x) => x.id === jobId);
+  // an exempt client never gets tax on the job (the server does the same, t18_job_money)
+  const next = j && jobClientExempt(d, j) ? { ...tax, taxEnabled: false } : tax;
+  return recount({ ...d, jobs: d.jobs.map((x) => (x.id === jobId ? { ...x, ...next } : x)) }, jobId) as T;
+}
+
+/** «Отменить» of a saved line as its own step (the save may already be on the server): a new line is removed, an
+ *  edited one goes back to how it was */
+export function lineSaveUndo(before: Pick<DB, "jobLines">, line: Pick<JobLineItem, "id">): { k: "remove"; id: ID } | { k: "save"; line: Omit<JobLineItem, "totalCents"> } {
+  const prev = (before.jobLines ?? []).find((l) => l.id === line.id);
+  if (!prev) return { k: "remove", id: line.id };
+  const { totalCents: _t, ...rest } = prev;
+  return { k: "save", line: rest };
+}
+
+/** the job's tax before a change, to put back on «Отменить» */
+export function taxBefore(before: Pick<DB, "jobs">, jobId: ID): { taxEnabled: boolean; taxRateBps: number } {
+  const j = before.jobs.find((x) => x.id === jobId);
+  return { taxEnabled: !!j?.taxEnabled, taxRateBps: j?.taxRateBps ?? 0 };
+}
+
+/** a tax rate typed as percent ("8.25") → basis points; null when it is not a number (no throw on "7..5") */
+export function percentToBps(s: string): number | null {
+  const clean = s.trim().replace(/%$/, "").trim();
+  if (!/^\d{0,3}(\.\d{0,4})?$/.test(clean) || clean === "" || clean === ".") return null;
+  const bpsVal = roundCents(dec(clean).mul(100));
+  return bpsVal >= 0 && bpsVal <= 10_000 ? bpsVal : null;
 }
 
 export type LineRefusal = "estimate" | "done" | "belowInvoiced";

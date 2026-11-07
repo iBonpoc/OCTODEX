@@ -1,5 +1,5 @@
 -- 3b-2 «Работы и выезды» (docs/specs/17-job.md §11.1): the own lines of a job (a job without an estimate) may not bring
--- its total below what is already invoiced — the balance would go negative and «Создать счёт на остаток» would not
+-- its total below what is already invoiced (sent invoices; a draft is not issued and the app does not load it) — the balance would go negative and «Создать счёт на остаток» would not
 -- catch it. A line change, a removed line or the tax switched off are refused the same way (the job total is
 -- recounted by t18_job_money before this trigger; t90_job_line_total updates the job after a line changes, so the
 -- line change rolls back with it). The app checks the same first (engine jobLinesBelowInvoiced). db T69.
@@ -11,7 +11,7 @@ declare v_invoiced bigint;
 begin
   if new.estimate_id is not null or new.contract_total_cents >= old.contract_total_cents then return new; end if;
   select coalesce(sum(i.total_cents), 0) into v_invoiced from public.invoices i
-   where i.job_id = new.id and i.company_id = new.company_id and i.status <> 'void' and i.deleted_at is null;
+   where i.job_id = new.id and i.company_id = new.company_id and i.status = 'sent' and i.deleted_at is null;
   if new.contract_total_cents < v_invoiced then
     raise exception 'the job total cannot go below what is invoiced' using errcode = 'check_violation';
   end if;

@@ -5492,8 +5492,12 @@ insert into public.job_line_items (id, company_id, job_id, position, name, quant
   ('a6900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e6900000-0000-4000-8000-000000000001', 0, 'T69 labor', 2, 20000, false),
   ('a6900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e6900000-0000-4000-8000-000000000001', 1, 'T69 part', 1, 10000, true);
 select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 51000, 'job total 40000 + 10000 + tax 1000');
+-- a draft is not issued (the app does not load it): it does not hold the total
 insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
-  ('06900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000001', 'progress', 50500);
+  ('06900000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000001', 'progress', 999999);
+select tst.ok((select status from public.invoices where id = '06900000-0000-4000-8000-000000000003') = 'draft', 'the big invoice is a draft');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
+  ('06900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000001', 'progress', 'sent', 50500);
 select tst.fails($q$update public.job_line_items set deleted_at = now() where id = 'a6900000-0000-4000-8000-000000000002'$q$, 'removing a line below what is invoiced is refused');
 select tst.fails($q$update public.job_line_items set quantity = 1 where id = 'a6900000-0000-4000-8000-000000000001'$q$, 'a smaller quantity below what is invoiced is refused');
 select tst.fails($q$update public.jobs set tax_enabled = false where id = 'e6900000-0000-4000-8000-000000000001'$q$, 'the tax switched off below what is invoiced is refused');
@@ -5514,12 +5518,17 @@ update public.job_line_items set unit_price_cents = 22500 where id = 'a6900000-0
 do $$ begin
   insert into public.jobs (id, company_id, title, customer_id, property_id, status, contract_total_cents) values
     ('e6900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T69 old', 'c6900000-0000-4000-8000-000000000001', 'd6900000-0000-4000-8000-000000000001', 'draft', 10000);
-  insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
-    ('06900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000002', 'final', 20000);
+  insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
+    ('06900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000002', 'final', 'sent', 20000);
 end $$;
 :as_office_a
 update public.jobs set title = 'T69 old renamed', description = 'still fine' where id = 'e6900000-0000-4000-8000-000000000002';
 select tst.ok((select title from public.jobs where id = 'e6900000-0000-4000-8000-000000000002') = 'T69 old renamed', 'old data over-invoiced: an edit that keeps the total passes');
+-- and its total may go up even while still below what is invoiced (10000 → 15000 < 20000): only going down is refused
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents) values
+  ('a6900000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e6900000-0000-4000-8000-000000000002', 0, 'T69 old line', 1, 15000);
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000002') = 15000, 'over-invoiced: the total goes up');
+select tst.fails($q$update public.job_line_items set unit_price_cents = 14000 where id = 'a6900000-0000-4000-8000-000000000003'$q$, 'over-invoiced: and does not go down again');
 -- a void invoice does not count
 :as_super
 update public.invoices set status = 'void', void_reason = 'T69 test', voided_at = now() where id = '06900000-0000-4000-8000-000000000001';

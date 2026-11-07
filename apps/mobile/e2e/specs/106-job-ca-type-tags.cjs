@@ -54,10 +54,27 @@ exports.run = async (h) => {
   h.expect(((await h.db()).jobs.find((j) => j.id === "j3").tagIds || []).includes("tag-vip"), "the tag is on the job");
   await h.shot("type-tags");
 
-  // the technician: reads, does not change
+  // the technician on his job without an estimate (j3, his visit v3): sees it and its lines, changes nothing
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
-  await h.go("/job/j1");
+  await h.go("/job/j3");
+  await h.expectText(/Drywall patch/, "the technician sees the job of his visit");
+  await tab("Деньги");
+  await h.expectText(/Repair/, "the technician reads the lines");
+  h.expect((await p.getByRole("button", { name: "Позиция", exact: true }).count()) === 0, "the technician has no «＋ Позиция»");
+  await p.getByText("Repair", { exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(400);
+  h.expect((await p.getByRole("button", { name: "Удалить позицию" }).count()) === 0, "a line does not open for the technician");
+  h.expect((await p.getByRole("switch", { name: "Налог с продаж" }).count()) === 0, "no tax switch for the technician");
+  await tab("Детали");
   await p.getByText("Тип работы", { exact: true }).first().click(); await p.waitForTimeout(300);
-  h.expect((await p.getByText("Гарантия", { exact: true }).count()) === 0, "the technician does not get the type sheet");
+  h.expect((await p.getByText("Обслуживание", { exact: true }).count()) === 0, "the technician does not get the type sheet");
+  await h.shot("tech");
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
+
+  // sales change lines, type and tags too (the server's is_staff, S17)
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));
+  await h.go("/job/j3");
+  await p.getByText("Тип работы", { exact: true }).first().click(); await p.waitForTimeout(400);
+  await h.sheet().getByText("Ремонт", { exact: true }).click(); await p.waitForTimeout(500);
+  h.expect((await h.db()).jobs.find((j) => j.id === "j3").jobTypeId === "jt-repair", "sales change the job type");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 };

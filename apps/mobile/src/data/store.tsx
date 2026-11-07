@@ -27,7 +27,7 @@ import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
-import { withJobLine, withJobTax, withoutJobLine } from "@/features/jobLines";
+import { lineSaveUndo, taxBefore, withJobLine, withJobTax, withoutJobLine } from "@/features/jobLines";
 import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/features/jobDone";
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { statusAfterManualWin } from "@/features/clientRows";
@@ -1195,7 +1195,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { id, undo };
       },
       completeJob: (jobId) => mutate("job.complete", (d) => withJobDone(d, jobId), { k: "job.complete", id: jobId }),
-      saveJobLine: (line, isNew) => mutate("jobLine.save", (d) => withJobLine(d, line), { k: "jobLine.save", line, isNew }),
+      saveJobLine: (line, isNew) => {
+        const back = lineSaveUndo(dbRef.current, line);
+        mutate("jobLine.save", (d) => withJobLine(d, line), { k: "jobLine.save", line, isNew });
+        // the save may already be on the server: «Отменить» is its own step back (a new line is removed, an edit undone)
+        return () =>
+          void (back.k === "remove"
+            ? mutate("jobLine.remove", (d) => withoutJobLine(d, back.id), { k: "jobLine.remove", id: back.id })
+            : mutate("jobLine.save", (d) => withJobLine(d, back.line), { k: "jobLine.save", line: back.line, isNew: false }));
+      },
       removeJobLine: (id) => {
         const line = (dbRef.current.jobLines ?? []).find((l) => l.id === id);
         if (!line) return () => {};
@@ -1203,11 +1211,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // the removal may already be on the server: «Отменить» puts the line back as its own step
         return () => void mutate("jobLine.restore", (d) => withJobLine(d, line), { k: "jobLine.restore", id });
       },
-      setJobTax: (jobId, tax) => mutate("job.update", (d) => withJobTax(d, jobId, tax), { k: "job.update", id: jobId, ...tax }),
-      setJobTags: (jobId, tagIds) =>
-        mutate("job.tags", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, tagIds } : j)) }), { k: "job.tags", id: jobId, tagIds }),
-      setJobType: (jobId, jobTypeId) =>
-        mutate("job.type", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, jobTypeId: jobTypeId ?? undefined } : j)) }), { k: "job.update", id: jobId, jobTypeId }),
+      setJobTax: (jobId, tax) => {
+        const prev = taxBefore(dbRef.current, jobId);
+        mutate("job.update", (d) => withJobTax(d, jobId, tax), { k: "job.update", id: jobId, ...tax });
+        return () => void mutate("job.update", (d) => withJobTax(d, jobId, prev), { k: "job.update", id: jobId, ...prev });
+      },
+      setJobTags: (jobId, tagIds) => {
+        const prev = dbRef.current.jobs.find((j) => j.id === jobId)?.tagIds ?? [];
+        const put = (ids: ID[]) => mutate("job.tags", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, tagIds: ids } : j)) }), { k: "job.tags", id: jobId, tagIds: ids });
+        put(tagIds);
+        return () => void put(prev);
+      },
+      setJobType: (jobId, jobTypeId) => {
+        const prev = dbRef.current.jobs.find((j) => j.id === jobId)?.jobTypeId ?? null;
+        const put = (id: ID | null) => mutate("job.type", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, jobTypeId: id ?? undefined } : j)) }), { k: "job.update", id: jobId, jobTypeId: id });
+        put(jobTypeId);
+        return () => void put(prev);
+      },
       setJobCategory: (id, serviceCategoryId) =>
         mutate("job.category", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, serviceCategoryId } : j)) }), { k: "job.category", id, serviceCategoryId: serviceCategoryId ?? null }),
       setEstimateCategory: (id, serviceCategoryId) =>
