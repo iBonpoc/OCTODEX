@@ -17,6 +17,9 @@ describe("visibleFilters", () => {
   it("a chosen filter that became empty stays visible (the person can see why the list is empty and leave it)", () => {
     expect(visibleFilters(items, "prospect").map((x) => x.key)).toEqual(["all", "owes", "prospect", "archived"]);
   });
+  it("a first chip at 0 is hidden too when it is not chosen («Ждут даты · 0» on «Работы», spec 31 §13)", () => {
+    expect(visibleFilters([{ key: "unscheduled", label: "Ждут даты", count: 0 }, { key: "scheduled", label: "Запланированы", count: 5 }], "scheduled").map((x) => x.key)).toEqual(["scheduled"]);
+  });
   it("«Все» stays even at 0 (an empty company)", () => {
     expect(visibleFilters([{ key: "all", label: "Все", count: 0 }, { key: "owes", label: "Должны", count: 0 }], "all").map((x) => x.key)).toEqual(["all"]);
   });
