@@ -25,6 +25,33 @@ export interface CompanyModule {
   rowVersion: number;
 }
 
+/** what a core screen gives a module's place: the screen's own object and who looks */
+export interface PlaceCtx {
+  role: import("@/data/types").Role;
+  leadId?: string;
+  customerId?: string;
+  propertyId?: string;
+}
+/** one action of a module in a core screen: a button (lead, property) or an item of «＋» (home) */
+export interface ModuleAction {
+  /** unique within the module; testID `module-<key>-<id>` */
+  id: string;
+  labelKey: DictKey;
+  icon: import("@/ui/primitives").IconKey;
+  href: string;
+}
+
+/** a module's change as the queue carries it (Op "module.op"): what to do and with what */
+export interface ModuleOpIn {
+  kind: string;
+  payload: Record<string, unknown>;
+}
+/** sends one module.op to the server; `run` turns a supabase result into the queue's errors (cloud/ops.ts) */
+export type ModuleOpHandler = (
+  op: ModuleOpIn,
+  ctx: { companyId: string; userId: string; run: (p: PromiseLike<{ error: { message: string; code?: string; hint?: string } | null; status?: number }>) => Promise<void> },
+) => Promise<void>;
+
 export interface ModuleDef {
   /** = company_modules.module_key: ^[a-z][a-z0-9_]{1,30}$ */
   key: string;
@@ -33,6 +60,10 @@ export interface ModuleDef {
   trialDays: number;
   /** the add-on's price a month (founder О1); payment itself is the step «Оплаты» */
   priceCentsMonthly: number;
+  /** the module's actions by place; a place with nothing for this screen / role returns [] */
+  places?: Partial<Record<ModulePlace, (ctx: PlaceCtx) => ModuleAction[]>>;
+  /** sends the module's own changes (module.op); a module without it has no changes of its own yet */
+  ops?: ModuleOpHandler;
 }
 
 /** off — not switched on; trial — in the trial; paid — paid; expired — switched on, trial over, not paid */
@@ -100,6 +131,11 @@ export const allModules = (): ModuleDef[] => [...defs.values()].sort((a, b) => a
 /** the company's usable modules */
 export const activeModules = (company: Pick<Company, "modules"> | null | undefined, now = Date.now()): ModuleDef[] =>
   allModules().filter((d) => moduleActive(company, d.key, now));
+
+/** the actions the company's usable modules add to a place (a module not active adds nothing — founder О2) */
+export function placeActions(place: ModulePlace, company: Pick<Company, "modules"> | null | undefined, ctx: PlaceCtx, now = Date.now()): (ModuleAction & { module: string })[] {
+  return activeModules(company, now).flatMap((d) => (d.places?.[place]?.(ctx) ?? []).map((a) => ({ ...a, module: d.key })));
+}
 
 type Ctx = { keys(): string[]; (id: string): { default?: ModuleDef } };
 /** registers every `<key>/module.ts` a context gives (Metro: require.context below; tests: a stand-in) */

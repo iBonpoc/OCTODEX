@@ -13,6 +13,7 @@ import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from ".
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
+import { moduleDef } from "@/modules/registry";
 
 export type Op =
   /** at: when the tech left (step en_route), phone time — visits.en_route_at (П3c) */
@@ -151,6 +152,10 @@ export type Op =
   | { k: "module.enable"; module: string }
   | { k: "module.disable"; module: string }
   | { k: "module.saveSettings"; module: string; settings: Record<string, unknown>; baseRowVersion: number }
+  /** spec 33 П15 C2c: a change of an add-on module, sent by the module's own handler (ModuleDef.ops). coalesceKey: a newer
+   *  change with the same key replaces a waiting one in the queue (a drawn line: one write per element, not per move).
+   *  made: the ids it creates — later ops that refer to them wait for it (outboxDeps). */
+  | { k: "module.op"; module: string; kind: string; payload: Record<string, unknown>; coalesceKey?: string; made?: string[] }
   | { k: "customField.save"; field: CustomField; isNew: boolean }
   | { k: "customFieldValue.save"; value: CustomFieldValue; isNew: boolean }
   | { k: "customFieldValue.remove"; id: string }
@@ -238,6 +243,8 @@ export class ServerError extends Error {
     message: string,
     readonly status?: number,
     readonly code?: string,
+    /** the server's hint (e.g. row_version_conflict — outboxRetry.classify reads it before the code) */
+    readonly hint?: string,
   ) {
     super(message);
   }
@@ -252,12 +259,14 @@ export async function renewSession(): Promise<void> {
   await supabase.auth?.refreshSession?.().catch(() => {});
 }
 
-async function run(p: PromiseLike<{ error: { message: string; code?: string } | null; status?: number }>) {
+async function run(p: PromiseLike<{ error: { message: string; code?: string; hint?: string } | null; status?: number }>) {
   const { error, status } = await p;
   if (!error) return;
-  const permanent = error.code ? /^(42|23|22|P0)/.test(error.code) : false;
-  if (permanent) throw new PermanentError(error.message, status, error.code);
-  throw new ServerError(error.message, status, error.code);
+  // «someone else changed it first» (40001 + hint row_version_conflict, module_save_settings): a retry never helps —
+  // the server's «no», the queue drops it and reads the truth (spec 33 П15.3); a plain 40001 is a serialization retry
+  const permanent = error.code ? /^(42|23|22|P0)/.test(error.code) || error.hint === "row_version_conflict" : false;
+  if (permanent) throw new PermanentError(error.message, status, error.code, error.hint);
+  throw new ServerError(error.message, status, error.code, error.hint);
 }
 
 /**
@@ -551,6 +560,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.rpc("module_enable", { p_company_id: c, p_module_key: op.module }));
     case "module.disable":
       return run(supabase.rpc("module_disable", { p_company_id: c, p_module_key: op.module }));
+    case "module.op": {
+      const handler = moduleDef(op.module)?.ops;
+      // an app without the module (an older version, a module removed): the server would get nothing it knows — a try
+      if (!handler) throw new PermanentError(`no handler for ${op.module}.${op.kind}`, 400, "22023");
+      return handler({ kind: op.kind, payload: op.payload }, { companyId: c, userId, run });
+    }
     case "module.saveSettings":
       return run(supabase.rpc("module_save_settings", { p_company_id: c, p_module_key: op.module, p_settings: op.settings, p_base_row_version: op.baseRowVersion }));
     case "calendarEvent.remove":

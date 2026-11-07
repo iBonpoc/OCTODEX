@@ -70,6 +70,7 @@ describe("breadcrumbs: Home › … › Parent (founder, 05.11.2026)", () => {
     expect(navContext("/company/address", {}, db, "director")).toMatchObject({ kind: "co.step.address", up: { href: "/company" } });
     expect(navContext("/company/profile", {}, db, "director").kind).toBe("co.step.profile");
     expect(navContext("/company/schedule", {}, db, "director").kind).toBe("schs.title");
+    expect(navContext("/company/modules", {}, db, "director")).toMatchObject({ kind: "mod.title", up: { href: "/company" } }); // spec 33 П15 C2b
     expect(hrefs("/company/address")).toEqual(["/today", "/company"]);
   });
   it("phone folds a long trail into Home › … › Parent", () => {

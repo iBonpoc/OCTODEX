@@ -51,6 +51,7 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, moduleActive, moduleDef } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
+import { coalesceAt, coalesced } from "./outboxCoalesce";
 import {
   type CalendarEvent,
   type MemberPrefs,
@@ -219,6 +220,10 @@ interface StoreCtx {
   disableModule: (key: string) => Undo;
   /** the module's settings; null = not saved: the module is not active (trial over, not paid — founder О2) */
   saveModuleSettings: (key: string, settings: Record<string, unknown>) => Undo | null;
+  /** spec 33 П15 C2c: a change of an add-on module — `apply` shows it on the phone at once, the module's handler sends it
+   *  (offline — the queue). A newer change with the same coalesceKey replaces a waiting one. null = not saved: the module
+   *  is not active (trial over, not paid — founder О2) */
+  moduleOp: (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: DB) => DB; coalesceKey?: string; made?: string[] }) => Undo | null;
   /** wave 7б-2: my consent to share my location (on — only after the notice, online); off forgets my points here.
    *  Changes only the consent: «Отменить» never takes back anything else (features/locationConsent.ts) */
   setLocationConsent: (on: boolean) => ConsentChange;
@@ -733,14 +738,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       setDb(next);
       let qid: string | null = null;
       let oid: string | null = null;
+      /** a waiting op this one replaced (module.op coalesceKey): «Отменить» puts it back in its place */
+      let replaced: OwnedItem | null = null;
       if (modeRef.current === "cloud" && op) {
         oid = uid();
         // an upsert that cannot tell «new» by itself: what it makes is what was not on the phone before (outboxDeps)
         const made = madeOnQueue(op, prev);
-        outboxRef.current = [
-          ...outboxRef.current,
-          { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}), ...(made ? { made } : {}) },
-        ];
+        const item: OwnedItem = { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}), ...(made ? { made } : {}) };
+        const at = coalesceAt(outboxRef.current, op, whoRef.current, inFlight.current);
+        if (at >= 0) {
+          replaced = outboxRef.current[at]!;
+          outboxRef.current = outboxRef.current.map((x, i) => (i === at ? coalesced(replaced!, item) : x));
+        } else outboxRef.current = [...outboxRef.current, item];
         setOutbox(outboxRef.current);
       } else if (!onlineRef.current) {
         qid = uid();
@@ -751,7 +760,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setDb(prev);
         if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
         if (oid) {
-          outboxRef.current = outboxRef.current.filter((x) => x.id !== oid);
+          outboxRef.current = replaced ? outboxRef.current.map((x) => (x.id === oid ? replaced! : x)) : outboxRef.current.filter((x) => x.id !== oid);
           setOutbox(outboxRef.current);
         }
       };
@@ -1169,6 +1178,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           },
           { k: "module.disable", module: key },
         ),
+      moduleOp: (module, { kind, payload, apply, coalesceKey, made }) => {
+        if (!moduleActive(dbRef.current.company, module)) return null;
+        const op: Op = { k: "module.op", module, kind, payload, ...(coalesceKey ? { coalesceKey } : {}), ...(made?.length ? { made } : {}) };
+        return mutate(`module.op`, apply, op);
+      },
       saveModuleSettings: (key, settings) => {
         const c = dbRef.current.company;
         const cur = c?.modules?.[key];

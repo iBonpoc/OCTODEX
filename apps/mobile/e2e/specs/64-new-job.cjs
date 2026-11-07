@@ -32,7 +32,7 @@ exports.run = async (h) => {
   await h.sheet().getByPlaceholder("Имя, телефон или адрес").fill(client.name);
   await h.sheet().getByRole("button", { name: client.name }).first().click();
   await p.waitForTimeout(400);
-  await p.getByPlaceholder("Например: ремонт водостока").last().fill("Downspout reattach");
+  await p.getByTestId("job-new-title").locator("visible=true").locator("input").last().fill("Downspout reattach");
   await p.getByRole("radio", { name: "Ремонт", exact: true }).last().click();
   await p.getByRole("tab", { name: "Дата и время", exact: true }).last().click();
   const dayOffset = workdayOffset(3);
@@ -65,7 +65,7 @@ exports.run = async (h) => {
   await p.getByPlaceholder("(555) 555-0100").last().fill("(555) 555-0164");
   await p.getByPlaceholder("Улица, дом, офис").last().fill("64 Birch Ln");
   await p.getByPlaceholder("Pasadena, CA 91103").last().fill("Pasadena, CA 91104");
-  await p.getByPlaceholder("Например: ремонт водостока").last().fill("Fascia patch");
+  await p.getByTestId("job-new-title").locator("visible=true").locator("input").last().fill("Fascia patch");
   // a double tap makes one client and one job
   await p.getByRole("button", { name: "Создать работу", exact: true }).last().dblclick();
   await p.waitForTimeout(700);
@@ -86,7 +86,7 @@ exports.run = async (h) => {
   await h.sheet().getByPlaceholder("Имя, телефон или адрес").fill(client.name);
   await h.sheet().getByRole("button", { name: client.name }).first().click();
   await p.waitForTimeout(400);
-  await p.getByPlaceholder("Например: ремонт водостока").last().fill("Sales job");
+  await p.getByTestId("job-new-title").locator("visible=true").locator("input").last().fill("Sales job");
   await h.click("Создать работу");
   await p.waitForTimeout(600);
   db = await h.db();

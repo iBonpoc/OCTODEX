@@ -13,7 +13,7 @@ exports.run = async (h) => {
   await p.getByPlaceholder("(555) 555-0100").last().fill("(555) 555-0121");
   await p.getByPlaceholder("Улица, дом, офис").last().fill("121 Oak Ln");
   await p.getByPlaceholder("Pasadena, CA 91103").last().fill("Pasadena, CA 91104");
-  await p.getByPlaceholder("Например: ремонт водостока").last().fill("Gate latch");
+  await p.getByTestId("job-new-title").locator("visible=true").locator("input").last().fill("Gate latch");
   // a double tap where the button is — the toast with «Отменить» shows up at once under the same finger
   await p.getByRole("button", { name: "Создать работу", exact: true }).last().dblclick();
   await p.waitForTimeout(700);

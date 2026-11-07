@@ -9,6 +9,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { fabItems, type FabCtx, type FabItem, type FabSet } from "./sections";
+import { placeActions } from "@/modules/registry";
 
 /**
  * «＋» of a screen (docs/specs/13 v2 §2.4, §2.5; 13а §9). The set comes from sections.ts (FAB_SETS) by screen and role.
@@ -25,8 +26,12 @@ export interface FabProps {
 
 /** the items this screen offers this role, with the actions the screen did not wire left out */
 export function useFabItems({ set, ctx, on }: FabProps): FabItem[] {
-  const { role } = useStore();
-  return fabItems(set, role, ctx).filter((it) => !it.act || it.act === "photo" || !!on?.[it.act]);
+  const { role, db } = useStore();
+  const core = fabItems(set, role, ctx).filter((it) => !it.act || it.act === "photo" || !!on?.[it.act]);
+  if (set !== "home") return core;
+  // the home «＋»: what the company's usable modules add («Замерить здесь», docs/specs/33 П15.2); none — as before
+  const mods = placeActions("home", db.company, { role }).map((a): FabItem => ({ id: `module.${a.module}.${a.id}`, label: a.labelKey, icon: a.icon, href: a.href }));
+  return [...core, ...mods];
 }
 
 function useRun({ ctx, on }: Pick<FabProps, "ctx" | "on">) {

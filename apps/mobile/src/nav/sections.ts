@@ -158,7 +158,8 @@ export interface FabCtx {
 }
 export type FabId = "lead" | "client" | "job" | "estimate" | "expense" | "visit" | "planAdd" | "planEvent" | "planTimeOff" | "photo" | "task" | "call" | "message";
 export interface FabItem {
-  id: FabId;
+  /** `module.<key>.<id>` — an item an add-on module adds to «＋» (modules/registry.ts, place "home") */
+  id: FabId | `module.${string}`;
   label: DictKey;
   icon: IconKey;
   /** a screen to open; undefined = an action the screen or the «＋» itself does (`act`) */
