@@ -5,7 +5,8 @@ import { useAuth } from "@/cloud/auth";
 import type { Role } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { roleHome } from "@/nav/roles";
-import { Button, Segmented } from "@/ui/controls";
+import { goTo } from "@/nav/go";
+import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
@@ -18,9 +19,11 @@ export default function Profile() {
   const { t } = useI18n();
   const { role, setRole, mode, companyName, availableRoles, queue, syncError, refresh, loading } = useStore();
   const auth = useAuth();
+  // the profile sits above the tabs: go DOWN to the new role's home (dismissTo), navigate would leave this card on top
+  // (lesson of #274; goTo = dismissTo when it can, else replace)
   const changeRole = (r: Role) => {
     setRole(r);
-    router.navigate(`/${roleHome[r]}`);
+    goTo(`/${roleHome[r]}`);
   };
   return (
     <Screen title={t("fix.settings.profile")}>
@@ -34,9 +37,12 @@ export default function Profile() {
             <T v="caption" tone="mut">
               {auth.email}
             </T>
-            <T v="caption" tone={syncError ? "bad" : queue.length ? "warn" : "ok"}>
-              {syncError ? t("account.error", { msg: syncError }) : queue.length ? t("account.pending", { n: queue.length }) : t("account.synced")}
-            </T>
+            {/* a status is an icon + a word (rule 2), not coloured text alone (review #289) */}
+            <StatusChip
+              status={syncError ? "bad" : queue.length ? "warn" : "ok"}
+              label={syncError ? t("account.error", { msg: syncError }) : queue.length ? t("account.pending", { n: queue.length }) : t("account.synced")}
+              soft
+            />
             <RowView style={{ flexWrap: "wrap" }}>
               <Button label={t("account.refresh")} icon="sync" variant="secondary" disabled={loading} onPress={refresh} />
               <Button label={t("account.signOut")} variant="ghost" onPress={auth.signOut} />
