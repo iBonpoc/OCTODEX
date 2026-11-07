@@ -1,0 +1,82 @@
+const { addDays, atMinute, todayKey, weekday } = require("../companyTime.cjs");
+/**
+ * 6-3 (17-job §12.2) and 24 §B: «Неделя» and «Месяц» count what the Feed shows — a task with a time, an event, a day off,
+ * not only visits — with the same «Показывать выполненные». The Week has a strip of 7 days (the Month's cell); a picked
+ * person's day off is the word «выходной»; the picked day is not yellow (one yellow per screen). Counts are compared
+ * before and after our own rows, so the demo's own plan does not matter.
+ */
+const { expectOneAccent } = require("../accent.cjs");
+const ACC = "rgb(251, 255, 0)";
+
+exports.run = async (h) => {
+  const p = h.page;
+  const today = todayKey();
+  // a day of this week other than today (the week runs Monday–Sunday: on a Sunday take Saturday)
+  const tomorrow = weekday(today) === 0 ? addDays(today, -1) : addDays(today, 1);
+  await h.go("/today");
+  await p.evaluate(() => {
+    localStorage.setItem("octo.planMode.v1", JSON.stringify("week"));
+    localStorage.setItem("octo.planWho.v1", JSON.stringify("all"));
+  });
+  const countOf = async (k) => {
+    const cell = p.getByRole("button", { name: new RegExp(`^${k}: \\d+$`) }).locator("visible=true").first();
+    const name = await cell.getAttribute("aria-label");
+    return Number(String(name).split(": ")[1]);
+  };
+  await h.go("/plan");
+  await p.waitForTimeout(300);
+  h.expect((await p.getByTestId("plan-week-strip").locator("visible=true").count()) === 1, "the Week has a strip of 7 days");
+  const n0 = await countOf(today);
+
+  // our rows: a task at 10, an event at 12, our own done visit today; Ivan is off the next day of the week
+  await p.evaluate(([today0, at10, at1030, at12, at13, tm0, tm1]) => {
+    const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+    const prop = raw.db.properties[0];
+    raw.db.tasks = [...(raw.db.tasks || []), { id: "t109", subjectType: "job", subjectId: "j1", title: "T109 order gutters", startsAt: at10, endsAt: at1030, assigneeId: raw.db.me }];
+    raw.db.calendarEvents = [...(raw.db.calendarEvents || []),
+      { id: "ev109", kind: "event", title: "T109 safety meeting", startsAt: at12, endsAt: at13, allDay: false },
+      { id: "off109", kind: "time_off", userId: "m-ivan", title: "", startsAt: tm0, endsAt: tm1, allDay: true }];
+    raw.db.visits = [...raw.db.visits, { id: "v109", propertyId: prop.id, kind: "inspection", techId: raw.db.me, assigneeIds: [raw.db.me], start: at10, durationMin: 30, step: "done", closed: true, scope: [], checklist: [], photos: [], amountDueCents: 0 }];
+    localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+  }, [today, atMinute(today, 10 * 60), atMinute(today, 10 * 60 + 30), atMinute(today, 12 * 60), atMinute(today, 13 * 60), atMinute(tomorrow, 0), atMinute(addDays(tomorrow, 1), 0)]);
+  await h.go("/plan");
+  await p.waitForTimeout(300);
+  h.expect(!(await p.getByRole("radio", { name: "Показывать выполненные", checked: true }).count()), "«Показывать выполненные» is off");
+  const n1 = await countOf(today);
+  h.expect(n1 === n0 + 2, `the Week counts the task and the event, not the done visit (${n0} → ${n1})`);
+  await h.expectText(/T109 order gutters/, "the task is in the Week's day");
+  await h.expectText(/T109 safety meeting/, "the event is in the Week's day");
+  await expectOneAccent(h, "the Week");
+  await h.shot("week");
+
+  // the same switch as the Feed: done ones counted when shown
+  await h.clickText("Показывать выполненные"); await p.waitForTimeout(300);
+  h.expect((await countOf(today)) === n0 + 3, "«Показывать выполненные»: the done visit counts too");
+  await h.clickText("Скрыть выполненные"); await p.waitForTimeout(300);
+
+  // Ivan's plan: tomorrow is his day off — said in a word, no colour
+  await p.getByRole("radio", { name: "Ivan", exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(300);
+  const strip = p.getByTestId("plan-week-strip").locator("visible=true").first();
+  const tCell = strip.getByRole("button", { name: new RegExp(`^${tomorrow}: `) });
+  h.expect((await tCell.count()) === 1, "the strip has the day off");
+  h.expect(/выходной/.test(await tCell.innerText()), "Ivan's day off: «выходной» in the strip");
+  await p.getByRole("radio", { name: "Все", exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(300);
+
+  // the Month: the same count, the picked day is an ink frame, not the accent
+  await h.clickText("Месяц"); await p.waitForTimeout(300);
+  h.expect((await countOf(today)) === n1, "the Month counts the same as the Week");
+  const border = await p.getByRole("button", { name: new RegExp(`^${today}: `) }).locator("visible=true").first().evaluate((el) => {
+    const all = [el, ...el.querySelectorAll("*")];
+    return all.map((x) => getComputedStyle(x).borderTopColor);
+  });
+  h.expect(!border.includes(ACC), "the picked day is not yellow");
+  await expectOneAccent(h, "the Month");
+  await h.shot("month");
+
+  // tap a day of the strip → that Day
+  await h.clickText("Неделя"); await p.waitForTimeout(300);
+  await p.getByTestId("plan-week-strip").locator("visible=true").first().getByRole("button", { name: new RegExp(`^${today}: `) }).click();
+  await p.waitForTimeout(300);
+  h.expect((await p.getByTestId("plan-week-strip").locator("visible=true").count()) === 0, "a strip day leaves the Week");
+  h.expect((await p.getByRole("radio", { name: /^Сегодня/ }).locator("visible=true").count()) > 0, "… for the Day: its day chips");
+};

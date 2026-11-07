@@ -5,7 +5,7 @@
 import type { CalendarEvent, DB, ID, Role, Task, Visit } from "@/data/types";
 import { addDays } from "./calendar";
 import { dayKeyIn, dayNumber, getZone, minuteIn, wallToInstant, type DayKey } from "./zone";
-import { assigneesOf, isOpenVisit, type PlanWho } from "./schedule";
+import { assigneesOf, isOpenVisit, liveAssignees, type PlanWho } from "./schedule";
 
 export type PlanItemKind = "visit" | "task" | "event" | "timeOff";
 /** `at` — the sort key of the item on its day: "" when it began on an earlier day (it runs from the day's start) */
@@ -113,6 +113,44 @@ export function itemTimes(x: Pick<PlanItem, "allDay" | "at" | "start" | "end">, 
 /** the items grouped by day, every day of the list present (an empty day shows «На этот день ничего нет») */
 export function groupByDay(items: PlanItem[], days: DayKey[]): { day: DayKey; items: PlanItem[] }[] {
   return days.map((day) => ({ day, items: items.filter((x) => x.day === day) }));
+}
+
+/**
+ * A list of days where a run of empty days is one row (24 §B: «Вс, 8 – Чт, 12 нояб. · свободно»). Today is never folded
+ * into a run — it stays its own row, empty or not. «Empty» is the same as the cards: what `planItems` gave for that day
+ * after «Чей план» and «Показывать выполненные»; a day with only an event or a day off is not empty.
+ */
+export type DayRow = { kind: "day"; day: DayKey; items: PlanItem[] } | { kind: "free"; from: DayKey; to: DayKey };
+export function collapseEmpty(groups: { day: DayKey; items: PlanItem[] }[], today: DayKey): DayRow[] {
+  const out: DayRow[] = [];
+  for (const g of groups) {
+    if (g.items.length || g.day === today) {
+      out.push({ kind: "day", day: g.day, items: g.items });
+      continue;
+    }
+    const last = out[out.length - 1];
+    if (last?.kind === "free" && last.to === addDays(g.day, -1)) last.to = g.day;
+    else out.push({ kind: "free", from: g.day, to: g.day });
+  }
+  return out;
+}
+
+/**
+ * The load of a day for the Week strip and the Month cell (24 §B, 17-job §12.2): every item the Feed shows that day, the
+ * same filters. `unassigned` — an open visit nobody live is on (the only yellow); `dayOff` — the picked person (or the
+ * tech himself) has a day off that day; with «Все» one person's day off is not the day's.
+ */
+export type DayLoad = { n: number; unassigned: boolean; dayOff: boolean };
+export function dayLoads(items: PlanItem[], members: DB["members"], personal: boolean): Map<DayKey, DayLoad> {
+  const out = new Map<DayKey, DayLoad>();
+  for (const x of items) {
+    const d = out.get(x.day) ?? { n: 0, unassigned: false, dayOff: false };
+    d.n += 1;
+    if (x.kind === "visit" && !x.done && !liveAssignees(x.visit, members).length) d.unassigned = true;
+    if (x.kind === "timeOff" && personal) d.dayOff = true;
+    out.set(x.day, d);
+  }
+  return out;
 }
 
 /** the days from one company day to another, inclusive */

@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
-import { space } from "@octo/design-tokens";
+import { component, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { CalendarEvent, CalendarEventKind, ID, Task } from "@/data/types";
 import { findJob } from "@/data/jobs";
@@ -10,16 +10,19 @@ import { todayKey, type DayKey } from "@/features/calendar";
 import { lateAfterOf, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { visitStatus } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
-import { groupByDay, itemTimes, type PlanItem } from "@/features/planFeed";
+import { collapseEmpty, groupByDay, itemTimes, type DayLoad, type PlanItem } from "@/features/planFeed";
+import { overlapSigns } from "@/features/listSigns";
+import { formatDayKey, wallToInstant } from "@/features/zone";
+import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { daysSince, unassignedSoon, visitWho, waitingJobs, type PlanWho } from "@/features/schedule";
 import { memberName } from "@/features/team";
 import { VisitFormSheet } from "@/features/VisitForm";
-import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
-import { T } from "@/ui/primitives";
+import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
+import { Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { CardList, Divider, ItemCard, ListRow, SectionTitle } from "@/ui/surfaces";
+import { CardList, Divider, ItemCard, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 
 /**
  * Parts of the Plan tab for the office (docs/specs/03 §7.2, wave П3b): «Ждут даты», «Чей план», «+».
@@ -81,7 +84,7 @@ export function PlanWhoChips({ who, onChange }: { who: PlanWho; onChange: (w: Pl
 }
 
 /** «+»: what to put in the plan — an inspection at a property (the visit form) or a job from «Ждут даты» */
-export function PlanAddSheet({ visible, onClose, onEvent }: { visible: boolean; onClose: () => void; onEvent?: (kind: CalendarEventKind) => void }) {
+export function PlanAddSheet({ visible, onClose, onEvent, day: onDay }: { visible: boolean; onClose: () => void; onEvent?: (kind: CalendarEventKind) => void; day?: DayKey }) {
   const store = useStore();
   const { db } = store;
   const { t, day, time } = useI18n();
@@ -136,7 +139,7 @@ export function PlanAddSheet({ visible, onClose, onEvent }: { visible: boolean; 
           onClose={() => { setPropertyId(null); close(); }}
           title={t("vf.addInspection")}
           saveLabel={t("lead.next.book")}
-          init={{ durationMin: scheduleSettingsOf(db.company).inspectionMin, propertyId }}
+          init={{ durationMin: scheduleSettingsOf(db.company).inspectionMin, propertyId, start: onDay ? wallToInstant(onDay, 9 * 60) : undefined }}
           onSave={(v) => {
             const visitId = uid();
             const r = store.addInspection(propertyId, { ...v, visitId });
@@ -186,26 +189,103 @@ export function UnassignedSoon() {
   );
 }
 
-/** «Лента»: the days one under another, every item a card; an empty day says so */
-export function FeedView({ days, items, onEvent }: { days: DayKey[]; items: PlanItem[]; onEvent?: (e: CalendarEvent) => void }) {
+/**
+ * «Лента» and the days of the Week: the days one under another, every item a card. A run of empty days is one row
+ * («Вс, 8 – Чт, 12 нояб. · свободно», 24 §B); today stays its own row. The planner gets a quiet «＋» on a free row: the
+ * add sheet opens on its first day (not the accent: one yellow per screen — the FAB).
+ */
+export function FeedView({ days, items, onEvent, onAdd }: { days: DayKey[]; items: PlanItem[]; onEvent?: (e: CalendarEvent) => void; onAdd?: (day: DayKey) => void }) {
   const { t, dayOf } = useI18n();
+  const today = todayKey();
   return (
     <View style={{ gap: space[4] }} testID="plan-feed">
-      {groupByDay(items, days).map(({ day, items: list }) => (
-        <View key={day} style={{ gap: space[2] }}>
-          <SectionTitle title={`${day === todayKey() ? `${t("common.today")} · ` : ""}${dayOf(day)}`} />
-          {list.length ? (
-            <CardList>
-              {list.map((x) => (
-                <FeedCard key={`${x.kind}:${x.id}:${day}`} x={x} onEvent={onEvent} />
-              ))}
-            </CardList>
-          ) : (
-            <T v="caption" tone="mut">
-              {t("plan5.emptyDay")}
-            </T>
-          )}
-        </View>
+      {collapseEmpty(groupByDay(items, days), today).map((r) => {
+        if (r.kind === "day" && r.items.length)
+          return (
+            <View key={r.day} style={{ gap: space[2] }}>
+              <SectionTitle title={`${r.day === today ? `${t("common.today")} · ` : ""}${dayOf(r.day)}`} />
+              <CardList>
+                {r.items.map((x) => (
+                  <FeedCard key={`${x.kind}:${x.id}:${r.day}`} x={x} onEvent={onEvent} />
+                ))}
+              </CardList>
+            </View>
+          );
+        // a free row: a run of empty days, one empty day, or today with nothing
+        const from = r.kind === "day" ? r.day : r.from;
+        const to = r.kind === "day" ? r.day : r.to;
+        const label = from === today ? t("plan5.freeToday", { day: dayOf(from) }) : from === to ? t("plan5.freeDay", { day: dayOf(from) }) : t("plan5.freeRun", { from: dayOf(from), to: dayOf(to) });
+        return (
+          <View key={`free:${from}`} testID="plan-free">
+            <RowView style={{ justifyContent: "space-between", minHeight: component.rowCompact }}>
+              <T v="caption" tone="mut" style={{ flex: 1 }}>
+                {label}
+              </T>
+              {onAdd ? <IconButton icon="plus" label={t("plan.addTitle")} onPress={() => onAdd(from)} /> : null}
+            </RowView>
+          </View>
+        );
+      })}
+    </View>
+  );
+}
+
+/**
+ * One day of the Week strip and of the Month (24 §B): the date, the number of the Feed's items («В плане: N» to a screen
+ * reader), yellow only when an open visit has nobody on it; a day off of the picked person is the word «выходной»,
+ * no colour. The picked day is an ink frame on surf2 (not the accent); today is bold. Tap → the Day.
+ */
+export function DayCell({ day, load, selected, dim, head, onPress }: { day: DayKey; load?: DayLoad; selected: boolean; dim?: boolean; head?: string; onPress: () => void }) {
+  const { t } = useI18n();
+  const { c } = useTheme();
+  const today = day === todayKey();
+  const n = load?.n ?? 0;
+  return (
+    <Press
+      onPress={onPress}
+      visibleHeight={component.rowCompact}
+      accessibilityRole="button"
+      accessibilityLabel={`${day}: ${n}`}
+      accessibilityHint={n ? t("plan5.planned", { n }) : undefined}
+      containerStyle={{ flex: 1, minWidth: 0 }}
+      style={{
+        minHeight: component.rowCompact + space[4],
+        borderRadius: component.checkbox.radius,
+        borderWidth: selected ? component.selectedBorder : component.hairline,
+        borderColor: selected ? c.ink : c.bd,
+        backgroundColor: selected ? c.surf2 : c.in,
+        opacity: dim ? component.dimOpacity : 1,
+        alignItems: "center",
+        justifyContent: "center",
+        gap: space[1],
+      }}
+    >
+      {head ? (
+        <T v="micro" tone="mut" numberOfLines={1}>
+          {head}
+        </T>
+      ) : null}
+      <T v="caption" w={today ? "bold" : "regular"} tabular>
+        {Number(day.slice(8))}
+      </T>
+      {n ? <StatusChip status={load?.unassigned ? "warn" : "info"} label={String(n)} soft /> : null}
+      {load?.dayOff ? (
+        <T v="micro" tone="mut" numberOfLines={1}>
+          {t("plan5.dayOff")}
+        </T>
+      ) : null}
+    </Press>
+  );
+}
+
+/** The Week strip: 7 days in a row, the same cell as the Month (24 §B) */
+export function WeekStrip({ days, loads, date, onPick }: { days: DayKey[]; loads: Map<DayKey, DayLoad>; date: DayKey; onPick: (k: DayKey) => void }) {
+  const { lang } = useI18n();
+  const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
+  return (
+    <View style={{ flexDirection: "row", gap: space[1] }} testID="plan-week-strip">
+      {days.map((k) => (
+        <DayCell key={k} day={k} load={loads.get(k)} selected={k === date} head={formatDayKey(k, { weekday: "short" }, loc)} onPress={() => onPick(k)} />
       ))}
     </View>
   );
@@ -229,7 +309,7 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
         status={status}
         title={`${when} · ${client || "—"}`}
         subtitle={[until, v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job"), job?.number, property?.address, names || t("plan.unassigned")].filter(Boolean).join(" · ")}
-        right={<StatusChip status={status} label={t(st.label)} />}
+        right={<RowView>{overlapSigns(db, v).map((o) => <StatusChip key={o.key} status={o.tone} label={t(o.key, o.params)} />)}<StatusChip status={status} label={t(st.label)} /></RowView>}
         onPress={() => router.push(`/visit/${v.id}`)}
       />
     );

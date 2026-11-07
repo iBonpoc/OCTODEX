@@ -1,7 +1,7 @@
 const { addDays, atMinute, todayKey } = require("../companyTime.cjs");
 /**
  * Wave 5 «План» — Лента (docs/specs/13-app-structure.md §3.2): visits, tasks with a time, events and days off in one list
- * by the company's days; «all day» first; an empty day says «На этот день ничего нет»; done ones hidden until
+ * by the company's days; «all day» first; a run of empty days is one row «… · свободно»; done ones hidden until
  * «Показывать выполненные»; «Не назначено» (today and tomorrow) on top for the office only — the same rule as «Требует
  * внимания». A tech sees his own and the company's, not a colleague's day off. One yellow per screen (rule 2).
  */
@@ -68,7 +68,10 @@ exports.run = async (h) => {
 
   // an empty day: a week far ahead
   for (let i = 0; i < 8; i++) { await p.getByRole("button", { name: "Вперёд" }).last().click(); await p.waitForTimeout(150); }
-  await h.expectText(/На этот день ничего нет/, "an empty day says so");
+  // a run of empty days is one row (24 §B), not «На этот день ничего нет» on every day
+  await h.expectText(/ – .* · свободно/, "a run of empty days is one row «… – … · свободно»");
+  h.expect((await p.getByText("На этот день ничего нет").count()) === 0, "no «На этот день ничего нет» any more");
+  h.expect((await p.getByTestId("plan-free").locator("visible=true").count()) === 1, "a whole free week is one row");
 
   // a tech: his own and the company's; no «Не назначено», no colleague's day off
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));

@@ -1875,6 +1875,12 @@ export const en: Dict = {
   "plan5.ev.problem.long": "The text is too long",
   "plan5.addEvent": "Event",
   "plan5.addTimeOff": "Time off",
+  // «Работы» №6, 6-3 / 24 §B: Week and Month count the Feed's items; a run of empty days is one row
+  "plan5.planned": "Planned: {n}",
+  "plan5.freeRun": "{from} – {to} · free",
+  "plan5.freeDay": "{day} · free",
+  "plan5.freeToday": "Today · {day} · free",
+  "plan5.dayOff": "day off",
   /* «Каркас» №4, 7а-1: согласие, документы, помощь и поддержка (docs/specs/19 §5) */
   "legal.terms.title": "Terms of Service",
   "legal.privacy.title": "Privacy Policy",

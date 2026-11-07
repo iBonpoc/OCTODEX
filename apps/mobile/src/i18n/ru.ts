@@ -1874,6 +1874,12 @@ export const ru = {
   "plan5.ev.problem.long": "Слишком длинный текст",
   "plan5.addEvent": "Событие",
   "plan5.addTimeOff": "Выходной",
+  // «Работы» №6, 6-3 / 24 §B: Week and Month count the Feed's items; a run of empty days is one row
+  "plan5.planned": "В плане: {n}",
+  "plan5.freeRun": "{from} – {to} · свободно",
+  "plan5.freeDay": "{day} · свободно",
+  "plan5.freeToday": "Сегодня · {day} · свободно",
+  "plan5.dayOff": "выходной",
   /* «Каркас» №4, 7а-1: согласие, документы, помощь и поддержка (docs/specs/19 §5) */
   "legal.terms.title": "Условия использования",
   "legal.privacy.title": "Политика конфиденциальности",
