@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { Activity, DB } from "../src/data/types";
-import { commsLog } from "../src/features/comms/comms";
+import { commsLog, matchComms } from "../src/features/comms/comms";
 
 const base = makeSeed();
 const other = base.members.find((m) => m.id !== base.me)!.id;
@@ -53,5 +53,18 @@ describe("comms log", () => {
     };
     expect(commsLog({ ...d2, leads: notHisLead.leads }, "tech", "calls").map((c) => c.id)).toEqual(["x2", "x1", "c1"]);
     expect(commsLog(d2, "director", "calls").map((c) => c.id)).toContain("x3");
+  });
+});
+
+describe("the search of «Звонки» (spec 31, one rule)", () => {
+  const e = { who: "Lead Mitchell", person: "Sarah Mitchell", by: "Alex Petrov", note: "Wants a quote for gutters" };
+  it("who, the person, who in the team, the note; no text — every call", () => {
+    expect(matchComms(e, "")).toBe(true);
+    expect(matchComms(e, " MITCH ")).toBe(true);
+    expect(matchComms(e, "sarah")).toBe(true);
+    expect(matchComms(e, "petrov")).toBe(true);
+    expect(matchComms(e, "quote")).toBe(true);
+    expect(matchComms(e, "zzz")).toBe(false);
+    expect(matchComms({ who: "Lead" }, "note")).toBe(false);
   });
 });

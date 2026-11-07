@@ -195,3 +195,9 @@ export function callPlacesAtClient(db: DB, role: Role, customerId: string): Call
 
 /** a call can be saved: something to tie it to and an outcome (the server counts a call without one as answered) */
 export const callReady = (c: Partial<CallInput>): c is CallInput => !!c.subjectType && !!c.subjectId && !!c.outcome && CALL_OUTCOMES.includes(c.outcome);
+
+/** the search of «Звонки» (spec 31, one rule): who it was with, the person, who in the team made it, the note */
+export function matchComms(e: Pick<CommsEntry, "who" | "person" | "by" | "note">, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  return !needle || [e.who, e.person, e.by, e.note].some((x) => (x ?? "").toLowerCase().includes(needle));
+}
