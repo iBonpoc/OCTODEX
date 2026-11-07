@@ -1842,7 +1842,6 @@ export const es: Dict = {
   "lead.noServiceHint": "Este teléfono o email es de un cliente marcado «No atender»",
   // wave 5 «План» — Лента (Работы и выезды)
   "plan5.feed": "Lista",
-  "plan5.emptyDay": "No hay nada este día",
   "plan5.showDone": "Mostrar completados",
   "plan5.unassigned": "Sin asignar · {n}",
   "plan5.today": "Hoy",
@@ -1885,6 +1884,7 @@ export const es: Dict = {
   "plan5.freeA11y": "Nada programado {from} – {to}. Añadir",
   "plan5.lateEnRoute": "en camino",
   "plan5.lateNotLeft": "no ha salido",
+  "plan5.dayOffShort": "Libre",
   "plan5.dayOff": "Día libre",
   /* «Каркас» №4, 7а-1: согласие, документы, помощь и поддержка (docs/specs/19 §5) */
   "legal.terms.title": "Términos del servicio",

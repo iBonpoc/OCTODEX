@@ -3,7 +3,7 @@
  * days is one row. The company is in Los Angeles; days are its days.
  */
 import { describe, expect, it } from "vitest";
-import { collapseEmpty, dayLoads, daysFrom, groupByDay, planItems } from "../src/features/planFeed";
+import { collapseEmpty, dayLoads, daysFrom, formDayOffset, groupByDay, planItems } from "../src/features/planFeed";
 import type { CalendarEvent, DB, Visit } from "../src/data/types";
 
 const LA = "America/Los_Angeles";
@@ -44,7 +44,7 @@ describe("Week and Month count the Feed's items (17-job §12.2)", () => {
   });
   it("yellow only for an open visit nobody is on", () => {
     const loads = dayLoads(planItems(data, range, "all", "director", { tz: LA }), members, false);
-    expect([...loads].filter(([, l]) => l.unassigned).map(([k]) => k)).toEqual(["2026-11-11"]);
+    expect([...loads].filter(([, l]) => l.unassigned > 0).map(([k]) => k)).toEqual(["2026-11-11"]);
   });
   it("done visits are not counted until «Показывать выполненные» — the same switch as the Feed", () => {
     const hide = dayLoads(planItems(data, range, "all", "director", { tz: LA }), members, false);
@@ -79,5 +79,37 @@ describe("a run of empty days is one row (24 §B)", () => {
     const withEvent = planItems(db({ calendarEvents: [Ev("e", { startsAt: "2026-11-10T18:00:00.000Z", endsAt: "2026-11-10T19:00:00.000Z" })] }), { from: week[0]!, to: week[6]! }, "all", "director", { tz: LA });
     const rows = collapseEmpty(groupByDay(withEvent, week), "2026-11-01");
     expect(rows.map((r) => r.kind)).toEqual(["free", "day", "free"]);
+  });
+});
+
+describe("yellow is an open visit nobody is on (review of #267)", () => {
+  it("a done visit with nobody on it is not yellow, even with «Показывать выполненные»", () => {
+    const items = planItems(
+      db({ visits: [V("gone", { start: "2026-11-10T17:00:00.000Z", techId: null, assigneeIds: [], step: "done", closed: true })] }),
+      { from: week[0]!, to: week[6]! }, "all", "director", { tz: LA, showDone: true },
+    );
+    const l = dayLoads(items, members, false).get("2026-11-10");
+    expect(l?.n).toBe(1);
+    expect(l?.unassigned).toBe(0);
+  });
+  it("counts the open visits nobody is on", () => {
+    const items = planItems(
+      db({ visits: [V("a", { start: "2026-11-10T17:00:00.000Z", techId: null, assigneeIds: [] }), V("b", { start: "2026-11-10T19:00:00.000Z", techId: null, assigneeIds: [] })] }),
+      { from: week[0]!, to: week[6]! }, "all", "director", { tz: LA },
+    );
+    expect(dayLoads(items, members, false).get("2026-11-10")?.unassigned).toBe(2);
+  });
+});
+
+describe("the day a visit form opens on (review of #267: «＋» of a day was always 9:00)", () => {
+  it("a picked day → that day; the time is the form's own (no fixed hour in it)", () => {
+    expect(formDayOffset({ day: "2026-11-12" }, "2026-11-10", LA)).toBe(2);
+  });
+  it("a past free row («Пн – Вт» on a Wednesday) → today, never before", () => {
+    expect(formDayOffset({ day: "2026-11-09" }, "2026-11-11", LA)).toBe(0);
+  });
+  it("a start it already has wins; nothing → tomorrow", () => {
+    expect(formDayOffset({ start: "2026-11-13T18:00:00.000Z", day: "2026-11-12" }, "2026-11-10", LA)).toBe(3);
+    expect(formDayOffset({}, "2026-11-10", LA)).toBe(1);
   });
 });

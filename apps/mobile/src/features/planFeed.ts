@@ -140,17 +140,28 @@ export function collapseEmpty(groups: { day: DayKey; items: PlanItem[] }[], toda
  * same filters. `unassigned` — an open visit nobody live is on (the only yellow); `dayOff` — the picked person (or the
  * tech himself) has a day off that day; with «Все» one person's day off is not the day's.
  */
-export type DayLoad = { n: number; unassigned: boolean; dayOff: boolean };
+/** `unassigned` — how many open visits have nobody live on them (0 = no yellow) */
+export type DayLoad = { n: number; unassigned: number; dayOff: boolean };
 export function dayLoads(items: PlanItem[], members: DB["members"], personal: boolean): Map<DayKey, DayLoad> {
   const out = new Map<DayKey, DayLoad>();
   for (const x of items) {
-    const d = out.get(x.day) ?? { n: 0, unassigned: false, dayOff: false };
+    const d = out.get(x.day) ?? { n: 0, unassigned: 0, dayOff: false };
     d.n += 1;
-    if (x.kind === "visit" && !x.done && !liveAssignees(x.visit, members).length) d.unassigned = true;
+    if (x.kind === "visit" && !x.done && !liveAssignees(x.visit, members).length) d.unassigned += 1;
     if (x.kind === "timeOff" && personal) d.dayOff = true;
     out.set(x.day, d);
   }
   return out;
+}
+
+/**
+ * The day a visit form opens on (review of #267): a start it already has → that day; a day picked in the Plan («＋» of a
+ * free row, the Day) → that day; nothing → tomorrow. Never before today — a «＋» on a past free row opens today. The time
+ * is the form's own (its first free slot, never a past one), not a fixed hour. Offsets from today.
+ */
+export function formDayOffset(init: { start?: string | null; day?: DayKey }, today: DayKey, tz: string = getZone()): number {
+  const from = init.start ? dayKeyIn(init.start, tz) : init.day;
+  return from ? Math.max(0, dayNumber(from) - dayNumber(today)) : 1;
 }
 
 /** the days from one company day to another, inclusive */

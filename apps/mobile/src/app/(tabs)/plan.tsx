@@ -28,8 +28,10 @@ const FEED_DAYS = 7;
 type Mode = "feed" | "day" | "week" | "month";
 
 /**
- * Plan: Feed (wave 5, 13 §3.2: everything by days — visits, tasks with a time, events, days off), Day (by person, drag & drop between people), Week (7 days, each visit a card), Month (calendar with
- * visit counts; tap a day → Day). Arrows move by day / week / month; "Today" jumps back.
+ * Plan: Feed (wave 5, 13 §3.2: everything by days — visits, tasks with a time, events, days off), Day (by person, drag &
+ * drop between people), Week (a strip of 7 days, then the days as in the Feed), Month (6 × 7 cells). Feed, Week and Month
+ * show one thing — planItems, the same filters (17-job §12.2, 24 §B); a cell counts the day's items, yellow only for a
+ * visit nobody is on; tap a cell → Day. Arrows move by day / week / month; "Today" jumps back.
  */
 export default function Plan() {
   const { t, dayOf, lang } = useI18n();
@@ -224,7 +226,6 @@ function DayView({ date, visits, who, onAdd }: { date: DayKey; visits: Visit[]; 
   );
 }
 
-/** 7 days; each visit is a card (time · client · tech); tap the day title to open the Day view. */
 /** Month calendar: weekday header, 6 weeks × 7 days; each day is the same cell as the Week strip (24 §B). */
 function MonthView({ date, loads, openDay }: { date: DayKey; loads: Map<DayKey, DayLoad>; openDay: (k: DayKey) => void }) {
   const { lang } = useI18n();

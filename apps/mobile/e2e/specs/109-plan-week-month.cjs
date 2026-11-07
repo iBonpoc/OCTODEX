@@ -7,9 +7,14 @@ const { addDays, atMinute, minuteOf, todayKey, weekday } = require("../companyTi
  */
 const { expectOneAccent } = require("../accent.cjs");
 const ACC = "rgb(251, 255, 0)";
+// design-tokens ink: #F2F3F5 dark, #15161A light
+const INKS = ["rgb(242, 243, 245)", "rgb(21, 22, 26)"];
 
 exports.run = async (h) => {
   const p = h.page;
+  // the day cell (Week strip, Month): its screen-reader label says «В плане: N» (24 §B, review of #267)
+  const dayCell = (k) => p.getByTestId(`plan-day-${k}`).locator("visible=true").first();
+  const countOf = async (k) => Number((String(await dayCell(k).getAttribute("aria-label")).match(/В плане: (\d+)/) || [])[1]);
   const today = todayKey();
   // a day of this week other than today (the week runs Monday–Sunday: on a Sunday take Saturday)
   const tomorrow = weekday(today) === 0 ? addDays(today, -1) : addDays(today, 1);
@@ -18,11 +23,6 @@ exports.run = async (h) => {
     localStorage.setItem("octo.planMode.v1", JSON.stringify("week"));
     localStorage.setItem("octo.planWho.v1", JSON.stringify("all"));
   });
-  const countOf = async (k) => {
-    const cell = p.getByRole("button", { name: new RegExp(`^${k}: \\d+$`) }).locator("visible=true").first();
-    const name = await cell.getAttribute("aria-label");
-    return Number(String(name).split(": ")[1]);
-  };
   await h.go("/plan");
   await p.waitForTimeout(300);
   h.expect((await p.getByTestId("plan-week-strip").locator("visible=true").count()) === 1, "the Week has a strip of 7 days");
@@ -57,28 +57,46 @@ exports.run = async (h) => {
   // Ivan's plan: tomorrow is his day off — said in a word, no colour
   await p.getByRole("radio", { name: "Ivan", exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(300);
   const strip = p.getByTestId("plan-week-strip").locator("visible=true").first();
-  const tCell = strip.getByRole("button", { name: new RegExp(`^${tomorrow}: `) });
+  const tCell = strip.getByTestId(`plan-day-${tomorrow}`);
   h.expect((await tCell.count()) === 1, "the strip has the day off");
-  h.expect(/выходной/.test(await tCell.innerText()), "Ivan's day off: «выходной» in the strip");
+  h.expect(/вых\./.test(await tCell.innerText()), "Ivan's day off: «вых.» in the strip (the whole word does not fit a phone cell)");
+  await h.shot("week-dayoff");
+  h.expect(/выходной/.test(String(await tCell.getAttribute("aria-label"))), "… and the screen reader hears it");
   await p.getByRole("radio", { name: "Все", exact: true }).locator("visible=true").first().click(); await p.waitForTimeout(300);
 
   // the Month: the same count, the picked day is an ink frame, not the accent
   await h.clickText("Месяц"); await p.waitForTimeout(300);
   h.expect((await countOf(today)) === n1, "the Month counts the same as the Week");
-  const border = await p.getByRole("button", { name: new RegExp(`^${today}: `) }).locator("visible=true").first().evaluate((el) => {
+  const border = await dayCell(today).evaluate((el) => {
     const all = [el, ...el.querySelectorAll("*")];
     return all.map((x) => getComputedStyle(x).borderTopColor);
   });
   h.expect(!border.includes(ACC), "the picked day is not yellow");
+  h.expect(border.some((b) => INKS.includes(b)), "the picked day is an ink frame");
   await expectOneAccent(h, "the Month");
   await h.shot("month");
 
   // tap a day of the strip → that Day
   await h.clickText("Неделя"); await p.waitForTimeout(300);
-  await p.getByTestId("plan-week-strip").locator("visible=true").first().getByRole("button", { name: new RegExp(`^${today}: `) }).click();
+  await p.getByTestId("plan-week-strip").locator("visible=true").first().getByTestId(`plan-day-${today}`).click();
   await p.waitForTimeout(300);
   h.expect((await p.getByTestId("plan-week-strip").locator("visible=true").count()) === 0, "a strip day leaves the Week");
   h.expect((await p.getByRole("radio", { name: /^Сегодня/ }).locator("visible=true").count()) > 0, "… for the Day: its day chips");
+
+  // «＋» of a free row (review of #267: it opened the form at a fixed 9:00): the form takes its own first free time on
+  // that day — the company opens at 8:00 (demo hours), nobody is on a day 8 weeks ahead
+  await h.clickText("Неделя"); await p.waitForTimeout(300);
+  for (let i = 0; i < 8; i++) { await p.getByRole("button", { name: "Вперёд" }).last().click(); await p.waitForTimeout(150); }
+  const plus = p.getByTestId("plan-free").locator("visible=true").first().getByRole("button");
+  h.expect((await plus.count()) === 1, "a free row has its «＋»");
+  await plus.click(); await p.waitForTimeout(400);
+  await h.sheet().getByText("Осмотр — выберите объект").waitFor();
+  await h.sheet().locator('[role="button"]').filter({ hasText: /,/ }).first().click(); await p.waitForTimeout(400);
+  const form = await h.sheet().innerText();
+  h.expect(/ · 8:00 AM–8:45 AM/.test(form), "the form opens at the first free time of that day (8:00), not a fixed 9:00");
+  h.expect((await p.getByRole("button", { name: "Записать на оценку" }).locator("visible=true").last().getAttribute("aria-disabled")) !== "true", "«Записать на оценку» is on");
+  await p.keyboard.press("Escape"); await p.waitForTimeout(300);
+  await h.go("/plan"); await p.waitForTimeout(300);
 
   // 24 §B, the cut names: a late visit's chip says only «Опаздывает» (the detail is in the subtitle); a job number is the
   // last part of a subtitle (cut first). Our own late visit: 40 minutes ago, not left (skipped in the company's first hour)
@@ -95,8 +113,10 @@ exports.run = async (h) => {
     h.expect((await p.getByText("Опаздывает", { exact: true }).locator("visible=true").count()) > 0, "the chip says «Опаздывает»");
     await h.expectText(/ · не выехал · /, "the detail is in the subtitle");
   }
+  await h.clickText("Неделя"); await p.waitForTimeout(300);
   const subs = await p.getByTestId("plan-feed").locator("visible=true").first().innerText();
   const withJob = subs.split("\n").filter((l) => /JOB-\d+/.test(l));
+  h.expect(withJob.length > 0, "at least one subtitle carries a job number (the check below is not blind)");
   h.expect(withJob.every((l) => /JOB-\d+$/.test(l.trim())), "a job number ends its subtitle");
 
 };

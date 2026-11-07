@@ -12,7 +12,7 @@ import { visitStatus } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
 import { collapseEmpty, groupByDay, itemTimes, type DayLoad, type PlanItem } from "@/features/planFeed";
 import { overlapSigns } from "@/features/listSigns";
-import { formatDayKey, wallToInstant } from "@/features/zone";
+import { formatDayKey } from "@/features/zone";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
@@ -116,7 +116,7 @@ export function PlanAddSheet({ visible, onClose, onEvent, day: onDay }: { visibl
               {waiting.map(({ job }, i) => (
                 <View key={job.id}>
                   {i > 0 ? <Divider /> : null}
-                  <ListRow title={job.title} subtitle={db.customers.find((c) => c.id === db.properties.find((p) => p.id === job.propertyId)?.customerId)?.name} onPress={() => { close(); router.push(`/job/schedule?jobId=${job.id}`); }} />
+                  <ListRow title={job.title} subtitle={db.customers.find((c) => c.id === db.properties.find((p) => p.id === job.propertyId)?.customerId)?.name} onPress={() => { close(); router.push(`/job/schedule?jobId=${job.id}${onDay ? `&day=${onDay}` : ""}`); }} />
                 </View>
               ))}
             </View>
@@ -139,7 +139,7 @@ export function PlanAddSheet({ visible, onClose, onEvent, day: onDay }: { visibl
           onClose={() => { setPropertyId(null); close(); }}
           title={t("vf.addInspection")}
           saveLabel={t("lead.next.book")}
-          init={{ durationMin: scheduleSettingsOf(db.company).inspectionMin, propertyId, start: onDay ? wallToInstant(onDay, 9 * 60) : undefined }}
+          init={{ durationMin: scheduleSettingsOf(db.company).inspectionMin, propertyId, day: onDay }}
           onSave={(v) => {
             const visitId = uid();
             const r = store.addInspection(propertyId, { ...v, visitId });
@@ -246,17 +246,20 @@ function FreeRow({ label, a11y, onAdd }: { label: string; a11y: string; onAdd?: 
  * no colour. The picked day is an ink frame on surf2 (not the accent); today is bold. Tap → the Day.
  */
 export function DayCell({ day, load, selected, dim, head, onPress }: { day: DayKey; load?: DayLoad; selected: boolean; dim?: boolean; head?: string; onPress: () => void }) {
-  const { t } = useI18n();
+  const { t, dayOf } = useI18n();
   const { c } = useTheme();
   const today = day === todayKey();
   const n = load?.n ?? 0;
+  const un = load?.unassigned ?? 0;
+  // a screen reader hears the day in words, «В плане: N», «Не назначено · N», «выходной» (review of #267)
+  const said = [dayOf(day), t("plan5.planned", { n }), un ? t("plan5.unassigned", { n: un }) : null, load?.dayOff ? t("plan5.dayOff") : null].filter(Boolean).join(", ");
   return (
     <Press
       onPress={onPress}
       visibleHeight={component.rowCompact}
       accessibilityRole="button"
-      accessibilityLabel={`${day}: ${n}`}
-      accessibilityHint={n ? t("plan5.planned", { n }) : undefined}
+      accessibilityLabel={said}
+      testID={`plan-day-${day}`}
       containerStyle={{ flex: 1, minWidth: 0 }}
       style={{
         minHeight: component.rowCompact + space[4],
@@ -278,10 +281,11 @@ export function DayCell({ day, load, selected, dim, head, onPress }: { day: DayK
       <T v="caption" w={today ? "bold" : "regular"} tabular>
         {Number(day.slice(8))}
       </T>
-      {n ? <StatusChip status={load?.unassigned ? "warn" : "info"} label={String(n)} soft /> : null}
+      {n ? <StatusChip status={un ? "warn" : "info"} label={String(n)} soft /> : null}
       {load?.dayOff ? (
+        // a cell of the strip is ~46 px on a phone: the short word; the screen reader hears the whole one
         <T v="micro" tone="mut" numberOfLines={1}>
-          {t("plan5.dayOff")}
+          {t("plan5.dayOffShort")}
         </T>
       ) : null}
     </Press>
