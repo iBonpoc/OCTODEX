@@ -590,7 +590,8 @@ export interface CatalogItem {
   /** properties set by a trade module: name → text (catalog_items.attributes, docs/specs/33 П16). The core keeps no list
    *  of names or values. Absent = none (and not sent: an old server without the column is never written to) */
   attributes?: Record<string, string>;
-  /** how the supplier sells it (the supplier order, C7): "box", "coil"…, and how many units are in one */
+  /** how the supplier sells it (the supplier order, C7): "lb", "pc", "box", "bag"…; packSize = how many of `unit` are in
+   *  one purchase unit (coil: 2.6 ft a lb; downspout: 10 ft a piece; a box of 30 elbows) — docs/specs/33 П16.6 */
   purchaseUnit?: string;
   packSize?: string;
 }

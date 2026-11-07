@@ -1,6 +1,7 @@
 -- C3 (docs/specs/33-gutters-module.md П16, П17; core K1): properties of a price-list item and how it is bought.
 -- attributes: a flat map name → text, set by a trade module (profile, size, material, gauge, color… — the words live in the
--- module, never here). purchase_unit / pack_size: how the supplier sells it (the supplier order, C7).
+-- module, never here). purchase_unit / pack_size: how the supplier sells it (the supplier order, C7): pack_size = how many
+-- of the item's own unit are in one purchase unit (coil: 2.6 ft a lb; downspout: 10 ft a piece; a box of 30) — spec П16.6.
 -- Rule 16 step 1: only new columns with defaults; nothing renamed or dropped. Old phones upsert without these columns —
 -- PostgREST updates only the columns sent, so nothing they do clears them (core_rls T91).
 -- Rights do not change: members read, staff (owner, admin, office, sales) insert and update (catalog_items_* policies);
