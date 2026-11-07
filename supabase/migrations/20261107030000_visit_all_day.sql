@@ -16,7 +16,9 @@ declare tz text := 'America/Los_Angeles'; s timestamp; e timestamp;
 begin
   if not new.all_day then return new; end if;
   select coalesce(nullif(co.timezone, ''), tz) into tz from public.companies co where co.id = new.company_id;
-  tz := coalesce(tz, 'America/Los_Angeles');
+  -- a zone Postgres does not know ('Pacific Time') must not stop the save (an offline op would retry forever):
+  -- Los Angeles, as the app's validZone does
+  if tz is null or not exists (select 1 from pg_catalog.pg_timezone_names z where z.name = tz) then tz := 'America/Los_Angeles'; end if;
   if new.starts_at is null or new.ends_at is null then new.all_day := false; return new; end if;
   s := new.starts_at at time zone tz;
   e := new.ends_at at time zone tz;

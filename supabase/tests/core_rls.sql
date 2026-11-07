@@ -5543,6 +5543,12 @@ insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) 
 select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000007'), 'a Honolulu company: its own midnight');
 select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000008'), 'a Honolulu company: Los Angeles midnight is not a whole day');
 :as_super
+update public.companies set timezone = 'Pacific Time' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) values
+  ('f7000000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-20 00:00 America/Los_Angeles', '2026-12-21 00:00 America/Los_Angeles', true);
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000009'), 'a zone Postgres does not know: the save goes through, Los Angeles');
+:as_super
 update public.companies set timezone = '' where id = 'ca000000-0000-0000-0000-000000000000';
 :as_office_a
 update public.visits set all_day = true, starts_at = '2026-12-18 00:00 America/Los_Angeles', ends_at = '2026-12-19 00:00 America/Los_Angeles' where id = 'f7000000-0000-4000-8000-000000000008';

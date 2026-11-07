@@ -1,3 +1,4 @@
+import { visitWhen } from "@/features/schedule";
 import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
@@ -200,7 +201,7 @@ function ApprovedCard({ e, jobId }: { e: Estimate; jobId?: string }) {
         ) : null}
         {visits.map((v) => (
           <T key={v.id} v="body" tabular>
-            {t("ue.scheduledOn", { date: day(v.start), time: time(v.start) })}
+            {t("ue.scheduledOn", { date: day(v.start), time: visitWhen(v, time, t("plan5.allDay"), false) })}
           </T>
         ))}
         {jobId && visits.length ? (

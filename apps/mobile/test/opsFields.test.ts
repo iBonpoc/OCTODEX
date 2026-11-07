@@ -22,6 +22,8 @@ vi.mock("../src/cloud/client", () => ({
       return {
         update: (row: Record<string, unknown>) => done({ table, how: "update", row }),
         upsert: (row: Record<string, unknown>) => done({ table, how: "upsert", row }),
+        // job.schedule reads the job's status (advanceJob): already scheduled → nothing more to write
+        select: () => ({ eq: () => ({ maybeSingle: () => Promise.resolve({ data: { status: "scheduled" }, error: null }) }) }),
       };
     },
   },
@@ -156,5 +158,25 @@ describe("ops: wave П-2b time and own fields", () => {
     await applyOp({ k: "customFieldValue.save", isNew: false, value: { ...v, value: 4 } }, "co", "u");
     expect(calls[0]!.row).toEqual({ id: "v1", company_id: "co", field_id: "f1", entity_id: "j1", value: 3 });
     expect(calls[1]).toEqual({ table: "custom_field_values", how: "update", id: "v1", row: { value: 4, deleted_at: null } });
+  });
+});
+
+describe("ops: «Весь день» of a visit (3b-3, 17-job §11.1)", () => {
+  it("visit.reschedule writes all_day: true keeps the day, false takes the flag off", async () => {
+    await applyOp({ k: "visit.reschedule", visitId: "v1", start: "2026-12-01T08:00:00.000Z", durationMin: 1440, allDay: true }, "co", "u");
+    await applyOp({ k: "visit.reschedule", visitId: "v1", start: "2026-12-01T17:00:00.000Z", durationMin: 60, allDay: false }, "co", "u");
+    // an op queued by the previous version (no allDay): false — a timed move never keeps the flag
+    await applyOp({ k: "visit.reschedule", visitId: "v1", start: "2026-12-01T18:00:00.000Z", durationMin: 60 }, "co", "u");
+    expect(calls.map((c) => [c.table, c.how, c.row, c.id])).toEqual([
+      ["visits", "update", { starts_at: "2026-12-01T08:00:00.000Z", ends_at: "2026-12-02T08:00:00.000Z", all_day: true }, "v1"],
+      ["visits", "update", { starts_at: "2026-12-01T17:00:00.000Z", ends_at: "2026-12-01T18:00:00.000Z", all_day: false }, "v1"],
+      ["visits", "update", { starts_at: "2026-12-01T18:00:00.000Z", ends_at: "2026-12-01T19:00:00.000Z", all_day: false }, "v1"],
+    ]);
+  });
+  it("job.schedule inserts the visit with all_day", async () => {
+    await applyOp({ k: "job.schedule", jobId: "j-local", visitId: "v9", start: "2026-12-01T08:00:00.000Z", end: "2026-12-02T08:00:00.000Z", techId: null, scope: ["Work"], allDay: true }, "co", "u");
+    await applyOp({ k: "job.schedule", jobId: "j-local", visitId: "v10", start: "2026-12-01T17:00:00.000Z", end: "2026-12-01T18:00:00.000Z", techId: null, scope: ["Work"] }, "co", "u");
+    const visits = calls.filter((c) => c.table === "visits");
+    expect(visits.map((c) => [c.how, c.row.id, c.row.all_day])).toEqual([["upsert", "v9", true], ["upsert", "v10", false]]);
   });
 });

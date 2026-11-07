@@ -16,7 +16,7 @@ import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { enRouteSms, filterJobHistory, jobHistory, nextOpenVisit, type JobHistoryFilter } from "@/features/jobHistory";
 import { canSeeGateCode } from "@/features/properties";
-import { canPlan } from "@/features/schedule";
+import { canPlan, visitWhen } from "@/features/schedule";
 import { completeBlock, jobAwaitingClose } from "@/features/jobDone";
 import { contractStatement } from "@octo/estimating-engine";
 import { RelatedBlock } from "@/features/RelatedBlock";
@@ -219,8 +219,8 @@ export default function JobScreen() {
               <ItemCard
                 key={v.id}
                 status={vs.status}
-                title={`${day(v.start)} · ${v.allDay ? t("job5.allDayChip") : time(v.start)}`}
-                subtitle={[memberLabel(tech, t) ?? t("sch.noTech"), `${v.durationMin} ${t("sch.min")}`].join(" · ")}
+                title={`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"), false)}`}
+                subtitle={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : `${v.durationMin} ${t("sch.min")}`].filter(Boolean).join(" · ")}
                 right={<StatusChip status={vs.status} label={t(vs.label)} />}
                 onPress={() => router.push(`/visit/${v.id}`)}
               />

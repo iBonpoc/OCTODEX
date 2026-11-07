@@ -31,7 +31,7 @@ import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/featu
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
-import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
+import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
@@ -925,8 +925,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       rescheduleVisit: (id, start, durationMin, allDay) => {
         const v = dbRef.current.visits.find((x) => x.id === id);
         if (!v || !canReschedule(v) || durationMin <= 0) return () => {};
-        const ad = allDay ? true : undefined;
-        return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => ({ ...x, start, durationMin, allDay: ad })), { k: "visit.reschedule", visitId: id, start, durationMin, allDay: !!allDay });
+        return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => rescheduled(x, start, durationMin, allDay)), { k: "visit.reschedule", visitId: id, start, durationMin, allDay: !!allDay });
       },
       addLead: (lead) => {
         const id = uid();

@@ -15,7 +15,7 @@ import type { CancelReason, ID, Visit } from "@/data/types";
 import { CANCEL_REASONS } from "@/data/types";
 import { tFor } from "@/i18n/translate";
 import { useI18n, type DictKey } from "@/i18n";
-import { assigneesOf, atMinute, canPlan, wholeDay, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, quickStarts, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { assigneesOf, atMinute, canPlan, visitWhen, wholeDay, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, quickStarts, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { arrivalWindow, businessHoursOf, clientDate, companyTime, companyTz, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { AssignSheet } from "@/features/sheets";
 import { DatePick, dayOffsetOf } from "@/features/DatePick";
@@ -104,7 +104,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
     // a day picked in «Другая дата» beyond the chips gets its own chip, so the choice is visible
     return f.dayOffset >= SCHEDULE_DEFAULTS.formDays ? [...list, { key: String(f.dayOffset), label: label(f.dayOffset) }] : list;
   }, [t, dayOf, f.dayOffset]);
-  const range = (v: Visit) => `${time(v.start)}–${time(new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString())}`;
+  const range = (v: Visit) => visitWhen(v, time, t("plan5.allDay"));
   const load = (id: ID) => {
     const vs = dayVisits(db, id, f.day, f.exceptId);
     return vs.length ? t("vf.load", { n: vs.length, ranges: vs.map(range).join(", ") }) : t("vf.free");
@@ -351,14 +351,13 @@ export function WhenWho({ visitId }: { visitId: ID }) {
   const [sheet, setSheet] = useState<"move" | "cancel" | "notify" | "assign" | null>(null);
   const v = db.visits.find((x) => x.id === visitId);
   if (!v) return null;
-  const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
   const people = assigneesOf(v);
   const who = people.length ? people.map((id) => memberName(db, id, t) ?? "").filter(Boolean).join(", ") : t("vf.dispatcherAssigns");
   const open = canReschedule(v);
   return (
     <Card>
       <T v="heading">{t("vw.title")}</T>
-      <T v="body" tabular>{`${day(v.start)} · ${time(v.start)}–${time(end)} · ${who}`}</T>
+      <T v="body" tabular>{`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"))} · ${who}`}</T>
       {v.customerNotifiedAt ? (
         <T v="caption" tone="mut">{t("vw.notified", { date: day(v.customerNotifiedAt) })}</T>
       ) : (
@@ -378,7 +377,7 @@ export function WhenWho({ visitId }: { visitId: ID }) {
           title={t("vw.reschedule")}
           saveLabel={t("vw.reschedule")}
           withNote={false}
-          init={{ durationMin: v.durationMin, techIds: people, start: v.start, exceptId: v.id, propertyId: visitPropertyId(db, v), jobId: v.jobId, allDay: v.allDay, allowAllDay: !!v.jobId }}
+          init={{ durationMin: v.durationMin, techIds: people, start: v.start, exceptId: v.id, propertyId: visitPropertyId(db, v), jobId: v.jobId, allDay: v.allDay, allowAllDay: !!v.jobId && v.kind !== "inspection" }}
           onSave={(f) => {
             const undoMove = store.rescheduleVisit(v.id, f.start, f.durationMin, f.allDay);
             const undoTech = f.assigneeIds.join() !== people.join() ? store.assignVisit(v.id, f.assigneeIds) : () => {};

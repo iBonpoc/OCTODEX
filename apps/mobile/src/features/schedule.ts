@@ -222,6 +222,23 @@ export function formHours(hours: BusinessHours, stepMin: number, day: DayKey): H
 export function atMinute(day: DayKey, minute: number, tz: string = getZone()): string {
   return wallToInstant(day, minute, tz);
 }
+/** a visit moved (S9a, «Перенести»): the new start and length; «Весь день» only when asked — a move to a time drops it */
+export function rescheduled<V extends Pick<Visit, "start" | "durationMin" | "allDay">>(v: V, start: string, durationMin: number, allDay?: boolean): V {
+  return { ...v, start, durationMin, allDay: allDay ? true : undefined };
+}
+
+/** the end of a visit (start + length) */
+export const visitEnd = (v: Pick<Visit, "start" | "durationMin">): string => new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
+
+/**
+ * How a visit's time reads everywhere (17-job §11.1): «Весь день» for an all-day visit — never «12:00 AM – 12:00 AM»;
+ * otherwise «9:00 AM – 11:00 AM» (range) or «9:00 AM» (start only). `time` is the screen's formatter.
+ */
+export function visitWhen(v: Pick<Visit, "start" | "durationMin" | "allDay">, time: (iso: string) => string, allDayLabel: string, range = true): string {
+  if (v.allDay) return allDayLabel;
+  return range ? `${time(v.start)} – ${time(visitEnd(v))}` : time(v.start);
+}
+
 /** «Весь день» (17-job §11.1): the company's day from its midnight to the next one — 23 or 25 hours on a DST day, so the
  *  server keeps the flag (t03_visit_all_day) */
 export function wholeDay(day: string): { start: string; durationMin: number } {
