@@ -1,3 +1,4 @@
+const { planShowDone } = require("../planFilters.cjs");
 const { addDays, atMinute, todayKey } = require("../companyTime.cjs");
 /**
  * The coloured edge of a list card only for warn / bad (docs/specs/06-list-cards.md §7.3, step 10а PR A), every view
@@ -32,7 +33,7 @@ exports.run = async (h) => {
   await h.go("/plan");
   const feed = p.getByTestId("plan-feed").last();
   await feed.waitFor();
-  await p.getByRole("radio", { name: "Показывать выполненные", exact: true }).last().click(); await p.waitForTimeout(400);
+  await planShowDone(p, true);
 
   // the card of a title: the nearest ancestor that has the edge strip, or the card frame (rounded, bordered) if none.
   // The edge is an absolute 3-px strip on the card's left side (component.statusEdge, Card in ui/surfaces.tsx).

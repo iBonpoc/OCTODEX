@@ -6,6 +6,7 @@ import type { CalendarEvent, DB, ID, Role, Task, Visit } from "@/data/types";
 import { addDays } from "./calendar";
 import { dayKeyIn, dayNumber, getZone, minuteIn, wallToInstant, type DayKey } from "./zone";
 import { assigneesOf, isOpenVisit, liveAssignees, type PlanWho } from "./schedule";
+import { visitContext } from "@/data/selectors";
 
 export type PlanItemKind = "visit" | "task" | "event" | "timeOff";
 /** `at` — the sort key of the item on its day: "" when it began on an earlier day (it runs from the day's start) */
@@ -202,4 +203,33 @@ export function eventRange(f: EventFields, tz: string = getZone()): { startsAt: 
   if (f.allDay) return { startsAt: wallToInstant(f.day, 0, tz), endsAt: wallToInstant(addDays(f.day, f.days), 0, tz) };
   const startsAt = wallToInstant(f.day, f.startMin, tz);
   return { startsAt, endsAt: new Date(Date.parse(startsAt) + f.duration * 60_000).toISOString() };
+}
+
+/**
+ * The search of «План» (spec 31, one rule): a visit by its client, address and work; a task and an event by their title.
+ * A day off has no words of its own — it stays only while nothing is searched.
+ */
+export function matchPlanItem(db: DB, it: PlanItem, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  const words: (string | undefined)[] =
+    it.kind === "visit"
+      ? visitWords(db, it.visit)
+      : it.kind === "task"
+        ? [it.task.title]
+        : it.kind === "event"
+          ? [it.event.title]
+          : [];
+  return words.some((x) => (x ?? "").toLowerCase().includes(needle));
+}
+
+const visitWords = (db: DB, v: Visit): (string | undefined)[] => {
+  const { job, property, customer } = visitContext(db, v);
+  return [customer?.name, property?.address, property?.city, job?.title];
+};
+
+/** the same search for a visit of the Day by person */
+export function matchVisit(db: DB, v: Visit, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  return !needle || visitWords(db, v).some((x) => (x ?? "").toLowerCase().includes(needle));
 }

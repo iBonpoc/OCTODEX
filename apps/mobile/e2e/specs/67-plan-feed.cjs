@@ -1,3 +1,4 @@
+const { planShowDone } = require("../planFilters.cjs");
 const { addDays, atMinute, todayKey } = require("../companyTime.cjs");
 /**
  * Wave 5 «План» — Лента (docs/specs/13-app-structure.md §3.2): visits, tasks with a time, events and days off in one list
@@ -57,7 +58,7 @@ exports.run = async (h) => {
   });
   await h.go("/plan"); await p.waitForTimeout(300);
   h.expect(!/T67 call the supplier/.test(await h.text()), "a done task hides (the Feed is remembered)");
-  await p.getByRole("radio", { name: "Показывать выполненные", exact: true }).last().click(); await p.waitForTimeout(400);
+  await planShowDone(p, true);
   await h.expectText(/T67 call the supplier/, "«Показывать выполненные» shows it");
   await h.expectText(/Выполнено/, "as done");
   await expectOneAccent(h, "the Plan feed with done ones shown");

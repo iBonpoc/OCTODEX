@@ -6,6 +6,7 @@ const { atMinute, todayKey } = require("../companyTime.cjs");
  * Our own done task today at noon — no reliance on the demo.
  */
 const { expectOneAccent } = require("../accent.cjs");
+const { planShowDone } = require("../planFilters.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -25,8 +26,8 @@ exports.run = async (h) => {
   // the Plan: hidden by default; «Показывать выполненные» shows it and saves the personal setting
   await h.go("/plan");
   h.expect(!/T69 order the gutters/.test(await h.text()), "a done task hides by default");
-  await chip("Показывать выполненные").click(); await p.waitForTimeout(400);
-  await h.expectText(/T69 order the gutters/, "«Показывать выполненные» shows it");
+  await planShowDone(p, true);
+  await h.expectText(/T69 order the gutters/, "«Выполненные» in «Фильтры» shows it");
   let db = await h.db();
   h.expect(db.prefs && db.prefs.planShowDone === true, `the personal setting is saved: ${JSON.stringify(db.prefs)}`);
   h.expect(await p.evaluate(() => localStorage.getItem("octo.planShowDone.v1") === null || localStorage.getItem("octo.planShowDone.v1") === "null"), "not a key of the device");
@@ -46,7 +47,7 @@ exports.run = async (h) => {
   h.expect(db.prefs.planShowDone === false, "hidden from the settings");
   await h.go("/plan");
   h.expect(!/T69 order the gutters/.test(await h.text()), "the Plan follows the settings: hidden");
-  h.expect((await frame("Скрыть выполненные")) === showFrame, "the Plan's chips show «Скрыть выполненные» chosen");
+  h.expect((await p.getByRole("button", { name: "Убрать фильтр: Выполненные" }).locator("visible=true").count()) === 0, "the Plan has no chip «Выполненные ✕»");
 
   // the device's old «show» moves into the personal setting once, then the key is cleared
   await p.evaluate(() => localStorage.setItem("octo.planShowDone.v1", "true"));
@@ -56,7 +57,8 @@ exports.run = async (h) => {
   h.expect(db.prefs.planShowDone === true, "the old device value is now the personal setting");
   await p.waitForTimeout(400);
   h.expect(await p.evaluate(() => localStorage.getItem("octo.planShowDone.v1")) === "null", "the device key is cleared after the move");
-  await chip("Скрыть выполненные").click(); await p.waitForTimeout(400);
+  h.expect((await p.getByRole("button", { name: "Убрать фильтр: Выполненные" }).locator("visible=true").count()) === 1, "the Plan says «Выполненные ✕»");
+  await planShowDone(p, false);
   await h.go("/plan");
   h.expect(!/T69 order the gutters/.test(await h.text()), "once moved, the old key does not come back");
 };
