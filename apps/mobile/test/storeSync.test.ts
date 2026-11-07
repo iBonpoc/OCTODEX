@@ -66,7 +66,7 @@ const refusal = () => Object.assign(new Error("new row violates row-level securi
 const notNow = (status: number, code = "") => Object.assign(new Error(`status ${status}`), { name: "ServerError", status, code });
 // the phone's «back in the app» (react-native's AppState does not load in node)
 const appActive = { cb: null as null | (() => void) };
-vi.mock("@/data/appActive", () => ({ onAppActive: (cb: () => void) => ((appActive.cb = cb), () => (appActive.cb = null)) }));
+vi.mock("@/data/appActive", () => ({ onAppActive: (cb: () => void) => ((appActive.cb = cb), () => (appActive.cb = null)), onAppLeave: () => () => {} }));
 vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), backoffMs: () => retry.pause }));
 // a wipe that comes while an update of the outbox is still queued (not applied yet): fired from inside adoptLegacy
 const midAdopt = { fire: null as null | (() => void) };
@@ -920,6 +920,12 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     );
     const r = await start();
     expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "E", leaving: 1, leavingKinds: [{ key: "sync.kind.estimate", n: 1 }], leavingMoney: true })]);
+  });
+  it("a change goes into the stored outbox in the same turn — not 250 ms later (rule 6: a crash right after it)", async () => {
+    const r = await start();
+    (v(r) as unknown as { saveTag: (t: object) => { id: string } }).saveTag({ name: "Now" });
+    await settle(); // no wait: the writer of the outbox is immediate
+    expect((stored() as unknown as { op: { k: string } }[]).map((x) => x.op.k)).toContain("tag.save");
   });
   it("a tag saved on the phone: queued with what it makes — a new one its id, a renamed one nothing (review #259 круг 3)", async () => {
     const r = await start();

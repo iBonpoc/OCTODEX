@@ -103,9 +103,15 @@ exports.run = async (h, { seed, admin }) => {
   h.expect((await p.getByTestId("stuck-money-q-gone").count()) > 0, "money: the «Деньги» chip in the second step");
   await h.expectText(/Это деньги: счёт, оплата, задаток или расход/, "money: the warning in words");
   await p.getByTestId("stuck-confirm-q-gone").last().getByRole("button", { name: "Да, отменить" }).click();
-  await p.waitForTimeout(700);
+  // wait for what is checked (CHECKS §9 №3): the card gone, then the stored outbox without it — not a fixed pause
+  for (let i = 0; i < 25 && (await p.getByTestId("stuck-q-gone").count()) > 0; i++) await p.waitForTimeout(200);
   h.expect((await p.getByTestId("stuck-q-gone").count()) === 0, "the discarded change is gone");
-  const left = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.outbox.v1") || "[]").map((x) => x.id));
+  const outboxIds = () => p.evaluate(() => JSON.parse(localStorage.getItem("octo.outbox.v1") || "[]").map((x) => x.id));
+  let left = await outboxIds();
+  for (let i = 0; i < 25 && left.includes("q-gone"); i++) {
+    await p.waitForTimeout(200);
+    left = await outboxIds();
+  }
   h.expect(!left.includes("q-gone") && left.includes("q-stuck"), `the discarded op left the phone, the other stays (${left})`);
 
   // the server is well again: «Повторить сейчас» sends it, the card goes
