@@ -2188,4 +2188,17 @@ export const es: Dict = {
   "fix.more.jobs": "Por programar: {n}",
   "fix.more.estimates": "Por firmar: {n}",
   "fix.more.invoices": "Vencidas: {n}",
+  // ---- push (docs/specs/27-push.md) ----
+  "push.title": "Notificaciones",
+  "push.thisPhone": "Notificaciones push en este teléfono",
+  "push.state.on": "Activadas: presupuestos firmados, pagos. Sin montos ni direcciones en el texto.",
+  "push.state.off": "Desactivadas. La campana en la app siempre funciona.",
+  "push.state.denied": "Desactivadas en los ajustes del teléfono.",
+  "push.state.signed_out": "Inicia sesión para recibir notificaciones push.",
+  "push.state.web": "Las notificaciones push llegan en la app OCTODEX del teléfono. Aquí, la campana.",
+  "push.state.expo_go": "Las notificaciones push funcionan en la app OCTODEX instalada, no en Expo Go.",
+  "push.openSettings": "Abrir ajustes del teléfono",
+  "push.turnedOn": "Notificaciones activadas",
+  "push.denied": "El teléfono no permitió las notificaciones",
+  "push.failed": "No se pudo activar. Revisa la conexión e inténtalo de nuevo",
 };
