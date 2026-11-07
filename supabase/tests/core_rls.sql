@@ -7465,7 +7465,8 @@ insert into public.memberships (company_id, user_id, role, status) values
   ('ca000000-0000-0000-0000-000000000000', 'a9200000-0000-4000-8000-000000000003', 'tech', 'active');
 insert into public.leads (id, company_id, source_id, contact_name, phone) values
   ('19200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T92 Lead', '+13235550192'),
-  ('19200000-0000-4000-8000-000000000002', 'cb000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000001', 'T92 B Lead', '+13235550193');
+  ('19200000-0000-4000-8000-000000000002', 'cb000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000001', 'T92 B Lead', '+13235550193'),
+  ('19200000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T92 Other Lead', '+13235550194');
 \set as_sales92 'reset role; set request.jwt.claim.sub = ''a9200000-0000-4000-8000-000000000001''; set role authenticated;'
 \set as_sub92   'reset role; set request.jwt.claim.sub = ''a9200000-0000-4000-8000-000000000002''; set role authenticated;'
 \set as_tech92  'reset role; set request.jwt.claim.sub = ''a9200000-0000-4000-8000-000000000003''; set role authenticated;'
@@ -7490,13 +7491,29 @@ select tst.fails($q$insert into public.gutter_measurements (company_id, status) 
 select tst.fails($q$insert into public.gutter_measurements (company_id, label) values ('ca000000-0000-0000-0000-000000000000', repeat('x', 121))$q$, 'T92 a label up to 120');
 -- a draft «measure here» without a lead or a property
 insert into public.gutter_measurements (id, company_id) values ('9e920000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000');
--- tech, sales, office: draw elements
+-- a tech sees only his own, his leads' and his visits' measurements (like leads and properties, П11)
+:as_tech92
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0,
+          'T92 a tech does not see the office''s measurements on a lead that is not his');
+select tst.blocked($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run')$q$,
+          'T92 …nor draws on them');
+insert into public.gutter_measurements (id, company_id, label) values ('9e920000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'Ted''s own');
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000003'$q$) = 1, 'T92 a tech measures on his own');
+select tst.blocked($q$insert into public.gutter_measurements (company_id, lead_id) values ('ca000000-0000-0000-0000-000000000000', '19200000-0000-4000-8000-000000000003')$q$,
+          'T92 a tech does not hang a measurement on a lead he does not see');
+select tst.blocked($q$update public.gutter_measurements set lead_id = '19200000-0000-4000-8000-000000000003' where id = '9e920000-0000-4000-8000-000000000003'$q$,
+          'T92 …nor moves his own onto it');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000003'$q$) = 0, 'T92 another tech does not see it');
+:as_super
+update public.leads set assigned_to = 'a9200000-0000-4000-8000-000000000003' where id = '19200000-0000-4000-8000-000000000001';
+-- the lead is his now: he sees the measurement on it and draws
 :as_tech92
 insert into public.gutter_measurement_elements (id, company_id, measurement_id, kind, geom, attrs) values
   ('9e920000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run',
    '{"a":[0,360],"b":[480,360]}', '{"profile":"k","size":"6","material":"aluminum","gauge":".032","story":1,"hanger":"hidden"}');
 select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 2,
-          'T92 a tech reads the company''s measurements');
+          'T92 a tech sees his own and the one on his lead, not the office''s draft');
 -- an element upsert as the queue sends it (full write of one element): the second time it updates, row_version + 1
 insert into public.gutter_measurement_elements (id, company_id, measurement_id, kind, geom, confidence) values
   ('9e920000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run', '{"a":[0,360],"b":[492,360]}', 'taped')
@@ -7551,7 +7568,8 @@ select tst.ok(not has_table_privilege('anon', 'public.gutter_measurements', 'SEL
           and not has_table_privilege('authenticated', 'public.gutter_measurement_elements', 'DELETE')
           and not has_table_privilege('authenticated', 'public.gutter_measurement_revisions', 'UPDATE')
           and not has_table_privilege('authenticated', 'public.gutter_measurement_revisions', 'DELETE')
-          and not has_function_privilege('anon', 'app.gutter_measurer(uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.gutter_sees(uuid, uuid, uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.gutter_sees_measurement(uuid)', 'EXECUTE')
           and not has_function_privilege('authenticated', 'app.tg_gutter_measurement_refs()', 'EXECUTE')
           and not has_function_privilege('authenticated', 'app.tg_gutter_revision_frozen()', 'EXECUTE'),
           'T92 rights: anon nothing; no deletes; revisions never updated; trigger functions not callable');
@@ -7581,7 +7599,7 @@ select tst.fails_like($q$update public.gutter_measurement_revisions set parts = 
 update public.company_modules set trial_ends_at = now() - interval '1 minute', paid_until = null
  where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
 :as_owner_a
-select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 2
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 3
           and tst.cnt($q$select 1 from public.gutter_measurement_elements where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$) = 3
           and tst.cnt($q$select 1 from public.gutter_measurement_revisions$q$) = 1,
           'T93 after the trial old drafts and revisions still open');
