@@ -27,6 +27,11 @@ exports.run = async (h) => {
   const app = await h.text();
   h.expect(!/Аккаунт/.test(app) && !/Моя подпись для договоров/.test(app) && (await p.getByRole("tab", { name: "Мастер", exact: true }).count()) === 0, "no account, signature or role in «Настройки приложения»");
 
+  // theme switch works from Settings
+  await p.getByRole("tab", { name: "Светлая", exact: true }).click(); await p.waitForTimeout(400);
+  h.expect((await p.evaluate(() => localStorage.getItem("octo.theme.v1"))) === '"light"', "theme saved");
+  await p.getByRole("tab", { name: "Тёмная", exact: true }).click(); await p.waitForTimeout(400);
+
   // the profile card opens «Профиль и аккаунт» — the account, my signature, the role, deleting the account
   await h.go("/more");
   await p.locator('[data-testid="more-profile"]:visible').click();
@@ -34,11 +39,6 @@ exports.run = async (h) => {
   h.expect(p.url().endsWith("/settings/profile"), `the profile card opens the profile: ${p.url()}`);
   await h.expectText(/Профиль и аккаунт[\s\S]*Аккаунт[\s\S]*Моя подпись для договоров/, "the profile: title, account, my signature");
   h.expect((await p.getByTestId("settings-delete-account").locator("visible=true").count()) === 1, "deleting the account is in the profile");
-
-  // theme switch works from Settings
-  await p.getByRole("tab", { name: "Светлая", exact: true }).click(); await p.waitForTimeout(400);
-  h.expect((await p.evaluate(() => localStorage.getItem("octo.theme.v1"))) === '"light"', "theme saved");
-  await p.getByRole("tab", { name: "Тёмная", exact: true }).click(); await p.waitForTimeout(400);
 
   // the role switch (several roles) moves to that role's home — it is in the profile now
   await h.go("/settings/profile");
