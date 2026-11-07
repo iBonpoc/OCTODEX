@@ -24,7 +24,7 @@ import { applyOp, callCols } from "../src/cloud/ops";
 import { makeSeed } from "../src/data/seed";
 import type { useStore } from "../src/data/store";
 import type { Activity, DB } from "../src/data/types";
-import { callPlaceForClient, callPlaces, callReady, commsLog, peopleOfSubject, techVisitCounts } from "../src/features/comms/comms";
+import { callPlaceForClient, callPlaces, callPlacesAtClient, callReady, commsLog, peopleOfSubject, techVisitCounts } from "../src/features/comms/comms";
 import { callNext, callOp, realPersonId } from "../src/features/comms/contactEvents";
 
 type Api = ReturnType<typeof useStore>;
@@ -100,6 +100,23 @@ describe("calls: where a role may write one (RLS activities_insert)", () => {
     expect(callPlaceForClient(w, "tech", "cx")).toEqual({ subjectType: "job", subjectId: "jx" });
     expect(callPlaceForClient(w, "tech", "cy")).toBeUndefined();
     expect(callPlaceForClient(w, "tech", "not-his")).toBeUndefined();
+  });
+  it("«Позвонить» on a client with two of his jobs: «к чему» = those jobs and his leads there, nothing else (20 §6-4)", () => {
+    const v0 = d.visits[0]!;
+    const job = (id: string, customerId: string) => ({ ...d.jobs[0]!, id, customerId, status: "scheduled" as const });
+    const visit = (id: string, jobId: string) => ({ ...v0, id, jobId, techId: "t-me", assigneeIds: ["t-me"], start: new Date(Date.now() + 86_400_000).toISOString(), closed: false });
+    const lead = (id: string, customerId: string | undefined, assigneeId: string) => ({ ...d.leads[0]!, id, name: `Lead ${id}`, customerId, assigneeId, createdBy: "office" });
+    const w: DB = {
+      ...d, me: "t-me",
+      jobs: [job("jx", "cx"), job("jy1", "cy"), job("jy2", "cy")],
+      visits: [visit("vx", "jx"), visit("vy1", "jy1"), visit("vy2", "jy2")],
+      leads: [lead("ly", "cy", "t-me"), lead("lx", "cx", "t-me"), lead("lo", "cy", "someone")],
+    };
+    const at = callPlacesAtClient(w, "tech", "cy").map((x) => `${x.subjectType}:${x.subjectId}`);
+    expect(at).toEqual(["job:jy1", "job:jy2", "lead:ly"]);
+    expect(callPlaces(w, "tech").length).toBeGreaterThan(at.length); // before: the whole list of his
+    expect(callPlacesAtClient(w, "director", "cy")).toEqual([]); // the office writes on the client itself
+    expect(callPlacesAtClient(w, "tech", "not-his")).toEqual([]);
   });
   it("the technician's window = the server's tech_visit_counts: not old, not a no-show, not a done or cancelled job", () => {
     const v0 = d.visits[0]!;

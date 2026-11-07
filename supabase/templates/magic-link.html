@@ -1,0 +1,6 @@
+<!-- LOCAL stack only (supabase start; the nightly cloud scenarios, docs/specs/21): the app signs in by the 6-digit
+     code (auth/sign-in.tsx → verifyOtp), so the local email carries {{ .Token }}. The hosted project's template is set
+     in the Supabase dashboard; release.yml runs `db push`, not `config push`, so this file never reaches it. -->
+<h2>Your OCTODEX sign-in code</h2>
+<p>Your code: <strong>{{ .Token }}</strong></p>
+<p>Or follow <a href="{{ .ConfirmationURL }}">this link</a>.</p>

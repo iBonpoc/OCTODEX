@@ -9,10 +9,11 @@
  * a spec at a risky hour, e.g. E2E_NOW=2026-11-06T08:10:00Z = 12:10 AM in Los Angeles (docs/ai/CHECKS.md §5).
  */
 const { execSync } = require("node:child_process");
-const http = require("node:http");
 const fs = require("node:fs");
 const path = require("node:path");
 const { chromium } = require("playwright");
+const { serveDist } = require("./serve.cjs");
+const { helpers } = require("./h.cjs");
 
 // E2E_NOW: the specs' clock is moved; installClock puts a browser context on the same clock
 let installClock = async () => {};
@@ -60,17 +61,9 @@ async function waitPastCompanyMidnight() {
   await new Promise((r) => setTimeout(r, Math.max(0, left) + 5000));
 }
 
-const types = { ".js": "text/javascript", ".html": "text/html", ".css": "text/css", ".png": "image/png", ".ico": "image/x-icon", ".json": "application/json", ".ttf": "font/ttf" };
-const server = http.createServer((req, res) => {
-  let p = path.join(DIST, decodeURIComponent(req.url.split("?")[0]));
-  if (!p.startsWith(DIST) || !fs.existsSync(p) || fs.statSync(p).isDirectory()) p = path.join(DIST, "index.html");
-  res.writeHead(200, { "content-type": types[path.extname(p)] || "application/octet-stream" });
-  fs.createReadStream(p).pipe(res);
-});
-
 (async () => {
-  await new Promise((r) => server.listen(0, "127.0.0.1", r));
-  const BASE = `http://127.0.0.1:${server.address().port}`;
+  const server = await serveDist(DIST);
+  const BASE = server.base;
   const browser = await chromium.launch();
   // --shard=k/n: the k-th of n equal parts of the sorted list (CI runs the parts as parallel jobs, docs/ai/CHECKS.md §1)
   const [shardK, shardN] = (opt("shard") || "1/1").split("/").map(Number);
@@ -101,7 +94,7 @@ const server = http.createServer((req, res) => {
     const page = await ctx.newPage();
     page.on("pageerror", (e) => errors.push(`pageerror: ${e.message}`));
     page.on("console", (m) => m.type() === "error" && errors.push(`console: ${m.text()}`));
-    const h = helpers(page, BASE, `${file.replace(/\.cjs$/, "")}-${layout.width}-${layout.theme}`);
+    const h = helpers(page, BASE, OUT, `${file.replace(/\.cjs$/, "")}-${layout.width}-${layout.theme}`);
     h.layout = layout;
     try {
       await spec.run(h, { browser, BASE, layout, layouts });
@@ -120,37 +113,3 @@ const server = http.createServer((req, res) => {
   console.log(failed ? `\n${failed} of ${runs} spec runs FAILED` : `\nALL ${runs} E2E SPEC RUNS PASSED (${layouts.map((l) => `${l.width} ${l.theme}`).join(", ")})`);
   process.exit(failed ? 1 : 0);
 })();
-
-function helpers(page, BASE, name) {
-  const h = {
-    page,
-    go: async (p) => { await page.goto(BASE + p); await page.waitForTimeout(1000); },
-    text: async () => (await page.locator("body").innerText()).split("\n").join(" | "),
-    expect: (cond, msg) => { if (!cond) throw new Error(`expect failed: ${msg}`); },
-    // Polls up to 3 s: a sheet or toast may still be opening after a fixed wait (02 failed once at 1280 dark on CI, 05.11).
-    expectText: async (re, msg) => {
-      let t = await h.text();
-      for (let i = 0; i < 15 && !re.test(t); i++) { await page.waitForTimeout(200); t = await h.text(); }
-      if (!re.test(t)) throw new Error(`expected ${re} (${msg || ""})\n${t.slice(0, 400)}`);
-      return t.match(re);
-    },
-    click: async (name, opts = {}) => { await page.getByRole("button", { name, exact: true, ...opts }).last().click(); await page.waitForTimeout(350); },
-    clickText: async (txt) => { await page.getByText(txt, { exact: true }).last().click(); await page.waitForTimeout(350); },
-    sheet: () => page.locator('[aria-modal="true"]').last(),
-    shot: (n) => page.screenshot({ path: path.join(OUT, `${name}-${n}.png`) }),
-    db: () => page.evaluate(() => JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db),
-    sign: async (signer) => {
-      await page.getByPlaceholder(/Ваше имя|Your name/).last().fill(signer);
-      await page.getByRole("switch", { name: /E-SIGN/ }).last().click();
-      const pad = page.getByLabel(/расписывается|signs here/i).last();
-      await pad.scrollIntoViewIfNeeded(); await page.waitForTimeout(250);
-      const bb = await pad.boundingBox();
-      await page.mouse.move(bb.x + 30, bb.y + 90); await page.mouse.down();
-      for (let i = 0; i < 20; i++) await page.mouse.move(bb.x + 30 + i * 12, bb.y + 90 - Math.sin(i / 2) * 40);
-      await page.mouse.up();
-      await page.getByRole("button", { name: /Одобрить и подписать|Approve and sign/ }).last().click();
-      await page.waitForTimeout(800);
-    },
-  };
-  return h;
-}

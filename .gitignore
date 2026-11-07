@@ -1,2 +1,8 @@
 node_modules/
 .preview-web/
+# supabase CLI (supabase start, the nightly cloud scenarios — docs/specs/21): local state, never committed
+supabase/.temp/
+supabase/.branches/
+supabase/functions/.local-ca.crt
+# the cloud scenarios build into their own folder (e2e/cloud/cloud.cjs)
+apps/mobile/dist-cloud/

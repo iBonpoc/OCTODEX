@@ -1,6 +1,6 @@
 # 21. Ночные сценарии против настоящего Supabase и контракт по живому каталогу
 
-«Каркас приложения» №6, 06.11.2026. Задача руководителя: `docs/ai/CHECKS.md` §3а «Осталось». Клетка карты: `docs/15-story-map.md` §8 (тесты), стыки S0, S22. Статус: этап 0 принят руководителем №4 (07.11); PR-1 — дамп каталога, T64, serverCatalog.
+«Каркас приложения» №6, 06.11.2026. Задача руководителя: `docs/ai/CHECKS.md` §3а «Осталось». Клетка карты: `docs/15-story-map.md` §8 (тесты), стыки S0, S22. Статус: этап 0 принят руководителем №4 (07.11). Влиты #233 (PR-1: дамп каталога, T64, serverCatalog) и #235 (PR-2: checks.yml). PR-3: seed, e2e/cloud (102, api-1, api-2, cat), `cloud.yml`.
 
 ## 1. Стыки
 - **S0** (компания → документы): сценарий «лид → смета → счёт → оплата» идёт в облачном режиме, номера `EST-/INV-/RCT-` ставит настоящий сервер.
@@ -62,12 +62,24 @@
 Ключи локального стека публичные (те же для всех, кто запускает `supabase start`), секретов в CI нет. Job ничего не пишет в боевой проект. `config.toml`: добавляются только локальные секции (`[auth] site_url`, `[edge_runtime]`). `release.yml` делает `db push`, а не `config push`, поэтому боевые настройки auth не меняются. Это проверю перед PR.
 
 ## 8. Ночной job и сигнал
+**Изменено в PR-3 (07.11):** вместо job в общем `checks.yml` — свой файл `.github/workflows/cloud.yml`. Он запускается ночью в 10:47 UTC (после `checks.yml` в 10:17), вручную и на PR, который меняет `supabase/**`, `src/cloud/**`, `e2e/cloud/**`, seed или сам файл. Причины: (1) общий файл не трогаем; (2) `workflow_dispatch` нового файла недоступен, пока его нет в main, а запуск на PR проверяет сценарии на GitHub уже в PR-3; (3) PR, меняющий сервер, сразу гоняет сценарии против настоящего Supabase (~10 мин, только такие PR). Красная ночь открывает тот же issue `nightly-red`. PR-5 в `checks.yml` больше не нужен.
+
+Было в плане:
 Job `cloud` в `checks.yml`: `if: schedule || workflow_dispatch`, `timeout-minutes: 30`. Шаги: setup-cli → `supabase start` → seed → прогрев функции (401 без JWT) → cat → api-1, api-2 → сборка `dist-cloud` → 102–104. Если упало, в артефакт идут скриншоты и `docker logs` auth/rest/edge. `nightly-alert` получает `needs: [checks, cloud]`, условие `failure()`, текст issue называет упавший job. Job `checks`: `cloud` = skipped допустимо, кроме ночного запуска.
+
+## 8а. Что выяснилось при сборке PR-3
+- **Заглушка = Supabase.** Каталог `run.sh` (голый Postgres + `auth_stub.sql`) совпал с `supabase start` один в один: 36 функций, 53 таблицы, все права. Значит, `serverCatalog` на каждом PR проверяет правду. Ночью это сверяет `catalog-diff.mjs`.
+- **Письмо с кодом.** Шаблон магической ссылки по умолчанию в CLI 3.0.0 содержит только ссылку, без кода. Приложение входит по коду (`verifyOtp`), поэтому локальный шаблон `supabase/templates/magic-link.html` с `{{ .Token }}` подключён в `config.toml`. Боевой шаблон задаётся в панели Supabase: `release.yml` делает `db push`, а не `config push`.
+- **Нет токена человека ≠ нет заголовка.** Клиент всегда шлёт `apikey` (anon-ключ — это JWT), шлюз его пропускает, а 401 даёт сама функция (в `userOf` нет пользователя). api-2 проверяет именно это.
+- **Edge runtime в песочнице чата** не скачивает `npm:` через прокси с подменой сертификата (UnknownIssuer). На GitHub такого прокси нет, поэтому api-2 проверяется прогоном `cloud.yml` на PR.
 
 ## 9. Тесты
 e2e 102, 103, 104 (cloud); api-1, api-2; cat; unit `serverCatalog.test.ts` + фикстура, которая падает; db T64. Проверка на ветке: `workflow_dispatch` по ветке. Полный ночной прогон считается зелёным после первой ночи на `main`.
 
 ## 10. PR и вопросы
+Сделано: PR-1 #233, PR-2 #235; PR-3 — seed, `e2e/serve.cjs`/`h.cjs`, `e2e/cloud/` (102, api-1, api-2, cat), `config.toml` и шаблон, `cloud.yml`; PR-4 — 103, 104. PR-5 отменён (см. §8).
+
+Было в плане:
 1. **PR-1**: `run.sh` (дамп каталога), T64, `serverCatalog.test.ts` + фикстуры. checks.yml не трогаю.
 2. **PR-2** (маленький, общий `checks.yml`): job fast — `CATALOG_OUT` + второй vitest с `CATALOG_REQUIRED=1`.
 3. **PR-3**: `scripts/cloud-seed.mjs`, `e2e/serve.cjs`/`h.cjs`, `e2e/cloud/` (102, api-1, api-2, cat), `config.toml`.
