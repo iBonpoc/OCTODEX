@@ -15,21 +15,18 @@ exports.run = async (h) => {
   await h.go("/today");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 
-  // «Мои настройки»: the row is the last one
-  await h.go("/settings");
+  // «Профиль и аккаунт» (spec 26): the row is the last one
+  await h.go("/settings/profile");
   const row = p.getByTestId("settings-delete-account").locator("visible=true").last();
   await row.waitFor({ timeout: 4000 });
   await row.scrollIntoViewIfNeeded();
-  // after «О приложении» and after the demo's «Для проверки» card: the very bottom
+  // the very bottom of the profile: after the account and «Моя подпись для договоров»
   const order = await p.evaluate(() => {
-    const vis = (sel) => [...document.querySelectorAll(sel)].filter((e) => e.offsetParent !== null).pop();
-    const row = vis('[data-testid="settings-delete-account"]');
-    const about = vis('[data-testid="settings-about"]');
-    const reset = [...document.querySelectorAll("button, [role=button]")].filter((e) => e.offsetParent !== null && /Сбросить тестовые данные/.test(e.textContent || "")).pop();
-    const after = (x) => !!x && !!(x.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING);
-    return { about: after(about), reset: after(reset) };
+    const row = [...document.querySelectorAll('[data-testid="settings-delete-account"]')].filter((e) => e.offsetParent !== null).pop();
+    const sig = [...document.querySelectorAll("button, [role=button]")].filter((e) => e.offsetParent !== null && /Моя подпись для договоров/.test(e.textContent || "")).pop();
+    return { sig: !!sig && !!(sig.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING) };
   });
-  h.expect(order.about && order.reset, `«Удалить аккаунт» is the last row of «Мои настройки» (${JSON.stringify(order)})`);
+  h.expect(order.sig, `«Удалить аккаунт» is the last row of «Профиль и аккаунт» (${JSON.stringify(order)})`);
   await h.expectText(/Удалить аккаунт/, "the row");
   await row.getByText("Удалить аккаунт").click();
   await p.waitForTimeout(600);
@@ -63,6 +60,9 @@ exports.run = async (h) => {
   await h.go("/settings");
   await p.getByRole("switch", { name: /режим без сети/i }).locator("visible=true").last().click();
   await p.waitForTimeout(300);
+  // to the profile inside the app (a page load would turn the network back on)
+  await p.evaluate(() => { window.history.pushState({}, "", "/settings/profile"); window.dispatchEvent(new PopStateEvent("popstate")); });
+  await p.waitForTimeout(700);
   const row2 = p.getByTestId("settings-delete-account").locator("visible=true").last();
   await row2.scrollIntoViewIfNeeded();
   await row2.getByText("Удалить аккаунт").click();

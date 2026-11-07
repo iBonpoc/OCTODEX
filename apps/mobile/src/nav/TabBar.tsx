@@ -11,7 +11,8 @@ import { Glass, Sheet } from "@/ui/overlays";
 import { Button } from "@/ui/controls";
 import { useNavInsets } from "@/ui/surfaces";
 import { useKeyboardHeight } from "@/ui/keyboard";
-import { formsAbove, showsTabBar } from "./tabBarRule";
+import { appStackRoutes, formsAbove, showsTabBar, tabLeave } from "./tabBarRule";
+import { setNavState } from "./go";
 import { useTabBarHidden } from "./tabBarHide";
 import { useAuth } from "@/cloud/auth";
 import { gateFreePath } from "@/features/legal";
@@ -34,6 +35,8 @@ export function TabBar() {
   const { session, legal } = useAuth();
   const { t } = useI18n();
   const root = useRootNavigationState();
+  // goTo (a plain function, no hooks) reads the stack from here: the shell always renders the bar, at every width
+  setNavState(root);
   const [ask, setAsk] = useState<Href | null>(null);
   const own = activeSection(pathname, params, store.db, store.role);
   // a section that is not a tab (Leads, Jobs… opened from «Ещё») lights «Ещё» (13 v2 §2.1, variant Б)
@@ -43,9 +46,11 @@ export function TabBar() {
   // help and the documents before the consent is given (the gate is open over them): the app is closed — no bar
   if (session && (legal === "first" || legal === "changed") && gateFreePath(pathname)) return null;
   // a tab from a card: back down to the tabs (dismissTo — navigate would push a second copy of the tabs, review #274),
-  // then the tab; on the tabs themselves — just the tab
+  // then the tab; on the tabs themselves — just the tab. «On the tabs» = the top of the stack is the tabs, not «nothing to
+  // dismiss»: after a card opened by a link ([card, (tabs)]) or the old role change ([(tabs), settings, (tabs)]) dismissTo did
+  // nothing (e2e 134)
   const leave = (href: Href) => {
-    if (router.canDismiss()) router.dismissTo(href);
+    if (tabLeave(appStackRoutes(root)) === "dismissTo") router.dismissTo(href);
     else router.navigate(href);
   };
   const go = (id: SectionId) => {
@@ -74,17 +79,6 @@ export function TabBar() {
       </Sheet>
     </>
   );
-}
-
-type NavState = { routeNames?: readonly string[]; routes?: readonly { name: string; state?: NavState }[]; index?: number } | undefined;
-/** the route names of the app's own stack (app/_layout: the one that has «(tabs)»), bottom first; expo-router wraps it
- *  in its «__root» navigator */
-function appStackRoutes(state: NavState): string[] {
-  for (let s = state, depth = 0; s && depth < 4; depth++) {
-    if (s.routeNames?.includes("(tabs)")) return (s.routes ?? []).map((r) => r.name);
-    s = s.routes?.[s.index ?? 0]?.state;
-  }
-  return [];
 }
 
 function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: (id: SectionId) => void }) {
