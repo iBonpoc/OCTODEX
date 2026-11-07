@@ -10,7 +10,7 @@
 ## 2. Что нужно, чтобы пуш пришёл (docs.expo.dev, SDK 58, проверено 07.11)
 - **В Expo Go удалённый пуш не работает** (с SDK 53). Нужна своя сборка EAS (профиль `preview`, Android — APK по ссылке). Expo Go для всего остального остаётся.
 - **Android — первым** (решение руководителя 07.11): проект Firebase (бесплатно) → `google-services.json` в `apps/mobile` и `android.googleServicesFile` в `app.json`; ключ сервисного аккаунта FCM V1 загружается в EAS (`eas credentials`), в репозиторий не попадает.
-- **iOS — позже**: Apple Developer ($99/год), регистрация iPhone (UDID) или TestFlight; ключ APNs EAS создаёт при первой сборке.
+- **iOS — позже**: Apple Developer ($99/год), регистрация iPhone (UDID) или TestFlight; ключ APNs (и сертификат, профиль, приложение в App Store Connect) — **один интерактивный запуск eas под Apple ID**, только после влития P2 (eas проверяет, установлен ли expo-notifications); кнопка `--non-interactive` их не создаёт (проверено «Выпуском iOS» по коду eas-cli 27.4.1) — см. `docs/specs/30-ios-testflight.md` §4. Дальше кнопка EAS build работает с одним EXPO_TOKEN.
 - **Безопасность Expo**: включить «enhanced push security» в expo.dev; токен доступа — секрет edge function `send-push` (Supabase), не в репозитории и не в чате.
 - **Веб/PWA**: Web Push — отдельная работа, не в этой волне. На вебе раздел «Уведомления» говорит «пуши — в приложении на телефоне».
 
@@ -59,6 +59,49 @@
 - Будит pg_cron раз в минуту (одно расписание с почтой П1b). Вызов функции из базы — HTTP, его делает только `pg_net` (решение руководителя 07.11: да, **один вызов из pg_cron, без триггеров**).
 - **Кто включает pg_net и pg_cron.** Миграция P3 (`20261107100000`): `create extension if not exists pg_net` и `pg_cron` (на Supabase оба доступны, ставятся в схему `extensions`) и `cron.schedule('send-push', '* * * * *', …)` — на прод уходит только через `release.yml`, как любая миграция; руками в панели ничего не включать. Расписание читает адрес функции и ключ из **Vault** и без них ничего не делает.
 - **Секреты в Vault кладёт оператор**, один раз, в Supabase → SQL Editor: `select vault.create_secret('<адрес send-push>', 'push_fn_url')` и `select vault.create_secret('<ключ>', 'push_fn_key')`. Значения — никогда в миграции, репозитории или чате. Токен доступа Expo — секрет функции: Supabase → Edge Functions → Secrets (`EXPO_ACCESS_TOKEN`).
+
+### 4.5 P3 подробно (этап 0, 07.11; код — после влития #272)
+**Брейншторм: кто будит отправку.** А — pg_cron раз в минуту → `net.http_post` в `send-push` (решение руководителя). Б — триггер на каждую строку через pg_net (быстрее, но HTTP внутри транзакции подписи — запрещено решением). В — GitHub Actions по расписанию (опоздания 10–30 мин). Берём А: задержка пуша ≤ 1 мин + отправка.
+
+**База (миграция `20261107100000_push_send.sql`)** — все функции `security definer`, `revoke … from public, anon, authenticated`, `grant execute … to service_role` (правило 18):
+- `public.push_claim(p_limit int default 100) returns jsonb` — атомарно (`for update skip locked`) берёт `pending` с `next_try_at <= now()`, ставит `sending`, `tries + 1`. Зависшие в `sending` дольше 10 мин возвращает в `pending`. **Заново проверяет** получателя (`app.push_recipients` по виду: активен, не удалён, не субподрядчик, роль) — нет → `skipped`, `error = 'not_member'`; живых устройств нет → `skipped`, `'no_device'`; строке больше 24 ч → `skipped`, `'expired'` (вчерашняя оплата — шум). Устройства берёт **в момент отправки**. Отдаёт `[{id, kind, route, devices: [{device_id, token, lang}]}]` — токены видит только service_role.
+- `public.push_finish(p_id, p_status, p_tickets jsonb, p_error text)` — `sent` (сохраняет тикеты), `retry` (→ `pending`, `next_try_at = now() + 2^(tries−1) мин`, после 5-й попытки → `failed`), `failed` (окончательно). Ошибка — только короткий код (`[a-z0-9_.:-]`, ≤ 64), без текста Expo.
+- `public.push_tickets` (ticket_id, outbox_id, device_id, created_at, checked_at) — квитанции; `public.push_receipts_due(n)` отдаёт тикеты старше 15 мин без проверки; `public.push_receipts_done(p_checked text[], p_gone uuid[])` отмечает проверенные и отключает устройства `DeviceNotRegistered` (`revoked_reason = 'not_registered'`). Тикеты старше 2 суток стирает `app.purge_push_outbox`.
+- `app.push_kick()` — читает из Vault `push_fn_url` и `push_fn_key`; нет секретов → ничего не делает (молча); есть → один `net.http_post` (таймаут 5 с, тело `{}`, ключ в заголовке `x-push-key`).
+- Расширения: `create extension if not exists pg_net` / `pg_cron` **только если они есть** (`pg_available_extensions`): локальная база тестов их не имеет — миграция там проходит без них. Расписания: `send-push` каждую минуту (`select app.push_kick()`), `push-purge` раз в сутки (`select app.purge_push_outbox()`). Повторный запуск миграции не создаёт второе расписание (`cron.unschedule` по имени перед `schedule`).
+
+**Edge function `supabase/functions/send-push/`** (как `delete-account`: чистый `handler.ts` + `index.ts` для Deno):
+- `verify_jwt = false`; вход только с заголовком `x-push-key`, равным секрету функции `PUSH_FN_KEY` (сравнение за постоянное время); иначе 401 без подробностей.
+- `push_claim` → тексты по `kind` и `lang` устройства (таблица в `handler.ts`, en/es/ru, **без сумм, имён и адресов**: «Estimate signed» / «Payment received» + «Open OCTODEX to see it») → `POST https://exp.host/--/api/v2/push/send` пачками ≤ 100, `Authorization: Bearer EXPO_ACCESS_TOKEN` (enhanced push security), `data: {route}`, `channelId: 'default'`, `sound: 'default'`.
+- Ответ: тикет `ok` → в `push_tickets`; `DeviceNotRegistered` → устройство отключить; 429 / 5xx / сеть → `retry`; другие ошибки пачки → `failed`. Потом проверка квитанций (`getReceipts`).
+- Логи: только счётчики (сколько взято / отправлено / повторов). Токены, тексты, ответы Expo с токенами — никогда.
+- За один вызов — не дольше 20 с; не успел — остальное в следующую минуту.
+
+**Что нужно от оператора (один раз, после влития):** секреты функции `PUSH_FN_KEY` (случайная строка) и `EXPO_ACCESS_TOKEN` (expo.dev → Access tokens, после включения enhanced push security) — Supabase → Edge Functions → Secrets; в Vault — `push_fn_url` и тот же `push_fn_key` (SQL Editor). Деплой функции — строка `supabase functions deploy send-push` в `release.yml` рядом с `delete-account` (файл руководителя — правка с его согласия в PR P3).
+
+**Заметка (руководитель, ревью #278):** ссылка тапнутого пуша, которая ждёт входа, откроется после входа **любого** человека на этом телефоне. Если вошёл другой, он увидит «не найдено» — данные не утекут, RLS не пустит. Принято; при желании позже — сбрасывать ссылку, если вошёл не тот, кому пуш (нужен `user_id` в `data`).
+
+**Тесты P3:** T82 — claim / finish / retry / предел попыток / повторная проверка получателя (отключили между очередью и отправкой → `skipped`) / нет устройств / старше 24 ч / зависшее `sending` / права только у service_role; T83 — квитанции, `DeviceNotRegistered` отключает устройство, `push_kick` без секретов молчит, расписания не дублируются (если pg_cron есть). Vitest `test/sendPushFn.test.ts` — ключ, пачки по 100, тексты на 3 языках без цифр и `$`, разбор тикетов, повторы, «нет токена в логах».
+
+### 4.6 P3 сделано (07.11, чат «Уведомления (пуш)» №2)
+Миграция `20261107100000_push_send.sql`, функция `supabase/functions/send-push/` (`handler.ts` + `index.ts`), T82–T83, `test/sendPushFn.test.ts`, шаги оператора — `docs/11-setup-guide.md` §6. Уточнения к §4.5:
+- `push_finish` возвращает новый статус (`sent` / `pending` / `failed`, пусто — строка не была в `sending`); тикеты сохраняются только для телефонов этого же человека.
+- Зависшая в `sending` строка без оставшихся попыток → `failed`, `error = 'stuck'` (а не снова в очередь).
+- Повторная проверка получателя учитывает и закрытую компанию (`app.company_closed`) → `skipped`, `'not_member'`; для видов P4 пока проверяется только «активный участник, не субподрядчик».
+- Ответ Expo, который не совпадает с пачкой по длине, — `failed`, `http_200`; `MessageRateExceeded` — повтор.
+- Квитанции старше 24 ч закрываются без запроса (Expo их уже не хранит). `push_kick` не зовёт адрес без `https://` и ключ короче 16 символов.
+- `push_tickets`: прав нет ни у кого из приложения и у `service_role` (только через функции); удаление аккаунта стирает тикеты каскадом с телефонами.
+- Повтор идёт только на телефоны, до которых пуш не дошёл (security-check #287 №3): `push_finish('retry')` сохраняет тикеты дошедших, `push_claim` их пропускает; все живые телефоны с тикетом → `sent`; кончились попытки, но хоть один дошёл → `sent` с кодом ошибки.
+- Ошибка базы на одной строке после отправки в Expo не останавливает остальные (счётчик `errors`); эта строка вернётся через 10 мин как зависшая — для неё возможен повтор (№2).
+- pg_net: после `create extension` у `anon` и `authenticated` отзываются права на функции и таблицы схемы `net` (там заголовки с `x-push-key`). Если отозвать не вышло (права выдал `supabase_admin`), миграция пишет предупреждение в журнал выпуска — тогда руководитель отзывает их в SQL Editor; PostgREST схему `net` не открывает, так что из приложения её не вызвать и тогда (№1).
+- Секреты в Vault кладутся через Dashboard → Vault, не через SQL Editor (история запросов, №5).
+
+**Принятые риски P3** (security-check #287 №6):
+- перехват токена → DoS, данные не утекают (§4.1); ссылка ждёт входа любого человека, RLS защищает (заметка §4.5);
+- ключ `x-push-key` виден ролям `postgres` и `supabase_admin` в `net.http_request_queue` (пока запрос в очереди pg_net) — это роли оператора;
+- телефон передали в окне между `push_claim` и ответом Expo (≤ ~20 с): пуш прежнего владельца уйдёт новому. В нём только путь в приложении — без входа прежнего владельца RLS ничего не покажет;
+- чужие вызовы функции получают 401, но считаются в лимит вызовов edge functions;
+- без BYPASSRLS локально проверены очередь, `push_claim` и `push_finish` (T81, T82: владелец функций без BYPASSRLS); `push_recipients` на хостинге и квитанции (`push_receipts_*`) без BYPASSRLS — проверка на staging по supabase/README п.7.
 
 ## 5. Приложение (P2)
 - `expo-notifications` (`npx expo install`, проверка `CHECKS.md` §4), плагин в `app.json`, `google-services.json`.
