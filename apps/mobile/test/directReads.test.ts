@@ -24,6 +24,8 @@ export interface Read {
   line: number;
   one: boolean;
   paged: boolean;
+  /** goes through `read(…)` (ops.ts): a failed request stops the op instead of reading as «no row» */
+  checked: boolean;
 }
 
 /** every select read in a source text: the statement from `.from("table")` to its `;` */
@@ -43,6 +45,7 @@ export function readsIn(file: string, text: string): Read[] {
       line: text.slice(0, m.index).split("\n").length,
       one: /maybeSingle\(|\.single\(|head:\s*true|\.limit\(1\)/.test(st),
       paged: /pages(<[^>]*>)?\(\s*\(\)\s*=>\s*supabase$/.test(before.trimEnd()),
+      checked: /\bread(<[^>]*>)?\(\s*supabase$/.test(before.trimEnd()),
     });
   }
   return out;
@@ -81,5 +84,19 @@ describe("unit:directReads — list reads outside repo.ts are paged or small (04
     const paged = readsIn("x.ts", 'await pages<Row>(() => supabase.from("lead_sources").select("id").eq("company_id", c), byId);');
     expect(paged[0]!.paged).toBe(true);
     expect(readsIn("x.ts", 'await supabase.from("files").update({ a: 1 }).eq("id", f).select("id");')).toEqual([]);
+  });
+
+  it("ops.ts: every read inside an op checks its error — through read() or pages(), never `const { data } = await supabase…`", () => {
+    const ops = reads.filter((r) => r.file === "src/cloud/ops.ts");
+    expect(ops.length).toBeGreaterThanOrEqual(9); // not blind; «Работы» move estimate.deposit to an RPC (−3)
+    expect(ops.filter((r) => !r.checked && !r.paged).map((r) => `${r.file}:${r.line} ${r.table}`)).toEqual([]);
+  });
+  it("fixtures: read(supabase…) is checked, a bare await is not", () => {
+    expect(readsIn("x.ts", 'const { data } = await read(supabase.from("jobs").select("id").eq("id", j).maybeSingle());')[0]!.checked).toBe(true);
+    expect(readsIn("x.ts", 'const { data } = await supabase.from("jobs").select("id").eq("id", j).maybeSingle();')[0]!.checked).toBe(false);
+  });
+  it("ops.ts: a paged read is not swallowed into «nothing there» (no bare .catch(() => []))", () => {
+    const text = readFileSync(join(SRC, "cloud", "ops.ts"), "utf8");
+    expect(text).not.toMatch(/\.catch\(\s*\(\)\s*=>\s*\[/);
   });
 });
