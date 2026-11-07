@@ -83,13 +83,15 @@ export function startAllowed(startIso: string, now: number = Date.now(), tz: str
 }
 
 /** visits of the same person that overlap [start, start + duration) — by time, not "how many that day" */
-export function overlaps(db: Pick<DB, "visits">, techId: ID | ID[] | null, startIso: string, durationMin: number, exceptId?: ID): Visit[] {
+export function overlaps(db: Pick<DB, "visits">, techId: ID | ID[] | null, startIso: string, durationMin: number, exceptId?: ID, allDay = false): Visit[] {
   const people = Array.isArray(techId) ? techId : techId ? [techId] : [];
   if (!people.length) return [];
   const a = new Date(startIso).getTime();
   const b = a + durationMin * 60_000;
   return db.visits.filter((v) => {
     if (v.id === exceptId || !people.some((p) => isAssigned(v, p)) || !isOpenVisit(v)) return false;
+    // «Весь день» (17-job §11.1) has no hours: it clashes only with another all-day visit of the person on that day
+    if (!!v.allDay !== allDay) return false;
     const s = new Date(v.start).getTime();
     const e = s + (v.durationMin || 0) * 60_000;
     return s < b && a < e;
@@ -105,12 +107,14 @@ export type LateKind = "en_route" | "not_left";
  * (and any later step), a closed visit or the first ticked checklist item do. Computed, never stored.
  */
 export function lateKind(
-  v: Pick<Visit, "start" | "step" | "closed" | "checklist" | "techId" | "assigneeIds">,
+  v: Pick<Visit, "start" | "step" | "closed" | "checklist" | "techId" | "assigneeIds"> & { allDay?: boolean },
   members: People,
   now: number = Date.now(),
   lateAfterMin: number = SCHEDULE_SETTINGS_DEFAULT.lateAfterMin,
 ): LateKind | null {
   if (v.closed || (v.step !== "scheduled" && v.step !== "en_route")) return null;
+  // a whole-day visit has no start hour to be late for (17-job §11.1)
+  if (v.allDay) return null;
   // nobody who can come: «Не назначено», not «опаздывает» (S22)
   if (!liveAssignees(v, members).length || v.checklist?.some((c) => c.done)) return null;
   const t = new Date(v.start).getTime();
@@ -218,6 +222,29 @@ export function formHours(hours: BusinessHours, stepMin: number, day: DayKey): H
 export function atMinute(day: DayKey, minute: number, tz: string = getZone()): string {
   return wallToInstant(day, minute, tz);
 }
+/** a visit moved (S9a, «Перенести»): the new start and length; «Весь день» only when asked — a move to a time drops it */
+export function rescheduled<V extends Pick<Visit, "start" | "durationMin" | "allDay">>(v: V, start: string, durationMin: number, allDay?: boolean): V {
+  return { ...v, start, durationMin, allDay: allDay ? true : undefined };
+}
+
+/** the end of a visit (start + length) */
+export const visitEnd = (v: Pick<Visit, "start" | "durationMin">): string => new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
+
+/**
+ * How a visit's time reads everywhere (17-job §11.1): «Весь день» for an all-day visit — never «12:00 AM – 12:00 AM»;
+ * otherwise «9:00 AM – 11:00 AM» (range) or «9:00 AM» (start only). `time` is the screen's formatter.
+ */
+export function visitWhen(v: Pick<Visit, "start" | "durationMin" | "allDay">, time: (iso: string) => string, allDayLabel: string, range = true): string {
+  if (v.allDay) return allDayLabel;
+  return range ? `${time(v.start)} – ${time(visitEnd(v))}` : time(v.start);
+}
+
+/** «Весь день» (17-job §11.1): the company's day from its midnight to the next one — 23 or 25 hours on a DST day, so the
+ *  server keeps the flag (t03_visit_all_day) */
+export function wholeDay(day: string): { start: string; durationMin: number } {
+  const start = atMinute(day, 0);
+  return { start, durationMin: Math.round((Date.parse(atMinute(keyOfNumber(dayNumber(day) + 1), 0)) - Date.parse(start)) / 60_000) };
+}
 
 /** open visits of a person on that day of the company, by start (the row "2 visits · 10:00–12:00, 14:00–15:00") */
 export function dayVisits(db: Pick<DB, "visits">, techId: ID, day: DayKey, exceptId?: ID, tz: string = getZone()): Visit[] {
@@ -250,13 +277,19 @@ export type FormWarning = { key: "busy"; visits: Visit[] } | { key: "outOfHours"
 
 /** what the form warns about (status warn, with a word); saving stays possible except in the past */
 export function formWarnings(
-  db: Pick<DB, "visits">, f: { techId: ID | ID[] | null; start: string; durationMin: number; exceptId?: ID },
+  db: Pick<DB, "visits">, f: { techId: ID | ID[] | null; start: string; durationMin: number; exceptId?: ID; allDay?: boolean },
   opts: { now?: number; hours?: Hours; tz?: string } = {},
 ): FormWarning[] {
   const h: Hours = opts.hours ?? SCHEDULE_DEFAULTS;
   const out: FormWarning[] = [];
-  const busy = overlaps(db, f.techId, f.start, f.durationMin, f.exceptId);
+  const busy = overlaps(db, f.techId, f.start, f.durationMin, f.exceptId, !!f.allDay);
   if (busy.length) out.push({ key: "busy", visits: busy });
+  if (f.allDay) {
+    // «Весь день»: no hours to be out of; «past» only when the whole day is over (today is fine)
+    const end = new Date(new Date(f.start).getTime() + f.durationMin * 60_000).toISOString();
+    if ((opts.now ?? Date.now()) >= Date.parse(end)) out.push({ key: "past" });
+    return out;
+  }
   // minutes on the company's clock (the slot the form shows), not the phone's
   const s = minuteIn(f.start, opts.tz);
   if (h.off || s < h.dayStartMin || s + f.durationMin > h.dayEndMin) out.push({ key: "outOfHours" });

@@ -24,7 +24,7 @@ export default function ScheduleJob() {
   const { t, money, day, time } = useI18n();
   const toast = useToast();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
-  const f = useVisitForm({ durationMin: scheduleSettingsOf(db.company).jobMin });
+  const f = useVisitForm({ durationMin: scheduleSettingsOf(db.company).jobMin, allowAllDay: true });
   const [notifyId, setNotifyId] = useState<string | null>(null);
 
   const job = db.jobs.find((j) => j.id === jobId);
@@ -60,7 +60,7 @@ export default function ScheduleJob() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     const visitId = uid();
     const undo = store.scheduleJob(job.id, { ...f.value, visitId });
-    toast.show(store.online ? t("sch.saved", { date: day(f.value.start), time: time(f.value.start) }) : t("offline.queued"), undo);
+    toast.show(store.online ? (f.value.allDay ? t("job5.allDaySaved", { date: day(f.value.start) }) : t("sch.saved", { date: day(f.value.start), time: time(f.value.start) })) : t("offline.queued"), undo);
     setNotifyId(visitId);
   };
 

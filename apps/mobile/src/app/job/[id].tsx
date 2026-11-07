@@ -16,10 +16,12 @@ import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { enRouteSms, filterJobHistory, jobHistory, nextOpenVisit, type JobHistoryFilter } from "@/features/jobHistory";
 import { canSeeGateCode } from "@/features/properties";
-import { canPlan } from "@/features/schedule";
+import { canPlan, visitWhen } from "@/features/schedule";
 import { completeBlock, jobAwaitingClose } from "@/features/jobDone";
 import { contractStatement } from "@octo/estimating-engine";
 import { RelatedBlock } from "@/features/RelatedBlock";
+import { JobLinesBlock, canEditJobLines } from "@/features/JobLinesBlock";
+import { JobTypeTags } from "@/features/JobTypeTags";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { smsWithBody } from "@/features/sms";
 import { useToast } from "@/ui/overlays";
@@ -30,13 +32,6 @@ import { Card, CardList, Empty, ItemCard, RowView, Screen, SectionTitle } from "
 import { memberLabel, memberName } from "@/features/team";
 
 type Tab = "details" | "money" | "history";
-
-/** the job's type word: a preset in the app's language, or the company's own name */
-function jobTypeLabel(db: DB, j: Job, t: (k: DictKey) => string): string | undefined {
-  const jt = (db.jobTypes ?? []).find((x) => x.id === j.jobTypeId);
-  if (!jt) return undefined;
-  return jt.name ?? (jt.seedKey ? t(`job3.jt.${jt.seedKey}` as DictKey) : undefined);
-}
 
 /** Job (13 §3.4, 17-job §7.1): «Связано», then Детали · Деньги · История. */
 export default function JobScreen() {
@@ -90,7 +85,6 @@ export default function JobScreen() {
     .map((mid) => memberName(db, mid, t))
     .filter(Boolean)
     .join(", ");
-  const typeLabel = jobTypeLabel(db, j, t);
   const title = j.number ? t("job3.title", { no: j.number }) : t("job3.newJob");
 
   // «В пути»: until our own number the phone's SMS opens with a ready text in the CLIENT's language (rule 7)
@@ -207,7 +201,7 @@ export default function JobScreen() {
       />
       {next ? (
         <T v="body" tone="mut">
-          {t("job3.next", { date: day(next.start), time: time(next.start) })}
+          {t("job3.next", { date: day(next.start), time: visitWhen(next, time, t("plan5.allDay"), false) })}
         </T>
       ) : null}
       {visits.length ? (
@@ -219,8 +213,8 @@ export default function JobScreen() {
               <ItemCard
                 key={v.id}
                 status={vs.status}
-                title={`${day(v.start)} · ${time(v.start)}`}
-                subtitle={[memberLabel(tech, t) ?? t("sch.noTech"), `${v.durationMin} ${t("sch.min")}`].join(" · ")}
+                title={`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"), false)}`}
+                subtitle={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : `${v.durationMin} ${t("sch.min")}`].filter(Boolean).join(" · ")}
                 right={<StatusChip status={vs.status} label={t(vs.label)} />}
                 onPress={() => router.push(`/visit/${v.id}`)}
               />
@@ -234,12 +228,7 @@ export default function JobScreen() {
       )}
 
       <Card>
-        <RowView style={{ justifyContent: "space-between" }}>
-          <T v="body" tone="mut">
-            {t("job3.type")}
-          </T>
-          <T v="body">{typeLabel ?? t("job3.noType")}</T>
-        </RowView>
+        <JobTypeTags job={j} canEdit={canEditJobLines(store.role)} />
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="body" tone="mut">
             {t("job3.team")}
@@ -266,11 +255,7 @@ export default function JobScreen() {
         </RowView>
       </Card>
       {j.amountCents > 0 ? <ContractStatement jobId={j.id} /> : null}
-      {!j.estimateId ? (
-        <T v="caption" tone="mut">
-          {t("job3.positionsLater")}
-        </T>
-      ) : null}
+      <JobLinesBlock job={j} />
       <View style={{ gap: space[2] }}>
         <SectionTitle title={t("jobs.costs")} right={<Button label={t("quick.receipt")} icon="plus" size="sm" variant="ghost" onPress={() => router.push("/expense/new")} />} />
         {expenses.length ? (
@@ -319,6 +304,8 @@ export default function JobScreen() {
           ))}
         </CardList>
       ) : null}
+      {/* the technician reads the job's own lines (what to do), changes nothing (server: app.is_staff) */}
+      <JobLinesBlock job={j} />
     </>
   );
 

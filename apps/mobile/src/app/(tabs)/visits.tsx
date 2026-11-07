@@ -13,7 +13,7 @@ import { useTick } from "@/features/sheets";
 import { MetaTag, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { isAssigned } from "@/features/schedule";
+import { isAssigned, visitWhen } from "@/features/schedule";
 import { isoDayKey, todayKey } from "@/features/calendar";
 import { overlapSigns } from "@/features/listSigns";
 
@@ -35,15 +35,15 @@ export default function Visits() {
     // an inspection has no job and maybe no client yet: the lead's name and request (docs/specs/03 §3.1)
     const lead = v.leadId ? db.leads.find((l) => l.id === v.leadId) : undefined;
     const st = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
-    const [hm, ampm] = time(v.start).split(" ");
-    const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
+    // «Весь день» has no hour: the label instead of «12:00 AM»
+    const [hm, ampm] = v.allDay ? [t("plan5.allDay"), ""] : time(v.start).split(" ");
     const addr = property ? `${property.address}, ${property.city}` : undefined;
     const done = v.checklist.filter((x) => x.done).length;
     return (
       <ListCard
         key={v.id}
         title={customer?.name ?? lead?.name ?? "—"}
-        when={`${later.includes(v) ? `${day(v.start)} · ` : ""}${time(v.start)} – ${time(end)}`}
+        when={`${later.includes(v) ? `${day(v.start)} · ` : ""}${visitWhen(v, time, t("plan5.allDay"))}`}
         lead={{ kind: "time", top: hm ?? "", bottom: ampm ?? "" }}
         value={v.amountDueCents > 0 ? money(v.amountDueCents) : undefined}
         valueLabel={v.amountDueCents > 0 ? t("card.val.toPay") : undefined}

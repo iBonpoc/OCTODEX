@@ -12,6 +12,7 @@ import type { BillingAddress, CalendarEvent, MemberPrefs, CustomField, CustomFie
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
+import { classify } from "@/data/outboxRetry";
 
 export type Op =
   /** at: when the tech left (step en_route), phone time — visits.en_route_at (П3c) */
@@ -45,7 +46,7 @@ export type Op =
   /** the office cancels a visit with a reason; S4a / S9a roll the lead / job back when nothing open is left */
   | { k: "visit.cancel"; visitId: string; reason: CancelReason; text?: string; leadBack?: string; jobBack?: string }
   /** the office moves a visit (time, length); the status does not change */
-  | { k: "visit.reschedule"; visitId: string; start: string; durationMin: number }
+  | { k: "visit.reschedule"; visitId: string; start: string; durationMin: number; allDay?: boolean }
   /** estimate visit for a lead whose client and property already exist (lead.prospect or earlier); replaced by visit.inspection */
   | {
       k: "lead.visit";
@@ -106,7 +107,7 @@ export type Op =
     }
   | { k: "payment.record"; id: string; invoiceId: string; customerId: string; amountCents: number; method: PaymentMethod; reference?: string }
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number; dueDate?: string }
-  | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[] }
+  | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[]; allDay?: boolean }
   | { k: "company.save"; company: Company; einChanged: boolean }
   | { k: "license.save"; license: CompanyLicense }
   | { k: "license.remove"; id: string }
@@ -252,6 +253,17 @@ async function run(p: PromiseLike<{ error: { message: string; code?: string } | 
   throw new ServerError(error.message, status, error.code);
 }
 
+/**
+ * A read inside an op: a failed request (dropped connection, server error) is not «no row» — it stops the op through
+ * run(), like a failed write, so nothing is written on a guess (second deposit invoice, second primary contact, a locked
+ * version edited as open). supabase-js gives `{ data: null, error }` here, not an exception.
+ */
+async function read<R extends { error: { message: string; code?: string } | null; status?: number }>(p: PromiseLike<R>): Promise<R> {
+  const r = await p;
+  await run(Promise.resolve({ error: r.error, status: r.status }));
+  return r;
+}
+
 /** people on a new visit: the same server function as «Назначить» (nobody → nothing to send) */
 async function assignPeople(visitId: string, ids: string[]) {
   if (ids.length) await run(supabase.rpc("assign_visit", { p_visit_id: visitId, p_user_ids: ids }));
@@ -265,7 +277,7 @@ function ins(table: string, row: Record<string, unknown>) {
 const JOB_PATH = ["draft", "scheduled", "in_progress", "completed"];
 async function advanceJob(jobId: string, to: "scheduled" | "in_progress" | "completed") {
   if (!realJob(jobId)) return;
-  const { data } = await supabase.from("jobs").select("status").eq("id", jobId).maybeSingle();
+  const { data } = await read(supabase.from("jobs").select("status").eq("id", jobId).maybeSingle());
   let cur = (data?.status as string | undefined) ?? "draft";
   let i = JOB_PATH.indexOf(cur);
   const target = JOB_PATH.indexOf(to);
@@ -283,21 +295,35 @@ async function sourceRef(companyId: string, op: { sourceId?: string; source?: st
   if (UUID.test(v)) return v;
   // every source of the company, page by page (they grow with imports and marketplaces; PostgREST gives ≤ 1000 at once)
   const rows = await pages<{ id: string; name: string }>(() => supabase.from("lead_sources").select("id, name").eq("company_id", companyId), [{ col: "id" }]).catch(
-    () => [] as { id: string; name: string }[],
+    (e: unknown) => {
+      // a dropped connection is not «the company has no sources»: the op waits and is retried. A refusal keeps the old
+      // way (the lead is saved without a source) — dropping the whole lead after MAX_TRIES would lose more.
+      if (classify(e) !== "refusal") throw e;
+      return [] as { id: string; name: string }[];
+    },
   );
   const name = v.replace(/^src-/, "").toLowerCase();
   return (rows.find((r) => r.name.toLowerCase() === name) ?? rows.find((r) => r.name === "Website") ?? rows[0])?.id ?? "";
 }
 
 async function uploadPhoto(companyId: string, fileId: string, uri: string) {
+  let blob: Blob;
   try {
-    const blob = await (await fetch(uri)).blob();
+    blob = await (await fetch(uri)).blob();
+  } catch {
+    // the photo is gone from the phone: nothing to send again
+    return run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
+  }
+  try {
     const key = `${companyId}/${fileId}.jpg`;
     const { error } = await supabase.storage.from("files").upload(key, blob, { contentType: blob.type || "image/jpeg", upsert: true });
     if (error) throw error;
-    await supabase.from("files").update({ storage_key: key, upload_status: "uploaded", mime: blob.type || "image/jpeg", size: blob.size }).eq("id", fileId);
-  } catch {
-    await supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId);
+    await run(supabase.from("files").update({ storage_key: key, upload_status: "uploaded", mime: blob.type || "image/jpeg", size: blob.size }).eq("id", fileId));
+  } catch (e) {
+    // no network or the server's «not now»: the op stays in the queue and the upload is tried again (upsert: true);
+    // only a refusal marks the photo failed
+    if (classify(e) !== "refusal") throw e;
+    await run(supabase.from("files").update({ upload_status: "failed" }).eq("id", fileId));
   }
 }
 
@@ -395,13 +421,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       await run(
         ins("properties", { id: op.propertyId, company_id: c, customer_id: op.customerId, address_line1: op.address || op.city || "—", address_city: op.city || "—", stories: 1 }),
       );
-      await run(
-        ins("jobs", { id: op.jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, title: "Estimate visit", type: "inspection", number: "" }),
-      );
+      // an inspection is a visit of the lead at the property, without a job (as visit.inspection, 20261105280000); the app
+      // inserts no job any more (17-job §12.1, 20261107040000) — op.jobId of an old queue is not used
       const end = new Date(new Date(op.start).getTime() + 45 * 60000).toISOString();
       await run(
         ins("visits", {
-          id: op.visitId, company_id: c, job_id: op.jobId, lead_id: op.leadId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.message ? [op.message] : [],
+          id: op.visitId, company_id: c, lead_id: op.leadId, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.message ? [op.message] : [],
         }),
       );
       return run(supabase.from("leads").update({ status: "inspection_scheduled", customer_id: op.customerId, property_id: op.propertyId }).eq("id", op.leadId));
@@ -425,14 +450,13 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.from("visits").update({ customer_notified_at: new Date(0).toISOString() }).eq("id", op.visitId));
     case "visit.reschedule": {
       const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
-      return run(supabase.from("visits").update({ starts_at: op.start, ends_at: end }).eq("id", op.visitId));
+      // all_day is sent always by this version (false clears it); the server keeps it only on whole days (t03_visit_all_day)
+      return run(supabase.from("visits").update({ starts_at: op.start, ends_at: end, all_day: !!op.allDay }).eq("id", op.visitId));
     }
     case "lead.visit": {
-      await run(
-        ins("jobs", { id: op.jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, title: "Estimate visit", type: "inspection", number: "" }),
-      );
+      // the same as lead.book: an inspection without a job (17-job §12.1); op.jobId of an old queue is not used
       const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
-      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, lead_id: op.leadId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
+      await run(ins("visits", { id: op.visitId, company_id: c, lead_id: op.leadId, property_id: op.propertyId, kind: "inspection", starts_at: op.start, ends_at: end, scope: op.scope }));
       // upsert: a replay after a partial failure must not die on unique (visit_id, user_id)
       if (op.techId) await run(supabase.from("visit_assignees").upsert({ company_id: c, visit_id: op.visitId, user_id: op.techId }, { onConflict: "visit_id,user_id", ignoreDuplicates: true }));
       // booking a visit is an answer to the client (same as the app); only the first one counts
@@ -557,7 +581,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         }),
       );
       await run(ins("estimate_options", { id: op.optionId, company_id: c, version_id: op.versionId, name: op.title.split(":")[0] ?? "Option", is_recommended: true }));
-      const { count } = await supabase.from("estimate_line_items").select("id", { count: "exact", head: true }).eq("option_id", op.optionId);
+      const { count } = await read(supabase.from("estimate_line_items").select("id", { count: "exact", head: true }).eq("option_id", op.optionId));
       if (op.lines.length && !count) {
         await run(
           supabase.from("estimate_line_items").insert(
@@ -593,12 +617,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         }),
       );
     case "job.schedule": {
-      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, scope: op.scope, notes: op.note ?? null }));
+      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, all_day: !!op.allDay, scope: op.scope, notes: op.note ?? null }));
       await advanceJob(op.jobId, "scheduled");
       return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }
     case "company.save": {
-      const { data: stored } = await supabase.from("companies").select(COMPANY_STORED_COLUMNS.join(", ")).eq("id", c).maybeSingle();
+      const { data: stored } = await read(supabase.from("companies").select([...COMPANY_STORED_COLUMNS, "timezone"].join(", ")).eq("id", c).maybeSingle());
       await run(supabase.from("companies").update(companyToDb(op.company, (stored ?? {}) as Record<string, unknown>)).eq("id", c));
       if (op.einChanged) {
         const ein = op.company.ein?.trim() || null;
@@ -651,7 +675,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         const patch: Record<string, string | null> = {};
         if (op.phone !== undefined) patch.phone = op.phone || null;
         if (op.email !== undefined) patch.email = op.email || null;
-        const { data: primary } = await supabase.from("contacts").select("id").eq("customer_id", op.id).eq("is_primary", true).maybeSingle();
+        const { data: primary } = await read(supabase.from("contacts").select("id").eq("customer_id", op.id).eq("is_primary", true).is("deleted_at", null).maybeSingle());
         if (primary?.id) await run(supabase.from("contacts").update(patch).eq("id", primary.id));
         else await run(supabase.from("contacts").insert({ company_id: c, customer_id: op.id, name: op.name ?? "—", is_primary: true, ...patch }));
       }
@@ -776,9 +800,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const { error, status } = await supabase.rpc("send_estimate", { p_estimate_id: op.id, p_token: op.token ?? null });
       await run(Promise.resolve({ error, status }));
       // a lost connection here is «try later», never «no lead» (review #244)
-      const sel = await supabase.from("estimates").select("lead_id").eq("id", op.id).maybeSingle();
-      await run(Promise.resolve(sel));
-      const est = sel.data;
+      const { data: est } = await read(supabase.from("estimates").select("lead_id").eq("id", op.id).maybeSingle());
       if (est?.lead_id) {
         await run(
           supabase.from("leads").update({ status: "estimate_sent" }).eq("id", est.lead_id).in("status", ["new", "contacted", "qualified", "inspection_scheduled"]),
@@ -822,34 +844,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const { error, status } = await supabase.rpc("revoke_estimate_link", { p_estimate_id: op.id });
       return run(Promise.resolve({ error, status }));
     }
-    case "estimate.deposit": {
-      const { data } = await supabase.from("estimates").select("current_version_id").eq("id", op.id).maybeSingle();
-      // The job may already exist (created when the client approved): reuse it.
-      const { data: existing } = await supabase.from("jobs").select("id").eq("estimate_id", op.id).maybeSingle();
-      const jobId = (existing?.id as string | undefined) ?? op.jobId;
-      await run(
-        ins("jobs", {
-          id: jobId, company_id: c, customer_id: op.customerId, property_id: op.propertyId, estimate_id: op.id,
-          approved_version_id: data?.current_version_id ?? null, title: op.title, contract_total_cents: op.totalCents, number: "",
-        }),
-      );
-      // The job stays "waiting for a date" until the contractor schedules it (job.schedule).
-      // A deposit invoice may already exist (created when the client signed): pay it instead of creating another.
-      const { data: depInv } = await supabase.from("invoices").select("id").eq("job_id", jobId).eq("kind", "deposit").neq("status", "void").maybeSingle();
-      const invoiceId = (depInv?.id as string | undefined) ?? op.invoiceId;
-      if (!depInv) await run(
-        ins("invoices", {
-          id: op.invoiceId, company_id: c, customer_id: op.customerId, job_id: jobId, kind: "deposit", status: "sent",
-          subtotal_cents: op.depositCents, total_cents: op.depositCents, due_date: op.dueDate ?? companyToday(), sent_at: new Date().toISOString(),
-        }),
-      );
-      return run(
-        ins("payments", {
-          id: op.paymentId, company_id: c, invoice_id: invoiceId, customer_id: op.customerId, method: op.method,
-          amount_cents: op.depositCents, status: "succeeded", idempotency_key: op.paymentId, received_by: userId,
-        }),
-      );
-    }
+    case "estimate.deposit":
+      // one server function (17-job §12.1, 20261107040000): the job and the deposit invoice are the signature's; the payment is
+      // the balance of that invoice as the server knows it; a replay with the same payment id changes nothing. Not signed on
+      // the server → P0001, a refusal: the op is dropped, the phone reloads and the estimate shows its deposit as due again
+      // (never a silent «received»). The app inserts no job any more.
+      return run(supabase.rpc("record_estimate_deposit", { p_estimate_id: op.id, p_payment_id: op.paymentId, p_method: op.method }));
     case "invoice.pay":
       return run(
         ins("payments", {
@@ -876,10 +876,8 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   await run(
     ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, lead_id: op.leadId ?? null, title: op.title, created_via: "manual", number: "" }),
   );
-  const sel = await supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle();
   // the connection dropped after the insert: «try later», never «not visible» (that would drop the estimate, review #244)
-  await run(Promise.resolve(sel));
-  const est = sel.data;
+  const { data: est } = await read(supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle());
   if (!est) throw new PermanentError("estimate is not visible");
   // «don't sign — change it» (E2a): the client signed, the company changes it → back to draft on the server, signature kept in history
   if (est.status === "awaiting_countersign") {
@@ -891,9 +889,9 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   if (est.status !== "draft") await run(supabase.from("estimates").update({ status: "draft" }).eq("id", op.id));
   let versionId = est.current_version_id as string | null;
   if (versionId) {
-    const { data: v } = await supabase.from("estimate_versions").select("locked_at, version_no").eq("id", versionId).maybeSingle();
+    const { data: v } = await read(supabase.from("estimate_versions").select("locked_at, version_no").eq("id", versionId).maybeSingle());
     if (v?.locked_at) {
-      const { data: last } = await supabase.from("estimate_versions").select("version_no").eq("estimate_id", op.id).order("version_no", { ascending: false }).limit(1).maybeSingle();
+      const { data: last } = await read(supabase.from("estimate_versions").select("version_no").eq("estimate_id", op.id).order("version_no", { ascending: false }).limit(1).maybeSingle());
       await run(ins("estimate_versions", { id: op.versionId, company_id: c, estimate_id: op.id, version_no: Number(last?.version_no ?? 1) + 1 }));
       versionId = op.versionId;
     }
@@ -917,7 +915,7 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   await run(supabase.from("estimates").update({ title: op.title, current_version_id: versionId }).eq("id", op.id));
 
   // Replace options and lines of this (unlocked) version.
-  const { data: oldOpts } = await supabase.from("estimate_options").select("id").eq("version_id", versionId);
+  const { data: oldOpts } = await read(supabase.from("estimate_options").select("id").eq("version_id", versionId));
   const oldIds = ((oldOpts ?? []) as { id: string }[]).map((o) => o.id);
   if (oldIds.length) {
     await run(supabase.from("estimate_line_items").delete().in("option_id", oldIds));
@@ -946,8 +944,10 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   if (lines.length) await run(supabase.from("estimate_line_items").insert(lines));
   const costRows = lines.filter((l) => op.costs[l.id] !== undefined).map((l) => ({ line_item_id: l.id, company_id: c, unit_cost_cents: op.costs[l.id] }));
   if (costRows.length) {
-    // Tech without "view costs" cannot write costs; the estimate itself is still saved.
-    await supabase.from("estimate_line_costs").upsert(costRows, { onConflict: "line_item_id" });
+    // Tech without "view costs" cannot write costs (42501): the estimate itself is still saved. Any other failure
+    // (no network, the server's «not now») stops the op — a resend replaces the lines and writes the costs again.
+    const r = await supabase.from("estimate_line_costs").upsert(costRows, { onConflict: "line_item_id" });
+    if (r.error?.code !== "42501") await run(Promise.resolve(r));
   }
 }
 
