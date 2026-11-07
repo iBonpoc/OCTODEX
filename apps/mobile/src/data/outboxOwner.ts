@@ -22,6 +22,21 @@ export type OwnedItem = OutboxItem & { owner?: Owner };
 export const mineOf = (items: readonly OwnedItem[], who: Owner | null): OwnedItem[] =>
   who ? items.filter((o) => !o.owner || (o.owner.userId === who.userId && o.owner.companyId === who.companyId)) : [];
 
+export const sameOwner = (a: Owner | null, b: Owner | null) => !!a && !!b && a.userId === b.userId && a.companyId === b.companyId;
+
+/**
+ * Ops of older versions carry no owner: the first person signed in when the outbox is loaded owns them — once (review
+ * #240 №3), so they never follow the person into another company. Returns the same array when nothing changes.
+ */
+export function adoptLegacy(items: readonly OwnedItem[], who: Owner | null): readonly OwnedItem[] {
+  if (!who || items.every((o) => o.owner)) return items;
+  return items.map((o) => (o.owner ? o : { ...o, owner: { ...who } }));
+}
+
+/** the person's unsent ops in every company (an account deletion removes them all, review #240 №4) */
+export const unsentOf = (items: readonly OwnedItem[], userId: string | null): number =>
+  userId ? items.filter((o) => !o.owner || o.owner.userId === userId).length : 0;
+
 /** the account of `userId` is deleted: what stays in the outbox — other people's ops (an op without owner counts as theirs) */
 export const othersOf = (items: readonly OwnedItem[], userId: string | null): OwnedItem[] =>
   items.filter((o) => !!o.owner && o.owner.userId !== userId);

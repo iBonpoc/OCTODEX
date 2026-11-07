@@ -7,7 +7,11 @@ let generation = 0;
 /** grows on every wipe: async code (a send, a reload) takes it before `await` and drops its result when it changed */
 export const deviceGeneration = () => generation;
 
-type Forget = (isWiped: (key: string) => boolean) => void;
+/** whose account is deleted (when known): the store drops their ops from the shared outbox, review #240 №2 */
+export interface ForgetInfo {
+  userId?: string | null;
+}
+type Forget = (isWiped: (key: string) => boolean, info: ForgetInfo) => void;
 const listeners = new Set<Forget>();
 /** subscribe to the wipe; returns the unsubscribe */
 export function onDeviceForgotten(cb: Forget): () => void {
@@ -21,9 +25,9 @@ export function onDeviceForgotten(cb: Forget): () => void {
  * that is still running drops its result), every persistent state whose key is wiped goes back to its initial value
  * without writing it, and the store drops what it keeps only in memory.
  */
-export function forgetDeviceState(isWiped: (key: string) => boolean): void {
+export function forgetDeviceState(isWiped: (key: string) => boolean, info: ForgetInfo = {}): void {
   generation += 1;
-  for (const cb of [...listeners]) cb(isWiped);
+  for (const cb of [...listeners]) cb(isWiped, info);
 }
 
 /* ---------- the debounced writer (pure, unit-tested: test/persist.test.ts) ---------- */

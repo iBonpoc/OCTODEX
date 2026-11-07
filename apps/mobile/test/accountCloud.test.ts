@@ -134,6 +134,25 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     await finishOnDevice(); // the session's person is u1 (the mock)
     expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["theirs", "theirs2"]);
     expect(storage.has("octo.role.v1")).toBe(false);
+    // the repeat on start without a session (review #240 №2): the mark names the deleted person
+    state.session = false;
+    storage.set("octo.outbox.v1", JSON.stringify([op("mine2", { userId: "u1", companyId: "c2" }), op("theirs3", { userId: "u9", companyId: "c1" })]));
+    storage.set("octo.wipe.pending.v1", "u1");
+    await wipeIfPending();
+    expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["theirs3"]);
+    expect(storage.has("octo.wipe.pending.v1")).toBe(false);
+    // an older mark ("1"): whose is not known — only ownerless ops go
+    storage.set("octo.outbox.v1", JSON.stringify([op("mine3", { userId: "u1", companyId: "c2" }), op("old2")]));
+    storage.set("octo.wipe.pending.v1", "1");
+    await wipeIfPending();
+    expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["mine3"]);
+    state.session = true;
+    // the start check knows the person even after the session is gone: finishOnDevice(uid)
+    state.session = false;
+    storage.set("octo.outbox.v1", JSON.stringify([op("mine4", { userId: "u7", companyId: "c1" }), op("theirs4", { userId: "u9", companyId: "c1" })]));
+    await finishOnDevice("u7");
+    expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["theirs4"]);
+    state.session = true;
     // nothing of anyone else: the key goes
     storage.set("octo.outbox.v1", JSON.stringify([op("mine", { userId: "u1", companyId: "c1" })]));
     await finishOnDevice();

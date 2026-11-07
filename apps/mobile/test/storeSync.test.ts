@@ -74,6 +74,7 @@ type Value = {
   refresh: () => Promise<void>;
   removeCalendarEvent: (id: string) => () => void;
   recordVisitPoint: (p: object, source: "status_change" | "foreground") => void;
+  unsentAll: number;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -271,6 +272,136 @@ describe("unit:storeSync — someone deletes their account on a shared phone (re
     await wait(1700);
     await settle();
     expect(server.sends.filter((x) => x.userId === "u9").map((x) => (x.op as { id: string }).id)).toContain("ev-of-u9");
+  });
+});
+
+/* ---------- review #240: the send is for its owner, whoever signs in meanwhile ---------- */
+type Who = { userId: string; companyId: string };
+/** an op whose id tells its owner ("u1@c2#1"): every send must go to that person and company */
+const owned = (who: Who | null, n: number, extra: object = {}) => {
+  const id = `${who ? `${who.userId}@${who.companyId}` : "nobody"}#${n}`;
+  return { id: `o-${id}`, op: { k: "calendarEvent.remove", id }, at: new Date(Date.now() - 60_000).toISOString(), tries: 0, ...(who ? { owner: who } : {}), ...extra };
+};
+const seedOutbox = (...items: object[]) => storage.set("octo.outbox.v1", JSON.stringify(items));
+const stored = () => JSON.parse(storage.get("octo.outbox.v1") ?? "[]") as { id: string; tries: number; owner?: Who }[];
+/** every send went to the owner its op names */
+const sentRight = () =>
+  server.sends.every((x) => !(x.op as { id: string }).id.includes("@") || (x.op as { id: string }).id.startsWith(`${x.userId}@${x.companyId}#`));
+const u1c1 = { userId: "u1", companyId: "c1" };
+const u1c2 = { userId: "u1", companyId: "c2" };
+
+describe("unit:storeSync — the company or the person changes while a send waits (review #240 №1)", () => {
+  it("another company: its op goes to its own company, never to the one the send began in", { timeout: 15_000 }, async () => {
+    seedOutbox(owned(u1c1, 1), owned(u1c2, 1));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(1700);
+    await settle();
+    expect(server.sends.map((x) => (x.op as { id: string }).id)).toEqual(["u1@c1#1"]);
+    await as(r, "u1", "c2"); // switched company while c1's op is on the way
+    server.sends[0]!.d.resolve(); // c1 answers: done
+    await settle();
+    await wait(1700);
+    await settle();
+    expect(server.sends.map((x) => (x.op as { id: string }).id)).toEqual(["u1@c1#1", "u1@c2#1"]);
+    expect(sentRight()).toBe(true);
+    expect(stored().map((x) => x.id)).toEqual(["o-u1@c2#1"]); // c1's left the outbox, c2's is on the way
+  });
+  it("another person: their op is never sent under the first one's name (and never dropped as refused)", { timeout: 15_000 }, async () => {
+    seedOutbox(owned(u1c1, 1));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(1700);
+    await settle();
+    expect(server.sends).toHaveLength(1);
+    await as(r, null);
+    await as(r, "u2", "c1");
+    answerLoads();
+    valueOf(r).removeCalendarEvent("ev-of-u2");
+    server.sends[0]!.d.reject(new Error("Failed to fetch")); // u1's send fails after u2 signed in
+    await settle();
+    await wait(1700);
+    await settle();
+    expect(server.sends.filter((x) => (x.op as { id: string }).id === "ev-of-u2").every((x) => x.userId === "u2")).toBe(true);
+    expect(server.sends.filter((x) => (x.op as { id: string }).id === "ev-of-u2")).toHaveLength(1); // u2's own goes, as u2
+    const kept = stored();
+    expect(kept.find((x) => x.id === "o-u1@c1#1")?.tries).toBe(1); // u1's op stays with its try counted
+  });
+});
+
+describe("unit:storeSync — another person's op at the head of the outbox (review #240, tests)", () => {
+  it("my op is sent and removed by its id; theirs stays untouched", { timeout: 15_000 }, async () => {
+    seedOutbox(owned({ userId: "u9", companyId: "c1" }, 1), owned(u1c1, 1));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(1700);
+    await settle();
+    expect(server.sends.map((x) => (x.op as { id: string }).id)).toEqual(["u1@c1#1"]);
+    server.sends[0]!.d.resolve();
+    await settle();
+    await wait(300);
+    expect(stored().map((x) => [x.id, x.tries])).toEqual([["o-u9@c1#1", 0]]);
+    void r;
+  });
+  it("my op fails: its try is counted, theirs keeps its own", { timeout: 15_000 }, async () => {
+    seedOutbox(owned({ userId: "u9", companyId: "c1" }, 1), owned(u1c1, 1));
+    signIn("u1", "c1");
+    root = render(StoreProvider as (p: P) => unknown, { children: null });
+    await settle();
+    await wait(1700);
+    await settle();
+    server.sends[0]!.d.reject(new Error("Failed to fetch"));
+    await settle();
+    await wait(300);
+    expect(stored().map((x) => [x.id, x.tries])).toEqual([["o-u9@c1#1", 0], ["o-u1@c1#1", 1]]);
+  });
+  it("their pending visit step does not hold my point for that visit", async () => {
+    seedOutbox(owned({ userId: "u9", companyId: "c1" }, 1, { op: { k: "visit.step", visitId: "v1", id: "u9@c1#step" } }));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    valueOf(r).recordVisitPoint({ visitId: "v1", userId: "u1", lat: 34.1, lng: -118.1, at: new Date().toISOString() }, "foreground");
+    expect(server.points).toHaveLength(1);
+  });
+});
+
+describe("unit:storeSync — ops of older versions get an owner once (review #240 №3)", () => {
+  it("the first person signed in owns them; switching company does not take them along", { timeout: 15_000 }, async () => {
+    seedOutbox(owned(null, 1));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    await wait(300);
+    expect(stored()[0]!.owner).toEqual(u1c1);
+    server.sends.splice(0).forEach((x) => x.d.reject(new Error("Failed to fetch")));
+    await settle();
+    await as(r, "u1", "c2");
+    await wait(1700);
+    await settle();
+    expect(server.sends.filter((x) => x.companyId === "c2")).toEqual([]);
+  });
+});
+
+describe("unit:storeSync — the account deletion counts and removes the person's ops in every company (review #240 №2, №4)", () => {
+  it("«не отправлено» for the deletion counts all companies of the person", async () => {
+    seedOutbox(owned(u1c1, 1), owned(u1c2, 1), owned({ userId: "u9", companyId: "c1" }, 1));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    expect(valueOf(r).queue).toHaveLength(1);
+    expect(valueOf(r).unsentAll).toBe(2);
+  });
+  it("the sign-in is already gone from the store (the start check): the wipe still drops the deleted person's ops", async () => {
+    seedOutbox(owned(u1c1, 1), owned({ userId: "u9", companyId: "c1" }, 1));
+    root = render(StoreProvider as (p: P) => unknown, { children: null }); // demo: nobody signed in
+    await settle();
+    forgetDeviceState(wipedOnDelete, { userId: "u1" });
+    await settle();
+    await wait(300);
+    expect(stored().map((x) => x.id)).toEqual(["o-u9@c1#1"]);
   });
 });
 

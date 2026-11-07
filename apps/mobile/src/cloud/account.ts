@@ -118,7 +118,7 @@ export async function myAccountState(ms: number = CALL_TIMEOUT_MS): Promise<Acco
 /** «Удалить навсегда»: the edge function, repeated on a lost answer (§6.12); after success the device is wiped and signed out */
 export async function deleteAccount(confirm: string, closeCompanies: string[]): Promise<DeleteOutcome> {
   const out = await deleteWithRepeat(() => callDelete(confirm, closeCompanies), () => myAccountState());
-  if (out.ok) await finishOnDevice();
+  if (out.ok) await finishOnDevice((await supabase.auth.getSession().catch(() => null))?.data.session?.user.id);
   return out;
 }
 
@@ -126,27 +126,30 @@ const deviceStore = AsyncStorage as unknown as WipeStore;
 const warn = (m: string) => console.warn(`delete-account: ${m}`);
 
 /** the account is gone: nothing of it stays on this phone (a failed wipe is repeated on the next start) */
-export async function finishOnDevice(): Promise<void> {
-  await wipeKeepingOthers();
+export async function finishOnDevice(userId?: string | null): Promise<void> {
+  await wipeKeepingOthers(userId);
   // the session is closed on the server already: only forget it here
   await supabase.auth.signOut({ scope: "local" }).catch(() => {});
 }
 /** a wipe failed last time: once more (AuthProvider, on start) */
 export async function wipeIfPending(): Promise<void> {
-  if (!(await AsyncStorage.getItem(WIPE_PENDING_KEY).catch(() => null))) return;
-  await wipeKeepingOthers();
+  const pending = await AsyncStorage.getItem(WIPE_PENDING_KEY).catch(() => null);
+  if (!pending) return;
+  // the deleted person's id was kept with the mark ("1" — an older version: whose is not known)
+  await wipeKeepingOthers(pending === "1" ? null : pending);
 }
 /**
  * The store in memory first (review #231): a pending write or a send still running cannot land after the wipe. The
  * outbox is not wiped whole: another person's unsent ops on this phone stay (rule 6) — only the deleted person's go,
  * and old ones without an owner (19 §6.12).
  */
-async function wipeKeepingOthers(): Promise<void> {
+async function wipeKeepingOthers(userId?: string | null): Promise<void> {
   const { data } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
-  const me = data.session?.user.id ?? null;
+  // whose account: told by the caller (the start check knows it; the session may be gone already), else the session
+  const me = userId || data.session?.user.id || null;
   const keep = othersOf(parseOutbox(await AsyncStorage.getItem(OUTBOX_KEY).catch(() => null)), me);
-  forgetDeviceState(wipedOnDelete);
-  await wipeDevice(deviceStore, warn);
+  forgetDeviceState(wipedOnDelete, { userId: me });
+  await wipeDevice(deviceStore, warn, me);
   if (keep.length) await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(keep)).catch(() => {});
 }
 
@@ -155,7 +158,7 @@ async function wipeKeepingOthers(): Promise<void> {
  * («pending», an old session) — finish it quietly (the RPC answers «repeat» before it checks the word), then wipe and
  * sign out. In the background: the app opens without waiting for it.
  */
-export async function finishDeletion(): Promise<void> {
+export async function finishDeletion(userId?: string): Promise<void> {
   await deleteWithRepeat(() => callDelete("DELETE", []), () => myAccountState());
-  await finishOnDevice();
+  await finishOnDevice(userId);
 }
