@@ -7,7 +7,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { GROUP_TITLE } from "@/nav/NavMenu";
 import { openSection } from "@/nav/go";
-import { menuGroups, sectionHref, type Section, type SectionId } from "@/nav/sections";
+import { menuGroups, moreHref, sectionHref, type Section, type SectionId } from "@/nav/sections";
 import { syncState } from "@/nav/shell";
 import { moreCounts } from "@/features/moreCounts";
 import { useTick } from "@/features/sheets";
@@ -53,7 +53,7 @@ export default function More() {
     return (
       <Press
         testID={`more-${s.id}`}
-        onPress={() => openSection(sectionHref(s.id, role))}
+        onPress={() => openSection(moreHref(s.id, role))}
         visibleHeight={size.rowMin}
         accessibilityRole="button"
         // the name is exactly the word (e2e and VoiceOver find rows by it); the counter is the hint
