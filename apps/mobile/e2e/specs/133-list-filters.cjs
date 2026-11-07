@@ -22,12 +22,26 @@ const LISTS = [
   { path: "/payments?p=all", search: "Клиент, RCT, INV", group: "Способ оплаты", inAddress: true },
   // PR 4: «Работы» — «Мастер» (people of the nearest open visit, «Не назначен») and «Направление» in the sheet
   { path: "/jobs", search: "Клиент, адрес, работа, JOB", group: "Мастер" },
+  // «Звонки» (one rule, director 07.11): the outcomes are the lane, no sheet; three calls of our own (the demo has one, no outcome)
+  {
+    path: "/calls",
+    search: "Кто, заметка",
+    card: '[data-testid^="comms-"]',
+    setup: () => {
+      const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+      const at = (m) => new Date(Date.now() - m * 60_000).toISOString();
+      const call = (id, outcome, m) => ({ id, subjectType: "lead", subjectId: "l2", kind: "call", at: at(m), actorId: raw.db.me, meta: { outcome, duration_min: 2 }, body: `T133 ${id}` });
+      raw.db.activities = [...raw.db.activities.filter((x) => !String(x.id).startsWith("c133-")), call("c133-1", "answered", 30), call("c133-2", "answered", 40), call("c133-3", "no_answer", 50)];
+      localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+    },
+  },
 ];
 
 exports.run = async (h) => {
   const p = h.page;
   const vis = (loc) => loc.locator("visible=true");
   for (const L of LISTS) {
+    if (L.setup) { await h.go("/today"); await p.evaluate(L.setup); }
     await h.go(L.path);
     const bar = vis(p.getByTestId("filter-bar")).first();
     await bar.waitFor();
