@@ -146,6 +146,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       // a number opened from "Today": back goes to Today, whatever tab the role has
       return { section: "home", up: { href: "/today", label: K("today.title") } };
     case "jobs":
+    case "calls":
     case "payments":
     case "money":
     case "team":
@@ -162,7 +163,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       // the Sales lists: a ☰ root (sales: its home)
       return a === roleHome[role] ? {} : { section: sectionOfRoute(a) };
     default:
-      // tabs (plan, messages, calls, clients), the client page /p, auth: no "up"
+      // tabs (plan, messages, clients), the client page /p, auth: no "up"
       return {};
   }
 }

@@ -81,7 +81,7 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext("/estimate/new", { customerId: db.customers[0]!.id }, db, "director").up?.href).toBe(`/client/${db.customers[0]!.id}`);
   });
   it("☰ roots (Jobs, Payments, Money, Team, Catalog, Company, Settings, Estimates) have ☰, not «back»; Catalog → item, Company → section", () => {
-    for (const p of ["/jobs", "/payments", "/money", "/team", "/catalog", "/company", "/settings", "/estimates"]) {
+    for (const p of ["/jobs", "/calls", "/payments", "/money", "/team", "/catalog", "/company", "/settings", "/estimates"]) {
       const c = navContext(p, {}, db, "director");
       expect(c.up, p).toBeUndefined();
       expect(c.section, p).toBe(p.slice(1));

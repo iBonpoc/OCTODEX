@@ -5,6 +5,7 @@ import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { isTabScreen } from "@/nav/roles";
+import { showsTabBar } from "@/nav/tabBarRule";
 import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
 import { SearchEntry } from "@/nav/SearchEntry";
@@ -684,7 +685,7 @@ export function Screen({
         <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingHorizontal: space[4] }}>{content}</View>
       )}
       {floatFab && !kb ? (
-        <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} bottom={isTabScreen(routeName) ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
+        <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} bottom={showsTabBar(routeName) ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
       ) : null}
     </View>
   );

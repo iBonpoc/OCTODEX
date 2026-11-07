@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
-import { useGlobalSearchParams, usePathname } from "expo-router";
+import { router, useGlobalSearchParams, usePathname, useSegments, type Href } from "expo-router";
 import { View, type LayoutChangeEvent } from "react-native";
-import type { BottomTabBarProps } from "expo-router/js-tabs";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
 import { component, motion, radius, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -11,8 +10,7 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { Glass } from "@/ui/overlays";
 import { useNavInsets } from "@/ui/surfaces";
 import { useKeyboardHeight } from "@/ui/keyboard";
-import { roleHome } from "./roles";
-import { goTo } from "./go";
+import { showsTabBar } from "./tabBarRule";
 import { activeSection } from "./hierarchy";
 import { sectionHref, tabs, type SectionId } from "./sections";
 
@@ -22,19 +20,19 @@ import { sectionHref, tabs, type SectionId } from "./sections";
  * Active item gets the liquid fill (160ms stretch + 420ms settle): raised surface + ink frame.
  * A screen without a tab (Leads, Jobs… from «Ещё») lights «Ещё».
  */
-export function TabBar({ state, navigateToTab }: BottomTabBarProps) {
+export function TabBar() {
   const store = useStore();
   const pathname = usePathname();
   const params = useGlobalSearchParams();
+  const segments = useSegments();
+  const { wide } = useDevice();
   const own = activeSection(pathname, params, store.db, store.role);
   // a section that is not a tab (Leads, Jobs… opened from «Ещё») lights «Ещё» (13 v2 §2.1, variant Б)
   const sec = own && !tabs(store.role).some((s) => s.id === own) ? "more" : own;
-  const go = (id: SectionId) => {
-    const name = id === "home" ? roleHome[store.role] : id;
-    const r = state.routes.find((x) => x.name === name);
-    if (r) navigateToTab(r.key);
-    else goTo(sectionHref(id, store.role));
-  };
+  // every phone screen but forms, the signature, sign-in, /p and the legal texts (docs/specs/28)
+  if (wide || !showsTabBar(segments.join("/"))) return null;
+  // the 5 targets are tab screens: navigate pops the cards above the tabs and switches to the tab
+  const go = (id: SectionId) => router.navigate(sectionHref(id, store.role) as Href);
   return <NavPill current={sec} onGo={go} />;
 }
 
@@ -144,7 +142,7 @@ function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: 
             maxWidth: wide ? undefined : 480,
           }}
         >
-          <View key={`${role}-${wide}`} role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
+          <View key={`${role}-${wide}`} testID="tab-bar" role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
             <Animated.View
               pointerEvents="none"
               style={[{ position: "absolute", top: 0, height: itemH, borderRadius: radius.pill, backgroundColor: c.surf2, borderWidth: 1, borderColor: c.ink }, pill]}
