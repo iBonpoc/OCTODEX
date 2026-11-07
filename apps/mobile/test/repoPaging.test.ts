@@ -9,7 +9,7 @@ const rows: Record<string, Record<string, unknown>[]> = {};
 /** columns the fake database does not have ("table.column") */
 const missing = new Set<string>();
 /** a table that fails from this page on (0-based page index) */
-let failFrom: { table: string; page: number } | null = null;
+let failFrom: { table: string; page: number; status?: number; code?: string; message?: string } | null = null;
 const calls: { table: string; range?: [number, number]; order: string[] }[] = [];
 
 function builder(table: string) {
@@ -26,7 +26,7 @@ function builder(table: string) {
     const gone = cols.split(",").map((x) => x.trim()).find((c) => missing.has(`${table}.${c}`));
     if (gone) return Promise.resolve({ data: null, error: { message: `column ${table}.${gone} does not exist` } }).then(ok);
     if (failFrom && failFrom.table === table && range && range[0] / MAX_ROWS >= failFrom.page)
-      return Promise.resolve({ data: null, error: { message: "network" } }).then(ok);
+      return Promise.resolve({ data: null, status: failFrom.status, error: { message: failFrom.message ?? "network", code: failFrom.code } }).then(ok);
     let data = [...(rows[table] ?? [])];
     for (const o of [...order].reverse())
       data.sort((x, y) => (String(x[o.col]) < String(y[o.col]) ? -1 : String(x[o.col]) > String(y[o.col]) ? 1 : 0) * (o.asc ? 1 : -1));
@@ -38,6 +38,8 @@ function builder(table: string) {
 }
 vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => builder(t) } }));
 import { loadCompanyDB, pages, PAGE } from "../src/cloud/repo";
+import { classify } from "../src/data/outboxRetry";
+const supabaseFrom = (t: string) => builder(t) as unknown as { select: (c: string) => unknown };
 import { supabase } from "../src/cloud/client";
 
 const CO = "co-1";
@@ -93,6 +95,25 @@ describe("pages(): every row, page by page", () => {
 });
 
 describe("loadCompanyDB: a company with more than 1000 rows", () => {
+  it("a server error on a page keeps its status and code: the queue reads it as «not now», not as a refusal (#244)", async () => {
+    rows.customers = Array.from({ length: 1500 }, (_, i) => ({ id: `c${String(i).padStart(5, "0")}` }));
+    failFrom = { table: "customers", page: 1, status: 503, code: "PGRST002", message: "Could not query the database" };
+    const e = await pages(() => supabaseFrom("customers").select("id"), [{ col: "id" }]).then(() => null, (x: unknown) => x);
+    expect(e).toMatchObject({ status: 503, code: "PGRST002", message: "Could not query the database" });
+    expect(classify(e)).toBe("transient");
+  });
+  it("a dropped connection on a page stays a network failure (no status)", async () => {
+    rows.customers = [{ id: "c1" }];
+    failFrom = { table: "customers", page: 0, status: 0, message: "TypeError: Failed to fetch" };
+    const e = await pages(() => supabaseFrom("customers").select("id"), [{ col: "id" }]).then(() => null, (x: unknown) => x);
+    expect(classify(e)).toBe("network");
+  });
+  it("a refusal on a page stays a refusal (403, 42501)", async () => {
+    rows.customers = [{ id: "c1" }];
+    failFrom = { table: "customers", page: 0, status: 403, code: "42501", message: "permission denied" };
+    const e = await pages(() => supabaseFrom("customers").select("id"), [{ col: "id" }]).then(() => null, (x: unknown) => x);
+    expect(classify(e)).toBe("refusal");
+  });
   it("all 2500 clients and their people reach the phone", async () => {
     rows.customers = customers(2500);
     rows.contacts = rows.customers.map((c, i) => ({ id: `p${pad(i)}`, customer_id: c.id, name: `Person ${i}`, phone: `555${pad(i)}`, is_primary: true }));

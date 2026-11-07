@@ -2141,4 +2141,19 @@ export const en: Dict = {
   "job5.tags.none": "No tags",
   "job5.tags.saved": "Tags saved",
   "job5.type.saved": "Job type changed",
+  // fix.* — founder fixes chat
+  "fix.client.balance": "Balance",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.leadOrphan": "{name}: the owner is not at work — hand the lead over",
+  "fr7.leadReplyOrphan": "Lead unanswered {m} min · {name} · the owner is not at work",
+  "fr7.taskOrphan": "Task with nobody on it: {name}",
+  "fr7.noOwnerChip": "No owner",
+  "fr7.noAssigneeChip": "Nobody on it",
+  "fr7.handOver": "Hand over",
+  "job5.byTime": "By time",
+  "job5.allDaySummary": "{date} · all day · {who}",
+  "job5.clientDay": "The client sees the date only, no time",
+  "job5.msg.allDay": "Hi {name}! {company} will come to do the work on {date}, during the day. If the day does not work, just reply to this message.",
+  "job5.allDaySaved": "Scheduled for {date}, all day",
+  "job5.allDayChip": "All day",
 };

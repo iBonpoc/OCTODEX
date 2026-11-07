@@ -15,20 +15,20 @@ import type { CancelReason, ID, Visit } from "@/data/types";
 import { CANCEL_REASONS } from "@/data/types";
 import { tFor } from "@/i18n/translate";
 import { useI18n, type DictKey } from "@/i18n";
-import { assigneesOf, atMinute, canPlan, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, quickStarts, SCHEDULE_DEFAULTS } from "@/features/schedule";
+import { assigneesOf, atMinute, canPlan, visitWhen, wholeDay, canReschedule, dayVisits, formHours, formWarnings, freeSlots, jobRollsBack, leadRollsBack, quickStarts, SCHEDULE_DEFAULTS } from "@/features/schedule";
 import { arrivalWindow, businessHoursOf, clientDate, companyTime, companyTz, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { AssignSheet } from "@/features/sheets";
 import { DatePick, dayOffsetOf } from "@/features/DatePick";
 import { addDays, isoDayKey, todayKey } from "@/features/calendar";
 import { minuteIn } from "@/features/zone";
-import { Button, ChoiceChips, IconButton, Stepper, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, Segmented, Stepper, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, ListRow, RowView } from "@/ui/surfaces";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { memberName } from "@/features/team";
 
-export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string };
+export type VisitFormValue = { start: string; durationMin: number; techId: ID | null; assigneeIds: ID[]; note: string; allDay?: boolean };
 
 /** a day of the company, `offset` days after its today (the form works on the company's calendar, П4b) */
 const dayAt = (offset: number) => addDays(todayKey(), offset);
@@ -46,13 +46,15 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 }
 
 /** state of the form: day (0 = today), start minute, length, person, note; derived start and warnings */
-export function useVisitForm(init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID }) {
+export function useVisitForm(init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID; allDay?: boolean; allowAllDay?: boolean }) {
   const { db, role } = useStore();
   const initStart = init.start && !Number.isNaN(new Date(init.start).getTime()) ? init.start : null;
   // the day and the minute of an existing start on the company's calendar and clock, not the phone's
   const initDay = initStart ? Math.max(0, dayOffsetOf(isoDayKey(initStart))) : 1;
   const [dayOffset, setDayOffset] = useState(initDay);
-  const [duration, setDuration] = useState(init.durationMin);
+  // an all-day visit has no length of its own: back to a time, it takes the company's usual job length
+  const [initDur] = useState(init.allDay && init.allowAllDay ? scheduleSettingsOf(db.company).jobMin : init.durationMin);
+  const [duration, setDuration] = useState(initDur);
   // sales books without people: the office assigns (canPlan); a form for a visit that has people keeps them
   const initTechs = init.techIds ?? (init.techId && canPlan([role]) ? [init.techId] : []);
   // several people on a visit (wave П3a): the first one is techId; none = «Назначит диспетчер»
@@ -67,6 +69,8 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
     setTouched(true);
   };
   const [note, setNote] = useState("");
+  // «Весь день» only for a job visit (job/schedule, «Перенести» of a job visit); an inspection keeps its hour
+  const [allDay, setAllDay] = useState(!!init.allDay && !!init.allowAllDay);
   const day = dayAt(dayOffset);
   // the company's hours of that weekday and its step (П4a; «Компания → Расписание»)
   const sch = scheduleSettingsOf(db.company);
@@ -74,13 +78,16 @@ export function useVisitForm(init: { durationMin: number; techId?: ID | null; te
   const slots = freeSlots(db, techIds, day, duration, { exceptId: init.exceptId, hours });
   const [minute, setMinute] = useState<number | null>(initStart ? minuteIn(initStart) : null);
   const startMin = minute ?? slots[0] ?? hours.dayStartMin;
-  const start = atMinute(day, startMin);
-  const warnings = formWarnings(db, { techId: techIds, start, durationMin: duration, exceptId: init.exceptId }, { hours });
-  const value: VisitFormValue = { start, durationMin: duration, techId, assigneeIds: techIds, note };
+  const whole = wholeDay(day);
+  const start = allDay ? whole.start : atMinute(day, startMin);
+  const len = allDay ? whole.durationMin : duration;
+  const warnings = formWarnings(db, { techId: techIds, start, durationMin: len, exceptId: init.exceptId, allDay }, { hours });
+  const value: VisitFormValue = { start, durationMin: len, techId, assigneeIds: techIds, note, allDay: allDay || undefined };
   return {
     value, day, hours, dayOffset, setDayOffset, duration, setDuration, techId, techIds, setTechId, toggleTech, note, setNote, slots, startMin,
     setMinute, warnings, past: warnings.some((w) => w.key === "past"), exceptId: init.exceptId,
-    dirty: dayOffset !== initDay || duration !== init.durationMin || techIds.join() !== initTechs.join() || note.trim().length > 0 || (minute !== null && !initStart),
+    allDay, setAllDay, allowAllDay: !!init.allowAllDay,
+    dirty: dayOffset !== initDay || duration !== initDur || techIds.join() !== initTechs.join() || note.trim().length > 0 || (minute !== null && !initStart) || allDay !== (!!init.allDay && !!init.allowAllDay),
   };
 }
 
@@ -97,7 +104,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
     // a day picked in «Другая дата» beyond the chips gets its own chip, so the choice is visible
     return f.dayOffset >= SCHEDULE_DEFAULTS.formDays ? [...list, { key: String(f.dayOffset), label: label(f.dayOffset) }] : list;
   }, [t, dayOf, f.dayOffset]);
-  const range = (v: Visit) => `${time(v.start)}–${time(new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString())}`;
+  const range = (v: Visit) => visitWhen(v, time, t("plan5.allDay"));
   const load = (id: ID) => {
     const vs = dayVisits(db, id, f.day, f.exceptId);
     return vs.length ? t("vf.load", { n: vs.length, ranges: vs.map(range).join(", ") }) : t("vf.free");
@@ -138,6 +145,18 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
           ))}
         </View> : null}
       </Field>
+      {f.allowAllDay ? (
+        <Segmented
+          full
+          value={f.allDay ? "allDay" : "time"}
+          onChange={(k) => f.setAllDay(k === "allDay")}
+          items={[
+            { key: "time", label: t("job5.byTime") },
+            { key: "allDay", label: t("plan5.allDay") },
+          ]}
+        />
+      ) : null}
+      {f.allDay ? null : (<>
       <Field label={t("sch.start")}>
         {f.slots.length ? (
           <ChoiceChips
@@ -155,6 +174,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
         </RowView>
       </Field>
       <Stepper label={t("sch.duration")} unit={t("sch.min")} value={f.duration} step={SCHEDULE_DEFAULTS.durationStepMin} min={SCHEDULE_DEFAULTS.durationStepMin} max={SCHEDULE_DEFAULTS.maxDurationMin} onChange={f.setDuration} />
+      </>)}
       {noteLabel ? (
         <Field label={t("lead.book.note")}>
           <TextField type="note" value={f.note} onChangeText={f.setNote} placeholder={t("lead.book.notePh")} />
@@ -166,7 +186,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
         </T>
       ))}
       <T v="body" tone="mut">
-        {t("vf.summary", {
+        {f.allDay ? t("job5.allDaySummary", { date: day(f.value.start), who: f.techIds.length ? f.techIds.map((id) => techs.find((m) => m.id === id)?.name ?? "").filter(Boolean).join(", ") : t("vf.dispatcherAssigns") }) : t("vf.summary", {
           date: day(f.value.start),
           // the company's clock, as the client's line below (П4a)
           from: companyTime(f.value.start, companyTz(db.company)),
@@ -175,7 +195,7 @@ export function VisitFormFields({ f, noteLabel = true }: { f: ReturnType<typeof 
         })}
       </T>
       {/* what the client is told (§7.1 п. 8): the window from the start, company time zone (П4a) */}
-      <T v="caption" tone="mut">{clientSees(f.value.start, db, t)}</T>
+      <T v="caption" tone="mut">{f.allDay ? t("job5.clientDay") : clientSees(f.value.start, db, t)}</T>
     </View>
   );
 }
@@ -208,7 +228,7 @@ export function VisitFormSheet({
   visible, onClose, title, saveLabel, init, onSave, withNote = true,
 }: {
   visible: boolean; onClose: () => void; title: string; saveLabel: string;
-  init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID; propertyId?: ID; jobId?: ID };
+  init: { durationMin: number; techId?: ID | null; techIds?: ID[]; start?: string; exceptId?: ID; propertyId?: ID; jobId?: ID; allDay?: boolean; allowAllDay?: boolean };
   onSave: (v: VisitFormValue) => ID | null; withNote?: boolean;
 }) {
   const f = useVisitForm(init);
@@ -258,7 +278,10 @@ export function NotifySheet({ visitId, onClose }: { visitId: ID | null; onClose:
   const name = (ctx.customer?.name ?? lead?.name ?? "").split(" ")[0] ?? "";
   const company = db.company?.name ?? "";
   const insp = v.kind === "inspection";
-  const text = w
+  // «Весь день»: the client gets the date only, no hour (17-job §11.1)
+  const text = v.allDay
+    ? ct("job5.msg.allDay", { name, company, date })
+    : w
     ? ct(insp ? "schs.msg.inspection" : "schs.msg.job", { name, company, date, from: companyTime(w.from, tz), to: companyTime(w.to, tz) })
     : ct(insp ? "vf.msg.inspection" : "vf.msg.job", { name, company, date, time: at });
   // numbers and addresses may come from outside (a web form): only digits and + for SMS; an address that looks like one, encoded
@@ -328,14 +351,13 @@ export function WhenWho({ visitId }: { visitId: ID }) {
   const [sheet, setSheet] = useState<"move" | "cancel" | "notify" | "assign" | null>(null);
   const v = db.visits.find((x) => x.id === visitId);
   if (!v) return null;
-  const end = new Date(new Date(v.start).getTime() + v.durationMin * 60_000).toISOString();
   const people = assigneesOf(v);
   const who = people.length ? people.map((id) => memberName(db, id, t) ?? "").filter(Boolean).join(", ") : t("vf.dispatcherAssigns");
   const open = canReschedule(v);
   return (
     <Card>
       <T v="heading">{t("vw.title")}</T>
-      <T v="body" tabular>{`${day(v.start)} · ${time(v.start)}–${time(end)} · ${who}`}</T>
+      <T v="body" tabular>{`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"))} · ${who}`}</T>
       {v.customerNotifiedAt ? (
         <T v="caption" tone="mut">{t("vw.notified", { date: day(v.customerNotifiedAt) })}</T>
       ) : (
@@ -355,11 +377,11 @@ export function WhenWho({ visitId }: { visitId: ID }) {
           title={t("vw.reschedule")}
           saveLabel={t("vw.reschedule")}
           withNote={false}
-          init={{ durationMin: v.durationMin, techIds: people, start: v.start, exceptId: v.id, propertyId: visitPropertyId(db, v), jobId: v.jobId }}
+          init={{ durationMin: v.durationMin, techIds: people, start: v.start, exceptId: v.id, propertyId: visitPropertyId(db, v), jobId: v.jobId, allDay: v.allDay, allowAllDay: !!v.jobId && v.kind !== "inspection" }}
           onSave={(f) => {
-            const undoMove = store.rescheduleVisit(v.id, f.start, f.durationMin);
+            const undoMove = store.rescheduleVisit(v.id, f.start, f.durationMin, f.allDay);
             const undoTech = f.assigneeIds.join() !== people.join() ? store.assignVisit(v.id, f.assigneeIds) : () => {};
-            toast.show(t("vf.rescheduled", { date: day(f.start), time: time(f.start) }), () => { undoTech(); undoMove(); });
+            toast.show(f.allDay ? t("job5.allDaySaved", { date: day(f.start) }) : t("vf.rescheduled", { date: day(f.start), time: time(f.start) }), () => { undoTech(); undoMove(); });
             // the client was told the old time: offer to tell the new one (§5.2)
             return v.customerNotifiedAt ? v.id : null;
           }}

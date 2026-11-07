@@ -147,6 +147,13 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     await wipeIfPending();
     expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["mine3"]);
     state.session = true;
+    // an older mark ("1") while ANOTHER person is signed in now (u1's wipe failed, u2 signed in, the app restarted):
+    // never the session's person — u2's unsent ops stay (review #244, rule 6)
+    state.session = true; // the session mock is u1 here: it stands for whoever is signed in now
+    storage.set("octo.outbox.v1", JSON.stringify([op("now-signed-in", { userId: "u1", companyId: "c1" }), op("old3")]));
+    storage.set("octo.wipe.pending.v1", "1");
+    await wipeIfPending();
+    expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["now-signed-in"]);
     // the start check knows the person even after the session is gone: finishOnDevice(uid)
     state.session = false;
     storage.set("octo.outbox.v1", JSON.stringify([op("mine4", { userId: "u7", companyId: "c1" }), op("theirs4", { userId: "u9", companyId: "c1" })]));

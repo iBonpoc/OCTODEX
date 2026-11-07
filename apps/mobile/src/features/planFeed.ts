@@ -69,7 +69,7 @@ export function planItems(
     if (!whoMatches(people, whoNow, db.me)) continue;
     // a visit past midnight is on both days, like a task or an event
     for (const day of spanDays(v.start, end, tz))
-      if (inRange(day)) out.push({ kind: "visit", id: v.id, day, start: v.start, end, allDay: false, people, done, visit: v, at: at(v.start, day) });
+      if (inRange(day)) out.push({ kind: "visit", id: v.id, day, start: v.start, end, allDay: !!v.allDay, people, done, visit: v, at: at(v.start, day) });
   }
   for (const t of db.tasks ?? []) {
     if (!t.startsAt) continue;   // only a task with a time is in the Plan (13 §3.7); a due date alone stays in «Задачи»

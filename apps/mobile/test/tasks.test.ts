@@ -133,6 +133,7 @@ describe("tasks: who a task may be for (S26, docs/specs/23 §5)", () => {
     const other = d.members.find((m) => m.id !== d.me)!.id;
     expect(taskAssignees(d, "tech", other).map((m) => m.id)).toEqual([other]);
     expect(taskAssignees(d, "tech", d.me).map((m) => m.id)).toEqual([d.me]);
+    expect(taskAssignees(d, "tech", "gone-member").map((m) => m.id)).toEqual([d.me]); // left the team: himself
   });
 });
 

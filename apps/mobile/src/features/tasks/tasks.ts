@@ -110,7 +110,8 @@ export const taskCounts = (tasks: readonly Task[], now = Date.now()): Record<Tas
 export function taskAssignees(db: DB, role: Role, current?: string | null): DB["members"] {
   const team = db.members.filter((m) => !m.pending);
   if (role !== "tech") return team;
-  const only = current && current !== db.me ? current : db.me;
+  // a person who has left the team is not offered (the sheet asks for a new assignee): then himself
+  const only = current && current !== db.me && team.some((m) => m.id === current) ? current : db.me;
   return team.filter((m) => m.id === only);
 }
 

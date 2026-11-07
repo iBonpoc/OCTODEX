@@ -10,6 +10,7 @@ import { clientCounts, clientRecords, clientRowsFor, isClientSection, type Clien
 import { billingLine } from "@/features/clientForm";
 import { ClientSection, PersonRows } from "@/features/client/ClientSections";
 import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
+import { useDialThenAsk } from "@/features/comms/dial";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { callPlaceForClient } from "@/features/comms/comms";
 import { StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
@@ -52,6 +53,7 @@ export default function ClientScreen() {
   const [menu, setMenu] = useState<{ x: number; y: number; w: number; h: number } | null>(null);
   /** wave 6-2: after «Позвонить» — «Чем кончился?» (the call goes to the client; a technician — to his job) */
   const [calling, setCalling] = useState<CallPreset | null>(null);
+  const dial = useDialThenAsk();
   const [writing, setWriting] = useState<MessagePreset | null>(null);
   const statusRef = useRef<React.ComponentRef<typeof View>>(null);
   const c = visibleClients(db, role).find((x) => x.id === id);
@@ -153,10 +155,8 @@ export default function ClientScreen() {
           <IconButton
             icon="phone"
             label={t("client.call")}
-            onPress={() => {
-              Linking.openURL(`tel:${tel}`).catch(() => {});
-              setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: main?.id });
-            }}
+            // the outcome sheet opens after the call, not under the system dialer (spec 20 §3, founder 07.11)
+            onPress={() => dial(tel, () => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: main?.id }))}
           />
         ) : null}
         {/* wave 6-3: «Новое сообщение» to the main person — a ready text in the client's language, the event is written */}
