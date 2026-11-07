@@ -214,6 +214,13 @@ describe("unit:storeSync — a plain sign-out leaves the outbox: whose op is it 
     await as(r, "u2", "c2");
     answerLoads();
     expect(valueOf(r).queue).toEqual([]); // not shown as theirs
+    // their own change and «Отменить»: the count and the undo are theirs only; the other person's op stays
+    const undo = valueOf(r).removeCalendarEvent("ev-of-u2");
+    await settle();
+    expect(valueOf(r).queue).toHaveLength(1);
+    undo();
+    await settle();
+    expect(valueOf(r).queue).toEqual([]);
     await wait(1700);
     await settle();
     expect(server.sends.filter((x) => x.userId === "u2")).toEqual([]);

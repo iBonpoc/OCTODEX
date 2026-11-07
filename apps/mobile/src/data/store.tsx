@@ -294,7 +294,9 @@ const reId = (doc: EstimateDoc): EstimateDoc => ({
 export type OwnedItem = OutboxItem & { owner?: { userId: string; companyId: string } };
 /**
  * The ops the signed-in person sends: theirs in this company, in order. Another person's (or another company's) wait
- * for their owner and are never lost. Ops of older versions carry no owner: they go as before (once, after the update).
+ * for their owner and are never lost. Ops of older versions carry no owner: they go as before — once, from whoever signs
+ * in after the update (nothing tells whose they were; the risk is only on a phone where the outbox stayed and the
+ * person changed). The «не отправлено» counts and «Отменить» see only the person's own ops (19 §6.12).
  */
 export const mineOf = (items: readonly OwnedItem[], who: { userId: string; companyId: string } | null): OwnedItem[] =>
   who ? items.filter((o) => !o.owner || (o.owner.userId === who.userId && o.owner.companyId === who.companyId)) : [];
