@@ -587,6 +587,13 @@ export interface CatalogItem {
   components?: { itemId: ID; qty: string }[];
   /** test price (founder rule: real prices never in code) */
   placeholder?: boolean;
+  /** properties set by a trade module: name → text (catalog_items.attributes, docs/specs/33 П16). The core keeps no list
+   *  of names or values. Absent = none (and not sent: an old server without the column is never written to) */
+  attributes?: Record<string, string>;
+  /** how the supplier sells it (the supplier order, C7): "lb", "pc", "box", "bag"…; packSize = how many of `unit` are in
+   *  one purchase unit (coil: 2.6 ft a lb; downspout: 10 ft a piece; a box of 30 elbows) — docs/specs/33 П16.6 */
+  purchaseUnit?: string;
+  packSize?: string;
 }
 
 /** visit.late — computed in the app for the office (docs/specs/03 П3c), never stored and not in the server notifications.kind */
