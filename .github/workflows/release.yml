@@ -91,8 +91,11 @@ jobs:
       # (the function calls public.delete_account); a failed deploy stops the release — the app never ships ahead of it.
       # --yes: the CLI asks for confirmation and fails without a terminal (releases after #214 stopped here, 06.11).
       # verify_jwt = true comes from supabase/config.toml; SUPABASE_SERVICE_ROLE_KEY is provided to the function by Supabase.
+      # Пуши П3: send-push (verify_jwt = false, its own key x-push-key; docs/specs/27 §4.5)
       - name: Deploy edge functions
-        run: supabase functions deploy delete-account --project-ref "$PROJECT_REF" --yes
+        run: |
+          supabase functions deploy delete-account --project-ref "$PROJECT_REF" --yes
+          supabase functions deploy send-push --project-ref "$PROJECT_REF" --yes
 
   publish:
     name: Publish (Expo Go + web)

@@ -99,3 +99,23 @@
 - Ключ пушей Apple один на аккаунт, всего их можно 2. **Не отзывать** его на developer.apple.com, иначе пуши перестанут приходить всем.
 - Проверка пушей: OCTODEX → «Ещё» → «Мои настройки» → «Уведомления» → переключатель → **Разрешить**. Если вместо переключателя написано про Expo Go, напишите руководителю.
 - Если `npm run ios:first` остановился с ошибкой, скопируйте **последние строки ошибки** руководителю. Перед отправкой проверьте, что в них нет пароля.
+
+## 6. Пуши: отправка с сервера (один раз, после влития P3)
+Сервер раз в минуту отправляет пуши через функцию `send-push`. Пока шагов ниже нет, он молчит, приложение работает как раньше. Ключи вставляются **только в поля Supabase и Expo**, не в чат и не в код. Подробности — `docs/specs/27-push.md` §4.5.
+
+1. **Ключ функции.** На Mac откройте «Терминал» и выполните `openssl rand -hex 32`. Скопируйте строку из 64 символов. Это ключ функции, он нужен в шагах 3 и 4.
+2. **Токен Expo.** expo.dev → значок аккаунта → **Account settings** → **Access tokens** → **Create token**, имя `send-push`. Скопируйте токен (он показывается один раз).
+3. **Секреты функции.** Supabase → **Edge Functions** → **Secrets** → **Add new secret**, два раза:
+   - `PUSH_FN_KEY` — ключ из шага 1;
+   - `EXPO_ACCESS_TOKEN` — токен из шага 2.
+4. **Адрес и ключ для расписания.** Supabase → **SQL Editor** → **New query**, вставьте и замените `<ключ>` на ключ из шага 1:
+   ```sql
+   select vault.create_secret('https://kgiaxygsjkyiquhjbxdg.supabase.co/functions/v1/send-push', 'push_fn_url');
+   select vault.create_secret('<ключ>', 'push_fn_key');
+   ```
+   **Run**. Запрос не сохраняйте: закройте вкладку без «Save».
+5. **Защита пушей Expo.** expo.dev → **Account settings** → **Access tokens** → включите **Enhanced Security for Push Notifications**. Делать после шага 3: иначе пуши без токена будут отклонены.
+6. **Проверка.** Supabase → **Edge Functions** → `send-push` → **Logs**: раз в минуту строка `send-push claimed=0 …`. Строка `unauthorized` значит, что ключ в шаге 3 и шаге 4 разный. Потом подпишите тестовую смету и через 1–2 минуты получите пуш «Estimate signed» на телефон со сборкой OCTODEX.
+
+Сменить ключ: шаг 1 заново, в шаге 3 замените `PUSH_FN_KEY`, в шаге 4 выполните `select vault.update_secret((select id from vault.secrets where name = 'push_fn_key'), '<новый ключ>');`.
+Остановить отправку: `select cron.unschedule('send-push');` в SQL Editor (вернуть — напишите руководителю).
