@@ -2162,4 +2162,11 @@ export const en: Dict = {
   "job5.msg.allDay": "Hi {name}! {company} will come to do the work on {date}, during the day. If the day does not work, just reply to this message.",
   "job5.allDaySaved": "Scheduled for {date}, all day",
   "job5.allDayChip": "All day",
+  // fix.filters.* — one row of filters (founder fixes chat, 07.11)
+  "fix.filters.button": "Filters",
+  "fix.filters.title": "Filters",
+  "fix.filters.a11y": "Filters, on: {n}",
+  "fix.filters.reset": "Reset",
+  "fix.filters.done": "Done",
+  "fix.filters.tags": "Tags",
 };

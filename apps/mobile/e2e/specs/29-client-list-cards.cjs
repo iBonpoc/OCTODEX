@@ -99,6 +99,38 @@ exports.run = async (h) => {
   const lateUsd = "$" + (lateCents / 100).toLocaleString("en-US", { minimumFractionDigits: lateCents % 100 ? 2 : 0, maximumFractionDigits: lateCents % 100 ? 2 : 0 });
   h.expect(lateTxt.includes(`Просрочено ${lateUsd} · 9 дн`), `overdue sign with amount and days: ${lateTxt.slice(0, 240)}`);
   await h.shot("overdue");
+  // founder 07.11 «очень много кнопок сверху»: filters are ONE row; empty ones hidden; tags behind «Фильтры»
+  await h.go("/clients");
+  const chips = p.getByRole("radio");
+  const ys = await chips.evaluateAll((els) => els.filter((e) => e.offsetParent).map((e) => Math.round(e.getBoundingClientRect().top)));
+  h.expect(ys.length >= 2 && ys.every((y) => Math.abs(y - ys[0]) <= 1), `status filters in one row (${ys.join(", ")})`);
+  const chipText = (await chips.allInnerTexts()).join(" | ");
+  h.expect((await p.locator('[role="radio"][aria-checked="true"]').locator("visible=true").count()) === 1, "the chosen filter is announced as checked (web a11y)");
+  h.expect(!/· 0\b/.test(chipText.replace(/^Все · \d+/, "")), `no empty filters but «Все»: ${chipText}`);
+  const moreBtn = p.getByRole("button", { name: /^Фильтры, включено: \d+$/ });
+  h.expect((await moreBtn.count()) === 1, "«Фильтры» button in the row");
+  const mb = await moreBtn.boundingBox();
+  h.expect(mb && Math.abs(Math.round(mb.y) - ys[0]) <= 1 && mb.height <= 36, `«Фильтры» on the same row, visible ≤ 36 (${mb && mb.height})`);
+  h.expect((await p.getByRole("checkbox").locator("visible=true").count()) === 0, "no tag chips on the screen");
+  // wheel scrolls the row sideways when it does not fit (web: mouse; keyboard focus scrolls by itself)
+  const row = await p.evaluate(() => {
+    const r = [...document.querySelectorAll('[role="radiogroup"]')].find((e) => e.offsetParent);
+    const sc = r && (r.scrollWidth > r.clientWidth ? r : r.parentElement);
+    if (!sc || sc.scrollWidth <= sc.clientWidth) return { fits: true };
+    sc.dispatchEvent(new WheelEvent("wheel", { deltaY: 120, bubbles: true, cancelable: true }));
+    return { fits: false, left: sc.scrollLeft };
+  });
+  h.expect(row.fits || row.left > 0, `mouse wheel scrolls the filter row (${JSON.stringify(row)})`);
+  await moreBtn.click();
+  await p.waitForTimeout(400);
+  const tagRows = h.sheet().getByRole("checkbox");
+  h.expect((await tagRows.count()) >= 3, "tags as rows in the «Фильтры» sheet");
+  await tagRows.first().click();
+  await h.sheet().getByText("Готово", { exact: true }).click();
+  await p.waitForTimeout(400);
+  h.expect((await p.getByRole("button", { name: "Фильтры, включено: 1" }).count()) === 1, "the button counts the tags that are on");
+  h.expect(await p.getByText("Фильтры · 1", { exact: true }).first().isVisible(), "«Фильтры · 1» on the button");
+  await h.shot("filters");
 
   // status from the card: prospect → archive in one tap, then «Undo».
   // The demo has no prospect: make one client a prospect in the saved data (like a lead with an estimate would) and reload.
