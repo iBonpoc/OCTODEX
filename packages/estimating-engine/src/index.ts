@@ -3,6 +3,7 @@ export * from "./formula.js";
 export * from "./gutters.js";
 export * from "./estimate.js";
 export * from "./gutterEstimate.js";
+export * from "./gutterParts.js";
 export * from "./custom.js";
 export * from "./contract.js";
 export * from "./reports.js";
