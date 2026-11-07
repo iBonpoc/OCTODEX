@@ -2143,4 +2143,11 @@ export const es: Dict = {
   "job5.type.saved": "Tipo de trabajo cambiado",
   // fix.* — founder fixes chat
   "fix.client.balance": "Saldo",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.leadOrphan": "{name}: el responsable ya no trabaja — entregue el lead",
+  "fr7.leadReplyOrphan": "Lead sin respuesta {m} min · {name} · el responsable ya no trabaja",
+  "fr7.taskOrphan": "Tarea sin responsable: {name}",
+  "fr7.noOwnerChip": "Sin responsable",
+  "fr7.noAssigneeChip": "Sin responsable",
+  "fr7.handOver": "Entregar",
 };
