@@ -10,7 +10,7 @@
 ## 2. Что нужно, чтобы пуш пришёл (docs.expo.dev, SDK 58, проверено 07.11)
 - **В Expo Go удалённый пуш не работает** (с SDK 53). Нужна своя сборка EAS (профиль `preview`, Android — APK по ссылке). Expo Go для всего остального остаётся.
 - **Android — первым** (решение руководителя 07.11): проект Firebase (бесплатно) → `google-services.json` в `apps/mobile` и `android.googleServicesFile` в `app.json`; ключ сервисного аккаунта FCM V1 загружается в EAS (`eas credentials`), в репозиторий не попадает.
-- **iOS — позже**: Apple Developer ($99/год), регистрация iPhone (UDID) или TestFlight; ключ APNs EAS создаёт при первой сборке.
+- **iOS — позже**: Apple Developer ($99/год), регистрация iPhone (UDID) или TestFlight; ключ APNs (и сертификат, профиль, приложение в App Store Connect) — **один интерактивный запуск eas под Apple ID**, только после влития P2 (eas проверяет, установлен ли expo-notifications); кнопка `--non-interactive` их не создаёт (проверено «Выпуском iOS» по коду eas-cli 27.4.1) — см. `docs/specs/30-ios-testflight.md` §4. Дальше кнопка EAS build работает с одним EXPO_TOKEN.
 - **Безопасность Expo**: включить «enhanced push security» в expo.dev; токен доступа — секрет edge function `send-push` (Supabase), не в репозитории и не в чате.
 - **Веб/PWA**: Web Push — отдельная работа, не в этой волне. На вебе раздел «Уведомления» говорит «пуши — в приложении на телефоне».
 
