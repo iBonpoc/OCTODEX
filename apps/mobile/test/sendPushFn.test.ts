@@ -179,6 +179,44 @@ describe("send-push: sending", () => {
     expect(c3.finish[0]).toMatchObject({ status: "failed", error: "http_200" });   // the answer does not match the batch
     expect(code("expo", "Weird Name!/x")).toBe("expo:weirdnamex");
   });
+  it("some phones reached, some to retry: a retry with the tickets of the reached ones (only the others get it again)", async () => {
+    const { d, calls } = fake({
+      queue: [[row("1", 3)]],
+      send: async () => ({ status: 200, body: { data: [
+        { status: "ok", id: "tk-a" },
+        { status: "error", message: "slow", details: { error: "MessageRateExceeded" } },
+        { status: "error", message: "bad", details: { error: "MismatchSenderId" } },
+      ] } }),
+    });
+    const r = await handlePush(req(), KEY, d);
+    expect(calls.finish).toEqual([{ id: "1", status: "retry", tickets: [{ ticket_id: "tk-a", device_id: "1-d0" }], error: "expo:messagerateexceeded" }]);
+    expect(JSON.parse(r.body)).toMatchObject({ retry: 1, sent: 0 });
+    // reached + a lasting error (no retry): sent to the reached ones
+    const { d: d2, calls: c2 } = fake({
+      queue: [[row("1", 2)]],
+      send: async () => ({ status: 200, body: { data: [{ status: "ok", id: "tk-a" }, { status: "error", message: "x", details: { error: "MismatchSenderId" } }] } }),
+    });
+    await handlePush(req(), KEY, d2);
+    expect(c2.finish).toEqual([{ id: "1", status: "sent", tickets: [{ ticket_id: "tk-a", device_id: "1-d0" }], error: null }]);
+  });
+  it("a database error on one row does not stop the others (the messages are already with Expo)", async () => {
+    const { d, calls, logs } = fake({ queue: [[row("1", 1), row("2", 1), row("3", 1)]], due: [{ ticket_id: "a", device_id: "d1" }],
+      receipts: async () => ({ status: 200, body: { data: { a: { status: "ok" } } } }) });
+    const finish = d.finish;
+    d.finish = async (id, ...rest) => { if (id === "2") throw new Error("rpc push_finish 08006"); return finish(id, ...rest); };
+    const r = await handlePush(req(), KEY, d);
+    expect(r.status).toBe(200);
+    expect(calls.finish.map((f) => f.id)).toEqual(["1", "3"]);
+    expect(calls.done).toEqual([{ checked: ["a"], gone: [] }]);   // the receipts are still checked
+    expect(JSON.parse(r.body)).toMatchObject({ sent: 2, errors: 1 });
+    expect(logs).toEqual(["send-push claimed=3 messages=3 sent=2 retry=0 failed=0 gone=0 receipts=1 errors=1"]);
+    // the phones to switch off failed to be saved: the rows are still finished
+    const gone = { status: "error", message: "x", details: { error: "DeviceNotRegistered" } };
+    const { d: d2, calls: c2 } = fake({ queue: [[row("1", 1)]], send: async () => ({ status: 200, body: { data: [gone] } }) });
+    d2.receiptsDone = async () => { throw new Error("rpc"); };
+    expect((await handlePush(req(), KEY, d2)).status).toBe(200);
+    expect(c2.finish).toEqual([{ id: "1", status: "failed", tickets: null, error: "not_registered" }]);
+  });
   it("skips a token of a bad shape and does not send it", async () => {
     const r1: ClaimRow = { id: "1", kind: "lead.new", route: "/leads", devices: [{ device_id: "d", token: "not-a-token", lang: "en" }] };
     const { d, calls } = fake({ queue: [[r1]] });
@@ -191,7 +229,7 @@ describe("send-push: sending", () => {
     d.claim = async () => { throw new Error("rpc push_claim 42501"); };
     const r = await handlePush(req(), KEY, d);
     expect(r.status).toBe(500);
-    expect(logs).toEqual(["send-push error claimed=0 messages=0 sent=0 retry=0 failed=0 gone=0 receipts=0"]);
+    expect(logs).toEqual(["send-push error claimed=0 messages=0 sent=0 retry=0 failed=0 gone=0 receipts=0 errors=0"]);
   });
 });
 
@@ -223,7 +261,7 @@ describe("send-push: logs", () => {
   it("logs one line of counts and never a token, a text or the key", async () => {
     const { d, logs } = fake({ queue: [[row("1", 2, "estimate.client_signed", "ru")]] });
     await handlePush(req(), KEY, d);
-    expect(logs).toEqual(["send-push claimed=1 messages=2 sent=1 retry=0 failed=0 gone=0 receipts=0"]);
+    expect(logs).toEqual(["send-push claimed=1 messages=2 sent=1 retry=0 failed=0 gone=0 receipts=0 errors=0"]);
     const all = logs.join("\n");
     expect(all).not.toContain(KEY);
     expect(all).not.toMatch(/PushToken|Смета|route/);

@@ -8,8 +8,9 @@
  * 2) the words come from the kind and the phone's language (en / es / ru) — never sums, names or addresses (Apple 4.5.4);
  * 3) POST https://exp.host/--/api/v2/push/send in batches of ≤ 100 messages (Authorization: Bearer EXPO_ACCESS_TOKEN —
  *    enhanced push security);
- * 4) a ticket ok → push_finish(sent); DeviceNotRegistered → the phone goes off; 429 / 5xx / network / rate → retry;
- *    any other error → failed (a short code only);
+ * 4) a ticket ok → push_finish(sent); DeviceNotRegistered → the phone goes off; 429 / 5xx / network / rate → retry
+ *    (with the tickets of the phones reached: the retry goes to the others only); any other error → failed (a code only);
+ *    a database error on one row does not stop the others;
  * 5) receipts of tickets older than 15 min (push_receipts_due / done).
  * Logs carry counts only: never a token, a text or an answer of Expo (its messages quote the token).
  * One call works ≤ 20 s; what is left waits for the next minute.
@@ -163,6 +164,8 @@ export interface Counts {
   failed: number;
   gone: number;
   receipts: number;
+  /** database errors after Expo took the messages (the row stays «sending»; push_claim brings it back in 10 min) */
+  errors: number;
 }
 
 /** one round: the rows of one claim → Expo → push_finish */
@@ -198,22 +201,33 @@ export async function sendRows(rows: ClaimRow[], deps: PushDeps, counts: Counts)
     } else if (o.kind === "retry") r.retry ??= o.code;
     else r.fail ??= o.code;
   });
+  // the messages are already with Expo: a database error on one row must not stop the others (security-check #287 №2) —
+  // else the rest stay «sending», come back after 10 min and the people get the push twice
   if (gone.length) {
-    await deps.receiptsDone([], gone);
-    counts.gone += gone.length;
+    try {
+      await deps.receiptsDone([], gone);
+      counts.gone += gone.length;
+    } catch {
+      counts.errors++;
+    }
   }
   for (let i = 0; i < rows.length; i++) {
     const r = perRow[i];
-    if (r.tickets.length) {
-      await deps.finish(rows[i].id, "sent", r.tickets, null);
-      counts.sent++;
-    } else if (r.retry) {
-      await deps.finish(rows[i].id, "retry", null, r.retry);
-      counts.retry++;
-    } else {
-      const why = r.fail ?? (r.gone && r.gone === r.total ? "not_registered" : "no_device");
-      await deps.finish(rows[i].id, "failed", null, why);
-      counts.failed++;
+    try {
+      if (r.retry) {
+        // only the phones not reached are tried again: the tickets of the reached ones are kept (push_claim skips them)
+        await deps.finish(rows[i].id, "retry", r.tickets.length ? r.tickets : null, r.retry);
+        counts.retry++;
+      } else if (r.tickets.length) {
+        await deps.finish(rows[i].id, "sent", r.tickets, null);
+        counts.sent++;
+      } else {
+        const why = r.fail ?? (r.gone && r.gone === r.total ? "not_registered" : "no_device");
+        await deps.finish(rows[i].id, "failed", null, why);
+        counts.failed++;
+      }
+    } catch {
+      counts.errors++;
     }
   }
 }
@@ -251,7 +265,7 @@ export async function handlePush(req: Req, fnKey: string | undefined, deps: Push
   if (!sameKey(req.header("x-push-key"), fnKey)) return json(401, { error: "unauthorized" });
   const now = deps.now ?? Date.now;
   const start = now();
-  const counts: Counts = { claimed: 0, messages: 0, sent: 0, retry: 0, failed: 0, gone: 0, receipts: 0 };
+  const counts: Counts = { claimed: 0, messages: 0, sent: 0, retry: 0, failed: 0, gone: 0, receipts: 0, errors: 0 };
   try {
     for (let round = 0; round < 20 && now() - start < BUDGET_MS; round++) {
       const rows = await deps.claim(CLAIM);
@@ -270,4 +284,4 @@ export async function handlePush(req: Req, fnKey: string | undefined, deps: Push
 }
 
 const line = (c: Counts) =>
-  `claimed=${c.claimed} messages=${c.messages} sent=${c.sent} retry=${c.retry} failed=${c.failed} gone=${c.gone} receipts=${c.receipts}`;
+  `claimed=${c.claimed} messages=${c.messages} sent=${c.sent} retry=${c.retry} failed=${c.failed} gone=${c.gone} receipts=${c.receipts} errors=${c.errors}`;

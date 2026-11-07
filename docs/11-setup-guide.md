@@ -108,14 +108,12 @@
 3. **Секреты функции.** Supabase → **Edge Functions** → **Secrets** → **Add new secret**, два раза:
    - `PUSH_FN_KEY` — ключ из шага 1;
    - `EXPO_ACCESS_TOKEN` — токен из шага 2.
-4. **Адрес и ключ для расписания.** Supabase → **SQL Editor** → **New query**, вставьте и замените `<ключ>` на ключ из шага 1:
-   ```sql
-   select vault.create_secret('https://kgiaxygsjkyiquhjbxdg.supabase.co/functions/v1/send-push', 'push_fn_url');
-   select vault.create_secret('<ключ>', 'push_fn_key');
-   ```
-   **Run**. Запрос не сохраняйте: закройте вкладку без «Save».
+4. **Адрес и ключ для расписания.** Supabase → **Integrations** → **Vault** (в старом меню: **Project Settings** → **Vault**) → **Secrets** → **Add new secret**, два раза:
+   - имя `push_fn_url`, значение `https://kgiaxygsjkyiquhjbxdg.supabase.co/functions/v1/send-push`;
+   - имя `push_fn_key`, значение — ключ из шага 1.
+   Через SQL Editor ключ не вводить: запрос с ключом остаётся в его истории («Recent»).
 5. **Защита пушей Expo.** expo.dev → **Account settings** → **Access tokens** → включите **Enhanced Security for Push Notifications**. Делать после шага 3: иначе пуши без токена будут отклонены.
 6. **Проверка.** Supabase → **Edge Functions** → `send-push` → **Logs**: раз в минуту строка `send-push claimed=0 …`. Строка `unauthorized` значит, что ключ в шаге 3 и шаге 4 разный. Потом подпишите тестовую смету и через 1–2 минуты получите пуш «Estimate signed» на телефон со сборкой OCTODEX.
 
-Сменить ключ: шаг 1 заново, в шаге 3 замените `PUSH_FN_KEY`, в шаге 4 выполните `select vault.update_secret((select id from vault.secrets where name = 'push_fn_key'), '<новый ключ>');`.
+Сменить ключ: шаг 1 заново, в шаге 3 замените `PUSH_FN_KEY`, в шаге 4 откройте `push_fn_key` в Vault → **Edit** → новое значение. Оба значения должны совпадать.
 Остановить отправку: `select cron.unschedule('send-push');` в SQL Editor (вернуть — напишите руководителю).

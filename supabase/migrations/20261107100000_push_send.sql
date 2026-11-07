@@ -110,9 +110,20 @@ begin
     select jsonb_agg(jsonb_build_object('device_id', d.id, 'token', d.expo_token, 'lang', d.lang) order by d.last_seen_at desc)
       into v_dev
       from public.push_devices d
-     where d.user_id = r.user_id and d.revoked_at is null;
+     where d.user_id = r.user_id and d.revoked_at is null
+       -- a retry goes only to the phones it did not reach (security-check #287 №3): a phone with a ticket of this row
+       -- already got it
+       and not exists (select 1 from public.push_tickets t where t.outbox_id = r.id and t.device_id = d.id);
     if v_dev is null then
-      update public.push_outbox set status = 'skipped', error = 'no_device' where id = r.id;
+      if exists (select 1 from public.push_tickets t where t.outbox_id = r.id) then
+        -- every live phone got it on an earlier try
+        update public.push_outbox
+           set status = 'sent', sent_at = now(), error = null,
+               ticket_ids = (select array_agg(ticket_id order by ticket_id) from public.push_tickets where outbox_id = r.id)
+         where id = r.id;
+      else
+        update public.push_outbox set status = 'skipped', error = 'no_device' where id = r.id;
+      end if;
       continue;
     end if;
     update public.push_outbox set status = 'sending', tries = tries + 1, next_try_at = now(), error = null where id = r.id;
@@ -125,7 +136,8 @@ revoke all on function public.push_claim(integer) from public, anon, authenticat
 grant execute on function public.push_claim(integer) to service_role;
 
 -- ---- 4. Finish --------------------------------------------------------------------------------------------------------
--- p_status: 'sent' (p_tickets = [{ticket_id, device_id}] — only phones of this person are kept), 'retry', 'failed'.
+-- p_status: 'sent' / 'retry' (p_tickets = [{ticket_id, device_id}] of the phones reached — only phones of this person
+-- are kept; a retry then goes to the other phones only), 'failed'.
 -- Only a row in «sending» changes. Returns the new status (null: the row was not «sending»).
 create or replace function public.push_finish(p_id uuid, p_status text, p_tickets jsonb default null, p_error text default null)
 returns text language plpgsql security definer set search_path = '' as $$
@@ -141,7 +153,8 @@ begin
   if not found then
     return null;
   end if;
-  if p_status = 'sent' then
+  -- the tickets are kept on «sent» and on «retry» (the phones a retry need not send to again, push_claim)
+  if p_status in ('sent', 'retry') then
     insert into public.push_tickets (ticket_id, outbox_id, device_id)
     select t.ticket_id, r.id, d.id
       from jsonb_to_recordset(case when jsonb_typeof(p_tickets) = 'array' then p_tickets else '[]'::jsonb end)
@@ -149,6 +162,8 @@ begin
       join public.push_devices d on d.id = t.device_id and d.user_id = r.user_id
      where t.ticket_id ~ '^[A-Za-z0-9_-]{1,64}$'
     on conflict (ticket_id) do nothing;
+  end if;
+  if p_status = 'sent' then
     update public.push_outbox
        set status = 'sent', sent_at = now(), error = null,
            ticket_ids = (select array_agg(ticket_id order by ticket_id) from public.push_tickets where outbox_id = r.id)
@@ -160,6 +175,13 @@ begin
        set status = 'pending', error = v_err, next_try_at = now() + make_interval(mins => (2 ^ (r.tries - 1))::integer)
      where id = r.id;
     return 'pending';
+  elsif exists (select 1 from public.push_tickets where outbox_id = r.id) then
+    -- no tries left, but some phones got it on an earlier try: it is sent (to those), the error says why not to all
+    update public.push_outbox
+       set status = 'sent', sent_at = now(), error = coalesce(v_err, 'failed'),
+           ticket_ids = (select array_agg(ticket_id order by ticket_id) from public.push_tickets where outbox_id = r.id)
+     where id = r.id;
+    return 'sent';
   else
     v_new := 'failed';
     update public.push_outbox set status = v_new, error = coalesce(v_err, 'failed') where id = r.id;
@@ -253,6 +275,20 @@ begin
       create extension if not exists pg_net with schema extensions;
     else
       create extension if not exists pg_net;
+    end if;
+  end if;
+  -- On the hosting the standard event trigger of pg_net grants anon and authenticated EXECUTE on net.http_get /
+  -- net.http_post and rights on its tables (net.http_request_queue keeps the headers — the x-push-key; net._http_response
+  -- the answers). The app's roles need none of it (security-check #287 №1). A revoke that postgres may not make (the
+  -- grant is supabase_admin's) only warns: the check below says so in the log of the release, the migration goes on.
+  if to_regnamespace('net') is not null then
+    revoke execute on all functions in schema net from public, anon, authenticated;
+    revoke all on all tables in schema net from public, anon, authenticated;
+    if exists (select 1 from pg_proc p where p.pronamespace = 'net'::regnamespace
+                and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE')))
+       or exists (select 1 from pg_class c where c.relnamespace = 'net'::regnamespace and c.relkind in ('r', 'v', 'p')
+                   and (has_table_privilege('anon', c.oid, 'SELECT') or has_table_privilege('authenticated', c.oid, 'SELECT'))) then
+      raise warning 'push: anon or authenticated still has rights in schema net — revoke them as supabase_admin (docs/specs/27 §4.6)';
     end if;
   end if;
   if exists (select 1 from pg_available_extensions where name = 'pg_cron') then

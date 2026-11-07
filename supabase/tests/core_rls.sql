@@ -6455,6 +6455,76 @@ select public.push_claim(100);
 :as_super
 select tst.ok((select status = 'failed' and error = 'stuck' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000010' and user_id = 'a8200000-0000-4000-8000-000000000001'),
           'T82 a stuck row with no tries left is failed');
+-- the role was lowered after the queue: an admin who is now sales gets no payment push (security-check #287 №4а)
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000012', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+update public.memberships set role = 'sales' where user_id = 'a8200000-0000-4000-8000-000000000001';
+reset role; set role service_role;
+select public.push_claim(100);
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a8200000-0000-4000-8000-000000000001';
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000012' and user_id = 'a8200000-0000-4000-8000-000000000001'),
+          'T82 an admin lowered to sales after the queue gets no payment push');
+-- a subcontractor never gets one, even if a row got into the queue (№4б)
+insert into auth.users (id, email, raw_user_meta_data) values ('a8200000-0000-4000-8000-000000000003', 'sub82@a.test', '{"full_name":"Sid Sub"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000003', 'subcontractor', 'active');
+insert into public.push_devices (id, user_id, expo_token, platform, lang) values ('d8200000-0000-4000-8000-000000000004', 'a8200000-0000-4000-8000-000000000003', 'ExponentPushToken[t82-sid]', 'android', 'en');
+insert into public.push_outbox (company_id, user_id, kind, route) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000003', 'payment.received', '/notifications'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000003', 'lead.new', '/leads');
+reset role; set role service_role;
+select tst.ok(not (public.push_claim(100)::text like '%t82-sid%'), 'T82 a subcontractor is never sent a push');
+:as_super
+select tst.ok((select bool_and(status = 'skipped' and error = 'not_member') from public.push_outbox where user_id = 'a8200000-0000-4000-8000-000000000003'),
+          'T82 … his rows are skipped (not_member)');
+-- some phones reached, some not: a retry goes only to the others; when all live ones have a ticket — sent (№3)
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000013', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+create temp table t82_part as select id from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000013' and user_id = 'a8200000-0000-4000-8000-000000000001';
+create temp table t82_got (v jsonb);
+grant select on t82_part to service_role;
+grant select, insert on t82_got to service_role;
+reset role; set role service_role;
+insert into t82_got select x from jsonb_array_elements(public.push_claim(100)) x;
+select tst.ok((select jsonb_array_length(v -> 'devices') from t82_got where (v ->> 'id')::uuid = (select id from t82_part)) = 2, 'T82 partial: the first try goes to both phones');
+select tst.ok(public.push_finish((select id from t82_part), 'retry', '[{"ticket_id":"tkt-82-p1","device_id":"d8200000-0000-4000-8000-000000000001"}]', 'http_429') = 'pending',
+          'T82 partial: one phone reached, the row is retried');
+:as_super
+update public.push_outbox set next_try_at = now() where id = (select id from t82_part);
+truncate t82_got;
+reset role; set role service_role;
+insert into t82_got select x from jsonb_array_elements(public.push_claim(100)) x;
+select tst.ok((select array_agg(d ->> 'device_id') from t82_got, jsonb_array_elements(v -> 'devices') d where (v ->> 'id')::uuid = (select id from t82_part))
+          = array['d8200000-0000-4000-8000-000000000002'], 'T82 partial: the retry goes only to the phone not reached');
+select tst.ok(public.push_finish((select id from t82_part), 'sent', '[{"ticket_id":"tkt-82-p2","device_id":"d8200000-0000-4000-8000-000000000002"}]', null) = 'sent', 'T82 partial: sent');
+:as_super
+select tst.ok((select ticket_ids = array['tkt-82-p1', 'tkt-82-p2'] from public.push_outbox where id = (select id from t82_part)), 'T82 partial: the row keeps the tickets of both tries');
+-- the phone not reached went off before the retry: every live phone has a ticket → the claim marks it sent
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000014', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+truncate t82_part;
+insert into t82_part select id from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000014' and user_id = 'a8200000-0000-4000-8000-000000000001';
+reset role; set role service_role;
+select public.push_claim(100);
+select public.push_finish((select id from t82_part), 'retry', '[{"ticket_id":"tkt-82-p3","device_id":"d8200000-0000-4000-8000-000000000001"}]', 'http_503');
+:as_super
+update public.push_devices set revoked_at = now(), revoked_reason = 'signed_out' where id = 'd8200000-0000-4000-8000-000000000002';
+update public.push_outbox set next_try_at = now() where id = (select id from t82_part);
+reset role; set role service_role;
+select tst.ok(not (public.push_claim(100)::text like '%' || (select id from t82_part)::text || '%'), 'T82 partial: nothing is sent twice to the phone already reached');
+:as_super
+select tst.ok((select status = 'sent' and ticket_ids = array['tkt-82-p3'] from public.push_outbox where id = (select id from t82_part)), 'T82 partial: all live phones reached → sent');
+-- out of tries with one phone reached: sent (to it), the error stays
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08200000-0000-4000-8000-000000000015', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+truncate t82_part;
+insert into t82_part select id from public.push_outbox where notification_id = '08200000-0000-4000-8000-000000000015' and user_id = 'a8200000-0000-4000-8000-000000000001';
+update public.push_devices set revoked_at = null, revoked_reason = null where id = 'd8200000-0000-4000-8000-000000000002';
+update public.push_outbox set tries = 4 where id = (select id from t82_part);
+reset role; set role service_role;
+select public.push_claim(100);
+select tst.ok(public.push_finish((select id from t82_part), 'retry', '[{"ticket_id":"tkt-82-p4","device_id":"d8200000-0000-4000-8000-000000000001"}]', 'http_503') = 'sent',
+          'T82 partial: the last try with one phone reached is sent, not failed');
+:as_super
+select tst.ok((select status = 'sent' and error = 'http_503' from public.push_outbox where id = (select id from t82_part)), 'T82 partial: … and keeps why not all phones got it');
+drop table t82_part;
+drop table t82_got;
 -- the limit of one claim
 insert into public.push_outbox (company_id, user_id, kind, route)
   select 'ca000000-0000-0000-0000-000000000000', 'a8200000-0000-4000-8000-000000000001', 'lead.new', '/leads' from generate_series(1, 3);
@@ -6516,6 +6586,19 @@ select tst.ok((select revoked_at is null from public.push_devices where id = 'd8
 insert into public.notifications (id, company_id, kind, invoice_id) values ('08300000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
 reset role; set role service_role;
 select tst.ok(not (public.push_claim(100)::text like '%t82-ada-1%'), 'T83 a switched-off phone is not sent to again');
+-- receipts_done touches only the ids it is given (№4в): unknown tickets and phones change nothing
+:as_super
+create temp table t83_before as
+  select (select count(*) from public.push_tickets where checked_at is null) as open_tickets,
+         (select count(*) from public.push_devices where revoked_at is null) as live_phones;
+reset role; set role service_role;
+select public.push_receipts_done(array['no-such-ticket'], array[gen_random_uuid()]);
+select public.push_receipts_done(null, null);
+:as_super
+select tst.ok((select open_tickets from t83_before) = (select count(*) from public.push_tickets where checked_at is null)
+          and (select live_phones from t83_before) = (select count(*) from public.push_devices where revoked_at is null),
+          'T83 receipts_done with unknown ids changes no other ticket or phone');
+drop table t83_before;
 -- the app re-registers the token: the phone is on again (P1)
 :as_super
 select tst.ok(not has_function_privilege('authenticated', 'public.push_receipts_due(integer)', 'EXECUTE') and not has_function_privilege('anon', 'public.push_receipts_due(integer)', 'EXECUTE')
@@ -6529,6 +6612,18 @@ select tst.ok(not has_table_privilege('authenticated', 'public.push_tickets', 'S
 select tst.fails($q$select 1 from public.push_tickets$q$, 'T83 the owner cannot read tickets');
 select tst.fails($q$select public.push_receipts_done(array['x'], null)$q$, 'T83 the owner cannot mark receipts');
 :as_super
+-- pg_net on the hosting: the app's roles have no rights in schema net (security-check #287 №1); no pg_net here → skipped
+do $$ begin
+  if to_regnamespace('net') is null then
+    perform tst.ok(true, 'T83 no pg_net here: nothing to check in schema net');
+  else
+    perform tst.ok(not exists (select 1 from pg_proc p where p.pronamespace = 'net'::regnamespace
+                                and (has_function_privilege('anon', p.oid, 'EXECUTE') or has_function_privilege('authenticated', p.oid, 'EXECUTE')))
+                   and not exists (select 1 from pg_class c where c.relnamespace = 'net'::regnamespace and c.relkind in ('r', 'v', 'p')
+                                    and (has_table_privilege('anon', c.oid, 'SELECT') or has_table_privilege('authenticated', c.oid, 'SELECT'))),
+                   'T83 anon and authenticated have no rights in schema net');
+  end if;
+end $$;
 -- the kick: no Vault and no pg_net here → silent
 select tst.ok(app.push_kick() = false, 'T83 the kick without Vault and pg_net does nothing');
 -- the kick with a stand-in Vault and pg_net (as on Supabase): only with both secrets, only https, the key in a header
