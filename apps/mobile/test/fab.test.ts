@@ -51,6 +51,15 @@ describe("unit:fab — the sets (13 §2.4, only what works)", () => {
     expect(ids("client", "director")).toEqual([]);
     expect(ids("client", "tech", { customerId: "c1" })).toEqual([]);
   });
+  it("Объект: the same «＋» as the client, tied to the client and this property (20 §6-4, S17 / S5)", () => {
+    const ctx = { customerId: "c1", propertyId: "p1" };
+    expect(fabItems("client", "director", ctx).map((i) => i.href)).toEqual(["/job/new?customerId=c1&propertyId=p1", "/estimate/new?customerId=c1&propertyId=p1"]);
+    // the screen declares it only for a client that may be served (both of its screens: the card and a row's list)
+    const src = fs.readFileSync(path.join(APP, "property/[id].tsx"), "utf8");
+    expect(src.match(/fab=\{servable \? "client" : undefined\}/g)?.length).toBe(2);
+    expect(src.match(/fabCtx=\{\{ customerId: p\.customerId, propertyId: p\.id \}\}/g)?.length).toBe(2);
+    expect(src).toMatch(/const servable = canServe\(db, p\.customerId\)/);
+  });
   it("Работа: planners — Выезд · Смета (client and property); tech — Расход", () => {
     const items = fabItems("job", "director", FULL);
     expect(items.map((i) => i.id)).toEqual(["visit", "estimate"]);
