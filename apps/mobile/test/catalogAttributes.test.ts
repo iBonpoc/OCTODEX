@@ -206,3 +206,60 @@ describe("unit:catalogAttributes — matching by properties (a hint, П14.2 e3)"
     expect(attributesLine(undefined)).toBe("");
   });
 });
+
+import { cleanAttributes, cleanCatalogItem, cleanPackSize, cleanPurchaseUnit } from "../src/features/catalogExtras";
+
+describe("unit:catalogAttributes — the server's rules in the app (security check C3 №3, №5)", () => {
+  it("a bad property is left out, the good ones stay (never the whole save refused)", () => {
+    expect(
+      cleanAttributes({
+        size: "6", gutterSize: "6", "gutter-size": "6", "1st": "x", empty: "", blank: "  ", nl: "\n", long: "a".repeat(121), ok120: "é".repeat(120),
+        ctl: "red\u001b[31m", bidi: "abc‮def", num: 6 as unknown as string,
+      }),
+    ).toEqual({ size: "6", gutterSize: "6", ok120: "é".repeat(120) });
+  });
+  it("the whole map at most 4000 bytes: the last ones are dropped until it fits", () => {
+    const big = Object.fromEntries(Array.from({ length: 45 }, (_, i) => [`k${i}`, "v".repeat(100)]));
+    const out = cleanAttributes(big);
+    expect(new TextEncoder().encode(JSON.stringify(out)).length).toBeLessThanOrEqual(4000);
+    expect(Object.keys(out).length).toBeGreaterThan(30);
+    expect(out.k0).toBe("v".repeat(100));
+  });
+  it("purchase unit: trimmed, 1..20, no control characters; \"\" clears; a bad one is not sent", () => {
+    expect(cleanPurchaseUnit("  box\t")).toBe("box");
+    expect(cleanPurchaseUnit("")).toBe("");
+    expect(cleanPurchaseUnit("   ")).toBe("");
+    expect(cleanPurchaseUnit("u".repeat(21))).toBeUndefined();
+    expect(cleanPurchaseUnit("b\nox")).toBeUndefined();
+  });
+  it("pack size: a positive number, 3 decimals; \"1,5\", 0 and what rounds to 0 are not sent", () => {
+    expect(cleanPackSize("2.6")).toBe("2.6");
+    expect(cleanPackSize(" 10 ")).toBe("10");
+    expect(cleanPackSize("1.23456")).toBe("1.235");
+    expect(cleanPackSize("")).toBe("");
+    expect(cleanPackSize("1,5")).toBeUndefined();
+    expect(cleanPackSize("0")).toBeUndefined();
+    expect(cleanPackSize("0.0001")).toBeUndefined();
+    expect(cleanPackSize("-2")).toBeUndefined();
+  });
+  it("the item: what is not valid is not sent, the rest (name, price) is", () => {
+    const out = cleanCatalogItem(it0({ name: "Kept", attributes: { size: "6", "bad key": "x" }, purchaseUnit: "u".repeat(30), packSize: "1,5" }));
+    expect(out).toMatchObject({ name: "Kept", priceCents: 100, attributes: { size: "6" } });
+    expect(out).not.toHaveProperty("purchaseUnit");
+    expect(out).not.toHaveProperty("packSize");
+    expect(cleanCatalogItem(it0({}))).toEqual(it0({}));
+  });
+  it("the store saves the cleaned item (the queue never carries what the server refuses)", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    valueOf(r).saveCatalogItems([it0({ id: "n9", attributes: { size: "6", "bad key": "x" }, packSize: "0" })]);
+    await settle();
+    const saved = valueOf(r).db.catalog.find((x) => x.id === "n9")!;
+    expect(saved.attributes).toEqual({ size: "6" });
+    expect(saved).not.toHaveProperty("packSize");
+  });
+  it("matching never finds a property on the object's prototype (constructor, toString)", () => {
+    expect(catalogMatch([it0({ id: "a", attributes: { size: "6" } })], { constructor: "x" })).toEqual([]);
+    expect(catalogMatch([it0({ id: "a", attributes: { size: "6" } })], { toString: "x", size: "6" })).toEqual([]);
+  });
+});

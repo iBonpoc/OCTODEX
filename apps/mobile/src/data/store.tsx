@@ -50,6 +50,7 @@ export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, moduleActive, moduleDef } from "@/modules/registry";
+import { cleanCatalogItem } from "@/features/catalogExtras";
 import {
   type CalendarEvent,
   type MemberPrefs,
@@ -1673,14 +1674,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }),
           { k: "note.update", id, ...patch },
         ),
-      saveCatalogItem: (it) =>
-        mutate(
+      // the server's rules for properties first (features/catalogExtras.ts): a bad one never loses the whole save
+      saveCatalogItem: (it0) => {
+        const it = cleanCatalogItem(it0);
+        return mutate(
           "catalog.save",
           (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it] }),
           { k: "catalog.save", item: it },
-        ),
+        );
+      },
       saveCatalogItems: (items) => {
-        const undos = items.map((it) =>
+        const undos = items.map(cleanCatalogItem).map((it) =>
           mutate(
             "catalog.save",
             (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it] }),

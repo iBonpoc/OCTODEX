@@ -13,7 +13,8 @@ export function catalogMatch(catalog: readonly CatalogItem[], want: Record<strin
   if (!keys.length) return [];
   const hits = catalog.filter((it) => {
     const a = it.attributes;
-    return !!a && keys.every((k) => a[k] !== undefined && norm(a[k]!) === norm(want[k]!));
+    // own properties only: «constructor» or «toString» is never found on the object's prototype (security check C3 №5)
+    return !!a && keys.every((k) => Object.prototype.hasOwnProperty.call(a, k) && typeof a[k] === "string" && norm(a[k]!) === norm(want[k]!));
   });
   const extra = (it: CatalogItem) => Object.keys(it.attributes ?? {}).length - keys.length;
   return hits.sort((x, y) => extra(x) - extra(y) || x.name.localeCompare(y.name));

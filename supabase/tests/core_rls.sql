@@ -7496,6 +7496,18 @@ select tst.fails($q$update public.catalog_items set attributes = null where id =
 select tst.fails_like($q$update public.catalog_items set pack_size = 0 where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 a pack size is above zero');
 select tst.fails_like($q$update public.catalog_items set purchase_unit = '  ' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 a purchase unit is not blank');
 select tst.fails_like($q$update public.catalog_items set purchase_unit = repeat('u', 21) where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 a purchase unit is at most 20 characters');
+-- security-check C3: a line break, blanks, control characters and bidi overrides; a padded purchase unit
+select tst.fails_like($q$update public.catalog_items set attributes = jsonb_build_object('note', repeat(E'abcdefghi\n', 300)) where id = '91000000-0000-4000-8000-000000000001'$q$,
+          '%catalog_items_attributes_check%', 'T91 line breaks count toward the 120 characters');
+select tst.fails_like($q$update public.catalog_items set attributes = jsonb_build_object('note', E'\n') where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 a line break alone is blank');
+select tst.fails_like($q$update public.catalog_items set attributes = '{"note":"   "}' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 spaces alone are blank');
+select tst.fails_like($q$update public.catalog_items set attributes = jsonb_build_object('note', E'red\u001b[31m') where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 no control characters');
+select tst.fails_like($q$update public.catalog_items set attributes = jsonb_build_object('note', E'abc‮def') where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 no bidirectional overrides');
+select tst.fails_like($q$update public.catalog_items set purchase_unit = 'a' || repeat(' ', 100) where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 a purchase unit is stored trimmed');
+select tst.fails_like($q$update public.catalog_items set purchase_unit = 'a' || repeat(E'\t', 5) where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 tabs do not pad a purchase unit');
+select tst.fails_like($q$update public.catalog_items set purchase_unit = E'b\nox' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 no control characters in a purchase unit');
+update public.catalog_items set attributes = '{"color":"white","note":"Café 6″ — ok","size":"6","profile":"k"}' where id = '91000000-0000-4000-8000-000000000001';
+select tst.ok((select attributes->>'note' = 'Café 6″ — ok' from public.catalog_items where id = '91000000-0000-4000-8000-000000000001'), 'T91 ordinary text with accents and symbols is fine');
 -- a tech reads, does not write; another company neither reads nor writes
 :as_tech91
 select tst.ok((select attributes->>'profile' = 'k' from public.catalog_items where id = '91000000-0000-4000-8000-000000000001'), 'T91 a tech reads the properties');
