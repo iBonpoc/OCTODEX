@@ -357,3 +357,69 @@ export function quickStarts(today: DayKey, nowMinute: number): { key: QuickStart
   out.push({ key: "monday", day: keyOfNumber(n + toMonday), minute: 9 * 60 });
   return out;
 }
+
+/**
+ * «через N рабочих дней» (docs/specs/03 §5.2, §13.5): the start of business on the N-th working day after the day of `iso`
+ * in the company's zone. A working day has hours in `hours` (a closed day is null). A week with no working day at all
+ * falls back to calendar days, so the rule never waits forever.
+ */
+export function workDaysAfter(iso: string, n: number, hours: BusinessHours = BUSINESS_HOURS_DEFAULT, tz: string = getZone()): number {
+  const anyOpen = Object.values(hours).some((h) => !!h);
+  let d = dayNumber(dayKeyIn(iso, tz));
+  let left = Math.max(1, Math.round(n));
+  while (left > 0) {
+    d += 1;
+    if (!anyOpen || hoursOn(hours, keyOfNumber(d))) left -= 1;
+  }
+  const h = hoursOn(hours, keyOfNumber(d));
+  return Date.parse(wallToInstant(keyOfNumber(d), h ? h[0] : 0, tz));
+}
+
+/** the visit is an inspection (kind, or old data: no job) */
+const isInspection = (v: Visit) => v.kind === "inspection" || (!v.jobId && !!(v.leadId || v.propertyId));
+/** an inspection has passed: «Готово» (or closed on the server), or its end is behind us */
+export const inspectionPassed = (v: Visit, now: number) => !isOpenVisit(v) || Date.parse(v.start) + v.durationMin * 60_000 <= now;
+
+/**
+ * «Осмотр прошёл — сметы нет» (docs/specs/03 §5.2, §13): open leads and clients' properties whose last inspection has passed
+ * N working days ago with no estimate yet and no new inspection planned. Lead: any estimate of the lead closes it (a draft
+ * too — a forgotten draft is the estimates' rule). A property without a lead: a draft there, or one sent after the inspection.
+ */
+export function inspectionsNoEstimate(
+  db: Pick<DB, "visits" | "leads" | "estimates" | "jobs" | "properties">,
+  now: number,
+  days: number,
+  hours: BusinessHours = BUSINESS_HOURS_DEFAULT,
+  tz: string = getZone(),
+): { v: Visit; lead?: Lead; customerId?: ID }[] {
+  const out: { v: Visit; lead?: Lead; customerId?: ID }[] = [];
+  const insp = db.visits.filter(isInspection);
+  const due = (v: Visit) => inspectionPassed(v, now) && workDaysAfter(new Date(Date.parse(v.start) + v.durationMin * 60_000).toISOString(), days, hours, tz) <= now;
+  const leadSeen = new Set<ID>();
+  for (const l of db.leads) {
+    if (l.archivedAt || (l.snoozedUntil && Date.parse(l.snoozedUntil) > now) || !(l.status === "booked" || l.status === "replied")) continue;
+    const mine = insp.filter((v) => isInspectionOf(db, v, l));
+    if (!mine.length) continue;
+    mine.forEach((v) => leadSeen.add(v.id));
+    // a new inspection is planned: that is the step, nothing is missing yet
+    if (mine.some((v) => !inspectionPassed(v, now))) continue;
+    const last = mine.sort((a, b) => b.start.localeCompare(a.start))[0]!;
+    if (db.estimates.some((e) => e.leadId === l.id)) continue;
+    if (due(last)) out.push({ v: last, lead: l });
+  }
+  // a client's property without a lead («+ Осмотр» at the client, 03 §5.1)
+  const byProp = new Map<ID, Visit[]>();
+  for (const v of insp) {
+    if (leadSeen.has(v.id) || v.leadId) continue;
+    const pid = visitPropertyId(db, v);
+    if (pid) byProp.set(pid, [...(byProp.get(pid) ?? []), v]);
+  }
+  for (const [pid, vs] of byProp) {
+    if (vs.some((v) => !inspectionPassed(v, now))) continue;
+    const last = vs.sort((a, b) => b.start.localeCompare(a.start))[0]!;
+    if (db.estimates.some((e) => e.propertyId === pid && (e.status === "draft" || (!!e.sentAt && e.sentAt >= last.start)))) continue;
+    const customerId = db.properties.find((p) => p.id === pid)?.customerId;
+    if (customerId && due(last)) out.push({ v: last, customerId });
+  }
+  return out;
+}

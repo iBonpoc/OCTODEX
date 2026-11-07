@@ -46,6 +46,12 @@ describe("breadcrumbs: Home › … › Parent (founder, 05.11.2026)", () => {
     expect(hrefs("/figures/x")).toEqual(["/today"]);
     expect(hrefs("/catalog/x", {}, "dispatcher")).toEqual(["/triage", "/catalog"]);
   });
+  it("the tech's lead goes up to his «Лиды» (13 §2.3), which lights its own item", () => {
+    const l = db.leads[0]!;
+    expect(hrefs(`/lead/${l.id}`, {}, "tech")).toEqual(["/visits", "/leads?tab=leads"]);
+    expect(activeSection(`/lead/${l.id}`, {}, db, "tech")).toBe("leads");
+    expect(activeSection("/leads", {}, db, "tech")).toBe("leads");
+  });
   it("receipt: the whole Sales chain, query links (Leads tab) followed", () => {
     const pay = db.payments.find((p) => p.invoiceId)!;
     const t = hrefs(`/receipt/${pay.id}`);

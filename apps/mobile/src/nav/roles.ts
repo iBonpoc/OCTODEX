@@ -32,7 +32,8 @@ export const routeRoles: Record<string, readonly Role[]> = {
   reports: PLANNERS,
   figures: OFFICE,
   triage: OFFICE,
-  leads: OFFICE,
+  // the tech: his own leads (13 §2.3, §4); /inbox is an old address of the office's «Продажи»
+  leads: [...OFFICE, "tech"],
   inbox: OFFICE,
   team: ["director"],
   // the office reads, the director changes (spec 26 §3; companies_update is owner / admin in the database)

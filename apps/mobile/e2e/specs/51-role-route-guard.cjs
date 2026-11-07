@@ -42,7 +42,7 @@ exports.run = async (h) => {
     const text = await p.evaluate(() => document.body.innerText + "\n" + document.body.textContent);
     for (const re of MONEY) h.expect(!re.test(text), `tech after ${path}: no «${re.source}» anywhere in the page`);
   }
-  for (const path of ["/money", "/team", "/company", "/company/hours", "/today", "/figures/profit", "/triage", "/leads", "/inbox"]) {
+  for (const path of ["/money", "/team", "/company", "/company/hours", "/today", "/figures/profit", "/triage", "/inbox"]) {
     await h.go(path);
     await p.waitForTimeout(500);
     h.expect(at(h) === "/visits", `tech ${path} → /visits (got ${at(h)})`);
