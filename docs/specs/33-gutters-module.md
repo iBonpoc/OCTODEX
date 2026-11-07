@@ -401,7 +401,7 @@ USGS 3DEP: pubs.usgs.gov/publication/cir1553, github.com/hobuinc/usgs-lidar · N
 | «Создать позиции сразу» (К1) | позиции по одной (`saveCatalog`) | пакет с одним «Отменить» — `saveCatalogItems(items)` |
 
 ### П16.2 Брейншторм
-**Где хранить свойства.** а) jsonb `attributes` строка→строка; б) таблица `catalog_item_attributes`; в) колонки профиль/размер/материал — слова ниши в ядре, нет. **Выбор а)**: одна строка, офлайн проще, без JOIN; ограничения — CHECK по jsonpath (ключ `^[a-z][a-z0-9_]{0,39}$`, значение — строка ≤ 120, всё ≤ 4000 байт).
+**Где хранить свойства.** а) jsonb `attributes` строка→строка; б) таблица `catalog_item_attributes`; в) колонки профиль/размер/материал — слова ниши в ядре, нет. **Выбор а)**: одна строка, офлайн проще, без JOIN; ограничения — CHECK по jsonpath (ключ `^[a-zA-Z][a-zA-Z0-9_]{0,39}$` — движок M1 уже пишет `gutterSize`, `lengthIn`, `stickIn`; значение — строка ≤ 120, всё ≤ 4000 байт).
 **Кто подбирает позицию.** Ядро даёт общую `catalogMatch(catalog, want)` (все пары совпали, только активные). Решает модуль: явная привязка «деталь → позиция» главнее (П14.2 e3).
 **Экран.** На карточке позиции — строка «Свойства: размер 6″ · цвет white» только для чтения, если они есть; правка — из модуля (M7). Ед. закупки и фасовка — без экрана до C7.
 
@@ -416,3 +416,37 @@ USGS 3DEP: pubs.usgs.gov/publication/cir1553, github.com/hobuinc/usgs-lidar · N
 
 ### П16.4 План PR (один, C3)
 Миграция `20261107170000_catalog_attributes.sql`: `attributes jsonb not null default '{}'` + CHECK, `purchase_unit text` (1–20 симв.), `pack_size numeric(12,3) > 0`. Приложение: `CatalogItem.attributes / purchaseUnit / packSize` (types, repo, ops `catalog.save` — пишет только заданное), `saveCatalogItems`, `catalogMatch` (`features/catalogMatch.ts`), строка «Свойства» на `catalog/[id]`. Тесты: база T91 (по умолчанию `{}`, мусор отклонён, staff пишет, мастер и чужая компания — нет, старый upsert без колонки не стирает свойства); unit `catalogAttributes.test.ts` (разбор, запись, пакет с одним «Отменить», `catalogMatch`).
+
+## П17. Справочник поставщика (стенды Berger, от основателя 07.11.2026) против движка M1
+Источник: `docs/prototypes/gutters-ref/` (K-style — 50 деталей, Half Round — 45, матрица «деталь × материал», размеры). Цен нет — в код не вносим (правило 9).
+
+### П17.1 Свойства позиций прайса (для C3 и привязки M7)
+| Свойство (ключ) | Значения со стенда | Где в движке M1 |
+|---|---|---|
+| `profile` | k, half_round (стенды); euro, fascia, box — у других поставщиков | есть |
+| `size` | желоб 5″, 6″, 7″, 8″; даунспот 2×2, 2×3, 3×4, 4×5, 5×6, круглый 2″–7″ | есть |
+| `material` | galvanized, paintgrip_steel, aluminum, copper, painted_steel, freedomgray_copper | есть одной строкой |
+| `gauge` (толщина) | .027, .032 (алюминий); 24, 26, 28 Ga (сталь) | **нет** — сейчас внутри `material`; разделить |
+| `finish` | mill, painted | **нет** |
+| `color` | 8 цветов алюминия у Half Round (Natural Clay, Musket Brown A, Royal Brown, AMP Dark Bronze, Black, Grecian Green, Dark Bronze, 80 White); медь, оцинковка — без цвета | есть |
+| `dsStyle` | plain, corrugated (квадратный и круглый даунспот) | **нет** — `DsShape` знает только rect / round / square |
+| `part`, `style`, `side`, `corner`, `hanger`, `guard` | вид детали, колено A/B, заглушка L/R, угол out/in, вид крепления, вид сетки | есть |
+
+### П17.2 Детали стенда, которых нет в движке (кандидаты в M1-доработку, решает основатель по своей практике)
+| Деталь (номер на стенде) | Когда нужна | Предложение |
+|---|---|---|
+| Ferrule (K 16) к spike | каждая пара spike — гильза | считать вместе с `spike`: +1 ferrule на крепление (закупка) |
+| Виды креплений: #40 fascia hanger + snap strap, #41 rafter hanger, roof bar hanger с тягой (K 10–13, 25); wrap around (K 14); half round: shank + stamped circle + болт (HR 11–19), Rival strap, Regal bar (HR 20–22) | крыша без доски, шифер, half round всегда | расширить `HangerKind` (rafter, roof_bar, wrap_around, shank) и для shank — набор из 3 деталей (shank, circle, nut&bolt); вид shank — по типу карниза (shank notes: #1/#10 fascia, #6 ogee, #11 стропило, #12/#25 обрешётка, #30 угол) |
+| Slip joint connector (K 6, HR 5) | секционные желоба на стыках | +1 на каждый стык секций (`buy: section`) |
+| End section with outlet (K 5, HR 4 «D») | half round: выход в торце | вариант выхода у заглушки |
+| Крепления даунспота по стене: sickle hook, conductor band, brick hook, U-bracket, conductor bracket, hinged hook, pipe cleat (K 17–20, 26–28; HR 16–17, 24–26) | кирпич / дерево / штукатурка | вместо одного `ds_strap` — `dsFastener` по типу стены (настройка компании) |
+| Y-воронка (K 43) | два даунспота в один | новый элемент рисунка «слияние» |
+| Cutoff with diverter (K 44, HR 27) | бочка для дождя | галочка у даунспота |
+| Conductor head (K 39–40B, HR 38–39B) | высокие дома, красивый выход | галочка у даунспота вместо funnel |
+| Eave box (K 42, HR 41) | открытый / закрытый карниз | галочка у линии |
+| Расходники: pop rivets (K 31), hex screws #8×½ (K 46), drives #0/#4/#6 (K 35–36), touch-up paint (K 32) | на каждом объекте | считать по правилам: заклёпки на угол/выход/стык, винты на крепление; краска — 1 на цвет |
+| Strip miter outside/inside (K 29) | уже есть как `stripmiter` | — |
+| Splash block, Flex-a-spout (K 49–50, HR 44–45) — Brown, Green, Gray, White | есть (`bottom.splash_block`, `flex`) | цвет — свойство `color` |
+
+Что взять в C3 сейчас: ключи свойств разрешают верблюжий регистр; словарь значений — данные модуля (M7), не ядро. Пробелы П17.2 — вопрос основателю (какие крепления и расходники он ставит на самом деле), затем доработка M1 отдельным PR модуля.
+Снимок дома 1907 Mellon Ave с пометками — для проверки лидара и рисунка (П3.0, этап 3); смысл красных и жёлтой линий уточняет руководитель.
