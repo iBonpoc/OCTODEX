@@ -2216,4 +2216,7 @@ export const en: Dict = {
   "today2.overdue": "Overdue: {n}",
   "today2.ofLeads": "{n}% of leads",
   "today2.ofSent": "{n}% of sent",
+  // fix.sign.* — the full-screen signature (spec 29)
+  "fix.sign.expand": "Full screen",
+  "fix.sign.done": "Done",
 };

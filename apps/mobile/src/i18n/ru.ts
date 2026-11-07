@@ -2215,6 +2215,9 @@ export const ru = {
   "today2.overdue": "Просрочено: {n}",
   "today2.ofLeads": "{n}% от лидов",
   "today2.ofSent": "{n}% от отправленных",
+  // fix.sign.* — the full-screen signature (spec 29)
+  "fix.sign.expand": "Развернуть на весь экран",
+  "fix.sign.done": "Готово",
 } as const;
 
 export type DictKey = keyof typeof ru;
