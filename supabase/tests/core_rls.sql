@@ -7553,6 +7553,13 @@ select tst.blocked($q$insert into public.gutter_measurement_elements (company_id
           'T92 another company cannot write into A');
 select tst.blocked($q$update public.gutter_measurement_elements set geom = '{}' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T92 another company cannot change A''s elements');
 select tst.blocked($q$update public.gutter_measurements set label = 'x' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T92 another company cannot change A''s measurements');
+-- no probing: A's real property and a random id give the same answer to a stranger
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'd1a00000-0000-0000-0000-000000000001')$q$,
+          'not allowed', 'T92 a stranger with A''s real property id…');
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, property_id) values ('ca000000-0000-0000-0000-000000000000', gen_random_uuid())$q$,
+          'not allowed', 'T92 …gets the same answer as with a random id');
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, lead_id) values ('ca000000-0000-0000-0000-000000000000', '19200000-0000-4000-8000-000000000001')$q$,
+          'not allowed', 'T92 …and with A''s real lead id');
 -- a subcontractor: nothing (П11)
 :as_sub92
 select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements$q$) = 0 and tst.cnt($q$select 1 from public.gutter_measurement_elements$q$) = 0
@@ -7571,7 +7578,8 @@ select tst.ok(not has_table_privilege('anon', 'public.gutter_measurements', 'SEL
           and not has_function_privilege('anon', 'app.gutter_sees(uuid, uuid, uuid, uuid)', 'EXECUTE')
           and not has_function_privilege('anon', 'app.gutter_sees_measurement(uuid)', 'EXECUTE')
           and not has_function_privilege('authenticated', 'app.tg_gutter_measurement_refs()', 'EXECUTE')
-          and not has_function_privilege('authenticated', 'app.tg_gutter_revision_frozen()', 'EXECUTE'),
+          and not has_function_privilege('authenticated', 'app.tg_gutter_revision_frozen()', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.tg_gutter_limits()', 'EXECUTE'),
           'T92 rights: anon nothing; no deletes; revisions never updated; trigger functions not callable');
 select tst.ok((select bool_and(relrowsecurity and relforcerowsecurity) from pg_class
                 where oid in ('public.gutter_measurements'::regclass, 'public.gutter_measurement_elements'::regclass, 'public.gutter_measurement_revisions'::regclass)),
@@ -7589,9 +7597,18 @@ select tst.fails($q$insert into public.gutter_measurement_revisions (company_id,
           'T93 one revision number once');
 select tst.fails($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 2, '{}', 'x')$q$,
           'T93 the snapshot is an array of elements');
-select tst.fails($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 2, jsonb_build_array(repeat('a', 1100000)), 'x')$q$,
-          'T93 a snapshot up to 1 MB');
+select tst.fails($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 2, jsonb_build_array(repeat('a', 600000)), 'x')$q$,
+          'T93 a snapshot up to 512 KB');
 select tst.blocked($q$update public.gutter_measurement_revisions set parts = '[]' where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$, 'T93 the app cannot change a revision');
+-- limits per measurement: 1000 elements, 100 revisions (no loop fills the database)
+insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version)
+select 'ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000003', g, '[]', 'x' from generate_series(1, 100) g;
+select tst.fails_like($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000003', 101, '[]', 'x')$q$,
+          '%at most 100 revisions%', 'T93 at most 100 revisions a measurement');
+insert into public.gutter_measurement_elements (company_id, measurement_id, kind)
+select 'ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000003', 'point' from generate_series(1, 1000);
+select tst.fails_like($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000003', 'point')$q$,
+          '%at most 1000 elements%', 'T93 at most 1000 elements a measurement');
 :as_super
 select tst.fails_like($q$update public.gutter_measurement_revisions set parts = '[]' where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$,
           '%never changes%', 'T93 …nor can the server');
@@ -7601,7 +7618,7 @@ update public.company_modules set trial_ends_at = now() - interval '1 minute', p
 :as_owner_a
 select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 3
           and tst.cnt($q$select 1 from public.gutter_measurement_elements where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$) = 3
-          and tst.cnt($q$select 1 from public.gutter_measurement_revisions$q$) = 1,
+          and tst.cnt($q$select 1 from public.gutter_measurement_revisions where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$) = 1,
           'T93 after the trial old drafts and revisions still open');
 select tst.blocked($q$insert into public.gutter_measurements (company_id) values ('ca000000-0000-0000-0000-000000000000')$q$, 'T93 after the trial no new measurement');
 select tst.blocked($q$update public.gutter_measurement_elements set geom = '{"a":[0,0],"b":[1,1]}' where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$,

@@ -66,7 +66,7 @@ create table public.gutter_measurement_revisions (
   updated_at     timestamptz not null default now(),
   updated_by     uuid,
   row_version    bigint not null default 1,
-  check (octet_length(elements::text) + octet_length(parts::text) <= 1048576),
+  check (octet_length(elements::text) + octet_length(parts::text) <= 524288),
   unique (measurement_id, revision),
   foreign key (measurement_id, company_id) references public.gutter_measurements (id, company_id) on delete cascade
 );
@@ -89,6 +89,11 @@ select app.attach_standard_triggers('public.gutter_measurement_revisions');
 create or replace function app.tg_gutter_measurement_refs()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
+  -- a stranger gets one answer whatever ids he sends: nobody probes whether a property or a lead is another
+  -- company's (security-check M2, item 1). The server (no JWT) writes as it is.
+  if auth.uid() is not null and not (app.is_staff(new.company_id) or app.has_role(new.company_id, array['tech'])) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
   if new.property_id is not null and not exists (
        select 1 from public.properties p where p.id = new.property_id and p.company_id = new.company_id) then
     raise exception 'the property is not of this company' using errcode = '42501';
@@ -115,6 +120,32 @@ $$;
 revoke all on function app.tg_gutter_measurement_refs() from public, anon, authenticated;
 create trigger t05_refs_same_company before insert or update of property_id, lead_id, company_id on public.gutter_measurements
   for each row execute function app.tg_gutter_measurement_refs();
+
+-- Limits per measurement (security-check M2, item 2): a real house is tens of elements and a few revisions; a loop
+-- of inserts must not fill the database. A count by the measurement_id index; two parallel inserts may pass one over.
+create or replace function app.tg_gutter_limits()
+returns trigger language plpgsql security definer set search_path = '' as $$
+declare n integer;
+begin
+  if tg_table_name = 'gutter_measurement_elements' then
+    select count(*) into n from public.gutter_measurement_elements where measurement_id = new.measurement_id;
+    if n >= 1000 then
+      raise exception 'a measurement has at most 1000 elements' using errcode = '54000';
+    end if;
+  else
+    select count(*) into n from public.gutter_measurement_revisions where measurement_id = new.measurement_id;
+    if n >= 100 then
+      raise exception 'a measurement has at most 100 revisions' using errcode = '54000';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_gutter_limits() from public, anon, authenticated;
+create trigger t06_limits before insert on public.gutter_measurement_elements
+  for each row execute function app.tg_gutter_limits();
+create trigger t06_limits before insert on public.gutter_measurement_revisions
+  for each row execute function app.tg_gutter_limits();
 
 -- A revision is a snapshot: never changed (the app has no UPDATE; this also stops the server's own roles).
 create or replace function app.tg_gutter_revision_frozen()
