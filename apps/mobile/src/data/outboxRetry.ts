@@ -23,6 +23,9 @@ const field = (e: unknown, k: string): unknown => (e && typeof e === "object" ? 
 export function classify(e: unknown): Failure {
   const status = Number(field(e, "status")) || 0;
   const code = String(field(e, "code") ?? "");
+  // «someone else changed it first» (40001 + hint row_version_conflict, module_save_settings): a retry never helps — the
+  // server's «no» before the code says «serialization, try later» (review #354 Б1)
+  if (field(e, "hint") === "row_version_conflict") return "refusal";
   if (code && TRANSIENT_CODE.test(code)) return "transient";
   if (status) return status >= 500 || TRANSIENT_STATUS.has(status) ? "transient" : "refusal";
   if (code) return "refusal"; // an answer with a code (42…, 23…, 22…, P0…) and no status

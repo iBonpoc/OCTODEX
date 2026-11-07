@@ -41,6 +41,17 @@ export interface ModuleAction {
   href: string;
 }
 
+/** a module's change as the queue carries it (Op "module.op"): what to do and with what */
+export interface ModuleOpIn {
+  kind: string;
+  payload: Record<string, unknown>;
+}
+/** sends one module.op to the server; `run` turns a supabase result into the queue's errors (cloud/ops.ts) */
+export type ModuleOpHandler = (
+  op: ModuleOpIn,
+  ctx: { companyId: string; userId: string; run: (p: PromiseLike<{ error: { message: string; code?: string; hint?: string } | null; status?: number }>) => Promise<void> },
+) => Promise<void>;
+
 export interface ModuleDef {
   /** = company_modules.module_key: ^[a-z][a-z0-9_]{1,30}$ */
   key: string;
@@ -51,6 +62,8 @@ export interface ModuleDef {
   priceCentsMonthly: number;
   /** the module's actions by place; a place with nothing for this screen / role returns [] */
   places?: Partial<Record<ModulePlace, (ctx: PlaceCtx) => ModuleAction[]>>;
+  /** sends the module's own changes (module.op); a module without it has no changes of its own yet */
+  ops?: ModuleOpHandler;
 }
 
 /** off — not switched on; trial — in the trial; paid — paid; expired — switched on, trial over, not paid */
