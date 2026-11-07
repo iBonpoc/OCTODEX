@@ -71,11 +71,12 @@
 2. Вставить `npm run ios:first` и нажать `Return`. Первые минуты ставятся файлы проекта, это нормально.
 3. **Вход в Expo** (если спросит): почта и пароль аккаунта expo.dev.
 4. **Вход в Apple.** Вопрос «Do you want to log in to your Apple account?» → `Y` → `Return`. Дальше:
-   - **Apple ID** — почта аккаунта Apple Developer;
+   - **Apple ID** — **полностью почта** аккаунта Apple Developer (не `y`!);
    - **Password** — пароль Apple ID (буквы не видны при вводе, так и должно быть);
    - **код из 6 цифр** — придёт на iPhone, ввести в Терминал.
 5. **Все остальные вопросы — просто `Return`.** Это согласие по умолчанию: создать сертификат, профиль, ключ пушей (Push Notifications → **Yes**), ключ App Store Connect, приложение в App Store Connect.
-   - Если спросит имя приложения и скажет, что «OCTODEX» занято, ввести `GoRix` (решение основателя 07.11).
+   - Если «OCTODEX» занято, Expo сам даст имя вида «OCTODEX (ea2bef)» — так и вышло 07.11. Поменять: App Store Connect → приложение → App Information → Name (запасное — `GoRix`, решение основателя 07.11). На iPhone под иконкой всё равно OCTODEX.
+   - Роль ключа App Store Connect — `Return` (ADMIN).
 6. В конце появятся две ссылки: Build и Submission. Терминал можно закрыть: дальше всё идёт на серверах Expo и Apple.
 7. Через 20–40 минут придёт письмо от TestFlight. Если не придёт через час, проверить статус на https://expo.dev/accounts/octodex-team/projects/octodex/builds.
 

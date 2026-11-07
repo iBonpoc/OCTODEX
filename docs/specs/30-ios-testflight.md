@@ -84,3 +84,9 @@ e2e не нужны: экраны не меняются.
 - **PR 1** (этот чат): `eas.json`, `eas-build.yml`, `app.json` (ios: `privacyManifests`; плагины image-picker и location: тексты разрешений), `locales/*.json` (тексты Always), `package.json` приложения (скрипт `ios:first` — строка в scripts), `scripts/ios-first-build.sh`, `test/easBuild.test.ts`, `docs/11-setup-guide.md` §5, эта спека, `version.ts` (BUILD). Вливать **после #278**.
 - **PR 2** (после ответа основателя): `ascAppId` в eas.json.
 - Не в этом шаге: splash (п.14), смена `runtimeVersion` (п.9), App Privacy в App Store Connect и скриншоты (спека 14 §10).
+
+## 9. Первый запуск (07.11.2026)
+- `npm run ios:first` на Mac основателя прошёл: bundle id зарегистрирован, сертификат и профиль созданы, ключ App Store Connect «[Expo] EAS Submit» (ADMIN) хранится в EAS, группа TestFlight «Team (Expo)».
+- Имя «OCTODEX» в App Store занято → Apple ID приложения **6831904411**, имя в App Store Connect «OCTODEX (ea2bef)» (поменять до публикации; на iPhone под иконкой — OCTODEX из app.json). Сборка 1.0.0 (2) отправлена в TestFlight.
+- `ascAppId` = 6831904411 в `eas.json` → дальше Actions → «EAS build» → ios + ios_submit.
+- Первая попытка упала, потому что в поле Apple ID ввели `y`. Подсказка в инструкции §5.2.
