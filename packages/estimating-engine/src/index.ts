@@ -4,6 +4,7 @@ export * from "./gutters.js";
 export * from "./estimate.js";
 export * from "./gutterEstimate.js";
 export * from "./gutterParts.js";
+export * from "./gutterKits.js";
 export * from "./custom.js";
 export * from "./contract.js";
 export * from "./reports.js";

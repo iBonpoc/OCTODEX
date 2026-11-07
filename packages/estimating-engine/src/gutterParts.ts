@@ -1,7 +1,24 @@
 import { D, dec, type Dec, type DecLike } from "./decimal.js";
+import {
+  DEFAULT_GUARD_KITS,
+  DEFAULT_HANGER_BY_MOUNT,
+  DEFAULT_HANGER_KITS,
+  DEFAULT_JOINTS,
+  DEFAULT_WALL_KITS,
+  DEFAULT_WALL_KIT_BY_WALL,
+  type GuardKit,
+  type GutterMount,
+  type HangerKit,
+  type JointKind,
+  type JointRule,
+  type KitPart,
+  type PartUse,
+  type WallKit,
+} from "./gutterKits.js";
 
 /**
- * Gutters module: parts and labor from a measurement (docs/specs/33-gutters-module.md §3, П4).
+ * Gutters module: parts and labor from a measurement (docs/specs/33-gutters-module.md §3, П4;
+ * parts, hangers and consumables — docs/specs/33-gutters-parts.md П18).
  * Input is the module's normalized measurement (no geometry: lengths are already in inches).
  * Output is quantities only, each with a stable `key` (the estimate line's sourceKey, spec §1 S5g),
  * the estimate section and what it is for: the client estimate, the supplier order, or both.
@@ -10,8 +27,10 @@ import { D, dec, type Dec, type DecLike } from "./decimal.js";
  */
 
 export type GutterProfile = "k" | "half_round" | "euro" | "fascia" | "box";
-export type DsShape = "rect" | "round" | "square";
-export type HangerKind = "hidden" | "spike" | "strap" | "bracket";
+/** "square" downspouts at suppliers are rectangular (2x2…5x6): rect with that size (spec П18.3 №6) */
+export type DsShape = "rect" | "round";
+/** id of a hanger kit (DEFAULT_HANGER_KITS or the company's own) */
+export type HangerKind = string;
 export type DsBottomKind = "none" | "extension" | "splash_block" | "flex" | "drain" | "lower_roof";
 
 /** Estimate sections in the founder's order (spec §6, ТЗ «Смета»). */
@@ -28,13 +47,17 @@ export const GUTTER_SECTIONS = [
 ] as const;
 export type GutterSection = (typeof GUTTER_SECTIONS)[number];
 
-/** What a gutter is made of: these four keys pick the price list item. Copper, zinc and galvanized have no color. */
+/** What a gutter is made of: these keys pick the price list item. Copper, zinc and galvanized have no color. */
 export interface GutterStock {
   profile: GutterProfile;
   /** nominal size, inches: "5", "6", "7" */
   size: string;
-  /** e.g. "alu_027", "alu_032", "galv", "steel_painted", "copper", "zinc" */
+  /** e.g. "aluminum", "steel", "galvalume", "copper", "zinc" (older drawings: "alu_032") */
   material: string;
+  /** metal thickness: ".027", ".032", "26ga", "16oz" (company default by material and size) */
+  gauge?: string;
+  /** "painted" or "mill"; without it a color means painted */
+  finish?: "mill" | "painted";
   color?: string;
 }
 
@@ -45,9 +68,17 @@ export interface MeasuredRun extends GutterStock {
   /** 1, 2, 3, 4 (4 = 4 and up) */
   story: number;
   lengthIn: number;
+  /** hanger kit id */
   hanger: HangerKind;
+  /** roof edge the gutter hangs on: the module picks the default kit by it (defaultHangerKit) */
+  mount?: GutterMount;
+  /** own spacing on this run (snow, wind): wins over the kit */
+  hangerSpacingIn?: number;
+  /** a wedge under every hanger (pitched fascia) */
+  wedges?: boolean;
   /** inches of the run covered by guards (0 = none; the founder: guards may cover only a part) */
   guardsIn?: number;
+  /** guard kit id */
   guardType?: string;
   tearOff?: boolean;
   /** start and end of the run as drawn */
@@ -59,8 +90,8 @@ export interface MeasuredRun extends GutterStock {
 export interface MeasuredCorner extends GutterStock {
   id: string;
   kind: "out" | "in" | "bay";
-  /** cut from the gutter on site, or a ready-made corner */
-  method: "cut" | "prefab";
+  /** cut: field-cut and folded; strip: field-cut with a strip miter; prefab: a ready box or bay miter */
+  method: "cut" | "strip" | "prefab";
   /** splash guard on an inside corner */
   splashGuard?: boolean;
   story: number;
@@ -70,19 +101,35 @@ export interface MeasuredDownspout {
   id: string;
   runId: string;
   shape: DsShape;
-  /** "2x3", "3x4" for rect; "3", "4" for round and square */
+  /** "2x3", "3x4" for rect; "3", "4" for round */
   size: string;
+  /** plain or corrugated */
+  dsStyle?: "plain" | "corrugated";
   material: string;
+  gauge?: string;
+  finish?: "mill" | "painted";
   color?: string;
   /** own height in inches; default = story × story height (the founder: 10 ft per story) */
   heightIn?: number;
   /** elbows: rect A/B and their angles; round by angle "45".."90"; qty may be 0 */
   elbows?: { style: string; qty: number }[];
-  /** offsets, inches: usually 1, 2, 4; anything else is a custom part */
+  /** offsets, inches: standard ones by the rules (1, 2, 4); anything else is a custom part */
   offsets?: { lengthIn: number; qty: number }[];
-  bottom: { kind: DsBottomKind; lengthIn?: number };
+  /** size changes on the way down, e.g. 3x4 → 2x3 */
+  reducers?: { to: string; qty: number }[];
+  bottom: { kind: DsBottomKind; lengthIn?: number; color?: string; /** drain pipe size, inches */ pipe?: string };
+  /** the wall the downspout is fastened to: picks the wall kit (or a wall kit id) */
+  wall?: string;
+  /** what sits on top: a funnel or a leader (conductor) head */
+  head?: "funnel" | "conductor";
+  /** older drawings: = head "funnel" */
   funnel?: boolean;
   outletScreen?: boolean;
+  /** cutoff with a diverter (rain barrel) */
+  diverter?: boolean;
+  eaveBox?: "open" | "closed" | "sloped";
+  /** half round: an end section with an outlet at this end of the run replaces the end cap and the outlet */
+  endOutlet?: "start" | "end";
 }
 
 export interface MeasuredChain {
@@ -93,14 +140,21 @@ export interface MeasuredChain {
   lengthIn?: number;
 }
 
+/** A Y: two downspouts join into one (the second continues). */
+export interface MeasuredWye {
+  id: string;
+  dsIds: [string, string];
+}
+
 export interface MeasurementInput {
   runs: MeasuredRun[];
   corners: MeasuredCorner[];
   downspouts: MeasuredDownspout[];
   chains?: MeasuredChain[];
+  wyes?: MeasuredWye[];
 }
 
-/** Company rules (spec П4). Every value is a company setting with this default. */
+/** Company rules (spec П4, П18.10). Every value is a company setting with this default. */
 export interface GutterRules {
   storyHeightIn: number;
   /** waste for the purchase: "0.05" = 5% (0..1) */
@@ -109,19 +163,48 @@ export interface GutterRules {
   cutCornerAllowanceIn: number;
   /** downspouts are bought in sticks */
   dsStickIn: number;
+  /** offcuts of one downspout go into another of the same kind (first fit decreasing) */
+  dsShareOffcuts: boolean;
+  /** added to every downspout's length (PRD 06 ds_extension_ft) */
+  dsExtensionIn: number;
   /** seamless from a coil (one piece per run) or sectional */
   seamless: boolean;
   sectionLengthIn: number;
-  hangerSpacingIn: Record<HangerKind, number>;
-  dsStrapsPerStick: number;
-  /** joints = end caps + corners + outlets (+ section joints); one tube per N joints */
+  /** coil blank width by "profile.size" (5 in K → 11 7/8, 6 in K → 15): an attribute of the coil line */
+  coilBlankIn: Record<string, string>;
+  hangerKits: Record<string, HangerKit>;
+  /** company spacing by kit id; a run's own spacing wins */
+  hangerSpacingIn: Record<string, number>;
+  /** hangers per run = ceil(length / spacing) + this (1 = a hanger at both ends) */
+  hangerExtraPerRun: number;
+  wallKits: Record<string, WallKit>;
+  /** wall kit by downspout shape and wall */
+  wallKitByWall: Record<string, Record<string, string>>;
+  defaultWall: string;
+  /** inches of downspout per wall fastener (2 per 10 ft) */
+  dsFastenerSpacingIn: number;
+  guardKits: Record<string, GuardKit>;
+  joints: Record<JointKind, JointRule>;
+  /** downspout joints: pop rivets or #8 x 1/2 screws */
+  dsJoin: "rivet" | "screw";
+  /** sealant points per tube (PRD 06: 8 joints a tube) */
   jointsPerSealantTube: number;
-  rivetsPerJoint: number;
+  /** soldered metals take solder instead of sealant */
+  solderedMaterials: string[];
+  solderPointsPerLb: number;
+  /** one touch-up can per painted color with field cuts */
+  touchUpPaint: boolean;
+  /** end caps of these profiles come left and right */
+  sidedCapProfiles: string[];
   defaultElbows: { style: string; qty: number }[];
+  /** offsets sold ready-made; others are marked custom */
+  stdOffsetsIn: number[];
   /** advice: max gutter length one downspout drains */
   maxRunPerDownspoutIn: number;
   /** advice: aluminum expansion joint spacing */
   expansionJointIn: number;
+  /** add the expansion joints as parts, not only as advice */
+  expansionJointPart: boolean;
 }
 
 export const DEFAULT_GUTTER_RULES: GutterRules = {
@@ -129,18 +212,56 @@ export const DEFAULT_GUTTER_RULES: GutterRules = {
   wastePct: "0.05",
   cutCornerAllowanceIn: 6,
   dsStickIn: 120,
+  dsShareOffcuts: true,
+  dsExtensionIn: 0,
   seamless: true,
   sectionLengthIn: 120,
-  hangerSpacingIn: { hidden: 24, spike: 24, strap: 24, bracket: 24 },
-  dsStrapsPerStick: 2,
+  coilBlankIn: { "k.5": "11.875", "k.6": "15" },
+  hangerKits: DEFAULT_HANGER_KITS,
+  hangerSpacingIn: {},
+  hangerExtraPerRun: 0,
+  wallKits: DEFAULT_WALL_KITS,
+  wallKitByWall: DEFAULT_WALL_KIT_BY_WALL,
+  defaultWall: "wood",
+  dsFastenerSpacingIn: 60,
+  guardKits: DEFAULT_GUARD_KITS,
+  joints: DEFAULT_JOINTS,
+  dsJoin: "rivet",
   jointsPerSealantTube: 8,
-  rivetsPerJoint: 6,
+  solderedMaterials: ["copper"],
+  solderPointsPerLb: 10,
+  touchUpPaint: true,
+  sidedCapProfiles: ["k", "fascia"],
   defaultElbows: [{ style: "A", qty: 3 }],
+  stdOffsetsIn: [1, 2, 4],
   maxRunPerDownspoutIn: 480,
   expansionJointIn: 600,
+  expansionJointPart: false,
 };
 
-export type PartUse = "estimate" | "purchase" | "both";
+/** Company rule overrides; kit maps merge with the defaults by id. */
+export type GutterRulesOverride = Partial<GutterRules>;
+
+export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
+  const d = DEFAULT_GUTTER_RULES;
+  const o = over ?? {};
+  return {
+    ...d,
+    ...o,
+    hangerKits: { ...d.hangerKits, ...o.hangerKits },
+    hangerSpacingIn: { ...d.hangerSpacingIn, ...o.hangerSpacingIn },
+    wallKits: { ...d.wallKits, ...o.wallKits },
+    wallKitByWall: { ...d.wallKitByWall, ...o.wallKitByWall },
+    guardKits: { ...d.guardKits, ...o.guardKits },
+    joints: { ...d.joints, ...o.joints },
+    coilBlankIn: { ...d.coilBlankIn, ...o.coilBlankIn },
+  };
+}
+
+/** The default hanger kit for a profile and roof edge (company table, spec П18.6). */
+export function defaultHangerKit(profile: GutterProfile, mount: GutterMount, byMount: Record<string, Record<string, string>> = DEFAULT_HANGER_BY_MOUNT): string {
+  return byMount[profile]?.[mount] ?? "hidden";
+}
 
 export interface PartQty {
   /** stable key: the same part on the next recalculation has the same key */
@@ -148,7 +269,7 @@ export interface PartQty {
   section: GutterSection;
   /** decimal string */
   qty: string;
-  unit: "ft" | "ea";
+  unit: "ft" | "ea" | "lb";
   use: PartUse;
   kind: "material" | "labor";
   /** what to look up in the price list (profile, size, material, color, …) */
@@ -161,22 +282,47 @@ export type GutterAdvice =
   | { code: "downspout_without_run"; downspoutId: string }
   | { code: "lower_roof_from_first_story"; downspoutId: string }
   | { code: "corner_missing"; runId: string; cornerId: string }
-  | { code: "run_without_downspout"; runId: string };
+  | { code: "run_without_downspout"; runId: string }
+  | { code: "hanger_kit_unknown"; runId: string; hanger: string }
+  | { code: "wall_kit_unknown"; downspoutId: string; wall: string }
+  | { code: "guard_kit_unknown"; runId: string; guard: string }
+  | { code: "end_outlet_not_cap"; downspoutId: string }
+  | { code: "wye_downspout_missing"; wyeId: string }
+  | { code: "wye_sizes_differ"; wyeId: string };
 
 export interface GutterPartsResult {
   parts: PartQty[];
   advice: GutterAdvice[];
 }
 
-const stockKey = (s: GutterStock) => [s.profile, s.size, s.material, s.color ?? "-"].join(".");
+/** a key segment: dots inside values (".032") would read as separators */
+const seg = (v: string) => v.replace(/\./g, "");
+const stockKey = (s: GutterStock) => [s.profile, s.size, s.material, ...(s.gauge ? [seg(s.gauge)] : []), s.color ?? "-"].join(".");
 const stockAttrs = (s: GutterStock): Record<string, string> => ({
   profile: s.profile,
   size: s.size,
   material: s.material,
+  ...(s.gauge ? { gauge: s.gauge } : {}),
+  ...(s.finish ? { finish: s.finish } : {}),
   ...(s.color ? { color: s.color } : {}),
 });
 const ft = (inches: Dec): Dec => inches.div(12);
 const storyKey = (story: number) => String(Math.min(Math.max(story, 1), 4));
+const painted = (s: { finish?: string; color?: string }) => (s.finish ? s.finish === "painted" : !!s.color);
+
+interface KitCtx { gutter?: GutterStock; ds?: { shape: string; size: string }; kitId?: string }
+
+/** a kit part's attributes and key: part + attribute values in key-name order */
+function kitPart(p: KitPart, ctx: KitCtx) {
+  const attrs: Record<string, string> = {
+    ...(p.attrs ?? {}),
+    ...(p.byKit && ctx.kitId ? { [p.part]: ctx.kitId } : {}),
+    ...(p.bySize && ctx.gutter ? { profile: ctx.gutter.profile, size: ctx.gutter.size } : {}),
+    ...(p.byDs && ctx.ds ? { shape: ctx.ds.shape, size: ctx.ds.size } : {}),
+  };
+  const key = [p.part, ...Object.keys(attrs).sort().map((k) => seg(attrs[k]!))].join(".");
+  return { key, attrs: { part: p.part, ...attrs } };
+}
 
 class Acc {
   private m = new Map<string, PartQty & { _q: Dec }>();
@@ -194,22 +340,86 @@ class Acc {
   }
 }
 
-/** Downspout length (inches) by the rules; null = cannot be known (warns). */
+/** Downspout length (inches) by the rules. */
 export function downspoutLengthIn(ds: MeasuredDownspout, story: number, rules: GutterRules): number {
-  if (ds.heightIn !== undefined) return ds.heightIn;
+  if (ds.heightIn !== undefined) return ds.heightIn + rules.dsExtensionIn;
   // onto the lower roof: from this eave down to the roof one story below
   const stories = ds.bottom.kind === "lower_roof" ? Math.max(story - 1, 0) : story;
-  return stories * rules.storyHeightIn;
+  return stories * rules.storyHeightIn + rules.dsExtensionIn;
 }
 
-export function computeGutterParts(input: MeasurementInput, over?: Partial<GutterRules>): GutterPartsResult {
-  const rules: GutterRules = { ...DEFAULT_GUTTER_RULES, ...(over ?? {}), hangerSpacingIn: { ...DEFAULT_GUTTER_RULES.hangerSpacingIn, ...(over?.hangerSpacingIn ?? {}) } };
+/**
+ * Sticks to buy for downspouts of one kind: every downspout takes its full sticks, the remainders share
+ * sticks first fit decreasing (an offcut serves only a shorter piece; pieces are never joined from offcuts).
+ */
+export function downspoutSticks(lengthsIn: number[], stickIn: number, shareOffcuts = true): number {
+  if (!shareOffcuts) return lengthsIn.reduce((n, l) => n + Math.ceil(l / stickIn), 0);
+  let sticks = 0;
+  const rest: number[] = [];
+  for (const l of lengthsIn) {
+    sticks += Math.floor(l / stickIn);
+    const r = l % stickIn;
+    if (r > 0) rest.push(r);
+  }
+  const free: number[] = [];
+  for (const r of rest.sort((a, b) => b - a)) {
+    const i = free.findIndex((f) => f >= r);
+    if (i >= 0) free[i] = free[i]! - r;
+    else { sticks += 1; free.push(stickIn - r); }
+  }
+  return sticks;
+}
+
+/** Purchase units: ceil(qty ÷ pack size), pack size = units of the line in one purchase unit (core C3, spec П16.6). */
+export function purchaseQty(qty: DecLike, packSize: DecLike): Dec {
+  const p = dec(packSize);
+  if (!p.gt(0)) throw new Error("pack size must be > 0");
+  return dec(qty).div(p).ceil();
+}
+
+export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOverride): GutterPartsResult {
+  const rules = resolveGutterRules(over);
   const acc = new Acc();
   const advice: GutterAdvice[] = [];
   const runs = new Map(input.runs.map((r) => [r.id, r]));
   const corners = new Map(input.corners.map((c) => [c.id, c]));
   const waste = dec(1).add(dec(rules.wastePct));
-  let joints = 0;
+
+  /* joints: rivets by metal and color, sealant or solder points, touch-up colors */
+  let sealantPts = 0;
+  let solderPts = 0;
+  const paintColors = new Set<string>();
+  const joint = (kind: JointKind, s: { material: string; finish?: string; color?: string }, n = 1) => {
+    if (n <= 0) return;
+    const j = rules.joints[kind];
+    const finish = painted(s) ? "painted" : "mill";
+    const metal = s.material === "copper" ? "copper" : "aluminum";
+    const color = finish === "painted" && s.color ? s.color : "-";
+    if (kind === "ds" && rules.dsJoin === "screw") {
+      acc.add({ key: "screw.8x05", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "screw", screw: "8x0.5" } }, j.rivets * n);
+    } else if (j.rivets > 0) {
+      acc.add({ key: `rivet.42.${metal}.${finish}.${color}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "rivet", rivet: "42", material: metal, finish, ...(color !== "-" ? { color } : {}) } }, j.rivets * n);
+    }
+    if (rules.solderedMaterials.includes(s.material)) solderPts += j.sealant * n;
+    else sealantPts += j.sealant * n;
+    if (j.paint && finish === "painted" && s.color) paintColors.add(s.color);
+  };
+
+  const kitParts = (parts: KitPart[], section: GutterSection, n: DecLike, ctx: KitCtx, strips?: Map<string, { attrs: Record<string, string>; inches: Dec }>) => {
+    for (const p of parts) {
+      const { key, attrs } = kitPart(p, ctx);
+      if (p.stripInBySize) {
+        const per = ctx.ds ? p.stripInBySize[ctx.ds.size] : undefined;
+        if (per === undefined || !strips) continue;
+        const cur = strips.get(key);
+        const inches = dec(per).mul(p.per).mul(dec(n));
+        if (cur) cur.inches = cur.inches.add(inches);
+        else strips.set(key, { attrs, inches });
+        continue;
+      }
+      acc.add({ key, section, unit: "ea", use: p.use ?? "purchase", kind: "material", attrs }, dec(n).mul(p.per));
+    }
+  };
 
   /* gutter by stock: the client sees the installed length; the supplier gets length + corners + waste */
   const purchaseIn = new Map<string, { stock: GutterStock; inches: Dec }>();
@@ -220,92 +430,182 @@ export function computeGutterParts(input: MeasurementInput, over?: Partial<Gutte
     else purchaseIn.set(k, { stock: s, inches: dec(inches) });
   };
 
+  // ends replaced by an end section with an outlet (half round "D")
+  const endOutlets = new Set<string>();
+  for (const ds of input.downspouts) {
+    if (!ds.endOutlet) continue;
+    const run = runs.get(ds.runId);
+    const i = ds.endOutlet === "start" ? 0 : 1;
+    if (run && run.ends[i].kind === "cap") endOutlets.add(`${run.id}:${i}`);
+    else if (run) advice.push({ code: "end_outlet_not_cap", downspoutId: ds.id });
+  }
+
   for (const r of input.runs) {
     const len = dec(r.lengthIn);
     acc.add({ key: `gutter.${stockKey(r)}`, section: "gutter", unit: "ft", use: "estimate", kind: "material", attrs: stockAttrs(r) }, ft(len));
     addPurchase(r, len);
     if (!rules.seamless) {
-      const sections = len.div(rules.sectionLengthIn).ceil();
-      joints += Math.max(sections.toNumber() - 1, 0);
+      const joins = Math.max(Math.ceil(r.lengthIn / rules.sectionLengthIn) - 1, 0);
+      if (joins > 0) {
+        acc.add({ key: `slipjoint.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "slip_joint" } }, joins);
+        joint("section", r, joins);
+      }
     }
 
-    // end caps, left or right by where the house is
+    // end caps: K and fascia come left and right by where the house is; round and box caps fit either end
     r.ends.forEach((e, i) => {
       if (e.kind === "corner" && !corners.has(e.cornerId)) advice.push({ code: "corner_missing", runId: r.id, cornerId: e.cornerId });
-      if (e.kind !== "cap") return;
-      // standing outside and facing the house: with the house on the right of the drawing direction,
-      // the start of the run is on your right (right cap) and the end on your left; mirrored for the house on the left
-      const side = (i === 0) === (r.houseSide === "R") ? "R" : "L";
-      acc.add({ key: `endcap.${side}.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), side } }, 1);
-      joints += 1;
+      if (e.kind !== "cap" || endOutlets.has(`${r.id}:${i}`)) return;
+      if (rules.sidedCapProfiles.includes(r.profile)) {
+        // standing outside and facing the house: with the house on the right of the drawing direction,
+        // the start of the run is on your right (right cap) and the end on your left; mirrored for the house on the left
+        const side = (i === 0) === (r.houseSide === "R") ? "R" : "L";
+        acc.add({ key: `endcap.${side}.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "end_cap", side } }, 1);
+      } else {
+        acc.add({ key: `endcap.-.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "end_cap" } }, 1);
+      }
+      joint("endcap", r);
     });
 
-    // hangers by kind and spacing
-    const spacing = rules.hangerSpacingIn[r.hanger];
-    acc.add({ key: `hanger.${r.hanger}.${r.profile}.${r.size}`, section: "fasteners", unit: "ea", use: "both", kind: "material", attrs: { hanger: r.hanger, profile: r.profile, size: r.size } }, len.div(spacing).ceil());
+    // hangers: the kit's parts × ceil(length / spacing) (+ one per run if the company wants hangers at both ends)
+    const kit = rules.hangerKits[r.hanger];
+    const spacing = r.hangerSpacingIn ?? rules.hangerSpacingIn[r.hanger] ?? kit?.spacingIn ?? 24;
+    const hangers = len.div(spacing).ceil().add(rules.hangerExtraPerRun);
+    if (kit) kitParts(kit.parts, "fasteners", hangers, { gutter: r, kitId: r.hanger });
+    else {
+      advice.push({ code: "hanger_kit_unknown", runId: r.id, hanger: r.hanger });
+      acc.add({ key: `hanger.${seg(r.hanger)}.${r.profile}.${r.size}`, section: "fasteners", unit: "ea", use: "both", kind: "material", attrs: { part: "hanger", hanger: r.hanger, profile: r.profile, size: r.size } }, hangers);
+    }
+    if (r.wedges) acc.add({ key: `wedge.${r.profile}.${r.size}`, section: "fasteners", unit: "ea", use: "purchase", kind: "material", attrs: { part: "wedge", profile: r.profile, size: r.size } }, hangers);
 
     if (r.guardsIn && r.guardsIn > 0) {
       const g = Math.min(r.guardsIn, r.lengthIn);
       const type = r.guardType ?? "default";
-      acc.add({ key: `guard.${type}.${r.profile}.${r.size}`, section: "guards", unit: "ft", use: "both", kind: "material", attrs: { guard: type, profile: r.profile, size: r.size } }, ft(dec(g)));
+      acc.add({ key: `guard.${type}.${r.profile}.${r.size}`, section: "guards", unit: "ft", use: "estimate", kind: "material", attrs: { guard: type, profile: r.profile, size: r.size } }, ft(dec(g)));
+      const gk = rules.guardKits[type];
+      if (gk) {
+        const pieces = Math.ceil(g / gk.pieceIn);
+        acc.add({ key: `guardpiece.${type}.${r.profile}.${r.size}`, section: "guards", unit: "ea", use: "purchase", kind: "material", attrs: { part: "guard", guard: type, profile: r.profile, size: r.size, lengthIn: String(gk.pieceIn) } }, pieces);
+        kitParts(gk.parts, "guards", pieces, { gutter: r });
+      } else advice.push({ code: "guard_kit_unknown", runId: r.id, guard: type });
     }
 
-    // labor: install by story; tear-off
+    // labor: install by story; tear-off; the kit's own labor (tile)
     acc.add({ key: `labor.install.story${storyKey(r.story)}`, section: "labor", unit: "ft", use: "estimate", kind: "labor", attrs: { work: "install", story: storyKey(r.story) } }, ft(len));
     if (r.tearOff) acc.add({ key: "labor.tearoff", section: "labor", unit: "ft", use: "estimate", kind: "labor", attrs: { work: "tearoff" } }, ft(len));
+    if (kit?.laborWork) acc.add({ key: `labor.${kit.laborWork}`, section: "labor", unit: "ft", use: "estimate", kind: "labor", attrs: { work: kit.laborWork } }, ft(len));
 
-    // advice: expansion joints on long aluminum runs
+    // expansion joints on long aluminum runs: advice, and a part if the company adds them
     if (r.material.startsWith("alu") && r.lengthIn > rules.expansionJointIn) {
-      advice.push({ code: "expansion_joint", runId: r.id, joints: Math.ceil(r.lengthIn / rules.expansionJointIn) - 1 });
+      const n = Math.ceil(r.lengthIn / rules.expansionJointIn) - 1;
+      advice.push({ code: "expansion_joint", runId: r.id, joints: n });
+      if (rules.expansionJointPart) acc.add({ key: `expjoint.${stockKey(r)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(r), part: "expansion_joint" } }, n);
     }
   }
 
   for (const c of input.corners) {
-    joints += 1;
     if (c.method === "prefab") {
-      acc.add({ key: `corner.${c.kind}.${stockKey(c)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(c), corner: c.kind } }, 1);
+      acc.add({ key: `corner.${c.kind}.${stockKey(c)}`, section: "corners_caps", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(c), part: "miter", corner: c.kind } }, 1);
+      joint("corner_prefab", c);
     } else {
-      acc.add({ key: `stripmiter.${stockKey(c)}`, section: "corners_caps", unit: "ea", use: "purchase", kind: "material", attrs: { ...stockAttrs(c), part: "strip_miter" } }, 1);
+      if (c.method === "strip") acc.add({ key: `stripmiter.${stockKey(c)}`, section: "corners_caps", unit: "ea", use: "purchase", kind: "material", attrs: { ...stockAttrs(c), part: "strip_miter" } }, 1);
       acc.add({ key: "labor.corner_cut", section: "labor", unit: "ea", use: "estimate", kind: "labor", attrs: { work: "corner_cut" } }, 1);
       addPurchase(c, rules.cutCornerAllowanceIn);
+      joint(c.method === "strip" ? "corner_strip" : "corner_cut", c);
     }
     if (c.splashGuard) acc.add({ key: `splashguard.${c.profile}.${c.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "splash_guard", profile: c.profile, size: c.size } }, 1);
   }
 
   const dsPerRun = new Map<string, number>();
+  const sticksByKind = new Map<string, { attrs: Record<string, string>; lengths: number[] }>();
+  const strips = new Map<string, { attrs: Record<string, string>; inches: Dec }>();
   for (const ds of input.downspouts) {
     const run = runs.get(ds.runId);
     if (!run) { advice.push({ code: "downspout_without_run", downspoutId: ds.id }); continue; }
     dsPerRun.set(run.id, (dsPerRun.get(run.id) ?? 0) + 1);
     if (ds.bottom.kind === "lower_roof" && run.story <= 1 && ds.heightIn === undefined) advice.push({ code: "lower_roof_from_first_story", downspoutId: ds.id });
-    const len = dec(downspoutLengthIn(ds, run.story, rules));
-    const dsAttrs = { shape: ds.shape, size: ds.size, material: ds.material, ...(ds.color ? { color: ds.color } : {}) };
-    const dsKey = [ds.shape, ds.size, ds.material, ds.color ?? "-"].join(".");
+    const lenIn = downspoutLengthIn(ds, run.story, rules);
+    const len = dec(lenIn);
+    const sz = [ds.shape, ds.size, ...(ds.dsStyle ? [ds.dsStyle] : [])].join(".");
+    const color = ds.color ?? "-";
+    const dsAttrs = { shape: ds.shape, size: ds.size, ...(ds.dsStyle ? { dsStyle: ds.dsStyle } : {}), material: ds.material, ...(ds.gauge ? { gauge: ds.gauge } : {}), ...(ds.finish ? { finish: ds.finish } : {}), ...(ds.color ? { color: ds.color } : {}) };
+    const dsKey = [sz, ds.material, ...(ds.gauge ? [seg(ds.gauge)] : []), color].join(".");
     acc.add({ key: `ds.${dsKey}`, section: "downspouts", unit: "ft", use: "estimate", kind: "material", attrs: dsAttrs }, ft(len));
-    const sticks = len.div(rules.dsStickIn).ceil();
-    acc.add({ key: `dsstick.${dsKey}`, section: "downspouts", unit: "ea", use: "purchase", kind: "material", attrs: { ...dsAttrs, stickIn: String(rules.dsStickIn) } }, sticks);
-    acc.add({ key: `dsstrap.${ds.shape}.${ds.size}`, section: "fasteners", unit: "ea", use: "purchase", kind: "material", attrs: { part: "ds_strap", shape: ds.shape, size: ds.size } }, sticks.mul(rules.dsStrapsPerStick));
-    acc.add({ key: `outlet.${run.profile}.${run.size}.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "outlet", profile: run.profile, gutterSize: run.size, shape: ds.shape, size: ds.size } }, 1);
-    joints += 1;
+    const kind = sticksByKind.get(dsKey);
+    if (kind) kind.lengths.push(lenIn);
+    else sticksByKind.set(dsKey, { attrs: { ...dsAttrs, stickIn: String(rules.dsStickIn) }, lengths: [lenIn] });
+
+    // wall fasteners: the kit for this shape and wall, 2 per 10 ft
+    const wall = ds.wall ?? rules.defaultWall;
+    const wallKitId = rules.wallKitByWall[ds.shape]?.[wall] ?? wall;
+    const wk = rules.wallKits[wallKitId];
+    const fasteners = Math.max(1, Math.ceil(lenIn / rules.dsFastenerSpacingIn));
+    if (wk) kitParts(wk.parts, "fasteners", fasteners, { ds }, strips);
+    else advice.push({ code: "wall_kit_unknown", downspoutId: ds.id, wall });
+
+    if (ds.endOutlet && endOutlets.has(`${run.id}:${ds.endOutlet === "start" ? 0 : 1}`)) {
+      acc.add({ key: `endoutlet.${stockKey(run)}.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { ...stockAttrs(run), part: "end_outlet", gutterSize: run.size, shape: ds.shape, size: ds.size } }, 1);
+    } else {
+      acc.add({ key: `outlet.${run.profile}.${run.size}.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "outlet", profile: run.profile, gutterSize: run.size, shape: ds.shape, size: ds.size } }, 1);
+    }
+    joint("outlet", run);
+
+    // downspout joints: every stick, elbow, offset, reducer and the bottom piece joins the one above
+    let pieces = Math.ceil(lenIn / rules.dsStickIn);
     for (const e of ds.elbows ?? rules.defaultElbows) {
-      if (e.qty > 0) acc.add({ key: `elbow.${e.style}.${ds.shape}.${ds.size}.${ds.color ?? "-"}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { part: "elbow", style: e.style, shape: ds.shape, size: ds.size, ...(ds.color ? { color: ds.color } : {}) } }, e.qty);
+      if (e.qty <= 0) continue;
+      pieces += e.qty;
+      acc.add({ key: `elbow.${e.style}.${sz}.${color}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { part: "elbow", style: e.style, shape: ds.shape, size: ds.size, ...(ds.dsStyle ? { dsStyle: ds.dsStyle } : {}), ...(ds.color ? { color: ds.color } : {}) } }, e.qty);
     }
     for (const o of ds.offsets ?? []) {
-      const std = [1, 2, 4].includes(o.lengthIn);
-      if (o.qty > 0) acc.add({ key: `offset.${o.lengthIn}.${ds.shape}.${ds.size}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { part: "offset", lengthIn: String(o.lengthIn), shape: ds.shape, size: ds.size, ...(std ? {} : { custom: "1" }) } }, o.qty);
+      if (o.qty <= 0) continue;
+      pieces += o.qty;
+      const std = rules.stdOffsetsIn.includes(o.lengthIn);
+      acc.add({ key: `offset.${o.lengthIn}.${ds.shape}.${ds.size}`, section: "downspouts", unit: "ea", use: "both", kind: "material", attrs: { part: "offset", lengthIn: String(o.lengthIn), shape: ds.shape, size: ds.size, ...(std ? {} : { custom: "1" }) } }, o.qty);
     }
-    if (ds.funnel) acc.add({ key: `funnel.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "funnel", shape: ds.shape, size: ds.size } }, 1);
+    for (const rd of ds.reducers ?? []) {
+      if (rd.qty <= 0) continue;
+      pieces += rd.qty;
+      acc.add({ key: `reducer.${ds.shape}.${ds.size}.${rd.to}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "reducer", shape: ds.shape, size: ds.size, to: rd.to } }, rd.qty);
+    }
+    const head = ds.head ?? (ds.funnel ? "funnel" : undefined);
+    if (head === "funnel") acc.add({ key: `funnel.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "funnel", shape: ds.shape, size: ds.size } }, 1);
+    if (head === "conductor") acc.add({ key: `conductorhead.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "conductor_head", shape: ds.shape, size: ds.size } }, 1);
+    if (ds.diverter) acc.add({ key: `diverter.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "diverter", shape: ds.shape, size: ds.size } }, 1);
+    if (ds.eaveBox) acc.add({ key: `eavebox.${ds.eaveBox}.${ds.shape}.${ds.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "eave_box", eaveBox: ds.eaveBox, shape: ds.shape, size: ds.size } }, 1);
     if (ds.outletScreen) acc.add({ key: `outletscreen.${ds.shape}.${ds.size}`, section: "guards", unit: "ea", use: "both", kind: "material", attrs: { part: "outlet_screen", shape: ds.shape, size: ds.size } }, 1);
+
     const b = ds.bottom;
+    const bc = b.color ? `.${b.color}` : "";
+    const bAttrs = { shape: ds.shape, size: ds.size, ...(b.color ? { color: b.color } : {}) };
     if (b.kind === "extension" || b.kind === "splash_block") {
-      acc.add({ key: `bottom.${b.kind}.${ds.shape}.${ds.size}`, section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: b.kind, shape: ds.shape, size: ds.size } }, 1);
+      acc.add({ key: `bottom.${b.kind}.${ds.shape}.${ds.size}${bc}`, section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: b.kind, ...bAttrs } }, 1);
+      if (b.kind === "extension") pieces += 1;
     } else if (b.kind === "flex" || b.kind === "drain") {
-      acc.add({ key: `bottom.${b.kind}.${ds.shape}.${ds.size}`, section: "ds_bottom", unit: "ft", use: "both", kind: "material", attrs: { part: b.kind, shape: ds.shape, size: ds.size } }, ft(dec(b.lengthIn ?? 0)));
-      if (b.kind === "drain") acc.add({ key: `bottom.drain_adapter.${ds.shape}.${ds.size}`, section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: "drain_adapter", shape: ds.shape, size: ds.size } }, 1);
+      acc.add({ key: `bottom.${b.kind}.${ds.shape}.${ds.size}${bc}`, section: "ds_bottom", unit: "ft", use: "both", kind: "material", attrs: { part: b.kind, ...bAttrs } }, ft(dec(b.lengthIn ?? 0)));
+      pieces += 1;
+      if (b.kind === "drain") acc.add({ key: `bottom.drain_adapter.${ds.shape}.${ds.size}${b.pipe ? `.${b.pipe}` : ""}`, section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: "drain_adapter", shape: ds.shape, size: ds.size, ...(b.pipe ? { pipe: b.pipe } : {}) } }, 1);
     } else if (b.kind === "lower_roof") {
       acc.add({ key: "bottom.splash_pan", section: "ds_bottom", unit: "ea", use: "both", kind: "material", attrs: { part: "splash_pan" } }, 1);
     }
+    joint("ds", ds, pieces);
     acc.add({ key: `labor.downspout.story${storyKey(run.story)}`, section: "labor", unit: "ea", use: "estimate", kind: "labor", attrs: { work: "downspout", story: storyKey(run.story) } }, 1);
+  }
+
+  for (const { attrs, lengths } of sticksByKind.values()) {
+    const key = `dsstick.${[attrs.shape, attrs.size, ...(attrs.dsStyle ? [attrs.dsStyle] : []), attrs.material, ...(attrs.gauge ? [seg(attrs.gauge)] : []), attrs.color ?? "-"].join(".")}`;
+    acc.add({ key, section: "downspouts", unit: "ea", use: "purchase", kind: "material", attrs }, downspoutSticks(lengths, rules.dsStickIn, rules.dsShareOffcuts));
+  }
+  for (const [key, { attrs, inches }] of strips) {
+    acc.add({ key, section: "fasteners", unit: "ft", use: "purchase", kind: "material", attrs }, ft(inches).ceil());
+  }
+
+  const dsById = new Map(input.downspouts.map((d) => [d.id, d]));
+  for (const w of input.wyes ?? []) {
+    const [a, b] = w.dsIds.map((id) => dsById.get(id));
+    if (!a || !b) { advice.push({ code: "wye_downspout_missing", wyeId: w.id }); continue; }
+    if (a.shape !== b.shape || a.size !== b.size) advice.push({ code: "wye_sizes_differ", wyeId: w.id });
+    acc.add({ key: `wye.${b.shape}.${b.size}`, section: "adapters", unit: "ea", use: "both", kind: "material", attrs: { part: "wye", shape: b.shape, size: b.size } }, 1);
   }
 
   for (const ch of input.chains ?? []) {
@@ -327,16 +627,20 @@ export function computeGutterParts(input: MeasurementInput, over?: Partial<Gutte
   for (const { stock, inches } of purchaseIn.values()) {
     const attrs = stockAttrs(stock);
     if (rules.seamless) {
-      acc.add({ key: `coil.${stockKey(stock)}`, section: "gutter", unit: "ft", use: "purchase", kind: "material", attrs: { ...attrs, buy: "coil" } }, ft(inches.mul(waste)).ceil());
+      const blank = rules.coilBlankIn[`${stock.profile}.${stock.size}`];
+      acc.add({ key: `coil.${stockKey(stock)}`, section: "gutter", unit: "ft", use: "purchase", kind: "material", attrs: { ...attrs, buy: "coil", ...(blank ? { blankIn: blank } : {}) } }, ft(inches.mul(waste)).ceil());
     } else {
       acc.add({ key: `section.${stockKey(stock)}`, section: "gutter", unit: "ea", use: "purchase", kind: "material", attrs: { ...attrs, buy: "section", lengthIn: String(rules.sectionLengthIn) } }, inches.mul(waste).div(rules.sectionLengthIn).ceil());
     }
   }
 
-  if (joints > 0) {
-    acc.add({ key: "sealant", section: "consumables", unit: "ea", use: "both", kind: "material", attrs: { part: "sealant" } }, Math.ceil(joints / rules.jointsPerSealantTube));
-    acc.add({ key: "rivets", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "rivets" } }, joints * rules.rivetsPerJoint);
+  // consumables
+  if (sealantPts > 0) acc.add({ key: "sealant", section: "consumables", unit: "ea", use: "both", kind: "material", attrs: { part: "sealant" } }, Math.ceil(sealantPts / rules.jointsPerSealantTube));
+  if (solderPts > 0) {
+    acc.add({ key: "solder", section: "consumables", unit: "lb", use: "purchase", kind: "material", attrs: { part: "solder" } }, Math.ceil(solderPts / rules.solderPointsPerLb));
+    acc.add({ key: "flux", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "flux" } }, 1);
   }
+  if (rules.touchUpPaint) for (const c of paintColors) acc.add({ key: `paint.${c}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "touch_up_paint", color: c } }, 1);
 
   return { parts: acc.list(), advice };
 }
