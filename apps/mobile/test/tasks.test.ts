@@ -91,13 +91,22 @@ describe("tasks: where a role may tie a new task (the server's tasks_insert)", (
     expect([...kinds].sort()).toEqual(["customer", "job", "lead", "property"]);
     expect(taskPlaces(d, "dispatcher").some((x) => x.kind === "lead" && d.leads.find((l) => l.id === x.subjectId)?.customerId)).toBe(false);
   });
-  it("the technician: only his leads and the properties of his visits — never a job or a client", () => {
+  it("the technician: his leads, the jobs and the properties of his visits — never a client (20 §6-4)", () => {
     const me = d.visits.find((v) => v.techId)!.techId!;
     const places = taskPlaces({ ...d, me }, "tech");
-    expect(places.every((x) => x.kind === "lead" || x.kind === "property")).toBe(true);
+    expect(places.every((x) => x.kind === "lead" || x.kind === "property" || x.kind === "job")).toBe(true);
     expect(places.some((x) => x.kind === "property")).toBe(true);
+    expect(places.some((x) => x.kind === "job")).toBe(true);
     const other = taskPlaces({ ...d, me: "nobody" }, "tech");
-    expect(other.filter((x) => x.kind === "property")).toEqual([]);
+    expect(other.filter((x) => x.kind === "property" || x.kind === "job")).toEqual([]);
+  });
+  it("the technician's jobs = the server's window: a job of an old visit (20 days) is not offered", () => {
+    const v0 = d.visits[0]!;
+    const job = (id: string) => ({ ...d.jobs[0]!, id, title: `Job ${id}`, status: "scheduled" as const });
+    const visit = (id: string, jobId: string, days: number) => ({ ...v0, id, jobId, techId: "t-me", assigneeIds: ["t-me"], start: new Date(Date.now() + days * 86_400_000).toISOString(), closed: false });
+    const w: DB = { ...d, me: "t-me", jobs: [job("j-soon"), job("j-old")], visits: [visit("v-soon", "j-soon", 1), visit("v-old", "j-old", -20)] };
+    const jobs = taskPlaces(w, "tech").filter((x) => x.kind === "job").map((x) => x.subjectId);
+    expect(jobs).toEqual(["j-soon"]);
   });
   it("search narrows the places", () => {
     const c = d.customers[0]!;
