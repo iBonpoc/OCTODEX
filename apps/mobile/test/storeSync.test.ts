@@ -86,6 +86,7 @@ vi.mock("@/data/outboxOwner", async (orig) => {
 
 import { render, settle, type Root } from "./support/miniReact";
 import { mineOf, StoreProvider } from "../src/data/store";
+import { badgeState } from "../src/data/syncLink";
 import { forgetDeviceState } from "../src/data/persist";
 import { makeSeed } from "../src/data/seed";
 import { isDeviceKey } from "../src/features/deleteAccount";
@@ -105,6 +106,7 @@ type Value = {
   online: boolean;
   link: "ok" | "offline" | "server";
   setOnline: (v: boolean) => number;
+  saveCompany: (patch: object) => () => void;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -683,6 +685,28 @@ describe("unit:storeSync — the wipe and the outbox's own timing (review #244)"
   });
 });
 
+describe("unit:storeSync — company.save carries «zone chosen» (docs/specs/22 §1.3)", () => {
+  const saved = async (patch: object) => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    valueOf(r).saveCompany(patch);
+    await wait(1700); // the outbox tick
+    await settle();
+    const ops = server.sends.map((x) => x.op as { k: string; tzChanged?: boolean });
+    expect(ops.map((o) => o.k)).toEqual(["company.save"]);
+    return ops[0]!;
+  };
+  it("the name only: tzChanged false (the zone is not sent)", async () => {
+    expect((await saved({ name: "New name" })).tzChanged).toBe(false);
+  });
+  it("the zone chosen: tzChanged true", async () => {
+    expect((await saved({ timezone: "America/Chicago" })).tzChanged).toBe(true);
+  });
+});
+
 
 // ---------------------------------------------------------------- docs/specs/23 §3: an op the server keeps answering with an error
 describe("unit:storeSync — the server's error for one op does not hold the others (docs/specs/23 §3)", () => {
@@ -694,7 +718,9 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
   const st = () => stored() as unknown as S[];
   const sentIds = () => server.sends.map((s) => (s.op as { id: string }).id);
   const timeout = (code = "57014") => notNow(500, code);
-  type V = Value & { link: string; stuckOps: { id: string; kind: string; waiting: number }[]; retryOp: (id: string) => void; discardOp: (id: string) => void };
+  type V = Value & { link: string; syncError: string | null; stuckOps: { id: string; kind: string; waiting: number; leaving: number; leavingKinds: { key: string; n: number }[]; leavingMoney: boolean; sending: boolean }[]; retryOp: (id: string) => void; discardOp: (id: string) => boolean };
+  const src = (id: string, n: number, extra: object = {}) => q(id, { k: "source.save", source: { id: U(n), name: "Yelp", kind: "online", active: true } }, extra);
+  const newLead = (id: string, n: number, s: number) => q(id, { k: "lead.add", id: U(n), name: "A", phone: "1", city: "LA", sourceId: U(s), message: "" });
   const start = async () => {
     signIn("u1", "c1");
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
@@ -731,13 +757,13 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await settle();
     expect(sentIds()).toEqual([U(1), U(3)]);
   });
-  it("a barrier (company settings) behind X does not go, nor anything after it", async () => {
-    seedOutbox(ev("X", 1), q("B", { k: "company.save", company: {} }), ev("Z", 3));
+  it("behind X every op waits (company settings, «the job is done») — only an op that adds its own goes (review #259 Б1)", async () => {
+    seedOutbox(q("X", { k: "visit.step", visitId: U(1), step: "done" }), q("B", { k: "company.save", company: {} }), q("J", { k: "job.complete", id: U(2) }), ev("Z", 3));
     const r = await start();
     await pass(r);
     server.sends[0]!.d.reject(timeout());
     await settle();
-    expect(sentIds()).toEqual([U(1)]);
+    expect(server.sends.map((x) => (x.op as { k: string }).k)).toEqual(["visit.step", "calendarEvent.remove"]);
   });
   it("Y gets a 500 too: the server as a whole — «server unavailable», the queue pauses, both stay, no tries", async () => {
     seedOutbox(ev("X", 1), ev("Y", 2), ev("Z", 3));
@@ -748,7 +774,9 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     server.sends[1]!.d.reject(notNow(500));
     await settle();
     expect(sentIds()).toEqual([U(1), U(2)]); // Z not tried in this pass
+    // the header says «Сервер недоступен» by `link`, not by syncError (a 500 does not write syncError, cc8a2a3)
     expect(v(r).link).toBe("server");
+    expect(badgeState(v(r).online, v(r).link as "server", v(r).queue.length, v(r).stuckOps.length)).toBe("server");
     await wait(300);
     expect(st().map((x) => [x.id, x.tries])).toEqual([["X", 0], ["Y", 0], ["Z", 0]]);
   });
@@ -795,13 +823,24 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await settle();
     await wait(300);
     expect(st().find((x) => x.id === "X")).toMatchObject({ fails: 3, failSince: since, stuck: true, tries: 0 });
-    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", kind: "calendarEvent.remove", waiting: 1 })]);
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", kind: "calendarEvent.remove", waiting: 1, leaving: 0 })]);
     const before = server.sends.length;
     await pass(r);
     expect(server.sends.length).toBe(before); // its 5-minute pause: not tried at once
   });
-  it("only stuck ops (and what waits for them) left: the reload is not held — the phone sees the server again", async () => {
+  it("an op waiting behind a stuck one holds the reload: its change is only on the phone (review #259 №4)", async () => {
     seedOutbox(ev("X", 1, { fails: 3, failSince: new Date(Date.now() - 20 * 60_000).toISOString(), stuck: true }), q("W", { k: "customer.tags", id: U(1), tagIds: [] }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)?.d.reject(timeout());
+    await settle();
+    const loads = server.loads.length;
+    void v(r).refresh();
+    await settle();
+    expect(server.loads.length).toBe(loads);
+  });
+  it("only stuck ops left: the reload is not held — the phone sees the server again", async () => {
+    seedOutbox(ev("X", 1, { fails: 3, failSince: new Date(Date.now() - 20 * 60_000).toISOString(), stuck: true }));
     const r = await start();
     // the start reload (stuck X tried once: a timeout again)
     await pass(r);
@@ -812,7 +851,7 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await settle();
     expect(server.loads.length).toBe(loads + 1);
     await wait(300);
-    expect(st().map((x) => x.id)).toEqual(["X", "W"]); // the ops stay (rule 6)
+    expect(st().map((x) => x.id)).toEqual(["X"]); // the op stays (rule 6)
   });
   it("an op that can still go holds the reload, as before", async () => {
     seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }), ev("Y", 2));
@@ -838,19 +877,115 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     expect(st()).toEqual([]);
     expect(v(r).stuckOps).toEqual([]);
   });
-  it("«Отменить изменение…»: the op and what waits for it leave; another person's ops stay; then a reload", async () => {
+  it("«Отменить изменение…»: the op and what needs what it makes leave; another person's ops stay; then a reload", async () => {
     seedOutbox(
-      ev("X", 1, { stuck: true, fails: 3, failSince: AGO }),
-      q("W", { k: "customer.tags", id: U(1), tagIds: [] }),
-      q("T", { k: "calendarEvent.remove", id: U(1) }, { owner: { userId: "u2", companyId: "c1" } }),
+      src("X", 1, { stuck: true, fails: 3, failSince: AGO }),
+      newLead("L", 2, 1), // needs the new source
+      q("W", { k: "customer.tags", id: U(5), tagIds: [] }), // only waited behind it
+      q("T", { k: "lead.add", id: U(3), name: "B", phone: "1", city: "LA", sourceId: U(1), message: "" }, { owner: { userId: "u2", companyId: "c1" } }),
     );
     const r = await start();
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", waiting: 2, leaving: 1, leavingKinds: [{ key: "sync.kind.lead", n: 1 }], leavingMoney: false })]);
+    expect(v(r).discardOp("X")).toBe(true);
+    await settle();
+    await wait(300);
+    expect(st().map((x) => x.id)).toEqual(["W", "T"]);
+    // W is free again: it goes, and then the server's truth comes back
+    await pass(r);
+    expect(server.sends.map((x) => (x.op as { k: string }).k)).toEqual(["customer.tags"]);
     const loads = server.loads.length;
-    v(r).discardOp("X");
+    server.sends[0]!.d.resolve();
     await settle();
     await wait(300);
     expect(st().map((x) => x.id)).toEqual(["T"]);
     expect(server.loads.length).toBeGreaterThan(loads);
+  });
+  it("a stuck new client: the confirmation names what leaves with it, by kind, and warns of money (review #259)", async () => {
+    seedOutbox(
+      q("C", { k: "customer.create", customerId: U(1), contactId: U(2), propertyId: U(3), name: "A", phone: "1", sourceId: U(9), address: "a", city: "LA" }, { stuck: true, fails: 3, failSince: AGO }),
+      q("J", { k: "job.create", id: U(4), customerId: U(1), propertyId: U(3), title: "T", description: null, jobTypeId: null, serviceCategoryId: null }),
+      q("I", { k: "invoice.issue", id: U(5), jobId: U(4), customerId: U(1), kind: "final", title: "F", totalCents: 100 }),
+      q("P", { k: "payment.record", id: U(6), invoiceId: U(5), customerId: U(1), amountCents: 100, method: "cash" }),
+      q("P2", { k: "payment.record", id: U(7), invoiceId: U(5), customerId: U(1), amountCents: 50, method: "cash" }),
+    );
+    const r = await start();
+    expect(v(r).stuckOps).toEqual([
+      expect.objectContaining({ id: "C", leaving: 4, leavingKinds: [{ key: "sync.kind.job", n: 1 }, { key: "sync.kind.money", n: 3 }], leavingMoney: true }),
+    ]);
+  });
+  it("a stuck estimate edit: the approval that makes its invoice leaves with it — money (review #259 круг 3, п.1)", async () => {
+    seedOutbox(
+      q("E", { k: "estimate.save", id: U(1), versionId: U(2), customerId: U(3), propertyId: U(4), title: "T" }, { stuck: true, fails: 3, failSince: AGO }),
+      q("A", { k: "estimate.approve", id: U(1), token: "t", optionId: U(5), addonIds: [], signer: "S", svg: "", channel: "on_site", jobId: U(6), invoiceId: U(7) }),
+    );
+    const r = await start();
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "E", leaving: 1, leavingKinds: [{ key: "sync.kind.estimate", n: 1 }], leavingMoney: true })]);
+  });
+  it("a tag saved on the phone: queued with what it makes — a new one its id, a renamed one nothing (review #259 круг 3)", async () => {
+    const r = await start();
+    const { id } = (v(r) as unknown as { saveTag: (t: object) => { id: string } }).saveTag({ name: "New tag" });
+    (v(r) as unknown as { saveTag: (t: object) => { id: string } }).saveTag({ id, name: "Renamed" });
+    await wait(300);
+    const tagOps = (stored() as unknown as { op: { k: string }; made?: string[] }[]).filter((x) => x.op.k === "tag.save");
+    expect(tagOps.map((x) => x.made)).toEqual([[id.toLowerCase()], []]);
+  });
+  it("e2e 114's start: a timeout stuck one and a stuck expense waiting behind it — two cards, the expense not tried", async () => {
+    const since = new Date(Date.now() - 11 * 60_000).toISOString();
+    seedOutbox(
+      ev("S", 1, { fails: 2, failSince: since }),
+      q("G", { k: "expense.add", id: U(2), jobId: null, vendor: "V", category: "materials", amountCents: 1234 }, { stuck: true, fails: 3, failSince: since }),
+    );
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(timeout());
+    await settle();
+    expect(server.sends.map((x) => (x.op as { k: string }).k)).toEqual(["calendarEvent.remove"]);
+    expect(v(r).stuckOps.map((x) => [x.id, x.leavingMoney])).toEqual([["S", false], ["G", true]]);
+  });
+  it("a client's people saved on the phone: queued with the new person only — the existing one is on the server (круг 4)", async () => {
+    const r = await start();
+    const c = (v(r) as unknown as { db: { customers: { id: string }[] } }).db.customers[0]!;
+    const person = (id: string, name: string) => ({ id, name, role: "other", phones: [], emails: [] });
+    const save = (v(r) as unknown as { saveCustomerPeople: (id: string, p: object[]) => void }).saveCustomerPeople;
+    save(c.id, [person(U(76), "Ann")]); // Ann is new here…
+    save(c.id, [person(U(76), "Ann"), person(U(77), "New person")]); // …and on the phone for the next save
+    await wait(300);
+    const ops = (stored() as unknown as { op: { k: string }; made?: string[] }[]).filter((x) => x.op.k === "customer.people");
+    expect(ops.map((x) => x.made)).toEqual([[U(76)], [U(77)]]);
+    const op = ops[1]!;
+    expect(op.made).toEqual([U(77)]);
+  });
+  it("a stuck payment alone: money, though nothing else leaves", async () => {
+    seedOutbox(q("P", { k: "payment.record", id: U(6), invoiceId: U(5), customerId: U(1), amountCents: 100, method: "cash" }, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "P", leaving: 0, leavingKinds: [], leavingMoney: true })]);
+  });
+  it("a stuck change of a client discarded: its new job, invoice and payment stay and go (review #259 п.2)", async () => {
+    seedOutbox(
+      q("X", { k: "customer.update", id: U(1), name: "B" }, { stuck: true, fails: 3, failSince: AGO }),
+      q("J", { k: "job.create", id: U(4), customerId: U(1), propertyId: U(3), title: "T", description: null, jobTypeId: null, serviceCategoryId: null }),
+      q("I", { k: "invoice.issue", id: U(5), jobId: U(4), customerId: U(1), kind: "final", title: "F", totalCents: 100 }),
+      q("P", { k: "payment.record", id: U(6), invoiceId: U(5), customerId: U(1), amountCents: 100, method: "cash" }),
+    );
+    const r = await start();
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", waiting: 3, leaving: 0 })]);
+    expect(v(r).discardOp("X")).toBe(true);
+    await settle();
+    await wait(300);
+    expect(st().map((x) => x.id)).toEqual(["J", "I", "P"]);
+  });
+  it("a new source gets a 500: the new lead with it waits — it does not go first and get 23503 (review #259 Б1-бис)", async () => {
+    seedOutbox(src("S", 1), newLead("L", 2, 1), newLead("M", 3, 9));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(timeout());
+    await settle();
+    expect(server.sends.map((x) => (x.op as { k: string }).k)).toEqual(["source.save", "lead.add"]);
+    expect((server.sends[1]!.op as { id: string }).id).toBe(U(3)); // M, with another source
+    server.sends[1]!.d.resolve();
+    await settle();
+    await wait(300);
+    expect(st().map((x) => x.id)).toEqual(["S", "L"]);
   });
   it("after a restart two stuck ops fail again: not «server unavailable», and the next op still goes", async () => {
     const st2 = { stuck: true, fails: 3, failSince: AGO };
@@ -863,6 +998,103 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await settle();
     expect(sentIds()).toEqual([U(1), U(2), U(3)]);
     expect(v(r).link).toBe("ok");
+  });
+  it("X 500 → Y ok → Z 500: the server answered in between — Z is maybe its own, not «server unavailable» (review #259 №1)", async () => {
+    seedOutbox(ev("X", 1), ev("Y", 2), ev("Z", 3), ev("W", 4));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(notNow(500));
+    await settle();
+    server.sends[1]!.d.resolve();
+    await settle();
+    server.sends[2]!.d.reject(notNow(500));
+    await settle();
+    expect(sentIds()).toEqual([U(1), U(2), U(3), U(4)]); // W still tried
+    expect(v(r).link).toBe("ok");
+  });
+  it("«Повторить сейчас» that fails again: still stuck, the card stays (review #259 №2)", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(timeout());
+    await settle();
+    const fails = st()[0]!.fails;
+    v(r).retryOp("X");
+    await settle();
+    // on its way: still «stuck», the card stays (not taken off and put back), the run of errors goes on
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", sending: true })]);
+    await wait(300);
+    expect(st()[0]).toMatchObject({ id: "X", stuck: true, fails, failSince: AGO });
+    server.sends.at(-1)!.d.reject(timeout());
+    await settle();
+    await wait(300);
+    // failSince is a minute ago: a «stuck» set again from scratch would not be stuck (10 minutes) — it never left
+    expect(st()[0]).toMatchObject({ id: "X", stuck: true, fails: fails! + 1, failSince: AGO });
+    expect(v(r).stuckOps.map((x) => x.id)).toEqual(["X"]);
+  });
+  it("while it is being sent: «Повторить» sends nothing more, «Отменить изменение…» is refused (review #259 №5)", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r); // X on its way
+    const before = server.sends.length;
+    expect((v(r).stuckOps[0] as unknown as { sending: boolean }).sending).toBe(true);
+    v(r).retryOp("X");
+    await settle();
+    expect(server.sends.length).toBe(before);
+    expect((v(r) as unknown as { discardOp: (id: string) => boolean }).discardOp("X")).toBe(false);
+    await settle();
+    expect(st().map((x) => x.id)).toEqual(["X"]);
+    server.sends.at(-1)!.d.reject(timeout()); // the answer: not taken — still stuck, now it may be discarded
+    await settle();
+    expect((v(r) as unknown as { discardOp: (id: string) => boolean }).discardOp("X")).toBe(true);
+    await settle();
+    await wait(300);
+    expect(st()).toEqual([]);
+  });
+  it("a network failure ends a run of the server's errors: two 500s, an hour offline, one 500 — not stuck yet", async () => {
+    seedOutbox(ev("X", 1, { fails: 2, failSince: new Date(Date.now() - 60 * 60_000).toISOString() }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(new TypeError("Failed to fetch"));
+    await settle();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(timeout());
+    await settle();
+    await wait(300);
+    expect(st()[0]).toMatchObject({ fails: 1 });
+    expect(st()[0]!.stuck).toBeUndefined();
+  });
+  it("a timeout of one op: no «Ошибка синхронизации» with the server's English text — its card tells it (cloud e2e 114)", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(Object.assign(new Error("canceling statement due to statement timeout"), { name: "ServerError", status: 500, code: "57014" }));
+    await settle();
+    expect(v(r).syncError).toBeNull();
+    expect(v(r).stuckOps.map((x) => x.id)).toEqual(["X"]);
+  });
+  it("a stuck op refused by the server: no more «не отправлено» — a try, as any refusal (review #259 п.4)", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(refusal());
+    await settle();
+    await wait(300);
+    expect(st()[0]).toMatchObject({ id: "X", tries: 1 });
+    expect(st()[0]!.stuck).toBeUndefined();
+    expect(st()[0]!.fails).toBeUndefined();
+    expect(v(r).stuckOps).toEqual([]);
+  });
+  it("a stuck op and no network: no more «не отправлено» — it waits for the network", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(new TypeError("Failed to fetch"));
+    await settle();
+    await wait(300);
+    expect(st()[0]!.stuck).toBeUndefined();
+    expect(v(r).stuckOps).toEqual([]);
+    expect(v(r).link).toBe("offline");
   });
   it("an older version's item (no failSince / fails) loads and goes as before", async () => {
     seedOutbox({ id: "old", op: { k: "calendarEvent.remove", id: U(9) }, at: AGO, tries: 0 });

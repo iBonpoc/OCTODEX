@@ -62,7 +62,8 @@ export function AttentionPeople({ items, max }: { items: AttentionItem[]; max: n
     const c = p.customerId ? db.customers.find((x) => x.id === p.customerId) : undefined;
     const l = p.leadId ? db.leads.find((x) => x.id === p.leadId) : undefined;
     const props = c ? db.properties.filter((x) => x.customerId === c.id) : [];
-    const name = c?.name ?? l?.name ?? p.items[0]!.name;
+    // a reason with no client or lead (a money change the server refused, docs/specs/23 §3): its own words as the title
+    const name = c?.name ?? l?.name ?? (p.items[0]!.name || t(p.items[0]!.label, p.items[0]!.params));
     const addr = props[0] ? `${props[0].address}, ${props[0].city}` : l?.address ? [l.address, l.city].filter(Boolean).join(", ") : undefined;
     const worst = p.items[0]!;
     // several properties: each reason says which address it is about
@@ -93,7 +94,7 @@ export function AttentionPeople({ items, max }: { items: AttentionItem[]; max: n
           action: verb(it),
         }))}
         contact={{ phone: c?.phone ?? l?.phone, email: c?.email ?? l?.email, addr }}
-        onPress={() => router.push(c ? `/client/${c.id}` : `/lead/${l?.id ?? worst.refId}`)}
+        onPress={() => router.push(c ? `/client/${c.id}` : l ? `/lead/${l.id}` : attentionHref(worst))}
       />
     );
   };

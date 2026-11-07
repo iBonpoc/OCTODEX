@@ -5,7 +5,8 @@ export type HomeRoute = "today" | "triage" | "visits" | "leads";
 
 /** Screens of the bottom/top tab navigator ((tabs)/_layout): they already have the tab bar. */
 // inbox and more are redirects (old addresses: «Продажи» → /leads, «Ещё» → ☰)
-const TAB_SCREENS = new Set<string>(["index", "visits", "triage", "today", "leads", "inbox", "plan", "messages", "calls", "clients", "more"]);
+// calls left the tabs (docs/specs/28): a section of «Ещё» with «‹ Ещё» and the back swipe
+const TAB_SCREENS = new Set<string>(["index", "visits", "triage", "today", "leads", "inbox", "plan", "messages", "clients", "more"]);
 export const isTabScreen = (routeName: string) => TAB_SCREENS.has(routeName);
 
 export const roleHome: Record<Role, HomeRoute> = { tech: "visits", dispatcher: "triage", director: "today", sales: "leads" };
@@ -34,7 +35,8 @@ export const routeRoles: Record<string, readonly Role[]> = {
   leads: OFFICE,
   inbox: OFFICE,
   team: ["director"],
-  company: ["director"],
+  // the office reads, the director changes (spec 26 §3; companies_update is owner / admin in the database)
+  company: ["director", "dispatcher"],
 };
 
 /** the first part of an address: "/company/hours?x=1" → "company", "/" → "" */

@@ -9,6 +9,11 @@ enable_confirmations = true
 [functions.delete-account]
 verify_jwt = true
 
+# Пуши П3 (docs/specs/27 §4.5): send-push is woken by pg_cron (app.push_kick), not by a person — no JWT; the only key is
+# the header x-push-key equal to the function's secret PUSH_FN_KEY (compared in constant time in handler.ts).
+[functions.send-push]
+verify_jwt = false
+
 # LOCAL stack only (supabase start — the nightly cloud scenarios, docs/specs/21 §7). release.yml runs `db push`,
 # never `config push`, so nothing below reaches the hosted project.
 [auth]

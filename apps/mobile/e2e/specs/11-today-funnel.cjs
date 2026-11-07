@@ -1,6 +1,6 @@
 const { dayKey, todayKey } = require("../companyTime.cjs");
 const { expectOneAccent } = require("../accent.cjs");
-/** Today: period switch (Today / Week / Month) changes money tiles; sales funnel shows leads → sent → signed → paid. */
+/** Today: period switch (Today / Week / Month) changes money tiles; sales funnel shows leads → sent → signed; money received is the «Получено» card. */
 /** S8b (docs/specs/07 §2.2 А, founder 05.11): an employee signs the contract for the company on the estimate screen. */
 async function countersign(h, estimateId) {
   await h.go(`/estimate/${estimateId}`);
@@ -18,8 +18,9 @@ exports.run = async (h) => {
   await h.go("/today");
   await expectOneAccent(h, "Today");
   await h.expectText(/Воронка продаж/, "funnel card");
-  for (const label of ["Новые лиды", "Сметы отправлены", "Сметы подписаны", "Деньги получены"]) await h.expectText(new RegExp(label), label);
-  await h.expectText(/Все открытые счета/, "awaiting is all-time");
+  // spec 24 A (founder 07.11): the funnel is counts; money received lives in «Получено» (the old «Деньги получены» row repeated it)
+  for (const label of ["Новые лиды", "Сметы отправлены", "Сметы подписаны", "Получено"]) await h.expectText(new RegExp(label), label);
+  await h.expectText(/Счетов: \d+/, "awaiting is all open invoices (spec 24: «Счетов: N»)");
 
   // A card payment today must show up in «Получено» for today, week and month.
   const before = await h.db();

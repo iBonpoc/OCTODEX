@@ -4,6 +4,7 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 import type { Role } from "../src/data/types";
 import { canOpen, roleHome, routeKey } from "../src/nav/roles";
+import { moreHref } from "../src/nav/sections";
 import { SECTIONS, menuGroups, sectionHref, sectionOfHref, tabs } from "../src/nav/sections";
 
 const ROLES: Role[] = ["director", "dispatcher", "sales", "tech"];
@@ -35,10 +36,10 @@ describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, �
     expect(side).toEqual(["home", "messages", "plan", "leads", "jobs", "clients", "calls", "tasks", "estimates", "invoices", "catalog", "payments", "reports", "money", "team", "company", "settings", "help"]);
     expect(side).not.toContain("more");
   });
-  it("office: no Team, no Company settings", () => {
+  it("office: no Team; Company settings to read (spec 26 §3: only the director changes them)", () => {
     const m = menu("dispatcher");
     expect(m).not.toContain("team");
-    expect(m).not.toContain("company");
+    expect(m).toContain("company");
     expect(m).toContain("money");
     expect(m).toContain("payments");
     expect(m).toContain("reports");
@@ -94,5 +95,14 @@ describe("only what works (13 §2.3: no empty sections)", () => {
     expect(sectionOfHref("/inbox?tab=invoices")).toBe("invoices");
     expect(sectionOfHref("/triage")).toBe("home");
     expect(sectionOfHref("/calls")).toBe("calls");
+  });
+  it("«Ещё» → a section on a tab screen: «from=more» for the office, the sales home as it is (docs/specs/28 §3)", () => {
+    expect(moreHref("leads", "director")).toBe("/leads?tab=leads&from=more");
+    expect(moreHref("estimates", "dispatcher")).toBe("/leads?tab=estimates&from=more");
+    // sales: Leads is the home — no «‹ Ещё» there
+    expect(moreHref("leads", "sales")).toBe("/leads?tab=leads");
+    // a stack screen already has its own «‹ Ещё» and back
+    expect(moreHref("jobs", "director")).toBe("/jobs");
+    expect(moreHref("estimates", "tech")).toBe("/estimates");
   });
 });

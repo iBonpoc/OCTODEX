@@ -1,6 +1,6 @@
 import { timing, type StatusName } from "@octo/design-tokens";
 import { daysOverdue, daysSince, isOverdue, minutesSince, visitContext } from "@/data/selectors";
-import type { DB, ID, Role } from "@/data/types";
+import type { DB, ID, Role, Task } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
 import { leadSettingsOf } from "./leadSettings";
 import { canCountersign } from "./estimateSign";
@@ -8,6 +8,7 @@ import { canPlan, liveAssignees, dayDiffIn, isOpenVisit, lateToday, unassignedSo
 import { companyTz, scheduleSettingsOf } from "./scheduleSettings";
 import { dayKeyIn } from "./zone";
 import { jobAwaitingClose } from "@/features/jobDone";
+import { goneId } from "./team";
 import type { DictKey } from "@/i18n";
 import type { RejectedOp } from "@/data/outboxRejected";
 
@@ -16,6 +17,8 @@ export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "la
   | "estimateSign" | "estimateExpired" | "estimateDeclined"
   /* wave 3c (S10, S15): the last visit is over — is the job done? (docs/specs/17-job.md §4) */
   | "jobDone"
+  /* docs/specs/22 §2 (S22c): the person on a lead / a task is not at work any more — the office hands it over */
+  | "leadOrphan" | "taskOrphan"
   /* docs/specs/23 §3 («Лиды и клиенты»): a money change the server refused — not written, the phone showed it */
   | "rejected";
 export interface AttentionItem {
@@ -31,6 +34,8 @@ export interface AttentionItem {
   amountCents?: number;
   /** higher = more urgent */
   score: number;
+  /** taskOrphan: what refId is (the task's subject) */
+  subject?: Task["subjectType"];
   /** where it opens, when it is not the record of `refId` by its kind (a refused change: the record it was about) */
   href?: string;
 }
@@ -40,6 +45,8 @@ export function attentionHref(it: AttentionItem): string {
   switch (it.kind) {
     case "schedule": return `/job/schedule?jobId=${it.refId}`;
     case "jobDone": return `/job/${it.refId}`;
+    case "rejected": return it.href ?? "/settings/profile";
+    case "taskOrphan": return `${SUBJECT_PATH[it.subject ?? "lead"]}/${it.refId}`;
     case "overdue": return `/invoice/${it.refId}`;
     case "estimate":
     case "estimateSign":
@@ -47,15 +54,17 @@ export function attentionHref(it: AttentionItem): string {
     case "estimateDeclined": return `/estimate/${it.refId}`;
     case "unassigned":
     case "late": return `/visit/${it.refId}`;
-    case "rejected": return it.href ?? "/settings";
     default: return `/lead/${it.refId}`;
   }
 }
 
+/** the screen of a task's subject (the same paths as tasks.ts taskSubject) */
+const SUBJECT_PATH: Record<Task["subjectType"], string> = { lead: "/lead", customer: "/client", property: "/property", job: "/job", estimate: "/estimate" };
+
 /** "Требует внимания" / triage queue: everything that needs a human decision now, most urgent first. */
 export function buildAttention(db: DB, role: Role = "director", now: number = Date.now(), extra: { rejected?: readonly RejectedOp[] } = {}): AttentionItem[] {
   const out: AttentionItem[] = [];
-  // a money change the server refused (the store's list, the signed-in person's): first — the phone showed it as done
+  // a money change the server refused (the store's list — the signed-in person's own): first, the phone showed it as done
   for (const r of extra.rejected ?? []) {
     out.push({
       id: `rej-${r.id}`, kind: "rejected", refId: r.id, name: "", label: `att.rejected.${r.what}`, params: {}, chip: "att.rejectedChip",
@@ -66,9 +75,22 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   const st = leadSettingsOf(db.company);
   // the client signed the estimate: the company owes the next step, «remind the client» would be wrong (E2b-2)
   const clientSignedLead = new Set(db.estimates.filter((e) => e.status === "awaiting_countersign" && e.leadId).map((e) => e.leadId!));
+  // the office hands over what a person who is not at work any more had (docs/specs/22 §2): sales works leads too
+  const office3 = role === "director" || role === "dispatcher" || role === "sales";
   for (const l of db.leads) {
     if (!canSeeLead(role, db.me, l)) continue;
     const turn = leadTurn(db, l, st);
+    // open, not snoozed (leadTurn: done / snoozed), not archived; one card per lead
+    if (office3 && goneId(db, l.assigneeId) && turn.kind !== "done" && turn.kind !== "snoozed" && !l.archivedAt) {
+      if (turn.kind === "reply") {
+        // a new lead: anyone in the office may answer — «Ответить» stays, the words say nobody owns it
+        const m = turn.minutes;
+        out.push({ id: `lead-${l.id}`, kind: "lead", refId: l.id, name: l.name, label: "fr7.leadReplyOrphan", params: { m, name: l.name, d: 0 }, chip: "inbox.waiting", status: turn.status, score: 1000 + m });
+      } else {
+        out.push({ id: `orph-${l.id}`, kind: "leadOrphan", refId: l.id, name: l.name, label: "fr7.leadOrphan", params: { name: l.name }, chip: "fr7.noOwnerChip", status: "warn", score: 870 });
+      }
+      continue;
+    }
     if (isBackFromSnooze(l) && turn.kind !== "reply") {
       out.push({ id: `back-${l.id}`, kind: "leadBack", refId: l.id, name: l.name, label: "att.leadBack", params: { name: l.name }, chip: "lead.backChip", status: "info", score: 630 });
     } else if (turn.kind === "reply") {
@@ -127,7 +149,20 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       out.push({ id: `done-${j.id}`, kind: "jobDone", refId: j.id, name: c?.name ?? "", label: "job3.att.done", params: { name: c?.name ?? "", title: j.title }, chip: "job3.att.doneChip", status: "info", amountCents: j.amountCents, score: 900 });
     }
   }
-  for (const i of db.invoices) {
+  // a task of a person who is not at work: its own card, it opens the task's subject (never the general list)
+  if (office3) {
+    for (const x of db.tasks) {
+      if (x.doneAt || !goneId(db, x.assigneeId)) continue;
+      const late = !!x.dueAt && Date.parse(x.dueAt) < now;
+      out.push({
+        id: `torph-${x.id}`, kind: "taskOrphan", refId: x.subjectId, subject: x.subjectType, name: x.title, label: "fr7.taskOrphan", params: { name: x.title },
+        chip: "fr7.noAssigneeChip", status: "warn", score: late ? 865 : 860,
+      });
+    }
+  }
+  // overdue invoices: those with «Счета» (owner, admin, office, sales — as RLS invoices_select); never the technician,
+  // not even for his own jobs: he does not chase the client's money (15-flows §4 q.3 — by default no)
+  for (const i of office3 ? db.invoices : []) {
     if (i.paidCents >= i.totalCents) continue;
     if (!isOverdue(i.dueDate, now, tz)) continue;
     const d = daysOverdue(i.dueDate, now, tz);

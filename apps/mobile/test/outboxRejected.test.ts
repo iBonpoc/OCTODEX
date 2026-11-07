@@ -1,7 +1,8 @@
 /** A money change the server refused stays visible (docs/specs/23 §3): what is kept, where it opens, «Требует внимания». */
 import { describe, expect, it } from "vitest";
 import type { Op } from "../src/cloud/ops";
-import { MONEY_KINDS, REJECTED_KEY, rejectedMine, rejectedOf, type RejectedOp } from "../src/data/outboxRejected";
+import { REJECTED_KEY, rejectedMine, rejectedOf, type RejectedOp } from "../src/data/outboxRejected";
+import { MONEY_KINDS } from "../src/data/syncLink";
 import type { OwnedItem } from "../src/data/outboxOwner";
 import { attentionHref, buildAttention } from "../src/features/attention";
 import { isDeviceKey } from "../src/features/deleteAccount";
@@ -25,7 +26,15 @@ describe("unit:outboxRejected — what is kept of a refused money change", () =>
     expect(of({ k: "payment.record", id: "p", invoiceId: "i2", customerId: "c", amountCents: 200, method: "check" })).toMatchObject({ what: "payment", href: "/invoice/i2" });
     expect(of({ k: "visit.pay", visitId: "v1", jobId: "j", customerId: "c", invoiceId: "i", paymentId: "p", amountCents: 100, method: "card" })).toMatchObject({ what: "payment", href: "/visit/v1" });
     expect(of({ k: "expense.add", id: "x", jobId: "j9", vendor: "HD", category: "materials", amountCents: 50 })).toMatchObject({ what: "expense", href: "/job/j9" });
-    expect(of({ k: "expense.add", id: "x", jobId: null, vendor: "HD", category: "materials", amountCents: 50 })).toMatchObject({ href: "/settings" });
+    expect(of({ k: "expense.add", id: "x", jobId: null, vendor: "HD", category: "materials", amountCents: 50 })).toMatchObject({ href: "/settings/profile" });
+  });
+  it("the client's approval / the company's countersign that makes the deposit invoice is money: its estimate (review #259 круг 3)", () => {
+    const of = (op: object) => rejectedOf(item(op as Op), "no", NOW);
+    const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    expect(of({ k: "estimate.approve", id: U(2), token: "t", optionId: U(3), addonIds: [], signer: "S", svg: "", channel: "on_site", jobId: U(4), invoiceId: U(5) })).toMatchObject({ what: "deposit", href: `/estimate/${U(2)}` });
+    expect(of({ k: "estimate.countersign", id: U(6), jobId: U(7), invoiceId: U(8) })).toMatchObject({ what: "deposit", href: `/estimate/${U(6)}` });
+    // without an invoice it makes no money: dropped as before
+    expect(of({ k: "estimate.countersign", id: "e3", svg: "x" })).toBeNull();
   });
   it("not money: nothing is kept (as before: the change is dropped, the server's data comes back)", () => {
     expect(rejectedOf(item({ k: "customer.update", id: "c1", name: "A" } as Op), "no", NOW)).toBeNull();

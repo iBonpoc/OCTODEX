@@ -34,11 +34,11 @@ describe("route-guard: who may open a screen", () => {
     for (const p of ["/visits", "/plan", "/messages", "/calls", "/clients", "/more", "/jobs", "/estimates", "/catalog", "/visit/v1", "/job/j1", "/invoice/i1", "/receipt/p1", "/expense/new", "/settings", "/p/abc"])
       expect(canOpen("tech", p), p).toBe(true);
   });
-  it("Company settings and Team — director only; the office sees money", () => {
-    for (const r of ["dispatcher", "sales", "tech"] as const) {
-      expect(canOpen(r, "/team"), `${r} team`).toBe(false);
-      expect(canOpen(r, "/company/profile"), `${r} company`).toBe(false);
-    }
+  it("Team — director only; Company settings — director and the office (read-only, spec 26 §3); the office sees money", () => {
+    for (const r of ["dispatcher", "sales", "tech"] as const) expect(canOpen(r, "/team"), `${r} team`).toBe(false);
+    for (const r of ["sales", "tech"] as const) expect(canOpen(r, "/company/profile"), `${r} company`).toBe(false);
+    expect(canOpen("dispatcher", "/company")).toBe(true);
+    expect(canOpen("dispatcher", "/company/profile")).toBe(true);
     expect(canOpen("director", "/team")).toBe(true);
     expect(canOpen("director", "/company")).toBe(true);
     for (const r of ["dispatcher", "director", "sales"] as const) expect(canOpen(r, "/money"), r).toBe(true);

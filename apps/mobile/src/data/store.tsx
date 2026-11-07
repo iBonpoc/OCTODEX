@@ -26,19 +26,22 @@ import { normalizeDB } from "./normalize";
 import { cleanPeople, leadPeopleOf, mainContact, nextClientNumber } from "./people";
 import { findJob, jobOfEstimate, nextJobNumber } from "./jobs";
 import { withNewJob, type NewJobInput } from "@/features/newJob";
+import { lineChangeRefusal, lineSaveUndo, taxBefore, withJobLine, withJobTax, withoutJobLine } from "@/features/jobLines";
 import { jobStatusAfterSchedule, jobStatusAfterStep, withJobDone } from "@/features/jobDone";
 import { applyCustomerPatch, type CustomerPatch } from "./customerPatch";
 import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
-import { canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
+import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { backoffMs, classify, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
-import { dependentsOf, liveOf, nextToSend } from "./outboxDeps";
+import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
+import { leavingSummary, MONEY_KINDS } from "./syncLink";
 import { REJECTED_KEY, rejectedMine, rejectedOf, type RejectedOp } from "./outboxRejected";
+import type { DictKey } from "@/i18n";
 import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 export { mineOf, type OwnedItem } from "./outboxOwner";
@@ -82,17 +85,27 @@ import {
   type Tag,
   ServiceCategory,
   CancelReason,
+  JobLineItem,
 } from "./types";
 
 type Undo = () => void;
+/** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
+export type GuardedUndo = () => boolean;
 export type Mode = "demo" | "cloud";
 export type Link = "ok" | "offline" | "server";
 export interface StuckOp {
   id: ID;
   kind: string;
   since: string;
-  error?: string;
+  /** the ops that wait for it now (they go when it goes) */
   waiting: number;
+  /** the ops that leave with it on «Отменить изменение…»: they need what it makes (docs/specs/23 §3) */
+  leaving: number;
+  /** what leaves with it, by kind, and whether money is among it (the confirmation names it, review #259) */
+  leavingKinds: { key: DictKey; n: number }[];
+  leavingMoney: boolean;
+  /** being sent right now: «Повторить» / «Отменить изменение…» wait */
+  sending: boolean;
 }
 /** when and who for an estimate visit */
 export interface BookAt {
@@ -135,8 +148,8 @@ interface StoreCtx {
   /** «Повторить сейчас» */
   retryOp: (id: ID) => void;
   /** «Отменить изменение…» (after a confirmation): the op and the ops that wait for it leave the phone; then a reload */
-  discardOp: (id: ID) => void;
-  /** the person's money changes the server refused: «не записано на сервере» until «Понятно» */
+  discardOp: (id: ID) => boolean;
+  /** the person's money changes the server refused: «не записано на сервере» until «Понятно» (docs/specs/23 §3) */
   rejectedOps: RejectedOp[];
   dismissRejected: (id: ID) => void;
   refresh: () => Promise<void>;
@@ -199,7 +212,7 @@ interface StoreCtx {
   /** the office cancels a visit before the tech is on site; S4a / S9a roll the lead / job back (docs/specs/03 §4) */
   cancelVisit: (id: ID, reason: CancelReason, text?: string) => Undo;
   /** the office moves a visit (time, length) before the tech is on site; the status does not change */
-  rescheduleVisit: (id: ID, start: string, durationMin: number) => Undo;
+  rescheduleVisit: (id: ID, start: string, durationMin: number, allDay?: boolean) => Undo;
   /** «+ Осмотр» on a client / property (a returning client wants a new estimate): an inspection without a lead */
   addInspection: (propertyId: ID, at: BookAt) => { id: ID; undo: Undo };
   /** the office sent the client the time (an SMS / email app was opened with the text, or it was copied) */
@@ -243,6 +256,14 @@ interface StoreCtx {
   addJob: (x: NewJobInput) => { id: ID; undo: Undo };
   /** wave 3c (S10): «Да, выполнена» / «Завершить работу» — office only, no open visit; server public.complete_job */
   completeJob: (jobId: ID) => Undo;
+  /** 3b-2 (17-job §11.1): own lines of a job without an estimate; the job total follows (engine). The screen checks
+   *  lineChangeRefusal first; the server refuses the same (t20, t19_job_total_floor). Undo of a removal restores it. */
+  /** «Отменить» of these runs the same check (lineChangeRefusal) and returns false when it is refused: nothing changes */
+  saveJobLine: (line: Omit<JobLineItem, "totalCents">, isNew: boolean) => GuardedUndo;
+  removeJobLine: (id: ID) => GuardedUndo;
+  setJobTax: (jobId: ID, tax: { taxEnabled: boolean; taxRateBps: number }) => GuardedUndo;
+  setJobTags: (jobId: ID, tagIds: ID[]) => Undo;
+  setJobType: (jobId: ID, jobTypeId: ID | null) => Undo;
   /** for the estimate screen (chat «Сметы и модуль Gutters») */
   setEstimateCategory: (id: ID, serviceCategoryId?: ID) => Undo;
   updateProperty: (id: ID, patch: { address?: string; city?: string }) => Undo;
@@ -284,7 +305,7 @@ interface StoreCtx {
   saveContact: (c: CompanyContact) => Undo;
   removeContact: (id: ID) => Undo;
   /** contractor picks date, time, duration and (optionally) the tech → a visit appears in the plan */
-  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null; assigneeIds?: ID[]; visitId?: ID; note?: string }) => Undo;
+  scheduleJob: (jobId: ID, s: { start: string; durationMin: number; techId: ID | null; assigneeIds?: ID[]; visitId?: ID; note?: string; allDay?: boolean }) => Undo;
 }
 
 const Ctx = createContext<StoreCtx | null>(null);
@@ -444,8 +465,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   /* ---------- server sync ---------- */
   // per op, in memory: when it may be tried again after the server's error that may be its own (docs/specs/23 §3)
   const opPause = useRef(new Map<string, number>());
-  /** an op of this person that can still go (not stuck, not waiting for a stuck one) */
-  const pendingLive = () => liveOf(outboxRef.current, whoRef.current, (o) => !!o.stuck).length > 0;
+  /**
+   * an op of this person that is not stuck — also one waiting behind a stuck one: its change is only on the phone, a
+   * reload would wipe it from the screens (review #259 №4). Only stuck ops left: the server's truth comes back.
+   */
+  const pendingLive = () => mineOf(outboxRef.current, whoRef.current).some((o) => !o.stuck);
+  // the op being sent now: «Отменить изменение…» and «Повторить» wait for its answer (review #259 №5)
+  const inFlight = useRef<string | null>(null);
+  const [sendingId, setSendingId] = useState<string | null>(null);
+  /**
+   * a network failure or a refusal ends a run of the server's errors: the 10 minutes count from the next one, and the
+   * card «не отправлено» goes (review #259 п.4) — a refused op is the refusals' now: after MAX_TRIES it is dropped
+   */
+  const clearFails = (id: string) => {
+    const cur = outboxRef.current.find((x) => x.id === id);
+    if (!cur || (cur.fails == null && cur.failSince == null && !cur.stuck)) return;
+    const { fails: _f, failSince: _s, stuck: _st, ...rest } = cur;
+    outboxRef.current = outboxRef.current.map((x) => (x.id === id ? rest : x));
+    setOutbox(outboxRef.current);
+  };
   const failedOnce = (item: OwnedItem, msg: string) => {
     const now = Date.now();
     const cur = outboxRef.current.find((x) => x.id === item.id) ?? item;
@@ -548,25 +586,35 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // in order; what needs a held op waits; the toast's «Отменить» window first: an undone op never reaches the server
         const item = nextToSend(outboxRef.current, w, held, Date.now());
         if (!item) break;
+        inFlight.current = item.id;
+        setSendingId(item.id);
         try {
           await applyOp(item.op, w.companyId, w.userId);
+          inFlight.current = null;
+          setSendingId(null);
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
           if (stale(gen)) return;
           sentAny = true;
+          probed = false; // the server answered: a later 500 is again maybe that op's alone
           opPause.current.delete(item.id);
           answered();
           outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
           setOutbox(outboxRef.current);
           if (!still()) break;
         } catch (e) {
+          inFlight.current = null;
+          setSendingId(null);
           // a send that fails because the account is gone must not put the deleted person's op back (review #231)
           if (stale(gen)) return;
           const msg = e instanceof Error ? e.message : String(e);
-          setSyncError(msg);
+          // the server's error that may be this op's alone (500, a timeout) is told by its card «Не отправлено» in our own
+          // words — not again as the server's English text in «Ошибка синхронизации» (cloud e2e 114)
+          if (!maybeOpOnly(e)) setSyncError(msg);
           // no answer, or the server's «not now» (5xx, 429, an expired sign-in…): not a try — the op stays as it is,
           // the next send waits longer (review #244)
           if (classify(e) !== "refusal") {
             if (needsSignIn(e)) void renewSession();
+            if (classify(e) === "network") clearFails(item.id);
             // an op already stuck failing again says nothing new about the server (after a restart every stuck op is
             // tried once: two of them must not read as «server unavailable»)
             const wasStuck = !!outboxRef.current.find((x) => x.id === item.id)?.stuck;
@@ -587,6 +635,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             continue;
           }
           // the server said «no»: a try; the last one drops it (never because of the network)
+          clearFails(item.id);
           if (item.tries + 1 >= MAX_TRIES) {
             // Will never succeed: drop it and reload the truth from the server. A money change is not dropped
             // silently: it stays as «не записано на сервере» until the person says «Понятно» (docs/specs/23 §3)
@@ -595,7 +644,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const rej = rejectedOf(item, msg, Date.now());
             if (rej) setRejected((prev) => [...prev.filter((x) => x.id !== rej.id), rej]);
           } else {
-            outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...item, tries: item.tries + 1, error: msg } : x));
+            outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...x, tries: item.tries + 1, error: msg } : x));
           }
           setOutbox(outboxRef.current);
           break;
@@ -645,7 +694,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       let oid: string | null = null;
       if (modeRef.current === "cloud" && op) {
         oid = uid();
-        outboxRef.current = [...outboxRef.current, { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}) }];
+        // an upsert that cannot tell «new» by itself: what it makes is what was not on the phone before (outboxDeps)
+        const made = madeOnQueue(op, prev);
+        outboxRef.current = [
+          ...outboxRef.current,
+          { id: oid, op, at: new Date().toISOString(), tries: 0, ...(whoRef.current ? { owner: whoRef.current } : {}), ...(made ? { made } : {}) },
+        ];
         setOutbox(outboxRef.current);
       } else if (!onlineRef.current) {
         qid = uid();
@@ -715,34 +769,46 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  // what leaves with a discarded op: by kind; money — also when the op itself is money
+  const leavingOf = (self: OwnedItem, gone: OwnedItem[]) => {
+    const sum = leavingSummary(gone.map((o) => o.op.k));
+    return { leaving: gone.length, leavingKinds: sum.kinds, leavingMoney: [self, ...gone].some((o) => isMoneyOp(o, MONEY_KINDS)) };
+  };
   const unsentAll = mode === "cloud" ? unsentOf(outbox, who?.userId ?? null) : 0;
   const stuckOps: StuckOp[] =
     mode === "cloud"
       ? mineOf(outbox, who)
           .filter((o) => o.stuck)
-          .map((o) => ({ id: o.id, kind: o.op.k, since: o.failSince ?? o.at, error: o.error, waiting: dependentsOf(outbox, who, o.id).length }))
+          .map((o) => ({
+            id: o.id,
+            kind: o.op.k,
+            since: o.failSince ?? o.at,
+            waiting: waitingFor(outbox, who, o.id),
+            ...leavingOf(o, dependentsOf(outbox, who, o.id)),
+            sending: sendingId === o.id,
+          }))
       : [];
-  const rejectedOps = mode === "cloud" ? rejectedMine(rejected, who) : [];
-  const dismissRejected = (id: ID) => setRejected((prev) => prev.filter((x) => x.id !== id));
+  // «Повторить сейчас»: only its pause goes — it stays «stuck» (and its card stays) until the server takes it
+  // (review #259 №2); while it is being sent, nothing to do
   const retryOp = (id: ID) => {
-    outboxRef.current = outboxRef.current.map((x) => {
-      if (x.id !== id) return x;
-      const { stuck: _s, fails: _f, failSince: _since, ...rest } = x;
-      return rest;
-    });
-    setOutbox(outboxRef.current);
+    if (inFlight.current === id) return;
     opPause.current.delete(id);
     nextTry.current = 0;
     void flush();
   };
-  const discardOp = (id: ID) => {
+  const discardOp = (id: ID): boolean => {
     const gone = new Set([id, ...dependentsOf(outboxRef.current, whoRef.current, id).map((o) => o.id)]);
+    // one of them is on its way to the server: it would get there although the card says it will not (review #259 №5)
+    if (inFlight.current && gone.has(inFlight.current)) return false;
     outboxRef.current = outboxRef.current.filter((x) => !gone.has(x.id));
     setOutbox(outboxRef.current);
     gone.forEach((x) => opPause.current.delete(x));
     // the phone showed the change as done: the server's truth again
     void refresh();
+    return true;
   };
+  const rejectedOps = mode === "cloud" ? rejectedMine(rejected, who) : [];
+  const dismissRejected = (id: ID) => setRejected((prev) => prev.filter((x) => x.id !== id));
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? mineOf(outbox, who).map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
@@ -1150,10 +1216,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const at = new Date().toISOString();
         return mutate("visit.notified", (d) => patchVisit(d, visitId, (v) => ({ ...v, customerNotifiedAt: at })), { k: "visit.notified", visitId });
       },
-      rescheduleVisit: (id, start, durationMin) => {
+      rescheduleVisit: (id, start, durationMin, allDay) => {
         const v = dbRef.current.visits.find((x) => x.id === id);
         if (!v || !canReschedule(v) || durationMin <= 0) return () => {};
-        return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => ({ ...x, start, durationMin })), { k: "visit.reschedule", visitId: id, start, durationMin });
+        return mutate("visit.reschedule", (d) => patchVisit(d, id, (x) => rescheduled(x, start, durationMin, allDay)), { k: "visit.reschedule", visitId: id, start, durationMin, allDay: !!allDay });
       },
       addLead: (lead) => {
         const id = uid();
@@ -1414,6 +1480,54 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return { id, undo };
       },
       completeJob: (jobId) => mutate("job.complete", (d) => withJobDone(d, jobId), { k: "job.complete", id: jobId }),
+      saveJobLine: (line, isNew) => {
+        const back = lineSaveUndo(dbRef.current, line);
+        mutate("jobLine.save", (d) => withJobLine(d, line), { k: "jobLine.save", line, isNew });
+        // the save may already be on the server: «Отменить» is its own step back (a new line is removed, an edit undone)
+        return () => {
+          const now = dbRef.current;
+          const after = back.k === "remove" ? withoutJobLine(now, back.id) : withJobLine(now, back.line);
+          // e.g. an invoice went out after the raise: going back below it is refused here as on the server (t19)
+          if (lineChangeRefusal(now, after, line.jobId)) return false;
+          if (back.k === "remove") mutate("jobLine.remove", (d) => withoutJobLine(d, back.id), { k: "jobLine.remove", id: back.id });
+          else mutate("jobLine.save", (d) => withJobLine(d, back.line), { k: "jobLine.save", line: back.line, isNew: false });
+          return true;
+        };
+      },
+      removeJobLine: (id) => {
+        const line = (dbRef.current.jobLines ?? []).find((l) => l.id === id);
+        if (!line) return () => false;
+        mutate("jobLine.remove", (d) => withoutJobLine(d, id), { k: "jobLine.remove", id });
+        // the removal may already be on the server: «Отменить» puts the line back as its own step
+        return () => {
+          if (lineChangeRefusal(dbRef.current, withJobLine(dbRef.current, line), line.jobId)) return false;
+          mutate("jobLine.restore", (d) => withJobLine(d, line), { k: "jobLine.restore", id });
+          return true;
+        };
+      },
+      setJobTax: (jobId, tax) => {
+        const prev = taxBefore(dbRef.current, jobId);
+        mutate("job.update", (d) => withJobTax(d, jobId, tax), { k: "job.update", id: jobId, ...tax });
+        return () => {
+          if (lineChangeRefusal(dbRef.current, withJobTax(dbRef.current, jobId, prev), jobId)) return false;
+          mutate("job.update", (d) => withJobTax(d, jobId, prev), { k: "job.update", id: jobId, ...prev });
+          return true;
+        };
+      },
+      setJobTags: (jobId, tagIds) => {
+        // a tag switched off since cannot be put back (job_tags_insert): «Отменить» leaves it out
+        const active = new Set(dbRef.current.tags.filter((x) => x.active).map((x) => x.id));
+        const prev = (dbRef.current.jobs.find((j) => j.id === jobId)?.tagIds ?? []).filter((id) => active.has(id));
+        const put = (ids: ID[]) => mutate("job.tags", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, tagIds: ids } : j)) }), { k: "job.tags", id: jobId, tagIds: ids });
+        put(tagIds);
+        return () => void put(prev);
+      },
+      setJobType: (jobId, jobTypeId) => {
+        const prev = dbRef.current.jobs.find((j) => j.id === jobId)?.jobTypeId ?? null;
+        const put = (id: ID | null) => mutate("job.type", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, jobTypeId: id ?? undefined } : j)) }), { k: "job.update", id: jobId, jobTypeId: id });
+        put(jobTypeId);
+        return () => void put(prev);
+      },
       setJobCategory: (id, serviceCategoryId) =>
         mutate("job.category", (d) => ({ ...d, jobs: d.jobs.map((j) => (j.id === id ? { ...j, serviceCategoryId } : j)) }), { k: "job.category", id, serviceCategoryId: serviceCategoryId ?? null }),
       setEstimateCategory: (id, serviceCategoryId) =>
@@ -1497,18 +1611,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: jobStatusAfterSchedule(j.status) } : j)),
             visits: [
               ...d.visits,
-              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },
+              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, allDay: sch.allDay ? true : undefined, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },
             ],
             notices: d.notices.map((n) => (n.jobId === jobId ? { ...n, read: true } : n)),
           }),
-          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope },
+          { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope, allDay: !!sch.allDay },
         );
       },
       saveCompany: (patch) => {
         const cur = dbRef.current.company;
         if (!cur) return () => {};
         const next = { ...cur, ...patch };
-        return mutate("company.save", (d) => ({ ...d, company: next }), { k: "company.save", company: next, einChanged: patch.ein !== undefined });
+        return mutate("company.save", (d) => ({ ...d, company: next }), { k: "company.save", company: next, einChanged: patch.ein !== undefined, tzChanged: patch.timezone !== undefined });
       },
       saveLicense: (l) =>
         mutate(
@@ -1620,7 +1734,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, rejected, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, rejected, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush],
   );
 
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady || !rejectedReady) return null;

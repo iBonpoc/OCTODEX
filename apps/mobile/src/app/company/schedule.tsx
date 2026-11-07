@@ -10,13 +10,14 @@ import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { US_TIMEZONES } from "@/features/companySetup";
+import { zoneChoices, zonePatch } from "@/features/companySetup";
+import { validZone } from "@/features/zone";
 import { atMinute } from "@/features/schedule";
 import {
   arrivalWindow, businessHoursOf, DURATION_RANGE, LATE_RANGE, scheduleSettingsOf, STEP_CHOICES, tzLabel, WINDOW_CHOICES,
   type BusinessHours, type ScheduleSettings, type WeekDay,
 } from "@/features/scheduleSettings";
-import { Button, ChoiceChips, IconButton, Stepper, Toggle } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, Toggle, useReadOnly } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
@@ -34,6 +35,8 @@ export default function CompanySchedule() {
   const [s, setS] = useState<ScheduleSettings>(() => scheduleSettingsOf(c));
   const [hours, setHours] = useState<BusinessHours>(() => businessHoursOf(c));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company"));
+  // spec 26 §3 (07.11): the office sees the schedule settings, only the director changes them
+  const ro = store.role !== "director";
   if (!c) {
     return (
       <Screen title={t("schs.title")} back={back}>
@@ -46,7 +49,8 @@ export default function CompanySchedule() {
   // a wall-clock label: a minute of a fixed day on the company clock, shown on the same clock (no DST that day)
   const clock = (m: number) => time(atMinute("2026-01-05", m));
   const save = () => {
-    const undo = store.saveCompany({ timezone: tz, scheduleSettings: s, businessHours: hours });
+    // the zone only when it was chosen here: saving the hours does not send it (docs/specs/22 §1.3)
+    const undo = store.saveCompany({ ...zonePatch(tz, c.timezone), scheduleSettings: s, businessHours: hours });
     toast.show(store.online ? t("co.saved") : t("offline.queued"), undo);
     back();
   };
@@ -60,10 +64,18 @@ export default function CompanySchedule() {
 
   return (
     <Screen title={t("schs.title")} back={back} subtitle={t("schs.who")}>
+      {ro ? <StatusChip status="info" label={t("fix.co.readOnly")} soft /> : null}
+      <ReadOnly value={ro}>
       <Card>
         <T v="heading">{t("co.timezone")}</T>
         <T v="caption" tone="mut">{t("schs.tzHint")}</T>
-        <ChoiceChips value={tz} onChange={setTz} items={US_TIMEZONES.map((z) => ({ key: z, label: tzLabel(z) }))} />
+        {c.timezone && !validZone(c.timezone) ? (
+          <View style={{ gap: space[1] }} testID="tz-unknown">
+            <StatusChip status="warn" label={t("fr7.tzUnknownChip")} />
+            <T v="caption" tone="mut">{t("fr7.tzUnknown", { tz: c.timezone })}</T>
+          </View>
+        ) : null}
+        <ChoiceChips value={tz} onChange={setTz} items={zoneChoices(c.timezone, validZone).map((z) => ({ key: z, label: tzLabel(z) }))} />
       </Card>
 
       <Card>
@@ -122,19 +134,21 @@ export default function CompanySchedule() {
         <T v="caption" tone="mut">{t("schs.lateHint")}</T>
       </Card>
 
-      <Button label={t("ue.save")} icon="check" full onPress={save} />
+      </ReadOnly>
+      {ro ? null : <Button label={t("ue.save")} icon="check" full onPress={save} />}
     </Screen>
   );
 }
 
 /** «Начало  −  8:00 AM  +»: one end of a working day, by 30 min */
 function HourRow({ day, label, value, onMinus, onPlus }: { day: string; label: string; value: string; onMinus: () => void; onPlus: () => void }) {
+  const ro = useReadOnly();
   return (
     <RowView style={{ gap: space[2] }}>
       <T v="body" tone="mut" style={{ flex: 1 }}>{label}</T>
-      <IconButton icon="minus" label={`${day} · ${label} −${HOUR_STEP}`} onPress={onMinus} />
+      {ro ? null : <IconButton icon="minus" label={`${day} · ${label} −${HOUR_STEP}`} onPress={onMinus} />}
       <T v="body" tabular>{value}</T>
-      <IconButton icon="plus" label={`${day} · ${label} +${HOUR_STEP}`} onPress={onPlus} />
+      {ro ? null : <IconButton icon="plus" label={`${day} · ${label} +${HOUR_STEP}`} onPress={onPlus} />}
     </RowView>
   );
 }

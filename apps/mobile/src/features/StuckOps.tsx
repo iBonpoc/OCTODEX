@@ -11,7 +11,7 @@ import { useStore, type StuckOp } from "@/data/store";
 import type { RejectedOp } from "@/data/outboxRejected";
 import { useI18n } from "@/i18n";
 import { stuckKindKey } from "@/data/syncLink";
-import { Button } from "@/ui/controls";
+import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { CardList, Card, SectionTitle } from "@/ui/surfaces";
 
@@ -19,31 +19,62 @@ function StuckCard({ op }: { op: StuckOp }) {
   const { t, day, time } = useI18n();
   const { retryOp, discardOp } = useStore();
   const [sure, setSure] = useState(false);
+  // «Отменить изменение…» refused: it (or one that leaves with it) is on its way to the server right now
+  const [busy, setBusy] = useState(false);
   return (
     <Card status="bad">
       <View testID={`stuck-${op.id}`} style={{ gap: space[2] }}>
-        <T v="body" w="semibold">
-          {t(stuckKindKey(op.kind))}
-        </T>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
+          <T v="body" w="semibold">
+            {t(stuckKindKey(op.kind))}
+          </T>
+          {/* rule 2: the status is an icon and a word, not only the card's colour */}
+          <StatusChip status="bad" label={op.sending ? t("sync.stuck.sending") : t("sync.stuck.chip")} />
+        </View>
         <T v="caption" tone="mut">
           {t("sync.stuck.since", { when: `${day(op.since)} ${time(op.since)}` })}
           {op.waiting ? ` · ${t("sync.stuck.waiting", { n: op.waiting })}` : ""}
+          {op.leaving ? ` · ${t("sync.stuck.leaving", { n: op.leaving })}` : ""}
         </T>
-        {op.error ? (
-          <T v="caption" tone="mut" numberOfLines={2}>
-            {op.error}
-          </T>
+        {/* our own words: the server's text is English and technical (review #259) */}
+        <T v="caption" tone="mut">
+          {t("sync.stuck.note")}
+        </T>
+        {busy ? (
+          <View testID={`stuck-busy-${op.id}`}>
+            <T v="caption">{t("sync.stuck.busy")}</T>
+          </View>
         ) : null}
         {!sure ? (
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-            <Button label={t("sync.stuck.retry")} icon="refresh" variant="secondary" onPress={() => retryOp(op.id)} />
-            <Button label={t("sync.stuck.discard")} icon="trash" variant="ghost" onPress={() => setSure(true)} />
+            <Button label={t("sync.stuck.retry")} icon="refresh" variant="secondary" disabled={op.sending} onPress={() => retryOp(op.id)} />
+            <Button label={t("sync.stuck.discard")} icon="trash" variant="ghost" disabled={op.sending} onPress={() => (setBusy(false), setSure(true))} />
           </View>
         ) : (
           <View testID={`stuck-confirm-${op.id}`} style={{ gap: space[2] }}>
-            <T v="body">{op.waiting ? t("sync.stuck.sureWaiting", { n: op.waiting }) : t("sync.stuck.sure")}</T>
+            <T v="body">
+              {op.leaving
+                ? t("sync.stuck.sureWaiting", { what: op.leavingKinds.map((x) => `${t(x.key)}: ${x.n}`).join(", ") })
+                : t("sync.stuck.sure")}
+            </T>
+            {op.leavingMoney ? (
+              <View testID={`stuck-money-${op.id}`} style={{ gap: space[1] }}>
+                <StatusChip status="warn" label={t("sync.stuck.moneyChip")} />
+                <T v="caption">{op.leaving ? t("sync.stuck.money") : t("sync.stuck.moneySelf")}</T>
+              </View>
+            ) : null}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-              <Button label={t("sync.stuck.discardYes")} icon="trash" variant="secondary" onPress={() => discardOp(op.id)} />
+              <Button
+                label={t("sync.stuck.discardYes")}
+                icon="trash"
+                variant="secondary"
+                disabled={op.sending}
+                onPress={() => {
+                  if (discardOp(op.id)) return;
+                  setSure(false);
+                  setBusy(true);
+                }}
+              />
               <Button label={t("sync.stuck.keep")} variant="ghost" onPress={() => setSure(false)} />
             </View>
           </View>
@@ -53,25 +84,27 @@ function StuckCard({ op }: { op: StuckOp }) {
   );
 }
 
-/** a money change the server refused: what it was, why, «Открыть» the record, «Понятно» */
+/**
+ * a money change the server refused (docs/specs/23 §3): what it was and its amount, when, our own words (not the
+ * server's English text, review #259), «Открыть» the record it was about, «Понятно» to take it away
+ */
 function RejectedCard({ r }: { r: RejectedOp }) {
   const { t, money, day, time } = useI18n();
   const { dismissRejected } = useStore();
   return (
     <Card status="bad">
       <View testID={`rejected-${r.id}`} style={{ gap: space[2] }}>
-        <T v="body" w="semibold">
-          {t(`att.rejected.${r.what}`)}
-          {r.amountCents != null ? ` · ${money(r.amountCents)}` : ""}
-        </T>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
+          <T v="body" w="semibold">
+            {t(`att.rejected.${r.what}`)}
+            {r.amountCents != null ? ` · ${money(r.amountCents)}` : ""}
+          </T>
+          {/* rule 2: the status is an icon and a word */}
+          <StatusChip status="bad" label={t("att.rejectedChip")} />
+        </View>
         <T v="caption" tone="mut">
           {`${day(r.at)} ${time(r.at)}`} · {t("sync.rejected.hint")}
         </T>
-        {r.error ? (
-          <T v="caption" tone="mut" numberOfLines={2}>
-            {r.error}
-          </T>
-        ) : null}
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
           <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} />
           <Button label={t("sync.rejected.ok")} icon="check" variant="ghost" onPress={() => dismissRejected(r.id)} />
@@ -81,7 +114,7 @@ function RejectedCard({ r }: { r: RejectedOp }) {
   );
 }
 
-/** the sections in «Настройки»: nothing when nothing is stuck or refused */
+/** the sections in «Профиль и аккаунт» (spec 26): nothing when nothing is stuck or refused */
 export function StuckOps() {
   const { t } = useI18n();
   const { stuckOps, rejectedOps } = useStore();

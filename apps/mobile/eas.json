@@ -20,9 +20,21 @@
         "EXPO_PUBLIC_APP_ENV": "production"
       },
       "channel": "production"
+    },
+    "testflight": {
+      "extends": "production",
+      "channel": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_ENV": "preview"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {},
+    "testflight": {
+      "ios": {
+        "ascAppId": "6831904411"
+      }
+    }
   }
 }

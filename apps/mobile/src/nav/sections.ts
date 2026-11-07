@@ -7,7 +7,7 @@
 import type { Role } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { IconKey } from "@/ui/primitives";
-import { canOpen, roleHome, routeKey } from "./roles";
+import { canOpen, isTabScreen, roleHome, routeKey } from "./roles";
 
 export type SectionId =
   | "home"
@@ -68,7 +68,8 @@ export const SECTIONS: readonly Section[] = [
   // «Расходы» (13 §2.3): the /money screen
   { id: "money", label: "nav.expenses", icon: "wallet", group: "money", roles: PLANNERS },
   { id: "team", label: "nav.team", icon: "users", group: "bottom", roles: ["director"] },
-  { id: "company", label: "nav.companySettings", icon: "home2", group: "bottom", roles: ["director"] },
+  // spec 26 §3 (07.11): the office (dispatcher) sees the company settings read-only; only the director changes them
+  { id: "company", label: "nav.companySettings", icon: "home2", group: "bottom", roles: ["director", "dispatcher"] },
   { id: "settings", label: "nav.mySettings", icon: "sliders", group: "bottom" },
   // «Помощь и поддержка» (7а-1; App Store 1.5): for everyone, last in the menu
   { id: "help", label: "support.title", icon: "help", group: "bottom" },
@@ -253,4 +254,17 @@ export function fabItems(set: FabSet, role: Role, ctx: FabCtx = {}): FabItem[] {
     out.push({ id: d.id, ...FAB_LOOK[d.id], href, act: d.act });
   }
   return out;
+}
+
+/**
+ * The address a tile of «Ещё» opens (docs/specs/28 §3, the director's decision 07.11). A section that lives on a tab
+ * screen but is not this role's home (office: Leads, Estimates on /leads) gets `from=more`: the screen then shows
+ * «‹ Ещё», and with the tabs' history the system back / Android back returns to «Ещё». The role's home (sales: Leads)
+ * stays as it is.
+ */
+export function moreHref(id: SectionId, role: Role): string {
+  const href = sectionHref(id, role);
+  const route = routeKey(href);
+  if (!isTabScreen(route) || route === roleHome[role]) return href;
+  return `${href}${href.includes("?") ? "&" : "?"}from=more`;
 }

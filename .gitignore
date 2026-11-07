@@ -1,4 +1,5 @@
-node_modules/
+# node_modules as a folder AND as a symlink (a worktree links it; «node_modules/» alone missed the link — #289)
+node_modules
 .preview-web/
 # supabase CLI (supabase start, the nightly cloud scenarios — docs/specs/21): local state, never committed
 supabase/.temp/

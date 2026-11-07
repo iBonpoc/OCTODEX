@@ -4,6 +4,7 @@
  * with visible size ≤ 36; status changes from the card only by allowed moves (prospect → archive) with «Undo».
  */
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
+const { addDays, todayKey } = require("../companyTime.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -29,6 +30,41 @@ exports.run = async (h) => {
       db.customers.map((c) => c.phone));
     h.expect(xs.length >= 2 && xs.every((x) => Math.abs(x - xs[0]) <= 1), `phone column on one line in every row (${xs.join(", ")})`);
   }
+  // founder 07.11: money sits in one place — the value at the top right. Debt > 0 → «Должен» (+ «просрочен»),
+  // otherwise «Оплатил всего»; no second money block under the facts. On 1280 rows the column is «Баланс».
+  const cents = (c) => {
+    const inv = db.invoices.filter((i) => i.customerId === c.id && !i.void);
+    const owed = inv.reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0);
+    const paid = Math.max(0, db.payments.filter((x) => x.customerId === c.id).reduce((s, x) => s + x.amountCents, 0));
+    return { owed, paid };
+  };
+  const usd = (n) => { const d = n % 100 === 0 ? 0 : 2; return "$" + (n / 100).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  const withPaid = db.customers.filter((c) => (c.status ?? "active") === "active" && cents(c).owed === 0 && cents(c).paid > 0);
+  h.expect(withPaid.length > 0, "demo has a client who paid and owes nothing");
+  for (const c of [owes, withPaid[0]]) {
+    const m = cents(c);
+    const el = p.getByRole("button", { name: c.name, exact: true }).first();
+    await el.scrollIntoViewIfNeeded();
+    const t = await el.innerText();
+    // the overdue sign carries its own amount («Просрочено $X · N дн») — the card value is still one figure
+    const amounts = t.replace(/Просрочено \$[\d,]+(\.\d\d)?/g, "").match(/\$[\d,]+(\.\d\d)?/g) ?? [];
+    h.expect(amounts.length === 1, `${c.name}: one money figure on the card (${amounts.join(", ")})`);
+    h.expect(amounts[0] === usd(m.owed > 0 ? m.owed : m.paid), `${c.name}: ${m.owed > 0 ? "owed" : "paid total"} shown (${amounts[0]})`);
+    // the figure is in the card's header: on the line of the client's name, to the right of it
+    const pos = await el.evaluate((root, args) => {
+      const leaf = (txt) => [...root.querySelectorAll("div")].find((d) => d.textContent.trim() === txt && !d.querySelector("div"));
+      const a = leaf(args.amount), n = leaf(args.name);
+      if (!a || !n) return null;
+      const ra = a.getBoundingClientRect(), rn = n.getBoundingClientRect();
+      return { dy: Math.abs(ra.top - rn.top), right: ra.left > rn.right };
+    }, { amount: amounts[0], name: c.name });
+    h.expect(pos && pos.dy <= 12 && pos.right, `${c.name}: money in the header, right of the name (${JSON.stringify(pos)})`);
+    if (!wide) {
+      h.expect(m.owed > 0 ? /Должен/.test(t) && !/Оплатил всего/.test(t) : /Оплатил всего/.test(t) && !/Должен/.test(t), `${c.name}: one label next to the figure`);
+    }
+  }
+  if (wide) await h.expectText(/Баланс/, "desktop column «Баланс»");
+
   h.expect(!/…|\.\.\./.test(await p.locator("main, body").first().innerText()), "no «…» anywhere in the list");
 
   // alphabet groups on phone and desktop (one letter header per first letter); tablet is one 2-column grid
@@ -47,6 +83,54 @@ exports.run = async (h) => {
   // edges and gaps: cards on the search field's lines; tablet rows of equal height (founder 05.11: «линии сдвинуты»)
   await p.evaluate(() => window.scrollTo(0, 0));
   await checkCardAlignment(h, { searchPlaceholder: "Имя, телефон или адрес" });
+
+  // founder 07.11: the overdue sign tells how much and how long — «Просрочено $X · N дн» (unpaid rest of overdue invoices, the oldest)
+  const late = db.invoices.filter((i) => i.customerId === owes.id && i.paidCents < i.totalCents);
+  const lateCents = late.reduce((s, i) => s + i.totalCents - i.paidCents, 0);
+  await p.evaluate(({ ids, due }) => {
+    const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+    raw.db.invoices = raw.db.invoices.map((i) => (ids.includes(i.id) ? { ...i, dueDate: due } : i));
+    localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+  }, { ids: late.map((i) => i.id), due: addDays(todayKey(), -9) });
+  await h.go("/clients");
+  const lateCard = p.getByRole("button", { name: owes.name, exact: true }).first();
+  await lateCard.scrollIntoViewIfNeeded();
+  const lateTxt = await lateCard.innerText();
+  const lateUsd = "$" + (lateCents / 100).toLocaleString("en-US", { minimumFractionDigits: lateCents % 100 ? 2 : 0, maximumFractionDigits: lateCents % 100 ? 2 : 0 });
+  h.expect(lateTxt.includes(`Просрочено ${lateUsd} · 9 дн`), `overdue sign with amount and days: ${lateTxt.slice(0, 240)}`);
+  await h.shot("overdue");
+  // founder 07.11 «очень много кнопок сверху»: filters are ONE row; empty ones hidden; tags behind «Фильтры»
+  await h.go("/clients");
+  const chips = p.getByRole("radio");
+  const ys = await chips.evaluateAll((els) => els.filter((e) => e.offsetParent).map((e) => Math.round(e.getBoundingClientRect().top)));
+  h.expect(ys.length >= 2 && ys.every((y) => Math.abs(y - ys[0]) <= 1), `status filters in one row (${ys.join(", ")})`);
+  const chipText = (await chips.allInnerTexts()).join(" | ");
+  h.expect((await p.locator('[role="radio"][aria-checked="true"]').locator("visible=true").count()) === 1, "the chosen filter is announced as checked (web a11y)");
+  h.expect(!/· 0\b/.test(chipText.replace(/^Все · \d+/, "")), `no empty filters but «Все»: ${chipText}`);
+  const moreBtn = p.getByRole("button", { name: /^Фильтры, включено: \d+$/ });
+  h.expect((await moreBtn.count()) === 1, "«Фильтры» button in the row");
+  const mb = await moreBtn.boundingBox();
+  h.expect(mb && Math.abs(Math.round(mb.y) - ys[0]) <= 1 && mb.height <= 36, `«Фильтры» on the same row, visible ≤ 36 (${mb && mb.height})`);
+  h.expect((await p.getByRole("checkbox").locator("visible=true").count()) === 0, "no tag chips on the screen");
+  // wheel scrolls the row sideways when it does not fit (web: mouse; keyboard focus scrolls by itself)
+  const row = await p.evaluate(() => {
+    const r = [...document.querySelectorAll('[role="radiogroup"]')].find((e) => e.offsetParent);
+    const sc = r && (r.scrollWidth > r.clientWidth ? r : r.parentElement);
+    if (!sc || sc.scrollWidth <= sc.clientWidth) return { fits: true };
+    sc.dispatchEvent(new WheelEvent("wheel", { deltaY: 120, bubbles: true, cancelable: true }));
+    return { fits: false, left: sc.scrollLeft };
+  });
+  h.expect(row.fits || row.left > 0, `mouse wheel scrolls the filter row (${JSON.stringify(row)})`);
+  await moreBtn.click();
+  await p.waitForTimeout(400);
+  const tagRows = h.sheet().getByRole("checkbox");
+  h.expect((await tagRows.count()) >= 3, "tags as rows in the «Фильтры» sheet");
+  await tagRows.first().click();
+  await h.sheet().getByText("Готово", { exact: true }).click();
+  await p.waitForTimeout(400);
+  h.expect((await p.getByRole("button", { name: "Фильтры, включено: 1" }).count()) === 1, "the button counts the tags that are on");
+  h.expect(await p.getByText("Фильтры · 1", { exact: true }).first().isVisible(), "«Фильтры · 1» on the button");
+  await h.shot("filters");
 
   // status from the card: prospect → archive in one tap, then «Undo».
   // The demo has no prospect: make one client a prospect in the saved data (like a lead with an estimate would) and reload.

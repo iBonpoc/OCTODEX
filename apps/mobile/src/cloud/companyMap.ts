@@ -1,6 +1,7 @@
 /** Company profile ↔ database rows (companies, company_secrets, company_licenses, company_contacts). */
 import { DOC_LANGS } from "@/i18n/translate";
 import type { Address, Company, CompanyContact, CompanyLicense, EntityType, LicenseKind } from "@/data/types";
+import { validZone } from "@/features/zone";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v === null || v === undefined ? "" : String(v));
@@ -55,7 +56,7 @@ const contactFromDb = (r: Row): CompanyContact => ({
 export const COMPANY_STORED_COLUMNS = ["brand", "contract_settings", "estimate_settings", "payment_settings", "onboarding_state", "lead_settings", "schedule_settings", "business_hours"] as const;
 
 /** Columns of `companies` (jsonb settings are merged with what is already stored). */
-export function companyToDb(c: Company, stored: Row) {
+export function companyToDb(c: Company, stored: Row, tzChanged?: boolean) {
   const n = (v: string | undefined) => (v && v.trim() ? v.trim() : null);
   return {
     name: c.name.trim(),
@@ -68,7 +69,10 @@ export function companyToDb(c: Company, stored: Row) {
     address_line1: n(c.address.line1), address_city: n(c.address.city), address_state: n(c.address.state), address_zip: n(c.address.zip),
     mailing_address_line1: n(c.mailingAddress?.line1), mailing_address_city: n(c.mailingAddress?.city),
     mailing_address_state: n(c.mailingAddress?.state), mailing_address_zip: n(c.mailingAddress?.zip),
-    timezone: c.timezone,
+    // the zone only when it was chosen on «Расписание» and the phone knows it (docs/specs/22 §1.3): a long-offline phone
+    // saving the name does not overwrite another admin's new zone; the server refuses an unknown one (22023 = permanent:
+    // the whole company.save would be dropped from the queue with the other settings)
+    ...(zoneToSend(c.timezone, stored.timezone, tzChanged) ? { timezone: c.timezone } : {}),
     doc_language: c.docLanguage ?? "en",
     brand: { ...((stored.brand as Row) ?? {}), logo: c.brand.logo ?? null, color: c.brand.color ?? null },
     contract_settings: { ...((stored.contract_settings as Row) ?? {}), insurance: c.insurance, cancel_email: n(c.cancelEmail) },
@@ -89,3 +93,8 @@ export const contactToDb = (c: CompanyContact, companyId: string, position: numb
   id: c.id, company_id: companyId, name: c.name.trim(), title: c.title || null, phone: c.phone || null, email: c.email || null,
   is_primary: c.isPrimary, on_documents: c.onDocuments, position,
 });
+
+/** company.save sends the zone only when it was chosen (`tzChanged`) and this phone knows it (docs/specs/22 §1.3).
+ *  An op queued by an older build has no flag: then — as before — when it differs from the stored one. */
+export const zoneToSend = (tz: string | undefined, stored: unknown, tzChanged?: boolean): boolean =>
+  !!tz && validZone(tz) && (tzChanged === undefined ? tz !== stored : tzChanged);

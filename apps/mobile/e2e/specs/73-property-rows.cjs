@@ -17,7 +17,8 @@ exports.run = async (h) => {
   for (const name of ["Люди объекта", "Лиды", "Работы", "Сметы", "Счета", "Выезды", "Задачи", "Заметки", "Файлы", "История"]) {
     h.expect((await rows().getByRole("button", { name, exact: true }).count()) === 1, `row «${name}» on the property`);
   }
-  h.expect((await p.getByRole("tab").count()) === 0, "no tabs on the property card");
+  // the card shows rows, not section tabs; the phone's bottom bar (its 5 tabs) is on every card now (docs/specs/28)
+  h.expect((await p.getByRole("tab").count()) - (await p.getByTestId("tab-bar").getByRole("tab").count()) === 0, "no section tabs on the property card");
   await h.expectText(/Сейчас на объекте/, "now at the property stays on top");
   const jobs = db0.jobs.filter((j) => j.propertyId === "p1");
   const visits = db0.visits.filter((v) => vprop(v) === "p1");

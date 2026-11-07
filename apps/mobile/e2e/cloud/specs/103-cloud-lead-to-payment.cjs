@@ -63,7 +63,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   await h.shot("sent");
 
   // S7 → S8: the client opens the link in their own browser (no sign-in) and signs
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "en-US" });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "en-US", reducedMotion: "reduce" });
   const cp = await ctx.newPage();
   const clientErrors = [];
   cp.on("pageerror", (e) => clientErrors.push(e.message));
@@ -98,7 +98,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   await h.go(`/estimate/${est.id}`);
   await p.getByRole("button", { name: /Выставить остаток/ }).click();
   await p.waitForTimeout(600);
-  const invs = await waitRows(admin, `invoices?company_id=eq.${A}&job_id=eq.${job.id}&select=id,number,total_cents,paid_cents,kind`, (r) => r.some((i) => i.total_cents > 0 && i.paid_cents === 0 && i.kind !== "deposit"), "the balance invoice");
+  const invs = await waitRows(admin, `invoices?company_id=eq.${A}&job_id=eq.${job.id}&select=id,number,total_cents,paid_cents,kind,due_date`, (r) => r.some((i) => i.total_cents > 0 && i.paid_cents === 0 && i.kind !== "deposit"), "the balance invoice");
   const inv = invs.find((i) => i.kind !== "deposit" && i.paid_cents === 0);
   h.expect(/^INV-\d{4,}$/.test(inv.number ?? ""), `S0: the server numbered the invoice (${inv.number})`);
 
@@ -116,5 +116,13 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   const [paid] = await waitRows(admin, `invoices?id=eq.${inv.id}&select=paid_cents,total_cents`, (r) => r[0]?.paid_cents === r[0]?.total_cents, "the invoice paid by the trigger");
   h.expect(paid.paid_cents === inv.total_cents, "the invoice's paid_cents = its payments (the trigger)");
   await h.expectText(/RCT-\d+/, "the app shows the server's receipt number");
+  await h.go(`/invoice/${inv.id}`);
+  // after a reload the screen shows what the SERVER keeps (due_date «YYYY-MM-DD»): the due day on the screen is the server's calendar day, not a day earlier (a date column read as UTC midnight
+  // and shown in LA — found by this spec 07.11, fixed in zone.ts dayLabel)
+  const [y, m, d] = inv.due_date.split("-").map(Number);
+  const dueLabel = new Intl.DateTimeFormat("ru", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }).format(Date.UTC(y, m - 1, d, 12));
+  // the visible line of THIS screen (hidden screens of the stack stay in the page and have their own «Срок …»)
+  const dueLine = await p.getByText(/^Срок .+ · Отправлена/).locator("visible=true").last().innerText();
+  h.expect(dueLine.startsWith(`Срок ${dueLabel} ·`), `the due day ${inv.due_date} = «${dueLabel}» on the invoice screen («${dueLine}»)`);
   await h.shot("paid");
 };

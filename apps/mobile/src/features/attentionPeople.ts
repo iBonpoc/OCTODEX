@@ -37,6 +37,10 @@ export function subjectOf(db: DB, it: Pick<AttentionItem, "refId">): { customerI
   }
   const lead = db.leads.find((x) => x.id === id);
   if (lead) return subjectOfLead(db, lead.id);
+  // a task's subject (taskOrphan, docs/specs/22 §2): a client or a property of a client
+  if (db.customers.some((c) => c.id === id)) return { customerId: id };
+  const prop = db.properties.find((x) => x.id === id);
+  if (prop?.customerId) return { customerId: prop.customerId };
   return {};
 }
 const subjectOfLead = (db: DB, leadId: ID) => {

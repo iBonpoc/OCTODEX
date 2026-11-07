@@ -4,7 +4,7 @@
  * 1. «Сервер недоступен»: every write gets 503 / PGRST002 → the header says «Сервер недоступен · в очереди: 1», not
  *    «Без сети»; the answer is let through → the lead reaches the server.
  * 2. «Не отправлено»: one change keeps getting a statement timeout (500 / 57014) for over 10 minutes (seeded with its
- *    first failure 11 minutes ago, so the test does not wait) → it is a card in «Мои настройки» and «Не отправлено: 1»;
+ *    first failure 11 minutes ago, so the test does not wait) → it is a card in «Профиль и аккаунт» and «Не отправлено: 1»;
  *    a lead typed meanwhile does not wait for it and reaches the server; «Повторить сейчас» with the server well again
  *    sends it; another stuck change is discarded with «Отменить изменение…» → «Да, отменить» (rule 5).
  */
@@ -61,26 +61,31 @@ exports.run = async (h, { seed, admin }) => {
     ([items]) => localStorage.setItem("octo.outbox.v1", JSON.stringify(items)),
     [[
       { id: "q-stuck", op: { k: "calendarEvent.remove", id: stuckId }, at, tries: 0, owner, fails: 2, failSince: since },
-      { id: "q-gone", op: { k: "calendarEvent.remove", id: goneId }, at, tries: 0, owner, fails: 2, failSince: since },
+      // money: its confirmation warns (review #259 круг 3, п.5). Already stuck: an expense is not its own kind, it waits
+      // behind q-stuck and is never tried in this test — so it comes stuck from an earlier run
+      { id: "q-gone", op: { k: "expense.add", id: goneId, jobId: null, vendor: "Nightly 114", category: "materials", amountCents: 1234 }, at, tries: 0, owner, fails: 3, failSince: since, stuck: true },
     ]],
   );
   const timeout = async (route) => {
-    if (route.request().method() === "GET" || !/calendar_events/.test(route.request().url())) return route.continue();
+    if (route.request().method() === "GET" || !/calendar_events|expenses/.test(route.request().url())) return route.continue();
     return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ code: "57014", message: "canceling statement due to statement timeout" }) });
   };
   await p.route("**/rest/v1/**", timeout);
-  await h.go("/settings");
-  for (let i = 0; i < 40 && !/Не отправлено: сервер отвечает ошибкой/.test(await h.text()); i++) await p.waitForTimeout(500);
+  await h.go("/settings/profile");
+  // both cards: q-gone comes stuck at once, q-stuck only after its third timeout — wait for that one, not for the title
+  const cards = async () => (await p.getByTestId("stuck-q-stuck").count()) > 0 && (await p.getByTestId("stuck-q-gone").count()) > 0;
+  for (let i = 0; i < 40 && !(await cards()); i++) await p.waitForTimeout(500);
   t = await h.text();
-  h.expect(/Не отправлено: сервер отвечает ошибкой/.test(t), "the stuck changes are a section in «Мои настройки»");
+  h.expect(/Не отправлено: сервер отвечает ошибкой/.test(t), "the stuck changes are a section in «Профиль и аккаунт»");
   h.expect((await p.getByTestId("stuck-q-stuck").count()) > 0 && (await p.getByTestId("stuck-q-gone").count()) > 0, "each is its own card");
+  h.expect(/Ошибка на сервере, не в телефоне/.test(t) && !/canceling statement/.test(t), "our own words on the card, not the server's English text");
 
   // a lead typed meanwhile does not wait for them (two timeouts in a row read as the whole server for a moment; the
   // lead's answer ends that — then the header names the stuck ones)
   await newLead(h, "Nightly Lead 114 B");
   await p.evaluate(() => window.dispatchEvent(new Event("online")));
   await waitRows(admin, `leads?company_id=eq.${A}&contact_name=eq.Nightly Lead 114 B&select=id`, (r) => r.length === 1, "the lead typed while two changes were stuck", 30_000);
-  await h.go("/settings");
+  await h.go("/settings/profile");
   for (let i = 0; i < 20 && !/Не отправлено: 2/.test(t); i++) {
     await p.waitForTimeout(500);
     t = await h.text();
@@ -89,12 +94,14 @@ exports.run = async (h, { seed, admin }) => {
   await h.shot("stuck");
 
   // «Отменить изменение…» → the second step says what happens → «Да, отменить»
-  await h.go("/settings");
+  await h.go("/settings/profile");
   const gone = p.getByTestId("stuck-q-gone").last();
   await gone.getByRole("button", { name: "Отменить изменение…" }).click();
   await p.waitForTimeout(300);
   h.expect((await p.getByTestId("stuck-confirm-q-gone").count()) > 0, "a second step before discarding (rule 5)");
   await h.expectText(/На сервер оно не попадёт/, "it says what discarding does");
+  h.expect((await p.getByTestId("stuck-money-q-gone").count()) > 0, "money: the «Деньги» chip in the second step");
+  await h.expectText(/Это деньги: счёт, оплата, задаток или расход/, "money: the warning in words");
   await p.getByTestId("stuck-confirm-q-gone").last().getByRole("button", { name: "Да, отменить" }).click();
   await p.waitForTimeout(700);
   h.expect((await p.getByTestId("stuck-q-gone").count()) === 0, "the discarded change is gone");

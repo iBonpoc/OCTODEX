@@ -5,6 +5,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { WEB_APP_URL } from "@/config/backend";
 import { LEGAL_RETRY_MS, legalState, legalTickets, PENDING_LEGAL_KEY, resolveLegal, type LegalState } from "@/features/legal";
 import { supabase } from "./client";
+import { forgetThisPhone } from "@/features/pushNative";
 import { acceptLegal, legalStatus } from "./legal";
 import { finishDeletion, profileDeleted, wipeIfPending } from "./account";
 import { authEventPlan, goneChecker } from "@/features/deleteAccount";
@@ -231,6 +232,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       signOut: async () => {
         await AsyncStorage.removeItem(PENDING_LEGAL_KEY).catch(() => {});
+        // while still signed in: this phone stops getting the person's pushes (never throws, ≤ 8 s; docs/specs/27-push.md)
+        await forgetThisPhone();
         await supabase.auth.signOut();
         setMemberships([]);
       },
