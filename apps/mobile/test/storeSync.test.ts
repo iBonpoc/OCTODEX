@@ -62,6 +62,7 @@ import { mineOf, StoreProvider } from "../src/data/store";
 import { forgetDeviceState } from "../src/data/persist";
 import { makeSeed } from "../src/data/seed";
 import { isDeviceKey } from "../src/features/deleteAccount";
+import { wipedOnDelete } from "../src/data/outboxOwner";
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const signIn = (userId: string, companyId: string) => Object.assign(auth, { session: {}, userId, company: { companyId, role: "owner", companyName: "Co" } });
@@ -124,7 +125,7 @@ describe("unit:storeSync — a send that is running when the device is wiped (re
     await settle();
     expect(server.sends).toHaveLength(1);
     // «Удалить навсегда» succeeded: the device is forgotten and wiped while the send still waits
-    forgetDeviceState(isDeviceKey);
+    forgetDeviceState(wipedOnDelete);
     for (const k of [...storage.keys()]) if (isDeviceKey(k)) storage.delete(k);
     server.sends[0]!.d.reject(new Error("JWT expired")); // the account is gone: the send fails
     await settle();
@@ -165,7 +166,7 @@ describe("unit:storeSync — after the wipe, the next person of the SAME company
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
     await settle();
     answerLoads();
-    forgetDeviceState(isDeviceKey);
+    forgetDeviceState(wipedOnDelete);
     await as(r, null);
     await as(r, "u2", "c1");
     answerLoads();
@@ -187,7 +188,7 @@ describe("unit:storeSync — a point answered «off» after the wipe (review #23
     await wait(300);
     valueOf(r).recordVisitPoint({ visitId: "v1", userId: "u1", lat: 34.1, lng: -118.1, at: new Date().toISOString() }, "foreground");
     expect(server.points).toHaveLength(1);
-    forgetDeviceState(isDeviceKey);
+    forgetDeviceState(wipedOnDelete);
     for (const k of [...storage.keys()]) if (isDeviceKey(k)) storage.delete(k);
     server.points[0]!.resolve("off"); // the server no longer takes points: the account is gone
     await settle();
@@ -244,6 +245,32 @@ describe("unit:storeSync — a plain sign-out leaves the outbox: whose op is it 
     expect(mineOf(items, { userId: "u1", companyId: "c1" }).map((x) => x.id)).toEqual(["a", "c", "e"]);
     expect(mineOf(items, { userId: "u2", companyId: "c1" }).map((x) => x.id)).toEqual(["b", "c"]);
     expect(mineOf(items, null)).toEqual([]);
+  });
+});
+
+describe("unit:storeSync — someone deletes their account on a shared phone (review #240)", () => {
+  it("the other person's unsent op stays in memory and on the phone, and goes when they are back", { timeout: 15_000 }, async () => {
+    const at = new Date().toISOString();
+    storage.set("octo.outbox.v1", JSON.stringify([{ id: "o9", op: { k: "calendarEvent.remove", id: "ev-of-u9" }, at, tries: 0, owner: { userId: "u9", companyId: "c1" } }]));
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    valueOf(r).removeCalendarEvent("ev-of-u1");
+    await settle();
+    expect(valueOf(r).queue).toHaveLength(1); // u1 sees only theirs
+    forgetDeviceState(wipedOnDelete); // u1 deletes their account
+    await settle();
+    expect(valueOf(r).queue).toEqual([]);
+    await wait(300);
+    const kept = storage.get("octo.outbox.v1") ?? "";
+    expect(kept).toContain("ev-of-u9");
+    expect(kept).not.toContain("ev-of-u1");
+    await as(r, null);
+    await as(r, "u9", "c1");
+    await wait(1700);
+    await settle();
+    expect(server.sends.filter((x) => x.userId === "u9").map((x) => (x.op as { id: string }).id)).toContain("ev-of-u9");
   });
 });
 

@@ -37,6 +37,8 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
+import { mineOf, OUTBOX_KEY, othersOf, type OwnedItem } from "./outboxOwner";
+export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import {
@@ -290,16 +292,6 @@ const reId = (doc: EstimateDoc): EstimateDoc => ({
   ...doc,
   options: doc.options.map((o) => ({ ...o, id: uid(), lines: o.lines.map((l) => ({ ...l, id: uid() })) })),
 });
-/** an outbox op with whose it is (the outbox key is one for the phone) */
-export type OwnedItem = OutboxItem & { owner?: { userId: string; companyId: string } };
-/**
- * The ops the signed-in person sends: theirs in this company, in order. Another person's (or another company's) wait
- * for their owner and are never lost. Ops of older versions carry no owner: they go as before — once, from whoever signs
- * in after the update (nothing tells whose they were; the risk is only on a phone where the outbox stayed and the
- * person changed). The «не отправлено» counts and «Отменить» see only the person's own ops (19 §6.12).
- */
-export const mineOf = (items: readonly OwnedItem[], who: { userId: string; companyId: string } | null): OwnedItem[] =>
-  who ? items.filter((o) => !o.owner || (o.owner.userId === who.userId && o.owner.companyId === who.companyId)) : [];
 const costsOf = (doc: EstimateDoc): Record<string, number> =>
   Object.fromEntries(doc.options.flatMap((o) => o.lines.filter((l) => l.unitCostCents !== undefined).map((l) => [l.id, l.unitCostCents!])));
 
@@ -353,7 +345,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const [savedRole, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "director");
   const [online, setOnlineState] = useState(true);
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
-  const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>("octo.outbox.v1", []);
+  const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, []);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const dbRef = useRef(db);
@@ -420,6 +412,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     () =>
       onDeviceForgotten(() => {
         wipedKey.current = cacheKeyRef.current;
+        // the outbox keeps other people's ops (rule 6): only the deleted person's go (and old ones without an owner)
+        const me = whoRef.current?.userId ?? null;
+        if (me) {
+          outboxRef.current = othersOf(outboxRef.current, me);
+          setOutbox(outboxRef.current);
+        }
         setGateCodes({});
         waitingPoints.current = {};
       }),

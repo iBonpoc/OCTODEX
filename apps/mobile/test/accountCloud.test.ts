@@ -114,7 +114,8 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     const offOrder = onDeviceForgotten(() => void (before = storage.has("octo.outbox.v1")));
     await finishOnDevice();
     offOrder();
-    expect(heard).toEqual(["octo.outbox.v1", "octo.role.v1", "octo.cloud.v1.c1"]);
+    // the outbox is filtered, not reset (another person's unsent ops stay, rule 6): the store drops only its own
+    expect(heard).toEqual(["octo.role.v1", "octo.cloud.v1.c1"]);
     expect(before).toBe(true); // forgotten BEFORE the wipe (review #231 №4): no write can land after it
     expect(storage.has("octo.outbox.v1")).toBe(false);
     heard.length = 0;
@@ -122,7 +123,20 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     expect(heard).toEqual([]);
     storage.set("octo.wipe.pending.v1", "1");
     await wipeIfPending();
-    expect(heard).toHaveLength(3);
+    expect(heard).toHaveLength(2);
     off();
+  });
+  it("another person's unsent ops on this phone stay; the deleted person's and old ones without an owner go", async () => {
+    const at = new Date().toISOString();
+    const op = (id: string, owner?: { userId: string; companyId: string }) => ({ id, op: { k: "x", id }, at, tries: 0, ...(owner ? { owner } : {}) });
+    storage.set("octo.outbox.v1", JSON.stringify([op("mine", { userId: "u1", companyId: "c1" }), op("old"), op("theirs", { userId: "u9", companyId: "c1" }), op("theirs2", { userId: "u9", companyId: "c7" })]));
+    storage.set("octo.role.v1", '"tech"');
+    await finishOnDevice(); // the session's person is u1 (the mock)
+    expect(JSON.parse(storage.get("octo.outbox.v1")!).map((o: { id: string }) => o.id)).toEqual(["theirs", "theirs2"]);
+    expect(storage.has("octo.role.v1")).toBe(false);
+    // nothing of anyone else: the key goes
+    storage.set("octo.outbox.v1", JSON.stringify([op("mine", { userId: "u1", companyId: "c1" })]));
+    await finishOnDevice();
+    expect(storage.has("octo.outbox.v1")).toBe(false);
   });
 });

@@ -6,10 +6,11 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/config/backend";
 import {
-  deleteWithRepeat, isDeviceKey, lastOwnerCompanies, RETRY_CODES, WIPE_PENDING_KEY, wipeDevice,
+  deleteWithRepeat, lastOwnerCompanies, RETRY_CODES, WIPE_PENDING_KEY, wipeDevice,
   type AccountState, type DeleteOutcome, type Gone, type MembershipRow, type OwnedCompany, type WipeStore,
 } from "@/features/deleteAccount";
 import { forgetDeviceState } from "@/data/persist";
+import { OUTBOX_KEY, othersOf, parseOutbox, wipedOnDelete } from "@/data/outboxOwner";
 import { supabase } from "./client";
 
 /** a hung request (the line dropped; OkHttp on Android waits for ever) becomes «no answer» */
@@ -126,17 +127,27 @@ const warn = (m: string) => console.warn(`delete-account: ${m}`);
 
 /** the account is gone: nothing of it stays on this phone (a failed wipe is repeated on the next start) */
 export async function finishOnDevice(): Promise<void> {
-  // the store in memory first (review #231): a pending write or a send still running cannot land after the wipe
-  forgetDeviceState(isDeviceKey);
-  await wipeDevice(deviceStore, warn);
+  await wipeKeepingOthers();
   // the session is closed on the server already: only forget it here
   await supabase.auth.signOut({ scope: "local" }).catch(() => {});
 }
 /** a wipe failed last time: once more (AuthProvider, on start) */
 export async function wipeIfPending(): Promise<void> {
   if (!(await AsyncStorage.getItem(WIPE_PENDING_KEY).catch(() => null))) return;
-  forgetDeviceState(isDeviceKey);
+  await wipeKeepingOthers();
+}
+/**
+ * The store in memory first (review #231): a pending write or a send still running cannot land after the wipe. The
+ * outbox is not wiped whole: another person's unsent ops on this phone stay (rule 6) — only the deleted person's go,
+ * and old ones without an owner (19 §6.12).
+ */
+async function wipeKeepingOthers(): Promise<void> {
+  const { data } = await supabase.auth.getSession().catch(() => ({ data: { session: null } }));
+  const me = data.session?.user.id ?? null;
+  const keep = othersOf(parseOutbox(await AsyncStorage.getItem(OUTBOX_KEY).catch(() => null)), me);
+  forgetDeviceState(wipedOnDelete);
   await wipeDevice(deviceStore, warn);
+  if (keep.length) await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(keep)).catch(() => {});
 }
 
 /**
