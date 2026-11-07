@@ -85,3 +85,16 @@ describe("needs attention: visits (П3c)", () => {
     expect(i!.name).toBe(sub.name);
   });
 });
+
+// task 3 of «Лиды» №10: who sees an overdue invoice in «Требует внимания» — those with «Счета» (13 §4; RLS invoices_select
+// gives owner / admin / office / sales every invoice); the technician never, not even for his own jobs
+describe("unit:attention — overdue invoices by role", () => {
+  const seed = makeSeed();
+  it("the demo has an overdue invoice: office and sales see it", () => {
+    for (const r of ["director", "dispatcher", "sales"] as const) expect(buildAttention(seed, r).some((a) => a.kind === "overdue")).toBe(true);
+  });
+  it("the technician does not (he has no «Счета»; the demo gives the phone every invoice)", () => {
+    const att = buildAttention(seed, "tech");
+    expect(att.some((a) => a.kind === "overdue")).toBe(false);
+  });
+});
