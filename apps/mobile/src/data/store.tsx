@@ -36,13 +36,13 @@ import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
-import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
+import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { backoffMs, classify, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
 import { freshRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
-import { onAppActive } from "./appActive";
+import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 import { unsentIn as unsentInOf, withoutUnsentIn } from "@/features/closedCompany";
 export { mineOf, type OwnedItem } from "./outboxOwner";
@@ -426,10 +426,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     nextTry.current = Date.now() + backoffMs(netFails.current);
     setLink(failedAs(e));
   };
-  const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
-  const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, []);
+  // small and only on the phone until sent: written at once, not after 250 ms (rule 6 — a crash right after a change)
+  const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", [], { immediate: true });
+  const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, [], { immediate: true });
   // money changes the server refused (docs/specs/23 §3): kept until «Понятно»
-  const [rejected, setRejected, rejectedReady] = usePersistentState<RejectedOp[]>(REJECTED_KEY, []);
+  const [rejected, setRejected, rejectedReady] = usePersistentState<RejectedOp[]>(REJECTED_KEY, [], { immediate: true });
+  // the app is leaving (background, the tab hidden or closed): every state that waits to be written is written now
+  useEffect(() => onAppLeave(flushAllWriters), []);
   const [syncError, setSyncError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const dbRef = useRef(db);
