@@ -4,8 +4,8 @@ import type { DB, ID, Role, Task } from "@/data/types";
 import { canSeeLead, isBackFromSnooze, leadTurn } from "./leads";
 import { leadSettingsOf } from "./leadSettings";
 import { canCountersign } from "./estimateSign";
-import { canPlan, liveAssignees, dayDiffIn, isOpenVisit, lateToday, unassignedSoon, visitWho } from "./schedule";
-import { companyTz, scheduleSettingsOf } from "./scheduleSettings";
+import { canPlan, inspectionsNoEstimate, liveAssignees, dayDiffIn, isOpenVisit, lateToday, unassignedSoon, visitWho } from "./schedule";
+import { businessHoursOf, companyTz, scheduleSettingsOf } from "./scheduleSettings";
 import { dayKeyIn } from "./zone";
 import { jobAwaitingClose } from "@/features/jobDone";
 import { goneId } from "./team";
@@ -20,7 +20,9 @@ export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "la
   /* docs/specs/22 §2 (S22c): the person on a lead / a task is not at work any more — the office hands it over */
   | "leadOrphan" | "taskOrphan"
   /* docs/specs/23 §3 («Лиды и клиенты»): a money change the server refused — not written, the phone showed it */
-  | "rejected";
+  | "rejected"
+  /* docs/specs/03 §5.2, §13 (S15): the inspection has passed N working days ago and there is no estimate yet */
+  | "inspectionNoEstimate";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -45,7 +47,8 @@ export function attentionHref(it: AttentionItem): string {
   switch (it.kind) {
     case "schedule": return `/job/schedule?jobId=${it.refId}`;
     case "jobDone": return `/job/${it.refId}`;
-    case "rejected": return it.href ?? "/settings/profile";
+    case "rejected":
+    case "inspectionNoEstimate": return it.href ?? `/lead/${it.refId}`;
     case "taskOrphan": return `${SUBJECT_PATH[it.subject ?? "lead"]}/${it.refId}`;
     case "overdue": return `/invoice/${it.refId}`;
     case "estimate":
@@ -79,9 +82,16 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   const clientSignedLead = new Set(db.estimates.filter((e) => e.status === "awaiting_countersign" && e.leadId).map((e) => e.leadId!));
   // the office hands over what a person who is not at work any more had (docs/specs/22 §2): sales works leads too
   const office3 = role === "director" || role === "dispatcher" || role === "sales";
+  // «Осмотр прошёл — сметы нет» (docs/specs/03 §13): the office and sales (they make estimates); a tech does not see it.
+  // A lead gets it only when it has no other card (one card per lead).
+  const noEst = office3
+    ? inspectionsNoEstimate(db, now, st.inspectionNoEstimateDays, businessHoursOf(db.company), companyTz(db.company))
+    : [];
+  const noEstLead = new Map(noEst.filter((x) => x.lead).map((x) => [x.lead!.id, x]));
   for (const l of db.leads) {
     if (!canSeeLead(role, db.me, l)) continue;
     const turn = leadTurn(db, l, st);
+    const before = out.length;
     // open, not snoozed (leadTurn: done / snoozed), not archived; one card per lead
     if (office3 && goneId(db, l.assigneeId) && turn.kind !== "done" && turn.kind !== "snoozed" && !l.archivedAt) {
       if (turn.kind === "reply") {
@@ -110,6 +120,18 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
     } else if (turn.kind === "noStep") {
       out.push({ id: `nostep-${l.id}`, kind: "leadNoStep", refId: l.id, name: l.name, label: "att.leadNoStep", params: { name: l.name }, chip: "lead.noNextStepShort", status: "warn", score: 610 });
     }
+    if (out.length === before && noEstLead.has(l.id)) {
+      out.push({ id: `noest-${l.id}`, kind: "inspectionNoEstimate", refId: l.id, name: l.name, label: "visitP2.att.noEstimate", params: { name: l.name }, chip: "visitP2.att.noEstimateChip", status: "warn", score: 680 });
+    }
+  }
+  for (const x of noEst) {
+    if (x.lead || !x.customerId) continue;
+    const c = db.customers.find((y) => y.id === x.customerId);
+    if (!c) continue;
+    out.push({
+      id: `noest-v-${x.v.id}`, kind: "inspectionNoEstimate", refId: c.id, name: c.name, label: "visitP2.att.noEstimate", params: { name: c.name },
+      chip: "visitP2.att.noEstimateChip", status: "warn", score: 680, href: `/client/${c.id}`,
+    });
   }
   // Visits (docs/specs/03 П3c): only the people who plan (director, dispatcher) — a tech or sales has nothing to do here.
   // «Не назначено» today and tomorrow; «Опаздывает» by one rule (schedule.ts lateKind), «on the way» does not clear it.

@@ -27,8 +27,13 @@ describe("route-guard: who may open a screen", () => {
     }
   });
   it("the technician: no company money, Sales, Triage, Company or Team", () => {
-    for (const p of ["/today", "/money", "/figures/profit?period=month", "/triage", "/inbox?tab=leads", "/leads?tab=invoices", "/payments", "/payments?p=week", "/reports", "/reports/revenue", "/team", "/company", "/company/hours"])
+    for (const p of ["/today", "/money", "/figures/profit?period=month", "/triage", "/inbox?tab=leads", "/payments", "/payments?p=week", "/reports", "/reports/revenue", "/team", "/company", "/company/hours"])
       expect(canOpen("tech", p), p).toBe(false);
+  });
+  it("the technician opens «Лиды» — his own (13 §2.3); /inbox, the office's old address, stays closed", () => {
+    expect(canOpen("tech", "/leads")).toBe(true);
+    expect(canOpen("tech", "/leads?tab=leads")).toBe(true);
+    expect(canOpen("tech", "/inbox")).toBe(false);
   });
   it("the technician keeps his own work, estimates, catalog, and invoices/receipts for a payment on site", () => {
     for (const p of ["/visits", "/plan", "/messages", "/calls", "/clients", "/more", "/jobs", "/estimates", "/catalog", "/visit/v1", "/job/j1", "/invoice/i1", "/receipt/p1", "/expense/new", "/settings", "/p/abc"])

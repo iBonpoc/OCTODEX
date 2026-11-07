@@ -2,6 +2,7 @@ import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { router, useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
+import { isAppPath, navInsets } from "@/nav/shell";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { isTabScreen } from "@/nav/roles";
@@ -297,19 +298,12 @@ export function SyncBadge({ compact }: { compact?: boolean }) {
     chip
   );
 }
-/* ---------- Nav metrics shared by Screen and TabBar ---------- */
-export function useNavInsets() {
+/* ---------- Nav metrics shared by Screen, TabBar, «＋», sheets (pure part: navInsets in nav/shell.ts) ---------- */
+/** `path`: the screen's own address — the client page and sign-in have no side menu, their left edge takes the notch */
+export function useNavInsets(path?: string) {
   const insets = useSafeAreaInsets();
   const { wide } = useDevice();
-  const bottomGap = space[2];
-  return {
-    wide,
-    // 820/1280: the menu is on the left (SideNav, docs/specs/13 §2.5) — nothing above the screen any more
-    top: wide ? insets.top + space[3] : insets.top + space[2],
-    bottom: wide ? insets.bottom + space[6] : Math.max(insets.bottom, space[3]) + size.tabbarH + bottomGap + space[6],
-    tabBottom: Math.max(insets.bottom, space[3]),
-    safeTop: insets.top,
-  };
+  return navInsets(insets, wide, wide && (path === undefined || isAppPath(path)));
 }
 
 /* ---------- Breadcrumbs: "⌂ Today › Clients › Client card" — like an address bar, every level is a link ----------
@@ -448,7 +442,6 @@ export function Screen({
   /** «Главная» of a role: the bell, the sync badge and the profile on the right (13 v2 §2.2, §3.14) */
   home?: boolean;
 }) {
-  const navInsets = useNavInsets();
   const kb = useKeyboardHeight();
   const hints = useHints();
   const { c } = useTheme();
@@ -458,6 +451,7 @@ export function Screen({
   // for a moment, and the list under it drew the card's header (screenPath.ts).
   const params = useLocalSearchParams();
   const pathname = screenPath(useRoute().name, params);
+  const navInsets = useNavInsets(pathname);
   const routeName = useRoute().name;
   const auth = useAuth();
   /** the bar is away while a signature is drawn (docs/specs/28): «＋» goes down to its place */
@@ -674,7 +668,7 @@ export function Screen({
       {pinned ? (
         <View
           onLayout={(e) => setBarH(e.nativeEvent.layout.height)}
-          style={{ paddingTop: navInsets.safeTop + space[3], paddingBottom: space[1], paddingHorizontal: space[4], gap: space[2], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
+          style={{ paddingTop: navInsets.safeTop + space[3], paddingBottom: space[1], paddingLeft: navInsets.left, paddingRight: navInsets.right, gap: space[2], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
         >
           <View style={column}>{addressRow}</View>
         </View>
@@ -684,7 +678,7 @@ export function Screen({
           <ScrollView
             ref={scrollRef}
             scrollEnabled={!scrollLocked}
-            contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0), paddingHorizontal: space[4] }}
+            contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
             automaticallyAdjustKeyboardInsets
@@ -707,10 +701,10 @@ export function Screen({
           </ScrollView>
         </KeyboardAvoidingView>
       ) : (
-        <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingHorizontal: space[4] }}>{content}</View>
+        <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right }}>{content}</View>
       )}
       {floatFab && !kb ? (
-        <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} bottom={showsTabBar(routeName) && !barAway ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
+        <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} right={navInsets.right} bottom={showsTabBar(routeName) && !barAway ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
       ) : null}
     </View>
   );

@@ -55,12 +55,12 @@ exports.run = async (h) => {
     h.expect((await p.getByRole("tab", { name: "Ещё", selected: true }).count()) === 1, "«Ещё» is lit on Leads");
   }
 
-  // the technician: no money, team, company, invoices, leads tiles
+  // the technician: no money, team, company, invoices tiles; «Лиды» — his own (#327)
   await setRole(h, "tech");
   await h.go("/more");
   await screen().waitFor({ timeout: 3000 });
-  for (const id of ["invoices", "payments", "reports", "money", "team", "company", "leads"]) h.expect((await tile(id).count()) === 0, `tech: no tile «${id}»`);
-  for (const id of ["jobs", "estimates", "catalog", "calls", "settings"]) h.expect((await tile(id).count()) === 1, `tech: tile «${id}»`);
+  for (const id of ["invoices", "payments", "reports", "money", "team", "company"]) h.expect((await tile(id).count()) === 0, `tech: no tile «${id}»`);
+  for (const id of ["leads", "jobs", "estimates", "catalog", "calls", "settings"]) h.expect((await tile(id).count()) === 1, `tech: tile «${id}»`);
   await setRole(h, "director");
 
   // the floating «＋» never covers the last card (phone)

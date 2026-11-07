@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type ElementRef, type ReactNode } from "react";
-import { Platform, ScrollView, View } from "react-native";
-import { component, radius, size, space } from "@octo/design-tokens";
+import { Platform, ScrollView, TextInput, View } from "react-native";
+import Animated, { Easing, interpolate, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
+import { component, font, motion, radius, size, space } from "@octo/design-tokens";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T } from "./primitives";
 import { Sheet } from "./overlays";
 import { Button, TextField } from "./controls";
-import { activeFilterCount, chosenFilters, filterLabel, SEARCH_FROM, sheetOptions, visibleFilters, type FilterGroup, type FilterItem } from "./filterBarRules";
+import { activeFilterCount, chosenFilters, chosenLabel, filterLabel, SEARCH_FROM, searchAfter, sheetOptions, searchState, visibleFilters, type FilterGroup, type FilterItem, type SearchState } from "./filterBarRules";
 
 export type { FilterGroup, FilterOption } from "./filterBarRules";
 
@@ -46,11 +47,9 @@ export function FilterBar<K extends string>({
   const [open, setOpen] = useState<string | null>(null);
   // the search inside the sheet (a long «Мастер»), forgotten when the sheet closes
   const [sheetQ, setSheetQ] = useState("");
+  const closeSheet = () => { setOpen(null); setSheetQ(""); };
   const scroller = useRef<ElementRef<typeof ScrollView>>(null);
-  const all = groups.filter((g) => g.options.length > 0);
-  // a group with its own pill in the row is not in «Фильтры», its number or the chosen line (the pill says it)
-  const pinned = all.filter((g) => g.pill);
-  const shown = all.filter((g) => !g.pill);
+  const shown = groups.filter((g) => g.options.length > 0);
   const active = activeFilterCount(shown);
   const chosen = chosenFilters(shown);
 
@@ -117,10 +116,6 @@ export function FilterBar<K extends string>({
   const sliders = <Icon name="sliders" s={size.iconSm} color={c.ink} />;
   // alone in its row (no search, no lane — «Оплаты»): the button says what it is, on the left
   const alone = !search && !items.length;
-  const pinnedPills = pinned.map((g) =>
-    // framed only off the default (its first option: «Все»)
-    pill(`p:${g.key}`, g.pill!, !g.options[0]?.on, () => setOpen(g.key), { role: "button", label: g.pill! }, <Icon name="chevronDown" s={size.iconXs} color={c.ink} />, `filter-pill-${g.key}`),
-  );
   const filterButton = shown.length ? (
     <Press
       onPress={() => setOpen("*")}
@@ -155,16 +150,36 @@ export function FilterBar<K extends string>({
     </Press>
   ) : null;
 
-  const field = search ? <TextField type="search" value={search.value} onChangeText={search.onChange} placeholder={search.placeholder} icon="search" /> : null;
-  const sheetGroups = open === "*" ? shown : all.filter((g) => g.key === open);
-  const closeSheet = () => { setOpen(null); setSheetQ(""); };
+  const sheetGroups = open === "*" ? shown : shown.filter((g) => g.key === open);
+  // the search is an icon (founder 07.11): a tap opens the field in the same row with focus; a blur or ✕ folds it back.
+  // Phone: the open field takes row 1 next to «Фильтр» and the lane drops to row 2 for that time (~100 pt would be left
+  // for the lane otherwise). Tablet and desktop: the field (panel-w) stays in the row with the lane.
+  const inline = device !== "phone";
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [rowW, setRowW] = useState(0);
+  const st = searchState(searchOpen, search?.value ?? "");
+  const fieldW = inline ? component.panelW : Math.max(0, rowW - (filterButton ? component.button.phone + space[2] : 0));
+  const searchEl = search ? (
+    <SearchToggle
+      state={st}
+      value={search.value}
+      placeholder={search.placeholder}
+      width={fieldW}
+      onChange={search.onChange}
+      onEvent={(ev) => {
+        const next = searchAfter(ev, search.value);
+        setSearchOpen(next.open);
+        if (next.q !== search.value) search.onChange(next.q);
+      }}
+    />
+  ) : null;
+  const rowOne = !inline && st === "open";
 
   return (
     <View style={{ gap: space[2] }} testID="filter-bar">
       {desktop ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
-          {field ? <View style={{ width: component.panelW }}>{field}</View> : null}
-          {pinnedPills}
+          {searchEl}
           <View style={{ flex: 1, minWidth: 0 }}>{items.length ? lane : null}</View>
           {shown.map((g) => {
             const n = g.options.filter((o) => o.on).length;
@@ -173,29 +188,30 @@ export function FilterBar<K extends string>({
         </View>
       ) : (
         <>
-          {field || filterButton || pinnedPills.length ? (
-            <View style={{ flexDirection: "row", alignItems: "center", gap: space[2], flexWrap: "wrap" }}>
-              {pinnedPills}
-              {alone ? null : <View style={{ flex: 1, minWidth: 0 }}>{field}</View>}
-              {filterButton}
-            </View>
-          ) : null}
-          {items.length ? lane : null}
+          {/* one row: the magnifier, the lane, «Фильтр»; on a phone the open field sends the lane to row 2.
+              Alone in its row (no search, no lane) the «Фильтры» button says what it is, on the left */}
+          <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
+            {searchEl}
+            {rowOne || alone ? null : <View style={{ flex: 1, minWidth: 0 }}>{items.length ? lane : null}</View>}
+            {filterButton}
+          </View>
+          {rowOne && items.length ? lane : null}
         </>
       )}
       {chosen.length ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }} testID="filter-chosen">
           {chosen.map(({ group, option }) => (
             <Press
+              testID={group.single ? `filter-chosen-${group.key}` : undefined}
               key={`${group.key}:${option.key}`}
               onPress={() => group.onToggle(option.key)}
               visibleHeight={component.button.sm}
               accessibilityRole="button"
-              accessibilityLabel={t("card.filter.remove", { v: option.label })}
+              accessibilityLabel={t("card.filter.remove", { v: chosenLabel(group, option) })}
               style={{ height: component.button.sm, paddingLeft: space[3], paddingRight: space[2], borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: space[1], backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}
             >
               <T v="button" w="semibold" style={{ color: c.ink }}>
-                {option.label}
+                {chosenLabel(group, option)}
               </T>
               <Icon name="close" s={size.iconXs} color={c.mut} />
             </Press>
@@ -212,10 +228,12 @@ export function FilterBar<K extends string>({
               </T>
             ) : null}
             {g.searchable && g.options.length > SEARCH_FROM ? (
-              <TextField type="search" value={sheetQ} onChangeText={setSheetQ} placeholder={t("card.filter.findPerson")} icon="search" />
+              <View testID={`filter-find-${g.key}`}>
+                <TextField type="search" value={sheetQ} onChangeText={setSheetQ} placeholder={t("card.filter.findPerson")} icon="search" />
+              </View>
             ) : null}
             {sheetOptions(g, sheetQ).map((o) => (
-              <FilterRow key={o.key} label={o.label} count={o.count} on={o.on} single={g.single} onToggle={() => { g.onToggle(o.key); if (g.single) closeSheet(); }} />
+              <FilterRow key={o.key} label={o.label} count={o.count} on={o.on} single={g.single} onToggle={() => g.onToggle(o.key)} />
             ))}
           </View>
         ))}
@@ -266,5 +284,93 @@ export function FilterRow({ label, count, on, single, onToggle }: { label: strin
         </T>
       ) : null}
     </Press>
+  );
+}
+
+/**
+ * The search of a list as an icon (founder 07.11, spec 31 §6 п.2а). closed — a magnifier button; closedActive — the same,
+ * framed in ink (a search is on, the list stays searched); open — the field grows to `width` (motion.durBase, easeOut;
+ * at once with «Уменьшить движение»), takes the focus, ✕ inside empties and folds it.
+ */
+function SearchToggle({ state, value, placeholder, width, onChange, onEvent }: {
+  state: SearchState;
+  value: string;
+  placeholder: string;
+  width: number;
+  onChange: (s: string) => void;
+  onEvent: (ev: "tap" | "blur" | "clear") => void;
+}) {
+  const { c } = useTheme();
+  const { t } = useI18n();
+  const { wide } = useDevice();
+  const reduce = useReducedMotion();
+  const h = wide ? component.button.md : component.button.phone;
+  const fieldH = wide ? component.field.h : component.field.phone;
+  const open = state === "open";
+  const grow = useSharedValue(open ? 1 : 0);
+  useEffect(() => {
+    grow.value = withTiming(open ? 1 : 0, { duration: reduce ? 0 : motion.durBase, easing: Easing.bezier(...motion.easeOut) });
+  }, [open, reduce, grow]);
+  const target = Math.max(width, h);
+  // a blur folds the field a moment later: a press on ✕ blurs the field first (web), and must still reach ✕
+  const blurTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => () => { if (blurTimer.current) clearTimeout(blurTimer.current); }, []);
+  const style = useAnimatedStyle(() => ({ width: interpolate(grow.value, [0, 1], [h, target]) }));
+  if (!open)
+    return (
+      <Press
+        onPress={() => onEvent("tap")}
+        visibleHeight={h}
+        accessibilityRole="button"
+        accessibilityLabel={state === "closedActive" ? t("card.filter.searchWith", { q: value.trim() }) : t("card.filter.search")}
+        testID="filter-search-toggle"
+        style={{
+          width: h,
+          height: h,
+          borderRadius: radius.pill,
+          alignItems: "center",
+          justifyContent: "center",
+          backgroundColor: c.surf2,
+          // on: an ink frame, like a chosen filter — not a colour (rule 2)
+          borderWidth: state === "closedActive" ? component.selectedBorder : component.hairline,
+          borderColor: state === "closedActive" ? c.ink : c.bd,
+        }}
+      >
+        <Icon name="search" s={size.iconSm} color={c.ink} />
+      </Press>
+    );
+  return (
+    <Animated.View style={[{ height: fieldH, borderRadius: radius.field, borderWidth: component.hairline, borderColor: c.ink, backgroundColor: c.in, flexDirection: "row", alignItems: "center", paddingLeft: space[3], gap: space[2], overflow: "hidden" }, style]} testID="filter-search-open">
+      <Icon name="search" s={size.iconSm} color={c.mut} />
+      <TextInput
+        testID="filter-search-field"
+        value={value}
+        onChangeText={onChange}
+        placeholder={placeholder}
+        placeholderTextColor={c.mut}
+        autoFocus
+        onBlur={() => {
+          blurTimer.current = setTimeout(() => onEvent("blur"), motion.durFast);
+        }}
+        inputMode="search"
+        returnKeyType="search"
+        autoCorrect={false}
+        accessibilityLabel={placeholder}
+        style={{ flex: 1, minWidth: 0, height: fieldH, color: c.ink, fontFamily: font.families.regular, fontSize: font.size.body + 2, outlineStyle: "none" } as object}
+      />
+      <Press
+        onPress={() => {
+          if (blurTimer.current) clearTimeout(blurTimer.current);
+          onEvent("clear");
+        }}
+        visibleHeight={h}
+        accessibilityRole="button"
+        accessibilityLabel={t("card.filter.clearSearch")}
+        testID="filter-search-clear"
+        style={{ width: h, height: h, alignItems: "center", justifyContent: "center" }}
+      >
+        <Icon name="close" s={size.iconSm} color={c.mut} />
+      </Press>
+    </Animated.View>
   );
 }

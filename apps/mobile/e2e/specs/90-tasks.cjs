@@ -1,3 +1,4 @@
+const { listSearch, listSearchClear } = require("../listSearch.cjs");
 /**
  * Wave 6-1 «Задачи» (docs/specs/20 §7, §9; 13 §3.7): «Ещё» → «Задачи» opens the list «Задачи (n) · n% готово»;
  * «＋» asks «к чему» first (nothing loose, 13 §2.4), then a task with a time is saved, shows in the list and in the Plan;
@@ -59,14 +60,14 @@ exports.run = async (h) => {
   // spec 31: a chip with nothing behind it is hidden — «Выполненные · 0» is not on the lane
   h.expect((await p.getByText("Выполненные · 0", { exact: true }).locator("visible=true").count()) === 0, "no empty «Выполненные» chip");
   await h.clickText("Открытые · 2");
-  await p.getByPlaceholder("Искать задачу").fill("водосток"); await p.waitForTimeout(300);
+  await listSearch(p, "водосток");
   await h.expectText(new RegExp(TITLE), "the search finds it by the title");
   h.expect((await p.getByText("Send the painting estimate").locator("visible=true").count()) === 0, "the other task is not shown");
-  await p.getByPlaceholder("Искать задачу").fill("Mitchell"); await p.waitForTimeout(300);
+  await listSearch(p, "Mitchell");
   await h.expectText(new RegExp(TITLE), "the search finds it by the client");
-  await p.getByPlaceholder("Искать задачу").fill("zzzz"); await p.waitForTimeout(300);
+  await listSearch(p, "zzzz");
   await h.expectText(/Задач не найдено/, "nothing found");
-  await p.getByPlaceholder("Искать задачу").fill("");
+  await listSearchClear(p);
 
   // the task with a time is in the Plan
   await h.go("/plan");

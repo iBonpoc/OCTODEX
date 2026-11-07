@@ -30,11 +30,17 @@ describe("moreCounts", () => {
     const empty = { ...db, leads: [], invoices: [], estimates: [], jobs: [], tasks: [], visits: [] } as DB;
     expect(moreCounts(empty, "director", NOW, TZ)).toEqual({});
   });
-  it("tech: no counter on a section the tech does not have (Счета, Лиды — sections.ts); no overdue invoices for him at all", () => {
+  it("tech: no counter on a section the tech does not have (Счета — sections.ts); no overdue invoices for him at all", () => {
     expect(buildAttention(db, "tech", NOW).some((a) => a.kind === "overdue")).toBe(false);
     const m = moreCounts(db, "tech", NOW, TZ);
     expect(m.invoices).toBeUndefined();
-    expect(m.leads).toBeUndefined();
+  });
+  it("tech: «Лиды» counts his own leads only (13 §2.3) — none of his waiting, no counter", () => {
+    const mine = moreCounts(db, "tech", NOW, TZ).leads?.n ?? 0;
+    expect(mine).toBe(moreCounts(db, "director", NOW, TZ).leads?.n ?? 0); // demo «me» (Alex) has every lead
+    const others: DB = { ...db, leads: db.leads.map((l) => ({ ...l, assigneeId: "m-ivan", createdBy: "m-ivan" })) };
+    expect(moreCounts(others, "director", NOW, TZ).leads?.n ?? 0).toBeGreaterThan(0);
+    expect(moreCounts(others, "tech", NOW, TZ).leads).toBeUndefined();
   });
   it("dispatcher (office) keeps Счета and Лиды", () => {
     const m = moreCounts(db, "dispatcher", NOW, TZ);

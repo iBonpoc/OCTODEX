@@ -34,12 +34,7 @@ export interface FilterGroup {
   onToggle: (key: string) => void;
   /** a search over the rows of the sheet when the group is long (spec 31 §7: «Мастер» of the Plan at 10+ people) */
   searchable?: boolean;
-  /**
-   * its own pill in the row, «Мастер: Все ▾», that opens just this group (spec 31 §7, «План», variant Б of the director
-   * 07.11): a frequent switch the person must see; what is on is said on the pill, not in the chosen line
-   */
-  pill?: string;
-  /** one option at a time: a pick closes the list */
+  /** one option at a time («Мастер» of the Plan): round rows; on, it is said with its group — «Мастер: Ivan ✕» */
   single?: boolean;
 }
 
@@ -52,6 +47,10 @@ export function sheetOptions(g: Pick<FilterGroup, "options" | "searchable">, q: 
   return g.options.filter((o) => o.on || o.label.toLowerCase().includes(needle));
 }
 
+/** the words of a chosen chip: an option of a one-at-a-time group says its group («Мастер: Ivan»), the others just the option */
+export const chosenLabel = (group: Pick<FilterGroup, "title" | "single">, option: Pick<FilterOption, "label">): string =>
+  group.single ? `${group.title}: ${option.label}` : option.label;
+
 /** what is on in the sheet, in the order of the groups — the line «Google ✕ · Мои ✕ · Сбросить» under the lane */
 export function chosenFilters(groups: readonly FilterGroup[]): { group: FilterGroup; option: FilterOption }[] {
   return groups.flatMap((group) => group.options.filter((o) => o.on).map((option) => ({ group, option })));
@@ -62,3 +61,20 @@ export const activeFilterCount = (groups: readonly FilterGroup[]): number => cho
 
 /** where a list keeps its filters on this device, until «Сбросить» (spec 31 §6 п.7); the search is not kept */
 export const filterStoreKey = (list: string): string => `octo.filter.${list}.v1`;
+
+/* ---------- the search as an icon (founder 07.11, spec 31 §6 п.2а) ---------- */
+
+/** closed — the magnifier; open — the field with focus; closedActive — the magnifier framed: a search is on */
+export type SearchState = "closed" | "open" | "closedActive";
+
+export function searchState(open: boolean, q: string): SearchState {
+  if (open) return "open";
+  return q.trim() ? "closedActive" : "closed";
+}
+
+/** what a tap / a blur / ✕ does: the field opens on a tap, closes on a blur (empty or not), ✕ empties and closes */
+export function searchAfter(ev: "tap" | "blur" | "clear", q: string): { open: boolean; q: string } {
+  if (ev === "tap") return { open: true, q };
+  if (ev === "clear") return { open: false, q: "" };
+  return { open: false, q };
+}
