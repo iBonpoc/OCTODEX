@@ -83,7 +83,7 @@ async function admin(query) {
     const spec = require(path.join(dir, file));
     const t0 = Date.now();
     const errors = [];
-    const ctx = await browser.newContext({ viewport: { width: LAYOUT.width, height: 844 }, locale: "en-US" });
+    const ctx = await browser.newContext({ viewport: { width: LAYOUT.width, height: 844 }, locale: "en-US", reducedMotion: "reduce" });
     await ctx.addInitScript((o) => {
       if (localStorage.getItem("octo.lang.v1")) return;
       localStorage.setItem("octo.lang.v1", JSON.stringify(o.lang));

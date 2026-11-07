@@ -82,7 +82,7 @@ async function waitPastCompanyMidnight() {
     const spec = require(path.join(__dirname, "specs", file));
     const t0 = Date.now();
     const errors = [];
-    const ctx = await browser.newContext({ viewport: { width: layout.width, height: layout.width === 390 ? 844 : 900 }, locale: "en-US" });
+    const ctx = await browser.newContext({ viewport: { width: layout.width, height: layout.width === 390 ? 844 : 900 }, locale: "en-US", reducedMotion: "reduce" });
     await installClock(ctx);
     await ctx.addInitScript((o) => {
       if (localStorage.getItem("octo.lang.v1")) return;
