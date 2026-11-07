@@ -56,7 +56,8 @@ export default function Plan() {
   const feedDays = useMemo(() => daysFrom(date, addDays(date, FEED_DAYS - 1)), [date]);
   // wave 7б-1: a personal setting, the same on every device and in «Мои настройки → План»
   const [showDone, setShowDone] = usePlanShowDone();
-  // «Мастер»: the office picks one person (or «Я»); a tech sees only his own. «Показывать»: the done ones, not in the Day
+  // «Мастер» (variant Б of the director 07.11): a pill in the row «Мастер: Все ▾» opens the people at once — one at a time,
+  // a search at 10+; a tech sees only his own. «Показывать» → «Выполненные» is in «Фильтры» (not in the Day)
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending && m.id !== db.me).sort((a, b) => a.name.localeCompare(b.name));
   const meTech = db.members.some((m) => m.id === db.me && m.roles.includes("tech"));
   const filterGroups: FilterGroup[] = [
@@ -65,8 +66,14 @@ export default function Plan() {
           key: "people",
           title: t("card.filter.masters"),
           searchable: true,
-          options: [...(meTech ? [{ key: "me", label: t("plan.who.me"), on: whoNow === "me" }] : []), ...techs.map((m) => ({ key: m.id, label: m.name, on: whoNow === m.id }))],
-          onToggle: (k: string) => setWho(whoNow === k ? "all" : k),
+          single: true,
+          pill: `${t("card.filter.masters")}: ${whoNow === "all" ? t("plan.who.all") : whoNow === "me" ? t("plan.who.me") : (techs.find((m) => m.id === whoNow)?.name ?? t("plan.who.all"))}`,
+          options: [
+            { key: "all", label: t("plan.who.all"), on: whoNow === "all" },
+            ...(meTech ? [{ key: "me", label: t("plan.who.me"), on: whoNow === "me" }] : []),
+            ...techs.map((m) => ({ key: m.id, label: m.name, on: whoNow === m.id })),
+          ],
+          onToggle: (k: string) => setWho(k),
         }]
       : []),
     ...(mode !== "day" ? [{ key: "done", title: t("card.filter.show"), options: [{ key: "done", label: t("card.filter.done"), on: showDone }], onToggle: () => setShowDone(!showDone) }] : []),
@@ -110,7 +117,7 @@ export default function Plan() {
     >
       {/* spec 31 §7: «Чей план» and «Показывать выполненные» went to the «Фильтры» sheet — «Мастер» (a search at 10+
           people) and «Показывать»; what is on is a line «Ivan Sokolov ✕» under it */}
-      {filterGroups.length ? <FilterBar<string> items={[]} value="" onChange={() => undefined} groups={filterGroups} onReset={() => { setWho("all"); setShowDone(false); }} /> : null}
+      {filterGroups.length ? <FilterBar<string> items={[]} value="" onChange={() => undefined} groups={filterGroups} onReset={() => setShowDone(false)} /> : null}
       {planner ? <WaitingJobs /> : null}
       {/* «Не назначено» today and tomorrow on top (13 §3.2); the Day keeps its own block of its day (drag from it);
           in the Week it goes under the strip (24 §B: whose plan → the arrows → the strip → «Не назначено» → the days) */}

@@ -34,6 +34,13 @@ export interface FilterGroup {
   onToggle: (key: string) => void;
   /** a search over the rows of the sheet when the group is long (spec 31 §7: «Мастер» of the Plan at 10+ people) */
   searchable?: boolean;
+  /**
+   * its own pill in the row, «Мастер: Все ▾», that opens just this group (spec 31 §7, «План», variant Б of the director
+   * 07.11): a frequent switch the person must see; what is on is said on the pill, not in the chosen line
+   */
+  pill?: string;
+  /** one option at a time: a pick closes the list */
+  single?: boolean;
 }
 
 /** the rows of a group as the sheet shows them: with a search only when the group is searchable and longer than 10 */
