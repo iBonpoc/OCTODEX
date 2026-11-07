@@ -108,7 +108,7 @@ export type Op =
   | { k: "payment.record"; id: string; invoiceId: string; customerId: string; amountCents: number; method: PaymentMethod; reference?: string }
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number; dueDate?: string }
   | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[]; allDay?: boolean }
-  | { k: "company.save"; company: Company; einChanged: boolean }
+  | { k: "company.save"; company: Company; einChanged: boolean; /** the zone was chosen (docs/specs/22 §1.3); absent in older ops */ tzChanged?: boolean }
   | { k: "license.save"; license: CompanyLicense }
   | { k: "license.remove"; id: string }
   | { k: "contact.save"; contact: CompanyContact }
@@ -623,7 +623,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "company.save": {
       const { data: stored } = await read(supabase.from("companies").select([...COMPANY_STORED_COLUMNS, "timezone"].join(", ")).eq("id", c).maybeSingle());
-      await run(supabase.from("companies").update(companyToDb(op.company, (stored ?? {}) as Record<string, unknown>)).eq("id", c));
+      await run(supabase.from("companies").update(companyToDb(op.company, (stored ?? {}) as Record<string, unknown>, op.tzChanged)).eq("id", c));
       if (op.einChanged) {
         const ein = op.company.ein?.trim() || null;
         await run(supabase.from("company_secrets").upsert({ company_id: c, ein }, { onConflict: "company_id" }));

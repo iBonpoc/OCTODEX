@@ -33,4 +33,17 @@ describe("company time zone (spec 22 §1)", () => {
     expect(zoneChoices("Bad/Zone", validZone)).toEqual(US_TIMEZONES);
     expect(zoneChoices(undefined, validZone)).toEqual(US_TIMEZONES);
   });
+  it("the «zone chosen» flag (spec 22 §1.3): a save without it never sends the zone, even one the server lacks", () => {
+    const c = { ...companyFromDb(row, undefined, [], []), timezone: "America/Chicago" };
+    // a long-offline phone saves the name: its old zone must not overwrite another admin's new one
+    expect("timezone" in (companyToDb(c, { ...row, timezone: "America/New_York" }, false) as Record<string, unknown>)).toBe(false);
+    // chosen on «Расписание»: sent (even when the server already has it)
+    expect(companyToDb(c, { ...row, timezone: "America/New_York" }, true).timezone).toBe("America/Chicago");
+    expect(companyToDb(c, { ...row, timezone: "America/Chicago" }, true).timezone).toBe("America/Chicago");
+    // chosen, but this phone does not know it: never sent
+    expect(zoneToSend("Bad/Zone", "America/Denver", true)).toBe(false);
+    // an op of an older build (no flag): as before — when it differs from the server
+    expect(zoneToSend("America/Chicago", "America/New_York", undefined)).toBe(true);
+    expect(zoneToSend("America/Chicago", "America/Chicago", undefined)).toBe(false);
+  });
 });

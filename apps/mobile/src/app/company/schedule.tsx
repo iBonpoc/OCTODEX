@@ -47,7 +47,8 @@ export default function CompanySchedule() {
   // a wall-clock label: a minute of a fixed day on the company clock, shown on the same clock (no DST that day)
   const clock = (m: number) => time(atMinute("2026-01-05", m));
   const save = () => {
-    const undo = store.saveCompany({ timezone: tz, scheduleSettings: s, businessHours: hours });
+    // the zone only when it was chosen here: saving the hours does not send it (docs/specs/22 §1.3)
+    const undo = store.saveCompany({ ...(tz !== c.timezone ? { timezone: tz } : {}), scheduleSettings: s, businessHours: hours });
     toast.show(store.online ? t("co.saved") : t("offline.queued"), undo);
     back();
   };
