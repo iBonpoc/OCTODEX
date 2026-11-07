@@ -2,11 +2,12 @@ import { lateAfterOf } from "@/features/scheduleSettings";
 import { View } from "react-native";
 import { isOpenVisit, visitWhen } from "@/features/schedule";
 import { router } from "expo-router";
-import { useContentWidth } from "@/nav/NavMenu";
-import { component, font, layout, size, space } from "@octo/design-tokens";
+import { component, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
-import { periodNumbers, type Figure, type Period } from "@/features/metrics";
+import { awaitingCounts, funnelShare, periodNumbers, prevReceivedCents, receivedBuckets, type Bucket, type Figure, type Period } from "@/features/metrics";
+import { formatDayKey } from "@/features/zone";
+import { Columns, Meter } from "@/ui/charts";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
 import { buildAttention } from "@/features/attention";
@@ -18,63 +19,110 @@ import { ListCard } from "@/ui/listCard";
 import { useTick } from "@/features/sheets";
 import { NoticesCard } from "@/features/notices";
 import { CompanySetupCard, FirstStepsCard } from "@/features/SetupCards";
-import { Button, Segmented } from "@/ui/controls";
+import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Card, Grid, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
-function Kpi({ label, cents, icon, hint, onPress, width }: { label: string; cents: number; icon: IconKey; hint?: string; onPress?: () => void; width: number }) {
+/** a tile: label · amount · one line of detail (spec 24 A3: two side by side, the label never wraps) */
+function Kpi({ label, cents, icon, hint, chip, onPress }: { label: string; cents: number; icon: IconKey; hint?: string; chip?: string; onPress?: () => void }) {
   const { moneyWhole } = useI18n();
   const { c } = useTheme();
-  const value = moneyWhole(cents);
-  /** three equal tiles; long amounts on narrow phones use the smaller title size so they never wrap or cut */
-  const small = value.length * font.size.title * 0.65 > width - space[3] * 2;
   return (
-    <View style={{ width }}>
     <Card style={{ padding: space[3], flex: 1 }} containerStyle={{ flex: 1 }} onPress={onPress} accessibilityLabel={label}>
-      <RowView gap={space[1]} style={{ alignItems: "flex-start" }}>
-        <View style={{ flexShrink: 0 }}>
-          <Icon name={icon} s={size.iconSm} color={c.mut} />
-        </View>
-        {/* two caption lines reserved: amounts in one row stay on one line even when a label wraps (unslop 05.11) */}
-        <T v="caption" tone="mut" style={{ flex: 1, minHeight: font.size.caption * font.lineHeight.body * 2 }}>
+      <RowView gap={space[1]}>
+        <Icon name={icon} s={size.iconSm} color={c.mut} />
+        <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
           {label}
         </T>
       </RowView>
-      <T v={small ? "heading" : "title"} tabular numberOfLines={1}>
-        {value}
+      <T v="title" tabular numberOfLines={1}>
+        {moneyWhole(cents)}
       </T>
-      {hint ? (
-        <T v="micro" tone="mut">
-          {hint}
-        </T>
-      ) : null}
+      <RowView gap={space[1]} style={{ flexWrap: "wrap" }}>
+        {hint ? (
+          <T v="micro" tone="mut">
+            {hint}
+          </T>
+        ) : null}
+        {/* overdue is a status: icon + word (rule 2) */}
+        {chip ? <StatusChip status="bad" label={chip} soft /> : null}
+      </RowView>
     </Card>
-    </View>
   );
 }
 
-/** One step of the sales funnel: count (and money), share of the previous step. */
-function FunnelRow({ icon, label, value, share, onPress }: { icon: IconKey; label: string; value: string; share?: number; onPress?: () => void }) {
-  const { t } = useI18n();
+/** «Получено»: the main number of the period with columns by days / weeks and the change against the period before */
+function Received({ period, onPress }: { period: Period; onPress: () => void }) {
+  const { t, moneyWhole, lang } = useI18n();
   const { c } = useTheme();
-  // a compact option row (48): the share is plain muted text, not a chip (rule 2: color only for status)
+  const { db } = useStore();
+  const n = periodNumbers(db, period);
+  const buckets = receivedBuckets(db, period);
+  const prev = prevReceivedCents(db, period);
+  const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
+  const label = (b: Bucket) => (period === "month" ? `${Number(b.from.slice(8))}–${Number(b.to.slice(8))}` : formatDayKey(b.from, { weekday: "short" }, loc));
+  const diff = n.receivedCents - prev;
+  const vs = period === "today" ? "today2.vsToday" : period === "week" ? "today2.vsWeek" : "today2.vsMonth";
+  const empty = buckets.every((b) => b.cents === 0);
   return (
-    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label}: ${value}`}>
-      <RowView gap={space[3]} style={{ minHeight: component.rowOption, alignItems: "center" }}>
-        <Icon name={icon} />
-        <T v="body" w="semibold" style={{ flex: 1 }}>
-          {label}
+    <Card onPress={onPress} accessibilityLabel={`${t("today.received")}: ${moneyWhole(n.receivedCents)}`} style={{ gap: space[3] }}>
+      <RowView gap={space[1]}>
+        <Icon name="wallet" s={size.iconSm} color={c.mut} />
+        <T v="caption" tone="mut" style={{ flex: 1 }} numberOfLines={1}>
+          {t("today.received")}
         </T>
-        {share !== undefined ? (
-          <T v="caption" tone="mut" tabular>
-            {t("today.share", { n: share })}
+        {/* growth is not a status — an arrow and words, no colour (spec 24 A3); nothing to compare with → nothing */}
+        {prev > 0 && diff !== 0 ? (
+          <T v="caption" tone="mut" tabular numberOfLines={1}>
+            {t("today2.change", { arrow: diff > 0 ? "▲" : "▼", amount: moneyWhole(Math.abs(diff)), vs: t(vs) })}
           </T>
         ) : null}
-        <T v="body" w="semibold" tabular>
-          {value}
-        </T>
-        {onPress ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
       </RowView>
+      <View>
+        <T v="display" w="semibold" tabular numberOfLines={1}>
+          {moneyWhole(n.receivedCents)}
+        </T>
+        <T v="caption" tone="mut">
+          {t("today.nPayments", { n: n.payments })}
+        </T>
+      </View>
+      <Columns
+        testID="received-chart"
+        a11y={t("today2.chartA11y", { list: buckets.map((b) => `${label(b)} ${moneyWhole(b.cents)}`).join(", ") })}
+        items={buckets.map((b) => ({ key: b.from, value: b.cents, label: label(b), valueLabel: moneyWhole(b.cents), current: b.current, future: b.future }))}
+      />
+      {empty ? (
+        <T v="caption" tone="mut">
+          {t("today2.empty")}
+        </T>
+      ) : null}
+    </Card>
+  );
+}
+
+/** One funnel step: a count (no money — it is in «Получено» and the tiles), a neutral bar, the share in words. */
+function FunnelRow({ icon, label, count, max, share, index, onPress }: { icon: IconKey; label: string; count: number; max: number; share?: string; index: number; onPress?: () => void }) {
+  const { c } = useTheme();
+  return (
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={`${label}: ${count}`}>
+      <View style={{ minHeight: component.rowOption, justifyContent: "center", gap: space[1] }}>
+        <RowView gap={space[3]}>
+          <Icon name={icon} />
+          <T v="body" w="semibold" style={{ flex: 1 }} numberOfLines={1}>
+            {label}
+          </T>
+          <T v="body" w="semibold" tabular>
+            {String(count)}
+          </T>
+          {onPress ? <Icon name="chevronRight" s={size.iconSm} color={c.mut} /> : null}
+        </RowView>
+        <Meter share={max > 0 ? count / max : 0} index={index} />
+        {share ? (
+          <T v="caption" tone="mut" tabular>
+            {share}
+          </T>
+        ) : null}
+      </View>
     </Press>
   );
 }
@@ -82,7 +130,7 @@ function FunnelRow({ icon, label, value, share, onPress }: { icon: IconKey; labe
 /** Owner home: money for today / week / month, the sales funnel and what needs a decision. */
 export default function Today() {
   useTick();
-  const { t, day, time, moneyWhole } = useI18n();
+  const { t, day, time } = useI18n();
   const { db, role } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
   const n = periodNumbers(db, period);
@@ -91,9 +139,9 @@ export default function Today() {
   const attention = buildAttention(db, role);
   // invited or switched off people are not a crew (7-2)
   const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending);
-  // the screen's own width: on 820/1280 the side menu takes the left (useContentWidth, 13 §2.5)
-  const screenW = useContentWidth();
-  const tileW = Math.floor((Math.min(screenW, layout.contentMax) - space[4] * 2 - space[2] * 2) / 3);
+  const aw = awaitingCounts(db);
+  const fmax = Math.max(n.leads, n.sent, n.signed);
+  const shareText = (key: "today2.ofLeads" | "today2.ofSent", v: number | undefined) => (v === undefined ? undefined : t(key, { n: v }));
   return (
     <Screen title={t("today.title")} help={t("help.today")} hintKey="today" fab="home" home subtitle={day(new Date().toISOString())}>
       <Segmented<Period>
@@ -105,18 +153,29 @@ export default function Today() {
           { key: "month", label: t("plan.month") },
         ]}
       />
-      <View style={{ flexDirection: "row", gap: space[2] }}>
-        <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} onPress={() => open("signed")} width={tileW} />
-        <Kpi label={t("today.received")} cents={n.receivedCents} icon="wallet" hint={t("today.nPayments", { n: n.payments })} onPress={() => open("received")} width={tileW} />
-        <Kpi label={t("today.awaiting")} cents={n.awaitingCents} icon="invoice" hint={t("today.allTime")} onPress={() => router.push("/invoice?f=owed")} width={tileW} />
-      </View>
-      <Card>
-        <SectionTitle title={t("today.funnel")} />
-        <FunnelRow icon="inbox" label={t("today.f.leads")} value={String(n.leads)} onPress={() => open("leads")} />
-        <FunnelRow icon="send" label={t("today.f.sent")} value={String(n.sent)} share={n.leads ? n.leadToSentPct : undefined} onPress={() => open("sent")} />
-        <FunnelRow icon="signature" label={t("today.f.signed")} value={`${n.signed} · ${moneyWhole(n.signedCents)}`} share={n.sent ? n.sentToSignedPct : undefined} onPress={() => open("signed")} />
-        <FunnelRow icon="wallet" label={t("today.f.paid")} value={moneyWhole(n.receivedCents)} onPress={() => open("received")} />
-      </Card>
+      {/* spec 24 A: the main number with columns, two tiles, the funnel in counts as bars (founder 07.11) */}
+      <Grid>
+        <Received period={period} onPress={() => open("received")} />
+        <View style={{ gap: space[3] }}>
+          <View style={{ flexDirection: "row", gap: space[2] }}>
+            <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} onPress={() => open("signed")} />
+            <Kpi
+              label={t("today.awaiting")}
+              cents={n.awaitingCents}
+              icon="invoice"
+              hint={t("today2.nInvoices", { n: aw.open })}
+              chip={aw.overdue > 0 ? t("today2.overdue", { n: aw.overdue }) : undefined}
+              onPress={() => router.push("/invoice?f=owed")}
+            />
+          </View>
+          <Card>
+            <SectionTitle title={t("today.funnel")} />
+            <FunnelRow icon="inbox" index={0} label={t("today.f.leads")} count={n.leads} max={fmax} onPress={() => open("leads")} />
+            <FunnelRow icon="send" index={1} label={t("today.f.sent")} count={n.sent} max={fmax} share={shareText("today2.ofLeads", funnelShare(n.sent, n.leads))} onPress={() => open("sent")} />
+            <FunnelRow icon="signature" index={2} label={t("today.f.signed")} count={n.signed} max={fmax} share={shareText("today2.ofSent", funnelShare(n.signed, n.sent))} onPress={() => open("signed")} />
+          </Card>
+        </View>
+      </Grid>
       <CompanySetupCard />
       <FirstStepsCard />
       <NoticesCard />

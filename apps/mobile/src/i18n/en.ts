@@ -2156,4 +2156,15 @@ export const en: Dict = {
   "job5.msg.allDay": "Hi {name}! {company} will come to do the work on {date}, during the day. If the day does not work, just reply to this message.",
   "job5.allDaySaved": "Scheduled for {date}, all day",
   "job5.allDayChip": "All day",
+  // today2.* — «Сегодня»: «Получено» with columns, tiles, funnel bars (spec 24 A, founder fixes chat)
+  "today2.vsToday": "vs yesterday",
+  "today2.vsWeek": "vs last week",
+  "today2.vsMonth": "vs last month",
+  "today2.change": "{arrow} {amount} {vs}",
+  "today2.empty": "Shows up after the first payment",
+  "today2.chartA11y": "Received: {list}",
+  "today2.nInvoices": "Invoices: {n}",
+  "today2.overdue": "Overdue: {n}",
+  "today2.ofLeads": "{n}% of leads",
+  "today2.ofSent": "{n}% of sent",
 };

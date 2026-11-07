@@ -6,6 +6,8 @@ import type { DB } from "@/data/types";
 import { addDays, addMonths, isoDayKey, todayKey, weekStart, type DayKey } from "./calendar";
 import { estimateListAmount } from "./estimateDoc";
 import { invoiceBalance } from "./invoiceStatus";
+import { clientMoney } from "@octo/estimating-engine";
+import { isOverdue } from "@/data/selectors";
 
 export type Period = "today" | "week" | "month";
 
@@ -89,3 +91,54 @@ export function figureItems(db: DB, f: Figure, p: Period, today?: DayKey): Figur
       return { ...none, invoices: db.invoices.filter((i) => invoiceBalance(i).owesCents > 0).sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "")) };
   }
 }
+
+/* ---- spec 24 A: the «Получено» card — money by days / weeks of the period, the previous period, open invoices ---- */
+
+export interface Bucket {
+  /** first day of the bucket (a day or a week of the month) */
+  from: DayKey;
+  to: DayKey;
+  cents: number;
+  /** the bucket with today in it */
+  current: boolean;
+  /** all of it is after today (only the track is drawn) */
+  future: boolean;
+}
+
+/** received money, integer cents, through the engine (rule 8): net of refunds, never below 0 */
+const receivedIn = (db: Pick<DB, "payments">, r: { from: DayKey; to: DayKey }) => clientMoney([], db.payments.filter((x) => inRange(x.at, r)).map((x) => x.amountCents)).paidTotalCents;
+
+/**
+ * Columns of the «Получено» chart (spec 24 A3): «Сегодня» — the last 7 days (today on the right);
+ * «Неделя» — Mon…Sun of this week; «Месяц» — weeks of the month 1–7, 8–14, 15–21, 22–28, 29–end.
+ * Days are the company's calendar days (isoDayKey).
+ */
+export function receivedBuckets(db: Pick<DB, "payments">, p: Period, today: DayKey = todayKey()): Bucket[] {
+  const day = (k: DayKey): Bucket => ({ from: k, to: k, cents: receivedIn(db, { from: k, to: k }), current: k === today, future: k > today });
+  if (p === "today") return Array.from({ length: 7 }, (_, i) => day(addDays(today, i - 6)));
+  if (p === "week") return Array.from({ length: 7 }, (_, i) => day(addDays(weekStart(today), i)));
+  const { from, to } = periodRange("month", today);
+  const out: Bucket[] = [];
+  for (let k = from; k <= to; k = addDays(k, 7)) {
+    const end = addDays(k, 6) < to ? addDays(k, 6) : to;
+    out.push({ from: k, to: end, cents: receivedIn(db, { from: k, to: end }), current: today >= k && today <= end, future: k > today });
+  }
+  return out;
+}
+
+/** the same span one period back: yesterday / last week / last month (for «▲ $420 к прошлой неделе») */
+export function prevPeriodRange(p: Period, today: DayKey = todayKey()): { from: DayKey; to: DayKey } {
+  if (p === "today") return periodRange("today", addDays(today, -1));
+  if (p === "week") return periodRange("week", addDays(weekStart(today), -7));
+  return periodRange("month", addMonths(`${today.slice(0, 8)}01`, -1));
+}
+export const prevReceivedCents = (db: Pick<DB, "payments">, p: Period, today: DayKey = todayKey()): number => receivedIn(db, prevPeriodRange(p, today));
+
+/** «Ждёт оплаты»: how many invoices are open and how many of them are overdue (company days) */
+export function awaitingCounts(db: Pick<DB, "invoices">, now: number = Date.now()): { open: number; overdue: number } {
+  const open = db.invoices.filter((i) => invoiceBalance(i).owesCents > 0);
+  return { open: open.length, overdue: open.filter((i) => !!i.dueDate && isOverdue(i.dueDate, now)).length };
+}
+
+/** a funnel step's share of the step before, shown only when it means something: base > 0 and ≤ 100 % (24 A3) */
+export const funnelShare = (part: number, base: number): number | undefined => (base > 0 && part <= base ? pct(part, base) : undefined);

@@ -2155,6 +2155,17 @@ export const ru = {
   "job5.msg.allDay": "Здравствуйте, {name}! {company} приедет на работы {date}, в течение дня. Если день не подходит, ответьте на это сообщение.",
   "job5.allDaySaved": "Запланировано на {date}, весь день",
   "job5.allDayChip": "Весь день",
+  // today2.* — «Сегодня»: «Получено» with columns, tiles, funnel bars (spec 24 A, founder fixes chat)
+  "today2.vsToday": "к вчерашнему дню",
+  "today2.vsWeek": "к прошлой неделе",
+  "today2.vsMonth": "к прошлому месяцу",
+  "today2.change": "{arrow} {amount} {vs}",
+  "today2.empty": "Появятся после первой оплаты",
+  "today2.chartA11y": "Получено: {list}",
+  "today2.nInvoices": "Счетов: {n}",
+  "today2.overdue": "Просрочено: {n}",
+  "today2.ofLeads": "{n}% от лидов",
+  "today2.ofSent": "{n}% от отправленных",
 } as const;
 
 export type DictKey = keyof typeof ru;
