@@ -60,10 +60,10 @@ exports.run = async (h) => {
   await h.go("/triage");
   await h.expectText(item, "31 min past the start: late");
 
-  // a dispatcher does not open the settings (the company section is the director's)
+  // the office sees the schedule settings but cannot change them (spec 26 §3, decision 07.11)
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("dispatcher")));
   await h.go("/company/schedule");
-  const body = await h.text();
-  h.expect(!/«Опаздывает» через/.test(body), "the dispatcher does not see the schedule settings");
+  await h.expectText(/Только просмотр — менять может директор/, "the dispatcher sees the schedule read-only");
+  h.expect((await p.getByRole("button", { name: "Сохранить", exact: true }).locator("visible=true").count()) === 0, "no «Сохранить» for the dispatcher");
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 };

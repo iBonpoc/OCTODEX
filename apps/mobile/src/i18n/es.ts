@@ -2229,4 +2229,6 @@ export const es: Dict = {
   // fix.sign.* — the full-screen signature (spec 29)
   "fix.sign.expand": "Pantalla completa",
   "fix.sign.done": "Listo",
+  // fix.co.* — company settings read-only for the office (spec 26 §3)
+  "fix.co.readOnly": "Solo lectura — los cambios los hace el director",
 };

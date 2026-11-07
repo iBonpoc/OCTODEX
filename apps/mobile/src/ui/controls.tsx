@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { ScrollView, TextInput, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
@@ -13,6 +13,17 @@ import { component, font, motion, radius, space, statusIcon, type StatusName, si
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { FIELD, type FieldType } from "./fieldTypes";
+
+/**
+ * «Только просмотр» (spec 26 §3, 07.11: the office sees the company settings but only the director changes them).
+ * Inside <ReadOnly value> fields do not take text and choice controls do not change (shown dimmed, a11y disabled).
+ * Off by default — every existing screen behaves as before. Buttons that save are hidden by the screen itself.
+ */
+const ReadOnlyCtx = createContext(false);
+export function ReadOnly({ value, children }: { value: boolean; children: ReactNode }) {
+  return <ReadOnlyCtx.Provider value={value}>{children}</ReadOnlyCtx.Provider>;
+}
+export const useReadOnly = () => useContext(ReadOnlyCtx);
 export { fieldSpec, type FieldType } from "./fieldTypes";
 
 /* ---------- Button (DS: visible ≤ 36, hit 44) ---------- */
@@ -149,6 +160,7 @@ export function StatusChip({ status, label, soft }: { status: StatusName; label:
 /* ---------- Toggle (spring knob) ---------- */
 export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boolean) => void; label: string }) {
   const { c } = useTheme();
+  const ro = useReadOnly();
   const reduce = useReducedMotion();
   const { w, h, knob } = component.switch;
   const pad = (h - knob) / 2 - 1;
@@ -161,9 +173,10 @@ export function Toggle({ on, onChange, label }: { on: boolean; onChange: (v: boo
   return (
     <Press
       onPress={() => onChange(!on)}
+      disabled={ro}
       visibleHeight={h}
       accessibilityRole="switch"
-      accessibilityState={{ checked: on }}
+      accessibilityState={{ checked: on, disabled: ro }}
       accessibilityLabel={label}
       style={{
         width: w,
@@ -198,6 +211,7 @@ export function Segmented<K extends string>({
   /** many tabs: one line that scrolls sideways on a narrow phone (the page itself never scrolls sideways) */
   scroll?: boolean;
 }) {
+  const ro = useReadOnly();
   const { c } = useTheme();
   const reduce = useReducedMotion();
   const [layouts, setLayouts] = useState<Record<string, { x: number; w: number }>>({});
@@ -249,6 +263,7 @@ export function Segmented<K extends string>({
           <Press
             key={it.key}
             onPress={() => onChange(it.key)}
+            disabled={ro}
             visibleHeight={h}
             accessibilityRole="tab"
             accessibilityState={{ selected: sel }}
@@ -422,6 +437,7 @@ export function TextField({
   /** return key on the keyboard */
   onSubmit?: () => void;
 }) {
+  const ro = useReadOnly();
   const { c } = useTheme();
   const { wide } = useDevice();
   const f = FIELD[type];
@@ -445,6 +461,8 @@ export function TextField({
       {icon ? <Icon name={icon} s={sizes.iconSm} color={c.mut} /> : null}
       <TextInput
         value={value}
+        editable={!ro}
+        aria-disabled={ro || undefined}
         onChangeText={(v) => onChangeText(f.fmt ? f.fmt(v) : v)}
         placeholder={placeholder}
         placeholderTextColor={c.mut}
@@ -494,12 +512,13 @@ export function Stepper({
   label: string;
   unit?: string;
 }) {
+  const ro = useReadOnly();
   const { c } = useTheme();
   const b = component.dockBtn;
   const btn = (icon: IconKey, delta: number, a11y: string) => (
     <Press
       onPress={() => onChange(Math.min(max, Math.max(min, value + delta)))}
-      disabled={delta < 0 ? value <= min : value >= max}
+      disabled={ro || (delta < 0 ? value <= min : value >= max)}
       visibleHeight={b}
       accessibilityRole="button"
       accessibilityLabel={a11y}
@@ -536,6 +555,7 @@ export function ChoiceChips<K extends string>({
   /** one line (put inside a horizontal ScrollView) */
   nowrap?: boolean;
 }) {
+  const ro = useReadOnly();
   const { c } = useTheme();
   const h = component.button.sm;
   return (
@@ -546,6 +566,7 @@ export function ChoiceChips<K extends string>({
           <Press
             key={it.key}
             onPress={() => onChange(it.key)}
+            disabled={ro}
             visibleHeight={h}
             accessibilityRole="radio"
             // web: a radio is read by aria-checked, not aria-selected (BOARD debt «Работы» №3)
@@ -583,6 +604,7 @@ export function MultiChips<K extends string>({
   value: K[];
   onChange: (v: K[]) => void;
 }) {
+  const ro = useReadOnly();
   const { c } = useTheme();
   const h = component.button.sm;
   return (
@@ -593,6 +615,7 @@ export function MultiChips<K extends string>({
           <Press
             key={it.key}
             onPress={() => onChange(sel ? value.filter((x) => x !== it.key) : [...value, it.key])}
+            disabled={ro}
             visibleHeight={h}
             accessibilityRole="checkbox"
             accessibilityState={{ checked: sel }}

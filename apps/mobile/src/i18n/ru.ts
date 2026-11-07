@@ -2228,6 +2228,8 @@ export const ru = {
   // fix.sign.* — the full-screen signature (spec 29)
   "fix.sign.expand": "Развернуть на весь экран",
   "fix.sign.done": "Готово",
+  // fix.co.* — company settings read-only for the office (spec 26 §3)
+  "fix.co.readOnly": "Только просмотр — менять может директор",
 } as const;
 
 export type DictKey = keyof typeof ru;
