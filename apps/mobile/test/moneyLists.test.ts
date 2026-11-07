@@ -1,8 +1,8 @@
 /** «Счета» (one path to debts) and «Оплаты» of wave 8 — docs/specs/18-money-reports.md §7. Days are the company's (LA), not the phone's. */
 import { afterEach, describe, expect, it } from "vitest";
-import type { Invoice, Payment } from "../src/data/types";
+import type { DB, Expense, Invoice, Payment } from "../src/data/types";
 import { setZone } from "../src/features/zone";
-import { asInvoiceFilter, canSeeInvoiceList, canSeePayments, daysOverdue, invoiceList, owedGroup, paymentsIn } from "../src/features/moneyLists";
+import { asInvoiceFilter, canSeeInvoiceList, canSeePayments, daysOverdue, invoiceList, matchExpense, owedGroup, paymentsIn } from "../src/features/moneyLists";
 
 const LA = "America/Los_Angeles";
 afterEach(() => setZone(LA));
@@ -123,5 +123,25 @@ describe("one path to debts: «Ждёт оплаты» on Today = «Не опл�
     expect(v.owedCents).toBe(periodNumbers(db, "today").awaitingCents);
     expect(v.groups.flatMap((g) => g.items.map((i) => i.id)).sort()).toEqual(fig.invoices.map((i) => i.id).sort());
     expect(v.owedCents).toBeGreaterThan(0);
+  });
+});
+
+describe("the search of «Расходы» (spec 31, one rule)", () => {
+  const db = {
+    jobs: [{ id: "j1", propertyId: "p1", title: "Seamless gutters" }],
+    properties: [{ id: "p1", customerId: "c1" }],
+    customers: [{ id: "c1", name: "Mitchell" }],
+    members: [{ id: "m1", name: "Alex Petrov" }],
+  } as unknown as Pick<DB, "jobs" | "customers" | "properties" | "members">;
+  const x = { id: "e1", vendor: "Home Depot", category: "materials", amountCents: 100, at: "2026-11-06T18:00:00.000Z", jobId: "j1", memberId: "m1" } as Expense;
+  it("the vendor, the category word, the work, its client, who paid; no text — every expense", () => {
+    expect(matchExpense(db, x, "")).toBe(true);
+    expect(matchExpense(db, x, " home ")).toBe(true);
+    expect(matchExpense(db, x, "матер", "Материалы")).toBe(true);
+    expect(matchExpense(db, x, "gutters")).toBe(true);
+    expect(matchExpense(db, x, "mitch")).toBe(true);
+    expect(matchExpense(db, x, "petrov")).toBe(true);
+    expect(matchExpense(db, x, "zzz")).toBe(false);
+    expect(matchExpense(db, { ...x, jobId: null }, "mitch")).toBe(false);
   });
 });

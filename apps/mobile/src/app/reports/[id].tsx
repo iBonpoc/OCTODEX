@@ -6,7 +6,9 @@ import { asPaymentPeriod, PAYMENT_PERIODS, type PaymentPeriod } from "@/features
 import { asReport, canExportCsv, canSeeReports, collectedReport, csvMoney, owedReport, REPEAT, salesReport, sourcesReport, toCsv, UNKNOWN, type ReportId } from "@/features/reports";
 import { shareCsv } from "@/features/csvShare";
 import { useDevice } from "@/theme/ThemeProvider";
-import { Button, Segmented } from "@/ui/controls";
+import { Button } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
+import { View } from "react-native";
 import { T } from "@/ui/primitives";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { Card, CardList, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -39,9 +41,22 @@ export default function Report() {
     canExportCsv(db, role) ? (
       <Button label={t("rpt.csv")} icon="doc" size="sm" variant="secondary" onPress={() => shareCsv(`${r}-${p}.csv`, toCsv(header, rows)).catch(() => {})} />
     ) : undefined;
+  // the periods are a lane, as on «Оплаты» (spec 31, one rule — director 07.11); no search: a report is figures, not a list
   const periods = r === "owed" ? null : (
-    <Segmented<PaymentPeriod> scroll value={p} onChange={(x) => router.setParams({ p: x })} items={PAYMENT_PERIODS.map((k) => ({ key: k, label: t(PERIOD[k]) }))} />
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <FilterBar<PaymentPeriod> value={p} onChange={(x) => router.setParams({ p: x })} items={PAYMENT_PERIODS.map((k) => ({ key: k, label: t(PERIOD[k]) }))} />
+    </View>
   );
+  // the periods and «CSV»: one row on a tablet and a desktop; on a phone the lane takes its own row (4 periods would hide behind «CSV»)
+  const head = (csv: ReturnType<typeof csvBtn>) =>
+    device === "phone" ? (
+      <>
+        {periods}
+        {csv ? <RowView style={{ justifyContent: "flex-end" }}>{csv}</RowView> : null}
+      </>
+    ) : (
+      <RowView style={{ justifyContent: "space-between" }}>{periods}{csv}</RowView>
+    );
   const total = (label: string, cents: number, note?: string) => (
     <Card>
       <T v="caption" tone="mut">{label}</T>
@@ -90,7 +105,7 @@ export default function Report() {
     const rows = [...c.byMethod.map((x) => [t("rpt.byMethod"), method(x.key), x.count, csvMoney(x.cents)]), ...c.byPerson.map((x) => [t("rpt.byPerson"), personName(x.key), x.count, csvMoney(x.cents)])];
     body = (
       <>
-        <RowView style={{ justifyContent: "space-between", flexWrap: "wrap" }}>{periods}{csvBtn(rows, [t("rpt.group"), t("rpt.name"), t("rpt.count"), t("rpt.amount")])}</RowView>
+        {head(csvBtn(rows, [t("rpt.group"), t("rpt.name"), t("rpt.count"), t("rpt.amount")]))}
         {total(t("rpt.collected.title"), c.totalCents, t("rpt.collected.note", { n: c.count }))}
         {c.count === 0 ? <Empty icon="wallet" title={t("mny.payments.empty")} /> : (
           <>
@@ -105,10 +120,7 @@ export default function Report() {
     const line = (label: string, v: string) => <ListRow title={label} right={<T v="body" tabular>{v}</T>} />;
     body = (
       <>
-        <RowView style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-          {periods}
-          {csvBtn([[t("rpt.sales.sent"), s.sent], [t("rpt.sales.signed"), s.signed], [t("rpt.sales.value"), csvMoney(s.signedCents)], [t("rpt.sales.pct"), s.signedPct]], [t("rpt.name"), t("rpt.amount")])}
-        </RowView>
+        {head(csvBtn([[t("rpt.sales.sent"), s.sent], [t("rpt.sales.signed"), s.signed], [t("rpt.sales.value"), csvMoney(s.signedCents)], [t("rpt.sales.pct"), s.signedPct]], [t("rpt.name"), t("rpt.amount")]))}
         {total(t("rpt.sales.value"), s.signedCents)}
         <Card>
           {line(t("rpt.sales.sent"), String(s.sent))}
@@ -124,7 +136,7 @@ export default function Report() {
     const rows = s.rows.map((x) => [sourceName(x.key), x.count, csvMoney(x.cents)]);
     body = (
       <>
-        <RowView style={{ justifyContent: "space-between", flexWrap: "wrap" }}>{periods}{csvBtn(rows, [t("rpt.source"), t("rpt.count"), t("rpt.amount")])}</RowView>
+        {head(csvBtn(rows, [t("rpt.source"), t("rpt.count"), t("rpt.amount")]))}
         {total(t("rpt.sources.revenue"), s.totalCents, t("rpt.sources.hint"))}
         {s.rows.length === 0 ? <Empty icon="megaphone" title={t("rpt.sources.empty")} /> : breakdown(t("rpt.source"), s.rows, sourceName, s.totalCents)}
       </>
