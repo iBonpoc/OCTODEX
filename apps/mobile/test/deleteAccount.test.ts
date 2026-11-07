@@ -191,6 +191,11 @@ describe("unit:deleteAccount — the device is wiped", () => {
     expect(log[0]).toMatch(/disk full/);
     expect(s.st.set[WIPE_PENDING_KEY]).toBe("1");
   });
+  it("review #240 №2: the mark keeps the deleted person's id, so the repeat knows whose ops leave the outbox", async () => {
+    const s = store(true);
+    expect(await wipeDevice(s, () => {}, "u1")).toBe(false);
+    expect(s.st.set[WIPE_PENDING_KEY]).toBe("u1");
+  });
 });
 
 describe("unit:deleteAccount — rate limits (review #220 №3)", () => {
