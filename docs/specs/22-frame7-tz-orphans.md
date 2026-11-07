@@ -97,7 +97,7 @@
 
 **Варианты (а).** А — проверка в каждой из трёх функций (рекомендую: точный текст, ветка `closed` раньше `sent → viewed` и уведомлений); Б — триггер на `estimate_approvals`/`payments` «компания закрыта» (ловит любой путь, но заблокирует и будущую запись настоящей оплаты Stripe по счёту, оплаченному до закрытия); В — `estimate_link_open` = false у закрытой (одна правка, но страница скажет «срок истёк» и покажет телефон). Берём А.
 
-**а+б — одна миграция** (время — у руководителя):
+**а+б — миграция `20261107070000`** (в — `20261107080000`; время от руководителя):
 - `app.portal_estimate_base`: копия 180000 + сразу после `select co`: `closed_at is not null` → `{status:'closed', company:{name}}` (без телефона — вопрос 1 §3.3; ни `viewed`, ни уведомления).
 - `portal_accept` (копия 240000) и `portal_pay_simulated` (копия 090000): первой проверкой после поиска сметы → `company closed` (`42501`), раньше повтора и подписи.
 - `email_claim` (копия 350000): письмо закрытой компании → `expired`, `null` (статус уже есть в check).
@@ -105,11 +105,19 @@
 - Приложение (файлы «Смет»: `p/[token].tsx`; `cloud/portal.ts` не меняется — статус проходит как есть): `status === "closed"` проверяется первым → карточка `neutral` «Компания «X» больше не работает с документами по этой ссылке», под `I18nOverride lang={data.lang}`; ключи `fr8.portal.closed` RU/EN/ES.
 - **T76**: закрытая компания — `portal_estimate` → `closed`, только имя, без телефона и `doc`; статус сметы не меняется, уведомлений нет; `portal_accept`, `portal_pay_simulated` → `company closed`, подписи и оплаты нет; `email_claim` → `null`, строка `expired`; открытая компания — всё как было (контроль). **e2e 113** (6 видов): `/p/<token>` неизвестного устройству токена, ответ `rpc/portal_estimate` подменён в браузере (`page.route`, без сети) на `closed` с `doc_language: es` → текст на испанском, нет кнопок подписи/оплаты.
 
+**Поправки security-check (07.11), входят в план:**
+- Обёртка `public.portal_estimate` к ответу `closed` **не** дописывает `simulated_pay` (только `doc_language`); T76 сверяет точный набор ключей `{status, company:{name}, doc_language}`. Имя — `coalesce(nullif(dba,''), name)`; без phone, legal_name, logo, номера сметы.
+- `closed` раньше `expired`/`declined` и раньше записи `viewed`: не меняются `status`, `viewed_count`, `last_viewed_at`, нет `notifications`.
+- `portal_accept`: проверка сразу после `select … for update` — до `on_site` и до ветки повтора (повтор после закрытия → `company closed`). Поэтому **приложение** (`cloud/portal.ts`, `p/[token].tsx`): на ошибке `company closed` у подписи и оплаты не тост с сырым английским текстом, а перечитать `portal_estimate` и показать карточку `closed` на языке клиента.
+- `email_claim`: проверка закрытой компании **до** `status = 'sending', attempts + 1` (после истечения 24 ч); T76 — `attempts` и `to_email` не меняются. Будущий отправщик (П1b) берёт письма только через `email_claim`.
+- T76 ещё: пустой `dba` → `name`; новых строк в `estimate_approvals`, `payments`, `email_outbox` нет; права прежние (anon — `portal_*`, `email_claim` — только service_role); upgrade-тест на текущей базе.
+- `my_closed_companies()`: без параметров; `auth.uid()` не null, `not app.is_anonymous_user()`, `app.account_alive()` (сам удалённый владелец с живым токеном не видит — его членство получает тот же `now()`); `co.closed_at is not null`; показ — 90 дней после закрытия. Критерий держится на одном `now()` в `delete_account` — комментарий в новой миграции и проверка `deleted_at = closed_at` в T77. Отключённые (`disabled`) при закрытии тоже становятся `deleted` → видят (это их компания); приглашения отозваны, не видят.
+
 **в — второй PR, миграция + T77:**
 - `public.my_closed_companies()` — `security definer`, `stable`, `search_path = ''`: мои членства `status = 'deleted'` и `deleted_at >= co.closed_at`, только `company_id`, `name` (dba/name), `closed_at`. `revoke all … from public, anon`, `grant execute … to authenticated`.
 - `cloud/auth.tsx`: без активных членств (как проверка «удалён») — вызов, `closedCompanies` в контексте; без ответа — не показываем.
 - Экран «вход без компании» (`settings/index.tsx`, блок `account.noCompany`): карточка `warn` «Компания «X» закрыта владельцем»; неотправленные изменения этой компании (`owner.companyId`) — «N изменений не отправлено: компания «X» закрыта» и «Убрать» (подтверждение, правило 5). Нужен доступ из стора к чужой по компании очереди: `unsentFor(companyId)` / `dropUnsent(companyId)` — `store.tsx` общий («Лиды»), отдельным маленьким PR или с их «да».
-- **T77**: удалённый вместе с закрытием видит компанию; удалённый раньше закрытия, активный член другой компании, чужой — нет; `anon` не исполняет. unit: выбор неотправленных по компании и «Убрать».
+- **T77**: удалённый вместе с закрытием (и бывший отключённый) видит компанию, `deleted_at = closed_at`; удалённый раньше закрытия (подстановкой данных), сам удалённый владелец с живым токеном, активный член другой компании, чужой — нет; закрыта больше 90 дней — нет; `anon` и PUBLIC не исполняют, функция в списке T52. unit: выбор неотправленных по компании и «Убрать».
 
 ## 4. PR
 1. **PR-A** (пояс): миграция 20261107050000 + upgrade-тест, T75, `companyMap.ts`, `ops.ts` (общий, 1 строка), `schedule.tsx`, unit, e2e 111.
