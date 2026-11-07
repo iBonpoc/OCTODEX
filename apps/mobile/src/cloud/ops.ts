@@ -800,6 +800,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
             unit_price_cents: it.priceCents, unit_cost_cents: it.costCents ?? null, vendor: it.vendor ?? null,
             vendor_tax_bps: it.vendorTaxBps ?? null, markup_bps: it.markupBps ?? null,
             components: (it.components ?? []).map((x) => ({ item_id: x.itemId, qty: x.qty })), is_placeholder_price: !!it.placeholder,
+            // C3 (docs/specs/33 П16): only what is set — an item without them never writes the new columns
+            ...(it.attributes !== undefined ? { attributes: it.attributes } : {}),
+            ...(it.purchaseUnit !== undefined ? { purchase_unit: it.purchaseUnit.trim() || null } : {}),
+            ...(it.packSize !== undefined ? { pack_size: it.packSize || null } : {}),
           },
           { onConflict: "id" },
         ),

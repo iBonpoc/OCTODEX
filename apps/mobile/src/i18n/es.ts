@@ -715,6 +715,7 @@ export const es: Dict = {
   "cat.saved": "Guardado: {name}",
   "cat.remove": "Quitar del catálogo",
   "cat.removed": "Quitado: {name}",
+  "cat.attributes": "Propiedades: {list}",
   "cat.placeholder": "precio de prueba",
   "cat.empty": "Aún vacío",
   "cat.need": "Indique nombre y precio",

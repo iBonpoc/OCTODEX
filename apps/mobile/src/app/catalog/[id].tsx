@@ -8,6 +8,7 @@ import type { CatalogItem, CatalogKind } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { uid, kitPrice } from "@/features/estimateDoc";
 import { CatalogPicker, kindLabel } from "@/features/estimatePickers";
+import { attributesLine } from "@/features/catalogMatch";
 import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -57,9 +58,17 @@ export default function CatalogItemScreen() {
     <Screen title={found ? t("cat.edit") : t("cat.new")} back={back}>
       <Card>
         <ChoiceChips value={it.kind} onChange={(k) => set({ kind: k })} items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
-        <TextField type="title" value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} />
+        <View testID="catalog-name">
+          <TextField type="title" value={it.name} onChangeText={(v) => set({ name: v })} placeholder={t("cat.name")} />
+        </View>
         <TextField type="unit" value={it.unit} onChangeText={(v) => set({ unit: v })} placeholder={t("cat.unit")} />
         {found?.placeholder ? <StatusChip status="warn" label={t("cat.placeholder")} /> : null}
+        {/* properties a trade module set (docs/specs/33 П16): read here, changed in the module */}
+        {it.attributes && Object.keys(it.attributes).length ? (
+          <View testID="catalog-attributes">
+            <T v="caption" tone="mut">{t("cat.attributes", { list: attributesLine(it.attributes) })}</T>
+          </View>
+        ) : null}
       </Card>
 
       {it.kind === "service" || it.kind === "labor" ? (
