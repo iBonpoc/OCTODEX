@@ -5,7 +5,10 @@ import { useStore } from "@/data/store";
 import type { CatalogItem, CatalogKind } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { kindLabel } from "@/features/estimatePickers";
-import { Button, ChoiceChips, TextField } from "@/ui/controls";
+import { Button } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
+import { filterStoreKey } from "@/ui/filterBarRules";
+import { usePersistentState } from "@/data/persist";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import type { IconKey } from "@/ui/primitives";
@@ -22,7 +25,9 @@ export default function Catalog() {
   const { db, role } = useStore();
   const { t, money } = useI18n();
   const [q, setQ] = useState("");
-  const [kind, setKind] = useState<CatalogKind | "all">("all");
+  // spec 31 §6 п.7: the kind is kept on this device for this list; the search is not
+  const [keptKind, setKind] = usePersistentState<CatalogKind | "all">(`${filterStoreKey("catalog")}.kind`, "all");
+  const kind = KINDS.includes(keptKind) ? keptKind : "all";
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   const items = useMemo(
     () =>
@@ -73,8 +78,13 @@ export default function Catalog() {
       hintKey="catalog"
       right={canEdit ? <Button label={t("cat.new")} icon="plus" size="sm" variant="secondary" onPress={() => router.push(`/catalog/new${kind !== "all" ? `?kind=${kind}` : ""}`)} /> : undefined}
     >
-      <TextField type="search" value={q} onChangeText={setQ} placeholder={t("ue.catalogSearch")} icon="search" />
-      <ChoiceChips value={kind} onChange={setKind} items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)) }))} />
+      {/* spec 31 (variant Б): the search and one lane of kinds with counts; nothing in the sheet (no «Фильтр» button) */}
+      <FilterBar<CatalogKind | "all">
+        search={{ value: q, onChange: setQ, placeholder: t("ue.catalogSearch") }}
+        value={kind}
+        onChange={setKind}
+        items={KINDS.map((k) => ({ key: k, label: t(kindLabel(k)), count: k === "all" ? db.catalog.length : db.catalog.filter((x) => x.kind === k).length }))}
+      />
       {items.length === 0 ? (
         <Empty icon="note" title={t("cat.empty")} />
       ) : (

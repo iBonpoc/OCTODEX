@@ -6,8 +6,8 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T } from "./primitives";
 import { Sheet } from "./overlays";
-import { Button } from "./controls";
-import { activeFilterCount, chosenFilters, filterLabel, searchAfter, searchState, visibleFilters, type FilterGroup, type FilterItem, type SearchState } from "./filterBarRules";
+import { Button, TextField } from "./controls";
+import { activeFilterCount, chosenFilters, chosenLabel, filterLabel, SEARCH_FROM, searchAfter, sheetOptions, searchState, visibleFilters, type FilterGroup, type FilterItem, type SearchState } from "./filterBarRules";
 
 export type { FilterGroup, FilterOption } from "./filterBarRules";
 
@@ -29,7 +29,8 @@ export function FilterBar<K extends string>({
 }: {
   /** row 1: the search field of the list */
   search?: { value: string; onChange: (s: string) => void; placeholder: string };
-  /** the lane: the first is the list's broad default, then the statuses in the order of the work */
+  /** the lane: the first is the list's broad default, then the statuses in the order of the work; empty — no lane
+   *  (a list whose main switch is elsewhere, e.g. the periods of «Оплаты») */
   items: FilterItem<K>[];
   value: K;
   onChange: (k: K) => void;
@@ -44,6 +45,9 @@ export function FilterBar<K extends string>({
   const desktop = device === "desktop";
   // which sheet is open: all groups (phone, tablet) or one group (a desktop button)
   const [open, setOpen] = useState<string | null>(null);
+  // the search inside the sheet (a long «Мастер»), forgotten when the sheet closes
+  const [sheetQ, setSheetQ] = useState("");
+  const closeSheet = () => { setOpen(null); setSheetQ(""); };
   const scroller = useRef<ElementRef<typeof ScrollView>>(null);
   const shown = groups.filter((g) => g.options.length > 0);
   const active = activeFilterCount(shown);
@@ -110,6 +114,8 @@ export function FilterBar<K extends string>({
 
   // phone / tablet: one square button next to the search, always visible (spec 31 §6 п.3)
   const sliders = <Icon name="sliders" s={size.iconSm} color={c.ink} />;
+  // alone in its row (no search, no lane — «Оплаты»): the button says what it is, on the left
+  const alone = !search && !items.length;
   const filterButton = shown.length ? (
     <Press
       onPress={() => setOpen("*")}
@@ -120,7 +126,7 @@ export function FilterBar<K extends string>({
       style={{
         height: component.button.phone,
         minWidth: component.button.phone,
-        paddingHorizontal: active ? space[2] : 0,
+        paddingHorizontal: alone ? space[3] : active ? space[2] : 0,
         borderRadius: radius.pill,
         flexDirection: "row",
         alignItems: "center",
@@ -132,7 +138,11 @@ export function FilterBar<K extends string>({
       }}
     >
       {sliders}
-      {active ? (
+      {alone ? (
+        <T v="button" w={active ? "bold" : undefined} style={{ color: c.ink }}>
+          {active ? `${t("fix.filters.button")} · ${active}` : t("fix.filters.button")}
+        </T>
+      ) : active ? (
         <T v="button" w="bold" tabular style={{ color: c.ink }}>
           {String(active)}
         </T>
@@ -170,7 +180,7 @@ export function FilterBar<K extends string>({
       {desktop ? (
         <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
           {searchEl}
-          <View style={{ flex: 1, minWidth: 0 }}>{lane}</View>
+          <View style={{ flex: 1, minWidth: 0 }}>{items.length ? lane : null}</View>
           {shown.map((g) => {
             const n = g.options.filter((o) => o.on).length;
             return pill(`g:${g.key}`, n ? `${g.title} · ${n}` : g.title, n > 0, () => setOpen(g.key), { role: "button", label: t("fix.filters.a11y", { n }) }, <Icon name="chevronDown" s={size.iconXs} color={c.ink} />, `filter-group-${g.key}`);
@@ -178,28 +188,30 @@ export function FilterBar<K extends string>({
         </View>
       ) : (
         <>
-          {/* one row: the magnifier, the lane, «Фильтр»; on a phone the open field sends the lane to row 2 */}
+          {/* one row: the magnifier, the lane, «Фильтр»; on a phone the open field sends the lane to row 2.
+              Alone in its row (no search, no lane) the «Фильтры» button says what it is, on the left */}
           <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }} onLayout={(e) => setRowW(e.nativeEvent.layout.width)}>
             {searchEl}
-            {rowOne ? null : <View style={{ flex: 1, minWidth: 0 }}>{lane}</View>}
+            {rowOne || alone ? null : <View style={{ flex: 1, minWidth: 0 }}>{items.length ? lane : null}</View>}
             {filterButton}
           </View>
-          {rowOne ? lane : null}
+          {rowOne && items.length ? lane : null}
         </>
       )}
       {chosen.length ? (
         <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }} testID="filter-chosen">
           {chosen.map(({ group, option }) => (
             <Press
+              testID={group.single ? `filter-chosen-${group.key}` : undefined}
               key={`${group.key}:${option.key}`}
               onPress={() => group.onToggle(option.key)}
               visibleHeight={component.button.sm}
               accessibilityRole="button"
-              accessibilityLabel={t("card.filter.remove", { v: option.label })}
+              accessibilityLabel={t("card.filter.remove", { v: chosenLabel(group, option) })}
               style={{ height: component.button.sm, paddingLeft: space[3], paddingRight: space[2], borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: space[1], backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}
             >
               <T v="button" w="semibold" style={{ color: c.ink }}>
-                {option.label}
+                {chosenLabel(group, option)}
               </T>
               <Icon name="close" s={size.iconXs} color={c.mut} />
             </Press>
@@ -207,7 +219,7 @@ export function FilterBar<K extends string>({
           {onReset ? <Button label={t("fix.filters.reset")} variant="ghost" size="sm" onPress={onReset} /> : null}
         </View>
       ) : null}
-      <Sheet visible={open !== null} onClose={() => setOpen(null)} title={open === "*" ? t("fix.filters.title") : (sheetGroups[0]?.title ?? t("fix.filters.title"))}>
+      <Sheet visible={open !== null} onClose={closeSheet} title={open === "*" ? t("fix.filters.title") : (sheetGroups[0]?.title ?? t("fix.filters.title"))}>
         {sheetGroups.map((g) => (
           <View key={g.key} style={{ gap: space[1] }}>
             {open === "*" ? (
@@ -215,14 +227,19 @@ export function FilterBar<K extends string>({
                 {g.title}
               </T>
             ) : null}
-            {g.options.map((o) => (
-              <FilterRow key={o.key} label={o.label} count={o.count} on={o.on} onToggle={() => g.onToggle(o.key)} />
+            {g.searchable && g.options.length > SEARCH_FROM ? (
+              <View testID={`filter-find-${g.key}`}>
+                <TextField type="search" value={sheetQ} onChangeText={setSheetQ} placeholder={t("card.filter.findPerson")} icon="search" />
+              </View>
+            ) : null}
+            {sheetOptions(g, sheetQ).map((o) => (
+              <FilterRow key={o.key} label={o.label} count={o.count} on={o.on} single={g.single} onToggle={() => g.onToggle(o.key)} />
             ))}
           </View>
         ))}
         <View style={{ flexDirection: "row", gap: space[2], marginTop: space[3] }}>
           {active > 0 && onReset ? <Button label={t("fix.filters.reset")} variant="secondary" onPress={onReset} /> : null}
-          <Button label={t("fix.filters.done")} variant="secondary" onPress={() => setOpen(null)} />
+          <Button label={t("fix.filters.done")} variant="secondary" onPress={closeSheet} />
         </View>
       </Sheet>
     </View>
@@ -230,13 +247,14 @@ export function FilterBar<K extends string>({
 }
 
 /** a row in the «Фильтр» sheet: a tag / a source / a person to show; several can be on (rule 12 — choice menus are rows) */
-export function FilterRow({ label, count, on, onToggle }: { label: string; count?: number; on: boolean; onToggle: () => void }) {
+export function FilterRow({ label, count, on, single, onToggle }: { label: string; count?: number; on: boolean; single?: boolean; onToggle: () => void }) {
   const { c } = useTheme();
   const empty = count === 0;
   return (
     <Press
       onPress={onToggle}
-      accessibilityRole="checkbox"
+      // one at a time («Мастер» of the Plan) — a radio, round; several — a checkbox
+      accessibilityRole={single ? "radio" : "checkbox"}
       accessibilityState={{ checked: on }}
       {...({ "aria-checked": on } as object)}
       accessibilityLabel={count === undefined ? label : `${label} · ${count}`}
@@ -246,7 +264,7 @@ export function FilterRow({ label, count, on, onToggle }: { label: string; count
         style={{
           width: component.checkbox.size,
           height: component.checkbox.size,
-          borderRadius: component.checkbox.radius,
+          borderRadius: single ? radius.pill : component.checkbox.radius,
           borderWidth: component.checkbox.border,
           // not yellow: one accent on the screen is the main action (rule 2)
           borderColor: on ? c.ink : c.mut,

@@ -24,7 +24,8 @@ exports.run = async (h) => {
   h.expect(!/…|\.\.\./.test(await p.locator("body").innerText()), "no «…»");
   await h.expectText(/Материал · \d+|Услуга · \d+/, "groups by kind under «All»");
   await p.evaluate(() => window.scrollTo(0, 0));
-  await checkCardAlignment(h, { searchPlaceholder: "Поиск в каталоге" });
+  // the line of the cards: the whole filter bar (spec 31)
+  await checkCardAlignment(h, { reference: (pg) => pg.getByTestId("filter-bar").locator("visible=true").first() });
   await h.shot("list");
 
   // real economics, not the old stub: a material with a supplier has a cost and a margin

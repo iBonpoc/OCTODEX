@@ -20,7 +20,8 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View, useWindow
 import { avoidBehavior, useKeyboardHeight } from "./keyboard";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Svg, { Defs, Ellipse, RadialGradient, Rect, Stop } from "react-native-svg";
-import { component, layout, radius, size, space, type StatusName } from "@octo/design-tokens";
+import { component, layout, motion, radius, size, space, type StatusName } from "@octo/design-tokens";
+import Animated, { FadeIn, FadeOut, useReducedMotion } from "react-native-reanimated";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
@@ -653,6 +654,9 @@ export function Screen({
   const { height: winH } = useWindowDimensions();
   const scrollRef = useRef<ScrollViewInstance>(null);
   const [scrollLocked, setScrollLocked] = useState(false);
+  /** the content has gone up under the status bar: the clock gets its glass backdrop (spec 32 §7) */
+  const [under, setUnder] = useState(false);
+  const reduce = useReducedMotion();
   const tabsY = useRef(0);
   const offset = useRef(0);
   useEffect(() => {
@@ -684,7 +688,12 @@ export function Screen({
             automaticallyAdjustKeyboardInsets
             stickyHeaderIndices={tabs ? [1] : undefined}
             scrollEventThrottle={16}
-            onScroll={tabs ? (e) => (offset.current = e.nativeEvent.contentOffset.y) : undefined}
+            onScroll={(e) => {
+              const y = e.nativeEvent.contentOffset.y;
+              offset.current = y;
+              const now = y > 0;
+              if (now !== under) setUnder(now);
+            }}
           >
             <ScrollLockCtx.Provider value={setScrollLocked}>{content}</ScrollLockCtx.Provider>
             {tabs ? (
@@ -703,6 +712,19 @@ export function Screen({
       ) : (
         <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right }}>{content}</View>
       )}
+      {/* the status bar backdrop: the same glass as the bars (--ov + blur), only while something is under the clock */}
+      {scroll && under && !pinned && navInsets.safeTop > 0 ? (
+        // the hairline makes the cut-off card go under the glass, not end at a line; it fades in (none with reduced motion)
+        <Animated.View
+          testID="status-backdrop"
+          pointerEvents="none"
+          entering={reduce ? undefined : FadeIn.duration(motion.durFast)}
+          exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
+          style={{ position: "absolute", top: 0, left: 0, right: 0, height: navInsets.safeTop, backgroundColor: c.ov, overflow: "hidden", borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
+        >
+          <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
+        </Animated.View>
+      ) : null}
       {floatFab && !kb ? (
         <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} right={navInsets.right} bottom={showsTabBar(routeName) && !barAway ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
       ) : null}

@@ -34,7 +34,24 @@ export interface FilterGroup {
   title: string;
   options: FilterOption[];
   onToggle: (key: string) => void;
+  /** a search over the rows of the sheet when the group is long (spec 31 §7: «Мастер» of the Plan at 10+ people) */
+  searchable?: boolean;
+  /** one option at a time («Мастер» of the Plan): round rows; on, it is said with its group — «Мастер: Ivan ✕» */
+  single?: boolean;
 }
+
+/** the rows of a group as the sheet shows them: with a search only when the group is searchable and longer than 10 */
+export const SEARCH_FROM = 10;
+export function sheetOptions(g: Pick<FilterGroup, "options" | "searchable">, q: string): FilterOption[] {
+  const needle = q.trim().toLowerCase();
+  if (!g.searchable || g.options.length <= SEARCH_FROM || !needle) return g.options;
+  // what is on stays on screen, so it can be taken off
+  return g.options.filter((o) => o.on || o.label.toLowerCase().includes(needle));
+}
+
+/** the words of a chosen chip: an option of a one-at-a-time group says its group («Мастер: Ivan»), the others just the option */
+export const chosenLabel = (group: Pick<FilterGroup, "title" | "single">, option: Pick<FilterOption, "label">): string =>
+  group.single ? `${group.title}: ${option.label}` : option.label;
 
 /** what is on in the sheet, in the order of the groups — the line «Google ✕ · Мои ✕ · Сбросить» under the lane */
 export function chosenFilters(groups: readonly FilterGroup[]): { group: FilterGroup; option: FilterOption }[] {

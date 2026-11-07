@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
-import type { Payment, PaymentMethod } from "@/data/types";
+import type { DB, Payment, PaymentMethod } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { asPaymentPeriod, canSeePayments, PAYMENT_PERIODS, paymentsIn, type PaymentPeriod } from "@/features/moneyLists";
 import { useDevice } from "@/theme/ThemeProvider";
-import { ChoiceChips, Segmented } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
 import { T } from "@/ui/primitives";
 import { Card, CardList, Empty, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCard, ListCardHeader } from "@/ui/listCard";
@@ -16,6 +17,15 @@ const METHODS: PaymentMethod[] = ["card", "cash", "check", "zelle"];
 /** desktop row columns */
 const COLUMNS: FactKey[] = ["receipt", "method", "by"];
 
+/** the search of «Оплаты»: the client's name, the receipt number, the invoice number */
+function matchPayment(db: Pick<DB, "customers" | "invoices">, x: Payment, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  const c = db.customers.find((y) => y.id === x.customerId);
+  const inv = db.invoices.find((i) => i.id === x.invoiceId);
+  return [c?.name, x.receiptNumber, inv?.number].some((s) => (s ?? "").toLowerCase().includes(needle));
+}
+
 /**
  * «Ещё» → Оплаты (wave 8, 13 §3.15): payments of a period with their receipts. Payment → receipt → invoice → job → client.
  * Owner, admin and office only (13 §4); refunds and voiding — «Запуск».
@@ -23,6 +33,8 @@ const COLUMNS: FactKey[] = ["receipt", "method", "by"];
 export default function Payments() {
   const { p: pParam, m } = useLocalSearchParams<{ p?: string; m?: string }>();
   const { db, role } = useStore();
+  // the search is not kept (spec 31 §6 п.7)
+  const [q, setQ] = useState("");
   const { t, money, moneyWhole, day } = useI18n();
   const { device } = useDevice();
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
@@ -34,7 +46,9 @@ export default function Payments() {
     );
   const p = asPaymentPeriod(pParam);
   const method = (METHODS as string[]).includes(m ?? "") ? (m as PaymentMethod) : undefined;
-  const v = paymentsIn(db, p, method);
+  const found = paymentsIn(db, p, method);
+  // the search: the client, the receipt RCT-…, the invoice INV-…
+  const v = { ...found, items: found.items.filter((x) => matchPayment(db, x, q)) };
   const all = paymentsIn(db, p);
   const card = (x: Payment) => {
     const c = db.customers.find((y) => y.id === x.customerId);
@@ -66,21 +80,31 @@ export default function Payments() {
   };
   return (
     <Screen title={t("mny.payments.title")} back={back} help={t("mny.payments.help")} hintKey="payments">
-      <Segmented<PaymentPeriod> scroll value={p} onChange={(x) => router.setParams({ p: x })} items={PAYMENT_PERIODS.map((k) => ({ key: k, label: t(PERIOD[k]) }))} />
+      {/* spec 31, one rule (founder 07.11): the magnifier, the periods as the lane (one at a time, with the number of
+          payments), the method in the «Фильтр» sheet; the period and the method live in the address (?p=, ?m=) */}
+      <FilterBar<PaymentPeriod>
+        search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchPayments") }}
+        items={PAYMENT_PERIODS.map((k) => ({ key: k, label: t(PERIOD[k]), count: paymentsIn(db, k).items.length }))}
+        value={p}
+        onChange={(x) => router.setParams({ p: x })}
+        groups={
+          all.byMethod.length > 1
+            ? [
+                {
+                  key: "method",
+                  title: t("card.filter.method"),
+                  options: all.byMethod.map((b) => ({ key: b.key, label: `${t(`pay.${b.key}` as DictKey)} · ${moneyWhole(b.cents)}`, count: all.items.filter((x) => x.method === b.key).length, on: method === b.key })),
+                  onToggle: (k) => router.setParams({ m: method === k ? "" : k }),
+                },
+              ]
+            : []
+        }
+        onReset={() => router.setParams({ m: "" })}
+      />
       <Card>
         <T v="caption" tone="mut">{t("mny.collected", { n: all.items.length })}</T>
         <T v="display" tabular>{money(all.totalCents)}</T>
       </Card>
-      {all.byMethod.length > 1 ? (
-        <ChoiceChips<string>
-          value={method ?? "all"}
-          onChange={(k) => router.setParams({ m: k === "all" ? "" : k })}
-          items={[
-            { key: "all", label: `${t("mny.method.all")} · ${moneyWhole(all.totalCents)}` },
-            ...all.byMethod.map((b) => ({ key: b.key, label: `${t(`pay.${b.key}` as DictKey)} · ${moneyWhole(b.cents)}` })),
-          ]}
-        />
-      ) : null}
       {v.items.length === 0 ? (
         <Empty icon="wallet" title={t("mny.payments.empty")} />
       ) : device === "tablet" ? (

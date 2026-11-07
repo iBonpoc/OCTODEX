@@ -3,7 +3,7 @@ const { dueKey, todayKey } = require("../companyTime.cjs");
  * «Ещё» → Счета, the one path to debts (wave 8, docs/specs/18-money-reports.md §7; 13 §3.15), every view (3 widths × 2 themes).
  * - «Не оплачен · Просрочен» is the default chip; its count and «Должны $N» = every invoice with a balance (= «Ждёт оплаты» on Today);
  * - overdue first (bad, «Просрочен N дн»), then «Ждёт оплаты»; «Оплачен» shows paid invoices with the word;
- * - `?customer=` = one client's debts («Должен» on the client), «Все клиенты» clears it;
+ * - `?customer=` = one client's debts («Должен» on the client), a chip «Клиент: X ✕» under the row clears it;
  * - the technician has no «Счета» list (he opens the invoice of his own job only).
  */
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
@@ -53,9 +53,12 @@ exports.run = async (h) => {
   const mine = owed.filter((i) => i.customerId === c.id);
   await h.go(`/invoice?f=owed&customer=${c.id}`);
   h.expect((await cards.count()) === mine.length, `client ${c.name}: ${mine.length} owed invoices`);
-  await h.expectText(new RegExp(`${c.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} · Должны ${money(mine.reduce((s, i) => s + owes(i), 0)).replace("$", "\\$")}`), "client and their debt in the header");
-  await h.click("Все клиенты");
-  h.expect((await cards.count()) === owed.length, "«Все клиенты» shows every owed invoice again");
+  await h.expectText(new RegExp(`Должны ${money(mine.reduce((s, i) => s + owes(i), 0)).replace("$", "\\$")}`), "the client's debt in the header");
+  // the client is a chip «Клиент: X ✕» under the row (spec 31, one rule); ✕ — every client again
+  const chip = p.getByTestId("filter-chosen-client").locator("visible=true");
+  h.expect((await chip.count()) === 1 && (await chip.first().innerText()).trim() === `Клиент: ${c.name}`, `the chip «Клиент: ${c.name} ✕»`);
+  await chip.first().click(); await p.waitForTimeout(400);
+  h.expect((await cards.count()) === owed.length, "✕ shows every owed invoice again");
 
   // a card opens the invoice
   await cards.first().click();

@@ -14,15 +14,35 @@ const LISTS = [
   { path: "/leads", search: "Имя, телефон, адрес, услуга", group: "Ответственный", noSwitch: true },
   // PR 3: «Сметы» and «Счета» — sections of their own with a search; nothing in the sheet yet (no «Фильтр» button)
   { path: "/estimates", search: "Клиент, адрес, работа, EST" },
-  { path: "/invoice", search: "Клиент, адрес, работа, INV" },
+  // «Клиент» in the sheet, one at a time (one rule, director 07.11): kept in the address (`?customer=`), the chip «Клиент: X ✕»
+  { path: "/invoice?f=all", search: "Клиент, адрес, работа, INV", group: "Клиент", single: true, inAddress: true },
+  // PR 5: «Задачи» («Только мои» in the sheet), «Каталог» (kinds, no sheet)
+  { path: "/tasks", search: "Искать задачу", group: "Чьи", card: '[data-testid^="task-"]' },
+  { path: "/catalog", search: "Поиск в каталоге" },
+  // «Оплаты» (one rule, founder 07.11): the periods are the lane, the method in the sheet — both in the address (?p=, ?m=)
+  { path: "/payments?p=all", search: "Клиент, RCT, INV", group: "Способ оплаты", inAddress: true },
   // PR 4: «Работы» — «Мастер» (people of the nearest open visit, «Не назначен») and «Направление» in the sheet
   { path: "/jobs", search: "Клиент, адрес, работа, JOB", group: "Мастер" },
+  // «Звонки» (one rule, director 07.11): the outcomes are the lane, no sheet; three calls of our own (the demo has one, no outcome)
+  {
+    path: "/calls",
+    search: "Кто, заметка",
+    card: '[data-testid^="comms-"]',
+    setup: () => {
+      const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+      const at = (m) => new Date(Date.now() - m * 60_000).toISOString();
+      const call = (id, outcome, m) => ({ id, subjectType: "lead", subjectId: "l2", kind: "call", at: at(m), actorId: raw.db.me, meta: { outcome, duration_min: 2 }, body: `T133 ${id}` });
+      raw.db.activities = [...raw.db.activities.filter((x) => !String(x.id).startsWith("c133-")), call("c133-1", "answered", 30), call("c133-2", "answered", 40), call("c133-3", "no_answer", 50)];
+      localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+    },
+  },
 ];
 
 exports.run = async (h) => {
   const p = h.page;
   const vis = (loc) => loc.locator("visible=true");
   for (const L of LISTS) {
+    if (L.setup) { await h.go("/today"); await p.evaluate(L.setup); }
     await h.go(L.path);
     const bar = vis(p.getByTestId("filter-bar")).first();
     await bar.waitFor();
@@ -41,7 +61,7 @@ exports.run = async (h) => {
     const lane = await vis(bar.getByTestId("filter-lane")).first().boundingBox();
     const mid = (b) => b.y + b.height / 2;
     h.expect(tb && tb.height <= 36 && Math.abs(mid(tb) - mid(lane)) <= 8, `${L.path}: the search icon and the lane in one row (${JSON.stringify(tb)} / ${JSON.stringify(lane)})`);
-    const first = await vis(p.locator('[data-testid="list-card"]')).first().boundingBox();
+    const first = await vis(p.locator(L.card ?? '[data-testid="list-card"]')).first().boundingBox();
     if (h.layout.width === 390) h.expect(first && first.y < 844 * 0.4, `${L.path}: 390 — the first card in the top 40 % (${first && first.y})`);
 
     // no empty chip but the chosen one
@@ -90,35 +110,36 @@ exports.run = async (h) => {
     }
 
     // the sheet: an option on → the chosen line → the list narrows → ✕
-    const before = await vis(p.locator('[data-testid="list-card"]')).count();
+    const before = await vis(p.locator(L.card ?? '[data-testid="list-card"]')).count();
     const open = h.layout.width === 1280 ? vis(bar.getByTestId(/^filter-group-/)).first() : vis(bar.getByTestId("filter-button")).first();
     await open.click(); await p.waitForTimeout(400);
-    const rows = h.sheet().getByRole("checkbox");
+    const rows = h.sheet().getByRole(L.single ? "radio" : "checkbox");
     h.expect((await rows.count()) > 0, `${L.path}: options as rows in the sheet`);
     // an option with something behind it (its count > 0)
     const labels = await rows.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") || ""));
     const i = labels.findIndex((x) => /· [1-9]\d*$/.test(x));
     h.expect(i >= 0, `${L.path}: an option with objects (${labels.join(" | ")})`);
-    const name = labels[i].replace(/ · \d+$/, "");
+    // a one-at-a-time group says its title on the chip: «Клиент: David Kim»
+    const name = (L.single ? `${L.group}: ` : "") + labels[i].replace(/ · \d+$/, "");
     const n = Number(labels[i].match(/· (\d+)$/)[1]);
     await rows.nth(i).click();
     await h.sheet().getByText("Готово", { exact: true }).click(); await p.waitForTimeout(400);
     const chosen = vis(p.getByTestId("filter-chosen")).first();
     h.expect((await chosen.getByRole("button", { name: `Убрать фильтр: ${name}` }).count()) === 1, `${L.path}: the chosen line «${name} ✕»`);
     h.expect((await vis(p.getByRole("button", { name: "Фильтры, включено: 1" })).count()) >= 1, `${L.path}: the button says how many are on`);
-    const after = await vis(p.locator('[data-testid="list-card"]')).count();
+    const after = await vis(p.locator(L.card ?? '[data-testid="list-card"]')).count();
     h.expect(after <= before && after <= n, `${L.path}: the list narrows (${before} → ${after}, option ${n})`);
     await h.shot(`${L.path.slice(1)}-chosen`);
 
-    // kept between visits; the search is not
+    // kept between visits (or, for a list that keeps it in the address, on a reload of that address); the search is not
     await listSearch(p, "zzz");
-    await h.go(L.path);
+    if (L.inAddress) { await p.reload(); await p.waitForTimeout(1000); } else await h.go(L.path);
     h.expect((await vis(p.getByTestId("filter-chosen")).first().getByRole("button", { name: `Убрать фильтр: ${name}` }).count()) === 1, `${L.path}: the option is kept`);
     h.expect((await vis(p.getByTestId("filter-search-toggle")).first().getAttribute("aria-label")) === "Поиск", `${L.path}: the search is not kept`);
 
     // ✕ takes it off
     await vis(p.getByTestId("filter-chosen")).first().getByRole("button", { name: `Убрать фильтр: ${name}` }).click(); await p.waitForTimeout(300);
     h.expect((await vis(p.getByTestId("filter-chosen")).count()) === 0, `${L.path}: ✕ — the line is gone`);
-    h.expect((await vis(p.locator('[data-testid="list-card"]')).count()) === before, `${L.path}: the list is whole again`);
+    h.expect((await vis(p.locator(L.card ?? '[data-testid="list-card"]')).count()) === before, `${L.path}: the list is whole again`);
   }
 };
