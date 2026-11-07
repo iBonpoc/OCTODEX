@@ -7358,4 +7358,66 @@ update public.estimates set deleted_at = now() where id::text like '0e890000-%';
 update public.memberships set status = 'disabled' where user_id = 'a8900000-0000-4000-8000-000000000001';
 \echo 'T89 no push about an estimate deleted after the queue ok'
 
+-- ---------------------------------------------------------------- T90: company modules — switch on, 7-day trial, nothing saved after it (docs/specs/33 S0b, founder О2)
+:as_tech_a
+select tst.fails($q$select public.module_enable('ca000000-0000-0000-0000-000000000000', 'gutters')$q$, 'T90 a tech does not switch modules on');
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a9000000-0000-4000-8000-000000000001', 'office90@a.test', '{"full_name":"Oscar Office"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a9000000-0000-4000-8000-000000000001', 'office', 'active');
+\set as_office90 'reset role; set request.jwt.claim.sub = ''a9000000-0000-4000-8000-000000000001''; set role authenticated;'
+:as_office90
+select tst.fails($q$select public.module_enable('ca000000-0000-0000-0000-000000000000', 'gutters')$q$, 'T90 the office does not switch modules on');
+:as_owner_b
+select tst.fails($q$select public.module_enable('ca000000-0000-0000-0000-000000000000', 'gutters')$q$, 'T90 another company does not switch A''s modules on');
+:as_owner_a
+select tst.ok((select enabled and trial_ends_at between now() + interval '6 days 23 hours' and now() + interval '7 days 1 minute'
+                 from public.module_enable('ca000000-0000-0000-0000-000000000000', 'gutters')), 'T90 the owner switches it on: a 7-day trial starts');
+select tst.ok(app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters'), 'T90 in the trial the module is active');
+select tst.fails($q$select public.module_enable('ca000000-0000-0000-0000-000000000000', 'Bad Key!')$q$, 'T90 a module key is a lowercase word');
+select tst.ok((select row_version from public.module_save_settings('ca000000-0000-0000-0000-000000000000', 'gutters', '{"storyHeightIn":120}', 1)) = 2,
+          'T90 the owner saves settings in the trial');
+select tst.fails_like($q$select public.module_save_settings('ca000000-0000-0000-0000-000000000000', 'gutters', '{"storyHeightIn":132}', 1)$q$,
+          '%changed by someone else%', 'T90 an old row version is a conflict, nothing overwritten silently');
+select tst.blocked($q$update public.company_modules set paid_until = now() + interval '1 year' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$,
+          'T90 nobody pays for themselves: no direct writes');
+select tst.blocked($q$insert into public.company_modules (company_id, module_key, enabled, paid_until) values ('ca000000-0000-0000-0000-000000000000', 'roofing', true, now() + interval '1 year')$q$,
+          'T90 no direct inserts');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 1, 'T90 every member reads the company''s modules');
+select tst.fails($q$select public.module_save_settings('ca000000-0000-0000-0000-000000000000', 'gutters', '{}', 2)$q$, 'T90 a tech does not change module settings');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'T90 another company does not see A''s modules');
+select tst.ok(not app.module_active('cb000000-0000-0000-0000-000000000000', 'gutters'), 'T90 a company that never switched it on has no module');
+-- the trial ends: nothing of the module is saved any more (founder О2)
+:as_super
+update public.company_modules set trial_ends_at = now() - interval '1 minute' where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
+:as_owner_a
+select tst.ok(not app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters'), 'T90 after the trial without payment the module is not active');
+select tst.fails_like($q$select public.module_save_settings('ca000000-0000-0000-0000-000000000000', 'gutters', '{"storyHeightIn":132}', 2)$q$,
+          '%not active%', 'T90 after the trial settings are not saved');
+select tst.ok((select trial_ends_at < now() from public.module_enable('ca000000-0000-0000-0000-000000000000', 'gutters')), 'T90 switching on again does not restart the trial');
+select tst.ok((select settings->>'storyHeightIn' = '120' from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters'),
+          'T90 the old settings are kept, readable');
+-- paid by the operator / billing: active again
+:as_super
+update public.company_modules set paid_until = now() + interval '30 days' where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
+:as_owner_a
+select tst.ok(app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters'), 'T90 paid: the module is active again');
+select public.module_disable('ca000000-0000-0000-0000-000000000000', 'gutters');
+select tst.ok(not app.module_active('ca000000-0000-0000-0000-000000000000', 'gutters')
+          and tst.cnt($q$select 1 from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 1,
+          'T90 switched off: not active, the row (and settings) stay');
+-- rights (rule 18)
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.module_enable(uuid, text)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.module_save_settings(uuid, text, jsonb, integer)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.module_active(uuid, text)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.module_enable(uuid, text)', 'EXECUTE')
+          and not has_table_privilege('authenticated', 'public.company_modules', 'INSERT')
+          and not has_table_privilege('authenticated', 'public.company_modules', 'UPDATE'), 'T90 rights: anon nothing; the app only through the functions');
+-- clean up
+delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000';
+update public.memberships set status = 'disabled' where user_id = 'a9000000-0000-4000-8000-000000000001';
+\echo 'T90 company modules: owner/admin switch on, 7-day trial, nothing saved after it, no self-payment ok'
+
 \echo 'ALL TESTS PASSED'
