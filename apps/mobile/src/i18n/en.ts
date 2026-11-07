@@ -2109,6 +2109,9 @@ export const en: Dict = {
   "job5.h.enRoute": "On the way",
   "job5.noService": "This client is marked «Do not service»: no new visits or estimates",
   "job5.noServiceHint": "A visit already set can be finished or moved",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.tzUnknownChip": "Unknown zone",
+  "fr7.tzUnknown": "This phone does not know the zone «{tz}» — times are shown in Los Angeles. Choose a zone.",
   "job5.lines.title": "Line items",
   "job5.lines.add": "Line item",
   "job5.lines.edit": "Line item",

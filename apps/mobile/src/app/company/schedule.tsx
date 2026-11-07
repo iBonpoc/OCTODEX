@@ -10,13 +10,14 @@ import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { US_TIMEZONES } from "@/features/companySetup";
+import { zoneChoices } from "@/features/companySetup";
+import { validZone } from "@/features/zone";
 import { atMinute } from "@/features/schedule";
 import {
   arrivalWindow, businessHoursOf, DURATION_RANGE, LATE_RANGE, scheduleSettingsOf, STEP_CHOICES, tzLabel, WINDOW_CHOICES,
   type BusinessHours, type ScheduleSettings, type WeekDay,
 } from "@/features/scheduleSettings";
-import { Button, ChoiceChips, IconButton, Stepper, Toggle } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, StatusChip, Stepper, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
@@ -63,7 +64,13 @@ export default function CompanySchedule() {
       <Card>
         <T v="heading">{t("co.timezone")}</T>
         <T v="caption" tone="mut">{t("schs.tzHint")}</T>
-        <ChoiceChips value={tz} onChange={setTz} items={US_TIMEZONES.map((z) => ({ key: z, label: tzLabel(z) }))} />
+        {c.timezone && !validZone(c.timezone) ? (
+          <View style={{ gap: space[1] }} testID="tz-unknown">
+            <StatusChip status="warn" label={t("fr7.tzUnknownChip")} />
+            <T v="caption" tone="mut">{t("fr7.tzUnknown", { tz: c.timezone })}</T>
+          </View>
+        ) : null}
+        <ChoiceChips value={tz} onChange={setTz} items={zoneChoices(c.timezone, validZone).map((z) => ({ key: z, label: tzLabel(z) }))} />
       </Card>
 
       <Card>
