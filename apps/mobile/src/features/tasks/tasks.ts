@@ -104,13 +104,14 @@ export const taskCounts = (tasks: readonly Task[], now = Date.now()): Record<Tas
 
 /**
  * Who a task may be for, for this role (S26, docs/specs/23 §5; the server: app.tg_task_who, migration 20261107060000):
- * the office — anyone on the team; the technician — only himself. The task's current assignee stays in the list
- * (an office task he opens shows who it is for; he cannot hand it to anyone else — the server keeps it).
+ * the office — anyone on the team; the technician — only himself. A task already for someone else (the office's) shows
+ * only that person: he does not change it (the server keeps the assignee of a task he did not write, security-check M1).
  */
 export function taskAssignees(db: DB, role: Role, current?: string | null): DB["members"] {
   const team = db.members.filter((m) => !m.pending);
   if (role !== "tech") return team;
-  return team.filter((m) => m.id === db.me || (!!current && m.id === current));
+  const only = current && current !== db.me ? current : db.me;
+  return team.filter((m) => m.id === only);
 }
 
 /** the default scope (20 §6): the technician starts on his own, the office on all */

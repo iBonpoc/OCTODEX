@@ -5662,6 +5662,29 @@ insert into public.tasks (id, company_id, subject_type, subject_id, title, assig
 select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004'
   and (select done_at from public.tasks where id = '17800000-0000-4000-8000-000000000004') is not null,
   'he marks it done through the upsert; the office''s assignee stays');
+-- security-check M1: not the author, he sends another assignee (himself / nobody) with «done» in one upsert — not refused
+-- (t05 would refuse it; t04 puts the assignee back first), the done mark is saved, the assignee stays the office's
+update public.tasks set done_at = null where id = '17800000-0000-4000-8000-000000000004';
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, done_at) values
+  ('17800000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'property', 'd6700000-0000-4000-8000-000000000001', 'T78 office for tech2', 'a0000000-0000-0000-0000-000000000003', now())
+  on conflict (id) do update set done_at = excluded.done_at, assignee_id = excluded.assignee_id;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004'
+  and (select done_at from public.tasks where id = '17800000-0000-4000-8000-000000000004') is not null,
+  'not the author: «Кто = me» with «done» — saved done, the office''s assignee stays (no refusal)');
+update public.tasks set assignee_id = null where id = '17800000-0000-4000-8000-000000000004';
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000004') = 'a0000000-0000-0000-0000-000000000004',
+  'not the author: «nobody» is not taken either (no refusal, the assignee stays)');
+-- the second unique key and «do nothing» behave the same (security-check)
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id, done_by) values
+  ('17800000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 by key', 'a0000000-0000-0000-0000-000000000004', 'a0000000-0000-0000-0000-000000000004')
+  on conflict (company_id, id) do update set assignee_id = excluded.assignee_id;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000005') = 'a0000000-0000-0000-0000-000000000003'
+  and (select done_by from public.tasks where id = '17800000-0000-4000-8000-000000000005') is null,
+  'on conflict (company_id, id): his, no forged «done by»');
+insert into public.tasks (id, company_id, subject_type, subject_id, title, assignee_id) values
+  ('17800000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T78 by key', 'a0000000-0000-0000-0000-000000000004')
+  on conflict do nothing;
+select tst.ok((select assignee_id from public.tasks where id = '17800000-0000-4000-8000-000000000005') = 'a0000000-0000-0000-0000-000000000003', 'on conflict do nothing changes nothing');
 :as_super
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_task_who()', 'execute') and not has_function_privilege('anon', 'app.tg_task_who()', 'execute'),
   'the trigger function is not callable');
