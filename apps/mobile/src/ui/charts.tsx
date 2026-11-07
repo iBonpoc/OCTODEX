@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useLayoutEffect, useRef } from "react";
 import { View } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming } from "react-native-reanimated";
 import { component, motion, radius, space } from "@octo/design-tokens";
@@ -24,7 +24,8 @@ function useScaleIn(size: number, delay: number) {
   const reduce = useReducedMotion();
   const s = useSharedValue(reduce ? 1 : 0);
   const prev = useRef<number | null>(null);
-  useEffect(() => {
+  // layout effect: the new scale is set before the frame is painted — no one-frame jump to the new size
+  useLayoutEffect(() => {
     const from = prev.current;
     prev.current = size;
     if (reduce) {
@@ -91,7 +92,8 @@ export function Columns({ items, testID }: { items: Column[]; testID?: string })
   return (
     <View testID={testID} style={{ flexDirection: "row", gap: space[2] }} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       {items.map((col, i) => (
-        <Bar key={col.key} col={col} max={max} index={i} />
+        // keyed by place, not by date: on a new period or after midnight the bars flow, they do not mount and grow from 0
+        <Bar key={i} col={col} max={max} index={i} />
       ))}
     </View>
   );

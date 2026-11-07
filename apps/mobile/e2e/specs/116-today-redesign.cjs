@@ -70,7 +70,24 @@ exports.run = async (h) => {
   for (const [name, el] of [["Подписано", signed], ["Ждёт оплаты", awaiting]]) {
     const lh = await el.getByText(name, { exact: true }).first().evaluate((e) => ({ h: e.getBoundingClientRect().height, lh: parseFloat(getComputedStyle(e).lineHeight) || 0 }));
     h.expect(lh.h <= (lh.lh || 20) * 1.5, `«${name}» label on one line (${JSON.stringify(lh)})`);
-    h.expect(!(await el.innerText()).includes("…"), `«${name}» amount is not cut`);
+    // the amount line fits its tile: nothing hidden past the edge (RN-web clips with overflow, «…» is not in innerText)
+    const cut = await el.evaluate((card) => [...card.querySelectorAll("div")].filter((d) => /^\$[\d,]+$/.test((d.textContent || "").trim()) && !d.querySelector("div")).some((d) => d.scrollWidth > d.clientWidth + 1));
+    h.expect(!cut, `«${name}» amount is not cut`);
+  }
+  // the same in Spanish on a phone (longer labels): one line each, amounts whole
+  if (h.layout.width === 390) {
+    await p.evaluate(() => localStorage.setItem("octo.lang.v1", JSON.stringify("es")));
+    await h.go("/today");
+    for (const card of [p.getByRole("button", { name: /^Firmado: \$/ }).first(), p.getByRole("button", { name: /^Pendiente de pago: \$/ }).first()]) {
+      h.expect((await card.count()) === 1, "the Spanish tile is there");
+      const res = await card.evaluate((c) => {
+        const leaves = [...c.querySelectorAll("div")].filter((d) => !d.querySelector("div") && (d.textContent || "").trim());
+        return { cut: leaves.some((d) => d.scrollWidth > d.clientWidth + 1), label: leaves[0]?.getBoundingClientRect().height ?? 0, lh: parseFloat(getComputedStyle(leaves[0]).lineHeight) || 20 };
+      });
+      h.expect(!res.cut && res.label <= res.lh * 1.5, `ES tile: one-line label, nothing cut (${JSON.stringify(res)})`);
+    }
+    await p.evaluate(() => localStorage.setItem("octo.lang.v1", JSON.stringify("ru")));
+    await h.go("/today");
   }
 
   // funnel: counts only, no repeat of «Получено»

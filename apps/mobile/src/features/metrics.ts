@@ -163,7 +163,7 @@ export function receivedSoFar(idx: ReceivedIndex, p: Period, today: DayKey = tod
  * this minute; last month 1 … the same day (cut to that month's length) up to this minute. Comparing a part of this
  * period with a whole one made Monday mornings and the 1st–5th always «▼».
  */
-export function prevPeriodRange(p: Period, today: DayKey = todayKey()): { from: DayKey; to: DayKey } {
+export function prevPeriodRange(p: Period, today: DayKey = todayKey()): { from: DayKey; to: DayKey; whole?: boolean } {
   if (p === "today") {
     const y = addDays(today, -1);
     return { from: y, to: y };
@@ -175,11 +175,12 @@ export function prevPeriodRange(p: Period, today: DayKey = todayKey()): { from: 
   const from = addMonths(`${today.slice(0, 8)}01`, -1);
   const last = addDays(`${today.slice(0, 8)}01`, -1);
   const same = `${from.slice(0, 8)}${today.slice(8)}`;
-  return { from, to: same > last ? last : same };
+  // the 29th–31st against a shorter month: its last day counts whole (there is no «same day» to cut at this minute)
+  return same > last ? { from, to: last, whole: true } : { from, to: same };
 }
 export function prevReceivedCents(idx: ReceivedIndex, p: Period, today: DayKey = todayKey(), nowMinute?: number): number {
   const r = prevPeriodRange(p, today);
-  return receivedSum(idx, r.from, r.to, nowMinute).cents;
+  return receivedSum(idx, r.from, r.to, r.whole ? undefined : nowMinute).cents;
 }
 
 /** «Ждёт оплаты»: how many invoices are open and how many of them are overdue (company days) */

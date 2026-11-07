@@ -1,14 +1,15 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Animated, { FadeInDown, useReducedMotion } from "react-native-reanimated";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { View } from "react-native";
 import { isOpenVisit, visitWhen } from "@/features/schedule";
 import { router } from "expo-router";
-import { component, font, size, space } from "@octo/design-tokens";
+import { component, font, motion, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
 import { awaitingCounts, funnelShare, periodNumbers, prevReceivedCents, receivedBuckets, receivedIndex, receivedSoFar, type Bucket, type Figure, type Period, type ReceivedIndex } from "@/features/metrics";
 import { todayKey } from "@/features/calendar";
-import { formatDayKey, minuteIn } from "@/features/zone";
+import { formatDayKey, getZone, minuteIn } from "@/features/zone";
 import { Columns, Meter } from "@/ui/charts";
 import { useI18n } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -32,7 +33,8 @@ function Kpi({ label, cents, icon, hint, chip, onPress }: { label: string; cents
   const [w, setW] = useState(0);
   const value = moneyWhole(cents);
   // long amounts in a narrow tile (820 two-up) take the smaller size instead of «…» (unslop 05.11)
-  const small = w > 0 && value.length * font.size.title * 0.65 > w - space[3] * 2;
+  // w is the content width (measured inside the card padding): compare with it once, and show the amount only then
+  const small = value.length * font.size.title * 0.65 > w;
   return (
     <Card
       style={{ padding: space[3], flex: 1 }}
@@ -49,7 +51,7 @@ function Kpi({ label, cents, icon, hint, chip, onPress }: { label: string; cents
           </T>
         </RowView>
       </View>
-      <T v={small ? "heading" : "title"} tabular numberOfLines={1}>
+      <T v={small ? "heading" : "title"} tabular numberOfLines={1} style={{ opacity: w > 0 ? 1 : 0 }}>
         {value}
       </T>
       <RowView gap={space[1]} style={{ flexWrap: "wrap" }}>
@@ -150,14 +152,27 @@ function FunnelRow({ icon, label, count, max, share, index, onPress }: { icon: I
 }
 
 /** Owner home: money for today / week / month, the sales funnel and what needs a decision. */
+/** the home cards have come in once in this session (spec 24 A4) */
+let homeAppeared = false;
+
 export default function Today() {
   useTick();
+  const reduce = useReducedMotion();
+  // decided once per mount: the first visit of the session animates, later visits (and reduced motion) do not
+  const [appear] = useState(() => (reduce || homeAppeared ? undefined : FadeInDown.duration(motion.durSlow).withInitialValues({ opacity: 0, transform: [{ translateY: space[2] }] })));
+  useEffect(() => {
+    homeAppeared = true;
+  }, []);
   const { t, day, time } = useI18n();
   const { db, role } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
-  const n = useMemo(() => periodNumbers(db, period), [db, period]);
-  // received money by day: one pass over the payments, rebuilt only when they change (review #270)
-  const idx = useMemo(() => receivedIndex(db.payments), [db.payments]);
+  // the company's day and zone are part of the key: left open overnight (useTick re-renders), the numbers move to
+  // the new day at midnight, not when db changes next (review #270); a new company zone re-sorts the payments
+  const today = todayKey();
+  const zone = getZone();
+  const n = useMemo(() => periodNumbers(db, period, today), [db, period, today]);
+  // received money by day: one pass over the payments, rebuilt only when they or the zone change (review #270)
+  const idx = useMemo(() => receivedIndex(db.payments, zone), [db.payments, zone]);
   const { device } = useDevice();
   // every number opens exactly the records it counts, for the same period (founder 05.11); back → Today
   const open = (f: Figure) => router.push(`/figures/${f}?period=${period}`);
@@ -183,7 +198,7 @@ export default function Today() {
   );
   const funnel = (
     <Card>
-      <SectionTitle title={t("today.funnel")} />
+      <SectionTitle title={`${t("today.funnel")} · ${t(period === "today" ? "today.title" : period === "week" ? "plan.week" : "plan.month")}`} />
       <FunnelRow icon="inbox" index={0} label={t("today.f.leads")} count={n.leads} max={fmax} onPress={() => open("leads")} />
       <FunnelRow icon="send" index={1} label={t("today.f.sent")} count={n.sent} max={fmax} share={shareText("today2.ofLeads", funnelShare(n.sent, n.leads))} onPress={() => open("sent")} />
       <FunnelRow icon="signature" index={2} label={t("today.f.signed")} count={n.signed} max={fmax} share={shareText("today2.ofSent", funnelShare(n.signed, n.sent))} onPress={() => open("signed")} />
@@ -201,28 +216,31 @@ export default function Today() {
         ]}
       />
       {/* spec 24 A: the main number with columns, two tiles, the funnel in counts as bars (founder 07.11) */}
-      {device === "desktop" ? (
-        // 1280: «Получено» | funnel | tiles + company setup (A3) — three full columns
-        <Grid>
-          {received}
-          {funnel}
-          <View style={{ gap: space[3] }}>
-            {tiles}
-            <CompanySetupCard />
-          </View>
-        </Grid>
-      ) : (
-        <>
+      {/* the cards come in once per session (A4: FadeInDown 8, durSlow); not again on coming back to the tab */}
+      <Animated.View entering={appear} style={{ gap: space[3] }}>
+        {device === "desktop" ? (
+          // 1280: «Получено» | funnel | tiles + company setup (A3) — three full columns
           <Grid>
             {received}
+            {funnel}
             <View style={{ gap: space[3] }}>
               {tiles}
-              {funnel}
+              <CompanySetupCard />
             </View>
           </Grid>
-          <CompanySetupCard />
-        </>
-      )}
+        ) : (
+          <>
+            <Grid>
+              {received}
+              <View style={{ gap: space[3] }}>
+                {tiles}
+                {funnel}
+              </View>
+            </Grid>
+            <CompanySetupCard />
+          </>
+        )}
+      </Animated.View>
       <FirstStepsCard />
       <NoticesCard />
       <Grid>
