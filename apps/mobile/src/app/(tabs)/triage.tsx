@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { Linking } from "react-native";
 import { useStore, visitContext } from "@/data/store";
 import { useI18n } from "@/i18n";
@@ -18,12 +18,12 @@ import { View } from "react-native";
 export default function Triage() {
   useTick();
   const { t, money } = useI18n();
-  const { db, role } = useStore();
+  const { db, role, rejectedOps, dismissRejected } = useStore();
   const toast = useToast();
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const [reply, setReply] = useState<string | null>(null);
   const [assign, setAssign] = useState<string | null>(null);
-  const all = buildAttention(db, role).filter((x) => !snoozed.includes(x.id));
+  const all = buildAttention(db, role, undefined, { rejected: rejectedOps }).filter((x) => !snoozed.includes(x.id));
   const cur = all[0];
   // the top card also shows how to reach the client and how many other reasons this client has (spec 06, PR7)
   const curSubject = cur ? subjectOf(db, cur) : {};
@@ -52,6 +52,15 @@ export default function Triage() {
         return <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${it.refId}`)} />;
       case "unassigned":
         return <Button label={t("triage.assign")} icon="user" onPress={() => setAssign(it.refId)} />;
+      // a money change the server refused (docs/specs/23 §3): open the record it was about
+      // and «Понятно» takes it away (docs/specs/23 §3; the toast's «Отменить» puts it back, rule 5)
+      case "rejected":
+        return (
+          <>
+            <Button label={t("sync.rejected.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it) as Href)} />
+            <Button label={t("sync.rejected.ok")} icon="check" variant="secondary" onPress={() => toast.show(t("sync.rejected.dismissed"), dismissRejected(it.refId))} />
+          </>
+        );
       case "late": {
         const v = db.visits.find((x) => x.id === it.refId);
         const href = v ? telHref(visitContext(db, v).customer?.phone) : null;
@@ -74,9 +83,12 @@ export default function Triage() {
             </T>
             <StatusChip status={cur.status} label={t(cur.chip, cur.params)} />
           </RowView>
-          <T v="title">{cur.name}</T>
+          {/* a reason with no client or lead (a refused money change): its own words as the title */}
+          <View testID={`triage-top-${cur.id}`}>
+            <T v="title">{cur.name || t(cur.label, cur.params)}</T>
+          </View>
           <T v="body" tone="mut">
-            {t(cur.label, cur.params)}
+            {cur.name ? t(cur.label, cur.params) : cur.kind === "rejected" ? t("sync.rejected.hint") : ""}
           </T>
           {curWho ? (
             <T v="body" tone="mut">
