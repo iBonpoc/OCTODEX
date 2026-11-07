@@ -1495,6 +1495,10 @@ export const es: Dict = {
   "card.val.price": "precio",
   "card.queued": "No enviado · esperando red",
   "card.tag.estimateSent": "Presupuesto enviado · {n}",
+  // card.filter.* — filters over a list (spec 31)
+  "card.filter.remove": "Quitar filtro: {v}",
+  "card.filter.people": "Responsable",
+  "card.filter.sources": "Origen",
   "card.emptyFilter": "Nadie en este filtro",
   "card.sign.noNextStep": "Sin siguiente paso",
   "card.group.action": "Requiere acción",

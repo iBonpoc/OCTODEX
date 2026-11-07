@@ -98,7 +98,8 @@ describe("only what works (13 §2.3: no empty sections)", () => {
   });
   it("«Ещё» → a section on a tab screen: «from=more» for the office, the sales home as it is (docs/specs/28 §3)", () => {
     expect(moreHref("leads", "director")).toBe("/leads?tab=leads&from=more");
-    expect(moreHref("estimates", "dispatcher")).toBe("/leads?tab=estimates&from=more");
+    // «Сметы» is a section of its own, a stack screen for every role (spec 31 §7а): its own «‹ Ещё», no «from»
+    expect(moreHref("estimates", "dispatcher")).toBe("/estimates");
     // sales: Leads is the home — no «‹ Ещё» there
     expect(moreHref("leads", "sales")).toBe("/leads?tab=leads");
     // a stack screen already has its own «‹ Ещё» and back

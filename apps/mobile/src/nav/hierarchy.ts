@@ -37,7 +37,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
   // ☰ items live under the role's home (13а §3); the technician has no Sales lists (a lead he opens sits under his home)
   const homeRoot = { href: `/${roleHome[role]}`, label: K("nav.home") };
   const leadsRoot = role === "tech" ? homeRoot : { href: "/leads?tab=leads", label: K("nav.leads") };
-  const estList = role === "tech" ? { href: "/estimates", label: K("nav.estimates") } : { href: "/leads?tab=estimates", label: K("nav.estimates") };
+  // «Сметы» is a section of its own, one screen for every role (founder 07.11, spec 31 §7а)
+  const estList = { href: "/estimates", label: K("nav.estimates") };
   const invList = role === "tech" ? homeRoot : { href: "/invoice", label: K("nav.invoices") };
   const lead = (lid: string) => db.leads.find((l) => l.id === lid);
   const client = (cid: string) => db.customers.find((c) => c.id === cid);

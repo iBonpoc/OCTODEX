@@ -85,10 +85,10 @@ exports.run = async (h) => {
   await p.waitForTimeout(400);
   await h.expectText(/Sarah Mitchell/, "found by a second person's phone");
   await p.getByPlaceholder("Имя, телефон или адрес").fill("");
-  // tags sit behind «Фильтры» in a sheet (founder 07.11: one row of filters)
+  // tags sit behind «Фильтр» in a sheet (spec 31: the button next to the search; 1280 — «Метки ▾» in the row)
   await p.getByRole("button", { name: /^Фильтры, включено: 0$/ }).click();
   await p.waitForTimeout(400);
-  await h.sheet().getByRole("checkbox", { name: "Избранный" }).click();
+  await h.sheet().getByRole("checkbox", { name: /^Избранный( · \d+)?$/ }).click();
   await h.sheet().getByText("Готово", { exact: true }).click();
   await p.waitForTimeout(400);
   const fav = await h.text();
