@@ -12,7 +12,7 @@ import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
-import { applyOp, PermanentError, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
+import { applyOp, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
@@ -38,6 +38,8 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
+import { backoffMs, classify, MAX_TRIES, needsSignIn } from "./outboxRetry";
+import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
@@ -358,6 +360,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   // nothing chosen yet → the first role this person has (owner → director); route-guard fix
   const [savedRole, setRole, roleReady] = usePersistentState<Role>("octo.role.v1", "director");
   const [online, setOnlineState] = useState(true);
+  // the cloud: is the server answering (the switch «без сети» is the demo's) — a failed request says no, an answer yes;
+  // without it the outbox waits longer and longer and never drops an op (rule 6, cloud e2e 104)
+  const [reachable, setReachable] = useState(true);
+  const netFails = useRef(0);
+  const nextTry = useRef(0);
+  const answered = () => {
+    netFails.current = 0;
+    nextTry.current = 0;
+    setReachable(true);
+  };
+  const unreachable = () => {
+    netFails.current += 1;
+    nextTry.current = Date.now() + backoffMs(netFails.current);
+    setReachable(false);
+  };
   const [queue, setQueue, queueReady] = usePersistentState<QueuedAction[]>("octo.queue.v1", []);
   const [outbox, setOutbox, outboxReady] = usePersistentState<OwnedItem[]>(OUTBOX_KEY, []);
   const [syncError, setSyncError] = useState<string | null>(null);
@@ -374,14 +391,25 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const whoRef = useRef(who);
   whoRef.current = who;
   const mine = (items: readonly OwnedItem[]) => mineOf(items, whoRef.current);
+  // a wipe that came while the outbox was still loading (the start repeat): applied to what the load brings
+  const outboxReadyRef = useRef(outboxReady);
+  outboxReadyRef.current = outboxReady;
+  const forgetOnLoad = useRef<{ userId: string | null } | null>(null);
+  useEffect(() => {
+    if (!outboxReady || !forgetOnLoad.current) return;
+    const { userId } = forgetOnLoad.current;
+    forgetOnLoad.current = null;
+    setOutbox((prev) => (outboxRef.current = othersOf(prev, userId)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outboxReady]);
   // ops of older versions (no owner) belong to the first person signed in once the outbox is loaded (review #240 №3)
   useEffect(() => {
-    if (!outboxReady || !who) return;
-    const adopted = adoptLegacy(outboxRef.current, who);
-    if (adopted !== outboxRef.current) {
-      outboxRef.current = [...adopted];
-      setOutbox(outboxRef.current);
-    }
+    if (!outboxReady || !who || forgetOnLoad.current) return;
+    // a functional update: never over a filter of a wipe that is set but not yet rendered (review #244 №5)
+    setOutbox((prev) => {
+      const adopted = adoptLegacy(prev, who);
+      return (outboxRef.current = adopted === prev ? prev : [...adopted]);
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [outboxReady, who?.userId, who?.companyId]);
   const modeRef = useRef(mode);
@@ -407,7 +435,10 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
       if (!mine(outboxRef.current).length) setDb(next);
       setSyncError(null);
+      answered();
     } catch (e) {
+      if (stale(gen)) return;
+      if (classify(e) !== "refusal") setReachable(false);
       setSyncError(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
@@ -438,9 +469,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         wipedKey.current = cacheKeyRef.current;
         // the outbox keeps other people's ops (rule 6): only the deleted person's go (and old ones without an owner).
         // The deleted person comes with the wipe: the sign-in may already be gone from the store (review #240 №2)
-        const me = info.userId ?? whoRef.current?.userId ?? null;
-        outboxRef.current = othersOf(outboxRef.current, me);
-        setOutbox(outboxRef.current);
+        // told by the wipe (even «not known» = null: never the person signed in now, review #244), else the sign-in
+        const me = "userId" in info ? (info.userId ?? null) : (whoRef.current?.userId ?? null);
+        if (!outboxReadyRef.current) forgetOnLoad.current = { userId: me };
+        // a functional update: the latest outbox, also one that is set but not yet rendered
+        setOutbox((prev) => (outboxRef.current = othersOf(prev, me)));
         setGateCodes({});
         waitingPoints.current = {};
       }),
@@ -461,6 +494,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     // time an answer comes (review #240 №1); another person or company signs in meanwhile → the loop stops
     const w = whoRef.current;
     if (flushing.current || modeRef.current !== "cloud" || !w || !onlineRef.current) return;
+    if (Date.now() < nextTry.current) return; // no network a moment ago: the pause before the next try
     const gen = deviceGeneration();
     if (stale(gen)) return;
     const still = () => sameOwner(whoRef.current, w);
@@ -477,6 +511,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
           if (stale(gen)) return;
           sentAny = true;
+          answered();
           outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
           setOutbox(outboxRef.current);
           if (!still()) break;
@@ -485,7 +520,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           if (stale(gen)) return;
           const msg = e instanceof Error ? e.message : String(e);
           setSyncError(msg);
-          if (e instanceof PermanentError || item.tries >= 5) {
+          // no answer, or the server's «not now» (5xx, 429, an expired sign-in…): not a try — the op stays as it is,
+          // the next send waits longer (review #244)
+          if (classify(e) !== "refusal") {
+            if (needsSignIn(e)) void renewSession();
+            unreachable();
+            break;
+          }
+          // the server said «no»: a try; the last one drops it (never because of the network)
+          if (item.tries + 1 >= MAX_TRIES) {
             // Will never succeed: drop it and reload the truth from the server.
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
@@ -512,9 +555,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (mine(outboxRef.current).length) flush();
     }, 1500);
     const poll = setInterval(refresh, 30_000);
+    // the network is back (the browser says so): no waiting out the pause — send now
+    const back = () => {
+      nextTry.current = 0;
+      if (mine(outboxRef.current).length) void flush();
+    };
+    const g = globalThis as { addEventListener?: (t: string, f: () => void) => void; removeEventListener?: (t: string, f: () => void) => void };
+    g.addEventListener?.("online", back);
+    const offActive = onAppActive(back); // the phone: back in the app
     return () => {
       clearInterval(tick);
       clearInterval(poll);
+      g.removeEventListener?.("online", back);
+      offActive();
     };
   }, [mode, refresh, flush]);
 
@@ -669,7 +722,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       role,
       setRole,
       availableRoles,
-      online,
+      online: online && (mode !== "cloud" || reachable),
       queue: pendingQueue,
       unsentAll,
       syncError,
@@ -1520,7 +1573,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, pendingQueue.length, unsentAll, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, reachable, pendingQueue.length, unsentAll, syncError, loading, mutate, setRole, setQueue, refresh, flush],
   );
 
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady) return null;
