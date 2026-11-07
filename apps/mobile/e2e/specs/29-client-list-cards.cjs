@@ -4,6 +4,7 @@
  * with visible size ≤ 36; status changes from the card only by allowed moves (prospect → archive) with «Undo».
  */
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
+const { addDays, todayKey } = require("../companyTime.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
@@ -81,6 +82,22 @@ exports.run = async (h) => {
   // edges and gaps: cards on the search field's lines; tablet rows of equal height (founder 05.11: «линии сдвинуты»)
   await p.evaluate(() => window.scrollTo(0, 0));
   await checkCardAlignment(h, { searchPlaceholder: "Имя, телефон или адрес" });
+
+  // founder 07.11: the overdue sign tells how much and how long — «Просрочено $X · N дн» (unpaid rest of overdue invoices, the oldest)
+  const late = db.invoices.filter((i) => i.customerId === owes.id && i.paidCents < i.totalCents);
+  const lateCents = late.reduce((s, i) => s + i.totalCents - i.paidCents, 0);
+  await p.evaluate(({ ids, due }) => {
+    const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+    raw.db.invoices = raw.db.invoices.map((i) => (ids.includes(i.id) ? { ...i, dueDate: due } : i));
+    localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+  }, { ids: late.map((i) => i.id), due: addDays(todayKey(), -9) });
+  await h.go("/clients");
+  const lateCard = p.getByRole("button", { name: owes.name, exact: true }).first();
+  await lateCard.scrollIntoViewIfNeeded();
+  const lateTxt = await lateCard.innerText();
+  const lateUsd = "$" + (lateCents / 100).toLocaleString("en-US", { minimumFractionDigits: lateCents % 100 ? 2 : 0, maximumFractionDigits: lateCents % 100 ? 2 : 0 });
+  h.expect(lateTxt.includes(`Просрочено ${lateUsd} · 9 дн`), `overdue sign with amount and days: ${lateTxt.slice(0, 240)}`);
+  await h.shot("overdue");
 
   // status from the card: prospect → archive in one tap, then «Undo».
   // The demo has no prospect: make one client a prospect in the saved data (like a lead with an estimate would) and reload.

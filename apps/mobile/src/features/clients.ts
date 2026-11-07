@@ -11,6 +11,7 @@ import type { DictKey } from "@/i18n";
 import type { IconKey } from "@/ui/primitives";
 import { isAssigned } from "@/features/schedule";
 import { getZone, minuteIn } from "@/features/zone";
+import { invoiceSigns } from "@/features/listSigns";
 
 /** Status label: colour + icon + word (CLAUDE.md rule 2). */
 export const clientStatusChip: Record<CustomerStatus, { s: StatusName; l: DictKey }> = {
@@ -68,6 +69,23 @@ export function clientMoneyOf(db: DB, customerId: ID) {
     db.invoices.filter((i) => i.customerId === customerId),
     db.payments.filter((p) => p.customerId === customerId).map((p) => p.amountCents),
   );
+}
+
+/**
+ * Overdue money of a client for the list card sign (founder 07.11): the unpaid rest of every overdue invoice
+ * and the oldest overdue in calendar days of the company — «Просрочено $1,400 · 12 дн». Same rule as invoiceSigns.
+ */
+export function clientOverdueOf(db: Pick<DB, "invoices">, customerId: ID, now = Date.now(), tz: string = getZone()): { cents: number; days: number } | null {
+  let cents = 0;
+  let days = 0;
+  for (const i of db.invoices) {
+    if (i.customerId !== customerId) continue;
+    const sign = invoiceSigns(i, now, tz).find((x) => x.key === "card.sign.overdueDays");
+    if (!sign) continue;
+    cents += i.totalCents - i.paidCents;
+    days = Math.max(days, sign.params?.d ?? 0);
+  }
+  return cents > 0 ? { cents, days } : null;
 }
 
 /** Money on the card: director and office see it, the tech does not (docs/specs/04 §8). */
