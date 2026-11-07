@@ -34,4 +34,16 @@ describe("company ↔ database rows (П4a)", () => {
     expect(out.business_hours).toEqual({ mon: [420, 960], sun: null });
     expect(out.lead_settings).toEqual({ replyWarnMin: 10 });
   });
+  it("whom new leads go to: read and written; null = the owner; an older op without the field leaves the stored one", () => {
+    const c = companyFromDb({ id: "c1", name: "Co", lead_default_assignee_id: "u-office" }, undefined, [], []);
+    expect(c.leadDefaultAssigneeId).toBe("u-office");
+    expect((companyToDb(c, row) as Record<string, unknown>).lead_default_assignee_id).toBe("u-office");
+    const none = companyFromDb({ id: "c1", name: "Co" }, undefined, [], []);
+    expect(none.leadDefaultAssigneeId).toBeNull();
+    // survives the queue (JSON): null is sent, so «Владелец» clears the choice
+    const queued = JSON.parse(JSON.stringify({ ...c, leadDefaultAssigneeId: null })) as typeof c;
+    expect((companyToDb(queued, row) as Record<string, unknown>).lead_default_assignee_id).toBeNull();
+    const old = { ...c, leadDefaultAssigneeId: undefined };
+    expect("lead_default_assignee_id" in companyToDb(old, row)).toBe(false);
+  });
 });

@@ -3,7 +3,6 @@ import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { InvoicesBoard } from "@/features/boards";
 import type { Expense, Invoice, PaymentMethod } from "@/data/types";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
@@ -53,13 +52,14 @@ export default function Money() {
 
   return (
     <Screen
-      title={t("money.title")}
+      // «Расходы» only: invoices are a section of their own, /invoice (founder 07.11, spec 31 §7а)
+      title={t("nav.expenses")}
       help={t("help.money")}
       hintKey="money"
       back={back}
       right={<Button label={t("money.addExpense")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/expense/new")} />}
     >
-      <InvoicesBoard />
+      {db.expenses.length === 0 ? <Empty icon="wallet" title={t("money.expenses")} /> : null}
       {db.expenses.length ? (
         <View style={{ gap: space[3] }}>
           <SectionTitle title={`${t("money.expenses")} · ${money(db.expenses.reduce((s, x) => s + x.amountCents, 0))}`} />

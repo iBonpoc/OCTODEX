@@ -662,6 +662,9 @@ export interface Company {
   cancelEmail?: string;
   /** lead thresholds set by the company (features/leadSettings.ts fills the gaps with defaults) */
   leadSettings?: Partial<import("@/features/leadSettings").LeadSettings>;
+  /** whom new leads go to (companies.lead_default_assignee_id; features/leadAssignee.ts — not at work → the owner).
+   *  null = the owner (nothing chosen); absent = not known on this phone (older cache) — company.save leaves it alone. */
+  leadDefaultAssigneeId?: ID | null;
   /** schedule settings (docs/specs/03 §6.1, П4a; features/scheduleSettings.ts fills the gaps with defaults) */
   scheduleSettings?: Partial<import("@/features/scheduleSettings").ScheduleSettings>;
   /** working hours by weekday (companies.business_hours; missing = Mon–Sat 8:00–18:00) */

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -6,13 +7,27 @@ import { useI18n, type DictKey } from "@/i18n";
 import { INV_COLUMNS, InvoiceListCard } from "@/features/listCards";
 import { asInvoiceFilter, canSeeInvoiceList, INVOICE_FILTERS, invoiceList, type InvoiceFilter, type OwedGroup } from "@/features/moneyLists";
 import { useDevice } from "@/theme/ThemeProvider";
-import { Button, ChoiceChips } from "@/ui/controls";
+import { Button } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
+import { filterStoreKey } from "@/ui/filterBarRules";
+import { usePersistentState } from "@/data/persist";
+import type { DB, Invoice } from "@/data/types";
 import { T } from "@/ui/primitives";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
 import { CardGrid, ListCardHeader } from "@/ui/listCard";
 
 const CHIP: Record<InvoiceFilter, DictKey> = { owed: "mny.f.owed", paid: "mny.f.paid", all: "mny.f.all" };
 const GROUP: Record<OwedGroup, DictKey> = { overdue: "mny.g.overdue", waiting: "mny.g.waiting", paid: "mny.g.paid" };
+/** the search of «Счета»: the client's name, the number, the title of the work, the address of the job's property */
+function matchInvoice(db: DB, i: Invoice, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  const client = db.customers.find((c) => c.id === i.customerId);
+  const job = db.jobs.find((j) => j.id === i.jobId);
+  const prop = db.properties.find((p) => p.id === job?.propertyId);
+  return [client?.name, i.number, i.title, job?.title, prop?.address, prop?.city].some((x) => (x ?? "").toLowerCase().includes(needle));
+}
+
 const EMPTY: Record<InvoiceFilter, DictKey> = { owed: "mny.empty.owed", paid: "mny.empty.paid", all: "mny.empty.all" };
 
 /**
@@ -24,7 +39,11 @@ export default function Invoices() {
   const { db, role } = useStore();
   const { t, money } = useI18n();
   const { device } = useDevice();
-  const f = asInvoiceFilter(fParam);
+  // spec 31 §6 п.7: a link with ?f= («Ждёт оплаты» on Today, «Должен» on a client) sets the filter for this visit only;
+  // a chip the person taps is kept on this device for this list; the search is not kept
+  const [kept, setKept] = usePersistentState<InvoiceFilter>(`${filterStoreKey("invoices")}.status`, "owed");
+  const f = fParam ? asInvoiceFilter(fParam) : asInvoiceFilter(kept);
+  const [q, setQ] = useState("");
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   if (!canSeeInvoiceList(role))
     return (
@@ -34,8 +53,14 @@ export default function Invoices() {
     );
   const client = customer ? db.customers.find((c) => c.id === customer) : undefined;
   const v = invoiceList(db, f, { customerId: client?.id });
+  // the search narrows the groups; the chips and «Должны всего» count the whole list
+  const shown = q.trim() ? invoiceList({ invoices: db.invoices.filter((i) => matchInvoice(db, i, q)) }, f, { customerId: client?.id }) : v;
   // the filter lives in the address: «back» and a shared link keep it
   const go = (x: InvoiceFilter, c: string | undefined = client?.id) => router.setParams({ f: x, customer: c ?? "" });
+  const pick = (x: InvoiceFilter) => {
+    setKept(x);
+    go(x);
+  };
   return (
     <Screen
       title={t("nav.invoices")}
@@ -44,14 +69,20 @@ export default function Invoices() {
       help={t("mny.invoices.help")}
       hintKey="invoices"
     >
-      <ChoiceChips<InvoiceFilter> value={f} onChange={(x) => go(x)} items={INVOICE_FILTERS.map((k) => ({ key: k, label: `${t(CHIP[k])} · ${v.counts[k]}` }))} />
+      {/* spec 31 (variant Б): the search (client, address, INV, work) and one lane; the debts first */}
+      <FilterBar<InvoiceFilter>
+        search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchInvoices") }}
+        value={f}
+        onChange={pick}
+        items={INVOICE_FILTERS.map((k) => ({ key: k, label: t(CHIP[k]), count: v.counts[k] }))}
+      />
       {client ? <Button label={t("mny.allClients")} icon="close" size="sm" variant="ghost" onPress={() => go(f, "")} /> : null}
-      {v.groups.length === 0 ? (
+      {shown.groups.length === 0 ? (
         <Empty icon="invoice" title={t(EMPTY[f])} />
       ) : (
         <>
           {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={INV_COLUMNS} value={t("card.val.toPay")} /> : null}
-          {v.groups.map(({ g, items, cents }) => (
+          {shown.groups.map(({ g, items, cents }) => (
             <View key={g} style={{ gap: space[2] }}>
               <T v="caption" w="semibold" tone="mut">{`${t(GROUP[g])} · ${items.length} · ${money(cents)}`}</T>
               {device === "tablet" ? (

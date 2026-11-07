@@ -31,6 +31,8 @@ export const NO_TAB_BAR = [
 export const WITH_TAB_BAR = [
   "index", "inbox",
   "calls", "catalog", "client/[id]", "clients", "company",
+  // a settings page saved from its sheet at once (no form to lose)
+  "company/leads",
   "estimate/[id]", "estimates", "figures/[metric]", "help",
   "invoice", "invoice/[id]", "job/[id]", "jobs", "lead/[id]", "leads",
   "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",
