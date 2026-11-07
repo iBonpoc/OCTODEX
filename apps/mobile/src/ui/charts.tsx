@@ -4,32 +4,42 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, w
 import { component, motion, radius, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { T } from "./primitives";
+import { barHeight } from "./chartMath";
 
 /**
  * Charts of «Наряд» for «Сегодня» (spec 24 A3–A4): columns and horizontal bars, built from Views (no SVG — steadier
- * on the web). No grid, no axes; the value is written only over the current column. Growth: the first time from 0
- * over motion.durChart with a stagger of motion.chartStagger; a new value flows over motion.durSlow.
+ * on the web). No grid, no axes; the value is written only over the current column, ABOVE the track, so every track
+ * has the same height (review #270). Growth animates only a transform (scale from the base): the first time from 0
+ * over motion.durChart with a stagger of motion.chartStagger; a new value flows from the old size over motion.durSlow.
  * «Уменьшить движение» (and e2e) — values are set at once. The current column is `ink`, not `acc`: yellow is kept for
  * the one main action (rule 2).
  */
 const ease = Easing.bezier(...motion.easeOut);
 
-/** a value that grows from 0 the first time and flows to the next value after that */
-function useGrow(target: number, delay: number) {
+/**
+ * Scale for a bar of `size`: grows from 0 the first time; when the size changes it starts from old/new and flows to 1,
+ * so the bar visibly goes from its old length to the new one — with a transform only.
+ */
+function useScaleIn(size: number, delay: number) {
   const reduce = useReducedMotion();
-  const v = useSharedValue(reduce ? target : 0);
-  const first = useRef(true);
+  const s = useSharedValue(reduce ? 1 : 0);
+  const prev = useRef<number | null>(null);
   useEffect(() => {
+    const from = prev.current;
+    prev.current = size;
     if (reduce) {
-      v.value = target;
-    } else if (first.current) {
-      v.value = withDelay(delay, withTiming(target, { duration: motion.durChart, easing: ease }));
-    } else {
-      v.value = withTiming(target, { duration: motion.durSlow, easing: ease });
+      s.value = 1;
+      return;
     }
-    first.current = false;
-  }, [target, reduce, delay, v]);
-  return v;
+    if (from === null) {
+      s.value = 0;
+      s.value = withDelay(delay, withTiming(1, { duration: motion.durChart, easing: ease }));
+    } else if (from !== size && size > 0) {
+      s.value = from / size;
+      s.value = withTiming(1, { duration: motion.durSlow, easing: ease });
+    }
+  }, [size, reduce, delay, s]);
+  return s;
 }
 
 export interface Column {
@@ -47,28 +57,26 @@ export interface Column {
 
 function Bar({ col, max, index }: { col: Column; max: number; index: number }) {
   const { c } = useTheme();
-  const { h, barMin, barRadius, mutedOpacity } = component.chart;
-  const target = col.future ? 0 : max > 0 ? barMin + ((h - barMin) * col.value) / max : barMin;
-  const height = useGrow(target, index * motion.chartStagger);
-  const fill = useAnimatedStyle(() => ({ height: height.value }));
+  const { h, barRadius, mutedOpacity } = component.chart;
+  const height = barHeight(col.value, max, col.future);
+  const scale = useScaleIn(height, index * motion.chartStagger);
+  const grow = useAnimatedStyle(() => ({ transform: [{ scaleY: scale.value }] }));
   return (
     <View style={{ flex: 1, alignItems: "center", gap: space[1] }}>
-      <View style={{ height: h, width: "100%", justifyContent: "flex-end" }}>
-        {col.current && col.valueLabel ? (
-          <T v="micro" w="semibold" tabular center numberOfLines={1}>
-            {col.valueLabel}
-          </T>
+      {/* the value line sits above the track in every column (blank where there is no value): equal tracks */}
+      <T v="micro" w="semibold" tabular center numberOfLines={1}>
+        {col.current && col.valueLabel ? col.valueLabel : " "}
+      </T>
+      <View testID="chart-track" style={{ height: h, width: "100%", justifyContent: "flex-end", borderRadius: barRadius, backgroundColor: c.track, overflow: "hidden" }}>
+        {height > 0 ? (
+          <Animated.View
+            testID={col.current ? "chart-bar-current" : "chart-bar"}
+            style={[
+              { height, width: "100%", borderRadius: barRadius, backgroundColor: col.current ? c.ink : c.mut, opacity: col.current ? 1 : mutedOpacity, transformOrigin: "bottom" },
+              grow,
+            ]}
+          />
         ) : null}
-        <View style={{ flex: 1, justifyContent: "flex-end", borderRadius: barRadius, backgroundColor: c.track, overflow: "hidden" }}>
-          {col.future ? null : (
-            <Animated.View
-              style={[
-                { width: "100%", borderRadius: barRadius, backgroundColor: col.current ? c.ink : c.mut, opacity: col.current ? 1 : mutedOpacity },
-                fill,
-              ]}
-            />
-          )}
-        </View>
       </View>
       <T v="micro" tone="mut" numberOfLines={1}>
         {col.label}
@@ -77,11 +85,11 @@ function Bar({ col, max, index }: { col: Column; max: number; index: number }) {
   );
 }
 
-/** Columns: «Получено» by days / weeks. `a11y` — the whole chart read as one image («Получено по дням: Пн $0, …»). */
-export function Columns({ items, a11y, testID }: { items: Column[]; a11y: string; testID?: string }) {
+/** Columns: «Получено» by days / weeks. Inside a pressable card the card itself carries the description (a11y). */
+export function Columns({ items, testID }: { items: Column[]; testID?: string }) {
   const max = Math.max(0, ...items.map((x) => (x.future ? 0 : x.value)));
   return (
-    <View testID={testID} accessible accessibilityRole="image" accessibilityLabel={a11y} style={{ flexDirection: "row", gap: space[2] }}>
+    <View testID={testID} style={{ flexDirection: "row", gap: space[2] }} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       {items.map((col, i) => (
         <Bar key={col.key} col={col} max={max} index={i} />
       ))}
@@ -92,11 +100,12 @@ export function Columns({ items, a11y, testID }: { items: Column[]; a11y: string
 /** A horizontal bar on its track (a funnel step): share 0…1 of the widest step. Not a status — neutral fill (rule 2). */
 export function Meter({ share, index = 0, testID }: { share: number; index?: number; testID?: string }) {
   const { c } = useTheme();
-  const pctW = useGrow(Math.max(0, Math.min(1, share)) * 100, index * motion.chartStagger);
-  const fill = useAnimatedStyle(() => ({ width: `${pctW.value}%` }));
+  const pct = Math.max(0, Math.min(1, share)) * 100;
+  const scale = useScaleIn(pct, index * motion.chartStagger);
+  const grow = useAnimatedStyle(() => ({ transform: [{ scaleX: scale.value }] }));
   return (
     <View testID={testID} style={{ height: component.chart.track, borderRadius: radius.pill, backgroundColor: c.track, overflow: "hidden" }}>
-      <Animated.View style={[{ height: "100%", borderRadius: radius.pill, backgroundColor: c.mut }, fill]} />
+      {pct > 0 ? <Animated.View style={[{ height: "100%", width: `${pct}%`, borderRadius: radius.pill, backgroundColor: c.mut, transformOrigin: "left" }, grow]} /> : null}
     </View>
   );
 }

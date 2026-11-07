@@ -8,6 +8,7 @@ import { estimateListAmount } from "./estimateDoc";
 import { invoiceBalance } from "./invoiceStatus";
 import { clientMoney } from "@octo/estimating-engine";
 import { isOverdue } from "@/data/selectors";
+import { getZone, minuteIn } from "./zone";
 
 export type Period = "today" | "week" | "month";
 
@@ -57,7 +58,8 @@ export function periodNumbers(db: DB, p: Period, today?: DayKey): PeriodNumbers 
     signed: signedList.length,
     // the same amounts as the lists (agreed with the list-cards chat): what the client signed, not the estimate total
     signedCents: signedList.reduce((s, e) => s + estimateListAmount(e).cents, 0),
-    receivedCents: pays.reduce((s, x) => s + x.amountCents, 0),
+    // the same engine path as «Получено» (rule 8, review #270): whole cents, net of refunds
+    receivedCents: clientMoney([], pays.map((x) => x.amountCents)).paidTotalCents,
     payments: pays.length,
     awaitingCents: db.invoices.reduce((s, i) => s + invoiceBalance(i).owesCents, 0),
     leadToSentPct: pct(sent, leads),
@@ -105,34 +107,80 @@ export interface Bucket {
   future: boolean;
 }
 
-/** received money, integer cents, through the engine (rule 8): net of refunds, never below 0 */
-const receivedIn = (db: Pick<DB, "payments">, r: { from: DayKey; to: DayKey }) => clientMoney([], db.payments.filter((x) => inRange(x.at, r)).map((x) => x.amountCents)).paidTotalCents;
+/**
+ * Received money by company day, built in ONE pass over the payments (24 A5; review #270: no Intl per payment per
+ * bucket on every render). A payment's amountCents is already net of its refunds (repo.ts: amount − refunded), and the
+ * refund counts on the payment's own day — the day the money came. Each entry keeps the minute of the company's day
+ * for «the same span» of the previous period.
+ */
+export type ReceivedIndex = Map<DayKey, { cents: number; minute: number }[]>;
+export function receivedIndex(payments: DB["payments"], tz: string = getZone()): ReceivedIndex {
+  const idx: ReceivedIndex = new Map();
+  for (const x of payments) {
+    if (!x.at) continue;
+    const k = isoDayKey(x.at, tz);
+    const list = idx.get(k) ?? [];
+    list.push({ cents: x.amountCents, minute: minuteIn(x.at, tz) });
+    idx.set(k, list);
+  }
+  return idx;
+}
+
+/** the one money path for «Получено» (rule 8): the engine sums whole cents; `untilMinute` cuts the last day */
+function receivedSum(idx: ReceivedIndex, from: DayKey, to: DayKey, untilMinute?: number): { cents: number; count: number } {
+  const amounts: number[] = [];
+  for (let k = from; k <= to; k = addDays(k, 1)) {
+    for (const e of idx.get(k) ?? []) if (untilMinute === undefined || k < to || e.minute <= untilMinute) amounts.push(e.cents);
+  }
+  return { cents: clientMoney([], amounts).paidTotalCents, count: amounts.length };
+}
 
 /**
  * Columns of the «Получено» chart (spec 24 A3): «Сегодня» — the last 7 days (today on the right);
  * «Неделя» — Mon…Sun of this week; «Месяц» — weeks of the month 1–7, 8–14, 15–21, 22–28, 29–end.
- * Days are the company's calendar days (isoDayKey).
  */
-export function receivedBuckets(db: Pick<DB, "payments">, p: Period, today: DayKey = todayKey()): Bucket[] {
-  const day = (k: DayKey): Bucket => ({ from: k, to: k, cents: receivedIn(db, { from: k, to: k }), current: k === today, future: k > today });
+export function receivedBuckets(idx: ReceivedIndex, p: Period, today: DayKey = todayKey()): Bucket[] {
+  const day = (k: DayKey): Bucket => ({ from: k, to: k, cents: receivedSum(idx, k, k).cents, current: k === today, future: k > today });
   if (p === "today") return Array.from({ length: 7 }, (_, i) => day(addDays(today, i - 6)));
   if (p === "week") return Array.from({ length: 7 }, (_, i) => day(addDays(weekStart(today), i)));
   const { from, to } = periodRange("month", today);
   const out: Bucket[] = [];
   for (let k = from; k <= to; k = addDays(k, 7)) {
     const end = addDays(k, 6) < to ? addDays(k, 6) : to;
-    out.push({ from: k, to: end, cents: receivedIn(db, { from: k, to: end }), current: today >= k && today <= end, future: k > today });
+    out.push({ from: k, to: end, cents: receivedSum(idx, k, end).cents, current: today >= k && today <= end, future: k > today });
   }
   return out;
 }
 
-/** the same span one period back: yesterday / last week / last month (for «▲ $420 к прошлой неделе») */
-export function prevPeriodRange(p: Period, today: DayKey = todayKey()): { from: DayKey; to: DayKey } {
-  if (p === "today") return periodRange("today", addDays(today, -1));
-  if (p === "week") return periodRange("week", addDays(weekStart(today), -7));
-  return periodRange("month", addMonths(`${today.slice(0, 8)}01`, -1));
+/** the period so far: today / this week from Monday / this month from the 1st — through the same engine path */
+export function receivedSoFar(idx: ReceivedIndex, p: Period, today: DayKey = todayKey()): { cents: number; count: number } {
+  const r = periodRange(p, today);
+  return receivedSum(idx, r.from, r.to);
 }
-export const prevReceivedCents = (db: Pick<DB, "payments">, p: Period, today: DayKey = todayKey()): number => receivedIn(db, prevPeriodRange(p, today));
+
+/**
+ * The SAME span one period back (review #270): yesterday up to this minute; last week Mon … the same weekday up to
+ * this minute; last month 1 … the same day (cut to that month's length) up to this minute. Comparing a part of this
+ * period with a whole one made Monday mornings and the 1st–5th always «▼».
+ */
+export function prevPeriodRange(p: Period, today: DayKey = todayKey()): { from: DayKey; to: DayKey } {
+  if (p === "today") {
+    const y = addDays(today, -1);
+    return { from: y, to: y };
+  }
+  if (p === "week") {
+    const from = addDays(weekStart(today), -7);
+    return { from, to: addDays(today, -7) };
+  }
+  const from = addMonths(`${today.slice(0, 8)}01`, -1);
+  const last = addDays(`${today.slice(0, 8)}01`, -1);
+  const same = `${from.slice(0, 8)}${today.slice(8)}`;
+  return { from, to: same > last ? last : same };
+}
+export function prevReceivedCents(idx: ReceivedIndex, p: Period, today: DayKey = todayKey(), nowMinute?: number): number {
+  const r = prevPeriodRange(p, today);
+  return receivedSum(idx, r.from, r.to, nowMinute).cents;
+}
 
 /** «Ждёт оплаты»: how many invoices are open and how many of them are overdue (company days) */
 export function awaitingCounts(db: Pick<DB, "invoices">, now: number = Date.now()): { open: number; overdue: number } {

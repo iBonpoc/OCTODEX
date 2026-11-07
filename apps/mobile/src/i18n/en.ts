@@ -262,7 +262,6 @@ export const en: Dict = {
   "today.awaiting": "Awaiting payment",
   "today.attention": "Needs attention",
   "today.allClear": "All under control",
-  "today.share": "{n}%",
   "today.nEstimates": "Estimates: {n}",
   "today.nPayments": "Payments: {n}",
   "today.allTime": "All open invoices",

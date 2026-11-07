@@ -1,15 +1,17 @@
+import { useMemo, useState } from "react";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { View } from "react-native";
 import { isOpenVisit, visitWhen } from "@/features/schedule";
 import { router } from "expo-router";
-import { component, size, space } from "@octo/design-tokens";
+import { component, font, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { usePersistentState } from "@/data/persist";
-import { awaitingCounts, funnelShare, periodNumbers, prevReceivedCents, receivedBuckets, type Bucket, type Figure, type Period } from "@/features/metrics";
-import { formatDayKey } from "@/features/zone";
+import { awaitingCounts, funnelShare, periodNumbers, prevReceivedCents, receivedBuckets, receivedIndex, receivedSoFar, type Bucket, type Figure, type Period, type ReceivedIndex } from "@/features/metrics";
+import { todayKey } from "@/features/calendar";
+import { formatDayKey, minuteIn } from "@/features/zone";
 import { Columns, Meter } from "@/ui/charts";
 import { useI18n } from "@/i18n";
-import { useTheme } from "@/theme/ThemeProvider";
+import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { buildAttention } from "@/features/attention";
 import { AttentionPeople } from "@/features/AttentionCards";
 import { todayVisits, visitStatus } from "@/features/visits";
@@ -27,16 +29,28 @@ import { Card, Grid, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 function Kpi({ label, cents, icon, hint, chip, onPress }: { label: string; cents: number; icon: IconKey; hint?: string; chip?: string; onPress?: () => void }) {
   const { moneyWhole } = useI18n();
   const { c } = useTheme();
+  const [w, setW] = useState(0);
+  const value = moneyWhole(cents);
+  // long amounts in a narrow tile (820 two-up) take the smaller size instead of «…» (unslop 05.11)
+  const small = w > 0 && value.length * font.size.title * 0.65 > w - space[3] * 2;
   return (
-    <Card style={{ padding: space[3], flex: 1 }} containerStyle={{ flex: 1 }} onPress={onPress} accessibilityLabel={label}>
-      <RowView gap={space[1]}>
-        <Icon name={icon} s={size.iconSm} color={c.mut} />
-        <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
-          {label}
-        </T>
-      </RowView>
-      <T v="title" tabular numberOfLines={1}>
-        {moneyWhole(cents)}
+    <Card
+      style={{ padding: space[3], flex: 1 }}
+      containerStyle={{ flex: 1 }}
+      onPress={onPress}
+      // the amount and the overdue status are read too, not only the title (review #270)
+      accessibilityLabel={[`${label}: ${value}`, hint, chip].filter(Boolean).join(", ")}
+    >
+      <View onLayout={(e) => setW(e.nativeEvent.layout.width)}>
+        <RowView gap={space[1]}>
+          <Icon name={icon} s={size.iconSm} color={c.mut} />
+          <T v="caption" tone="mut" numberOfLines={1} style={{ flex: 1 }}>
+            {label}
+          </T>
+        </RowView>
+      </View>
+      <T v={small ? "heading" : "title"} tabular numberOfLines={1}>
+        {value}
       </T>
       <RowView gap={space[1]} style={{ flexWrap: "wrap" }}>
         {hint ? (
@@ -51,44 +65,52 @@ function Kpi({ label, cents, icon, hint, chip, onPress }: { label: string; cents
   );
 }
 
-/** «Получено»: the main number of the period with columns by days / weeks and the change against the period before */
-function Received({ period, onPress }: { period: Period; onPress: () => void }) {
+/** «Получено»: the main number of the period with columns by days / weeks and the change against the same span before */
+function Received({ period, idx, onPress }: { period: Period; idx: ReceivedIndex; onPress: () => void }) {
   const { t, moneyWhole, lang } = useI18n();
   const { c } = useTheme();
-  const { db } = useStore();
-  const n = periodNumbers(db, period);
-  const buckets = receivedBuckets(db, period);
-  const prev = prevReceivedCents(db, period);
+  const today = todayKey();
+  const now = minuteIn(Date.now());
+  // one engine path for the big number and the columns (rule 8): the columns of the period add up to it
+  const total = receivedSoFar(idx, period, today);
+  const buckets = receivedBuckets(idx, period, today);
+  const prev = prevReceivedCents(idx, period, today, now);
   const loc = lang === "en" ? "en-US" : lang === "es" ? "es-US" : "ru-RU";
   const label = (b: Bucket) => (period === "month" ? `${Number(b.from.slice(8))}–${Number(b.to.slice(8))}` : formatDayKey(b.from, { weekday: "short" }, loc));
-  const diff = n.receivedCents - prev;
+  const diff = total.cents - prev;
   const vs = period === "today" ? "today2.vsToday" : period === "week" ? "today2.vsWeek" : "today2.vsMonth";
+  const change = prev > 0 && diff !== 0 ? t("today2.change", { arrow: diff > 0 ? "▲" : "▼", amount: moneyWhole(Math.abs(diff)), vs: t(vs) }) : undefined;
   const empty = buckets.every((b) => b.cents === 0);
+  const chart = t("today2.chartA11y", { list: buckets.filter((b) => !b.future).map((b) => `${label(b)} ${moneyWhole(b.cents)}`).join(", ") });
   return (
-    <Card onPress={onPress} accessibilityLabel={`${t("today.received")}: ${moneyWhole(n.receivedCents)}`} style={{ gap: space[3] }}>
+    <Card
+      onPress={onPress}
+      // the card is one button: it carries the change and the chart for VoiceOver (the chart inside is not focusable)
+      accessibilityLabel={[`${t("today.received")}: ${moneyWhole(total.cents)}`, change, empty ? t("today2.empty") : chart].filter(Boolean).join(". ")}
+      style={{ gap: space[3] }}
+    >
       <RowView gap={space[1]}>
         <Icon name="wallet" s={size.iconSm} color={c.mut} />
         <T v="caption" tone="mut" style={{ flex: 1 }} numberOfLines={1}>
           {t("today.received")}
         </T>
         {/* growth is not a status — an arrow and words, no colour (spec 24 A3); nothing to compare with → nothing */}
-        {prev > 0 && diff !== 0 ? (
+        {change ? (
           <T v="caption" tone="mut" tabular numberOfLines={1}>
-            {t("today2.change", { arrow: diff > 0 ? "▲" : "▼", amount: moneyWhole(Math.abs(diff)), vs: t(vs) })}
+            {change}
           </T>
         ) : null}
       </RowView>
       <View>
         <T v="display" w="semibold" tabular numberOfLines={1}>
-          {moneyWhole(n.receivedCents)}
+          {moneyWhole(total.cents)}
         </T>
         <T v="caption" tone="mut">
-          {t("today.nPayments", { n: n.payments })}
+          {t("today.nPayments", { n: total.count })}
         </T>
       </View>
       <Columns
         testID="received-chart"
-        a11y={t("today2.chartA11y", { list: buckets.map((b) => `${label(b)} ${moneyWhole(b.cents)}`).join(", ") })}
         items={buckets.map((b) => ({ key: b.from, value: b.cents, label: label(b), valueLabel: moneyWhole(b.cents), current: b.current, future: b.future }))}
       />
       {empty ? (
@@ -133,7 +155,10 @@ export default function Today() {
   const { t, day, time } = useI18n();
   const { db, role } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
-  const n = periodNumbers(db, period);
+  const n = useMemo(() => periodNumbers(db, period), [db, period]);
+  // received money by day: one pass over the payments, rebuilt only when they change (review #270)
+  const idx = useMemo(() => receivedIndex(db.payments), [db.payments]);
+  const { device } = useDevice();
   // every number opens exactly the records it counts, for the same period (founder 05.11); back → Today
   const open = (f: Figure) => router.push(`/figures/${f}?period=${period}`);
   const attention = buildAttention(db, role);
@@ -142,6 +167,28 @@ export default function Today() {
   const aw = awaitingCounts(db);
   const fmax = Math.max(n.leads, n.sent, n.signed);
   const shareText = (key: "today2.ofLeads" | "today2.ofSent", v: number | undefined) => (v === undefined ? undefined : t(key, { n: v }));
+  const received = <Received period={period} idx={idx} onPress={() => open("received")} />;
+  const tiles = (
+    <View style={{ flexDirection: "row", gap: space[2] }}>
+      <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} onPress={() => open("signed")} />
+      <Kpi
+        label={t("today.awaiting")}
+        cents={n.awaitingCents}
+        icon="invoice"
+        hint={t("today2.nInvoices", { n: aw.open })}
+        chip={aw.overdue > 0 ? t("today2.overdue", { n: aw.overdue }) : undefined}
+        onPress={() => router.push("/invoice?f=owed")}
+      />
+    </View>
+  );
+  const funnel = (
+    <Card>
+      <SectionTitle title={t("today.funnel")} />
+      <FunnelRow icon="inbox" index={0} label={t("today.f.leads")} count={n.leads} max={fmax} onPress={() => open("leads")} />
+      <FunnelRow icon="send" index={1} label={t("today.f.sent")} count={n.sent} max={fmax} share={shareText("today2.ofLeads", funnelShare(n.sent, n.leads))} onPress={() => open("sent")} />
+      <FunnelRow icon="signature" index={2} label={t("today.f.signed")} count={n.signed} max={fmax} share={shareText("today2.ofSent", funnelShare(n.signed, n.sent))} onPress={() => open("signed")} />
+    </Card>
+  );
   return (
     <Screen title={t("today.title")} help={t("help.today")} hintKey="today" fab="home" home subtitle={day(new Date().toISOString())}>
       <Segmented<Period>
@@ -154,29 +201,28 @@ export default function Today() {
         ]}
       />
       {/* spec 24 A: the main number with columns, two tiles, the funnel in counts as bars (founder 07.11) */}
-      <Grid>
-        <Received period={period} onPress={() => open("received")} />
-        <View style={{ gap: space[3] }}>
-          <View style={{ flexDirection: "row", gap: space[2] }}>
-            <Kpi label={t("today.signed")} cents={n.signedCents} icon="signature" hint={t("today.nEstimates", { n: n.signed })} onPress={() => open("signed")} />
-            <Kpi
-              label={t("today.awaiting")}
-              cents={n.awaitingCents}
-              icon="invoice"
-              hint={t("today2.nInvoices", { n: aw.open })}
-              chip={aw.overdue > 0 ? t("today2.overdue", { n: aw.overdue }) : undefined}
-              onPress={() => router.push("/invoice?f=owed")}
-            />
+      {device === "desktop" ? (
+        // 1280: «Получено» | funnel | tiles + company setup (A3) — three full columns
+        <Grid>
+          {received}
+          {funnel}
+          <View style={{ gap: space[3] }}>
+            {tiles}
+            <CompanySetupCard />
           </View>
-          <Card>
-            <SectionTitle title={t("today.funnel")} />
-            <FunnelRow icon="inbox" index={0} label={t("today.f.leads")} count={n.leads} max={fmax} onPress={() => open("leads")} />
-            <FunnelRow icon="send" index={1} label={t("today.f.sent")} count={n.sent} max={fmax} share={shareText("today2.ofLeads", funnelShare(n.sent, n.leads))} onPress={() => open("sent")} />
-            <FunnelRow icon="signature" index={2} label={t("today.f.signed")} count={n.signed} max={fmax} share={shareText("today2.ofSent", funnelShare(n.signed, n.sent))} onPress={() => open("signed")} />
-          </Card>
-        </View>
-      </Grid>
-      <CompanySetupCard />
+        </Grid>
+      ) : (
+        <>
+          <Grid>
+            {received}
+            <View style={{ gap: space[3] }}>
+              {tiles}
+              {funnel}
+            </View>
+          </Grid>
+          <CompanySetupCard />
+        </>
+      )}
       <FirstStepsCard />
       <NoticesCard />
       <Grid>

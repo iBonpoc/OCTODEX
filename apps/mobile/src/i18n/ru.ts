@@ -261,7 +261,6 @@ export const ru = {
   "today.awaiting": "Ждёт оплаты",
   "today.attention": "Требует внимания",
   "today.allClear": "Всё под контролем",
-  "today.share": "{n}%",
   "today.nEstimates": "Смет: {n}",
   "today.nPayments": "Платежей: {n}",
   "today.allTime": "Все открытые счета",
