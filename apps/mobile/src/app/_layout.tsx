@@ -10,6 +10,7 @@ import { StoreProvider } from "@/data/store";
 import { AuthProvider } from "@/cloud/auth";
 import { ToastProvider } from "@/ui/overlays";
 import { HintsProvider } from "@/ui/hints";
+import { PushBridge } from "@/features/PushBridge";
 import { NoticeWatcher } from "@/features/notices";
 import { GuardedScreen, RouteGuard } from "@/nav/RouteGuard";
 import { NavMenuProvider } from "@/nav/NavMenu";
@@ -52,6 +53,8 @@ export default function RootLayout() {
             <AuthProvider>
               <StoreProvider>
                 <HintsProvider>
+                  {/* pushes: a tap opens its record; the token is registered again (docs/specs/27-push.md §5) */}
+                  <PushBridge />
                   <Shell />
                 </HintsProvider>
               </StoreProvider>

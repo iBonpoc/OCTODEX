@@ -21,24 +21,12 @@ export function PushBridge() {
   useEffect(() => {
     const n = notifications();
     if (!n) return;
-    // a push that comes while the app is open is shown as a banner too (the bell has it as well)
-    n.setNotificationHandler({
-      handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
-    });
-    const open = (data: unknown) => {
-      const to = safeRoute(data);
-      if (to) router.push(to as never);
-    };
-    const last = n.getLastNotificationResponse();
-    if (last) {
-      open(last.notification.request.content.data);
-      n.clearLastNotificationResponse();
+    // a build whose native module is missing or broken: pushes stay off, the app goes on (never a crash)
+    try {
+      return listen(n);
+    } catch {
+      return;
     }
-    const sub = n.addNotificationResponseReceivedListener((r) => {
-      open(r.notification.request.content.data);
-      n.clearLastNotificationResponse();
-    });
-    return () => sub.remove();
   }, []);
 
   useEffect(() => {
@@ -51,4 +39,25 @@ export function PushBridge() {
   }, [uid, lang]);
 
   return null;
+}
+
+function listen(n: NonNullable<ReturnType<typeof notifications>>): () => void {
+  // a push that comes while the app is open is shown as a banner too (the bell has it as well)
+  n.setNotificationHandler({
+    handleNotification: async () => ({ shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false }),
+  });
+  const open = (data: unknown) => {
+    const to = safeRoute(data);
+    if (to) router.push(to as never);
+  };
+  const last = n.getLastNotificationResponse();
+  if (last) {
+    open(last.notification.request.content.data);
+    n.clearLastNotificationResponse();
+  }
+  const sub = n.addNotificationResponseReceivedListener((r) => {
+    open(r.notification.request.content.data);
+    n.clearLastNotificationResponse();
+  });
+  return () => sub.remove();
 }

@@ -23,7 +23,12 @@ export function usePushState(): { state: PushState; busy: boolean; turnOn: () =>
   const read = useCallback(async () => {
     const d = nativePushDeps();
     if (!d) return setState(stateOf({ support: pushSupport === "device" ? "expo_go" : pushSupport, signedIn: !!session, permission: "undetermined", token: null }));
-    setState(stateOf({ support: "device", signedIn: !!session, permission: await d.permission(), token: await d.load() }));
+    try {
+      setState(stateOf({ support: "device", signedIn: !!session, permission: await d.permission(), token: await d.load() }));
+    } catch {
+      // the native module is missing or broken in this build: say where pushes work instead of a dead switch
+      setState("expo_go");
+    }
   }, [session]);
   useEffect(() => {
     void read();
@@ -34,7 +39,7 @@ export function usePushState(): { state: PushState; busy: boolean; turnOn: () =>
     const d = nativePushDeps();
     if (!d || busy) return;
     setBusy(true);
-    const r = await enable(d, lang, appVersion);
+    const r = await enable(d, lang, appVersion).catch(() => "failed" as const);
     setBusy(false);
     toast.show(t(r === "on" ? "push.turnedOn" : r === "denied" ? "push.denied" : "push.failed"));
     await read();
@@ -43,7 +48,7 @@ export function usePushState(): { state: PushState; busy: boolean; turnOn: () =>
     const d = nativePushDeps();
     if (!d || busy) return;
     setBusy(true);
-    await disable(d);
+    await disable(d).catch(() => {});
     setBusy(false);
     await read();
   };
