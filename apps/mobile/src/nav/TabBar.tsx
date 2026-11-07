@@ -171,7 +171,8 @@ function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: 
           right: 0,
           bottom: nav.tabBottom,
           alignItems: "center",
-          paddingHorizontal: space[4],
+          paddingLeft: nav.left,
+          paddingRight: nav.right,
         }}
       >
         <Glass
