@@ -27,7 +27,8 @@ begin
     when 'US/EASTERN' then 'America/New_York'
     when 'CST' then 'America/Chicago' when 'CDT' then 'America/Chicago' when 'CST6CDT' then 'America/Chicago'
     when 'US/CENTRAL' then 'America/Chicago'
-    when 'MST' then 'America/Denver' when 'MDT' then 'America/Denver' when 'MST7MDT' then 'America/Denver'
+    -- 'MST' in Postgres is a fixed UTC−7 without daylight time — Arizona (security-check 07.11)
+    when 'MST' then 'America/Phoenix' when 'MDT' then 'America/Denver' when 'MST7MDT' then 'America/Denver'
     when 'US/MOUNTAIN' then 'America/Denver' when 'US/ARIZONA' then 'America/Phoenix'
     when 'PST' then 'America/Los_Angeles' when 'PDT' then 'America/Los_Angeles' when 'PST8PDT' then 'America/Los_Angeles'
     when 'US/PACIFIC' then 'America/Los_Angeles'

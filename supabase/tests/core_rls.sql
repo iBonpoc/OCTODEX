@@ -5580,6 +5580,20 @@ select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0
 select tst.fails_like($q$insert into public.companies (name, timezone) values ('T75 bad', 'Bad/Zone')$q$, 'unknown time zone', 'a new company with an unknown zone is refused (any writer)');
 select tst.ok(not has_function_privilege('anon', 'app.tg_company_timezone()', 'EXECUTE') and not has_function_privilege('authenticated', 'app.tg_company_timezone()', 'EXECUTE'), 'nobody executes the trigger function');
 select tst.ok(not has_function_privilege('anon', 'app.zone_name(text)', 'EXECUTE'), 'anon does not execute zone_name');
+-- an edge function (service_role) writes through the same check (app.zone_name is granted to it)
+reset role; set role service_role;
+update public.companies set timezone = 'mst' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select timezone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = 'America/Phoenix', 'service_role: the same check (MST — Arizona, no daylight time)');
+select tst.fails_like($q$update public.companies set timezone = 'Bad/Zone' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'unknown time zone', 'service_role: an unknown zone is refused too');
+-- a zone the server stopped knowing (a tzdata change) stays in the row: saving another field still works (rule 16)
+:as_super
+alter table public.companies disable trigger t89_company_timezone;
+update public.companies set timezone = 'Gone/Zone' where id = 'ca000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t89_company_timezone;
+:as_owner_a
+update public.companies set phone = '+13235557501' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select phone from public.companies where id = 'ca000000-0000-0000-0000-000000000000') = '+13235557501', 'a stored zone the server does not know does not block saving another field');
+:as_super
 update public.companies set timezone = 'America/Los_Angeles', phone = null where id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T75 companies.timezone: unknown refused, case and abbreviations made exact ok'
 
