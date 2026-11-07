@@ -6,7 +6,8 @@ import { canMarkNoService, clientHistory, clientMoneyOf, clientStatusChip, match
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { invoiceSigns } from "@/features/listSigns";
 import { useI18n } from "@/i18n";
-import { Button, ChoiceChips, IconButton, MultiChips, TextField } from "@/ui/controls";
+import { Button, IconButton, TextField } from "@/ui/controls";
+import { FilterBar, FilterRow } from "@/ui/filterBar";
 import { CardList, Empty, ListRow, Screen } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -109,18 +110,31 @@ export default function Clients() {
       right={office ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
     >
       <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.search")} icon="search" />
-      <ChoiceChips<Filter>
+      {/* founder 07.11: one row of filters — empty ones hidden, tags behind «Фильтры» (rows in a sheet) */}
+      <FilterBar<Filter>
         value={tab}
         onChange={setTab}
-        items={filters.map((f) => ({ key: f, label: `${t(`clients.f.${f}`)} · ${count(f)}` }))}
+        items={filters.map((f) => ({ key: f, label: t(`clients.f.${f}`), count: count(f) }))}
+        more={
+          db.tags.some((x) => x.active)
+            ? {
+                active: tagIds.length,
+                onReset: () => setTagIds([]),
+                children: db.tags
+                  .filter((x) => x.active)
+                  .sort((a, b) => a.position - b.position)
+                  .map((x) => (
+                    <FilterRow
+                      key={x.id}
+                      label={tagLabel(x, t)}
+                      on={tagIds.includes(x.id)}
+                      onToggle={() => setTagIds(tagIds.includes(x.id) ? tagIds.filter((y) => y !== x.id) : [...tagIds, x.id])}
+                    />
+                  )),
+              }
+            : undefined
+        }
       />
-      {db.tags.some((x) => x.active) ? (
-        <MultiChips<string>
-          value={tagIds}
-          onChange={setTagIds}
-          items={db.tags.filter((x) => x.active).sort((a, b) => a.position - b.position).map((x) => ({ key: x.id, label: tagLabel(x, t) }))}
-        />
-      ) : null}
       {list.length === 0 ? (
         <Empty
           icon="search"
