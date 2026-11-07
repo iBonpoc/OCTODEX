@@ -226,6 +226,8 @@ export const en: Dict = {
   "vcard.photos": "Photos: {n}",
 
   "offline.badge": "Offline · queued: {n}",
+  // «Лиды и клиенты» — очередь (docs/specs/23)
+  "sync.server.badge": "Server unavailable · queued: {n}",
   "offline.queued": "Offline. Saved, will sync later",
   "offline.synced": "Back online. Queue sent: {n}",
   "offline.toggle": "Test: offline mode",
