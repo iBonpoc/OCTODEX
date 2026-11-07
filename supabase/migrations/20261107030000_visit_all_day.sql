@@ -10,14 +10,16 @@
 alter table public.visits add column if not exists all_day boolean not null default false;
 
 create or replace function app.tg_visit_all_day()
-returns trigger language plpgsql security definer set search_path = '' as $$
-declare tz text; s timestamp; e timestamp;
+returns trigger language plpgsql set search_path = '' as $$
+-- invoker: whoever writes the visit reads their own company's zone (RLS); nothing else is needed
+declare tz text := 'America/Los_Angeles'; s timestamp; e timestamp;
 begin
   if not new.all_day then return new; end if;
-  select coalesce(nullif(co.timezone, ''), 'America/Los_Angeles') into tz from public.companies co where co.id = new.company_id;
+  select coalesce(nullif(co.timezone, ''), tz) into tz from public.companies co where co.id = new.company_id;
+  tz := coalesce(tz, 'America/Los_Angeles');
   if new.starts_at is null or new.ends_at is null then new.all_day := false; return new; end if;
-  s := new.starts_at at time zone coalesce(tz, 'America/Los_Angeles');
-  e := new.ends_at at time zone coalesce(tz, 'America/Los_Angeles');
+  s := new.starts_at at time zone tz;
+  e := new.ends_at at time zone tz;
   if s <> date_trunc('day', s) or e <> date_trunc('day', e) or e <= s then new.all_day := false; end if;
   return new;
 end;

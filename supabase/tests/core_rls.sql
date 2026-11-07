@@ -5522,6 +5522,33 @@ select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4
 -- a visit without an end cannot be all day
 update public.visits set all_day = true, ends_at = null where id = 'f7000000-0000-4000-8000-000000000005';
 select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000005'), 'no end — not «весь день»');
+-- the technician does not put the flag on a whole-day visit either
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f7000000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-14 00:00 America/Los_Angeles', '2026-12-15 00:00 America/Los_Angeles');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f7000000-0000-4000-8000-000000000006', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.fails($q$update public.visits set all_day = true where id = 'f7000000-0000-4000-8000-000000000006'$q$, 'the technician does not set «весь день» even on a whole day');
+-- another company does not touch our flag
+:as_owner_b
+select tst.blocked($q$update public.visits set all_day = false where id = 'f7000000-0000-4000-8000-000000000002'$q$, 'another company does not change our «весь день»');
+:as_super
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000002'), 'and it stays');
+-- the company's own zone, not Los Angeles: Honolulu midnight is 10:00Z; an empty zone falls back to Los Angeles
+update public.companies set timezone = 'Pacific/Honolulu' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) values
+  ('f7000000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-16 00:00 Pacific/Honolulu', '2026-12-17 00:00 Pacific/Honolulu', true),
+  ('f7000000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-16 00:00 America/Los_Angeles', '2026-12-17 00:00 America/Los_Angeles', true);
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000007'), 'a Honolulu company: its own midnight');
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000008'), 'a Honolulu company: Los Angeles midnight is not a whole day');
+:as_super
+update public.companies set timezone = '' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+update public.visits set all_day = true, starts_at = '2026-12-18 00:00 America/Los_Angeles', ends_at = '2026-12-19 00:00 America/Los_Angeles' where id = 'f7000000-0000-4000-8000-000000000008';
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000008'), 'an empty zone: Los Angeles');
+:as_super
+update public.companies set timezone = 'America/Los_Angeles' where id = 'ca000000-0000-0000-0000-000000000000';
 :as_super
 \echo 'T71 an old app never leaves «весь день» on a timed visit ok'
 
