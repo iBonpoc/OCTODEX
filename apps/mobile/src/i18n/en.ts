@@ -2141,4 +2141,11 @@ export const en: Dict = {
   "job5.tags.none": "No tags",
   "job5.tags.saved": "Tags saved",
   "job5.type.saved": "Job type changed",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.leadOrphan": "{name}: the owner is not at work — hand the lead over",
+  "fr7.leadReplyOrphan": "Lead unanswered {m} min · {name} · the owner is not at work",
+  "fr7.taskOrphan": "Task with nobody on it: {name}",
+  "fr7.noOwnerChip": "No owner",
+  "fr7.noAssigneeChip": "Nobody on it",
+  "fr7.handOver": "Hand over",
 };

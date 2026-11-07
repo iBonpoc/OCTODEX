@@ -2140,6 +2140,13 @@ export const ru = {
   "job5.tags.none": "Без меток",
   "job5.tags.saved": "Метки сохранены",
   "job5.type.saved": "Тип работы изменён",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.leadOrphan": "{name}: ответственный не работает — передайте лид",
+  "fr7.leadReplyOrphan": "Лид без ответа {m} мин · {name} · ответственный не работает",
+  "fr7.taskOrphan": "Задача без исполнителя: {name}",
+  "fr7.noOwnerChip": "Без ответственного",
+  "fr7.noAssigneeChip": "Без исполнителя",
+  "fr7.handOver": "Передать",
 } as const;
 
 export type DictKey = keyof typeof ru;
