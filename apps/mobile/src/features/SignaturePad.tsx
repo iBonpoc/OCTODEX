@@ -7,6 +7,7 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView, useScrollLock } from "@/ui/surfaces";
+import { SIG_BOX, fitSignature, normalizeSignature } from "./signaturePath";
 
 /** Finger signature. Output is SVG path data (stored with the visit; PDF in wave 3). */
 export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string }) {
@@ -15,6 +16,7 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
   const [d, setD] = useState("");
   const dRef = useRef("");
   const [h, setH] = useState(0);
+  const [w, setW] = useState(0);
   // the stroke owns the finger: the screen does not scroll under it (iOS), the browser does not take it (web)
   const lockScroll = useScrollLock();
   const lockRef = useRef(lockScroll);
@@ -46,7 +48,10 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
   return (
     <View style={{ gap: space[2] }}>
       <View
-        onLayout={(e: LayoutChangeEvent) => setH(e.nativeEvent.layout.height)}
+        onLayout={(e: LayoutChangeEvent) => {
+          setH(e.nativeEvent.layout.height);
+          setW(e.nativeEvent.layout.width);
+        }}
         style={{
           height: component.mediaH,
           borderRadius: radius.inner,
@@ -77,13 +82,13 @@ export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onC
       </T>
       <RowView>
         <Button label={t("visit.clear")} variant="secondary" onPress={clear} disabled={!d} />
-        <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" onPress={() => onConfirm(d)} disabled={disabled || d.length < 20} />
+        <Button label={confirmLabel ?? t("visit.confirmSign")} icon="check" onPress={() => onConfirm(normalizeSignature(d, w, h))} disabled={disabled || d.length < 20} />
       </RowView>
     </View>
   );
 }
 
-/** A saved signature, drawn the same way as on the pad (path in the pad's own coordinates). */
+/** A saved signature in the 400 × 160 box (same as the PDF): a phone signature looks as drawn, a wide one is never cut. */
 export function SignaturePreview({ svg, label }: { svg: string; label: string }) {
   const { c } = useTheme();
   return (
@@ -91,8 +96,9 @@ export function SignaturePreview({ svg, label }: { svg: string; label: string })
       style={{ height: component.mediaH, borderRadius: radius.inner, borderWidth: 1, borderColor: c.bd, backgroundColor: c.in, overflow: "hidden" }}
       accessibilityLabel={label}
     >
-      <Svg width="100%" height="100%" pointerEvents="none">
-        <Path d={svg} stroke={c.ink} strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
+      {/* the saved path lives in the 400 × 160 box (signaturePath.ts): drawn in that box, left-aligned, never cut */}
+      <Svg width="100%" height="100%" viewBox={`0 0 ${SIG_BOX.w} ${SIG_BOX.h}`} preserveAspectRatio="xMinYMid meet" pointerEvents="none">
+        <Path d={fitSignature(svg)} stroke={c.ink} strokeWidth={2.4} fill="none" strokeLinecap="round" strokeLinejoin="round" />
       </Svg>
     </View>
   );
