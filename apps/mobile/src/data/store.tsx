@@ -50,6 +50,7 @@ export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, moduleActive, moduleDef } from "@/modules/registry";
+import { cleanCatalogItem } from "@/features/catalogExtras";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
 import {
   type CalendarEvent,
@@ -318,6 +319,9 @@ interface StoreCtx {
   updateMember: (id: ID, patch: { title?: string; hisNumber?: string; canSignContracts?: boolean }) => Undo;
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
+  /** several items at once with one «Отменить» («create the items now», docs/specs/33 П16, core K1): each goes as its own
+   *  catalog.save through the queue; «Отменить» takes them all back */
+  saveCatalogItems: (items: CatalogItem[]) => Undo;
   readNotices: () => void;
   /** invite a person (demo: added as pending; cloud: email invites come with the email service) */
   inviteMember: (m: { name: string; email?: string; phone?: string; roles: Role[]; kind: "employee" | "sub" }) => Undo;
@@ -1684,12 +1688,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }),
           { k: "note.update", id, ...patch },
         ),
-      saveCatalogItem: (it) =>
-        mutate(
+      // the server's rules for properties first (features/catalogExtras.ts): a bad one never loses the whole save
+      saveCatalogItem: (it0) => {
+        const it = cleanCatalogItem(it0);
+        return mutate(
           "catalog.save",
           (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it] }),
           { k: "catalog.save", item: it },
-        ),
+        );
+      },
+      saveCatalogItems: (items) => {
+        const undos = items.map(cleanCatalogItem).map((it) =>
+          mutate(
+            "catalog.save",
+            (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it] }),
+            { k: "catalog.save", item: it },
+          ),
+        );
+        // the last one first: each undo puts back the phone's state from before its own save
+        return () => [...undos].reverse().forEach((u) => u());
+      },
       removeCatalogItem: (id) => mutate("catalog.remove", (d) => ({ ...d, catalog: d.catalog.filter((x) => x.id !== id) }), { k: "catalog.remove", id }),
       scheduleJob: (jobId, sch) => {
         const d0 = dbRef.current;

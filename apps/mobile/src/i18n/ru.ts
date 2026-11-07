@@ -714,6 +714,7 @@ export const ru = {
   "cat.saved": "Сохранено: {name}",
   "cat.remove": "Удалить из каталога",
   "cat.removed": "Удалено: {name}",
+  "cat.attributes": "Свойства: {list}",
   "cat.placeholder": "тестовая цена",
   "cat.empty": "Пока пусто",
   "cat.need": "Укажите название и цену",

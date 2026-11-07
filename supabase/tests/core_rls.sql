@@ -7453,4 +7453,72 @@ update public.memberships set status = 'disabled' where user_id::text like 'a900
 drop table t90_trial;
 \echo 'T90 company modules: owner/admin switch on, 7-day trial, nothing saved after it, no self-payment ok'
 
+-- ---------------------------------------------------------------- T91: price-list item properties (docs/specs/33 П16, C3; core K1)
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a9100000-0000-4000-8000-000000000001', 'office91@a.test', '{"full_name":"Olive Office"}'),
+  ('a9100000-0000-4000-8000-000000000002', 'tech91@a.test', '{"full_name":"Ted Tech"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a9100000-0000-4000-8000-000000000001', 'office', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a9100000-0000-4000-8000-000000000002', 'tech', 'active');
+\set as_office91 'reset role; set request.jwt.claim.sub = ''a9100000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_tech91 'reset role; set request.jwt.claim.sub = ''a9100000-0000-4000-8000-000000000002''; set role authenticated;'
+:as_office91
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price)
+  values ('91000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T91 test item', 'ft', 100, true);
+select tst.ok((select attributes = '{}'::jsonb and purchase_unit is null and pack_size is null from public.catalog_items where id = '91000000-0000-4000-8000-000000000001'),
+          'T91 a new item has no properties: {} and no purchase unit');
+-- the office (staff) writes properties the way the app does (upsert of the columns it sends)
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, attributes, purchase_unit, pack_size)
+  values ('91000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T91 test item', 'ft', 100, true,
+          '{"profile":"k","size":"6","material":"aluminum","gauge":".032","color":"white","gutterSize":"6","lengthIn":"120"}', 'coil', 1.5)
+  on conflict (id) do update set attributes = excluded.attributes, purchase_unit = excluded.purchase_unit, pack_size = excluded.pack_size;
+select tst.ok((select attributes->>'gauge' = '.032' and attributes->>'gutterSize' = '6' and purchase_unit = 'coil' and pack_size = 1.5
+                 from public.catalog_items where id = '91000000-0000-4000-8000-000000000001'), 'T91 staff saves properties (camelCase names too), a purchase unit and a pack size');
+-- an old phone saves the item without the new columns: they stay (rule 16)
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price)
+  values ('91000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T91 renamed by an old phone', 'ft', 120, true)
+  on conflict (id) do update set name = excluded.name, unit_price_cents = excluded.unit_price_cents;
+select tst.ok((select name = 'T91 renamed by an old phone' and attributes->>'color' = 'white' and purchase_unit = 'coil'
+                 from public.catalog_items where id = '91000000-0000-4000-8000-000000000001'), 'T91 an old phone''s save never clears the properties');
+-- junk is refused by the server, not only the app
+select tst.fails_like($q$update public.catalog_items set attributes = '["k"]' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 properties are an object');
+select tst.fails_like($q$update public.catalog_items set attributes = '{"size":6}' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 a value is text');
+select tst.fails_like($q$update public.catalog_items set attributes = '{"color":{"r":1}}' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 no nested values');
+select tst.fails_like($q$update public.catalog_items set attributes = '{"size":""}' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 no empty values');
+select tst.fails_like($q$update public.catalog_items set attributes = jsonb_build_object('note', repeat('a', 121)) where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 a value is at most 120 characters');
+select tst.fails_like($q$update public.catalog_items set attributes = '{"bad key":"x"}' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 names: letters, digits, _');
+select tst.fails_like($q$update public.catalog_items set attributes = '{"1size":"x"}' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 a name starts with a letter');
+select tst.fails_like($q$update public.catalog_items set attributes = (select jsonb_object_agg('k' || g, repeat('v', 100)) from generate_series(1, 45) g) where id = '91000000-0000-4000-8000-000000000001'$q$,
+          '%catalog_items_attributes_check%', 'T91 the whole map is at most 4000 bytes');
+select tst.fails_like($q$update public.catalog_items set attributes = 'null' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 not a JSON null');
+select tst.fails($q$update public.catalog_items set attributes = null where id = '91000000-0000-4000-8000-000000000001'$q$, 'T91 not an SQL null');
+select tst.fails_like($q$update public.catalog_items set pack_size = 0 where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 a pack size is above zero');
+select tst.fails_like($q$update public.catalog_items set purchase_unit = '  ' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 a purchase unit is not blank');
+select tst.fails_like($q$update public.catalog_items set purchase_unit = repeat('u', 21) where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 a purchase unit is at most 20 characters');
+-- security-check C3: a line break, blanks, control characters and bidi overrides; a padded purchase unit
+select tst.fails_like($q$update public.catalog_items set attributes = jsonb_build_object('note', repeat(E'abcdefghi\n', 300)) where id = '91000000-0000-4000-8000-000000000001'$q$,
+          '%catalog_items_attributes_check%', 'T91 line breaks count toward the 120 characters');
+select tst.fails_like($q$update public.catalog_items set attributes = jsonb_build_object('note', E'\n') where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 a line break alone is blank');
+select tst.fails_like($q$update public.catalog_items set attributes = '{"note":"   "}' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 spaces alone are blank');
+select tst.fails_like($q$update public.catalog_items set attributes = jsonb_build_object('note', E'red\u001b[31m') where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 no control characters');
+select tst.fails_like($q$update public.catalog_items set attributes = jsonb_build_object('note', E'abc‮def') where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_attributes_check%', 'T91 no bidirectional overrides');
+select tst.fails_like($q$update public.catalog_items set purchase_unit = 'a' || repeat(' ', 100) where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 a purchase unit is stored trimmed');
+select tst.fails_like($q$update public.catalog_items set purchase_unit = 'a' || repeat(E'\t', 5) where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 tabs do not pad a purchase unit');
+select tst.fails_like($q$update public.catalog_items set purchase_unit = E'b\nox' where id = '91000000-0000-4000-8000-000000000001'$q$, '%catalog_items_purchase_check%', 'T91 no control characters in a purchase unit');
+update public.catalog_items set attributes = '{"color":"white","note":"Café 6″ — ok","size":"6","profile":"k"}' where id = '91000000-0000-4000-8000-000000000001';
+select tst.ok((select attributes->>'note' = 'Café 6″ — ok' from public.catalog_items where id = '91000000-0000-4000-8000-000000000001'), 'T91 ordinary text with accents and symbols is fine');
+-- a tech reads, does not write; another company neither reads nor writes
+:as_tech91
+select tst.ok((select attributes->>'profile' = 'k' from public.catalog_items where id = '91000000-0000-4000-8000-000000000001'), 'T91 a tech reads the properties');
+select tst.blocked($q$update public.catalog_items set attributes = '{"color":"red"}' where id = '91000000-0000-4000-8000-000000000001'$q$, 'T91 a tech does not change properties');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.catalog_items where id = '91000000-0000-4000-8000-000000000001'$q$) = 0, 'T91 another company does not see the item');
+select tst.blocked($q$update public.catalog_items set attributes = '{"color":"red"}' where id = '91000000-0000-4000-8000-000000000001'$q$, 'T91 another company does not change properties');
+:as_super
+select tst.ok((select attributes->>'color' = 'white' from public.catalog_items where id = '91000000-0000-4000-8000-000000000001'), 'T91 nothing changed by the refused writes');
+select tst.ok(not has_table_privilege('anon', 'public.catalog_items', 'SELECT'), 'T91 anon reads nothing');
+update public.memberships set status = 'disabled' where user_id in ('a9100000-0000-4000-8000-000000000001', 'a9100000-0000-4000-8000-000000000002');
+\echo 'T91 catalog item properties: shape checked on the server, staff writes, old phones never clear them ok'
+
 \echo 'ALL TESTS PASSED'
