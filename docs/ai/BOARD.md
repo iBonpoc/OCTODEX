@@ -98,7 +98,7 @@
 | «Уведомления» №2 | `session_015CqH68voRsmGog696cFSju` | напоминания (§4.9) → P4b после #259 → P4c |
 | «Выпуск iOS» №1 | `session_015CqH68rP2HtS74ExY9Wfru` | архив (памятка выше) |
 | «Карточки списков» №3 | `session_015CqH6A9FZYh1MEgH5GrZAX` | 10в: #326 «Работы» ждёт «да» основателя; PR 5 «Задачи», «Каталог», «Оплаты» |
-| «Осмотр и План» №1 | `session_015CqH691oa5Yge3g4avfagb` | PR А «Осмотр прошёл — сметы нет» (attention.ts, e2e 131), этап 0 |
+| «Осмотр и План» №1 | `session_015CqH691oa5Yge3g4avfagb` | архив (памятка ниже); #331 ведёт руководитель |
 | «Каркас» №9 | `session_015CqH68bN9NqicpEbDDiUbs` | архив (памятка выше) |
 
 **Документы, долг руководителя** (не успел):
@@ -110,6 +110,13 @@
 
 Строки карты §5, пуши: PushOutbox — триггеры → pending → push_claim → sending → sent (Expo принял хоть одному); 429/5xx/сеть → pending через 1/2/4/8 мин; 5 попыток → failed (или sent, если хоть один телефон получил); pending → skipped (not_member / no_device / expired >24 ч / off); sending >10 мин → pending, попытки кончились → failed stuck. PushDevice — живой → revoked_at (signed_out / not_registered / too_many >10); токен переходит к вошедшему; удаление аккаунта стирает. Стыки: S1, S4, S4a, S7, S8, S9, S9a, S9b, S12, S22. Тесты T80–T85, e2e 124–125.
 
+### Памятка «Осмотр и План» №1 (session_015CqH691oa5Yge3g4avfagb, 07.11, архив)
+- Влито: #297 (сборка #309) — «Сообщить клиенту об отмене?» (S4a/S9a), e2e 132, unit cancelNotify.
+- Открыто: #331 (claude/visit-plan-p2-attention, ecbb42d, BUILD 331) — «Осмотр прошёл — сметы нет» (S15), порог LeadSettings.inspectionNoEstimateDays (1–10, по умолчанию 1) в «Компания → Лиды»; unit inspectionNoEstimate, e2e 131; ждёт «да» основателя на снимки docs/specs/img/03-*. Карта: S15 + unit:inspectionNoEstimate, e2e:131-inspection-no-estimate, хвост снять.
+- Держит до влития #331: attention.ts (блок inspectionNoEstimate), schedule.ts (workDaysAfter, inspectionPassed, inspectionsNoEstimate), leadSettings.ts, app/company/leads.tsx, i18n visitP2.*.
+- Читать: спека 03 §13 (13.0, 13.2, 13.3, 13.5).
+- Дальше П5 (после пушей, шаг 18): личные пуши «назначен / перенесён / отменён выезд» (03 §6.2, §7.5) — мастер не узнаёт об отмене; настройки расписания 03 §6.1 п.7; шаблон текста клиенту.
+- Долги: leadTurn (leads.ts:149–154) считает просрочку осмотра 24 ч в поясе телефона, новый пункт — рабочими днями в companyTz: свести; у сметы нет даты создания; «Скопировать» в шторке отмены не пишет событие; даты в текстах клиенту на es/ru — формат США (правило 7).
 ### Памятка «Лиды и клиенты» №11 (session_015CqH6AXexfSJUxpzdXPpY4, 07.11, архив)
 - Влито: #322 «Компания → Лиды», кому назначать новые лиды (сборка #325): lead_default_assignee_id, leadAssignee.ts, e2e 129, спека 14 §6.4.
 - Открыто: #327 «Лиды» мастеру (claude/tech-leads, 72d0f7c, BUILD 327), ждёт «да» основателя по снимкам docs/prototypes/img/127-*. Section.noSub, menuGroups(role, wide, sub), meIsSub; правлены e2e 07/51/56, unit sections/routeRoles/breadcrumbs/moreCounts. При слиянии конфликт только в version.ts. Карта §4: e2e:127.
