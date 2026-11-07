@@ -39,7 +39,7 @@ exports.run = async (h) => {
     boxes.push(b);
   }
   h.expect(boxes.every((b) => Math.abs(b.x - boxes[0].x) <= 1 && Math.abs(b.width - boxes[0].width) <= 1), "rows in one column (no tiles)");
-  h.expect((await p.getByRole("button", { name: "Настройки компании", exact: true }).locator("visible=true").count()) === 1, "a row's name is exactly its word");
+  h.expect((await p.locator('[data-testid="more-screen"]:visible').getByRole("button", { name: "Настройки компании", exact: true }).count()) === 1, "a row's name is exactly its word (the side menu on 820/1280 has its own)");
   if (wide) {
     const sb = await p.locator('[data-testid="more-screen"]:visible').boundingBox();
     h.expect(sb && sb.width <= 560.5, `one column not wider than 560 on ${h.layout.width} (${sb && sb.width})`);

@@ -128,7 +128,7 @@ export default function More() {
                 </T>
               </View>
             ) : null}
-            <Card style={{ paddingHorizontal: 0, paddingVertical: space[1] }}>
+            <Card style={{ paddingHorizontal: 0, paddingVertical: space[1], gap: 0 }}>
               {g.items.map((s, i) => (
                 <Fragment key={s.id}>
                   {i > 0 ? (
