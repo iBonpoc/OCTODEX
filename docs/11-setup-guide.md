@@ -115,5 +115,7 @@
 5. **Защита пушей Expo.** expo.dev → **Account settings** → **Access tokens** → включите **Enhanced Security for Push Notifications**. Делать после шага 3: иначе пуши без токена будут отклонены.
 6. **Проверка.** Supabase → **Edge Functions** → `send-push` → **Logs**: раз в минуту строка `send-push claimed=0 …`. Строка `unauthorized` значит, что ключ в шаге 3 и шаге 4 разный. Потом подпишите тестовую смету и через 1–2 минуты получите пуш «Estimate signed» на телефон со сборкой OCTODEX.
 
+В Supabase → **Database** → **Extensions** у `pg_net` и `pg_cron` стоит «включено» — их включил выпуск сам. **Там ничего трогать не нужно**: не выключайте их и не меняйте права, иначе пуши перестанут уходить.
+
 Сменить ключ: шаг 1 заново, в шаге 3 замените `PUSH_FN_KEY`, в шаге 4 откройте `push_fn_key` в Vault → **Edit** → новое значение. Оба значения должны совпадать.
 Остановить отправку: `select cron.unschedule('send-push');` в SQL Editor (вернуть — напишите руководителю).
