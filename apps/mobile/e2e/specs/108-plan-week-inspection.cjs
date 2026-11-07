@@ -21,8 +21,9 @@ exports.run = async (h) => {
   }, visit);
   await h.go("/plan");
   await p.waitForTimeout(300);
-  const card = p.getByText(new RegExp(`^11:00 PM · ${client.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}$`)).locator("visible=true");
+  // recipe C (ListCard): «11:00 / PM» on the left, the client is the card's name
+  const card = p.getByRole("button", { name: client.name, exact: true }).filter({ hasText: "11:00" }).locator("visible=true");
   h.expect((await card.count()) > 0, `the inspection's card names its client (${client.name})`);
-  h.expect((await p.getByText(/^11:00 PM · —$/).locator("visible=true").count()) === 0, "no «11:00 PM · —»");
+  h.expect((await p.getByRole("button", { name: "—", exact: true }).filter({ hasText: "11:00" }).locator("visible=true").count()) === 0, "no card named «—» at 11:00 PM");
   await h.shot("week-inspection");
 };

@@ -38,14 +38,16 @@ exports.run = async (h) => {
   h.expect(/^Сегодня · /.test((await feed.innerText()).trim()), "the Feed starts today");
   await h.expectText(/T67 call the supplier/, "a task with a time is in the Feed");
   await h.expectText(/T67 team meeting/, "an event is in the Feed");
-  await h.expectText(/Весь день · Выходной/, "a day off, all day");
-  await h.expectText(/Выходной · Ivan Sokolov/, "the day off names the person");
-  await h.expectText(/Событие · Вся компания/, "a company event says so");
+  // ListCard (10а): the name «Выходной», «Весь день» under it, the person in the «who» fact
+  const offCard = feed.getByRole("button", { name: "Выходной", exact: true }).filter({ hasText: "Весь день" });
+  h.expect((await offCard.count()) > 0, "a day off, all day");
+  h.expect((await offCard.filter({ hasText: "Ivan Sokolov" }).count()) > 0, "the day off names the person");
+  h.expect((await feed.getByRole("button").filter({ hasText: "Событие" }).filter({ hasText: "Вся компания" }).count()) > 0, "a company event says so");
   let body = await h.text();
   h.expect(body.indexOf("T67 call the supplier") < body.indexOf("T67 team meeting"), "today by time: 10:00 before 12:00");
   const soon = p.getByTestId("plan-unassigned-soon").last();
   const soonText = await soon.innerText();
-  h.expect(new RegExp(`6:15 AM · ${client.name}`).test(soonText) && /Завтра · /.test(soonText), "«Не назначено» on top for the office: our visit tomorrow (the day in the subtitle, 24 §B)");
+  h.expect(soonText.includes(client.name) && (await soon.getByRole("button", { name: client.name, exact: true }).filter({ hasText: "6:15" }).filter({ hasText: "Завтра" }).count()) > 0, "«Не назначено» on top for the office: our visit tomorrow (the day under the name, 24 §B)");
   await expectOneAccent(h, "the Plan feed (office)");
   await h.shot("plan-feed");
 
