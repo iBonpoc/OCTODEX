@@ -2165,6 +2165,11 @@ export const en: Dict = {
   "fr7.noOwnerChip": "No owner",
   "fr7.noAssigneeChip": "Nobody on it",
   "fr7.handOver": "Hand over",
+  // «Каркас» №8: a tab pressed over an unsaved form (docs/specs/28)
+  "fr8.tab.leaveTitle": "Leave without saving?",
+  "fr8.tab.leaveText": "An unsaved form is open under this screen. Switching tabs will discard what you entered.",
+  "fr8.tab.stay": "Stay",
+  "fr8.tab.leave": "Leave without saving",
   "job5.byTime": "By time",
   "job5.allDaySummary": "{date} · all day · {who}",
   "job5.clientDay": "The client sees the date only, no time",

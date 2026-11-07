@@ -51,3 +51,13 @@ export function tabRouteKey(route: string): string {
 
 /** the phone's bottom bar on this route (a route name like "client/[id]", or the segments joined) */
 export const showsTabBar = (route: string): boolean => !hidden.has(tabRouteKey(route));
+
+/**
+ * The forms a tab would close (review #274): the routes of the root stack above the tabs that are forms. A tab pressed
+ * on a card opened from a form (a new lead → «already a client» → the client) would drop what was typed; the bar asks
+ * «Выйти без сохранения?» first. `routes` — the root stack's route names, bottom first.
+ */
+export function formsAbove(routes: readonly string[]): string[] {
+  const tabsAt = routes.lastIndexOf("(tabs)");
+  return routes.slice(tabsAt + 1).filter((r) => hidden.has(tabRouteKey(r)));
+}

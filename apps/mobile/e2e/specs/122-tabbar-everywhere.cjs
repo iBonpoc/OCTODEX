@@ -56,17 +56,60 @@ exports.run = async (h) => {
     await p.waitForTimeout(400);
     h.expect((await bars()) === 0, `${url}: no bottom bar`);
   }
-  // the client signs on site on the estimate: no bar while the signature pad is there (rule А)
   if (!wide) {
+    // the client signs on site: the bar stays until a signature is drawn, then it is away until cleared / left
     await h.go("/estimate/e6");
     await p.waitForTimeout(600);
-    const pad = await p.getByText(/расписывается здесь/).locator("visible=true").count();
-    h.expect(pad > 0, "the estimate e6 shows the signature pad on site");
-    h.expect((await bars()) === 0, "no bottom bar while the client can sign");
-    // leaving the estimate: the bar is back
-    await h.go("/jobs");
-    await p.waitForTimeout(500);
+    const pad = p.getByLabel(/расписывается здесь/).locator("visible=true").first();
+    h.expect((await pad.count()) === 1, "the estimate e6 shows the signature pad on site");
+    h.expect((await bars()) === 1, "the pad is there, nothing drawn yet: the bar stays (review #274)");
+    await pad.scrollIntoViewIfNeeded();
+    const b = await pad.boundingBox();
+    const draw = async () => {
+      await p.mouse.move(b.x + 20, b.y + b.height / 2);
+      await p.mouse.down();
+      for (let k = 1; k <= 8; k++) await p.mouse.move(b.x + 20 + k * 20, b.y + b.height / 2 + (k % 2 ? 10 : -10));
+      await p.mouse.up();
+      await p.waitForTimeout(300);
+    };
+    await draw();
+    h.expect((await bars()) === 0, "a signature being drawn: no bottom bar");
+    await p.getByRole("button", { name: "Очистить", exact: true }).locator("visible=true").first().click();
+    await p.waitForTimeout(300);
+    h.expect((await bars()) === 1, "cleared: the bar is back");
+    await draw();
+    h.expect((await bars()) === 0, "drawn again: away");
+    // leaving the estimate inside the app (no reload): the bar is back on the next screen
+    await p.getByRole("button", { name: /^Назад/ }).locator("visible=true").first().click();
+    await p.waitForTimeout(700);
+    h.expect(!/^\/estimate\//.test(new URL(p.url()).pathname), `left the estimate in the app (${p.url()})`);
     h.expect((await bars()) === 1, "the bar is back on the next screen");
+
+    // a tab over an unsaved form (a new lead → «this number is already there» → its card): asked first, «Остаться» keeps the form
+    await h.go("/lead/new");
+    await p.getByPlaceholder("Имя", { exact: true }).last().fill("Typed Lead");
+    await p.getByPlaceholder("(555) 555-0100").last().fill("8185550170");
+    await h.expectText(/Этот номер уже есть/, "the duplicate warning");
+    await p.getByText(/Ваш клиент — откройте|Лид от /).locator("visible=true").first().click();
+    await p.waitForTimeout(700);
+    h.expect(/^\/(client|lead)\/(?!new)/.test(new URL(p.url()).pathname), `the duplicate's card from the new lead (${p.url()})`);
+    await p.getByRole("tab", { name: "Главная", exact: true }).click();
+    await p.waitForTimeout(500);
+    await h.expectText(/Выйти без сохранения\?/, "a tab over a form asks first (rule 5)");
+    await h.sheet().getByRole("button", { name: "Остаться", exact: true }).click();
+    await p.waitForTimeout(500);
+    h.expect(/^\/(client|lead)\/(?!new)/.test(new URL(p.url()).pathname), `«Остаться»: still on the card (${p.url()})`);
+    await p.goBack();
+    await p.waitForTimeout(700);
+    h.expect((await p.getByPlaceholder("Имя", { exact: true }).last().inputValue()) === "Typed Lead", "the form kept what was typed");
+    await p.getByText(/Ваш клиент — откройте|Лид от /).locator("visible=true").first().click();
+    await p.waitForTimeout(700);
+    await p.getByRole("tab", { name: "Главная", exact: true }).click();
+    await p.waitForTimeout(500);
+    await h.sheet().getByRole("button", { name: "Выйти без сохранения", exact: true }).click();
+    await p.waitForTimeout(700);
+    h.expect(!/^\/(client|lead)\//.test(new URL(p.url()).pathname), `«Выйти без сохранения»: the tab (${p.url()})`);
+    h.expect(!(await p.evaluate(() => document.body.innerText.includes("Typed Lead"))), "the form is gone");
   }
   // not signed in, on the sign-in screen: no bar there, nor on the Terms it links to (its tabs are behind the sign-in)
   await h.go("/auth/sign-in");
@@ -76,4 +119,9 @@ exports.run = async (h) => {
   await p.waitForTimeout(600);
   h.expect(new URL(p.url()).pathname === "/legal/terms", `the Terms from the sign-in screen (${p.url()})`);
   h.expect((await bars()) === 0, "the Terms opened from the sign-in screen: no bottom bar");
+  // its header goes back to the sign-in, not to «Помощь» (review #274; e2e 96 uses goBack and would not see it)
+  h.expect((await p.getByRole("button", { name: /Назад: Помощь/ }).locator("visible=true").count()) === 0, "no «‹ Помощь» before signing in");
+  await p.getByRole("button", { name: /^Назад/ }).locator("visible=true").first().click();
+  await p.waitForTimeout(600);
+  h.expect(new URL(p.url()).pathname === "/auth/sign-in", `the header's back → the sign-in (${p.url()})`);
 };

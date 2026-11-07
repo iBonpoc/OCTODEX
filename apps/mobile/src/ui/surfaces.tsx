@@ -6,6 +6,8 @@ import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { isTabScreen } from "@/nav/roles";
 import { showsTabBar } from "@/nav/tabBarRule";
+import { useAuth } from "@/cloud/auth";
+import { useTabBarHidden } from "@/nav/tabBarHide";
 import { Fab } from "@/nav/Fab";
 import { HomeHeader } from "@/nav/HomeHeader";
 import { SearchEntry } from "@/nav/SearchEntry";
@@ -448,7 +450,11 @@ export function Screen({
   const params = useLocalSearchParams();
   const pathname = screenPath(useRoute().name, params);
   const routeName = useRoute().name;
-  const nav = navContext(pathname, params, store.db, store.role);
+  const auth = useAuth();
+  /** the bar is away while a signature is drawn (docs/specs/28): «＋» goes down to its place */
+  const barAway = useTabBarHidden();
+  // the legal texts: «‹ Помощь» only inside the open app; from sign-in / the consent gate their own «back» (review #274)
+  const nav = navContext(pathname, params, store.db, store.role, { appOpen: !!auth.session && auth.legal !== "first" && auth.legal !== "changed" });
   const up = nav.up;
   /** a ☰ root (Leads, Jobs, Catalog…, docs/specs/13а §3): a root like a tab — ☰, not the screen's own «back» */
   const menuRoot = !up && !!nav.section;
@@ -695,7 +701,7 @@ export function Screen({
         <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingHorizontal: space[4] }}>{content}</View>
       )}
       {floatFab && !kb ? (
-        <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} bottom={showsTabBar(routeName) ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
+        <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} bottom={showsTabBar(routeName) && !barAway ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
       ) : null}
     </View>
   );

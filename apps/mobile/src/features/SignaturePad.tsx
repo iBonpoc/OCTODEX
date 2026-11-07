@@ -13,9 +13,10 @@ import { useHideTabBar } from "@/nav/tabBarHide";
 export function SignaturePad({ onConfirm, disabled, confirmLabel, label }: { onConfirm: (path: string) => void; disabled?: boolean; confirmLabel?: string; /** who signs: «Клиент расписывается здесь» by default */ label?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
-  // rule А (docs/specs/28): no bottom bar under the client's finger while a signature can be drawn here
-  useHideTabBar();
   const [d, setD] = useState("");
+  // rule А (docs/specs/28; the director's decision on #274): no bottom bar while a signature is being drawn here —
+  // from the first stroke until it is confirmed, cleared or the screen is left; before that the bar stays
+  useHideTabBar(!!d);
   const dRef = useRef("");
   const [h, setH] = useState(0);
   // the stroke owns the finger: the screen does not scroll under it (iOS), the browser does not take it (web)

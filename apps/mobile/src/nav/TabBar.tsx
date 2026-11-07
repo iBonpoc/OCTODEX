@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { router, useGlobalSearchParams, usePathname, useSegments, type Href } from "expo-router";
+import { router, useGlobalSearchParams, usePathname, useRootNavigationState, useSegments, type Href } from "expo-router";
 import { View, type LayoutChangeEvent } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
 import { component, motion, radius, size, space } from "@octo/design-tokens";
@@ -7,10 +7,11 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T } from "@/ui/primitives";
-import { Glass } from "@/ui/overlays";
+import { Glass, Sheet } from "@/ui/overlays";
+import { Button } from "@/ui/controls";
 import { useNavInsets } from "@/ui/surfaces";
 import { useKeyboardHeight } from "@/ui/keyboard";
-import { showsTabBar } from "./tabBarRule";
+import { formsAbove, showsTabBar } from "./tabBarRule";
 import { useTabBarHidden } from "./tabBarHide";
 import { useAuth } from "@/cloud/auth";
 import { gateFreePath } from "@/features/legal";
@@ -31,6 +32,9 @@ export function TabBar() {
   const { wide } = useDevice();
   const signing = useTabBarHidden();
   const { session, legal } = useAuth();
+  const { t } = useI18n();
+  const root = useRootNavigationState();
+  const [ask, setAsk] = useState<Href | null>(null);
   const own = activeSection(pathname, params, store.db, store.role);
   // a section that is not a tab (Leads, Jobs… opened from «Ещё») lights «Ещё» (13 v2 §2.1, variant Б)
   const sec = own && !tabs(store.role).some((s) => s.id === own) ? "more" : own;
@@ -40,12 +44,47 @@ export function TabBar() {
   if (session && (legal === "first" || legal === "changed") && gateFreePath(pathname)) return null;
   // a tab from a card: back down to the tabs (dismissTo — navigate would push a second copy of the tabs, review #274),
   // then the tab; on the tabs themselves — just the tab
-  const go = (id: SectionId) => {
-    const href = sectionHref(id, store.role) as Href;
+  const leave = (href: Href) => {
     if (router.canDismiss()) router.dismissTo(href);
     else router.navigate(href);
   };
-  return <NavPill current={sec} onGo={go} />;
+  const go = (id: SectionId) => {
+    const href = sectionHref(id, store.role) as Href;
+    // a form lies under this card (a new lead → «already a client» → the client): never drop it silently (rule 5)
+    const forms = formsAbove(appStackRoutes(root));
+    if (forms.length) setAsk(href);
+    else leave(href);
+  };
+  return (
+    <>
+      <NavPill current={sec} onGo={go} />
+      <Sheet visible={!!ask} onClose={() => setAsk(null)} title={t("fr8.tab.leaveTitle")}>
+        <T v="body" tone="mut">{t("fr8.tab.leaveText")}</T>
+        <Button label={t("fr8.tab.stay")} variant="primary" full onPress={() => setAsk(null)} />
+        <Button
+          label={t("fr8.tab.leave")}
+          variant="secondary"
+          full
+          onPress={() => {
+            const href = ask;
+            setAsk(null);
+            if (href) leave(href);
+          }}
+        />
+      </Sheet>
+    </>
+  );
+}
+
+type NavState = { routeNames?: readonly string[]; routes?: readonly { name: string; state?: NavState }[]; index?: number } | undefined;
+/** the route names of the app's own stack (app/_layout: the one that has «(tabs)»), bottom first; expo-router wraps it
+ *  in its «__root» navigator */
+function appStackRoutes(state: NavState): string[] {
+  for (let s = state, depth = 0; s && depth < 4; depth++) {
+    if (s.routeNames?.includes("(tabs)")) return (s.routes ?? []).map((r) => r.name);
+    s = s.routes?.[s.index ?? 0]?.state;
+  }
+  return [];
 }
 
 function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: (id: SectionId) => void }) {

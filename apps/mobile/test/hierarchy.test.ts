@@ -114,4 +114,8 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext("/legal/terms", {}, db, "tech")).toMatchObject({ section: "help", kind: "legal.terms.title", up: { href: "/help" } });
     expect(navContext("/legal/privacy", {}, db, "director").kind).toBe("legal.privacy.title");
   });
+  it("review #274: the legal texts opened before the app is open (sign-in, the consent gate) have no «‹ Помощь» — their own back", () => {
+    expect(navContext("/legal/terms", {}, db, "director", { appOpen: false })).toEqual({});
+    expect(navContext("/legal/terms", {}, db, "director", { appOpen: true }).up?.href).toBe("/help");
+  });
 });

@@ -2165,6 +2165,11 @@ export const es: Dict = {
   "fr7.noOwnerChip": "Sin responsable",
   "fr7.noAssigneeChip": "Sin responsable",
   "fr7.handOver": "Entregar",
+  // «Каркас» №8: a tab pressed over an unsaved form (docs/specs/28)
+  "fr8.tab.leaveTitle": "¿Salir sin guardar?",
+  "fr8.tab.leaveText": "Hay un formulario sin guardar debajo de esta pantalla. Si cambia de pestaña, se perderá lo que escribió.",
+  "fr8.tab.stay": "Quedarse",
+  "fr8.tab.leave": "Salir sin guardar",
   "job5.byTime": "Por hora",
   "job5.allDaySummary": "{date} · todo el día · {who}",
   "job5.clientDay": "El cliente verá solo la fecha, sin hora",

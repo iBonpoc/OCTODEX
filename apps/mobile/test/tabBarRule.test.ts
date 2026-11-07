@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { NO_TAB_BAR, WITH_TAB_BAR, tabRouteKey, showsTabBar } from "../src/nav/tabBarRule";
+import { NO_TAB_BAR, WITH_TAB_BAR, formsAbove, tabRouteKey, showsTabBar } from "../src/nav/tabBarRule";
 
 const APP = path.resolve(__dirname, "../src/app");
 function routes(dir = APP, base = ""): string[] {
@@ -39,5 +39,13 @@ describe("unit:tabBarRule — the bottom bar on the phone", () => {
     expect(tabRouteKey("")).toBe("index");
     expect(tabRouteKey("(tabs)")).toBe("index");
     expect(showsTabBar("(tabs)/plan")).toBe(true);
+  });
+  it("a tab asks first when a form lies under the card (review #274: a new lead → its client → «Главная»)", () => {
+    expect(formsAbove(["(tabs)", "lead/new", "client/[id]"])).toEqual(["lead/new"]);
+    expect(formsAbove(["(tabs)", "client/[id]", "job/[id]"])).toEqual([]);
+    // a deep link with no tabs under it: every form counts
+    expect(formsAbove(["estimate/new", "client/[id]"])).toEqual(["estimate/new"]);
+    // only above the last copy of the tabs
+    expect(formsAbove(["lead/new", "(tabs)", "client/[id]"])).toEqual([]);
   });
 });

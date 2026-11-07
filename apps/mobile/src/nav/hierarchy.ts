@@ -28,7 +28,9 @@ const X = (text: string, fallback: DictKey): Label => (text ? { text } : { key: 
 type P = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
-export function navContext(pathname: string, params: P, db: DB, role: Role): NavContext {
+/** `appOpen` — signed in and the current Terms accepted: the app's own parents can be offered (the legal texts, review
+ *  #274); before that (sign-in, sign-up, the consent gate, an invitation) the screen's own «back» returns there. */
+export function navContext(pathname: string, params: P, db: DB, role: Role, opts: { appOpen?: boolean } = {}): NavContext {
   const seg = pathname.split("?")[0]!.split("/").filter(Boolean);
   const [a, b] = seg;
   const id = b ?? "";
@@ -155,6 +157,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       if (id) return { section: "settings", kind: "acct.title", up: { href: "/settings", label: K("nav.mySettings") } };
       return { section: a };
     case "legal":
+      // opened from sign-in, the consent gate or an invitation: back to it, not to «Помощь» (review #274)
+      if (opts.appOpen === false) return {};
       // the legal texts are opened from «Помощь и поддержка» (LOG п.17)
       return { section: "help", kind: id === "privacy" ? "legal.privacy.title" : id === "terms" ? "legal.terms.title" : "support.documents", up: { href: "/help", label: K("support.title") } };
     case "jobs":
