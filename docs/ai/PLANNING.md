@@ -22,6 +22,7 @@
 | Требования | `docs/03-prd/*` (`mvp-scope.md`, `00-decisions-for-founder.md`, `18-money-test-cases.md`) | что должен уметь каждый модуль; решения основателя; денежные примеры |
 | Сущности и пути | `docs/04-domain-model.md`, `05-user-flows.md`, `13-core-workflow-spec.md` | словарь сущностей, сценарии, основной путь лид → оплата |
 | Спеки шагов | `docs/14-leads-spec.md` (образец), `docs/specs/*` | точное описание шага: варианты, решение, стыки, тесты |
+| Модули ниш | `docs/03-prd/06-gutters-module.md` (PRD), `docs/specs/33-gutters-module.md` (спека), `docs/prototypes/gutters-*.html` (прототип) | что модуль добавляет к ядру и через какие слоты; ничего нишевого в ядре |
 | Техника | `docs/06-architecture.md`, `docs/adr/*`, `08-security.md`, `08a-seo.md` | как устроено и почему так |
 | Вид | `design/naryad-ds/*` (`CLAUDE.md`, `HANDOFF.md`, `CHECKLIST.md`), `docs/09-design-system.md` | дизайн-система «Наряд» — источник правды по виду |
 | Аудиты | `docs/16-audit-2026-11-04.md`, `docs/audit/*` | что проверено и что осталось открытым |
