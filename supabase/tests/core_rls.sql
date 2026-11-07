@@ -5127,7 +5127,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by', 'legal_acceptance.user_id', 'users.id',
     -- erased (app.erase_personal_rows)
-    'member_prefs.user_id', 'user_locations.user_id',
+    'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id',
     -- unlinked (set to null)
     'company_contacts.user_id', 'companies.lead_default_assignee_id') \gset
 select tst.ok(:'t50_unclassified' = '', format('every person column is classified in T50 (kept / erased / unlinked): %s', :'t50_unclassified'));
@@ -5970,5 +5970,133 @@ select tst.ok((select phone from public.companies where id = 'ca000000-0000-0000
 :as_super
 update public.companies set timezone = 'America/Los_Angeles', phone = null where id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T75 companies.timezone: unknown refused, case and abbreviations made exact ok'
+
+-- ---------------------------------------------------------------- T80: push_devices — a person's phones (docs/specs/27 §4.1)
+:as_tech_a
+select public.register_push_device('ExponentPushToken[t80-mike-1]', 'android', 'es', '1.0.0 · 270');
+select tst.ok(tst.cnt($q$select 1 from public.push_devices where revoked_at is null$q$) = 1, 'T80 the person sees their phone');
+select tst.ok((select lang from public.push_devices where expo_token = 'ExponentPushToken[t80-mike-1]') = 'es', 'T80 the interface language of the phone is kept');
+select public.register_push_device('ExponentPushToken[t80-mike-1]', 'android', 'ru', null);
+select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 1 and (select lang from public.push_devices) = 'ru', 'T80 a repeat updates the same row (the language changed)');
+select public.register_push_device('ExpoPushToken[t80-mike-2]', 'ios', 'xx', null);
+select tst.ok((select lang from public.push_devices where expo_token = 'ExpoPushToken[t80-mike-2]') = 'en', 'T80 an unknown language becomes en');
+select tst.fails_like($q$select public.register_push_device('not a token', 'android', 'en', null)$q$, 'not a push token', 'T80 a wrong token is refused');
+select tst.fails_like($q$select public.register_push_device('ExponentPushToken[a b]', 'android', 'en', null)$q$, 'not a push token', 'T80 a token with a space is refused');
+select tst.fails_like($q$select public.register_push_device('ExponentPushToken[ok]', 'windows', 'en', null)$q$, 'unknown platform', 'T80 an unknown platform is refused');
+select tst.fails($q$insert into public.push_devices (user_id, expo_token, platform) values ('a0000000-0000-0000-0000-000000000003', 'ExponentPushToken[direct]', 'android')$q$, 'T80 no direct insert');
+select tst.blocked($q$update public.push_devices set lang = 'en'$q$, 'T80 no direct update');
+select tst.blocked($q$delete from public.push_devices$q$, 'T80 no direct delete');
+:as_tech2_a
+select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 0, 'T80 another person sees no phones of Mike');
+select public.forget_push_device('ExponentPushToken[t80-mike-1]');
+:as_super
+select tst.ok((select revoked_at is null from public.push_devices where expo_token = 'ExponentPushToken[t80-mike-1]'), 'T80 forget does not touch another person''s token');
+:as_tech2_a
+-- the phone was handed over: Luis signs in on it — the token moves to Luis
+select public.register_push_device('ExponentPushToken[t80-mike-1]', 'android', 'en', null);
+select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 1, 'T80 the token moved to the person signed in now');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 1, 'T80 Mike keeps only his other phone');
+select public.forget_push_device('ExpoPushToken[t80-mike-2]');
+select tst.ok((select revoked_reason from public.push_devices where expo_token = 'ExpoPushToken[t80-mike-2]') = 'signed_out', 'T80 sign out switches the own phone off');
+select public.register_push_device('ExpoPushToken[t80-mike-2]', 'ios', 'en', null);
+select tst.ok((select revoked_at is null from public.push_devices where expo_token = 'ExpoPushToken[t80-mike-2]'), 'T80 signing in again switches it on');
+-- not more than 10 live phones
+do $$ begin
+  for i in 1..11 loop
+    perform public.register_push_device('ExponentPushToken[t80-many-' || i || ']', 'android', 'en', null);
+  end loop;
+end $$;
+select tst.ok(tst.cnt($q$select 1 from public.push_devices where revoked_at is null$q$) = 10, 'T80 not more than 10 live phones');
+select tst.ok((select revoked_reason from public.push_devices where expo_token = 'ExpoPushToken[t80-mike-2]') = 'too_many', 'T80 the phone seen longest ago goes off');
+reset role; set role anon;
+select tst.fails($q$select public.register_push_device('ExponentPushToken[anon]', 'android', 'en', null)$q$, 'T80 anon cannot register');
+select tst.fails($q$select 1 from public.push_devices$q$, 'T80 anon cannot read the phones');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.forget_push_device(text)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.register_push_device(text, text, text, text)', 'EXECUTE'), 'T80 anon executes neither function');
+select tst.ok(not has_table_privilege('authenticated', 'public.push_devices', 'INSERT') and not has_table_privilege('authenticated', 'public.push_devices', 'UPDATE')
+          and not has_table_privilege('authenticated', 'public.push_devices', 'DELETE'), 'T80 the app has only select on push_devices');
+-- account deletion (S22) erases the phones
+select app.erase_personal_rows('a0000000-0000-0000-0000-000000000003');
+select tst.ok((select count(*) from public.push_devices where user_id = 'a0000000-0000-0000-0000-000000000003') = 0, 'T80 account deletion erases the person''s phones');
+delete from public.push_devices;
+\echo 'T80 push_devices: own rows only, through the functions, the token follows the person signed in ok'
+
+-- ---------------------------------------------------------------- T81: push_outbox — who gets a push (docs/specs/27 §4.2–4.3)
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a8100000-0000-4000-8000-000000000001', 'admin81@a.test', '{"full_name":"Ann Admin"}'),
+  ('a8100000-0000-4000-8000-000000000002', 'sales81@a.test', '{"full_name":"Sam Sales"}'),
+  ('a8100000-0000-4000-8000-000000000003', 'sub81@a.test',   '{"full_name":"Sid Sub"}'),
+  ('a8100000-0000-4000-8000-000000000004', 'off81@a.test',   '{"full_name":"Olga Off"}'),
+  ('a8100000-0000-4000-8000-000000000005', 'office81@a.test', '{"full_name":"Oscar Office"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8100000-0000-4000-8000-000000000001', 'admin', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8100000-0000-4000-8000-000000000002', 'sales', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8100000-0000-4000-8000-000000000003', 'subcontractor', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8100000-0000-4000-8000-000000000004', 'admin', 'disabled'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8100000-0000-4000-8000-000000000005', 'office', 'active');
+update public.estimates set owner_user_id = 'a8100000-0000-4000-8000-000000000002' where id = '0e730000-0000-4000-8000-000000000003';
+create temp table t81_who (user_id uuid, kind text, route text);
+grant select on t81_who to authenticated;
+-- a) the client signed
+insert into public.notifications (id, company_id, kind, estimate_id, payload) values
+  ('08100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003', '{"customer":"T81 Client","total":123400}');
+insert into t81_who select user_id, kind, route from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000001';
+select tst.ok(exists (select 1 from t81_who where user_id = 'a0000000-0000-0000-0000-000000000001'), 'T81 signed: the owner gets it');
+select tst.ok(exists (select 1 from t81_who where user_id = 'a8100000-0000-4000-8000-000000000001'), 'T81 signed: an admin gets it');
+select tst.ok(exists (select 1 from t81_who where user_id = 'a8100000-0000-4000-8000-000000000002'), 'T81 signed: the author of the estimate (sales) gets it');
+select tst.ok(not exists (select 1 from t81_who where user_id in ('a8100000-0000-4000-8000-000000000005', 'a0000000-0000-0000-0000-000000000003',
+          'a8100000-0000-4000-8000-000000000003', 'a8100000-0000-4000-8000-000000000004', 'b0000000-0000-0000-0000-000000000001')),
+          'T81 signed: not the office, a tech, a subcontractor, a switched-off admin or another company');
+select tst.ok((select bool_and(kind = 'estimate.client_signed' and route = '/estimate/0e730000-0000-4000-8000-000000000003') from t81_who), 'T81 the push leads to the estimate');
+select tst.ok((select bool_and(status = 'pending' and tries = 0) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000001'), 'T81 rows wait for send-push');
+-- no text, names or sums in the queue (14-app-store п.6): the columns are fixed
+select tst.ok(not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'push_outbox'
+          and column_name in ('title', 'body', 'payload', 'customer', 'total')), 'T81 the queue keeps no text, names or sums');
+-- b) a payment: owner and admin only
+truncate t81_who;
+insert into public.notifications (id, company_id, kind, estimate_id, payload) values
+  ('08100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'deposit.paid', '0e730000-0000-4000-8000-000000000003', '{}');
+insert into t81_who select user_id, kind, route from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000002';
+select tst.ok((select count(*) from t81_who where user_id in ('a0000000-0000-0000-0000-000000000001', 'a8100000-0000-4000-8000-000000000001')) = 2
+          and not exists (select 1 from t81_who where user_id = 'a8100000-0000-4000-8000-000000000002'), 'T81 payment: owner and admin, not the author');
+select tst.ok((select bool_and(kind = 'payment.received') from t81_who), 'T81 deposit.paid is «payment received»');
+-- the viewed estimate is off by default; approved is the office's own act
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08100000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e730000-0000-4000-8000-000000000003'),
+  ('08100000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'estimate.approved', '0e730000-0000-4000-8000-000000000003');
+select tst.ok(not exists (select 1 from public.push_outbox where notification_id in ('08100000-0000-4000-8000-000000000003', '08100000-0000-4000-8000-000000000004')),
+          'T81 estimate.viewed and estimate.approved send no push');
+-- an error of the queue never rolls back the feed row (a signature, a payment)
+alter table public.push_outbox add constraint t81_broken check (false) not valid;
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08100000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003');
+alter table public.push_outbox drop constraint t81_broken;
+select tst.ok(exists (select 1 from public.notifications where id = '08100000-0000-4000-8000-000000000005')
+          and not exists (select 1 from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000005'), 'T81 a broken queue does not roll back the notification');
+-- the app's roles have no rights on the queue
+:as_owner_a
+select tst.fails($q$select 1 from public.push_outbox$q$, 'T81 the owner cannot read the queue');
+select tst.fails($q$insert into public.push_outbox (company_id, user_id, kind, route) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'lead.new', '/')$q$, 'T81 the app cannot write the queue');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_notification_push()', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.push_recipients(uuid, text[], uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.purge_push_outbox()', 'EXECUTE'), 'T81 nobody in the app executes the queue functions');
+select tst.fails_like($q$insert into public.push_outbox (company_id, user_id, kind, route) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'lead.new', 'https://evil.test')$q$,
+          '%push_outbox_route_check%', 'T81 a route is only a path inside the app');
+-- account deletion erases the person's queued pushes; the 30-day purge keeps fresh rows
+select app.erase_personal_rows('a8100000-0000-4000-8000-000000000002');
+select tst.ok(not exists (select 1 from public.push_outbox where user_id = 'a8100000-0000-4000-8000-000000000002'), 'T81 account deletion erases the person''s queue rows');
+select tst.ok(app.purge_push_outbox() = 0 and exists (select 1 from public.push_outbox), 'T81 the purge keeps rows younger than 30 days');
+update public.push_outbox set created_at = now() - interval '31 days';
+select tst.ok(app.purge_push_outbox() > 0, 'T81 the purge deletes rows older than 30 days');
+select tst.ok(not exists (select 1 from public.push_outbox), 'T81 nothing older than 30 days is left');
+delete from public.notifications where id::text like '08100000-%';
+update public.estimates set owner_user_id = null where id = '0e730000-0000-4000-8000-000000000003';
+update public.memberships set status = 'disabled' where user_id::text like 'a8100000-%' and status = 'active';
+drop table t81_who;
+\echo 'T81 push_outbox: owner, admin and the author; payments to owner and admin; no text; server only ok'
 
 \echo 'ALL TESTS PASSED'

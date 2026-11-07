@@ -23,7 +23,7 @@ export const BIG_TABLES: readonly string[] = [
   "customers", "contacts", "properties", "leads", "activities", "jobs", "job_line_items", "visits", "visit_assignees",
   "estimates", "estimate_versions", "estimate_options", "estimate_line_items", "estimate_line_costs", "estimate_approvals",
   "invoices", "invoice_line_items", "payments", "notifications", "audit_log", "files", "tasks", "notes", "calendar_events",
-  "email_outbox", "user_locations", "legal_acceptance", "memberships", "users",
+  "email_outbox", "push_outbox", "user_locations", "legal_acceptance", "memberships", "users",
 ];
 
 const strip = (sql: string) => sql.replace(/\$(\w*)\$[\s\S]*?\$\1\$/g, (m) => m.replace(/[^\n]/g, " ")); // bodies out, lines kept
