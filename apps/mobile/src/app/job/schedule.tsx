@@ -10,6 +10,7 @@ import { Button } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, Screen } from "@/ui/surfaces";
+import { jobServable } from "@/features/jobs";
 
 /**
  * The client signed → the job waits for a date (S9). The same visit form as an inspection (docs/specs/03 §7.1):
@@ -41,6 +42,14 @@ export default function ScheduleJob() {
     return (
       <Screen title={t("sch.title")} back={back}>
         <Empty icon="check" title={t("job3.done.closed")} hint={t("job3.done.noVisit")} />
+      </Screen>
+    );
+  }
+  // «Не обслуживаем» (17-job §11.1): no new visit — the server refuses it too (t44_no_service_guard, db T44)
+  if (!jobServable(db, job)) {
+    return (
+      <Screen title={t("sch.title")} back={back}>
+        <Empty icon="close" title={t("client.st.doNotService")} hint={t("job5.noService")} />
       </Screen>
     );
   }

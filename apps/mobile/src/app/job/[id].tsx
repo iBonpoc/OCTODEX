@@ -9,7 +9,11 @@ import type { DB, Job } from "@/data/types";
 import { canSeeProfit } from "@/nav/roles";
 import { useI18n, type DictKey } from "@/i18n";
 import { ContractStatement } from "@/features/ContractStatement";
-import { jobStatusView } from "@/features/jobs";
+import { jobServable, jobStatusView } from "@/features/jobs";
+import { peopleOf } from "@/data/people";
+import { cleanPhone, telHref } from "@/features/contactLinks";
+import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
+import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { enRouteSms, filterJobHistory, jobHistory, nextOpenVisit, type JobHistoryFilter } from "@/features/jobHistory";
 import { canSeeGateCode } from "@/features/properties";
 import { canPlan } from "@/features/schedule";
@@ -45,6 +49,8 @@ export default function JobScreen() {
   const [filter, setFilter] = useState<JobHistoryFilter>("all");
   const [noteText, setNoteText] = useState("");
   const [restSent, setRestSent] = useState(false);
+  const [calling, setCalling] = useState<CallPreset | null>(null);
+  const [writing, setWriting] = useState<MessagePreset | null>(null);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/jobs"));
   const j = findJob(db, id);
   if (!j)
@@ -60,7 +66,21 @@ export default function JobScreen() {
   const expenses = db.expenses.filter((x) => x.jobId === j.id);
   const pr = jobProfit(db, j.id);
   const st = jobStatusView[j.status];
-  const tel = (c?.phone ?? "").replace(/[^\d+]/g, "");
+  const tel = cleanPhone(c?.phone);
+  const [main] = c ? peopleOf(c) : [];
+  // «Не обслуживаем» (17-job §11.1): no new visit or estimate from this job; the visit already set is finished as usual
+  const servable = jobServable(db, j);
+  const call = () => {
+    const href = telHref(tel);
+    if (href) Linking.openURL(href).catch(() => {});
+    // wave 6: after «Позвонить» the call is written on this job (the sheet asks the outcome)
+    setCalling({ subjectType: "job", subjectId: j.id, contactId: main?.id });
+  };
+  const sms = () => {
+    // wave 6-3: a ready text in the client's language through the messages sheet; without a person — the phone's SMS
+    if (c && main) return setWriting({ owner: { type: "customer", id: c.id }, person: main });
+    Linking.openURL(smsWithBody(tel, "")).catch(() => {});
+  };
   const addr = [p?.address, p?.city].filter(Boolean).join(", ");
   const showMoney = canSeeProfit(store.role);
   const invoices = db.invoices.filter((i) => i.jobId === j.id);
@@ -127,7 +147,7 @@ export default function JobScreen() {
           </T>
           <RowView style={{ flexWrap: "wrap" }}>
             <Button label={t("job3.done.yes")} icon="check" variant="primary" size="sm" onPress={complete} />
-            <Button label={t("job3.done.more")} icon="calendar" variant="secondary" size="sm" onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />
+            {servable ? <Button label={t("job3.done.more")} icon="calendar" variant="secondary" size="sm" onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} /> : null}
           </RowView>
         </Card>
       ) : null}
@@ -152,8 +172,8 @@ export default function JobScreen() {
           </T>
         ) : null}
         <RowView style={{ flexWrap: "wrap" }}>
-          {tel ? <Button label={t("client.call")} icon="phone" variant="secondary" size="sm" onPress={() => Linking.openURL(`tel:${tel}`)} /> : null}
-          {tel ? <Button label={t("visit.message")} icon="sms" variant="secondary" size="sm" onPress={() => Linking.openURL(`sms:${tel}`)} /> : null}
+          {tel ? <Button label={t("client.call")} icon="phone" variant="secondary" size="sm" onPress={call} /> : null}
+          {tel ? <Button label={t("visit.message")} icon="sms" variant="secondary" size="sm" onPress={sms} /> : null}
           {addr ? <Button label={t("jobs.route")} icon="route" variant="secondary" size="sm" onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${encodeURIComponent(addr)}`)} /> : null}
         </RowView>
       </Card>
@@ -170,9 +190,20 @@ export default function JobScreen() {
         </Card>
       ) : null}
 
+      {!servable ? (
+        <Card status="warn">
+          <RowView>
+            <StatusChip status="warn" label={t("client.st.doNotService")} />
+          </RowView>
+          <T v="body">{t("job5.noService")}</T>
+          <T v="caption" tone="mut">
+            {t("job5.noServiceHint")}
+          </T>
+        </Card>
+      ) : null}
       <SectionTitle
         title={t("job3.schedule")}
-        right={j.status === "done" ? undefined : <Button label={visits.length ? t("sch.another") : t("sch.title")} icon="calendar" size="sm" variant={visits.length ? "ghost" : "primary"} onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />}
+        right={j.status === "done" || !servable ? undefined : <Button label={visits.length ? t("sch.another") : t("sch.title")} icon="calendar" size="sm" variant={visits.length ? "ghost" : "primary"} onPress={() => router.push(`/job/schedule?jobId=${j.id}`)} />}
       />
       {next ? (
         <T v="body" tone="mut">
@@ -331,7 +362,7 @@ export default function JobScreen() {
   );
 
   return (
-    <Screen title={title} back={back} subtitle={[j.title, c?.name].filter(Boolean).join(" · ")} fab="job" fabCtx={{ jobId: j.id, customerId: c?.id, propertyId: p?.id }}>
+    <Screen title={title} back={back} subtitle={[j.title, c?.name].filter(Boolean).join(" · ")} fab="job" fabCtx={servable ? { jobId: j.id, customerId: c?.id, propertyId: p?.id } : {}}>
       <RelatedBlock of={{ type: "job", id: j.id }} />
       <Segmented
         full
@@ -344,6 +375,8 @@ export default function JobScreen() {
         ]}
       />
       {tab === "details" ? details : tab === "money" ? moneyTab : historyTab}
+      <CallSheet preset={calling} onClose={() => setCalling(null)} />
+      <MessageSheet preset={writing} onClose={() => setWriting(null)} />
     </Screen>
   );
 }

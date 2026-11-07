@@ -12,6 +12,12 @@ import { WhenWho } from "@/features/VisitForm";
 import { NotesBlock } from "@/features/NotesBlock";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { canPlan } from "@/features/schedule";
+import { visitServable } from "@/features/jobs";
+import { peopleOf } from "@/data/people";
+import { cleanPhone, telHref } from "@/features/contactLinks";
+import { smsWithBody } from "@/features/sms";
+import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
+import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { useTheme } from "@/theme/ThemeProvider";
 import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
@@ -34,6 +40,8 @@ export default function VisitScreen() {
   const toast = useToast();
   const [method, setMethod] = useState<PaymentMethod>("card");
   const [extra, setExtra] = useState("");
+  const [calling, setCalling] = useState<CallPreset | null>(null);
+  const [writing, setWriting] = useState<MessagePreset | null>(null);
   const v = db.visits.find((x) => x.id === id);
   // wave 7б-2: the location question comes before the first «On the way» on my own visit (docs/specs/03 §12)
   const consent = useConsentQuestion(v);
@@ -78,11 +86,26 @@ export default function VisitScreen() {
     // nothing to tie the estimate to: say so instead of a silent button
     router.push("/estimate/new");
   };
-  const tel = customer?.phone.replace(/[^\d+]/g, "");
+  const tel = cleanPhone(customer?.phone);
+  const [main] = customer ? peopleOf(customer) : [];
+  // «Не обслуживаем» (17-job §11.1): no estimate from here; the visit itself is finished as usual
+  const servable = visitServable(db, v);
+  const call = () => {
+    const href = telHref(tel);
+    if (!href) return;
+    Linking.openURL(href).catch(() => {});
+    // wave 6: the call is written on the visit's job (an inspection — on its lead), the sheet asks the outcome
+    if (v.jobId) setCalling({ subjectType: "job", subjectId: v.jobId, contactId: main?.id });
+    else if (v.leadId) setCalling({ subjectType: "lead", subjectId: v.leadId });
+  };
+  const sms = () => {
+    if (customer && main) return setWriting({ owner: { type: "customer", id: customer.id }, person: main });
+    if (tel) Linking.openURL(smsWithBody(tel, "")).catch(() => {});
+  };
   const addr = property ? encodeURIComponent(`${property.address}, ${property.city}`) : "";
 
   return (
-    <Screen title={customer?.name ?? t("visit.title")} back={back} subtitle={`${time(v.start)} · ${job?.title ?? ""}`} fab="visit" fabCtx={{ visitId: v.id, customerId: customer?.id, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
+    <Screen title={customer?.name ?? t("visit.title")} back={back} subtitle={`${time(v.start)} · ${job?.title ?? ""}`} fab="visit" fabCtx={{ visitId: v.id, customerId: servable ? customer?.id : undefined, propertyId: property?.id, leadId: v.leadId, inspection: v.kind === "inspection" }}>
       <RelatedBlock of={{ type: "visit", id: v.id }} />
       <Card>
         <RowView style={{ justifyContent: "space-between" }}>
@@ -101,8 +124,8 @@ export default function VisitScreen() {
           </T>
         </RowView>
         <RowView>
-          <IconButton icon="phone" label={t("visit.call")} onPress={() => tel && Linking.openURL(`tel:${tel}`)} />
-          <IconButton icon="message" label={t("visit.message")} onPress={() => tel && Linking.openURL(`sms:${tel}`)} />
+          <IconButton icon="phone" label={t("visit.call")} onPress={call} />
+          <IconButton icon="message" label={t("visit.message")} onPress={sms} />
           <IconButton icon="navigate" label={t("visit.navigate")} onPress={() => Linking.openURL(`https://maps.apple.com/?daddr=${addr}`)} />
         </RowView>
       </Card>
@@ -298,7 +321,7 @@ export default function VisitScreen() {
         </Card>
       ) : null}
 
-      {v.step === "done" && isInspection ? (
+      {v.step === "done" && isInspection && servable ? (
         // after an inspection the main action is the estimate, lead and property filled in (13 §3.9, 17-job §7.2)
         <Button label={t("job3.makeEstimate")} icon="invoice" variant="primary" full onPress={makeEstimate} />
       ) : null}
@@ -338,6 +361,8 @@ export default function VisitScreen() {
         </Card>
       ) : null}
       {job ? <NotesBlock subjectType="job" subjectId={job.id} /> : v.leadId ? <NotesBlock subjectType="lead" subjectId={v.leadId} /> : null}
+      <CallSheet preset={calling} onClose={() => setCalling(null)} />
+      <MessageSheet preset={writing} onClose={() => setWriting(null)} />
     </Screen>
   );
 }
