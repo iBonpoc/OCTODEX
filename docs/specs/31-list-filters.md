@@ -150,7 +150,7 @@
 |---|---|---|
 | 1 | FilterBar: ряд поиска, «Фильтр» в ряду, группы, строка выбранного, 1280 в ряд; «Клиенты» на новом виде | `src/ui/filterBar.tsx`, `filterBarRules.ts`, `(tabs)/clients.tsx` (файл «Лиды и клиенты» — на время), i18n `fix.filters.*` |
 | 2 | Лиды: без переключателя, `?tab=` → `/estimates` / `/invoice` | `(tabs)/leads.tsx` (`LeadsBoard`); `src/nav/*` — «Каркас» №9 (пункт «Сметы» → `/estimates`, цепочка) |
-| 3 | Сметы и Счета (+ поиск): один экран счетов `/invoice`, из `/money` список счетов уходит | `features/boards.tsx`, `estimates.tsx`, `invoice/index.tsx`, `money.tsx` |
+| 3 | Сметы и Счета (+ поиск): один экран счетов `/invoice` (ссылка `?f=` — на заход, выбранный чип помнится), из `/money` список счетов уходит — экран «Расходы» (название и «назад» у расхода — «Расходы», как в меню) | `features/boards.tsx`, `estimates.tsx`, `invoice/index.tsx`, `money.tsx` |
 | 4 | Работы (+ поиск) | `jobs.tsx` |
 | 5 | Задачи, Каталог, Оплаты | `tasks.tsx`, `catalog/index.tsx`, `payments/index.tsx` |
 | 6 | План: «Чей план» в «Фильтр» | `plan.tsx`, `PlanParts.tsx` |

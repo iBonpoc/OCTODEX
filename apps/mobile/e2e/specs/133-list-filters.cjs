@@ -11,6 +11,9 @@ const LISTS = [
   { path: "/clients", search: "Имя, телефон или адрес", group: "Метки" },
   // PR 2: «Лиды» — no Leads · Estimates · Invoices switch; people («Мои») and sources in the sheet
   { path: "/leads", search: "Имя, телефон, адрес, услуга", group: "Ответственный", noSwitch: true },
+  // PR 3: «Сметы» and «Счета» — sections of their own with a search; nothing in the sheet yet (no «Фильтр» button)
+  { path: "/estimates", search: "Клиент, адрес, работа, EST" },
+  { path: "/invoice", search: "Клиент, адрес, работа, INV" },
 ];
 
 exports.run = async (h) => {
@@ -20,6 +23,9 @@ exports.run = async (h) => {
     await h.go(L.path);
     const bar = vis(p.getByTestId("filter-bar")).first();
     await bar.waitFor();
+    // a first-visit hint of the screen is not part of the filters: close it before measuring
+    const got = vis(p.getByRole("button", { name: "Понятно", exact: true }));
+    if (await got.count()) { await got.first().click(); await p.waitForTimeout(300); }
     if (L.noSwitch) h.expect((await vis(p.getByRole("tab", { name: /^(Сметы|Счета)$/ })).count()) === 0, `${L.path}: no switch of sub-lists over the list (spec 31 §7а)`);
 
     // rows over the list: the search row and the lane — the lane is one line
@@ -38,6 +44,20 @@ exports.run = async (h) => {
     const texts = await chips.allInnerTexts();
     const checked = await vis(bar.locator('[role="radio"][aria-checked="true"]')).allInnerTexts();
     h.expect(texts.filter((x) => /· 0$/.test(x) && !checked.includes(x)).length === 0, `${L.path}: no «· 0» chips (${texts.join(" | ")})`);
+
+    // a list without a sheet: no «Фильтр» button; the chip is kept between visits, the search is not
+    if (!L.group) {
+      h.expect((await vis(bar.getByTestId("filter-button")).count()) === 0 && (await vis(bar.getByTestId(/^filter-group-/)).count()) === 0, `${L.path}: no «Фильтр» without groups`);
+      const other = vis(bar.locator('[role="radio"][aria-checked="false"]')).first();
+      const label = await other.getAttribute("aria-label");
+      await other.click(); await p.waitForTimeout(300);
+      await vis(p.getByPlaceholder(L.search)).first().fill("zzz");
+      await h.go(L.path);
+      h.expect((await vis(p.getByTestId("filter-bar")).first().locator(`[role="radio"][aria-checked="true"][aria-label="${label}"]`).count()) === 1, `${L.path}: the chip «${label}» is kept`);
+      h.expect((await vis(p.getByPlaceholder(L.search)).first().inputValue()) === "", `${L.path}: the search is not kept`);
+      await h.shot(`${L.path.slice(1)}-kept`);
+      continue;
+    }
 
     // the sheet: an option on → the chosen line → the list narrows → ✕
     const before = await vis(p.locator('[data-testid="list-card"]')).count();

@@ -140,7 +140,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       return id ? { section: "reports", kind: "rpt.title", up: { href: "/reports", label: K("rpt.title") } } : { section: "reports" };
     case "expense": {
       const jid = one(params.jobId);
-      return { section: "money", kind: "exp.title", up: jid ? toJob(jid) : { href: "/money", label: K("money.title") } };
+      return { section: "money", kind: "exp.title", up: jid ? toJob(jid) : { href: "/money", label: K("nav.expenses") } };
     }
     case "search":
       // «Искать везде» (15-flows §3.2) opens over the home screen

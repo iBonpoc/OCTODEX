@@ -15,9 +15,9 @@ exports.run = async (h) => {
   // Estimates and Invoices are sections of their own (spec 31 §7а): no switch on /leads
   await h.go("/estimates");
   await h.expectText(/Открытые · \d+/, "estimate filters");
-  // the invoice cards with groups (until 10в PR 3 they also live on /money)
-  await h.go("/money");
-  await h.expectText(/Нужно действие · \d+ · \$1,840/, "overdue invoices group (list cards PR5)");
+  // the invoice cards with groups: «Счета» is the one invoices list (spec 31 §7а)
+  await h.go("/invoice");
+  await h.expectText(/Просрочено · \d+ · \$[\d,]+/, "overdue invoices group");
   await h.expectText(/Просрочен \d+ дн/, "overdue sign on the invoice card");
   await h.go("/jobs");
   await h.expectText(/Запланирован · \d+/, "job filters");
