@@ -2217,6 +2217,9 @@ export const ru = {
   "today2.ofSent": "{n}% от отправленных",
   // fix.settings.* — profile split from app settings (spec 26)
   "fix.settings.profile": "Профиль и аккаунт",
+  // fix.sign.* — the full-screen signature (spec 29)
+  "fix.sign.expand": "Развернуть на весь экран",
+  "fix.sign.done": "Готово",
 } as const;
 
 export type DictKey = keyof typeof ru;

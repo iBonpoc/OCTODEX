@@ -113,6 +113,8 @@ export const component = {
   /* ---- app-only tokens (not in the DS css yet; same style, keep here so components never use raw numbers) ---- */
   /** company logo stored size, px (image processing) */
   logoPx: 256,
+  /** a signature stroke, px (the pad, the full-screen pad, the preview) */
+  signStroke: 2.4,
   /** «Ещё» on 820/1280: one column of menu rows, not wider than the palette (spec 25) */
   menuListMax: 560,
   /** charts of «Сегодня» (spec 24 A3; «Наряд» prototype column bars r8 / min 4 / muted .55, track 8; height 130 → 120 for the phone) */

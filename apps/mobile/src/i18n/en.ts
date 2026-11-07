@@ -2218,4 +2218,7 @@ export const en: Dict = {
   "today2.ofSent": "{n}% of sent",
   // fix.settings.* — profile split from app settings (spec 26)
   "fix.settings.profile": "Profile & account",
+  // fix.sign.* — the full-screen signature (spec 29)
+  "fix.sign.expand": "Full screen",
+  "fix.sign.done": "Done",
 };
