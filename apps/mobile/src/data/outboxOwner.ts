@@ -56,7 +56,9 @@ export const othersOf = (items: readonly OwnedItem[], userId: string | null): Ow
   items.filter((o) => !!o.owner && o.owner.userId !== userId);
 
 /** the keys the account deletion resets in memory: the device keys except the outbox, which is filtered (othersOf) */
-export const wipedOnDelete = (k: string) => isDeviceKey(k) && k !== OUTBOX_KEY;
+export const wipedOnDelete = (k: string) => isDeviceKey(k) && k !== OUTBOX_KEY && k !== REJECTED_KEY;
+/** the money changes the server refused (outboxRejected): by owner, like the outbox — an account deletion keeps others' */
+export const REJECTED_KEY = "octo.cloud.v1.rejected";
 
 /** the stored outbox text → its ops (a broken value → none) */
 export function parseOutbox(raw: string | null): OwnedItem[] {

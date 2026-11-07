@@ -6,12 +6,15 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
+import { router, type Href } from "expo-router";
 import { useStore, type StuckOp } from "@/data/store";
+import type { RejectedOp } from "@/data/outboxRejected";
 import { useI18n } from "@/i18n";
 import { stuckKindKey } from "@/data/syncLink";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { CardList, Card, SectionTitle } from "@/ui/surfaces";
+import { useToast } from "@/ui/overlays";
 
 function StuckCard({ op }: { op: StuckOp }) {
   const { t, day, time } = useI18n();
@@ -82,19 +85,63 @@ function StuckCard({ op }: { op: StuckOp }) {
   );
 }
 
-/** the section in «Профиль и аккаунт» (spec 26): nothing when nothing is stuck */
+/**
+ * a money change the server refused (docs/specs/23 §3): what it was and its amount, when, our own words (not the
+ * server's English text, review #259), «Открыть» the record it was about, «Понятно» to take it away
+ */
+function RejectedCard({ r }: { r: RejectedOp }) {
+  const { t, money, day, time } = useI18n();
+  const { dismissRejected } = useStore();
+  const toast = useToast();
+  return (
+    <Card status="bad">
+      <View testID={`rejected-${r.id}`} style={{ gap: space[2] }}>
+        <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
+          <T v="body" w="semibold">
+            {t(`att.rejected.${r.what}`)}
+            {r.amountCents != null ? ` · ${money(r.amountCents)}` : ""}
+          </T>
+          {/* rule 2: the status is an icon and a word */}
+          <StatusChip status="bad" label={t("att.rejectedChip")} />
+        </View>
+        <T v="caption" tone="mut">
+          {`${day(r.at)} ${time(r.at)}`} · {t("sync.rejected.hint")}
+        </T>
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+          <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} />
+          <Button label={t("sync.rejected.ok")} icon="check" variant="ghost" onPress={() => toast.show(t("sync.rejected.dismissed"), dismissRejected(r.id))} />
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+/** the sections in «Профиль и аккаунт» (spec 26): nothing when nothing is stuck or refused */
 export function StuckOps() {
   const { t } = useI18n();
-  const { stuckOps } = useStore();
-  if (!stuckOps.length) return null;
+  const { stuckOps, rejectedOps } = useStore();
   return (
     <>
-      <SectionTitle title={t("sync.stuck.title")} />
-      <CardList>
-        {stuckOps.map((op) => (
-          <StuckCard key={op.id} op={op} />
-        ))}
-      </CardList>
+      {rejectedOps.length ? (
+        <>
+          <SectionTitle title={t("sync.rejected.title")} />
+          <CardList>
+            {rejectedOps.map((r) => (
+              <RejectedCard key={r.id} r={r} />
+            ))}
+          </CardList>
+        </>
+      ) : null}
+      {stuckOps.length ? (
+        <>
+          <SectionTitle title={t("sync.stuck.title")} />
+          <CardList>
+            {stuckOps.map((op) => (
+              <StuckCard key={op.id} op={op} />
+            ))}
+          </CardList>
+        </>
+      ) : null}
     </>
   );
 }
