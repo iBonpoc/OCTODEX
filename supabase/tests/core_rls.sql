@@ -6682,15 +6682,29 @@ insert into public.memberships (company_id, user_id, role, status) values ('ca00
 insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
   ('18400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Lead', '+13235558401', 'a0000000-0000-0000-0000-000000000001');
 :as_super
-select tst.ok((select count(*) = 1 and bool_and(user_id = 'a0000000-0000-0000-0000-000000000001' and route = '/lead/18400000-0000-4000-8000-000000000001'
-               and source_id = '18400000-0000-4000-8000-000000000001' and notification_id is null)
-               from public.push_outbox where kind = 'lead.new'), 'T84 a new lead added by the office: a push to its assignee (the owner)');
+select tst.ok((select count(*) = 1 and bool_and(route = '/lead/18400000-0000-4000-8000-000000000001' and notification_id is null)
+               from public.push_outbox where kind = 'lead.new' and source_id = '18400000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T84 a new lead added by the office: a push to its assignee (the owner), once');
+select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000002'),
+          'T84 … not to the office who added it');
 -- the owner adds a lead for himself: nobody is told
 :as_owner_a
 insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
   ('18400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Own', '+13235558402', 'a0000000-0000-0000-0000-000000000001');
 :as_super
-select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000002'), 'T84 the person who added the lead gets no push about it');
+select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T84 the person who added the lead gets no push about it');
+select tst.ok(exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000002'),
+          'T84 a busy owner is not the only one: the office hears of the owner''s new lead (variant 2)');
+-- a lead given to the tech at once: the tech and the people of the flow; never the subcontractor
+:as_office_a
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('18400000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Tech', '+13235558404', 'a0000000-0000-0000-0000-000000000003');
+:as_super
+select tst.ok(exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000004' and user_id = 'a0000000-0000-0000-0000-000000000003')
+          and exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000004' and user_id = 'a0000000-0000-0000-0000-000000000001')
+          and not exists (select 1 from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000004' and user_id = 'a8400000-0000-4000-8000-000000000001'),
+          'T84 a lead given to the tech: the tech and the owner; not the subcontractor');
 -- a lead nobody holds (from outside: no auth.uid) → owner, admin, office; never tech or subcontractor
 insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
   ('18400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T84 Web', '+13235558403', null);
@@ -6787,8 +6801,9 @@ update public.push_outbox set next_try_at = now() where status = 'pending';
 update public.visit_assignees set deleted_at = now() where visit_id = 'f8400000-0000-4000-8000-000000000002' and user_id = 'a0000000-0000-0000-0000-000000000003';
 update public.visits set status = 'cancelled', cancel_reason = 'other', cancel_reason_text = 'T84' where id = 'f8400000-0000-4000-8000-000000000001';
 update public.leads set status = 'lost', lost_reason = 'price_too_high' where id = '18400000-0000-4000-8000-000000000001';
--- lead 3 went to the subcontractor and back to nobody: its «new lead» to owner and office still stands
-update public.leads set assigned_to = null where id = '18400000-0000-4000-8000-000000000003';
+-- lead 3 went to the subcontractor: its «new lead» to owner and office still stands (they handle the flow)
+-- lead 4 is handed from Mike to the office before sending
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000002' where id = '18400000-0000-4000-8000-000000000004';
 reset role; set role service_role;
 select public.push_claim(500);
 :as_super
@@ -6800,7 +6815,12 @@ select tst.ok((select status = 'skipped' and error = 'not_member' from public.pu
           'T84 at sending: a person taken off the visit gets nothing');
 select tst.ok((select count(*) = 2 and bool_and(status = 'sending') from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000003'
                and user_id in ('a0000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002')),
-          'T84 at sending: the open lead nobody else holds still goes');
+          'T84 at sending: the open lead still goes to the people of the flow');
+select tst.ok((select status = 'skipped' and error = 'not_member' from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000004'
+               and user_id = 'a0000000-0000-0000-0000-000000000003' and kind = 'lead.new')
+          and (select status = 'sending' from public.push_outbox where source_id = '18400000-0000-4000-8000-000000000004'
+               and user_id = 'a0000000-0000-0000-0000-000000000001' and kind = 'lead.new'),
+          'T84 at sending: the tech whose lead was handed on gets nothing, the owner still does');
 -- the subcontractor never gets money or signatures (payment, signature of his own estimate)
 update public.estimates set owner_user_id = 'a8400000-0000-4000-8000-000000000001' where id = '0e730000-0000-4000-8000-000000000003';
 insert into public.notifications (id, company_id, kind, estimate_id) values

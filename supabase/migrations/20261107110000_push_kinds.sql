@@ -5,8 +5,7 @@
 --    Checked twice: when queued (not queued) and when sent (push_claim → skipped 'off').
 -- 3. Triggers (no HTTP, any error caught — a visit or a lead is never rolled back by a push):
 --    visit_assignees (a person put on a visit, or put back) → visit.assigned; visits (the time moved) → visit.rescheduled
---    to everyone on it; leads (a new lead → its assignee, or owner / admin / office when nobody; assigned_to changed →
---    lead.assigned). The person who did it gets nothing.
+--    to everyone on it; leads (a new lead → owner, admin, office and its assignee; assigned_to changed → lead.assigned). The person who did it gets nothing.
 -- 4. app.push_still_recipient — the checks at sending time for the new kinds (a subcontractor gets «visits» of his own
 --    visits only: director 07.11, §4.7 №3); push_claim — the 'off' check; erase_personal_rows — the switches go too.
 -- Nothing is renamed or dropped (rule 16): the kind check is widened (only the server reads the queue).
@@ -205,17 +204,14 @@ begin
       return null;
     end if;
     if tg_op = 'INSERT' then
-      if new.assigned_to is not null then
-        -- the app gives a new lead to the owner (founder 04.11): the owner hears of the leads someone else adds
-        if app.push_role(new.company_id, new.assigned_to) is distinct from 'subcontractor' then
-          perform app.push_enqueue(new.company_id, new.assigned_to, 'lead.new', '/lead/' || new.id::text, new.id);
-        end if;
-      else
-        -- nobody holds it (a lead from outside, later): everyone who handles the flow
-        for r in select app.push_recipients(new.company_id, array['owner', 'admin', 'office'], null) loop
-          perform app.push_enqueue(new.company_id, r, 'lead.new', '/lead/' || new.id::text, new.id);
-        end loop;
-      end if;
+      -- everyone who handles the flow (owner, admin, office) and the assignee — not only a busy owner (director 07.11,
+      -- §4.7 variant 2: the speed of the answer matters most, 14 §9); each switches «leads» off for himself if too much.
+      -- The app gives a new lead to the owner (founder 04.11): the assignment itself does not change here.
+      for r in select app.push_recipients(new.company_id, array['owner', 'admin', 'office'],
+                                          case when app.push_role(new.company_id, new.assigned_to) is distinct from 'subcontractor'
+                                               then new.assigned_to end) loop
+        perform app.push_enqueue(new.company_id, r, 'lead.new', '/lead/' || new.id::text, new.id);
+      end loop;
     elsif new.assigned_to is distinct from old.assigned_to and new.assigned_to is not null
           and app.push_role(new.company_id, new.assigned_to) is distinct from 'subcontractor' then
       perform app.push_enqueue(new.company_id, new.assigned_to, 'lead.assigned', '/lead/' || new.id::text, new.id);
@@ -310,8 +306,8 @@ begin
     if v_lead.id is null or not app.push_lead_open(v_lead) then
       return false;
     end if;
-    -- still theirs; a lead nobody holds — the people who handle the flow
-    return v_lead.assigned_to = p_row.user_id or (v_lead.assigned_to is null and p_row.kind = 'lead.new' and v_role in ('owner', 'admin', 'office'));
+    -- «assigned to you»: still theirs; «new lead»: still theirs, or they handle the flow (owner, admin, office)
+    return v_lead.assigned_to = p_row.user_id or (p_row.kind = 'lead.new' and v_role in ('owner', 'admin', 'office'));
   end if;
   return false;
 end;
