@@ -62,7 +62,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       return { section: "estimates" };
     case "estimate": {
       // «Моя подпись» lives under «Мои настройки», it is not an estimate with the id «signature» (LOG п.15)
-      if (id === "signature") return { section: "settings", kind: "est.sig.title", up: { href: "/settings", label: K("nav.mySettings") } };
+      // «Моя подпись для договоров» is a row of «Профиль и аккаунт» (spec 26): back goes there
+      if (id === "signature") return { section: "settings", kind: "est.sig.title", up: { href: "/settings/profile", label: K("fix.settings.profile") } };
       if (id === "new") {
         const lid = one(params.leadId);
         const cid = one(params.customerId);
@@ -153,8 +154,10 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       // a conversation sits under «Сообщения» (LOG п.16: after a reload there was no way back); the list is a tab root
       return id ? { section: "messages", kind: "w6.msg.thread", up: { href: "/messages", label: K("nav.messages") } } : {};
     case "settings":
-      // «Удалить аккаунт» goes back to «Мои настройки», not to «Ещё» (LOG п.17)
-      if (id) return { section: "settings", kind: "acct.title", up: { href: "/settings", label: K("nav.mySettings") } };
+      // «Профиль и аккаунт» (spec 26): opened from the profile card of «Ещё» / the menus — a page of its own
+      if (id === "profile") return { section: "settings", kind: "fix.settings.profile" };
+      // «Удалить аккаунт» lives in the profile now: back goes to «Профиль и аккаунт» (LOG п.17, spec 26)
+      if (id) return { section: "settings", kind: "acct.title", up: { href: "/settings/profile", label: K("fix.settings.profile") } };
       return { section: a };
     case "legal":
       // opened from sign-in, the consent gate or an invitation: back to it, not to «Помощь» (review #274)

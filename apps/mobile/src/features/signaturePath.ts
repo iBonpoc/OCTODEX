@@ -9,7 +9,7 @@ export const SIG_BOX = { w: 400, h: 160 } as const;
 const NUM = /-?\d+(?:\.\d+)?/g;
 
 /** the path with every number × k (commands and order untouched) */
-function scale(d: string, k: number): string {
+export function scale(d: string, k: number): string {
   return d.replace(NUM, (n) => String(Math.round(Number(n) * k * 100) / 100));
 }
 

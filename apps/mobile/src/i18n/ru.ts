@@ -47,7 +47,7 @@ export const ru = {
   "nav.expenses": "Расходы",
   "nav.team": "Команда",
   "nav.companySettings": "Настройки компании",
-  "nav.mySettings": "Мои настройки",
+  "nav.mySettings": "Настройки приложения",
   "nav.menu": "Меню",
   "nav.create": "Создать",
   "nav.group.work": "Работа",
@@ -2215,6 +2215,11 @@ export const ru = {
   "today2.overdue": "Просрочено: {n}",
   "today2.ofLeads": "{n}% от лидов",
   "today2.ofSent": "{n}% от отправленных",
+  // fix.settings.* — profile split from app settings (spec 26)
+  "fix.settings.profile": "Профиль и аккаунт",
+  // fix.sign.* — the full-screen signature (spec 29)
+  "fix.sign.expand": "Развернуть на весь экран",
+  "fix.sign.done": "Готово",
 } as const;
 
 export type DictKey = keyof typeof ru;

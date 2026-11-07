@@ -88,7 +88,8 @@ export default function More() {
         <Card>
           <Press
             testID="more-profile"
-            onPress={() => openSection(sectionHref("settings", role))}
+            // spec 26: the profile card opens «Профиль и аккаунт»; «Настройки приложения» is its own row below
+            onPress={() => openSection("/settings/profile")}
             visibleHeight={size.rowMax}
             accessibilityRole="button"
             accessibilityLabel={`${me?.name ?? auth.email ?? ""} · ${who}`}
