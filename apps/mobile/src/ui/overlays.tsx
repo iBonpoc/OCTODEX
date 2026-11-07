@@ -11,6 +11,12 @@ import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T, type IconKey } from "./primitives";
 
+/**
+ * Every modal turns with the phone (docs/specs/32): without it an iPhone shows a modal in portrait only
+ * (React Native's default) — a sheet opened in landscape turns the whole screen.
+ */
+export const ALL_ORIENTATIONS: ("portrait" | "landscape")[] = ["portrait", "landscape"];
+
 /* ---------- Glass panel (overlay background --ov + blur --blurov) ---------- */
 export function Glass({ children, style, strong }: { children: ReactNode; style?: object; strong?: boolean }) {
   const { c } = useTheme();
@@ -49,15 +55,18 @@ export function Menu<K extends string>({
 }) {
   const { c } = useTheme();
   const { width: winW, height: winH } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
   if (!visible || !anchor) return null;
-  const w = Math.min(component.menuW, winW - space[4] * 2);
-  const left = Math.max(space[4], Math.min(anchor.x, winW - w - space[4]));
+  // the edges: 16 from the window, and clear of the notch and the home indicator (docs/specs/32)
+  const e = { l: Math.max(insets.left, space[4]), r: Math.max(insets.right, space[4]), t: Math.max(insets.top, space[4]), b: Math.max(insets.bottom, space[4]) };
+  const w = Math.min(component.menuW, winW - e.l - e.r);
+  const left = Math.max(e.l, Math.min(anchor.x, winW - w - e.r));
   const below = anchor.y + anchor.h + space[1];
   const estH = (items.length + (title ? 1 : 0)) * size.hitMin + space[2] * 2;
-  const top = below + estH > winH - space[4] ? Math.max(space[4], anchor.y - estH - space[1]) : below;
+  const top = below + estH > winH - e.b ? Math.max(e.t, anchor.y - estH - space[1]) : below;
   return (
-    <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent>
+    <Modal transparent visible animationType="none" onRequestClose={onClose} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       <Pressable style={StyleSheet.absoluteFill} onPress={onClose} accessibilityRole="button" accessibilityLabel={title ?? ""} />
       <Animated.View
         entering={reduce ? undefined : FadeIn.duration(motion.durFast)}
@@ -167,10 +176,11 @@ export function Sheet({
   const follow = useAnimatedStyle(() => ({ transform: [{ translateY: drag.value }] }));
   const maxH = full ? winH - insets.top - space[2] : winH * component.sheetHeightRatio;
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={requestClose} statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={requestClose} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       <KeyboardAvoidingView
         behavior={avoidBehavior}
-        style={{ flex: 1, justifyContent: wide ? "center" : "flex-end", alignItems: "center", paddingTop: insets.top + space[2] }}
+        // 820/1280: the centred sheet keeps clear of the home indicator too (docs/specs/32); the phone sheet runs to the edge
+        style={{ flex: 1, justifyContent: wide ? "center" : "flex-end", alignItems: "center", paddingTop: insets.top + space[2], paddingBottom: wide ? insets.bottom + space[2] : 0 }}
       >
         <Animated.View
           entering={reduce ? undefined : FadeIn.duration(motion.durBase)}
@@ -200,6 +210,9 @@ export function Sheet({
               padding: space[4],
               paddingTop: wide ? space[4] : 0,
               paddingBottom: wide ? space[4] : insets.bottom + space[4],
+              // the phone sheet is as wide as the screen: in landscape its rows keep clear of the notch (docs/specs/32)
+              paddingLeft: wide ? space[4] : Math.max(insets.left, space[4]),
+              paddingRight: wide ? space[4] : Math.max(insets.right, space[4]),
               gap: space[3],
             }}
           >
@@ -363,7 +376,7 @@ function ToastView({ item, onDone }: { item: ToastItem | null; onDone: () => voi
       entering={reduce ? undefined : SlideInDown.duration(motion.durBase)}
       exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
       pointerEvents="box-none"
-      style={{ position: "absolute", left: space[4], right: space[4], bottom, alignItems: "center", zIndex: 100 }}
+      style={{ position: "absolute", left: Math.max(insets.left, space[4]), right: Math.max(insets.right, space[4]), bottom, alignItems: "center", zIndex: 100 }}
       accessibilityLiveRegion="polite"
     >
       <Glass

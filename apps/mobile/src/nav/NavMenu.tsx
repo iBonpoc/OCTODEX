@@ -8,7 +8,7 @@ import { useStore } from "@/data/store";
 import { useAuth } from "@/cloud/auth";
 import { useI18n, type DictKey } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
-import { Glass } from "@/ui/overlays";
+import { ALL_ORIENTATIONS, Glass } from "@/ui/overlays";
 import { Avatar } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { activeSection } from "./hierarchy";
@@ -96,7 +96,8 @@ export function useMenuCurrent(): SectionId | undefined {
 export function useContentWidth(): number {
   const { width } = useWindowDimensions();
   const { device } = useDevice();
-  return contentWidth(width, device, useNavMenu().sideOpen);
+  const insets = useSafeAreaInsets();
+  return contentWidth(width, device, useNavMenu().sideOpen, insets.left);
 }
 
 export const GROUP_TITLE: Partial<Record<MenuGroup, DictKey>> = { work: "nav.group.work", docs: "nav.group.docs", money: "nav.group.money" };
@@ -119,7 +120,7 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
   };
   const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={() => onClose()} statusBarTranslucent>
+    <Modal visible={visible} transparent animationType="none" onRequestClose={() => onClose()} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       <Animated.View entering={reduce ? undefined : FadeIn.duration(motion.durBase)} exiting={reduce ? undefined : FadeOut.duration(motion.durFast)} style={StyleSheet.absoluteFill}>
         {/* a tap outside closes it; for the keyboard and screen readers: «Закрыть» in the menu and Esc */}
         <View
@@ -138,9 +139,10 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
         aria-modal
         role="dialog"
         aria-label={t("nav.menu")}
-        style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: Math.min(component.panelW, winW - space[8]) }}
+        // the notch in landscape (docs/specs/32): the drawer runs to the edge and grows by it, its rows keep clear
+        style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: Math.min(component.panelW, winW - space[8] - insets.left) + insets.left }}
       >
-        <Glass strong style={{ flex: 1, borderTopRightRadius: component.sheetRadius, borderBottomRightRadius: component.sheetRadius, paddingTop: insets.top + space[3], paddingBottom: insets.bottom + space[3] }}>
+        <Glass strong style={{ flex: 1, borderTopRightRadius: component.sheetRadius, borderBottomRightRadius: component.sheetRadius, paddingTop: insets.top + space[3], paddingBottom: insets.bottom + space[3], paddingLeft: insets.left }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space[4], minHeight: size.hitMin }}>
             <T v="title">{t("nav.menu")}</T>
             <Press onPress={() => onClose()} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>

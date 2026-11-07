@@ -11,10 +11,9 @@ import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { menuGroups, sectionHref, type SectionId } from "./sections";
 import { GROUP_TITLE, useMenuCurrent, useNavMenu } from "./NavMenu";
 import { openSection } from "./go";
-import { sideNavWidth } from "./shell";
+import { isAppPath, sideNavWidth } from "./shell";
 
-/** pages outside the app: the client page and sign-in have no staff menu (13а §8) */
-export const isAppPath = (path: string) => !/^\/(p|auth)(\/|$)/.test(path);
+export { isAppPath };
 
 /**
  * Side menu on 820 and 1280 (docs/specs/13 §2.5, 13а §8): a rail of icons with labels, always on screen.
@@ -43,7 +42,8 @@ export function SideNav() {
       testID="side-nav"
       role="navigation"
       aria-label={t("nav.menu")}
-      style={{ width: sideNavWidth(device, menu.sideOpen), borderRightWidth: component.hairline, borderRightColor: c.bd, backgroundColor: c.page, paddingTop: insets.top + space[3], paddingBottom: insets.bottom + space[3] }}
+      // the notch in landscape (docs/specs/32): the menu runs to the edge, its places keep clear of it
+      style={{ width: sideNavWidth(device, menu.sideOpen, insets.left), borderRightWidth: component.hairline, borderRightColor: c.bd, backgroundColor: c.page, paddingTop: insets.top + space[3], paddingBottom: insets.bottom + space[3], paddingLeft: insets.left }}
     >
       <ScrollView testID="side-scroll" contentContainerStyle={{ paddingHorizontal: space[2], gap: space[1], alignItems: open ? "stretch" : "center" }}>
         <Item
