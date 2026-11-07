@@ -180,5 +180,18 @@ export function techJobsAt(db: DB, customerId: string): { id: string; label: str
     .map((j) => ({ id: j.id, label: j.title || j.number || j.id }));
 }
 
+/**
+ * «Позвонить» on a client by the technician with several of his jobs there (20 §6-4): «к чему» offers only this
+ * client's jobs of his and his own leads at this client — never his whole list, never the client itself (RLS).
+ */
+export function callPlacesAtClient(db: DB, role: Role, customerId: string): CallPlace[] {
+  if (role !== "tech") return [];
+  const mine = techScope(db);
+  return [
+    ...techJobsAt(db, customerId).map((j) => ({ subjectType: "job" as const, subjectId: j.id, label: j.label })),
+    ...db.leads.filter((l) => mine.leads.has(l.id) && l.customerId === customerId).map((l) => ({ subjectType: "lead" as const, subjectId: l.id, label: l.name })),
+  ].filter((x) => x.label);
+}
+
 /** a call can be saved: something to tie it to and an outcome (the server counts a call without one as answered) */
 export const callReady = (c: Partial<CallInput>): c is CallInput => !!c.subjectType && !!c.subjectId && !!c.outcome && CALL_OUTCOMES.includes(c.outcome);

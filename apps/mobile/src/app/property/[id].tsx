@@ -15,6 +15,7 @@ import { isPropertyRow, propertyCounts, propertyRecords, propertyRowsFor, type P
 import { PropertySection, propertyRowLabel, RowCount } from "@/features/client/PropertySections";
 import { AccessSheet, PropertySheet } from "@/features/client/PropertySheets";
 import { jobStatusView } from "@/features/jobs";
+import { canServe } from "@/features/clients";
 import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { Icon, T, type IconKey } from "@/ui/primitives";
 import { Card, CardList, Empty, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -53,11 +54,13 @@ export default function PropertyScreen() {
     );
   const c = db.customers.find((x) => x.id === p.customerId);
   const office = role !== "tech";
+  // «не обслуживаем»: nothing new for this property — no «＋», no inspection (S4 / S5 / S17, Customer §5)
+  const servable = canServe(db, p.customerId);
   const rows = propertyRowsFor(role);
   // a row's own list: the same address with ?s=<row>
   if (isPropertyRow(sec) && rows.includes(sec))
     return (
-      <Screen title={t(propertyRowLabel(sec))} subtitle={propertyTitle(p)} back={back}>
+      <Screen title={t(propertyRowLabel(sec))} subtitle={propertyTitle(p)} back={back} fab={servable ? "client" : undefined} fabCtx={{ customerId: p.customerId, propertyId: p.id }}>
         <PropertySection p={p} s={sec} />
       </Screen>
     );
@@ -91,11 +94,10 @@ export default function PropertyScreen() {
         <RowView style={{ flexWrap: "wrap" }}>
           <Button label={t("jobs.route")} icon="route" variant="secondary" onPress={route} />
           {c ? <Button label={`${c.name} ›`} icon="user" variant="ghost" onPress={() => router.push(`/client/${c.id}`)} /> : null}
-          {office ? <Button label={t("est.new")} icon="invoice" variant="ghost" onPress={() => router.push(`/estimate/new?customerId=${p.customerId}&propertyId=${p.id}`)} /> : null}
           {/* «+ Осмотр»: a returning client wants a new estimate (docs/specs/03 §5.1) — an inspection without a lead */}
-          {office ? <Button label={t("vf.addInspection")} icon="plus" variant="ghost" onPress={() => setInspect(true)} /> : null}
+          {office && servable ? <Button label={t("vf.addInspection")} icon="plus" variant="ghost" onPress={() => setInspect(true)} /> : null}
         </RowView>
-        {office ? (
+        {office && servable ? (
           <VisitFormSheet
             visible={inspect}
             onClose={() => setInspect(false)}
@@ -193,6 +195,9 @@ export default function PropertyScreen() {
       title={propertyTitle(p)}
       back={back}
       subtitle={c?.name}
+      // «＋»: Новая работа and Смета for this client and this property (S17, S5); none for «не обслуживаем»
+      fab={servable ? "client" : undefined}
+      fabCtx={{ customerId: p.customerId, propertyId: p.id }}
     >
       {overview}
 

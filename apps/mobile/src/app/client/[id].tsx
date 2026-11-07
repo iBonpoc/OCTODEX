@@ -155,7 +155,7 @@ export default function ClientScreen() {
             label={t("client.call")}
             onPress={() => {
               Linking.openURL(`tel:${tel}`).catch(() => {});
-              setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), contactId: main?.id });
+              setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: main?.id });
             }}
           />
         ) : null}
@@ -188,7 +188,7 @@ export default function ClientScreen() {
         <>
           <SectionTitle title={t("client.contacts")} />
           <Card>
-            <PersonRows p={main} onCall={(x) => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), contactId: x.id })} />
+            <PersonRows p={main} onCall={(x) => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: x.id })} />
           </Card>
         </>
       ) : null}
