@@ -33,6 +33,17 @@ describe("clientOverdueOf", () => {
     const db = { invoices: [inv("c1", 50_000, 0, 0), inv("c1", 50_000, 0, 1), inv("c1", 50_000, 50_000, -5)] };
     expect(clientOverdueOf(db, "c1", NOW, TZ)).toBeNull();
   });
+  it("days are the company's calendar days: 11:30 PM in Los Angeles is still the due day (no overdue), after midnight it is 1 day", () => {
+    const db = { invoices: [inv("c1", 30_000, 0, 0)] };
+    const beforeMidnight = new Date("2026-11-06T07:30:00.000Z").getTime(); // 11:30 PM Nov 5 in LA, Nov 6 in UTC
+    const afterMidnight = new Date("2026-11-06T08:30:00.000Z").getTime(); // 0:30 AM Nov 6 in LA
+    expect(clientOverdueOf(db, "c1", beforeMidnight, TZ)).toBeNull();
+    expect(clientOverdueOf(db, "c1", afterMidnight, TZ)).toEqual({ cents: 30_000, days: 1 });
+  });
+  it("an overpaid invoice does not lower another one's overdue (engine: no negative rest)", () => {
+    const db = { invoices: [inv("c1", 10_000, 15_000, -4), inv("c1", 20_000, 0, -2)] };
+    expect(clientOverdueOf(db, "c1", NOW, TZ)).toEqual({ cents: 20_000, days: 2 });
+  });
   it("the list card takes the sign from clientOverdueOf (one rule)", () => {
     const src = readFileSync(join(__dirname, "../src/app/(tabs)/clients.tsx"), "utf8");
     expect(src).toMatch(/clientOverdueOf\(/);

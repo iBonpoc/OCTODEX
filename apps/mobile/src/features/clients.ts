@@ -5,13 +5,12 @@
 import type { StatusName } from "@octo/design-tokens";
 import { clientMoney } from "@octo/estimating-engine";
 import { peopleOf } from "@/data/people";
-import { visitPropertyId } from "@/data/selectors";
+import { daysOverdue, isOverdue, visitPropertyId } from "@/data/selectors";
 import type { Customer, CustomerStatus, DB, ID, Role, Tag } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import type { IconKey } from "@/ui/primitives";
 import { isAssigned } from "@/features/schedule";
 import { getZone, minuteIn } from "@/features/zone";
-import { invoiceSigns } from "@/features/listSigns";
 
 /** Status label: colour + icon + word (CLAUDE.md rule 2). */
 export const clientStatusChip: Record<CustomerStatus, { s: StatusName; l: DictKey }> = {
@@ -73,19 +72,14 @@ export function clientMoneyOf(db: DB, customerId: ID) {
 
 /**
  * Overdue money of a client for the list card sign (founder 07.11): the unpaid rest of every overdue invoice
- * and the oldest overdue in calendar days of the company — «Просрочено $1,400 · 12 дн». Same rule as invoiceSigns.
+ * and the oldest overdue in calendar days of the company (not the phone's) — «Просрочено $1,400 · 12 дн».
  */
 export function clientOverdueOf(db: Pick<DB, "invoices">, customerId: ID, now = Date.now(), tz: string = getZone()): { cents: number; days: number } | null {
-  let cents = 0;
-  let days = 0;
-  for (const i of db.invoices) {
-    if (i.customerId !== customerId) continue;
-    const sign = invoiceSigns(i, now, tz).find((x) => x.key === "card.sign.overdueDays");
-    if (!sign) continue;
-    cents += i.totalCents - i.paidCents;
-    days = Math.max(days, sign.params?.d ?? 0);
-  }
-  return cents > 0 ? { cents, days } : null;
+  const late = db.invoices.filter((i) => i.customerId === customerId && i.paidCents < i.totalCents && !!i.dueDate && isOverdue(i.dueDate, now, tz));
+  // money only through the engine (rule 8): the owed rest of the overdue invoices, whole cents
+  const cents = clientMoney(late, []).owesCents;
+  if (cents <= 0) return null;
+  return { cents, days: Math.max(...late.map((i) => daysOverdue(i.dueDate, now, tz))) };
 }
 
 /** Money on the card: director and office see it, the tech does not (docs/specs/04 §8). */
