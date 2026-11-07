@@ -8,7 +8,7 @@ import { jobProfit, useStore, visitContext } from "@/data/store";
 import { canSeeProfit } from "@/nav/roles";
 import type { PaymentMethod } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { WhenWho } from "@/features/VisitForm";
+import { CancelNotifySheet, WhenWho } from "@/features/VisitForm";
 import { NotesBlock } from "@/features/NotesBlock";
 import { RelatedBlock } from "@/features/RelatedBlock";
 import { canPlan } from "@/features/schedule";
@@ -42,16 +42,24 @@ export default function VisitScreen() {
   const [extra, setExtra] = useState("");
   const [calling, setCalling] = useState<CallPreset | null>(null);
   const [writing, setWriting] = useState<MessagePreset | null>(null);
+  // «Сообщить клиенту об отмене?» (docs/specs/03 §13): asked here, because the cancelled visit leaves `visits`
+  const [cancelled, setCancelled] = useState<string | null>(null);
   const v = db.visits.find((x) => x.id === id);
   // wave 7б-2: the location question comes before the first «On the way» on my own visit (docs/specs/03 §12)
   const consent = useConsentQuestion(v);
 
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
+  const cancelAsk = <CancelNotifySheet visitId={cancelled} onClose={() => {
+    setCancelled(null);
+    // «Отменить» on the cancel toast brings the visit back: stay on it
+    if (!v) (router.canGoBack() ? router.back() : router.replace("/plan"));
+  }} />;
 
   if (!v)
     return (
       <Screen title={t("visit.title")} back={back}>
-        <Empty icon="alert" title={t("clients.empty")} />
+        {cancelled ? null : <Empty icon="alert" title={t("clients.empty")} />}
+        {cancelAsk}
       </Screen>
     );
 
@@ -130,7 +138,7 @@ export default function VisitScreen() {
         </RowView>
       </Card>
 
-      {office ? <WhenWho visitId={v.id} /> : null}
+      {office ? <WhenWho visitId={v.id} onCancelled={setCancelled} /> : null}
       {office ? <OfficeLocation v={v} geo={property?.geo} /> : null}
 
       {/* the note for the tech from the visit form (docs/specs/03 §7.3, wave П3b): everyone on the visit sees it */}
