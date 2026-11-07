@@ -245,6 +245,16 @@ export const ru = {
   "sync.stuck.moneyChip": "Деньги",
   "sync.stuck.money": "Среди уходящих есть деньги: счёт, оплата, задаток или расход. На сервер они не попадут, запишите их заново.",
   "sync.stuck.moneySelf": "Это деньги: счёт, оплата, задаток или расход. На сервер они не попадут, запишите их заново.",
+  "att.rejected.deposit": "Задаток не записан на сервере",
+  "att.rejected.invoice": "Счёт не записан на сервере",
+  "att.rejected.payment": "Оплата не записана на сервере",
+  "att.rejected.expense": "Расход не записан на сервере",
+  "att.rejectedChip": "Не записано",
+  "sync.rejected.title": "Сервер отказал",
+  "sync.rejected.hint": "Сервер не принял это изменение. На телефоне снова данные сервера — проверьте и внесите заново, если нужно.",
+  "sync.rejected.open": "Открыть",
+  "sync.rejected.dismissed": "Убрано из списка",
+  "sync.rejected.ok": "Понятно",
   "sync.stuck.retry": "Повторить сейчас",
   "sync.stuck.discard": "Отменить изменение…",
   "sync.stuck.sure": "Отменить это изменение? На сервер оно не попадёт, на телефоне вернутся данные сервера.",
@@ -2271,6 +2281,17 @@ export const ru = {
   "fix.sign.done": "Готово",
   // fix.co.* — company settings read-only for the office (spec 26 §3)
   "fix.co.readOnly": "Только просмотр — менять может директор",
+  // 7а-3 «в»: the people of a closed company (docs/specs/22 §3.6)
+  "fr9.closed.title": "Компания «{company}» закрыта владельцем",
+  "fr9.closed.chip": "Закрыта",
+  "fr9.closed.text": "Владелец удалил аккаунт и закрыл компанию {date}. Работать в ней больше нельзя. Можно создать свою компанию или принять приглашение в другую.",
+  "fr9.closed.unsent": "{n} изм. не отправлено: компания закрыта, сервер их не примет",
+  "fr9.closed.drop": "Убрать…",
+  "fr9.closed.dropSure": "Убрать {n} изм. с телефона? Вернуть их будет нельзя.",
+  "fr9.closed.dropYes": "Да, убрать",
+  "fr9.closed.keep": "Оставить",
+  "fr9.closed.dropped": "Изменения убраны",
+  "fr9.closed.ok": "Понятно",
 } as const;
 
 export type DictKey = keyof typeof ru;

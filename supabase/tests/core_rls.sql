@@ -7158,4 +7158,169 @@ update public.memberships set status = 'disabled' where user_id = 'a8700000-0000
 drop table t87_t;
 \echo 'T87 reminders of a lead without an answer: 15 min to the assignee, 60 min to the owner, working hours, once, not the author ok'
 
+-- ---------------------------------------------------------------- T77: S22b — the people of a closed company see why (docs/specs/22 §3.6)
+-- «T77 Co»: Olive owns it alone; Wes works there, Otto is switched off, Ed left the day before. Olive deletes her account
+-- and closes the company (a real delete_account): Wes and Otto become «deleted» with the same now() as closed_at.
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a7700000-0000-4000-8000-000000000001', 'early77@a.test', '{"full_name":"Ed Early"}'),
+  ('a7700000-0000-4000-8000-000000000002', 'with77@a.test',  '{"full_name":"Wes With"}'),
+  ('a7700000-0000-4000-8000-000000000003', 'off77@a.test',   '{"full_name":"Otto Off"}'),
+  ('a7700000-0000-4000-8000-000000000004', 'owner77@a.test', '{"full_name":"Olive Owner"}');
+select tst.agree('a7700000-0000-4000-8000-000000000004');
+\set as_owner77 'reset role; set request.jwt.claim.sub = ''a7700000-0000-4000-8000-000000000004''; reset request.jwt.claims; set role authenticated;'
+\set as_early77 'reset role; set request.jwt.claim.sub = ''a7700000-0000-4000-8000-000000000001''; reset request.jwt.claims; set role authenticated;'
+\set as_with77  'reset role; set request.jwt.claim.sub = ''a7700000-0000-4000-8000-000000000002''; reset request.jwt.claims; set role authenticated;'
+\set as_off77   'reset role; set request.jwt.claim.sub = ''a7700000-0000-4000-8000-000000000003''; reset request.jwt.claims; set role authenticated;'
+:as_owner77
+insert into public.companies (id, name, dba) values ('c7700000-0000-4000-8000-000000000001', 'T77 Legal LLC', '');
+:as_super
+insert into public.memberships (company_id, user_id, role, status, deleted_at) values
+  ('c7700000-0000-4000-8000-000000000001', 'a7700000-0000-4000-8000-000000000001', 'tech', 'deleted', now() - interval '1 day');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('c7700000-0000-4000-8000-000000000001', 'a7700000-0000-4000-8000-000000000002', 'tech', 'active'),
+  ('c7700000-0000-4000-8000-000000000001', 'a7700000-0000-4000-8000-000000000003', 'office', 'disabled');
+-- before the closing: nothing to show
+:as_with77
+select tst.ok((select count(*) from public.my_closed_companies()) = 0, 'T77 an open company: nothing');
+:as_owner77
+select tst.fresh(1);
+select tst.ok((public.delete_account('DELETE', array['c7700000-0000-4000-8000-000000000001']::uuid[]) -> 'closed_companies') ? 'c7700000-0000-4000-8000-000000000001',
+              'T77 Olive closes «T77 Co» with her account');
+:as_super
+select tst.ok((select every(m.deleted_at = co.closed_at) from public.memberships m join public.companies co on co.id = m.company_id
+                where co.id = 'c7700000-0000-4000-8000-000000000001' and m.user_id <> 'a7700000-0000-4000-8000-000000000001'),
+              'T77 delete_account: deleted_at of the members = closed_at (one now(), the function counts on it)');
+:as_with77
+do $$
+declare r record; n int;
+begin
+  select count(*) into n from public.my_closed_companies();
+  select * into r from public.my_closed_companies() limit 1;
+  -- failed before: nothing told him why — he silently worked in the demo
+  perform tst.ok(n = 1 and r.company_id = 'c7700000-0000-4000-8000-000000000001' and r.name = 'T77 Legal LLC' and r.closed_at is not null,
+                 'T77 gone with the closing: sees the company (empty dba → name): ' || n || ' ' || coalesce(r.name, 'null'));
+end $$;
+:as_off77
+select tst.ok((select count(*) from public.my_closed_companies()) = 1, 'T77 switched off at the closing: sees it too (it was his company)');
+:as_early77
+select tst.ok((select count(*) from public.my_closed_companies()) = 0, 'T77 left BEFORE the closing: nothing');
+:as_owner77
+select tst.ok((select count(*) from public.my_closed_companies()) = 0, 'T77 the deleted owner with a live token: nothing (account_alive)');
+:as_owner_a
+select tst.ok((select count(*) from public.my_closed_companies()) = 0, 'T77 an active member of another company: nothing');
+:as_owner_b
+select tst.ok((select count(*) from public.my_closed_companies()) = 0, 'T77 a stranger: nothing');
+-- an anonymous sign-in sees nothing
+:as_with77
+set request.jwt.claims = '{"is_anonymous": true}';
+select tst.ok((select count(*) from public.my_closed_companies()) = 0, 'T77 an anonymous sign-in: nothing');
+reset request.jwt.claims;
+-- only the name and the moment: three columns
+:as_super
+select tst.ok((select array_agg(a.n order by a.i) from pg_proc p, unnest(p.proargnames) with ordinality a(n, i)
+                where p.proname = 'my_closed_companies' and p.pronamespace = 'public'::regnamespace) = array['company_id', 'name', 'closed_at'],
+              'T77 only company_id, name, closed_at');
+-- the 90-day edge: 89 days after the closing — still shown, 91 — no more
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = closed_at - interval '89 days' where id = 'c7700000-0000-4000-8000-000000000001';
+alter table public.companies enable trigger t06_company_closed_guard;
+update public.memberships set deleted_at = deleted_at - interval '89 days'
+ where company_id = 'c7700000-0000-4000-8000-000000000001' and user_id <> 'a7700000-0000-4000-8000-000000000001';
+:as_with77
+select tst.ok((select count(*) from public.my_closed_companies()) = 1, 'T77 closed 89 days ago: still shown');
+:as_super
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = closed_at - interval '2 days' where id = 'c7700000-0000-4000-8000-000000000001';
+alter table public.companies enable trigger t06_company_closed_guard;
+update public.memberships set deleted_at = deleted_at - interval '2 days'
+ where company_id = 'c7700000-0000-4000-8000-000000000001' and user_id <> 'a7700000-0000-4000-8000-000000000001';
+:as_with77
+select tst.ok((select count(*) from public.my_closed_companies()) = 0, 'T77 closed more than 90 days ago: nothing');
+-- rights (rule 18)
+:as_super
+select tst.ok(has_function_privilege('authenticated', 'public.my_closed_companies()', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.my_closed_companies()', 'EXECUTE')
+          and not exists (select 1 from pg_proc p, aclexplode(coalesce(p.proacl, acldefault('f', p.proowner))) a
+                           where p.proname = 'my_closed_companies' and a.grantee = 0),
+              'T77 the signed-in app only: not anon, not PUBLIC');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$select * from public.my_closed_companies()$q$, 'T77 anon cannot call it');
+:as_super
+\echo 'T77 the people of a closed company: their own membership gone with the closing, name and time only, 90 days ok'
+
+-- ---------------------------------------------------------------- T88: the author of an estimate for pushes (docs/specs/27 §4.11 №1–№2)
+-- The app never fills estimates.owner_user_id: the author is whoever made the estimate (created_by). No owner_user_id by hand here.
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a8800000-0000-4000-8000-000000000001', 'office88@a.test', '{"full_name":"Olivia Office"}'),
+  ('a8800000-0000-4000-8000-000000000002', 'tech88@a.test',   '{"full_name":"Tim Tech"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8800000-0000-4000-8000-000000000001', 'office', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8800000-0000-4000-8000-000000000002', 'tech', 'active');
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e880000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T88 by the office', 'a8800000-0000-4000-8000-000000000001'),
+  ('0e880000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T88 by a tech', 'a8800000-0000-4000-8000-000000000002');
+select tst.ok((select bool_and(owner_user_id is null) and count(*) = 2 from public.estimates where id::text like '0e880000-%')
+          and (select created_by from public.estimates where id = '0e880000-0000-4000-8000-000000000001') = 'a8800000-0000-4000-8000-000000000001',
+          'T88 the estimates have no owner_user_id, only who made them (as the app leaves them)');
+-- a) the office made it: «the client signed» reaches the office author, and owner / admin as before
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08800000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e880000-0000-4000-8000-000000000001');
+select tst.ok(exists (select 1 from public.push_outbox where notification_id = '08800000-0000-4000-8000-000000000001' and user_id = 'a8800000-0000-4000-8000-000000000001'),
+          'T88 signed: the office person who made the estimate gets it (before: nobody but owner / admin)');
+select tst.ok(exists (select 1 from public.push_outbox where notification_id = '08800000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T88 signed: the owner still gets it');
+-- b) «the client opened»: the office author who switched it on gets it, nobody else
+insert into public.push_prefs (company_id, user_id, kind, enabled) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8800000-0000-4000-8000-000000000001', 'viewed', true),
+  ('ca000000-0000-0000-0000-000000000000', 'a8800000-0000-4000-8000-000000000002', 'viewed', true);
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08800000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e880000-0000-4000-8000-000000000001');
+select tst.ok((select count(*) = 1 and bool_and(user_id = 'a8800000-0000-4000-8000-000000000001') from public.push_outbox where notification_id = '08800000-0000-4000-8000-000000000002'),
+          'T88 opened: the author who switched it on gets it, nobody else (before: nobody at all)');
+-- c) a tech made it: no «signed» and no «opened» for him (he has no such switches, §4.11 №2); the owner still gets «signed»
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08800000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e880000-0000-4000-8000-000000000002'),
+  ('08800000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e880000-0000-4000-8000-000000000002');
+select tst.ok(not exists (select 1 from public.push_outbox where notification_id in ('08800000-0000-4000-8000-000000000003', '08800000-0000-4000-8000-000000000004')
+                            and user_id = 'a8800000-0000-4000-8000-000000000002'), 'T88 a tech who made the estimate gets neither «signed» nor «opened»');
+select tst.ok(exists (select 1 from public.push_outbox where notification_id = '08800000-0000-4000-8000-000000000003' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T88 the tech''s estimate signed: the owner gets it');
+select tst.ok(not exists (select 1 from public.push_outbox where notification_id = '08800000-0000-4000-8000-000000000004'), 'T88 the tech''s estimate opened: nobody');
+-- d) at sending time the same author counts: the office author's rows go, a tech put in by hand is skipped
+insert into public.push_outbox (company_id, user_id, notification_id, kind, route) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8800000-0000-4000-8000-000000000002', '08800000-0000-4000-8000-000000000003', 'estimate.client_signed', '/estimate/0e880000-0000-4000-8000-000000000002');
+select tst.ok((select bool_and(app.push_still_recipient(o)) from public.push_outbox o
+                where o.notification_id in ('08800000-0000-4000-8000-000000000001', '08800000-0000-4000-8000-000000000002') and o.user_id = 'a8800000-0000-4000-8000-000000000001'),
+          'T88 at sending time the office author is still a recipient');
+select tst.ok(not (select app.push_still_recipient(o) from public.push_outbox o
+                    where o.notification_id = '08800000-0000-4000-8000-000000000003' and o.user_id = 'a8800000-0000-4000-8000-000000000002'),
+          'T88 at sending time a tech author is not');
+-- e) an owner_user_id, when someone sets it, still wins over created_by
+update public.estimates set owner_user_id = 'a0000000-0000-0000-0000-000000000001' where id = '0e880000-0000-4000-8000-000000000001';
+select tst.ok(app.push_estimate_author('ca000000-0000-0000-0000-000000000000', '0e880000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000001'
+          and app.push_estimate_author('ca000000-0000-0000-0000-000000000000', '0e880000-0000-4000-8000-000000000002') is null
+          and app.push_estimate_author('b0000000-0000-0000-0000-000000000000', '0e880000-0000-4000-8000-000000000001') is null,
+          'T88 owner_user_id wins; a tech is no author; another company finds nothing');
+update public.estimates set owner_user_id = 'a8800000-0000-4000-8000-000000000002' where id = '0e880000-0000-4000-8000-000000000001';
+select tst.ok(app.push_estimate_author('ca000000-0000-0000-0000-000000000000', '0e880000-0000-4000-8000-000000000001') = 'a8800000-0000-4000-8000-000000000001',
+          'T88 a tech as owner_user_id: the author falls back to who made it');
+-- with a JWT nobody writes someone else as the maker: created_by is the caller (core trigger), so the push goes to them
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e880000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T88 forged maker', 'a8800000-0000-4000-8000-000000000001');
+:as_super
+select tst.ok((select created_by from public.estimates where id = '0e880000-0000-4000-8000-000000000003') = 'a0000000-0000-0000-0000-000000000002',
+          'T88 a forged created_by is replaced by the caller: nobody makes pushes go to a colleague');
+select tst.ok(not has_function_privilege('authenticated', 'app.push_estimate_author(uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.push_estimate_author(uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('service_role', 'app.push_estimate_author(uuid, uuid)', 'EXECUTE'), 'T88 nobody in the app runs the author function');
+-- clean up
+delete from public.push_outbox;
+delete from public.push_prefs where user_id::text like 'a8800000-%';
+update public.estimates set deleted_at = now() where id::text like '0e880000-%';
+update public.memberships set status = 'disabled' where user_id::text like 'a8800000-%';
+\echo 'T88 the author of an estimate for pushes: who made it (owner_user_id first), not a tech; the same at sending time ok'
+
 \echo 'ALL TESTS PASSED'

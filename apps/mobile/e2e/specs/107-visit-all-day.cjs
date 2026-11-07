@@ -3,13 +3,11 @@
  * hour, no length); the job shows «Весь день», the client is told the date only; «Перенести» keeps the switch and can
  * turn it back to a time. Kept as the company's midnight to midnight (server t03_visit_all_day, db T70–T71).
  */
-const { atMinute, todayKey } = require("../companyTime.cjs");
 
 exports.run = async (h) => {
   const p = h.page;
   // no midnight in this spec (CHECKS §5): at 00:21 LA a demo notice read «в пути с 12:00 AM» (another demo visit,
-  // en route since the company's midnight) and failed the «no 12:00 AM» check (#297). The clock stands at noon.
-  await p.clock.install({ time: new Date(atMinute(todayKey(), 12 * 60)) });
+  // en route since the company's midnight) and failed the «no 12:00 AM» check (#297). The runner's clock stands at noon.
   const visit = async () => (await h.db()).visits.filter((v) => v.jobId === "j3").sort((a, b) => a.start.localeCompare(b.start)).at(-1);
 
   await h.go("/job/j3");
