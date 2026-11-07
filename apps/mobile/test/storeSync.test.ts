@@ -717,7 +717,7 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
   const st = () => stored() as unknown as S[];
   const sentIds = () => server.sends.map((s) => (s.op as { id: string }).id);
   const timeout = (code = "57014") => notNow(500, code);
-  type V = Value & { link: string; stuckOps: { id: string; kind: string; waiting: number; leaving: number; leavingKinds: { key: string; n: number }[]; leavingMoney: boolean; sending: boolean }[]; retryOp: (id: string) => void; discardOp: (id: string) => boolean };
+  type V = Value & { link: string; syncError: string | null; stuckOps: { id: string; kind: string; waiting: number; leaving: number; leavingKinds: { key: string; n: number }[]; leavingMoney: boolean; sending: boolean }[]; retryOp: (id: string) => void; discardOp: (id: string) => boolean };
   const src = (id: string, n: number, extra: object = {}) => q(id, { k: "source.save", source: { id: U(n), name: "Yelp", kind: "online", active: true } }, extra);
   const newLead = (id: string, n: number, s: number) => q(id, { k: "lead.add", id: U(n), name: "A", phone: "1", city: "LA", sourceId: U(s), message: "" });
   const start = async () => {
@@ -1018,6 +1018,15 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await wait(300);
     expect(st()[0]).toMatchObject({ fails: 1 });
     expect(st()[0]!.stuck).toBeUndefined();
+  });
+  it("a timeout of one op: no «Ошибка синхронизации» with the server's English text — its card tells it (cloud e2e 114)", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(Object.assign(new Error("canceling statement due to statement timeout"), { name: "ServerError", status: 500, code: "57014" }));
+    await settle();
+    expect(v(r).syncError).toBeNull();
+    expect(v(r).stuckOps.map((x) => x.id)).toEqual(["X"]);
   });
   it("a stuck op refused by the server: no more «не отправлено» — a try, as any refusal (review #259 п.4)", async () => {
     seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));

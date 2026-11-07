@@ -601,7 +601,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // a send that fails because the account is gone must not put the deleted person's op back (review #231)
           if (stale(gen)) return;
           const msg = e instanceof Error ? e.message : String(e);
-          setSyncError(msg);
+          // the server's error that may be this op's alone (500, a timeout) is told by its card «Не отправлено» in our own
+          // words — not again as the server's English text in «Ошибка синхронизации» (cloud e2e 114)
+          if (!maybeOpOnly(e)) setSyncError(msg);
           // no answer, or the server's «not now» (5xx, 429, an expired sign-in…): not a try — the op stays as it is,
           // the next send waits longer (review #244)
           if (classify(e) !== "refusal") {
