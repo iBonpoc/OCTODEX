@@ -86,6 +86,7 @@ vi.mock("@/data/outboxOwner", async (orig) => {
 
 import { render, settle, type Root } from "./support/miniReact";
 import { mineOf, StoreProvider } from "../src/data/store";
+import { badgeState } from "../src/data/syncLink";
 import { forgetDeviceState } from "../src/data/persist";
 import { makeSeed } from "../src/data/seed";
 import { isDeviceKey } from "../src/features/deleteAccount";
@@ -773,7 +774,9 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     server.sends[1]!.d.reject(notNow(500));
     await settle();
     expect(sentIds()).toEqual([U(1), U(2)]); // Z not tried in this pass
+    // the header says «Сервер недоступен» by `link`, not by syncError (a 500 does not write syncError, cc8a2a3)
     expect(v(r).link).toBe("server");
+    expect(badgeState(v(r).online, v(r).link as "server", v(r).queue.length, v(r).stuckOps.length)).toBe("server");
     await wait(300);
     expect(st().map((x) => [x.id, x.tries])).toEqual([["X", 0], ["Y", 0], ["Z", 0]]);
   });
