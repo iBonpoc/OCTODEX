@@ -35,6 +35,25 @@ export function classify(e: unknown): Failure {
   return NETWORK.test(msg) ? "network" : "refusal";
 }
 export const isNetworkError = (e: unknown) => classify(e) === "network";
+/**
+ * The server's «not now» that may be this op's alone (docs/specs/23 §3): an internal error (500 / XX000), a statement
+ * timeout (57014), a serialization failure or a deadlock (40001, 40P01). Every other «not now» (PostgREST cannot reach
+ * the database, 503, 429, an expired sign-in, the database restarting) is the whole server: the queue pauses.
+ */
+const OP_ONLY_CODE = /^(XX000|57014|40001|40P01)$/;
+export function maybeOpOnly(e: unknown): boolean {
+  if (classify(e) !== "transient") return false;
+  const code = String(field(e, "code") ?? "");
+  if (code) return OP_ONLY_CODE.test(code);
+  return Number(field(e, "status")) === 500;
+}
+/** an op that got the server's error this long, this many times, is shown as «не отправлено» (it is not dropped) */
+export const STUCK_AFTER_MS = 10 * 60_000;
+export const STUCK_AFTER_FAILS = 3;
+/** a stuck op is tried again this often (and at once on «Повторить сейчас») */
+export const STUCK_RETRY_MS = 5 * 60_000;
+export const isStuck = (failSince: string | undefined, fails: number | undefined, now: number) =>
+  !!failSince && (fails ?? 0) >= STUCK_AFTER_FAILS && now - Date.parse(failSince) >= STUCK_AFTER_MS;
 /** the sign-in expired: renew it before the next try */
 export const needsSignIn = (e: unknown) => Number(field(e, "status")) === 401 || field(e, "code") === "PGRST301";
 

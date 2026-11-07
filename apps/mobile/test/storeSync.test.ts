@@ -656,3 +656,194 @@ describe("unit:storeSync — the wipe and the outbox's own timing (review #244)"
   });
 });
 
+
+// ---------------------------------------------------------------- docs/specs/23 §3: an op the server keeps answering with an error
+describe("unit:storeSync — the server's error for one op does not hold the others (docs/specs/23 §3)", () => {
+  const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const AGO = new Date(Date.now() - 60_000).toISOString();
+  const q = (id: string, op: object, extra: object = {}) => ({ id, op, at: AGO, tries: 0, owner: u1c1, ...extra });
+  const ev = (id: string, n: number, extra: object = {}) => q(id, { k: "calendarEvent.remove", id: U(n) }, extra);
+  type S = { id: string; tries: number; fails?: number; failSince?: string; stuck?: true; error?: string };
+  const st = () => stored() as unknown as S[];
+  const sentIds = () => server.sends.map((s) => (s.op as { id: string }).id);
+  const timeout = (code = "57014") => notNow(500, code);
+  type V = Value & { link: string; stuckOps: { id: string; kind: string; waiting: number }[]; retryOp: (id: string) => void; discardOp: (id: string) => void };
+  const start = async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    return r;
+  };
+  const v = (r: Root<P>) => valueOf(r) as unknown as V;
+  const pass = async (r: Root<P>) => {
+    v(r).setOnline(true);
+    await settle();
+  };
+
+  it("X gets a timeout (57014): an op that does not need it goes in the same pass; X stays, not a try; the link is fine", async () => {
+    seedOutbox(ev("X", 1), ev("Y", 2));
+    const r = await start();
+    await pass(r);
+    expect(sentIds()).toEqual([U(1)]);
+    server.sends[0]!.d.reject(timeout());
+    await settle();
+    expect(sentIds()).toEqual([U(1), U(2)]); // Y without waiting for X
+    server.sends[1]!.d.resolve();
+    await settle();
+    await wait(300);
+    expect(st().map((x) => [x.id, x.tries, x.fails])).toEqual([["X", 0, 1]]);
+    expect(v(r).link).toBe("ok");
+  });
+  it("an op that shares an id with X waits; one after it that does not, goes", async () => {
+    seedOutbox(ev("X", 1), q("Y", { k: "customer.tags", id: U(1), tagIds: [] }), ev("Z", 3));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(timeout("XX000"));
+    await settle();
+    expect(sentIds()).toEqual([U(1), U(3)]);
+  });
+  it("a barrier (company settings) behind X does not go, nor anything after it", async () => {
+    seedOutbox(ev("X", 1), q("B", { k: "company.save", company: {} }), ev("Z", 3));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(timeout());
+    await settle();
+    expect(sentIds()).toEqual([U(1)]);
+  });
+  it("Y gets a 500 too: the server as a whole — «server unavailable», the queue pauses, both stay, no tries", async () => {
+    seedOutbox(ev("X", 1), ev("Y", 2), ev("Z", 3));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(notNow(500));
+    await settle();
+    server.sends[1]!.d.reject(notNow(500));
+    await settle();
+    expect(sentIds()).toEqual([U(1), U(2)]); // Z not tried in this pass
+    expect(v(r).link).toBe("server");
+    await wait(300);
+    expect(st().map((x) => [x.id, x.tries])).toEqual([["X", 0], ["Y", 0], ["Z", 0]]);
+  });
+  it("PGRST002 (the database is not reachable): the whole server at once — Y is not tried", async () => {
+    seedOutbox(ev("X", 1), ev("Y", 2));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(notNow(503, "PGRST002"));
+    await settle();
+    expect(sentIds()).toEqual([U(1)]);
+    expect(v(r).link).toBe("server");
+    await wait(300);
+    expect(st()[0]!.fails).toBeUndefined(); // the server's outage is not this op's: it never becomes «stuck» for it
+  });
+  it("no network: «offline», nothing is skipped", async () => {
+    seedOutbox(ev("X", 1), ev("Y", 2));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(new TypeError("Failed to fetch"));
+    await settle();
+    expect(sentIds()).toEqual([U(1)]);
+    expect(v(r).link).toBe("offline");
+  });
+  it("a refusal of Y (after X was skipped) is Y's try only", async () => {
+    seedOutbox(ev("X", 1), ev("Y", 2));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(timeout());
+    await settle();
+    server.sends[1]!.d.reject(refusal());
+    await settle();
+    await wait(300);
+    expect(st().map((x) => [x.id, x.tries])).toEqual([["X", 0], ["Y", 1]]);
+  });
+
+  it("10 minutes and the third error: «stuck» — shown with what waits for it, tried again only later", async () => {
+    const since = new Date(Date.now() - 11 * 60_000).toISOString();
+    seedOutbox(ev("X", 1, { fails: 2, failSince: since }), q("W", { k: "customer.tags", id: U(1), tagIds: [] }), ev("Z", 3));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(timeout());
+    await settle();
+    server.sends[1]!.d.resolve(); // Z
+    await settle();
+    await wait(300);
+    expect(st().find((x) => x.id === "X")).toMatchObject({ fails: 3, failSince: since, stuck: true, tries: 0 });
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", kind: "calendarEvent.remove", waiting: 1 })]);
+    const before = server.sends.length;
+    await pass(r);
+    expect(server.sends.length).toBe(before); // its 5-minute pause: not tried at once
+  });
+  it("only stuck ops (and what waits for them) left: the reload is not held — the phone sees the server again", async () => {
+    seedOutbox(ev("X", 1, { fails: 3, failSince: new Date(Date.now() - 20 * 60_000).toISOString(), stuck: true }), q("W", { k: "customer.tags", id: U(1), tagIds: [] }));
+    const r = await start();
+    // the start reload (stuck X tried once: a timeout again)
+    await pass(r);
+    server.sends.at(-1)?.d.reject(timeout());
+    await settle();
+    const loads = server.loads.length;
+    void v(r).refresh();
+    await settle();
+    expect(server.loads.length).toBe(loads + 1);
+    await wait(300);
+    expect(st().map((x) => x.id)).toEqual(["X", "W"]); // the ops stay (rule 6)
+  });
+  it("an op that can still go holds the reload, as before", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }), ev("Y", 2));
+    const r = await start();
+    const loads = server.loads.length;
+    void v(r).refresh();
+    await settle();
+    expect(server.loads.length).toBe(loads);
+  });
+  it("«Повторить сейчас»: sent at once, and gone when the server takes it", async () => {
+    seedOutbox(ev("X", 1, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.reject(timeout());
+    await settle();
+    const before = server.sends.length;
+    v(r).retryOp("X");
+    await settle();
+    expect(server.sends.length).toBe(before + 1);
+    server.sends.at(-1)!.d.resolve();
+    await settle();
+    await wait(300);
+    expect(st()).toEqual([]);
+    expect(v(r).stuckOps).toEqual([]);
+  });
+  it("«Отменить изменение…»: the op and what waits for it leave; another person's ops stay; then a reload", async () => {
+    seedOutbox(
+      ev("X", 1, { stuck: true, fails: 3, failSince: AGO }),
+      q("W", { k: "customer.tags", id: U(1), tagIds: [] }),
+      q("T", { k: "calendarEvent.remove", id: U(1) }, { owner: { userId: "u2", companyId: "c1" } }),
+    );
+    const r = await start();
+    const loads = server.loads.length;
+    v(r).discardOp("X");
+    await settle();
+    await wait(300);
+    expect(st().map((x) => x.id)).toEqual(["T"]);
+    expect(server.loads.length).toBeGreaterThan(loads);
+  });
+  it("after a restart two stuck ops fail again: not «server unavailable», and the next op still goes", async () => {
+    const st2 = { stuck: true, fails: 3, failSince: AGO };
+    seedOutbox(ev("X", 1, st2), ev("Y", 2, st2), ev("Z", 3));
+    const r = await start();
+    await pass(r);
+    server.sends[0]!.d.reject(timeout());
+    await settle();
+    server.sends[1]!.d.reject(timeout());
+    await settle();
+    expect(sentIds()).toEqual([U(1), U(2), U(3)]);
+    expect(v(r).link).toBe("ok");
+  });
+  it("an older version's item (no failSince / fails) loads and goes as before", async () => {
+    seedOutbox({ id: "old", op: { k: "calendarEvent.remove", id: U(9) }, at: AGO, tries: 0 });
+    const r = await start();
+    await pass(r);
+    server.sends.at(-1)!.d.resolve();
+    await settle();
+    await wait(300);
+    expect(st()).toEqual([]);
+  });
+});

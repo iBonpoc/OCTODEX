@@ -254,15 +254,15 @@ export function Empty({ icon, title, hint, action }: { icon: IconKey; title: str
 /* ---------- Sync badge (DS rule 11: queue counter visible; 13 v2 §2.2, §2.6) ----------
  * Only while there is something to say: no network (warn) or the queue still going out (info). */
 export function SyncBadge({ compact }: { compact?: boolean }) {
-  const { online, link, queue } = useStore();
+  const { online, link, queue, stuckOps } = useStore();
   const { c } = useTheme();
   const { t } = useI18n();
   // the network is there, the server answers «not now» (5xx, 429): not «no network» (docs/specs/23 §3)
-  const state = badgeState(online, link, queue.length);
+  const state = badgeState(online, link, queue.length, stuckOps.length);
   if (!state) return null;
-  const tone = state === "sending" ? c.status.info : c.status.warn;
+  const tone = state === "sending" ? c.status.info : state === "stuck" ? c.status.bad : c.status.warn;
   const label =
-    state === "offline" ? t("offline.badge", { n: queue.length }) : state === "server" ? t("sync.server.badge", { n: queue.length }) : t("nav.sync.sending", { n: queue.length });
+    state === "offline" ? t("offline.badge", { n: queue.length }) : state === "server" ? t("sync.server.badge", { n: queue.length }) : state === "stuck" ? t("sync.stuck.badge", { n: stuckOps.length }) : t("nav.sync.sending", { n: queue.length });
   return (
     <View
       testID="sync-badge"
@@ -278,7 +278,7 @@ export function SyncBadge({ compact }: { compact?: boolean }) {
         gap: space[1],
       }}
     >
-      <Icon name={state === "offline" ? "wifiOff" : state === "server" ? "alert" : "send"} s={size.iconSm} color={tone.on} />
+      <Icon name={state === "offline" ? "wifiOff" : state === "server" || state === "stuck" ? "alert" : "send"} s={size.iconSm} color={tone.on} />
       <T v="caption" w="semibold" style={{ color: tone.on }} numberOfLines={1}>
         {label}
       </T>

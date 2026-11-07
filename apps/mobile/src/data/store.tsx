@@ -16,7 +16,6 @@ import { applyOp, renewSession, sendVisitPoint, type Op, type OutboxItem } from 
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
-import { readyToSend } from "@/cloud/outboxTiming";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
 import { leadStatusToDb } from "@/cloud/statusMap";
 
@@ -37,7 +36,8 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
-import { backoffMs, classify, MAX_TRIES, needsSignIn } from "./outboxRetry";
+import { backoffMs, classify, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
+import { dependentsOf, liveOf, nextToSend } from "./outboxDeps";
 import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 export { mineOf, type OwnedItem } from "./outboxOwner";
@@ -86,6 +86,13 @@ import {
 type Undo = () => void;
 export type Mode = "demo" | "cloud";
 export type Link = "ok" | "offline" | "server";
+export interface StuckOp {
+  id: ID;
+  kind: string;
+  since: string;
+  error?: string;
+  waiting: number;
+}
 /** when and who for an estimate visit */
 export interface BookAt {
   /** the id of the new visit, when the caller needs it (the form shows «Сообщить клиенту?» for it) */
@@ -119,6 +126,15 @@ interface StoreCtx {
   /** the signed-in person's unsent ops in every company (the account deletion removes them all, review #240 №4) */
   unsentAll: number;
   syncError: string | null;
+  /**
+   * the person's ops the server keeps answering with an error (docs/specs/23 §3): not dropped, shown as
+   * «не отправлено: сервер отвечает ошибкой», tried again every 5 minutes. `waiting` — the ops that wait for it.
+   */
+  stuckOps: StuckOp[];
+  /** «Повторить сейчас» */
+  retryOp: (id: ID) => void;
+  /** «Отменить изменение…» (after a confirmation): the op and the ops that wait for it leave the phone; then a reload */
+  discardOp: (id: ID) => void;
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -420,9 +436,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   }, [mode, company?.role]);
 
   /* ---------- server sync ---------- */
+  // per op, in memory: when it may be tried again after the server's error that may be its own (docs/specs/23 §3)
+  const opPause = useRef(new Map<string, number>());
+  /** an op of this person that can still go (not stuck, not waiting for a stuck one) */
+  const pendingLive = () => liveOf(outboxRef.current, whoRef.current, (o) => !!o.stuck).length > 0;
+  const failedOnce = (item: OwnedItem, msg: string) => {
+    const now = Date.now();
+    const cur = outboxRef.current.find((x) => x.id === item.id) ?? item;
+    const fails = (cur.fails ?? 0) + 1;
+    const failSince = cur.failSince ?? new Date(now).toISOString();
+    const stuck = !!cur.stuck || isStuck(failSince, fails, now);
+    // the tries (refusals) are not touched: the server did not say «no»
+    const next: OwnedItem = { ...cur, fails, failSince, error: msg, ...(stuck ? { stuck: true as const } : {}) };
+    outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? next : x));
+    setOutbox(outboxRef.current);
+    opPause.current.set(item.id, now + (stuck ? STUCK_RETRY_MS : backoffMs(fails)));
+  };
   const refresh = useCallback(async () => {
     if (modeRef.current !== "cloud" || !company || !auth.userId || !onlineRef.current) return;
-    if (mine(outboxRef.current).length) return; // send pending changes first, then reload
+    // send pending changes first, then reload — an op the server keeps refusing «for now» (stuck) and what waits for it
+    // do not hold the reload (else the phone would never see the server again, docs/specs/23 §3)
+    if (pendingLive()) return;
     const gen = deviceGeneration();
     if (stale(gen)) return;
     setLoading(true);
@@ -430,7 +464,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const next = await loadCompanyDB(company.companyId, auth.userId);
       // signed out, another company or the device wiped while it loaded: the answer is not for this store (19 §6.12)
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
-      if (!mine(outboxRef.current).length) setDb(next);
+      if (!pendingLive()) setDb(next);
       setSyncError(null);
       answered();
     } catch (e) {
@@ -498,16 +532,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     flushing.current = true;
     let sentAny = false;
     let dropped = false;
+    // an op that got the server's error that may be its own (500, a timeout) waits for its pause; the next op that does
+    // not need it goes (docs/specs/23 §3). A second such error in one pass — the server as a whole: the queue pauses
+    let probed = false;
+    const failedNow = new Set<string>();
+    const held = (o: OwnedItem) => failedNow.has(o.id) || (opPause.current.get(o.id) ?? 0) > Date.now();
     try {
       for (;;) {
-        const item = mineOf(outboxRef.current, w)[0];
-        // the toast's «Отменить» window first: an undone op never reaches the server
-        if (!item || !readyToSend(item, Date.now())) break;
+        // in order; what needs a held op waits; the toast's «Отменить» window first: an undone op never reaches the server
+        const item = nextToSend(outboxRef.current, w, held, Date.now());
+        if (!item) break;
         try {
           await applyOp(item.op, w.companyId, w.userId);
           // the device was wiped while it was sent: the outbox is not this person's any more — never write it back
           if (stale(gen)) return;
           sentAny = true;
+          opPause.current.delete(item.id);
           answered();
           outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
           setOutbox(outboxRef.current);
@@ -521,8 +561,24 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // the next send waits longer (review #244)
           if (classify(e) !== "refusal") {
             if (needsSignIn(e)) void renewSession();
-            unreachable(e);
-            break;
+            // an op already stuck failing again says nothing new about the server (after a restart every stuck op is
+            // tried once: two of them must not read as «server unavailable»)
+            const wasStuck = !!outboxRef.current.find((x) => x.id === item.id)?.stuck;
+            if (maybeOpOnly(e) && wasStuck) {
+              failedOnce(item, msg);
+              failedNow.add(item.id);
+              continue;
+            }
+            if (!maybeOpOnly(e) || probed) {
+              if (maybeOpOnly(e)) failedOnce(item, msg);
+              unreachable(e);
+              break;
+            }
+            // maybe this op's alone: it waits (and after 10 minutes is shown as stuck); try the next op without it
+            failedOnce(item, msg);
+            probed = true;
+            failedNow.add(item.id);
+            continue;
           }
           // the server said «no»: a try; the last one drops it (never because of the network)
           if (item.tries + 1 >= MAX_TRIES) {
@@ -542,7 +598,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     }
     // a dropped op left the phone ahead of the server: reload the truth
     if (stale(gen) || !still()) return;
-    if ((sentAny && !mineOf(outboxRef.current, w).length) || dropped) await refresh();
+    if ((sentAny && !pendingLive()) || dropped) await refresh();
   }, [setOutbox, refresh, sendWaitingPoints]);
 
   useEffect(() => {
@@ -651,6 +707,31 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
 
   const unsentAll = mode === "cloud" ? unsentOf(outbox, who?.userId ?? null) : 0;
+  const stuckOps: StuckOp[] =
+    mode === "cloud"
+      ? mineOf(outbox, who)
+          .filter((o) => o.stuck)
+          .map((o) => ({ id: o.id, kind: o.op.k, since: o.failSince ?? o.at, error: o.error, waiting: dependentsOf(outbox, who, o.id).length }))
+      : [];
+  const retryOp = (id: ID) => {
+    outboxRef.current = outboxRef.current.map((x) => {
+      if (x.id !== id) return x;
+      const { stuck: _s, fails: _f, failSince: _since, ...rest } = x;
+      return rest;
+    });
+    setOutbox(outboxRef.current);
+    opPause.current.delete(id);
+    nextTry.current = 0;
+    void flush();
+  };
+  const discardOp = (id: ID) => {
+    const gone = new Set([id, ...dependentsOf(outboxRef.current, whoRef.current, id).map((o) => o.id)]);
+    outboxRef.current = outboxRef.current.filter((x) => !gone.has(x.id));
+    setOutbox(outboxRef.current);
+    gone.forEach((x) => opPause.current.delete(x));
+    // the phone showed the change as done: the server's truth again
+    void refresh();
+  };
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? mineOf(outbox, who).map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
@@ -724,6 +805,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       queue: pendingQueue,
       unsentAll,
       syncError,
+      stuckOps,
+      retryOp,
+      discardOp,
       refresh,
       loading,
       setOnline: (v) => {
@@ -1523,7 +1607,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, syncError, loading, mutate, setRole, setQueue, refresh, flush],
   );
 
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady) return null;

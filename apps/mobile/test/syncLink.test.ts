@@ -1,6 +1,6 @@
 /** The sync badge: «no network» vs «server unavailable» (docs/specs/23 §3, review #244 №3). */
 import { describe, expect, it } from "vitest";
-import { badgeState } from "../src/data/syncLink";
+import { badgeState, stuckKindKey } from "../src/data/syncLink";
 import { ru } from "../src/i18n/ru";
 import { en } from "../src/i18n/en";
 import { es } from "../src/i18n/es";
@@ -18,10 +18,28 @@ describe("unit:syncLink — what the badge says", () => {
     expect(badgeState(false, "server", 0)).toBe("server");
     expect(badgeState(false, "server", 3)).toBe("server");
   });
+  it("changes the server keeps refusing «for now»: «not sent: n» — but no network / server unavailable come first", () => {
+    expect(badgeState(true, "ok", 3, 1)).toBe("stuck");
+    expect(badgeState(true, "ok", 1, 1)).toBe("stuck");
+    expect(badgeState(false, "offline", 3, 1)).toBe("offline");
+    expect(badgeState(false, "server", 3, 1)).toBe("server");
+    expect(badgeState(true, "ok", 2, 0)).toBe("sending");
+  });
   it("the words differ in every language and keep the count", () => {
     for (const d of [ru, en, es] as Record<string, string>[]) {
       expect(d["sync.server.badge"]).toContain("{n}");
       expect(d["sync.server.badge"]).not.toBe(d["offline.badge"]);
+      expect(d["sync.stuck.badge"]).toContain("{n}");
+      expect(d["sync.stuck.sureWaiting"]).toContain("{n}");
     }
+  });
+
+  it("what kind of change a stuck op is: by the op's kind; an unknown kind is «a change»", () => {
+    expect(stuckKindKey("customer.update")).toBe("sync.kind.customer");
+    expect(stuckKindKey("estimate.deposit")).toBe("sync.kind.estimate");
+    expect(stuckKindKey("invoice.pay")).toBe("sync.kind.money");
+    expect(stuckKindKey("visit.step")).toBe("sync.kind.visit");
+    expect(stuckKindKey("whatever.x")).toBe("sync.kind.other");
+    for (const d of [ru, en, es] as Record<string, string>[]) for (const k of ["customer", "lead", "estimate", "money", "job", "visit", "task", "other"]) expect(d[`sync.kind.${k}`]).toBeTruthy();
   });
 });

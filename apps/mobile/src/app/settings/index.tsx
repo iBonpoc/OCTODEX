@@ -14,6 +14,7 @@ import { usePlanShowDone } from "@/features/prefs";
 import { LocationSetting } from "@/features/LocationParts";
 import { Card, Divider, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { editionLabel, LEGAL_VERSIONS, legalHref } from "@/features/legal";
+import { StuckOps } from "@/features/StuckOps";
 
 /**
  * "My settings" (docs/specs/05-menu-and-settings.md §4.1): only what concerns me and this device.
@@ -74,6 +75,9 @@ export default function Settings() {
         {/* E2b-2 (docs/specs/07): the employee's own signature for contracts */}
         <Button label={t("est.sig.settingsRow")} icon="pencil" variant="secondary" onPress={() => router.push("/estimate/signature")} />
       </Card>
+
+      {/* docs/specs/23 §3: changes the server keeps answering with an error — not dropped, here to retry or discard */}
+      <StuckOps />
 
       <SectionTitle title={t("settings.look")} />
       <Card>

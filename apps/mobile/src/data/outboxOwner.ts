@@ -11,8 +11,12 @@ export interface Owner {
   userId: string;
   companyId: string;
 }
-/** an outbox op with whose it is */
-export type OwnedItem = OutboxItem & { owner?: Owner };
+/**
+ * An outbox op with whose it is, and how the server has been answering it (docs/specs/23 §3; optional — older
+ * versions neither write nor need them and keep them when they copy an item): `failSince` — the first «not now» of the
+ * server for this op in a row, `fails` — how many, `stuck` — shown as «не отправлено: сервер отвечает ошибкой».
+ */
+export type OwnedItem = OutboxItem & { owner?: Owner; failSince?: string; fails?: number; stuck?: true };
 
 /**
  * The ops the signed-in person sends: theirs in this company, in order. Ops of older versions carry no owner: they go
