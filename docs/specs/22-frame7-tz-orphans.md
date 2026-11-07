@@ -141,6 +141,13 @@
   (шторка, `/auth/company`) для основателя.
 - порядок: код после влития #259 и #293.
 
+**Сделано (PR «Каркас» №9):** миграция `20261107130000_closed_company_people.sql` (время выдал руководитель);
+T77 — компания закрыта настоящим `delete_account`; `cloud/auth.tsx` → `closedCompanies`; `features/closedCompany.ts`
+(чистые помощники, unit), `features/ClosedCompany.tsx` (карточка), `nav/ClosedCompanyNotice.tsx` (шторка в оболочке);
+стор — `unsentIn` / `dropUnsentIn`: `discardOp` из #259 работает только с операциями текущей компании, а у человека
+без компании её нет. Дата закрытия — en-US («Nov 5, 2026», правило 7). **e2e 135** — обычная сборка, сервер подставлен
+в браузере (`page.route`, как e2e 113), 6 видов. Облачный прогон не нужен: серверную сторону проверяет T77.
+
 ## 4. PR
 1. **PR-A** (пояс): миграция 20261107050000 + upgrade-тест, T75, `companyMap.ts`, `ops.ts` (общий, 1 строка), `schedule.tsx`, unit, e2e 111.
 2. **PR-B** (общий `attention.ts`, маленький): `isGone` (team.ts), `leadOrphan`, `taskOrphan`, triage-кнопки, i18n `fr7.*`, unit, e2e 112; согласовать `attentionPeople.ts` («Карточки списков») и `TaskSheet.tsx` («Лиды»).

@@ -9,6 +9,7 @@ import { forgetThisPhone } from "@/features/pushNative";
 import { acceptLegal, legalStatus } from "./legal";
 import { finishDeletion, profileDeleted, wipeIfPending } from "./account";
 import { authEventPlan, goneChecker } from "@/features/deleteAccount";
+import { parseClosed, type ClosedCompany } from "@/features/closedCompany";
 
 /** Where email links (confirm / magic link) return. Must be in Supabase Auth → URL Configuration. */
 const redirectTo = () => (Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL);
@@ -45,6 +46,11 @@ interface AuthCtx {
   /** 7а-2b: the account was just deleted (here or finished on sign-in) — the sign-in screen says «Аккаунт удалён» once */
   accountDeleted: boolean;
   setAccountDeleted: (v: boolean) => void;
+  /**
+   * 7а-3 «в» (docs/specs/22 §3.6): the companies closed by their owner that this person worked in (90 days). Asked only
+   * without active memberships; no answer (no network, an old server) — none.
+   */
+  closedCompanies: ClosedCompany[];
 }
 
 const Ctx = createContext<AuthCtx | null>(null);
@@ -57,6 +63,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [legal, setLegal] = useState<LegalState>("unknown");
   const [legalChecked, setLegalChecked] = useState(false);
   const [accountDeleted, setAccountDeleted] = useState(false);
+  const [closedCompanies, setClosedCompanies] = useState<ClosedCompany[]>([]);
   const checkedUid = useRef<string | null>(null);
   const legalRun = useRef<Promise<void> | null>(null);
   // a slow old answer never overwrites a newer one (review #206 M1): checks and accepts take tickets
@@ -81,10 +88,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     [tickets],
   );
 
+  /** no answer (no network, an old server without the function): none */
+  const askClosed = () => {
+    supabase.rpc("my_closed_companies").then(
+      ({ data: rows, error: e }) => setClosedCompanies(e ? [] : parseClosed(rows)),
+      () => setClosedCompanies([]),
+    );
+  };
   const reloadMemberships = useCallback(async (): Promise<Membership[] | null> => {
     const { data: s } = await supabase.auth.getSession();
     if (!s.session) {
       setMemberships([]);
+      setClosedCompanies([]);
       return [];
     }
     const { data, error } = await supabase
@@ -98,6 +113,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       companyName: Array.isArray(m.companies) ? (m.companies[0]?.name ?? "") : (m.companies?.name ?? ""),
     }));
     setMemberships(list);
+    // no company: was it closed by its owner? (only then; not waited for — the start never waits on it)
+    if (error || list.length) setClosedCompanies([]);
+    else askClosed();
     // null — no answer (no network): «no memberships» is not known then
     return error ? null : list;
   }, []);
@@ -146,6 +164,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         checkedUid.current = null;
         gone.forget();
         setMemberships([]);
+        setClosedCompanies([]);
         setLegal("unknown");
         setLegalChecked(false);
         return;
@@ -236,12 +255,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await forgetThisPhone();
         await supabase.auth.signOut();
         setMemberships([]);
+        setClosedCompanies([]);
       },
       reloadMemberships,
       accountDeleted,
       setAccountDeleted,
+      closedCompanies,
     }),
-    [ready, session, memberships, reloadMemberships, legal, legalChecked, tickets, accountDeleted],
+    [ready, session, memberships, reloadMemberships, legal, legalChecked, tickets, accountDeleted, closedCompanies],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

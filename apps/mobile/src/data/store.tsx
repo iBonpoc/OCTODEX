@@ -43,6 +43,7 @@ import { leavingSummary, MONEY_KINDS } from "./syncLink";
 import type { DictKey } from "@/i18n";
 import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
+import { unsentIn as unsentInOf, withoutUnsentIn } from "@/features/closedCompany";
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
@@ -148,6 +149,12 @@ interface StoreCtx {
   retryOp: (id: ID) => void;
   /** «Отменить изменение…» (after a confirmation): the op and the ops that wait for it leave the phone; then a reload */
   discardOp: (id: ID) => boolean;
+  /**
+   * 7а-3 «в» (docs/specs/22 §3.6): the signed-in person's changes still waiting for a company closed by its owner (the
+   * server refuses them now), and «Убрать» them (after a confirmation, rule 5). Other people's ops stay.
+   */
+  unsentIn: (companyId: ID) => number;
+  dropUnsentIn: (companyId: ID) => void;
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -798,6 +805,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     void refresh();
     return true;
   };
+  const unsentInCompany = (companyId: ID) => unsentInOf(outbox, auth.userId ?? null, companyId).length;
+  const dropUnsentIn = (companyId: ID) => {
+    outboxRef.current = withoutUnsentIn(outboxRef.current, auth.userId ?? null, companyId);
+    setOutbox(outboxRef.current);
+  };
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? mineOf(outbox, who).map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
@@ -874,6 +886,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       stuckOps,
       retryOp,
       discardOp,
+      unsentIn: unsentInCompany,
+      dropUnsentIn,
       refresh,
       loading,
       setOnline: (v) => {
@@ -1721,7 +1735,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush, auth.userId],
   );
 
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady) return null;

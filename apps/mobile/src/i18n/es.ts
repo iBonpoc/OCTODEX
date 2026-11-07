@@ -2259,4 +2259,15 @@ export const es: Dict = {
   "fix.sign.done": "Listo",
   // fix.co.* — company settings read-only for the office (spec 26 §3)
   "fix.co.readOnly": "Solo lectura — los cambios los hace el director",
+  // 7а-3 «в»: the people of a closed company (docs/specs/22 §3.6)
+  "fr9.closed.title": "El propietario cerró «{company}»",
+  "fr9.closed.chip": "Cerrada",
+  "fr9.closed.text": "El propietario eliminó su cuenta y cerró la empresa el {date}. Ya no puede trabajar en ella. Puede crear su propia empresa o aceptar una invitación a otra.",
+  "fr9.closed.unsent": "{n} cambio(s) sin enviar: la empresa está cerrada, el servidor no los aceptará",
+  "fr9.closed.drop": "Quitar…",
+  "fr9.closed.dropSure": "¿Quitar {n} cambio(s) de este teléfono? No se podrán recuperar.",
+  "fr9.closed.dropYes": "Sí, quitar",
+  "fr9.closed.keep": "Conservar",
+  "fr9.closed.dropped": "Cambios quitados",
+  "fr9.closed.ok": "Entendido",
 };
