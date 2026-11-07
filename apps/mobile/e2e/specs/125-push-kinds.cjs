@@ -7,7 +7,7 @@
  * - the screen keeps one yellow (rule 2: the switches are a state, not an action — e2e/accent.cjs).
  * The op to the server (set_push_kind through the queue) is test/pushPrefs.test.ts; who gets what — db T84, T85, T88.
  */
-const { expectOneAccent } = require("../accent.cjs");
+const { accentCount, expectOneAccent } = require("../accent.cjs");
 
 const ALL = ["signed", "payment", "visits", "leads", "viewed"];
 
@@ -37,6 +37,19 @@ exports.run = async (h) => {
   const text = await h.text();
   h.expect(/Что присылать/.test(text) && text.indexOf("Что присылать") < text.indexOf("О приложении"), "«Что присылать» is in «Уведомления», before «О приложении»");
   await expectOneAccent(h, "settings with the push groups");
+  // the guard still sees a second yellow button among the switches (the switches alone are not counted)
+  const before = await accentCount(p);
+  await p.evaluate(() => {
+    const card = [...document.querySelectorAll('[data-testid="push-kinds"]')].pop();
+    const b = document.createElement("button");
+    b.id = "t125-second-accent";
+    b.textContent = "second";
+    b.style.cssText = "background-color: rgb(251, 255, 0); width: 80px; height: 32px;";
+    card.appendChild(b);
+    b.scrollIntoView({ block: "center" });
+  });
+  h.expect((await accentCount(p)) === before + 1, "a second yellow button next to the switches is still counted");
+  await p.evaluate(() => document.getElementById("t125-second-accent")?.remove());
   await h.shot("director");
 
   // switch «Лиды» off and «Клиент открыл смету» on: at once, and still so after a reload
