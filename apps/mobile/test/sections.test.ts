@@ -5,7 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { Role } from "../src/data/types";
 import { canOpen, roleHome, routeKey } from "../src/nav/roles";
 import { moreHref } from "../src/nav/sections";
-import { SECTIONS, menuGroups, sectionHref, sectionOfHref, tabs } from "../src/nav/sections";
+import { SECTIONS, meIsSub, menuGroups, sectionHref, sectionOfHref, tabs } from "../src/nav/sections";
 
 const ROLES: Role[] = ["director", "dispatcher", "sales", "tech"];
 const APP = path.join(__dirname, "../src/app");
@@ -50,11 +50,22 @@ describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, �
     expect(m).toContain("invoices");
     expect(m).toContain("leads");
   });
-  it("tech: no Leads, Invoices, Money, Team, Company settings; his estimates on /estimates", () => {
+  it("tech: his own Leads (13 §2.3); no Invoices, Money, Team, Company settings; his estimates on /estimates", () => {
     const m = menu("tech");
-    for (const id of ["leads", "invoices", "payments", "reports", "money", "team", "company"]) expect(m, id).not.toContain(id);
+    expect(m).toContain("leads");
+    expect(sectionHref("leads", "tech")).toBe("/leads?tab=leads");
+    for (const id of ["invoices", "payments", "reports", "money", "team", "company"]) expect(m, id).not.toContain(id);
     expect(m).toContain("estimates");
     expect(sectionHref("estimates", "tech")).toBe("/estimates");
+  });
+  it("a subcontractor (app role «tech», Member.kind «sub»): no Leads in «Ещё» nor in the side menu; the rest as a tech", () => {
+    const sub = (wide: boolean) => menuGroups("tech", wide, true).flatMap((g) => g.items.map((i) => i.id));
+    for (const wide of [false, true]) {
+      expect(sub(wide), `wide ${wide}`).not.toContain("leads");
+      expect(sub(wide), `wide ${wide}`).toEqual(menuGroups("tech", wide).flatMap((g) => g.items.map((i) => i.id)).filter((id) => id !== "leads"));
+    }
+    expect(meIsSub({ me: "m-sub", members: [{ id: "m-sub", kind: "sub" }] })).toBe(true);
+    expect(meIsSub({ me: "m-ivan", members: [{ id: "m-ivan", kind: "employee" }, { id: "m-sub", kind: "sub" }] })).toBe(false);
   });
   it("«Счета» opens the one invoices list /invoice (18 §1), «Оплаты» — /payments; both in their groups", () => {
     for (const r of ["director", "dispatcher", "sales"] as const) expect(sectionHref("invoices", r), r).toBe("/invoice");

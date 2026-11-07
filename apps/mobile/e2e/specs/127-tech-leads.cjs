@@ -1,0 +1,84 @@
+/**
+ * e2e 127 — «Лиды» of the technician (docs/specs/13 §2.3, §4; spec 14 §6.4): his own leads only — assigned to him or
+ * brought by him (canSeeLead, RLS leads_select). Every view. Demo «me» is Alex (as in e2e 15).
+ * - the director hands l2 to Ivan (the lead's «Кто ведёт»);
+ * - tech: «Лиды» is in «Ещё» (phone) / the side menu (820/1280) and opens /leads; l1 (his) is there, l2 (Ivan's) is not;
+ *   no «Ответственный» / «Источник» in the filter, no lead price; a lead's «‹ назад» goes to «Лиды», not «Главная»;
+ * - /inbox (the office's old address) stays closed to him.
+ * The subcontractor (no «Лиды») is the unit test sections.test.ts: in the demo «me» is never a subcontractor.
+ */
+const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
+const path = (h) => new URL(h.page.url()).pathname;
+const { menuApi } = require("../menu.cjs");
+
+exports.run = async (h) => {
+  const p = h.page;
+  const m = menuApi(h);
+  const waitDb = async (ok, what) => {
+    let db = await h.db();
+    for (let i = 0; i < 30 && !(db && ok(db)); i++) { await p.waitForTimeout(200); db = await h.db(); }
+    h.expect(!!db && ok(db), what);
+    return db;
+  };
+
+  // the director hands l2 to Ivan
+  await h.go("/today");
+  await setRole(h, "director");
+  await h.go("/lead/l2");
+  await h.clickText("Обзор");
+  await p.getByRole("button", { name: "Alex Petrov" }).last().click();
+  await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).waitFor({ timeout: 3000 });
+  await h.sheet().getByRole("button", { name: "Ivan Sokolov" }).click();
+  const db = await waitDb((d) => d.leads.find((l) => l.id === "l2")?.assigneeId === "m-ivan", "l2 is Ivan's");
+  const l1 = db.leads.find((l) => l.id === "l1");
+  const l2 = db.leads.find((l) => l.id === "l2");
+  h.expect(l1.assigneeId === db.me, "l1 is the tech's (demo «me»)");
+
+  // the technician: «Лиды» in the menu → /leads
+  await setRole(h, "tech");
+  await h.go("/visits");
+  await m.open();
+  const item = m.menu().getByRole("button", { name: "Лиды", exact: true });
+  h.expect((await item.count()) === 1, "the tech has «Лиды» in the menu");
+  if (m.phone) await h.shot("more-tech");
+  await item.click();
+  await p.waitForURL(/\/leads/, { timeout: 5000 });
+  h.expect(path(h) === "/leads", `«Лиды» opens /leads for the tech (${p.url()})`);
+  await p.getByRole("button", { name: l1.name }).first().waitFor({ timeout: 5000 });
+  h.expect((await p.getByRole("button", { name: l2.name }).locator("visible=true").count()) === 0, `Ivan's lead is not on the tech's list (${l2.name})`);
+  // the price paid for a lead (canSeeLeadCost) is the office's; the client's budget may show
+  const text = await h.text();
+  for (const l of db.leads.filter((x) => x.costCents && (x.assigneeId === db.me || x.createdBy === db.me))) {
+    const usd = String(l.costCents / 100);
+    h.expect(!text.includes(`$${usd}`), `no lead price ($${usd}) on the tech's list`);
+  }
+  await h.shot("leads-tech");
+
+  // the filter: no office groups
+  const fb = p.getByTestId("filter-button").locator("visible=true");
+  if (await fb.count()) {
+    await fb.first().click();
+    await p.waitForTimeout(300);
+    const sheet = await h.text();
+    h.expect(!/Ответственный/.test(sheet) && !/Источник/.test(sheet), "no «Ответственный» / «Источник» for the tech");
+    await p.keyboard.press("Escape");
+    await p.waitForTimeout(300);
+  }
+
+  // his lead goes up to «Лиды»
+  await h.go("/lead/l1");
+  await p.getByText(l1.name).first().waitFor({ timeout: 5000 });
+  const up = p.getByRole("link", { name: "Лиды", exact: true }).or(p.getByRole("button", { name: /Лиды/ })).locator("visible=true");
+  h.expect((await up.count()) >= 1, "the lead's crumb / «‹ назад» names «Лиды»");
+  await up.first().click();
+  await p.waitForURL(/\/leads/, { timeout: 5000 });
+  h.expect(path(h) === "/leads", `back from the lead → /leads (${p.url()})`);
+
+  // Ivan's lead stays closed; /inbox stays the office's
+  await h.go("/lead/l2");
+  await h.expectText(/Этот лид ведёт другой человек/, "the tech cannot open Ivan's lead");
+  await h.go("/inbox");
+  await p.waitForTimeout(500);
+  h.expect(path(h) === "/visits", `/inbox → /visits for the tech (${path(h)})`);
+  await setRole(h, "director");
+};

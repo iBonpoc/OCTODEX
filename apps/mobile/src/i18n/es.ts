@@ -150,6 +150,11 @@ export const es: Dict = {
   "vw.notified": "Cliente avisado el {date}",
   "vw.notify": "Avisar al cliente",
   // visitP2.* — «Сообщить клиенту?» after a cancel (docs/specs/03 §13, chat «Осмотр и План» №1)
+  "visitP2.att.noEstimate": "{name}: visita de evaluación hecha — sin presupuesto",
+  "visitP2.att.noEstimateChip": "Sin presupuesto",
+  "visitP2.set.title": "Visita hecha — sin presupuesto",
+  "visitP2.set.hint": "Cuántos días hábiles después de una visita sin presupuesto aparece en «Requiere atención»",
+  "visitP2.set.days": "Días hábiles",
   "visitP2.notify.title": "¿Avisar al cliente de la cancelación?",
   "visitP2.notify.noContact": "No hay teléfono ni correo — puede copiar el texto",
   "visitP2.notify.opened": "Mensaje abierto en el teléfono, guardado en el historial",
@@ -291,6 +296,8 @@ export const es: Dict = {
   "inbox.book": "Agendar visita",
   "inbox.empty": "No hay solicitudes nuevas",
   "inbox.emptyHint": "Las solicitudes de Thumbtack, Yelp, Google y su sitio llegan aquí.",
+  // leads.* («Лиды и клиенты»: «Лиды» мастера, спека 13 §2.3)
+  "leads.empty.tech": "Aquí aparecen los leads que usted registró o que le asignaron.",
   "inbox.autoReply": "¡Hola! Gracias por escribirnos. Podemos ir mañana para un presupuesto gratis. ¿Le queda mejor en la mañana o en la tarde?",
 
   "plan.title": "Agenda",

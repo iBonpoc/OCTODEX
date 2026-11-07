@@ -8,7 +8,7 @@ import { useI18n } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Avatar } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
-import { menuGroups, sectionHref, type SectionId } from "./sections";
+import { meIsSub, menuGroups, sectionHref, type SectionId } from "./sections";
 import { GROUP_TITLE, useMenuCurrent, useNavMenu } from "./NavMenu";
 import { openSection } from "./go";
 import { isAppPath, sideNavWidth } from "./shell";
@@ -56,7 +56,7 @@ export function SideNav() {
           expanded={device === "desktop" ? open : undefined}
         />
         <Item icon="plus" label={t("nav.create")} open={open} onPress={menu.create} accent />
-        {menuGroups(role, true).map((g) => (
+        {menuGroups(role, true, meIsSub(db)).map((g) => (
           <View key={g.group} style={{ gap: space[1], alignItems: open ? "stretch" : "center", alignSelf: "stretch" }}>
             {g.group !== "top" ? <View style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[1], marginHorizontal: space[1] }} /> : null}
             {open && GROUP_TITLE[g.group] ? (

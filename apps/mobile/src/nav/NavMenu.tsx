@@ -12,7 +12,7 @@ import { ALL_ORIENTATIONS, Glass } from "@/ui/overlays";
 import { Avatar } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { activeSection } from "./hierarchy";
-import { hasSection, menuGroups, sectionHref, sectionOfHref, type MenuGroup, type SectionId } from "./sections";
+import { hasSection, meIsSub, menuGroups, sectionHref, sectionOfHref, type MenuGroup, type SectionId } from "./sections";
 import { FabSheet } from "./Fab";
 import { openKey } from "./shell";
 import { roleHome, routeKey } from "./roles";
@@ -145,7 +145,7 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
           </View>
           <ScrollView contentContainerStyle={{ paddingHorizontal: space[3], paddingVertical: space[2], gap: space[1] }}>
             <MenuRow icon="plus" label={t("nav.create")} onPress={onCreate} accent />
-            {menuGroups(role, wide).map((g) => (
+            {menuGroups(role, wide, meIsSub(db)).map((g) => (
               <View key={g.group} style={{ gap: space[1] }}>
                 {g.group !== "top" ? <View style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[2], marginHorizontal: space[2] }} /> : null}
                 {GROUP_TITLE[g.group] ? (
