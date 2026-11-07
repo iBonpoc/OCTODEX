@@ -78,6 +78,9 @@ export const motion = {
   /** Reanimated spring roughly equal to the CSS spring curve above. */
   spring: { damping: 16, stiffness: 220, mass: 0.9 },
   toastUndoMs: 5000,
+  /** app-only: «Отменить» on a toast ignores taps this long after it shows — the second tap of a double tap
+   *  must not undo what the first one made (reduced motion shows the toast at once, under the finger) */
+  toastArmMs: 300,
 } as const;
 
 export const z = { nav: 2, fab: 4, scrim: 5, sheet: 6, modal: 7, toast: 8 } as const;

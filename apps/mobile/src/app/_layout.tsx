@@ -15,6 +15,7 @@ import { NoticeWatcher } from "@/features/notices";
 import { GuardedScreen, RouteGuard } from "@/nav/RouteGuard";
 import { NavMenuProvider } from "@/nav/NavMenu";
 import { SideNav } from "@/nav/SideNav";
+import { TabBar } from "@/nav/TabBar";
 import { SlashToSearch } from "@/nav/SearchEntry";
 import { LegalGate } from "@/nav/LegalGate";
 
@@ -32,6 +33,8 @@ function Shell() {
             <SideNav />
             <View style={{ flex: 1 }}>
               <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: c.bg } }} screenLayout={(props) => <GuardedScreen {...props} />} />
+              {/* the phone's bottom bar over every screen but forms (docs/specs/28); 820/1280: SideNav instead */}
+              <TabBar />
               <RouteGuard />
               <LegalGate />
             </View>

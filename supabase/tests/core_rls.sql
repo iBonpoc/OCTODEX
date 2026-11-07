@@ -5971,6 +5971,114 @@ select tst.ok((select phone from public.companies where id = 'ca000000-0000-0000
 update public.companies set timezone = 'America/Los_Angeles', phone = null where id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T75 companies.timezone: unknown refused, case and abbreviations made exact ok'
 
+-- ---------------------------------------------------------------- T76: a closed company — the client page, signing, paying, letters (docs/specs/22 §3.5)
+:as_super
+insert into public.companies (id, name, dba, phone) values ('ca760000-0000-4000-8000-000000000000', 'T76 Legal LLC', 'T76 Gutters', '+13235557676');
+insert into app.company_flags (company_id, simulated_payments) values ('ca760000-0000-4000-8000-000000000000', true);  -- else «not available» would answer first
+do $$
+declare v_cust uuid; v_prop uuid;
+begin
+  insert into public.customers (company_id, display_name) values ('ca760000-0000-4000-8000-000000000000', 'T76 Client') returning id into v_cust;
+  insert into public.properties (company_id, customer_id, address_line1, address_city) values ('ca760000-0000-4000-8000-000000000000', v_cust, '76 Closed St', 'Burbank') returning id into v_prop;
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+    ('0e1a7600-0000-4000-8000-000000000001', 'ca760000-0000-4000-8000-000000000000', '', v_cust, v_prop, 'T76 sent');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+    ('0e2a7600-0000-4000-8000-000000000001', 'ca760000-0000-4000-8000-000000000000', '0e1a7600-0000-4000-8000-000000000001', 1);
+  update public.estimates set current_version_id = '0e2a7600-0000-4000-8000-000000000001' where id = '0e1a7600-0000-4000-8000-000000000001';
+  insert into public.estimate_options (id, company_id, version_id, name) values
+    ('0e3a7600-0000-4000-8000-000000000001', 'ca760000-0000-4000-8000-000000000000', '0e2a7600-0000-4000-8000-000000000001', 'Standard');
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+    ('ca760000-0000-4000-8000-000000000000', '0e3a7600-0000-4000-8000-000000000001', 'labor', 'Gutters (тестовые цены)', 1, 100000, false);
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a7600-0000-4000-8000-000000000001';
+  update public.estimates set status = 'sent', sent_version_id = '0e2a7600-0000-4000-8000-000000000001' where id = '0e1a7600-0000-4000-8000-000000000001';
+  perform tst.set_token('0e1a7600-0000-4000-8000-000000000001', 'tok_t76_closed_0123456789ab');
+  -- a second estimate the client has never opened: «sent» (its first view would make it «viewed» and notify the company)
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+    ('0e1a7600-0000-4000-8000-000000000002', 'ca760000-0000-4000-8000-000000000000', '', v_cust, v_prop, 'T76 never viewed');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+    ('0e2a7600-0000-4000-8000-000000000002', 'ca760000-0000-4000-8000-000000000000', '0e1a7600-0000-4000-8000-000000000002', 1);
+  update public.estimates set current_version_id = '0e2a7600-0000-4000-8000-000000000002' where id = '0e1a7600-0000-4000-8000-000000000002';
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a7600-0000-4000-8000-000000000002';
+  update public.estimates set status = 'sent', sent_version_id = '0e2a7600-0000-4000-8000-000000000002' where id = '0e1a7600-0000-4000-8000-000000000002';
+  perform tst.set_token('0e1a7600-0000-4000-8000-000000000002', 'tok_t76_sent_0123456789abcd');
+  -- a letter queued minutes before the company was closed
+  insert into public.email_outbox (company_id, estimate_id, kind) values ('ca760000-0000-4000-8000-000000000000', '0e1a7600-0000-4000-8000-000000000001', 'signed_copy');
+end $$;
+-- open: the page works as before (control)
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_estimate('tok_t76_closed_0123456789ab') ->> 'status' = 'viewed', 'T76 control: an open company — the page as before');
+-- closed as delete_account closes it (the test plants it past the guard t06).
+-- Owner A stays an ACTIVE owner of T76 here: in real life delete_account makes every other member «deleted» in the same
+-- transaction, so an active member of a closed company cannot exist — the test makes the strongest case on purpose:
+-- even someone who may sign contracts there gets «company closed» on site (review of #271, item 3).
+:as_super
+insert into public.memberships (company_id, user_id, role, status) values ('ca760000-0000-4000-8000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'owner', 'active');
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = now() where id = 'ca760000-0000-4000-8000-000000000000';
+alter table public.companies enable trigger t06_company_closed_guard;
+select set_config('tst.t76_views', (select viewed_count || '|' || coalesce(last_viewed_at::text, '') from public.estimates where id = '0e1a7600-0000-4000-8000-000000000001'), false);
+select set_config('tst.t76_rows', ((select count(*) from public.notifications where company_id = 'ca760000-0000-4000-8000-000000000000')
+                                 + (select count(*) from public.estimate_approvals where company_id = 'ca760000-0000-4000-8000-000000000000') * 1000
+                                 + (select count(*) from public.payments where company_id = 'ca760000-0000-4000-8000-000000000000') * 1000000)::text, false);
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb := public.portal_estimate('tok_t76_closed_0123456789ab');
+begin
+  -- failed before: the whole estimate, the phone and «Pay by card»
+  perform tst.ok(r = '{"status": "closed", "company": {"name": "T76 Gutters"}, "doc_language": "en"}'::jsonb, 'a closed company: only its name and the client''s language: ' || coalesce(r::text, 'null'));
+  perform tst.ok(public.portal_estimate('tok_t76_sent_0123456789abcd') ->> 'status' = 'closed', 'a sent estimate never viewed: «closed» too');
+  perform tst.fails_like($q$select public.portal_accept('tok_t76_closed_0123456789ab', '0e3a7600-0000-4000-8000-000000000001', null, 'Client', 'M0 0 L5 5', true)$q$, 'company closed', 'a closed company: the client cannot sign');
+  perform tst.fails_like($q$select public.portal_pay_simulated('tok_t76_closed_0123456789ab', '0e1a7600-0000-4000-8000-0000000000ff')$q$, 'company closed', 'a closed company: no card payment (refused before anything else)');
+end $$;
+-- signed on site by an active owner of T76 (may sign contracts): still closed — the check is before «on site»
+:as_super
+select tst.ok(exists (select 1 from public.memberships where company_id = 'ca760000-0000-4000-8000-000000000000'
+                        and user_id = 'a0000000-0000-0000-0000-000000000001' and role = 'owner' and status = 'active'),
+              'owner A is an active owner of T76 (else the on-site refusal would answer first)');
+:as_owner_a
+select tst.fails_like($q$select public.portal_accept('tok_t76_closed_0123456789ab', '0e3a7600-0000-4000-8000-000000000001', null, 'Client', 'M0 0 L5 5', true, 'on_site')$q$, 'company closed', 'on site by a member who may sign: refused too');
+:as_super
+select tst.ok((select status from public.estimates where id = '0e1a7600-0000-4000-8000-000000000002') = 'sent', 'the never viewed estimate stays «sent» (no sent → viewed)');
+select tst.ok((select status from public.estimates where id = '0e1a7600-0000-4000-8000-000000000001') = 'viewed'
+          and (select viewed_count || '|' || coalesce(last_viewed_at::text, '') from public.estimates where id = '0e1a7600-0000-4000-8000-000000000001') = current_setting('tst.t76_views'),
+              'the closed page counts no view');
+select tst.ok(((select count(*) from public.notifications where company_id = 'ca760000-0000-4000-8000-000000000000')
+             + (select count(*) from public.estimate_approvals where company_id = 'ca760000-0000-4000-8000-000000000000') * 1000
+             + (select count(*) from public.payments where company_id = 'ca760000-0000-4000-8000-000000000000') * 1000000)::text = current_setting('tst.t76_rows'),
+              'no notification, signature or payment is written for a closed company');
+-- a repeat of the signature (the answer was lost, the company closed meanwhile): «company closed», not the page
+select set_config('app.signing_estimate', '0e1a7600-0000-4000-8000-000000000001', false);
+update public.estimates set status = 'awaiting_countersign' where id = '0e1a7600-0000-4000-8000-000000000001';
+select set_config('app.signing_estimate', '', false);
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails_like($q$select public.portal_accept('tok_t76_closed_0123456789ab', '0e3a7600-0000-4000-8000-000000000001', null, 'Client', 'M0 0 L5 5', true)$q$, 'company closed', 'a repeat of the signature (awaiting countersign): refused before the repeat branch');
+:as_super
+-- «closed» wins over «expired» and «declined» (they give the phone)
+select tst.set_expires('0e1a7600-0000-4000-8000-000000000001', (now() - interval '3 days')::date);
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_estimate('tok_t76_closed_0123456789ab') ->> 'status' = 'closed' and public.portal_estimate('tok_t76_closed_0123456789ab')::text not like '%3235557676%',
+              'past «valid until»: still «closed», no phone');
+-- an empty dba: the name
+:as_super
+update public.companies set dba = '' where id = 'ca760000-0000-4000-8000-000000000000';
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_estimate('tok_t76_closed_0123456789ab') -> 'company' ->> 'name' = 'T76 Legal LLC', 'an empty dba: the company name');
+-- the letter: never handed out, no attempt counted, no address taken
+reset role; set role service_role;
+select tst.ok(public.email_claim((select id from public.email_outbox where estimate_id = '0e1a7600-0000-4000-8000-000000000001')) is null, 'a closed company: email_claim hands out no letter');
+:as_super
+select tst.ok((select status = 'expired' and attempts = 0 and to_email is null from public.email_outbox where estimate_id = '0e1a7600-0000-4000-8000-000000000001'),
+              'the letter is expired, no attempt, no address');
+-- rights as before (rule 18, T52)
+select tst.ok(has_function_privilege('anon', 'public.portal_estimate(text)', 'EXECUTE')
+          and has_function_privilege('anon', 'public.portal_pay_simulated(text, uuid)', 'EXECUTE')
+          and has_function_privilege('anon', 'public.portal_accept(text, uuid, uuid[], text, text, boolean, text, uuid, uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.email_claim(uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.email_claim(uuid)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.email_claim(uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.company_closed(uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.company_closed(uuid)', 'EXECUTE'), 'the rights are as before; nobody calls company_closed directly');
+\echo 'T76 a closed company: the page, signing, paying and letters refused ok'
 -- ---------------------------------------------------------------- T80: push_devices — a person's phones (docs/specs/27 §4.1)
 :as_tech_a
 select public.register_push_device('ExponentPushToken[t80-mike-1]', 'android', 'es', '1.0.0 · 270');

@@ -1,3 +1,4 @@
+import { toastArmed } from "./toastArm";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { KeyboardAvoidingView, Modal, PanResponder, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from "react-native";
 import { avoidBehavior } from "./keyboard";
@@ -320,6 +321,7 @@ export function HelpButton({ title, text, where }: { title: string; text: string
 }
 
 /* ---------- Toast with 5-second Undo (DS rule 10) ---------- */
+
 interface ToastItem {
   id: number;
   text: string;
@@ -383,6 +385,8 @@ function ToastView({ item, onDone }: { item: ToastItem | null; onDone: () => voi
         {item.undo ? (
           <UndoButton
             onPress={() => {
+              // the second tap of the double tap that made the thing is not «Отменить» (item.id = when it showed)
+              if (!toastArmed(item.id, Date.now())) return;
               item.undo?.();
               onDone();
             }}
