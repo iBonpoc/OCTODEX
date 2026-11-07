@@ -64,7 +64,14 @@
           "isAndroidForegroundServiceEnabled": false
         }
       ],
-      "expo-sharing"
+      "expo-sharing",
+      [
+        "expo-notifications",
+        {
+          "defaultChannel": "default",
+          "enableBackgroundRemoteNotifications": false
+        }
+      ]
     ],
     "scheme": "octodex",
     "owner": "octodex-team",

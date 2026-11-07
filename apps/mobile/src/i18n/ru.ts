@@ -2184,6 +2184,19 @@ export const ru = {
   "fix.more.jobs": "К плану: {n}",
   "fix.more.estimates": "На подпись: {n}",
   "fix.more.invoices": "Просрочено: {n}",
+  // ---- push (docs/specs/27-push.md) ----
+  "push.title": "Уведомления",
+  "push.thisPhone": "Пуш-уведомления на этом телефоне",
+  "push.state.on": "Включены: подписанная смета, оплата. Без сумм и адресов в тексте.",
+  "push.state.off": "Выключены. Колокольчик в приложении работает всегда.",
+  "push.state.denied": "Запрещены в настройках телефона.",
+  "push.state.signed_out": "Войдите в аккаунт, чтобы получать пуши.",
+  "push.state.web": "Пуши приходят в приложении OCTODEX на телефоне. Здесь — колокольчик.",
+  "push.state.expo_go": "Пуши работают в установленном приложении OCTODEX, не в Expo Go.",
+  "push.openSettings": "Открыть настройки телефона",
+  "push.turnedOn": "Уведомления включены",
+  "push.denied": "Телефон не разрешил уведомления",
+  "push.failed": "Не удалось включить. Проверьте связь и попробуйте ещё раз",
 } as const;
 
 export type DictKey = keyof typeof ru;
