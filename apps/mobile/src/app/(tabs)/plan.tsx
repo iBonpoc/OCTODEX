@@ -20,7 +20,7 @@ import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip } from "
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
-import { canPlan, canReschedule, hiddenAssignees, isAssigned, liveAssignees, moveAssignee, planFilter, type PlanWho } from "@/features/schedule";
+import { canPlan, canReschedule, hiddenAssignees, isAssigned, liveAssignees, moveAssignee, planFilter, type PlanWho, visitWhen } from "@/features/schedule";
 import { memberLabel, memberName } from "@/features/team";
 import { FeedView, PlanAddSheet, PlanWhoChips, UnassignedSoon, WaitingJobs } from "@/features/PlanParts";
 import { daysFrom, planItems } from "@/features/planFeed";
@@ -244,7 +244,7 @@ function WeekView({ days, visitsOn, openDay }: { days: DayKey[]; visitsOn: (k: D
                     <ItemCard
                       key={v.id}
                       status={st.status}
-                      title={`${time(v.start)} · ${c?.name ?? "—"}`}
+                      title={`${visitWhen(v, time, t("plan5.allDay"), false)} · ${c?.name ?? "—"}`}
                       subtitle={[job?.title, memberLabel(tech, t) ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
                       right={<RowView>{overlapSigns(db, v).map((s) => <StatusChip key={s.key} status={s.tone} label={t(s.key, s.params)} />)}<StatusChip status={st.status} label={t(st.label)} /></RowView>}
                       onPress={() => router.push(`/visit/${v.id}`)}

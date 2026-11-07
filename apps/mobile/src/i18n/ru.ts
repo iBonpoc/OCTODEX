@@ -2140,6 +2140,21 @@ export const ru = {
   "job5.tags.none": "Без меток",
   "job5.tags.saved": "Метки сохранены",
   "job5.type.saved": "Тип работы изменён",
+  // fix.* — founder fixes chat
+  "fix.client.balance": "Баланс",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.leadOrphan": "{name}: ответственный не работает — передайте лид",
+  "fr7.leadReplyOrphan": "Лид без ответа {m} мин · {name} · ответственный не работает",
+  "fr7.taskOrphan": "Задача без исполнителя: {name}",
+  "fr7.noOwnerChip": "Без ответственного",
+  "fr7.noAssigneeChip": "Без исполнителя",
+  "fr7.handOver": "Передать",
+  "job5.byTime": "По времени",
+  "job5.allDaySummary": "{date} · весь день · {who}",
+  "job5.clientDay": "Клиент увидит только дату, без времени",
+  "job5.msg.allDay": "Здравствуйте, {name}! {company} приедет на работы {date}, в течение дня. Если день не подходит, ответьте на это сообщение.",
+  "job5.allDaySaved": "Запланировано на {date}, весь день",
+  "job5.allDayChip": "Весь день",
 } as const;
 
 export type DictKey = keyof typeof ru;

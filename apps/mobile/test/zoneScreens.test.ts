@@ -121,6 +121,17 @@ describe("labels on the screens: the company's clock and day", () => {
     setZone("Pacific/Honolulu");
     expect(dayKeyLabel("2026-11-08")).toBe("Sun, Nov 8");
   });
+  // e2e 103 against a real Supabase (07.11): invoices.due_date «2026-11-06» showed «Thu, Nov 5» on the invoice screen —
+  // a calendar day read as UTC midnight and shown in LA. The same for leads.timeframe_date and every date column.
+  it("a calendar day «YYYY-MM-DD» from the server is that day in every zone, not UTC midnight", () => {
+    for (const tz of [LA, NY, "Pacific/Honolulu", "UTC", "Asia/Tokyo", "Pacific/Kiritimati"]) {
+      expect(dayLabel("2026-11-06", "en-US", tz), tz).toBe("Fri, Nov 6");
+      expect(dayLabel("2026-11-06", "ru", tz), tz).toBe(dayKeyLabel("2026-11-06", "ru"));
+    }
+    setZone(LA);
+    expect(dayLabel("2026-11-06")).toBe("Fri, Nov 6"); // the default zone too
+    expect(dayLabel("2026-11-06T07:00:00.000Z", "en-US", LA)).toBe("Thu, Nov 5"); // a moment still goes by the clock
+  });
   // PDF dates (docPdf.ts docDay) default to the company's zone too: test/estimatePdf.test.ts «US numeric dates» fails
   // in TZ=Asia/Tokyo without it
 });
