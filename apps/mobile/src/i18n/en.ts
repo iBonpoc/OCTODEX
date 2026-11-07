@@ -262,7 +262,6 @@ export const en: Dict = {
   "today.awaiting": "Awaiting payment",
   "today.attention": "Needs attention",
   "today.allClear": "All under control",
-  "today.share": "{n}%",
   "today.nEstimates": "Estimates: {n}",
   "today.nPayments": "Payments: {n}",
   "today.allTime": "All open invoices",
@@ -2206,4 +2205,15 @@ export const en: Dict = {
   "push.turnedOn": "Notifications on",
   "push.denied": "The phone did not allow notifications",
   "push.failed": "Could not turn on. Check the connection and try again",
+  // today2.* — «Сегодня»: «Получено» with columns, tiles, funnel bars (spec 24 A, founder fixes chat)
+  "today2.vsToday": "vs yesterday",
+  "today2.vsWeek": "vs last week",
+  "today2.vsMonth": "vs last month",
+  "today2.change": "{arrow} {amount} {vs}",
+  "today2.empty": "Shows up after the first payment",
+  "today2.chartA11y": "Received: {list}",
+  "today2.nInvoices": "Invoices: {n}",
+  "today2.overdue": "Overdue: {n}",
+  "today2.ofLeads": "{n}% of leads",
+  "today2.ofSent": "{n}% of sent",
 };

@@ -63,7 +63,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   await h.shot("sent");
 
   // S7 → S8: the client opens the link in their own browser (no sign-in) and signs
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "en-US" });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, locale: "en-US", reducedMotion: "reduce" });
   const cp = await ctx.newPage();
   const clientErrors = [];
   cp.on("pageerror", (e) => clientErrors.push(e.message));

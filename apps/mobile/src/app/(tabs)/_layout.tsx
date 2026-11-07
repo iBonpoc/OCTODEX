@@ -6,6 +6,8 @@ export default function TabsLayout() {
     <Tabs
       // the bar is drawn by the shell on every phone screen, not only on these (app/_layout.tsx, docs/specs/28)
       tabBar={() => null}
+      // back walks the tabs as they were opened (Leads from «Ещё» → «Ещё»), not always to the first tab (docs/specs/28)
+      backBehavior="history"
       screenLayout={(props) => <GuardedScreen {...props} />}
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: "transparent" } }}
     >
