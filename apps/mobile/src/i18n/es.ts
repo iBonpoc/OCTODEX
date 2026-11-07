@@ -2156,6 +2156,9 @@ export const es: Dict = {
   "fr7.noOwnerChip": "Sin responsable",
   "fr7.noAssigneeChip": "Sin responsable",
   "fr7.handOver": "Entregar",
+  // «Каркас» №8, 7а-3: the client page of a closed company (docs/specs/22 §3.5)
+  "fr8.portal.closed": "{company} cerró — los documentos de este enlace ya no están disponibles",
+  "fr8.portal.closedChip": "Cerrada",
   "job5.byTime": "Por hora",
   "job5.allDaySummary": "{date} · todo el día · {who}",
   "job5.clientDay": "El cliente verá solo la fecha, sin hora",
