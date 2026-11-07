@@ -46,7 +46,8 @@ exports.run = async (h) => {
     const el = p.getByRole("button", { name: c.name, exact: true }).first();
     await el.scrollIntoViewIfNeeded();
     const t = await el.innerText();
-    const amounts = t.match(/\$[\d,]+(\.\d\d)?/g) ?? [];
+    // the overdue sign carries its own amount («Просрочено $X · N дн») — the card value is still one figure
+    const amounts = t.replace(/Просрочено \$[\d,]+(\.\d\d)?/g, "").match(/\$[\d,]+(\.\d\d)?/g) ?? [];
     h.expect(amounts.length === 1, `${c.name}: one money figure on the card (${amounts.join(", ")})`);
     h.expect(amounts[0] === usd(m.owed > 0 ? m.owed : m.paid), `${c.name}: ${m.owed > 0 ? "owed" : "paid total"} shown (${amounts[0]})`);
     // the figure is in the card's header: on the line of the client's name, to the right of it
