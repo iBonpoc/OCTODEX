@@ -7034,11 +7034,69 @@ update public.leads set assigned_to = 'a8700000-0000-4000-8000-000000000001' whe
 delete from public.push_outbox;
 select app.push_lead_reminders((select at from t87_t where k = 'in'));
 select tst.ok(not exists (select 1 from public.push_outbox where user_id = 'a8700000-0000-4000-8000-000000000001'), 'T87 a subcontractor gets no reminder');
+-- security-check #305 №1: 501 old leads that already got their reminder never hide a new one
+update public.leads set assigned_to = 'a0000000-0000-0000-0000-000000000003' where id = '18700000-0000-4000-8000-000000000001';
+delete from public.push_outbox;
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to, created_by, received_at)
+select ('18710000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001',
+       'T87 Old ' || g, '+1323555' || lpad(g::text, 4, '0'), 'a0000000-0000-0000-0000-000000000003', 'a0000000-0000-0000-0000-000000000002',
+       (select at from t87_t where k = 'in') - interval '23 hours' + g * interval '1 second'
+  from generate_series(1, 501) g;
+delete from public.push_outbox;
+insert into public.push_outbox (company_id, user_id, kind, route, source_id, status)
+select company_id, assigned_to, 'lead.reminder', '/lead/' || id::text, id, 'sent' from public.leads where id::text like '18710000-%';
+update public.leads set received_at = (select at from t87_t where k = 'in') - interval '20 minutes' where id = '18700000-0000-4000-8000-000000000001';
+select app.push_lead_reminders((select at from t87_t where k = 'in'));
+select tst.ok(exists (select 1 from public.push_outbox where source_id = '18700000-0000-4000-8000-000000000001' and kind = 'lead.reminder'),
+          'T87 501 old leads already reminded do not hide a new one');
+-- one company with many leads does not take the minute from the others: at most 20 per company
+delete from public.push_outbox;
+update public.leads set deleted_at = now() where id::text like '18710000-%';
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to, created_by, received_at)
+select ('18720000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, 'cb000000-0000-0000-0000-000000000000', (select id from public.lead_sources where company_id = 'cb000000-0000-0000-0000-000000000000' limit 1),
+       'T87 B ' || g, '+1424555' || lpad(g::text, 4, '0'), 'b0000000-0000-0000-0000-000000000001', null,
+       (select at from t87_t where k = 'in') - interval '20 minutes' + g * interval '1 second'
+  from generate_series(1, 30) g;
+delete from public.push_outbox;
+select app.push_lead_reminders((select at from t87_t where k = 'in'));
+select tst.ok((select count(*) from public.push_outbox where company_id = 'cb000000-0000-0000-0000-000000000000' and kind = 'lead.reminder') = 20,
+          'T87 at most 20 reminders per company in one minute');
+select tst.ok(exists (select 1 from public.push_outbox where source_id = '18700000-0000-4000-8000-000000000001' and kind = 'lead.reminder'),
+          'T87 … and the other company still gets its reminder');
+select app.push_lead_reminders((select at from t87_t where k = 'in') + interval '1 minute');
+select tst.ok((select count(*) from public.push_outbox where company_id = 'cb000000-0000-0000-0000-000000000000' and kind = 'lead.reminder') = 30,
+          'T87 the rest come the next minute');
+update public.leads set deleted_at = now() where id::text like '18720000-%';
+-- №5: given to a person less than 15 min ago — no reminder yet (the «lead assigned to you» push is fresh)
+delete from public.push_outbox;
+insert into public.push_outbox (company_id, user_id, kind, route, source_id, status, created_at)
+  values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000003', 'lead.assigned', '/lead/18700000-0000-4000-8000-000000000001',
+          '18700000-0000-4000-8000-000000000001', 'sent', (select at from t87_t where k = 'in') - interval '5 minutes');
+select app.push_lead_reminders((select at from t87_t where k = 'in'));
+select tst.ok(not exists (select 1 from public.push_outbox where source_id = '18700000-0000-4000-8000-000000000001' and kind = 'lead.reminder'),
+          'T87 given to him 5 minutes ago: no reminder yet');
+select app.push_lead_reminders((select at from t87_t where k = 'in') + interval '11 minutes');
+select tst.ok(exists (select 1 from public.push_outbox where source_id = '18700000-0000-4000-8000-000000000001' and kind = 'lead.reminder'),
+          'T87 15 minutes after it was given to him: the reminder');
+-- the schedule: its own job once, where pg_cron exists (not here)
+do $$ declare n int; begin
+  if to_regnamespace('cron') is null then
+    perform tst.ok(true, 'T87 no pg_cron here: no schedule, the migration did not fail');
+  else
+    execute $q$select count(*) from cron.job where jobname = 'push-lead-reminders'$q$ into n;
+    perform tst.ok(n = 1, 'T87 the reminders have their own schedule, once');
+  end if;
+end $$;
+select tst.ok(not exists (select 1 from pg_proc where proname = 'push_claim' and prosrc like '%push_lead_reminders%'), 'T87 push_claim does not run the reminders (they never stop the queue)');
 -- rights
 select tst.ok(not has_function_privilege('authenticated', 'app.push_lead_reminders(timestamptz)', 'EXECUTE')
           and not has_function_privilege('anon', 'app.push_lead_reminders(timestamptz)', 'EXECUTE')
           and not has_function_privilege('service_role', 'app.push_lead_reminders(timestamptz)', 'EXECUTE')
-          and not has_function_privilege('authenticated', 'app.push_in_hours(uuid, timestamptz)', 'EXECUTE'), 'T87 nobody but the server runs the reminders');
+          and not has_function_privilege('authenticated', 'app.push_in_hours(uuid, timestamptz)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.push_in_hours(uuid, timestamptz)', 'EXECUTE')
+          and not has_function_privilege('service_role', 'app.push_in_hours(uuid, timestamptz)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.push_lead_unanswered(public.leads)', 'EXECUTE')
+          and not has_function_privilege('service_role', 'app.push_lead_unanswered(public.leads)', 'EXECUTE'), 'T87 nobody but the server runs the reminders');
 -- clean up
 delete from public.push_outbox;
 delete from public.push_devices;
