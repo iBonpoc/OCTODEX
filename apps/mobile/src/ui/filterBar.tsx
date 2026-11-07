@@ -1,37 +1,54 @@
 import { useEffect, useRef, useState, type ElementRef, type ReactNode } from "react";
 import { Platform, ScrollView, View } from "react-native";
 import { component, radius, size, space } from "@octo/design-tokens";
-import { useTheme } from "@/theme/ThemeProvider";
+import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Icon, Press, T } from "./primitives";
 import { Sheet } from "./overlays";
-import { Button } from "./controls";
-import { filterLabel, visibleFilters, type FilterItem } from "./filterBarRules";
+import { Button, TextField } from "./controls";
+import { activeFilterCount, chosenFilters, filterLabel, visibleFilters, type FilterGroup, type FilterItem } from "./filterBarRules";
+
+export type { FilterGroup, FilterOption } from "./filterBarRules";
 
 /**
- * One line of filters over a list (founder 07.11: four rows of chips took half the phone screen).
- * Status chips scroll sideways in one row (mouse wheel and keyboard on the web too); empty ones are hidden
- * (visibleFilters). The rest — tags, sources — sits behind «Фильтры · N» in a sheet, as rows (rule 12).
+ * Filters over a list (docs/specs/31-list-filters.md, variant Б — founder 07.11: «очень много кнопок сверху»).
+ * - phone / tablet: row 1 — the search and the «Фильтр» button (a number when something is on); row 2 — one lane of
+ *   statuses with counts, never wrapped, scrolls sideways; empty ones hidden (visibleFilters);
+ * - desktop 1280: one row — the search (panel-w), the lane, a button per group («Метки ▾»);
+ * - under it, only when something is on in the sheet: «VIP ✕ · HOA ✕ · Сбросить».
+ * The sheet holds the groups as rows (rule 12). No status colour on the chips: chosen = ink frame on surf2 (rule 2).
  */
 export function FilterBar<K extends string>({
+  search,
   items,
   value,
   onChange,
-  more,
+  groups = [],
+  onReset,
 }: {
+  /** row 1: the search field of the list */
+  search?: { value: string; onChange: (s: string) => void; placeholder: string };
+  /** the lane: the first is the list's broad default, then the statuses in the order of the work */
   items: FilterItem<K>[];
   value: K;
   onChange: (k: K) => void;
-  /** «Фильтры» button: how many extra filters are on and what the sheet holds */
-  more?: { active: number; onReset: () => void; children: ReactNode };
+  /** the «Фильтр» sheet: sources, people, tags… (only the groups that have options) */
+  groups?: FilterGroup[];
+  /** «Сбросить»: everything in the sheet off */
+  onReset?: () => void;
 }) {
   const { c } = useTheme();
   const { t } = useI18n();
-  const [open, setOpen] = useState(false);
+  const { device } = useDevice();
+  const desktop = device === "desktop";
+  // which sheet is open: all groups (phone, tablet) or one group (a desktop button)
+  const [open, setOpen] = useState<string | null>(null);
   const scroller = useRef<ElementRef<typeof ScrollView>>(null);
-  const h = component.button.sm;
+  const shown = groups.filter((g) => g.options.length > 0);
+  const active = activeFilterCount(shown);
+  const chosen = chosenFilters(shown);
 
-  // web: a vertical mouse wheel scrolls the row sideways (a horizontal row does not take it by default)
+  // web: a vertical mouse wheel scrolls the lane sideways (a horizontal row does not take it by default)
   useEffect(() => {
     if (Platform.OS !== "web") return;
     const node = (scroller.current as unknown as { getScrollableNode?: () => HTMLElement } | null)?.getScrollableNode?.();
@@ -45,7 +62,8 @@ export function FilterBar<K extends string>({
     return () => node.removeEventListener("wheel", onWheel);
   }, []);
 
-  const chip = (key: string, label: string, sel: boolean, onPress: () => void, a11y: { role: "radio" | "button"; label: string }, icon?: ReactNode) => (
+  const h = desktop ? component.button.sm : component.button.md;
+  const pill = (key: string, label: string, sel: boolean, onPress: () => void, a11y: { role: "radio" | "button"; label: string }, icon?: ReactNode, testID?: string) => (
     <Press
       key={key}
       onPress={onPress}
@@ -54,6 +72,7 @@ export function FilterBar<K extends string>({
       accessibilityState={a11y.role === "radio" ? { selected: sel, checked: sel } : undefined}
       {...(a11y.role === "radio" ? ({ "aria-checked": sel } as object) : {})}
       accessibilityLabel={a11y.label}
+      testID={testID}
       style={{
         height: h,
         paddingHorizontal: space[3],
@@ -63,7 +82,7 @@ export function FilterBar<K extends string>({
         gap: space[1],
         // chosen: ink frame on the same surface — yellow is kept for the one main action (rule 2)
         backgroundColor: c.surf2,
-        borderWidth: sel ? component.selectedBorder : 1,
+        borderWidth: sel ? component.selectedBorder : component.hairline,
         borderColor: sel ? c.ink : c.bd,
       }}
     >
@@ -74,44 +93,130 @@ export function FilterBar<K extends string>({
     </Press>
   );
 
-  return (
-    <View>
-      <ScrollView ref={scroller} horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2], paddingVertical: space[1] }} accessibilityRole="radiogroup">
-        {visibleFilters(items, value).map((it) => chip(it.key, filterLabel(it), it.key === value, () => onChange(it.key), { role: "radio", label: filterLabel(it) }))}
-        {more
-          ? chip(
-              "__more",
-              more.active > 0 ? `${t("fix.filters.button")} · ${more.active}` : t("fix.filters.button"),
-              more.active > 0,
-              () => setOpen(true),
-              { role: "button", label: t("fix.filters.a11y", { n: more.active }) },
-              <Icon name="sliders" s={size.iconSm} color={c.ink} />,
-            )
-          : null}
-      </ScrollView>
-      {more ? (
-        <Sheet visible={open} onClose={() => setOpen(false)} title={t("fix.filters.title")}>
-          {more.children}
-          <View style={{ flexDirection: "row", gap: space[2], marginTop: space[3] }}>
-            {more.active > 0 ? <Button label={t("fix.filters.reset")} variant="secondary" onPress={more.onReset} /> : null}
-            <Button label={t("fix.filters.done")} variant="secondary" onPress={() => setOpen(false)} />
-          </View>
-        </Sheet>
+  const lane = (
+    <ScrollView
+      ref={scroller}
+      horizontal
+      showsHorizontalScrollIndicator={false}
+      style={desktop ? { flexShrink: 1 } : undefined}
+      contentContainerStyle={{ gap: space[2], paddingVertical: space[1] }}
+      accessibilityRole="radiogroup"
+      testID="filter-lane"
+    >
+      {visibleFilters(items, value).map((it) => pill(it.key, filterLabel(it), it.key === value, () => onChange(it.key), { role: "radio", label: filterLabel(it) }))}
+    </ScrollView>
+  );
+
+  // phone / tablet: one square button next to the search, always visible (spec 31 §6 п.3)
+  const sliders = <Icon name="sliders" s={size.iconSm} color={c.ink} />;
+  const filterButton = shown.length ? (
+    <Press
+      onPress={() => setOpen("*")}
+      visibleHeight={component.button.phone}
+      accessibilityRole="button"
+      accessibilityLabel={t("fix.filters.a11y", { n: active })}
+      testID="filter-button"
+      style={{
+        height: component.button.phone,
+        minWidth: component.button.phone,
+        paddingHorizontal: active ? space[2] : 0,
+        borderRadius: radius.pill,
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "center",
+        gap: space[1],
+        backgroundColor: c.surf2,
+        borderWidth: active ? component.selectedBorder : component.hairline,
+        borderColor: active ? c.ink : c.bd,
+      }}
+    >
+      {sliders}
+      {active ? (
+        <T v="button" w="bold" tabular style={{ color: c.ink }}>
+          {String(active)}
+        </T>
       ) : null}
+    </Press>
+  ) : null;
+
+  const field = search ? <TextField type="search" value={search.value} onChangeText={search.onChange} placeholder={search.placeholder} icon="search" /> : null;
+  const sheetGroups = open === "*" ? shown : shown.filter((g) => g.key === open);
+
+  return (
+    <View style={{ gap: space[2] }} testID="filter-bar">
+      {desktop ? (
+        <View style={{ flexDirection: "row", alignItems: "center", gap: space[3] }}>
+          {field ? <View style={{ width: component.panelW }}>{field}</View> : null}
+          <View style={{ flex: 1, minWidth: 0 }}>{lane}</View>
+          {shown.map((g) => {
+            const n = g.options.filter((o) => o.on).length;
+            return pill(`g:${g.key}`, n ? `${g.title} · ${n}` : g.title, n > 0, () => setOpen(g.key), { role: "button", label: t("fix.filters.a11y", { n }) }, <Icon name="chevronDown" s={size.iconXs} color={c.ink} />, `filter-group-${g.key}`);
+          })}
+        </View>
+      ) : (
+        <>
+          {field || filterButton ? (
+            <View style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+              <View style={{ flex: 1, minWidth: 0 }}>{field}</View>
+              {filterButton}
+            </View>
+          ) : null}
+          {lane}
+        </>
+      )}
+      {chosen.length ? (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", alignItems: "center", gap: space[2] }} testID="filter-chosen">
+          {chosen.map(({ group, option }) => (
+            <Press
+              key={`${group.key}:${option.key}`}
+              onPress={() => group.onToggle(option.key)}
+              visibleHeight={component.button.sm}
+              accessibilityRole="button"
+              accessibilityLabel={t("card.filter.remove", { v: option.label })}
+              style={{ height: component.button.sm, paddingLeft: space[3], paddingRight: space[2], borderRadius: radius.pill, flexDirection: "row", alignItems: "center", gap: space[1], backgroundColor: c.surf2, borderWidth: component.hairline, borderColor: c.bd }}
+            >
+              <T v="button" w="semibold" style={{ color: c.ink }}>
+                {option.label}
+              </T>
+              <Icon name="close" s={size.iconXs} color={c.mut} />
+            </Press>
+          ))}
+          {onReset ? <Button label={t("fix.filters.reset")} variant="ghost" size="sm" onPress={onReset} /> : null}
+        </View>
+      ) : null}
+      <Sheet visible={open !== null} onClose={() => setOpen(null)} title={open === "*" ? t("fix.filters.title") : (sheetGroups[0]?.title ?? t("fix.filters.title"))}>
+        {sheetGroups.map((g) => (
+          <View key={g.key} style={{ gap: space[1] }}>
+            {open === "*" ? (
+              <T v="caption" w="semibold" tone="mut">
+                {g.title}
+              </T>
+            ) : null}
+            {g.options.map((o) => (
+              <FilterRow key={o.key} label={o.label} count={o.count} on={o.on} onToggle={() => g.onToggle(o.key)} />
+            ))}
+          </View>
+        ))}
+        <View style={{ flexDirection: "row", gap: space[2], marginTop: space[3] }}>
+          {active > 0 && onReset ? <Button label={t("fix.filters.reset")} variant="secondary" onPress={onReset} /> : null}
+          <Button label={t("fix.filters.done")} variant="secondary" onPress={() => setOpen(null)} />
+        </View>
+      </Sheet>
     </View>
   );
 }
 
-/** a row in the «Фильтры» sheet: a tag / a source to show; several can be on (rule 12 — choice menus are rows) */
-export function FilterRow({ label, on, onToggle }: { label: string; on: boolean; onToggle: () => void }) {
+/** a row in the «Фильтр» sheet: a tag / a source / a person to show; several can be on (rule 12 — choice menus are rows) */
+export function FilterRow({ label, count, on, onToggle }: { label: string; count?: number; on: boolean; onToggle: () => void }) {
   const { c } = useTheme();
+  const empty = count === 0;
   return (
     <Press
       onPress={onToggle}
       accessibilityRole="checkbox"
       accessibilityState={{ checked: on }}
       {...({ "aria-checked": on } as object)}
-      accessibilityLabel={label}
+      accessibilityLabel={count === undefined ? label : `${label} · ${count}`}
       style={{ minHeight: component.rowOption, flexDirection: "row", alignItems: "center", gap: space[3] }}
     >
       <View
@@ -129,9 +234,14 @@ export function FilterRow({ label, on, onToggle }: { label: string; on: boolean;
       >
         {on ? <Icon name="check" s={size.iconSm} color={c.bg} /> : null}
       </View>
-      <T v="body" style={{ flex: 1 }}>
+      <T v="body" tone={empty && !on ? "mut" : undefined} style={{ flex: 1 }}>
         {label}
       </T>
+      {count !== undefined ? (
+        <T v="body" tone="mut" tabular>
+          {String(count)}
+        </T>
+      ) : null}
     </Press>
   );
 }
