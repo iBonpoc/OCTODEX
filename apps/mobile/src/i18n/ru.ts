@@ -2168,6 +2168,13 @@ export const ru = {
   "fix.filters.reset": "Сбросить",
   "fix.filters.done": "Готово",
   "fix.filters.tags": "Метки",
+  // fix.more.* — «Ещё» as rows with counters (spec 25, founder fixes chat)
+  "fix.more.groupCompany": "Компания",
+  "fix.more.leads": "Ждут: {n}",
+  "fix.more.tasks": "На сегодня: {n}",
+  "fix.more.jobs": "К плану: {n}",
+  "fix.more.estimates": "На подпись: {n}",
+  "fix.more.invoices": "Просрочено: {n}",
 } as const;
 
 export type DictKey = keyof typeof ru;

@@ -2169,4 +2169,11 @@ export const en: Dict = {
   "fix.filters.reset": "Reset",
   "fix.filters.done": "Done",
   "fix.filters.tags": "Tags",
+  // fix.more.* — «Ещё» as rows with counters (spec 25, founder fixes chat)
+  "fix.more.groupCompany": "Company",
+  "fix.more.leads": "Waiting: {n}",
+  "fix.more.tasks": "For today: {n}",
+  "fix.more.jobs": "To schedule: {n}",
+  "fix.more.estimates": "To sign: {n}",
+  "fix.more.invoices": "Overdue: {n}",
 };
