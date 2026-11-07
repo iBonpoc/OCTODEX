@@ -109,8 +109,14 @@ describe("unit:accountCloud — the store in memory is forgotten with the device
     const off = onDeviceForgotten((wiped) => {
       for (const k of ["octo.outbox.v1", "octo.role.v1", "octo.cloud.v1.c1", "octo.lang.v1"]) if (wiped(k)) heard.push(k);
     });
+    storage.set("octo.outbox.v1", "[]");
+    let before = false;
+    const offOrder = onDeviceForgotten(() => void (before = storage.has("octo.outbox.v1")));
     await finishOnDevice();
+    offOrder();
     expect(heard).toEqual(["octo.outbox.v1", "octo.role.v1", "octo.cloud.v1.c1"]);
+    expect(before).toBe(true); // forgotten BEFORE the wipe (review #231 №4): no write can land after it
+    expect(storage.has("octo.outbox.v1")).toBe(false);
     heard.length = 0;
     await wipeIfPending(); // nothing pending: nothing forgotten
     expect(heard).toEqual([]);
