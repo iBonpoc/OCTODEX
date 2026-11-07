@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import Animated, { FadeInDown, useReducedMotion } from "react-native-reanimated";
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from "react-native-reanimated";
 import { lateAfterOf } from "@/features/scheduleSettings";
 import { View } from "react-native";
 import { isOpenVisit, visitWhen } from "@/features/schedule";
@@ -158,11 +158,15 @@ let homeAppeared = false;
 export default function Today() {
   useTick();
   const reduce = useReducedMotion();
-  // decided once per mount: the first visit of the session animates, later visits (and reduced motion) do not
-  const [appear] = useState(() => (reduce || homeAppeared ? undefined : FadeInDown.duration(motion.durSlow).withInitialValues({ opacity: 0, transform: [{ translateY: space[2] }] })));
+  // the cards come in once per session (A4): opacity 0 → 1 and 8 px up, durSlow; own shared values, so nothing can
+  // stay hidden on the web (a layout «entering» with initial values left the cards at opacity 0 there)
+  const [animate] = useState(() => !reduce && !homeAppeared);
+  const shown = useSharedValue(animate ? 0 : 1);
   useEffect(() => {
     homeAppeared = true;
-  }, []);
+    if (animate) shown.value = withTiming(1, { duration: motion.durSlow, easing: Easing.bezier(...motion.easeOut) });
+  }, [animate, shown]);
+  const appearStyle = useAnimatedStyle(() => ({ opacity: shown.value, transform: [{ translateY: (1 - shown.value) * space[2] }] }));
   const { t, day, time } = useI18n();
   const { db, role } = useStore();
   const [period, setPeriod] = usePersistentState<Period>("octo.todayPeriod.v1", "today");
@@ -217,7 +221,7 @@ export default function Today() {
       />
       {/* spec 24 A: the main number with columns, two tiles, the funnel in counts as bars (founder 07.11) */}
       {/* the cards come in once per session (A4: FadeInDown 8, durSlow); not again on coming back to the tab */}
-      <Animated.View entering={appear} style={{ gap: space[3] }}>
+      <Animated.View style={[{ gap: space[3] }, appearStyle]}>
         {device === "desktop" ? (
           // 1280: «Получено» | funnel | tiles + company setup (A3) — three full columns
           <Grid>
