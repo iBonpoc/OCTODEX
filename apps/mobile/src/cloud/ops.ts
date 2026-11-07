@@ -46,7 +46,7 @@ export type Op =
   /** the office cancels a visit with a reason; S4a / S9a roll the lead / job back when nothing open is left */
   | { k: "visit.cancel"; visitId: string; reason: CancelReason; text?: string; leadBack?: string; jobBack?: string }
   /** the office moves a visit (time, length); the status does not change */
-  | { k: "visit.reschedule"; visitId: string; start: string; durationMin: number }
+  | { k: "visit.reschedule"; visitId: string; start: string; durationMin: number; allDay?: boolean }
   /** estimate visit for a lead whose client and property already exist (lead.prospect or earlier); replaced by visit.inspection */
   | {
       k: "lead.visit";
@@ -107,7 +107,7 @@ export type Op =
     }
   | { k: "payment.record"; id: string; invoiceId: string; customerId: string; amountCents: number; method: PaymentMethod; reference?: string }
   | { k: "invoice.issue"; id: string; jobId: string; customerId: string; kind: "progress" | "final"; title: string; totalCents: number; dueDate?: string }
-  | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[] }
+  | { k: "job.schedule"; jobId: string; visitId: string; start: string; end: string; techId: string | null; assigneeIds?: string[]; note?: string; scope: string[]; allDay?: boolean }
   | { k: "company.save"; company: Company; einChanged: boolean }
   | { k: "license.save"; license: CompanyLicense }
   | { k: "license.remove"; id: string }
@@ -451,7 +451,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.from("visits").update({ customer_notified_at: new Date(0).toISOString() }).eq("id", op.visitId));
     case "visit.reschedule": {
       const end = new Date(new Date(op.start).getTime() + op.durationMin * 60000).toISOString();
-      return run(supabase.from("visits").update({ starts_at: op.start, ends_at: end }).eq("id", op.visitId));
+      // all_day is sent always by this version (false clears it); the server keeps it only on whole days (t03_visit_all_day)
+      return run(supabase.from("visits").update({ starts_at: op.start, ends_at: end, all_day: !!op.allDay }).eq("id", op.visitId));
     }
     case "lead.visit": {
       await run(
@@ -619,7 +620,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         }),
       );
     case "job.schedule": {
-      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, scope: op.scope, notes: op.note ?? null }));
+      await run(ins("visits", { id: op.visitId, company_id: c, job_id: op.jobId, kind: "install", starts_at: op.start, ends_at: op.end, all_day: !!op.allDay, scope: op.scope, notes: op.note ?? null }));
       await advanceJob(op.jobId, "scheduled");
       return assignPeople(op.visitId, op.assigneeIds ?? (op.techId ? [op.techId] : []));
     }

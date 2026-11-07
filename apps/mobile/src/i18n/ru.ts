@@ -2149,6 +2149,12 @@ export const ru = {
   "fr7.noOwnerChip": "Без ответственного",
   "fr7.noAssigneeChip": "Без исполнителя",
   "fr7.handOver": "Передать",
+  "job5.byTime": "По времени",
+  "job5.allDaySummary": "{date} · весь день · {who}",
+  "job5.clientDay": "Клиент увидит только дату, без времени",
+  "job5.msg.allDay": "Здравствуйте, {name}! {company} приедет на работы {date}, в течение дня. Если день не подходит, ответьте на это сообщение.",
+  "job5.allDaySaved": "Запланировано на {date}, весь день",
+  "job5.allDayChip": "Весь день",
 } as const;
 
 export type DictKey = keyof typeof ru;

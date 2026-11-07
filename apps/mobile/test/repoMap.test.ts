@@ -231,3 +231,18 @@ describe("loadCompanyDB — invoices and payments (wave 8, docs/specs/18-money-r
     expect(db.payments.find((p) => p.id === "p-part")).toMatchObject({ amountCents: 3000, refundedCents: 2000 });
   });
 });
+
+describe("loadCompanyDB — «Весь день» of a visit (3b-3, 17-job §11.1)", () => {
+  it("all_day true → allDay; false or missing (an old server) → not set", async () => {
+    rows.visits = [
+      { id: "v1", job_id: "j1", status: "scheduled", starts_at: "2026-12-01T08:00:00Z", ends_at: "2026-12-02T08:00:00Z", all_day: true },
+      { id: "v2", job_id: "j1", status: "scheduled", starts_at: "2026-12-03T17:00:00Z", ends_at: "2026-12-03T18:00:00Z", all_day: false },
+      { id: "v3", job_id: "j1", status: "scheduled", starts_at: "2026-12-04T17:00:00Z", ends_at: "2026-12-04T18:00:00Z" },
+    ];
+    const db = await loadCompanyDB(CO, "u1");
+    const by = (id: string) => db.visits.find((v) => v.id === id)!;
+    expect(by("v1")).toMatchObject({ allDay: true, durationMin: 1440 });
+    expect(by("v2").allDay).toBeUndefined();
+    expect(by("v3").allDay).toBeUndefined();
+  });
+});

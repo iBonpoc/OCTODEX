@@ -2150,4 +2150,10 @@ export const es: Dict = {
   "fr7.noOwnerChip": "Sin responsable",
   "fr7.noAssigneeChip": "Sin responsable",
   "fr7.handOver": "Entregar",
+  "job5.byTime": "Por hora",
+  "job5.allDaySummary": "{date} · todo el día · {who}",
+  "job5.clientDay": "El cliente verá solo la fecha, sin hora",
+  "job5.msg.allDay": "¡Hola, {name}! {company} irá a hacer el trabajo el {date}, durante el día. Si el día no le conviene, responda a este mensaje.",
+  "job5.allDaySaved": "Programado para el {date}, todo el día",
+  "job5.allDayChip": "Todo el día",
 };
