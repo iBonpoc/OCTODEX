@@ -942,6 +942,19 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     expect(server.sends.map((x) => (x.op as { k: string }).k)).toEqual(["calendarEvent.remove"]);
     expect(v(r).stuckOps.map((x) => [x.id, x.leavingMoney])).toEqual([["S", false], ["G", true]]);
   });
+  it("a client's people saved on the phone: queued with the new person only — the existing one is on the server (круг 4)", async () => {
+    const r = await start();
+    const c = (v(r) as unknown as { db: { customers: { id: string }[] } }).db.customers[0]!;
+    const person = (id: string, name: string) => ({ id, name, role: "other", phones: [], emails: [] });
+    const save = (v(r) as unknown as { saveCustomerPeople: (id: string, p: object[]) => void }).saveCustomerPeople;
+    save(c.id, [person(U(76), "Ann")]); // Ann is new here…
+    save(c.id, [person(U(76), "Ann"), person(U(77), "New person")]); // …and on the phone for the next save
+    await wait(300);
+    const ops = (stored() as unknown as { op: { k: string }; made?: string[] }[]).filter((x) => x.op.k === "customer.people");
+    expect(ops.map((x) => x.made)).toEqual([[U(76)], [U(77)]]);
+    const op = ops[1]!;
+    expect(op.made).toEqual([U(77)]);
+  });
   it("a stuck payment alone: money, though nothing else leaves", async () => {
     seedOutbox(q("P", { k: "payment.record", id: U(6), invoiceId: U(5), customerId: U(1), amountCents: 100, method: "cash" }, { stuck: true, fails: 3, failSince: AGO }));
     const r = await start();

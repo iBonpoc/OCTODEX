@@ -249,22 +249,32 @@ describe("unit:outboxDeps — what an upsert makes is decided when it is queued 
     expect([...createdBy({ k: "estimate.save", id: u(1), versionId: u(6) } as unknown as Op)].sort()).toEqual([u(1), u(6)]);
     expect([...createdBy({ k: "tag.save", tag: { id: u(7), name: "New" } } as unknown as Op)]).toEqual([u(7)]);
   });
-  it("on the queue: only what was not on the phone — an existing estimate makes its new version only", () => {
-    expect(madeOnQueue({ k: "estimate.save", id: u(1), versionId: u(6) } as unknown as Op, before)).toEqual([u(6)]);
+  it("on the queue: only what was not on the phone — but an estimate's save always «makes» the estimate (круг 4, Б1)", () => {
+    expect(madeOnQueue({ k: "estimate.save", id: u(1), versionId: u(6) } as unknown as Op, before)?.sort()).toEqual([u(1), u(6)]);
+    expect(madeOnQueue({ k: "estimate.save", id: u(1), versionId: u(2) } as unknown as Op, before)).toEqual([u(1)]); // same version
     expect(madeOnQueue({ k: "estimate.save", id: u(8), versionId: u(9) } as unknown as Op, before)?.sort()).toEqual([u(8), u(9)]);
     expect(madeOnQueue({ k: "tag.save", tag: { id: u(3), name: "VIP!" } } as unknown as Op, before)).toEqual([]);
     expect(madeOnQueue({ k: "tag.save", tag: { id: u(7), name: "New" } } as unknown as Op, before)).toEqual([u(7)]);
     // a client's people: only the new one (a call to Ann, already on the server, stays when the list is discarded)
     expect(madeOnQueue({ k: "customer.people", id: u(4), people: [{ id: u(5) }, { id: u(10) }] } as unknown as Op, before)).toEqual([u(10)]);
+    // the company's contacts and licenses live in db.company (an object): an edit of an existing one makes nothing (круг 4, п.1)
+    const withCompany = { ...before, company: { contacts: [{ id: u(17) }], licenses: [{ id: u(18) }] } };
+    expect(madeOnQueue({ k: "contact.save", contact: { id: u(17), name: "Office" } } as unknown as Op, withCompany)).toEqual([]);
+    expect(madeOnQueue({ k: "license.save", license: { id: u(18), number: "1" } } as unknown as Op, withCompany)).toEqual([]);
+    expect(madeOnQueue({ k: "contact.save", contact: { id: u(19), name: "New" } } as unknown as Op, withCompany)).toEqual([u(19)]);
     // kinds that tell by themselves: by their kind
     expect(madeOnQueue({ k: "lead.add", id: u(11) } as unknown as Op, before)).toBeUndefined();
   });
-  it("an edit of an existing estimate discarded: its send, the approval with its invoice and the payment stay", () => {
-    const E = item({ k: "estimate.save", id: u(1), versionId: u(6), customerId: u(4), propertyId: u(12), title: "T" }, { made: [u(6)] });
+  it("an edit of an existing estimate discarded: its send, the client's approval with its deposit invoice and the payment leave with it — money (круг 4, Б1)", () => {
+    const E = item({ k: "estimate.save", id: u(1), versionId: u(6), customerId: u(4), propertyId: u(12), title: "T" }, { made: [u(1), u(6)] });
     const send = item({ k: "estimate.send", id: u(1), token: "t" });
     const appr = item({ k: "estimate.approve", id: u(1), token: "t", optionId: u(13), addonIds: [], signer: "A", svg: "", channel: "on_site", jobId: u(14), invoiceId: u(15) });
     const pay = item({ k: "payment.record", id: u(16), invoiceId: u(15), customerId: u(4), amountCents: 100, method: "cash" });
-    expect(dependentsOf([E, send, appr, pay], me, E.id)).toEqual([]);
+    expect(ids(dependentsOf([E, send, appr, pay], me, E.id))).toEqual([send.id, appr.id, pay.id]);
+    expect([E, send, appr, pay].some((o) => isMoneyOp(o, MONEY_KINDS))).toBe(true);
+    // another estimate of the same client stays
+    const other = item({ k: "estimate.send", id: u(20), token: "t" });
+    expect(dependentsOf([E, other], me, E.id)).toEqual([]);
     // an older item without `made`: by its kind — all of them leave (careful: they may need the estimate)
     const old = item({ k: "estimate.save", id: u(1), versionId: u(6), customerId: u(4), propertyId: u(12), title: "T" });
     expect(ids(dependentsOf([old, send, appr, pay], me, old.id))).toEqual([send.id, appr.id, pay.id]);

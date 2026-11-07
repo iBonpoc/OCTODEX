@@ -112,25 +112,36 @@ export const UNSURE_KINDS: ReadonlySet<Op["k"]> = new Set<Op["k"]>([
   "customer.people", "lead.people", "estimate.save",
 ]);
 
-/** is `id` an object on the phone (a top-level record, or one inside it: a client's person, an estimate's version) */
+/**
+ * is `id` an object on the phone: a record anywhere up to 4 levels down (a client's person, an estimate's version, the
+ * company's contacts and licenses — db.company is an object, not a list; review #259 круг 4 п.1)
+ */
 function onPhone(db: object, id: string): boolean {
   const low = id.toLowerCase();
-  const hit = (x: unknown) => !!x && typeof x === "object" && typeof (x as { id?: unknown }).id === "string" && (x as { id: string }).id.toLowerCase() === low;
-  for (const list of Object.values(db)) {
-    if (!Array.isArray(list)) continue;
-    for (const x of list) {
-      if (hit(x)) return true;
-      if (x && typeof x === "object")
-        for (const v of Object.values(x as Record<string, unknown>)) if (Array.isArray(v) && v.some(hit)) return true;
-    }
-  }
-  return false;
+  const walk = (v: unknown, depth: number): boolean => {
+    if (depth > 4 || !v || typeof v !== "object") return false;
+    if (Array.isArray(v)) return v.some((x) => walk(x, depth + 1));
+    const rec = v as Record<string, unknown>;
+    if (typeof rec.id === "string" && rec.id.toLowerCase() === low) return true;
+    return Object.values(rec).some((x) => x && typeof x === "object" && walk(x, depth + 1));
+  };
+  return walk(db, 0);
 }
+
+/**
+ * ids an upsert always makes, new or not (review #259 круг 4, Б1): an estimate's send, approval, signatures and deposit
+ * carry the estimate's id, not the version's — and they belong to the content this save writes (an approval of an
+ * option of the new version, a deposit of its total). So they go and leave with its estimate.save, also when it edits.
+ */
+const ALWAYS_MADE: Partial<Record<Op["k"], (op: Op) => string>> = {
+  "estimate.save": (op) => (op as Extract<Op, { k: "estimate.save" }>).id,
+};
 
 /** what an op of UNSURE_KINDS makes, by the phone's data before it (`before`); other kinds: undefined (by their kind) */
 export function madeOnQueue(op: Op, before: object): string[] | undefined {
   if (!UNSURE_KINDS.has(op.k)) return undefined;
-  return [...createdBy(op)].filter((x) => !onPhone(before, x));
+  const always = ALWAYS_MADE[op.k]?.(op)?.toLowerCase();
+  return [...createdBy(op)].filter((x) => x === always || !onPhone(before, x));
 }
 
 /** what the queued op makes: decided when it was queued, else by its kind */
