@@ -1,6 +1,6 @@
 import { BlurView } from "expo-blur";
 import { VersionBadge } from "@/features/version";
-import { useCallback, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ComponentRef, type ReactNode } from "react";
 import { useFocusEffect, useLocalSearchParams, useRoute } from "expo-router";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
@@ -385,6 +385,14 @@ function Breadcrumbs({ trail, current, go }: { trail: Crumb[]; current?: string;
 const noFocusRing = (Platform.OS === "web" ? { outlineStyle: "none" } : {}) as ViewStyle;
 
 /* ---------- Screen: background, header with title + "?" + offline badge, scroll ---------- */
+/**
+ * Lock the screen's scroll while a finger draws (signature, founder 07.11: «страница скроллится вместе с пальцем —
+ * подписать нельзя»). On iOS the native scroll takes the gesture from a JS responder inside it; the pad asks the
+ * screen to stop scrolling for the stroke. Outside a Screen it is a no-op.
+ */
+const ScrollLockCtx = createContext<(locked: boolean) => void>(() => {});
+export const useScrollLock = () => useContext(ScrollLockCtx);
+
 export function Screen({
   title,
   help,
@@ -634,6 +642,7 @@ export function Screen({
   );
   const { height: winH } = useWindowDimensions();
   const scrollRef = useRef<ScrollViewInstance>(null);
+  const [scrollLocked, setScrollLocked] = useState(false);
   const tabsY = useRef(0);
   const offset = useRef(0);
   useEffect(() => {
@@ -658,6 +667,7 @@ export function Screen({
         <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
           <ScrollView
             ref={scrollRef}
+            scrollEnabled={!scrollLocked}
             contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0), paddingHorizontal: space[4] }}
             keyboardShouldPersistTaps="handled"
             keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
@@ -666,7 +676,7 @@ export function Screen({
             scrollEventThrottle={16}
             onScroll={tabs ? (e) => (offset.current = e.nativeEvent.contentOffset.y) : undefined}
           >
-            {content}
+            <ScrollLockCtx.Provider value={setScrollLocked}>{content}</ScrollLockCtx.Provider>
             {tabs ? (
               <View
                 onLayout={(e) => (tabsY.current = e.nativeEvent.layout.y)}
