@@ -14,6 +14,7 @@ import { appRoles, loadCompanyDB } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
+import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
 import { changeConsent, withConsent, type ConsentChange } from "@/features/locationConsent";
 import { leadCols, type LeadPatch } from "@/cloud/leadCols";
@@ -1273,8 +1274,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       addLead: (lead) => {
         const id = uid();
         const d0 = dbRef.current;
-        // new leads go to the owner by default (founder 04.11); the creator is remembered (a tech keeps seeing his lead)
-        const owner = d0.members.find((m) => m.roles.includes("director"))?.id ?? d0.me;
+        // new leads go to the company's choice while at work, else the owner (founder 04.11; features/leadAssignee.ts);
+        // the creator is remembered (a tech keeps seeing his lead)
+        const owner = defaultLeadAssignee(d0.company, d0.members, d0.me);
         // provisional number for the screen; the server assigns the real one (it ignores what the app sends)
         const last = Math.max(0, ...d0.leads.map((x) => Number(/^[A-Z]+-(\d+)$/.exec(x.number ?? "")?.[1] ?? 0)));
         const number = `LEA-${String(last + 1).padStart(4, "0")}`;

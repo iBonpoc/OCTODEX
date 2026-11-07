@@ -76,6 +76,22 @@ export default function CompanyScreen() {
           </View>
         </RowView>
       </Card>
+      {/* not a setup step either: whom new leads go to (docs/14-leads-spec.md §6.4) */}
+      <View testID="company-leads">
+        <Card onPress={() => router.push("/company/leads")} accessibilityLabel={t("co.leads.title")}>
+          <RowView style={{ alignItems: "flex-start" }}>
+            <Icon name="user" />
+            <View style={{ flex: 1, gap: space[1] }}>
+              <T v="body" w="semibold">
+                {t("co.leads.title")}
+              </T>
+              <T v="caption" tone="mut">
+                {t("co.leads.hint")}
+              </T>
+            </View>
+          </RowView>
+        </Card>
+      </View>
     </Screen>
   );
 }

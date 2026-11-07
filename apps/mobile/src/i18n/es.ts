@@ -1614,6 +1614,14 @@ export const es: Dict = {
   "late.unassignedTomorrowChip": "Sin asignar · mañana",
   // route-guard (screens by role)
   "guard.noAccess": "Sin acceso a esta pantalla — se abrió su pantalla principal",
+  // co.leads («Лиды и клиенты»: «Компания → Лиды», docs/14-leads-spec.md §6.1, §6.4)
+  "co.leads.title": "Leads",
+  "co.leads.hint": "Quién recibe los leads nuevos.",
+  "co.leads.assignee": "Quién recibe los leads nuevos",
+  "co.leads.assigneeHint": "Un lead nuevo va directo a esta persona. Si se desactiva o deja la empresa, los leads van al dueño.",
+  "co.leads.owner": "Dueño (predeterminado)",
+  "co.leads.ownerNow": "Ahora: el dueño — {name}",
+  "co.leads.change": "Cambiar",
   // schs (П4a: «Компания → Расписание», docs/specs/03 §6.1)
   "schs.title": "Horario",
   "schs.hint": "Zona horaria, horario laboral, duración de visitas, ventana para el cliente, «Con retraso».",
