@@ -58,4 +58,27 @@ exports.run = async (h) => {
   await up.click();
   await p.waitForTimeout(600);
   h.expect(path(h) === "/messages", `«‹ Сообщения» → /messages (${p.url()})`);
+  // Leads from «Ещё» (office): «‹ Ещё», and the system back returns to «Ещё» (the director's decision 07.11, spec 28 §3)
+  await h.go("/today");
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
+  await h.go("/more");
+  await p.locator('[data-testid="more-leads"]:visible').click();
+  await p.waitForTimeout(700);
+  h.expect(path(h) === "/leads", `tile → /leads (${p.url()})`);
+  if (!wide) {
+    await p.getByTestId("back-more").locator("visible=true").click();
+    await p.waitForTimeout(600);
+    h.expect(path(h) === "/more", `Leads: «‹ Ещё» → /more (${p.url()})`);
+    await p.locator('[data-testid="more-leads"]:visible').click();
+    await p.waitForTimeout(700);
+  }
+  await p.goBack();
+  await p.waitForTimeout(700);
+  h.expect(path(h) === "/more", `Leads: back → /more (${p.url()})`);
+  // sales: Leads is the home — no «‹ Ещё» there
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));
+  await h.go("/leads");
+  await p.waitForTimeout(500);
+  h.expect((await p.getByTestId("back-more").locator("visible=true").count()) === 0, "sales: Leads is the home, no «‹ Ещё»");
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 };
