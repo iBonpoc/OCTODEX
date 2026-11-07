@@ -68,4 +68,12 @@ exports.run = async (h) => {
     await p.waitForTimeout(500);
     h.expect((await bars()) === 1, "the bar is back on the next screen");
   }
+  // not signed in, on the sign-in screen: no bar there, nor on the Terms it links to (its tabs are behind the sign-in)
+  await h.go("/auth/sign-in");
+  await p.waitForTimeout(400);
+  h.expect((await bars()) === 0, "/auth/sign-in: no bottom bar");
+  await p.getByTestId("legal-agree-terms").locator("visible=true").first().click();
+  await p.waitForTimeout(600);
+  h.expect(new URL(p.url()).pathname === "/legal/terms", `the Terms from the sign-in screen (${p.url()})`);
+  h.expect((await bars()) === 0, "the Terms opened from the sign-in screen: no bottom bar");
 };
