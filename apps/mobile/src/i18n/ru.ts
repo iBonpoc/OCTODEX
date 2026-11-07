@@ -2140,6 +2140,8 @@ export const ru = {
   "job5.tags.none": "Без меток",
   "job5.tags.saved": "Метки сохранены",
   "job5.type.saved": "Тип работы изменён",
+  // fix.* — founder fixes chat
+  "fix.client.balance": "Баланс",
 } as const;
 
 export type DictKey = keyof typeof ru;

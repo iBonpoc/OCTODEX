@@ -2141,4 +2141,6 @@ export const en: Dict = {
   "job5.tags.none": "No tags",
   "job5.tags.saved": "Tags saved",
   "job5.type.saved": "Job type changed",
+  // fix.* — founder fixes chat
+  "fix.client.balance": "Balance",
 };

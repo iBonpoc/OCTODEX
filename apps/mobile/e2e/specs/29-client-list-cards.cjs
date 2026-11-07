@@ -29,6 +29,40 @@ exports.run = async (h) => {
       db.customers.map((c) => c.phone));
     h.expect(xs.length >= 2 && xs.every((x) => Math.abs(x - xs[0]) <= 1), `phone column on one line in every row (${xs.join(", ")})`);
   }
+  // founder 07.11: money sits in one place — the value at the top right. Debt > 0 → «Должен» (+ «просрочен»),
+  // otherwise «Оплатил всего»; no second money block under the facts. On 1280 rows the column is «Баланс».
+  const cents = (c) => {
+    const inv = db.invoices.filter((i) => i.customerId === c.id && !i.void);
+    const owed = inv.reduce((s, i) => s + Math.max(0, i.totalCents - i.paidCents), 0);
+    const paid = Math.max(0, db.payments.filter((x) => x.customerId === c.id).reduce((s, x) => s + x.amountCents, 0));
+    return { owed, paid };
+  };
+  const usd = (n) => { const d = n % 100 === 0 ? 0 : 2; return "$" + (n / 100).toLocaleString("en-US", { minimumFractionDigits: d, maximumFractionDigits: d }); };
+  const withPaid = db.customers.filter((c) => (c.status ?? "active") === "active" && cents(c).owed === 0 && cents(c).paid > 0);
+  h.expect(withPaid.length > 0, "demo has a client who paid and owes nothing");
+  for (const c of [owes, withPaid[0]]) {
+    const m = cents(c);
+    const el = p.getByRole("button", { name: c.name, exact: true }).first();
+    await el.scrollIntoViewIfNeeded();
+    const t = await el.innerText();
+    const amounts = t.match(/\$[\d,]+(\.\d\d)?/g) ?? [];
+    h.expect(amounts.length === 1, `${c.name}: one money figure on the card (${amounts.join(", ")})`);
+    h.expect(amounts[0] === usd(m.owed > 0 ? m.owed : m.paid), `${c.name}: ${m.owed > 0 ? "owed" : "paid total"} shown (${amounts[0]})`);
+    // the figure is in the card's header: on the line of the client's name, to the right of it
+    const pos = await el.evaluate((root, args) => {
+      const leaf = (txt) => [...root.querySelectorAll("div")].find((d) => d.textContent.trim() === txt && !d.querySelector("div"));
+      const a = leaf(args.amount), n = leaf(args.name);
+      if (!a || !n) return null;
+      const ra = a.getBoundingClientRect(), rn = n.getBoundingClientRect();
+      return { dy: Math.abs(ra.top - rn.top), right: ra.left > rn.right };
+    }, { amount: amounts[0], name: c.name });
+    h.expect(pos && pos.dy <= 12 && pos.right, `${c.name}: money in the header, right of the name (${JSON.stringify(pos)})`);
+    if (!wide) {
+      h.expect(m.owed > 0 ? /Должен/.test(t) && !/Оплатил всего/.test(t) : /Оплатил всего/.test(t) && !/Должен/.test(t), `${c.name}: one label next to the figure`);
+    }
+  }
+  if (wide) await h.expectText(/Баланс/, "desktop column «Баланс»");
+
   h.expect(!/…|\.\.\./.test(await p.locator("main, body").first().innerText()), "no «…» anywhere in the list");
 
   // alphabet groups on phone and desktop (one letter header per first letter); tablet is one 2-column grid
