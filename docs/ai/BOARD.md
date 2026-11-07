@@ -101,7 +101,8 @@
 | «Осмотр и План» №1 | `session_015CqH691oa5Yge3g4avfagb` | архив (памятка ниже); #331 ведёт руководитель |
 | «Безопасные зоны» №1 | `session_015CqH67aehAFqiTfyZ2g4qv` | архив (памятка ниже); #335 ведёт руководитель |
 | «Модуль Gutters» №1 | `session_015CqH689yfpp9T3kx6wNs91` | архив (памятка ниже); #347, #348, #350 ведёт руководитель |
-| «Модуль Gutters» №2 | `session_015CqH6AXE9eebe7W7zjS2tg` | C2a реестр + данные + ops + сторож ниши → C2b экран «Модули» + места (e2e 141) → C2c module.op; держит на время C2 store/types/ops/repo/normalize/outboxDeps/i18n mod.* |
+| «Модуль Gutters» №2 | `session_015CqH6AXE9eebe7W7zjS2tg` | архив (памятка ниже); #353, #354, #356 ведёт руководитель |
+| «Модуль Gutters» №3 | `session_015CqH6A9Dq1b3G4TvHHz6Mq` | этап 0 «детали и расходники» (спека 33 П18) → PR «M1 детали»; затем M2 таблицы замера, M4 холст |
 | «Каркас» №9 | `session_015CqH68bN9NqicpEbDDiUbs` | архив (памятка выше) |
 
 **Документы, долг руководителя** (не успел):
@@ -113,6 +114,12 @@
 
 Строки карты §5, пуши: PushOutbox — триггеры → pending → push_claim → sending → sent (Expo принял хоть одному); 429/5xx/сеть → pending через 1/2/4/8 мин; 5 попыток → failed (или sent, если хоть один телефон получил); pending → skipped (not_member / no_device / expired >24 ч / off); sending >10 мин → pending, попытки кончились → failed stuck. PushDevice — живой → revoked_at (signed_out / not_registered / too_many >10); токен переходит к вошедшему; удаление аккаунта стирает. Стыки: S1, S4, S4a, S7, S8, S9, S9a, S9b, S12, S22. Тесты T80–T85, e2e 124–125.
 
+### Памятка «Модуль Gutters» №2 (session_015CqH6AXE9eebe7W7zjS2tg, 07.11, архив)
+- Влито: #352 (C2a реестр модулей, Company.modules, ops module.*, сторож nicheGuard). Открыты, ведёт руководитель: #353 C2b (экран «Модули», места модуля, e2e 141) → #354 C2c (module.op, слияние по coalesceKey; исправлен по независимому обзору Б1–Б4) → #356 C3 (catalog_items.attributes / purchase_unit / pack_size, T91, e2e 142; независим).
+- Контракт: модуль описывает себя в src/modules/<key>/module.ts (ModuleDef: places, ops). Op с coalesceKey — полная идемпотентная запись элемента, удаление без ключа (спека 33 П15.6). moduleOp → null при неактивном модуле (О2). Слово gutter в ядре — только в i18n mod.gutters.*; исключения — в nicheGuard.test.ts с причиной.
+- Уроки: require.context работает в Metro, в vitest нет — registerModule; classify читает код раньше имени — hint сервера проверять раньше кода; CHECK с like_regex — флаг "s"; в T-тестах свои пользователи.
+- Номера взяты: e2e 141, 142; T91; миграция 20261107170000. Порядок выпуска: миграция C3 до того, как модуль начнёт писать свойства (M7/C7).
+- Справочник основателя: docs/prototypes/gutters-ref (Berger, палитра Service Partners, fascia style, Hangfast, край крыши); прайс VGS — только устройство (реальные цены не в репозитории).
 ### Памятка «Модуль Gutters» №1 (session_015CqH689yfpp9T3kx6wNs91, 07.11, архив)
 - Влито: #337 (спека 33 v3, план основателю gutters-plan.html, проверка лидара). Открыты, ведёт руководитель: #347 M1 движок gutterParts (24 теста), #348 M3 геометрия (поверх #347, 14 тестов), #350 C1 company_modules + T90 (миграция 20261107160000; правки по security-check внесены).
 - Долг правила 16, шаг 2: удалить `companies.gutter_settings` (данные перенесены в `company_modules.settings` в #350; колонку никто не читает) — отдельным PR, когда старые версии приложения её не пишут.
