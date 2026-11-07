@@ -44,6 +44,7 @@ import { freshRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, 
 import type { DictKey } from "@/i18n";
 import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
+import { unsentIn as unsentInOf, withoutUnsentIn } from "@/features/closedCompany";
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
@@ -153,6 +154,13 @@ interface StoreCtx {
   rejectedOps: RejectedOp[];
   /** «Понятно»: the toast's «Отменить» puts it back (rule 5) */
   dismissRejected: (id: ID) => Undo;
+  /**
+   * 7а-3 «в» (docs/specs/22 §3.6): the signed-in person's changes still waiting for a company closed by its owner (the
+   * server refuses them now), and «Убрать» them (after a confirmation, rule 5). Other people's ops stay.
+   */
+  unsentIn: (companyId: ID) => number;
+  /** false — one of them is being sent right now: nothing removed */
+  dropUnsentIn: (companyId: ID) => boolean;
   refresh: () => Promise<void>;
   loading: boolean;
   advanceVisit: (id: ID) => Undo;
@@ -829,6 +837,16 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (was) setRejected((prev) => (prev.some((x) => x.id === was.id) ? prev : [...prev, was]));
     };
   };
+  const unsentInCompany = (companyId: ID) => unsentInOf(outbox, auth.userId ?? null, companyId).length;
+  // like discardOp: refused while one of them is on its way to the server (it would get there although the card says no)
+  const dropUnsentIn = (companyId: ID): boolean => {
+    const gone = new Set(unsentInOf(outboxRef.current, auth.userId ?? null, companyId).map((o) => o.id));
+    if (inFlight.current && gone.has(inFlight.current)) return false;
+    outboxRef.current = withoutUnsentIn(outboxRef.current, auth.userId ?? null, companyId);
+    setOutbox(outboxRef.current);
+    gone.forEach((x) => opPause.current.delete(x));
+    return true;
+  };
   const pendingQueue: QueuedAction[] =
     mode === "cloud" ? mineOf(outbox, who).map((o) => ({ id: o.id, label: o.op.k, at: o.at })) : queue;
 
@@ -907,6 +925,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       discardOp,
       rejectedOps,
       dismissRejected,
+      unsentIn: unsentInCompany,
+      dropUnsentIn,
       refresh,
       loading,
       setOnline: (v) => {
@@ -1754,7 +1774,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       resetDemo: () => (mode === "demo" ? mutate("demo.reset", () => makeSeed()) : () => {}),
     }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, rejected, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush],
+    [db, mode, company, role, online, link, pendingQueue.length, unsentAll, outbox, rejected, sendingId, syncError, loading, mutate, setRole, setQueue, refresh, flush, auth.userId],
   );
 
   if (!auth.ready || !dbReady || !roleReady || !queueReady || !outboxReady || !rejectedReady) return null;

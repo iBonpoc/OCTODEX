@@ -2268,6 +2268,17 @@ export const ru = {
   "fix.sign.done": "Готово",
   // fix.co.* — company settings read-only for the office (spec 26 §3)
   "fix.co.readOnly": "Только просмотр — менять может директор",
+  // 7а-3 «в»: the people of a closed company (docs/specs/22 §3.6)
+  "fr9.closed.title": "Компания «{company}» закрыта владельцем",
+  "fr9.closed.chip": "Закрыта",
+  "fr9.closed.text": "Владелец удалил аккаунт и закрыл компанию {date}. Работать в ней больше нельзя. Можно создать свою компанию или принять приглашение в другую.",
+  "fr9.closed.unsent": "{n} изм. не отправлено: компания закрыта, сервер их не примет",
+  "fr9.closed.drop": "Убрать…",
+  "fr9.closed.dropSure": "Убрать {n} изм. с телефона? Вернуть их будет нельзя.",
+  "fr9.closed.dropYes": "Да, убрать",
+  "fr9.closed.keep": "Оставить",
+  "fr9.closed.dropped": "Изменения убраны",
+  "fr9.closed.ok": "Понятно",
 } as const;
 
 export type DictKey = keyof typeof ru;
