@@ -38,7 +38,13 @@ exports.run = async (h, { seed }) => {
   const card = await p.getByTestId("rejected-q-rej").last().innerText();
   h.expect(/Расход не записан на сервере/.test(card) && /\$43\.21/.test(card), `what it was and its amount (${card})`);
   h.expect(!/row-level|violates/.test(card), "our own words, not the server's English text");
-  const left = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.outbox.v1") || "[]").map((x) => x.id));
+  // the outbox is written to the phone 250 ms after the change (persist): wait for it, not for the card (CHECKS §9 №3)
+  const outboxIds = () => p.evaluate(() => JSON.parse(localStorage.getItem("octo.outbox.v1") || "[]").map((x) => x.id));
+  let left = await outboxIds();
+  for (let i = 0; i < 25 && left.includes("q-rej"); i++) {
+    await p.waitForTimeout(200);
+    left = await outboxIds();
+  }
   h.expect(!left.includes("q-rej"), `the refused op left the outbox (${left})`);
   await h.shot("profile");
 
