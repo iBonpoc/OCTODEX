@@ -97,8 +97,10 @@
 | Чат правок (личный, основателя) | `session_015CqH6A7tDSFPVok5tYPHfS` | открытого кода нет; ждёт логотип (спека 16 §6) |
 | «Уведомления» №2 | `session_015CqH68voRsmGog696cFSju` | напоминания (§4.9) → P4b после #259 → P4c |
 | «Выпуск iOS» №1 | `session_015CqH68rP2HtS74ExY9Wfru` | архив (памятка выше) |
-| «Карточки списков» №3 | `session_015CqH6A9FZYh1MEgH5GrZAX` | 10в: #326 «Работы» ждёт «да» основателя; PR 5 «Задачи», «Каталог», «Оплаты» |
+| «Карточки списков» №3 | `session_015CqH6A9FZYh1MEgH5GrZAX` | 10в одно правило фильтров: #334 ✅, #326 ✅, #329, PR 6 «План», «Счета»/«Расходы», «Звонки», PR 7 сторож, два акцента в «Дне» |
 | «Осмотр и План» №1 | `session_015CqH691oa5Yge3g4avfagb` | архив (памятка ниже); #331 ведёт руководитель |
+| «Безопасные зоны» №1 | `session_015CqH67aehAFqiTfyZ2g4qv` | архив (памятка ниже); #335 ведёт руководитель |
+| «Модуль Gutters» №1 | `session_015CqH689yfpp9T3kx6wNs91` | этап 0 + прототип модуля Gutters (спека 33, docs/prototypes/gutters-*); src/modules/gutters/** и gutter-часть движка — за ним |
 | «Каркас» №9 | `session_015CqH68bN9NqicpEbDDiUbs` | архив (памятка выше) |
 
 **Документы, долг руководителя** (не успел):
@@ -110,6 +112,11 @@
 
 Строки карты §5, пуши: PushOutbox — триггеры → pending → push_claim → sending → sent (Expo принял хоть одному); 429/5xx/сеть → pending через 1/2/4/8 мин; 5 попыток → failed (или sent, если хоть один телефон получил); pending → skipped (not_member / no_device / expired >24 ч / off); sending >10 мин → pending, попытки кончились → failed stuck. PushDevice — живой → revoked_at (signed_out / not_registered / too_many >10); токен переходит к вошедшему; удаление аккаунта стирает. Стыки: S1, S4, S4a, S7, S8, S9, S9a, S9b, S12, S22. Тесты T80–T85, e2e 124–125.
 
+### Памятка «Безопасные зоны» №1 (session_015CqH67aehAFqiTfyZ2g4qv, 07.11, архив)
+- Влито: #333 — navInsets (nav/shell.ts), SideNav и ящик меню с вырезом, широкая шторка, fullCanvas с отступами, ALL_ORIENTATIONS на всех Modal; спека 32, e2e 137, unit shell/signatureCanvas/modalOrientations.
+- Открыто: #335 (claude/statusbar-backdrop) — подложка под часами при прокрутке (стекло c.ov+blur, линия c.bd, durFast); ведёт руководитель.
+- Долги: sticky-вкладки Screen под строкой состояния (спека 32 §4); testID в SignBlock/SignaturePad на /p/ — «Сметам» (e2e 137, 126 ищут по надписи); на устройстве не проверено: поворот модалок iPhone/iPad, Android edge-to-edge.
+- Уроки: safe-area-context в вебе применяет отступы после CSS-перехода — в e2e ждать устойчивую раскладку; reanimated Animated.View в вебе теряет testID — вешать на вложенный View; Screen не может usePathname — путь параметром; Modal на iPhone по умолчанию только портрет.
 ### Памятка «Осмотр и План» №1 (session_015CqH691oa5Yge3g4avfagb, 07.11, архив)
 - Влито: #297 (сборка #309) — «Сообщить клиенту об отмене?» (S4a/S9a), e2e 132, unit cancelNotify.
 - Открыто: #331 (claude/visit-plan-p2-attention, ecbb42d, BUILD 331) — «Осмотр прошёл — сметы нет» (S15), порог LeadSettings.inspectionNoEstimateDays (1–10, по умолчанию 1) в «Компания → Лиды»; unit inspectionNoEstimate, e2e 131; ждёт «да» основателя на снимки docs/specs/img/03-*. Карта: S15 + unit:inspectionNoEstimate, e2e:131-inspection-no-estimate, хвост снять.
