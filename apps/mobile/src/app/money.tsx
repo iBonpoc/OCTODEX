@@ -9,11 +9,13 @@ import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Divider, Empty, ItemCard, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
 import { dayKeyIn, getZone, zonedFormat } from "@/features/zone";
 import { memberName } from "@/features/team";
+import { matchExpense } from "@/features/moneyLists";
 
 /** desktop row columns for expenses */
 const EXP_COLUMNS: FactKey[] = ["work", "by"];
@@ -29,7 +31,10 @@ export default function Money() {
 
   const { device } = useDevice();
   // expenses by month, newest first; dates in US format (rule 7)
-  const months = [...db.expenses.slice().sort((a, b) => b.at.localeCompare(a.at)).reduce((m, x) => m.set(monthKey(x.at), [...(m.get(monthKey(x.at)) ?? []), x]), new Map<string, Expense[]>())];
+  // the search (spec 31, one rule): vendor, category, work, client, who paid; not kept
+  const [q, setQ] = useState("");
+  const shown = db.expenses.filter((x) => matchExpense(db, x, q, t(`exp.cat.${x.category}`)));
+  const months = [...shown.slice().sort((a, b) => b.at.localeCompare(a.at)).reduce((m, x) => m.set(monthKey(x.at), [...(m.get(monthKey(x.at)) ?? []), x]), new Map<string, Expense[]>())];
   /** an expense has no screen to open yet: the card has no tap and no contact buttons, nothing is written from it */
   const expenseCard = (x: Expense) => {
     const job = x.jobId ? db.jobs.find((j) => j.id === x.jobId) : undefined;
@@ -62,7 +67,9 @@ export default function Money() {
       {db.expenses.length === 0 ? <Empty icon="wallet" title={t("money.expenses")} /> : null}
       {db.expenses.length ? (
         <View style={{ gap: space[3] }}>
-          <SectionTitle title={`${t("money.expenses")} · ${money(db.expenses.reduce((s, x) => s + x.amountCents, 0))}`} />
+          <FilterBar<string> items={[]} value="" onChange={() => undefined} search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchExpenses") }} />
+          <SectionTitle title={`${t("money.expenses")} · ${money(shown.reduce((s, x) => s + x.amountCents, 0))}`} />
+          {shown.length === 0 ? <Empty icon="search" title={t("card.emptyFilter")} /> : null}
           {months.map(([m, xs]) => (
             <View key={m} style={{ gap: space[2] }}>
               <T v="caption" w="semibold" tone="mut">{`${monthOf(xs[0]!.at)} · ${money(xs.reduce((s, x) => s + x.amountCents, 0))}`}</T>

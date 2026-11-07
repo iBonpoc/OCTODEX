@@ -7,7 +7,6 @@ import { useI18n, type DictKey } from "@/i18n";
 import { INV_COLUMNS, InvoiceListCard } from "@/features/listCards";
 import { asInvoiceFilter, canSeeInvoiceList, INVOICE_FILTERS, invoiceList, type InvoiceFilter, type OwedGroup } from "@/features/moneyLists";
 import { useDevice } from "@/theme/ThemeProvider";
-import { Button } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
 import { filterStoreKey } from "@/ui/filterBarRules";
 import { usePersistentState } from "@/data/persist";
@@ -57,6 +56,20 @@ export default function Invoices() {
   const shown = q.trim() ? invoiceList({ invoices: db.invoices.filter((i) => matchInvoice(db, i, q)) }, f, { customerId: client?.id }) : v;
   // the filter lives in the address: «back» and a shared link keep it
   const go = (x: InvoiceFilter, c: string | undefined = client?.id) => router.setParams({ f: x, customer: c ?? "" });
+  // «Клиент» (spec 31, one rule): one at a time, in the sheet with a search at 10+; picked — a chip «Клиент: X ✕» under the row.
+  // «Должен» on a client opens the list with it (`?customer=`)
+  const payers = db.customers
+    .map((c) => ({ c, n: invoiceList(db, f, { customerId: c.id }).groups.reduce((s, g) => s + g.items.length, 0), any: db.invoices.some((i) => i.customerId === c.id) }))
+    .filter((x) => x.any)
+    .sort((a, b) => a.c.name.localeCompare(b.c.name));
+  const clientGroup = {
+    key: "client",
+    title: t("card.fact.client"),
+    single: true,
+    searchable: true,
+    options: payers.map(({ c, n }) => ({ key: c.id, label: c.name, count: n, on: client?.id === c.id })),
+    onToggle: (id: string) => go(f, client?.id === id ? "" : id),
+  };
   const pick = (x: InvoiceFilter) => {
     setKept(x);
     go(x);
@@ -65,7 +78,7 @@ export default function Invoices() {
     <Screen
       title={t("nav.invoices")}
       back={back}
-      subtitle={[client?.name, `${t("mny.owedTotal")} ${money(v.owedCents)}`].filter(Boolean).join(" · ")}
+      subtitle={`${t("mny.owedTotal")} ${money(v.owedCents)}`}
       help={t("mny.invoices.help")}
       hintKey="invoices"
     >
@@ -75,8 +88,9 @@ export default function Invoices() {
         value={f}
         onChange={pick}
         items={INVOICE_FILTERS.map((k) => ({ key: k, label: t(CHIP[k]), count: v.counts[k] }))}
+        groups={payers.length > 1 || client ? [clientGroup] : []}
+        onReset={() => go(f, "")}
       />
-      {client ? <Button label={t("mny.allClients")} icon="close" size="sm" variant="ghost" onPress={() => go(f, "")} /> : null}
       {shown.groups.length === 0 ? (
         <Empty icon="invoice" title={t(EMPTY[f])} />
       ) : (

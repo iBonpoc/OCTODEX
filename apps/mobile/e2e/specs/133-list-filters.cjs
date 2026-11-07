@@ -14,7 +14,8 @@ const LISTS = [
   { path: "/leads", search: "Имя, телефон, адрес, услуга", group: "Ответственный", noSwitch: true },
   // PR 3: «Сметы» and «Счета» — sections of their own with a search; nothing in the sheet yet (no «Фильтр» button)
   { path: "/estimates", search: "Клиент, адрес, работа, EST" },
-  { path: "/invoice", search: "Клиент, адрес, работа, INV" },
+  // «Клиент» in the sheet, one at a time (one rule, director 07.11): kept in the address (`?customer=`), the chip «Клиент: X ✕»
+  { path: "/invoice?f=all", search: "Клиент, адрес, работа, INV", group: "Клиент", single: true, inAddress: true },
   // PR 5: «Задачи» («Только мои» in the sheet), «Каталог» (kinds, no sheet)
   { path: "/tasks", search: "Искать задачу", group: "Чьи", card: '[data-testid^="task-"]' },
   { path: "/catalog", search: "Поиск в каталоге" },
@@ -112,13 +113,14 @@ exports.run = async (h) => {
     const before = await vis(p.locator(L.card ?? '[data-testid="list-card"]')).count();
     const open = h.layout.width === 1280 ? vis(bar.getByTestId(/^filter-group-/)).first() : vis(bar.getByTestId("filter-button")).first();
     await open.click(); await p.waitForTimeout(400);
-    const rows = h.sheet().getByRole("checkbox");
+    const rows = h.sheet().getByRole(L.single ? "radio" : "checkbox");
     h.expect((await rows.count()) > 0, `${L.path}: options as rows in the sheet`);
     // an option with something behind it (its count > 0)
     const labels = await rows.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") || ""));
     const i = labels.findIndex((x) => /· [1-9]\d*$/.test(x));
     h.expect(i >= 0, `${L.path}: an option with objects (${labels.join(" | ")})`);
-    const name = labels[i].replace(/ · \d+$/, "");
+    // a one-at-a-time group says its title on the chip: «Клиент: David Kim»
+    const name = (L.single ? `${L.group}: ` : "") + labels[i].replace(/ · \d+$/, "");
     const n = Number(labels[i].match(/· (\d+)$/)[1]);
     await rows.nth(i).click();
     await h.sheet().getByText("Готово", { exact: true }).click(); await p.waitForTimeout(400);

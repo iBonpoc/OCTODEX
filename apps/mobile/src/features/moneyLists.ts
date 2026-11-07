@@ -4,7 +4,7 @@
  * Unit-tested in test/moneyLists.test.ts.
  */
 import { sumCents, totalsBy, type CentsTotal } from "@octo/estimating-engine";
-import type { DB, Invoice, Payment, PaymentMethod, Role } from "@/data/types";
+import type { DB, Expense, Invoice, Payment, PaymentMethod, Role } from "@/data/types";
 import { invoiceBalance } from "./invoiceStatus";
 import { periodRange, type Period } from "./metrics";
 import { todayKey, type DayKey } from "./calendar";
@@ -90,4 +90,14 @@ export function paymentsIn(db: Pick<DB, "payments">, p: PaymentPeriod, method?: 
     totalCents: sumCents(items.map((x) => x.amountCents)),
     byMethod: totalsBy(inP.map((x) => ({ key: x.method, cents: x.amountCents }))),
   };
+}
+
+/** the search of «Расходы» (spec 31, one rule): the vendor, the category (its word), the work and its client, who paid */
+export function matchExpense(db: Pick<DB, "jobs" | "customers" | "properties" | "members">, x: Expense, q: string, categoryWord = ""): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  const job = x.jobId ? db.jobs.find((j) => j.id === x.jobId) : undefined;
+  const client = job ? db.customers.find((c) => c.id === db.properties.find((p) => p.id === job.propertyId)?.customerId) : undefined;
+  const who = db.members.find((m) => m.id === x.memberId)?.name;
+  return [x.vendor, categoryWord, job?.title, client?.name, who].some((w) => (w ?? "").toLowerCase().includes(needle));
 }
