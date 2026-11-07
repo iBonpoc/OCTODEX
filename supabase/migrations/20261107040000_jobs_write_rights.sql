@@ -7,8 +7,9 @@
 -- 1. public.record_estimate_deposit — the office takes the deposit of a signed estimate. The job and the deposit invoice
 --    are made by the signature (app.execute_estimate); here only the payment is written, for the balance of that invoice as
 --    the server knows it (never a sum from the phone). A repeat with the same payment id (offline queue replay) changes
---    nothing. The estimate not signed on the server yet → 55000 (the queue tries again: the signature op is ahead of it);
---    no deposit invoice (no deposit is due) → 22023; a paid deposit (the client paid on the page) → no second payment.
+--    nothing. No job of the estimate on the server → P0001, a refusal (the phone reloads, the deposit is due again);
+--    no deposit invoice (no deposit is due) → 22023; a paid deposit (the client paid on the page) → no second payment
+--    (already_paid; two phones replaying the same id at once: the second may get already_paid instead of repeat — no money moves).
 -- 2. UPDATE by columns: only what the app writes (status, description, job_type_id, tax_enabled, tax_rate_bps,
 --    service_category_id — every build of ops.ts wrote only these, git log 07.11) and the name (title: plain text, no
 --    guard depends on it; T44 edits it, renaming a job is the next screen). The total, the client, the estimate,
@@ -53,8 +54,11 @@ begin
 
   select id into v_job from public.jobs where estimate_id = e.id and deleted_at is null;
   if v_job is null then
-    -- the signature makes the job; its op is ahead in the same queue — not a refusal, a «later»
-    raise exception 'the estimate is not signed yet' using errcode = '55000';
+    -- the signature makes the job, and its op is ahead in the same queue (the queue goes strictly in order): no job here
+    -- means the signature never got through or the estimate was approved the old way. A «later» would hold the whole queue
+    -- five tries and then drop the deposit silently — so a plain refusal: the phone reloads the truth and the estimate shows
+    -- its deposit as due again (review of #247)
+    raise exception 'the deposit was not recorded: the estimate is not signed on the server' using errcode = 'P0001';
   end if;
   select * into i from public.invoices
    where job_id = v_job and kind = 'deposit' and status <> 'void' order by created_at limit 1 for update;

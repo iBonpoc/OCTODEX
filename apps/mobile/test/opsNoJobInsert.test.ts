@@ -67,3 +67,18 @@ describe("the app inserts no job (17-job §12.1)", () => {
     expect(rpcs).toEqual([{ name: "record_estimate_deposit", args: { p_estimate_id: op.id, p_payment_id: op.paymentId, p_method: "cash" } }]);
   });
 });
+
+describe("estimate.deposit refused by the server (review of #247)", () => {
+  it("«not signed on the server» is a refusal (P0001): the op is dropped, not tried again five times", async () => {
+    const { PermanentError } = await import("../src/cloud/ops");
+    const { supabase } = await import("../src/cloud/client");
+    const spy = vi.spyOn(supabase, "rpc").mockResolvedValueOnce({ data: null, error: { message: "the deposit was not recorded: the estimate is not signed on the server", code: "P0001" } } as never);
+    const op: Op = {
+      k: "estimate.deposit", id: "70000000-0000-4000-8000-000000000002", jobId: ids.jobId, invoiceId: "80000000-0000-4000-8000-000000000002",
+      paymentId: "90000000-0000-4000-8000-000000000002", method: "cash", customerId: ids.customerId, propertyId: ids.propertyId,
+      title: "Gutters", totalCents: 100000, depositCents: 30000,
+    };
+    await expect(applyOp(op, "co-1", "u-1")).rejects.toBeInstanceOf(PermanentError);
+    spy.mockRestore();
+  });
+});

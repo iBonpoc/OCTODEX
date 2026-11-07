@@ -1,4 +1,5 @@
--- After 17-job §12.1: old jobs stay as they were; UPDATE is by columns; the deposit the old queue sends finds its invoice.
+-- After 17-job §12.1: old jobs stay as they were; UPDATE is by columns, INSERT stays (step 1); the new deposit function is for
+-- authenticated only; the old unpaid deposit invoice is still due (the deposit an old queue sends has its invoice).
 do $$ begin
   if (select count(*) from public.jobs where company_id = 'cf740000-0000-0000-0000-000000000001') <> 2 then
     raise exception 'upgrade: the old jobs must stay';

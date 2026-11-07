@@ -5596,6 +5596,11 @@ select tst.fails($q$update public.jobs set deleted_at = now() where id = 'e72000
 select tst.fails($q$update public.jobs set number = 'JOB-X' where id = 'e7200000-0000-4000-8000-000000000001'$q$, 'T72 the number is the server''s');
 select tst.fails($q$update public.jobs set title = 'T72 x', contract_total_cents = 1 where id = 'e7200000-0000-4000-8000-000000000001'$q$, 'T72 one forbidden column refuses the whole update');
 select tst.ok((select title = 'T72 renamed' and property_id = 'd7200000-0000-4000-8000-000000000001' and deleted_at is null from public.jobs where id = 'e7200000-0000-4000-8000-000000000001'), 'T72 nothing of the refused updates went through');
+-- the signature paths ran above under the same grants (all migrations come first): T8 — the client on the page
+-- (portal_accept) and the company's countersign → execute_estimate; T47 — on site + countersign
+:as_super
+select tst.ok((select count(*) = 1 and bool_and(status = 'draft') from public.jobs where estimate_id = '0e1a0000-0000-0000-0000-000000000010'), 'T72 portal_accept + countersign made the job of the estimate (T8)');
+select tst.ok((select count(*) = 1 from public.jobs where estimate_id = '0e470000-0000-4000-8000-000000000002'), 'T72 on-site signature + countersign made the job (T47)');
 \echo 'T72 jobs: update by columns, the server still makes jobs ok'
 
 -- ---------------------------------------------------------------- T73: record_estimate_deposit — the office takes the deposit of a signed estimate
@@ -5629,7 +5634,8 @@ begin
     perform public.record_estimate_deposit('0e730000-0000-4000-8000-000000000002', 'a7300000-0000-4000-8000-0000000000f4', 'cash');
     raise exception 'FAILED: a deposit on an estimate without its job';
   exception when others then
-    perform tst.ok(sqlstate = '55000', 'T73 not signed on the server yet: «later» (55000), the queue tries again — ' || sqlstate);
+    -- a plain refusal, not a «later»: the queue goes in order, so no job means the signature never got through (review #247)
+    perform tst.ok(sqlstate = 'P0001' and sqlerrm like 'the deposit was not recorded%', 'T73 not signed on the server: refused (P0001), no payment — ' || sqlstate);
   end;
   begin
     perform public.record_estimate_deposit('0e730000-0000-4000-8000-000000000003', 'a7300000-0000-4000-8000-0000000000f5', 'cash');
