@@ -7158,4 +7158,78 @@ update public.memberships set status = 'disabled' where user_id = 'a8700000-0000
 drop table t87_t;
 \echo 'T87 reminders of a lead without an answer: 15 min to the assignee, 60 min to the owner, working hours, once, not the author ok'
 
+-- ---------------------------------------------------------------- T88: the author of an estimate for pushes (docs/specs/27 §4.11 №1–№2)
+-- The app never fills estimates.owner_user_id: the author is whoever made the estimate (created_by). No owner_user_id by hand here.
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a8800000-0000-4000-8000-000000000001', 'office88@a.test', '{"full_name":"Olivia Office"}'),
+  ('a8800000-0000-4000-8000-000000000002', 'tech88@a.test',   '{"full_name":"Tim Tech"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8800000-0000-4000-8000-000000000001', 'office', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8800000-0000-4000-8000-000000000002', 'tech', 'active');
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e880000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T88 by the office', 'a8800000-0000-4000-8000-000000000001'),
+  ('0e880000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T88 by a tech', 'a8800000-0000-4000-8000-000000000002');
+select tst.ok((select bool_and(owner_user_id is null) and count(*) = 2 from public.estimates where id::text like '0e880000-%')
+          and (select created_by from public.estimates where id = '0e880000-0000-4000-8000-000000000001') = 'a8800000-0000-4000-8000-000000000001',
+          'T88 the estimates have no owner_user_id, only who made them (as the app leaves them)');
+-- a) the office made it: «the client signed» reaches the office author, and owner / admin as before
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08800000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e880000-0000-4000-8000-000000000001');
+select tst.ok(exists (select 1 from public.push_outbox where notification_id = '08800000-0000-4000-8000-000000000001' and user_id = 'a8800000-0000-4000-8000-000000000001'),
+          'T88 signed: the office person who made the estimate gets it (before: nobody but owner / admin)');
+select tst.ok(exists (select 1 from public.push_outbox where notification_id = '08800000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T88 signed: the owner still gets it');
+-- b) «the client opened»: the office author who switched it on gets it, nobody else
+insert into public.push_prefs (company_id, user_id, kind, enabled) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8800000-0000-4000-8000-000000000001', 'viewed', true),
+  ('ca000000-0000-0000-0000-000000000000', 'a8800000-0000-4000-8000-000000000002', 'viewed', true);
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08800000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e880000-0000-4000-8000-000000000001');
+select tst.ok((select count(*) = 1 and bool_and(user_id = 'a8800000-0000-4000-8000-000000000001') from public.push_outbox where notification_id = '08800000-0000-4000-8000-000000000002'),
+          'T88 opened: the author who switched it on gets it, nobody else (before: nobody at all)');
+-- c) a tech made it: no «signed» and no «opened» for him (he has no such switches, §4.11 №2); the owner still gets «signed»
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08800000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e880000-0000-4000-8000-000000000002'),
+  ('08800000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e880000-0000-4000-8000-000000000002');
+select tst.ok(not exists (select 1 from public.push_outbox where notification_id in ('08800000-0000-4000-8000-000000000003', '08800000-0000-4000-8000-000000000004')
+                            and user_id = 'a8800000-0000-4000-8000-000000000002'), 'T88 a tech who made the estimate gets neither «signed» nor «opened»');
+select tst.ok(exists (select 1 from public.push_outbox where notification_id = '08800000-0000-4000-8000-000000000003' and user_id = 'a0000000-0000-0000-0000-000000000001'),
+          'T88 the tech''s estimate signed: the owner gets it');
+select tst.ok(not exists (select 1 from public.push_outbox where notification_id = '08800000-0000-4000-8000-000000000004'), 'T88 the tech''s estimate opened: nobody');
+-- d) at sending time the same author counts: the office author's rows go, a tech put in by hand is skipped
+insert into public.push_outbox (company_id, user_id, notification_id, kind, route) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8800000-0000-4000-8000-000000000002', '08800000-0000-4000-8000-000000000003', 'estimate.client_signed', '/estimate/0e880000-0000-4000-8000-000000000002');
+select tst.ok((select bool_and(app.push_still_recipient(o)) from public.push_outbox o
+                where o.notification_id in ('08800000-0000-4000-8000-000000000001', '08800000-0000-4000-8000-000000000002') and o.user_id = 'a8800000-0000-4000-8000-000000000001'),
+          'T88 at sending time the office author is still a recipient');
+select tst.ok(not (select app.push_still_recipient(o) from public.push_outbox o
+                    where o.notification_id = '08800000-0000-4000-8000-000000000003' and o.user_id = 'a8800000-0000-4000-8000-000000000002'),
+          'T88 at sending time a tech author is not');
+-- e) an owner_user_id, when someone sets it, still wins over created_by
+update public.estimates set owner_user_id = 'a0000000-0000-0000-0000-000000000001' where id = '0e880000-0000-4000-8000-000000000001';
+select tst.ok(app.push_estimate_author('ca000000-0000-0000-0000-000000000000', '0e880000-0000-4000-8000-000000000001') = 'a0000000-0000-0000-0000-000000000001'
+          and app.push_estimate_author('ca000000-0000-0000-0000-000000000000', '0e880000-0000-4000-8000-000000000002') is null
+          and app.push_estimate_author('b0000000-0000-0000-0000-000000000000', '0e880000-0000-4000-8000-000000000001') is null,
+          'T88 owner_user_id wins; a tech is no author; another company finds nothing');
+update public.estimates set owner_user_id = 'a8800000-0000-4000-8000-000000000002' where id = '0e880000-0000-4000-8000-000000000001';
+select tst.ok(app.push_estimate_author('ca000000-0000-0000-0000-000000000000', '0e880000-0000-4000-8000-000000000001') = 'a8800000-0000-4000-8000-000000000001',
+          'T88 a tech as owner_user_id: the author falls back to who made it');
+-- with a JWT nobody writes someone else as the maker: created_by is the caller (core trigger), so the push goes to them
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+  ('0e880000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c7300000-0000-4000-8000-000000000001', 'd7300000-0000-4000-8000-000000000001', 'T88 forged maker', 'a8800000-0000-4000-8000-000000000001');
+:as_super
+select tst.ok((select created_by from public.estimates where id = '0e880000-0000-4000-8000-000000000003') = 'a0000000-0000-0000-0000-000000000002',
+          'T88 a forged created_by is replaced by the caller: nobody makes pushes go to a colleague');
+select tst.ok(not has_function_privilege('authenticated', 'app.push_estimate_author(uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.push_estimate_author(uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('service_role', 'app.push_estimate_author(uuid, uuid)', 'EXECUTE'), 'T88 nobody in the app runs the author function');
+-- clean up
+delete from public.push_outbox;
+delete from public.push_prefs where user_id::text like 'a8800000-%';
+update public.estimates set deleted_at = now() where id::text like '0e880000-%';
+update public.memberships set status = 'disabled' where user_id::text like 'a8800000-%';
+\echo 'T88 the author of an estimate for pushes: who made it (owner_user_id first), not a tech; the same at sending time ok'
+
 \echo 'ALL TESTS PASSED'
