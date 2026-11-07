@@ -2109,4 +2109,6 @@ export const en: Dict = {
   "job5.h.enRoute": "On the way",
   "job5.noService": "This client is marked «Do not service»: no new visits or estimates",
   "job5.noServiceHint": "A visit already set can be finished or moved",
+  // fix.* — founder fixes chat
+  "fix.client.balance": "Balance",
 };

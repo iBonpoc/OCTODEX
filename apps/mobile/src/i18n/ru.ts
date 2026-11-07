@@ -2108,6 +2108,8 @@ export const ru = {
   "job5.h.enRoute": "В пути",
   "job5.noService": "Клиент с пометкой «Не обслуживаем»: новых выездов и смет нет",
   "job5.noServiceHint": "Назначенный выезд можно доделать или перенести",
+  // fix.* — founder fixes chat
+  "fix.client.balance": "Баланс",
 } as const;
 
 export type DictKey = keyof typeof ru;
