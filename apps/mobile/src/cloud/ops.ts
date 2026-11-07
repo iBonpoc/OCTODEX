@@ -220,15 +220,36 @@ export interface OutboxItem {
 }
 
 
-/** Errors that will never succeed on retry (permission, constraint). Network errors are retried. */
-export class PermanentError extends Error {}
+/**
+ * An answer of the server that is not «done», with its HTTP status and its code (PostgREST / Postgres), so the outbox
+ * can tell a refusal from «try later» (src/data/outboxRetry.ts; review #244). Status 0 — no answer at all.
+ */
+export class ServerError extends Error {
+  override name = "ServerError";
+  constructor(
+    message: string,
+    readonly status?: number,
+    readonly code?: string,
+  ) {
+    super(message);
+  }
+}
+/** A refusal that will not change on retry (permission, constraint, a broken row): counted, dropped after the tries. */
+export class PermanentError extends ServerError {
+  override name = "PermanentError";
+}
 
-async function run(p: PromiseLike<{ error: { message: string; code?: string } | null }>) {
-  const { error } = await p;
+/** the sign-in expired (401 / PGRST301): renew it quietly before the outbox tries again (review #244) */
+export async function renewSession(): Promise<void> {
+  await supabase.auth?.refreshSession?.().catch(() => {});
+}
+
+async function run(p: PromiseLike<{ error: { message: string; code?: string } | null; status?: number }>) {
+  const { error, status } = await p;
   if (!error) return;
   const permanent = error.code ? /^(42|23|22|P0)/.test(error.code) : false;
-  if (permanent) throw new PermanentError(error.message);
-  throw new Error(error.message);
+  if (permanent) throw new PermanentError(error.message, status, error.code);
+  throw new ServerError(error.message, status, error.code);
 }
 
 /** people on a new visit: the same server function as «Назначить» (nobody → nothing to send) */
@@ -553,11 +574,11 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return saveEstimate(op, c);
     case "estimate.approve": {
       await applyOp({ k: "estimate.send", id: op.id, token: op.token }, c, userId);
-      const { error } = await supabase.rpc("portal_accept", {
+      const { error, status } = await supabase.rpc("portal_accept", {
         p_token: op.token, p_option_id: op.optionId, p_addon_ids: op.addonIds, p_signer: op.signer, p_svg: op.svg, p_consent: true,
         p_channel: op.channel, p_job_id: op.jobId, p_visit_id: null, p_invoice_id: op.invoiceId ?? null,
       });
-      return run(Promise.resolve({ error }));
+      return run(Promise.resolve({ error, status }));
     }
     case "job.complete":
       return run(supabase.rpc("complete_job", { p_job_id: op.id }));
@@ -749,9 +770,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "estimate.send": {
       // E2a, security-check 05.11: the server locks the version, sets "valid until" and the link token
       // (it takes the phone's token only if it was never revoked; otherwise makes its own — the next refresh brings it)
-      const { error } = await supabase.rpc("send_estimate", { p_estimate_id: op.id, p_token: op.token ?? null });
-      await run(Promise.resolve({ error }));
-      const { data: est } = await supabase.from("estimates").select("lead_id").eq("id", op.id).maybeSingle();
+      const { error, status } = await supabase.rpc("send_estimate", { p_estimate_id: op.id, p_token: op.token ?? null });
+      await run(Promise.resolve({ error, status }));
+      // a lost connection here is «try later», never «no lead» (review #244)
+      const sel = await supabase.from("estimates").select("lead_id").eq("id", op.id).maybeSingle();
+      await run(Promise.resolve(sel));
+      const est = sel.data;
       if (est?.lead_id) {
         await run(
           supabase.from("leads").update({ status: "estimate_sent" }).eq("id", est.lead_id).in("status", ["new", "contacted", "qualified", "inspection_scheduled"]),
@@ -763,14 +787,14 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       // a quick estimate signed on site: the server records the client's signature and the total (sign_estimate_on_site);
       // the app no longer writes the signature or the status directly (security-check 05.11)
       await applyOp({ k: "estimate.send", id: op.id }, c, userId);
-      const { error } = await supabase.rpc("sign_estimate_on_site", { p_estimate_id: op.id, p_signer: op.signer ?? "Client", p_svg: op.svg });
-      return run(Promise.resolve({ error }));
+      const { error, status } = await supabase.rpc("sign_estimate_on_site", { p_estimate_id: op.id, p_signer: op.signer ?? "Client", p_svg: op.svg });
+      return run(Promise.resolve({ error, status }));
     }
     case "estimate.countersign": {
-      const { error } = await supabase.rpc("countersign_estimate", {
+      const { error, status } = await supabase.rpc("countersign_estimate", {
         p_estimate_id: op.id, p_svg: op.svg ?? null, p_member_signature_id: op.memberSignatureId ?? null, p_job_id: op.jobId ?? null, p_invoice_id: op.invoiceId ?? null,
       });
-      return run(Promise.resolve({ error }));
+      return run(Promise.resolve({ error, status }));
     }
     case "member.signature":
       // own signature only (RLS); the previous one is revoked by the server trigger
@@ -784,16 +808,16 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.from("memberships").update(patch).eq("company_id", c).eq("user_id", op.id));
     }
     case "estimate.decline": {
-      const { error } = await supabase.rpc("decline_countersign", { p_estimate_id: op.id, p_text: op.text });
-      return run(Promise.resolve({ error }));
+      const { error, status } = await supabase.rpc("decline_countersign", { p_estimate_id: op.id, p_text: op.text });
+      return run(Promise.resolve({ error, status }));
     }
     case "estimate.reopen": {
-      const { error } = await supabase.rpc("reopen_estimate", { p_estimate_id: op.id, p_reason: op.reason || null });
-      return run(Promise.resolve({ error }));
+      const { error, status } = await supabase.rpc("reopen_estimate", { p_estimate_id: op.id, p_reason: op.reason || null });
+      return run(Promise.resolve({ error, status }));
     }
     case "estimate.revoke": {
-      const { error } = await supabase.rpc("revoke_estimate_link", { p_estimate_id: op.id });
-      return run(Promise.resolve({ error }));
+      const { error, status } = await supabase.rpc("revoke_estimate_link", { p_estimate_id: op.id });
+      return run(Promise.resolve({ error, status }));
     }
     case "estimate.deposit":
       // one server function (17-job §12.1, 20261107040000): the job and the deposit invoice are the signature's; the payment is
@@ -827,12 +851,15 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
   await run(
     ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, lead_id: op.leadId ?? null, title: op.title, created_via: "manual", number: "" }),
   );
-  const { data: est } = await supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle();
+  const sel = await supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle();
+  // the connection dropped after the insert: «try later», never «not visible» (that would drop the estimate, review #244)
+  await run(Promise.resolve(sel));
+  const est = sel.data;
   if (!est) throw new PermanentError("estimate is not visible");
   // «don't sign — change it» (E2a): the client signed, the company changes it → back to draft on the server, signature kept in history
   if (est.status === "awaiting_countersign") {
-    const { error } = await supabase.rpc("reopen_estimate", { p_estimate_id: op.id, p_reason: null });
-    await run(Promise.resolve({ error }));
+    const { error, status } = await supabase.rpc("reopen_estimate", { p_estimate_id: op.id, p_reason: null });
+    await run(Promise.resolve({ error, status }));
     est.status = "draft";
   }
   if (!["draft", "sent", "viewed"].includes(est.status as string)) return;
