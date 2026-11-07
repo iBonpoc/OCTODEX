@@ -2104,6 +2104,10 @@ export const ru = {
   "w6.msgc.visitReminder": "Здравствуйте, {name}! Это {company}. Напоминаем о визите {date} в {time}.",
   "w6.msgc.estimateSent": "Здравствуйте, {name}! Это {company}. Мы отправили вам смету {number}.",
   "w6.msgc.thanksPayment": "Здравствуйте, {name}! Это {company}. Спасибо за оплату!",
+  // «Работы и выезды» №5 (17-job §11)
+  "job5.h.enRoute": "В пути",
+  "job5.noService": "Клиент с пометкой «Не обслуживаем»: новых выездов и смет нет",
+  "job5.noServiceHint": "Назначенный выезд можно доделать или перенести",
 } as const;
 
 export type DictKey = keyof typeof ru;
