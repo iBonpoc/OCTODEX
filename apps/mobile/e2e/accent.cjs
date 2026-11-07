@@ -16,6 +16,10 @@ exports.accentCount = (page, within) =>
       if (r.width < 2 || r.height < 2 || r.bottom < 0 || r.top > innerHeight) continue;
       // «＋ Создать» of the menu and the screen's floating «＋» (13 v2 §2.4, §2.5): the accent of the shell, not of the screen
       if (el.closest('[aria-label="Создать"], [aria-label="Create"], [aria-label="Crear"], [data-testid="fab"]')) continue;
+      // a switch that is on is filled with acc by the design system itself (design/naryad-ds/components/core/Toggle.jsx:
+      // background on ? var(--acc)) — the state of a setting, not the main action (spec 27 §4.12, decision of the lead 07.11).
+      // A second yellow BUTTON next to switches is still counted (e2e 125 checks it).
+      if (el.closest('[role="switch"]')) continue;
       if (seen.some((s) => s.contains(el) || el.contains(s))) continue;
       seen.push(el);
     }

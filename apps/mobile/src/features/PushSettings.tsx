@@ -2,16 +2,21 @@
  * «Settings → Notifications» (docs/specs/27-push.md §5; the place — docs/specs/26, the app settings screen).
  * One working switch for this phone: turn on (the system question on the tap), turn off; refused in the phone's
  * settings → the way there. On the web and in Expo Go — one line where pushes work (no switch that does nothing).
+ * Below it (step 18 P4c, §4.11): «Что присылать» — a switch per group, a setting of the person (the web too), only the
+ * groups the person can get; offline it waits in the queue (store.setPushKind, rule 6).
  */
 import { useCallback, useEffect, useState } from "react";
-import { AppState, Linking } from "react-native";
+import { AppState, Linking, View } from "react-native";
+import { space } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { useI18n } from "@/i18n";
 import { Button, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, RowView, SectionTitle } from "@/ui/surfaces";
+import { useStore } from "@/data/store";
 import { disable, enable, stateOf, type PushState } from "./push";
+import { pushGroupOn, pushGroupsFor } from "./pushPrefs";
 import { appVersion, nativePushDeps, pushSupport } from "./pushNative";
 
 export function usePushState(): { state: PushState; busy: boolean; turnOn: () => Promise<void>; turnOff: () => Promise<void> } {
@@ -81,6 +86,42 @@ export function PushSettingsSection() {
           <Button label={t("push.openSettings")} icon="bell" variant="secondary" onPress={() => void Linking.openSettings().catch(() => undefined)} />
         ) : null}
       </Card>
+      <PushKinds />
     </>
+  );
+}
+
+/** «Что присылать»: what the server can send me. In the cloud — my real roles; in the demo — the role being tried. */
+function PushKinds() {
+  const { t } = useI18n();
+  const { db, mode, role, availableRoles, setPushKind } = useStore();
+  const me = db.members.find((m) => m.id === db.me);
+  const groups = pushGroupsFor(mode === "cloud" ? availableRoles : [role], me?.kind === "sub");
+  if (!groups.length) return null;
+  return (
+    <Card>
+      <View testID="push-kinds" style={{ gap: space[2] }}>
+        <T v="heading">{t("push.kinds.title")}</T>
+        <T v="caption" tone="mut">
+          {t("push.kinds.note")}
+        </T>
+        {groups.map((g, i) => (
+          <View key={g} style={{ gap: space[2] }}>
+            {i ? <Divider /> : null}
+            <View testID={`push-kind-${g}`}>
+              <RowView>
+                <View style={{ flex: 1 }}>
+                  <T v="body">{t(`push.kind.${g}`)}</T>
+                  <T v="caption" tone="mut">
+                    {t(`push.kind.${g}.hint`)}
+                  </T>
+                </View>
+                <Toggle label={t(`push.kind.${g}`)} on={pushGroupOn(db.pushPrefs, g)} onChange={(v) => setPushKind(g, v)} />
+              </RowView>
+            </View>
+          </View>
+        ))}
+      </View>
+    </Card>
   );
 }
