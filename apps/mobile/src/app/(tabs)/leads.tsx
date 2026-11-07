@@ -132,7 +132,8 @@ function LeadsBoard() {
         onChange={setF}
         items={LANE.map((k) => ({ key: k, label: t(`lead.f.${k}` as DictKey), count: count(k) }))}
         groups={[
-          ...(people.length > 1
+          // the office's groups (a tech sees only his own leads; who brought a lead and its price are the office's — canSeeLeadCost)
+          ...(office && people.length > 1
             ? [{
                 key: "people",
                 title: t("card.filter.people"),
@@ -146,7 +147,7 @@ function LeadsBoard() {
                 onToggle: toggle(who, setWhoIds),
               }]
             : []),
-          ...(usedSources.length > 1
+          ...(office && usedSources.length > 1
             ? [{
                 key: "sources",
                 title: t("card.filter.sources"),
