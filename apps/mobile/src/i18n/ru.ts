@@ -2167,6 +2167,7 @@ export const ru = {
   "job5.tags.saved": "Метки сохранены",
   "job5.type.saved": "Тип работы изменён",
   // fix.* — founder fixes chat
+  "fix.client.overdue": "Просрочено {amount} · {d} дн",
   "fix.client.balance": "Баланс",
   /* «Каркас» №7 (docs/specs/22) */
   "fr7.leadOrphan": "{name}: ответственный не работает — передайте лид",
@@ -2181,6 +2182,20 @@ export const ru = {
   "job5.msg.allDay": "Здравствуйте, {name}! {company} приедет на работы {date}, в течение дня. Если день не подходит, ответьте на это сообщение.",
   "job5.allDaySaved": "Запланировано на {date}, весь день",
   "job5.allDayChip": "Весь день",
+  // fix.filters.* — one row of filters (founder fixes chat, 07.11)
+  "fix.filters.button": "Фильтры",
+  "fix.filters.title": "Фильтры",
+  "fix.filters.a11y": "Фильтры, включено: {n}",
+  "fix.filters.reset": "Сбросить",
+  "fix.filters.done": "Готово",
+  "fix.filters.tags": "Метки",
+  // fix.more.* — «Ещё» as rows with counters (spec 25, founder fixes chat)
+  "fix.more.groupCompany": "Компания",
+  "fix.more.leads": "Ждут: {n}",
+  "fix.more.tasks": "На сегодня: {n}",
+  "fix.more.jobs": "К плану: {n}",
+  "fix.more.estimates": "На подпись: {n}",
+  "fix.more.invoices": "Просрочено: {n}",
 } as const;
 
 export type DictKey = keyof typeof ru;
