@@ -99,7 +99,8 @@ export function fromRaw(r: Raw): PortalData {
     depositPaid: !!r.deposit_paid,
     lang: r.doc_language === "es" || r.doc_language === "ru" ? r.doc_language : "en",
     // an older server has no field: keep the button as before; a newer one says false for a real company
-    simulatedPay: r.simulated_pay !== false,
+    // a closed company (7а-3) has no field either: never the button
+    simulatedPay: r.status !== "closed" && r.simulated_pay !== false,
     invoices: (r.invoices ?? []).map((i) => ({ id: i.id, number: i.number, title: i.title ?? undefined, kind: i.kind, totalCents: Number(i.total), paidCents: Number(i.paid), dueDate: i.due_date })),
   };
 }
@@ -159,6 +160,9 @@ export function portalFromEstimate(db: DB, e: Estimate, companyName: string): Po
   };
 }
 
+/** 7а-3 (docs/specs/22 §3.5): the server refuses signing and paying for a company its owner closed. */
+export const isCompanyClosed = (e: { message?: string } | null | undefined) => !!e?.message && /company closed/i.test(e.message);
+
 export async function fetchPortal(token: string): Promise<PortalData | null> {
   const { data, error } = await supabase.rpc("portal_estimate", { p_token: token });
   if (error) throw new Error(error.message);
@@ -169,6 +173,8 @@ export async function acceptPortal(token: string, a: { optionId: string; addonId
   const { data, error } = await supabase.rpc("portal_accept", {
     p_token: token, p_option_id: a.optionId, p_addon_ids: a.addonIds, p_signer: a.signer, p_svg: a.svg, p_consent: true, p_channel: "portal",
   });
+  // closed meanwhile: not a raw English error to the client — the page reloads and says it in their language
+  if (isCompanyClosed(error)) return fetchPortal(token);
   if (error) throw new Error(error.message);
   return data ? fromRaw(data as Raw) : null;
 }
@@ -202,6 +208,7 @@ export const licenseLine = (l: { kind: string; number: string; classes: string[]
 /** Stripe test mode: the client "pays" the invoice balance by card; no money moves (founder: Stripe later). */
 export async function paySimulated(token: string, invoiceId: string): Promise<PortalData | null> {
   const { data, error } = await supabase.rpc("portal_pay_simulated", { p_token: token, p_invoice_id: invoiceId });
+  if (isCompanyClosed(error)) return fetchPortal(token);
   if (error) throw new Error(error.message);
   return data ? fromRaw(data as Raw) : null;
 }

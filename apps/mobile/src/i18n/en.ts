@@ -2165,6 +2165,9 @@ export const en: Dict = {
   "fr7.noOwnerChip": "No owner",
   "fr7.noAssigneeChip": "Nobody on it",
   "fr7.handOver": "Hand over",
+  // «Каркас» №8, 7а-3: the client page of a closed company (docs/specs/22 §3.5)
+  "fr8.portal.closed": "{company} has closed — documents at this link are no longer available",
+  "fr8.portal.closedChip": "Closed",
   "job5.byTime": "By time",
   "job5.allDaySummary": "{date} · all day · {who}",
   "job5.clientDay": "The client sees the date only, no time",

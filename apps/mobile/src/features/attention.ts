@@ -147,7 +147,9 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       });
     }
   }
-  for (const i of db.invoices) {
+  // overdue invoices: those with «Счета» (owner, admin, office, sales — as RLS invoices_select); never the technician,
+  // not even for his own jobs: he does not chase the client's money (15-flows §4 q.3 — by default no)
+  for (const i of office3 ? db.invoices : []) {
     if (i.paidCents >= i.totalCents) continue;
     if (!isOverdue(i.dueDate, now, tz)) continue;
     const d = daysOverdue(i.dueDate, now, tz);

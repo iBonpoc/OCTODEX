@@ -5127,7 +5127,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by', 'legal_acceptance.user_id', 'users.id',
     -- erased (app.erase_personal_rows)
-    'member_prefs.user_id', 'user_locations.user_id',
+    'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id',
     -- unlinked (set to null)
     'company_contacts.user_id', 'companies.lead_default_assignee_id') \gset
 select tst.ok(:'t50_unclassified' = '', format('every person column is classified in T50 (kept / erased / unlinked): %s', :'t50_unclassified'));
@@ -5970,5 +5970,334 @@ select tst.ok((select phone from public.companies where id = 'ca000000-0000-0000
 :as_super
 update public.companies set timezone = 'America/Los_Angeles', phone = null where id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T75 companies.timezone: unknown refused, case and abbreviations made exact ok'
+
+-- ---------------------------------------------------------------- T76: a closed company — the client page, signing, paying, letters (docs/specs/22 §3.5)
+:as_super
+insert into public.companies (id, name, dba, phone) values ('ca760000-0000-4000-8000-000000000000', 'T76 Legal LLC', 'T76 Gutters', '+13235557676');
+insert into app.company_flags (company_id, simulated_payments) values ('ca760000-0000-4000-8000-000000000000', true);  -- else «not available» would answer first
+do $$
+declare v_cust uuid; v_prop uuid;
+begin
+  insert into public.customers (company_id, display_name) values ('ca760000-0000-4000-8000-000000000000', 'T76 Client') returning id into v_cust;
+  insert into public.properties (company_id, customer_id, address_line1, address_city) values ('ca760000-0000-4000-8000-000000000000', v_cust, '76 Closed St', 'Burbank') returning id into v_prop;
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+    ('0e1a7600-0000-4000-8000-000000000001', 'ca760000-0000-4000-8000-000000000000', '', v_cust, v_prop, 'T76 sent');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+    ('0e2a7600-0000-4000-8000-000000000001', 'ca760000-0000-4000-8000-000000000000', '0e1a7600-0000-4000-8000-000000000001', 1);
+  update public.estimates set current_version_id = '0e2a7600-0000-4000-8000-000000000001' where id = '0e1a7600-0000-4000-8000-000000000001';
+  insert into public.estimate_options (id, company_id, version_id, name) values
+    ('0e3a7600-0000-4000-8000-000000000001', 'ca760000-0000-4000-8000-000000000000', '0e2a7600-0000-4000-8000-000000000001', 'Standard');
+  insert into public.estimate_line_items (company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+    ('ca760000-0000-4000-8000-000000000000', '0e3a7600-0000-4000-8000-000000000001', 'labor', 'Gutters (тестовые цены)', 1, 100000, false);
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a7600-0000-4000-8000-000000000001';
+  update public.estimates set status = 'sent', sent_version_id = '0e2a7600-0000-4000-8000-000000000001' where id = '0e1a7600-0000-4000-8000-000000000001';
+  perform tst.set_token('0e1a7600-0000-4000-8000-000000000001', 'tok_t76_closed_0123456789ab');
+  -- a second estimate the client has never opened: «sent» (its first view would make it «viewed» and notify the company)
+  insert into public.estimates (id, company_id, number, customer_id, property_id, title) values
+    ('0e1a7600-0000-4000-8000-000000000002', 'ca760000-0000-4000-8000-000000000000', '', v_cust, v_prop, 'T76 never viewed');
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+    ('0e2a7600-0000-4000-8000-000000000002', 'ca760000-0000-4000-8000-000000000000', '0e1a7600-0000-4000-8000-000000000002', 1);
+  update public.estimates set current_version_id = '0e2a7600-0000-4000-8000-000000000002' where id = '0e1a7600-0000-4000-8000-000000000002';
+  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a7600-0000-4000-8000-000000000002';
+  update public.estimates set status = 'sent', sent_version_id = '0e2a7600-0000-4000-8000-000000000002' where id = '0e1a7600-0000-4000-8000-000000000002';
+  perform tst.set_token('0e1a7600-0000-4000-8000-000000000002', 'tok_t76_sent_0123456789abcd');
+  -- a letter queued minutes before the company was closed
+  insert into public.email_outbox (company_id, estimate_id, kind) values ('ca760000-0000-4000-8000-000000000000', '0e1a7600-0000-4000-8000-000000000001', 'signed_copy');
+end $$;
+-- open: the page works as before (control)
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_estimate('tok_t76_closed_0123456789ab') ->> 'status' = 'viewed', 'T76 control: an open company — the page as before');
+-- closed as delete_account closes it (the test plants it past the guard t06).
+-- Owner A stays an ACTIVE owner of T76 here: in real life delete_account makes every other member «deleted» in the same
+-- transaction, so an active member of a closed company cannot exist — the test makes the strongest case on purpose:
+-- even someone who may sign contracts there gets «company closed» on site (review of #271, item 3).
+:as_super
+insert into public.memberships (company_id, user_id, role, status) values ('ca760000-0000-4000-8000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'owner', 'active');
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = now() where id = 'ca760000-0000-4000-8000-000000000000';
+alter table public.companies enable trigger t06_company_closed_guard;
+select set_config('tst.t76_views', (select viewed_count || '|' || coalesce(last_viewed_at::text, '') from public.estimates where id = '0e1a7600-0000-4000-8000-000000000001'), false);
+select set_config('tst.t76_rows', ((select count(*) from public.notifications where company_id = 'ca760000-0000-4000-8000-000000000000')
+                                 + (select count(*) from public.estimate_approvals where company_id = 'ca760000-0000-4000-8000-000000000000') * 1000
+                                 + (select count(*) from public.payments where company_id = 'ca760000-0000-4000-8000-000000000000') * 1000000)::text, false);
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare r jsonb := public.portal_estimate('tok_t76_closed_0123456789ab');
+begin
+  -- failed before: the whole estimate, the phone and «Pay by card»
+  perform tst.ok(r = '{"status": "closed", "company": {"name": "T76 Gutters"}, "doc_language": "en"}'::jsonb, 'a closed company: only its name and the client''s language: ' || coalesce(r::text, 'null'));
+  perform tst.ok(public.portal_estimate('tok_t76_sent_0123456789abcd') ->> 'status' = 'closed', 'a sent estimate never viewed: «closed» too');
+  perform tst.fails_like($q$select public.portal_accept('tok_t76_closed_0123456789ab', '0e3a7600-0000-4000-8000-000000000001', null, 'Client', 'M0 0 L5 5', true)$q$, 'company closed', 'a closed company: the client cannot sign');
+  perform tst.fails_like($q$select public.portal_pay_simulated('tok_t76_closed_0123456789ab', '0e1a7600-0000-4000-8000-0000000000ff')$q$, 'company closed', 'a closed company: no card payment (refused before anything else)');
+end $$;
+-- signed on site by an active owner of T76 (may sign contracts): still closed — the check is before «on site»
+:as_super
+select tst.ok(exists (select 1 from public.memberships where company_id = 'ca760000-0000-4000-8000-000000000000'
+                        and user_id = 'a0000000-0000-0000-0000-000000000001' and role = 'owner' and status = 'active'),
+              'owner A is an active owner of T76 (else the on-site refusal would answer first)');
+:as_owner_a
+select tst.fails_like($q$select public.portal_accept('tok_t76_closed_0123456789ab', '0e3a7600-0000-4000-8000-000000000001', null, 'Client', 'M0 0 L5 5', true, 'on_site')$q$, 'company closed', 'on site by a member who may sign: refused too');
+:as_super
+select tst.ok((select status from public.estimates where id = '0e1a7600-0000-4000-8000-000000000002') = 'sent', 'the never viewed estimate stays «sent» (no sent → viewed)');
+select tst.ok((select status from public.estimates where id = '0e1a7600-0000-4000-8000-000000000001') = 'viewed'
+          and (select viewed_count || '|' || coalesce(last_viewed_at::text, '') from public.estimates where id = '0e1a7600-0000-4000-8000-000000000001') = current_setting('tst.t76_views'),
+              'the closed page counts no view');
+select tst.ok(((select count(*) from public.notifications where company_id = 'ca760000-0000-4000-8000-000000000000')
+             + (select count(*) from public.estimate_approvals where company_id = 'ca760000-0000-4000-8000-000000000000') * 1000
+             + (select count(*) from public.payments where company_id = 'ca760000-0000-4000-8000-000000000000') * 1000000)::text = current_setting('tst.t76_rows'),
+              'no notification, signature or payment is written for a closed company');
+-- a repeat of the signature (the answer was lost, the company closed meanwhile): «company closed», not the page
+select set_config('app.signing_estimate', '0e1a7600-0000-4000-8000-000000000001', false);
+update public.estimates set status = 'awaiting_countersign' where id = '0e1a7600-0000-4000-8000-000000000001';
+select set_config('app.signing_estimate', '', false);
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails_like($q$select public.portal_accept('tok_t76_closed_0123456789ab', '0e3a7600-0000-4000-8000-000000000001', null, 'Client', 'M0 0 L5 5', true)$q$, 'company closed', 'a repeat of the signature (awaiting countersign): refused before the repeat branch');
+:as_super
+-- «closed» wins over «expired» and «declined» (they give the phone)
+select tst.set_expires('0e1a7600-0000-4000-8000-000000000001', (now() - interval '3 days')::date);
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_estimate('tok_t76_closed_0123456789ab') ->> 'status' = 'closed' and public.portal_estimate('tok_t76_closed_0123456789ab')::text not like '%3235557676%',
+              'past «valid until»: still «closed», no phone');
+-- an empty dba: the name
+:as_super
+update public.companies set dba = '' where id = 'ca760000-0000-4000-8000-000000000000';
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_estimate('tok_t76_closed_0123456789ab') -> 'company' ->> 'name' = 'T76 Legal LLC', 'an empty dba: the company name');
+-- the letter: never handed out, no attempt counted, no address taken
+reset role; set role service_role;
+select tst.ok(public.email_claim((select id from public.email_outbox where estimate_id = '0e1a7600-0000-4000-8000-000000000001')) is null, 'a closed company: email_claim hands out no letter');
+:as_super
+select tst.ok((select status = 'expired' and attempts = 0 and to_email is null from public.email_outbox where estimate_id = '0e1a7600-0000-4000-8000-000000000001'),
+              'the letter is expired, no attempt, no address');
+-- rights as before (rule 18, T52)
+select tst.ok(has_function_privilege('anon', 'public.portal_estimate(text)', 'EXECUTE')
+          and has_function_privilege('anon', 'public.portal_pay_simulated(text, uuid)', 'EXECUTE')
+          and has_function_privilege('anon', 'public.portal_accept(text, uuid, uuid[], text, text, boolean, text, uuid, uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.email_claim(uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.email_claim(uuid)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.email_claim(uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.company_closed(uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.company_closed(uuid)', 'EXECUTE'), 'the rights are as before; nobody calls company_closed directly');
+\echo 'T76 a closed company: the page, signing, paying and letters refused ok'
+-- ---------------------------------------------------------------- T80: push_devices — a person's phones (docs/specs/27 §4.1)
+:as_tech_a
+select public.register_push_device('ExponentPushToken[t80-mike-1]', 'android', 'es', '1.0.0 · 270');
+select tst.ok(tst.cnt($q$select 1 from public.push_devices where revoked_at is null$q$) = 1, 'T80 the person sees their phone');
+select tst.ok((select lang from public.push_devices) = 'es', 'T80 the interface language of the phone is kept');
+select tst.fails($q$select expo_token from public.push_devices$q$, 'T80 the token itself is never read back');
+select public.register_push_device('ExponentPushToken[t80-mike-1]', 'android', 'ru', null);
+select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 1 and (select lang from public.push_devices) = 'ru', 'T80 a repeat updates the same row (the language changed)');
+select public.register_push_device('ExpoPushToken[t80-mike-2]', 'ios', 'xx', null);
+select tst.ok((select lang from public.push_devices where platform = 'ios') = 'en', 'T80 an unknown language becomes en');
+select tst.fails_like($q$select public.register_push_device('not a token', 'android', 'en', null)$q$, 'not a push token', 'T80 a wrong token is refused');
+select tst.fails_like($q$select public.register_push_device('ExponentPushToken[a b]', 'android', 'en', null)$q$, 'not a push token', 'T80 a token with a space is refused');
+select tst.fails_like($q$select public.register_push_device('ExponentPushToken[ok]', 'windows', 'en', null)$q$, 'unknown platform', 'T80 an unknown platform is refused');
+select tst.fails($q$insert into public.push_devices (user_id, expo_token, platform) values ('a0000000-0000-0000-0000-000000000003', 'ExponentPushToken[direct]', 'android')$q$, 'T80 no direct insert');
+select tst.blocked($q$update public.push_devices set lang = 'en'$q$, 'T80 no direct update');
+select tst.blocked($q$delete from public.push_devices$q$, 'T80 no direct delete');
+:as_tech2_a
+select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 0, 'T80 another person sees no phones of Mike');
+select public.forget_push_device('ExponentPushToken[t80-mike-1]');
+select public.forget_push_device(null);
+:as_super
+select tst.ok((select revoked_at is null from public.push_devices where expo_token = 'ExponentPushToken[t80-mike-1]'), 'T80 forget does not touch another person''s token');
+select tst.ok(not exists (select 1 from public.push_devices where revoked_at is not null), 'T80 forget(null) is silent and changes nothing');
+:as_tech2_a
+-- the phone was handed over: Luis signs in on it — the token moves to Luis
+select public.register_push_device('ExponentPushToken[t80-mike-1]', 'android', 'en', null);
+select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 1, 'T80 the token moved to the person signed in now');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) = 1, 'T80 Mike keeps only his other phone');
+select public.forget_push_device('ExpoPushToken[t80-mike-2]');
+select tst.ok((select revoked_reason from public.push_devices where platform = 'ios') = 'signed_out', 'T80 sign out switches the own phone off');
+select public.register_push_device('ExpoPushToken[t80-mike-2]', 'ios', 'en', null);
+select tst.ok((select revoked_at is null from public.push_devices where platform = 'ios'), 'T80 signing in again switches it on');
+-- not more than 10 live phones
+do $$ begin
+  for i in 1..11 loop
+    perform public.register_push_device('ExponentPushToken[t80-many-' || i || ']', 'android', 'en', null);
+  end loop;
+end $$;
+select tst.ok(tst.cnt($q$select 1 from public.push_devices where revoked_at is null$q$) = 10, 'T80 not more than 10 live phones');
+select tst.ok((select revoked_reason from public.push_devices where platform = 'ios') = 'too_many', 'T80 the phone seen longest ago goes off');
+-- the table never grows without end: 30 more fake tokens leave at most 10 live + 10 switched-off rows
+do $$ begin
+  for i in 1..30 loop
+    perform public.register_push_device('ExponentPushToken[t80-flood-' || i || ']', 'android', 'en', null);
+  end loop;
+end $$;
+select tst.ok(tst.cnt($q$select 1 from public.push_devices$q$) <= 20 and tst.cnt($q$select 1 from public.push_devices where revoked_at is null$q$) = 10,
+          'T80 a flood of tokens keeps at most 20 rows of a person');
+:as_super
+select tst.ok((select revoked_at is null from public.push_devices where expo_token = 'ExponentPushToken[t80-flood-30]'), 'T80 the phone just registered is never the one switched off');
+:as_tech_a
+reset role; set role anon;
+select tst.fails($q$select public.register_push_device('ExponentPushToken[anon]', 'android', 'en', null)$q$, 'T80 anon cannot register');
+select tst.fails($q$select 1 from public.push_devices$q$, 'T80 anon cannot read the phones');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.forget_push_device(text)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.register_push_device(text, text, text, text)', 'EXECUTE'), 'T80 anon executes neither function');
+select tst.ok(not has_table_privilege('authenticated', 'public.push_devices', 'INSERT') and not has_table_privilege('authenticated', 'public.push_devices', 'UPDATE')
+          and not has_table_privilege('authenticated', 'public.push_devices', 'DELETE'), 'T80 the app has only select on push_devices');
+-- the server's paths without BYPASSRLS (supabase/README: not checked on staging) — as T57: the rules «to postgres» carry them
+create role t80_owner nologin nobypassrls;
+grant postgres to t80_owner;
+grant usage on schema app, public to t80_owner;
+grant select, insert, update, delete on public.push_devices, public.push_outbox to t80_owner;
+grant execute on function app.push_account_alive(uuid) to t80_owner;
+alter function public.register_push_device(text, text, text, text) owner to t80_owner;
+alter function app.erase_personal_rows(uuid) owner to t80_owner;
+:as_tech2_a
+select public.register_push_device('ExponentPushToken[t80-luis-2]', 'ios', 'en', null);
+select tst.ok(tst.cnt($q$select 1 from public.push_devices where platform = 'ios'$q$) = 1, 'T80 registering works without BYPASSRLS');
+:as_super
+-- account deletion (S22) erases the phones — without BYPASSRLS too
+select app.erase_personal_rows('a0000000-0000-0000-0000-000000000003');
+select tst.ok((select count(*) from public.push_devices where user_id = 'a0000000-0000-0000-0000-000000000003') = 0, 'T80 account deletion erases the person''s phones (no BYPASSRLS)');
+alter function public.register_push_device(text, text, text, text) owner to postgres;
+alter function app.erase_personal_rows(uuid) owner to postgres;
+-- a deleted account (its JWT still valid for a while) registers nothing
+update public.users set deleted_at = now() where id = 'a0000000-0000-0000-0000-000000000004';
+:as_tech2_a
+select tst.fails_like($q$select public.register_push_device('ExponentPushToken[t80-gone]', 'android', 'en', null)$q$, 'not allowed', 'T80 a deleted account cannot register a phone');
+:as_super
+update public.users set deleted_at = null where id = 'a0000000-0000-0000-0000-000000000004';
+-- the whole path of account deletion (public.delete_account, S22), not only erase_personal_rows
+insert into auth.users (id, email, raw_user_meta_data) values ('a8000000-0000-4000-8000-000000000020', 'gone80@a.test', '{"full_name":"Gail Gone"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a8000000-0000-4000-8000-000000000020', 'admin', 'active');
+reset role; set request.jwt.claim.sub = 'a8000000-0000-4000-8000-000000000020'; set role authenticated;
+select public.register_push_device('ExponentPushToken[t80-gail]', 'android', 'en', null);
+:as_super
+insert into public.notifications (id, company_id, kind, invoice_id) values ('08000000-0000-4000-8000-000000000020', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+select tst.ok(exists (select 1 from public.push_outbox where user_id = 'a8000000-0000-4000-8000-000000000020'), 'T80 Gail (admin) has a queued push');
+reset role; set request.jwt.claim.sub = 'a8000000-0000-4000-8000-000000000020'; reset request.jwt.claims; set role authenticated;
+select tst.fresh(2);
+select tst.ok((public.delete_account('DELETE') ->> 'deleted')::boolean, 'T80 Gail deletes her account');
+select tst.fails_like($q$select public.register_push_device('ExponentPushToken[t80-gail-2]', 'android', 'en', null)$q$, 'not allowed', 'T80 after delete_account her JWT registers nothing');
+:as_super
+reset request.jwt.claims;
+select tst.ok(not exists (select 1 from public.push_devices where user_id = 'a8000000-0000-4000-8000-000000000020')
+          and not exists (select 1 from public.push_outbox where user_id = 'a8000000-0000-4000-8000-000000000020'), 'T80 delete_account erased her phones and queued pushes');
+delete from public.push_outbox where notification_id = '08000000-0000-4000-8000-000000000020';
+delete from public.notifications where id = '08000000-0000-4000-8000-000000000020';
+delete from public.push_devices;
+\echo 'T80 push_devices: own rows only, through the functions, the token follows the person signed in ok'
+
+-- ---------------------------------------------------------------- T81: push_outbox — who gets a push (docs/specs/27 §4.2–4.3)
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a8100000-0000-4000-8000-000000000001', 'admin81@a.test', '{"full_name":"Ann Admin"}'),
+  ('a8100000-0000-4000-8000-000000000002', 'sales81@a.test', '{"full_name":"Sam Sales"}'),
+  ('a8100000-0000-4000-8000-000000000003', 'sub81@a.test',   '{"full_name":"Sid Sub"}'),
+  ('a8100000-0000-4000-8000-000000000004', 'off81@a.test',   '{"full_name":"Olga Off"}'),
+  ('a8100000-0000-4000-8000-000000000005', 'office81@a.test', '{"full_name":"Oscar Office"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a8100000-0000-4000-8000-000000000001', 'admin', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8100000-0000-4000-8000-000000000002', 'sales', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8100000-0000-4000-8000-000000000003', 'subcontractor', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8100000-0000-4000-8000-000000000004', 'admin', 'disabled'),
+  ('ca000000-0000-0000-0000-000000000000', 'a8100000-0000-4000-8000-000000000005', 'office', 'active');
+update public.estimates set owner_user_id = 'a8100000-0000-4000-8000-000000000002' where id = '0e730000-0000-4000-8000-000000000003';
+create temp table t81_who (user_id uuid, kind text, route text);
+grant select on t81_who to authenticated;
+-- a) the client signed
+insert into public.notifications (id, company_id, kind, estimate_id, payload) values
+  ('08100000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003', '{"customer":"T81 Client","total":123400}');
+insert into t81_who select user_id, kind, route from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000001';
+select tst.ok(exists (select 1 from t81_who where user_id = 'a0000000-0000-0000-0000-000000000001'), 'T81 signed: the owner gets it');
+select tst.ok(exists (select 1 from t81_who where user_id = 'a8100000-0000-4000-8000-000000000001'), 'T81 signed: an admin gets it');
+select tst.ok(exists (select 1 from t81_who where user_id = 'a8100000-0000-4000-8000-000000000002'), 'T81 signed: the author of the estimate (sales) gets it');
+select tst.ok(not exists (select 1 from t81_who where user_id in ('a8100000-0000-4000-8000-000000000005', 'a0000000-0000-0000-0000-000000000003',
+          'a8100000-0000-4000-8000-000000000003', 'a8100000-0000-4000-8000-000000000004', 'b0000000-0000-0000-0000-000000000001')),
+          'T81 signed: not the office, a tech, a subcontractor, a switched-off admin or another company');
+select tst.ok((select bool_and(kind = 'estimate.client_signed' and route = '/estimate/0e730000-0000-4000-8000-000000000003') from t81_who), 'T81 the push leads to the estimate');
+select tst.ok((select bool_and(status = 'pending' and tries = 0) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000001'), 'T81 rows wait for send-push');
+-- no text, names or sums in the queue (14-app-store п.6): the columns are fixed
+select tst.ok(not exists (select 1 from information_schema.columns where table_schema = 'public' and table_name = 'push_outbox'
+          and column_name in ('title', 'body', 'payload', 'customer', 'total')), 'T81 the queue keeps no text, names or sums');
+-- b) a payment: owner and admin only
+truncate t81_who;
+insert into public.notifications (id, company_id, kind, estimate_id, payload) values
+  ('08100000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'deposit.paid', '0e730000-0000-4000-8000-000000000003', '{}');
+insert into t81_who select user_id, kind, route from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000002';
+select tst.ok((select count(*) from t81_who where user_id in ('a0000000-0000-0000-0000-000000000001', 'a8100000-0000-4000-8000-000000000001')) = 2
+          and not exists (select 1 from t81_who where user_id = 'a8100000-0000-4000-8000-000000000002'), 'T81 payment: owner and admin, not the author');
+select tst.ok((select bool_and(kind = 'payment.received') from t81_who), 'T81 deposit.paid is «payment received»');
+-- the viewed estimate is off by default; approved is the office's own act
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08100000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'estimate.viewed', '0e730000-0000-4000-8000-000000000003'),
+  ('08100000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'estimate.approved', '0e730000-0000-4000-8000-000000000003');
+select tst.ok(not exists (select 1 from public.push_outbox where notification_id in ('08100000-0000-4000-8000-000000000003', '08100000-0000-4000-8000-000000000004')),
+          'T81 estimate.viewed and estimate.approved send no push');
+-- an error of the queue never rolls back the feed row (a signature, a payment)
+alter table public.push_outbox add constraint t81_broken check (false) not valid;
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08100000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003');
+alter table public.push_outbox drop constraint t81_broken;
+select tst.ok(exists (select 1 from public.notifications where id = '08100000-0000-4000-8000-000000000005')
+          and not exists (select 1 from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000005'), 'T81 a broken queue does not roll back the notification');
+-- the app's roles have no rights on the queue
+:as_owner_a
+select tst.fails($q$select 1 from public.push_outbox$q$, 'T81 the owner cannot read the queue');
+select tst.fails($q$insert into public.push_outbox (company_id, user_id, kind, route) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'lead.new', '/')$q$, 'T81 the app cannot write the queue');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_notification_push()', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.push_recipients(uuid, text[], uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.purge_push_outbox()', 'EXECUTE'), 'T81 nobody in the app executes the queue functions');
+select tst.fails_like($q$insert into public.push_outbox (company_id, user_id, kind, route) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', 'lead.new', 'https://evil.test')$q$,
+          '%push_outbox_route_check%', 'T81 a route is only a path inside the app');
+-- one push per (feed row, person): the owner who is also the author of the estimate gets one, not two
+update public.estimates set owner_user_id = 'a0000000-0000-0000-0000-000000000001' where id = '0e730000-0000-4000-8000-000000000003';
+insert into public.notifications (id, company_id, kind, estimate_id) values
+  ('08100000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003');
+select tst.ok((select count(*) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000007' and user_id = 'a0000000-0000-0000-0000-000000000001') = 1,
+          'T81 the owner who is the author gets exactly one push');
+select tst.fails_like($q$insert into public.push_outbox (company_id, user_id, notification_id, kind, route) values ('ca000000-0000-0000-0000-000000000000', 'a0000000-0000-0000-0000-000000000001', '08100000-0000-4000-8000-000000000007', 'estimate.client_signed', '/')$q$,
+          '%push_outbox_notification_id_user_id_key%', 'T81 a second push of the same row to the same person is refused by the table');
+-- the author who is a subcontractor, switched off or deleted gets nothing
+create temp table t81_author (who uuid, nid uuid);
+insert into t81_author values
+  ('a8100000-0000-4000-8000-000000000003', '08100000-0000-4000-8000-000000000011'),
+  ('a8100000-0000-4000-8000-000000000004', '08100000-0000-4000-8000-000000000012'),
+  ('a8100000-0000-4000-8000-000000000005', '08100000-0000-4000-8000-000000000013');
+update public.users set deleted_at = now() where id = 'a8100000-0000-4000-8000-000000000005';
+do $$ declare r record; begin
+  for r in select * from t81_author loop
+    update public.estimates set owner_user_id = r.who where id = '0e730000-0000-4000-8000-000000000003';
+    insert into public.notifications (id, company_id, kind, estimate_id) values (r.nid, 'ca000000-0000-0000-0000-000000000000', 'estimate.client_signed', '0e730000-0000-4000-8000-000000000003');
+    perform tst.ok(not exists (select 1 from public.push_outbox where notification_id = r.nid and user_id = r.who), 'T81 an author who is a subcontractor / switched off / deleted gets no push');
+    perform tst.ok(exists (select 1 from public.push_outbox where notification_id = r.nid and user_id = 'a0000000-0000-0000-0000-000000000001'), 'T81 the owner still gets it');
+  end loop;
+end $$;
+update public.users set deleted_at = null where id = 'a8100000-0000-4000-8000-000000000005';
+drop table t81_author;
+-- the trigger and the purge without BYPASSRLS (as T57)
+alter function app.tg_notification_push() owner to t80_owner;
+alter function app.purge_push_outbox() owner to t80_owner;
+alter function app.erase_personal_rows(uuid) owner to t80_owner;
+grant execute on function app.push_recipients(uuid, text[], uuid) to t80_owner;
+insert into public.notifications (id, company_id, kind, invoice_id) values
+  ('08100000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'invoice.paid', null);
+select tst.ok((select count(*) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000006')
+          = (select count(*) from public.push_outbox where notification_id = '08100000-0000-4000-8000-000000000002'), 'T81 the queue works without BYPASSRLS (the same people as the deposit)');
+-- account deletion erases the person's queued pushes; the 30-day purge keeps fresh rows
+select app.erase_personal_rows('a8100000-0000-4000-8000-000000000002');
+select tst.ok(not exists (select 1 from public.push_outbox where user_id = 'a8100000-0000-4000-8000-000000000002'), 'T81 account deletion erases the person''s queue rows');
+select tst.ok(app.purge_push_outbox() = 0 and exists (select 1 from public.push_outbox), 'T81 the purge keeps rows younger than 30 days');
+update public.push_outbox set created_at = now() - interval '31 days';
+select tst.ok(app.purge_push_outbox() > 0, 'T81 the purge deletes rows older than 30 days');
+select tst.ok(not exists (select 1 from public.push_outbox), 'T81 nothing older than 30 days is left');
+alter function app.tg_notification_push() owner to postgres;
+alter function app.purge_push_outbox() owner to postgres;
+alter function app.erase_personal_rows(uuid) owner to postgres;
+delete from public.notifications where id::text like '08100000-%';
+update public.estimates set owner_user_id = null where id = '0e730000-0000-4000-8000-000000000003';
+update public.memberships set status = 'disabled' where user_id::text like 'a8100000-%' and status = 'active';
+drop table t81_who;
+delete from public.push_devices;
+reassign owned by t80_owner to postgres;
+drop owned by t80_owner;
+drop role t80_owner;
+\echo 'T81 push_outbox: owner, admin and the author; payments to owner and admin; no text; server only ok'
 
 \echo 'ALL TESTS PASSED'
