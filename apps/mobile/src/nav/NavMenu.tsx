@@ -14,7 +14,7 @@ import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { activeSection } from "./hierarchy";
 import { hasSection, menuGroups, sectionHref, sectionOfHref, type MenuGroup, type SectionId } from "./sections";
 import { FabSheet } from "./Fab";
-import { contentWidth, openKey } from "./shell";
+import { openKey } from "./shell";
 import { roleHome, routeKey } from "./roles";
 import { usePersistentState } from "@/data/persist";
 import { openSection } from "./go";
@@ -92,14 +92,6 @@ export function useMenuCurrent(): SectionId | undefined {
   return own && own !== "home" && hasSection(role, own) ? own : activeSection(pathname, params, db, role);
 }
 
-/** the width the screen's own content gets on this device (window minus the side menu) */
-export function useContentWidth(): number {
-  const { width } = useWindowDimensions();
-  const { device } = useDevice();
-  const insets = useSafeAreaInsets();
-  return contentWidth(width, device, useNavMenu().sideOpen, insets.left);
-}
-
 export const GROUP_TITLE: Partial<Record<MenuGroup, DictKey>> = { work: "nav.group.work", docs: "nav.group.docs", money: "nav.group.money" };
 
 function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; onClose: () => void; onChoose: () => void; onCreate: () => void }) {
@@ -142,7 +134,7 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
         // the notch in landscape (docs/specs/32): the drawer runs to the edge and grows by it, its rows keep clear
         style={{ position: "absolute", left: 0, top: 0, bottom: 0, width: Math.min(component.panelW, winW - space[8] - insets.left) + insets.left }}
       >
-        <Glass strong style={{ flex: 1, borderTopRightRadius: component.sheetRadius, borderBottomRightRadius: component.sheetRadius, paddingTop: insets.top + space[3], paddingBottom: insets.bottom + space[3], paddingLeft: insets.left }}>
+        <Glass strong testID="menu-drawer" style={{ flex: 1, borderTopRightRadius: component.sheetRadius, borderBottomRightRadius: component.sheetRadius, paddingTop: insets.top + space[3], paddingBottom: insets.bottom + space[3], paddingLeft: insets.left }}>
           <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", paddingHorizontal: space[4], minHeight: size.hitMin }}>
             <T v="title">{t("nav.menu")}</T>
             <Press onPress={() => onClose()} visibleHeight={component.dockBtn} accessibilityRole="button" accessibilityLabel={t("common.close")}>

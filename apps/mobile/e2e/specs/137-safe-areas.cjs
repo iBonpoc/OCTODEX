@@ -31,10 +31,66 @@ async function insets(page, c) {
     s.textContent = `body > div[style*="z-index: -1"]{padding:${c.t}px ${c.r}px ${c.b}px ${c.l}px!important}`;
   }, c);
   await page.setViewportSize({ width: c.w + 1, height: c.h });
-  await page.waitForTimeout(250);
+  await page.waitForFunction((w) => window.innerWidth === w, c.w + 1);
   await page.setViewportSize({ width: c.w, height: c.h });
-  await page.waitForTimeout(700);
+  await applied(page, c);
 }
+
+/**
+ * Wait until the app has drawn with the new insets — on what shows them: the signature's padding, the side menu's
+ * left padding (the notch), the tab bar's distance from the bottom. Not seen in time: the check below says what is wrong.
+ */
+const applied = (page, c) =>
+  page
+    .waitForFunction(
+      (c) => {
+        if (window.innerWidth !== c.w) return false;
+        // the layout holds still (the insets are read after a short CSS transition; a sheet opening): the same edges
+        // three polls running
+        const key = [...document.querySelectorAll('[role="button"],[data-testid="sig-full"]')]
+          .slice(0, 40)
+          .map((e) => { const b = e.getBoundingClientRect(); return `${Math.round(b.left)},${Math.round(b.top)},${Math.round(b.width)}`; })
+          .join(";");
+        const st = (window.__e2eStable = window.__e2eStable && window.__e2eStable.key === key ? { key, n: window.__e2eStable.n + 1 } : { key, n: 0 });
+        if (st.n < 3) return false;
+        const px = (e, k) => parseFloat(getComputedStyle(e)[k]);
+        const sig = document.querySelector('[data-testid="sig-full"]');
+        if (sig) return Math.abs(px(sig, "paddingLeft") - Math.max(c.l, 16)) < 0.5 && Math.abs(px(sig, "paddingTop") - Math.max(c.t, 16)) < 0.5;
+        const nav = document.querySelector('[data-testid="side-nav"]');
+        if (nav) return Math.abs(px(nav, "paddingLeft") - c.l) < 0.5 && Math.abs(px(nav, "paddingTop") - (c.t + 12)) < 0.5;
+        const bar = [...document.querySelectorAll('[data-testid="tab-bar"]')].map((e) => e.getBoundingClientRect()).find((b) => b.height > 0);
+        if (bar) return bar.bottom <= window.innerHeight - Math.max(c.b, 12) + 0.5 && bar.bottom >= window.innerHeight - Math.max(c.b, 12) - 12;
+        return true; // a page without them (the client page): the resize is all
+      },
+      c,
+      { timeout: 3000 },
+    )
+    .catch(() => {});
+
+/**
+ * The left edge of the screen's content: 16 after the side menu (820/1280 — not the notch again), max(notch, 16) on a
+ * phone. The leftmost thing on the screen (a card, a button, the version line) lies on that edge.
+ */
+const contentLeft = (page) =>
+  page.evaluate(() => {
+    const nav = document.querySelector('[data-testid="side-nav"]');
+    const skip = '[data-testid="side-nav"],[data-testid="tab-bar"],[data-testid="fab"],[aria-modal="true"]';
+    const inHScroll = (e) => {
+      for (let n = e.parentElement; n; n = n.parentElement) {
+        const st = getComputedStyle(n);
+        if (/(auto|scroll)/.test(st.overflowX) && n.scrollWidth > n.clientWidth + 1) return true;
+      }
+      return false;
+    };
+    let left = Infinity;
+    for (const e of document.getElementById("root").querySelectorAll('[role="button"],button,a,input')) {
+      if (e.closest(skip) || inHScroll(e)) continue;
+      const b = e.getBoundingClientRect();
+      if (b.width < 1 || b.height < 1 || b.bottom <= 0 || b.top >= window.innerHeight) continue;
+      left = Math.min(left, b.left);
+    }
+    return { left, nav: nav ? nav.getBoundingClientRect().right : null };
+  });
 
 /**
  * What lies outside the safe rectangle. `scope`: a selector (a sheet, the signature) — only inside it, and up/down too;
@@ -127,6 +183,11 @@ exports.run = async (h) => {
       await h.go(path);
       await insets(p, c);
       await clear(h, c, name);
+      // no double padding: after the side menu the content starts 16 from it, the notch is the menu's (useNavInsets)
+      const cl = await contentLeft(p);
+      const want = wide ? cl.nav + 16 : Math.max(c.l, 16);
+      if (wide && cl.nav === null) h.failures.push(`${c.name} ${name}: no side menu`);
+      else if (Math.abs(cl.left - want) > 1) h.failures.push(`${c.name} ${c.w}×${c.h}: ${name} — the content starts at ${Math.round(cl.left)}, not ${want}`);
       // the fixed parts are there to check
       if (wide) h.expect(await p.getByTestId("side-nav").isVisible(), `${c.name}: the side menu shown`);
       else h.expect(await p.getByTestId("tab-bar").first().isVisible(), `${c.name}: the tab bar shown`);
@@ -138,12 +199,12 @@ exports.run = async (h) => {
     await insets(p, c);
     const fab = p.locator(wide ? '[data-testid="fab-header"]' : '[data-testid="fab"]').locator("visible=true").first();
     await fab.click();
-    await h.sheet().waitFor({ timeout: 3000 });
-    await p.waitForTimeout(300);
+    await h.sheet().locator('[data-testid^="fab-"]').first().waitFor({ timeout: 3000 });
+    await applied(p, c);
     await clear(h, c, "the «＋» sheet", '[aria-modal="true"]');
     await h.shot(`${c.name}-create`);
     await p.keyboard.press("Escape");
-    await p.waitForTimeout(400);
+    await p.waitForFunction(() => !document.querySelector('[aria-modal="true"] [data-testid^="fab-"]'), null, { timeout: 3000 });
 
     // the menu: the phone has the «Ещё» tab (a screen); 820 — ☰ opens the drawer; 1280 — the side menu opens in place
     if (!wide) {
@@ -154,9 +215,12 @@ exports.run = async (h) => {
       await h.go("/clients");
       await insets(p, c);
       await p.getByTestId("side-toggle").click();
-      await p.waitForTimeout(500);
-      const drawer = await p.getByRole("dialog", { name: "Меню" }).count();
-      await clear(h, c, "the menu", drawer ? '[role="dialog"]' : '[data-testid="side-nav"]');
+      // 820: the drawer; 1280: the side menu opens in place (☰ says so)
+      const drawer = c.w < 1280;
+      if (drawer) await p.getByTestId("menu-drawer").waitFor({ timeout: 3000 });
+      else await p.waitForFunction(() => document.querySelector('[data-testid="side-toggle"]')?.getAttribute("aria-expanded") === "true", null, { timeout: 3000 });
+      await applied(p, c);
+      await clear(h, c, "the menu", drawer ? '[data-testid="menu-drawer"]' : '[data-testid="side-nav"]');
       await h.shot(`${c.name}-menu`);
       if (!drawer) await p.getByTestId("side-toggle").click();
     }
@@ -171,7 +235,7 @@ exports.run = async (h) => {
       await expand.scrollIntoViewIfNeeded();
       await expand.click();
       await p.locator('[data-testid="sig-full"]').waitFor({ timeout: 3000 });
-      await p.waitForTimeout(400);
+      await applied(p, c);
       await clear(h, c, "the full-screen signature", '[data-testid="sig-full"]');
       await h.shot(`${c.name}-signature`);
     }

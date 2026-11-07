@@ -14,14 +14,34 @@ const files = (dir: string): string[] =>
     return statSync(p).isDirectory() ? files(p) : /\.tsx$/.test(f) ? [p] : [];
   });
 
-/** each <Modal …> opening tag: from "<Modal" to the ">" that ends a line (not the "=>" of an arrow in its props) */
-const modalTags = (src: string) => [...src.matchAll(/<Modal\b[\s\S]*?(?<!=)>\s*$/gm)].map((m) => m[0]);
+/** each <Modal …> opening tag: from "<Modal" to its own ">" — braces counted, so "=>" or ">" inside {…} props don't end it */
+function modalTags(src: string): string[] {
+  const tags: string[] = [];
+  for (const m of src.matchAll(/<Modal\b/g)) {
+    let depth = 0;
+    let quote = "";
+    for (let i = m.index! + 6; i < src.length; i++) {
+      const ch = src[i]!;
+      if (quote) {
+        if (ch === quote) quote = "";
+      } else if (ch === '"' || ch === "'" || ch === "`") quote = ch;
+      else if (ch === "{") depth++;
+      else if (ch === "}") depth--;
+      else if (ch === ">" && depth === 0) {
+        tags.push(src.slice(m.index!, i + 1));
+        break;
+      }
+    }
+  }
+  return tags;
+}
 
 describe("modals turn with the phone (docs/specs/32)", () => {
-  it("ALL_ORIENTATIONS: both portrait and landscape", () => {
+  it("ALL_ORIENTATIONS: portrait, upside down (an iPad in a stand) and landscape", () => {
     const def = readFileSync(join(SRC, "ui", "overlays.tsx"), "utf8").match(/export const ALL_ORIENTATIONS[^=]*= (\[[^\]]*\])/)?.[1] ?? "";
     expect(def).toContain('"portrait"');
     expect(def).toContain('"landscape"');
+    expect(def).toContain('"portrait-upside-down"');
   });
   it("every <Modal> in the app passes supportedOrientations", () => {
     const missing: string[] = [];
@@ -34,5 +54,9 @@ describe("modals turn with the phone (docs/specs/32)", () => {
     }
     expect(seen).toBeGreaterThanOrEqual(4); // Menu, Sheet, the drawer, the signature
     expect(missing).toEqual([]);
+  });
+  it("the tag reader is not fooled by an arrow or a \">\" inside the props", () => {
+    const src = '<Modal visible onRequestClose={() => a > b && close()} statusBarTranslucent>\n<View />';
+    expect(modalTags(src)).toEqual(['<Modal visible onRequestClose={() => a > b && close()} statusBarTranslucent>']);
   });
 });

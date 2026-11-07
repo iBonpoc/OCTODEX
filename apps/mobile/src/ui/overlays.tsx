@@ -12,16 +12,17 @@ import { useI18n } from "@/i18n";
 import { Icon, Press, T, type IconKey } from "./primitives";
 
 /**
- * Every modal turns with the phone (docs/specs/32): without it an iPhone shows a modal in portrait only
- * (React Native's default) — a sheet opened in landscape turns the whole screen.
+ * Every modal turns with the device (docs/specs/32): without it an iPhone shows a modal in portrait only
+ * (React Native's default) — a sheet opened in landscape turns the whole screen. Upside down too: an iPad in a stand
+ * turned over (without the prop React Native gives an iPad all four); on an iPhone the app's own mask drops it.
  */
-export const ALL_ORIENTATIONS: ("portrait" | "landscape")[] = ["portrait", "landscape"];
+export const ALL_ORIENTATIONS: ("portrait" | "portrait-upside-down" | "landscape")[] = ["portrait", "portrait-upside-down", "landscape"];
 
 /* ---------- Glass panel (overlay background --ov + blur --blurov) ---------- */
-export function Glass({ children, style, strong }: { children: ReactNode; style?: object; strong?: boolean }) {
+export function Glass({ children, style, strong, testID }: { children: ReactNode; style?: object; strong?: boolean; testID?: string }) {
   const { c } = useTheme();
   return (
-    <View style={[{ overflow: "hidden", backgroundColor: c.ov, borderColor: c.bd, borderWidth: 1 }, style]}>
+    <View testID={testID} style={[{ overflow: "hidden", backgroundColor: c.ov, borderColor: c.bd, borderWidth: 1 }, style]}>
       <BlurView intensity={strong ? c.blurOverlay * 3 : c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
       {children}
     </View>
@@ -179,8 +180,9 @@ export function Sheet({
     <Modal visible={visible} transparent animationType="none" onRequestClose={requestClose} statusBarTranslucent supportedOrientations={ALL_ORIENTATIONS}>
       <KeyboardAvoidingView
         behavior={avoidBehavior}
-        // 820/1280: the centred sheet keeps clear of the home indicator too (docs/specs/32); the phone sheet runs to the edge
-        style={{ flex: 1, justifyContent: wide ? "center" : "flex-end", alignItems: "center", paddingTop: insets.top + space[2], paddingBottom: wide ? insets.bottom + space[2] : 0 }}
+        // 820/1280: the centred sheet keeps clear of the home indicator too (docs/specs/32) — without one, as before;
+        // the phone sheet runs to the edge
+        style={{ flex: 1, justifyContent: wide ? "center" : "flex-end", alignItems: "center", paddingTop: insets.top + space[2], paddingBottom: wide ? insets.bottom : 0 }}
       >
         <Animated.View
           entering={reduce ? undefined : FadeIn.duration(motion.durBase)}
