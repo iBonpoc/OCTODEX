@@ -1,18 +1,19 @@
-/** Lists for the Sales hub and Money: estimates and invoices as cards with status filters. */
+/** «Сметы» (a section of its own, spec 31 §7а): estimates as cards with the list filters. Invoices — /invoice. */
 import { useState } from "react";
 import { View } from "react-native";
 import { space, type StatusName } from "@octo/design-tokens";
-import { daysSince, isOverdue, useStore } from "@/data/store";
-import type { Estimate, EstimateStatus, Invoice } from "@/data/types";
-import { ESTIMATE_GROUPS, INVOICE_GROUPS, estimateGroup, inEstimateFilter, inListFilter, invoiceGroup, type EstimateFilter, type EstimateGroup, type InvoiceGroup } from "@/features/listGroups";
-import { invoiceBalance } from "@/features/invoiceStatus";
+import { useStore } from "@/data/store";
+import { usePersistentState } from "@/data/persist";
+import type { DB, Estimate, EstimateStatus } from "@/data/types";
+import { ESTIMATE_GROUPS, estimateGroup, inEstimateFilter, type EstimateFilter, type EstimateGroup } from "@/features/listGroups";
 import { CardGrid, ListCardHeader } from "@/ui/listCard";
-import { EST_COLUMNS, EstimateListCard, INV_COLUMNS, InvoiceListCard } from "@/features/listCards";
+import { EST_COLUMNS, EstimateListCard } from "@/features/listCards";
 import { useDevice } from "@/theme/ThemeProvider";
 import { T } from "@/ui/primitives";
 import { useI18n, type DictKey } from "@/i18n";
-import { ChoiceChips, StatusChip } from "@/ui/controls";
-import { CardList, Empty, ItemCard, SectionTitle } from "@/ui/surfaces";
+import { FilterBar } from "@/ui/filterBar";
+import { filterStoreKey } from "@/ui/filterBarRules";
+import { CardList, Empty } from "@/ui/surfaces";
 
 /** status chip of an estimate — the one place for it (lists, client and property documents) */
 export const estView: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
@@ -23,30 +24,45 @@ export const estView: Record<EstimateStatus, { s: StatusName; l: DictKey }> = {
   declined: { s: "bad", l: "st.declined" },
 };
 
+/** the lane of «Сметы» (spec 31 §7): the open ones first, then the closed, «Все» last */
+const ESTIMATE_LANE: readonly EstimateFilter[] = ["open", "closed", "all"];
+const LANE_LABEL: Record<EstimateFilter, DictKey> = { open: "board.open", closed: "card.f.closed", all: "cat.all" };
+
+/** the search of «Сметы»: the client's name, the number, the title of the work, the address of the property */
+export function matchEstimate(db: DB, e: Estimate, q: string): boolean {
+  const needle = q.trim().toLowerCase();
+  if (!needle) return true;
+  const client = db.customers.find((c) => c.id === e.customerId);
+  const prop = db.properties.find((p) => p.id === e.propertyId);
+  return [client?.name, e.number, e.title, prop?.address, prop?.city].some((x) => (x ?? "").toLowerCase().includes(needle));
+}
+
 export function EstimatesBoard() {
   const { db } = useStore();
   const { t, money, day } = useI18n();
   const { device } = useDevice();
-  const [f, setF] = useState<EstimateFilter>("open");
+  // spec 31 §6 п.7: the status is kept on this device for this list; the search is not
+  const [kept, setF] = usePersistentState<EstimateFilter>(`${filterStoreKey("estimates")}.status`, "open");
+  const f: EstimateFilter = ESTIMATE_LANE.includes(kept) ? kept : "open";
+  const [q, setQ] = useState("");
   const now = Date.now();
   const all = db.estimates.map((e) => ({ e, g: estimateGroup(e, now) }));
   const count = (x: EstimateFilter) => all.filter(({ g }) => inEstimateFilter(g, x)).length;
   const list = all
     .filter(({ g }) => inEstimateFilter(g, f))
+    .filter(({ e }) => matchEstimate(db, e, q))
     .sort((a, b) => (b.e.sentAt ?? b.e.approvedAt ?? "").localeCompare(a.e.sentAt ?? a.e.approvedAt ?? ""));
   // the one estimate card (features/listCards.tsx), shared with the «Today» figures
   const card = ({ e }: { e: Estimate; g: EstimateGroup }) => <EstimateListCard key={e.id} e={e} density={device === "desktop" ? "row" : "rich"} />;
   const groups = ESTIMATE_GROUPS.map((g) => [g, list.filter((x) => x.g === g)] as const).filter(([, xs]) => xs.length);
   return (
     <View style={{ gap: space[3] }}>
-      <ChoiceChips<EstimateFilter>
+      {/* spec 31 (variant Б): the search (client, address, EST, work) and one lane of statuses; nothing in the sheet yet */}
+      <FilterBar<EstimateFilter>
+        search={{ value: q, onChange: setQ, placeholder: t("card.filter.searchEstimates") }}
         value={f}
         onChange={setF}
-        items={[
-          { key: "open", label: `${t("board.open")} · ${count("open")}` },
-          { key: "closed", label: `${t("card.f.closed")} · ${count("closed")}` },
-          { key: "all", label: `${t("cat.all")} · ${count("all")}` },
-        ]}
+        items={ESTIMATE_LANE.map((k) => ({ key: k, label: t(LANE_LABEL[k]), count: count(k) }))}
       />
       {list.length === 0 ? (
         <Empty icon="invoice" title={t("board.noEstimates")} />
@@ -56,48 +72,6 @@ export function EstimatesBoard() {
           {groups.map(([g, xs]) => (
             <View key={g} style={{ gap: space[2] }}>
               <T v="caption" w="semibold" tone="mut">{`${t(`card.group.${g}`)} · ${xs.length}`}</T>
-              {device === "tablet" ? <CardGrid>{xs.map(card)}</CardGrid> : <CardList>{xs.map(card)}</CardList>}
-            </View>
-          ))}
-        </>
-      )}
-    </View>
-  );
-}
-
-/** Invoices on list cards (spec 06, PR5): needs action (overdue / due soon) → waiting → paid; status from invoiceStatusView. */
-export function InvoicesBoard() {
-  const { db } = useStore();
-  const { t, money, day } = useI18n();
-  const { device } = useDevice();
-  const [f, setF] = useState<EstimateFilter>("open");
-  const now = Date.now();
-  const all = db.invoices.map((i) => ({ i, g: invoiceGroup(i, now) }));
-  const count = (x: EstimateFilter) => all.filter(({ g }) => inListFilter(g, x)).length;
-  const list = all.filter(({ g }) => inListFilter(g, f)).sort((a, b) => a.i.dueDate.localeCompare(b.i.dueDate));
-  // the one invoice card (features/listCards.tsx), shared with the «Today» figures
-  const card = ({ i }: { i: Invoice }) => <InvoiceListCard key={i.id} i={i} density={device === "desktop" ? "row" : "rich"} />;
-  const groups = INVOICE_GROUPS.map((g) => [g, list.filter((x) => x.g === g)] as const).filter(([, xs]) => xs.length);
-  const sum = (g: InvoiceGroup, xs: readonly { i: Invoice }[]) => money(xs.reduce((s, { i }) => s + (g === "done" ? i.paidCents : invoiceBalance(i).owesCents), 0));
-  return (
-    <View style={{ gap: space[3] }}>
-      <ChoiceChips<EstimateFilter>
-        value={f}
-        onChange={setF}
-        items={[
-          { key: "open", label: `${t("board.open")} · ${count("open")}` },
-          { key: "closed", label: `${t("card.f.closed")} · ${count("closed")}` },
-          { key: "all", label: `${t("cat.all")} · ${count("all")}` },
-        ]}
-      />
-      {list.length === 0 ? (
-        <Empty icon="invoice" title={t("money.empty")} />
-      ) : (
-        <>
-          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={INV_COLUMNS} value={t("card.val.toPay")} /> : null}
-          {groups.map(([g, xs]) => (
-            <View key={g} style={{ gap: space[2] }}>
-              <T v="caption" w="semibold" tone="mut">{`${t(g === "done" ? "money.paid" : g === "waiting" ? "money.awaiting" : "card.group.action")} · ${xs.length} · ${sum(g, xs)}`}</T>
               {device === "tablet" ? <CardGrid>{xs.map(card)}</CardGrid> : <CardList>{xs.map(card)}</CardList>}
             </View>
           ))}

@@ -5,8 +5,10 @@ import { useStore } from "@/data/store";
 import { canMarkNoService, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
-import { Button, IconButton, TextField } from "@/ui/controls";
-import { FilterBar, FilterRow } from "@/ui/filterBar";
+import { Button, IconButton } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
+import { filterStoreKey } from "@/ui/filterBarRules";
+import { usePersistentState } from "@/data/persist";
 import { CardList, Empty, ListRow, Screen } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -29,8 +31,11 @@ export default function Clients() {
   const clients = visibleClients(db, role);
   const office = role !== "tech";
   const [q, setQ] = useState("");
-  const [tab, setTab] = useState<Filter>("all");
-  const [tagIds, setTagIds] = useState<string[]>([]);
+  // spec 31 §6 п.7: the status and the tags are kept on this device for this list, until «Сбросить»; the search is not
+  const [kept, setTab] = usePersistentState<Filter>(`${filterStoreKey("clients")}.status`, "all");
+  const [keptTags, setTagIds] = usePersistentState<string[]>(`${filterStoreKey("clients")}.tags`, []);
+  // what was kept may not fit any more: a role without that filter, a tag switched off or deleted
+  const tagIds = keptTags.filter((id) => db.tags.some((x) => x.id === id && x.active));
   const owes = (id: string) => clientMoneyOf(db, id).owesCents > 0;
   const openEst = (id: string) => db.estimates.some((e) => e.customerId === id && e.status === "sent");
   const pass: Record<Filter, (c: (typeof db.customers)[number]) => boolean> = {
@@ -41,6 +46,7 @@ export default function Clients() {
     archived: (c) => statusOf(c) === "archived",
   };
   const filters: Filter[] = office ? ["all", "owes", "estimate", "prospect", "archived"] : ["all"];
+  const tab: Filter = filters.includes(kept) ? kept : "all";
   const count = (f: Filter) => clients.filter(pass[f]).length;
   // search: name, number, any phone / email of any person, any property address, any document number
   const list = clients
@@ -108,31 +114,24 @@ export default function Clients() {
       fab="clients"
       right={office ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
     >
-      <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.search")} icon="search" />
-      {/* founder 07.11: one row of filters — empty ones hidden, tags behind «Фильтры» (rows in a sheet) */}
+      {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane of statuses, the tags in the sheet */}
       <FilterBar<Filter>
+        search={{ value: q, onChange: setQ, placeholder: t("clients.search") }}
         value={tab}
         onChange={setTab}
         items={filters.map((f) => ({ key: f, label: t(`clients.f.${f}`), count: count(f) }))}
-        more={
-          db.tags.some((x) => x.active)
-            ? {
-                active: tagIds.length,
-                onReset: () => setTagIds([]),
-                children: db.tags
-                  .filter((x) => x.active)
-                  .sort((a, b) => a.position - b.position)
-                  .map((x) => (
-                    <FilterRow
-                      key={x.id}
-                      label={tagLabel(x, t)}
-                      on={tagIds.includes(x.id)}
-                      onToggle={() => setTagIds(tagIds.includes(x.id) ? tagIds.filter((y) => y !== x.id) : [...tagIds, x.id])}
-                    />
-                  )),
-              }
-            : undefined
-        }
+        groups={[
+          {
+            key: "tags",
+            title: t("fix.filters.tags"),
+            options: db.tags
+              .filter((x) => x.active)
+              .sort((a, b) => a.position - b.position)
+              .map((x) => ({ key: x.id, label: tagLabel(x, t), count: clients.filter(pass[tab]).filter((c) => (c.tagIds ?? []).includes(x.id)).length, on: tagIds.includes(x.id) })),
+            onToggle: (id) => setTagIds(tagIds.includes(id) ? tagIds.filter((y) => y !== id) : [...tagIds, id]),
+          },
+        ]}
+        onReset={() => setTagIds([])}
       />
       {list.length === 0 ? (
         <Empty
