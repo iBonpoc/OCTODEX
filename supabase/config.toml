@@ -8,3 +8,17 @@ enable_confirmations = true
 # 7а-2a (S22): «Удалить аккаунт» — only with a valid user JWT (the person deletes themselves; the uid is never in the body).
 [functions.delete-account]
 verify_jwt = true
+
+# LOCAL stack only (supabase start — the nightly cloud scenarios, docs/specs/21 §7). release.yml runs `db push`,
+# never `config push`, so nothing below reaches the hosted project.
+[auth]
+site_url = "http://127.0.0.1:3000"
+additional_redirect_urls = ["http://127.0.0.1:*/**"]
+
+# the app signs in by the 6-digit code from the email (auth/sign-in.tsx → verifyOtp): the local email must carry it
+[auth.email.template.magic_link]
+subject = "Your OCTODEX sign-in code"
+content_path = "./supabase/templates/magic-link.html"
+
+[edge_runtime]
+enabled = true

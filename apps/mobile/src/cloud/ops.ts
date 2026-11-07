@@ -11,7 +11,7 @@ import { ENGINE_VERSION, jobLineQty } from "@octo/estimating-engine";
 import type { BillingAddress, CalendarEvent, MemberPrefs, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
-import { expenseCategoryToDb } from "./repo";
+import { expenseCategoryToDb, pages } from "./repo";
 
 export type Op =
   /** at: when the tech left (step en_route), phone time — visits.en_route_at (П3c) */
@@ -260,8 +260,10 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 async function sourceRef(companyId: string, op: { sourceId?: string; source?: string }): Promise<string> {
   const v = op.sourceId ?? op.source ?? "";
   if (UUID.test(v)) return v;
-  const { data } = await supabase.from("lead_sources").select("id, name").eq("company_id", companyId);
-  const rows = (data ?? []) as { id: string; name: string }[];
+  // every source of the company, page by page (they grow with imports and marketplaces; PostgREST gives ≤ 1000 at once)
+  const rows = await pages<{ id: string; name: string }>(() => supabase.from("lead_sources").select("id, name").eq("company_id", companyId), [{ col: "id" }]).catch(
+    () => [] as { id: string; name: string }[],
+  );
   const name = v.replace(/^src-/, "").toLowerCase();
   return (rows.find((r) => r.name.toLowerCase() === name) ?? rows.find((r) => r.name === "Website") ?? rows[0])?.id ?? "";
 }

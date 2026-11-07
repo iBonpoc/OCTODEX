@@ -116,7 +116,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
                 <T v="caption" tone="mut">
                   {t(`person.role.${p.role}` as DictKey)}
                 </T>
-                <PersonRows p={p} onCall={(x) => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), contactId: x.id })} />
+                <PersonRows p={p} onCall={(x) => setCalling({ ...(callPlaceForClient(db, role, c.id) ?? {}), customerId: c.id, contactId: x.id })} />
               </Card>
             ))}
           </CardList>
