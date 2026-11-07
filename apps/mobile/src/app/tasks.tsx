@@ -2,7 +2,10 @@ import { useState } from "react";
 import { useStore } from "@/data/store";
 import type { Task } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { ChoiceChips, ProgressBar, Segmented, TextField, Button } from "@/ui/controls";
+import { ProgressBar, Button } from "@/ui/controls";
+import { FilterBar } from "@/ui/filterBar";
+import { filterStoreKey } from "@/ui/filterBarRules";
+import { usePersistentState } from "@/data/persist";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
 import { ListCard } from "@/ui/listCard";
 import { useToast } from "@/ui/overlays";
@@ -21,8 +24,12 @@ export default function Tasks() {
   const { db, role } = store;
   const { t, day, time } = useI18n();
   const toast = useToast();
-  const [scope, setScope] = useState<TaskScope>(defaultTaskScope(role));
-  const [filter, setFilter] = useState<TaskFilter>("open");
+  // spec 31 §6 п.7: the status and «Только мои» are kept on this device for this list; the search is not
+  const key = filterStoreKey("tasks");
+  const [keptScope, setScope] = usePersistentState<TaskScope | null>(`${key}.scope`, null);
+  const scope: TaskScope = keptScope ?? defaultTaskScope(role);
+  const [keptFilter, setFilter] = usePersistentState<TaskFilter>(`${key}.status`, "open");
+  const filter: TaskFilter = FILTERS.includes(keptFilter) ? keptFilter : "open";
   const [q, setQ] = useState("");
   const [edit, setEdit] = useState<TaskDraft | null>(null);
   const now = Date.now();
@@ -64,16 +71,22 @@ export default function Tasks() {
       fabOn={{ task: newTask }}
     >
       {progress.total ? <ProgressBar value={progress.done} max={progress.total} label={t("w6.task.progressA11y", { done: progress.done, n: progress.total })} /> : null}
-      <Segmented<TaskScope>
-        value={scope}
-        onChange={setScope}
-        items={[
-          { key: "mine", label: t("w6.task.mine") },
-          { key: "all", label: t("w6.task.all") },
+      {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane; «Мои / Все» went to the sheet («Только мои») */}
+      <FilterBar<TaskFilter>
+        search={{ value: q, onChange: setQ, placeholder: t("w6.task.search") }}
+        value={filter}
+        onChange={setFilter}
+        items={FILTERS.map((f) => ({ key: f, label: t(`w6.task.f.${f}`), count: counts[f] }))}
+        groups={[
+          {
+            key: "scope",
+            title: t("card.filter.whose"),
+            options: [{ key: "mine", label: t("w6.task.mine"), count: filterTasks(tasksOf(db, "mine"), filter, now).length, on: scope === "mine" }],
+            onToggle: () => setScope(scope === "mine" ? "all" : "mine"),
+          },
         ]}
+        onReset={() => setScope("all")}
       />
-      <TextField type="search" value={q} onChangeText={setQ} placeholder={t("w6.task.search")} icon="search" />
-      <ChoiceChips<TaskFilter> value={filter} onChange={setFilter} items={FILTERS.map((f) => ({ key: f, label: `${t(`w6.task.f.${f}`)} · ${counts[f]}` }))} />
       {list.length === 0 ? (
         <Empty
           icon="check"
