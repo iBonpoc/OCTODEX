@@ -5477,4 +5477,89 @@ select tst.ok(has_function_privilege('authenticated', 'public.t64_probe(uuid)', 
 drop function public.t64_probe(uuid);
 \echo 'T64 the stub: a new function has no EXECUTE without a grant ok'
 
+-- ---------------------------------------------------------------- T67: wave 6-4 — the tech's task on his own job (docs/specs/20 §6-4)
+-- tasks_insert (20261107010000): a job of his live visit (tech_visit_counts) — yes; a job without his visit, a job of a
+-- visit older than 14 days — no. He sees and marks his own task; he does not move it to another job (tg_task_guard);
+-- the office's task on that job stays hidden from him.
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c6700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T67 Client');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d6700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6700000-0000-4000-8000-000000000001', '67 Task St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e6700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T67 his job', 'c6700000-0000-4000-8000-000000000001', 'd6700000-0000-4000-8000-000000000001', 'draft'),
+    ('e6700000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T67 not his job', 'c6700000-0000-4000-8000-000000000001', 'd6700000-0000-4000-8000-000000000001', 'draft'),
+    ('e6700000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T67 old job', 'c6700000-0000-4000-8000-000000000001', 'd6700000-0000-4000-8000-000000000001', 'draft'),
+    ('e6700000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T67 job to cancel', 'c6700000-0000-4000-8000-000000000001', 'd6700000-0000-4000-8000-000000000001', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('f6700000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e6700000-0000-4000-8000-000000000001', now() + interval '1 day'),
+    ('f6700000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e6700000-0000-4000-8000-000000000002', now() + interval '1 day'),
+    ('f6700000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e6700000-0000-4000-8000-000000000003', now() - interval '20 days'),
+    ('f6700000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e6700000-0000-4000-8000-000000000004', now() + interval '2 days');
+  insert into public.visit_assignees (company_id, visit_id, user_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'f6700000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003'),
+    ('ca000000-0000-0000-0000-000000000000', 'f6700000-0000-4000-8000-000000000003', 'a0000000-0000-0000-0000-000000000003'),
+    ('ca000000-0000-0000-0000-000000000000', 'f6700000-0000-4000-8000-000000000004', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+insert into public.tasks (company_id, subject_type, subject_id, title) values
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T67 office task');
+:as_tech_a
+insert into public.tasks (company_id, subject_type, subject_id, title) values
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T67 buy brackets');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'T67 buy brackets' and created_by = 'a0000000-0000-0000-0000-000000000003'$q$) = 1,
+  'T67 the tech adds a task to the job of his visit and sees it');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000002', 'T67 x')$q$,
+  'the tech does not add a task to a job without his visit');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000003', 'T67 y')$q$,
+  'the tech does not add a task to the job of a visit older than 14 days');
+update public.tasks set done_at = now() where title = 'T67 buy brackets';
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'T67 buy brackets' and done_at is not null$q$) = 1, 'he marks his task done');
+select tst.fails($q$update public.tasks set subject_id = 'e6700000-0000-4000-8000-000000000002' where title = 'T67 buy brackets'$q$,
+  'he does not move his task to another job');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'T67 office task'$q$) = 0, 'the office''s task on his job stays hidden (only his own)');
+:as_tech2_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title like 'T67 %'$q$) = 0, 'another tech sees none of them');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T67 z')$q$,
+  'another tech does not add a task to that job');
+-- security review: taken off the visit, the job cancelled, the row put under another company — no
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('cb000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T67 b')$q$,
+  'the tech does not put a task on his job under another company');
+:as_super
+update public.visit_assignees set deleted_at = now() where visit_id = 'f6700000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000003';
+:as_tech_a
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T67 off')$q$,
+  'taken off the visit: no new task on that job');
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'T67 buy brackets'$q$) = 1, 'his own task stays his (the author)');
+:as_super
+update public.visit_assignees set deleted_at = null where visit_id = 'f6700000-0000-4000-8000-000000000001' and user_id = 'a0000000-0000-0000-0000-000000000003';
+:as_tech_a
+insert into public.tasks (company_id, subject_type, subject_id, title) values
+  ('ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000004', 'T67 before the cancel');
+:as_super
+update public.jobs set status = 'cancelled' where id = 'e6700000-0000-4000-8000-000000000004';
+:as_tech_a
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000004', 'T67 c')$q$,
+  'the job cancelled: no new task on it (one was allowed before)');
+\echo 'T67 the tech: a task on the job of his live visit only; sees and marks his own ok'
+
+-- ---------------------------------------------------------------- T68: the tech's job task — the office, another company, off the team
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title in ('T67 buy brackets', 'T67 office task')$q$) = 2, 'T68 the office sees the tech''s task and its own');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title like 'T67 %'$q$) = 0, 'another company sees none of them');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T68 planted')$q$,
+  'another company does not plant a task on our job');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('cb000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T68 planted')$q$,
+  'nor under its own company');
+-- off the team (switched off): no task of his any more, no new one on the job he was on
+:as_super
+update public.memberships set status = 'disabled' where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.tasks where title = 'T67 buy brackets'$q$) = 0, 'switched off: he does not see his task any more');
+select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_id, title) values ('ca000000-0000-0000-0000-000000000000', 'job', 'e6700000-0000-4000-8000-000000000001', 'T68 off')$q$,
+  'switched off: no new task on his job');
+:as_super
+update public.memberships set status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T68 the tech''s job task: the office sees it, another company and a switched-off tech do not ok'
+
 \echo 'ALL TESTS PASSED'

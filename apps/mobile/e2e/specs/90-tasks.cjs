@@ -2,7 +2,7 @@
  * Wave 6-1 «Задачи» (docs/specs/20 §7, §9; 13 §3.7): «Ещё» → «Задачи» opens the list «Задачи (n) · n% готово»;
  * «＋» asks «к чему» first (nothing loose, 13 §2.4), then a task with a time is saved, shows in the list and in the Plan;
  * «Выполнено» on the card with «Отменить» (rule 5); the filters and the search; the task's subject opens the client.
- * The lead's task sheet is the same form (one TaskSheet).
+ * The lead's task sheet is the same form (one TaskSheet). The technician ties a task to his own job (20 §6-4, db T67).
  */
 const { menuApi } = require("../menu.cjs");
 const path = (h) => new URL(h.page.url()).pathname;
@@ -87,4 +87,23 @@ exports.run = async (h) => {
   await h.expectText(/К чему.*Lead|К чему.*Лид/, "the lead's form shows its subject");
   await h.expectText(/В Плане/, "and has «В Плане»");
   await h.shot("lead-form");
+
+  // the technician: a task on his own job (the job of his visit), in «Мои»
+  const d0 = await h.db();
+  const myVisit = d0.visits.find((v) => v.jobId && !v.closed && (v.techId === "m-alex" || (v.assigneeIds || []).includes("m-alex")) && Date.parse(v.start) > Date.now() - 86400000);
+  const myJob = d0.jobs.find((j) => j.id === myVisit.jobId);
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
+  await h.go("/tasks");
+  await plus().click(); await p.waitForTimeout(500);
+  const ts = h.sheet();
+  await ts.getByPlaceholder("Клиент, лид, работа или адрес").fill(myJob.title.slice(0, 6)); await p.waitForTimeout(300);
+  await ts.getByText(myJob.title, { exact: true }).first().click(); await p.waitForTimeout(300);
+  await ts.getByPlaceholder("Например: перезвонить и уточнить объём").fill("Купить кронштейны");
+  await h.shot("tech-form");
+  await ts.getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(700);
+  db = await h.db();
+  const mine = db.tasks.find((x) => x.title === "Купить кронштейны");
+  h.expect(mine && mine.subjectType === "job" && mine.subjectId === myJob.id && mine.assigneeId === db.me, "the tech's task is on his job, assigned to him");
+  await h.expectText(/Купить кронштейны/, "it is in his «Мои»");
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
 };
