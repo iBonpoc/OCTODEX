@@ -39,6 +39,8 @@ import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { backoffMs, classify, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, nextToSend, waitingFor } from "./outboxDeps";
+import { leavingSummary } from "./syncLink";
+import type { DictKey } from "@/i18n";
 import { onAppActive } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
 export { mineOf, type OwnedItem } from "./outboxOwner";
@@ -98,6 +100,9 @@ export interface StuckOp {
   waiting: number;
   /** the ops that leave with it on «Отменить изменение…»: they need what it makes (docs/specs/23 §3) */
   leaving: number;
+  /** what leaves with it, by kind, and whether money is among it (the confirmation names it, review #259) */
+  leavingKinds: { key: DictKey; n: number }[];
+  leavingMoney: boolean;
   /** being sent right now: «Повторить» / «Отменить изменение…» wait */
   sending: boolean;
 }
@@ -748,6 +753,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  // what leaves with a discarded op: by kind; money — also when the op itself is money
+  const leavingOf = (self: OwnedItem, gone: OwnedItem[]) => {
+    const sum = leavingSummary(gone.map((o) => o.op.k));
+    return { leaving: gone.length, leavingKinds: sum.kinds, leavingMoney: sum.money || leavingSummary([self.op.k]).money };
+  };
   const unsentAll = mode === "cloud" ? unsentOf(outbox, who?.userId ?? null) : 0;
   const stuckOps: StuckOp[] =
     mode === "cloud"
@@ -758,7 +768,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             kind: o.op.k,
             since: o.failSince ?? o.at,
             waiting: waitingFor(outbox, who, o.id),
-            leaving: dependentsOf(outbox, who, o.id).length,
+            ...leavingOf(o, dependentsOf(outbox, who, o.id)),
             sending: sendingId === o.id,
           }))
       : [];

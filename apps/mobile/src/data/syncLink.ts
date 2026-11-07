@@ -29,3 +29,21 @@ export function stuckKindKey(kind: string): DictKey {
     default: return "sync.kind.other";
   }
 }
+
+/** ops that carry money: when one of them leaves with a discarded change, the confirmation says so (review #259) */
+export const MONEY_KINDS: ReadonlySet<string> = new Set(["payment.record", "visit.pay", "estimate.deposit", "invoice.issue", "invoice.pay", "expense.add"]);
+
+/**
+ * What leaves with a discarded change, for its confirmation (rule 5): each kind of change and how many, in the order
+ * they come, and whether money is among them («вместе уйдут: Работа: 1, Счёт или оплата: 2»).
+ */
+export function leavingSummary(kinds: readonly string[]): { kinds: { key: DictKey; n: number }[]; money: boolean } {
+  const out: { key: DictKey; n: number }[] = [];
+  for (const k of kinds) {
+    const key = stuckKindKey(k);
+    const at = out.find((x) => x.key === key);
+    if (at) at.n++;
+    else out.push({ key, n: 1 });
+  }
+  return { kinds: out, money: kinds.some((k) => MONEY_KINDS.has(k)) };
+}

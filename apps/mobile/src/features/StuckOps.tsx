@@ -50,7 +50,17 @@ function StuckCard({ op }: { op: StuckOp }) {
           </View>
         ) : (
           <View testID={`stuck-confirm-${op.id}`} style={{ gap: space[2] }}>
-            <T v="body">{op.leaving ? t("sync.stuck.sureWaiting", { n: op.leaving }) : t("sync.stuck.sure")}</T>
+            <T v="body">
+              {op.leaving
+                ? t("sync.stuck.sureWaiting", { what: op.leavingKinds.map((x) => `${t(x.key)}: ${x.n}`).join(", ") })
+                : t("sync.stuck.sure")}
+            </T>
+            {op.leavingMoney ? (
+              <View testID={`stuck-money-${op.id}`} style={{ gap: space[1] }}>
+                <StatusChip status="warn" label={t("sync.stuck.moneyChip")} />
+                <T v="caption">{t("sync.stuck.money")}</T>
+              </View>
+            ) : null}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
               <Button
                 label={t("sync.stuck.discardYes")}

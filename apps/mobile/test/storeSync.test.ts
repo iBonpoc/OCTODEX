@@ -717,7 +717,7 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
   const st = () => stored() as unknown as S[];
   const sentIds = () => server.sends.map((s) => (s.op as { id: string }).id);
   const timeout = (code = "57014") => notNow(500, code);
-  type V = Value & { link: string; stuckOps: { id: string; kind: string; waiting: number; leaving: number; sending: boolean }[]; retryOp: (id: string) => void; discardOp: (id: string) => boolean };
+  type V = Value & { link: string; stuckOps: { id: string; kind: string; waiting: number; leaving: number; leavingKinds: { key: string; n: number }[]; leavingMoney: boolean; sending: boolean }[]; retryOp: (id: string) => void; discardOp: (id: string) => boolean };
   const src = (id: string, n: number, extra: object = {}) => q(id, { k: "source.save", source: { id: U(n), name: "Yelp", kind: "online", active: true } }, extra);
   const newLead = (id: string, n: number, s: number) => q(id, { k: "lead.add", id: U(n), name: "A", phone: "1", city: "LA", sourceId: U(s), message: "" });
   const start = async () => {
@@ -882,7 +882,7 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
       q("T", { k: "lead.add", id: U(3), name: "B", phone: "1", city: "LA", sourceId: U(1), message: "" }, { owner: { userId: "u2", companyId: "c1" } }),
     );
     const r = await start();
-    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", waiting: 2, leaving: 1 })]);
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "X", waiting: 2, leaving: 1, leavingKinds: [{ key: "sync.kind.lead", n: 1 }], leavingMoney: false })]);
     expect(v(r).discardOp("X")).toBe(true);
     await settle();
     await wait(300);
@@ -896,6 +896,24 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     await wait(300);
     expect(st().map((x) => x.id)).toEqual(["T"]);
     expect(server.loads.length).toBeGreaterThan(loads);
+  });
+  it("a stuck new client: the confirmation names what leaves with it, by kind, and warns of money (review #259)", async () => {
+    seedOutbox(
+      q("C", { k: "customer.create", customerId: U(1), contactId: U(2), propertyId: U(3), name: "A", phone: "1", sourceId: U(9), address: "a", city: "LA" }, { stuck: true, fails: 3, failSince: AGO }),
+      q("J", { k: "job.create", id: U(4), customerId: U(1), propertyId: U(3), title: "T", description: null, jobTypeId: null, serviceCategoryId: null }),
+      q("I", { k: "invoice.issue", id: U(5), jobId: U(4), customerId: U(1), kind: "final", title: "F", totalCents: 100 }),
+      q("P", { k: "payment.record", id: U(6), invoiceId: U(5), customerId: U(1), amountCents: 100, method: "cash" }),
+      q("P2", { k: "payment.record", id: U(7), invoiceId: U(5), customerId: U(1), amountCents: 50, method: "cash" }),
+    );
+    const r = await start();
+    expect(v(r).stuckOps).toEqual([
+      expect.objectContaining({ id: "C", leaving: 4, leavingKinds: [{ key: "sync.kind.job", n: 1 }, { key: "sync.kind.money", n: 3 }], leavingMoney: true }),
+    ]);
+  });
+  it("a stuck payment alone: money, though nothing else leaves", async () => {
+    seedOutbox(q("P", { k: "payment.record", id: U(6), invoiceId: U(5), customerId: U(1), amountCents: 100, method: "cash" }, { stuck: true, fails: 3, failSince: AGO }));
+    const r = await start();
+    expect(v(r).stuckOps).toEqual([expect.objectContaining({ id: "P", leaving: 0, leavingKinds: [], leavingMoney: true })]);
   });
   it("a stuck change of a client discarded: its new job, invoice and payment stay and go (review #259 п.2)", async () => {
     seedOutbox(
