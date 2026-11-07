@@ -78,6 +78,9 @@ export const motion = {
   /** Reanimated spring roughly equal to the CSS spring curve above. */
   spring: { damping: 16, stiffness: 220, mass: 0.9 },
   toastUndoMs: 5000,
+  /** app-only: «Отменить» on a toast ignores taps this long after it shows — the second tap of a double tap
+   *  must not undo what the first one made (reduced motion shows the toast at once, under the finger) */
+  toastArmMs: 300,
   /** app-only (spec 24 A4): delay between columns / bars growing one after another */
   chartStagger: 40,
 } as const;

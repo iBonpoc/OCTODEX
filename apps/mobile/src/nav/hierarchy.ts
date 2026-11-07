@@ -28,7 +28,9 @@ const X = (text: string, fallback: DictKey): Label => (text ? { text } : { key: 
 type P = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
-export function navContext(pathname: string, params: P, db: DB, role: Role): NavContext {
+/** `appOpen` — signed in and the current Terms accepted: the app's own parents can be offered (the legal texts, review
+ *  #274); before that (sign-in, sign-up, the consent gate, an invitation) the screen's own «back» returns there. */
+export function navContext(pathname: string, params: P, db: DB, role: Role, opts: { appOpen?: boolean } = {}): NavContext {
   const seg = pathname.split("?")[0]!.split("/").filter(Boolean);
   const [a, b] = seg;
   const id = b ?? "";
@@ -59,6 +61,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
     case "estimates":
       return { section: "estimates" };
     case "estimate": {
+      // «Моя подпись» lives under «Мои настройки», it is not an estimate with the id «signature» (LOG п.15)
+      if (id === "signature") return { section: "settings", kind: "est.sig.title", up: { href: "/settings", label: K("nav.mySettings") } };
       if (id === "new") {
         const lid = one(params.leadId);
         const cid = one(params.customerId);
@@ -145,11 +149,25 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
     case "figures":
       // a number opened from "Today": back goes to Today, whatever tab the role has
       return { section: "home", up: { href: "/today", label: K("today.title") } };
+    case "messages":
+      // a conversation sits under «Сообщения» (LOG п.16: after a reload there was no way back); the list is a tab root
+      return id ? { section: "messages", kind: "w6.msg.thread", up: { href: "/messages", label: K("nav.messages") } } : {};
+    case "settings":
+      // «Удалить аккаунт» goes back to «Мои настройки», not to «Ещё» (LOG п.17)
+      if (id) return { section: "settings", kind: "acct.title", up: { href: "/settings", label: K("nav.mySettings") } };
+      return { section: a };
+    case "legal":
+      // opened from sign-in, the consent gate or an invitation: back to it, not to «Помощь» (review #274)
+      if (opts.appOpen === false) return {};
+      // the legal texts are opened from «Помощь и поддержка» (LOG п.17)
+      return { section: "help", kind: id === "privacy" ? "legal.privacy.title" : id === "terms" ? "legal.terms.title" : "support.documents", up: { href: "/help", label: K("support.title") } };
     case "jobs":
+    case "calls":
+    case "tasks":
+    case "help":
     case "payments":
     case "money":
     case "team":
-    case "settings":
       // ☰ roots (13а §3): no «up» — the header has ☰ on the left, like a tab
       return { section: a };
     case "today":
@@ -162,7 +180,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role): Nav
       // the Sales lists: a ☰ root (sales: its home)
       return a === roleHome[role] ? {} : { section: sectionOfRoute(a) };
     default:
-      // tabs (plan, messages, calls, clients), the client page /p, auth: no "up"
+      // tabs (plan, messages, clients), the client page /p, auth: no "up"
       return {};
   }
 }
