@@ -132,7 +132,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
     case "company":
       // the last crumb is the section itself («Адрес и часовой пояс», «Расписание»), not «Настройки компании» again
       return id
-        ? { section: "company", kind: SETUP_STEPS.includes(id as SetupStep) ? stepTitle(id as SetupStep) : id === "schedule" ? "schs.title" : "co.title", up: { href: "/company", label: K("co.title") } }
+        ? { section: "company", kind: SETUP_STEPS.includes(id as SetupStep) ? stepTitle(id as SetupStep) : id === "schedule" ? "schs.title" : id === "leads" ? "co.leads.title" : "co.title", up: { href: "/company", label: K("co.title") } }
         : { section: "company" };
     case "reports":
       // «Ещё» → Отчёты: the list is a root, a report goes up to it

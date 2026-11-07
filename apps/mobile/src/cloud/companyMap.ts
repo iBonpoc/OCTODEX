@@ -33,6 +33,7 @@ export function companyFromDb(r: Row, ein: string | undefined, licenses: Row[], 
     insurance: contract.insurance ?? {},
     cancelEmail: contract.cancel_email,
     leadSettings: (r.lead_settings as Company["leadSettings"] | null) ?? undefined,
+    leadDefaultAssigneeId: opt(r.lead_default_assignee_id) ?? null,
     scheduleSettings: (r.schedule_settings as Company["scheduleSettings"] | null) ?? undefined,
     businessHours: (r.business_hours as Company["businessHours"] | null) ?? undefined,
     estimate: { validDays: est.valid_days ?? 7, depositBps: est.deposit_bps === undefined ? 1000 : est.deposit_bps, terms: est.terms },
@@ -79,6 +80,8 @@ export function companyToDb(c: Company, stored: Row, tzChanged?: boolean) {
     estimate_settings: { ...((stored.estimate_settings as Row) ?? {}), valid_days: c.estimate.validDays, deposit_bps: c.estimate.depositBps, terms: n(c.estimate.terms) },
     payment_settings: { ...((stored.payment_settings as Row) ?? {}), zelle: n(c.payment.zelle), check_payable_to: n(c.payment.checkPayableTo) },
     onboarding_state: { ...((stored.onboarding_state as Row) ?? {}), skipped: c.skipped },
+    // whom new leads go to: null = the owner; absent (an older build's queued op, an old cache) leaves the stored one
+    ...(c.leadDefaultAssigneeId !== undefined ? { lead_default_assignee_id: c.leadDefaultAssigneeId } : {}),
     lead_settings: { ...((stored.lead_settings as Row) ?? {}), ...(c.leadSettings ?? {}) },
     schedule_settings: { ...((stored.schedule_settings as Row) ?? {}), ...(c.scheduleSettings ?? {}) },
     // hours: the days the phone has win, the stored ones stay; no hours on the phone — the stored ones stay (null = defaults)
