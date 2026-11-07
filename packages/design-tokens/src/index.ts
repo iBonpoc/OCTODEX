@@ -108,6 +108,8 @@ export const component = {
   /* ---- app-only tokens (not in the DS css yet; same style, keep here so components never use raw numbers) ---- */
   /** company logo stored size, px (image processing) */
   logoPx: 256,
+  /** «Ещё» on 820/1280: one column of menu rows, not wider than the palette (spec 25) */
+  menuListMax: 560,
   /** compact row (lines of an estimate, small lists) */
   rowCompact: 32,
   /** signature pad, receipt photo */

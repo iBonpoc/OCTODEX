@@ -2,11 +2,11 @@ import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
-import { canMarkNoService, clientHistory, clientMoneyOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
+import { canMarkNoService, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
-import { invoiceSigns } from "@/features/listSigns";
 import { useI18n } from "@/i18n";
-import { Button, ChoiceChips, IconButton, MultiChips, TextField } from "@/ui/controls";
+import { Button, IconButton, TextField } from "@/ui/controls";
+import { FilterBar, FilterRow } from "@/ui/filterBar";
 import { CardList, Empty, ListRow, Screen } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -70,8 +70,8 @@ export default function Clients() {
     const st = statusOf(c);
     const open = db.estimates.filter((e) => e.customerId === c.id && e.status === "sent").length;
     const last = clientHistory(db, c.id, role)[0];
-    // computed sign (map §5): the worst overdue invoice of the client
-    const overdue = office ? db.invoices.filter((i) => i.customerId === c.id).flatMap((i) => invoiceSigns(i)).filter((x) => x.key === "card.sign.overdueDays") : [];
+    // computed sign: how much is overdue and how long — the oldest invoice (founder 07.11)
+    const overdue = office ? clientOverdueOf(db, c.id) : null;
     const addr = props[0] ? `${props[0].address}, ${props[0].city}` : undefined;
     return (
       <ListCard
@@ -83,7 +83,7 @@ export default function Clients() {
         valueLabel={figure ? t(figure.label) : undefined}
         // an active client has no chip (spec 06 §5); prospects, archive, «do not service» do — tappable when it can change
         status={st !== "active" ? { tone: clientStatusChip[st].s, label: t(clientStatusChip[st].l), onPress: office && canChangeStatus("customer", st) ? () => setPicking(c) : undefined } : undefined}
-        signs={overdue.length ? [{ tone: "bad", label: t("card.sign.overdueDays", { d: Math.max(...overdue.map((x) => x.params?.d ?? 0)) }) }] : undefined}
+        signs={overdue ? [{ tone: "bad", label: t("fix.client.overdue", { amount: moneyFmt(overdue.cents), d: overdue.days }) }] : undefined}
         tags={[...tagsOf(db, c).slice(0, 3).map((x) => tagLabel(x, t)), ...(open > 0 ? [t("card.tag.estimateSent", { n: open })] : [])]}
         facts={{
           num: c.number,
@@ -109,18 +109,31 @@ export default function Clients() {
       right={office ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
     >
       <TextField type="search" value={q} onChangeText={setQ} placeholder={t("clients.search")} icon="search" />
-      <ChoiceChips<Filter>
+      {/* founder 07.11: one row of filters — empty ones hidden, tags behind «Фильтры» (rows in a sheet) */}
+      <FilterBar<Filter>
         value={tab}
         onChange={setTab}
-        items={filters.map((f) => ({ key: f, label: `${t(`clients.f.${f}`)} · ${count(f)}` }))}
+        items={filters.map((f) => ({ key: f, label: t(`clients.f.${f}`), count: count(f) }))}
+        more={
+          db.tags.some((x) => x.active)
+            ? {
+                active: tagIds.length,
+                onReset: () => setTagIds([]),
+                children: db.tags
+                  .filter((x) => x.active)
+                  .sort((a, b) => a.position - b.position)
+                  .map((x) => (
+                    <FilterRow
+                      key={x.id}
+                      label={tagLabel(x, t)}
+                      on={tagIds.includes(x.id)}
+                      onToggle={() => setTagIds(tagIds.includes(x.id) ? tagIds.filter((y) => y !== x.id) : [...tagIds, x.id])}
+                    />
+                  )),
+              }
+            : undefined
+        }
       />
-      {db.tags.some((x) => x.active) ? (
-        <MultiChips<string>
-          value={tagIds}
-          onChange={setTagIds}
-          items={db.tags.filter((x) => x.active).sort((a, b) => a.position - b.position).map((x) => ({ key: x.id, label: tagLabel(x, t) }))}
-        />
-      ) : null}
       {list.length === 0 ? (
         <Empty
           icon="search"

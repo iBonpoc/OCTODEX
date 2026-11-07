@@ -1,87 +1,147 @@
+import { Fragment } from "react";
 import { View } from "react-native";
-import { component, layout, radius, size, space } from "@octo/design-tokens";
+import { component, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useAuth } from "@/cloud/auth";
-import { useI18n } from "@/i18n";
+import { useI18n, type DictKey } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
-import { GROUP_TITLE, useContentWidth } from "@/nav/NavMenu";
+import { GROUP_TITLE } from "@/nav/NavMenu";
 import { openSection } from "@/nav/go";
-import { menuGroups, sectionHref, type Section } from "@/nav/sections";
+import { menuGroups, sectionHref, type Section, type SectionId } from "@/nav/sections";
 import { syncState } from "@/nav/shell";
+import { moreCounts } from "@/features/moreCounts";
+import { useTick } from "@/features/sheets";
 import { Avatar, StatusChip } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
-import { Card, Screen, SectionTitle, SyncBadge } from "@/ui/surfaces";
+import { Card, Divider, Screen, SyncBadge } from "@/ui/surfaces";
+
+/** the director's «Команда · Настройки компании» get their own group «Компания» (spec 25); sections.ts is not changed */
+const COMPANY: ReadonlySet<SectionId> = new Set<SectionId>(["team", "company"]);
 
 /**
- * «Ещё» — the fifth tab (founder 06.11, variant Б; docs/specs/13 v2 §2.1, §2.3): the profile card with the connection
- * status on top, then the tiles of every section by group and by rights (sections.ts menuGroups — the tabs are not
- * repeated). Replaces the ☰ drawer on the phone. On 820/1280 the same sections are in the side menu; /more still works.
+ * «Ещё» — the fifth tab (founder 06.11, variant Б; docs/specs/13 v2 §2.3). Founder 07.11 «очень некрасивое меню» →
+ * spec 25: grouped ROWS like iOS «Настройки» (as the «Наряд» prototype and rule 12: choice menus are rows), not tiles.
+ * Row = icon · word · counter · chevron, 44 high. Counters from moreCounts (the same numbers as «Требует внимания»).
+ * «Онлайн · всё сохранено» is quiet (no colour); colour only when there is something to say (SyncBadge).
+ * On 820/1280 the same list in one column (component.menuListMax), like the side menu.
  */
 export default function More() {
   const { t } = useI18n();
   const { c } = useTheme();
   const { wide } = useDevice();
+  useTick();
   const { db, role, mode, companyName, online, queue } = useStore();
   const auth = useAuth();
   const me = db.members.find((m) => m.id === db.me);
   const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
-  const cols = wide ? 4 : 2;
-  const contentW = Math.min(useContentWidth(), layout.contentMax);
-  const tileW = Math.floor((contentW - space[4] * 2 - space[2] * (cols - 1)) / cols);
+  const counts = moreCounts(db, role);
   // on 820/1280 the side menu has the tabs too; here only what is not a tab
-  const groups = menuGroups(role, false);
-  const tile = (s: Section) => (
-    <Press
-      key={s.id}
-      testID={`more-${s.id}`}
-      onPress={() => openSection(sectionHref(s.id, role))}
-      visibleHeight={size.rowMax}
-      accessibilityRole="button"
-      accessibilityLabel={t(s.label)}
-      style={{ width: tileW, minHeight: size.rowMax, padding: space[3], gap: space[2], borderRadius: radius.inner, borderWidth: component.hairline, borderColor: c.bd, backgroundColor: c.surf }}
-    >
-      <View style={{ width: component.dockBtn, height: component.dockBtn, borderRadius: radius.pill, backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
-        <Icon name={s.icon} s={size.iconMd} color={c.ink} />
-      </View>
-      <T v="body" w="semibold" numberOfLines={2}>
-        {t(s.label)}
-      </T>
-    </Press>
-  );
+  const groups: { key: string; title?: DictKey; items: Section[] }[] = menuGroups(role, false)
+    .flatMap((g) =>
+      g.group === "bottom"
+        ? [
+            { key: "company", title: "fix.more.groupCompany" as DictKey, items: g.items.filter((s) => COMPANY.has(s.id)) },
+            { key: "bottom", title: undefined, items: g.items.filter((s) => !COMPANY.has(s.id)) },
+          ]
+        : [{ key: g.group as string, title: GROUP_TITLE[g.group], items: g.items }],
+    )
+    .filter((g) => g.items.length > 0);
+
+  const row = (s: Section) => {
+    const n = counts[s.id];
+    const count = n ? t(n.label, { n: n.n }) : undefined;
+    return (
+      <Press
+        testID={`more-${s.id}`}
+        onPress={() => openSection(sectionHref(s.id, role))}
+        visibleHeight={size.rowMin}
+        accessibilityRole="button"
+        // the name is exactly the word (e2e and VoiceOver find rows by it); the counter is the hint
+        accessibilityLabel={t(s.label)}
+        accessibilityHint={count}
+        style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: size.rowMin, paddingHorizontal: space[4] }}
+      >
+        <View style={{ width: component.avatar.sm, alignItems: "center" }}>
+          <Icon name={s.icon} s={size.iconMd} color={c.ink} />
+        </View>
+        <T v="body" style={{ flex: 1 }} numberOfLines={1}>
+          {t(s.label)}
+        </T>
+        {n && count ? (
+          n.bad ? (
+            <StatusChip status="bad" label={count} soft />
+          ) : (
+            <T v="caption" tone="mut" tabular>
+              {count}
+            </T>
+          )
+        ) : null}
+        <Icon name="chevronRight" s={size.iconSm} color={c.mut} />
+      </Press>
+    );
+  };
+
   return (
-    <Screen title={t("nav.more")} subtitle={t("nav.more.hint")}>
-      <View testID="more-screen" style={{ gap: space[3] }}>
-      {/* profile and the connection status (13 §2.3, like Jobber) */}
-      <Card>
-        <Press
-          testID="more-profile"
-          onPress={() => openSection(sectionHref("settings", role))}
-          visibleHeight={size.rowMax}
-          accessibilityRole="button"
-          accessibilityLabel={`${me?.name ?? auth.email ?? ""} · ${who}`}
-          style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: size.rowMax }}
-        >
-          <Avatar initials={me?.initials ?? "··"} />
-          <View style={{ flex: 1, gap: space[1] }}>
-            <T v="body" w="semibold" numberOfLines={1}>
-              {me?.name ?? auth.email ?? t("settings.title")}
-            </T>
-            <T v="caption" tone="mut" numberOfLines={1}>
-              {who}
-            </T>
+    <Screen title={t("nav.more")}>
+      <View testID="more-screen" style={{ gap: space[4], width: "100%", maxWidth: wide ? component.menuListMax : undefined }}>
+        {/* profile and the connection status (13 §2.3, like Jobber) */}
+        <Card>
+          <Press
+            testID="more-profile"
+            onPress={() => openSection(sectionHref("settings", role))}
+            visibleHeight={size.rowMax}
+            accessibilityRole="button"
+            accessibilityLabel={`${me?.name ?? auth.email ?? ""} · ${who}`}
+            style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: size.rowMax }}
+          >
+            <Avatar initials={me?.initials ?? "··"} />
+            <View style={{ flex: 1, gap: space[1] }}>
+              <T v="body" w="semibold" numberOfLines={1}>
+                {me?.name ?? auth.email ?? t("settings.title")}
+              </T>
+              <T v="caption" tone="mut" numberOfLines={1}>
+                {who}
+              </T>
+            </View>
+            <Icon name="chevronRight" s={size.iconSm} color={c.mut} />
+          </Press>
+          <View testID="more-sync" style={{ marginTop: space[2] }}>
+            {syncState(online, queue.length) ? (
+              <SyncBadge />
+            ) : (
+              // all is well — quiet, no colour (rule 2: colour is for a status that asks for something)
+              <View style={{ flexDirection: "row", alignItems: "center", gap: space[1] }} accessible accessibilityLabel={t("nav.more.online")}>
+                <Icon name="check" s={size.iconSm} color={c.mut} />
+                <T v="caption" tone="mut">
+                  {t("nav.more.online")}
+                </T>
+              </View>
+            )}
           </View>
-          <Icon name="chevronRight" s={size.iconSm} color={c.mut} />
-        </Press>
-        <View testID="more-sync" style={{ marginTop: space[2] }}>
-          {syncState(online, queue.length) ? <SyncBadge /> : <StatusChip status="ok" label={t("nav.more.online")} />}
-        </View>
-      </Card>
-      {groups.map((g) => (
-        <View key={g.group} testID={`more-group-${g.group}`} style={{ gap: space[2] }}>
-          {GROUP_TITLE[g.group] ? <SectionTitle title={t(GROUP_TITLE[g.group]!)} /> : null}
-          <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>{g.items.map(tile)}</View>
-        </View>
-      ))}
+        </Card>
+        {groups.map((g) => (
+          <View key={g.key} testID={`more-group-${g.key}`} style={{ gap: space[1] }}>
+            {g.title ? (
+              <View accessibilityRole="header" style={{ paddingHorizontal: space[4] }}>
+                <T v="caption" w="semibold" tone="mut">
+                  {t(g.title)}
+                </T>
+              </View>
+            ) : null}
+            <Card style={{ paddingHorizontal: 0, paddingVertical: space[1], gap: 0 }}>
+              {g.items.map((s, i) => (
+                <Fragment key={s.id}>
+                  {i > 0 ? (
+                    <View style={{ marginLeft: space[4] + component.avatar.sm + space[3] }}>
+                      <Divider />
+                    </View>
+                  ) : null}
+                  {row(s)}
+                </Fragment>
+              ))}
+            </Card>
+          </View>
+        ))}
       </View>
     </Screen>
   );

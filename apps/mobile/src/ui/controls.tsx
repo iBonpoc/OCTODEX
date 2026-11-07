@@ -548,7 +548,9 @@ export function ChoiceChips<K extends string>({
             onPress={() => onChange(it.key)}
             visibleHeight={h}
             accessibilityRole="radio"
-            accessibilityState={{ selected: sel }}
+            // web: a radio is read by aria-checked, not aria-selected (BOARD debt «Работы» №3)
+            accessibilityState={{ selected: sel, checked: sel }}
+            {...({ "aria-checked": sel } as object)}
             accessibilityLabel={it.label}
             style={{
               height: h,
