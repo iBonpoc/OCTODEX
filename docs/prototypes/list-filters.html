@@ -1,0 +1,249 @@
+<title>Фильтры списков OCTODEX</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap">
+<style>
+/* Макет спеки 31: сверху панель (экран, ширина, тема); ниже — «до» (снимок main #288) и «после» рядом.
+   Значения — токены «Наряда» (design/naryad-ds/tokens/*.css), как в list-cards.html. */
+:root{
+  --acc:#FBFF00;--on-acc:#0B0C0F;--font:'Onest',system-ui,-apple-system,'Segoe UI',sans-serif;
+  --r:24px;--ri:18px;--rf:12px;
+  --fs-display:28px;--fs-title:20px;--fs-heading:15px;--fs-body:13px;--fs-btn:12.5px;--fs-caption:11.5px;
+  --s1:4px;--s2:8px;--s3:12px;--s4:16px;--s5:20px;--s6:24px;--s8:32px;
+  --c-sm:28px;--c-md:32px;--c-lg:36px;--hit:44px;--field-phone:44px;--field:34px;--row-opt:48px;--panel-w:360px;--edge:3px;--avatar:36px;
+  --st-ok:#7CE08A;--st-info:#8FA2FF;--st-warn:#FF8A3D;--st-bad:#FF6B6B;--st-on:#0B0C0F;--scrim:rgba(0,0,0,.42);
+  --page:#DDD9D2;--bg:#EFEBE5;--ink:#15161A;--mut:#575C68;--surf:rgba(255,255,255,.62);--surf2:rgba(255,255,255,.85);--in:rgba(255,255,255,.55);
+  --bd:rgba(20,22,30,.1);--sh:0 10px 28px rgba(60,50,40,.12);--ov:rgba(250,248,244,.94);
+  --st-ok-t:#176428;--st-info-t:#3647C4;--st-warn-t:#944600;--st-bad-t:#B4232A;
+  --mark:#B4232A;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.97);
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;--mark:#FFAAAA;color-scheme:dark}}
+:root[data-theme="dark"]{
+  --page:#181A1E;--bg:#24272D;--ink:#F2F3F5;--mut:#CDD1DA;--surf:rgba(255,255,255,.07);--surf2:rgba(255,255,255,.11);--in:rgba(255,255,255,.05);
+  --bd:rgba(255,255,255,.14);--sh:0 10px 30px rgba(0,0,0,.3);--ov:rgba(38,41,48,.97);
+  --st-ok-t:#9CF0A8;--st-info-t:#C2CCFF;--st-warn-t:#FFB47E;--st-bad-t:#FFAAAA;--mark:#FFAAAA;color-scheme:dark}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font:400 var(--fs-body)/1.4 var(--font);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:var(--s6)}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--ink);outline-offset:2px}
+.wrap{max-width:1500px;margin:0 auto;display:grid;gap:var(--s5)}
+h1{font-size:var(--fs-display);margin:0;text-wrap:balance}
+.lede{color:var(--mut);max-width:70ch;margin:var(--s2) 0 0}
+.bar{display:flex;flex-wrap:wrap;gap:var(--s3);align-items:center}
+.seg{display:inline-flex;background:var(--surf);border:1px solid var(--bd);border-radius:999px;padding:3px;gap:2px}
+.seg button{border:0;background:none;border-radius:999px;min-height:var(--c-md);padding:0 var(--s3);cursor:pointer;font-weight:500}
+.seg button[aria-pressed="true"]{background:var(--surf2);box-shadow:inset 0 0 0 2px var(--ink);font-weight:700}
+.lbl{font-size:var(--fs-caption);color:var(--mut);letter-spacing:.04em;text-transform:uppercase;margin-right:var(--s1)}
+.cols{display:grid;gap:var(--s5);grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start}
+.col{min-width:0;display:grid;gap:var(--s2)}
+.col h2{font-size:var(--fs-heading);margin:0;display:flex;gap:var(--s2);align-items:baseline;flex-wrap:wrap}
+.col h2 small{font-weight:400;color:var(--mut);font-size:var(--fs-caption)}
+.stage{overflow-x:auto;border-radius:var(--r)}
+.shot{display:block;border-radius:var(--r);border:1px solid var(--bd)}
+.shot.w390{width:390px;max-width:100%}
+.shot.w1280{width:100%;min-width:640px}
+.note{background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) var(--s4);color:var(--mut)}
+.note b{color:var(--ink)}
+.notes{display:grid;gap:var(--s2);grid-template-columns:repeat(auto-fit,minmax(min(100%,280px),1fr))}
+
+/* ---------- макет приложения ---------- */
+.dev{background:var(--bg);border:1px solid var(--bd);border-radius:var(--r);position:relative;overflow:hidden;color:var(--ink)}
+.dev.p390{width:390px;max-width:100%;height:844px}
+.dev.p1280{width:1280px;min-width:1280px;height:640px;display:grid;grid-template-columns:72px 1fr}
+.side{border-right:1px solid var(--bd);display:flex;flex-direction:column;align-items:center;gap:var(--s4);padding-top:var(--s4);font-size:10px;color:var(--mut)}
+.side i{display:block;width:var(--c-lg);height:var(--c-lg);border-radius:999px;background:var(--acc)}
+.side span{display:block;width:22px;height:22px;border-radius:6px;border:1.5px solid var(--mut);opacity:.6}
+.scr{padding:var(--s4);display:flex;flex-direction:column;gap:var(--s3);height:100%;overflow:hidden}
+.ver{font-size:var(--fs-caption);color:var(--mut)}
+.head{display:flex;justify-content:space-between;align-items:center;gap:var(--s2)}
+.title{font-size:var(--fs-display);font-weight:700;display:flex;align-items:center;gap:6px}
+.title .dd{font-size:var(--fs-heading);color:var(--mut)}
+.btn{height:var(--c-lg);border-radius:999px;border:1px solid var(--bd);background:var(--surf2);padding:0 var(--s3);display:inline-flex;align-items:center;gap:6px;font-weight:600;font-size:var(--fs-btn);white-space:nowrap;cursor:pointer}
+.p1280 .btn{height:var(--c-md)}
+.btn.on{box-shadow:inset 0 0 0 2px var(--ink)}
+.row1{display:flex;gap:var(--s2);align-items:center}
+.search{flex:1;min-width:0;height:var(--field-phone);border-radius:var(--rf);border:1px solid var(--bd);background:var(--in);display:flex;align-items:center;gap:var(--s2);padding:0 var(--s3);color:var(--mut)}
+.p1280 .search{flex:0 0 var(--panel-w);height:var(--c-md)}
+.fbtn{width:var(--field-phone);height:var(--field-phone);border-radius:var(--rf);border:1px solid var(--bd);background:var(--surf2);display:grid;place-items:center;position:relative;cursor:pointer;flex:none}
+.fbtn.on{box-shadow:inset 0 0 0 2px var(--ink)}
+.fbtn b{position:absolute;top:-6px;right:-6px;min-width:20px;height:20px;border-radius:999px;background:var(--ink);color:var(--bg);font-size:var(--fs-caption);display:grid;place-items:center;padding:0 5px}
+.lane{display:flex;gap:var(--s2);overflow-x:auto;scrollbar-width:none;padding:2px 0;margin-right:calc(-1 * var(--s4))}
+.p1280 .lane{margin:0;overflow:visible}
+.chip{flex:none;height:var(--c-md);border-radius:999px;border:1px solid var(--bd);background:var(--surf2);padding:0 var(--s3);display:inline-flex;align-items:center;font-size:var(--fs-btn);font-weight:500;white-space:nowrap;cursor:pointer}
+.p1280 .chip{height:var(--c-sm)}
+.chip[aria-checked="true"]{border:2px solid var(--ink);font-weight:700}
+.chip .n{color:var(--mut);margin-left:5px;font-variant-numeric:tabular-nums}
+.chosen{display:flex;gap:var(--s2);flex-wrap:wrap;align-items:center;font-size:var(--fs-btn)}
+.tag{height:var(--c-sm);border-radius:999px;background:var(--surf2);border:1px solid var(--bd);padding:0 4px 0 var(--s3);display:inline-flex;align-items:center;gap:4px;font-weight:600}
+.tag button{border:0;background:none;width:24px;height:24px;border-radius:999px;cursor:pointer;color:var(--mut)}
+.reset{border:0;background:none;text-decoration:underline;color:var(--mut);cursor:pointer;min-height:var(--c-sm)}
+.sub{font-size:var(--fs-caption);font-weight:600;color:var(--mut)}
+.list{display:flex;flex-direction:column;gap:var(--s2)}
+.card{background:var(--surf);border:1px solid var(--bd);border-radius:var(--ri);padding:var(--s3) var(--s4);position:relative;display:grid;gap:6px}
+.card.warn::before,.card.bad::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:var(--edge);border-radius:2px}
+.card.warn::before{background:var(--st-warn)}.card.bad::before{background:var(--st-bad)}
+.ch{display:flex;gap:var(--s3);align-items:center}
+.av{width:var(--avatar);height:var(--avatar);border-radius:999px;border:1px solid var(--bd);display:grid;place-items:center;font-size:var(--fs-caption);font-weight:600;flex:none}
+.nm{font-weight:600;font-size:var(--fs-heading);flex:1;min-width:0}
+.amt{font-weight:600;font-variant-numeric:tabular-nums}
+.st{display:inline-flex;gap:4px;align-items:center;font-size:var(--fs-caption);font-weight:600;border-radius:999px;padding:2px 8px;width:max-content}
+.st.info{background:var(--st-info);color:var(--st-on)}.st.ok{background:var(--st-ok);color:var(--st-on)}.st.neutral{background:var(--surf2);border:1px solid var(--bd)}
+.sign{font-size:var(--fs-caption);font-weight:600;border:1px solid currentColor;border-radius:999px;padding:1px 8px;width:max-content}
+.sign.bad{color:var(--st-bad-t)}.sign.warn{color:var(--st-warn-t)}
+.facts{color:var(--mut);display:flex;gap:var(--s3);flex-wrap:wrap}
+.p1280 .card{grid-template-columns:var(--avatar) 220px 1fr 1fr 120px;align-items:center;padding:var(--s2) var(--s4);gap:var(--s3)}
+.p1280 .card .ch{display:contents}
+.p1280 .card .facts{display:contents}
+.tabbar{position:absolute;left:var(--s3);right:var(--s3);bottom:var(--s3);height:64px;border-radius:999px;background:var(--ov);border:1px solid var(--bd);display:flex;justify-content:space-around;align-items:center;font-size:var(--fs-caption);color:var(--mut)}
+.fold{position:absolute;left:0;right:0;border-top:2px dashed var(--mark);font-size:var(--fs-caption);color:var(--mark);font-weight:700;padding-left:6px;pointer-events:none}
+/* шторка */
+.scrim{position:absolute;inset:0;background:var(--scrim)}
+.sheet{position:absolute;left:0;right:0;bottom:0;background:var(--ov);border-radius:var(--r) var(--r) 0 0;padding:var(--s4);display:grid;gap:var(--s2);max-height:78%;overflow:auto;box-shadow:var(--sh)}
+.p1280 .sheet{left:auto;right:auto;bottom:auto;top:120px;width:280px;border-radius:var(--ri);margin-left:540px}
+.sheet h3{margin:0;font-size:var(--fs-title)}
+.grp{font-size:var(--fs-caption);color:var(--mut);text-transform:uppercase;letter-spacing:.05em;margin-top:var(--s2)}
+.opt{min-height:var(--row-opt);display:flex;align-items:center;gap:var(--s3);border-bottom:1px solid var(--bd);cursor:pointer}
+.box{width:20px;height:20px;border-radius:5px;border:2px solid var(--mut);display:grid;place-items:center;font-size:12px;flex:none}
+.opt.on .box{background:var(--ink);border-color:var(--ink);color:var(--bg)}
+.opt .n{margin-left:auto;color:var(--mut);font-variant-numeric:tabular-nums}
+.opt.zero{color:var(--mut)}
+.sheet .acts{display:flex;gap:var(--s2);margin-top:var(--s2)}
+@media (prefers-reduced-motion:no-preference){.sheet{animation:up .22s cubic-bezier(.3,1.25,.5,1)}@keyframes up{from{transform:translateY(24px);opacity:.6}}}
+</style>
+
+<div class="wrap">
+  <header>
+    <h1>Фильтры над списками: до и после</h1>
+    <p class="lede">Спека 31, вариант Б. Над списком не больше двух рядов: поиск с кнопкой «Фильтр» и одна лента статусов. Чипов с нулём нет. Источник, ответственный, мастер и сортировка лежат в шторке «Фильтр», а выбранное показано строкой с ✕. Слева снимок нынешней сборки main #288, справа макет. Пунктир отмечает, где начинается первая карточка.</p>
+  </header>
+
+  <div class="bar" role="toolbar" aria-label="Что показать">
+    <span class="lbl">Экран</span>
+    <div class="seg" id="scr"><button aria-pressed="true" data-v="leads">Лиды</button><button aria-pressed="false" data-v="estimates">Сметы</button><button aria-pressed="false" data-v="jobs">Работы</button></div>
+    <span class="lbl">Ширина</span>
+    <div class="seg" id="wid"><button aria-pressed="true" data-v="390">Телефон 390</button><button aria-pressed="false" data-v="1280">Компьютер 1280</button></div>
+    <span class="lbl">Тема</span>
+    <div class="seg" id="thm"><button aria-pressed="false" data-v="light">Светлая</button><button aria-pressed="true" data-v="dark">Тёмная</button></div>
+    <span class="lbl">Состояние</span>
+    <div class="seg" id="st"><button aria-pressed="true" data-v="rest">Как открыл</button><button aria-pressed="false" data-v="chosen">Выбран фильтр</button><button aria-pressed="false" data-v="sheet">Шторка открыта</button></div>
+  </div>
+
+  <div class="cols">
+    <section class="col">
+      <h2>До <small id="beforeNote"></small></h2>
+      <div class="stage"><img id="before" class="shot w390" alt="Снимок экрана до"></div>
+    </section>
+    <section class="col">
+      <h2>После <small id="afterNote"></small></h2>
+      <div class="stage" id="after"></div>
+    </section>
+  </div>
+
+  <div class="notes">
+    <div class="note"><b>Ряд 1.</b> Поиск есть на каждом списке, у смет и работ он новый. Справа кнопка «Фильтр». Когда что-то выбрано, на ней рамка и число.</div>
+    <div class="note"><b>Ряд 2.</b> Одна лента статусов с числами, на новые строки не переносится. Чипа с нулём нет, кроме выбранного. Цвета у чипов нет, жёлтый на экране только «＋».</div>
+    <div class="note"><b>Шторка.</b> Группы строками: источник, ответственный, мастер, сортировка. Строка с нулём остаётся, но серая. Внизу кнопки «Сбросить» и «Готово».</div>
+    <div class="note"><b>Память.</b> Статус и фильтры запоминаются на устройстве для каждого списка отдельно. Поиск не запоминается. Ссылка с Главной ставит фильтр только на этот заход.</div>
+    <div class="note"><b>1280.</b> Всё в один ряд: поиск шириной 360, лента целиком, справа «Источник ▾» и «Ответственный ▾». Меню показывает те же строки, что шторка.</div>
+    <div class="note"><b>Вопрос основателю.</b> «Лиды · Сметы · Счета» под заголовком «Лидов»: переключатель или «Лиды ▾» в заголовке? В макете «Лиды ▾», это экономит ещё один ряд.</div>
+  </div>
+</div>
+
+<script>
+const D = {
+  leads: {
+    title: "Лиды", menu: true, add: "Новый лид", search: "Имя, телефон, адрес, LEA",
+    lane: [["В работе",5],["Без ответа",2],["Отложенные",0],["Стали клиентами",0],["Закрытые",0],["Все",5]],
+    groups: [["Источник",[["Thumbtack",1],["Yelp",1],["Google",1],["Website",1],["Referral",1],["Facebook",0]]],["Ответственный",[["Мои",5],["Alex Petrov",5]]],["Сортировка",[["Сначала срочные",null],["Новые сверху",null]]]],
+    chosen: ["Google"], before: "6 рядов над списком, нули видны",
+    cards: [["AR","Angela Rossi","bad",["Новый","info"],"Ждёт ответа 22 мин",["LEA-0002","(310) 555-0155","Google"],""],
+            ["KB","Kevin Brooks","",["Новый","info"],"",["LEA-0001","(818) 555-0170","Thumbtack — $45"],""],
+            ["TB","Tom Becker","",["На связи","info"],"",["LEA-0003","(626) 555-0108","Yelp"],""],
+            ["NP","Nina Patel","",["Оценка","info"],"",["LEA-0004","(213) 555-0191","Website"],""]],
+    filtered: [0]
+  },
+  estimates: {
+    title: "Сметы", add: "Новая смета", search: "Клиент, адрес, EST",
+    lane: [["Открытые",3],["Закрытые",3],["Все",6]],
+    groups: [["Ответственный",[["Мои",4],["Alex Petrov",4],["Maria Lopez",2]]],["Сортировка",[["Сначала без ответа",null],["Сумма",null],["Действует до",null]]]],
+    chosen: ["Мои"], before: "поиска нет",
+    cards: [["EP","Emily Park","warn",["Отправлена","info"],"Без ответа 3 дн",["EST-0145","520 W Olive Ave","Fence repair + new gate"],"$2,980"],
+            ["LA","Linda Alvarez","warn",["Отправлена","info"],"Без ответа 6 дн",["EST-0142","Torrance","Carpet removal"],"$2,640"],
+            ["SM","Sarah Mitchell","",["Черновик","neutral"],"",["EST-0147","Pasadena","Bathroom remodel"],"$3,420"]],
+    filtered: [0,2]
+  },
+  jobs: {
+    title: "Работы", add: null, search: "Клиент, адрес, JOB",
+    lane: [["Ждут даты",0],["Запланированы",5],["Идёт работа",0],["Завершены",2],["Все",7]], def: 1,
+    groups: [["Мастер",[["Alex Petrov",4],["Mike Chen",3],["Не назначен",0]]],["Сортировка",[["Ближайший выезд",null],["Сумма",null]]]],
+    chosen: ["Alex Petrov"], before: "поиска нет, «· 0» видны",
+    cards: [["SM","Sarah Mitchell","",["Запланирована","info"],"",["JOB-0031","Pasadena","сб, 7 нояб. · 9:00"],"$3,420"],
+            ["DK","David Kim","",["Запланирована","info"],"",["JOB-0032","Sherman Oaks","пн, 9 нояб. · 8:00"],"$680"],
+            ["JW","James Wong","",["Запланирована","info"],"",["JOB-0029","Glendale","вт, 10 нояб. · 13:00"],"$1,250"]],
+    filtered: [0,2]
+  }
+};
+const S = { scr: "leads", wid: "390", thm: "dark", st: "rest" };
+try { Object.assign(S, JSON.parse(localStorage.getItem("lf31") || "{}")); } catch (e) {}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" })[c]);
+const ico = {
+  search: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>',
+  sliders: '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M4 6h10M18 6h2M4 12h4M12 12h8M4 18h12M20 18h0"/><circle cx="16" cy="6" r="2"/><circle cx="10" cy="12" r="2"/><circle cx="18" cy="18" r="2"/></svg>',
+};
+
+function card(c, wide) {
+  const [av, nm, edge, st, sign, facts, amt] = c;
+  const signHtml = sign ? `<span class="sign ${edge}">${edge === "bad" ? "✕" : "▲"} ${esc(sign)}</span>` : "";
+  if (wide) return `<div class="card ${edge}"><div class="av">${av}</div><div><div class="nm">${esc(nm)}</div><div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px"><span class="st ${st[1]}">${esc(st[0])}</span>${signHtml}</div></div><div class="facts"><span>${esc(facts[0])} · ${esc(facts[1])}</span><span>${esc(facts[2])}</span></div><div class="amt" style="text-align:right">${amt}</div></div>`;
+  return `<div class="card ${edge}"><div class="ch"><div class="av">${av}</div><div class="nm">${esc(nm)}</div>${amt ? `<div class="amt">${amt}</div>` : ""}</div><div style="display:flex;gap:6px;flex-wrap:wrap"><span class="st ${st[1]}">${esc(st[0])}</span>${signHtml}</div><div class="facts">${facts.map(esc).map((f) => `<span>${f}</span>`).join("")}</div></div>`;
+}
+
+function after() {
+  const d = D[S.scr], wide = S.wid === "1280", chosen = S.st !== "rest";
+  const def = d.def ?? 0;
+  const lane = d.lane.map(([l, n], i) => (n === 0 && i !== def) ? "" : `<button class="chip" role="radio" aria-checked="${i === def}">${esc(l)}<span class="n">${n}</span></button>`).join("");
+  const n = chosen ? d.chosen.length : 0;
+  const fbtn = wide
+    ? d.groups.filter(([g]) => g !== "Сортировка").map(([g]) => `<button class="btn ${chosen && d.groups[0][0] === g ? "on" : ""}">${esc(g)}${chosen && d.groups[0][0] === g ? " · 1" : ""} ▾</button>`).join("")
+    : `<button class="fbtn ${n ? "on" : ""}" aria-label="Фильтры, выбрано ${n}">${ico.sliders}${n ? `<b>${n}</b>` : ""}</button>`;
+  const chosenRow = chosen ? `<div class="chosen">${d.chosen.map((c) => `<span class="tag">${esc(c)}<button aria-label="Убрать фильтр: ${esc(c)}">✕</button></span>`).join("")}<button class="reset">Сбросить</button></div>` : "";
+  const cards = (chosen ? d.cards.filter((_, i) => d.filtered.includes(i)) : d.cards).map((c) => card(c, wide)).join("");
+  const sheet = S.st === "sheet" ? `<div class="scrim"></div><div class="sheet" role="dialog" aria-label="Фильтр"><h3>${wide ? esc(d.groups[0][0]) : "Фильтр"}</h3>${(wide ? d.groups.slice(0, 1) : d.groups).map(([g, opts]) => `${wide ? "" : `<div class="grp">${esc(g)}</div>`}${opts.map(([o, c]) => `<div class="opt ${d.chosen.includes(o) ? "on" : ""} ${c === 0 ? "zero" : ""}" role="checkbox" aria-checked="${d.chosen.includes(o)}"><span class="box">${d.chosen.includes(o) ? "✓" : ""}</span>${esc(o)}${c == null ? "" : `<span class="n">${c}</span>`}</div>`).join("")}`).join("")}${wide ? "" : `<div class="acts"><button class="btn">Сбросить</button><button class="btn">Готово</button></div>`}</div>` : "";
+  const head = `<div class="ver">OCTODEX v1.0.0 · макет 31</div><div class="head"><div class="title">${esc(d.title)}${d.menu ? '<span class="dd" aria-label="Сменить список: Сметы, Счета">▾</span>' : ""}</div>${d.add ? `<button class="btn">＋ ${esc(d.add)}</button>` : ""}</div>`;
+  const filters = wide
+    ? `<div class="row1"><div class="search">${ico.search}${esc(d.search)}</div><div class="lane" role="radiogroup" aria-label="Статус">${lane}</div><div style="margin-left:auto;display:flex;gap:8px">${fbtn}</div></div>${chosenRow}`
+    : `<div class="row1"><div class="search">${ico.search}${esc(d.search)}</div>${fbtn}</div><div class="lane" role="radiogroup" aria-label="Статус">${lane}</div>${chosenRow}`;
+  const body = `${head}${filters}<div class="list">${cards}</div>`;
+  const html = wide
+    ? `<div class="dev p1280"><nav class="side"><i></i><span></span><span></span><span></span><span></span><span></span></nav><div class="scr" id="scrIn">${body}</div>${sheet}</div>`
+    : `<div class="dev p390"><div class="scr" id="scrIn">${body}</div><div class="tabbar"><span>Главная</span><span>План</span><span>Сообщения</span><span>Клиенты</span><span>Ещё</span></div>${sheet}</div>`;
+  const host = document.getElementById("after");
+  host.innerHTML = html;
+  // the fold: where the first card starts, in points from the top of the device
+  const devEl = host.querySelector(".dev"), first = host.querySelector(".card");
+  if (devEl && first && S.st !== "sheet") {
+    const y = Math.round(first.getBoundingClientRect().top - devEl.getBoundingClientRect().top);
+    const f = document.createElement("div"); f.className = "fold"; f.style.top = y + "px"; f.textContent = `первая карточка: ${y} pt`;
+    devEl.appendChild(f);
+    document.getElementById("afterNote").textContent = `${wide ? "" : `первая карточка на ${y} pt из 844 · `}рядов над списком: ${wide ? 1 : 2}${chosen ? " + выбранное" : ""}`;
+  } else document.getElementById("afterNote").textContent = wide ? "меню «Источник ▾»" : "шторка «Фильтр»";
+}
+
+function render() {
+  document.documentElement.setAttribute("data-theme", S.thm);
+  for (const id of ["scr", "wid", "thm", "st"]) for (const b of document.querySelectorAll(`#${id} button`)) b.setAttribute("aria-pressed", String(b.dataset.v === S[id]));
+  const img = document.getElementById("before");
+  img.src = `img/31-before-${S.scr}-${S.wid}.png`;
+  img.className = `shot w${S.wid}`;
+  img.alt = `Экран «${D[S.scr].title}» до, ${S.wid} px, тёмная тема`;
+  document.getElementById("beforeNote").textContent = `main #288, тёмная тема · ${D[S.scr].before}`;
+  after();
+  try { localStorage.setItem("lf31", JSON.stringify(S)); } catch (e) {}
+}
+for (const id of ["scr", "wid", "thm", "st"]) document.getElementById(id).addEventListener("click", (e) => { const b = e.target.closest("button"); if (b) { S[id] = b.dataset.v; render(); } });
+render();
+</script>
