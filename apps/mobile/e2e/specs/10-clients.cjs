@@ -1,3 +1,4 @@
+const { listSearch, listSearchClear } = require("../listSearch.cjs");
 /** Clients: new client by hand → active with a property → found by search; filters count; each client a card. */
 exports.run = async (h) => {
   const p = h.page;
@@ -30,13 +31,13 @@ exports.run = async (h) => {
   // List: count +1, search by phone digits and by address.
   await h.go("/clients");
   await h.expectText(new RegExp(`Все · ${active + 1}`), "All count grew");
-  await p.getByPlaceholder("Имя, телефон или адрес").fill("5550199");
+  await listSearch(p, "5550199");
   await p.waitForTimeout(300);
   h.expect((await p.getByRole("button", { name: "Tom Becker" }).count()) === 1, "found by phone");
-  await p.getByPlaceholder("Имя, телефон или адрес").fill("lake ave");
+  await listSearch(p, "lake ave");
   await p.waitForTimeout(300);
   h.expect((await p.getByRole("button", { name: "Tom Becker" }).count()) === 1, "found by address");
-  await p.getByPlaceholder("Имя, телефон или адрес").fill("");
+  await listSearchClear(p);
 
   // Filters: «Должны» lists only clients with a balance; Tom (no invoices) is not there.
   await p.getByText(/^Должны · \d+$/).last().click();

@@ -1,6 +1,6 @@
 /**
  * Which status chips the filter bar shows (founder 07.11 «очень много кнопок сверху», spec: заявка №6).
- * A chip with nothing behind it (count 0) is hidden — except the first one («Все») and the chosen one:
+ * A chip with nothing behind it (count 0) is hidden — except the chosen one:
  * a chosen filter that became empty stays visible, so the person sees why the list is empty and can leave it.
  */
 export interface FilterItem<K extends string> {
@@ -11,7 +11,9 @@ export interface FilterItem<K extends string> {
 }
 
 export function visibleFilters<K extends string>(items: FilterItem<K>[], value: K): FilterItem<K>[] {
-  return items.filter((it, i) => i === 0 || it.key === value || it.count === undefined || it.count > 0);
+  // the chosen one always stays (also «Все · 0» of an empty company); no «first stays» rule: a lane may start with a
+  // status that is empty today (spec 31 §13: «Ждут даты · 0» on «Работы»)
+  return items.filter((it) => it.key === value || it.count === undefined || it.count > 0);
 }
 
 /** label on the chip: «Должны · 2»; without a count — just the word */
@@ -44,3 +46,20 @@ export const activeFilterCount = (groups: readonly FilterGroup[]): number => cho
 
 /** where a list keeps its filters on this device, until «Сбросить» (spec 31 §6 п.7); the search is not kept */
 export const filterStoreKey = (list: string): string => `octo.filter.${list}.v1`;
+
+/* ---------- the search as an icon (founder 07.11, spec 31 §6 п.2а) ---------- */
+
+/** closed — the magnifier; open — the field with focus; closedActive — the magnifier framed: a search is on */
+export type SearchState = "closed" | "open" | "closedActive";
+
+export function searchState(open: boolean, q: string): SearchState {
+  if (open) return "open";
+  return q.trim() ? "closedActive" : "closed";
+}
+
+/** what a tap / a blur / ✕ does: the field opens on a tap, closes on a blur (empty or not), ✕ empties and closes */
+export function searchAfter(ev: "tap" | "blur" | "clear", q: string): { open: boolean; q: string } {
+  if (ev === "tap") return { open: true, q };
+  if (ev === "clear") return { open: false, q: "" };
+  return { open: false, q };
+}

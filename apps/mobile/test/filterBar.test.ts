@@ -17,6 +17,9 @@ describe("visibleFilters", () => {
   it("a chosen filter that became empty stays visible (the person can see why the list is empty and leave it)", () => {
     expect(visibleFilters(items, "prospect").map((x) => x.key)).toEqual(["all", "owes", "prospect", "archived"]);
   });
+  it("a first chip at 0 is hidden too when it is not chosen («Ждут даты · 0» on «Работы», spec 31 §13)", () => {
+    expect(visibleFilters([{ key: "unscheduled", label: "Ждут даты", count: 0 }, { key: "scheduled", label: "Запланированы", count: 5 }], "scheduled").map((x) => x.key)).toEqual(["scheduled"]);
+  });
   it("«Все» stays even at 0 (an empty company)", () => {
     expect(visibleFilters([{ key: "all", label: "Все", count: 0 }, { key: "owes", label: "Должны", count: 0 }], "all").map((x) => x.key)).toEqual(["all"]);
   });
@@ -47,5 +50,25 @@ describe("the «Фильтр» sheet (spec 31 §6)", () => {
   it("each list keeps its filters under its own key", () => {
     expect(filterStoreKey("clients")).toBe("octo.filter.clients.v1");
     expect(filterStoreKey("leads")).not.toBe(filterStoreKey("clients"));
+  });
+});
+
+import { searchAfter, searchState } from "../src/ui/filterBarRules";
+
+describe("the search as an icon (founder 07.11, spec 31 §6 п.2а)", () => {
+  it("closed with nothing typed — the plain magnifier", () => expect(searchState(false, "")).toBe("closed"));
+  it("closed with text — the magnifier is marked: the list is still searched", () => {
+    expect(searchState(false, "mitch")).toBe("closedActive");
+    expect(searchState(false, "   ")).toBe("closed");
+  });
+  it("open — the field, whatever is typed", () => {
+    expect(searchState(true, "")).toBe("open");
+    expect(searchState(true, "mitch")).toBe("open");
+  });
+  it("a tap opens with the same text; a blur closes and keeps it; ✕ empties and closes", () => {
+    expect(searchAfter("tap", "mitch")).toEqual({ open: true, q: "mitch" });
+    expect(searchAfter("blur", "")).toEqual({ open: false, q: "" });
+    expect(searchAfter("blur", "mitch")).toEqual({ open: false, q: "mitch" });
+    expect(searchAfter("clear", "mitch")).toEqual({ open: false, q: "" });
   });
 });
