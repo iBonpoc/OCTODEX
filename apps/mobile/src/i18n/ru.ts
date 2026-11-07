@@ -225,6 +225,8 @@ export const ru = {
   "vcard.photos": "Фото: {n}",
 
   "offline.badge": "Без сети · в очереди: {n}",
+  // «Лиды и клиенты» — очередь (docs/specs/23)
+  "sync.server.badge": "Сервер недоступен · в очереди: {n}",
   "offline.queued": "Без сети. Сохранено, отправится позже",
   "offline.synced": "Сеть есть. Очередь отправлена: {n}",
   "offline.toggle": "Проверка: режим без сети",
@@ -2117,6 +2119,9 @@ export const ru = {
   "job5.h.enRoute": "В пути",
   "job5.noService": "Клиент с пометкой «Не обслуживаем»: новых выездов и смет нет",
   "job5.noServiceHint": "Назначенный выезд можно доделать или перенести",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.tzUnknownChip": "Пояс не распознан",
+  "fr7.tzUnknown": "Телефон не знает пояс «{tz}» — время показано по Los Angeles. Выберите пояс.",
   "job5.lines.title": "Позиции",
   "job5.lines.add": "Позиция",
   "job5.lines.edit": "Позиция",

@@ -226,6 +226,8 @@ export const es: Dict = {
   "vcard.photos": "Fotos: {n}",
 
   "offline.badge": "Sin conexión · en cola: {n}",
+  // «Лиды и клиенты» — очередь (docs/specs/23)
+  "sync.server.badge": "Servidor no disponible · en cola: {n}",
   "offline.queued": "Sin conexión. Guardado, se enviará después",
   "offline.synced": "Conectado. Cola enviada: {n}",
   "offline.toggle": "Prueba: modo sin conexión",
@@ -2118,6 +2120,9 @@ export const es: Dict = {
   "job5.h.enRoute": "En camino",
   "job5.noService": "Cliente marcado «No atender»: sin nuevas visitas ni presupuestos",
   "job5.noServiceHint": "Una visita ya programada se puede terminar o mover",
+  /* «Каркас» №7 (docs/specs/22) */
+  "fr7.tzUnknownChip": "Zona desconocida",
+  "fr7.tzUnknown": "El teléfono no conoce la zona «{tz}»: la hora se muestra en Los Ángeles. Elija una zona.",
   "job5.lines.title": "Partidas",
   "job5.lines.add": "Partida",
   "job5.lines.edit": "Partida",
