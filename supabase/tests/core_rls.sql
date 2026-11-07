@@ -5561,6 +5561,67 @@ select tst.fails($q$insert into public.tasks (company_id, subject_type, subject_
 :as_super
 update public.memberships set status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T68 the tech''s job task: the office sees it, another company and a switched-off tech do not ok'
+-- ---------------------------------------------------------------- T69: 3b-2 — the own lines of a job never bring its total below what is invoiced
+-- (migration 20261107020000, engine jobLinesBelowInvoiced; test prices)
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c6900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T69 Home');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d6900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', '69 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, tax_enabled, tax_rate_bps) values
+    ('e6900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T69 lines', 'c6900000-0000-4000-8000-000000000001', 'd6900000-0000-4000-8000-000000000001', 'draft', true, 1000);
+end $$;
+:as_office_a
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents, taxable) values
+  ('a6900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e6900000-0000-4000-8000-000000000001', 0, 'T69 labor', 2, 20000, false),
+  ('a6900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e6900000-0000-4000-8000-000000000001', 1, 'T69 part', 1, 10000, true);
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 51000, 'job total 40000 + 10000 + tax 1000');
+-- a draft is not issued (the app does not load it): it does not hold the total
+insert into public.invoices (id, company_id, customer_id, job_id, kind, total_cents) values
+  ('06900000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000001', 'progress', 999999);
+select tst.ok((select status from public.invoices where id = '06900000-0000-4000-8000-000000000003') = 'draft', 'the big invoice is a draft');
+insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
+  ('06900000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000001', 'progress', 'sent', 50500);
+select tst.fails($q$update public.job_line_items set deleted_at = now() where id = 'a6900000-0000-4000-8000-000000000002'$q$, 'removing a line below what is invoiced is refused');
+select tst.fails($q$update public.job_line_items set quantity = 1 where id = 'a6900000-0000-4000-8000-000000000001'$q$, 'a smaller quantity below what is invoiced is refused');
+select tst.fails($q$update public.jobs set tax_enabled = false where id = 'e6900000-0000-4000-8000-000000000001'$q$, 'the tax switched off below what is invoiced is refused');
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 51000, 'the total stays after the refusals');
+select tst.ok(tst.cnt($q$select 1 from public.job_line_items where job_id = 'e6900000-0000-4000-8000-000000000001' and deleted_at is null$q$) = 2, 'the refused removal rolled back');
+-- down to exactly what is invoiced: fine; more lines: fine
+update public.job_line_items set unit_price_cents = 19800 where id = 'a6900000-0000-4000-8000-000000000001';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 50600, 'lower but above what is invoiced is fine');
+select tst.fails($q$update public.job_line_items set unit_price_cents = 19700 where id = 'a6900000-0000-4000-8000-000000000001'$q$, 'two dollars less crosses the floor');
+update public.job_line_items set unit_price_cents = 22500 where id = 'a6900000-0000-4000-8000-000000000001';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 56000, 'raising the total is fine');
+-- a lower tax rate counts the same: 39600 + 10000 + 1000 = 50600, rate 0 → 49600 < 50500
+update public.job_line_items set unit_price_cents = 19800 where id = 'a6900000-0000-4000-8000-000000000001';
+select tst.fails($q$update public.jobs set tax_rate_bps = 0 where id = 'e6900000-0000-4000-8000-000000000001'$q$, 'a lower tax rate below what is invoiced is refused');
+update public.job_line_items set unit_price_cents = 22500 where id = 'a6900000-0000-4000-8000-000000000001';
+-- old data: a job already invoiced above its total still takes changes that do not lower the total
+:as_super
+do $$ begin
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status, contract_total_cents) values
+    ('e6900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T69 old', 'c6900000-0000-4000-8000-000000000001', 'd6900000-0000-4000-8000-000000000001', 'draft', 10000);
+  insert into public.invoices (id, company_id, customer_id, job_id, kind, status, total_cents) values
+    ('06900000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c6900000-0000-4000-8000-000000000001', 'e6900000-0000-4000-8000-000000000002', 'final', 'sent', 20000);
+end $$;
+:as_office_a
+update public.jobs set title = 'T69 old renamed', description = 'still fine' where id = 'e6900000-0000-4000-8000-000000000002';
+select tst.ok((select title from public.jobs where id = 'e6900000-0000-4000-8000-000000000002') = 'T69 old renamed', 'old data over-invoiced: an edit that keeps the total passes');
+-- and its total may go up even while still below what is invoiced (10000 → 15000 < 20000): only going down is refused
+insert into public.job_line_items (id, company_id, job_id, position, name, quantity, unit_price_cents) values
+  ('a6900000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e6900000-0000-4000-8000-000000000002', 0, 'T69 old line', 1, 15000);
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000002') = 15000, 'over-invoiced: the total goes up');
+select tst.fails($q$update public.job_line_items set unit_price_cents = 14000 where id = 'a6900000-0000-4000-8000-000000000003'$q$, 'over-invoiced: and does not go down again');
+-- a void invoice does not count
+:as_super
+update public.invoices set status = 'void', void_reason = 'T69 test', voided_at = now() where id = '06900000-0000-4000-8000-000000000001';
+:as_office_a
+update public.job_line_items set deleted_at = now() where id = 'a6900000-0000-4000-8000-000000000002';
+select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000-0000-4000-8000-000000000001') = 45000, 'with the invoice void the line can go');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_job_total_floor()', 'execute'), 'the trigger function is not callable');
+\echo 'T69 job lines never go below what is invoiced ok'
 
 -- ---------------------------------------------------------------- T70: 3b-3 — «Весь день» у выезда (migration 20261107030000)
 :as_owner_a
