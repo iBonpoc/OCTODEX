@@ -15,6 +15,8 @@ const LISTS = [
   // PR 3: «Сметы» and «Счета» — sections of their own with a search; nothing in the sheet yet (no «Фильтр» button)
   { path: "/estimates", search: "Клиент, адрес, работа, EST" },
   { path: "/invoice", search: "Клиент, адрес, работа, INV" },
+  // PR 4: «Работы» — «Мастер» (people of the nearest open visit, «Не назначен») and «Направление» in the sheet
+  { path: "/jobs", search: "Клиент, адрес, работа, JOB", group: "Мастер" },
 ];
 
 exports.run = async (h) => {
