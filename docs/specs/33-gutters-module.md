@@ -455,7 +455,22 @@ USGS 3DEP: pubs.usgs.gov/publication/cir1553, github.com/hobuinc/usgs-lidar · N
 Миграция `20261107170000_catalog_attributes.sql`: `attributes jsonb not null default '{}'` + CHECK, `purchase_unit text` (1–20 симв.), `pack_size numeric(12,3) > 0`. Приложение: `CatalogItem.attributes / purchaseUnit / packSize` (types, repo, ops `catalog.save` — пишет только заданное), `saveCatalogItems`, `catalogMatch` (`features/catalogMatch.ts`), строка «Свойства» на `catalog/[id]`. Тесты: база T91 (по умолчанию `{}`, мусор отклонён, staff пишет, мастер и чужая компания — нет, старый upsert без колонки не стирает свойства); unit `catalogAttributes.test.ts` (разбор, запись, пакет с одним «Отменить», `catalogMatch`).
 
 ### П16.5 Какие ключи будет писать модуль (по справочнику П17 и движку M1)
-`profile`, `size`, `material`, `gauge`, `finish`, `color`, `part`, `style`, `side`, `corner`, `hanger`, `guard`, `shape`, `dsStyle`, `gutterSize`, `lengthIn`, `stickIn`, `buy`, `work`, `story`. Ядро не держит список ключей и значений — только правило формы (CHECK). Палитры разные у поставщиков (Service Partners — 24 цвета алюминия, Berger half round — 8 других), поэтому **цвета — настройка компании в модуле (M7), не список в коде**. Новые виды из снимков #355: скрытое крепление Hangfast (значение `hanger`), box-профиль (`profile: box`, уже в движке), край крыши fascia / soffit / rafter — к выбору крепления (M7, П17.2).
+`profile`, `size`, `material`, `gauge`, `finish`, `color`, `part`, `style`, `side`, `corner`, `hanger`, `guard`, `shape`, `dsStyle`, `gutterSize`, `lengthIn`, `stickIn`, `buy`, `work`, `story`. Ядро не держит список ключей и значений — только правило формы (CHECK). Палитры разные у поставщиков (Service Partners — 24 цвета алюминия, Berger half round — 8 других), поэтому **цвета — настройка компании в модуле (M7), не список в коде**. Новые виды из снимков #355: скрытое крепление Hangfast (значение `hanger`), профиль fascia style (`profile: fascia`, уже в движке; снимок `profile-fascia-style.jpg`, поправка основателя), край крыши fascia / soffit / rafter — к выбору крепления (M7, П17.2).
+
+### П16.6 Единица покупки и пересчёт (прайс поставщика VGS, от основателя 07.11; цен в репозитории нет)
+Поставщик продаёт не в тех единицах, в которых мы считаем: рулон под бесшовный желоб — фунтами (считаем футы), даунспот — штуками по 10 ft, offsets — коробками по 27–33, ferrule — коробкой 500, винты — пакетами по 100.
+**Модель C3 (без нового поля):** `unit` — единица расчёта (ft, ea); `purchase_unit` — единица покупки (lb, pc, box, bag, roll…); `pack_size` — **сколько единиц расчёта в одной единице покупки**. Количество к покупке = ⌈ расчёт ÷ `pack_size` ⌉ (округление — правило модуля, M10).
+| Деталь | unit | purchase_unit | pack_size |
+|---|---|---|---|
+| рулон алюминия 11 7/8″ (под 5″ K) | ft | lb | 2.6 (ft ÷ 2.6 = lb) |
+| рулон алюминия 15″ (под 6″ K) | ft | lb | 2.0 |
+| рулон .032 11 7/8″ / 15″ | ft | lb | 2.2 / 1.7 |
+| рулон bond 11 7/8″ / 15″ | ft | lb | 1.3 / 1.0 |
+| даунспот 2×3, 3×4, 3″ round | ft | pc | 10 |
+| offset 2″ (коробка 30) | ea | box | 30 |
+| ferrule 5″ (коробка 500) | ea | box | 500 |
+| винты #8×½ (пакет 100) | ea | bag | 100 |
+«Только коробкой» = `purchase_unit: box`. Позиция, которую продают и штукой, и коробкой, — две позиции прайса (решает модуль при «создать позиции сразу»). Ширина заготовки (11 7/8″ → 5″ K, 15″ → 6″ K) — свойство позиции (`blankIn`), сверить с основателем в П18.
 
 ## П17. Справочник поставщика (стенды Berger, от основателя 07.11.2026) против движка M1
 Источник: `docs/prototypes/gutters-ref/` (K-style — 50 деталей, Half Round — 45, матрица «деталь × материал», размеры). Цен нет — в код не вносим (правило 9).
