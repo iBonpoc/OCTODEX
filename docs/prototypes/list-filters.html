@@ -40,6 +40,9 @@ h1{font-size:var(--fs-display);margin:0;text-wrap:balance}
 .lbl{font-size:var(--fs-caption);color:var(--mut);letter-spacing:.04em;text-transform:uppercase;margin-right:var(--s1)}
 .cols{display:grid;gap:var(--s5);grid-template-columns:repeat(auto-fit,minmax(min(100%,420px),1fr));align-items:start}
 .col{min-width:0;display:grid;gap:var(--s2)}
+.variant{font-size:var(--fs-title);font-weight:700;display:flex;gap:var(--s2);align-items:center;flex-wrap:wrap}
+.variant span{font-size:var(--fs-caption);font-weight:600;border:2px solid var(--ink);border-radius:999px;padding:2px 10px;text-transform:uppercase;letter-spacing:.05em}
+.variant.was span{border:1px solid var(--bd);color:var(--mut)}
 .col h2{font-size:var(--fs-heading);margin:0;display:flex;gap:var(--s2);align-items:baseline;flex-wrap:wrap}
 .col h2 small{font-weight:400;color:var(--mut);font-size:var(--fs-caption)}
 .stage{overflow-x:auto;border-radius:var(--r)}
@@ -118,7 +121,7 @@ h1{font-size:var(--fs-display);margin:0;text-wrap:balance}
 <div class="wrap">
   <header>
     <h1>Фильтры над списками: до и после</h1>
-    <p class="lede">Спека 31, вариант Б. Над списком не больше двух рядов: поиск с кнопкой «Фильтр» и одна лента статусов. Чипов с нулём нет. Источник, ответственный, мастер и сортировка лежат в шторке «Фильтр», а выбранное показано строкой с ✕. Слева снимок нынешней сборки main #288, справа макет. Пунктир отмечает, где начинается первая карточка.</p>
+    <p class="lede">Спека 31. Справа — <b>вариант Б, который мы рекомендуем</b>. Над списком не больше двух рядов: поиск с кнопкой «Фильтр» и одна лента статусов. Чипов с нулём нет. Источник, ответственный, мастер и сортировка лежат в шторке «Фильтр», а выбранное показано строкой с ✕. Слева снимок нынешней сборки main #288, справа макет. Пунктир отмечает, где начинается первая карточка.</p>
   </header>
 
   <div class="bar" role="toolbar" aria-label="Что показать">
@@ -134,10 +137,12 @@ h1{font-size:var(--fs-display);margin:0;text-wrap:balance}
 
   <div class="cols">
     <section class="col">
+      <div class="variant was">Сейчас <span>main #288</span></div>
       <h2>До <small id="beforeNote"></small></h2>
       <div class="stage"><img id="before" class="shot w390" alt="Снимок экрана до"></div>
     </section>
     <section class="col">
+      <div class="variant">Вариант Б <span>рекомендуем</span></div>
       <h2>После <small id="afterNote"></small></h2>
       <div class="stage" id="after"></div>
     </section>
@@ -149,14 +154,14 @@ h1{font-size:var(--fs-display);margin:0;text-wrap:balance}
     <div class="note"><b>Шторка.</b> Группы строками: источник, ответственный, мастер, сортировка. Строка с нулём остаётся, но серая. Внизу кнопки «Сбросить» и «Готово».</div>
     <div class="note"><b>Память.</b> Статус и фильтры запоминаются на устройстве для каждого списка отдельно. Поиск не запоминается. Ссылка с Главной ставит фильтр только на этот заход.</div>
     <div class="note"><b>1280.</b> Всё в один ряд: поиск шириной 360, лента целиком, справа «Источник ▾» и «Ответственный ▾». Меню показывает те же строки, что шторка.</div>
-    <div class="note"><b>Вопрос основателю.</b> «Лиды · Сметы · Счета» под заголовком «Лидов»: переключатель или «Лиды ▾» в заголовке? В макете «Лиды ▾», это экономит ещё один ряд.</div>
+    <div class="note"><b>Разделы (решение основателя 07.11).</b> Переключателя «Лиды · Сметы · Счета» больше нет. Лиды, Сметы и Счета — отдельные разделы, каждый своим экраном, открываются из «Ещё» и из меню слева.</div>
   </div>
 </div>
 
 <script>
 const D = {
   leads: {
-    title: "Лиды", menu: true, add: "Новый лид", search: "Имя, телефон, адрес, LEA",
+    title: "Лиды", add: "Новый лид", search: "Имя, телефон, адрес, LEA",
     lane: [["В работе",5],["Без ответа",2],["Отложенные",0],["Стали клиентами",0],["Закрытые",0],["Все",5]],
     groups: [["Источник",[["Thumbtack",1],["Yelp",1],["Google",1],["Website",1],["Referral",1],["Facebook",0]]],["Ответственный",[["Мои",5],["Alex Petrov",5]]],["Сортировка",[["Сначала срочные",null],["Новые сверху",null]]]],
     chosen: ["Google"], before: "6 рядов над списком, нули видны",
@@ -213,7 +218,7 @@ function after() {
   const chosenRow = chosen ? `<div class="chosen">${d.chosen.map((c) => `<span class="tag">${esc(c)}<button aria-label="Убрать фильтр: ${esc(c)}">✕</button></span>`).join("")}<button class="reset">Сбросить</button></div>` : "";
   const cards = (chosen ? d.cards.filter((_, i) => d.filtered.includes(i)) : d.cards).map((c) => card(c, wide)).join("");
   const sheet = S.st === "sheet" ? `<div class="scrim"></div><div class="sheet" role="dialog" aria-label="Фильтр"><h3>${wide ? esc(d.groups[0][0]) : "Фильтр"}</h3>${(wide ? d.groups.slice(0, 1) : d.groups).map(([g, opts]) => `${wide ? "" : `<div class="grp">${esc(g)}</div>`}${opts.map(([o, c]) => `<div class="opt ${d.chosen.includes(o) ? "on" : ""} ${c === 0 ? "zero" : ""}" role="checkbox" aria-checked="${d.chosen.includes(o)}"><span class="box">${d.chosen.includes(o) ? "✓" : ""}</span>${esc(o)}${c == null ? "" : `<span class="n">${c}</span>`}</div>`).join("")}`).join("")}${wide ? "" : `<div class="acts"><button class="btn">Сбросить</button><button class="btn">Готово</button></div>`}</div>` : "";
-  const head = `<div class="ver">OCTODEX v1.0.0 · макет 31</div><div class="head"><div class="title">${esc(d.title)}${d.menu ? '<span class="dd" aria-label="Сменить список: Сметы, Счета">▾</span>' : ""}</div>${d.add ? `<button class="btn">＋ ${esc(d.add)}</button>` : ""}</div>`;
+  const head = `<div class="ver">OCTODEX v1.0.0 · макет 31</div><div class="head"><div class="title">${esc(d.title)}</div>${d.add ? `<button class="btn">＋ ${esc(d.add)}</button>` : ""}</div>`;
   const filters = wide
     ? `<div class="row1"><div class="search">${ico.search}${esc(d.search)}</div><div class="lane" role="radiogroup" aria-label="Статус">${lane}</div><div style="margin-left:auto;display:flex;gap:8px">${fbtn}</div></div>${chosenRow}`
     : `<div class="row1"><div class="search">${ico.search}${esc(d.search)}</div>${fbtn}</div><div class="lane" role="radiogroup" aria-label="Статус">${lane}</div>${chosenRow}`;
