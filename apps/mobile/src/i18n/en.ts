@@ -2147,6 +2147,7 @@ export const en: Dict = {
   "job5.tags.saved": "Tags saved",
   "job5.type.saved": "Job type changed",
   // fix.* — founder fixes chat
+  "fix.client.overdue": "{amount} overdue · {d} days",
   "fix.client.balance": "Balance",
   /* «Каркас» №7 (docs/specs/22) */
   "fr7.leadOrphan": "{name}: the owner is not at work — hand the lead over",

@@ -2146,6 +2146,7 @@ export const ru = {
   "job5.tags.saved": "Метки сохранены",
   "job5.type.saved": "Тип работы изменён",
   // fix.* — founder fixes chat
+  "fix.client.overdue": "Просрочено {amount} · {d} дн",
   "fix.client.balance": "Баланс",
   /* «Каркас» №7 (docs/specs/22) */
   "fr7.leadOrphan": "{name}: ответственный не работает — передайте лид",
