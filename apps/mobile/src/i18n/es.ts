@@ -2105,4 +2105,8 @@ export const es: Dict = {
   "w6.msgc.visitReminder": "Hola {name}, le escribe {company}. Le recordamos nuestra visita el {date} a las {time}.",
   "w6.msgc.estimateSent": "Hola {name}, le escribe {company}. Le enviamos el presupuesto {number}.",
   "w6.msgc.thanksPayment": "Hola {name}, le escribe {company}. ¡Gracias por su pago!",
+  // «Работы и выезды» №5 (17-job §11)
+  "job5.h.enRoute": "En camino",
+  "job5.noService": "Cliente marcado «No atender»: sin nuevas visitas ni presupuestos",
+  "job5.noServiceHint": "Una visita ya programada se puede terminar o mover",
 };
