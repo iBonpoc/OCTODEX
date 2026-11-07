@@ -8,92 +8,12 @@
  *   20261106100000 also had it through PUBLIC unless a revoke took it away).
  * - `.from("table")`: the table or view exists in schema public (or `storage`/`auth` are not ours — not read here).
  * A wrong name, a renamed parameter or a missing grant is a call that fails on the phone only — this test fails first.
- * The precise check against the real catalog (pg_proc, has_function_privilege) — the nightly runs, later.
+ * The app's side is in serverContract.lib.ts; the same calls against the live catalog (pg_proc) — serverCatalog.test.ts.
  */
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-
-const ROOT = path.resolve(__dirname, "../../..");
-const read = (p: string) => fs.readFileSync(path.join(ROOT, p), "utf8");
-const walk = (dir: string): string[] =>
-  fs.existsSync(path.join(ROOT, dir))
-    ? fs.readdirSync(path.join(ROOT, dir), { withFileTypes: true }).flatMap((d) => {
-        const p = `${dir}/${d.name}`;
-        return d.isDirectory() ? walk(p) : /\.(ts|tsx)$/.test(d.name) ? [p] : [];
-      })
-    : [];
-
-/* ---------- the app's side ---------- */
-/** the text of a balanced (...) / {...} starting at `open` */
-function balanced(src: string, open: number): string {
-  const pairs: Record<string, string> = { "(": ")", "{": "}", "[": "]" };
-  const stack: string[] = [];
-  let str: string | null = null;
-  for (let i = open; i < src.length; i++) {
-    const c = src[i]!;
-    if (str) {
-      if (c === "\\") i++;
-      else if (c === str) str = null;
-      continue;
-    }
-    if (c === '"' || c === "'" || c === "`") str = c;
-    else if (pairs[c]) stack.push(pairs[c]!);
-    else if (c === stack[stack.length - 1]) {
-      stack.pop();
-      if (!stack.length) return src.slice(open, i + 1);
-    }
-  }
-  return src.slice(open);
-}
-/** top-level keys of an object literal `{ a: 1, b, c: f(x, y) }` */
-export function objectKeys(obj: string): string[] {
-  const inner = obj.trim().replace(/^\{|\}$/g, "");
-  const parts: string[] = [];
-  let depth = 0;
-  let cur = "";
-  let str: string | null = null;
-  for (let i = 0; i < inner.length; i++) {
-    const c = inner[i]!;
-    if (str) {
-      cur += c;
-      if (c === "\\") cur += inner[++i] ?? "";
-      else if (c === str) str = null;
-      continue;
-    }
-    if (c === '"' || c === "'" || c === "`") str = c;
-    if ("([{".includes(c)) depth++;
-    if (")]}".includes(c)) depth--;
-    if (c === "," && depth === 0) {
-      parts.push(cur);
-      cur = "";
-    } else cur += c;
-  }
-  parts.push(cur);
-  return parts.map((p) => /^\s*([A-Za-z_]\w*)\s*(?::|$)/.exec(p)?.[1]).filter((k): k is string => !!k);
-}
-export interface AppCall {
-  fn: string;
-  keys: string[] | null; // null — the arguments are not a literal object (cannot be checked by keys)
-  where: string;
-}
-export function appCalls(file: string, src: string): AppCall[] {
-  const out: AppCall[] = [];
-  for (const m of src.matchAll(/(?:\.rpc|\bcall(?:<[^>]*>)?)\(\s*"([a-z_][a-z0-9_]*)"\s*(,)?/g)) {
-    const at = m.index! + m[0].length;
-    let keys: string[] | null = [];
-    if (m[2]) {
-      const brace = src.slice(at).search(/\S/);
-      const start = at + brace;
-      keys = src[start] === "{" ? objectKeys(balanced(src, start)) : null;
-    }
-    out.push({ fn: m[1]!, keys, where: `${file}:${src.slice(0, m.index).split("\n").length}` });
-  }
-  return out;
-}
-export function appTables(src: string): string[] {
-  return [...src.matchAll(/\.from\(\s*"([a-z_][a-z0-9_]*)"\s*\)/g)].map((m) => m[1]!);
-}
+import { ROOT, balanced, objectKeys, read, repoCalls, type AppCall } from "./serverContract.lib";
 
 /* ---------- the server's side (the migrations, in order) ---------- */
 export interface Sig {
@@ -204,9 +124,7 @@ const migrations = fs
   .map((f) => ({ file: f, sql: read(`supabase/migrations/${f}`) }));
 const FNS = dbFunctions(migrations);
 const TABLES = dbTables(migrations.map((m) => m.sql).join("\n"));
-const appFiles = [...walk("apps/mobile/src"), ...walk("supabase/functions")];
-const CALLS = appFiles.flatMap((f) => appCalls(f, read(f)));
-const TABLE_CALLS = appFiles.flatMap((f) => appTables(read(f)).map((t) => ({ t, f })));
+const { calls: CALLS, tables: TABLE_CALLS } = repoCalls();
 
 describe("serverContract — the parser itself", () => {
   it("finds the app's calls (a silent parser would pass everything)", () => {
