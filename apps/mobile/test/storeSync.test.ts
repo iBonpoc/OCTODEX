@@ -874,3 +874,59 @@ describe("unit:storeSync — the server's error for one op does not hold the oth
     expect(st()).toEqual([]);
   });
 });
+
+describe("unit:storeSync — a money change the server refused stays visible (docs/specs/23 §3)", () => {
+  const AGO = new Date(Date.now() - 60_000).toISOString();
+  type V = Value & { rejectedOps: { id: string; what: string; href: string }[]; dismissRejected: (id: string) => void };
+  const v = (r: Root<P>) => valueOf(r) as unknown as V;
+  const start = async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    answerLoads();
+    await settle();
+    return r;
+  };
+  it("the last refusal of a payment: it leaves the queue, and is kept as «не записано» until «Понятно»", async () => {
+    seedOutbox({ id: "pay", op: { k: "invoice.pay", invoiceId: "i1", paymentId: "p1", customerId: "c", amountCents: 300, method: "cash" }, at: AGO, tries: 4, owner: u1c1 });
+    const r = await start();
+    v(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.reject(refusal());
+    await settle();
+    await wait(300);
+    expect(stored()).toEqual([]);
+    expect(v(r).rejectedOps).toEqual([expect.objectContaining({ id: "pay", what: "payment", href: "/invoice/i1" })]);
+    expect(JSON.parse(storage.get("octo.cloud.v1.rejected") ?? "[]")).toHaveLength(1); // survives a restart
+    v(r).dismissRejected("pay");
+    await settle();
+    await wait(300);
+    expect(v(r).rejectedOps).toEqual([]);
+    expect(JSON.parse(storage.get("octo.cloud.v1.rejected") ?? "[]")).toEqual([]);
+  });
+  it("not money: dropped as before, nothing kept", async () => {
+    seedOutbox({ id: "ev", op: { k: "calendarEvent.remove", id: "x" }, at: AGO, tries: 4, owner: u1c1 });
+    const r = await start();
+    v(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.reject(refusal());
+    await settle();
+    await wait(300);
+    expect(stored()).toEqual([]);
+    expect(v(r).rejectedOps).toEqual([]);
+  });
+  it("a refusal before the last try is a try, not a «не записано»", async () => {
+    seedOutbox({ id: "pay", op: { k: "invoice.pay", invoiceId: "i1", paymentId: "p1", customerId: "c", amountCents: 300, method: "cash" }, at: AGO, tries: 1, owner: u1c1 });
+    const r = await start();
+    v(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.reject(refusal());
+    await settle();
+    expect(v(r).rejectedOps).toEqual([]);
+  });
+  it("another person's refused change is not shown to me", async () => {
+    storage.set("octo.cloud.v1.rejected", JSON.stringify([{ id: "x", owner: { userId: "u2", companyId: "c1" }, kind: "invoice.pay", what: "payment", href: "/invoice/i", error: "no", at: AGO }]));
+    const r = await start();
+    expect(v(r).rejectedOps).toEqual([]);
+  });
+});

@@ -6,7 +6,9 @@
 import { useState } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
+import { router, type Href } from "expo-router";
 import { useStore, type StuckOp } from "@/data/store";
+import type { RejectedOp } from "@/data/outboxRejected";
 import { useI18n } from "@/i18n";
 import { stuckKindKey } from "@/data/syncLink";
 import { Button } from "@/ui/controls";
@@ -51,19 +53,60 @@ function StuckCard({ op }: { op: StuckOp }) {
   );
 }
 
-/** the section in «Настройки»: nothing when nothing is stuck */
+/** a money change the server refused: what it was, why, «Открыть» the record, «Понятно» */
+function RejectedCard({ r }: { r: RejectedOp }) {
+  const { t, money, day, time } = useI18n();
+  const { dismissRejected } = useStore();
+  return (
+    <Card status="bad">
+      <View testID={`rejected-${r.id}`} style={{ gap: space[2] }}>
+        <T v="body" w="semibold">
+          {t(`att.rejected.${r.what}`)}
+          {r.amountCents != null ? ` · ${money(r.amountCents)}` : ""}
+        </T>
+        <T v="caption" tone="mut">
+          {`${day(r.at)} ${time(r.at)}`} · {t("sync.rejected.hint")}
+        </T>
+        {r.error ? (
+          <T v="caption" tone="mut" numberOfLines={2}>
+            {r.error}
+          </T>
+        ) : null}
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
+          <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} />
+          <Button label={t("sync.rejected.ok")} icon="check" variant="ghost" onPress={() => dismissRejected(r.id)} />
+        </View>
+      </View>
+    </Card>
+  );
+}
+
+/** the sections in «Настройки»: nothing when nothing is stuck or refused */
 export function StuckOps() {
   const { t } = useI18n();
-  const { stuckOps } = useStore();
-  if (!stuckOps.length) return null;
+  const { stuckOps, rejectedOps } = useStore();
   return (
     <>
-      <SectionTitle title={t("sync.stuck.title")} />
-      <CardList>
-        {stuckOps.map((op) => (
-          <StuckCard key={op.id} op={op} />
-        ))}
-      </CardList>
+      {rejectedOps.length ? (
+        <>
+          <SectionTitle title={t("sync.rejected.title")} />
+          <CardList>
+            {rejectedOps.map((r) => (
+              <RejectedCard key={r.id} r={r} />
+            ))}
+          </CardList>
+        </>
+      ) : null}
+      {stuckOps.length ? (
+        <>
+          <SectionTitle title={t("sync.stuck.title")} />
+          <CardList>
+            {stuckOps.map((op) => (
+              <StuckCard key={op.id} op={op} />
+            ))}
+          </CardList>
+        </>
+      ) : null}
     </>
   );
 }

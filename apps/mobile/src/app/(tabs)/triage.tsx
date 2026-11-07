@@ -1,9 +1,9 @@
 import { useState } from "react";
-import { router } from "expo-router";
+import { router, type Href } from "expo-router";
 import { Linking } from "react-native";
 import { useStore, visitContext } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { buildAttention, type AttentionItem } from "@/features/attention";
+import { attentionHref, buildAttention, type AttentionItem } from "@/features/attention";
 import { AttentionRows } from "@/features/AttentionCards";
 import { subjectOf } from "@/features/attentionPeople";
 import { telHref } from "@/features/contactLinks";
@@ -18,12 +18,12 @@ import { View } from "react-native";
 export default function Triage() {
   useTick();
   const { t, money } = useI18n();
-  const { db, role } = useStore();
+  const { db, role, rejectedOps } = useStore();
   const toast = useToast();
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const [reply, setReply] = useState<string | null>(null);
   const [assign, setAssign] = useState<string | null>(null);
-  const all = buildAttention(db, role).filter((x) => !snoozed.includes(x.id));
+  const all = buildAttention(db, role, undefined, { rejected: rejectedOps }).filter((x) => !snoozed.includes(x.id));
   const cur = all[0];
   // the top card also shows how to reach the client and how many other reasons this client has (spec 06, PR7)
   const curSubject = cur ? subjectOf(db, cur) : {};
@@ -48,6 +48,9 @@ export default function Triage() {
         return <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${it.refId}`)} />;
       case "unassigned":
         return <Button label={t("triage.assign")} icon="user" onPress={() => setAssign(it.refId)} />;
+      // a money change the server refused (docs/specs/23 §3): open the record it was about
+      case "rejected":
+        return <Button label={t("sync.rejected.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it) as Href)} />;
       case "late": {
         const v = db.visits.find((x) => x.id === it.refId);
         const href = v ? telHref(visitContext(db, v).customer?.phone) : null;
