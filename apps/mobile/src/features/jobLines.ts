@@ -36,7 +36,8 @@ function recount(d: D, jobId: ID): D {
   const j = d.jobs.find((x) => x.id === jobId);
   if (!j || j.estimateId) return d;
   const lines = linesOf(d, jobId);
-  const t = totalOf(lines, jobClientExempt(d, j) ? { taxEnabled: false, taxRateBps: 0 } : j);
+  // the job's own tax snapshot as it is (server t18): «Без налога» of the client counts only when the tax is set (withJobTax)
+  const t = totalOf(lines, j);
   const totals = new Map(lines.map((l, i) => [l.id, t.lineTotals[i] ?? 0]));
   return {
     ...d,

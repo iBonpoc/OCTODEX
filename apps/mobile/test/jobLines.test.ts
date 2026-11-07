@@ -97,4 +97,35 @@ describe("job lines in the app", () => {
     expect(taxBefore(d0, "j3")).toEqual({ taxEnabled: false, taxRateBps: 0 });
     expect(taxBefore(d1, "j3")).toEqual({ taxEnabled: true, taxRateBps: 825 });
   });
+  it("«Без налога» set later does not change the job's tax snapshot: a rename keeps $550, no false refusal (server t18)", () => {
+    let d: DB = withJobLine(makeSeed(), line({ id: "l1", jobId: "j3", quantity: "5", unitPriceCents: 10_000, taxable: true }));
+    d = withJobTax(d, "j3", { taxEnabled: true, taxRateBps: 1000 });
+    expect(d.jobs.find((j) => j.id === "j3")!.amountCents).toBe(55_000);
+    d = { ...d, invoices: [...d.invoices, { ...d.invoices[0]!, id: "i-t", jobId: "j3", totalCents: 55_000, paidCents: 0 }] };
+    d = { ...d, customers: d.customers.map((c) => (c.id === "c3" ? { ...c, taxExempt: true } : c)) };
+    const renamed = withJobLine(d, line({ id: "l1", jobId: "j3", name: "Labor (renamed)", quantity: "5", unitPriceCents: 10_000, taxable: true }));
+    expect(renamed.jobs.find((j) => j.id === "j3")!.amountCents).toBe(55_000);
+    expect(lineChangeRefusal(d, renamed, "j3")).toBeNull();
+    // the CA check uses the same $550
+    expect(caContractWarning(renamed, "j3")).toBe(true);
+    // switching the tax on again for an exempt client: stays off (the moment the tax is set)
+    const off = withJobTax(withJobTax(d, "j3", { taxEnabled: false, taxRateBps: 1000 }), "j3", { taxEnabled: true, taxRateBps: 1000 });
+    expect(off.jobs.find((j) => j.id === "j3")!.taxEnabled).toBe(false);
+  });
+  it("«Отменить» after an invoice went out is refused by the same check (store undo, server t19)", () => {
+    const d0 = withJobLine(makeSeed(), line({ id: "l1", jobId: "j3", quantity: "4" })); // $400
+    const back = lineSaveUndo(d0, { id: "l1" });
+    let d1 = withJobLine(d0, line({ id: "l1", jobId: "j3", quantity: "8" })); // $800
+    d1 = { ...d1, invoices: [...d1.invoices, { ...d1.invoices[0]!, id: "i-t", jobId: "j3", totalCents: 80_000, paidCents: 0 }] };
+    expect(back.k).toBe("save");
+    const undone = withJobLine(d1, (back as { line: Omit<JobLineItem, "totalCents"> }).line);
+    expect(lineChangeRefusal(d1, undone, "j3")).toBe("belowInvoiced");
+    // the tax back off: refused when an $880 invoice is out, fine when only $800 is
+    const taxed = withJobTax(d1, "j3", { taxEnabled: true, taxRateBps: 1000 });
+    expect(taxed.jobs.find((j) => j.id === "j3")!.amountCents).toBe(80_000); // the line is not taxable
+    const taxedLine = withJobLine(taxed, line({ id: "l1", jobId: "j3", quantity: "8", taxable: true }));
+    const out880 = { ...taxedLine, invoices: taxedLine.invoices.map((i) => (i.id === "i-t" ? { ...i, totalCents: 88_000 } : i)) };
+    expect(lineChangeRefusal(out880, withJobTax(out880, "j3", taxBefore(d1, "j3")), "j3")).toBe("belowInvoiced");
+    expect(lineChangeRefusal(taxedLine, withJobTax(taxedLine, "j3", taxBefore(d1, "j3")), "j3")).toBeNull();
+  });
 });

@@ -2131,6 +2131,7 @@ export const es: Dict = {
   "job5.lines.err.estimate": "Un trabajo de un presupuesto usa sus partidas",
   "job5.lines.err.done": "El trabajo está terminado: las partidas no cambian",
   "job5.lines.err.below": "El total no puede ser menor que lo ya facturado",
+  "job5.lines.err.undo": "No se puede deshacer: el total quedaría por debajo de lo facturado",
   "job5.ca.chip": "Se requiere contrato",
   "job5.ca.text": "Según la ley de CA, una obra en vivienda de más de $500 requiere un contrato escrito firmado por el cliente.",
   "job5.lines.err.rate": "La tasa es un número de 0 a 100, p. ej. 8.25",

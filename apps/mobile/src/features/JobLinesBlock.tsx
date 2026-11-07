@@ -52,9 +52,10 @@ export function JobLinesBlock({ job }: { job: Job }) {
   const lines = linesOf(db, job.id);
   const editable = linesEditable(job) && canEditJobLines(store.role);
   const exempt = jobClientExempt(db, job);
-  const totals = totalOf(lines, exempt ? { taxEnabled: false, taxRateBps: 0 } : job);
+  const totals = totalOf(lines, job);
   const warn = caContractWarning(db, job.id);
-  const done = (msg: string, undo: () => void) => toast.show(store.online ? msg : t("offline.queued"), undo);
+  // «Отменить» may be refused (an invoice went out meanwhile): then say why, nothing changes
+  const done = (msg: string, undo: () => boolean) => toast.show(store.online ? msg : t("offline.queued"), () => { if (!undo()) toast.show(t("job5.lines.err.undo")); });
   const refuse = (after: typeof db): boolean => {
     const r = lineChangeRefusal(db, after, job.id);
     if (r) toast.show(t(REFUSAL_KEY[r]));
@@ -121,7 +122,7 @@ export function JobLinesBlock({ job }: { job: Job }) {
             <T v="body" tone="mut">{t("job5.lines.subtotal")}</T>
             <T v="body" tabular>{money(totals.subtotal)}</T>
           </RowView>
-          {job.taxEnabled && !exempt ? (
+          {job.taxEnabled ? (
             <RowView style={{ justifyContent: "space-between" }}>
               <T v="body" tone="mut">{t("job5.lines.tax", { rate: (job.taxRateBps ?? 0) / 100 })}</T>
               <T v="body" tabular>{money(totals.tax)}</T>
@@ -135,10 +136,10 @@ export function JobLinesBlock({ job }: { job: Job }) {
       ) : (
         <T v="caption" tone="mut">{t("job5.lines.empty")}</T>
       )}
-      {editable && lines.length && exempt ? (
+      {editable && lines.length && exempt && !job.taxEnabled ? (
         <T v="caption" tone="mut">{t("job5.lines.exempt")}</T>
       ) : null}
-      {editable && lines.length && !exempt ? (
+      {editable && lines.length && (!exempt || job.taxEnabled) ? (
         <Card>
           <Toggle on={!!job.taxEnabled} onChange={(on) => setTax(on)} label={t("job5.lines.taxToggle")} />
           {job.taxEnabled ? (

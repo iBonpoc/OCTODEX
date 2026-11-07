@@ -2131,6 +2131,7 @@ export const en: Dict = {
   "job5.lines.err.estimate": "A job from an estimate uses the estimate's items",
   "job5.lines.err.done": "The job is done: items do not change",
   "job5.lines.err.below": "The total cannot go below what is already invoiced",
+  "job5.lines.err.undo": "Cannot undo: the total would go below what is invoiced",
   "job5.ca.chip": "Contract needed",
   "job5.ca.text": "Under CA law, home improvement work over $500 needs a written contract signed by the client.",
   "job5.lines.err.rate": "The rate is a number from 0 to 100, e.g. 8.25",
