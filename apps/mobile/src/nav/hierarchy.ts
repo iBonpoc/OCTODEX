@@ -34,9 +34,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
   const seg = pathname.split("?")[0]!.split("/").filter(Boolean);
   const [a, b] = seg;
   const id = b ?? "";
-  // ☰ items live under the role's home (13а §3); the technician has no Sales lists (a lead he opens sits under his home)
+  // ☰ items live under the role's home (13а §3); the technician's own leads are a list of his too (13 §2.3)
   const homeRoot = { href: `/${roleHome[role]}`, label: K("nav.home") };
-  const leadsRoot = role === "tech" ? homeRoot : { href: "/leads?tab=leads", label: K("nav.leads") };
+  const leadsRoot = { href: "/leads?tab=leads", label: K("nav.leads") };
   // «Сметы» is a section of its own, one screen for every role (founder 07.11, spec 31 §7а)
   const estList = { href: "/estimates", label: K("nav.estimates") };
   const invList = role === "tech" ? homeRoot : { href: "/invoice", label: K("nav.invoices") };
@@ -58,7 +58,7 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
 
   switch (a) {
     case "lead":
-      return { section: role === "tech" ? "home" : "leads", kind: id === "new" ? "lead.title" : "lead.card", up: leadsRoot };
+      return { section: "leads", kind: id === "new" ? "lead.title" : "lead.card", up: leadsRoot };
     case "estimates":
       return { section: "estimates" };
     case "estimate": {

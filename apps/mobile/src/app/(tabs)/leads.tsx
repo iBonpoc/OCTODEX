@@ -159,7 +159,10 @@ function LeadsBoard() {
         onReset={() => { setSrcIds([]); setWhoIds([]); }}
       />
       {leads.length === 0 ? (
-        <Empty icon="inbox" title={t("inbox.empty")} hint={t("inbox.emptyHint")} />
+        <View testID="leads-empty">
+          {/* the tech sees only his own (13 §2.3): say which, not «from Thumbtack and the website» */}
+          <Empty icon="inbox" title={t("inbox.empty")} hint={t(office ? "inbox.emptyHint" : "leads.empty.tech")} />
+        </View>
       ) : (
         <>
           {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={COLUMNS} /> : null}
