@@ -1,8 +1,11 @@
 /**
- * The role changed in «Мои настройки» (TestFlight 288, founder 07.11): after it every tab but «＋» stopped answering —
+ * The role changed in «Профиль и аккаунт» (was «Мои настройки») (TestFlight 288, founder 07.11): after it every tab but «＋» stopped answering —
  * also after switching back, until the app was restarted. The role change pushed a second copy of the tabs over
  * /settings ([(tabs), settings, (tabs)]) and a tab pressed there did dismissTo — a no-op on the tabs themselves.
- * Now: tech and back to director, from «Ещё» → «Мои настройки» and from a typed /settings — every tab opens its screen.
+ * Now: tech and back to director, from «Ещё» → the profile and from a typed /settings/profile — every tab opens its screen.
+ * The same dead tabs without a role change: a card opened by a link (a push, an address) → a tab → [card, (tabs)]; the
+ * first tab worked, every next one did nothing. Since #289 the role change goes down with goTo, so the link case is
+ * the one that fails without tabLeave.
  * 820/1280: no bottom bar; the role change and the side menu still lead on.
  */
 exports.run = async (h) => {
@@ -22,15 +25,15 @@ exports.run = async (h) => {
       h.expect((await p.locator('[aria-modal="true"]').count()) === 0, `${label}: «${name}» asks nothing`);
     }
   };
+  // «Профиль и аккаунт» (spec 26, #289): the profile card in «Ещё» on a phone, the profile in the side menu at 820/1280
   const openSettings = async () => {
-    if (wide) await p.getByText("Мои настройки", { exact: true }).locator("visible=true").first().click();
-    else {
+    if (!wide) {
       await p.getByRole("tab", { name: "Ещё", exact: true }).click();
       await p.waitForTimeout(600);
-      await p.getByText("Мои настройки", { exact: true }).locator("visible=true").first().click();
     }
+    await p.getByTestId(wide ? "side-profile" : "more-profile").locator("visible=true").first().click();
     await p.waitForTimeout(700);
-    h.expect(path() === "/settings", `«Мои настройки» (${path()})`);
+    h.expect(path() === "/settings/profile", `«Профиль и аккаунт» (${path()})`);
   };
 
   await h.go("/today");
@@ -52,9 +55,15 @@ exports.run = async (h) => {
   await role("Директор");
   h.expect(path() === "/today", `the director's home after the role change back (${path()})`);
   if (!wide) await walk("/today", "director");
-  // a typed /settings (no tabs under it), then the role change
-  await h.go("/settings");
+  // a typed /settings/profile (no tabs under it), then the role change
+  await h.go("/settings/profile");
   await role("Мастер");
-  h.expect(path() === "/visits", `typed /settings → the technician's home (${path()})`);
-  if (!wide) await walk("/visits", "tech from a typed /settings");
+  h.expect(path() === "/visits", `typed /settings/profile → the technician's home (${path()})`);
+  if (!wide) await walk("/visits", "tech from a typed /settings/profile");
+  // a card by a link (a push notification, a typed address): the first tab, then every other one still answers
+  if (!wide) {
+    const db = await h.db();
+    await h.go(`/client/${db.customers[0].id}`);
+    await walk("/visits", "a card by a link");
+  }
 };
