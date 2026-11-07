@@ -485,3 +485,26 @@ describe("unit:storeSync — no network in the cloud: the op is never dropped (r
   });
 });
 
+describe("unit:storeSync — the wipe and the outbox's own timing (review #244)", () => {
+  it("a wipe while the outbox is still loading (the start repeat) is applied to what the load brings", async () => {
+    seedOutbox(owned(u1c1, 1), owned({ userId: "u9", companyId: "c1" }, 1));
+    root = render(StoreProvider as (p: P) => unknown, { children: null }); // the read of the outbox is on its way
+    forgetDeviceState(wipedOnDelete, { userId: "u1" });
+    await settle();
+    await wait(300);
+    expect(stored().map((x) => x.id)).toEqual(["o-u9@c1#1"]);
+  });
+  it("«whose is not known» (null) never means the person signed in now: their ops stay", async () => {
+    seedOutbox(owned({ userId: "u2", companyId: "c1" }, 1), owned(null, 1));
+    signIn("u2", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    // the adoption gave the ownerless op to u2 first; then an old "1" wipe repeat (whose: not known)
+    forgetDeviceState(wipedOnDelete, { userId: null });
+    await settle();
+    await wait(300);
+    expect(stored().map((x) => x.id)).toEqual(["o-u2@c1#1", "o-nobody#1"]);
+    expect(valueOf(r).queue).toHaveLength(2);
+  });
+});
+

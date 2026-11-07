@@ -378,9 +378,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const whoRef = useRef(who);
   whoRef.current = who;
   const mine = (items: readonly OwnedItem[]) => mineOf(items, whoRef.current);
+  // a wipe that came while the outbox was still loading (the start repeat): applied to what the load brings
+  const outboxReadyRef = useRef(outboxReady);
+  outboxReadyRef.current = outboxReady;
+  const forgetOnLoad = useRef<{ userId: string | null } | null>(null);
+  useEffect(() => {
+    if (!outboxReady || !forgetOnLoad.current) return;
+    const { userId } = forgetOnLoad.current;
+    forgetOnLoad.current = null;
+    setOutbox((prev) => (outboxRef.current = othersOf(prev, userId)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [outboxReady]);
   // ops of older versions (no owner) belong to the first person signed in once the outbox is loaded (review #240 №3)
   useEffect(() => {
-    if (!outboxReady || !who) return;
+    if (!outboxReady || !who || forgetOnLoad.current) return;
     const adopted = adoptLegacy(outboxRef.current, who);
     if (adopted !== outboxRef.current) {
       outboxRef.current = [...adopted];
@@ -445,9 +456,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         wipedKey.current = cacheKeyRef.current;
         // the outbox keeps other people's ops (rule 6): only the deleted person's go (and old ones without an owner).
         // The deleted person comes with the wipe: the sign-in may already be gone from the store (review #240 №2)
-        const me = info.userId ?? whoRef.current?.userId ?? null;
-        outboxRef.current = othersOf(outboxRef.current, me);
-        setOutbox(outboxRef.current);
+        // told by the wipe (even «not known» = null: never the person signed in now, review #244), else the sign-in
+        const me = "userId" in info ? (info.userId ?? null) : (whoRef.current?.userId ?? null);
+        if (!outboxReadyRef.current) forgetOnLoad.current = { userId: me };
+        // a functional update: the latest outbox, also one that is set but not yet rendered
+        setOutbox((prev) => (outboxRef.current = othersOf(prev, me)));
         setGateCodes({});
         waitingPoints.current = {};
       }),
