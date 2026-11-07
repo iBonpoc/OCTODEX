@@ -149,6 +149,11 @@ export const ru = {
   "vw.notified": "Клиенту сообщили {date}",
   "vw.notify": "Сообщить клиенту",
   // visitP2.* — «Сообщить клиенту?» after a cancel (docs/specs/03 §13, chat «Осмотр и План» №1)
+  "visitP2.att.noEstimate": "{name}: осмотр прошёл — сметы нет",
+  "visitP2.att.noEstimateChip": "Сметы нет",
+  "visitP2.set.title": "Осмотр прошёл — сметы нет",
+  "visitP2.set.hint": "Через сколько рабочих дней после осмотра без сметы пункт появится в «Требует внимания»",
+  "visitP2.set.days": "Рабочих дней",
   "visitP2.notify.title": "Сообщить клиенту об отмене?",
   "visitP2.notify.noContact": "Нет телефона и почты — текст можно скопировать",
   "visitP2.notify.opened": "Сообщение открыто в телефоне, записано в ленту",

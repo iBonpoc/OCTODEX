@@ -150,6 +150,11 @@ export const en: Dict = {
   "vw.notified": "Client told on {date}",
   "vw.notify": "Let the client know",
   // visitP2.* — «Сообщить клиенту?» after a cancel (docs/specs/03 §13, chat «Осмотр и План» №1)
+  "visitP2.att.noEstimate": "{name}: estimate visit done — no estimate",
+  "visitP2.att.noEstimateChip": "No estimate",
+  "visitP2.set.title": "Estimate visit done — no estimate",
+  "visitP2.set.hint": "How many business days after a visit with no estimate it shows up in «Needs attention»",
+  "visitP2.set.days": "Business days",
   "visitP2.notify.title": "Tell the client about the cancellation?",
   "visitP2.notify.noContact": "No phone or email — you can copy the text",
   "visitP2.notify.opened": "Message opened on your phone, added to the feed",
