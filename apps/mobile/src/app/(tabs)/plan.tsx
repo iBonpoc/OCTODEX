@@ -18,7 +18,9 @@ import { T } from "@/ui/primitives";
 import { Card, Empty, Grid, RowView, Screen } from "@/ui/surfaces";
 import { canPlan, canReschedule, hiddenAssignees, isAssigned, liveAssignees, moveAssignee, planFilter, type PlanWho } from "@/features/schedule";
 import { memberName } from "@/features/team";
-import { DayCell, FeedView, PlanAddSheet, PlanWhoChips, UnassignedSoon, WaitingJobs, WeekStrip } from "@/features/PlanParts";
+import { DayCell, FeedView, PlanAddSheet, UnassignedSoon, WaitingJobs, WeekStrip } from "@/features/PlanParts";
+import { FilterBar } from "@/ui/filterBar";
+import type { FilterGroup } from "@/ui/filterBarRules";
 import { dayLoads, daysFrom, planItems, type DayLoad } from "@/features/planFeed";
 import { EventSheet, type EventSheetState } from "@/features/EventForm";
 
@@ -54,6 +56,21 @@ export default function Plan() {
   const feedDays = useMemo(() => daysFrom(date, addDays(date, FEED_DAYS - 1)), [date]);
   // wave 7б-1: a personal setting, the same on every device and in «Мои настройки → План»
   const [showDone, setShowDone] = usePlanShowDone();
+  // «Мастер»: the office picks one person (or «Я»); a tech sees only his own. «Показывать»: the done ones, not in the Day
+  const techs = db.members.filter((m) => m.roles.includes("tech") && !m.pending && m.id !== db.me).sort((a, b) => a.name.localeCompare(b.name));
+  const meTech = db.members.some((m) => m.id === db.me && m.roles.includes("tech"));
+  const filterGroups: FilterGroup[] = [
+    ...(planner
+      ? [{
+          key: "people",
+          title: t("card.filter.masters"),
+          searchable: true,
+          options: [...(meTech ? [{ key: "me", label: t("plan.who.me"), on: whoNow === "me" }] : []), ...techs.map((m) => ({ key: m.id, label: m.name, on: whoNow === m.id }))],
+          onToggle: (k: string) => setWho(whoNow === k ? "all" : k),
+        }]
+      : []),
+    ...(mode !== "day" ? [{ key: "done", title: t("card.filter.show"), options: [{ key: "done", label: t("card.filter.done"), on: showDone }], onToggle: () => setShowDone(!showDone) }] : []),
+  ];
   // Feed, Week and Month show one thing: what planItems gives for their days (17-job §12.2, 24 §B) — visits (past midnight
   // on both days), tasks with a time, events, days off, «весь день»; «Чей план» and «Показывать выполненные» the same
   const range: DayKey[] = mode === "feed" ? feedDays : mode === "week" ? week : mode === "month" ? monthGrid(date).map((x) => x.key) : [];
@@ -91,7 +108,9 @@ export default function Plan() {
         </RowView>
       }
     >
-      {planner ? <PlanWhoChips who={whoNow} onChange={setWho} /> : null}
+      {/* spec 31 §7: «Чей план» and «Показывать выполненные» went to the «Фильтры» sheet — «Мастер» (a search at 10+
+          people) and «Показывать»; what is on is a line «Ivan Sokolov ✕» under it */}
+      {filterGroups.length ? <FilterBar<string> items={[]} value="" onChange={() => undefined} groups={filterGroups} onReset={() => { setWho("all"); setShowDone(false); }} /> : null}
       {planner ? <WaitingJobs /> : null}
       {/* «Не назначено» today and tomorrow on top (13 §3.2); the Day keeps its own block of its day (drag from it);
           in the Week it goes under the strip (24 §B: whose plan → the arrows → the strip → «Не назначено» → the days) */}
@@ -107,18 +126,7 @@ export default function Plan() {
       {mode === "week" ? <WeekStrip days={week} loads={loads} date={date} onPick={(k) => { setDate(k); setMode("day"); }} /> : null}
       {planner && mode === "week" ? <UnassignedSoon /> : null}
 
-      {mode !== "day" ? (
-        // chips, not a switch: a switch that is on is yellow, and the screen keeps one yellow (rule 2); the same personal
-        // setting in Feed, Week and Month (13 §5а) — the Day by person shows the open visits to move
-        <ChoiceChips
-          value={showDone ? "show" : "hide"}
-          onChange={(k) => setShowDone(k === "show")}
-          items={[
-            { key: "hide", label: t("plan5.hideDone") },
-            { key: "show", label: t("plan5.showDone") },
-          ]}
-        />
-      ) : null}
+
       {mode === "feed" || mode === "week" ? (
         <FeedView days={mode === "feed" ? feedDays : week} items={items} onEvent={planner ? (e) => setEv({ kind: e.kind, event: e }) : undefined} onAdd={addOn} />
       ) : mode === "day" ? (

@@ -6,7 +6,7 @@ import { useI18n } from "@/i18n";
 import { Icon, Press, T } from "./primitives";
 import { Sheet } from "./overlays";
 import { Button, TextField } from "./controls";
-import { activeFilterCount, chosenFilters, filterLabel, visibleFilters, type FilterGroup, type FilterItem } from "./filterBarRules";
+import { activeFilterCount, chosenFilters, filterLabel, SEARCH_FROM, sheetOptions, visibleFilters, type FilterGroup, type FilterItem } from "./filterBarRules";
 
 export type { FilterGroup, FilterOption } from "./filterBarRules";
 
@@ -43,6 +43,8 @@ export function FilterBar<K extends string>({
   const desktop = device === "desktop";
   // which sheet is open: all groups (phone, tablet) or one group (a desktop button)
   const [open, setOpen] = useState<string | null>(null);
+  // the search inside the sheet (a long «Мастер»), forgotten when the sheet closes
+  const [sheetQ, setSheetQ] = useState("");
   const scroller = useRef<ElementRef<typeof ScrollView>>(null);
   const shown = groups.filter((g) => g.options.length > 0);
   const active = activeFilterCount(shown);
@@ -184,7 +186,7 @@ export function FilterBar<K extends string>({
           {onReset ? <Button label={t("fix.filters.reset")} variant="ghost" size="sm" onPress={onReset} /> : null}
         </View>
       ) : null}
-      <Sheet visible={open !== null} onClose={() => setOpen(null)} title={open === "*" ? t("fix.filters.title") : (sheetGroups[0]?.title ?? t("fix.filters.title"))}>
+      <Sheet visible={open !== null} onClose={() => { setOpen(null); setSheetQ(""); }} title={open === "*" ? t("fix.filters.title") : (sheetGroups[0]?.title ?? t("fix.filters.title"))}>
         {sheetGroups.map((g) => (
           <View key={g.key} style={{ gap: space[1] }}>
             {open === "*" ? (
@@ -192,7 +194,10 @@ export function FilterBar<K extends string>({
                 {g.title}
               </T>
             ) : null}
-            {g.options.map((o) => (
+            {g.searchable && g.options.length > SEARCH_FROM ? (
+              <TextField type="search" value={sheetQ} onChangeText={setSheetQ} placeholder={t("card.filter.findPerson")} icon="search" />
+            ) : null}
+            {sheetOptions(g, sheetQ).map((o) => (
               <FilterRow key={o.key} label={o.label} count={o.count} on={o.on} onToggle={() => g.onToggle(o.key)} />
             ))}
           </View>
