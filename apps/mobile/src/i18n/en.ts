@@ -2109,11 +2109,9 @@ export const en: Dict = {
   "job5.h.enRoute": "On the way",
   "job5.noService": "This client is marked «Do not service»: no new visits or estimates",
   "job5.noServiceHint": "A visit already set can be finished or moved",
-<<<<<<< HEAD
   /* «Каркас» №7 (docs/specs/22) */
   "fr7.tzUnknownChip": "Unknown zone",
   "fr7.tzUnknown": "This phone does not know the zone «{tz}» — times are shown in Los Angeles. Choose a zone.",
-=======
   "job5.lines.title": "Line items",
   "job5.lines.add": "Line item",
   "job5.lines.edit": "Line item",
@@ -2161,5 +2159,4 @@ export const en: Dict = {
   "job5.msg.allDay": "Hi {name}! {company} will come to do the work on {date}, during the day. If the day does not work, just reply to this message.",
   "job5.allDaySaved": "Scheduled for {date}, all day",
   "job5.allDayChip": "All day",
->>>>>>> origin/main
 };
