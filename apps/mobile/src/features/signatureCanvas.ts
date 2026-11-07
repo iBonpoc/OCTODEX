@@ -6,14 +6,32 @@ import { SIG_BOX } from "./signaturePath";
  * no need to turn the phone; turned to landscape, the window is wide and nothing is rotated. Pure geometry, unit-tested.
  */
 
-/** the canvas for a window: same proportions as the field on the screen, as large as fits along the long side */
-export function fullCanvas(winW: number, winH: number, fieldW: number, fieldH: number, gap: number, bar: number): { w: number; h: number; rotate: boolean } {
+type Edges = { top: number; bottom: number; left: number; right: number };
+const NONE: Edges = { top: 0, bottom: 0, left: 0, right: 0 };
+
+/**
+ * The canvas for a window: same proportions as the field on the screen, as large as fits along the long side.
+ * `insets` — the safe area (docs/specs/32): the notch / Dynamic Island, the home indicator, the rounded corners.
+ * `pad` is the screen's padding on each side, max(inset, gap): the canvas and its buttons lie inside it.
+ */
+export function fullCanvas(
+  winW: number,
+  winH: number,
+  fieldW: number,
+  fieldH: number,
+  gap: number,
+  bar: number,
+  insets: Edges = NONE,
+): { w: number; h: number; rotate: boolean; pad: Edges } {
+  const pad = { top: Math.max(insets.top, gap), bottom: Math.max(insets.bottom, gap), left: Math.max(insets.left, gap), right: Math.max(insets.right, gap) };
   const rotate = winH > winW;
-  const long = (rotate ? winH : winW) - gap * 2;
-  const short = (rotate ? winW : winH) - gap * 2 - bar; // the button bar sits under the canvas, along the long side
+  const across = winW - pad.left - pad.right;
+  const down = winH - pad.top - pad.bottom;
+  const long = rotate ? down : across;
+  const short = (rotate ? across : down) - bar; // the button bar sits under the canvas, along the long side
   const aspect = fieldW > 0 && fieldH > 0 ? fieldW / fieldH : SIG_BOX.w / SIG_BOX.h;
-  const w = Math.min(long, short * aspect);
-  return { w: Math.floor(w), h: Math.floor(w / aspect), rotate };
+  const w = Math.max(0, Math.min(long, short * aspect));
+  return { w: Math.floor(w), h: Math.floor(w / aspect), rotate, pad };
 }
 
 /**

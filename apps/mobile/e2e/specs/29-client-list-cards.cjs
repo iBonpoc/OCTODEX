@@ -111,10 +111,10 @@ exports.run = async (h) => {
   const moreBtn = p.getByRole("button", { name: /^Фильтры, включено: \d+$/ });
   h.expect((await moreBtn.count()) === 1, "«Фильтры» button in the row");
   const mb = await moreBtn.boundingBox();
-  // phone / tablet: next to the search field; 1280: at the end of the one row of the lane
-  const sb = await p.getByPlaceholder("Имя, телефон или адрес").last().boundingBox();
+  // one row with the search icon (spec 31 §6 п.2а) and the lane, on every width
+  const sb = await p.getByTestId("filter-search-toggle").locator("visible=true").first().boundingBox();
   const midOf = (b) => b.y + b.height / 2;
-  const same = h.layout?.width === 1280 ? Math.abs(midOf(mb) - (ys[0] + 0)) <= 20 : Math.abs(midOf(mb) - midOf(sb)) <= 2;
+  const same = Math.abs(midOf(mb) - midOf(sb)) <= 2;
   h.expect(mb && mb.height <= 36 && same, `«Фильтр» in its row, visible ≤ 36 (${mb && JSON.stringify(mb)})`);
   const firstCard = await p.locator('[data-testid="list-card"]').locator("visible=true").first().boundingBox();
   h.expect(h.layout?.width !== 390 || firstCard.y < 844 * 0.4, `390: the first card starts in the top 40 % of the screen (${firstCard.y})`);

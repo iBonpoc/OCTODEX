@@ -11,7 +11,8 @@ import { useStore } from "@/data/store";
 import type { ID, Member } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { companyOwner, leadAssigneeChoices } from "@/features/leadAssignee";
-import { Avatar, Button, StatusChip } from "@/ui/controls";
+import { INSPECTION_NO_ESTIMATE_RANGE, leadSettingsOf } from "@/features/leadSettings";
+import { Avatar, Button, ReadOnly, StatusChip, Stepper } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, ListRow, Screen } from "@/ui/surfaces";
@@ -43,6 +44,13 @@ export default function CompanyLeads() {
     const undo = store.saveCompany({ leadDefaultAssigneeId: id });
     toast.show(store.online ? t("co.saved") : t("offline.queued"), undo);
   };
+  // «Осмотр прошёл — сметы нет» after N working days (docs/specs/03 §13.5): saved at once, like the choice above
+  const noEstDays = leadSettingsOf(c).inspectionNoEstimateDays;
+  const setNoEstDays = (v: number) => {
+    if (v === noEstDays) return;
+    const undo = store.saveCompany({ leadSettings: { ...(c.leadSettings ?? {}), inspectionNoEstimateDays: v } });
+    toast.show(store.online ? t("co.saved") : t("offline.queued"), undo);
+  };
 
   return (
     <Screen title={t("co.leads.title")} back={back} subtitle={t("schs.who")}>
@@ -66,6 +74,16 @@ export default function CompanyLeads() {
             <Button label={t("co.leads.change")} icon="user" variant="secondary" onPress={() => setOpen(true)} />
           </View>
         )}
+      </Card>
+
+      <Card>
+        <T v="heading">{t("visitP2.set.title")}</T>
+        <T v="caption" tone="mut">{t("visitP2.set.hint")}</T>
+        <View testID="no-estimate-days">
+          <ReadOnly value={ro}>
+            <Stepper label={t("visitP2.set.days")} value={noEstDays} min={INSPECTION_NO_ESTIMATE_RANGE.min} max={INSPECTION_NO_ESTIMATE_RANGE.max} onChange={setNoEstDays} />
+          </ReadOnly>
+        </View>
       </Card>
 
       <Sheet visible={open} onClose={() => setOpen(false)} title={t("co.leads.assignee")}>

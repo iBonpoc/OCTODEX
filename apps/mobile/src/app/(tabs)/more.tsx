@@ -7,7 +7,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { GROUP_TITLE } from "@/nav/NavMenu";
 import { openSection } from "@/nav/go";
-import { menuGroups, moreHref, sectionHref, type Section, type SectionId } from "@/nav/sections";
+import { meIsSub, menuGroups, moreHref, sectionHref, type Section, type SectionId } from "@/nav/sections";
 import { syncState } from "@/nav/shell";
 import { moreCounts } from "@/features/moreCounts";
 import { useTick } from "@/features/sheets";
@@ -36,7 +36,7 @@ export default function More() {
   const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
   const counts = moreCounts(db, role);
   // on 820/1280 the side menu has the tabs too; here only what is not a tab
-  const groups: { key: string; title?: DictKey; items: Section[] }[] = menuGroups(role, false)
+  const groups: { key: string; title?: DictKey; items: Section[] }[] = menuGroups(role, false, meIsSub(db))
     .flatMap((g) =>
       g.group === "bottom"
         ? [

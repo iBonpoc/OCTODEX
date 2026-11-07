@@ -83,7 +83,8 @@ export function FabSheet({ visible, onClose, ...p }: FabProps & { visible: boole
 }
 
 /** the «＋» button: `float` = phone, bottom-right; `header` = 820/1280, in the screen's header. Nothing to offer — no button. */
-export function Fab({ placement, bottom = 0, ...p }: FabProps & { placement: "float" | "header"; bottom?: number }) {
+/** `right`: the screen's right edge — the notch in landscape (docs/specs/32) */
+export function Fab({ placement, bottom = 0, right = space[4], ...p }: FabProps & { placement: "float" | "header"; bottom?: number; right?: number }) {
   const { t } = useI18n();
   const { c } = useTheme();
   const items = useFabItems(p);
@@ -116,7 +117,7 @@ export function Fab({ placement, bottom = 0, ...p }: FabProps & { placement: "fl
     );
   return (
     <>
-      <View pointerEvents="box-none" style={{ position: "absolute", right: space[4], bottom, zIndex: z.fab }}>
+      <View pointerEvents="box-none" style={{ position: "absolute", right, bottom, zIndex: z.fab }}>
         <Press
           testID="fab"
           onPress={press}

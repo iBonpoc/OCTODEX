@@ -150,6 +150,11 @@ export const en: Dict = {
   "vw.notified": "Client told on {date}",
   "vw.notify": "Let the client know",
   // visitP2.* — «Сообщить клиенту?» after a cancel (docs/specs/03 §13, chat «Осмотр и План» №1)
+  "visitP2.att.noEstimate": "{name}: estimate visit done — no estimate",
+  "visitP2.att.noEstimateChip": "No estimate",
+  "visitP2.set.title": "Estimate visit done — no estimate",
+  "visitP2.set.hint": "How many business days after a visit with no estimate it shows up in «Needs attention»",
+  "visitP2.set.days": "Business days",
   "visitP2.notify.title": "Tell the client about the cancellation?",
   "visitP2.notify.noContact": "No phone or email — you can copy the text",
   "visitP2.notify.opened": "Message opened on your phone, added to the feed",
@@ -291,6 +296,8 @@ export const en: Dict = {
   "inbox.book": "Book estimate visit",
   "inbox.empty": "No new requests",
   "inbox.emptyHint": "Requests from Thumbtack, Yelp, Google and your website land here.",
+  // leads.* («Лиды и клиенты»: «Лиды» мастера, спека 13 §2.3)
+  "leads.empty.tech": "Leads you brought in or that are assigned to you show up here.",
   "inbox.autoReply": "Hi! Thanks for reaching out. We can come by for a free estimate tomorrow. Does morning or afternoon work better?",
 
   "plan.title": "Schedule",
@@ -1547,8 +1554,12 @@ export const en: Dict = {
   "card.filter.sources": "Source",
   "card.filter.searchEstimates": "Client, address, work, EST",
   "card.filter.searchInvoices": "Client, address, work, INV",
+  "card.filter.searchPayments": "Client, RCT, INV",
   "card.filter.whose": "Whose",
   "card.filter.method": "Payment method",
+  "card.filter.search": "Search",
+  "card.filter.searchWith": "Search: {q}",
+  "card.filter.clearSearch": "Clear search",
   "card.emptyFilter": "Nobody in this filter",
   "card.sign.noNextStep": "No next step",
   "card.group.action": "Needs action",
