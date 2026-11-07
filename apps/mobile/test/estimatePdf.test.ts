@@ -128,6 +128,26 @@ describe("estimate PDF: in the client's language for every app language", () => 
     expect(html).toContain("<path d=\"M0 0 L10 10\"");
   });
 
+  it("a signature drawn on a wide field (1280: ~700 px) fits the PDF box 0 0 400 160 whole, scaled evenly (founder 07.11)", () => {
+    const { db, e } = dbWith("en");
+    // an old signature saved in the pixels of a 700-px field: before the fix the right part fell outside the PDF box
+    const wide = "M20.0 80.0 L350.0 40.0 L690.0 120.0 ";
+    const signed = { ...e, status: "approved" as const, approval: { optionId: "o1", addonIds: [], signerName: "Rosa Diaz", signature: wide, at: "2026-11-05T21:05:00Z", channel: "portal" as const, totalCents: 28650, depositCents: 0 } };
+    db.estimates = db.estimates.map((x) => (x.id === e.id ? signed : x));
+    const html = estimateHtml(portalFromEstimate(db, signed, "Acme"), { lang: "en" });
+    const d = html.match(/<svg viewBox="0 0 400 160"[^>]*><path d="([^"]+)"/)![1]!;
+    const nums = d.match(/-?\d+(\.\d+)?/g)!.map(Number);
+    const xs = nums.filter((_, i) => i % 2 === 0);
+    const ys = nums.filter((_, i) => i % 2 === 1);
+    expect(Math.max(...xs)).toBeLessThanOrEqual(400);
+    expect(Math.max(...ys)).toBeLessThanOrEqual(160);
+    // only the scale changes: every point is the original × one factor (no smoothing, no dropped points)
+    const orig = wide.match(/-?\d+(\.\d+)?/g)!.map(Number);
+    expect(nums).toHaveLength(orig.length);
+    const k = 400 / 690; // the widest point decides; one factor for both axes
+    nums.forEach((v, i) => expect(v).toBeCloseTo(orig[i]! * k, 1)); // rounded to 0.01 px
+  });
+
   it("signed on site: the record says on whose device (security-check 05.11)", () => {
     const { db, e } = dbWith("en");
     const me = db.members.find((m) => m.id === db.me)!;
