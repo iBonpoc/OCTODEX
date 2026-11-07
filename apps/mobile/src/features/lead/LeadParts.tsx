@@ -26,6 +26,7 @@ import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { dayAtHour } from "./bookRules";
 import { TaskSheet } from "@/features/tasks/TaskSheet";
 import { memberLabel, memberName } from "@/features/team";
+import { useDialThenAsk } from "@/features/comms/dial";
 
 const uid = () => (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
 const tel = (p?: string) => (p ?? "").replace(/[^\d+]/g, "");
@@ -43,6 +44,7 @@ function useSaved() {
 export function ContactActions({ l, onCall }: { l: Lead; onCall: () => void }) {
   const store = useStore();
   const { t } = useI18n();
+  const dial = useDialThenAsk();
   const src = sourceOf(store.db, l.sourceId);
   const addr = [l.address, l.city, l.state, l.zip].filter(Boolean).join(", ");
   const touch = (kind: "sms" | "email" | "marketplace", url?: string) => {
@@ -54,11 +56,8 @@ export function ContactActions({ l, onCall }: { l: Lead; onCall: () => void }) {
       <IconButton
         icon="phone"
         label={t("visit.call")}
-        onPress={() => {
-          Linking.openURL(`tel:${tel(l.phone)}`).catch(() => {});
-          // a call always asks «Чем кончился?» — never a call without an outcome (20 §3)
-          onCall();
-        }}
+        // a call always asks «Чем кончился?» — after the call, not under the system dialer (20 §3)
+        onPress={() => dial(tel(l.phone), onCall)}
       />
       <IconButton icon="sms" label={t("visit.message")} onPress={() => touch("sms", smsHref(l.phone) ?? undefined)} />
       {mailtoHref(l.email) ? <IconButton icon="mail" label={t("lead.emailTo")} onPress={() => touch("email", mailtoHref(l.email) ?? undefined)} /> : null}

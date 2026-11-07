@@ -35,6 +35,12 @@ export function memberLabel(m: Pick<Member, "name" | "deleted"> | null | undefin
 export const memberName = (db: Pick<DB, "members">, id: string | null | undefined, deleted: DeletedWord): string | undefined =>
   id ? memberLabel(db.members.find((m) => m.id === id), deleted) : undefined;
 
+/** not at work in the company (docs/specs/22 §2): deleted their account or switched off — their leads and tasks go to the
+ *  office in «Требует внимания». Invited and not joined yet is not «gone»; an id not in `members` (old data) is not either. */
+export const isGone = (m: Pick<Member, "deleted" | "disabled"> | null | undefined): boolean => !!m && (!!m.deleted || !!m.disabled);
+/** the member behind an id is not at work any more */
+export const goneId = (db: Pick<DB, "members">, id: string | null | undefined): boolean => !!id && isGone(db.members.find((m) => m.id === id));
+
 export type TeamState = "active" | "pending" | "expired" | "disabled";
 export function teamState(m: Member, now = Date.now()): TeamState {
   if (m.disabled) return "disabled";

@@ -5627,6 +5627,86 @@ select tst.ok((select contract_total_cents from public.jobs where id = 'e6900000
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_job_total_floor()', 'execute'), 'the trigger function is not callable');
 \echo 'T69 job lines never go below what is invoiced ok'
 
+-- ---------------------------------------------------------------- T70: 3b-3 — «Весь день» у выезда (migration 20261107030000)
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c7000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T70 Home');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('d7000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c7000000-0000-4000-8000-000000000001', '70 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('e7000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T70 job', 'c7000000-0000-4000-8000-000000000001', 'd7000000-0000-4000-8000-000000000001', 'draft');
+end $$;
+:as_office_a
+-- the company is in Los Angeles (default): a whole day there is 08:00Z–08:00Z in winter
+insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) values
+  ('f7000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-01 00:00 America/Los_Angeles', '2026-12-02 00:00 America/Los_Angeles', true),
+  ('f7000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-03 00:00 America/Los_Angeles', '2026-12-05 00:00 America/Los_Angeles', true),
+  ('f7000000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-06 10:00 America/Los_Angeles', '2026-12-06 11:00 America/Los_Angeles', true),
+  ('f7000000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-07 00:00 UTC', '2026-12-08 00:00 UTC', true);
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000001'), 'a whole day at the company midnight stays «весь день»');
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000002'), 'two whole days stay «весь день»');
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000003'), 'a timed range is never «весь день»');
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000004'), 'UTC midnight is not the company midnight');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f7000000-0000-4000-8000-000000000001', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.visits where id = 'f7000000-0000-4000-8000-000000000001' and all_day$q$) = 1, 'the technician sees «весь день» of his visit');
+select tst.fails($q$update public.visits set all_day = false where id = 'f7000000-0000-4000-8000-000000000001'$q$, 'the technician does not change «весь день»');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_visit_all_day()', 'execute'), 'the normalizer is not callable');
+\echo 'T70 visits: all day only on whole days at the company midnight; the tech does not change it ok'
+
+-- ---------------------------------------------------------------- T71: 3b-3 — an old app version and «Весь день» (rule 16)
+:as_office_a
+-- an old app moves the all-day visit: it writes only starts_at / ends_at → the flag goes by itself
+update public.visits set starts_at = '2026-12-01 09:00 America/Los_Angeles', ends_at = '2026-12-01 10:00 America/Los_Angeles' where id = 'f7000000-0000-4000-8000-000000000001';
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000001'), 'an old app move to a time clears «весь день»');
+-- the new app moves a whole day to another day: stays
+update public.visits set starts_at = '2026-12-10 00:00 America/Los_Angeles', ends_at = '2026-12-11 00:00 America/Los_Angeles' where id = 'f7000000-0000-4000-8000-000000000002';
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000002'), 'a whole day moved to another whole day stays «весь день»');
+-- an old app inserts without the column: an ordinary visit
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f7000000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-12 00:00 America/Los_Angeles', '2026-12-13 00:00 America/Los_Angeles');
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000005'), 'without the column a visit is not «весь день»');
+-- a visit without an end cannot be all day
+update public.visits set all_day = true, ends_at = null where id = 'f7000000-0000-4000-8000-000000000005';
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000005'), 'no end — not «весь день»');
+-- the technician does not put the flag on a whole-day visit either
+insert into public.visits (id, company_id, job_id, starts_at, ends_at) values
+  ('f7000000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-14 00:00 America/Los_Angeles', '2026-12-15 00:00 America/Los_Angeles');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f7000000-0000-4000-8000-000000000006', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+select tst.fails($q$update public.visits set all_day = true where id = 'f7000000-0000-4000-8000-000000000006'$q$, 'the technician does not set «весь день» even on a whole day');
+-- another company does not touch our flag
+:as_owner_b
+select tst.blocked($q$update public.visits set all_day = false where id = 'f7000000-0000-4000-8000-000000000002'$q$, 'another company does not change our «весь день»');
+:as_super
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000002'), 'and it stays');
+-- the company's own zone, not Los Angeles: Honolulu midnight is 10:00Z; an empty zone falls back to Los Angeles
+update public.companies set timezone = 'Pacific/Honolulu' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) values
+  ('f7000000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-16 00:00 Pacific/Honolulu', '2026-12-17 00:00 Pacific/Honolulu', true),
+  ('f7000000-0000-4000-8000-000000000008', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-16 00:00 America/Los_Angeles', '2026-12-17 00:00 America/Los_Angeles', true);
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000007'), 'a Honolulu company: its own midnight');
+select tst.ok(not (select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000008'), 'a Honolulu company: Los Angeles midnight is not a whole day');
+:as_super
+update public.companies set timezone = 'Pacific Time' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+insert into public.visits (id, company_id, job_id, starts_at, ends_at, all_day) values
+  ('f7000000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'e7000000-0000-4000-8000-000000000001', '2026-12-20 00:00 America/Los_Angeles', '2026-12-21 00:00 America/Los_Angeles', true);
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000009'), 'a zone Postgres does not know: the save goes through, Los Angeles');
+:as_super
+update public.companies set timezone = '' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+update public.visits set all_day = true, starts_at = '2026-12-18 00:00 America/Los_Angeles', ends_at = '2026-12-19 00:00 America/Los_Angeles' where id = 'f7000000-0000-4000-8000-000000000008';
+select tst.ok((select all_day from public.visits where id = 'f7000000-0000-4000-8000-000000000008'), 'an empty zone: Los Angeles');
+:as_super
+update public.companies set timezone = 'America/Los_Angeles' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+\echo 'T71 an old app never leaves «весь день» on a timed visit ok'
+
 -- ---------------------------------------------------------------- T72: jobs — UPDATE by columns (17-job §12.1, 20261107040000, rule 16 step 1)
 :as_super
 do $$

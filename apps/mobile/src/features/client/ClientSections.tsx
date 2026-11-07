@@ -20,6 +20,7 @@ import { NotesBlock } from "@/features/NotesBlock";
 import { PeopleSheet } from "@/features/client/ClientSheets";
 import { TaskSheet, type TaskDraft } from "@/features/tasks/TaskSheet";
 import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
+import { useDialThenAsk } from "@/features/comms/dial";
 import { callPlaceForClient } from "@/features/comms/comms";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { propertyTitle } from "@/features/properties";
@@ -34,6 +35,7 @@ const PHONE_KEY: Record<string, DictKey> = { mobile: "phone.mobile", home: "phon
 /** the phones and emails of a person; a phone calls and then asks «Чем кончился?» (onCall, 20 §5) */
 export function PersonRows({ p, onCall }: { p: Person; onCall?: (p: Person) => void }) {
   const { t } = useI18n();
+  const dial = useDialThenAsk();
   return (
     <>
       {p.phones.map((ph, i) => (
@@ -42,10 +44,7 @@ export function PersonRows({ p, onCall }: { p: Person; onCall?: (p: Person) => v
           title={ph.number}
           subtitle={[t(PHONE_KEY[ph.label] ?? "phone.other"), p.phones.length > 1 && ph.primary ? t("person.primary") : null].filter(Boolean).join(" · ")}
           left={<Icon name="phone" />}
-          onPress={() => {
-            Linking.openURL(`tel:${ph.number.replace(/[^\d+]/g, "")}`).catch(() => {});
-            onCall?.(p);
-          }}
+          onPress={() => dial(ph.number, () => onCall?.(p))}
         />
       ))}
       {p.emails.map((e, i) => (

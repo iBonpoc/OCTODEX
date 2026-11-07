@@ -3,7 +3,7 @@ import { router } from "expo-router";
 import { Linking } from "react-native";
 import { useStore, visitContext } from "@/data/store";
 import { useI18n } from "@/i18n";
-import { buildAttention, type AttentionItem } from "@/features/attention";
+import { attentionHref, buildAttention, type AttentionItem } from "@/features/attention";
 import { AttentionRows } from "@/features/AttentionCards";
 import { subjectOf } from "@/features/attentionPeople";
 import { telHref } from "@/features/contactLinks";
@@ -44,6 +44,10 @@ export default function Triage() {
         return <Button label={t("inbox.reply")} icon="send" onPress={() => setReply(it.refId)} />;
       case "leadIdle":
         return <Button label={t("lead.open")} icon="chevronRight" onPress={() => router.push(`/lead/${it.refId}`)} />;
+      case "leadOrphan":
+        return <Button label={t("fr7.handOver")} icon="user" onPress={() => router.push(attentionHref(it))} />;
+      case "taskOrphan":
+        return <Button label={t("lead.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it))} />;
       case "schedule":
         return <Button label={t("sch.title")} icon="calendar" onPress={() => router.push(`/job/schedule?jobId=${it.refId}`)} />;
       case "unassigned":

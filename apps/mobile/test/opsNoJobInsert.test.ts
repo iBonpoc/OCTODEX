@@ -15,7 +15,7 @@ const chain = (table: string): Record<string, unknown> => {
     update: (row: Record<string, unknown>) => { writes.push({ table, how: "update", row }); return c; },
     then: (r: (v: unknown) => unknown, j?: (e: unknown) => unknown) => done.then(r, j),
   };
-  for (const k of ["select", "eq", "neq", "is", "in", "order", "limit"]) c[k] = () => c;
+  for (const k of ["select", "eq", "neq", "is", "in", "not", "order", "limit", "range"]) c[k] = () => c;
   c.maybeSingle = () => done;
   c.single = () => done;
   return c;
