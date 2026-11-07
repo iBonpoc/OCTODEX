@@ -62,3 +62,10 @@ export const US_TIMEZONES = ["America/Los_Angeles", "America/Phoenix", "America/
 export function zoneChoices(stored: string | undefined, known: (tz: string) => boolean): string[] {
   return stored && !US_TIMEZONES.includes(stored) && known(stored) ? [...US_TIMEZONES, stored] : US_TIMEZONES;
 }
+
+/** «Расписание» → saveCompany: the zone goes only when it was chosen here (another chip than the stored one) — saving
+ *  the hours alone does not send it, so a long-offline phone does not overwrite another admin's zone (docs/specs/22 §1.3).
+ *  `saveCompany` sets company.save's `tzChanged` from whether `timezone` is in the patch. */
+export function zonePatch(chosen: string, stored: string | undefined): { timezone?: string } {
+  return chosen !== stored ? { timezone: chosen } : {};
+}
