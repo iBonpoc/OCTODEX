@@ -1618,6 +1618,14 @@ export const en: Dict = {
   "late.unassignedTomorrowChip": "Unassigned · tomorrow",
   // route-guard (screens by role)
   "guard.noAccess": "No access to this screen — opened your home screen",
+  // co.leads («Лиды и клиенты»: «Компания → Лиды», docs/14-leads-spec.md §6.1, §6.4)
+  "co.leads.title": "Leads",
+  "co.leads.hint": "Who gets new leads.",
+  "co.leads.assignee": "Who gets new leads",
+  "co.leads.assigneeHint": "A new lead goes straight to this person. If they are switched off or leave the company, leads go to the owner.",
+  "co.leads.owner": "Owner (default)",
+  "co.leads.ownerNow": "Now: the owner — {name}",
+  "co.leads.change": "Change",
   // schs (П4a: «Компания → Расписание», docs/specs/03 §6.1)
   "schs.title": "Schedule",
   "schs.hint": "Time zone, working hours, visit lengths, the client's window, «Running late».",
