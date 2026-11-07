@@ -37,6 +37,8 @@ export function jobHistory(db: D, jobId: string, role: Role): JobHistoryItem[] {
   if (est?.approvedAt) out.push({ id: `est-${est.id}`, at: est.approvedAt, kind: "action", icon: "signature", title: "job3.h.estimateSigned", detail: est.number, href: role === "tech" ? undefined : `/estimate/${est.id}`, cents: money ? est.totalCents : undefined });
   for (const v of db.visits.filter((x) => x.jobId === job.id)) {
     out.push({ id: `visit-${v.id}`, at: v.start, kind: "action", icon: "route", title: v.step === "paid" || v.step === "done" ? "job3.h.visitDone" : "job3.h.visit", href: `/visit/${v.id}` });
+    // «В пути» (17-job §11.1): when the tech left, from the visit itself (works offline); one line per visit
+    if (v.enRouteAt) out.push({ id: `enroute-${v.id}`, at: v.enRouteAt, kind: "action", icon: "navigate", title: "job5.h.enRoute", href: `/visit/${v.id}` });
   }
   for (const v of (db.cancelledVisits ?? []).filter((x) => x.jobId === job.id)) {
     out.push({ id: `vcan-${v.id}`, at: v.cancelledAt, kind: "action", icon: "close", title: "job3.h.visitCancelled", detail: v.cancelText, reason: `vc.r.${v.cancelReason}` as DictKey });

@@ -72,7 +72,15 @@ jobs:
       - name: Database tests (PostgreSQL 16)
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq postgresql-16 >/dev/null
-          sudo bash supabase/tests/run.sh
+          sudo CATALOG_OUT="$RUNNER_TEMP/catalog.json" bash supabase/tests/run.sh
+      # docs/specs/21 §5: the app's calls against the LIVE catalog the run above wrote (pg_proc, EXECUTE rights).
+      # CATALOG_REQUIRED=1: without the file the test fails instead of skipping.
+      - name: The app's server calls against the live catalog
+        working-directory: apps/mobile
+        env:
+          CATALOG_JSON: ${{ runner.temp }}/catalog.json
+          CATALOG_REQUIRED: '1'
+        run: npx vitest run test/serverCatalog.test.ts
 
   bundle:
     # CHECKS §3а п.2: the iOS and Android bundles build (Metro, Hermes) and the dependencies match the Expo SDK.
