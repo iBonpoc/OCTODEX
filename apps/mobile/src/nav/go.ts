@@ -1,11 +1,21 @@
 import { router, type Href } from "expo-router";
+import { appStackRoutes, goAction, type NavState } from "./tabBarRule";
+
+/** the root navigation state as the shell last rendered it (TabBar): goTo is called from handlers, not hooks */
+let navState: NavState;
+export const setNavState = (s: unknown) => {
+  navState = s as NavState;
+};
 
 /**
  * To a screen above or to a tab: if it is already below us in the stack we pop to it,
- * otherwise it replaces this screen (so "back" never walks into a loop).
+ * otherwise it replaces this screen (so "back" never walks into a loop). The tabs on top with a card under them (opened by
+ * a link): navigate — dismissTo did nothing there (e2e 134).
  */
 export function goTo(href: string) {
-  if (router.canDismiss()) router.dismissTo(href as Href);
+  const a = goAction(appStackRoutes(navState), router.canDismiss());
+  if (a === "dismissTo") router.dismissTo(href as Href);
+  else if (a === "navigate") router.navigate(href as Href);
   else router.replace(href as Href);
 }
 

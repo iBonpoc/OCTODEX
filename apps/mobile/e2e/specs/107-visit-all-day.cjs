@@ -3,8 +3,11 @@
  * hour, no length); the job shows «Весь день», the client is told the date only; «Перенести» keeps the switch and can
  * turn it back to a time. Kept as the company's midnight to midnight (server t03_visit_all_day, db T70–T71).
  */
+
 exports.run = async (h) => {
   const p = h.page;
+  // no midnight in this spec (CHECKS §5): at 00:21 LA a demo notice read «в пути с 12:00 AM» (another demo visit,
+  // en route since the company's midnight) and failed the «no 12:00 AM» check (#297). The runner's clock stands at noon.
   const visit = async () => (await h.db()).visits.filter((v) => v.jobId === "j3").sort((a, b) => a.start.localeCompare(b.start)).at(-1);
 
   await h.go("/job/j3");
@@ -45,7 +48,9 @@ exports.run = async (h) => {
 
   // «Сегодня» of the director (the crew cards: «Дальше: …»): no «12:00 AM»
   await h.go("/today");
-  h.expect(!/12:00 AM/.test(await h.text()), "«Сегодня»: no «12:00 AM»");
+  // the crew cards («Дальше: …») are what shows the all-day visit — not the notices of other demo visits
+  const crew = (await p.getByTestId("crew-card").locator("visible=true").allInnerTexts()).join(" | ");
+  h.expect(crew.length > 0 && !/12:00 AM/.test(crew), `«Сегодня»: no «12:00 AM» on the crew cards (${crew.slice(0, 160)})`);
 
   // the Plan: «Весь день», no hour, not «опаздывает», no «Накладка»
   await h.go("/plan");

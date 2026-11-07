@@ -167,7 +167,10 @@ function Drawer({ visible, onClose, onChoose, onCreate }: { visible: boolean; on
             {/* profile: name, role (or company) — opens My settings (13 v2 §4: one role per person, no «Сменить роль») */}
             <View style={{ height: component.hairline, backgroundColor: c.bd, marginVertical: space[2], marginHorizontal: space[2] }} />
             <Press
-              onPress={() => go("settings")}
+              onPress={() => {
+                onChoose();
+                openSection("/settings/profile");
+              }}
               visibleHeight={size.rowMax}
               accessibilityRole="button"
               accessibilityLabel={`${me?.name ?? auth.email ?? ""} · ${who}`}

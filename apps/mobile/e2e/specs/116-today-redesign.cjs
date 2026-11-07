@@ -15,6 +15,8 @@ const { expectOneAccent } = require("../accent.cjs");
 exports.run = async (h) => {
   const p = h.page;
   await p.emulateMedia({ reducedMotion: "reduce" });
+  // no midnight in this spec (CHECKS §5): the runner's clock stands at noon of the company's day (e2e/clock.cjs), so
+  // «yesterday up to this minute» always holds yesterday's 00:01 payment (at 00:00 LA it did not — red build at 08:00 UTC, #292)
   await h.go("/today");
   const chart = p.locator('[data-testid="received-chart"]:visible');
   for (const [period, want] of [["Неделя", [7]], ["Месяц", [4, 5, 6]], ["Сегодня", [7]]]) {

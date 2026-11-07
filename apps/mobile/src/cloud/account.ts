@@ -10,7 +10,8 @@ import {
   type AccountState, type DeleteOutcome, type Gone, type MembershipRow, type OwnedCompany, type WipeStore,
 } from "@/features/deleteAccount";
 import { forgetDeviceState } from "@/data/persist";
-import { OUTBOX_KEY, othersOf, parseOutbox, wipedOnDelete } from "@/data/outboxOwner";
+import { OUTBOX_KEY, othersOf, parseOutbox, REJECTED_KEY, wipedOnDelete } from "@/data/outboxOwner";
+import { parseRejected, rejectedOthers } from "@/data/outboxRejected";
 import { supabase } from "./client";
 
 /** a hung request (the line dropped; OkHttp on Android waits for ever) becomes «no answer» */
@@ -150,9 +151,12 @@ async function wipeKeepingOthers(userId: string | null | undefined, orSession = 
   const session = orSession ? (await supabase.auth.getSession().catch(() => ({ data: { session: null } }))).data.session : null;
   const me = userId || session?.user.id || null;
   const keep = othersOf(parseOutbox(await AsyncStorage.getItem(OUTBOX_KEY).catch(() => null)), me);
+  // the money changes the server refused: other people's stay too (review #263 №2)
+  const keepRejected = rejectedOthers(parseRejected(await AsyncStorage.getItem(REJECTED_KEY).catch(() => null)), me);
   forgetDeviceState(wipedOnDelete, { userId: me });
   await wipeDevice(deviceStore, warn, me);
   if (keep.length) await AsyncStorage.setItem(OUTBOX_KEY, JSON.stringify(keep)).catch(() => {});
+  if (keepRejected.length) await AsyncStorage.setItem(REJECTED_KEY, JSON.stringify(keepRejected)).catch(() => {});
 }
 
 /**

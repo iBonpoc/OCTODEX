@@ -16,6 +16,7 @@ import { GuardedScreen, RouteGuard } from "@/nav/RouteGuard";
 import { NavMenuProvider } from "@/nav/NavMenu";
 import { SideNav } from "@/nav/SideNav";
 import { TabBar } from "@/nav/TabBar";
+import { ClosedCompanyNotice } from "@/nav/ClosedCompanyNotice";
 import { SlashToSearch } from "@/nav/SearchEntry";
 import { LegalGate } from "@/nav/LegalGate";
 
@@ -37,6 +38,8 @@ function Shell() {
               <TabBar />
               <RouteGuard />
               <LegalGate />
+              {/* 7а-3 «в»: once per company its owner closed (docs/specs/22 §3.6) */}
+              <ClosedCompanyNotice />
             </View>
           </View>
         </NavMenuProvider>

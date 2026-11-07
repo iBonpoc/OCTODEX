@@ -5,7 +5,7 @@ const SCREENS = [
   "/estimate/new?id=e6", "/estimate/e5", "/estimate/signature", "/estimates", "/p/demo0handyman0estimate0000000001",
   "/jobs", "/job/j1", "/job/new", "/job/schedule?jobId=j1", "/visit/v1",
   "/money", "/invoice", "/invoice?f=paid", "/payments", "/reports", "/reports/owed", "/reports/collected?p=all", "/reports/sales", "/reports/sources?p=all", "/invoice/i5", "/receipt/pay5", "/expense/new",
-  "/catalog", "/catalog/cat-haul", "/company", "/company/profile", "/company/schedule", "/company/licenses", "/company/trades", "/team", "/settings", "/settings/delete-account", "/auth/trade", "/auth/terms", "/legal/terms", "/legal/privacy", "/help", "/auth/invite?token=a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
+  "/catalog", "/catalog/cat-haul", "/company", "/company/profile", "/company/schedule", "/company/licenses", "/company/trades", "/team", "/settings", "/settings/profile", "/settings/delete-account", "/auth/trade", "/auth/terms", "/legal/terms", "/legal/privacy", "/help", "/auth/invite?token=a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1",
 ];
 /**
  * Screens already on the new list cards (step 10а, docs/specs/06-list-cards.md): also checked for straight edges and equal
@@ -15,10 +15,11 @@ const CARD_SCREENS = [{ path: "/clients", search: "Имя, телефон или
 const { checkCardAlignment } = require("../cardsAlignment.cjs");
 /** loops over all requested layouts itself (one browser context per layout) */
 exports.ownLayouts = true;
-exports.run = async (h, { browser, BASE, layouts }) => {
+exports.run = async (h, { browser, BASE, layouts, installClock }) => {
   for (const { theme, width } of layouts) {
     {
       const ctx = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 900 }, reducedMotion: "reduce" });
+      await installClock(ctx);
       await ctx.addInitScript((th) => {
         localStorage.setItem("octo.lang.v1", JSON.stringify("ru")); localStorage.setItem("octo.role.v1", JSON.stringify("director"));
         localStorage.setItem("octo.theme.v1", JSON.stringify(th)); localStorage.setItem("octo.hints.v1", JSON.stringify(["today", "company", "clients", "estimate-builder", "inbox", "money", "jobs", "team", "catalog", "plan"]));

@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { NO_TAB_BAR, WITH_TAB_BAR, formsAbove, tabRouteKey, showsTabBar } from "../src/nav/tabBarRule";
+import { NO_TAB_BAR, WITH_TAB_BAR, appStackRoutes, formsAbove, goAction, tabLeave, tabRouteKey, showsTabBar } from "../src/nav/tabBarRule";
 
 const APP = path.resolve(__dirname, "../src/app");
 function routes(dir = APP, base = ""): string[] {
@@ -47,5 +47,34 @@ describe("unit:tabBarRule — the bottom bar on the phone", () => {
     expect(formsAbove(["estimate/new", "client/[id]"])).toEqual(["estimate/new"]);
     // only above the last copy of the tabs
     expect(formsAbove(["lead/new", "(tabs)", "client/[id]"])).toEqual([]);
+  });
+  it("a tab on the tabs switches the tab, over a card closes it (e2e 134: role change from settings, TestFlight 288)", () => {
+    expect(tabLeave(["(tabs)"])).toBe("navigate");
+    expect(tabLeave(["(tabs)", "client/[id]"])).toBe("dismissTo");
+    // navigate from /settings pushed a second copy of the tabs: on top already — dismissTo was a no-op, the tab did nothing
+    expect(tabLeave(["(tabs)", "settings/index", "(tabs)"])).toBe("navigate");
+    // a deep link to /settings, then its role change: [settings, (tabs)]
+    expect(tabLeave(["settings/index", "(tabs)"])).toBe("navigate");
+    // a card opened by a link (a push), then a tab: [card, (tabs)] — the next tab was a no-op too (e2e 134)
+    expect(tabLeave(["client/[id]", "(tabs)"])).toBe("navigate");
+    // no tabs in the stack (a deep link to a card) or no state yet
+    expect(tabLeave(["client/[id]", "job/[id]"])).toBe("navigate");
+    expect(tabLeave([])).toBe("navigate");
+  });
+  it("goTo (the screen's «‹ up», the role change): navigate when the tabs are on top over a card (e2e 134)", () => {
+    // a card opened by a link → «Ещё» → «Лиды» → «‹ Ещё»: dismissTo did nothing, the button was dead
+    expect(goAction(["client/[id]", "(tabs)"], true)).toBe("navigate");
+    // as before: a card over the tabs → down to them; alone → replace
+    expect(goAction(["(tabs)", "settings/profile"], true)).toBe("dismissTo");
+    expect(goAction(["(tabs)", "client/[id]", "job/[id]"], true)).toBe("dismissTo");
+    expect(goAction(["client/[id]"], false)).toBe("replace");
+    expect(goAction(["(tabs)"], false)).toBe("replace");
+    expect(goAction([], false)).toBe("replace");
+    expect(goAction(["settings/index", "client/[id]"], true)).toBe("dismissTo");
+  });
+  it("the app's stack is found under expo-router's «__root»", () => {
+    const st = { routeNames: ["__root"], index: 0, routes: [{ name: "__root", state: { routeNames: ["(tabs)", "client/[id]"], index: 1, routes: [{ name: "client/[id]" }, { name: "(tabs)" }] } }] };
+    expect(appStackRoutes(st)).toEqual(["client/[id]", "(tabs)"]);
+    expect(appStackRoutes(undefined)).toEqual([]);
   });
 });

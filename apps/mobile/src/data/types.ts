@@ -757,6 +757,15 @@ export interface MemberPrefs {
 }
 export const MEMBER_PREFS_DEFAULT: MemberPrefs = { planShowDone: false };
 
+/** step 18 P4b (docs/specs/27-push.md §4.8, §4.11): a group of push kinds a person switches on or off (server: push_prefs.kind,
+ *  app.push_group) — «Клиент подписал», «Оплата», «Выезды» (assigned + rescheduled), «Лиды» (new, assigned, reminders),
+ *  «Клиент открыл смету» */
+export type PushGroup = "signed" | "payment" | "visits" | "leads" | "viewed";
+export const PUSH_GROUPS: readonly PushGroup[] = ["signed", "payment", "visits", "leads", "viewed"];
+/** my switches in this company: only the groups I changed (server: push_prefs rows of mine). A missing group is the
+ *  default — on, except «viewed» (app.push_enabled, founder 07.11: «клиент открыл смету» off by default) */
+export type PushPrefs = Partial<Record<PushGroup, boolean>>;
+
 /** wave 7б-2 (docs/specs/03 §12): my consent to share my location in this company (server: memberships.share_location,
  *  location_notice_ack_at; the company flag app.company_flags.location_sharing — AB 1331, off until the lawyer's answer) */
 export interface LocationState {
@@ -801,6 +810,8 @@ export interface DB {
   customFieldValues?: CustomFieldValue[];
   /** wave 7б-1: the personal settings of `me` in this company, the same on every device (absent in old saved data → defaults) */
   prefs?: MemberPrefs;
+  /** step 18 P4b: my push switches by group here (absent in old saved data → the defaults) */
+  pushPrefs?: PushPrefs;
   /** wave 7б-2: my location consent here (absent in old saved data → off) */
   location?: LocationState;
   /** wave 7б-2: the last point per person on open visits (absent → []) */

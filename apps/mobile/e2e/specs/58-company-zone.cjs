@@ -20,12 +20,12 @@ function laAt(k, h, m) {
   throw new Error(`no ${h}:${m} on ${k} in LA`);
 }
 
-exports.run = async (h0, { browser, BASE, layout }) => {
+exports.run = async (h0, { browser, BASE, layout, installClock }) => {
   // «today» of the company: the real LA day; the fake clock is at 9:30 PM of it
   const today = dayKey(Date.now());
   const now = laAt(today, 21, 30);
   const ctx = await browser.newContext({ viewport: { width: layout.width, height: layout.width === 390 ? 844 : 900 }, locale: "en-US", timezoneId: NY, reducedMotion: "reduce" });
-  await ctx.clock.install({ time: now });
+  await installClock(ctx, now.getTime());
   await ctx.addInitScript((o) => {
     if (localStorage.getItem("octo.lang.v1")) return;
     localStorage.setItem("octo.lang.v1", JSON.stringify("ru"));
