@@ -12,7 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
-import { appRoles, loadCompanyDB, loadCompanyModule } from "@/cloud/repo";
+import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, catalogCostChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
@@ -54,6 +54,7 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, keepModuleData, moduleActive, moduleDef } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
+import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
 import {
   type CalendarEvent,
@@ -102,6 +103,7 @@ import {
   type ChecklistVisitKind,
   type NaReason,
   type VisitSettings,
+  type Supplier,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
 import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, visitSettingsOf } from "@/features/checklist";
@@ -368,6 +370,14 @@ interface StoreCtx {
   updateMember: (id: ID, patch: { title?: string; hisNumber?: string; canSignContracts?: boolean }) => Undo;
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
+  /** spec 36: make or change a supplier (owner / admin / office); null name — nothing */
+  saveSupplier: (x: Supplier) => Undo;
+  /** spec 36: archive or bring back a supplier («Отменить» 5 s) */
+  setSupplierActive: (id: ID, active: boolean) => Undo;
+  /** spec 36: the supplier's purchase tax into its items that have another one (new estimate lines follow) */
+  applySupplierTax: (id: ID) => Undo;
+  /** spec 36: read the newest history of one item or one supplier from the server (cloud, online, who sees costs) */
+  loadCostHistory: (where: { itemId?: ID; supplierId?: ID }) => void;
   /** several items at once with one «Отменить» («create the items now», docs/specs/33 П16, core K1): each goes as its own
    *  catalog.save through the queue; «Отменить» takes them all back. onlyNew (spec 33 П22.10): an item whose id is on the
    *  phone already is left as it is (no op), and the server inserts only an id it does not have (ON CONFLICT DO NOTHING) */
@@ -614,7 +624,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
       // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
       if (!pendingLive()) {
-        setDb(keepModuleData(next, dbRef.current));
+        // spec 36: the history read on open stays (the full read has none)
+        setDb(keepCostHistory(keepModuleData(next, dbRef.current), dbRef.current));
         // the whole company read again: every module's settings are the server's now
         settingsStale.current.clear();
       }
@@ -1066,6 +1077,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   const visitOf = (visitId: ID) => dbRef.current.visits.find((x) => x.id === visitId);
   const noop: Undo = () => {};
+  /**
+   * spec 36: change several price-list items at once (a supplier's tax or its new name) — each a catalog.save with its
+   * cost change and the phone's history row; «Отменить» sends the reverse ops (the change may already be on the
+   * server — review SUP1 №1), the last one wins.
+   */
+  const saveItemsBoth = (pairs: { prev: CatalogItem; next: CatalogItem }[]): Undo => {
+    if (!pairs.length) return noop;
+    const go = (from: CatalogItem, to: CatalogItem, at: string) => {
+      const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(from, to, uid(), at);
+      mutate(
+        "catalog.save",
+        (d) => ({ ...d, catalog: d.catalog.map((c) => (c.id === to.id ? to : c)), ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}) }),
+        { k: "catalog.save", item: to, costs: catalogCostChange(from, to) },
+      );
+    };
+    const at = new Date().toISOString();
+    pairs.forEach(({ prev, next }) => go(prev, next, at));
+    return () => {
+      const back = new Date().toISOString();
+      [...pairs].reverse().forEach(({ prev, next }) => go(next, prev, back));
+    };
+  };
   const checkItemFn = (visitId: ID, itemId: ID, done: boolean): Undo => {
     const v = visitOf(visitId);
     const item = v?.checklist.find((c) => c.id === itemId);
@@ -2060,14 +2093,77 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ),
       // the server's rules for properties first (features/catalogExtras.ts): a bad one never loses the whole save
       saveCatalogItem: (it0) => {
-        const it = cleanCatalogItem(it0);
+        const it = cleanSupplierLink(cleanCatalogItem(it0));
+        const prev = dbRef.current.catalog.find((x) => x.id === it.id);
         // 19 §9: only the cost fields changed here go to the server — a phone without costs never erases them
-        const costs = catalogCostChange(dbRef.current.catalog.find((x) => x.id === it.id), it);
+        const costs = catalogCostChange(prev, it);
+        // spec 36: the phone's own history row, shown at once (the server writes its own; the next read replaces the list)
+        const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(prev, it, uid(), new Date().toISOString());
         return mutate(
           "catalog.save",
-          (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it] }),
+          (d) => ({
+            ...d,
+            catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it],
+            ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}),
+          }),
           { k: "catalog.save", item: it, costs },
         );
+      },
+      saveSupplier: (x0) => {
+        const x = cleanSupplier(x0);
+        const d0 = dbRef.current;
+        if (!x || !canSeeSuppliers(role) || d0.suppliersLegacy) return noop;
+        const before = (d0.suppliers ?? []).find((y) => y.id === x.id);
+        const put = (v: Supplier | undefined) =>
+          mutate(
+            "supplier.save",
+            (d) => {
+              const list = d.suppliers ?? [];
+              if (!v) return { ...d, suppliers: list.filter((y) => y.id !== x.id) };
+              return { ...d, suppliers: list.some((y) => y.id === v.id) ? list.map((y) => (y.id === v.id ? v : y)) : [...list, v] };
+            },
+            v ? { k: "supplier.save", supplier: v } : undefined,
+          );
+        const undoSup = put(x);
+        // a rename: the name goes into `vendor` of its items too (sales, the tech and old phones read only that; spec 36 §1в)
+        const renamed = before && before.name !== x.name
+          ? itemsOfSupplier(dbRef.current, x.id).filter((it) => it.vendor !== x.name).map((it) => ({ prev: it, next: { ...it, vendor: x.name } }))
+          : [];
+        const undoItems = saveItemsBoth(renamed);
+        // «Отменить» (rule 5): a new supplier is taken back from the queue (nothing reached the server yet, or it stays
+        // as made); a changed one gets a reverse op — the change may already be on the server
+        return () => {
+          undoItems();
+          if (before) put(before);
+          else undoSup();
+        };
+      },
+      setSupplierActive: (id, active) => {
+        const x = (dbRef.current.suppliers ?? []).find((y) => y.id === id);
+        if (!x || !canSeeSuppliers(role) || dbRef.current.suppliersLegacy) return noop;
+        const next = { ...x, active };
+        mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? next : y)) }), { k: "supplier.save", supplier: next });
+        // «Отменить» (rule 5): the op may already be on the server — a reverse op, the last one wins
+        return () =>
+          void mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? x : y)) }), { k: "supplier.save", supplier: x });
+      },
+      loadCostHistory: (where) => {
+        const cid = whoRef.current?.companyId;
+        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || dbRef.current.costsVisible === false) return;
+        void loadCostHistory(cid, where)
+          .then((rows) => {
+            // another company signed in meanwhile: nothing
+            if (whoRef.current?.companyId !== cid) return;
+            dbRef.current = { ...dbRef.current, costHistory: mergeHistory(dbRef.current, where, rows) };
+            setDb(dbRef.current);
+          })
+          .catch(() => undefined);
+      },
+      applySupplierTax: (id) => {
+        const d0 = dbRef.current;
+        const x = (d0.suppliers ?? []).find((y) => y.id === id);
+        if (!x || x.taxBps === undefined || !canSeeSuppliers(role) || d0.costsVisible === false) return noop;
+        return saveItemsBoth(itemsWithOtherTax(d0, x).map((it) => ({ prev: it, next: { ...it, vendorTaxBps: x.taxBps } })));
       },
       saveCatalogItems: (items, opts) => {
         const onlyNew = !!opts?.onlyNew;

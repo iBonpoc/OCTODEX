@@ -34,6 +34,8 @@ export const SELF_KINDS: ReadonlySet<Op["k"]> = new Set<Op["k"]>([
 export const REF_KEYS: ReadonlySet<string> = new Set([
   "sourceId", "tagIds", "tagId", "techId", "userId", "userIds", "assigneeId", "assigneeIds", "serviceCategoryId",
   "jobTypeId", "categoryId", "catalogItemId", "serviceItemId", "createdBy", "ownerId", "doneBy",
+  // spec 36: an item waits for its new supplier (catalog_items.supplier_id → suppliers)
+  "supplierId",
   // the same in a lead's columns (cloud/leadCols.ts: lead.add / lead.update `cols`)
   "source_id", "service_item_id", "service_category_id", "assigned_to",
 ]);
@@ -75,6 +77,7 @@ const CREATES: Creates = {
   "visit.step": none, "photo.add": (o) => [o.id], "photo.remove": none, "visit.checklist": none, "visit.sign": none,
   "chk.item.set": none, "chk.item.add": (o) => [o.item.id], "chk.item.remove": none, "chk.item.edit": none, "chk.visit.review": none, "chk.visit.mins": none,
   "chk.template.save": (o) => [o.template.id], "est.template.save": (o) => [o.template.id], "company.visitSettings": none,
+  "supplier.save": (o) => [o.supplier.id],
   "visit.pay": (o) => [o.invoiceId, o.paymentId], "lead.reply": none,
   "lead.book": (o) => [o.customerId, o.contactId, o.propertyId, o.jobId, o.visitId],
   "visit.notified": none, "visit.inspection": (o) => [o.visitId], "visit.cancel": none, "visit.reschedule": none,
@@ -112,7 +115,7 @@ const CREATES: Creates = {
  */
 export const UNSURE_KINDS: ReadonlySet<Op["k"]> = new Set<Op["k"]>([
   "source.save", "tag.save", "catalog.save", "contact.save", "license.save", "property.save", "task.save", "lead.contactSave",
-  "customer.people", "lead.people", "estimate.save", "chk.template.save", "est.template.save",
+  "customer.people", "lead.people", "estimate.save", "chk.template.save", "est.template.save", "supplier.save",
 ]);
 
 /**

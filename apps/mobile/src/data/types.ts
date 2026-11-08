@@ -692,6 +692,41 @@ export interface CatalogItem {
    *  one purchase unit (coil: 2.6 ft a lb; downspout: 10 ft a piece; a box of 30 elbows) — docs/specs/33 П16.6 */
   purchaseUnit?: string;
   packSize?: string;
+  /** the main supplier (docs/specs/36 §5; catalog_items.supplier_id); `vendor` keeps its name for old phones (rule 16) */
+  supplierId?: ID;
+  /** the supplier's own code of the item */
+  supplierSku?: string;
+}
+
+/** how a supplier wants to be paid (printed on the supplier order, spec 36 §5) */
+export type PaymentTerms = "cod" | "prepaid" | "net_15" | "net_30" | "net_60" | "custom";
+/** a company's supplier (docs/specs/36; server: suppliers — owner / admin / office only) */
+export interface Supplier {
+  id: ID;
+  name: string;
+  contactName?: string;
+  phone?: string;
+  email?: string;
+  accountNumber?: string;
+  address?: string;
+  terms?: PaymentTerms;
+  termsNote?: string;
+  /** the purchase tax of this supplier, copied into an item when the supplier is picked; absent = not set */
+  taxBps?: number;
+  notes?: string;
+  active: boolean;
+}
+/** one change of an item's purchase cost or supplier tax (server: catalog_cost_history, only who sees costs) */
+export interface CostHistoryEntry {
+  id: ID;
+  itemId: ID;
+  supplierId?: ID;
+  costCents?: number;
+  vendorTaxBps?: number;
+  source: string;
+  at: string;
+  /** made by this phone at a save (shown at once); the server's rows replace it when the screen reads them */
+  local?: boolean;
 }
 
 /** visit.late — computed in the app for the office (docs/specs/03 П3c), never stored and not in the server notifications.kind */
@@ -982,6 +1017,12 @@ export interface DB {
   invoices: Invoice[];
   expenses: Expense[];
   catalog: CatalogItem[];
+  /** spec 36: the company's suppliers (absent in old saved data → []; a tech and sales read none) */
+  suppliers?: Supplier[];
+  /** spec 36: the history of the items' costs, newest first (only who sees costs; absent → []) */
+  costHistory?: CostHistoryEntry[];
+  /** the server has no suppliers table yet (before 20261110000000): suppliers are not written */
+  suppliersLegacy?: boolean;
   /**
    * 19 §9: does this person get our costs from the server (app.can_view_costs: owner / admin / office, others with
    * view_costs, never a tech or a subcontractor)? false — the price list comes without cost, supplier tax and markup,

@@ -7,9 +7,10 @@
 // day the invoice was made (op.dueDate, set when the op is queued), not the day the op reaches the server
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
+import { supplierToRow } from "@/features/suppliers";
 import { realJob } from "./inspectionBridge";
 import { discountBps, ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
-import type { EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
+import type { EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
@@ -47,6 +48,8 @@ export type Op =
   /** a checklist template, whole (owner, admin, office) */
   /** ifNew: a module's starter (fixed id) — inserted once, never over the office's edits (another phone added it first) */
   | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
+  /** spec 36: a supplier made, changed, archived or restored (the whole row) */
+  | { k: "supplier.save"; supplier: Supplier }
   /** the company's photo rules, whole (owner, admin) */
   | { k: "company.visitSettings"; settings: VisitSettings }
   | { k: "visit.sign"; visitId: string; svg: string }
@@ -552,6 +555,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "est.template.save":
       return saveEstimateTemplate(op.template, c);
+    case "supplier.save":
+      return run(supabase.from("suppliers").upsert(supplierToRow(op.supplier, c), { onConflict: "id" }));
     case "chk.template.save":
       return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id", ...(op.ifNew ? { ignoreDuplicates: true } : {}) }));
     case "company.visitSettings":
@@ -997,6 +1002,9 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
             ...(it.attributes !== undefined ? { attributes: it.attributes } : {}),
             ...(it.purchaseUnit !== undefined ? { purchase_unit: it.purchaseUnit.trim() || null } : {}),
             ...(it.packSize !== undefined ? { pack_size: it.packSize || null } : {}),
+            // spec 36: the same — only once set ("" = cleared)
+            ...(it.supplierId !== undefined ? { supplier_id: it.supplierId || null } : {}),
+            ...(it.supplierSku !== undefined ? { supplier_sku: it.supplierSku || null } : {}),
           },
           // onlyNew: INSERT … ON CONFLICT (id) DO NOTHING — the row there stays as it is; a refusal (RLS) stays a refusal
           op.onlyNew ? { onConflict: "id", ignoreDuplicates: true } : { onConflict: "id" },

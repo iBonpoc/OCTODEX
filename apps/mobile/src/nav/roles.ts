@@ -38,6 +38,8 @@ export const routeRoles: Record<string, readonly Role[]> = {
   team: ["director"],
   // the office reads, the director changes (spec 26 §3; companies_update is owner / admin in the database)
   company: ["director", "dispatcher"],
+  // spec 36 §8: owner, admin, office (suppliers_select in the database is the same)
+  suppliers: PLANNERS,
 };
 
 /** the first part of an address: "/company/hours?x=1" → "company", "/" → "" */

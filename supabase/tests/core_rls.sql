@@ -11106,4 +11106,164 @@ select tst.ok((select channel = 'on_site' and signer_user_id = 'a0000000-0000-00
 drop function tst.t142_estimate(int, uuid);
 \echo 'T142 tech and client link ok'
 
+-- ---------------------------------------------------------------- T143: suppliers — only owner / admin / office (spec 36 §8)
+-- the account number lets anyone order on the company's account: not the tech, not sales (§4 №9); no delete — archive
+:as_owner_a
+insert into public.suppliers (id, company_id, name, phone, email, account_number, payment_terms, purchase_tax_bps)
+  values ('51430000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T143 Supply (test)', '555-0100', 'orders@t143.test', 'ACC-143', 'net_30', 1025);
+select tst.ok(tst.cnt($q$select 1 from public.suppliers where id = '51430000-0000-4000-8000-000000000001'$q$) = 1, 'T143 the owner makes and reads a supplier');
+:as_office_a
+update public.suppliers set contact_name = 'Pat', is_active = false where id = '51430000-0000-4000-8000-000000000001';
+select tst.ok((select contact_name = 'Pat' and not is_active from public.suppliers where id = '51430000-0000-4000-8000-000000000001'), 'T143 the office changes and archives it');
+update public.suppliers set is_active = true where id = '51430000-0000-4000-8000-000000000001';
+-- the app saves with an upsert of every column (ops.ts supplier.save)
+insert into public.suppliers (id, company_id, name, phone, is_active) values
+  ('51430000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T143 Supply (test)', '555-0101', true)
+  on conflict (id) do update set id = excluded.id, company_id = excluded.company_id, name = excluded.name, phone = excluded.phone, is_active = excluded.is_active;
+select tst.ok((select phone = '555-0101' from public.suppliers where id = '51430000-0000-4000-8000-000000000001'), 'T143 the app''s upsert changes a supplier');
+-- the key never changes (director's check of #459 Н3)
+update public.suppliers set id = '51430000-0000-4000-8000-0000000000ff' where id = '51430000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.suppliers where id = '51430000-0000-4000-8000-000000000001'$q$) = 1
+          and tst.cnt($q$select 1 from public.suppliers where id = '51430000-0000-4000-8000-0000000000ff'$q$) = 0, 'T143 a supplier''s id never changes');
+select tst.blocked($q$delete from public.suppliers where id = '51430000-0000-4000-8000-000000000001'$q$, 'T143 nobody deletes a supplier (archive only)');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.suppliers$q$) = 0, 'T143 the tech reads no supplier');
+select tst.fails($q$insert into public.suppliers (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'tech')$q$, 'T143 the tech makes none');
+select tst.blocked($q$update public.suppliers set name = 'x' where id = '51430000-0000-4000-8000-000000000001'$q$, 'T143 the tech changes none');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.suppliers$q$) = 0, 'T143 sales reads no supplier (В3 by default: no)');
+select tst.fails($q$insert into public.suppliers (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'sales')$q$, 'T143 sales makes none');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.suppliers where id = '51430000-0000-4000-8000-000000000001'$q$) = 0, 'T143 company B does not see A''s supplier');
+select tst.fails($q$insert into public.suppliers (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'B into A')$q$, 'T143 company B makes none in A');
+select tst.blocked($q$update public.suppliers set name = 'x' where id = '51430000-0000-4000-8000-000000000001'$q$, 'T143 company B changes none of A''s');
+select tst.fails($q$insert into public.suppliers (id, company_id, name) values ('51430000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'steal')
+  on conflict (id) do update set company_id = excluded.company_id, name = excluded.name$q$, 'T143 company B''s upsert onto A''s id is refused');
+:as_owner_a
+select tst.fails($q$insert into public.suppliers (company_id, name) values ('ca000000-0000-0000-0000-000000000000', '  ')$q$, 'T143 a blank name');
+select tst.fails($q$insert into public.suppliers (company_id, name) values ('ca000000-0000-0000-0000-000000000000', E'bad‮name')$q$, 'T143 a bidirectional override in the name');
+select tst.fails($q$insert into public.suppliers (company_id, name, email) values ('ca000000-0000-0000-0000-000000000000', 'e', 'not an email')$q$, 'T143 an email without @');
+select tst.fails($q$insert into public.suppliers (company_id, name, purchase_tax_bps) values ('ca000000-0000-0000-0000-000000000000', 't', 10001)$q$, 'T143 a tax above 100%');
+select tst.fails($q$update public.suppliers set company_id = 'cb000000-0000-0000-0000-000000000000' where id = '51430000-0000-4000-8000-000000000001'$q$, 'T143 a supplier never moves to another company');
+\echo 'T143 suppliers: owner/admin/office only, archive not delete ok'
+
+-- ---------------------------------------------------------------- T144: an item's supplier is of its own company (spec 36 §5)
+:as_owner_b
+insert into public.suppliers (id, company_id, name) values ('51440000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'T144 B supply');
+:as_owner_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id, supplier_sku, vendor)
+  values ('51440000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T144 bracket (test)', 'ea', 0,
+          '51430000-0000-4000-8000-000000000001', 'SKU-144', 'T143 Supply (test)');
+select tst.ok((select supplier_id = '51430000-0000-4000-8000-000000000001' and supplier_sku = 'SKU-144' from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'),
+  'T144 the owner links an item to the company''s supplier');
+select tst.fails($q$update public.catalog_items set supplier_id = '51440000-0000-4000-8000-0000000000b1' where id = '51440000-0000-4000-8000-000000000001'$q$,
+  'T144 a supplier of another company is refused');
+select tst.fails($q$update public.catalog_items set supplier_sku = E'a\nb' where id = '51440000-0000-4000-8000-000000000001'$q$, 'T144 a line break in the SKU');
+-- an old owner phone types another vendor on a linked item: the supplier's name stays (director's check of #459 Н2)
+update public.catalog_items set vendor = 'Lowes' where id = '51440000-0000-4000-8000-000000000001';
+select tst.ok((select vendor = 'T143 Supply (test)' from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'),
+  'T144 a linked item''s vendor is always its supplier''s name');
+update public.suppliers set name = 'T143 Supply renamed (test)' where id = '51430000-0000-4000-8000-000000000001';
+select tst.ok((select vendor = 'T143 Supply renamed (test)' from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'),
+  'T144 a renamed supplier: its items carry the new name');
+update public.suppliers set name = 'T143 Supply (test)' where id = '51430000-0000-4000-8000-000000000001';
+-- sales edits the price list (is_staff) without reading suppliers: a save that does not send the columns keeps them
+:as_sales_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents)
+  values ('51440000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T144 bracket renamed (test)', 'ea', 0)
+  on conflict (id) do update set name = excluded.name;
+select tst.ok((select supplier_id = '51430000-0000-4000-8000-000000000001' and supplier_sku = 'SKU-144' from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'),
+  'T144 sales renames the item, its supplier and SKU stay');
+-- …and whatever sales sends for them is ignored (it reads no suppliers; security check SUP1 №2)
+update public.catalog_items set supplier_id = null, supplier_sku = 'X', vendor = 'Lowe''s' where id = '51440000-0000-4000-8000-000000000001';
+select tst.ok((select supplier_id = '51430000-0000-4000-8000-000000000001' and supplier_sku = 'SKU-144' and vendor = 'T143 Supply (test)'
+                 from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'),
+  'T144 sales does not unlink, re-SKU or rename the supplier of a linked item');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id, supplier_sku)
+  values ('51440000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'material', 'T144 sales item (test)', 'ea', 0,
+          '51430000-0000-4000-8000-000000000001', 'S1');
+select tst.ok((select supplier_id is null and supplier_sku is null from public.catalog_items where id = '51440000-0000-4000-8000-000000000002'),
+  'T144 sales makes an item without a supplier, whatever it sends');
+-- the tech reads the item (and its old vendor text) as before, the supplier id gives him nothing
+:as_tech_a
+select tst.ok((select vendor = 'T143 Supply (test)' from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'), 'T144 the tech reads the vendor text as before');
+select tst.ok(tst.cnt($q$select 1 from public.suppliers s join public.catalog_items i on i.supplier_id = s.id where i.id = '51440000-0000-4000-8000-000000000001'$q$) = 0,
+  'T144 …but not the supplier behind the id');
+\echo 'T144 the supplier of an item ok'
+
+-- ---------------------------------------------------------------- T145: the history of an item's cost (spec 36 §5, §8)
+:as_owner_a
+-- the screen writes the side table directly (ops.ts catalog.save)
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps)
+  values ('51440000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 1000, 1025)
+  on conflict (item_id) do update set unit_cost_cents = excluded.unit_cost_cents, vendor_tax_bps = excluded.vendor_tax_bps;
+select tst.ok((select count(*) = 1 and bool_and(unit_cost_cents = 1000 and vendor_tax_bps = 1025 and source = 'manual'
+                 and supplier_id = '51430000-0000-4000-8000-000000000001' and by = 'a0000000-0000-0000-0000-000000000001')
+                 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'),
+  'T145 the first cost: one row, with the supplier, who and manual');
+-- the same cost again (a replay, a rename): no row
+update public.catalog_item_costs set unit_cost_cents = 1000, markup_bps = 500 where item_id = '51440000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 1,
+  'T145 the same cost and tax (only the markup changed): no row');
+-- an old phone sends the cost on the item row (t30 moves it): a row too
+update public.catalog_items set unit_cost_cents = 1100 where id = '51440000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001' and unit_cost_cents = 1100$q$) = 1,
+  'T145 a cost written the old way is in the history');
+-- the supplier and the cost in one save: the history has the new supplier (map-keeper №2)
+insert into public.suppliers (id, company_id, name) values ('51450000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T145 Other (test)');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id, unit_cost_cents)
+  values ('51440000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T144 bracket renamed (test)', 'ea', 0,
+          '51450000-0000-4000-8000-000000000001', 1200)
+  on conflict (id) do update set supplier_id = excluded.supplier_id, unit_cost_cents = excluded.unit_cost_cents;
+select tst.ok((select supplier_id = '51450000-0000-4000-8000-000000000001' from public.catalog_cost_history
+                where item_id = '51440000-0000-4000-8000-000000000001' and unit_cost_cents = 1200),
+  'T145 the supplier and the cost changed in one save: the row has the new supplier');
+select tst.ok((select supplier_id = '51430000-0000-4000-8000-000000000001' from public.catalog_cost_history
+                where item_id = '51440000-0000-4000-8000-000000000001' and unit_cost_cents = 1100),
+  'T145 …the earlier row keeps the earlier supplier');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 3, 'T145 the office reads the history');
+-- a cost row never moves to another item (director's check of #459 Н3)
+update public.catalog_item_costs set item_id = '99000000-0000-4000-8000-000000000001' where item_id = '51440000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 1, 'T145 a cost row keeps its item');
+select tst.fails($q$insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents) values ('ca000000-0000-0000-0000-000000000000', '51440000-0000-4000-8000-000000000001', 1)$q$,
+  'T145 the office writes no history itself');
+select tst.blocked($q$update public.catalog_cost_history set unit_cost_cents = 1 where item_id = '51440000-0000-4000-8000-000000000001'$q$, 'T145 …changes none');
+select tst.blocked($q$delete from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$, 'T145 …deletes none');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history$q$) = 0, 'T145 the tech reads no history (our costs)');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history$q$) = 0, 'T145 sales without view_costs reads none');
+:as_super
+update public.memberships set permissions_override = '{"view_costs": true}'::jsonb
+ where user_id in ('a0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000003') and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 3, 'T145 sales with view_costs reads the history');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history$q$) = 0, 'T145 the tech never, even with view_costs');
+:as_super
+update public.memberships set permissions_override = permissions_override - 'view_costs'
+ where user_id in ('a0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000003') and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 0, 'T145 company B reads none of A''s');
+:as_super
+delete from public.catalog_items where id in ('51440000-0000-4000-8000-000000000001', '51440000-0000-4000-8000-000000000002');
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 0, 'T145 the history goes with its item');
+\echo 'T145 the cost history ok'
+
+-- ---------------------------------------------------------------- T146: who calls the new functions (rule 18); the move of vendor texts
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_cost_history()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_cost_history_supplier()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_catalog_supplier_guard()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_supplier_renamed()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_keep_id()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_keep_item_id()', 'execute')
+          and not has_function_privilege('anon', 'app.sup_text_ok(text, integer)', 'execute')
+          and not has_table_privilege('authenticated', 'public.suppliers', 'delete')
+          and not has_table_privilege('authenticated', 'public.catalog_cost_history', 'insert')
+          and not has_table_privilege('anon', 'public.suppliers', 'select'),
+  'T146 the triggers are nobody''s door; no delete of suppliers, no insert into the history, nothing for anon');
+-- the move on a database with data: upgrade/20261110000000_suppliers.after.sql
+\echo 'T146 doors ok'
+
 \echo 'ALL TESTS PASSED'
