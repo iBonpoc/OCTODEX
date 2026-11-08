@@ -13,6 +13,12 @@ const SECRET = Deno.env.get("STRIPE_WEBHOOK_SECRET") ?? "";
 // the same API version as stripe-connect and stripe-pay
 const STRIPE_VERSION = "2024-06-20";
 const admin = createClient(URL_, SERVICE, { auth: { persistSession: false, autoRefreshToken: false } });
+// as service_role (the doors are granted to it only — rule 18), the same helper as stripe-pay / stripe-connect
+async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
+  const { data, error } = await admin.rpc(name, args);
+  if (error) throw new DbError(error.code ?? null);
+  return data as T;
+}
 const keyMode = !KEY ? null : /^(sk|rk)_test_/.test(KEY) ? "test" : "live";
 
 async function stripe(path: string, account: string): Promise<StripeAnswer> {
@@ -32,11 +38,7 @@ Deno.serve(async (req: Request) => {
       now: () => Math.floor(Date.now() / 1000),
       stripe: KEY ? stripe : null,
       keyMode,
-      apply: async (event, method, fee) => {
-        const { data, error } = await admin.rpc("stripe_webhook_apply", { p_event: event, p_method: method, p_fee_cents: fee });
-        if (error) throw new DbError(error.code ?? null);
-        return String(data);
-      },
+      apply: async (event, method, fee) => String(await rpc<string>("stripe_webhook_apply", { p_event: event, p_method: method, p_fee_cents: fee })),
       log: (m) => console.warn(m),
     },
   );
