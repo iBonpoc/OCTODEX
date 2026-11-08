@@ -6,9 +6,10 @@
 // due_date is the company's calendar day (features/zone.ts, docs/specs/03 П4b), not the UTC date of the phone; it is the
 // day the invoice was made (op.dueDate, set when the op is queued), not the day the op reaches the server
 import { companyToday } from "@/features/zone";
+import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
 import { realJob } from "./inspectionBridge";
 import { ENGINE_VERSION, jobLineQty } from "@octo/estimating-engine";
-import type { BillingAddress, CalendarEvent, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
+import type { BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
@@ -21,7 +22,26 @@ export type Op =
   | { k: "visit.step"; visitId: string; to: VisitStep; at?: string }
   | { k: "photo.add"; id: string; visitId: string; jobId?: string; stage: "before" | "after"; uri?: string }
   | { k: "photo.remove"; id: string }
+  /** the whole list at once — what the app sent before step 14; kept for ops still in old queues (the server's
+   *  legacy trigger moves only ticks and new optional items of it into the rows, migration 20261108140000) */
   | { k: "visit.checklist"; visitId: string; checklist: { id: string; label: string; done: boolean }[] }
+  /**
+   * step 14 (docs/specs/08 §11.3): a tick, a skip, the photos of items of one visit — an UPDATE of the rows only
+   * (never an upsert: a tech's write would be checked by the insert policy). `at` — the phone's time of the change; the
+   * server takes it only at the tick / skip itself, and writes who. addPhotoId: one photo added to the item's photos on
+   * the server (read and merged there — never the phone's whole array: two people adding photos would drop one).
+   */
+  | { k: "chk.item.set"; visitId: string; itemIds: string[]; done?: boolean; skipped?: boolean; naReason?: NaReason | null; naText?: string | null; addPhotoId?: string; at: string }
+  /** a new item of a visit (the office's; a tech's own — always optional) */
+  | { k: "chk.item.add"; item: { id: string; visitId: string; position: number; label: string; kind: ChecklistItemKind; required: boolean; hint?: string; templateId?: string; templateName?: string } }
+  /** an item removed (soft: deleted_at, undo 5 s) */
+  | { k: "chk.item.remove"; id: string; visitId: string }
+  /** «Просмотрено» on the «not done» card (at = null: «Отменить»); the server writes who */
+  | { k: "chk.visit.review"; visitId: string; at: string | null }
+  /** a checklist template, whole (owner, admin, office) */
+  | { k: "chk.template.save"; template: ChecklistTemplate }
+  /** the company's photo rules, whole (owner, admin) */
+  | { k: "company.visitSettings"; settings: VisitSettings }
   | { k: "visit.sign"; visitId: string; svg: string }
   /** dueDate: the company's day when the invoice was made (offline at 11:50 PM it stays that day); older queued ops have none */
   | { k: "visit.pay"; visitId: string; jobId: string; customerId: string; invoiceId: string; paymentId: string; amountCents: number; method: PaymentMethod; dueDate?: string }
@@ -302,6 +322,35 @@ async function assignPeople(visitId: string, ids: string[]) {
   if (ids.length) await run(supabase.rpc("assign_visit", { p_visit_id: visitId, p_user_ids: ids }));
 }
 
+/** the columns of one chk.item.set (only what the op says; the server sets who and keeps the time after the change) */
+export function chkItemPatch(op: Extract<Op, { k: "chk.item.set" }>): Record<string, unknown> {
+  const row: Record<string, unknown> = {};
+  if (op.done !== undefined) {
+    row.done = op.done;
+    if (op.done) row.done_at = op.at;
+  }
+  if (op.skipped !== undefined) {
+    row.skipped = op.skipped;
+    if (op.skipped) {
+      row.na_at = op.at;
+      row.na_reason = op.naReason ?? null;
+      row.na_text = cleanText(op.naText ?? "") || null;
+    }
+  }
+  return row;
+}
+
+/** a template → its row (docs/specs/08 §3.1; server checklist_templates) */
+export function templateToDb(t: ChecklistTemplate, companyId: string): Record<string, unknown> {
+  return {
+    id: t.id, company_id: companyId, name: cleanText(t.name, TEMPLATE_NAME_MAX),
+    items: t.items.map((i) => ({ id: i.id, label: cleanText(i.label), kind: i.kind, required: i.required, ...(cleanText(i.hint) ? { hint: cleanText(i.hint) } : {}) })),
+    applies_every_visit: t.appliesTo.everyVisit, applies_visit_kinds: t.appliesTo.visitKinds, applies_catalog_item_ids: t.appliesTo.catalogItemIds,
+    min_photos_before: t.minPhotosBefore ?? null, min_photos_after: t.minPhotosAfter ?? null,
+    module_key: t.module ?? null, archived_at: t.archivedAt ?? null,
+  };
+}
+
 /** Insert by client-made id; a retry after a partial failure does not duplicate rows (ON CONFLICT DO NOTHING). */
 function ins(table: string, row: Record<string, unknown>) {
   return supabase.from(table).upsert(row, { onConflict: "id", ignoreDuplicates: true });
@@ -425,6 +474,34 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.from("files").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "visit.checklist":
       return run(supabase.from("visits").update({ checklist: op.checklist }).eq("id", op.visitId));
+    case "chk.item.set": {
+      if (!op.itemIds.length) return;
+      const row = chkItemPatch(op);
+      if (op.addPhotoId) {
+        // the photos of one item: what the server has now + this one (a retry adds nothing twice)
+        const { data } = await read(supabase.from("visit_checklist_items").select("photo_ids").eq("visit_id", op.visitId).eq("id", op.itemIds[0]!).maybeSingle());
+        const now = ((data as { photo_ids?: string[] | null } | null)?.photo_ids ?? []).filter((x) => x !== op.addPhotoId);
+        row.photo_ids = [...now, op.addPhotoId].slice(-20);
+      }
+      return run(supabase.from("visit_checklist_items").update(row).eq("visit_id", op.visitId).in("id", op.itemIds));
+    }
+    case "chk.item.add": {
+      const it = op.item;
+      return run(
+        ins("visit_checklist_items", {
+          id: it.id, company_id: c, visit_id: it.visitId, position: it.position, label: cleanText(it.label), kind: it.kind, required: it.required,
+          hint: cleanText(it.hint) || null, template_id: it.templateId ?? null, template_name: cleanText(it.templateName, TEMPLATE_NAME_MAX) || null,
+        }),
+      );
+    }
+    case "chk.item.remove":
+      return run(supabase.from("visit_checklist_items").update({ deleted_at: new Date().toISOString() }).eq("id", op.id).eq("visit_id", op.visitId));
+    case "chk.visit.review":
+      return run(supabase.from("visits").update({ checklist_reviewed_at: op.at }).eq("id", op.visitId));
+    case "chk.template.save":
+      return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id" }));
+    case "company.visitSettings":
+      return run(supabase.from("companies").update({ visit_settings: op.settings }).eq("id", c));
     case "visit.sign":
       return run(supabase.from("visits").update({ signed_at: new Date().toISOString(), signature_svg: op.svg }).eq("id", op.visitId));
     case "visit.pay": {

@@ -73,6 +73,8 @@ const none = () => [];
  */
 const CREATES: Creates = {
   "visit.step": none, "photo.add": (o) => [o.id], "photo.remove": none, "visit.checklist": none, "visit.sign": none,
+  "chk.item.set": none, "chk.item.add": (o) => [o.item.id], "chk.item.remove": none, "chk.visit.review": none,
+  "chk.template.save": (o) => [o.template.id], "company.visitSettings": none,
   "visit.pay": (o) => [o.invoiceId, o.paymentId], "lead.reply": none,
   "lead.book": (o) => [o.customerId, o.contactId, o.propertyId, o.jobId, o.visitId],
   "visit.notified": none, "visit.inspection": (o) => [o.visitId], "visit.cancel": none, "visit.reschedule": none,
@@ -110,7 +112,7 @@ const CREATES: Creates = {
  */
 export const UNSURE_KINDS: ReadonlySet<Op["k"]> = new Set<Op["k"]>([
   "source.save", "tag.save", "catalog.save", "contact.save", "license.save", "property.save", "task.save", "lead.contactSave",
-  "customer.people", "lead.people", "estimate.save",
+  "customer.people", "lead.people", "estimate.save", "chk.template.save",
 ]);
 
 /**
