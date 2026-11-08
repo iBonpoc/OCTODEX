@@ -265,7 +265,8 @@ export const TEMPLATE_NAME_MAX = 120;
 export const PHOTOS_PER_ITEM_MAX = 20;
 /** control characters (new lines, tabs) → a space; spaces trimmed; cut to `max` */
 export const cleanText = (s: string | undefined, max: number = LABEL_MAX): string =>
-  (s ?? "").replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").trim().slice(0, max).trim();
+  // line / paragraph separators too (the server's [[:cntrl:]] may take them); cut by characters, never half a pair
+  Array.from((s ?? "").replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").trim()).slice(0, max).join("").trim();
 
 /** a template as the server takes it, or null when it would be refused (no name) */
 export function cleanTemplate(t: ChecklistTemplate): ChecklistTemplate | null {

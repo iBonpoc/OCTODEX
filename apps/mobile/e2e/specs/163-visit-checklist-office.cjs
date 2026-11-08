@@ -67,14 +67,27 @@ exports.run = async (h) => {
   h.expect(v.checklist[4].label === "Dog in the yard" && v.checklist[4].required === true, `a new required item: ${JSON.stringify(v.checklist[4])}`);
   await h.shot("edited");
 
+  // «Убрать пункт» (an optional one — the office's) with «Отменить» (rule 5)
+  const gone = v.checklist[1].id;
+  await p.getByTestId("chk-edit-1").last().getByRole("button", { name: /^Изменить/ }).click();
+  await h.sheet().getByTestId("chk-edit-remove").getByRole("button").click();
+  await h.expectText(/Пункт убран/, "the toast");
+  v = await until((x) => !x.checklist.some((c) => c.id === gone));
+  h.expect(!v.checklist.some((c) => c.id === gone), "removed");
+  await p.getByRole("button", { name: "Отменить", exact: true }).last().click();
+  v = await until((x) => x.checklist.some((c) => c.id === gone));
+  h.expect(v.checklist.length === 5 && v.checklist[1].id === gone, "«Отменить» brings it back");
+
   // the dispatcher: a required item stays required (only the director turns it off; the server's guard)
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("dispatcher")));
   await h.go(`/visit/${ID}`);
   await p.getByTestId("chk-edit-0").last().getByRole("button", { name: /^Изменить/ }).click();
   await h.sheet().getByText("Пункт чек-листа").waitFor();
   h.expect((await h.sheet().getByText("Снять «Обязательный» может только директор").count()) === 0, "an optional item: the dispatcher may make it required");
-  await p.keyboard.press("Escape");
-  await h.sheet().waitFor({ state: "detached" }).catch(() => {});
+  await h.sheet().getByRole("switch", { name: "Обязательный" }).click();
+  await h.sheet().getByTestId("chk-edit-save").getByRole("button").click();
+  v = await until((x) => x.checklist[0].required === true);
+  h.expect(v.checklist[0].required === true, "the dispatcher made it required");
   await p.getByTestId("chk-edit-2").last().getByRole("button", { name: /^Изменить/ }).click();
   await h.sheet().getByText("Снять «Обязательный» может только директор").waitFor();
   h.expect((await h.sheet().getByRole("switch", { name: "Обязательный" }).count()) === 0, "no switch for a required item");

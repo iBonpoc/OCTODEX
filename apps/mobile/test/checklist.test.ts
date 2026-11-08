@@ -277,3 +277,12 @@ describe("unit:checklistOffice — the office edits a visit's items before it st
     expect(itemsFromTemplate(v, { ...t, archivedAt: "2026-11-01T00:00:00Z" }, id)).toEqual([]);
   });
 });
+
+describe("unit:checklistText — what the server's [[:cntrl:]] may refuse (CH3 review)", () => {
+  it("line / paragraph separators become a space; the cut never leaves half a pair", () => {
+    expect(cleanText("a\u2028b\u2029c")).toBe("a b c");
+    const emoji = "🙂".repeat(3);
+    expect(cleanText(emoji, 2)).toBe("🙂🙂");
+    expect(Array.from(cleanText("x".repeat(299) + "🙂🙂"))).toHaveLength(300);
+  });
+});

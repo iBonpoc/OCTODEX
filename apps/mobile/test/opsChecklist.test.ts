@@ -88,9 +88,11 @@ describe("ops: the other checklist ops", () => {
     await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", label: " Dog\tin the yard " }, "co", "u");
     await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", required: false, position: 2 }, "co", "u");
     await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", label: " \n " }, "co", "u");
+    await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", position: 250000.4 }, "co", "u");
     expect(calls.map((c) => [c.how, c.row, c.eq])).toEqual([
       ["update", { label: "Dog in the yard" }, [["id", "i9"], ["visit_id", "v1"]]],
       ["update", { required: false, position: 2 }, [["id", "i9"], ["visit_id", "v1"]]],
+      ["update", { position: 100000 }, [["id", "i9"], ["visit_id", "v1"]]],
     ]);
   });
   it("chk.visit.review: «Просмотрено» and «Отменить» (the server writes who)", async () => {

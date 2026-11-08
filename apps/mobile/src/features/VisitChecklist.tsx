@@ -11,7 +11,7 @@ import { useStore } from "@/data/store";
 import type { ChecklistItem, Visit } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { canAddItem, canAttachPhoto, canRemoveItem, canSetRequired, canTick, itemDone, itemKind, itemRequired, itemSkipped, templatesForVisit, type Missing } from "@/features/checklist";
+import { canAddItem, canAttachPhoto, canRemoveItem, canSetRequired, canTick, cleanText, itemDone, itemKind, itemRequired, itemSkipped, itemsFromTemplate, LABEL_MAX, templatesForVisit, type Missing } from "@/features/checklist";
 import { PhotoStrip } from "@/features/PhotoStrip";
 import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
@@ -248,7 +248,7 @@ export function ChecklistEditor({ v }: { v: Visit }) {
         ))}
         <RowView>
           <View style={{ flex: 1 }}>
-            <TextField type="text" value={extra} onChangeText={setExtra} placeholder={t("check.addPlaceholder")} icon="plus" />
+            <TextField type="text" value={extra} onChangeText={(x) => setExtra(x.slice(0, LABEL_MAX))} placeholder={t("check.addPlaceholder")} icon="plus" />
           </View>
           <Button label={t("check.add")} size="sm" variant="secondary" disabled={!extra.trim()} onPress={add} />
         </RowView>
@@ -280,7 +280,10 @@ export function ChecklistEditor({ v }: { v: Visit }) {
                   ? undefined
                   : () => {
                       setPicking(false);
-                      say(t("chk3.addedN", { n: template.items.length }), store.addVisitTemplate(v.id, template.id));
+                      // the count of what really comes (the 200 cap, doubles); nothing — no toast (its «Отменить» would do nothing)
+                      const cur = store.db.visits.find((x) => x.id === v.id) ?? v;
+                      const n = itemsFromTemplate(cur, template, () => "").length;
+                      if (n) say(t("chk3.addedN", { n }), store.addVisitTemplate(v.id, template.id));
                     }
               }
             />
@@ -300,16 +303,22 @@ function EditItemSheet({ v, item, onClose }: { v: Visit; item: ChecklistItem; on
   const [label, setLabel] = useState(item.label);
   const [required, setRequired] = useState(itemRequired(item));
   const lockedOn = itemRequired(item) && !canSetRequired(store.role, false);
-  const dirty = label.trim() !== item.label || required !== itemRequired(item);
+  // as the store will take it: an empty text keeps the old one; «Обязательный» off only when the role may
+  const clean = cleanText(label);
+  const next = {
+    ...(clean && clean !== item.label ? { label: clean } : {}),
+    ...(required !== itemRequired(item) && canSetRequired(store.role, required) ? { required } : {}),
+  };
+  const dirty = Object.keys(next).length > 0;
   const say = (msg: string, undo: () => void) => toast.show(store.online ? msg : t("offline.queued"), undo);
   const save = () => {
     onClose();
-    if (dirty) say(t("chk3.edited"), store.editVisitItem(v.id, item.id, { label, required }));
+    if (dirty) say(t("chk3.edited"), store.editVisitItem(v.id, item.id, next));
   };
   return (
     <Sheet visible onClose={onClose} title={t("chk3.editTitle")} dirty={dirty} onSave={save}>
       <View testID="chk-edit-sheet" style={{ gap: space[2] }}>
-        <TextField label={t("chk3.label")} type="text" value={label} onChangeText={setLabel} />
+        <TextField label={t("chk3.label")} type="text" value={label} onChangeText={(x) => setLabel(x.slice(0, LABEL_MAX))} />
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="body" style={{ flex: 1 }}>
             {t("chk3.required")}
@@ -322,7 +331,7 @@ function EditItemSheet({ v, item, onClose }: { v: Visit; item: ChecklistItem; on
           </T>
         ) : null}
         <View testID="chk-edit-save">
-          <Button label={t("ue.save")} icon="check" full disabled={!label.trim()} onPress={save} />
+          <Button label={t("ue.save")} icon="check" full disabled={!dirty} onPress={save} />
         </View>
         {canRemoveItem(store.role, store.db.me, v, item) ? (
           <View testID="chk-edit-remove">

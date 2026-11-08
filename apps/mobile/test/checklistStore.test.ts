@@ -479,6 +479,14 @@ describe("unit:checklistOfficeStore — the office edits a visit before it start
     expect(visitOf(r).checklist.map((c) => c.label)).toEqual(["Confirm scope", "Photo of the area"]);
     expect(server.sends).toEqual([]);
   });
+  it("an old server: «Ниже» goes as the old whole list in the new order", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistLegacy: true });
+    scheduled(r);
+    valueOf(r).moveVisitItem(VISIT, ITEM, 1);
+    await drain();
+    expect(server.sends.map((x) => x.op.k)).toEqual(["visit.checklist"]);
+    expect((server.sends[0]!.op.checklist as { id: string }[]).map((c) => c.id)).toEqual([PHOTO_ITEM, ITEM]);
+  });
   it("an old server: the edit and the template go as the old whole list", { timeout: 15_000 }, async () => {
     const r = await signedIn({ checklistTemplates: [TPL], checklistLegacy: true });
     scheduled(r);
