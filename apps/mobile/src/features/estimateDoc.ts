@@ -3,6 +3,7 @@
  */
 import {
   activeLines,
+  jobLineQty,
   catalogPrice,
   marginPctOf,
   partsCost,
@@ -143,6 +144,17 @@ export function clientDoc(doc: EstimateDoc): EstimateDoc {
   };
 }
 
+/** The quantity people see (page /p/, PDF, the estimate screens): the one the engine and the server count — numeric(14,4),
+ *  half away from zero, no trailing zeros ("1.23455" → "1.2346", "2.50" → "2.5"). Debt 1 of «Сметы» №1: the page showed
+ *  the raw number while the sum counted the rounded one. A quantity that is not a number is shown as typed. */
+export function shownQty(q: CustomLine["quantity"]): string {
+  try {
+    return jobLineQty(q);
+  } catch {
+    return String(q);
+  }
+}
+
 /** quantity is a plain decimal zero ("0", "-0", "0.", "00", "0.00", " .0 ") — the same pattern as the server's app.client_doc
  *  (migration 20261108170000), so the demo page, the PDF and the real /p/ agree; a blank, broken or "0e5" quantity is not */
 const ZERO_QTY = /^\s*[+-]?(0+(\.0*)?|\.0+)\s*$/;
@@ -200,6 +212,52 @@ export function sendIssues(doc: EstimateDoc): SendIssues {
 }
 export const issueCount = (i: SendIssues) => SEND_ISSUE_KINDS.reduce((n, k) => n + i[k].length, 0);
 
+/**
+ * The margin the office sees on the estimate screen (debt 5 of «Сметы» №1). The server's margin is gone after a tech
+ * changed prices or lines (spec 19 §9.1: only who sees costs writes it): the office counts it from its own copy of the
+ * document — the lines keep their costs (migration 20261108180000). A line without a cost → «not counted» with how many,
+ * never an empty place. Lines with quantity 0 and add-ons the client did not take do not count. null: nothing to count.
+ */
+export type MarginView = { kind: "pct"; pct: string } | { kind: "missing"; lines: number };
+export function marginView(e: { marginPct?: string | null; doc?: EstimateDoc; approval?: { optionId: string; addonIds: string[] } }): MarginView | null {
+  if (e.marginPct) return { kind: "pct", pct: e.marginPct };
+  if (!e.doc?.options.length) return null;
+  const base = (e.approval && e.doc.options.find((o) => o.id === e.approval!.optionId)) || mainOption(e.doc);
+  const o = e.approval ? withAddons(base, e.approval.addonIds) : base;
+  const counted = activeLines(o.lines).filter((l) => (!l.optional || l.selected) && !zeroQty(l));
+  const missing = counted.filter((l) => l.unitCostCents === undefined).length;
+  if (missing) return { kind: "missing", lines: missing };
+  const pct = counted.length ? optionTotals(e.doc, o).marginPct : null;
+  return pct ? { kind: "pct", pct } : null;
+}
+
+/**
+ * Fresh ids for options/lines when a sent estimate is edited (the sent version stays immutable in the database);
+ * `from`: new line id → the sent line it was copied from — the server copies its cost for who cannot write costs
+ * (debt 4 of «Сметы» №1, migration 20261108200000, core_rls T110–T111). Pure: test/reIdDoc.test.ts.
+ */
+export function reIdDoc(doc: EstimateDoc, newId: () => string): { doc: EstimateDoc; from: Record<string, string> } {
+  const from: Record<string, string> = {};
+  const options = doc.options.map((o) => ({
+    ...o,
+    id: newId(),
+    lines: o.lines.map((l) => {
+      const id = newId();
+      from[id] = l.id;
+      return { ...l, id };
+    }),
+  }));
+  return { doc: { ...doc, options }, from };
+}
+
+/** What saveEstimate stores and sends: a sent (not draft) estimate gets new ids and the map to its sent lines; a new
+ *  estimate or a draft keeps its ids and sends no map (director's review #420 №2). Pure: test/reIdDoc.test.ts. */
+export function docForSave(prevStatus: string | undefined, doc: EstimateDoc, newId: () => string): { doc: EstimateDoc; linesFrom?: Record<string, string> } {
+  if (!prevStatus || prevStatus === "draft") return { doc };
+  const r = reIdDoc(doc, newId);
+  return { doc: r.doc, linesFrom: r.from };
+}
+
 /** Summary fields kept on Estimate for lists (total, deposit, visible lines of the main option). */
 export function summarize(doc: EstimateDoc, approved?: { optionId: string; addonIds: string[] }) {
   const base = (approved && doc.options.find((o) => o.id === approved.optionId)) || mainOption(doc);
@@ -209,7 +267,7 @@ export function summarize(doc: EstimateDoc, approved?: { optionId: string; addon
     totalCents: t.total,
     depositCents: t.deposit,
     marginPct: costComplete(o) ? t.marginPct : null,
-    lines: activeLines(o.lines).map((l, i) => ({ name: l.name.trim() || "—", qty: String(l.quantity), totalCents: t.lineTotals[i] ?? 0, optional: l.optional })),
+    lines: activeLines(o.lines).map((l, i) => ({ name: l.name.trim() || "—", qty: shownQty(l.quantity), totalCents: t.lineTotals[i] ?? 0, optional: l.optional })),
   };
 }
 

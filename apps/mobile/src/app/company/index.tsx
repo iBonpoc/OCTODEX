@@ -124,6 +124,22 @@ export default function CompanyScreen() {
           </RowView>
         </Card>
       </View>
+      {/* online payments (docs/specs/35, 20b): the company's own Stripe account */}
+      <View testID="company-payments">
+        <Card onPress={() => router.push("/company/payments")} accessibilityLabel={t("opay.title")}>
+          <RowView style={{ alignItems: "flex-start" }}>
+            <Icon name="dollar" />
+            <View style={{ flex: 1, gap: space[1] }}>
+              <T v="body" w="semibold">
+                {t("opay.title")}
+              </T>
+              <T v="caption" tone="mut">
+                {t("opay.entryHint")}
+              </T>
+            </View>
+          </RowView>
+        </Card>
+      </View>
       {/* add-on modules (docs/specs/33 П15): «Подключить», the trial */}
       <View testID="company-modules">
         <Card onPress={() => router.push("/company/modules")} accessibilityLabel={t("mod.title")}>

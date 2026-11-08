@@ -8,7 +8,7 @@
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
 import { realJob } from "./inspectionBridge";
-import { ENGINE_VERSION, jobLineQty } from "@octo/estimating-engine";
+import { discountBps, ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
 import type { EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
@@ -45,7 +45,8 @@ export type Op =
   /** an estimate template, whole (owner, admin, office; docs/specs/07 §11); archive = archivedAt */
   | { k: "est.template.save"; template: EstimateTemplate }
   /** a checklist template, whole (owner, admin, office) */
-  | { k: "chk.template.save"; template: ChecklistTemplate }
+  /** ifNew: a module's starter (fixed id) — inserted once, never over the office's edits (another phone added it first) */
+  | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
   /** the company's photo rules, whole (owner, admin) */
   | { k: "company.visitSettings"; settings: VisitSettings }
   | { k: "visit.sign"; visitId: string; svg: string }
@@ -119,6 +120,9 @@ export type Op =
       doc: EstimateDoc;
       /** line id → unit cost incl. supplier tax (estimate_line_costs, hidden from tech) */
       costs: Record<string, number>;
+      /** a sent estimate edited: new line id → the line of the sent version it was copied from (the server copies its
+       *  cost to the new line for who cannot write costs — migration 20261108200000, debt 4); absent in older builds */
+      linesFrom?: Record<string, string>;
       totalCents: number;
       depositCents: number;
       marginPct: string | null;
@@ -200,6 +204,10 @@ export type Op =
   | { k: "lead.people"; id: string; people: Person[] }
   | { k: "customer.tags"; id: string; tagIds: string[] }
   | { k: "customer.status"; id: string; status: CustomerStatus; reason?: string }
+  /** step 17 C3 (docs/specs/04 §13): everything of dropId moves to keepId (public.merge_customers; a repeat changes nothing) */
+  | { k: "customer.merge"; keepId: string; dropId: string }
+  /** «not a duplicate»: one more id on the card's list (public.mark_not_duplicate; never the whole list — two devices) */
+  | { k: "customer.notDup"; id: string; otherId: string }
   | { k: "tag.save"; tag: Tag }
   | { k: "serviceCategory.save"; category: ServiceCategory; isNew: boolean }
   | { k: "job.category"; id: string; serviceCategoryId: string | null }
@@ -545,7 +553,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "est.template.save":
       return saveEstimateTemplate(op.template, c);
     case "chk.template.save":
-      return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id" }));
+      return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id", ...(op.ifNew ? { ignoreDuplicates: true } : {}) }));
     case "company.visitSettings":
       return run(supabase.from("companies").update({ visit_settings: op.settings }).eq("id", c));
     case "visit.sign":
@@ -868,6 +876,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.rpc("set_customer_tags", { p_customer_id: op.id, p_tag_ids: op.tagIds }));
     case "customer.status":
       return run(supabase.from("customers").update({ status: op.status, do_not_service_reason: op.status === "do_not_service" ? op.reason || "—" : null }).eq("id", op.id));
+    case "customer.merge":
+      return run(supabase.rpc("merge_customers", { p_keep: op.keepId, p_drop: op.dropId }));
+    case "customer.notDup":
+      return run(supabase.rpc("mark_not_duplicate", { p_id: op.id, p_other: op.otherId }));
     case "serviceCategory.save": {
       // seed_key is set once; afterwards only name, position and archive change (column grants, migration 20261105250000)
       const x = op.category;
@@ -1094,6 +1106,14 @@ function catalogCostCols(op: Extract<Op, { k: "catalog.save" }>): Record<string,
  * options and line items mirrored from the doc (same ids), costs in the restricted side table.
  * The doc without costs is kept in estimate_versions.calc_inputs for the app and the client page.
  */
+/** A line's quantity as estimate_line_items keeps it; a text that is not a number goes as before (the server says no). */
+const storedQty = (q: DecLike): string | number => {
+  try {
+    return jobLineQty(q);
+  } catch {
+    return Number(q as string);
+  }
+};
 async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) {
   await run(
     ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, lead_id: op.leadId ?? null, title: op.title, created_via: op.templateId ? "template" : "manual", number: "" }),
@@ -1151,7 +1171,7 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
       op.doc.options.map((o, i) => ({
         id: o.id, company_id: c, version_id: versionId, name: o.name, position: i, is_recommended: !!o.recommended,
         discount_mode: s.discount ? s.discount.kind : null,
-        discount_value: s.discount ? (s.discount.kind === "pct" ? Math.round(Number(s.discount.value) * 10000) : s.discount.cents) : null,
+        discount_value: s.discount ? (s.discount.kind === "pct" ? discountBps(s.discount.value) : s.discount.cents) : null,
       })),
     ),
   );
@@ -1161,11 +1181,21 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
       .map((l, i) => ({
         id: l.id, company_id: c, option_id: o.id, position: i, line_group: l.group, catalog_item_id: null,
         origin: l.catalogItemId ? "catalog" : "manual", name: l.name.trim() || "—", description: l.description ?? null,
-        quantity: Number(l.quantity), unit: l.unit || "ea", unit_price_cents: l.unitPriceCents,
+        // the stored quantity (numeric(14,4)) — the same the engine counts (Н1): the lock check finds no difference
+        quantity: storedQty(l.quantity), unit: l.unit || "ea", unit_price_cents: l.unitPriceCents,
         taxable: taxOn && !!s.tax.groups[l.group], is_optional: !!l.optional,
+        // only when this save made new ids for a sent estimate (debt 4): the column stays out of older builds' rows
+        ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
       })),
   );
-  if (lines.length) await run(supabase.from("estimate_line_items").insert(lines));
+  if (lines.length) {
+    const r = await supabase.from("estimate_line_items").insert(lines);
+    // a server before migration 20261108200000 has no copied_from_line_id: the lines go without it (the cost is not
+    // copied — as before), never a save that keeps failing and leaves a draft with no lines (director's review #420 №1)
+    const noColumn = r.error && (r.error.code === "PGRST204" || r.error.code === "42703") && lines.some((l) => "copied_from_line_id" in l);
+    if (noColumn) await run(supabase.from("estimate_line_items").insert(lines.map(({ copied_from_line_id: _, ...l }) => l)));
+    else await run(Promise.resolve(r));
+  }
   const costRows = lines.filter((l) => op.costs[l.id] !== undefined).map((l) => ({ line_item_id: l.id, company_id: c, unit_cost_cents: op.costs[l.id] }));
   if (costRows.length) {
     // Tech without "view costs" cannot write costs (42501): the estimate itself is still saved. Any other failure

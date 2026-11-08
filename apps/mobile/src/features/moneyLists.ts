@@ -6,6 +6,7 @@
 import { sumCents, totalsBy, type CentsTotal } from "@octo/estimating-engine";
 import type { DB, Expense, Invoice, Payment, PaymentMethod, Role } from "@/data/types";
 import { invoiceBalance } from "./invoiceStatus";
+import { collectedPayments } from "./payments/collected";
 import { periodRange, type Period } from "./metrics";
 import { todayKey, type DayKey } from "./calendar";
 import { dayKeyIn, daysBetween, dueDayKey, getZone } from "./zone";
@@ -77,9 +78,10 @@ export interface PaymentsView {
 }
 
 /** payments of a period (by the company's day of the payment), newest first; method filter after the totals by method */
-export function paymentsIn(db: Pick<DB, "payments">, p: PaymentPeriod, method?: PaymentMethod, today: DayKey = todayKey()): PaymentsView {
+export function paymentsIn(db: Pick<DB, "payments" | "advances">, p: PaymentPeriod, method?: PaymentMethod, today: DayKey = todayKey()): PaymentsView {
   const r = p === "all" ? null : periodRange(p, today);
-  const inP = db.payments.filter((x) => {
+  // advances (no invoice) only when they count as collected (payments/collected.ts — one switch, spec 35 §4г)
+  const inP = collectedPayments(db).filter((x) => {
     if (!r) return true;
     const k = dayKeyIn(x.at);
     return k >= r.from && k <= r.to;

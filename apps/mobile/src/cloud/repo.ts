@@ -5,11 +5,12 @@
 import { companyFromDb } from "./companyMap";
 import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFromDb, visitSettingsFromDb } from "./checklistMap";
 import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
-import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
+import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, paymentMethodFromDb, paymentShown, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type EstimateTemplate, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Advance, type PendingPayment, type Estimate, type EstimateDoc, type EstimateTemplate, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
+import { legacyForEstimate } from "./legacyTotals";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -129,9 +130,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("visit_assignees", "visit_id, user_id, created_at"),
       live<Row>("leads"),
       live<Row>("estimates"),
-      live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs, template_id"),
-      live<Row>("estimate_options", "id, version_id, name"),
-      live<Row>("estimate_line_items", "id, option_id, name, quantity, line_total_cents, is_optional, client_visible, position"),
+      live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs, tax_enabled, tax_rate_bps, deposit_rule, template_id"),
+      live<Row>("estimate_options", "id, version_id, name, position, created_at, discount_mode, discount_value"),
+      live<Row>("estimate_line_items", "id, option_id, name, quantity, line_total_cents, is_optional, client_visible, position, taxable"),
       every<Row>("estimate_approvals", "estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method"),
       live<Row>("invoices"),
       live<Row>("payments"),
@@ -153,6 +154,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       every<Row>("estimate_version_costs", "version_id, margin_pct", key("version_id")).catch(orNoTable),
     ]);
   // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
+  // spec 35 §4г: refunds on their way (staff only by RLS; a server before 20а has no table — nothing on its way)
+  const refundRows = await every<Row>("refunds", "id, payment_id, amount_cents, status, created_at").catch(() => [] as Row[]);
   const signatureRows = await every<Row>("member_signatures", "id, user_id, svg, name, title, created_at, revoked_at").catch(() => [] as Row[]);
   // wave П-1: the company's job types (no deleted_at, archived ones stay); empty before the migration
   const jobTypeRows = await every<Row>("job_types", "id, seed_key, name, position, archived_at").catch(() => [] as Row[]);
@@ -391,7 +394,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         amountDueCents: n(job?.contract_total_cents),
         signature: (v.signature_svg as string | null) ?? undefined,
         closed: v.status === "completed" || v.status === "no_show" || undefined,
-        payment: pay ? { method: s(pay.method) as Visit["payment"] extends infer P ? P extends { method: infer M } ? M : never : never, amountCents: n(pay.amount_cents), at: s(pay.received_at) } : undefined,
+        payment: pay ? { method: paymentMethodFromDb(s(pay.method)), amountCents: n(pay.amount_cents), at: s(pay.received_at) } : undefined,
       };
   };
   const placed = visits.filter((v) => v.job_id || v.property_id);
@@ -412,8 +415,13 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const mappedEstimates: Estimate[] = estimates.map((e) => {
     const ver = versionOf.get(s(e.current_version_id));
     const totals = (ver?.totals ?? {}) as { total?: number; deposit?: number; marginPct?: string | null };
-    const opt = options.find((o) => o.version_id === e.current_version_id);
+    // the first option as the server signs it (sign_estimate_on_site: order by position, created_at)
+    const opt = options
+      .filter((o) => o.version_id === e.current_version_id)
+      .sort((a, b) => n(a.position) - n(b.position) || s(a.created_at).localeCompare(s(b.created_at)))[0];
     const appr = approvals.filter((a) => a.estimate_id === e.id && a.party !== "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
+    // the old quick estimate (no document), not signed yet: what the client will sign (legacyForEstimate)
+    const legacy = legacyForEstimate(e, { versionOf, options, lines, signed: !!appr });
     // E2a: the company's signature (an employee in their own name)
     const csig = approvals.filter((a) => a.estimate_id === e.id && a.party === "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
     const sel = (appr?.selection ?? null) as { addon_ids?: string[]; total?: number; deposit?: number } | null;
@@ -426,12 +434,12 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       propertyId: s(e.property_id),
       title: s(e.title) || s(e.number),
       leadId: (e.lead_id as string | null) ?? undefined,
-      totalCents: sel?.total !== undefined ? n(sel.total) : n(totals.total),
+      totalCents: sel?.total !== undefined ? n(sel.total) : legacy ? legacy.totalCents : n(totals.total),
       status: estimateStatus[s(e.status)] ?? "draft",
       sentAt: (ver?.sent_at as string | null) ?? undefined,
       // approved = both signed: the moment the company signed (a legacy contract signed before E2a: the client's moment)
       approvedAt: e.status === "approved" ? ((csig?.signed_at ?? appr?.signed_at) as string | null) ?? undefined : undefined,
-      depositCents: sel?.deposit !== undefined ? n(sel.deposit) : totals.deposit,
+      depositCents: sel?.deposit !== undefined ? n(sel.deposit) : legacy ? legacy.depositCents : totals.deposit,
       marginPct: marginOf.has(s(ver?.id)) ? marginOf.get(s(ver?.id)) ?? null : totals.marginPct ?? null,
       signature: (appr?.signature_svg as string | null) ?? undefined,
       doc: withCosts(ver?.calc_inputs),
@@ -463,7 +471,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   });
 
   const lastPayment = new Map<string, Row>();
-  for (const p of payments) if (p.invoice_id) lastPayment.set(s(p.invoice_id), p);
+  for (const p of payments) if (p.invoice_id && paymentShown(s(p.status))) lastPayment.set(s(p.invoice_id), p);
   const mappedInvoices: Invoice[] = invoices
     // a draft is not sent, so not a debt (wave 8): it stays out like a void one until the app has drafts
     .filter((i) => i.status === "sent")
@@ -476,12 +484,14 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       // no due date = due on receipt: from the day it was sent
       dueDate: s(i.due_date) || s(i.sent_at) || s(i.created_at),
       paidAt: n(i.paid_cents) >= n(i.total_cents) && lastPayment.get(s(i.id)) ? s(lastPayment.get(s(i.id))?.received_at) : undefined,
-      method: (lastPayment.get(s(i.id))?.method as Invoice["method"]) ?? undefined,
+      method: lastPayment.has(s(i.id)) ? paymentMethodFromDb(s(lastPayment.get(s(i.id))?.method)) : undefined,
       kind: i.kind === "deposit" ? "deposit" : i.kind === "progress" ? "progress" : "final",
       number: s(i.number) || undefined,
       title: (i.title as string | null) ?? undefined,
       sentAt: (i.sent_at as string | null) ?? undefined,
       subtotalCents: i.subtotal_cents == null ? undefined : n(i.subtotal_cents),
+      taxCents: n(i.tax_cents) || undefined,
+      taxMode: (["included_in_price", "added_on_top", "tax_inclusive_display", "exempt"] as const).find((m) => m === i.tax_mode),
     }));
 
   const mappedLeads: Lead[] = leads.map((l) => ({
@@ -635,6 +645,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         billing: billingOf(c),
         taxExempt: c.tax_exempt == null ? undefined : !!c.tax_exempt,
         taxExemptNote: (c.tax_exempt_note as string | null) ?? undefined,
+        // step 17 C3: a server before migration 20261109120000 has no not_duplicate_ids (undefined → none)
+        mergedIntoId: (c.merged_into_customer_id as string | null) ?? undefined,
+        notDuplicateIds: Array.isArray(c.not_duplicate_ids) && c.not_duplicate_ids.length ? (c.not_duplicate_ids as string[]) : undefined,
       };
     }),
     serviceCategories: catRows
@@ -676,16 +689,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     estimates: mappedEstimates,
     invoices: mappedInvoices,
     expenses: mappedExpenses,
-    payments: payments
-      // a fully refunded payment brought nothing: it is not in the list of payments (wave 8); partial — net, with refundedCents
-      .filter((p) => p.invoice_id && ["succeeded", "partially_refunded"].includes(s(p.status)) && n(p.amount_cents) - n(p.refunded_cents) > 0)
-      .map((p) => ({
-        id: s(p.id), invoiceId: s(p.invoice_id), customerId: s(p.customer_id), amountCents: n(p.amount_cents) - n(p.refunded_cents),
-        method: (["card", "cash", "check", "zelle"].includes(s(p.method)) ? s(p.method) : "card") as Payment["method"],
-        at: s(p.received_at), receiptNumber: (p.receipt_number as string | null) ?? undefined, reference: (p.reference as string | null) ?? undefined,
-        receivedBy: (p.received_by as string | null) ?? undefined, refundedCents: n(p.refunded_cents) || undefined,
-      }))
-      .sort((a, b) => b.at.localeCompare(a.at)),
+    ...paymentsFromRows(payments, refundRows),
+    pendingPayments: pendingFromRows(payments),
     company: companyRows[0]
       ? {
           ...companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows), modules: companyModules,
@@ -787,4 +792,56 @@ export async function loadCompanyModule(companyId: string, key: string): Promise
   if (error || !data) return null;
   const { companyModulesFromRows } = await import("@/modules/registry");
   return companyModulesFromRows([data as Record<string, unknown>])[key] ?? null;
+}
+
+/** the bank may send a refund back «up to 30 days from the post date» (docs.stripe.com/refunds) — as t41 in the database */
+export const REFUND_SETTLE_MS = 30 * 24 * 3600 * 1000;
+
+/**
+ * Payments and the clients' advances (spec 35 §4г). A fully refunded payment brought nothing: it is not in the list (wave 8);
+ * partial — net, with refundedCents. A payment without an invoice (an online payment above the balance) is an advance —
+ * its own list, never in sums. refundPendingCents — what refund rows hold back beyond refunded_cents, as
+ * app.refund_available: amount − greatest(refunded, Σ pending + succeeded rows).
+ */
+export function paymentsFromRows(rows: Row[], refundRows: Row[] = [], now: number = Date.now()): { payments: Payment[]; advances: Advance[] } {
+  const held = new Map<string, number>();
+  // a refund still pending, or one that went less than 30 days ago (the bank may still send it back — t41
+  // advance_refund_settling): an advance waits with its apply
+  const settling = (r: Row) => s(r.status) === "succeeded" && now - Date.parse(s(r.created_at)) < REFUND_SETTLE_MS;
+  const open = new Set(refundRows.filter((r) => s(r.status) === "pending" || settling(r)).map((r) => s(r.payment_id)));
+  for (const r of refundRows) {
+    if (!["pending", "succeeded"].includes(s(r.status))) continue;
+    held.set(s(r.payment_id), (held.get(s(r.payment_id)) ?? 0) + n(r.amount_cents));
+  }
+  const shown = rows.filter((p) => paymentShown(s(p.status)) && n(p.amount_cents) - n(p.refunded_cents) > 0);
+  const base = (p: Row) => {
+    const refunded = n(p.refunded_cents);
+    const net = n(p.amount_cents) - refunded;
+    const pending = Math.min(net, Math.max(0, (held.get(s(p.id)) ?? 0) - refunded));
+    return {
+      id: s(p.id), customerId: s(p.customer_id), amountCents: net,
+      method: paymentMethodFromDb(s(p.method)),
+      at: s(p.received_at), receiptNumber: (p.receipt_number as string | null) ?? undefined, reference: (p.reference as string | null) ?? undefined,
+      receivedBy: (p.received_by as string | null) ?? undefined, refundedCents: refunded || undefined,
+      needsReview: p.needs_review === true || undefined,
+      feeCents: n(p.fee_cents) > 0 ? n(p.fee_cents) : undefined,
+      refundPendingCents: pending > 0 ? pending : undefined,
+      refundOpen: open.has(s(p.id)) || undefined,
+    };
+  };
+  const newest = <T extends { at: string }>(a: T, b: T) => b.at.localeCompare(a.at);
+  return {
+    payments: shown.filter((p) => p.invoice_id).map((p) => ({ ...base(p), invoiceId: s(p.invoice_id) })).sort(newest),
+    // an advance is Stripe's money kept without an invoice (key «stripe:pi_…»); a payment recorded by hand without an
+    // invoice is not one (security review of spec 35 §4г) — it stays out, as before
+    advances: shown.filter((p) => !p.invoice_id && s(p.idempotency_key).startsWith("stripe:")).map((p) => ({ ...base(p), invoiceId: null })).sort(newest),
+  };
+}
+
+/** ACH on its way (20в): payments.status = pending with an invoice — shown as «processing», never counted (statusMap.paymentShown) */
+export function pendingFromRows(rows: Row[]): PendingPayment[] {
+  return rows
+    .filter((p) => p.invoice_id && s(p.status) === "pending" && n(p.amount_cents) > 0)
+    .map((p) => ({ id: s(p.id), invoiceId: s(p.invoice_id), amountCents: n(p.amount_cents), method: paymentMethodFromDb(s(p.method)), at: s(p.received_at) }))
+    .sort((a, b) => b.at.localeCompare(a.at));
 }

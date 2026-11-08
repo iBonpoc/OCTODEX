@@ -11,6 +11,7 @@ import { findJob } from "@/data/jobs";
 import type { DB, Role } from "@/data/types";
 import type { DictKey } from "@/i18n";
 import { SETUP_STEPS, stepTitle, type SetupStep } from "@/features/companySetup";
+import { asReport, REPORT_TITLE } from "@/features/reports";
 import { roleHome } from "./roles";
 import { hasSection, sectionOfHref, sectionOfRoute, type SectionId } from "./sections";
 
@@ -26,6 +27,8 @@ export interface NavContext {
 const K = (key: DictKey): Label => ({ key });
 const X = (text: string, fallback: DictKey): Label => (text ? { text } : { key: fallback });
 type P = Record<string, string | string[] | undefined>;
+/** an unknown report id keeps the section's word */
+const reportKind = (id: string): DictKey => { const r = asReport(id); return r ? REPORT_TITLE[r] : "rpt.title"; };
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
 
 /** `appOpen` — signed in and the current Terms accepted: the app's own parents can be offered (the legal texts, review
@@ -135,12 +138,14 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       // checklist templates (docs/specs/08 §7): the list under «Компания», a template under the list
       if (id === "checklists") return { section: "company", kind: "chk2.title", up: { href: "/company", label: K("co.title") } };
       if (id === "checklist") return { section: "company", kind: "chk2.template", up: { href: "/company/checklists", label: K("chk2.title") } };
+      // «Приём заявок» (#422): under «Лиды» of the company settings
+      if (id === "intake") return { section: "company", kind: "intake.set.title", up: { href: "/company/leads", label: K("co.leads.title") } };
       return id
         ? { section: "company", kind: SETUP_STEPS.includes(id as SetupStep) ? stepTitle(id as SetupStep) : id === "schedule" ? "schs.title" : id === "leads" ? "co.leads.title" : id === "modules" ? "mod.title" : "co.title", up: { href: "/company", label: K("co.title") } }
         : { section: "company" };
     case "reports":
-      // «Ещё» → Отчёты: the list is a root, a report goes up to it
-      return id ? { section: "reports", kind: "rpt.title", up: { href: "/reports", label: K("rpt.title") } } : { section: "reports" };
+      // «Ещё» → Отчёты: the list is a root, a report goes up to it; its crumb is the report's own title (not «Отчёты» twice)
+      return id ? { section: "reports", kind: reportKind(id), up: { href: "/reports", label: K("rpt.title") } } : { section: "reports" };
     case "expense": {
       const jid = one(params.jobId);
       return { section: "money", kind: "exp.title", up: jid ? toJob(jid) : { href: "/money", label: K("nav.expenses") } };

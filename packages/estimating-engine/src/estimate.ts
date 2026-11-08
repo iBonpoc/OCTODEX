@@ -1,4 +1,4 @@
-import { dec, bps, roundCents, type DecLike } from "./decimal.js";
+import { D, dec, bps, roundCents, type DecLike } from "./decimal.js";
 
 /**
  * Estimate / option totals (PRD 05 §7.2, PRD 19 §7.5). All money in integer cents, round half up.
@@ -70,6 +70,10 @@ export function lineCost(l: Line, includePurchaseTax = true): number {
 
 const included = (l: Line) => !l.isOptional || !!l.selected;
 
+/** A percent discount as the server keeps it: a fraction (0.05 = 5%) → whole basis points, half away from zero
+ *  (estimate_options.discount_value; the lock check rounds the document's fraction the same way, migration 20261108190000). */
+export const discountBps = (fraction: DecLike): number => dec(fraction).mul(10000).toDecimalPlaces(0, D.ROUND_HALF_UP).toNumber();
+
 export function computeOption(lines: Line[], tax: TaxContext, discount: Discount = null): OptionTotals {
   const warnings: string[] = [];
   for (const l of lines) {
@@ -83,7 +87,9 @@ export function computeOption(lines: Line[], tax: TaxContext, discount: Discount
   const lineCosts = lines.map(l => lineCost(l, includePT));
   const subtotal = lines.reduce((s, l, i) => (included(l) ? s + lineTotals[i]! : s), 0);
   let disc = 0;
-  if (discount?.kind === "pct") disc = roundCents(dec(subtotal).mul(dec(discount.value)));
+  // the server keeps a percent discount in whole bps (estimate_options.discount_value) and counts floor(sub × bps / 10000
+  // + 0.5): the engine counts the same bps, never a longer fraction (debt 3 of «Сметы» №1)
+  if (discount?.kind === "pct") disc = roundCents(dec(subtotal).mul(bps(discountBps(discount.value))));
   if (discount?.kind === "fixed") disc = Math.min(discount.cents, subtotal);
   const net = subtotal - disc;
   if (net === 0 && subtotal > 0) warnings.push("Итог $0");

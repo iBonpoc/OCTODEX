@@ -126,6 +126,8 @@ grant execute on all functions in schema tst to authenticated, anon;
 -- SEED
 -- =============================================================================
 :as_super
+-- the lock check (migration 20261108190000) stays on for every test (review #415 №1): the fixtures below lock versions
+-- written by hand with no document, which it does not check — as the old quick estimate
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a0000000-0000-0000-0000-000000000001', 'owner@a.test',  '{"full_name":"Owner A","locale":"ru"}'),
   ('a0000000-0000-0000-0000-000000000002', 'office@a.test', '{"full_name":"Dispatcher A"}'),
@@ -515,11 +517,13 @@ end $$;
 -- =============================================================================
 -- T6. Отправленная версия сметы неизменяема; доступ к ролям
 -- =============================================================================
+-- the fixture version has lines and no document: locked as setup (no JWT — the lock check of T107 guards a member's send)
+:as_super
+update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000001';
 :as_owner_a
 do $$ begin
   perform tst.fails($q$insert into public.estimate_line_items (company_id, option_id, name, unit_price_cents, client_visible)
                        values ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000001', 'BOM', 100, false)$q$, 'BOM line with price');
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000001';
   perform tst.fails($q$update public.estimate_versions set intro_text = 'changed' where id = '0e2a0000-0000-0000-0000-000000000001'$q$, 'edit locked version');
   perform tst.fails($q$update public.estimate_line_items set unit_price_cents = 1 where id = '0e4a0000-0000-0000-0000-000000000001'$q$, 'edit line of locked version');
   perform tst.fails($q$delete from public.estimate_line_items where id = '0e4a0000-0000-0000-0000-000000000001'$q$, 'delete line of locked version');
@@ -587,7 +591,14 @@ do $$ begin
   perform tst.set_token('0e1a0000-0000-0000-0000-000000000010', 'tok_test_0123456789abcdef');
   insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, deposit_rule, calc_inputs) values
     ('0e2a0000-0000-0000-0000-000000000010', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000010', 1,
-     true, 950, '{"kind":"pct","bps":1000}', '{"options":[]}');
+     true, 950, '{"kind":"pct","bps":1000}',
+     -- the document the page draws = the lines below (T107: a version is locked only when both sides match)
+     '{"options":[{"id":"0e3a0000-0000-0000-0000-000000000010","name":"Standard","recommended":true,"lines":[
+        {"id":"0e4a0000-0000-0000-0000-000000000011","name":"Install railing","group":"labor","quantity":"1","unit":"ea","unitPriceCents":25000},
+        {"id":"0e4a0000-0000-0000-0000-000000000012","name":"Bracket","group":"material","quantity":"12","unit":"ea","unitPriceCents":1213},
+        {"id":"0e4a0000-0000-0000-0000-000000000013","name":"Deep clean","group":"service","quantity":"1","unit":"ea","unitPriceCents":9000,"optional":true}]}],
+      "settings":{"discount":{"kind":"fixed","cents":1000},"tax":{"enabled":true,"rateBps":950,"groups":{"service":false,"labor":false,"material":true}},
+                  "deposit":{"kind":"pct","bps":1000}}}');
   update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000010' where id = '0e1a0000-0000-0000-0000-000000000010';
   insert into public.estimate_options (id, company_id, version_id, name, is_recommended, discount_mode, discount_value) values
     ('0e3a0000-0000-0000-0000-000000000010', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000010', 'Standard', true, 'fixed', 1000);
@@ -1649,8 +1660,8 @@ end $$;
 do $$ begin
   perform tst.ok(
     (select array_agg(k order by k) from jsonb_object_keys(public.portal_estimate('tok_lang_0123456789abcdef')) k)
-    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language' union all select 'simulated_pay') x),
-    'answer keys = base keys + doc_language + simulated_pay (T54), nothing else');
+    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language' union all select 'simulated_pay' union all select 'online_pay' union all select 'pending') x),
+    'answer keys = base keys + doc_language + simulated_pay (T54) + online_pay, pending (T131), nothing else');
 end $$;
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin
@@ -3427,7 +3438,8 @@ insert into public.payments (id, company_id, invoice_id, customer_id, method, am
 :as_sales_a
 select tst.blocked($q$update public.payments set refunded_cents = 1000, status = 'partially_refunded' where id = '94500000-0000-4000-8000-000000000003'$q$, 'sales does not refund');
 :as_owner_a
-update public.payments set refunded_cents = 1000, status = 'partially_refunded' where id = '94500000-0000-4000-8000-000000000003';
+-- 20д: a refund goes through public.refund_record (a refunds row with its tax part), never a direct update (T133)
+select public.refund_record('94500000-0000-4000-8000-000000000003', 1000, 'goodwill', null, 'k45-refund-1');
 select tst.ok((select paid_cents = 18000 and balance_cents = 12000 from public.invoices where id = '14500000-0000-4000-8000-000000000001'), 'paid = net of the refund (10000 + 5000 + 3000), balance 12000');
 -- staff reads the report (office_a, an admin by now): collected by method and by person, net of refunds (= engine: zelle 13000 ×2, cash 5000 ×1; owner 10000, office 8000)
 :as_office_a
@@ -5127,7 +5139,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
-    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by',
     -- erased (app.erase_personal_rows)
     'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id', 'push_prefs.user_id',
     -- unlinked (set to null)
@@ -5140,7 +5152,7 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
-    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by',
     'member_prefs.user_id', 'user_locations.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
  where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
@@ -8846,8 +8858,11 @@ insert into public.estimate_line_items (id, company_id, option_id, name, quantit
 select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b2'$q$) = 0,
   'T106 the tech moves a line to another estimate: its cost does not go with it');
 -- a locked version: the tech's delete fails and keeps nothing
-:as_owner_a
+:as_super
+-- the T106 document is a fake (lines do not match it): locked past the lock check of T107 — this test is about the cost keeping
+alter table public.estimate_versions disable trigger t50_lock_lines_match;
 update public.estimate_versions set locked_at = now() where id = 'a1060000-0000-4000-8000-000000000002';
+alter table public.estimate_versions enable trigger t50_lock_lines_match;
 :as_tech_a
 select tst.fails($q$delete from public.estimate_line_items where id = 'a1060000-0000-4000-8000-0000000000c1'$q$, 'T106 the tech deletes a line of a locked version');
 :as_super
@@ -8857,6 +8872,595 @@ select tst.ok(not has_table_privilege('anon', 'public.estimate_line_costs_kept',
               and not has_table_privilege('authenticated', 'public.estimate_line_costs_kept', 'select'), 'T106 no grant on estimate_line_costs_kept');
 \echo 'T106 a tech''s edit of a draft keeps the office''s costs and margin ok'
 
+-- ---------------------------------------------------------------- T107: a version is locked only when its lines match its document (Н1, spec 33 П23.9)
+-- The page /p/ draws app.client_doc(calc_inputs); the server's sums come from estimate_line_items. send_estimate
+-- locks a version only when, per option, the client-visible lines with a non-zero amount are the same on both sides.
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1070000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T107 lock match');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, deposit_rule, calc_inputs)
+  values ('a1070000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000001', 1, false, '{"kind":"none"}', $j${"options":[
+   {"id":"a1070000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
+     {"id":"a1070000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
+     {"id":"a1070000-0000-4000-8000-0000000000b2","name":"Guards","group":"material","quantity":"1","unit":"ea","unitPriceCents":5000,"optional":true},
+     {"id":"a1070000-0000-4000-8000-0000000000b3","name":"Hanger (BOM)","group":"material","quantity":"40","unit":"ea","unitPriceCents":0,"optional":true,"clientVisible":false},
+     {"id":"a1070000-0000-4000-8000-0000000000b4","name":"Left out","group":"material","quantity":"0","unit":"ea","unitPriceCents":7000,"optional":true}]},
+   {"id":"a1070000-0000-4000-8000-0000000000a2","name":"B","lines":[
+     {"id":"a1070000-0000-4000-8000-0000000000b5","name":"Other add-on","group":"service","quantity":"1","unit":"ea","unitPriceCents":3000,"optional":true}]}],
+ "settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"},"discount":null}}$j$);
+update public.estimates set current_version_id = 'a1070000-0000-4000-8000-000000000002' where id = 'a1070000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended) values
+  ('a1070000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000002', 'A', 0, true), ('a1070000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000002', 'B', 1, false);
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, is_optional, client_visible, taxable) values
+  ('a1070000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Install', 1, 10001, false, true, false),   -- one cent apart from the document
+  ('a1070000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Guards', 1, 5000, true, true, false),
+  ('a1070000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Hanger (BOM)', 40, 0, true, false, false),
+  ('a1070000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Left out', 0, 7000, true, true, false),
+  ('a1070000-0000-4000-8000-0000000000b5', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a2', 'Other add-on', 1, 3000, true, true, false);
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a line one cent apart: not sent');
+select tst.ok((select locked_at is null from public.estimate_versions where id = 'a1070000-0000-4000-8000-000000000002')
+              and (select status = 'draft' from public.estimates where id = 'a1070000-0000-4000-8000-000000000001'), 'T107 nothing locked, still a draft');
+update public.estimate_line_items set unit_price_cents = 10000 where id = 'a1070000-0000-4000-8000-0000000000b1';
+-- a line the client would pay for but never see
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, taxable) values
+  ('a1070000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Not on the page', 1, 100, false);
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a line missing from the document: not sent');
+delete from public.estimate_line_items where id = 'a1070000-0000-4000-8000-0000000000b9';
+-- an add-on on one side, a plain line on the other
+update public.estimate_line_items set is_optional = false where id = 'a1070000-0000-4000-8000-0000000000b2';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 add-on vs plain line: not sent');
+update public.estimate_line_items set is_optional = true where id = 'a1070000-0000-4000-8000-0000000000b2';
+-- security-check В1: an option id twice in the document (the page shows «Basic» $100 and «Premium» $900 under one id,
+-- the server sums both) — and a line twice in one option
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options}', (calc_inputs -> 'options') || jsonb_build_array(calc_inputs #> '{options,0}')) where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 an option id twice: not sent');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options}', (calc_inputs -> 'options') - 2) where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines}', (calc_inputs #> '{options,0,lines}') || jsonb_build_array(calc_inputs #> '{options,0,lines,0}')) where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a line twice in the document: not sent');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines}', (calc_inputs #> '{options,0,lines}') - 4) where id = 'a1070000-0000-4000-8000-000000000002';
+-- security-check В2: no document (no options array) but paid lines — the page would show nothing
+update public.estimate_versions set calc_inputs = '{"note": "hi"}' where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 no document, paid lines: not sent');
+-- security-check of the review fix: «drawing» does not open the skip — only a version with no calc_inputs at all
+update public.estimate_versions set source = 'drawing' where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 source drawing, a document with no options, paid lines: not sent');
+update public.estimate_versions set source = 'scratch' where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_versions set calc_inputs = $j${"options":[
+   {"id":"a1070000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
+     {"id":"a1070000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
+     {"id":"a1070000-0000-4000-8000-0000000000b2","name":"Guards","group":"material","quantity":"1","unit":"ea","unitPriceCents":5000,"optional":true},
+     {"id":"a1070000-0000-4000-8000-0000000000b3","name":"Hanger (BOM)","group":"material","quantity":"40","unit":"ea","unitPriceCents":0,"optional":true,"clientVisible":false},
+     {"id":"a1070000-0000-4000-8000-0000000000b4","name":"Left out","group":"material","quantity":"0","unit":"ea","unitPriceCents":7000,"optional":true}]},
+   {"id":"a1070000-0000-4000-8000-0000000000a2","name":"B","lines":[
+     {"id":"a1070000-0000-4000-8000-0000000000b5","name":"Other add-on","group":"service","quantity":"1","unit":"ea","unitPriceCents":3000,"optional":true}]}],
+ "settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"},"discount":null}}$j$ where id = 'a1070000-0000-4000-8000-000000000002';
+-- security-check С1: the discount, the tax and the deposit as the document says
+update public.estimate_options set discount_mode = 'pct', discount_value = 5000 where id = 'a1070000-0000-4000-8000-0000000000a1';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%(discount)%', 'T107 a discount the document does not have: not sent');
+update public.estimate_options set discount_mode = null, discount_value = null where id = 'a1070000-0000-4000-8000-0000000000a1';
+update public.estimate_versions set tax_enabled = true, tax_rate_bps = 2000 where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%(tax)%', 'T107 a tax the document does not have: not sent');
+update public.estimate_versions set tax_enabled = false where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_versions set deposit_rule = '{"kind":"pct","bps":10000}' where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%(deposit)%', 'T107 a deposit the document does not have: not sent');
+update public.estimate_versions set deposit_rule = '{"kind":"none"}' where id = 'a1070000-0000-4000-8000-000000000002';
+-- a quantity that is not a number: the page cannot count it — never matches
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"one"') where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a quantity that is not a number: not sent');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"1"') where id = 'a1070000-0000-4000-8000-000000000002';
+-- a huge price: never matches, the same refusal (not «bigint out of range»)
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,unitPriceCents}', '1e300') where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a huge price: the same refusal');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,unitPriceCents}', '10000') where id = 'a1070000-0000-4000-8000-000000000002';
+-- review №4: «1e-7» (decimal.js writes a tiny quantity so) is a number: $0 on both sides, it matches
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,1,lines,0,quantity}', '"1e-7"') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 0.0000001 where id = 'a1070000-0000-4000-8000-0000000000b5';
+:as_super
+select tst.ok(tst.cnt($q$select 1 from app.version_lines_mismatch('a1070000-0000-4000-8000-000000000002')$q$) = 0, 'T107 a quantity of 1e-7: $0 both sides, it matches');
+:as_office_a
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,1,lines,0,quantity}', '"1"') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 1 where id = 'a1070000-0000-4000-8000-0000000000b5';
+-- security-check С3: a member cannot make a version that is locked from the start
+select tst.fails_like($q$insert into public.estimate_versions (id, company_id, estimate_id, version_no, locked_at)
+  values ('a1070000-0000-4000-8000-0000000000c9', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000001', 7, now())$q$, '%cannot be locked%', 'T107 a version born locked');
+-- a quantity with 5 decimals: both sides count the stored 1.2346 (the engine too, custom.test.ts) → $123.46
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"1.23455"') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 1.23455 where id = 'a1070000-0000-4000-8000-0000000000b1';
+select tst.ok((select quantity = 1.2346 and line_total_cents = 12346 from public.estimate_line_items where id = 'a1070000-0000-4000-8000-0000000000b1'), 'T107 the line keeps 1.2346 → $123.46');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from app.version_lines_mismatch('a1070000-0000-4000-8000-000000000002')$q$) = 0, 'T107 the two sides match (hidden BOM, quantity-0 line, other option)');
+:as_office_a
+select tst.ok(public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef') = 'tok_t107_0123456789abcdef', 'T107 matching lines: sent');
+select tst.ok((select locked_at is not null from public.estimate_versions where id = 'a1070000-0000-4000-8000-000000000002'), 'T107 the version is locked');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.version_lines_mismatch(uuid)', 'execute')
+              and not has_function_privilege('anon', 'app.version_lines_mismatch(uuid)', 'execute'), 'T107 the check is not callable from the API');
+-- review #415 №2: a match exactly as saveEstimate writes it — a pct discount (Math.round(0.05 × 10000) = 500), the tax on
+-- with the material group taxed, a pct deposit {"kind":"pct","bps":1000} → sent
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1070000-0000-4000-8000-000000000101', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T107 as saveEstimate');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, deposit_rule, calc_inputs)
+  values ('a1070000-0000-4000-8000-000000000102', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000101', 1, true, 825, '{"kind":"pct","bps":1000}', $j${"options":[
+   {"id":"a1070000-0000-4000-8000-0000000001a1","name":"A","recommended":true,"lines":[
+     {"id":"a1070000-0000-4000-8000-0000000001b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
+     {"id":"a1070000-0000-4000-8000-0000000001b2","name":"Gutter","group":"material","quantity":"2","unit":"ft","unitPriceCents":2500}]}],
+ "settings":{"tax":{"enabled":true,"rateBps":825,"groups":{"service":false,"labor":false,"material":true}},"deposit":{"kind":"pct","bps":1000},"discount":{"kind":"pct","value":"0.05"}}}$j$);
+update public.estimates set current_version_id = 'a1070000-0000-4000-8000-000000000102' where id = 'a1070000-0000-4000-8000-000000000101';
+insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended, discount_mode, discount_value)
+  values ('a1070000-0000-4000-8000-0000000001a1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000102', 'A', 0, true, 'pct', 500);
+insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+  ('a1070000-0000-4000-8000-0000000001b1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000001a1', 'labor', 'Install', 1, 10000, false),
+  ('a1070000-0000-4000-8000-0000000001b2', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000001a1', 'material', 'Gutter', 2, 2500, true);
+select tst.ok(public.send_estimate('a1070000-0000-4000-8000-000000000101', 'tok_t107b_0123456789abcdef') = 'tok_t107b_0123456789abcdef', 'T107 discount, tax and deposit as saveEstimate writes them: sent');
+-- review #415 №1: the old quick estimate exactly as estimate.add writes it — no document, paid lines, a pct deposit —
+-- is not checked: sent and signed on site with the check on
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_via)
+  values ('a1070000-0000-4000-8000-000000000201', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T107 quick', 'drawing');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, engine_version, totals, deposit_rule, contract_type)
+  values ('a1070000-0000-4000-8000-000000000202', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000201', 1, 'drawing', '0.1.0',
+          '{"total":15000,"deposit":1500,"marginPct":null}', '{"kind":"pct","value":"0.1","contractType":"ca_hic"}', 'ca_home_improvement');
+insert into public.estimate_options (id, company_id, version_id, name, is_recommended)
+  values ('a1070000-0000-4000-8000-0000000002a1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000202', 'Quick', true);
+insert into public.estimate_line_items (company_id, option_id, position, name, quantity, unit_price_cents, is_optional, origin)
+  values ('ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000002a1', 0, 'Gutters', 1, 15000, false, 'assembly');
+update public.estimates set current_version_id = 'a1070000-0000-4000-8000-000000000202' where id = 'a1070000-0000-4000-8000-000000000201';
+:as_owner_a
+select tst.ok(public.send_estimate('a1070000-0000-4000-8000-000000000201') is not null, 'T107 a quick estimate with no document: sent');
+select tst.ok(public.sign_estimate_on_site('a1070000-0000-4000-8000-000000000201', 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign',
+  'T107 a quick estimate with no document: the client signs on site');
+-- security-check В2 stays: a scratch version with a document of no options and paid lines is not sent (above)
+:as_super
+\echo 'T107 a version is locked only when its lines match its document ok'
+
+-- ---------------------------------------------------------------- T108: portal_accept with ids of hidden add-ons (Н4а, spec 33 П23.9)
+-- The client's page cannot show a hidden BOM line or a quantity-0 add-on, but a crafted request can send their ids,
+-- an add-on of another option or a plain line: none of them moves the total.
+select tst.ok((select total = 12346 from app.estimate_option_totals('a1070000-0000-4000-8000-000000000002', 'a1070000-0000-4000-8000-0000000000a1', null)), 'T108 option A alone: $123.46');
+select tst.ok((select total = 12346 from app.estimate_option_totals('a1070000-0000-4000-8000-000000000002', 'a1070000-0000-4000-8000-0000000000a1',
+                 array['a1070000-0000-4000-8000-0000000000b3', 'a1070000-0000-4000-8000-0000000000b4', 'a1070000-0000-4000-8000-0000000000b5', 'a1070000-0000-4000-8000-0000000000b1']::uuid[])),
+  'T108 hidden BOM, quantity-0 add-on, another option''s add-on, a plain line: the total does not move');
+select tst.ok((select total = 17346 from app.estimate_option_totals('a1070000-0000-4000-8000-000000000002', 'a1070000-0000-4000-8000-0000000000a1', array['a1070000-0000-4000-8000-0000000000b2']::uuid[])), 'T108 the visible add-on counts: $173.46');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((public.portal_accept('tok_t107_0123456789abcdef', 'a1070000-0000-4000-8000-0000000000a1',
+                 array['a1070000-0000-4000-8000-0000000000b3', 'a1070000-0000-4000-8000-0000000000b4', 'a1070000-0000-4000-8000-0000000000b5']::uuid[], 'Ann Client', 'M0 0 L10 10', true)
+               -> 'approval' -> 'selection' ->> 'total')::bigint = 12346, 'T108 the client signs with hidden ids: the server total is $123.46');
+:as_super
+select tst.ok((select (selection ->> 'total')::bigint = 12346 from public.estimate_approvals where estimate_id = 'a1070000-0000-4000-8000-000000000001' and party = 'customer'),
+  'T108 the signed selection keeps $123.46');
+\echo 'T108 portal_accept: hidden add-on ids do not move the total ok'
+
+-- ---------------------------------------------------------------- T109: a percent discount longer than 4 digits (debt 3 of «Сметы» №1)
+-- The app writes round(fraction × 10000) bps (engine discountBps), the server counts floor(sub × bps / 10000 + 0.5),
+-- the lock check rounds the document's fraction the same way: 0.123456 → 1235 bps. The engine's numbers:
+-- packages/estimating-engine/test/estimate.test.ts T4b (3 × $333.33 − 12.35% = $876.49).
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1090000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T109 discount bps');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, deposit_rule, calc_inputs)
+  values ('a1090000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-000000000001', 1, false, '{"kind":"none"}', $j${"options":[
+   {"id":"a1090000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
+     {"id":"a1090000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"3","unit":"ea","unitPriceCents":33333}]}],
+ "settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"},"discount":{"kind":"pct","value":"0.123456"}}}$j$);
+update public.estimates set current_version_id = 'a1090000-0000-4000-8000-000000000002' where id = 'a1090000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended, discount_mode, discount_value)
+  values ('a1090000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-000000000002', 'A', 0, true, 'pct', 1234);   -- truncated, not rounded
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, taxable)
+  values ('a1090000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-0000000000a1', 'Install', 3, 33333, false);
+select tst.fails_like($q$select public.send_estimate('a1090000-0000-4000-8000-000000000001', 'tok_t109_0123456789abcdef')$q$, '%(discount)%', 'T109 1234 bps for 0.123456: not sent, the discount differs');
+update public.estimate_options set discount_value = 1235 where id = 'a1090000-0000-4000-8000-0000000000a1';
+select tst.ok(public.send_estimate('a1090000-0000-4000-8000-000000000001', 'tok_t109_0123456789abcdef') = 'tok_t109_0123456789abcdef', 'T109 1235 bps (the engine''s discountBps): sent');
+:as_super
+select tst.ok((select total = 87649 from app.estimate_option_totals('a1090000-0000-4000-8000-000000000002', 'a1090000-0000-4000-8000-0000000000a1', null)), 'T109 the server''s total = the engine''s $876.49');
+\echo 'T109 a percent discount counts whole bps on both sides ok'
+-- ---------------------------------------------------------------- T112–T119: lead intake from outside (docs/specs/34 §3, §3а)
+\set as_service 'reset role; reset request.jwt.claim.sub; set role service_role;'
+:as_super
+grant usage on schema tst to service_role;
+create table tst.intake_tok (k text primary key, id uuid, token text);
+grant all on tst.intake_tok to authenticated, service_role;
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- the Edge Function's call: the hash of the token, of the body and of the IP
+create function tst.intake(p_kind text, p_k text, p_key text, p_payload jsonb, p_ip text default null, p_checks jsonb default '{}')
+returns jsonb language sql as $$
+  select app.intake_lead(p_kind, encode(sha256(convert_to((select token from tst.intake_tok where k = p_k), 'UTF8')), 'hex'), p_key,
+    encode(sha256(convert_to(p_payload::text, 'UTF8')), 'hex'),
+    case when p_ip is not null then encode(sha256(convert_to(p_ip, 'UTF8')), 'hex') end, p_payload, p_checks);
+$$;
+-- T112: who may do what
+:as_owner_a
+insert into tst.intake_tok (k, id, token)
+  select 'form', (r ->> 'id')::uuid, r ->> 'token' from public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'form', '1a000000-0000-0000-0000-000000000001') r;
+insert into tst.intake_tok (k, id, token)
+  select 'hook', (r ->> 'id')::uuid, r ->> 'token' from public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'webhook', '1a000000-0000-0000-0000-000000000001') r;
+select tst.ok((select token ~ '^f[0-9a-f]{32}$' from tst.intake_tok where k = 'form') and (select token ~ '^gxk_[0-9a-f]{64}$' from tst.intake_tok where k = 'hook'),
+  'T112 a form token has 128 bits, a webhook key 256 bits with its prefix');
+select tst.ok((select public_token is not null from public.intake_endpoints where id = (select id from tst.intake_tok where k = 'form'))
+          and (select public_token is null from public.intake_endpoints where id = (select id from tst.intake_tok where k = 'hook')),
+  'T112 the owner reads the form link again; the webhook key is not kept');
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_daily_limit => 1000);
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'hook'), p_daily_limit => 1000);
+do $$ begin
+  perform tst.fails($q$select token_hash from public.intake_endpoints$q$, 'T112 nobody in the app reads the token hash');
+  perform tst.fails($q$insert into public.intake_endpoints (company_id, kind, token_hash, token_hint, source_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'webhook', repeat('a', 64), 'aaaa', '1a000000-0000-0000-0000-000000000001')$q$, 'T112 a way in is made only by the function');
+  perform tst.fails($q$select app.intake_lead('form', 'x', 'k', 'x', null, '{}', '{}')$q$, 'T112 the owner cannot call the pipeline');
+end $$;
+:as_office_a
+do $$ begin
+  perform tst.ok(tst.cnt('select id from public.intake_endpoints') = 0, 'T112 the office does not see the ways in (their links and keys)');
+  perform tst.fails($q$select public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'form', '1a000000-0000-0000-0000-000000000001')$q$, 'T112 the office makes no way in');
+  perform tst.fails($q$select public.intake_endpoint_rotate((select id from tst.intake_tok where k = 'form'))$q$, 'T112 the office changes no link');
+end $$;
+:as_owner_b
+do $$ begin
+  perform tst.ok(tst.cnt('select id from public.intake_endpoints') = 0 and tst.cnt('select id from public.intake_events') = 0, 'T112 company B sees nothing of A');
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => false)$q$, 'T112 company B switches off A''s form');
+end $$;
+reset role; set role anon;
+do $$ begin
+  perform tst.fails($q$select app.intake_lead('form', 'x', 'k', 'x', null, '{}', '{}')$q$, 'T112 anon cannot call the pipeline');
+  perform tst.fails($q$select app.intake_form_info('x')$q$, 'T112 anon cannot read a form''s company');
+  perform tst.fails($q$select id from public.intake_events$q$, 'T112 anon reads no journal');
+end $$;
+:as_super
+select tst.ok(has_function_privilege('service_role', 'app.intake_lead(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.intake_lead(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.intake_make_lead(public.intake_endpoints, uuid, jsonb, boolean)', 'execute')
+          and not has_function_privilege('service_role', 'app.intake_make_lead(public.intake_endpoints, uuid, jsonb, boolean)', 'execute'),
+  'T118 the pipeline runs only for service_role, its steps for nobody (rule 18)');
+
+-- T113: a repeat of an event is the same result, one lead; the same key with another body is refused
+:as_service
+select tst.ok(tst.intake('form', 'form', 'k113', '{"name":"Ann Lee","phone":"(626) 555-0113","message":"Clean gutters","language":"ru","utm":{"utm_source":"gbp","evil":"x"}}', '1.1.1.113') ->> 'status' = 'accepted',
+  'T113 a form request becomes a lead');
+select tst.ok((tst.intake('form', 'form', 'k113', '{"name":"Ann Lee","phone":"(626) 555-0113","message":"Clean gutters","language":"ru","utm":{"utm_source":"gbp","evil":"x"}}', '1.1.1.113') ->> 'repeat')::boolean,
+  'T113 a repeat is a repeat');
+select tst.ok(tst.intake('form', 'form', 'k113', '{"name":"Ann Lee","phone":"(626) 555-0199"}', '1.1.1.113') ->> 'status' = 'invalid', 'T113 the same key with another body is refused');
+select tst.ok(tst.intake('webhook', 'form', 'k113b', '{"name":"X","phone":"(626) 555-0114"}') ->> 'status' = 'unknown', 'T118 a form token does not open the webhook');
+:as_super
+select tst.ok((select count(*) from public.leads where phone = '(626) 555-0113') = 1, 'T113 one lead for the repeated event');
+select tst.ok((select status = 'new' and source_id = '1a000000-0000-0000-0000-000000000001' and language = 'ru' and utm = '{"utm_source":"gbp"}'::jsonb
+                  and intake_event_id is not null and created_by is null and number like 'LEA-%'
+                 from public.leads where phone = '(626) 555-0113'), 'T113 the lead: new, the source of the way in, its language, only known utm keys');
+select tst.ok((select c.preferred_language = 'ru' from public.contacts c join public.leads l on l.id = c.lead_id where l.phone = '(626) 555-0113' and c.is_primary),
+  'T113 the main person keeps Russian (t85)');
+select tst.ok((select status = 'accepted' and lead_id is not null and payload_hash ~ '^[0-9a-f]{64}$' from public.intake_events where event_key = 'k113'),
+  'T113 the journal row points to the lead');
+
+-- T114: the same person's open lead gets the request in its feed (≤ 3 a day), nothing else changes
+:as_service
+select tst.ok(tst.intake('form', 'form', 'k114a', '{"name":"Someone else","phone":"626.555.0113","message":"again"}', '1.1.1.114') ->> 'status' = 'merged', 'T114 a repeat request of an open lead is merged');
+select tst.intake('form', 'form', 'k114b', '{"phone":"6265550113","message":"2"}', '1.1.1.114');
+select tst.intake('form', 'form', 'k114c', '{"phone":"6265550113","message":"3"}', '1.1.1.114');
+select tst.ok(tst.intake('form', 'form', 'k114d', '{"phone":"6265550113","message":"4"}', '1.1.1.114') ->> 'status' = 'merged', 'T114 the 4th is merged too');
+:as_super
+select tst.ok((select count(*) from public.leads where right(regexp_replace(phone, '\D', '', 'g'), 10) = '6265550113') = 1, 'T114 no second lead');
+select tst.ok((select count(*) from public.activities a join public.leads l on l.id = a.subject_id
+                where l.phone = '(626) 555-0113' and a.kind = 'intake' and a.direction = 'in' and a.meta ->> 'unconfirmed' = '1' and a.actor_id is null) = 3,
+  'T114 three unconfirmed feed events a day, not more');
+select tst.ok((select contact_name = 'Ann Lee' and status = 'new' from public.leads where phone = '(626) 555-0113'), 'T114 the name and status of the lead stay');
+select tst.ok((select reason = 'repeat_cap' from public.intake_events where event_key = 'k114d'), 'T114 the capped one is in the journal');
+
+-- T115: a client's phone → a new lead linked to the client; a provider's price; a provider's lead once
+:as_service
+select tst.ok(tst.intake('webhook', 'hook', 'z115', '{"name":"Yuri","phone":"+1 323 555 0101","provider":"thumbtack","provider_ref":"tt-115","cost_cents":"3200"}') ->> 'status' = 'accepted',
+  'T115 a webhook request becomes a lead');
+select tst.ok(tst.intake('webhook', 'hook', 'z115-replay', '{"name":"Yuri","phone":"+1 323 555 0101","provider":"thumbtack","provider_ref":"tt-115","cost_cents":"3200"}') ->> 'status' = 'merged',
+  'T115 the same provider lead with another event key is the same lead');
+select tst.ok(tst.intake('webhook', 'hook', 'z115c', '{"email":"Big@Example.com","provider":"angi","cost_cents":"999999"}') ->> 'status' = 'accepted', 'T115 a lead with a wild price is still taken');
+select tst.ok(tst.intake('webhook', 'hook', 'z115d', '{"name":"No contact","message":"hi"}') ->> 'status' = 'invalid', 'T115 no phone and no email — refused');
+:as_super
+select tst.ok((select customer_id = 'c1a00000-0000-0000-0000-000000000001' and provider = 'thumbtack' and cost_origin = 'provider'
+                 from public.leads where provider_ref = 'tt-115'), 'T115 the lead knows the client ("already a client") and its provider');
+select tst.ok((select k.cost_cents = 3200 and k.origin = 'provider' from public.lead_costs k join public.leads l on l.id = k.lead_id where l.provider_ref = 'tt-115'),
+  'T115 the provider''s price in cents');
+select tst.ok((select parse_status = 'needs_review' and email = 'big@example.com' and not exists (select 1 from public.lead_costs k where k.lead_id = l.id)
+                 from public.leads l where l.provider = 'angi'), 'T115 a price over $500 is dropped, the lead marked for review');
+select tst.ok((select payload is null from public.intake_events where event_key = 'z115d'), 'T115 a refused request keeps no fields');
+
+-- T116: limits — a request is held, never lost; bots and a missing captcha are refused
+:as_service
+do $$ declare i int; begin
+  for i in 1..5 loop
+    perform tst.ok(tst.intake('form', 'form', 'ip116-' || i, jsonb_build_object('phone', '(818) 555-01' || (10 + i)), '9.9.9.9') ->> 'status' = 'accepted', 'T116 five from one IP pass');
+  end loop;
+  perform tst.ok(tst.intake('form', 'form', 'ip116-6', '{"phone":"(818) 555-0199"}', '9.9.9.9') ->> 'status' = 'held', 'T116 the 6th from one IP an hour is held');
+  perform tst.ok(tst.intake('form', 'form', 'ip116-7', '{"phone":"(818) 555-0198"}', '9.9.9.8') ->> 'status' = 'accepted', 'T116 another IP passes');
+  perform tst.ok(tst.intake('form', 'form', 'bot116', '{"phone":"(818) 555-0197"}', '9.9.9.7', '{"bot":true}') ->> 'status' = 'rejected', 'T116 a bot is refused');
+end $$;
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => true);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'cap116', '{"phone":"(818) 555-0196"}', '9.9.9.6') ->> 'status' = 'rejected', 'T116 the captcha is required and missing');
+select tst.ok(tst.intake('form', 'form', 'cap116ok', '{"phone":"(818) 555-0195"}', '9.9.9.6', '{"captcha":"ok"}') ->> 'status' = 'accepted', 'T116 a solved captcha passes');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 2);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'day116', '{"phone":"(818) 555-0194"}', '9.9.9.5') ->> 'status' = 'held', 'T116 over the form''s day limit — held');
+select tst.ok(tst.intake('webhook', 'hook', 'day116-hook', '{"phone":"(818) 555-0193"}') ->> 'status' = 'accepted', 'T116 the form''s spam does not hold the webhook''s leads');
+select tst.ok(tst.intake('form', 'form', 'noip116', '{"phone":"(818) 555-0192"}') ->> 'status' = 'held', 'T116 a form request without a trusted IP is held, not refused (§3д)');
+select tst.ok(tst.intake('form', 'form', 'junk116', '{"phone":"(818) 555-0191"}', '9.9.9.4', '{"bot":"maybe","consent":"yes"}') ->> 'status' = 'held',
+  'T116 junk in the checks is not an error');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_daily_limit => 1);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'flood116', '{"phone":"(818) 555-0190"}', '9.9.9.3') ->> 'status' = 'rejected', 'T116 past ten days'' worth in a day — refused, not kept');
+:as_super
+select tst.ok((select payload is null and reason = 'flood' from public.intake_events where event_key = 'flood116'), 'T116 a flood keeps no fields');
+:as_super
+select tst.ok((select payload is not null and lead_id is null from public.intake_events where event_key = 'day116'), 'T116 a held request keeps its fields');
+select tst.ok((select payload is null from public.intake_events where event_key = 'bot116'), 'T116 a bot''s fields are not kept');
+:as_tech_a
+select tst.ok(tst.cnt('select id from public.intake_events') = 0, 'T112 a tech reads no journal');
+select tst.fails($q$select public.intake_event_decide((select id from public.intake_events where event_key = 'day116'), true)$q$, 'T116 a tech accepts nothing');
+:as_office_a
+select tst.ok(tst.cnt($q$select id from public.intake_events where event_key = 'day116'$q$) = 1, 'T112 the office reads the journal');
+select tst.ok(public.intake_event_decide((select id from public.intake_events where event_key = 'day116'), true) ->> 'status' = 'accepted', 'T116 the office accepts a held request');
+select tst.ok(public.intake_event_decide((select id from public.intake_events where event_key = 'day116'), true) ->> 'status' = 'accepted', 'T116 a second accept changes nothing');
+:as_super
+select tst.ok((select count(*) from public.leads where phone = '(818) 555-0194') = 1, 'T116 the accepted request made one lead');
+select tst.ok(not has_column_privilege('authenticated', 'public.intake_events', 'status', 'UPDATE')
+          and not has_table_privilege('authenticated', 'public.intake_events', 'INSERT')
+          and not has_column_privilege('authenticated', 'public.intake_events', 'ip_hash', 'SELECT'), 'T112 the app writes no journal and reads no IP hash');
+-- parallel requests: the advisory lock serialises the count (two sessions are not possible here; the lock is checked to exist)
+select tst.ok(position('pg_advisory_xact_lock' in pg_get_functiondef('app.intake_lead(text, text, text, text, text, jsonb, jsonb)'::regprocedure)) > 0,
+  'T116 the limits are counted under the company''s lock');
+
+-- T117: who gets the lead — the chosen person while active, else the owner
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_daily_limit => 1000);
+:as_super
+update public.companies set lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000002' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.intake('webhook', 'hook', 'z117a', '{"phone":"(213) 555-0117"}');
+:as_super
+update public.memberships set status = 'disabled' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.intake('webhook', 'hook', 'z117b', '{"phone":"(213) 555-0118"}');
+:as_super
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000002' from public.leads where phone = '(213) 555-0117'), 'T117 the chosen person gets the lead');
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000001' from public.leads where phone = '(213) 555-0118'), 'T117 a disabled person does not, the owner does');
+update public.memberships set status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+update public.companies set lead_default_assignee_id = null where id = 'ca000000-0000-0000-0000-000000000000';
+
+-- T118: a switched-off or rotated way in answers like an unknown one; the page reads only the company's name
+:as_service
+select tst.ok(app.intake_form_info(encode(sha256(convert_to((select token from tst.intake_tok where k = 'form'), 'UTF8')), 'hex')) ->> 'company' is not null,
+  'T118 the page gets the company''s name');
+select tst.ok(app.intake_form_info(repeat('0', 64)) = '{}'::jsonb, 'T118 an unknown token: an empty answer');
+:as_owner_a
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'hook';
+insert into tst.intake_tok (k, token) values ('hook-old', 'gxk_old');
+:as_super
+update tst.intake_tok set token = (select token from tst.intake_tok where k = 'hook') where k = 'hook-old';
+:as_owner_a
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'hook';
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => false);
+:as_service
+select tst.ok(tst.intake('webhook', 'hook-old', 'z118', '{"phone":"(213) 555-0119"}') ->> 'status' = 'unknown', 'T118 an old key stops after a rotation');
+select tst.ok(tst.intake('webhook', 'hook', 'z118', '{"phone":"(213) 555-0119"}') ->> 'status' = 'accepted', 'T118 the new key works');
+select tst.ok(tst.intake('form', 'form', 'f118', '{"phone":"(213) 555-0120"}') ->> 'status' = 'unknown', 'T118 a switched-off form answers like an unknown one');
+select tst.ok(app.intake_form_info(encode(sha256(convert_to((select token from tst.intake_tok where k = 'form'), 'UTF8')), 'hex')) = '{}'::jsonb,
+  'T118 the page of a switched-off form shows nothing');
+
+-- T119: a way in links only this company's source and kind of work
+:as_super
+insert into public.service_categories (id, company_id, name) values ('c1190000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'T119 B work');
+:as_owner_a
+do $$ begin
+  perform tst.fails($q$select public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'form', '1b000000-0000-0000-0000-000000000001')$q$, 'T119 company B''s source in A''s way in');
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_source_id => '1b000000-0000-0000-0000-000000000001')$q$, 'T119 a switch to B''s source');
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'),
+    p_service_category_id => 'c1190000-0000-4000-8000-000000000001')$q$, 'T119 B''s kind of work');
+  perform tst.fails($q$select public.intake_endpoint_create('cb000000-0000-0000-0000-000000000000', 'form', '1b000000-0000-0000-0000-000000000001')$q$, 'T119 A''s owner makes a way into B');
+end $$;
+:as_super
+insert into public.service_categories (id, company_id, name) values ('c1190000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T119 A work');
+:as_service
+select tst.intake('webhook', 'hook', 'cat119a', '{"phone":"(213) 555-0121","category_id":"c1190000-0000-4000-8000-0000000000a2"}');
+select tst.intake('webhook', 'hook', 'cat119b', '{"phone":"(213) 555-0122","category_id":"c1190000-0000-4000-8000-000000000001"}');
+:as_super
+select tst.ok((select service_category_id = 'c1190000-0000-4000-8000-0000000000a2' from public.leads where phone = '(213) 555-0121'), 'T119 the visitor''s kind of work of this company is kept');
+select tst.ok((select service_category_id is distinct from 'c1190000-0000-4000-8000-000000000001' from public.leads where phone = '(213) 555-0122'), 'T119 B''s kind of work from a request is ignored');
+-- T119 (cont.): a client or a person of another company is never linked; consent; deciding; size; purge
+:as_owner_b
+insert into public.customers (id, company_id, display_name) values ('c1190000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'T119 B client');
+insert into public.contacts (company_id, customer_id, name, phone, is_primary) values ('cb000000-0000-0000-0000-000000000000', 'c1190000-0000-4000-8000-0000000000b1', 'B person', '(213) 555-0123', true);
+:as_super
+update public.companies set lead_default_assignee_id = 'b0000000-0000-0000-0000-000000000001' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => true, p_daily_limit => 1000, p_sms_consent_enabled => true);
+:as_service
+select tst.intake('webhook', 'hook', 'x119', '{"phone":"(213) 555-0123","language":"ES"}');
+select tst.intake('form', 'form', 'consent119', '{"phone":"(213) 555-0124"}', '7.7.7.1', '{"consent":"true","consent_version":"sms-v1"}');
+select tst.ok(tst.intake('form', 'form', 'big119', jsonb_build_object('phone', '(213) 555-0125', 'message', repeat('x', 17000)), '7.7.7.2') ->> 'status' = 'invalid', 'T119 a body over 16 KB is refused');
+select tst.ok(tst.intake('form', 'form', 'arr119', '[1,2]', '7.7.7.3') ->> 'status' = 'invalid', 'T119 a body that is not an object is refused');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_sms_consent_enabled => false);
+:as_service
+select tst.intake('form', 'form', 'noconsent119', '{"phone":"(213) 555-0126"}', '7.7.7.4', '{"consent":"true"}');
+:as_super
+update public.companies set lead_default_assignee_id = null where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select customer_id is null and assigned_to = 'a0000000-0000-0000-0000-000000000001' and language = 'es' from public.leads where phone = '(213) 555-0123' and company_id = 'ca000000-0000-0000-0000-000000000000'),
+  'T119 B''s client with the same phone and B''s person as A''s choice are never used; «ES» is Spanish');
+select tst.ok((select c.sms_consent_status = 'opted_in' from public.contacts c join public.leads l on l.id = c.lead_id where l.phone = '(213) 555-0124' and c.is_primary)
+          and (select sms_consent and consent_text_version = 'sms-v1' from public.intake_events where event_key = 'consent119'), 'T119 the consent box: the person opted in, the record kept');
+select tst.ok((select c.sms_consent_status = 'unknown' from public.contacts c join public.leads l on l.id = c.lead_id where l.phone = '(213) 555-0126' and c.is_primary),
+  'T119 consent from a form without the box is ignored');
+-- a held one refused by hand; company B decides nothing of A
+update public.intake_events set status = 'held' where event_key = 'flood116';
+update public.intake_events set payload = '{"phone":"(818) 555-0190"}' where event_key = 'flood116';
+:as_owner_b
+select tst.fails($q$select public.intake_event_decide((select id from tst.intake_tok where k = 'form'), true)$q$, 'T119 an unknown event');
+:as_super
+insert into tst.intake_tok (k, id) select 'flood', id from public.intake_events where event_key = 'flood116';
+:as_owner_b
+select tst.fails($q$select public.intake_event_decide((select id from tst.intake_tok where k = 'flood'), true)$q$, 'T119 company B decides A''s request');
+:as_owner_a
+select tst.ok(public.intake_event_decide((select id from tst.intake_tok where k = 'flood'), false) ->> 'status' = 'rejected', 'T116 the owner refuses a held request');
+:as_super
+select tst.ok((select status = 'rejected' and reason = 'by_hand' and payload is null and decided_by = 'a0000000-0000-0000-0000-000000000001' from public.intake_events where event_key = 'flood116')
+          and (select lead_id is null from public.intake_events where event_key = 'flood116'), 'T116 a refused request makes no lead and keeps no fields');
+-- the purge: old fields and IP hashes go, the consent's IP hash stays
+update public.intake_events set received_at = now() - interval '100 days' where event_key in ('k113', 'consent119', 'day116');
+select app.purge_intake_events();
+select tst.ok((select payload is null and ip_hash is null from public.intake_events where event_key = 'k113')
+          and (select payload is null and ip_hash is not null from public.intake_events where event_key = 'consent119'), 'T112 the purge clears old fields and IPs, keeps the consent''s');
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select count(*) from public.intake_events where payload is not null and status = 'accepted') > 0, 'T112 the purge keeps fresh requests');
+\echo 'T112–T119 lead intake: rights, repeats, duplicates, client, limits, assignee, ways in ok'
+
+-- ---------------------------------------------------------------- T110: a new version of a sent estimate keeps the office's costs (debt 4)
+-- The app's edit of a sent estimate makes new line ids and sends copied_from_line_id (migration 20261108200000): for who
+-- does not see costs the server copies the cost of that line — only from an earlier locked version of the same estimate.
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('a1100000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T110 sent'), ('a1100000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T110 other');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('a1100000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000e1', 1), ('a1100000-0000-4000-8000-0000000000d2', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000e1', 2), ('a1100000-0000-4000-8000-0000000000d9', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000e2', 1);
+insert into public.estimate_options (id, company_id, version_id, name) values
+  ('a1100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000d1', 'A'), ('a1100000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000d2', 'A'), ('a1100000-0000-4000-8000-0000000000a9', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000d9', 'A');
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('a1100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a1', 'Gutter', 10, 1200), ('a1100000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a9', 'Other', 1, 9000);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 400), ('a1100000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 7777);
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, unit) values
+  ('a1100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a1', 'Downspout', 1, 900, 'ea'), ('a1100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a1', 'Removed', 1, 900, 'ea');
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 50), ('a1100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 60);
+update public.estimate_line_items set deleted_at = now() where id = 'a1100000-0000-4000-8000-0000000000b4';   -- a deleted source (T111)
+update public.estimate_versions set locked_at = now() where id in ('a1100000-0000-4000-8000-0000000000d1', 'a1100000-0000-4000-8000-0000000000d9');
+update public.estimates set current_version_id = 'a1100000-0000-4000-8000-0000000000d2' where id = 'a1100000-0000-4000-8000-0000000000e1';
+update public.estimates set current_version_id = 'a1100000-0000-4000-8000-0000000000d9' where id = 'a1100000-0000-4000-8000-0000000000e2';
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id)
+  values ('a1100000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter', 12, 1300, 'a1100000-0000-4000-8000-0000000000b1');
+select tst.ok(tst.cnt('select 1 from public.estimate_line_costs') = 0, 'T110 sales without view_costs still reads no cost');
+:as_super
+select tst.ok((select unit_cost_cents = 400 and line_cost_cents is null from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000c1'),
+  'T110 the new line has the sent line''s unit cost (not its line cost: the quantity changed 10 → 12)');
+-- review PR-B №1: the next save of that draft (delete + insert, the same id, no copied_from_line_id) keeps it —
+-- t35_cost_keep / t95_cost_restore (migration 20261108180000) with t96_cost_copy
+:as_sales_a
+delete from public.estimate_line_items where id = 'a1100000-0000-4000-8000-0000000000c1';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents)
+  values ('a1100000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter', 14, 1300);
+:as_super
+select tst.ok((select unit_cost_cents = 400 from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000c1'), 'T110 the second save keeps the copied cost');
+\echo 'T110 a new version of a sent estimate keeps the costs ok'
+
+-- ---------------------------------------------------------------- T111: the copy takes no cost it should not (debt 4)
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('a1100000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'From another estimate', 1, 9000, 'a1100000-0000-4000-8000-0000000000b9'),
+  ('a1100000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'From the same open version', 1, 1300, 'a1100000-0000-4000-8000-0000000000c1'),
+  ('a1100000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'From nothing', 1, 100, 'a1100000-0000-4000-8000-0000000000ff');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id in ('a1100000-0000-4000-8000-0000000000c2', 'a1100000-0000-4000-8000-0000000000c3', 'a1100000-0000-4000-8000-0000000000c4')$q$) = 0,
+  'T111 another estimate, an open version, a missing line: no cost copied');
+-- who sees costs writes its own: nothing is copied for the office (a cost it cleared stays cleared)
+:as_office_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id)
+  values ('a1100000-0000-4000-8000-0000000000c5', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Office copy', 1, 1200, 'a1100000-0000-4000-8000-0000000000b1');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000c5'$q$) = 0, 'T111 the office''s insert copies nothing');
+-- an earlier version only: a line of a LATER locked version is not a source
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values ('a1100000-0000-4000-8000-0000000000d3', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000e1', 3);
+insert into public.estimate_options (id, company_id, version_id, name) values ('a1100000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000d3', 'A');
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values ('a1100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a3', 'Later', 1, 500);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 300);
+update public.estimate_versions set locked_at = now() where id = 'a1100000-0000-4000-8000-0000000000d3';
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id)
+  values ('a1100000-0000-4000-8000-0000000000c6', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'From a later version', 1, 500, 'a1100000-0000-4000-8000-0000000000b3');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000c6'$q$) = 0, 'T111 a later version is not a source');
+-- security-check: another item of the same sent version (a cost planted on another line), another unit, a deleted
+-- source, a line of company B — nothing
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values ('a1100000-0000-4000-8000-0000000000eb', 'cb000000-0000-0000-0000-000000000000', 'c1b00000-0000-0000-0000-000000000001', 'd1b00000-0000-0000-0000-000000000001', 'T111 B');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values ('a1100000-0000-4000-8000-0000000000db', 'cb000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000eb', 1);
+insert into public.estimate_options (id, company_id, version_id, name) values ('a1100000-0000-4000-8000-0000000000ab', 'cb000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000db', 'A');
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values ('a1100000-0000-4000-8000-0000000000bb', 'cb000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000ab', 'Gutter', 1, 1200);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000bb', 'cb000000-0000-0000-0000-000000000000', 999);
+update public.estimate_versions set locked_at = now() where id = 'a1100000-0000-4000-8000-0000000000db';
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, unit, copied_from_line_id) values
+  ('a1100000-0000-4000-8000-0000000000c7', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter guard', 1, 5000, 'ea', 'a1100000-0000-4000-8000-0000000000b2'),
+  ('a1100000-0000-4000-8000-0000000000c8', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter', 10, 1200, 'ft', 'a1100000-0000-4000-8000-0000000000b1'),
+  ('a1100000-0000-4000-8000-0000000000c9', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Removed', 1, 900, 'ea', 'a1100000-0000-4000-8000-0000000000b4'),
+  ('a1100000-0000-4000-8000-0000000000ca', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter', 1, 1200, 'ea', 'a1100000-0000-4000-8000-0000000000bb');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id in ('a1100000-0000-4000-8000-0000000000c7', 'a1100000-0000-4000-8000-0000000000c8', 'a1100000-0000-4000-8000-0000000000c9', 'a1100000-0000-4000-8000-0000000000ca')$q$) = 0,
+  'T111 another item, another unit, a deleted source, company B: no cost copied');
+-- the same name with other spaces and case is the same line
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id)
+  values ('a1100000-0000-4000-8000-0000000000cb', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', '  gutter ', 12, 1300, 'a1100000-0000-4000-8000-0000000000b1');
+:as_super
+select tst.ok((select unit_cost_cents = 400 from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000cb'), 'T111 «  gutter » = «Gutter»: copied');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_line_cost_copy()', 'execute'), 'T111 the copy is not callable from the API');
+\echo 'T111 the copy takes no cost it should not ok'
+
+-- ---------------------------------------------------------------- T121: the old quick estimate — the client signs the number the phone shows
+-- A version with no document (estimate.add): the phone shows app.estimate_option_totals of the first option from its
+-- lines (apps/mobile/src/cloud/legacyTotals.ts, test/legacyTotals.test.ts — the same numbers), the server signs the same.
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_via) values
+  ('a1120000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T121 quick', 'drawing'), ('a1120000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T121 quick, tax', 'drawing');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, totals, deposit_rule, tax_enabled, tax_rate_bps) values
+  ('a1120000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000e1', 1, 'drawing', '{"total":10000,"deposit":1000}', '{"kind":"pct","value":"0.1","contractType":"ca_hic"}', false, null),
+  ('a1120000-0000-4000-8000-0000000000d2', 'ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000e2', 1, 'drawing', '{"total":15000,"deposit":1500}', '{"kind":"pct","bps":1000}', true, 825);
+insert into public.estimate_options (id, company_id, version_id, name, position, discount_mode, discount_value) values
+  ('a1120000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000d1', 'Quick', 0, null, null), ('a1120000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000d2', 'Quick', 0, 'pct', 500);
+-- $100.00 over 3 ft as estimate.add wrote it: round(10000 / 3) = 3333 → $99.99
+insert into public.estimate_line_items (company_id, option_id, position, name, quantity, unit_price_cents, taxable, is_optional) values
+  ('ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000a1', 0, 'Gutter', 3, 3333, false, false),
+  ('ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000a2', 0, 'Gutter', 3, 3333, false, false), ('ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000a2', 1, 'Guards', 1, 5000, true, false),
+  ('ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000a2', 2, 'Add-on', 1, 7000, false, true);
+update public.estimates set current_version_id = 'a1120000-0000-4000-8000-0000000000d1' where id = 'a1120000-0000-4000-8000-0000000000e1';
+update public.estimates set current_version_id = 'a1120000-0000-4000-8000-0000000000d2' where id = 'a1120000-0000-4000-8000-0000000000e2';
+:as_owner_a
+select tst.ok(public.send_estimate('a1120000-0000-4000-8000-0000000000e1') is not null and public.send_estimate('a1120000-0000-4000-8000-0000000000e2') is not null, 'T121 both quick estimates sent');
+select tst.ok(public.sign_estimate_on_site('a1120000-0000-4000-8000-0000000000e1', 'Walk-in', 'M0 0 L2 2') = 'awaiting_countersign'
+              and public.sign_estimate_on_site('a1120000-0000-4000-8000-0000000000e2', 'Walk-in', 'M0 0 L2 2') = 'awaiting_countersign', 'T121 both signed on site');
+:as_super
+select tst.ok((select (selection ->> 'total')::bigint = 9999 and (selection ->> 'deposit')::bigint = 0 from public.estimate_approvals
+                where estimate_id = 'a1120000-0000-4000-8000-0000000000e1' and party = 'customer'), 'T121 signed $99.99, no deposit — what the phone shows (not totals $100.00 / $10.00)');
+select tst.ok((select (selection ->> 'total')::bigint = 14641 and (selection ->> 'deposit')::bigint = 1464 from public.estimate_approvals
+                where estimate_id = 'a1120000-0000-4000-8000-0000000000e2' and party = 'customer'), 'T121 with discount, tax and a bps deposit: $146.41 / $14.64, as legacyTotals');
+\echo 'T121 the old quick estimate: the client signs what the phone shows ok'
+-- ---------------------------------------------------------------- T120: the doors of the Edge Function lead-intake (docs/specs/34 PR 2)
+:as_super
+select tst.ok(has_function_privilege('service_role', 'public.intake_submit(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and has_function_privilege('service_role', 'public.intake_form(text)', 'execute')
+          and not has_function_privilege('anon', 'public.intake_submit(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'public.intake_submit(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and not has_function_privilege('anon', 'public.intake_form(text)', 'execute')
+          and not has_function_privilege('authenticated', 'public.intake_form(text)', 'execute'), 'T120 only service_role opens the doors');
+:as_service
+select tst.ok(public.intake_form(repeat('0', 64)) = '{}'::jsonb, 'T120 the page door: an unknown token is empty');
+select tst.ok(public.intake_submit('webhook', repeat('0', 64), 'k120', repeat('0', 64), null, '{}', null) ->> 'status' = 'unknown', 'T120 the submit door: an unknown key');
+reset role; set role anon;
+select tst.fails($q$select public.intake_submit('webhook', 'x', 'k', 'x', null, '{}', '{}')$q$, 'T120 anon cannot submit around the function');
+:as_owner_a
+select tst.fails($q$select public.intake_form('x')$q$, 'T120 a member cannot read a form''s info directly');
+\echo 'T120 lead intake doors: service_role only ok'
+-- T120 (cont., review #422 №4): the office decides held requests but changes no way in; sales sees no journal
+:as_super
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+do $$ begin
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => true)$q$, 'T120 the office switches no form');
+  perform tst.fails($q$select public.intake_endpoint_rotate((select id from tst.intake_tok where k = 'hook'))$q$, 'T120 the office makes no new key');
+end $$;
+:as_sales_a
+do $$ begin
+  perform tst.ok(tst.cnt('select id from public.intake_events') = 0, 'T120 sales reads no journal');
+  perform tst.fails($q$select public.intake_event_decide((select id from tst.intake_tok where k = 'flood'), true)$q$, 'T120 sales decides nothing');
+end $$;
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T120 office and sales rights on intake ok'
 -- ---------------------------------------------------------------- T122–T124: estimate templates (docs/specs/07 §11, migration 20261108230000)
 -- T122 who reads and writes; our cost lives only in estimate_template_line_costs
 :as_office_a
@@ -9059,5 +9663,1261 @@ select tst.ok(tst.cnt($q$select 1 from public.estimate_template_line_costs where
 update public.memberships set permissions_override = permissions_override - 'view_costs'
  where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T124 money in a template: whole cents, kept exactly ok'
+-- ---------------------------------------------------------------- T125: no request is lost silently (docs/specs/34 §3д; director's check of #421)
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => true, p_daily_limit => 1000);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'time122', '{"phone":"(310) 555-0122"}', '5.5.5.1', '{"bot":"time"}') ->> 'status' = 'held', 'T125 a «bot» by the fill time only is held');
+select tst.ok(tst.intake('form', 'form', 'trap122', '{"phone":"(310) 555-0123"}', '5.5.5.2', '{"bot":"trap"}') ->> 'status' = 'rejected', 'T125 the trap field refuses');
+:as_super
+select tst.ok((select payload is not null and reason = 'too_fast' from public.intake_events where event_key = 'time122'), 'T125 the held one keeps its fields for a person');
+select tst.ok((select payload is null and reason = 'bot' from public.intake_events where event_key = 'trap122'), 'T125 the trapped one keeps nothing');
+-- a changed link: its requests are held 30 days, its page still opens; a link changed twice ago is unknown
+:as_super
+insert into tst.intake_tok (k, token) select 'form-old', token from tst.intake_tok where k = 'form';
+:as_owner_a
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'form';
+:as_service
+select tst.ok(tst.intake('form', 'form-old', 'old122', '{"phone":"(310) 555-0124"}', '5.5.5.3') ->> 'status' = 'held', 'T125 a request by the old link is held, not dropped');
+select tst.ok(app.intake_form_info(encode(sha256(convert_to((select token from tst.intake_tok where k = 'form-old'), 'UTF8')), 'hex')) ->> 'company' is not null,
+  'T125 the old link''s page still opens (≤ 30 days)');
+select tst.ok(tst.intake('form', 'form', 'new122', '{"phone":"(310) 555-0125"}', '5.5.5.4') ->> 'status' = 'accepted', 'T125 the new link works');
+:as_super
+select tst.ok((select reason = 'old_link' and payload is not null from public.intake_events where event_key = 'old122'), 'T125 old_link with its fields');
+update public.intake_endpoints set prev_rotated_at = now() - interval '31 days' where id = (select id from tst.intake_tok where k = 'form');
+:as_service
+select tst.ok(tst.intake('form', 'form-old', 'old122b', '{"phone":"(310) 555-0126"}', '5.5.5.5') ->> 'status' = 'unknown', 'T125 past 30 days the old link is gone');
+-- the IPv6 /48: a second, higher limit (20 an hour per company)
+do $$ declare i int; n text := repeat('4', 64); begin
+  for i in 1..20 loop
+    perform tst.intake('form', 'form', 'net122-' || i, jsonb_build_object('phone', '(310) 555-02' || (10 + i)), 'v6-' || i, jsonb_build_object('net', n));
+  end loop;
+  perform tst.ok(tst.intake('form', 'form', 'net122-21', '{"phone":"(310) 555-0299"}', 'v6-21', jsonb_build_object('net', n)) ->> 'status' = 'held', 'T125 the 21st from one /48 an hour is held');
+  perform tst.ok(tst.intake('form', 'form', 'net122-x', '{"phone":"(310) 555-0298"}', 'v6-x', jsonb_build_object('net', 'junk')) ->> 'status' = 'accepted', 'T125 a malformed net hash is ignored');
+end $$;
+:as_super
+select tst.ok((select reason = 'net_limit' from public.intake_events where event_key = 'net122-21'), 'T125 net_limit in the journal');
+\echo 'T125 no request is lost silently: held by time, no IP, an old link; the /48 limit ok'
+-- ---------------------------------------------------------------- T126–T129: Stripe online payments, the database (docs/specs/35 §4)
+:as_super
+insert into public.customers (id, company_id, display_name) values ('c1260000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T126 Client');
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('11260000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T126-1', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T126 card', 10000, 10000, now()),
+  ('11260000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T126-2', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T126 ach', 5000, 5000, now()),
+  ('11260000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T126-3', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T126 race', 3000, 3000, now()),
+  ('11260000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T126-4', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'draft', 'T126 draft', 3000, 3000, null);
+create table tst.pa (k text primary key, id uuid, key text);
+grant all on tst.pa to service_role;
+-- T126 rights: nobody but service_role writes; staff read their company's state, no account id, no keys
+select tst.ok(not has_function_privilege('authenticated', 'app.stripe_event_apply(jsonb,text)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.stripe_event_apply(jsonb,text)', 'EXECUTE')
+          and has_function_privilege('service_role', 'app.stripe_event_apply(jsonb,text)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.payment_attempt_open(uuid,bigint)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.stripe_account_sync(uuid,jsonb)', 'EXECUTE')
+          and not has_function_privilege('service_role', 'app.stripe_apply_intent(text,text,boolean,jsonb,text)', 'EXECUTE'),
+  'T126 the Stripe functions run only for service_role, their steps for nobody (rule 18)');
+select tst.ok(not has_table_privilege('authenticated', 'app.stripe_events', 'SELECT')
+          and not has_column_privilege('authenticated', 'public.stripe_accounts', 'account_id', 'SELECT')
+          and not has_column_privilege('authenticated', 'public.payment_attempts', 'idempotency_key', 'SELECT')
+          and not has_table_privilege('authenticated', 'public.stripe_accounts', 'INSERT')
+          and not has_table_privilege('authenticated', 'public.payment_attempts', 'UPDATE')
+          and not has_table_privilege('authenticated', 'public.refunds', 'INSERT'),
+  'T126 the app reads no account id, no key, no event journal and writes nothing');
+:as_service
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 1000)$q$, 'T126 no attempt while Stripe is not connected');
+select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126A","charges_enabled":false,"requirements":{"currently_due":["external_account"]}}');
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 1000)$q$, 'T126 no attempt until Stripe allows charges');
+select tst.fails($q$select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_Other"}')$q$, 'T126 a company keeps its one Stripe account');
+select app.stripe_account_sync('cb000000-0000-0000-0000-000000000000', '{"id":"acct_T126B","charges_enabled":true}');
+select tst.fails($q$select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126B"}')$q$, 'T126 an account of another company is not taken');
+-- account.updated from Stripe opens payments
+select tst.ok(app.stripe_event_apply('{"id":"evt_T126acc","type":"account.updated","account":"acct_T126A","data":{"object":{"id":"acct_T126A","charges_enabled":true,"payouts_enabled":true,"details_submitted":true,"requirements":{"currently_due":[]}}}}') = 'processed', 'T126 account.updated is applied');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T126accB","type":"account.updated","account":"acct_T126A","data":{"object":{"id":"acct_T126B","charges_enabled":false}}}') = 'ignored', 'T126 an event of one account does not change another');
+:as_owner_a
+select tst.ok((select charges_enabled and payouts_enabled and requirements_due = 0 from public.stripe_accounts where company_id = 'ca000000-0000-0000-0000-000000000000'), 'T126 the owner sees that payments are on');
+select tst.fails($q$update public.stripe_accounts set charges_enabled = true where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T126 the owner does not switch Stripe on by hand');
+:as_tech_a
+select tst.ok((select count(*) from public.stripe_accounts) = 0, 'T126 a tech does not see the Stripe state');
+:as_owner_b
+select tst.ok((select count(*) from public.stripe_accounts) = 1 and (select count(*) from public.payment_attempts) = 0, 'T126 company B sees only its own');
+:as_super
+select tst.ok((select charges_enabled = true from public.stripe_accounts where company_id = 'cb000000-0000-0000-0000-000000000000'), 'T126 B''s account stays as it was');
+
+-- T129 attempts: one key per invoice + amount; the amount is 1…balance; only a sent invoice
+:as_service
+insert into tst.pa select 'a1', id, idempotency_key from app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 10000);
+select tst.ok((select id from app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 10000)) = (select id from tst.pa where k = 'a1'), 'T129 a double tap gets the same attempt and key');
+select tst.ok((select attempt_no = 1 from app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 4000)), 'T129 another amount is its own attempt');
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 10001)$q$, 'T129 not above the balance');
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 0)$q$, 'T129 not zero');
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000004', 1000)$q$, 'T129 not a draft invoice');
+select app.payment_attempt_set_intent((select id from tst.pa where k = 'a1'), 'pi_T126a');
+select tst.fails($q$select app.payment_attempt_set_intent((select id from tst.pa where k = 'a1'), 'pi_T126other')$q$, 'T129 an attempt keeps its one PaymentIntent');
+
+-- T127 the same event twice: one payment, one receipt, one notification
+select tst.ok(app.stripe_event_apply('{"id":"evt_T127s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T126a","amount":10000,"amount_received":10000,"application_fee_amount":50,"latest_charge":"ch_T126a","payment_method_types":["card"]}}}') = 'processed', 'T127 succeeded is applied');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T127s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T126a","amount":10000,"amount_received":10000}}}') = 'duplicate', 'T127 the repeat is a duplicate');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T127s2","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T126a","amount":10000,"amount_received":10000}}}') = 'ignored', 'T127 the same intent in a new event changes nothing');
+:as_super
+select tst.ok((select count(*) = 1 from public.payments where stripe_payment_intent_id = 'pi_T126a')
+          and (select method = 'card' and status = 'succeeded' and amount_cents = 10000 and platform_fee_cents = 50 and receipt_number is not null
+                      and stripe_charge_id = 'ch_T126a' and not needs_review from public.payments where stripe_payment_intent_id = 'pi_T126a'),
+  'T127 one card payment with a receipt number and our fee');
+select tst.ok((select paid_cents = 10000 and payment_status = 'paid' from public.invoices where id = '11260000-0000-4000-8000-000000000001'), 'T127 the invoice is paid');
+select tst.ok((select count(*) = 1 from public.notifications where invoice_id = '11260000-0000-4000-8000-000000000001' and kind = 'invoice.paid'), 'T127 the contractor is told once');
+select tst.ok((select status = 'succeeded' and payment_id is not null from public.payment_attempts where stripe_payment_intent_id = 'pi_T126a'), 'T127 the attempt is closed');
+:as_service
+select tst.fails($q$select app.stripe_event_apply('{"id":"nope","type":"x","data":{"object":{}}}')$q$, 'T127 not a Stripe event is refused');
+
+-- T128 ACH: pending, the order of events, refunds only grow, disputes
+insert into tst.pa select 'a2', id, idempotency_key from app.payment_attempt_open('11260000-0000-4000-8000-000000000002', 5000);
+select app.payment_attempt_set_intent((select id from tst.pa where k = 'a2'), 'pi_T128');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128p","type":"payment_intent.processing","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128","amount":5000}}}') = 'processed', 'T128 processing is applied');
+:as_super
+select tst.ok((select method = 'ach' and status = 'pending' and receipt_number is null from public.payments where stripe_payment_intent_id = 'pi_T128')
+          and (select paid_cents = 0 and payment_status = 'unpaid' from public.invoices where id = '11260000-0000-4000-8000-000000000002'),
+  'T128 ACH on its way: pending, the invoice is not paid yet');
+:as_service
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000002', 1000)$q$, 'T128 no second online payment over money already on its way');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128","amount":5000,"amount_received":5000}}}') = 'processed', 'T128 succeeded after processing');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128p2","type":"payment_intent.processing","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128","amount":5000}}}') = 'ignored', 'T128 a late processing does not take the payment back');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128f","type":"payment_intent.payment_failed","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128","amount":5000}}}') = 'ignored', 'T128 a late failure does not undo a succeeded payment');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128r1","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T128","payment_intent":"pi_T128","amount_refunded":2000}}}') = 'processed', 'T128 a partial refund');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128r0","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T128","payment_intent":"pi_T128","amount_refunded":1000}}}') = 'ignored', 'T128 an older refund event does not lower the refunded sum');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128r9","type":"charge.refunded","account":"acct_T126B","data":{"object":{"id":"ch_T128","payment_intent":"pi_T128","amount_refunded":5000}}}') = 'ignored', 'T128 another account does not refund our payment');
+:as_super
+select tst.ok((select status = 'partially_refunded' and refunded_cents = 2000 and receipt_number is not null from public.payments where stripe_payment_intent_id = 'pi_T128')
+          and (select paid_cents = 3000 and payment_status = 'partially_paid' from public.invoices where id = '11260000-0000-4000-8000-000000000002'),
+  'T128 refunded 2000 of 5000: the invoice owes 2000 again');
+:as_service
+select app.stripe_event_apply('{"id":"evt_T128rr","type":"refund.updated","account":"acct_T126A","data":{"object":{"id":"re_T128","payment_intent":"pi_T128","amount":2000,"status":"succeeded","reason":"requested_by_customer"}}}');
+select app.stripe_event_apply('{"id":"evt_T128rr0","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T128","payment_intent":"pi_T128","amount":2000,"status":"pending"}}}');
+select app.stripe_event_apply('{"id":"evt_T128bd","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T128b","payment_intent":"pi_T128","amount":1000,"status":"succeeded","billing_details":{"name":"Kim","email":"kim@x.test"}}}}');
+select app.stripe_event_apply('{"id":"evt_T128bf","type":"refund.failed","account":"acct_T126A","data":{"object":{"id":"re_T128b","payment_intent":"pi_T128","amount":1000,"status":"failed"}}}');
+-- 20д debts (T136): after a failed Stripe refund charge.amount_refunded no longer decides — the rest comes with its refund row
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128r2","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T128","payment_intent":"pi_T128","amount_refunded":5000}}}') = 'ignored', 'T128 the rest: charge.refunded alone after a failure');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T128r3","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T128c","payment_intent":"pi_T128","amount":3000,"status":"succeeded"}}}') = 'processed', 'T128 the rest refunded (its refund row)');
+select app.stripe_event_apply('{"id":"evt_T128d1","type":"charge.dispute.created","account":"acct_T126A","data":{"object":{"id":"dp_T128","payment_intent":"pi_T128","status":"needs_response"}}}');
+select app.stripe_event_apply('{"id":"evt_T128d2","type":"charge.dispute.closed","account":"acct_T126A","data":{"object":{"id":"dp_T128","payment_intent":"pi_T128","status":"won"}}}');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128d3","type":"charge.dispute.created","account":"acct_T126A","data":{"object":{"id":"dp_T128","payment_intent":"pi_T128"}}}') = 'ignored', 'T128 a late dispute event does not reopen a closed one');
+:as_super
+select tst.ok((select status = 'refunded' and refunded_cents = 5000 and dispute_status = 'won' from public.payments where stripe_payment_intent_id = 'pi_T128')
+          and (select paid_cents = 0 and payment_status = 'refunded' from public.invoices where id = '11260000-0000-4000-8000-000000000002'),
+  'T128 fully refunded; the dispute won');
+select tst.ok((select count(*) = 1 and bool_and(status = 'succeeded' and amount_cents = 2000) from public.refunds where stripe_refund_id = 're_T128'),
+  'T128 one refund row; a late «pending» does not take back «succeeded»');
+select tst.ok((select payload -> 'data' -> 'object' ? 'id' and not (payload -> 'data' -> 'object' ? 'billing_details') from app.stripe_events where event_id = 'evt_T128bd'),
+  'T128 the journal keeps no billing details of the client');
+select tst.ok((select status = 'failed' from public.refunds where stripe_refund_id = 're_T128b')
+          and (select needs_review from public.payments where stripe_payment_intent_id = 'pi_T128'),
+  'T128 an ACH refund that failed after «succeeded» is failed, and the payment goes to the owner');
+:as_owner_a
+select tst.ok((select count(*) from public.refunds where amount_cents = 2000 and status = 'succeeded') = 1, 'T128 the owner sees the refund');
+:as_tech_a
+select tst.ok((select count(*) from public.refunds) = 0 and (select count(*) from public.payment_attempts) = 0, 'T128 a tech sees no refunds and no attempts');
+
+-- T128 (cont.): ACH on its way, a cash payment meanwhile — the money is kept, the overpaid invoice goes to the owner
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('11260000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'T126-5', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T126 race ach', 2000, 2000, now());
+:as_service
+insert into tst.pa select 'a5', id, idempotency_key from app.payment_attempt_open('11260000-0000-4000-8000-000000000005', 2000);
+select app.payment_attempt_set_intent((select id from tst.pa where k = 'a5'), 'pi_T128race');
+select app.stripe_event_apply('{"id":"evt_T128rp","type":"payment_intent.processing","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128race","amount":2000}}}');
+:as_owner_a
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', '11260000-0000-4000-8000-000000000005', 'c1260000-0000-4000-8000-000000000001', 'cash', 2000, 'succeeded', 't128-cash');
+:as_service
+select app.stripe_event_apply('{"id":"evt_T128rs","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128race","amount":2000,"amount_received":2000}}}');
+:as_super
+select tst.ok((select status = 'succeeded' and needs_review from public.payments where stripe_payment_intent_id = 'pi_T128race')
+          and (select paid_cents = 4000 from public.invoices where id = '11260000-0000-4000-8000-000000000005'),
+  'T128 ACH + cash on the same balance: both kept, the ACH payment marked for the owner');
+
+-- T129 (cont.): another account, the intent id from metadata, money above the balance, a failure opens the next attempt
+:as_service
+insert into tst.pa select 'a3', id, idempotency_key from app.payment_attempt_open('11260000-0000-4000-8000-000000000003', 3000);
+select tst.ok(app.stripe_event_apply(jsonb_build_object('id', 'evt_T129x', 'type', 'payment_intent.succeeded', 'account', 'acct_T126B',
+  'data', jsonb_build_object('object', jsonb_build_object('currency', 'usd', 'id', 'pi_T129evil', 'amount', 3000, 'amount_received', 3000,
+  'metadata', jsonb_build_object('attempt_id', (select id from tst.pa where k = 'a3')))))) = 'ignored', 'T129 an event of another account with our attempt in its metadata makes no payment');
+select tst.ok(app.stripe_event_apply(jsonb_build_object('id', 'evt_T129m', 'type', 'payment_intent.succeeded', 'account', 'acct_T126A', 'livemode', true,
+  'data', jsonb_build_object('object', jsonb_build_object('currency', 'usd', 'id', 'pi_T129', 'amount', 3000, 'amount_received', 3000,
+  'metadata', jsonb_build_object('attempt_id', (select id from tst.pa where k = 'a3')))))) = 'ignored'
+          and app.stripe_event_apply(jsonb_build_object('id', 'evt_T129c', 'type', 'payment_intent.succeeded', 'account', 'acct_T126A',
+  'data', jsonb_build_object('object', jsonb_build_object('currency', 'eur', 'id', 'pi_T129', 'amount', 3000, 'amount_received', 3000,
+  'metadata', jsonb_build_object('attempt_id', (select id from tst.pa where k = 'a3')))))) = 'ignored'
+          and app.stripe_event_apply('{"id":"evt_T129p","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T129","amount":3000,"amount_received":3000,"metadata":{"attempt_id":"------------------------------------"}}}}') = 'ignored',
+  'T129 a live event for a test account, another currency, a broken attempt id: ignored, never an error');
+:as_super
+select tst.ok((select stripe_payment_intent_id is null from public.payment_attempts where id = (select id from tst.pa where k = 'a3')), 'T129 the ignored events did not take the attempt');
+:as_owner_a
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', '11260000-0000-4000-8000-000000000003', 'c1260000-0000-4000-8000-000000000001', 'cash', 1000, 'succeeded', 't129-cash');
+:as_service
+select tst.ok(app.stripe_event_apply(jsonb_build_object('id', 'evt_T129s', 'type', 'payment_intent.succeeded', 'account', 'acct_T126A',
+  'data', jsonb_build_object('object', jsonb_build_object('currency', 'usd', 'id', 'pi_T129', 'amount', 3000, 'amount_received', 3000,
+  'metadata', jsonb_build_object('attempt_id', (select id from tst.pa where k = 'a3')))))) = 'processed', 'T129 the attempt is found by its metadata');
+:as_super
+select tst.ok((select stripe_payment_intent_id = 'pi_T129' from public.payment_attempts where id = (select id from tst.pa where k = 'a3')), 'T129 the intent id is written from the event');
+select tst.ok((select invoice_id is null and needs_review and status = 'succeeded' and amount_cents = 3000 from public.payments where stripe_payment_intent_id = 'pi_T129')
+          and (select paid_cents = 1000 from public.invoices where id = '11260000-0000-4000-8000-000000000003'),
+  'T129 money above the balance is kept as the client''s, for review, and does not overpay the invoice');
+:as_service
+insert into tst.pa select 'a4', id, idempotency_key from app.payment_attempt_open('11260000-0000-4000-8000-000000000003', 2000);
+select app.payment_attempt_set_intent((select id from tst.pa where k = 'a4'), 'pi_T129f');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T129f","type":"payment_intent.payment_failed","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T129f","amount":2000}}}') = 'processed', 'T129 a failure is applied');
+select tst.ok((select attempt_no = 2 and id <> (select id from tst.pa where k = 'a4') from app.payment_attempt_open('11260000-0000-4000-8000-000000000003', 2000)), 'T129 after a failure the next attempt has a new number and key');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T129fp","type":"payment_intent.processing","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T129f","amount":2000}}}') = 'ignored', 'T129 processing after a failure (out of order) makes no endless pending');
+select tst.fails($q$select app.stripe_event_apply('{"id":"evt_T129early","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_x","payment_intent":"pi_T129f","amount_refunded":100}}}')$q$, 'T129 a refund of our intent before its payment: an error, so Stripe sends it again');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T129u","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T129none","amount":100,"amount_received":100}}}') = 'ignored'
+          and app.stripe_event_apply('{"id":"evt_T129t","type":"customer.created","account":"acct_T126A","data":{"object":{"id":"cus_1"}}}') = 'ignored',
+  'T129 an unknown intent and an unknown type are ignored');
+:as_super
+select tst.ok((select count(*) = 0 from public.payments where stripe_payment_intent_id = 'pi_T129f')
+          and (select status = 'failed' from public.payment_attempts where id = (select id from tst.pa where k = 'a4'))
+          and (select string_agg(status || ':' || coalesce(reason, ''), ',' order by event_id) from app.stripe_events where event_id in ('evt_T129t', 'evt_T129u', 'evt_T129x'))
+              = 'ignored:type,ignored:unknown_intent,ignored:wrong_account',
+  'T129 a card failure makes no payment; the journal keeps why an event was ignored');
+select tst.ok(not exists (select 1 from app.stripe_events where event_id = 'evt_T129early'), 'T129 the retried event is not in the journal yet');
+select tst.ok((select count(*) = 0 from public.notifications where invoice_id = '11260000-0000-4000-8000-000000000003'), 'T129 money kept for review does not tell «the invoice is paid»');
+drop table tst.pa;
+\echo 'T126–T129 Stripe: rights, repeats, order, refunds, attempts ok'
+
+-- ---------------------------------------------------------------- T130: connecting Stripe — the doors of the Edge Function (docs/specs/35, 20b)
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'public.stripe_connect_target(uuid,uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.stripe_account_save(uuid,jsonb)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.stripe_connect_target(uuid,uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_account_save(uuid,jsonb)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.stripe_connect_target(uuid,uuid)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.stripe_account_save(uuid,jsonb)', 'EXECUTE'),
+  'T130 only the Edge Function (service_role) asks who may connect and saves the account');
+:as_service
+select tst.ok((public.stripe_connect_target('a0000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000') ->> 'allowed')::boolean
+          and public.stripe_connect_target('a0000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000') ->> 'account_id' = 'acct_T126A',
+  'T130 the owner may connect; the company''s account is known');
+select tst.ok(not (public.stripe_connect_target('a0000000-0000-0000-0000-000000000003', 'ca000000-0000-0000-0000-000000000000') ->> 'allowed')::boolean
+          and not (public.stripe_connect_target('a0000000-0000-0000-0000-000000000005', 'ca000000-0000-0000-0000-000000000000') ->> 'allowed')::boolean
+          and not (public.stripe_connect_target('b0000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000') ->> 'allowed')::boolean,
+  'T130 a tech, sales and another company''s owner may not');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.ok(not (public.stripe_connect_target('a0000000-0000-0000-0000-000000000005', 'ca000000-0000-0000-0000-000000000000') ->> 'allowed')::boolean,
+  'T130 an admin does not connect: the Stripe account and its payouts belong to whoever fills the form');
+:as_super
+update public.memberships set role = 'sales' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok(public.stripe_connect_target('a0000000-0000-0000-0000-000000000001', 'cf000000-0000-4000-8000-000000000000') is null, 'T130 an unknown company: nothing');
+select tst.ok((public.stripe_account_save('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126A","charges_enabled":true,"payouts_enabled":false,"requirements":{"currently_due":["a","b"]}}') ->> 'requirements_due')::int = 2,
+  'T130 the saved state comes back');
+select tst.fails($q$select public.stripe_account_save('ca000000-0000-0000-0000-000000000000', '{"id":"acct_Else"}')$q$, 'T130 the save keeps the company''s one account');
+:as_super
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = now() where id = 'cb000000-0000-0000-0000-000000000000';
+:as_service
+select tst.fails($q$select public.stripe_account_save('cb000000-0000-0000-0000-000000000000', '{"id":"acct_T126B"}')$q$, 'T130 a closed company connects nothing');
+select tst.ok((public.stripe_connect_target('b0000000-0000-0000-0000-000000000001', 'cb000000-0000-0000-0000-000000000000') ->> 'closed')::boolean, 'T130 the Edge Function sees a closed company');
+:as_super
+update public.companies set closed_at = null where id = 'cb000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t06_company_closed_guard;
+\echo 'T130 Stripe connect doors ok'
+
+-- ---------------------------------------------------------------- T131: paying online from /p/ — the doors of stripe-pay (docs/specs/35, 20в)
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.stripe_pay_open(text,uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_pay_open(text,uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.stripe_pay_set_intent(uuid,text)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_pay_set_intent(uuid,text)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.stripe_pay_open(text,uuid)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.stripe_pay_set_intent(uuid,text)', 'EXECUTE'),
+  'T131 only the Edge Function (service_role) opens an attempt and keeps its PaymentIntent');
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
+select '11310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T131-1', 'c1a00000-0000-0000-0000-000000000001',
+       j.id, 'progress', 'sent', 'T131 progress', 150000, 150000, now()
+  from public.jobs j where j.estimate_id = '0e1a0000-0000-0000-0000-000000000088';
+:as_service
+select tst.fails_like($q$select public.stripe_pay_open('tok_lead_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%does not belong%', 'T131 another estimate''s link does not open an attempt on this invoice (IDOR)');
+select tst.fails_like($q$select public.stripe_pay_open('tok_nobody_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%estimate not found%', 'T131 an unknown link opens nothing');
+select tst.fails($q$select public.stripe_pay_open(null, '11310000-0000-4000-8000-000000000001')$q$, 'T131 no link — nothing');
+create temp table t131 as select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') as a;
+select tst.ok((select (a ->> 'amount_cents')::bigint = 150000 and a ->> 'account_id' = 'acct_T126A' and a ->> 'payment_intent_id' is null
+                      and a ->> 'company_id' = 'ca000000-0000-0000-0000-000000000000' from t131),
+  'T131 the link''s own invoice: an attempt for the whole balance on the company''s account');
+select tst.ok((select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') ->> 'attempt_id' = a ->> 'attempt_id' from t131),
+  'T131 a second tap is the same attempt');
+select tst.fails($q$select public.stripe_pay_set_intent((select (a ->> 'attempt_id')::uuid from t131), 'not_a_pi')$q$, 'T131 only a PaymentIntent id is kept');
+select public.stripe_pay_set_intent((select (a ->> 'attempt_id')::uuid from t131), 'pi_T131A');
+select tst.ok(public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') ->> 'payment_intent_id' = 'pi_T131A',
+  'T131 the attempt comes back with its PaymentIntent (stripe-pay reuses it)');
+select tst.fails($q$select public.stripe_pay_set_intent((select (a ->> 'attempt_id')::uuid from t131), 'pi_T131B')$q$, 'T131 an attempt keeps its one PaymentIntent');
+:as_super
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, reference)
+values ('ca000000-0000-0000-0000-000000000000', '11310000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000001',
+        'ach', 40000, 'pending', 'stripe:pi_T131P', 'pi_T131P');
+set role anon;
+select tst.ok((public.portal_estimate('tok_inv_0123456789abcdef') -> 'pending' ->> '11310000-0000-4000-8000-000000000001')::bigint = 40000
+          and (public.portal_estimate('tok_inv_0123456789abcdef') ->> 'online_pay')::boolean,
+  'T131 the client page knows online payments are on and sees the ACH on its way');
+:as_service
+select tst.ok((public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') ->> 'amount_cents')::bigint = 110000,
+  'T131 ACH on its way is not asked again: the attempt is the rest');
+select tst.ok(public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') -> 'stale_intents' = '["pi_T131A"]'::jsonb,
+  'T131 the older attempt''s intent (the old amount) is handed to stripe-pay to cancel');
+select tst.fails($q$select public.stripe_pay_close_attempt('nope')$q$, 'T131 only a PaymentIntent id closes an attempt');
+select public.stripe_pay_close_attempt('pi_T131A');
+:as_super
+select tst.ok((select status = 'canceled' from public.payment_attempts where stripe_payment_intent_id = 'pi_T131A')
+          and not has_function_privilege('anon', 'public.stripe_pay_close_attempt(text)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_pay_close_attempt(text)', 'EXECUTE'),
+  'T131 the attempt of an intent stripe-pay cancelled is closed at once (service_role only)');
+:as_service
+select tst.ok(public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') -> 'stale_intents' = '[]'::jsonb,
+  'T131 …and is no longer handed to cancel');
+:as_super
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = now() where id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.fails_like($q$select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%company closed%', 'T131 a closed company takes no payment');
+:as_super
+update public.companies set closed_at = null where id = 'ca000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t06_company_closed_guard;
+:as_super
+select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126A","charges_enabled":false}');
+:as_service
+select tst.fails_like($q$select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%not connected%', 'T131 Stripe stopped charges: no attempt');
+set role anon;
+select tst.ok(not (public.portal_estimate('tok_inv_0123456789abcdef') ->> 'online_pay')::boolean, 'T131 …and the page shows no online payment');
+:as_super
+select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126A","charges_enabled":true}');
+do $$ begin
+  perform set_config('app.signing_estimate', '0e1a0000-0000-0000-0000-000000000088', true);
+  update public.estimates set link_revoked_at = now() where id = '0e1a0000-0000-0000-0000-000000000088';
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+:as_service
+select tst.fails_like($q$select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%link is closed%', 'T131 a revoked link takes no payment');
+:as_super
+do $$ begin
+  perform set_config('app.signing_estimate', '0e1a0000-0000-0000-0000-000000000088', true);
+  update public.estimates set link_revoked_at = null where id = '0e1a0000-0000-0000-0000-000000000088';
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+drop table t131;
+\echo 'T131 Stripe pay doors ok'
+
+-- ---------------------------------------------------------------- T132: Stripe's webhook — the door of stripe-webhook (docs/specs/35, 20г)
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.stripe_webhook_apply(jsonb,text,bigint)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_webhook_apply(jsonb,text,bigint)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.stripe_webhook_apply(jsonb,text,bigint)', 'EXECUTE'),
+  'T132 only the Edge Function (service_role) applies a signed event');
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('11320000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T132-1', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T132 card', 20000, 20000, now()),
+  ('11320000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T132-2', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T132 early refund', 7000, 7000, now());
+:as_service
+select app.payment_attempt_set_intent((select id from app.payment_attempt_open('11320000-0000-4000-8000-000000000001', 20000)), 'pi_T132');
+select app.payment_attempt_set_intent((select id from app.payment_attempt_open('11320000-0000-4000-8000-000000000002', 7000)), 'pi_T132R');
+-- an object that names another company: by no right ours — journal only, no money
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132x","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132","amount":20000,"amount_received":20000,"metadata":{"company_id":"cb000000-0000-0000-0000-000000000000"}}}}', 'card', 610) = 'ignored',
+  'T132 metadata.company_id of another company: ignored');
+:as_super
+select tst.ok((select status = 'ignored' and reason = 'company_mismatch' from app.stripe_events where event_id = 'evt_T132x')
+          and not exists (select 1 from public.payments where stripe_payment_intent_id = 'pi_T132'),
+  'T132 …kept in the journal, no payment');
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132","amount":20000,"amount_received":20000,"payment_method_types":["card","us_bank_account"],"metadata":{"company_id":"CA000000-0000-0000-0000-000000000000"}}}}', 'bitcoin', 610) = 'processed',
+  'T132 our company: applied');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132","amount":20000,"amount_received":20000}}}', 'card', 9999) = 'duplicate',
+  'T132 a repeat is a duplicate and changes no fee');
+:as_super
+select tst.ok((select status = 'succeeded' and method = 'card' and fee_cents = 610 from public.payments where stripe_payment_intent_id = 'pi_T132'),
+  'T132 the payment carries Stripe''s fee; an unknown method falls back to the event''s');
+:as_service
+-- a refund of our payment before the payment itself: 55000 — nothing is written, the Edge Function answers 500, Stripe retries
+select tst.fails_like($q$select public.stripe_webhook_apply('{"id":"evt_T132r","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T132R","payment_intent":"pi_T132R","amount_refunded":7000}}}')$q$,
+  '%retry later%', 'T132 an event that came too early is refused (55000) for Stripe to send again');
+:as_super
+select tst.ok(not exists (select 1 from app.stripe_events where event_id = 'evt_T132r'), 'T132 …and is not in the journal (so the retry is applied)');
+:as_service
+select tst.fails($q$select public.stripe_webhook_apply('{"id":"nope","type":"x","data":{"object":{}}}')$q$, 'T132 not a Stripe event is refused');
+-- ACH: processing has no fee, succeeded brings it; a repeat may bring a fee the first delivery lacked — never lowers or changes it
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('11320000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T132-3', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T132 ach', 5000, 5000, now()),
+  ('11320000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T132-4', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T132 late fee', 3000, 3000, now());
+:as_service
+select app.payment_attempt_set_intent((select id from app.payment_attempt_open('11320000-0000-4000-8000-000000000003', 5000)), 'pi_T132A');
+select app.payment_attempt_set_intent((select id from app.payment_attempt_open('11320000-0000-4000-8000-000000000004', 3000)), 'pi_T132L');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132ap","type":"payment_intent.processing","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132A","amount":5000}}}', 'ach', null) = 'processed', 'T132 ACH processing');
+:as_super
+select tst.ok((select status = 'pending' and method = 'ach' and fee_cents = 0 from public.payments where stripe_payment_intent_id = 'pi_T132A'), 'T132 ACH on its way: no fee yet');
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132as","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132A","amount":5000,"amount_received":5000}}}', 'ach', 40) = 'processed', 'T132 ACH succeeded');
+:as_super
+select tst.ok((select status = 'succeeded' and fee_cents = 40 from public.payments where stripe_payment_intent_id = 'pi_T132A'), 'T132 the ACH fee comes with succeeded');
+:as_service
+select public.stripe_webhook_apply('{"id":"evt_T132ls","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132L","amount":3000,"amount_received":3000}}}', 'card', null);
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132ls","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132L","amount":3000,"amount_received":3000}}}', 'card', -5) = 'duplicate', 'T132 a repeat');
+select public.stripe_webhook_apply('{"id":"evt_T132ls","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132L","amount":3000,"amount_received":3000}}}', 'card', 77);
+select public.stripe_webhook_apply('{"id":"evt_T132ls","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132L","amount":3000,"amount_received":3000}}}', 'card', 99);
+:as_super
+select tst.ok((select fee_cents = 77 from public.payments where stripe_payment_intent_id = 'pi_T132L'),
+  'T132 the fee the first delivery lacked comes with a repeat; a negative one is not taken, a known one is not changed');
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132u","type":"payment_intent.succeeded","account":"acct_Nobody","data":{"object":{"currency":"usd","id":"pi_T132U","amount":1,"metadata":{"company_id":"ca000000-0000-0000-0000-000000000000"}}}}') = 'ignored'
+          and public.stripe_webhook_apply('{"id":"evt_T132u","type":"payment_intent.succeeded","account":"acct_Nobody","data":{"object":{"currency":"usd","id":"pi_T132U","amount":1,"metadata":{"company_id":"ca000000-0000-0000-0000-000000000000"}}}}') = 'duplicate',
+  'T132 an unknown account naming our company: ignored once, then a duplicate');
+:as_super
+select tst.ok((select reason = 'unknown_account' from app.stripe_events where event_id = 'evt_T132u'), 'T132 …the journal says why');
+\echo 'T132 Stripe webhook door ok'
+-- ---------------------------------------------------------------- T134: merging two clients (docs/specs/04 §13, map S3d)
+:as_super
+insert into public.customers (id, company_id, display_name, created_at) values
+  ('c1340000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T134 Keep', now() - interval '2 days'),
+  ('c1340000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'T134 Drop', now() - interval '1 day'),
+  ('c1340000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T134 Third', now());
+update public.customers set billing_address_line1 = '1 T134 Billing', billing_address_city = 'Glendale', notes = 'gate on the left'
+ where id = 'c1340000-0000-4000-8000-0000000000b1';
+insert into public.contacts (id, company_id, customer_id, name, role, is_primary) values
+  ('c1340000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000a1', 'Yuri', 'main', true),
+  ('c1340000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'Yuri P', 'main', true),
+  ('c1340000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'Tenant', 'tenant', false);
+insert into public.contact_phones (company_id, contact_id, number, is_primary) values
+  ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000a2', '8185550134', true),
+  ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b2', '+1 (818) 555-0134', true),
+  ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b2', '626 555 0134', false),
+  ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b3', '3105550199', true);
+insert into public.contact_emails (company_id, contact_id, address, is_primary) values
+  ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b2', 'Yuri.T134@example.com', true);
+insert into public.properties (id, company_id, customer_id, address_line1, address_city, contact_ids) values
+  ('c1340000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', '134 Main St', 'Pasadena',
+   array['c1340000-0000-4000-8000-0000000000b2', 'c1340000-0000-4000-8000-0000000000b3']::uuid[]);
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('c1340000-0000-4000-8000-0000000000b5', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000b4', 'T134 draft'),
+  ('c1340000-0000-4000-8000-0000000000b6', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000b4', 'T134 signed');
+select set_config('app.signing_estimate', 'c1340000-0000-4000-8000-0000000000b6', false);
+update public.estimates set status = 'sent' where id = 'c1340000-0000-4000-8000-0000000000b6';
+update public.estimates set status = 'awaiting_countersign' where id = 'c1340000-0000-4000-8000-0000000000b6';
+update public.estimates set status = 'approved' where id = 'c1340000-0000-4000-8000-0000000000b6';
+select set_config('app.signing_estimate', '', false);
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('c1340000-0000-4000-8000-0000000000b7', 'ca000000-0000-0000-0000-000000000000', 'T134-1', 'c1340000-0000-4000-8000-0000000000b1', 'standalone', 'sent', 'T134 sent', 10000, 10000, now()),
+  ('c1340000-0000-4000-8000-0000000000a7', 'ca000000-0000-0000-0000-000000000000', 'T134-2', 'c1340000-0000-4000-8000-0000000000a1', 'standalone', 'sent', 'T134 keep', 2500, 2500, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('c1340000-0000-4000-8000-0000000000b8', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b7', 'c1340000-0000-4000-8000-0000000000b1', 'cash', 4000, 'succeeded', 't134-cash');
+insert into public.notes (company_id, subject_type, subject_id, body) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c1340000-0000-4000-8000-0000000000b1', 'T134 note');
+insert into public.tasks (company_id, subject_type, subject_id, title) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c1340000-0000-4000-8000-0000000000b1', 'T134 task');
+insert into public.tags (id, company_id, name) values
+  ('c1340000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T134 vip'),
+  ('c1340000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'T134 hoa');
+insert into public.customer_tags (company_id, customer_id, tag_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000e1'),
+  ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000e1'),
+  ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000e2');
+insert into public.leads (id, company_id, source_id, customer_id, contact_name) values
+  ('c1340000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by id limit 1), 'c1340000-0000-4000-8000-0000000000b1', 'T134 lead');
+-- the second card's person refused SMS and email and speaks Spanish; the second card is tax exempt
+update public.contacts set sms_consent_status = 'opted_out', sms_opted_out_at = now() - interval '3 days',
+       email_unsubscribed_at = now() - interval '2 days', preferred_language = 'es'
+ where id = 'c1340000-0000-4000-8000-0000000000b2';
+update public.customers set tax_exempt = true, tax_exempt_note = 'CERT-134' where id = 'c1340000-0000-4000-8000-0000000000b1';
+-- the second client is «do not service» (marked after its open work, as in life)
+update public.customers set status = 'do_not_service', do_not_service_reason = 'T134 unpaid' where id = 'c1340000-0000-4000-8000-0000000000b1';
+create table tst.t134 (k text primary key, n bigint, t text);
+insert into tst.t134 (k, t) select 'num', number from public.invoices where id = 'c1340000-0000-4000-8000-0000000000b7';
+insert into tst.t134 select 'owed', sum(balance_cents) from public.customer_balances
+ where customer_id in ('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1');
+
+-- rights: the door is open to authenticated only (the function checks owner / admin itself)
+select tst.ok(has_function_privilege('authenticated', 'public.merge_customers(uuid,uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.merge_customers(uuid,uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.merging_customer(uuid,uuid)', 'EXECUTE')
+          and not has_table_privilege('authenticated', 'app.customer_merge_runs', 'INSERT'),
+  'T134 merge_customers for authenticated, not anon; the merge marks are closed');
+:as_office90
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1')$q$, 'not allowed', 'T134 the office does not merge');
+:as_sales_a
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1')$q$, 'not allowed', 'T134 sales do not merge');
+:as_tech_a
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1')$q$, 'not allowed', 'T134 a tech does not merge');
+:as_owner_b
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1')$q$, 'not allowed', 'T134 another company''s owner does not merge');
+:as_owner_a
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000a1')$q$, 'merge_same_client', 'T134 not into itself');
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'e3a00000-0000-4000-8000-0000000000b1')$q$, 'not allowed', 'T134 not a client of another company');
+-- a person who sets the merge flag himself gets no pass: not on a sent invoice, a payment, a signed estimate
+select set_config('app.merging_customer', (select gen_random_uuid())::text, false);
+select tst.fails($q$update public.invoices set customer_id = 'c1340000-0000-4000-8000-0000000000a1' where id = 'c1340000-0000-4000-8000-0000000000b7'$q$, 'T134 the flag alone does not move a sent invoice');
+select tst.fails($q$update public.payments set customer_id = 'c1340000-0000-4000-8000-0000000000a1' where id = 'c1340000-0000-4000-8000-0000000000b8'$q$, 'T134 the flag alone does not move a payment');
+select tst.fails($q$update public.estimates set customer_id = 'c1340000-0000-4000-8000-0000000000a1' where id = 'c1340000-0000-4000-8000-0000000000b6'$q$, 'T134 the flag alone does not move a signed estimate');
+select tst.fails($q$insert into app.customer_merge_runs (drop_id, keep_id) values ('c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000a1')$q$, 'T134 a person cannot write a merge mark');
+select set_config('app.merging_customer', '', false);
+-- merged_into is written only by the merge: no person (not even the owner) points a card at another directly
+:as_owner_a
+select tst.fails_like($q$update public.customers set merged_into_customer_id = 'c1340000-0000-4000-8000-0000000000a1' where id = 'c1340000-0000-4000-8000-0000000000c1'$q$, '%merged only by merge_customers%', 'T134 the owner cannot set merged_into directly');
+select tst.fails_like($q$insert into public.customers (company_id, display_name, merged_into_customer_id) values ('ca000000-0000-0000-0000-000000000000', 'T134 fake', 'c1340000-0000-4000-8000-0000000000a1')$q$, '%merged only by merge_customers%', 'T134 nobody makes a merged card directly');
+-- money on its way: merge after it settles
+:as_super
+insert into public.payment_attempts (id, company_id, invoice_id, customer_id, amount_cents, attempt_no, idempotency_key, stripe_account_id) values
+  ('c1340000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b7', 'c1340000-0000-4000-8000-0000000000b1', 6000, 1, 't134-attempt', 'acct_T126A');
+:as_owner_a
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1')$q$, 'merge_payment_in_flight', 'T134 not while a card payment is open');
+:as_super
+-- left open on the page for more than a day: it does not block for ever
+update public.payment_attempts set updated_at = now() - interval '2 days' where id = 'c1340000-0000-4000-8000-0000000000b9';
+-- a pending payment blocks
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('c1340000-0000-4000-8000-0000000000ba', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b7', 'c1340000-0000-4000-8000-0000000000b1', 'ach', 1000, 'pending', 't134-pending');
+:as_owner_a
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1')$q$, 'merge_payment_in_flight', 'T134 not while a bank payment is pending');
+:as_super
+update public.payments set status = 'failed' where id = 'c1340000-0000-4000-8000-0000000000ba';
+
+-- the merge
+:as_owner_a
+select tst.ok(not (public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1') ->> 'repeat')::boolean, 'T134 the owner merges');
+:as_super
+select tst.ok((select status = 'archived' and merged_into_customer_id = 'c1340000-0000-4000-8000-0000000000a1' and deleted_at is null
+                 from public.customers where id = 'c1340000-0000-4000-8000-0000000000b1'), 'T134 the second card: archived, merged into the kept one, not deleted');
+select tst.ok((select status = 'do_not_service' and do_not_service_reason = 'T134 unpaid' and billing_address_line1 = '1 T134 Billing'
+                      and billing_address_city = 'Glendale' and notes = 'gate on the left'
+                 from public.customers where id = 'c1340000-0000-4000-8000-0000000000a1'), 'T134 kept: «do not service» stays, empty fields from the second');
+select tst.ok(not exists (select 1 from public.properties where customer_id = 'c1340000-0000-4000-8000-0000000000b1')
+          and not exists (select 1 from public.estimates where customer_id = 'c1340000-0000-4000-8000-0000000000b1')
+          and not exists (select 1 from public.invoices where customer_id = 'c1340000-0000-4000-8000-0000000000b1')
+          and not exists (select 1 from public.payments where customer_id = 'c1340000-0000-4000-8000-0000000000b1')
+          and not exists (select 1 from public.payment_attempts where customer_id = 'c1340000-0000-4000-8000-0000000000b1')
+          and not exists (select 1 from public.notes where subject_id = 'c1340000-0000-4000-8000-0000000000b1')
+          and not exists (select 1 from public.tasks where subject_id = 'c1340000-0000-4000-8000-0000000000b1')
+          and not exists (select 1 from public.contacts where customer_id = 'c1340000-0000-4000-8000-0000000000b1' and deleted_at is null),
+  'T134 nothing is left on the second card');
+select tst.ok((select number = (select t from tst.t134 where k = 'num') and total_cents = 10000 and paid_cents = 4000 from public.invoices where id = 'c1340000-0000-4000-8000-0000000000b7')
+          and (select status = 'approved' from public.estimates where id = 'c1340000-0000-4000-8000-0000000000b6')
+          and (select sum(balance_cents) from public.customer_balances where customer_id = 'c1340000-0000-4000-8000-0000000000a1') = (select n from tst.t134 where k = 'owed'),
+  'T134 numbers, amounts, the signed estimate and the debt are the same — now on one card');
+select tst.ok((select count(*) from public.customer_tags where customer_id = 'c1340000-0000-4000-8000-0000000000a1') = 2, 'T134 tags: both sets');
+select tst.ok((select sms_consent_status = 'opted_out' and sms_opted_out_at is not null and email_unsubscribed_at is not null and preferred_language = 'es'
+                 from public.contacts where id = 'c1340000-0000-4000-8000-0000000000a2'),
+  'T134 the same person keeps the refusals and the language of the merged one (TCPA / CAN-SPAM, rule 7)');
+select tst.ok((select tax_exempt and tax_exempt_note = 'CERT-134' from public.customers where id = 'c1340000-0000-4000-8000-0000000000a1'), 'T134 «no sales tax» of the other card stays, with its note');
+-- people: Yuri P (same phone) is Yuri now — his other phone and email moved; the tenant joined as another person
+select tst.ok((select deleted_at is not null from public.contacts where id = 'c1340000-0000-4000-8000-0000000000b2')
+          and (select count(*) from public.contact_phones where contact_id = 'c1340000-0000-4000-8000-0000000000a2' and deleted_at is null) = 2
+          and exists (select 1 from public.contact_emails where contact_id = 'c1340000-0000-4000-8000-0000000000a2' and address = 'Yuri.T134@example.com' and deleted_at is null)
+          and (select customer_id = 'c1340000-0000-4000-8000-0000000000a1' and not is_primary from public.contacts where id = 'c1340000-0000-4000-8000-0000000000b3')
+          and (select contact_ids = array['c1340000-0000-4000-8000-0000000000a2', 'c1340000-0000-4000-8000-0000000000b3']::uuid[]
+                 or contact_ids = array['c1340000-0000-4000-8000-0000000000b3', 'c1340000-0000-4000-8000-0000000000a2']::uuid[]
+                 from public.properties where id = 'c1340000-0000-4000-8000-0000000000b4'),
+  'T134 the same person is one, the other joins; the property points at the kept person');
+select tst.ok(exists (select 1 from public.audit_log where entity_type = 'customers' and entity_id = 'c1340000-0000-4000-8000-0000000000b1'
+                        and action = 'merge' and actor_id = 'a0000000-0000-0000-0000-000000000001'
+                        and after -> 'moved' -> 'invoices' ? 'c1340000-0000-4000-8000-0000000000b7')
+          and not exists (select 1 from app.customer_merge_runs),
+  'T134 the audit row lists what moved (support can undo it); no merge mark is left');
+select tst.ok((select customer_id = 'c1340000-0000-4000-8000-0000000000a1' from public.leads where id = 'c1340000-0000-4000-8000-0000000000f1')
+          and (select customer_id = 'c1340000-0000-4000-8000-0000000000a1' from public.payment_attempts where id = 'c1340000-0000-4000-8000-0000000000b9'),
+  'T134 the lead and the payment attempt moved too');
+select tst.ok(exists (select 1 from public.activities where subject_id = 'c1340000-0000-4000-8000-0000000000b1' and meta ->> 'action' = 'do_not_service_lifted')
+          and not exists (select 1 from public.activities where subject_id = 'c1340000-0000-4000-8000-0000000000a1' and meta ->> 'action' = 'do_not_service_lifted')
+          and exists (select 1 from public.activities where subject_id = 'c1340000-0000-4000-8000-0000000000a1' and meta ->> 'action' = 'do_not_service_set'),
+  'T134 the kept card''s history says «do not service» set, not lifted (B''s own archive line stays on B)');
+-- the same merge again (the queue sent it twice): no error, nothing moves twice
+:as_owner_a
+select tst.ok((public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1') ->> 'repeat')::boolean, 'T134 a repeat changes nothing');
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000a1')$q$, 'merge_already_merged', 'T134 a merged card is not kept');
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000c1', 'c1340000-0000-4000-8000-0000000000b1')$q$, 'merge_already_merged', 'T134 a merged card is not merged again elsewhere');
+:as_super
+select tst.ok((select count(*) from public.audit_log where entity_id = 'c1340000-0000-4000-8000-0000000000b1' and action = 'merge') = 1, 'T134 one merge, one audit row');
+-- an old phone that does not know: what it sends for the second card lands on the kept one
+:as_owner_a
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+  ('c1340000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', '135 Main St', 'Pasadena');
+insert into public.notes (company_id, subject_type, subject_id, body) values
+  ('ca000000-0000-0000-0000-000000000000', 'customer', 'c1340000-0000-4000-8000-0000000000b1', 'T134 late note');
+insert into public.contacts (id, company_id, customer_id, name, role, is_primary) values
+  ('c1340000-0000-4000-8000-0000000000d2', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'Late', 'main', true);
+:as_super
+select tst.ok((select customer_id = 'c1340000-0000-4000-8000-0000000000a1' from public.properties where id = 'c1340000-0000-4000-8000-0000000000d1')
+          and exists (select 1 from public.notes where body = 'T134 late note' and subject_id = 'c1340000-0000-4000-8000-0000000000a1')
+          and (select customer_id = 'c1340000-0000-4000-8000-0000000000a1' and not is_primary from public.contacts where id = 'c1340000-0000-4000-8000-0000000000d2'),
+  'T134 an old phone''s rows for the merged card land on the kept one');
+-- the merged card stays archived whatever an old phone sends
+:as_owner_a
+update public.customers set status = 'active' where id = 'c1340000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok((select status = 'archived' and merged_into_customer_id = 'c1340000-0000-4000-8000-0000000000a1' from public.customers where id = 'c1340000-0000-4000-8000-0000000000b1'), 'T134 the merged card stays archived');
+-- another company cannot use the redirect: its row for A's merged card is refused, not moved
+:as_owner_b
+select tst.fails($q$insert into public.properties (company_id, customer_id, address_line1, address_city) values ('cb000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', '1 Other Co', 'LA')$q$, 'T134 another company''s row for a merged card is refused');
+-- «Не дубль»: one id added by the office, a repeat changes nothing, sales and another company — no
+:as_owner_a
+select public.mark_not_duplicate('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000c1');
+select public.mark_not_duplicate('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000c1');
+:as_sales_a
+select tst.fails_like($q$select public.mark_not_duplicate('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000c1')$q$, 'not allowed', 'T134 sales do not mark «not a duplicate»');
+:as_owner_b
+select tst.fails_like($q$select public.mark_not_duplicate('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000c1')$q$, 'not allowed', 'T134 another company does not mark');
+:as_super
+select tst.ok((select not_duplicate_ids = array['c1340000-0000-4000-8000-0000000000c1']::uuid[] from public.customers where id = 'c1340000-0000-4000-8000-0000000000a1'), 'T134 «not a duplicate»: one id, once');
+-- an old phone's whole people / tags list for the merged card: refused with our reason, the kept card untouched
+:as_owner_a
+select tst.fails_like($q$select public.save_customer_people('c1340000-0000-4000-8000-0000000000b1', '[]'::jsonb)$q$, 'customer_merged', 'T134 people of a merged card: refused');
+select tst.fails_like($q$select public.set_customer_tags('c1340000-0000-4000-8000-0000000000b1', '{}'::uuid[])$q$, 'customer_merged', 'T134 tags of a merged card: refused');
+:as_super
+select tst.ok((select count(*) from public.customer_tags where customer_id = 'c1340000-0000-4000-8000-0000000000a1') = 2
+          and exists (select 1 from public.contacts where id = 'c1340000-0000-4000-8000-0000000000a2' and deleted_at is null),
+  'T134 the kept card''s people and tags stay');
+-- the server's own jobs (service_role) still change a draft's client (no merge row: the guard just says «not a merge»)
+:as_service
+update public.estimates set customer_id = 'c1340000-0000-4000-8000-0000000000c1' where id = 'c1340000-0000-4000-8000-0000000000b5';
+update public.estimates set customer_id = 'c1340000-0000-4000-8000-0000000000a1' where id = 'c1340000-0000-4000-8000-0000000000b5';
+:as_super
+select tst.ok((select customer_id = 'c1340000-0000-4000-8000-0000000000a1' from public.estimates where id = 'c1340000-0000-4000-8000-0000000000b5'), 'T134 service_role moves a draft as before');
+-- lead → client (S3, app.move_lead_people): the same person keeps the lead person's refusal and language
+insert into public.contacts (id, company_id, customer_id, name, role, is_primary) values
+  ('c1340000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000c1', 'Third', 'main', true);
+insert into public.contact_phones (company_id, contact_id, number, is_primary) values
+  ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000c2', '2135550134', true);
+insert into public.leads (id, company_id, source_id, contact_name) values
+  ('c1340000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by id limit 1), 'T134 lead 2');
+-- (the lead's main person is made by the lead itself, t85)
+update public.contacts set sms_consent_status = 'opted_out', sms_opted_out_at = now(), preferred_language = 'ru'
+ where lead_id = 'c1340000-0000-4000-8000-0000000000f2' and is_primary and deleted_at is null;
+insert into public.contact_phones (company_id, contact_id, number, is_primary)
+select 'ca000000-0000-0000-0000-000000000000', id, '(213) 555-0134', true from public.contacts
+ where lead_id = 'c1340000-0000-4000-8000-0000000000f2' and is_primary and deleted_at is null;
+update public.leads set customer_id = 'c1340000-0000-4000-8000-0000000000c1' where id = 'c1340000-0000-4000-8000-0000000000f2';
+select tst.ok((select sms_consent_status = 'opted_out' and sms_opted_out_at is not null and preferred_language = 'ru'
+                 from public.contacts where id = 'c1340000-0000-4000-8000-0000000000c2'),
+  'T134 lead → client: the refusal and the language of the lead person are kept');
+\echo 'T134 client merge ok'
+
+-- ---------------------------------------------------------------- T133: refunds — who, how much, tax by mode, Stripe and its webhook (docs/specs/35 §4в, 20д)
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, tax_mode, sent_at) values
+  ('11330000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T133-1', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T133 taxed', 200000, 8357, 208357, 'added_on_top', now()),
+  ('11330000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T133-2', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T133 card', 30000, 0, 30000, 'exempt', now()),
+  ('11330000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T133-3', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T133 disputed', 5000, 0, 5000, null, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, stripe_payment_intent_id) values
+  ('21330000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '11330000-0000-4000-8000-000000000001', 'c1260000-0000-4000-8000-000000000001', 'cash', 50000, 'succeeded', 't133-cash', null),
+  ('21330000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '11330000-0000-4000-8000-000000000002', 'c1260000-0000-4000-8000-000000000001', 'card', 30000, 'succeeded', 'stripe:pi_T133C', 'pi_T133C'),
+  ('21330000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '11330000-0000-4000-8000-000000000003', 'c1260000-0000-4000-8000-000000000001', 'check', 5000, 'succeeded', 't133-disputed', null),
+  ('21330000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '11330000-0000-4000-8000-000000000001', 'c1260000-0000-4000-8000-000000000001', 'card', 3000, 'succeeded', 't133-terminal', null),
+  ('21330000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '11330000-0000-4000-8000-000000000001', 'c1260000-0000-4000-8000-000000000001', 'cash', 1000, 'succeeded', 't133-cash-2', null);
+update public.payments set dispute_status = 'open' where id = '21330000-0000-4000-8000-000000000003';
+insert into auth.users (id, email, raw_user_meta_data) values ('a1330000-0000-4000-8000-000000000001', 'admin133@a.test', '{"full_name":"Ann Admin"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a1330000-0000-4000-8000-000000000001', 'admin', 'active');
+\set as_admin133 'reset role; set request.jwt.claim.sub = ''a1330000-0000-4000-8000-000000000001''; set role authenticated;'
+select tst.ok(not has_function_privilege('anon', 'public.refund_record(uuid, bigint, text, text, text)', 'execute')
+          and has_function_privilege('authenticated', 'public.refund_record(uuid, bigint, text, text, text)', 'execute')
+          and not has_function_privilege('authenticated', 'public.stripe_refund_open(uuid, uuid, bigint, text, text, text)', 'execute')
+          and not has_function_privilege('authenticated', 'public.stripe_refund_settle(uuid, jsonb)', 'execute')
+          and has_function_privilege('service_role', 'public.stripe_refund_open(uuid, uuid, bigint, text, text, text)', 'execute')
+          and not has_function_privilege('authenticated', 'app.refund_guard(uuid, uuid, bigint, text, text, text)', 'execute')
+          and not has_function_privilege('authenticated', 'app.refund_sync_money(uuid)', 'execute'),
+  'T133 a manual refund — the app; a Stripe refund — only the Edge Function; the steps — nobody (rule 18)');
+:as_tech_a
+select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000001', 1000, 'goodwill', null, 'k133-tech-1')$q$, '%owner/admin%', 'T133 a tech does not refund');
+:as_office90
+select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000001', 1000, 'goodwill', null, 'k133-office1')$q$, '%owner/admin%', 'T133 the office does not refund (INV-US-08)');
+select tst.blocked($q$insert into public.refunds (company_id, payment_id, amount_cents, idempotency_key) values ('ca000000-0000-0000-0000-000000000000', '21330000-0000-4000-8000-000000000001', 1, 'x')$q$, 'T133 nobody writes refunds by hand');
+:as_owner_b
+select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000001', 1000, 'goodwill', null, 'k133-other1')$q$, '%owner/admin%', 'T133 another company''s owner does not refund A''s payment');
+:as_owner_a
+select tst.fails_like($q$update public.payments set refunded_cents = 100, status = 'partially_refunded' where id = '21330000-0000-4000-8000-000000000001'$q$, '%refund_record%', 'T133 the owner does not refund by a direct update (no refunds row, no tax part)');
+select tst.fails_like($q$update public.payments set status = 'partially_refunded' where id = '21330000-0000-4000-8000-000000000005'$q$, '%refund_record%', 'T133 no refund status without money (the status would lie)');
+select tst.fails_like($q$update public.payments set customer_id = 'c1260000-0000-4000-8000-000000000001' where id = '94500000-0000-4000-8000-000000000001'$q$, '%immutable%', 'T133 a payment''s client: the same refusal as ever, not «function does not exist»');
+select tst.fails_like($q$insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, stripe_payment_intent_id) values ('ca000000-0000-0000-0000-000000000000', '11330000-0000-4000-8000-000000000001', 'c1260000-0000-4000-8000-000000000001', 'card', 100, 'succeeded', 'k133-borrow', 'pi_T133C')$q$, '%written by Stripe%', 'T133 a person does not borrow a PaymentIntent for a payment of their own');
+select tst.fails_like($q$update public.payments set dispute_status = 'none' where id = '21330000-0000-4000-8000-000000000003'$q$, '%written by Stripe%', 'T133 …nor closes a dispute by hand');
+select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000001', 50001, 'goodwill', null, 'k133-above1')$q$, '%refund_above_available%', 'T133 not more than was paid');
+select tst.fails($q$select public.refund_record('21330000-0000-4000-8000-000000000001', 0, 'goodwill', null, 'k133-zero01')$q$, 'T133 not zero');
+select tst.fails($q$select public.refund_record('21330000-0000-4000-8000-000000000001', 100, 'whim', null, 'k133-kind01')$q$, 'T133 a reason kind from the list');
+select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000002', 100, 'goodwill', null, 'k133-card01')$q$, '%refund_through_stripe%', 'T133 a card payment is refunded through Stripe, not recorded');
+select tst.ok(public.refund_record('21330000-0000-4000-8000-000000000004', 3000, 'other', 'terminal', 'k133-term01') ->> 'status' = 'succeeded',
+  'T133 a card taken by the contractor''s own terminal (no PaymentIntent) is refunded as a record');
+select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000003', 100, 'goodwill', null, 'k133-disp01')$q$, '%refund_disputed%', 'T133 no refund while a dispute is open');
+select tst.ok((public.refund_record('21330000-0000-4000-8000-000000000001', 10000, 'goodwill', 'scratched fence', 'k133-cash-1') ->> 'tax_cents')::bigint = 401,
+  'T133 TX13: $100.00 of $2,083.57 (tax $83.57) — tax $4.01, as refundAllocation of the engine');
+select tst.ok((public.refund_record('21330000-0000-4000-8000-000000000001', 10000, 'goodwill', 'scratched fence', 'k133-cash-1') ->> 'net_cents')::bigint = 9599,
+  'T133 a repeat with the same key is the same refund (revenue $95.99)');
+:as_super
+select tst.ok((select refunded_cents = 10000 and status = 'partially_refunded' from public.payments where id = '21330000-0000-4000-8000-000000000001')
+          and (select paid_cents = 41000 and payment_status = 'partially_paid' from public.invoices where id = '11330000-0000-4000-8000-000000000001')
+          and (select count(*) = 1 from public.refunds where payment_id = '21330000-0000-4000-8000-000000000001'),
+  'T133 one refund, the payment partially refunded, the invoice owes again');
+:as_admin133
+select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000002', 100, 'goodwill', null, 'k133-cash-1')$q$, '%key used%', 'T133 a key of another refund is not taken');
+select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000001', 40001, 'other', null, 'k133-rest01')$q$, '%refund_above_available%', 'T133 paid − refunded is the limit');
+select tst.ok((select j ->> 'status' = 'succeeded' and (j ->> 'tax_cents')::bigint = 1604 and (j ->> 'net_cents')::bigint = 38396
+                 from (select public.refund_record('21330000-0000-4000-8000-000000000001', 40000, 'cancellation', null, 'k133-rest01') j) x),
+  'T133 an admin refunds the rest; tax $16.04 as the engine (refund.test.ts)');
+:as_super
+select tst.ok((select status = 'refunded' and refunded_cents = 50000 from public.payments where id = '21330000-0000-4000-8000-000000000001'), 'T133 all of it → refunded');
+select tst.ok((select count(*) = 2 from public.audit_log where entity_type = 'refunds' and entity_id in (select id from public.refunds where payment_id = '21330000-0000-4000-8000-000000000001')), 'T133 every refund is in the audit log');
+
+-- Stripe: a pending row before Stripe, the limit holds it back, a retry resumes it, the answer ties it
+:as_service
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000003', '21330000-0000-4000-8000-000000000002', 1000, 'goodwill', null, 'k133-st-tech')$q$, '%owner/admin%', 'T133 the Edge Function asks the role too (a tech)');
+select tst.fails_like($q$select public.stripe_refund_open('b0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 1000, 'goodwill', null, 'k133-st-othr')$q$, '%owner/admin%', 'T133 …and another company');
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000003', 100, 'goodwill', null, 'k133-st-chk1')$q$, '%refund_disputed%', 'T133 a disputed payment: nothing to Stripe');
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000005', 100, 'goodwill', null, 'k133-st-cash')$q$, '%refund_not_stripe%', 'T133 a cash payment is not sent to Stripe');
+select tst.fails_like($q$select public.stripe_refund_inflight('b0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 'k133-any-key')$q$, '%owner/admin%', 'T133 another company learns nothing about a refund on its way');
+select tst.ok(public.stripe_refund_inflight('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 'k133-any-key') is null, 'T133 nothing on its way yet');
+create temp table t133 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 10000, 'goodwill', null, 'k133-st-own1') j;
+select tst.ok((select j ->> 'status' = 'pending' and j ->> 'account_id' = 'acct_T126A' and j ->> 'payment_intent' = 'pi_T133C'
+                      and j ->> 'idempotency_key' = 'octodex-refund-' || (j ->> 'id') and (j ->> 'tax_cents')::bigint = 0 from t133),
+  'T133 a pending refund of the exempt invoice: tax 0, the account and the intent for Stripe');
+select tst.ok((select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 10000, 'goodwill', null, 'k133-st-own1') ->> 'id' = j ->> 'id' from t133),
+  'T133 a retry with its key resumes the refund that never reached Stripe');
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 10000, 'goodwill', null, 'k133-st-own2')$q$, '%refund_in_progress%',
+  'T133 another tab (another key), even the same amount, does not adopt it — that key could make a second refund later');
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000005', null, 'goodwill', null, 'k133-st-null')$q$, '%refund_not_stripe%', 'T133 a cash payment first says «not Stripe»');
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 5000, 'goodwill', null, 'k133-st-own3')$q$, '%refund_in_progress%', 'T133 …another amount waits for it');
+select tst.ok((select x ->> 'id' = j ->> 'id' and x ->> 'own' = 'false' and (x ->> 'age_s')::bigint < 60
+                 from t133, lateral (select public.stripe_refund_inflight('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 'k133-st-own3') x) y),
+  'T133 the Edge Function sees the refund on its way (not its own, just tried) — to ask Stripe about it when it is idle');
+select tst.ok((select public.stripe_refund_settle((j ->> 'id')::uuid, '{"error":"not_sent"}') ->> 'status' = 'pending' from t133),
+  'T133 «not_sent» does not free a row someone tried a moment ago');
+select tst.fails_like($q$select public.stripe_refund_open('b0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 5000, 'goodwill', null, 'k133-st-othr2')$q$, '%owner/admin%', 'T133 another company gets «not allowed», not «in progress»');
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"error":"insufficient_funds"}');
+:as_super
+select tst.ok((select status = 'failed' and failure_reason = 'insufficient_funds' from public.refunds where id = (select (j ->> 'id')::uuid from t133))
+          and (select refunded_cents = 0 from public.payments where id = '21330000-0000-4000-8000-000000000002'),
+  'T133 Stripe said no: the refund failed, no money moved');
+:as_service
+drop table t133;
+create temp table t133 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 20000, 'goodwill', null, 'k133-st-own4') j;
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 10001, 'goodwill', null, 'k133-st-own5')$q$, '%refund_in_progress%', 'T133 one refund on its way at a time');
+select tst.fails($q$select public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"id":"re_T133a","status":"succeeded","amount":19999,"payment_intent":"pi_T133C"}')$q$, 'T133 an answer of another amount is not ours');
+select tst.fails($q$select public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"id":"re_T133a","status":"succeeded","amount":20000,"payment_intent":"pi_Other"}')$q$, 'T133 …nor of another intent');
+-- the webhook comes first: it ties the row by metadata, no second row; the answer after it changes nothing
+select tst.ok(public.stripe_webhook_apply(format('{"id":"evt_T133r1","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T133a","status":"pending","amount":20000,"payment_intent":"pi_T133C","metadata":{"company_id":"ca000000-0000-0000-0000-000000000000","octo_refund_id":"%s"}}}}', (select j ->> 'id' from t133))::jsonb) = 'processed', 'T133 refund.created before the answer');
+:as_super
+select tst.ok((select count(*) = 2 from public.refunds where payment_id = '21330000-0000-4000-8000-000000000002')
+          and (select stripe_refund_id = 're_T133a' from public.refunds where id = (select (j ->> 'id')::uuid from t133))
+          and (select refunded_cents = 20000 and status = 'partially_refunded' from public.payments where id = '21330000-0000-4000-8000-000000000002')
+          and (select paid_cents = 10000 from public.invoices where id = '11330000-0000-4000-8000-000000000002'),
+  'T133 …our row got its Stripe id (no duplicate), the money is back on the invoice');
+:as_service
+select tst.ok(public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"id":"re_T133a","status":"succeeded","amount":20000,"payment_intent":"pi_T133C"}') ->> 'status' = 'succeeded', 'T133 the answer after the webhook');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T133r2","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T133","amount_refunded":20000,"payment_intent":"pi_T133C"}}}') in ('processed', 'ignored'), 'T133 charge.refunded of the same sum');
+:as_super
+select tst.ok((select refunded_cents = 20000 from public.payments where id = '21330000-0000-4000-8000-000000000002'), 'T133 …counted once');
+:as_service
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 10001, 'goodwill', null, 'k133-st-own6')$q$, '%refund_above_available%', 'T133 the card limit: $300 − $200 refunded');
+-- a check «not sent» that came too early, then Stripe's answer: Stripe's word wins, the money counts
+drop table t133;
+create temp table t133 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 4000, 'goodwill', null, 'k133-st-own7') j;
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', null, 'goodwill', null, 'k133-st-own8')$q$, '%refund_in_progress%', 'T133 one at a time, whatever the amount');
+:as_super
+update public.refunds set updated_at = now() - interval '5 minutes' where id = (select (j ->> 'id')::uuid from t133);
+:as_service
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"error":"not_sent"}');
+select tst.ok((select status = 'failed' and failure_reason = 'not_sent' from public.refunds where id = (select (j ->> 'id')::uuid from t133)), 'T133 an idle row Stripe has not got is freed');
+select tst.ok((select x ->> 'status' = 'succeeded' and x ->> 'failure_reason' is null
+                 from (select public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"id":"re_T133b","status":"succeeded","amount":4000,"payment_intent":"pi_T133C"}') x) y),
+  'T133 …but Stripe made it after all: Stripe''s answer wins, no failure reason left');
+:as_super
+select tst.ok((select refunded_cents = 24000 from public.payments where id = '21330000-0000-4000-8000-000000000002'), 'T133 …and its money');
+:as_service
+select tst.fails($q$select public.stripe_refund_settle('21330000-0000-4000-8000-000000000002', '{"error":"x"}')$q$, 'T133 settle takes only a refund row');
+-- the webhook ties a row freed as not_sent too: Stripe's word, the money counts
+drop table t133;
+create temp table t133 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 1000, 'goodwill', null, 'k133-st-own9') j;
+:as_super
+update public.refunds set updated_at = now() - interval '5 minutes' where id = (select (j ->> 'id')::uuid from t133);
+:as_service
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"error":"not_sent"}');
+select tst.ok(public.stripe_webhook_apply(format('{"id":"evt_T133r3","type":"refund.updated","account":"acct_T126A","data":{"object":{"id":"re_T133c","status":"succeeded","amount":1000,"payment_intent":"pi_T133C","metadata":{"company_id":"ca000000-0000-0000-0000-000000000000","octo_refund_id":"%s"}}}}', (select j ->> 'id' from t133))::jsonb) = 'processed', 'T133 refund.updated about a freed row');
+:as_super
+select tst.ok((select status = 'succeeded' and stripe_refund_id = 're_T133c' and failure_reason is null from public.refunds where id = (select (j ->> 'id')::uuid from t133))
+          and (select refunded_cents = 25000 from public.payments where id = '21330000-0000-4000-8000-000000000002'),
+  'T133 …it is tied, succeeded, counted');
+:as_owner_a
+select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000005', null, 'goodwill', null, 'k133-null01')$q$, '%refund_above_available%', 'T133 an empty amount is our refusal, not a raw error');
+\echo 'T133 refunds ok'
+
+-- ---------------------------------------------------------------- T138: server import of clients from CSV (docs/specs/04 §14, map S3e)
+\set t138_rows '[{"line":2,"name":"T138 Ann Lee","first_name":"Ann","last_name":"Lee","company":"Lee LLC","phone":"(909) 138-0001","email":"Ann.T138@example.com","address":"1 T138 Way","city":"Pasadena"},{"line":3,"name":"T138 Bob","phone":"909 138 0002","email":"","address":"","city":""},{"line":4,"name":"T138 Second Person","phone":"909-138-0099","email":"","address":"","city":""},{"line":5,"name":"","phone":"909 138 0005","email":"","address":"","city":""}]'
+:as_super
+-- a card whose SECOND person has the phone of row 4 (any person of a card counts)
+insert into public.customers (id, company_id, display_name, created_at) values
+  ('c1380000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T138 Existing', now() - interval '3 days');
+insert into public.contacts (company_id, customer_id, name, phone, is_primary) values
+  ('ca000000-0000-0000-0000-000000000000', 'c1380000-0000-4000-8000-0000000000e1', 'T138 Main', '(909) 138-0050', true),
+  ('ca000000-0000-0000-0000-000000000000', 'c1380000-0000-4000-8000-0000000000e1', 'T138 Spouse', '909.138.0099', false);
+-- who may start: owner / admin / office of THIS company
+:as_tech_a
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', repeat('a', 64), 4, '1a000000-0000-0000-0000-000000000001')$q$, '%not allowed%', 'T138 a tech does not import');
+:as_sales_a
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', repeat('a', 64), 4, '1a000000-0000-0000-0000-000000000001')$q$, '%not allowed%', 'T138 sales does not import (was: everyone but the tech)');
+:as_owner_b
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', repeat('a', 64), 4, '1b000000-0000-0000-0000-000000000001')$q$, '%not allowed%', 'T138 another company does not import into A');
+:as_office_a
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', repeat('a', 64), 4, '1b000000-0000-0000-0000-000000000001')$q$, '%import_bad_source%', 'T138 a source of another company is refused');
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', repeat('a', 64), 5001, '1a000000-0000-0000-0000-000000000001')$q$, '%import_too_big%', 'T138 more than 5,000 rows — refused');
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', 'nothex', 4, '1a000000-0000-0000-0000-000000000001')$q$, '%import_bad_file%', 'T138 a hash that is not sha256 — refused');
+select tst.ok((select j ->> 'status' = 'applying' and (j ->> 'next_line')::int = 2 and j ->> 'same_file_at' is null
+                 from (select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000001', 'clients.csv', repeat('a', 64), 4, '1a000000-0000-0000-0000-000000000001') j) x),
+  'T138 the office starts an import');
+select tst.ok((select (j ->> 'id')::uuid = 'f1380000-0000-4000-8000-000000000001'
+                 from (select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000001', 'clients.csv', repeat('a', 64), 4, '1a000000-0000-0000-0000-000000000001') j) x),
+  'T138 the same start again — the same job');
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000002', 'other.csv', repeat('b', 64), 4, '1a000000-0000-0000-0000-000000000001')$q$, '%import_busy%', 'T138 a second open import of the company — import_busy (two phones)');
+-- somebody else's job id (security-check §14.9 №1): nothing about it, no rows into it
+:as_owner_b
+select tst.fails_like($q$select public.import_customers_start('cb000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000001', 'x.csv', repeat('c', 64), 4, '1b000000-0000-0000-0000-000000000001')$q$, '%not allowed%', 'T138 another company''s job id in start — not allowed, no state');
+select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$, :'t138_rows'), '%not allowed%', 'T138 another company sends rows into A''s job — not allowed');
+:as_owner_a
+select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$, :'t138_rows'), '%not allowed%', 'T138 only the author sends batches');
+-- the batch
+:as_office_a
+create temp table t138 as select public.import_customers('f1380000-0000-4000-8000-000000000001', :'t138_rows') j;
+select tst.ok((select jsonb_agg(jsonb_build_object('l', e ->> 'line', 'r', e ->> 'result', 's', e ->> 'reason') order by (e ->> 'line')::int)
+                 from t138, jsonb_array_elements(j) e)
+              = '[{"l":"2","r":"added","s":null},{"l":"3","r":"added","s":null},{"l":"4","r":"skipped","s":"dupClient"},{"l":"5","r":"skipped","s":"noName"}]'::jsonb,
+  'T138 every row checked by the server: two added, the second person''s phone is a duplicate, no name — skipped');
+select tst.ok((select e ->> 'who' = 'T138 Existing' and (e ->> 'customer_id')::uuid = 'c1380000-0000-4000-8000-0000000000e1' from t138, jsonb_array_elements(j) e where e ->> 'line' = '4'),
+  'T138 …with the card it matched');
+:as_super
+select tst.ok((select c.first_name = 'Ann' and c.last_name = 'Lee' and c.company_name = 'Lee LLC' and c.status = 'active'
+                      and c.lead_source_id = '1a000000-0000-0000-0000-000000000001' and k.phone = '(909) 138-0001' and k.email = 'ann.t138@example.com'
+                      and k.is_primary and c.primary_contact_id = k.id and p.address_line1 = '1 T138 Way' and p.address_city = 'Pasadena'
+                 from public.customers c join public.contacts k on k.customer_id = c.id join public.properties p on p.customer_id = c.id
+                where c.display_name = 'T138 Ann Lee'),
+  'T138 an added row: card (name parts, company, source, active), main person, property');
+select count(*) as t138_cards from public.customers where display_name like 'T138 %' \gset
+-- the answer was lost: the same batch again
+:as_office_a
+select tst.ok((select jsonb_agg(e - 'customer_id' order by (e ->> 'line')::int) from jsonb_array_elements(public.import_customers('f1380000-0000-4000-8000-000000000001', :'t138_rows')) e)
+              = (select jsonb_agg(e - 'customer_id' order by (e ->> 'line')::int) from t138, jsonb_array_elements(j) e), 'T138 the same batch again — the same answers, word for word');
+:as_super
+select tst.ok((select count(*) from public.customers where display_name like 'T138 %') = :t138_cards, 'T138 …and no new cards');
+:as_office_a
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":3,"name":"T138 Bob Changed","phone":"909 138 0002"}]')$q$, '%row_changed%', 'T138 the same line with other content — row_changed');
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":6,"name":"T138 Past The End","phone":"909 138 0006"}]')$q$, '%import_bad_line%', 'T138 a line past the total — refused');
+select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$,
+                        (select jsonb_agg(jsonb_build_object('line', 2, 'name', 'x')) from generate_series(1, 251))), '%import_too_big%', 'T138 more than 250 rows in a batch — refused');
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":2.5,"name":"T138 Half","phone":"909 138 0008"}]')$q$, '%import_bad_line%', 'T138 a line that is not a whole number — import_bad_line');
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"name":"T138 No Line","phone":"909 138 0008"}]')$q$, '%import_bad_line%', 'T138 a row without a line — import_bad_line, no row data in the answer (director №1)');
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":1e12,"name":"T138 Huge","phone":"909 138 0008"}]')$q$, '%import_bad_line%', 'T138 a huge line — import_bad_line, not a raw error');
+select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$,
+                        jsonb_build_array(jsonb_build_object('line', 5, 'name', repeat('x', 201)))), '%import_too_big%', 'T138 a cell over 200 characters — refused');
+-- nobody writes the tables, the keys are closed (§14.9 №2)
+select tst.blocked($q$insert into public.import_jobs (id, company_id, file_name, file_sha256, total_rows, lead_source_id, created_by) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'x', repeat('a', 64), 1, '1a000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002')$q$, 'T138 the app does not write import_jobs');
+select tst.blocked($q$update public.import_rows set result = 'added' where job_id = 'f1380000-0000-4000-8000-000000000001'$q$, 'T138 …nor import_rows');
+select tst.fails($q$select * from app.customer_keys('ca000000-0000-0000-0000-000000000000')$q$, 'T138 app.customer_keys (every phone and email of a company) — not for the app');
+select tst.ok((select count(*) from public.import_rows where job_id = 'f1380000-0000-4000-8000-000000000001') = 4, 'T138 the office reads the rows');
+:as_sales_a
+select tst.ok((select count(*) from public.import_jobs) = 0 and (select count(*) from public.import_rows) = 0, 'T138 sales reads no imports');
+:as_owner_b
+select tst.ok((select count(*) from public.import_jobs where id = 'f1380000-0000-4000-8000-000000000001') = 0, 'T138 another company reads no imports');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.import_customers(uuid,jsonb)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.import_customers_start(uuid,uuid,text,text,int,uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.import_customers_finish(uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.undo_customer_import(uuid)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.import_customers(uuid,jsonb)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.customer_keys(uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.address_key(text,text,text,text)', 'EXECUTE'), 'T138 rights of the functions (rule 18)');
+-- finish: one audit line, no file name (§14.9 №10)
+:as_office_a
+select tst.ok((select j ->> 'status' = 'applied' and (j -> 'counts' ->> 'added')::int = 2 and (j -> 'counts' ->> 'skipped')::int = 2
+                 from (select public.import_customers_finish('f1380000-0000-4000-8000-000000000001') j) x), 'T138 finish: applied, counts');
+select tst.ok((select j ->> 'status' = 'applied' from (select public.import_customers_finish('f1380000-0000-4000-8000-000000000001') j) x), 'T138 finish again — the same');
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":5,"name":"T138 Late","phone":"909 138 0007"}]')$q$, '%import_closed%', 'T138 no batch into a finished import');
+:as_super
+select tst.ok((select count(*) = 0 from public.import_rows where job_id = 'f1380000-0000-4000-8000-000000000001' and name is not null), 'T138 the names of the rows are not kept after the import');
+select tst.ok((select count(*) = 1 and bool_and(not (after ? 'file_name') and after ->> 'total' = '4') from public.audit_log
+                where entity_type = 'import_job' and entity_id = 'f1380000-0000-4000-8000-000000000001' and action = 'apply'), 'T138 one audit line, no file name');
+-- the same file again: a warning
+:as_office_a
+select tst.ok((select j ->> 'same_file_at' is not null
+                 from (select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000003', 'clients.csv', repeat('a', 64), 1, '1a000000-0000-0000-0000-000000000001') j) x),
+  'T138 the same file again — «already imported on …»');
+select tst.ok((select e ->> 'reason' = 'dupClient' and e ->> 'who' = 'T138 Ann Lee'
+                 from jsonb_array_elements(public.import_customers('f1380000-0000-4000-8000-000000000003', '[{"line":2,"name":"T138 Ann Lee","phone":"(909) 138-0001"}]')) e),
+  'T138 …and its rows are the existing clients now');
+select public.import_customers_finish('f1380000-0000-4000-8000-000000000003');
+-- undo (§14.9 №3): the card this import made and nobody touched — gone; a card with a note — kept; the matched card — never
+:as_super
+insert into public.notes (company_id, subject_type, subject_id, body, visibility)
+select 'ca000000-0000-0000-0000-000000000000', 'customer', id, 'T138 called back', 'team' from public.customers where display_name = 'T138 Bob';
+-- the third card: nothing on the card itself, a gate code on its property (a row that points to the property)
+:as_office_a
+select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000007', 'more.csv', repeat('7', 64), 1, '1a000000-0000-0000-0000-000000000001') is not null as t138_s7 \gset
+select public.import_customers('f1380000-0000-4000-8000-000000000007', '[{"line":2,"name":"T138 Gate","phone":"909 138 0010"}]') is not null as t138_b7 \gset
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values ('a1380000-0000-4000-8000-000000000002', 'office138@a.test', '{"full_name":"Olivia 138"}');
+insert into public.memberships (company_id, user_id, role, status) values ('ca000000-0000-0000-0000-000000000000', 'a1380000-0000-4000-8000-000000000002', 'office', 'active');
+reset role; set request.jwt.claim.sub = 'a1380000-0000-4000-8000-000000000002'; set role authenticated;
+select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-000000000007')$q$, '%not allowed%', 'T138 another office does not undo an import still being sent');
+:as_super
+insert into public.property_secrets (company_id, property_id, gate_code)
+select p.company_id, p.id, '1380' from public.properties p join public.customers c on c.id = p.customer_id where c.display_name = 'T138 Gate';
+:as_office_a
+select tst.ok((select j ->> 'status' = 'undone' and (j -> 'counts' ->> 'undone')::int = 0 and (j -> 'counts' ->> 'kept')::int = 1
+                 from (select public.undo_customer_import('f1380000-0000-4000-8000-000000000007') j) x), 'T138 undo keeps a card whose property has a gate code (any row pointing to its person or property)');
+:as_super
+select tst.ok((select c.deleted_at is null and p.deleted_at is null from public.customers c join public.properties p on p.customer_id = c.id where c.display_name = 'T138 Gate'), 'T138 …card and property are there');
+-- a card that referred a lead (leads.referred_by_customer_id has no foreign key — merge_customers counts it, so does undo; director №3)
+:as_office_a
+select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000008', 'ref.csv', repeat('8', 64), 1, '1a000000-0000-0000-0000-000000000001') is not null as t138_s8 \gset
+select public.import_customers('f1380000-0000-4000-8000-000000000008', '[{"line":2,"name":"T138 Referrer","phone":"909 138 0011"}]') is not null as t138_b8 \gset
+select public.import_customers_finish('f1380000-0000-4000-8000-000000000008') is not null as t138_f8 \gset
+:as_super
+insert into public.leads (company_id, contact_name, phone, source_id, referred_by_customer_id)
+select 'ca000000-0000-0000-0000-000000000000', 'T138 Referred', '909 138 0012', '1a000000-0000-0000-0000-000000000001', id from public.customers where display_name = 'T138 Referrer';
+:as_office_a
+select tst.ok((select (j -> 'counts' ->> 'kept')::int = 1 from (select public.undo_customer_import('f1380000-0000-4000-8000-000000000008') j) x), 'T138 undo keeps a card a lead was referred by');
+:as_super
+select tst.ok((select deleted_at is null from public.customers where display_name = 'T138 Referrer'), 'T138 …the referrer card is there');
+-- an import left open for 60 days: no batch into it, no undo (the 30 days count from its last batch; director №2)
+insert into public.import_jobs (id, company_id, file_name, file_sha256, total_rows, lead_source_id, created_by, last_batch_at, created_at)
+values ('f1380000-0000-4000-8000-00000000000a', 'ca000000-0000-0000-0000-000000000000', 'old.csv', repeat('a', 64), 5, '1a000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', now() - interval '60 days', now() - interval '60 days');
+:as_office_a
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-00000000000a', '[{"line":2,"name":"T138 Late","phone":"909 138 0013"}]')$q$, '%import_closed%', 'T138 no batch into an import silent for a day');
+select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-00000000000a')$q$, '%import_undo_expired%', 'T138 no undo of an import silent for 60 days');
+:as_super
+delete from public.import_jobs where id = 'f1380000-0000-4000-8000-00000000000a';
+:as_tech_a
+select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-000000000001')$q$, '%not allowed%', 'T138 a tech does not undo');
+:as_owner_b
+select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-000000000001')$q$, '%not allowed%', 'T138 another company does not undo');
+:as_office_a
+select tst.ok((select j ->> 'status' = 'undone' and (j -> 'counts' ->> 'undone')::int = 1 and (j -> 'counts' ->> 'kept')::int = 1
+                 from (select public.undo_customer_import('f1380000-0000-4000-8000-000000000001') j) x), 'T138 undo: one card taken back, one kept');
+:as_super
+select tst.ok((select deleted_at is not null from public.customers where display_name = 'T138 Ann Lee' and id in (select customer_id from public.import_rows where job_id = 'f1380000-0000-4000-8000-000000000001'))
+          and not exists (select 1 from public.contacts k join public.import_rows r on r.customer_id = k.customer_id where r.job_id = 'f1380000-0000-4000-8000-000000000001' and r.line = 2 and k.deleted_at is null)
+          and not exists (select 1 from public.properties p join public.import_rows r on r.customer_id = p.customer_id where r.job_id = 'f1380000-0000-4000-8000-000000000001' and r.line = 2 and p.deleted_at is null),
+  'T138 …the untouched card with its person and property');
+select tst.ok((select deleted_at is null from public.customers where display_name = 'T138 Bob'), 'T138 …the card with a note stays');
+select tst.ok((select deleted_at is null from public.customers where id = 'c1380000-0000-4000-8000-0000000000e1')
+          and (select count(*) = 2 from public.contacts where customer_id = 'c1380000-0000-4000-8000-0000000000e1' and deleted_at is null),
+  'T138 …the card a row matched is never touched');
+:as_office_a
+select tst.ok((select j ->> 'status' = 'undone' and (j -> 'counts' ->> 'undone')::int = 1 from (select public.undo_customer_import('f1380000-0000-4000-8000-000000000001') j) x), 'T138 undo again — the same');
+:as_super
+update public.import_jobs set undo_until = now() - interval '1 minute' where id = 'f1380000-0000-4000-8000-000000000003';
+:as_office_a
+select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-000000000003')$q$, '%import_undo_expired%', 'T138 after 30 days — no undo');
+-- an import left open a day closes itself; at most 10 imports a day
+:as_super
+insert into public.import_jobs (id, company_id, file_name, file_sha256, total_rows, lead_source_id, created_by, last_batch_at)
+values ('f1380000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'lost.csv', repeat('d', 64), 10, '1a000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', now() - interval '25 hours');
+:as_office_a
+select tst.ok((select j ->> 'status' = 'applying'
+                 from (select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000005', 'next.csv', repeat('f', 64), 1, '1a000000-0000-0000-0000-000000000001') j) x),
+  'T138 a new import starts though one was left open for a day…');
+:as_super
+select tst.ok((select status = 'applied' and undo_until is not null from public.import_jobs where id = 'f1380000-0000-4000-8000-000000000004'), 'T138 …that one is closed with what it had');
+select tst.ok((select count(*) = 1 from public.audit_log where entity_type = 'import_job' and entity_id = 'f1380000-0000-4000-8000-000000000004' and action = 'apply' and actor_type = 'system'), 'T138 …with its audit line');
+:as_office_a
+select public.import_customers_finish('f1380000-0000-4000-8000-000000000005');
+:as_super
+insert into public.import_jobs (id, company_id, file_name, file_sha256, total_rows, lead_source_id, created_by, status)
+select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'day.csv', repeat('e', 64), 1, '1a000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', 'applied'
+  from generate_series(1, 6);
+:as_office_a
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000006', 'more.csv', repeat('f', 64), 1, '1a000000-0000-0000-0000-000000000001')$q$, '%import_daily_limit%', 'T138 the 11th import of a day — refused');
+:as_super
+delete from public.import_jobs where file_name = 'day.csv';
+drop table t138;
+\echo 'T138 server import of clients ok'
+
+-- ---------------------------------------------------------------- T139: one rule on the phone and on the server (apps/mobile/test/fixtures/matchKeys.json, read by test/matchKeys.test.ts too)
+\set match_json `cat :match_keys`
+:as_super
+select tst.ok(coalesce(string_agg(x ->> 'in', ', '), '') = '', format('T139 phone keys as in the app: %s', coalesce(string_agg(x ->> 'in', ', '), '')))
+  from jsonb_array_elements((:'match_json')::jsonb -> 'phones') x where app.phone_key(x ->> 'in') is distinct from x ->> 'key';
+select tst.ok(coalesce(string_agg(x ->> 'in', ', '), '') = '', format('T139 email keys as in the app: %s', coalesce(string_agg(x ->> 'in', ', '), '')))
+  from jsonb_array_elements((:'match_json')::jsonb -> 'emails') x where app.email_key(x ->> 'in') is distinct from x ->> 'key';
+select tst.ok(coalesce(string_agg(x ->> 'street', ', '), '') = '', format('T139 address keys as in the app: %s', coalesce(string_agg((x ->> 'street') || ' → ' || coalesce(app.address_key(x ->> 'street', x ->> 'unit', x ->> 'city', x ->> 'zip'), 'null'), ', '), '')))
+  from jsonb_array_elements((:'match_json')::jsonb -> 'addresses') x
+ where app.address_key(x ->> 'street', x ->> 'unit', x ->> 'city', x ->> 'zip') is distinct from x ->> 'key';
+-- the rows of an import: a company of its own, the same existing cards, the same answers
+select set_config('tst.match_json', :'match_json', false) is not null as t139_set \gset
+insert into auth.users (id, email, raw_user_meta_data) values ('a1390000-0000-4000-8000-000000000001', 'owner139@c.test', '{"full_name":"Olga 139"}');
+insert into public.companies (id, name) values ('c1390000-0000-4000-8000-000000000000', 'T139 Co');
+insert into public.memberships (company_id, user_id, role, status) values ('c1390000-0000-4000-8000-000000000000', 'a1390000-0000-4000-8000-000000000001', 'owner', 'active');
+insert into public.lead_sources (id, company_id, name, kind) values ('1c139000-0000-4000-8000-000000000001', 'c1390000-0000-4000-8000-000000000000', 'T139 source', 'marketplace');
+do $$
+declare e jsonb; n int := 0; v_id uuid;
+begin
+  for e in select * from jsonb_array_elements((current_setting('tst.match_json')::jsonb) -> 'rows' -> 'existing') loop
+    n := n + 1;
+    insert into public.customers (company_id, display_name, status, do_not_service_reason, created_at)
+    values ('c1390000-0000-4000-8000-000000000000', e ->> 'name', e ->> 'status',
+            case when e ->> 'status' = 'do_not_service' then 'T139' end, now() - make_interval(days => 10 - n))
+    returning id into v_id;
+    insert into public.contacts (company_id, customer_id, name, phone, email, is_primary)
+    values ('c1390000-0000-4000-8000-000000000000', v_id, e ->> 'name', e ->> 'phone', e ->> 'email', true);
+    insert into public.properties (company_id, customer_id, address_line1, address_city, address_zip, stories)
+    values ('c1390000-0000-4000-8000-000000000000', v_id, e ->> 'address', e ->> 'city', e ->> 'zip', 1);
+  end loop;
+end $$;
+reset role; set request.jwt.claim.sub = 'a1390000-0000-4000-8000-000000000001'; set role authenticated;
+select public.import_customers_start('c1390000-0000-4000-8000-000000000000', 'f1390000-0000-4000-8000-000000000001', 'fixture.csv', repeat('9', 64),
+  jsonb_array_length((:'match_json')::jsonb -> 'rows' -> 'import'), '1c139000-0000-4000-8000-000000000001') is not null as t139_started \gset
+create temp table t139 as select e from jsonb_array_elements(public.import_customers('f1390000-0000-4000-8000-000000000001', (:'match_json')::jsonb -> 'rows' -> 'import')) e;
+select tst.ok(coalesce(string_agg(x ->> 'line', ', '), '') = '', format('T139 import rows as in the app (lines %s)', coalesce(string_agg((x ->> 'line') || ': ' || coalesce(t.e::text, 'none'), '; '), '')))
+  from jsonb_array_elements((:'match_json')::jsonb -> 'rows' -> 'expect') x
+  left join t139 t on t.e ->> 'line' = x ->> 'line'
+ where t.e is null or t.e ->> 'result' is distinct from x ->> 'result' or t.e ->> 'reason' is distinct from x ->> 'reason'
+    or t.e ->> 'who' is distinct from x ->> 'who' or t.e ->> 'who_status' is distinct from x ->> 'who_status';
+drop table t139;
+\echo 'T139 one rule for keys and rows ok'
+-- ---------------------------------------------------------------- T135: the client's advance (a payment without an invoice) applied to an invoice (docs/specs/35 §4г)
+:as_super
+insert into public.customers (id, company_id, display_name) values ('c1350000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T135 Other client');
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, sent_at) values
+  ('11350000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T135-1', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T135 small', 3000, 0, 3000, now()),
+  ('11350000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T135-2', 'c1350000-0000-4000-8000-000000000002', 'standalone', 'sent', 'T135 other client', 90000, 0, 90000, now()),
+  ('11350000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T135-3', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T135 fits', 12000, 0, 12000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, stripe_payment_intent_id, needs_review) values
+  ('21350000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'card', 5000, 'succeeded', 'stripe:pi_T135a1', 'pi_T135a1', true);
+:as_owner_a
+select tst.fails_like($q$update public.payments set invoice_id = '11350000-0000-4000-8000-000000000002' where id = '21350000-0000-4000-8000-000000000001'$q$, '%advance_other_client%',
+  'T135 a direct update does not put an advance on another client''s invoice');
+select tst.fails_like($q$update public.payments set invoice_id = '11350000-0000-4000-8000-000000000001' where id = '21350000-0000-4000-8000-000000000001'$q$, '%advance_above_balance%',
+  'T135 …nor above the invoice''s balance ($50 on a $30 invoice)');
+:as_super
+select tst.ok((select invoice_id is null from public.payments where id = '21350000-0000-4000-8000-000000000001')
+          and (select paid_cents = 0 from public.invoices where id = '11350000-0000-4000-8000-000000000002'),
+  'T135 …the advance stays without an invoice, the other invoice is untouched');
+-- the door: who, idempotent, the invoice gets the money, the owner is no longer asked, the team hears «paid»
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, sent_at) values
+  ('11350000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T135-4', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T135 void', 9000, 0, 9000, now()),
+  ('11350000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'T135-5', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T135 rest', 6000, 0, 6000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, stripe_payment_intent_id, needs_review) values
+  ('21350000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'ach', 4000, 'pending', 'stripe:pi_T135a2', 'pi_T135a2', true),
+  ('21350000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'card', 8000, 'succeeded', 'stripe:pi_T135a3', 'pi_T135a3', true),
+  ('21350000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'card', 1000, 'succeeded', 'stripe:pi_T135a4', 'pi_T135a4', true),
+  ('21350000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'card', 1500, 'succeeded', 'stripe:pi_T135a5', 'pi_T135a5', true),
+  ('21350000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'cash', 1000, 'succeeded', 't135-hand-cash', null, false);
+update public.payments set dispute_status = 'open' where id = '21350000-0000-4000-8000-000000000004';
+update public.invoices set status = 'void', void_reason = 'T135' where id = '11350000-0000-4000-8000-000000000004';
+insert into public.refunds (company_id, payment_id, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', '21350000-0000-4000-8000-000000000005', 500, 'pending', 'octo:t135-busy-1');
+:as_office90
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000003')$q$, '%owner/admin%', 'T135 the office does not apply an advance');
+:as_tech_a
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000003')$q$, '%owner/admin%', 'T135 nor a tech');
+:as_owner_b
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000003')$q$, '%owner/admin%', 'T135 nor another company''s owner');
+:as_owner_a
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000002')$q$, '%advance_other_client%', 'T135 the door: not another client''s invoice');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000004')$q$, '%advance_invoice_not_open%', 'T135 not a void invoice');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', null)$q$, '%advance_other_client%', 'T135 not «no invoice» (no false «paid» notice)');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000006', '11350000-0000-4000-8000-000000000003')$q$, '%advance_not_applicable%', 'T135 a payment recorded by hand without an invoice is not an advance');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000002', '11350000-0000-4000-8000-000000000003')$q$, '%advance_not_applicable%', 'T135 not ACH on its way');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000004', '11350000-0000-4000-8000-000000000003')$q$, '%advance_disputed%', 'T135 not while a dispute is open');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000005', '11350000-0000-4000-8000-000000000003')$q$, '%advance_refund_in_progress%', 'T135 not while a refund of it is on its way');
+select tst.fails_like($q$update public.payments set invoice_id = '11350000-0000-4000-8000-000000000003', status = 'returned' where id = '21350000-0000-4000-8000-000000000003'$q$, '%advance_not_applicable%', 'T135 applied as it is: no other change in the same update');
+select tst.ok((select (j ->> 'balance_cents')::bigint = 7000 and (j ->> 'paid_cents')::bigint = 5000
+                 from (select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000003') j) x),
+  'T135 $50 applied to a $120 invoice: paid $50, owes $70');
+select tst.ok((select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000003') ->> 'repeat') = 'true',
+  'T135 a repeat is the same answer');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000005')$q$, '%advance_already_applied%', 'T135 an applied advance does not move to another invoice');
+select tst.fails_like($q$update public.payments set invoice_id = '11350000-0000-4000-8000-000000000005' where id = '21350000-0000-4000-8000-000000000001'$q$, '%immutable%', 'T135 …not by a direct update either');
+-- an advance of $80 on a $60 invoice: refund the $20 first (through Stripe, tax 0 without an invoice), then the rest fits
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000003', '11350000-0000-4000-8000-000000000005')$q$, '%advance_above_balance%', 'T135 the whole advance or nothing');
+:as_service
+drop table if exists t135;
+create temp table t135 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21350000-0000-4000-8000-000000000003', 2000, 'other', 'overpaid', 'k135-adv-rf1') j;
+select tst.ok((select (j ->> 'tax_cents')::bigint = 0 from t135), 'T135 an advance is refunded as any payment (no invoice — no tax part)');
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t135), '{"id":"re_T135a3","status":"succeeded","amount":2000,"payment_intent":"pi_T135a3"}');
+:as_owner_a
+-- director's review of #449 №2: the $20 may still come back from the bank (up to 30 days) — applied now, its failure would
+-- leave the $60 invoice paid $80
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000003', '11350000-0000-4000-8000-000000000005')$q$, '%advance_refund_settling%',
+  'T135 not while a Stripe refund of it may still come back from the bank');
+:as_super
+update public.refunds set created_at = now() - interval '31 days' where stripe_refund_id = 're_T135a3';
+:as_owner_a
+select tst.ok((public.advance_apply('21350000-0000-4000-8000-000000000003', '11350000-0000-4000-8000-000000000005') ->> 'balance_cents')::bigint = 0,
+  'T135 …after the bank''s 30 days the $60 left pays the $60 invoice');
+:as_super
+select tst.ok((select needs_review = false and invoice_id = '11350000-0000-4000-8000-000000000003' from public.payments where id = '21350000-0000-4000-8000-000000000001')
+          and (select payment_status = 'partially_paid' from public.invoices where id = '11350000-0000-4000-8000-000000000003')
+          and (select payment_status = 'paid' and paid_cents = 6000 from public.invoices where id = '11350000-0000-4000-8000-000000000005')
+          and (select count(*) = 1 from public.notifications where invoice_id = '11350000-0000-4000-8000-000000000003' and kind = 'invoice.paid' and payload ->> 'advance' = 'true')
+          and (select count(*) >= 1 from public.audit_log where entity_type = 'payments' and entity_id = '21350000-0000-4000-8000-000000000001' and after ->> 'invoice_id' = '11350000-0000-4000-8000-000000000003'),
+  'T135 the invoices owe less, the owner is not asked any more, one «paid» notice, the audit log has it');
+\echo 'T135 advances ok'
+
+-- ---------------------------------------------------------------- T136: an accepted Stripe refund that failed later gives the money back (docs/specs/35 §4г)
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, sent_at) values
+  ('11360000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T136-1', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T136 ach', 40000, 0, 40000, now()),
+  ('11360000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T136-2', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T136 card', 10000, 0, 10000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, stripe_payment_intent_id) values
+  ('21360000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '11360000-0000-4000-8000-000000000001', 'c1260000-0000-4000-8000-000000000001', 'ach', 40000, 'succeeded', 'stripe:pi_T136A', 'pi_T136A'),
+  ('21360000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '11360000-0000-4000-8000-000000000002', 'c1260000-0000-4000-8000-000000000001', 'card', 10000, 'succeeded', 'stripe:pi_T136C', 'pi_T136C');
+:as_service
+drop table if exists t136;
+create temp table t136 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21360000-0000-4000-8000-000000000001', 40000, 'cancellation', null, 'k136-ach-01') j;
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136a","status":"pending","amount":40000,"payment_intent":"pi_T136A"}');
+:as_super
+select tst.ok((select refunded_cents = 40000 and status = 'refunded' from public.payments where id = '21360000-0000-4000-8000-000000000001')
+          and (select paid_cents = 0 from public.invoices where id = '11360000-0000-4000-8000-000000000001'),
+  'T136 Stripe accepted the ACH refund (pending with its id): counted, the invoice owes $400 again');
+:as_owner_a
+select tst.fails_like($q$update public.payments set refunded_cents = 0, status = 'succeeded' where id = '21360000-0000-4000-8000-000000000001'$q$, '%refund_record%',
+  'T136 the owner does not undo a refund by hand');
+select tst.fails_like($q$update public.payments set status = 'partially_refunded' where id = '21360000-0000-4000-8000-000000000001'$q$, '%refund%',
+  'T136 …nor moves its status back');
+:as_service
+select tst.fails_like($q$update public.payments set refunded_cents = 0, status = 'succeeded' where id = '21360000-0000-4000-8000-000000000001'$q$, '%only grow%',
+  'T136 not even the service lowers it below the refunds Stripe still accepts');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136f1","type":"refund.failed","account":"acct_T126A","data":{"object":{"id":"re_T136a","status":"failed","amount":40000,"payment_intent":"pi_T136A"}}}') = 'processed',
+  'T136 refund.failed (the bank sent the ACH refund back)');
+:as_super
+select tst.ok((select refunded_cents = 0 and status = 'succeeded' and needs_review from public.payments where id = '21360000-0000-4000-8000-000000000001')
+          and (select status = 'failed' from public.refunds where stripe_refund_id = 're_T136a')
+          and (select paid_cents = 40000 and payment_status = 'paid' from public.invoices where id = '11360000-0000-4000-8000-000000000001')
+          and (select count(*) = 1 from public.status_events where entity_id = '21360000-0000-4000-8000-000000000001' and from_status = 'refunded'
+                                                             and to_status = 'succeeded' and reason = 'refund_failed' and actor_type = 'system')
+          and (select count(*) >= 1 from public.audit_log where entity_type = 'payments' and entity_id = '21360000-0000-4000-8000-000000000001'
+                                                         and (before ->> 'refunded_cents')::bigint = 40000 and (after ->> 'refunded_cents')::bigint = 0),
+  'T136 …the money is back: the payment brings $400 again, the invoice is paid, the owner is asked to look, the reason and the audit are kept');
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136f2","type":"refund.updated","account":"acct_T126A","data":{"object":{"id":"re_T136a","status":"failed","amount":40000,"payment_intent":"pi_T136A"}}}') = 'processed',
+  'T136 refund.updated with the same failure');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136c1","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T136a","payment_intent":"pi_T136A","amount_refunded":40000}}}') = 'ignored',
+  'T136 a late charge.refunded with the old amount_refunded');
+:as_super
+select tst.ok((select refunded_cents = 0 and status = 'succeeded' from public.payments where id = '21360000-0000-4000-8000-000000000001'),
+  'T136 …neither takes the money off a second time nor lifts it back');
+-- a card payment, two Stripe refunds, the second fails: only its part comes back
+:as_service
+drop table t136;
+create temp table t136 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21360000-0000-4000-8000-000000000002', 3000, 'goodwill', null, 'k136-card-1') j;
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136b","status":"succeeded","amount":3000,"payment_intent":"pi_T136C"}');
+drop table t136;
+create temp table t136 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21360000-0000-4000-8000-000000000002', 2000, 'goodwill', null, 'k136-card-2') j;
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136c","status":"pending","amount":2000,"payment_intent":"pi_T136C"}');
+:as_super
+select tst.ok((select refunded_cents = 5000 and status = 'partially_refunded' from public.payments where id = '21360000-0000-4000-8000-000000000002'), 'T136 two refunds counted');
+:as_service
+-- stripe-refund asks again later and Stripe now says failed: the same way back
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136c","status":"failed","amount":2000,"payment_intent":"pi_T136C","failure_reason":"lost_or_stolen_card"}');
+:as_super
+select tst.ok((select refunded_cents = 3000 and status = 'partially_refunded' and needs_review from public.payments where id = '21360000-0000-4000-8000-000000000002')
+          and (select paid_cents = 7000 from public.invoices where id = '11360000-0000-4000-8000-000000000002'),
+  'T136 the failed $20 comes back, the $30 that went stays refunded');
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136c2","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T136c","payment_intent":"pi_T136C","amount_refunded":5000}}}') = 'ignored',
+  'T136 charge.refunded after the failure');
+-- a refund made later in Stripe's dashboard: its rows bring the money (charge.refunded no longer decides alone)
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136d1","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T136d","status":"succeeded","amount":1000,"payment_intent":"pi_T136C"}}}') = 'processed',
+  'T136 a dashboard refund after the failure');
+:as_super
+select tst.ok((select refunded_cents = 4000 from public.payments where id = '21360000-0000-4000-8000-000000000002'), 'T136 …counted from its row: $30 + $10');
+-- reviews of this PR: once per row, whatever comes twice; a voided invoice; Stripe's own refund met first as failed
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, sent_at) values
+  ('11360000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T136-3', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T136 twice', 10000, 0, 10000, now()),
+  ('11360000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T136-4', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T136 void', 10000, 0, 10000, now()),
+  ('11360000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'T136-5', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T136 dashboard', 40000, 0, 40000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, stripe_payment_intent_id) values
+  ('21360000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '11360000-0000-4000-8000-000000000003', 'c1260000-0000-4000-8000-000000000001', 'card', 10000, 'succeeded', 'stripe:pi_T136T', 'pi_T136T'),
+  ('21360000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', '11360000-0000-4000-8000-000000000004', 'c1260000-0000-4000-8000-000000000001', 'ach', 10000, 'succeeded', 'stripe:pi_T136V', 'pi_T136V'),
+  ('21360000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', '11360000-0000-4000-8000-000000000005', 'c1260000-0000-4000-8000-000000000001', 'ach', 40000, 'succeeded', 'stripe:pi_T136D', 'pi_T136D');
+:as_service
+-- $30 refunded in Stripe's dashboard (charge.refunded only, its row not here yet) + our $50 accepted; ours fails, told twice
+select app.stripe_event_apply('{"id":"evt_T136t0","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T136t","payment_intent":"pi_T136T","amount_refunded":3000}}}');
+drop table t136;
+create temp table t136 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21360000-0000-4000-8000-000000000003', 5000, 'goodwill', null, 'k136-twice1') j;
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136t","status":"pending","amount":5000,"payment_intent":"pi_T136T"}');
+select tst.ok((select refunded_cents = 5000 from public.payments where id = '21360000-0000-4000-8000-000000000003'), 'T136 $30 + $50: refunded_cents is Σ of what Stripe said (the greater)');
+select public.stripe_webhook_apply('{"id":"evt_T136t1","type":"refund.failed","account":"acct_T126A","data":{"object":{"id":"re_T136t","status":"failed","amount":5000,"payment_intent":"pi_T136T"}}}');
+select public.stripe_webhook_apply('{"id":"evt_T136t2","type":"refund.updated","account":"acct_T126A","data":{"object":{"id":"re_T136t","status":"failed","amount":5000,"payment_intent":"pi_T136T"}}}');
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136t","status":"failed","amount":5000,"payment_intent":"pi_T136T"}');
+:as_super
+select tst.ok(app.refund_unwind((select (j ->> 'id')::uuid from t136)) = 'stale', 'T136 the unwind of a row is done once');
+select tst.ok((select refunded_cents = 0 and status = 'succeeded' from public.payments where id = '21360000-0000-4000-8000-000000000003')
+          and (select count(*) = 1 from public.status_events where entity_id = '21360000-0000-4000-8000-000000000003' and reason = 'refund_failed'),
+  'T136 told three times: the $50 came off once (floor: no rows prove the $30)');
+-- the full ACH refund was accepted, the invoice was voided, then the bank sent the refund back: no 500, the owner looks
+:as_service
+drop table t136;
+create temp table t136 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21360000-0000-4000-8000-000000000004', 10000, 'cancellation', null, 'k136-void01') j;
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136v","status":"pending","amount":10000,"payment_intent":"pi_T136V"}');
+:as_owner_a
+update public.invoices set status = 'void', void_reason = 'T136 job canceled' where id = '11360000-0000-4000-8000-000000000004';
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136v1","type":"refund.failed","account":"acct_T126A","data":{"object":{"id":"re_T136v","status":"failed","amount":10000,"payment_intent":"pi_T136V"}}}') = 'processed',
+  'T136 a failure on a voided invoice is applied (Stripe is not left retrying for days)');
+:as_super
+select tst.ok((select status = 'failed' from public.refunds where stripe_refund_id = 're_T136v')
+          and (select needs_review and refunded_cents = 10000 from public.payments where id = '21360000-0000-4000-8000-000000000004'),
+  'T136 …the refund is failed, the money is marked for the owner (a voided invoice takes no money)');
+-- Stripe's own refund: charge.refunded first, then refund.failed before its refund.created
+:as_service
+select app.stripe_event_apply('{"id":"evt_T136d0","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T136d","payment_intent":"pi_T136D","amount_refunded":40000}}}');
+select public.stripe_webhook_apply('{"id":"evt_T136d2","type":"refund.failed","account":"acct_T126A","data":{"object":{"id":"re_T136dd","status":"failed","amount":40000,"payment_intent":"pi_T136D"}}}');
+select public.stripe_webhook_apply('{"id":"evt_T136d1","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T136dd","status":"pending","amount":40000,"payment_intent":"pi_T136D"}}}');
+:as_super
+select tst.ok((select refunded_cents = 0 and status = 'succeeded' and needs_review from public.payments where id = '21360000-0000-4000-8000-000000000005')
+          and (select paid_cents = 40000 from public.invoices where id = '11360000-0000-4000-8000-000000000005'),
+  'T136 out of order: the failed dashboard refund gives the $400 back, the late refund.created does not take it again');
+-- director's review of #449 №1: our refund tied to Stripe by the failure event itself (charge.refunded came first, then
+-- refund.failed with metadata.octo_refund_id, stripe-refund's answer last) — the money comes back
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, sent_at) values
+  ('11360000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', 'T136-6', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T136 tied', 10000, 0, 10000, now()),
+  ('11360000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', 'T136-7', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T136 two dashboard', 10000, 0, 10000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, stripe_payment_intent_id) values
+  ('21360000-0000-4000-8000-000000000006', 'ca000000-0000-0000-0000-000000000000', '11360000-0000-4000-8000-000000000006', 'c1260000-0000-4000-8000-000000000001', 'card', 10000, 'succeeded', 'stripe:pi_T136O', 'pi_T136O'),
+  ('21360000-0000-4000-8000-000000000007', 'ca000000-0000-0000-0000-000000000000', '11360000-0000-4000-8000-000000000007', 'c1260000-0000-4000-8000-000000000001', 'ach', 10000, 'succeeded', 'stripe:pi_T136W', 'pi_T136W');
+:as_service
+drop table t136;
+create temp table t136 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21360000-0000-4000-8000-000000000006', 4000, 'goodwill', null, 'k136-tied01') j;
+select app.stripe_event_apply('{"id":"evt_T136o0","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T136o","payment_intent":"pi_T136O","amount_refunded":4000}}}');
+select public.stripe_webhook_apply(format('{"id":"evt_T136o1","type":"refund.failed","account":"acct_T126A","data":{"object":{"id":"re_T136o","status":"failed","amount":4000,"payment_intent":"pi_T136O","metadata":{"company_id":"ca000000-0000-0000-0000-000000000000","octo_refund_id":"%s"}}}}', (select j ->> 'id' from t136))::jsonb);
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136o","status":"pending","amount":4000,"payment_intent":"pi_T136O"}');
+:as_super
+select tst.ok((select status = 'failed' and unwound_at is not null from public.refunds where stripe_refund_id = 're_T136o')
+          and (select refunded_cents = 0 and status = 'succeeded' from public.payments where id = '21360000-0000-4000-8000-000000000006')
+          and (select paid_cents = 10000 from public.invoices where id = '11360000-0000-4000-8000-000000000006'),
+  'T136 a refund tied to Stripe by its own failure event: the $40 is back, stripe-refund''s late «pending» does not take it again');
+-- №3: two dashboard refunds — $30 known by charge.refunded alone, then a $50 one fails (no row yet): the $30 stays
+:as_service
+select app.stripe_event_apply('{"id":"evt_T136w0","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T136w","payment_intent":"pi_T136W","amount_refunded":3000}}}');
+select public.stripe_webhook_apply('{"id":"evt_T136w1","type":"refund.failed","account":"acct_T126A","data":{"object":{"id":"re_T136w2","status":"failed","amount":5000,"payment_intent":"pi_T136W"}}}');
+select app.stripe_event_apply('{"id":"evt_T136w2","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T136w","payment_intent":"pi_T136W","amount_refunded":3000}}}');
+:as_super
+select tst.ok((select refunded_cents = 3000 and status = 'partially_refunded' and needs_review from public.payments where id = '21360000-0000-4000-8000-000000000007')
+          and (select paid_cents = 7000 from public.invoices where id = '11360000-0000-4000-8000-000000000007'),
+  'T136 a failed $50 that never was in the money does not take the $30 that went back');
+\echo 'T136 failed refunds ok'
+
+-- ---------------------------------------------------------------- T137: who calls the new doors and steps (rule 18)
+select tst.ok(has_function_privilege('authenticated', 'public.advance_apply(uuid, uuid)', 'execute')
+          and not has_function_privilege('anon', 'public.advance_apply(uuid, uuid)', 'execute')
+          and not has_function_privilege('authenticated', 'app.refund_unwind(uuid, boolean)', 'execute')
+          and not has_function_privilege('service_role', 'app.refund_unwind(uuid, boolean)', 'execute')
+          and not has_column_privilege('authenticated', 'public.refunds', 'unwound_at', 'select')
+          and not has_function_privilege('authenticated', 'app.refund_counted(uuid)', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_advance_apply()', 'execute')
+          and not has_function_privilege('authenticated', 'app.stripe_apply_refunded(uuid, bigint)', 'execute'),
+  'T137 advance_apply — the app; the unwind and its steps — nobody from outside');
+select tst.ok((select count(*) = 3 from app.status_transitions where entity_type = 'payment'
+                and (from_status, to_status) in (('refunded', 'partially_refunded'), ('refunded', 'succeeded'), ('partially_refunded', 'succeeded'))),
+  'T137 the payment moves back exist (only the unwind makes them: T136)');
+\echo 'T137 doors ok'
 
 \echo 'ALL TESTS PASSED'

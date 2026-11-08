@@ -86,14 +86,15 @@ export function clientOverdueOf(db: Pick<DB, "invoices">, customerId: ID, now = 
 export const canSeeClientMoney = (role: Role) => role !== "tech";
 /** Tech sees only clients of their own visits; office sees everyone. */
 export function visibleClients(db: DB, role: Role): Customer[] {
-  if (role !== "tech") return db.customers;
+  // a card merged into another (step 17 C3, docs/specs/04 §13) is no longer a client: its old link shows «Слито с …»
+  if (role !== "tech") return db.customers.filter((c) => !c.mergedIntoId);
   const mine = new Set(
     db.visits
       .filter((v) => isAssigned(v, db.me))
       .map((v) => db.properties.find((p) => p.id === db.jobs.find((j) => j.id === v.jobId)?.propertyId)?.customerId)
       .filter(Boolean),
   );
-  return db.customers.filter((c) => mine.has(c.id));
+  return db.customers.filter((c) => mine.has(c.id) && !c.mergedIntoId);
 }
 
 /** Search: name, number, any phone or email of any person, address of any property, number of any document. */

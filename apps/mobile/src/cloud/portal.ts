@@ -9,6 +9,7 @@ import { docLanguageFor } from "@/data/people";
 import { linkOpen } from "@/features/estimateSign";
 import { tFor, type DocLang } from "@/i18n/translate";
 import { memberName } from "@/features/team";
+import { SUPABASE_PUBLISHABLE_KEY, SUPABASE_URL } from "@/config/backend";
 import { supabase } from "./client";
 
 export interface PortalData {
@@ -38,11 +39,13 @@ export interface PortalData {
   approval: { optionId: string; addonIds: string[]; signerName: string; signedAt: string; signature?: string; totalCents?: number; depositCents?: number; channel?: "on_site" | "portal"; deviceUser?: string } | null;
   depositPaid: boolean;
   /** issued invoices of the job (client pays them on this page) */
-  invoices: { id: string; number?: string; title?: string; kind: string; totalCents: number; paidCents: number; dueDate?: string }[];
+  invoices: { id: string; number?: string; title?: string; kind: string; totalCents: number; paidCents: number; dueDate?: string; pendingCents: number }[];
   /** the client's language for this page and its PDF (rule 7); from the server: portal_estimate.doc_language */
   lang: DocLang;
   /** «Pay by card» (simulated until Stripe): only for a demo company (portal_estimate.simulated_pay, audit 06.11) */
   simulatedPay: boolean;
+  /** 20в: the company's Stripe takes charges — the page shows the real Payment Element (portal_estimate.online_pay) */
+  onlinePay: boolean;
   /* ---- wave E2a (docs/specs/07 §2.2) ---- */
   /** YYYY-MM-DD: the link works until this day while unsigned */
   validUntil?: string;
@@ -63,6 +66,9 @@ type Raw = {
   invoices?: { id: string; number?: string; title?: string; kind: string; total: number; paid: number; due_date?: string }[];
   doc_language?: string;
   simulated_pay?: boolean;
+  online_pay?: boolean;
+  /** ACH on its way per invoice id, cents (20в) */
+  pending?: Record<string, number>;
   valid_until?: string | null;
   countersign?: { signer_name: string; signer_title?: string | null; his?: string | null; signed_at: string; signature_svg?: string } | null;
 };
@@ -75,7 +81,8 @@ export function fromRaw(r: Raw): PortalData {
     title: r.title ?? "",
     status: r.status,
     sentAt: r.sent_at,
-    doc: r.doc && Array.isArray(r.doc.options) ? r.doc : null,
+    // no option to show (an empty list too): «link not valid», never a page that crashes on mainOption (security-check #415)
+    doc: r.doc && Array.isArray(r.doc.options) && r.doc.options.length > 0 ? r.doc : null,
     company: {
       name: r.company?.name ?? "", phone: r.company?.phone, email: r.company?.email, website: r.company?.website,
       address: r.company?.address || undefined, logo: r.company?.logo, color: r.company?.color, terms: r.company?.terms,
@@ -101,7 +108,12 @@ export function fromRaw(r: Raw): PortalData {
     // an older server has no field: keep the button as before; a newer one says false for a real company
     // a closed company (7а-3) has no field either: never the button
     simulatedPay: r.status !== "closed" && r.simulated_pay !== false,
-    invoices: (r.invoices ?? []).map((i) => ({ id: i.id, number: i.number, title: i.title ?? undefined, kind: i.kind, totalCents: Number(i.total), paidCents: Number(i.paid), dueDate: i.due_date })),
+    // an older server has neither: no online payment, nothing on its way
+    onlinePay: r.status !== "closed" && r.online_pay === true,
+    invoices: (r.invoices ?? []).map((i) => ({
+      id: i.id, number: i.number, title: i.title ?? undefined, kind: i.kind, totalCents: Number(i.total), paidCents: Number(i.paid), dueDate: i.due_date,
+      pendingCents: Number(r.pending?.[i.id] ?? 0) || 0,
+    })),
   };
 }
 
@@ -149,12 +161,13 @@ export function portalFromEstimate(db: DB, e: Estimate, companyName: string): Po
     depositPaid: !!e.depositPaidAt,
     lang: docLanguageFor(db, { customerId: e.customerId, leadId: e.leadId }),
     simulatedPay: true, // the demo on this phone
+    onlinePay: false, // Stripe needs the server
     invoices: (() => {
       const job = db.jobs.find((x) => x.estimateId === e.id);
       return job
         ? db.invoices
             .filter((x) => x.jobId === job.id)
-            .map((x) => ({ id: x.id, number: x.number, title: x.title, kind: x.kind ?? "final", totalCents: x.totalCents, paidCents: x.paidCents, dueDate: x.dueDate }))
+            .map((x) => ({ id: x.id, number: x.number, title: x.title, kind: x.kind ?? "final", totalCents: x.totalCents, paidCents: x.paidCents, dueDate: x.dueDate, pendingCents: 0 }))
         : [];
     })(),
   };
@@ -211,4 +224,37 @@ export async function paySimulated(token: string, invoiceId: string): Promise<Po
   if (isCompanyClosed(error)) return fetchPortal(token);
   if (error) throw new Error(error.message);
   return data ? fromRaw(data as Raw) : null;
+}
+
+/** 20в: what stripe-pay answered — what the Payment Element needs, or why there is nothing to pay */
+export type OnlinePayStart =
+  | { state: "ready"; clientSecret: string; account: string; publishableKey: string; amountCents: number; methods: string[] }
+  | { state: "processing" }
+  | { state: "error"; error: string };
+
+/** the edge function stripe-pay (verify_jwt = false: the client has no account; the /p/ token is the key) */
+export async function startOnlinePay(token: string, invoiceId: string): Promise<OnlinePayStart> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), 20_000);
+  try {
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/stripe-pay`, {
+      method: "POST",
+      headers: { apikey: SUPABASE_PUBLISHABLE_KEY, "Content-Type": "application/json" },
+      body: JSON.stringify({ token, invoiceId }),
+      signal: ctl.signal,
+    });
+    const b = (await res.json().catch(() => null)) as Record<string, unknown> | null;
+    if (res.ok && b?.state === "processing") return { state: "processing" };
+    if (res.ok && b?.state === "ready" && typeof b.clientSecret === "string" && typeof b.account === "string" && typeof b.publishableKey === "string") {
+      return {
+        state: "ready", clientSecret: b.clientSecret, account: b.account, publishableKey: b.publishableKey,
+        amountCents: Number(b.amountCents), methods: Array.isArray(b.methods) ? b.methods.map(String) : ["card"],
+      };
+    }
+    return { state: "error", error: typeof b?.error === "string" ? b.error : "failed" };
+  } catch {
+    return { state: "error", error: "network" };
+  } finally {
+    clearTimeout(timer);
+  }
 }

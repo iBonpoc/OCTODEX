@@ -8,11 +8,15 @@
 | Чат | id | Направление | Состояние |
 |---|---|---|---|
 | Руководитель №5 | `session_015CqH6AYWnjNhg5RZy2re5D` | CLAUDE.md, docs/ai/*, 10-build-plan §0, 15-story-map | план, приёмка, вливание сборками |
-| Карточки списков №7 | `session_015CqH69vCkcxb4Suu1ksNze` | src/nav/listPanel.ts, hierarchy.ts, clients.tsx, features/client/ClientCard.tsx | панель открытой карточки 1280: PR1 «Клиенты» (e2e 155), PR2 «Сметы»+«Счета» (156); «Лиды» (157) — следующему |
-| Сметы №1 | `session_015CqH661aLVst69Yr9qB3TS` | ops.ts (estimate.save), repo.ts, миграции 20261108180000/190000, T106–T108, e2e 175, StuckOp.reason | PR1 себестоимость строк мастера + costs-обрыв; PR2 Н1 сверка при блокировке + Н4а |
-| Шаблоны чек-листов №4 | `session_015CqH6629KseSSe7gT6mPeM` | visit/[id], VisitChecklist, checklist.ts, ops.ts (chk.*), store.tsx, registry.ts (checklistTemplates) | CH3a правка пунктов в выезде (e2e 163), CH3b стартовые шаблоны модуля |
+| Лиды и клиенты №14 | `session_015CqH66PePGjJasrpJgtqH3` | спека 04 §13, clientDuplicates.ts, client/**, clients.tsx, LeadCard.tsx, миграция 20261109120000 | C3 дубли и слияние клиентов (T134, e2e 189) |
+| Сметы №3 | `session_015CqH68FFv5zHgyQV88Jvva` | шаблоны смет: estimate/**, estimateTemplate.ts, ops/store (шаблоны), миграция 20261108230000 | E3a #423 влит; E3b экраны (e2e 177), E3c слот модулей (e2e 180) |
+| Деньги и отчёты №6 | `session_015CqH68oEGqeAYaK5CRygU5` | features/payments/*, cloud/refund.ts, functions/stripe-*, миграции 20261109150000+ | долги: аванс (платёж без счёта), ACH-возврат после принятия, fee_cents, мелкие шторки; T с T135, e2e с 190 |
 | Правки Gutters (личный чат основателя) | `session_015CqH66K82f6Sc1E161JFM2` | src/modules/gutters/** (кроме registry/module/estimateLink без согласования), e2e 168–174 | правки основателя; архив только по его слову |
 | Бренд (личный чат основателя) | `session_015CqH69WWiSwHTpW9sTb2km` | бренд GoRix | архив только по слову основателя |
+
+**Долги:** лимит запросов stripe-pay до live; rule16 шаг 2 (старые колонки себестоимости, companies.stripe_account_id).
+
+**Ждут ответа основателя (08.11):** включить Stripe Radar до перехода на live (защита от перебора карт); аванс без счёта в «собрано» до зачёта (сейчас нет); переплата счёта после упавшего возврата (сейчас needs_review); при настройке вебхука Stripe — подписать события из спеки 35 §4б (refund.created обязателен); приём заявок В1 галочка SMS, В2 текст о данных, В3 Turnstile, В4 адрес формы (gorix.app); задаток быстрых смет (pct «0.1» читается как 0); Stripe В1 аккаунт, В2 Standard/Express, В3 комиссия платформы, В4 без надбавки за карту, В5 ИИ для чеков, В6 проигранный спор; VGS (выпуски 2⅜/2¾, колена A/B, box miter, straight face cap); секреты INTAKE_IP_SECRET, TURNSTILE_SECRET (заводит сам); было/стало за 08.11.
 
 Прежняя таблица 07.11 — в истории файла.
 
@@ -84,6 +88,69 @@
 - Карта: S4/S9 — снимок чек-листа (пункты + минимумы фото); S15 — «Не сделано» + «Просмотрено»; §5 — вычисляемый признак «не сделано обязательных».
 - Дальше CH3 (e2e 163): правка пунктов офисом в работе/выезде, «Добавить из шаблона» (и для осмотров продавца — §11.8 №8), слот модуля для стартовых шаблонов (§11.7 №12), пересмотр applies_catalog_item_ids/module_key на сервере (§11.6).
 - По умолчанию: В3 один текст, В6 осмотр с чек-листом; порядок пунктов «Выше/Ниже» (основателю было/стало); демо-шаблон только для работ.
+
+### Памятка Сметы №1 (session_015CqH661aLVst69Yr9qB3TS, 08.11) — архив
+- Сдал #413 (себестоимость строк и маржа при правке мастером: estimate_line_costs_kept, миграция 20261108180000, T106) и #415 (Н1 сверка строк, скидки, налога, задатка при блокировке версии — 22023 estimate_lines_mismatch; Н4а; qty 4 знака в движке и ops, ENGINE_VERSION 0.1.1; RejectedOp.reason; миграция 20261108190000; T107–T108).
+- Долги: маржа «не посчитана» после правки мастером до сохранения офисом; правка мастером отправленной сметы → новая версия без себестоимости; created_by возвращённой себестоимости — мастер; qty на /p/ и в PDF сырое («1.23455»), сумма по 1.2346; скидка pct >4 знаков — движок по дроби, сервер по bps; sent_version_id меняется не только через send_estimate; плашка ошибки синхронизации показывает английский текст сервера; rule16 шаг 2 для #383.
+- Уроки: заготовки в core_rls.sql «строки без документа» ломаются новыми проверками — выключать триггер в SEED и включать перед своим тестом; 22023 из op — отказ (rejected), не stuck; FOR SHARE в не-definer триггере требует прав — делать definer.
+- e2e 175 свободен.
+### Памятка Шаблоны чек-листов №4 (session_015CqH6629KseSSe7gT6mPeM, 08.11) — архив
+- Сдал #414 CH3a (офис правит пункты до начала выезда, «Добавить из шаблона», op chk.item.edit, e2e 163) и #416 CH3b (ModuleDef.checklistTemplates, карточки «Шаблоны модулей», 3 стартовых шаблона Gutters, starterTemplateId, chk.template.save ifNew; e2e 176; спека §11.11). Карта S0b → e2e 176.
+- Принято без правки (§11.10 №9): шаг выезда проверяет только телефон — правка офиса без сети после подписи принимается.
+- Не сделано: правка чек-листа в карточке работы; стартовые шаблоны в выезды сами не приходят (одна строка visitKinds в module.ts, если основатель захочет).
+- Уроки: nicheGuard ловит «Gutters» даже в комментарии i18n ядра; store.setRole не даёт sales владельцу — роль sales задавать при входе.
+- T109 свободен (взяли «Сметы» №2).
+### Памятка Сметы №2 (session_015CqH6755TfxbkPhBhTkfzo, 08.11) — архив
+- Сдал #415 (правки ревью: версия без документа не сверяется — calc_inputs null; t50 не выключается в SEED; T107 как saveEstimate; «подпись клиента не сохранилась»; пустой options = «ссылка недействительна»), #417 (shownQty, syncErrorKey, discountBps/ENGINE 0.1.2, marginView; T109, e2e 175), #420 (copied_from_line_id + t96_cost_copy, миграция 20261108200000 + запасной путь без колонки; legacyTotals/legacyForEstimate; T110, T111, T121).
+- Ждёт основателя: задаток быстрых смет (deposit_rule pct «0.1» сервер читает как 0).
+- Долги: line_cost_cents при копии null; повторная отправка может вернуть очищенную себестоимость (19 §9.1); JobLinesBlock.tsx:116 — сырое qty строк работы; e2e 177 свободен.
+- Уроки: t40_child_lock действует и для super — фикстуры строк до locked_at; новая серверная проверка → сразу искать старые тесты, которые блокируют от имени участника; Math.round(Number(x)*10000) врёт на float — bps только через discountBps.
+### Памятка Лиды и клиенты №12 (session_015CqH67p9oWTaDHnBHbGJT5, 08.11) — архив
+- Сдал приём заявок (шаг 16, L4, спека 34): #418 база (миграции 20261108210000/210100/210200, T112–T119), #421 функция lead-intake + /f/<token> (220000, T120, e2e 178), #422 экран «Приём заявок» (e2e 179, облачная 180), #424 защита от встраивания (public/index.html, e2e 181), #426 правки безопасности (только cf-connecting-ip; too_fast/no_ip/old_link → held; ::ffff, /48, bidi; миграция 20261108233000, T125).
+- После выкладки: основатель заводит INTAKE_IP_SECRET и TURNSTILE_SECRET; проверить в логах, что приходит cf-connecting-ip; прогнать облачную e2e 180.
+- Дальше: виджет Turnstile (после В3); QR (новая зависимость, правило 17); письма площадок (после домена gorix.app и образцов Г3); iframe на отдельном адресе — только со слова основателя; крошка /company/intake в hierarchy.ts («Карточки» №7); intake_events в CCPA-экспорт; спека 34 — вписать В1–В4; SMS по CTIA (версия с языком, вечная запись согласия) — после В1.
+- Уроки: функции схемы app не видны PostgREST — обёртки в public только для service_role; output single не умеет заголовки по путям; в e2e 5xx даёт console error — подменять 200 с ok:false; подпись Toggle видна только диктору — текст согласия рядом; время заполнения — часами страницы.
+### Памятка Карточки списков №7 (session_015CqH69vCkcxb4Suu1ksNze, 08.11) — архив
+- Сдал #425 (панель 1280 «Клиенты», e2e 155) и #429 (включает #425; «Сметы» + «Счета», useListPanel, e2e 156; крошка «Приём заявок» в hierarchy.ts). Тела карточек вынесены: features/client/ClientCard.tsx, features/EstimateCard.tsx, features/invoice/InvoiceCard.tsx — экраны estimate/[id], invoice/[id] возвращаются «Сметам» / «Лидам и клиентам».
+- Правила панели (спека 06 «10а, панель 1280»): адрес заменяется (setParams); назад с экрана — в список с той же панелью; панель остаётся, если карточка выпала из фильтра; ↑/↓ только при фокусе на строках.
+- Долги: ↑/↓ не прокручивают к строке за краем; в панели нет «＋» и «Изменить»; выпавшая из фильтра карточка не отмечена — ↓ ведёт к первой.
+- Дальше: «Лиды» на панель (e2e 157), затем каталог / «Требует внимания».
+- Уроки: aria-selected на кнопке RNW не выводится — aria-current; e2e на 1280, нажимающие строку списка (28, 36, 78), идут через list-panel-open; чистые правила — в *Rule.ts без react-native.
+
+### Памятка Деньги и отчёты №3 (session_015CqH67PmMt1QCsV7jDGcdn, 08.11) — архив
+- Сдал #428 20а (база Stripe, миграция 20261109010000, T126–T129), #431 (statusMap paymentShown/paymentMethodFromDb, ach, карта §5 Payment), #433 20б (/company/payments, Edge stripe-connect, миграция 20261109020000, T130, e2e 182; подключает только владелец).
+- Спека 35-stripe.md: §2 решения, §4 база, §4а подключение (долги), §5 план. Ждут основателя В1–В6 (Standard-эквивалент — константа CONTROLLER в stripe-connect/handler.ts). ADR-007 и PRD 09 не правились до В2.
+- Основателю: STRIPE_SECRET_KEY (sk_test_) в Supabase → Edge Functions → Secrets.
+- Дальше: 20в stripe-pay + Payment Element на /p/ (public-обёртки service_role для payment_attempt_open/set_intent; сверка токена /p/ со счётом против IDOR; переиспользовать попытку с PaymentIntent; CORS до сайта; @stripe/stripe-js и react-stripe-js по CHECKS §4; ACH первым ≥ $1,000; e2e 183). 20г webhook (подпись по сырому телу; p_method из expand; fee из balance transaction; сверка metadata.company_id; 55000 → 500; хранение stripe_events; T131–T132). 20д возвраты (T133, e2e 184). 20е чеки после В5 (e2e 185).
+- Долги: лимит частоты start; удалить companies.stripe_account_id (правило 16); ACH return не обрабатывается.
+- Уроки: app.* через supabase-js не вызвать — public-обёртка service_role; security-check на каждом PR с деньгами находил настоящие дыры; новый экран → tabBarRule и NO_FILTER; i18n через json.dumps; stacked — брать main и добавлять свой блок.
+
+### Памятка Карточки списков №8 (session_015CqH66bdTBKTgPfknA5z82, 08.11) — архив
+- Сдал #434 («Лиды» на панель 1280, LeadCard, e2e 157) и #438 (↑/↓ прокручивают к строке; «Изменить»/«＋» в панели клиента; метка «Нет в списке — другой фильтр»; вкладки лида листаются вбок на 390; e2e 158).
+- Панель 1280 на клиентах, сметах, счетах, лидах; useListPanel даёт openId, outside, open, close, full. features/lead/LeadCard.tsx возвращается «Лидам и клиентам».
+- Дальше: Segmented scroll (controls.tsx) прокручивать к выбранной вкладке; «возможный дубль» в панели лида — панелью; каталог и «Требует внимания» на панель не переводить (спека 06).
+### Памятка Деньги и отчёты №4 (session_015CqH66hzCgPgL8zYoAg7rn, 08.11)
+- Сдал #435 (db.pendingPayments), #437 (20в: Edge stripe-pay, Payment Element на /p/, миграция 20261109030000, T131, e2e 183; /p/ ошибки сети и revoked на языке клиента, e2e 184), #439 (20г: stripe-webhook, подпись по сырому телу, миграция 20261109040000, T132). Порядок #433 → #435 → #437 → #439.
+- Дальше: 20д возвраты (stripe-refund, ручной возврат, refundAllocation, T133, e2e 185); 20е чеки после В5.
+- Долги: лимит запросов stripe-pay по токену/IP + Radar — до live; ручная проверка 3DS (4000 0025 0000 3155) и ACH на test Stripe после секретов; S12a/S12b в карту §4; хранение app.stripe_events (спека 21); application_fee_amount после В3.
+- Секреты основателю: STRIPE_SECRET_KEY (sk_test_), STRIPE_PUBLISHABLE_KEY (pk_test_), STRIPE_WEBHOOK_SECRET (whsec_ Connect-эндпоинта …/functions/v1/stripe-webhook).
+- Уроки: раннер e2e падает на ошибке консоли — 4xx в page.route отдавать 200 с error, офлайн подменой fetch; serverContract считает admin.rpc в Edge вызовом приложения — через обёртку rpc(); платежи нельзя мягко удалить.
+
+### Памятка Лиды и клиенты №13 (session_015CqH67mXYcoVoL5GKnUime, 08.11) — архив
+- #440: крошка отчёта = название (REPORT_TITLE); qty строк работы через jobLineQty; фото выезда на вебе — liveUri/madeHere (features/photoUri.ts). e2e 186, 187.
+- #442 (на #438+#440): Segmented scroll (src/ui/segmentedScroll.ts); «Возможный дубль» в панели 1280; дубли фильтруются canSeeLead; фото лида liveUri + значок (lead-photo-<id>). e2e 188, unit segmentedScroll.
+- Файлы теперь за «Лидами и клиентами»: features/lead/LeadCard.tsx, app/(tabs)/leads.tsx.
+- Осталось: modules/gutters/photoUri.ts → features/photoUri.ts (личный «Правки Gutters»); тест фильтра дублей под монтажника.
+- Ловушки: e2e run.cjs флаги только через «=» (--width=1280); RNW без aria-selected у вкладок — ждать содержимое по testID; nicheGuard ловит слово gutter даже в комментарии ядра; useRef ScrollView — ScrollViewInstance.
+- Свободно: e2e с 189, T с T133 (T133 занят «Деньгами» №5).
+
+### Памятка Деньги и отчёты №5 (session_015CqH69czeKQQz4r6pDxxwJ, 08.11) — архив после сборки #445
+- Сдал #443 (20д-1: refund_record, stripe_refund_open/settle/inflight, Edge stripe-refund, гард платежей, T133, upgrade-фикстура) и #444 (20д-2: «Вернуть деньги» на квитанции, чип «Проверить», e2e 185, unit refundApp, cloudRefund).
+- Держал: миграция 20261109050000_refunds.sql, functions/stripe-refund, features/payments/*, cloud/refund.ts, receipt/[id].tsx.
+- tg_payment_guard зовёт app.merging_customer(uuid,uuid) через to_regprocedure+EXECUTE — функцию создаёт «Лиды» №14 (20261109120000).
+- Демо: amountCents уменьшается при возврате (как приходит из облака: amount − refunded).
+- Долги: ACH-возврат после принятия failed/canceled — двери нет; платёж без счёта (аванс) не виден; fee_cents в приложение; предел в шторке не вычитает возвраты в пути; 42501 «company closed» показывается как «только владелец/админ».
+- Дальше: 20е чтение чека (после В5 основателя).
 
 ## Памятки-передачи 07.11 (руководитель №4)
 ### Памятка «Лиды и клиенты» №10 (session_015CqH6A7brPRZCibvSZzhLd, архив 07.11; дела у №11 `session_015CqH6AXexfSJUxpzdXPpY4`)

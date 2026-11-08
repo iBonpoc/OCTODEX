@@ -18,7 +18,9 @@ exports.run = async (h) => {
   await h.expectText(/Kevin Brooks/, "leads list renders with old data");
   await h.expectText(/Thumbtack/, "source name resolved from the old text value");
   await p.getByText("Kevin Brooks", { exact: true }).first().click();
-  await p.waitForTimeout(600);
+  // on 1280 a list row opens the side panel (#434); «Открыть» takes it to the lead screen
+  if (h.layout.width >= 1280) await p.getByTestId("list-panel-open").locator("visible=true").click();
+  await p.getByRole("button", { name: "Назад: Лиды" }).first().waitFor({ timeout: 5000 }).catch(() => {});
   h.expect((await p.getByRole("button", { name: "Назад: Лиды" }).count()) > 0, "lead card opens (trail ⌂ › Лиды › Лид)");
   await h.clickText("Переписка");
   await h.expectText(/Лид пришёл: Thumbtack/, "history works");

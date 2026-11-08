@@ -1,19 +1,30 @@
 /**
  * Import clients from CSV (docs/specs/13-app-structure.md §3.16, 15-flows §1.13, 04 §12.5). Pure — tested in
  * test/csvImport.test.ts. Steps: parse the file → guess which column is which (EN / RU / ES headers) → rows →
- * plan: what is added, what is skipped and why (a duplicate of a client or of an earlier row of the same file, by any
- * phone or email — the same rule as findDuplicates / mergePeople; a row without a name or a way to reach them).
+ * plan: what is added, what is added as a possible duplicate, what is skipped and why. The rule is the server's
+ * (public.import_customers, docs/specs/04 §14.4; the same examples test/fixtures/matchKeys.json — this file's
+ * test/csvImport.test.ts and db T139): the server writes and has the last word, this is the check before the tap.
  */
-import { fullPhoneKey as phoneKey, peopleOf } from "@/data/people";
-import type { CustomerStatus, DB } from "@/data/types";
+import { fullPhoneKey, peopleOf } from "@/data/people";
+import type { Customer, CustomerStatus, DB, Property } from "@/data/types";
+import { addressKey, CROWD, emailKey, isLiveClient } from "@/features/clientDuplicates";
 
-/** at most this many rows in one import (decision of the director 06.11) */
-export const IMPORT_MAX_ROWS = 500;
-/** a bigger file is not read at all (a CSV of 500 clients is ~100 KB) */
-export const IMPORT_MAX_BYTES = 2 * 1024 * 1024;
-/** rows parsed at most (the rest of a huge file is not even looked at) and the longest cell kept */
-export const IMPORT_MAX_PARSED = IMPORT_MAX_ROWS * 4;
+/** at most this many rows in one import (decision of the founder, docs/03-prd/00-decisions-for-founder.md: up to 5,000) */
+export const IMPORT_MAX_ROWS = 5000;
+/** a bigger file is not read at all (PRD 04 §7.7.4: up to 10 MB) */
+export const IMPORT_MAX_BYTES = 10 * 1024 * 1024;
+/** rows parsed at most: one more than can be imported, so «the file is longer» is known */
+export const IMPORT_MAX_PARSED = IMPORT_MAX_ROWS + 1;
 export const IMPORT_MAX_CELL = 200;
+/** rows per server call (one transaction each, docs/specs/04 §14.4) */
+export const IMPORT_BATCH = 250;
+
+/** a control character (a line break inside a quoted cell) becomes a space; bidi and zero-width characters go; then
+ *  trim — the same as app.import_cell on the server (db T139) */
+// eslint-disable-next-line no-control-regex
+const CONTROL = /[\u0000-\u001f\u007f-\u009f]/g;
+const INVISIBLE = /[\u061c\u200b-\u200f\u202a-\u202e\u2066-\u2069\ufeff]/g;
+export const importCell = (c: string) => c.replace(CONTROL, " ").replace(INVISIBLE, "").trim();
 
 /** the file is not a CSV we can read (an unclosed quote, nothing after the header) */
 export class CsvError extends Error {}
@@ -34,7 +45,7 @@ export function parseCsv(text: string): string[][] {
   let row: string[] = [];
   let cell = "";
   let quoted = false;
-  const cut = (c: string) => c.trim().slice(0, IMPORT_MAX_CELL);
+  const cut = (c: string) => importCell(c).slice(0, IMPORT_MAX_CELL);
   for (let i = 0; i < src.length && rows.length <= IMPORT_MAX_PARSED; i++) {
     const ch = src[i]!;
     if (quoted) {
@@ -178,46 +189,98 @@ export function rowsOf(table: readonly string[][], m: ImportMapping): ImportRow[
 export type SkipReason = "noName" | "noContact" | "badPhone" | "badEmail" | "dupClient" | "dupFile" | "overLimit";
 export interface ImportPlan {
   add: ImportRow[];
+  /** added, but only the address matched a live client (a weak sign, §13.4): the card gets «Возможный дубль» */
+  dupAdd: { row: ImportRow; who: string }[];
   /** who: the client or the earlier row it repeats; whoStatus: that client is archived / «do not service» */
   skip: { row: ImportRow; reason: SkipReason; who?: string; whoStatus?: CustomerStatus }[];
 }
 
-const emailKey = (e: string | undefined) => (e ?? "").trim().toLowerCase();
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+/** the phone the server keeps as a key: 10 digits, or 11 starting with 1; "" — no phone; null — digits, but not a US number */
+function phoneOf(row: ImportRow): string | null {
+  const d = row.phone.replace(/\D/g, "");
+  if (!d) return "";
+  return d.length === 10 || (d.length === 11 && d.startsWith("1")) ? fullPhoneKey(d) : null;
+}
 
-/** what will be added and what skipped, before anything is written */
-export function planImport(db: Pick<DB, "customers">, rows: readonly ImportRow[]): ImportPlan {
+/**
+ * What will be added and what skipped, before anything is written — the server's order (classifyImportRow there):
+ * noName → badPhone → badEmail → noContact → dupClient (any phone / email of any person of a card that is not merged,
+ * the oldest card) → dupFile (an earlier row of this file) → added; only the address of a live card's property (≤ CROWD
+ * cards share it) — added as a possible duplicate. Rows past IMPORT_MAX_ROWS — overLimit (split the file).
+ */
+export function planImport(db: Pick<DB, "customers"> & Partial<Pick<DB, "properties">>, rows: readonly ImportRow[]): ImportPlan {
   type Hit = { name: string; status?: CustomerStatus };
   const phones = new Map<string, Hit>();
   const emails = new Map<string, Hit>();
-  for (const c of db.customers)
+  const addrs = new Map<string, Set<string>>();
+  // the oldest card first (the server: created_at): the CLT number, else the list's order (it keeps the newest first)
+  const num = (c: Customer) => Number(c.number?.replace(/\D/g, "") || NaN);
+  const pos = new Map(db.customers.map((c, i) => [c.id, i]));
+  const oldest = (a: Customer, b: Customer) => {
+    const na = num(a);
+    const nb = num(b);
+    return Number.isFinite(na) && Number.isFinite(nb) && na !== nb ? na - nb : pos.get(b.id)! - pos.get(a.id)!;
+  };
+  const cards = db.customers.filter((c) => !c.mergedIntoId).sort(oldest);
+  const byId = new Map(cards.map((c) => [c.id, c]));
+  for (const c of cards)
     for (const p of peopleOf(c)) {
       const hit = { name: c.name, status: c.status };
-      for (const x of p.phones) if (phoneKey(x.number)) phones.set(phoneKey(x.number), hit);
-      for (const x of p.emails) if (emailKey(x.address)) emails.set(emailKey(x.address), hit);
+      for (const x of p.phones) if (fullPhoneKey(x.number) && !phones.has(fullPhoneKey(x.number))) phones.set(fullPhoneKey(x.number), hit);
+      for (const x of p.emails) if (emailKey(x.address) && !emails.has(emailKey(x.address))) emails.set(emailKey(x.address), hit);
     }
+  const putAddr = (k: string, who: string) => k && addrs.set(k, (addrs.get(k) ?? new Set<string>()).add(who));
+  for (const p of (db.properties ?? []) as Property[]) {
+    const c = byId.get(p.customerId);
+    if (c && isLiveClient(c)) putAddr(addressKey(p), `c:${c.id}`);
+  }
+  const names = new Map<string, string>(); // `c:<id>` / `r:<line>` → the name shown
+  for (const c of cards) names.set(`c:${c.id}`, c.name);
   const filePhones = new Map<string, Hit>();
   const fileEmails = new Map<string, Hit>();
-  const plan: ImportPlan = { add: [], skip: [] };
-  for (const row of rows) {
-    const ph = row.phoneOk === false ? "" : phoneKey(row.phone);
+  const plan: ImportPlan = { add: [], dupAdd: [], skip: [] };
+  rows.forEach((row, i) => {
+    const ph = phoneOf(row);
     const em = emailKey(row.email);
     const skip = (reason: SkipReason, hit?: Hit) =>
       plan.skip.push({ row, reason, who: hit?.name, whoStatus: hit?.status === "archived" || hit?.status === "do_not_service" ? hit.status : undefined });
     const known = (ph && phones.get(ph)) || (em && emails.get(em)) || undefined;
     const repeat = (ph && filePhones.get(ph)) || (em && fileEmails.get(em)) || undefined;
-    if (!row.name) skip("noName");
-    else if (row.phoneOk === false || (row.phone && !ph)) skip("badPhone");
+    if (i >= IMPORT_MAX_ROWS) skip("overLimit");
+    else if (!row.name) skip("noName");
+    else if (ph === null) skip("badPhone");
     else if (em && !EMAIL.test(em)) skip("badEmail");
     else if (!ph && !em) skip("noContact");
     else if (known) skip("dupClient", known);
     else if (repeat) skip("dupFile", repeat);
-    else if (plan.add.length >= IMPORT_MAX_ROWS) skip("overLimit");
     else {
-      plan.add.push(row);
+      const ak = addressKey({ address: row.address, city: row.city });
+      const same = ak ? addrs.get(ak) : undefined;
+      const first = same && same.size <= CROWD ? [...same][0] : undefined;
+      if (first) plan.dupAdd.push({ row, who: names.get(first) ?? "" });
+      else plan.add.push(row);
+      const me = `r:${row.line}`;
+      names.set(me, row.name);
+      putAddr(ak, me);
       if (ph) filePhones.set(ph, { name: row.name });
       if (em) fileEmails.set(em, { name: row.name });
     }
-  }
+  });
   return plan;
+}
+
+/** the rows the server is sent (in the file's order, ≤ IMPORT_MAX_ROWS), in batches of IMPORT_BATCH */
+export interface ServerRow {
+  line: number; name: string; first_name: string; last_name: string; company: string; phone: string; email: string; address: string; city: string;
+}
+export const serverRow = (r: ImportRow): ServerRow => ({
+  line: r.line, name: r.name, first_name: r.firstName ?? "", last_name: r.lastName ?? "", company: r.company ?? "",
+  phone: r.phone, email: r.email ?? "", address: r.address, city: r.city,
+});
+export function batchesOf(rows: readonly ImportRow[], fromLine = 2): ServerRow[][] {
+  const out: ServerRow[][] = [];
+  const send = rows.slice(0, IMPORT_MAX_ROWS).filter((r) => r.line >= fromLine).map(serverRow);
+  for (let i = 0; i < send.length; i += IMPORT_BATCH) out.push(send.slice(i, i + IMPORT_BATCH));
+  return out;
 }

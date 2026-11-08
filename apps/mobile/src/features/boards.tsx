@@ -1,5 +1,5 @@
 /** «Сметы» (a section of its own, spec 31 §7а): estimates as cards with the list filters. Invoices — /invoice. */
-import { useState } from "react";
+import { useState, type ReactElement, type ReactNode } from "react";
 import { View } from "react-native";
 import { space, type StatusName } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -7,7 +7,10 @@ import { usePersistentState } from "@/data/persist";
 import type { DB, Estimate, EstimateStatus } from "@/data/types";
 import { ESTIMATE_GROUPS, estimateGroup, inEstimateFilter, type EstimateFilter, type EstimateGroup } from "@/features/listGroups";
 import { CardGrid, ListCardHeader } from "@/ui/listCard";
-import { EST_COLUMNS, EstimateListCard } from "@/features/listCards";
+import { EST_COLUMNS, EST_COLUMNS_PANEL, EstimateListCard } from "@/features/listCards";
+import { EstimateCardBody, estimateSubtitle } from "@/features/EstimateCard";
+import { useListPanel } from "@/nav/listPanel";
+import { ListPanel } from "@/ui/listPanel";
 import { useDevice } from "@/theme/ThemeProvider";
 import { T } from "@/ui/primitives";
 import { useI18n, type DictKey } from "@/i18n";
@@ -37,7 +40,8 @@ export function matchEstimate(db: DB, e: Estimate, q: string): boolean {
   return [client?.name, e.number, e.title, prop?.address, prop?.city].some((x) => (x ?? "").toLowerCase().includes(needle));
 }
 
-export function EstimatesBoard() {
+/** `wrap` — the screen around the board: on 1280 it gets the open estimate as its `aside` (spec 06 «Панель 1280») */
+export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: ReactNode) => ReactElement }) {
   const { db } = useStore();
   const { t, money, day } = useI18n();
   const { device } = useDevice();
@@ -53,9 +57,24 @@ export function EstimatesBoard() {
     .filter(({ e }) => matchEstimate(db, e, q))
     .sort((a, b) => (b.e.sentAt ?? b.e.approvedAt ?? "").localeCompare(a.e.sentAt ?? a.e.approvedAt ?? ""));
   // the one estimate card (features/listCards.tsx), shared with the «Today» figures
-  const card = ({ e }: { e: Estimate; g: EstimateGroup }) => <EstimateListCard key={e.id} e={e} density={device === "desktop" ? "row" : "rich"} />;
   const groups = ESTIMATE_GROUPS.map((g) => [g, list.filter((x) => x.g === g)] as const).filter(([, xs]) => xs.length);
-  return (
+  // 1280: the open estimate beside the list, `/estimates?open=<id>`; the order of the rows on screen is the groups'
+  const panel = useListPanel(groups.flatMap(([, xs]) => xs.map((x) => x.e.id)), (id) => `/estimate/${id}`, (id) => db.estimates.some((x) => x.id === id));
+  const openE = panel.openId ? db.estimates.find((x) => x.id === panel.openId) : undefined;
+  const card = ({ e }: { e: Estimate; g: EstimateGroup }) => (
+    <EstimateListCard key={e.id} e={e} density={device === "desktop" ? "row" : "rich"} panel={{ selected: e.id === panel.openId, open: () => panel.open(e.id), narrow: !!panel.openId }} />
+  );
+  const aside = openE ? (
+    <ListPanel
+      title={[openE.number, openE.title].filter(Boolean).join(" · ") || t("est.detail")}
+      // as the estimate's screen: the client and the address under the title
+      subtitle={estimateSubtitle(db, openE)}
+      outside={panel.outside}
+      onOpen={panel.full} onClose={panel.close}>
+      <EstimateCardBody key={openE.id} e={openE} />
+    </ListPanel>
+  ) : undefined;
+  return wrap(
     <View style={{ gap: space[3] }}>
       {/* spec 31 (variant Б): the search (client, address, EST, work) and one lane of statuses; nothing in the sheet yet */}
       <FilterBar<EstimateFilter>
@@ -68,7 +87,7 @@ export function EstimatesBoard() {
         <Empty icon="invoice" title={t("board.noEstimates")} />
       ) : (
         <>
-          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={EST_COLUMNS} value={t("card.val.total")} /> : null}
+          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={panel.openId ? EST_COLUMNS_PANEL : EST_COLUMNS} value={t("card.val.total")} /> : null}
           {groups.map(([g, xs]) => (
             <View key={g} style={{ gap: space[2] }}>
               <T v="caption" w="semibold" tone="mut">{`${t(`card.group.${g}`)} · ${xs.length}`}</T>
@@ -77,6 +96,7 @@ export function EstimatesBoard() {
           ))}
         </>
       )}
-    </View>
+    </View>,
+    aside,
   );
 }

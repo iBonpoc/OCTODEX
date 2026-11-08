@@ -12,7 +12,7 @@ import { LEAD_SETTINGS_DEFAULT, type LeadSettings } from "./leadSettings";
 import { DECLINE_REASONS, LOST_REASONS, type Customer, type DB, type Lead, type LeadStatus, type Person, type LostReason, type Role, type Source, type SourceKind, type Task } from "@/data/types";
 import { memberName } from "./team";
 import type { DictKey } from "@/i18n";
-import { leadPeopleOf, peopleOf, phonesOfPeople } from "@/data/people";
+import { leadPeopleOf, peopleForLead, peopleOf, phonesOfPeople } from "@/data/people";
 
 export const leadStatusView: Record<LeadStatus, { status: StatusName; label: DictKey }> = {
   new: { status: "info", label: "st.new" },
@@ -83,10 +83,21 @@ export function findDuplicates(db: DB, q: { phone?: string; phones?: string[]; e
   // every phone and email of every person counts (L2 part 2), not only the main one
   const hit = (people: Person[]) =>
     people.some((p) => p.phones.some((x) => phones.includes(phoneKey(x.number))) || p.emails.some((x) => emails.includes(emailKey(x.address))));
-  const customers = db.customers.filter((c) => hit(peopleOf(c)));
+  // a merged card (step 17 C3) is not a client any more: its kept card is found by the same phone
+  const customers = db.customers.filter((c) => !c.mergedIntoId && hit(peopleOf(c)));
   const recent = now - 30 * 86_400_000;
   const leads = db.leads.filter((l) => l.id !== exceptLeadId && hit(leadPeopleOf(l)) && (isOpenLead(l) || new Date(l.receivedAt).getTime() >= recent));
   return { customers, leads };
+}
+
+/**
+ * The duplicates the lead card shows to this person: a tech sees only the leads he may see (canSeeLead) — another lead
+ * with the same phone is not a way into the office's leads (review #442).
+ */
+export function leadDuplicatesFor(db: DB, role: Role, l: Lead, now = Date.now()): Duplicates {
+  const mine = peopleForLead(db, l);
+  const found = findDuplicates(db, { phones: phonesOfPeople(mine), emails: mine.flatMap((p) => p.emails.map((e) => e.address)) }, l.id, now);
+  return { ...found, leads: found.leads.filter((d) => canSeeLead(role, db.me, d)) };
 }
 
 /* ---------- next step ---------- */
@@ -254,6 +265,8 @@ export function leadTimeline(db: DB, l: Lead, viewer?: string, deletedWord = "")
     else if (a.kind === "reply") out.push({ ...base, icon: "check", key: "tl.reply" });
     else if (a.kind === "assigned") out.push({ ...base, icon: "user", key: "tl.assigned", params: { name: memberName(db, a.meta?.to as string | undefined, deletedWord) || "—" } });
     else if (a.kind === "edited") out.push({ ...base, icon: "pencil", key: "tl.edited" });
+    // the same person asked again from the form / a webhook (spec 34): their words, marked unconfirmed — anyone may type a phone
+    else if (a.kind === "intake") out.push({ ...base, icon: "inbox", key: "tl.intake" });
     else if (a.kind === "status") {
       const to = (a.meta?.to ?? "") as LeadStatus;
       const reason = a.meta?.reason;

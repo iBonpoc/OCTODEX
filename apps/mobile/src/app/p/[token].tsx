@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
-import { Image, View } from "react-native";
+import { Image, Platform, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { I18nOverride, useI18n } from "@/i18n";
+import { I18nOverride, useI18n, type DictKey } from "@/i18n";
+import type { DocLang } from "@/i18n/translate";
 import type { EstimateDoc } from "@/data/types";
 import { acceptPortal, fetchPortal, licenseLine, localPortal, paySimulated, type PortalData } from "@/cloud/portal";
 import { SimulatedCheckout } from "@/features/SimulatedCheckout";
+import { StripeCheckout, type OnlineOutcome } from "@/features/StripeCheckout";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { mainOption, optionTotals, withAddons } from "@/features/estimateDoc";
@@ -49,15 +51,12 @@ export default function ClientEstimatePage() {
     );
   }
   if (!data || !data.doc || data.status === "revoked") {
+    // rule 7: a revoked link speaks the client's language; with no answer at all (no network) the browser's — never the app's,
+    // and never a raw «TypeError: Failed to fetch» (review «Лиды и клиенты» №13)
     return (
-      <Screen title={t("portal.estimate")} back={back}>
-        {data === undefined && !error ? (
-          <Empty icon="clock" title={t("portal.loading")} />
-        ) : (
-          // not found or revoked: the token no longer leads anywhere
-          <Empty icon="alert" title={error ? t("portal.error", { msg: error }) : t("est.portal.invalid")} />
-        )}
-      </Screen>
+      <I18nOverride lang={data?.lang ?? browserLang()}>
+        <NoPage loading={data === undefined && !error} failed={!!error} back={back} />
+      </I18nOverride>
     );
   }
 
@@ -69,12 +68,52 @@ export default function ClientEstimatePage() {
   );
 }
 
+/** the client's browser language among the document languages (en / es / ru), en otherwise */
+function browserLang(): DocLang {
+  const l = (typeof navigator !== "undefined" ? navigator.language : "en").slice(0, 2).toLowerCase();
+  return l === "es" || l === "ru" ? l : "en";
+}
+
+/** a failure on the client page in our words: «no connection» or «try again» — never the browser's or the server's text */
+function portalFail(t: (k: DictKey) => string, e: unknown): string {
+  const m = String((e as Error)?.message ?? e);
+  return /fetch|network|timeout|abort/i.test(m) ? t("portal.offline") : t("portal.failed");
+}
+
+function NoPage({ loading, failed, back }: { loading: boolean; failed: boolean; back?: () => void }) {
+  const { t } = useI18n();
+  return (
+    <Screen title={t("portal.estimate")} back={back}>
+      {loading ? (
+        <Empty icon="clock" title={t("portal.loading")} />
+      ) : (
+        // not found or revoked: the token no longer leads anywhere; no network: say so and how to retry
+        <Empty icon="alert" title={failed ? t("portal.offline") : t("est.portal.invalid")} />
+      )}
+    </Screen>
+  );
+}
+
 function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; doc: EstimateDoc; token: string; back?: () => void; setRemote: (d: PortalData | null) => void }) {
   const store = useStore();
   const { t, money, day } = useI18n();
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [paying, setPaying] = useState<string | null>(null);
+  // 20в: the invoice paid through the real Payment Element, and what Stripe said (the payment itself comes by the webhook)
+  const [online, setOnline] = useState<string | null>(null);
+  // back from a bank's or 3DS page: Stripe adds redirect_status; «paid» names the invoice (review 20в №2)
+  const back3ds = useLocalSearchParams<{ paid?: string; redirect_status?: string }>();
+  const [outcome, setOutcome] = useState<Record<string, OnlineOutcome>>({});
+  useEffect(() => {
+    const id = back3ds.paid;
+    if (!id || !data.invoices.some((i) => i.id === id)) return;
+    if (back3ds.redirect_status === "succeeded" || back3ds.redirect_status === "processing") {
+      setOutcome((m) => ({ ...m, [id]: back3ds.redirect_status === "succeeded" ? "succeeded" : "processing" }));
+    }
+    router.setParams({ paid: undefined, redirect_status: undefined, payment_intent: undefined, payment_intent_client_secret: undefined });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [back3ds.paid, data.invoices.length]);
   const [optionId, setOptionId] = useState<string | null>(null);
   const [addonIds, setAddonIds] = useState<string[]>([]);
 
@@ -94,7 +133,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
         setRemote(await acceptPortal(token, { optionId: base.id, addonIds: addons, signer: name, svg }));
       }
     } catch (e) {
-      toast.show(t("portal.error", { msg: String((e as Error)?.message ?? e) }));
+      toast.show(portalFail(t, e));
     } finally {
       setBusy(false);
     }
@@ -109,11 +148,21 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
         setRemote(await paySimulated(token, payingInv.id));
       }
     } catch (e) {
-      toast.show(t("portal.error", { msg: String((e as Error)?.message ?? e) }));
+      toast.show(portalFail(t, e));
     }
   };
+  const onlineInv = data.invoices.find((i) => i.id === online);
+  const onlineDone = (o: OnlineOutcome) => {
+    if (!onlineInv) return;
+    setOutcome((m) => ({ ...m, [onlineInv.id]: o }));
+    setOnline(null);
+    // the webhook may already have recorded it: the page reads the server again (ACH shows as «processing»)
+    fetchPortal(token).then((d) => d && setRemote(d)).catch(() => {});
+  };
+  // the real Payment Element: the company's Stripe takes charges, in the client's browser; the simulation only otherwise
+  const canOnline = data.onlinePay && data.source !== "local" && Platform.OS === "web";
   const pdf = () =>
-    saveEstimatePdf(estimateHtml(data, { lang: data.lang }), estimateFileName(data)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+    saveEstimatePdf(estimateHtml(data, { lang: data.lang }), estimateFileName(data)).catch((e) => toast.show(portalFail(t, e)));
 
   return (
     <Screen
@@ -165,19 +214,63 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
               <CardList>
                 {data.invoices.map((inv) => {
                   const bal = Math.max(0, inv.totalCents - inv.paidCents);
+                  // ACH on its way is not money yet, but the client must not be asked for it again
+                  const toPay = Math.max(0, bal - inv.pendingCents);
+                  const sent = outcome[inv.id];
+                  const waiting = bal > 0 && (!!sent || toPay === 0);
+                  const tone = bal === 0 ? "ok" : waiting ? "info" : "warn";
                   return (
-                    <Card key={inv.id} status={bal === 0 ? "ok" : "warn"}>
-                      <RowView style={{ justifyContent: "space-between" }}>
-                        <T v="body" w="semibold" style={{ flex: 1 }}>
-                          {[inv.number, inv.title].filter(Boolean).join(" · ")}
+                    <View key={inv.id} style={{ gap: space[3] }}>
+                      <Card status={tone}>
+                        <RowView style={{ justifyContent: "space-between" }}>
+                          <T v="body" w="semibold" style={{ flex: 1 }}>
+                            {[inv.number, inv.title].filter(Boolean).join(" · ")}
+                          </T>
+                          <StatusChip status={tone} label={bal === 0 ? t("money.paid") : waiting ? t("pay.online.processing") : t("money.awaiting")} />
+                        </RowView>
+                        <T v="title" tabular>
+                          {money(bal === 0 ? inv.totalCents : waiting ? bal : toPay)}
                         </T>
-                        <StatusChip status={bal === 0 ? "ok" : "warn"} label={bal === 0 ? t("money.paid") : t("money.awaiting")} />
-                      </RowView>
-                      <T v="title" tabular>
-                        {money(bal === 0 ? inv.totalCents : bal)}
-                      </T>
-                      {bal > 0 && data.simulatedPay ? <Button label={t("pay.payByCard")} icon="wallet" full onPress={() => setPaying(inv.id)} /> : null}
-                    </Card>
+                        {inv.pendingCents > 0 ? (
+                          <View testID={`portal-pending-${inv.id}`}>
+                            <T v="body" tone="info">
+                              {t("pay.online.pending", { amount: money(inv.pendingCents) })}
+                            </T>
+                          </View>
+                        ) : null}
+                        {sent ? (
+                          <T v="caption" tone="mut">
+                            {sent === "succeeded" ? t("pay.online.succeeded") : t("pay.online.wait")}
+                          </T>
+                        ) : waiting ? (
+                          <T v="caption" tone="mut">
+                            {t("pay.online.processingHint")}
+                          </T>
+                        ) : null}
+                        {toPay > 0 && !sent && canOnline && online !== inv.id ? (
+                          <View testID={`portal-pay-online-${inv.id}`}>
+                            <Button label={t("pay.online.button")} icon="wallet" full onPress={() => setOnline(inv.id)} />
+                          </View>
+                        ) : toPay > 0 && !sent && data.onlinePay && Platform.OS !== "web" ? (
+                          <T v="caption" tone="mut">
+                            {t("pay.online.webOnly")}
+                          </T>
+                        ) : toPay > 0 && !sent && !data.onlinePay && data.simulatedPay ? (
+                          <Button label={t("pay.payByCard")} icon="wallet" full onPress={() => setPaying(inv.id)} />
+                        ) : null}
+                      </Card>
+                      {online === inv.id ? (
+                        <StripeCheckout
+                          visible
+                          token={token}
+                          invoiceId={inv.id}
+                          title={[inv.number, inv.title].filter(Boolean).join(" · ")}
+                          amountCents={toPay}
+                          onClose={() => setOnline(null)}
+                          onDone={onlineDone}
+                        />
+                      ) : null}
+                    </View>
                   );
                 })}
               </CardList>

@@ -395,6 +395,7 @@ export function Screen({
   fabCtx,
   fabOn,
   home,
+  aside,
 }: {
   title: string;
   help?: string;
@@ -421,6 +422,8 @@ export function Screen({
   fabOn?: Partial<Record<NonNullable<FabItem["act"]>, () => void>>;
   /** «Главная» of a role: the bell, the sync badge and the profile on the right (13 v2 §2.2, §3.14) */
   home?: boolean;
+  /** 1280: the open card beside the list (ui/listPanel.tsx, spec 06 «Панель 1280»): the list scrolls on its own, the panel on the right */
+  aside?: ReactNode;
 }) {
   const kb = useKeyboardHeight();
   const hints = useHints();
@@ -662,6 +665,8 @@ export function Screen({
             <View style={column}>{addressRow}</View>
           </View>
         ) : null}
+        <View style={{ flex: 1, flexDirection: "row" }}>
+        <View style={{ flex: 1 }}>
         {scroll ? (
           <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
             <ScrollView
@@ -697,6 +702,9 @@ export function Screen({
         ) : (
           <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right }}>{content}</View>
         )}
+        </View>
+        {aside}
+        </View>
         {/* the status bar backdrop: the same glass as the bars (--ov + blur), only while something is under the clock */}
         {scroll && under && !pinned && navInsets.safeTop > 0 ? (
           // the hairline makes the cut-off card go under the glass, not end at a line; it fades in (none with reduced motion)

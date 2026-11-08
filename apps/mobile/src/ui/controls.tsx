@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
-import { ScrollView, TextInput, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from "react-native";
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from "react";
+import { ScrollView, TextInput, View, type LayoutChangeEvent, type ScrollViewInstance, type StyleProp, type ViewStyle } from "react-native";
 import Animated, {
   useAnimatedStyle,
   useReducedMotion,
@@ -13,6 +13,7 @@ import { component, font, motion, radius, space, statusIcon, type StatusName, si
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Icon, Press, T, type IconKey } from "./primitives";
 import { FIELD, type FieldType } from "./fieldTypes";
+import { offsetToShow } from "./segmentedScroll";
 
 /**
  * «Только просмотр» (spec 26 §3, 07.11: the office sees the company settings but only the director changes them).
@@ -220,6 +221,18 @@ export function Segmented<K extends string>({
   const left = useSharedValue(0);
   const width = useSharedValue(0);
   const ready = Object.keys(layouts).length === items.length;
+  // scroll: the line follows the selected tab (a remembered tab past the edge is brought into view)
+  const strip = useRef<ScrollViewInstance>(null);
+  const view = useRef({ w: 0, offset: 0 });
+  const [viewW, setViewW] = useState(0);
+  useEffect(() => {
+    const l = layouts[value];
+    if (!scroll || !l || !viewW) return;
+    // the line's width from the tabs themselves (not a separate content-size event that may come later)
+    const content = Math.max(...Object.values(layouts).map((x) => x.x + x.w)) + component.segmented.pad;
+    const to = offsetToShow(l, { ...view.current, content }, space[3]);
+    if (to !== null) strip.current?.scrollTo({ x: to, animated: !reduce });
+  }, [scroll, value, layouts, viewW, reduce]);
 
   useEffect(() => {
     const l = layouts[value];
@@ -294,7 +307,20 @@ export function Segmented<K extends string>({
   // scroll: a fixed capsule the width of the screen; the tabs slide inside it, its rounded ends never get cut
   return scroll ? (
     <View style={{ alignSelf: "stretch", borderRadius: radius.pill, overflow: "hidden", backgroundColor: c.track }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0 }}>
+      <ScrollView
+        ref={strip}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        style={{ flexGrow: 0 }}
+        scrollEventThrottle={16}
+        onScroll={(e) => {
+          view.current.offset = e.nativeEvent.contentOffset.x;
+        }}
+        onLayout={(e) => {
+          view.current.w = e.nativeEvent.layout.width;
+          setViewW(e.nativeEvent.layout.width);
+        }}
+      >
         {bar}
       </ScrollView>
     </View>

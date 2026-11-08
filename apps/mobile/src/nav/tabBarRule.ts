@@ -20,6 +20,8 @@ export const NO_TAB_BAR = [
   "company/checklist/[id]",
   "estimate/new", "estimate/signature",
   "expense/new",
+  // the request page of a company (docs/specs/34): a homeowner without the app — no app menu
+  "f/[token]",
   "job/new", "job/schedule",
   "lead/new",
   "legal/[doc]",
@@ -37,6 +39,8 @@ export const WITH_TAB_BAR = [
   "calls", "catalog", "client/[id]", "clients", "company",
   // a settings page saved from its sheet at once (no form to lose)
   "company/leads",
+  "company/intake",
+  "company/payments",
   "company/modules",
   "company/checklists",
   "estimate/[id]", "estimate/templates", "estimates", "figures/[metric]", "help",

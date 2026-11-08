@@ -94,6 +94,10 @@ export interface Customer {
   taxExempt?: boolean;
   /** certificate number or reason */
   taxExemptNote?: string;
+  /** step 17 C3 (docs/specs/04 §13): this card was merged into that one (server: merged_into_customer_id; it is archived) */
+  mergedIntoId?: ID;
+  /** clients the office said are not duplicates of this one (server: not_duplicate_ids) */
+  notDuplicateIds?: ID[];
 }
 export interface BillingAddress {
   line1: string;
@@ -336,7 +340,8 @@ export interface Photo {
   uri?: string;
 }
 
-export type PaymentMethod = "card" | "cash" | "check" | "zelle";
+/** ach — a bank payment online (Stripe, step 20; docs/specs/35); people record only card / cash / check / zelle by hand */
+export type PaymentMethod = "card" | "cash" | "check" | "zelle" | "ach";
 
 export interface Visit {
   id: ID;
@@ -553,7 +558,8 @@ export interface CustomFieldValue {
 }
 
 /** History line: contact attempts, status changes, assignment, edits. Notes, estimates and visits join the timeline from their own tables. */
-export type ActivityKind = "call" | "sms" | "email" | "marketplace" | "reply" | "status" | "assigned" | "edited";
+/** intake — a repeat request of the same person from outside (docs/specs/34; the server writes it, unconfirmed) */
+export type ActivityKind = "call" | "sms" | "email" | "marketplace" | "reply" | "status" | "assigned" | "edited" | "intake";
 export interface Activity {
   id: ID;
   subjectType: "lead" | "customer" | "job" | "estimate";
@@ -813,6 +819,9 @@ export interface Invoice {
   sentAt?: string;
   /** before tax (server: invoices.subtotal_cents) — «revenue» in reports (PRD 14 §7, wave 8) */
   subtotalCents?: number;
+  /** the invoice's tax and its mode (server: tax_cents, tax_mode) — a refund's tax part (step 20д, PRD 19 §7.9) */
+  taxCents?: number;
+  taxMode?: "included_in_price" | "added_on_top" | "tax_inclusive_display" | "exempt";
 }
 
 /** One payment = one receipt (number RCT-… assigned by the server; locally in demo). */
@@ -830,7 +839,23 @@ export interface Payment {
   receivedBy?: ID;
   /** already taken off amountCents (amountCents is net); > 0 = partially refunded (wave 8) */
   refundedCents?: number;
+  /** the server marked it for the owner (an online payment above the balance, a failed refund; docs/specs/35 §2) */
+  needsReview?: boolean;
+  /** Stripe's processing fee (payments.fee_cents, the webhook); it does not come back on a refund. Staff only, never to the client */
+  feeCents?: number;
+  /** refunds on their way that are not in refundedCents yet (as app.refund_available): not refundable twice (spec 35 §4г) */
+  refundPendingCents?: number;
+  /** a refund of it is still «pending», or went less than 30 days ago (the bank may send it back): an advance is not applied
+   *  meanwhile (t41: advance_refund_in_progress / advance_refund_settling) */
+  refundOpen?: boolean;
 }
+/** the client's advance (spec 35 §4г): a payment without an invoice (an online payment above the balance, kept for the owner
+ *  to refund or apply to an invoice). Not in payments, sums or balances until it is applied (moneyLists.ADVANCES_COLLECTED). */
+export interface Advance extends Omit<Payment, "invoiceId"> {
+  invoiceId: null;
+}
+/** a payment or an advance: what a receipt and a refund need */
+export type AnyPayment = Payment | Advance;
 
 export type ExpenseCategory = "materials" | "fuel" | "dump" | "tools" | "other";
 export interface Expense {
@@ -898,6 +923,16 @@ export interface VisitPoint {
   at: string;
 }
 
+/** an online payment Stripe has not settled yet (payments.status = pending) — read-only, from the server */
+export interface PendingPayment {
+  id: string;
+  invoiceId: string;
+  amountCents: number;
+  method: PaymentMethod;
+  /** when it was started (received_at) */
+  at: string;
+}
+
 export interface DB {
   me: ID;
   members: Member[];
@@ -957,6 +992,11 @@ export interface DB {
   company: Company | null;
   notes: Note[];
   payments: Payment[];
+  /** online payments on their way (ACH «pending», step 20в): NOT money yet — never in payments, sums or balances; only shown
+   *  as «ACH processing» on the invoice. Filled by the cloud load; absent in demo and old saved data. */
+  pendingPayments?: PendingPayment[];
+  /** the clients' advances (payments without an invoice, spec 35 §4г) — filled by the cloud load; absent in old saved data */
+  advances?: Advance[];
   /** employees' saved signatures (wave E2a); absent in old saved data */
   memberSignatures?: MemberSignature[];
   /** spec 33 П21: each add-on module's own data by module key (its shape is the module's: ModuleDef.load reads it,

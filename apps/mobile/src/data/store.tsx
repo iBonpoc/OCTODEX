@@ -6,6 +6,8 @@
  * Every mutation returns `undo` for the 5-second "Undo" toast (DS rule 10). In cloud mode an op is sent
  * only after that window, so Undo simply drops it from the outbox.
  */
+import { applyRefund, type RefundError } from "@/features/payments/refund";
+import { applyAdvance, type AdvanceError } from "@/features/payments/advance";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
@@ -34,9 +36,10 @@ import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
-import { newToken, storedDoc, summarize } from "@/features/estimateDoc";
+import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
+import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { backoffMs, classify, isModuleInactive, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
@@ -203,7 +206,7 @@ interface StoreCtx {
   /** «Просмотрено» on the «not done» card */
   reviewVisitMissed: (visitId: ID) => Undo;
   /** a checklist template, whole (new or changed; archive = archivedAt) */
-  saveChecklistTemplate: (t: ChecklistTemplate) => Undo;
+  saveChecklistTemplate: (t: ChecklistTemplate, opts?: { ifNew?: boolean }) => Undo;
   /** the company's photo rules (owner, admin) */
   setVisitSettings: (patch: Partial<VisitSettings>) => Undo;
   signVisit: (visitId: ID, path: string) => Undo;
@@ -289,6 +292,13 @@ interface StoreCtx {
   payDeposit: (id: ID, method: PaymentMethod, fromClient?: boolean) => Undo;
   /** any amount up to the invoice balance; every payment is a receipt */
   recordPayment: (invoiceId: ID, amountCents: number, method: PaymentMethod, reference?: string, fromClient?: boolean) => Undo;
+  /** 20д: the DEMO's refund only (features/payments/refund.ts applyRefund — the database's rules); in the cloud it does
+   *  nothing and says so: there the server refunds (cloud/refund.ts), then refresh(). No undo — money that left is gone;
+   *  the sheet asks first (rule 5). null — done, else our word why not. */
+  refundPaymentDemo: (paymentId: ID, amountCents: number) => RefundError | null;
+  /** spec 35 §4г: the DEMO's apply of a client's advance to an invoice (features/payments/advance.ts applyAdvance — the
+   *  database's rules); in the cloud the server applies (cloud/advance.ts), then refresh(). null — done, else our word. */
+  applyAdvanceDemo: (advanceId: ID, invoiceId: ID) => AdvanceError | null;
   /** progress (by stage) or final balance invoice for a job */
   issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo;
   /** create or update a universal estimate (draft) */
@@ -307,6 +317,11 @@ interface StoreCtx {
   saveCustomerPeople: (id: ID, people: Person[]) => Undo;
   setCustomerTags: (id: ID, tagIds: ID[]) => Undo;
   setCustomerStatus: (id: ID, status: CustomerStatus, reason?: string) => Undo;
+  /** step 17 C3 (docs/specs/04 §13): dropId's people, properties, leads, documents and money move to keepId; dropId is
+   *  archived and merged. Owner / admin only (server: public.merge_customers). «Отменить» works until the op is sent. */
+  mergeCustomers: (keepId: ID, dropId: ID) => Undo;
+  /** «Не дубль»: the pair is not shown as a possible duplicate again (customers.not_duplicate_ids of aId) */
+  markNotDuplicate: (aId: ID, bId: ID) => Undo;
   /** add or edit a company tag (hiding = active: false; a tag is never deleted) */
   saveTag: (t: Omit<Tag, "id" | "position"> & { id?: ID; position?: number }) => { id: ID; undo: Undo };
   /** directions of the business (docs/specs/11-trade.md): add, rename, reorder, archive / bring back — never delete */
@@ -403,11 +418,6 @@ function withPayment(d: DB, p: Payment, demo: boolean): DB {
     ),
   };
 }
-/** Fresh ids for options/lines when a sent estimate is edited (the sent version stays immutable in the database). */
-const reId = (doc: EstimateDoc): EstimateDoc => ({
-  ...doc,
-  options: doc.options.map((o) => ({ ...o, id: uid(), lines: o.lines.map((l) => ({ ...l, id: uid() })) })),
-});
 const costsOf = (doc: EstimateDoc): Record<string, number> =>
   Object.fromEntries(doc.options.flatMap((o) => o.lines.filter((l) => l.unitCostCents !== undefined).map((l) => [l.id, l.unitCostCents!])));
 
@@ -784,7 +794,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // silently: it stays as «не записано на сервере» until the person says «Понятно» (docs/specs/23 §3)
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
-            const rej = rejectedOf(item, msg, Date.now(), w);
+            const rej = rejectedOf(item, msg, Date.now(), w, (e as { hint?: unknown } | null)?.hint);
             if (rej) setRejected((prev) => [...freshRejected(prev, Date.now()).filter((x) => x.id !== rej.id), rej]);
           } else {
             outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...x, tries: item.tries + 1, error: msg } : x));
@@ -1272,17 +1282,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return () =>
           void mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: undefined, checklistReviewedBy: undefined })), { k: "chk.visit.review", visitId, at: null });
       },
-      saveChecklistTemplate: (t) => {
+      saveChecklistTemplate: (t, opts) => {
         const clean = cleanTemplate(t);
         // no name: the server would refuse it; the old server has no templates
         if (!clean || !canEditTemplates(role) || dbRef.current.checklistLegacy) return noop;
+        // a starter (ifNew) already on the phone: nothing (a second tap, a second phone's after the next read)
+        if (opts?.ifNew && (dbRef.current.checklistTemplates ?? []).some((x) => x.id === clean.id)) return noop;
         return mutate(
           "checklist.template",
           (d) => {
             const list = d.checklistTemplates ?? [];
             return { ...d, checklistTemplates: list.some((x) => x.id === clean.id) ? list.map((x) => (x.id === clean.id ? clean : x)) : [...list, clean] };
           },
-          { k: "chk.template.save", template: clean },
+          { k: "chk.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true } : {}) },
         );
       },
       setVisitSettings: (patch) => {
@@ -1688,6 +1700,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return inv ? recordPayment(id, inv.totalCents - inv.paidCents, method) : () => {};
       },
       recordPayment: (invoiceId, amountCents, method, reference, fromClient) => recordPayment(invoiceId, amountCents, method, reference, fromClient),
+      refundPaymentDemo: (paymentId, amountCents) => {
+        const r = applyRefund(dbRef.current, paymentId, amountCents, { mode: modeRef.current, appRole: role });
+        if (!r.ok) return r.error;
+        mutate("payment.refundDemo", (d) => ({ ...d, payments: r.payments, invoices: r.invoices, advances: r.advances }));   // no op: never sent anywhere
+        return null;
+      },
+      applyAdvanceDemo: (advanceId, invoiceId) => {
+        const r = applyAdvance(dbRef.current, advanceId, invoiceId, { mode: modeRef.current, appRole: role });
+        if (!r.ok) return r.error;
+        mutate("payment.advanceDemo", (d) => ({ ...d, payments: r.payments, invoices: r.invoices, advances: r.advances }));   // no op
+        return null;
+      },
       issueInvoice: (jobId, kind, amountCents, title) => {
         const d0 = dbRef.current;
         const job = d0.jobs.find((j) => j.id === jobId);
@@ -1753,7 +1777,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
         if (prev?.status === "approved") return () => {};
-        const doc = prev && prev.status !== "draft" ? reId(doc0) : doc0;
+        const { doc, linesFrom } = docForSave(prev?.status, doc0, uid);
         const sum = summarize(doc);
         const versionId = uid();
         return mutate(
@@ -1775,7 +1799,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               : {};
             return { ...d, ...used, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
-          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
+          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), ...(linesFrom ? { linesFrom } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
         );
       },
       approveEstimate: (id, a) => {
@@ -1901,6 +1925,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, status, statusReason: status === "do_not_service" ? reason : undefined } : c)) }),
           { k: "customer.status", id, status, reason: status === "do_not_service" ? reason : undefined },
         ),
+      // a repeat (a double tap, the pair already merged / marked) queues nothing: a second op would outlive its «Отменить»
+      mergeCustomers: (keepId, dropId) => {
+        if (mergeCustomersDb(dbRef.current, keepId, dropId) === dbRef.current) return () => {};
+        return mutate("customer.merge", (d) => mergeCustomersDb(d, keepId, dropId), { k: "customer.merge", keepId, dropId });
+      },
+      markNotDuplicate: (aId, bId) => {
+        if (markNotDuplicateDb(dbRef.current, aId, bId) === dbRef.current) return () => {};
+        return mutate("customer.notDup", (d) => markNotDuplicateDb(d, aId, bId), { k: "customer.notDup", id: aId, otherId: bId });
+      },
       saveServiceCategory: (cat) => {
         const id = cat.id ?? uid();
         const list = dbRef.current.serviceCategories;

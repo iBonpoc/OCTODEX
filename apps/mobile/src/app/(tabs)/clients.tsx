@@ -1,8 +1,9 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { canImportClients } from "@/features/client/importRun";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
-import { canMarkNoService, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
+import { canMarkNoService, canServe, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
 import { Button, IconButton } from "@/ui/controls";
@@ -13,8 +14,13 @@ import { CardList, Empty, ListRow, Screen } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { CardGrid, ListCard, ListCardHeader, StatusPicker } from "@/ui/listCard";
+import { canSeeClientDups, clientDuplicates } from "@/features/clientDuplicates";
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
+import { ListPanel } from "@/ui/listPanel";
+import { Fab } from "@/nav/Fab";
+import { useListPanel } from "@/nav/listPanel";
+import { ClientCardBody } from "@/features/client/ClientCard";
 import { space } from "@octo/design-tokens";
 import type { Customer, CustomerStatus } from "@/data/types";
 
@@ -23,6 +29,8 @@ type Filter = "all" | "owes" | "estimate" | "prospect" | "archived";
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 /** desktop row columns (docs/specs/06-list-cards.md §5 «Клиенты») */
 const COLUMNS: FactKey[] = ["phone", "addr", "last"];
+/** with the panel open the row keeps one column of details (06 §4) */
+const COLUMNS_PANEL: FactKey[] = ["phone"];
 
 /** Client list (each client a card): search by name, phone or address; filters; new client by hand. */
 export default function Clients() {
@@ -37,6 +45,12 @@ export default function Clients() {
   // what was kept may not fit any more: a role without that filter, a tag switched off or deleted
   const tagIds = keptTags.filter((id) => db.tags.some((x) => x.id === id && x.active));
   const owes = (id: string) => clientMoneyOf(db, id).owesCents > 0;
+  // step 17 C3 (docs/specs/04 §13): possible duplicates — the office's mark; found on the phone, without the network
+  const dups = useMemo(
+    () => (canSeeClientDups(role) ? clientDuplicates(db) : new Map<string, unknown[]>()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the clients and their properties decide
+    [role, db.customers, db.properties],
+  );
   const openEst = (id: string) => db.estimates.some((e) => e.customerId === id && e.status === "sent");
   const pass: Record<Filter, (c: (typeof db.customers)[number]) => boolean> = {
     all: (c) => statusOf(c) === "active" || statusOf(c) === "do_not_service",
@@ -55,6 +69,10 @@ export default function Clients() {
     .filter((c) => tagIds.length === 0 || (c.tagIds ?? []).some((x) => tagIds.includes(x)))
     .sort((a, b) => a.name.localeCompare(b.name));
   const { device } = useDevice();
+  // 1280: the open card beside the list, `/clients?open=<id>` (spec 06 «Панель 1280», nav/listPanel.ts)
+  const panel = useListPanel(list.map((c) => c.id), (id) => `/client/${id}`, (id) => clients.some((c) => c.id === id));
+  const { desktop, openId } = panel;
+  const openC = openId ? clients.find((c) => c.id === openId) : undefined;
   const toast = useToast();
   const store = useStore();
   const [picking, setPicking] = useState<Customer | null>(null);
@@ -89,7 +107,14 @@ export default function Clients() {
         valueLabel={figure ? t(figure.label) : undefined}
         // an active client has no chip (spec 06 §5); prospects, archive, «do not service» do — tappable when it can change
         status={st !== "active" ? { tone: clientStatusChip[st].s, label: t(clientStatusChip[st].l), onPress: office && canChangeStatus("customer", st) ? () => setPicking(c) : undefined } : undefined}
-        signs={overdue ? [{ tone: "bad", label: t("fix.client.overdue", { amount: moneyFmt(overdue.cents), d: overdue.days }) }] : undefined}
+        signs={
+          overdue || dups.get(c.id)?.length
+            ? [
+                ...(overdue ? [{ tone: "bad" as const, label: t("fix.client.overdue", { amount: moneyFmt(overdue.cents), d: overdue.days }) }] : []),
+                ...(dups.get(c.id)?.length ? [{ tone: "warn" as const, label: t("clientDup.sign") }] : []),
+              ]
+            : undefined
+        }
         tags={[...tagsOf(db, c).slice(0, 3).map((x) => tagLabel(x, t)), ...(open > 0 ? [t("card.tag.estimateSent", { n: open })] : [])]}
         facts={{
           num: c.number,
@@ -99,9 +124,10 @@ export default function Clients() {
           last: last ? [t(last.title), last.detail, day(last.at)].filter(Boolean).join(" · ") : undefined,
         }}
         contact={{ phone: c.phone, email: c.email, addr }}
-        density={device === "desktop" ? "row" : "rich"}
-        columns={COLUMNS}
-        onPress={() => router.push(`/client/${c.id}`)}
+        density={desktop ? "row" : "rich"}
+        columns={openId ? COLUMNS_PANEL : COLUMNS}
+        selected={c.id === openId}
+        onPress={() => panel.open(c.id)}
       />
     );
   };
@@ -112,7 +138,33 @@ export default function Clients() {
       hintKey="clients"
       subtitle={t("clients.count", { n: count("all") })}
       fab="clients"
-      right={office ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
+      // «…» holds only «Импорт из CSV»: the office's (owner, admin, office), not sales (04 §14.4)
+      right={canImportClients(role) ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
+      aside={
+        openC ? (
+          <ListPanel
+            title={openC.name}
+            outside={panel.outside}
+            // as the client's screen: «Изменить» (office) and «＋» with this client
+            actions={
+              office || canServe(db, openC.id) ? (
+                <>
+                  {office ? (
+                    <View testID="list-panel-edit">
+                      <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${openC.id}`)} />
+                    </View>
+                  ) : null}
+                  {canServe(db, openC.id) ? <Fab placement="header" set="client" ctx={{ customerId: openC.id }} /> : null}
+                </>
+              ) : undefined
+            }
+            onOpen={panel.full}
+            onClose={panel.close}
+          >
+            <ClientCardBody key={openC.id} c={openC} />
+          </ListPanel>
+        ) : undefined
+      }
     >
       {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane of statuses, the tags in the sheet */}
       <FilterBar<Filter>
@@ -144,7 +196,7 @@ export default function Clients() {
         <CardGrid>{list.map(card)}</CardGrid>
       ) : (
         <>
-          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={COLUMNS} value={office ? t("fix.client.balance") : undefined} /> : null}
+          {desktop ? <ListCardHeader title={t("card.fact.client")} columns={openId ? COLUMNS_PANEL : COLUMNS} value={office ? t("fix.client.balance") : undefined} /> : null}
           {groups.map(([letter, cs]) => (
           <View key={letter} style={{ gap: space[2] }}>
             <T v="caption" w="semibold" tone="mut">{letter}</T>

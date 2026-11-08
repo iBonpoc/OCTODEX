@@ -24,8 +24,14 @@ type T = ReturnType<typeof useI18n>["t"];
 
 /** desktop row columns (spec 06 §5) */
 export const LEAD_COLUMNS: FactKey[] = ["phone", "src", "svc", "next"];
+export const LEAD_COLUMNS_PANEL: FactKey[] = ["phone"];
 export const EST_COLUMNS: FactKey[] = ["addr", "work", "valid"];
 export const INV_COLUMNS: FactKey[] = ["addr", "work", "due"];
+/** with the panel open on 1280 the row keeps one column of details (06 §4, «Панель 1280») */
+export const EST_COLUMNS_PANEL: FactKey[] = ["work"];
+export const INV_COLUMNS_PANEL: FactKey[] = ["due"];
+/** a list with the panel on 1280 (nav/listPanel.ts): the row opens the panel and is marked when open */
+export type PanelRow = { selected: boolean; open: () => void; narrow: boolean };
 export const PAY_COLUMNS: FactKey[] = ["num", "method"];
 
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -43,9 +49,10 @@ export function leadCardSign(db: DB, l: Lead, t: T): CardSign | undefined {
   return undefined;
 }
 
-export function LeadListCard({ l, density, showResp, onStatus, onContact, onReply }: {
+export function LeadListCard({ l, density, showResp, onStatus, onContact, onReply, panel }: {
   l: Lead;
   density: Density;
+  panel?: PanelRow;
   /** «Responsible» only when the company has a team and the list is not «mine» */
   showResp?: boolean;
   onStatus?: () => void;
@@ -82,13 +89,14 @@ export function LeadListCard({ l, density, showResp, onStatus, onContact, onRepl
       onContact={onContact}
       action={l.status === "new" && onReply ? { label: t("inbox.reply"), onPress: onReply } : undefined}
       density={density}
-      columns={LEAD_COLUMNS}
-      onPress={() => router.push(`/lead/${l.id}`)}
+      columns={panel?.narrow ? LEAD_COLUMNS_PANEL : LEAD_COLUMNS}
+      selected={panel?.selected}
+      onPress={panel?.open ?? (() => router.push(`/lead/${l.id}`))}
     />
   );
 }
 
-export function EstimateListCard({ e, density }: { e: Estimate; density: Density }) {
+export function EstimateListCard({ e, density, panel }: { e: Estimate; density: Density; panel?: PanelRow }) {
   const { db } = useStore();
   const { t, money, day } = useI18n();
   const c = db.customers.find((x) => x.id === e.customerId);
@@ -125,13 +133,14 @@ export function EstimateListCard({ e, density }: { e: Estimate; density: Density
       // contact buttons only open the phone / map / mail: an estimate has no «touch» in the store, nothing is written
       contact={{ phone: c?.phone, email: c?.email, addr }}
       density={density}
-      columns={EST_COLUMNS}
-      onPress={() => router.push(`/estimate/${e.id}`)}
+      columns={panel?.narrow ? EST_COLUMNS_PANEL : EST_COLUMNS}
+      selected={panel?.selected}
+      onPress={panel?.open ?? (() => router.push(`/estimate/${e.id}`))}
     />
   );
 }
 
-export function InvoiceListCard({ i, density }: { i: Invoice; density: Density }) {
+export function InvoiceListCard({ i, density, panel }: { i: Invoice; density: Density; panel?: PanelRow }) {
   const { db } = useStore();
   const { t, money, day } = useI18n();
   const c = db.customers.find((x) => x.id === i.customerId);
@@ -163,8 +172,9 @@ export function InvoiceListCard({ i, density }: { i: Invoice; density: Density }
       // secondary: the one accent of the screen stays the main action of the screen
       action={open ? { label: t("visit.recordPayment"), icon: "wallet", onPress: () => router.push(`/invoice/${i.id}`) } : undefined}
       density={density}
-      columns={INV_COLUMNS}
-      onPress={() => router.push(`/invoice/${i.id}`)}
+      columns={panel?.narrow ? INV_COLUMNS_PANEL : INV_COLUMNS}
+      selected={panel?.selected}
+      onPress={panel?.open ?? (() => router.push(`/invoice/${i.id}`))}
     />
   );
 }
