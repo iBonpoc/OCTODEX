@@ -103,7 +103,8 @@
 | «Модуль Gutters» №1 | `session_015CqH689yfpp9T3kx6wNs91` | архив (памятка ниже); #347, #348, #350 ведёт руководитель |
 | «Модуль Gutters» №2 | `session_015CqH6AXE9eebe7W7zjS2tg` | архив (памятка ниже); #353, #354, #356 ведёт руководитель |
 | «Модуль Gutters» №3 | `session_015CqH6A9Dq1b3G4TvHHz6Mq` | архив (памятка ниже); #358, #359 ведёт руководитель |
-| «Модуль Gutters» №4 | `session_015CqH685UZ23nYegED79Hd2` | M4 холст + проверка скорости; затем памятка → №5 на M5 экраны замера |
+| «Модуль Gutters» №4 | `session_015CqH685UZ23nYegED79Hd2` | архив (памятка ниже); #362 ведёт руководитель |
+| «Модуль Gutters» №5 | `session_015CqH66Zjcahu6nEV7tGRgH` | M5: замер ↔ module.op и таблицы, входы из заявки/объекта/«Замерить здесь», шторки атрибутов, рулетка, фото; e2e с 145, T94 |
 | «Каркас» №9 | `session_015CqH68bN9NqicpEbDDiUbs` | архив (памятка выше) |
 
 **Документы, долг руководителя** (не успел):
@@ -115,6 +116,14 @@
 
 Строки карты §5, пуши: PushOutbox — триггеры → pending → push_claim → sending → sent (Expo принял хоть одному); 429/5xx/сеть → pending через 1/2/4/8 мин; 5 попыток → failed (или sent, если хоть один телефон получил); pending → skipped (not_member / no_device / expired >24 ч / off); sending >10 мин → pending, попытки кончились → failed stuck. PushDevice — живой → revoked_at (signed_out / not_registered / too_many >10); токен переходит к вошедшему; удаление аккаунта стирает. Стыки: S1, S4, S4a, S7, S8, S9, S9a, S9b, S12, S22. Тесты T80–T85, e2e 124–125.
 
+### Памятка «Модуль Gutters» №4 (session_015CqH685UZ23nYegED79Hd2, 08.11, архив)
+- Влито: #361 M4a (стенд скорости, маршрут /module/<key>/<screen>, токены drawing.*, e2e 143). Открыт, ведёт руководитель: #362 M4b (холст, e2e 144).
+- Основателю после выхода сборки ≥361 в Expo Go — замер скорости (инструкция в спеке П20.6). Expo Go ≠ release — принятый риск. Не прошло → этап 0 Skia (правило 17), меняется только canvas/SvgPainter.tsx.
+- Спека: docs/specs/33-gutters-canvas.md (П20). В 33 нужна строка-ссылка на П18, П19, П20.
+- Устройство: canvas/scene.ts → SvgPainter (memo); CanvasView — сдвиг/зум на UI-потоке; edit.ts — чистые правки и история; model.ts — строки П19 + diffElements + MeasurementStore; draftStore.ts — очередь записей; localStore.ts — AsyncStorage (заменить на module.op в M5).
+- Долги: возможный рывок на кадр при фиксации зума (проверить на телефоне); инструменты модуля видны на карточке и у выключенного модуля (П20.3); TEST_RATES — до M8.
+- Уроки: у SVG в Playwright нет innerText → textContent; тост «Отменить» игнорирует нажатие первые 300 мс; RNGH v3 — точка касания в onBegin, в onDeactivate проверять e.canceled; модуль с RN-импортами не тянуть в vitest.
+- Номера: e2e 143, 144 взяты; следующие 145+.
 ### Памятка «Модуль Gutters» №3 (session_015CqH6A9Dq1b3G4TvHHz6Mq, 07.11, архив)
 - Открыты, ведёт руководитель: #358 M1 детали (gutterKits.ts — наборы креплений/расходников, gutterParts.ts; 87+6 тестов), #359 M2 таблицы замера (gutter_measurements/_elements/_revisions, миграция 20261107180000, T92–T93).
 - Спеки: docs/specs/33-gutters-parts.md (П18), docs/specs/33-gutters-measurement-db.md (П19); в 33 нужна строка-ссылка на оба.
