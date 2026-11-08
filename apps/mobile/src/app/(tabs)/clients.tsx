@@ -63,7 +63,7 @@ export default function Clients() {
   // 1280: the open card beside the list, `/clients?open=<id>` (spec 06 «Панель 1280», nav/listPanel.ts)
   const panel = useListPanel(list.map((c) => c.id), (id) => `/client/${id}`, (id) => clients.some((c) => c.id === id));
   const { desktop, openId } = panel;
-  const openC = openId ? list.find((c) => c.id === openId) : undefined;
+  const openC = openId ? clients.find((c) => c.id === openId) : undefined;
   const toast = useToast();
   const store = useStore();
   const [picking, setPicking] = useState<Customer | null>(null);

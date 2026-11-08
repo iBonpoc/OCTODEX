@@ -8,7 +8,7 @@ import type { DB, Estimate, EstimateStatus } from "@/data/types";
 import { ESTIMATE_GROUPS, estimateGroup, inEstimateFilter, type EstimateFilter, type EstimateGroup } from "@/features/listGroups";
 import { CardGrid, ListCardHeader } from "@/ui/listCard";
 import { EST_COLUMNS, EST_COLUMNS_PANEL, EstimateListCard } from "@/features/listCards";
-import { EstimateCardBody } from "@/features/EstimateCard";
+import { EstimateCardBody, estimateSubtitle } from "@/features/EstimateCard";
 import { useListPanel } from "@/nav/listPanel";
 import { ListPanel } from "@/ui/listPanel";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -65,7 +65,11 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
     <EstimateListCard key={e.id} e={e} density={device === "desktop" ? "row" : "rich"} panel={{ selected: e.id === panel.openId, open: () => panel.open(e.id), narrow: !!panel.openId }} />
   );
   const aside = openE ? (
-    <ListPanel title={[openE.number, openE.title].filter(Boolean).join(" · ") || t("est.detail")} onOpen={panel.full} onClose={panel.close}>
+    <ListPanel
+      title={[openE.number, openE.title].filter(Boolean).join(" · ") || t("est.detail")}
+      // as the estimate's screen: the client and the address under the title
+      subtitle={estimateSubtitle(db, openE)}
+      onOpen={panel.full} onClose={panel.close}>
       <EstimateCardBody key={openE.id} e={openE} />
     </ListPanel>
   ) : undefined;

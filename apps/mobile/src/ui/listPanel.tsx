@@ -12,7 +12,7 @@ import { Button, IconButton } from "./controls";
 import { RowView } from "./surfaces";
 import { T } from "./primitives";
 
-export function ListPanel({ title, onOpen, onClose, children }: { title: string; onOpen: () => void; onClose: () => void; children: ReactNode }) {
+export function ListPanel({ title, subtitle, onOpen, onClose, children }: { title: string; subtitle?: string; onOpen: () => void; onClose: () => void; children: ReactNode }) {
   const { c } = useTheme();
   const { t } = useI18n();
   return (
@@ -23,6 +23,11 @@ export function ListPanel({ title, onOpen, onClose, children }: { title: string;
             <T v="title" numberOfLines={2}>
               {title}
             </T>
+            {subtitle ? (
+              <T v="body" tone="mut" numberOfLines={2}>
+                {subtitle}
+              </T>
+            ) : null}
           </View>
           <RowView gap={space[1]} style={{ flexShrink: 0 }}>
             <View testID="list-panel-open">

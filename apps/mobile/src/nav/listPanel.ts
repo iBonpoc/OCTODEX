@@ -52,7 +52,7 @@ export function useListPanel(ids: readonly string[], href: (id: string) => strin
   const desktop = device === "desktop";
   const { open: param } = useLocalSearchParams<{ open?: string }>();
   const raw = typeof param === "string" ? param : undefined;
-  const openId = panelId(raw, ids, desktop);
+  const openId = panelId(raw, desktop, known);
   const setOpen = (id: string | undefined) => router.setParams({ open: id });
   usePanelKeys(!!openId, (k) => setOpen(k === "close" ? undefined : neighbor(ids, openId, k === "down" ? 1 : -1)));
   // a link with ?open= opened on a narrower window: the card's own screen, once, as a tap there; the list under it
@@ -63,7 +63,7 @@ export function useListPanel(ids: readonly string[], href: (id: string) => strin
     router.push(href(raw));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
-  // 1280: the open card fell out of the list (a filter, the archive): the panel closes and the address says so
+  // 1280: the card is gone for this person (deleted, another role): the panel closes and the address says so
   const stale = desktop && !!raw && !openId;
   useEffect(() => {
     if (stale) router.setParams({ open: undefined });

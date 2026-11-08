@@ -90,7 +90,7 @@ export default function Invoices() {
       back={back}
       aside={
         openInv ? (
-          <ListPanel title={`${t("inv.title")} ${openInv.number ?? ""}`.trim()} onOpen={panel.full} onClose={panel.close}>
+          <ListPanel title={`${t("inv.title")} ${openInv.number ?? ""}`.trim()} subtitle={db.customers.find((c) => c.id === openInv.customerId)?.name} onOpen={panel.full} onClose={panel.close}>
             <InvoiceCardBody key={openInv.id} inv={openInv} />
           </ListPanel>
         ) : undefined

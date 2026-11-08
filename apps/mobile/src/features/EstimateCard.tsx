@@ -5,7 +5,7 @@ import { router } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { space, type StatusName, size } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import type { Estimate, PaymentMethod } from "@/data/types";
+import type { DB, Estimate, PaymentMethod } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { portalFromEstimate } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
@@ -29,7 +29,13 @@ import { canCountersign, canManageLink, hisWarning, mySignature } from "@/featur
 import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
 
 
-/** Estimate: send by link (SMS/email), client view, PDF, on-site signature, deposit → job in the plan. */
+/** under the estimate's title (its screen and the panel on 1280): «client · address, city» */
+export function estimateSubtitle(db: DB, e: Estimate): string {
+  const customer = db.customers.find((c) => c.id === e.customerId);
+  const property = db.properties.find((p) => p.id === e.propertyId);
+  return [customer?.name, [property?.address, property?.city].filter(Boolean).join(", ")].filter(Boolean).join(" · ");
+}
+
 /**
  * The estimate card's body: status, lines, send / PDF / on-site signature, deposit → job. The same body on the
  * estimate's own screen (`/estimate/<id>`) and in the panel beside the list on 1280 (`/estimates?open=<id>`,
