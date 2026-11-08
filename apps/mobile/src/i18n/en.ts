@@ -1004,6 +1004,7 @@ export const en: Dict = {
   "pay.cash": "Cash",
   "pay.check": "Check",
   "pay.zelle": "Zelle",
+  "pay.ach": "Bank (ACH)",
   "board.open": "Open",
   "board.noEstimates": "No estimates",
   "sales.title": "Sales",
@@ -2923,8 +2924,15 @@ export const en: Dict = {
   "intake.set.heldTitle": "Request waiting",
   "intake.set.reason.ip_limit": "Many requests from one address in an hour — looks like spam.",
   "intake.set.reason.daily_limit": "The form's daily limit is used up.",
+  "intake.set.reason.too_fast": "The form was filled too fast — bots do that. Check and decide.",
+  "intake.set.reason.no_ip": "The server could not see the sender's address — the limits could not count it. Check and decide.",
+  "intake.set.reason.old_link": "The request came by the old link (it was changed). Update the link on your site.",
+  "intake.set.reason.net_limit": "Many requests from one network in an hour — looks like spam.",
   "intake.set.reason.other": "The request is held.",
   "intake.set.accept": "Accept — make a lead",
   "intake.set.reject": "Refuse",
   "tl.intake": "Repeat request (unconfirmed)",
+  // «Шаблоны чек-листов» CH2b: «Не сделано» in «Требует внимания» (docs/specs/08 §8)
+  // step 14 CH3 (чек-листы): the office edits a visit's checklist
+  // step 14 CH3b: starter checklist templates of a module
 };

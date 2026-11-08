@@ -1004,6 +1004,7 @@ export const es: Dict = {
   "pay.cash": "Efectivo",
   "pay.check": "Cheque",
   "pay.zelle": "Zelle",
+  "pay.ach": "Banco (ACH)",
   "board.open": "Abiertos",
   "board.noEstimates": "Sin presupuestos",
   "sales.title": "Ventas",
@@ -2923,8 +2924,15 @@ export const es: Dict = {
   "intake.set.heldTitle": "Solicitud en espera",
   "intake.set.reason.ip_limit": "Muchas solicitudes desde una dirección en una hora: parece spam.",
   "intake.set.reason.daily_limit": "Se agotó el límite diario del formulario.",
+  "intake.set.reason.too_fast": "El formulario se llenó demasiado rápido, como lo hacen los bots. Revise y decida.",
+  "intake.set.reason.no_ip": "El servidor no vio la dirección del remitente; los límites no pudieron contarla. Revise y decida.",
+  "intake.set.reason.old_link": "La solicitud llegó por el enlace anterior (se cambió). Actualice el enlace en su sitio.",
+  "intake.set.reason.net_limit": "Muchas solicitudes desde una red en una hora: parece spam.",
   "intake.set.reason.other": "La solicitud está en espera.",
   "intake.set.accept": "Aceptar — crear cliente potencial",
   "intake.set.reject": "Rechazar",
   "tl.intake": "Solicitud repetida (sin confirmar)",
+  // «Шаблоны чек-листов» CH2b: «Не сделано» in «Требует внимания» (docs/specs/08 §8)
+  // step 14 CH3 (чек-листы): the office edits a visit's checklist
+  // step 14 CH3b: starter checklist templates of a module
 };
