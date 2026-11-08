@@ -11014,7 +11014,8 @@ select tst.ok(app.stripe_event_apply('{"id":"evt_T127s","type":"payment_intent.s
 :as_super
 select tst.ok((select count(*) = 1 from public.payments where idempotency_key = 'stripe:pi_T126a'), 'T141 …one payment');
 \echo 'T141 Stripe journal ok'
-=======
+
+-- ======================================================================================================================
 -- T142 — the tech and the client link, step 1 (spec 35 §4д п.10, migration 20261109220000)
 -- ======================================================================================================================
 :as_super
