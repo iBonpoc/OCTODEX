@@ -24,6 +24,8 @@ export interface Opened {
   payment_intent: string;
   company_id: string;
   stripe_refund_id: string | null;
+  /** seconds since the row was made, by the database's clock */
+  age_s: number;
   fee_cents: number;
   platform_fee_cents: number;
   idempotency_key: string;
@@ -41,9 +43,12 @@ export interface RefundDeps {
   userOf: (jwt: string) => Promise<string | null>;
   /** public.stripe_refund_open as service_role; throws DbError */
   open: (userId: string, b: RefundBody) => Promise<Opened>;
+  /** public.stripe_refund_inflight as service_role: the refund of this payment that has not reached Stripe yet, or null */
+  inflight: (userId: string, paymentId: string) => Promise<Pick<Opened, "id" | "amount_cents" | "age_s" | "account_id" | "payment_intent" | "status"> | null>;
   /** public.stripe_refund_settle as service_role */
   settle: (refundId: string, stripe: Record<string, unknown>) => Promise<Record<string, unknown>>;
-  stripe: ((path: string, form: Record<string, string>, idempotencyKey: string, account: string) => Promise<StripeAnswer>) | null;
+  /** one call of the Stripe API on the connected account; form and key only for POST */
+  stripe: ((method: "GET" | "POST", path: string, account: string, form?: Record<string, string>, idempotencyKey?: string) => Promise<StripeAnswer>) | null;
   keyMode: "test" | "live" | null;
   log?: (msg: string) => void;
 }
@@ -73,6 +78,8 @@ export const CORS: Record<string, string> = {
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY = /^[A-Za-z0-9:_-]{8,100}$/;
 const RE = /^(re|pyr)_[A-Za-z0-9]{1,64}$/;
+/** a refund row older than this that never reached Stripe is asked about at Stripe before anything else (its call times out in 10 s) */
+export const STALE_S = 120;
 const KINDS = ["rescission", "cancellation", "goodwill", "other"] as const;
 /** the database's refusals the person can act on (raise exception '<word>') */
 export const REFUSALS = ["refund_above_available", "refund_disputed", "refund_in_progress", "refund_not_refundable", "refund_not_stripe"] as const;
@@ -119,15 +126,57 @@ export async function handleRefund(req: Req, deps: RefundDeps): Promise<Res> {
   if (!deps.stripe || !deps.keyMode) return json(200, { error: "not_configured" });
   if (deps.keyMode !== "test") return json(200, { error: "live_refused" });
 
+  const stripe = deps.stripe;
+  const refused = (e: unknown, what: string) => {
+    if (e instanceof DbError && e.code === "42501") return json(403, { error: "not_allowed" });
+    const word = e instanceof DbError ? REFUSALS.find((w) => e.text.includes(w)) : undefined;
+    if (word) return json(200, { error: word });
+    deps.log?.(`stripe-refund: ${what} failed ${e instanceof DbError ? e.code ?? "" : ""}`.trim());
+    return json(500, { error: "failed" });
+  };
+
+  // A refund of this payment that never reached Stripe a while ago (a timeout, a closed tab): did Stripe make it? Asked by
+  // its metadata, so a retry after Stripe forgot the Idempotency-Key (24 h) never makes a second real refund (security 20д №4),
+  // and a stuck row never blocks another amount for ever (№5).
+  let inf: Awaited<ReturnType<RefundDeps["inflight"]>>;
+  try {
+    inf = await deps.inflight(uid, body.paymentId);
+  } catch (e) {
+    return refused(e, "inflight");
+  }
+  if (inf && inf.age_s >= STALE_S) {
+    let l: StripeAnswer;
+    try {
+      l = await stripe("GET", `/v1/refunds?payment_intent=${encodeURIComponent(inf.payment_intent)}&limit=100`, inf.account_id);
+    } catch {
+      return json(200, { error: "retry_later" });
+    }
+    const list = l.status === 200 && l.body && Array.isArray(l.body.data) ? (l.body.data as Record<string, unknown>[]) : null;
+    if (!list) {
+      deps.log?.(`stripe-refund: list ${l.status}`);
+      return json(200, { error: "retry_later" });
+    }
+    const made = list.find((x) => (x.metadata as Record<string, unknown> | undefined)?.octo_refund_id === inf!.id);
+    try {
+      if (made) {
+        const kept = await deps.settle(inf.id, made);
+        if (inf.amount_cents === body.amountCents) return json(200, { refund: shown(kept) });   // that was this very refund
+      } else if (l.body!.has_more === true) {
+        return json(200, { error: "retry_later" });
+      } else if (inf.amount_cents !== body.amountCents) {
+        await deps.settle(inf.id, { error: "not_sent" });   // Stripe never made it: the other amount may go
+      }
+    } catch {
+      deps.log?.("stripe-refund: settle failed");
+      return json(200, { error: "retry_later" });
+    }
+  }
+
   let o: Opened;
   try {
     o = await deps.open(uid, body);
   } catch (e) {
-    if (e instanceof DbError && e.code === "42501") return json(403, { error: "not_allowed" });
-    const word = e instanceof DbError ? REFUSALS.find((w) => e.text.includes(w)) : undefined;
-    if (word) return json(200, { error: word });
-    deps.log?.(`stripe-refund: open failed ${e instanceof DbError ? e.code ?? "" : ""}`.trim());
-    return json(500, { error: "failed" });
+    return refused(e, "open");
   }
   // already answered (a repeat after the answer, or the webhook was first): never a second call to Stripe
   if (o.status !== "pending" || o.stripe_refund_id) return json(200, { refund: shown(o as unknown as Record<string, unknown>) });
@@ -143,7 +192,7 @@ export async function handleRefund(req: Req, deps: RefundDeps): Promise<Res> {
   if (o.platform_fee_cents > 0) form.refund_application_fee = "true";
   let r: StripeAnswer;
   try {
-    r = await deps.stripe("/v1/refunds", form, o.idempotency_key, o.account_id);
+    r = await stripe("POST", "/v1/refunds", o.account_id, form, o.idempotency_key);
   } catch {
     deps.log?.("stripe-refund: no answer");
     return json(200, { error: "retry_later", refund: shown(o as unknown as Record<string, unknown>) });

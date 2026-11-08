@@ -17,14 +17,13 @@ async function rpc<T>(name: string, args: Record<string, unknown>): Promise<T> {
 }
 const keyMode = !KEY ? null : /^(sk|rk)_test_/.test(KEY) ? "test" : "live";
 
-async function stripe(path: string, form: Record<string, string>, idempotencyKey: string, account: string): Promise<StripeAnswer> {
+async function stripe(method: "GET" | "POST", path: string, account: string, form?: Record<string, string>, idempotencyKey?: string): Promise<StripeAnswer> {
+  const headers: Record<string, string> = { Authorization: `Bearer ${KEY}`, "Stripe-Version": STRIPE_VERSION, "Stripe-Account": account };
+  if (form) headers["Content-Type"] = "application/x-www-form-urlencoded";
+  if (idempotencyKey) headers["Idempotency-Key"] = idempotencyKey;
   const r = await fetch(`https://api.stripe.com${path}`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${KEY}`, "Stripe-Version": STRIPE_VERSION, "Stripe-Account": account,
-      "Content-Type": "application/x-www-form-urlencoded", "Idempotency-Key": idempotencyKey,
-    },
-    body: new URLSearchParams(form).toString(),
+    method, headers,
+    body: form ? new URLSearchParams(form).toString() : undefined,
     signal: AbortSignal.timeout(10000),
   });
   return { status: r.status, body: (await r.json().catch(() => null)) as Record<string, unknown> | null };
@@ -39,6 +38,7 @@ Deno.serve(async (req: Request) => {
         p_user_id: userId, p_payment_id: b.paymentId, p_amount_cents: b.amountCents,
         p_reason_kind: b.reasonKind, p_reason: b.reason, p_key: b.key,
       }),
+      inflight: (userId, paymentId) => rpc("stripe_refund_inflight", { p_user_id: userId, p_payment_id: paymentId }),
       settle: (refundId, s) => rpc("stripe_refund_settle", { p_refund_id: refundId, p_stripe: s }),
       stripe: KEY ? stripe : null,
       keyMode,

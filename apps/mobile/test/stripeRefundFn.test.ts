@@ -17,11 +17,12 @@ const req = (o: { method?: string; auth?: string | null; body?: unknown } = {}) 
 });
 const opened = (over: Partial<Opened> = {}): Opened => ({
   id: ROW, payment_id: PAY, amount_cents: 5000, status: "pending", tax_cents: 0, net_cents: 5000, failure_reason: null,
-  account_id: "acct_T1", payment_intent: "pi_T1", company_id: "ca000000-0000-0000-0000-000000000000", stripe_refund_id: null,
+  account_id: "acct_T1", payment_intent: "pi_T1", company_id: "ca000000-0000-0000-0000-000000000000", stripe_refund_id: null, age_s: 0,
   fee_cents: 175, platform_fee_cents: 0, idempotency_key: `octodex-refund-${ROW}`, ...over,
 });
-type Call = { path: string; form: Record<string, string>; idem: string; account: string };
-function deps(o: { open?: Opened | Error; answer?: StripeAnswer | Error; over?: Partial<RefundDeps> } = {}) {
+type Call = { method: string; path: string; form?: Record<string, string>; idem?: string; account: string };
+type Inf = Awaited<ReturnType<RefundDeps["inflight"]>>;
+function deps(o: { open?: Opened | Error; answer?: StripeAnswer | Error; inflight?: Inf | Error; list?: StripeAnswer; over?: Partial<RefundDeps> } = {}) {
   const calls: Call[] = [];
   const settled: Record<string, unknown>[] = [];
   const logs: string[] = [];
@@ -31,9 +32,14 @@ function deps(o: { open?: Opened | Error; answer?: StripeAnswer | Error; over?: 
       if (o.open instanceof Error) throw o.open;
       return o.open ?? opened();
     },
+    inflight: async () => {
+      if (o.inflight instanceof Error) throw o.inflight;
+      return o.inflight ?? null;
+    },
     settle: async (id, s) => (settled.push(s), { id, status: s.error ? "failed" : s.status, amount_cents: 5000, tax_cents: 0, net_cents: 5000, stripe_refund_id: s.id }),
-    stripe: async (path, form, idem, account) => {
-      calls.push({ path, form, idem, account });
+    stripe: async (method, path, account, form, idem) => {
+      calls.push(method === "GET" ? { method, path, account } : { method, path, form, idem, account });
+      if (method === "GET") return o.list ?? { status: 200, body: { data: [], has_more: false } };
       if (o.answer instanceof Error) throw o.answer;
       return o.answer ?? { status: 200, body: { id: "re_T1", status: "succeeded", amount: 5000, payment_intent: "pi_T1" } };
     },
@@ -87,7 +93,7 @@ describe("unit:stripeRefundFn — Stripe", () => {
     const x = deps();
     const r = parse(await handleRefund(req(), x.d));
     expect(x.calls).toEqual([{
-      path: "/v1/refunds", idem: `octodex-refund-${ROW}`, account: "acct_T1",
+      method: "POST", path: "/v1/refunds", idem: `octodex-refund-${ROW}`, account: "acct_T1",
       form: { payment_intent: "pi_T1", amount: "5000", reason: "requested_by_customer", "metadata[octo_refund_id]": ROW, "metadata[company_id]": "ca000000-0000-0000-0000-000000000000" },
     }]);
     expect(r.refund).toMatchObject({ id: ROW, status: "succeeded" });
@@ -96,7 +102,7 @@ describe("unit:stripeRefundFn — Stripe", () => {
   it("our application fee back in proportion only when there is one", async () => {
     const x = deps({ open: opened({ platform_fee_cents: 50 }) });
     await handleRefund(req(), x.d);
-    expect(x.calls[0].form.refund_application_fee).toBe("true");
+    expect(x.calls[0].form?.refund_application_fee).toBe("true");
   });
   it("an answered row is never sent to Stripe again", async () => {
     for (const o of [opened({ status: "succeeded" }), opened({ stripe_refund_id: "re_T1" }), opened({ status: "failed" })]) {
@@ -124,5 +130,47 @@ describe("unit:stripeRefundFn — Stripe", () => {
     const x = deps({ answer: { status: 200, body: { id: "re_T1", livemode: true } } });
     expect(parse(await handleRefund(req(), x.d)).error).toBe("live_refused");
     expect(x.settled).toHaveLength(0);
+  });
+  it("the refund is on its way only a moment: nothing asked at Stripe, the database decides", async () => {
+    const x = deps({ inflight: { id: ROW, amount_cents: 9000, age_s: 5, account_id: "acct_T1", payment_intent: "pi_T1", status: "pending" }, open: new DbError("23514", "refund_in_progress") });
+    expect(parse(await handleRefund(req(), x.d)).error).toBe("refund_in_progress");
+    expect(x.calls).toHaveLength(0);
+  });
+});
+
+describe("unit:stripeRefundFn — a refund that never got an answer (security 20д №4, №5)", () => {
+  const old = (amount: number) => ({ id: ROW, amount_cents: amount, age_s: 3600 * 30, account_id: "acct_T1", payment_intent: "pi_T1", status: "pending" as const });
+  it("Stripe made it after all: kept from Stripe's list, never POSTed again (24 h later too)", async () => {
+    const made = { id: "re_Old", status: "succeeded", amount: 5000, payment_intent: "pi_T1", metadata: { octo_refund_id: ROW } };
+    const x = deps({ inflight: old(5000), list: { status: 200, body: { data: [{ id: "re_X", metadata: {} }, made], has_more: false } } });
+    const r = parse(await handleRefund(req(), x.d));
+    expect(x.calls.map((c) => c.method)).toEqual(["GET"]);
+    expect(x.calls[0]).toMatchObject({ path: "/v1/refunds?payment_intent=pi_T1&limit=100", account: "acct_T1" });
+    expect(x.settled).toEqual([made]);
+    expect(r.refund.status).toBe("succeeded");
+  });
+  it("Stripe never made it, the same amount: one POST with the row's key", async () => {
+    const x = deps({ inflight: old(5000) });
+    await handleRefund(req(), x.d);
+    expect(x.calls.map((c) => c.method)).toEqual(["GET", "POST"]);
+    expect(x.settled).toHaveLength(1);
+  });
+  it("Stripe never made it, another amount: the old row is marked not_sent, the new amount goes", async () => {
+    const x = deps({ inflight: old(9000) });
+    await handleRefund(req(), x.d);
+    expect(x.settled[0]).toEqual({ error: "not_sent" });
+    expect(x.calls.map((c) => c.method)).toEqual(["GET", "POST"]);
+  });
+  it("Stripe cannot be asked, or the list is cut: wait, never POST", async () => {
+    for (const list of [{ status: 500, body: null }, { status: 200, body: { data: [], has_more: true } }] as StripeAnswer[]) {
+      const x = deps({ inflight: old(5000), list });
+      expect(parse(await handleRefund(req(), x.d)).error).toBe("retry_later");
+      expect(x.calls.map((c) => c.method)).toEqual(["GET"]);
+    }
+  });
+  it("another company asking about the payment: 403, nothing told", async () => {
+    const x = deps({ inflight: new DbError("42501", "only owner/admin can refund") });
+    expect((await handleRefund(req(), x.d)).status).toBe(403);
+    expect(x.calls).toHaveLength(0);
   });
 });
