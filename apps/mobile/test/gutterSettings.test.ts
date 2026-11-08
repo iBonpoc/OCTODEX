@@ -2,11 +2,11 @@
 import { describe, expect, it } from "vitest";
 import { computeGutterParts } from "@octo/estimating-engine";
 import { changeDs, changeRun, COLORS, hangerKitsFor, MATERIALS, PROFILES, SIZES_BY_PROFILE, wallKitsFor, wallOf, withCurrent } from "../src/modules/gutters/canvas/attrs";
-import { setDsAttrs, setRunAttrs } from "../src/modules/gutters/canvas/edit";
+import { setCornerMethod, setDsAttrs, setRunAttrs } from "../src/modules/gutters/canvas/edit";
 import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS } from "../src/modules/gutters/canvas/model";
-import { toMeasurement, type Drawing } from "../src/modules/gutters/geometry";
+import { findCorners, toMeasurement, type Drawing } from "../src/modules/gutters/geometry";
 import {
-  choicesFor, colorName, keepsOne, MAX_PALETTE, MODULE_CHOICES, MODULE_OFFER, newDsAttrs, newRunAttrs, PALETTES, readPalette, settingsFit, setSetting,
+  choicesFor, colorName, keepsOne, MAX_PALETTE, MODULE_CHOICES, MODULE_OFFER, newDsAttrs, newRunAttrs, PALETTES, readPalette, readRules, readUse, settingsFit, setSetting, toRulesOverride,
 } from "../src/modules/gutters/settings";
 
 describe("чтение настроек", () => {
@@ -148,5 +148,88 @@ describe("шторка и новые элементы по настройкам 
     const D: Drawing = { runs: [{ id: "r", a: [0, 0], b: [240, 0], attrs: { ...DEFAULT_RUN_ATTRS, mount: "rafter", hanger: "rafter" } }], downspouts: [{ ...DEFAULT_DS_ATTRS, id: "d", runId: "r", atIn: 120 }] };
     expect(setRunAttrs(D, "r", { mount: "fascia" }, ch).runs[0]!.attrs.hanger).toBe("spike");
     expect(setDsAttrs(D, "d", { wall: "wood" }, ch).downspouts[0]!.wall).toBe("sickle_hook");
+  });
+});
+
+describe("M7c: правила и расходники компании → движок", () => {
+  // L-образный дом: две линии 40 ft с наружным углом, даунспот на первой
+  const D: Drawing = {
+    runs: [
+      { id: "r1", a: [0, 0], b: [480, 0], attrs: { ...DEFAULT_RUN_ATTRS } },
+      { id: "r2", a: [480, 0], b: [480, -480], attrs: { ...DEFAULT_RUN_ATTRS } },
+    ],
+    downspouts: [{ ...DEFAULT_DS_ATTRS, id: "d1", runId: "r1", atIn: 10 }],
+  };
+  const parts = (raw: unknown, d: Drawing = D) => {
+    const r = readRules(raw);
+    return computeGutterParts(toMeasurement(d, { method: r.corner }), toRulesOverride(raw)).parts;
+  };
+  const qty = (ps: ReturnType<typeof parts>, pred: (p: ReturnType<typeof parts>[number]) => boolean) => ps.filter(pred).reduce((s, p) => s + Number(p.qty), 0);
+
+  it("пустые настройки считают ровно как движок по умолчанию", () => {
+    expect(parts({})).toEqual(computeGutterParts(toMeasurement(D)).parts);
+    expect(parts({ rules: "junk", use: [1] })).toEqual(computeGutterParts(toMeasurement(D)).parts);
+  });
+  it("чужие и вне диапазона значения — умолчание", () => {
+    const r = readRules({ rules: { storyFt: 99, wastePct: -1, hangerSpacingIn: 24.5, dsStickFt: 11, corner: "glue", rainBasis: "x" } });
+    expect(r).toMatchObject({ storyFt: 10, wastePct: 5, hangerSpacingIn: 24, dsStickFt: 10, corner: "cut", rainBasis: "smacna" });
+    const u = readUse({ use: { joints: { endcap: { rivets: 99 } }, pointsPerTube: 0 } });
+    expect(u.joints.endcap).toEqual({ rivets: 2, sealant: 1 });
+    expect(u.pointsPerTube).toBe(8);
+  });
+  it("запас 10 % и шаг креплений 18″ меняют рулон и крепления", () => {
+    const base = parts({});
+    const p = parts({ rules: { wastePct: 10, hangerSpacingIn: 18 } });
+    expect(qty(p, (x) => x.key.startsWith("coil."))).toBeGreaterThan(qty(base, (x) => x.key.startsWith("coil.")));
+    expect(qty(p, (x) => x.attrs.part === "hanger")).toBe(2 * Math.ceil(480 / 18));
+    expect(qty(base, (x) => x.attrs.part === "hanger")).toBe(2 * Math.ceil(480 / 24));
+    expect(toRulesOverride({ rules: { wastePct: 7 } }).wastePct).toBe("0.07");
+  });
+  it("высота этажа 12 ft — даунспот 12 ft; +1 крепление на линию", () => {
+    expect(qty(parts({ rules: { storyFt: 12 } }), (x) => x.section === "downspouts" && x.unit === "ft")).toBe(12);
+    expect(qty(parts({ rules: { hangerExtra: true } }), (x) => x.attrs.part === "hanger")).toBe(2 * (20 + 1));
+  });
+  it("метод угла компании strip → strip miter; на углу своё (prefab) сильнее компании", () => {
+    const strip = parts({ rules: { corner: "strip" } });
+    expect(strip.some((x) => x.key.startsWith("stripmiter."))).toBe(true);
+    const own = setCornerMethod(D, findCorners(D)[0]!, "prefab");
+    // хранится на обеих линиях, каждая — на своём конце
+    expect(own.runs[0]!.attrs.cornerMethod).toEqual({ b: "prefab" });
+    expect(own.runs[1]!.attrs.cornerMethod).toEqual({ a: "prefab" });
+    const p = parts({ rules: { corner: "strip" } }, own);
+    expect(p.some((x) => x.key.startsWith("corner.out."))).toBe(true);
+    expect(p.some((x) => x.key.startsWith("stripmiter."))).toBe(false);
+    // в движок cornerMethod не уходит; null — снова умолчание
+    expect(toMeasurement(own).runs.every((r) => !("cornerMethod" in r))).toBe(true);
+    expect(setCornerMethod(own, findCorners(own)[0]!, null).runs.every((r) => !r.attrs.cornerMethod)).toBe(true);
+    expect(setCornerMethod(D, findCorners(D)[0]!, null)).toBe(D);
+  });
+  it("расходники: заклёпки у заглушки, точек на тубу, соединение даунспота винтами", () => {
+    const base = parts({});
+    const p = parts({ use: { joints: { endcap: { rivets: 4 } }, pointsPerTube: 4, dsJoin: "screw" } });
+    const rivets = (ps: typeof p) => qty(ps, (x) => x.key.startsWith("rivet."));
+    expect(rivets(p)).toBeLessThan(rivets(base) + 4); // заглушек 2 × (+2), а даунспот ушёл на винты
+    expect(qty(p, (x) => x.key.startsWith("sealant"))).toBeGreaterThanOrEqual(qty(base, (x) => x.key.startsWith("sealant")));
+    expect(toRulesOverride({ use: { joints: { endcap: { rivets: 4 } } } }).joints?.endcap).toEqual({ rivets: 4, sealant: 1 });
+  });
+  it("кусок сетки 6 ft вместо 4 ft — меньше кусков", () => {
+    const g: Drawing = { ...D, runs: D.runs.map((r) => ({ ...r, attrs: { ...r.attrs, guardsIn: 480 } })) };
+    const pieces = (raw: unknown) => qty(parts(raw, g), (x) => x.key.startsWith("guardpiece."));
+    expect(pieces({})).toBe(2 * 10);
+    expect(pieces({ use: { guardPieceFt: { micromesh: 6 } } })).toBe(2 * Math.ceil(480 / 72));
+  });
+});
+
+describe("M7c: редкие поля даунспота", () => {
+  it("переход в размер другой формы снимается при смене формы; высота, смещения, верх — в движке", () => {
+    const d = changeDs({ ...DEFAULT_DS_ATTRS, size: "3x4", reducers: [{ to: "2x3", qty: 1 }] }, { shape: "round" });
+    expect(d.reducers).toBeUndefined();
+    const ds = { ...DEFAULT_DS_ATTRS, id: "d", runId: "r", atIn: 10, heightIn: 216, offsets: [{ lengthIn: 2, qty: 2 }], head: "conductor" as const, diverter: true };
+    const D2: Drawing = { runs: [{ id: "r", a: [0, 0], b: [240, 0], attrs: { ...DEFAULT_RUN_ATTRS } }], downspouts: [ds] };
+    const p = computeGutterParts(toMeasurement(D2)).parts;
+    expect(p.filter((x) => x.section === "downspouts" && x.unit === "ft").reduce((s, x) => s + Number(x.qty), 0)).toBe(18);
+    expect(p.some((x) => x.key.startsWith("offset.2."))).toBe(true);
+    expect(p.some((x) => x.key.startsWith("conductorhead."))).toBe(true);
+    expect(p.some((x) => x.key.startsWith("diverter."))).toBe(true);
   });
 });

@@ -8,7 +8,10 @@
  * wrong type, an unknown value or an empty list is dropped and the default is used. Writing keeps every key it does not
  * know (rules and use of M7c, a newer version's fields) — an older phone never deletes a newer phone's settings.
  */
-import { DEFAULT_HANGER_BY_MOUNT, DEFAULT_HANGER_KITS, DEFAULT_WALL_KITS, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
+import {
+  DEFAULT_GUARD_KITS, DEFAULT_GUTTER_RULES, DEFAULT_HANGER_BY_MOUNT, DEFAULT_HANGER_KITS, DEFAULT_JOINTS, DEFAULT_WALL_KITS, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile,
+  type GutterRulesOverride, type JointKind,
+} from "@octo/estimating-engine";
 import { COLORS, DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, wallValue, WALLS, type Wall } from "./canvas/attrs";
 
 export type DsShape = (typeof DS_SHAPES)[number];
@@ -244,3 +247,132 @@ export const settingsFit = (raw: unknown) => new TextEncoder().encode(JSON.strin
 
 /** a list without its last item is not saved: the company installs at least one profile, size, material… */
 export const keepsOne = (list: readonly unknown[]) => list.length > 0;
+
+/* ---------- M7c: rules (spec П4) and use («проверить», П18.8) ---------- */
+
+export type CornerMethod = "cut" | "strip" | "prefab";
+export const CORNER_METHODS: readonly CornerMethod[] = ["cut", "strip", "prefab"];
+export type RainBasis = "smacna" | "code";
+export const STICK_FT = [10, 15, 20] as const;
+
+/** a number rule: whole, its range and default (spec П4 ranges); the screen shows it in `unit` */
+interface NumRule { min: number; max: number; def: number; step: number }
+/** the company's rules as the screen keeps them: feet and percents where the owner thinks in them */
+export const RULE_NUMS = {
+  storyFt: { min: 8, max: 20, def: 10, step: 1 },
+  hangerSpacingIn: { min: 12, max: 36, def: 24, step: 2 },
+  wastePct: { min: 0, max: 100, def: 5, step: 1 },
+  cutCornerIn: { min: 0, max: 12, def: 6, step: 1 },
+  runPerDsFt: { min: 30, max: 50, def: 40, step: 1 },
+  expansionFt: { min: 40, max: 50, def: 50, step: 1 },
+  dsExtensionIn: { min: 0, max: 60, def: 0, step: 6 },
+} as const satisfies Record<string, NumRule>;
+export const USE_NUMS = {
+  rivets: { min: 0, max: 16, def: 0, step: 1 },
+  sealant: { min: 0, max: 6, def: 0, step: 1 },
+  pointsPerTube: { min: 4, max: 20, def: 8, step: 1 },
+  solderPointsPerLb: { min: 4, max: 20, def: 10, step: 1 },
+  guardPieceFt: { min: 3, max: 10, def: 4, step: 1 },
+} as const satisfies Record<string, NumRule>;
+
+export interface Rules {
+  storyFt: number;
+  hangerSpacingIn: number;
+  hangerExtra: boolean;
+  wastePct: number;
+  cutCornerIn: number;
+  runPerDsFt: number;
+  expansionFt: number;
+  expansionPart: boolean;
+  rainBasis: RainBasis;
+  dsStickFt: (typeof STICK_FT)[number];
+  dsShareOffcuts: boolean;
+  dsExtensionIn: number;
+  seamless: boolean;
+  corner: CornerMethod;
+}
+export interface Use {
+  joints: Record<JointKind, { rivets: number; sealant: number }>;
+  pointsPerTube: number;
+  solderPointsPerLb: number;
+  touchUpPaint: boolean;
+  dsJoin: "rivet" | "screw";
+  guardPieceFt: Record<string, number>;
+}
+
+const num = (v: unknown, r: NumRule, def = r.def) => (typeof v === "number" && Number.isInteger(v) && v >= r.min && v <= r.max ? v : def);
+const bool = (v: unknown, def: boolean) => (typeof v === "boolean" ? v : def);
+
+export function readRules(raw: unknown): Rules {
+  const r = obj(obj(raw).rules);
+  const d = DEFAULT_GUTTER_RULES;
+  return {
+    storyFt: num(r.storyFt, RULE_NUMS.storyFt),
+    hangerSpacingIn: num(r.hangerSpacingIn, RULE_NUMS.hangerSpacingIn),
+    hangerExtra: bool(r.hangerExtra, d.hangerExtraPerRun > 0),
+    wastePct: num(r.wastePct, RULE_NUMS.wastePct),
+    cutCornerIn: num(r.cutCornerIn, RULE_NUMS.cutCornerIn),
+    runPerDsFt: num(r.runPerDsFt, RULE_NUMS.runPerDsFt),
+    expansionFt: num(r.expansionFt, RULE_NUMS.expansionFt),
+    expansionPart: bool(r.expansionPart, d.expansionJointPart),
+    rainBasis: r.rainBasis === "code" ? "code" : "smacna",
+    dsStickFt: (STICK_FT as readonly unknown[]).includes(r.dsStickFt) ? (r.dsStickFt as Rules["dsStickFt"]) : 10,
+    dsShareOffcuts: bool(r.dsShareOffcuts, d.dsShareOffcuts),
+    dsExtensionIn: num(r.dsExtensionIn, RULE_NUMS.dsExtensionIn),
+    seamless: bool(r.seamless, d.seamless),
+    corner: one(r.corner, CORNER_METHODS, "cut"),
+  };
+}
+
+export const JOINT_KINDS = Object.keys(DEFAULT_JOINTS) as JointKind[];
+export const GUARD_KINDS = Object.keys(DEFAULT_GUARD_KITS);
+
+export function readUse(raw: unknown): Use {
+  const u = obj(obj(raw).use);
+  const j = obj(u.joints);
+  const g = obj(u.guardPieceFt);
+  return {
+    joints: Object.fromEntries(
+      JOINT_KINDS.map((kind) => {
+        const x = obj(j[kind]);
+        return [kind, { rivets: num(x.rivets, USE_NUMS.rivets, DEFAULT_JOINTS[kind].rivets), sealant: num(x.sealant, USE_NUMS.sealant, DEFAULT_JOINTS[kind].sealant) }];
+      }),
+    ) as Use["joints"],
+    pointsPerTube: num(u.pointsPerTube, USE_NUMS.pointsPerTube, DEFAULT_GUTTER_RULES.jointsPerSealantTube),
+    solderPointsPerLb: num(u.solderPointsPerLb, USE_NUMS.solderPointsPerLb, DEFAULT_GUTTER_RULES.solderPointsPerLb),
+    touchUpPaint: bool(u.touchUpPaint, DEFAULT_GUTTER_RULES.touchUpPaint),
+    dsJoin: u.dsJoin === "screw" ? "screw" : "rivet",
+    guardPieceFt: Object.fromEntries(GUARD_KINDS.map((id) => [id, num(g[id], USE_NUMS.guardPieceFt, Math.round(DEFAULT_GUARD_KITS[id]!.pieceIn / 12))])),
+  };
+}
+
+/**
+ * The engine's company rules from the settings (spec П22.1): only the whitelisted fields, in the engine's units
+ * (inches, a decimal waste). The wall table goes too, so a downspout stored with a wall type counts the company's kit.
+ */
+export function toRulesOverride(raw: unknown): GutterRulesOverride {
+  const r = readRules(raw);
+  const u = readUse(raw);
+  const ch = choicesFor(raw);
+  return {
+    storyHeightIn: r.storyFt * 12,
+    hangerSpacingIn: Object.fromEntries(Object.keys(DEFAULT_HANGER_KITS).map((id) => [id, r.hangerSpacingIn])),
+    hangerExtraPerRun: r.hangerExtra ? 1 : 0,
+    wastePct: (r.wastePct / 100).toFixed(2),
+    cutCornerAllowanceIn: r.cutCornerIn,
+    maxRunPerDownspoutIn: r.runPerDsFt * 12,
+    expansionJointIn: r.expansionFt * 12,
+    expansionJointPart: r.expansionPart,
+    dsStickIn: r.dsStickFt * 12,
+    dsShareOffcuts: r.dsShareOffcuts,
+    dsExtensionIn: r.dsExtensionIn,
+    seamless: r.seamless,
+    wallKitByWall: ch.wallKitByWall,
+    joints: Object.fromEntries(JOINT_KINDS.map((k) => [k, u.joints[k]])),
+    jointsPerSealantTube: u.pointsPerTube,
+    solderPointsPerLb: u.solderPointsPerLb,
+    touchUpPaint: u.touchUpPaint,
+    dsJoin: u.dsJoin,
+    guardKits: Object.fromEntries(GUARD_KINDS.map((id) => [id, { ...DEFAULT_GUARD_KITS[id]!, pieceIn: u.guardPieceFt[id]! * 12 }])),
+  };
+}

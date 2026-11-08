@@ -16,7 +16,10 @@ export interface DrawnRun {
   lengthIn?: number;
   /** auto: from the house centre; the user can flip it */
   houseSide?: "L" | "R";
-  attrs: Omit<MeasuredRun, "id" | "lengthIn" | "ends" | "houseSide">;
+  attrs: Omit<MeasuredRun, "id" | "lengthIn" | "ends" | "houseSide"> & {
+    /** how the corner at this run's start (a) / end (b) is made (M7c, spec 33 П22.2 №15); none — the company's default */
+    cornerMethod?: { a?: CornerChoice["method"]; b?: CornerChoice["method"] };
+  };
   /** the user removed the end cap at this end (start, end) */
   noCap?: [boolean, boolean];
 }
@@ -179,21 +182,28 @@ export function nearestRun(d: Pick<Drawing, "runs">, p: P, tolIn = 36): { runId:
 }
 
 /** The drawing → the engine's measurement input (docs/specs/33 S5g). */
+/** the method stored on the corner's runs (first run first); none → undefined */
+export function cornerChoiceOf(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "runs">): CornerChoice | undefined {
+  for (const end of f.runs) {
+    const m = d.runs.find((r) => r.id === end.id)?.attrs.cornerMethod?.[end.end ? "b" : "a"];
+    if (m) return { method: m };
+  }
+  return undefined;
+}
+
 export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method: "cut" }): MeasurementInput {
   const c = centre(d.runs);
   const found = findCorners(d);
   const ends = runEnds(d, found);
-  const runs: MeasuredRun[] = d.runs.map((r) => ({
-    ...r.attrs,
-    id: r.id,
-    lengthIn: runLengthIn(r),
-    houseSide: houseSide(r, c),
-    ends: ends[r.id]!,
-  }));
+  const runs: MeasuredRun[] = d.runs.map((r) => {
+    // the corner methods are the drawing's, not the engine's run input
+    const { cornerMethod: _cm, ...attrs } = r.attrs;
+    return { ...attrs, id: r.id, lengthIn: runLengthIn(r), houseSide: houseSide(r, c), ends: ends[r.id]! };
+  });
   const byId = new Map(d.runs.map((r) => [r.id, r]));
   const corners: MeasuredCorner[] = found.map((f) => {
     const first = byId.get(f.runs[0].id)!;
-    const choice = d.corners?.[f.id] ?? defaultCorner;
+    const choice = d.corners?.[f.id] ?? cornerChoiceOf(d, f) ?? defaultCorner;
     // the corner is made of the first run's stock: gauge and finish too, or the coil splits into two lines
     const { profile, size, material, gauge, finish, color, story } = first.attrs;
     return { id: f.id, kind: f.kind, method: choice.method, splashGuard: choice.splashGuard, profile, size, material, gauge, finish, color, story };

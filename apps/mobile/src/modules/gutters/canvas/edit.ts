@@ -3,7 +3,7 @@
  * out. Tolerances come from the screen (a finger is ~22 px whatever the zoom) and are passed in as inches.
  * Prilipanie (snapping) is geometry.ts: to the ends of other lines first, else the direction to 45° steps.
  */
-import { nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type Drawing, type DrawnDownspout, type DrawnRun, type P } from "../geometry";
+import { nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
 import type { Story } from "./scene";
 import { changeDs, changeRun, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
@@ -170,4 +170,26 @@ export function undo(h: History, cur: Drawing): { h: History; d: Drawing } | nul
 export function redo(h: History, cur: Drawing): { h: History; d: Drawing } | null {
   const next = h.future[0];
   return next ? { h: { past: [...h.past, cur], future: h.future.slice(1) }, d: next } : null;
+}
+
+/**
+ * How a corner is made (M7c, spec 33 П22.2 №15): stored on both runs that meet there (each at its own end), so either
+ * run's panel shows it and deleting one run leaves no stale choice on the other's corner. `null` — the company's default.
+ */
+export function setCornerMethod(d: Drawing, corner: Pick<FoundCorner, "runs">, method: CornerChoice["method"] | null): Drawing {
+  let changed = false;
+  const runs = d.runs.map((r) => {
+    const end = corner.runs.find((x) => x.id === r.id);
+    if (!end) return r;
+    const key = end.end ? "b" : "a";
+    const cur = r.attrs.cornerMethod ?? {};
+    if ((cur[key] ?? null) === method) return r;
+    changed = true;
+    const next = { ...cur };
+    if (method) next[key] = method;
+    else delete next[key];
+    const { cornerMethod: _old, ...rest } = r.attrs;
+    return { ...r, attrs: Object.keys(next).length ? { ...rest, cornerMethod: next } : rest };
+  });
+  return changed ? { ...d, runs } : d;
 }

@@ -27,9 +27,9 @@ import { Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import { CanvasView, useLive } from "../canvas/CanvasView";
-import { addDownspout, endAt, finishStroke, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, endAt, finishStroke, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
-import { AttrBody, DsAttrsView, RunAttrsView } from "./AttrPanel";
+import { AttrBody, DsAttrsView, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { ftIn } from "../canvas/format";
 import { forgetOldDraft, loadToolbarPlace, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
@@ -37,11 +37,11 @@ import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf, photosOf } from "../data";
 import { makeSaver } from "../canvas/draftStore";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
-import { choicesFor, newDsAttrs, newRunAttrs } from "../settings";
+import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
 import { buildScene, fitView, storyOf, toPlan, toScreen, type Story, type View as PlanView } from "../canvas/scene";
 import { LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { TEST_RATES } from "../canvas/testRates";
-import { runLengthIn, toMeasurement, type Drawing, type P } from "../geometry";
+import { cornerChoiceOf, findCorners, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 
 type Tool = "line" | "ds" | "select";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
@@ -75,6 +75,8 @@ export default function DrawScreen() {
   // what the company installs, its palette and defaults (settings M7b): new elements and the attribute panel
   const settings = store.db.company?.modules?.gutters?.settings;
   const ch = useMemo(() => choicesFor(settings), [settings]);
+  // the company's rules and use (M7c) and its corner method: the $ under the drawing counts by them
+  const rules = useMemo(() => ({ over: toRulesOverride(settings), corner: readRules(settings).corner }), [settings]);
 
   const [drawing, setDrawing] = useState<Drawing>(EMPTY);
   const [hist, setHist] = useState<History>({ past: [], future: [] });
@@ -272,8 +274,8 @@ export default function DrawScreen() {
 
   const preview = useMemo(() => {
     if (!drawing.runs.length) return { totalCents: 0, unpriced: 0, gutterFt: "0" };
-    return gutterPreview(computeGutterParts(toMeasurement(drawing)).parts, TEST_RATES);
-  }, [drawing]);
+    return gutterPreview(computeGutterParts(toMeasurement(drawing, { method: rules.corner }), rules.over).parts, TEST_RATES);
+  }, [drawing, rules]);
 
   const sel = selected ? drawing.runs.find((r) => r.id === selected) ?? drawing.downspouts.find((s) => s.id === selected) : undefined;
   const selText = !sel
@@ -293,6 +295,17 @@ export default function DrawScreen() {
     const id = cur.current.selected;
     if (id) commit(setDsAttrs(cur.current.drawing, id, p, cur.current.ch));
   };
+  // the corners of the picked run (M7c): stored on its runs, else the company's method
+  const runCorners: RunCorner[] =
+    sel && "a" in sel
+      ? findCorners(drawing)
+          .filter((f) => f.runs.some((x) => x.id === sel.id))
+          .map((f) => {
+            const own = cornerChoiceOf(drawing, f);
+            return { found: f, method: own?.method ?? rules.corner, own: !!own };
+          })
+      : [];
+  const onCorner = (f: FoundCorner, method: CornerChoice["method"]) => commit(setCornerMethod(cur.current.drawing, f, method));
   const onLength = (lengthIn: number | null) => {
     const id = cur.current.selected;
     if (id) commit(setLength(cur.current.drawing, id, lengthIn));
@@ -309,7 +322,7 @@ export default function DrawScreen() {
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
-      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} />}
+      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} />}
       {elPhotos}
     </>
   );

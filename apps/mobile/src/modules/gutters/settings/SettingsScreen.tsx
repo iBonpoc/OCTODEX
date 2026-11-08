@@ -14,14 +14,16 @@ import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { moduleState } from "@/modules/registry";
-import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, TextField, useReadOnly } from "@/ui/controls";
+import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useToast } from "@/ui/overlays";
 import { Card, RowView, Screen } from "@/ui/surfaces";
 import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, WALLS } from "../canvas/attrs";
 import { useColorLabel } from "../draw/AttrPanel";
-import { choicesFor, colorName, familyKits, MAX_PALETTE, MODULE_OFFER, PALETTES, settingsFit, setSetting, type Choices } from "../settings";
+import {
+  choicesFor, colorName, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, settingsFit, setSetting, STICK_FT, USE_NUMS, type Choices,
+} from "../settings";
 
 const a = (s: string) => `mod.gutters.attr.${s}` as DictKey;
 const k = (s: string) => `mod.gutters.set.${s}` as DictKey;
@@ -39,6 +41,16 @@ function Part({ title, hint, children, testID }: { title: string; hint: string; 
     </View>
   );
 }
+/** a switch with its words beside it (the core's Toggle carries the words for screen readers only) */
+function Switch({ label, on, onChange, testID }: { label: string; on: boolean; onChange: (v: boolean) => void; testID: string }) {
+  return (
+    <RowView style={{ gap: space[3], justifyContent: "space-between" }}>
+      <T v="body" style={{ flex: 1 }}>{label}</T>
+      <View testID={testID}><Toggle on={on} onChange={onChange} label={label} /></View>
+    </RowView>
+  );
+}
+
 function Field({ label, children, testID }: { label: string; children: React.ReactNode; testID: string }) {
   return (
     <View style={{ gap: space[2] }} testID={testID}>
@@ -92,6 +104,8 @@ export default function GutterSettingsScreen() {
   const cm = store.db.company?.modules?.gutters;
   const raw = cm?.settings;
   const ch: Choices = useMemo(() => choicesFor(raw), [raw]);
+  const rules = useMemo(() => readRules(raw), [raw]);
+  const use = useMemo(() => readUse(raw), [raw]);
   const [newColor, setNewColor] = useState("");
   const access = moduleState(cm).access;
   const active = access === "trial" || access === "paid";
@@ -113,6 +127,14 @@ export default function GutterSettingsScreen() {
   const setRun = (p: Record<string, unknown>) => save(setSetting(raw, "run", null, choicesFor(setSetting(raw, "run", null, { ...ch.run, ...p })).run));
   const setDs = (p: Record<string, unknown>) => save(setSetting(raw, "ds", null, choicesFor(setSetting(raw, "ds", null, { ...ch.ds, ...p })).ds));
   const setPalette = (list: string[]) => save(setSetting(raw, "palette", null, list));
+  const setRule = (key: string, v: unknown) => save(setSetting(raw, "rules", key, v));
+  const setUse = (key: string, v: unknown) => save(setSetting(raw, "use", key, v));
+  /** a number rule as a stepper: its unit, range and step (spec П4); the default is said under it */
+  const num = (key: keyof typeof RULE_NUMS, unit: string, label: string, setter = setRule, value = rules[key as keyof typeof rules] as number, r = RULE_NUMS[key]) => (
+    <View testID={`gset-rule-${key}`}>
+      <Stepper label={label} unit={unit} value={value} min={r.min} max={r.max} step={r.step} onChange={(v) => setter(key, v)} />
+    </View>
+  );
   const addColor = () => {
     const n = colorName(newColor);
     if (!n) return;
@@ -232,6 +254,56 @@ export default function GutterSettingsScreen() {
                 </RowView>
               </>
             )}
+          </Part>
+
+          <Part title={t(k("rules"))} hint={t(k("rulesHint"))} testID="gset-rules">
+            {num("storyFt", t(k("ft")), t(k("r.storyFt")))}
+            {num("hangerSpacingIn", t(k("in")), t(k("r.hangerSpacingIn")))}
+            <Switch testID="gset-rule-hangerExtra" on={rules.hangerExtra} onChange={(v) => setRule("hangerExtra", v)} label={t(k("r.hangerExtra"))} />
+            {num("wastePct", "%", t(k("r.wastePct")))}
+            {num("cutCornerIn", t(k("in")), t(k("r.cutCornerIn")))}
+            <Field label={t(k("r.corner"))} testID="gset-rule-corner">
+              <ChoiceChips items={CORNER_METHODS.map((m) => ({ key: m, label: t(a(`cm.${m}`)) }))} value={rules.corner} onChange={(m) => setRule("corner", m)} />
+            </Field>
+            <Field label={t(k("r.seamless"))} testID="gset-rule-seamless">
+              <ChoiceChips items={[{ key: "1", label: t(k("r.seamlessYes")) }, { key: "0", label: t(k("r.seamlessNo")) }]} value={rules.seamless ? "1" : "0"} onChange={(v) => setRule("seamless", v === "1")} />
+            </Field>
+            {num("runPerDsFt", t(k("ft")), t(k("r.runPerDsFt")))}
+            {num("expansionFt", t(k("ft")), t(k("r.expansionFt")))}
+            <Switch testID="gset-rule-expansionPart" on={rules.expansionPart} onChange={(v) => setRule("expansionPart", v)} label={t(k("r.expansionPart"))} />
+            <Field label={t(k("r.dsStickFt"))} testID="gset-rule-dsStickFt">
+              <ChoiceChips items={STICK_FT.map((n) => ({ key: String(n), label: `${n} ${t(k("ft"))}` }))} value={String(rules.dsStickFt)} onChange={(v) => setRule("dsStickFt", Number(v))} />
+            </Field>
+            <Switch testID="gset-rule-dsShareOffcuts" on={rules.dsShareOffcuts} onChange={(v) => setRule("dsShareOffcuts", v)} label={t(k("r.dsShareOffcuts"))} />
+            {num("dsExtensionIn", t(k("in")), t(k("r.dsExtensionIn")))}
+            <Field label={t(k("r.rainBasis"))} testID="gset-rule-rainBasis">
+              <ChoiceChips items={(["smacna", "code"] as const).map((b) => ({ key: b, label: t(k(`r.rain.${b}`)) }))} value={rules.rainBasis} onChange={(b) => setRule("rainBasis", b)} />
+              <T v="caption" tone="mut">{t(k("r.rainHint"))}</T>
+            </Field>
+          </Part>
+
+          <Part title={t(k("use"))} hint={t(k("useHint"))} testID="gset-use">
+            {JOINT_KINDS.map((j) => (
+              <Field key={j} label={t(k(`j.${j}`))} testID={`gset-joint-${j}`}>
+                <Stepper label={t(k("u.rivets"))} value={use.joints[j].rivets} min={USE_NUMS.rivets.min} max={USE_NUMS.rivets.max} onChange={(v) => setUse("joints", { ...use.joints, [j]: { ...use.joints[j], rivets: v } })} />
+                <Stepper label={t(k("u.sealant"))} value={use.joints[j].sealant} min={USE_NUMS.sealant.min} max={USE_NUMS.sealant.max} onChange={(v) => setUse("joints", { ...use.joints, [j]: { ...use.joints[j], sealant: v } })} />
+              </Field>
+            ))}
+            <View testID="gset-use-pointsPerTube">
+              <Stepper label={t(k("u.pointsPerTube"))} value={use.pointsPerTube} min={USE_NUMS.pointsPerTube.min} max={USE_NUMS.pointsPerTube.max} onChange={(v) => setUse("pointsPerTube", v)} />
+            </View>
+            <View testID="gset-use-solder">
+              <Stepper label={t(k("u.solder"))} value={use.solderPointsPerLb} min={USE_NUMS.solderPointsPerLb.min} max={USE_NUMS.solderPointsPerLb.max} onChange={(v) => setUse("solderPointsPerLb", v)} />
+            </View>
+            <Switch testID="gset-use-paint" on={use.touchUpPaint} onChange={(v) => setUse("touchUpPaint", v)} label={t(k("u.paint"))} />
+            <Field label={t(k("u.dsJoin"))} testID="gset-use-dsJoin">
+              <ChoiceChips items={(["rivet", "screw"] as const).map((x) => ({ key: x, label: t(k(`u.join.${x}`)) }))} value={use.dsJoin} onChange={(x) => setUse("dsJoin", x)} />
+            </Field>
+            {GUARD_KINDS.map((g) => (
+              <View key={g} testID={`gset-use-guard-${g}`}>
+                <Stepper label={t(k("u.guardPiece"), { what: t(k(`g.${g}`)) })} unit={t(k("ft"))} value={use.guardPieceFt[g]!} min={USE_NUMS.guardPieceFt.min} max={USE_NUMS.guardPieceFt.max} onChange={(v) => setUse("guardPieceFt", { ...use.guardPieceFt, [g]: v })} />
+              </View>
+            ))}
           </Part>
 
           <Part title={t(k("defRun"))} hint={t(k("defRunHint"))} testID="gset-def-run">
