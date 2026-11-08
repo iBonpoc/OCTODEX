@@ -4,6 +4,7 @@
  */
 import { categoryTotals, centsToDecimal, owedByClient, salesFunnel, sumCents, totalsBy, type CategoryFact, type CategoryRow, type CentsTotal, type OwedRow, type SalesFunnel } from "@octo/estimating-engine";
 import type { DB, Invoice, PaymentMethod, Role } from "@/data/types";
+import type { DictKey } from "@/i18n";
 import { estimateListAmount } from "./estimateDoc";
 import { periodRange } from "./metrics";
 import { daysOverdue, paymentsIn, type PaymentPeriod } from "./moneyLists";
@@ -12,6 +13,8 @@ import { dayKeyIn } from "./zone";
 
 export type ReportId = "owed" | "collected" | "sales" | "sources" | "categories";
 export const REPORTS: readonly ReportId[] = ["owed", "collected", "sales", "sources", "categories"];
+/** a report's own title: the list card, the report's header and its last breadcrumb («Отчёты > Кто должен», not «Отчёты > Отчёты») */
+export const REPORT_TITLE: Record<ReportId, DictKey> = { owed: "rpt.owed.title", collected: "rpt.collected.title", sales: "rpt.sales.title", sources: "rpt.sources.title", categories: "rpt.cat.title" };
 export const asReport = (x: unknown): ReportId | undefined => ((REPORTS as readonly unknown[]).includes(x) ? (x as ReportId) : undefined);
 
 /** Reports: owner, admin, office (office only looks, 13 §4); not sales, not the tech */

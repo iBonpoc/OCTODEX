@@ -8,11 +8,21 @@ import { ScrollView, View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import { useI18n } from "@/i18n";
-import { Button, IconButton } from "./controls";
+import { Button, IconButton, StatusChip } from "./controls";
 import { RowView } from "./surfaces";
 import { T } from "./primitives";
 
-export function ListPanel({ title, subtitle, onOpen, onClose, children }: { title: string; subtitle?: string; onOpen: () => void; onClose: () => void; children: ReactNode }) {
+export function ListPanel({ title, subtitle, outside, actions, onOpen, onClose, children }: {
+  title: string;
+  subtitle?: string;
+  /** the open card is not in the list now (another filter): a neutral mark under the header */
+  outside?: boolean;
+  /** the card screen's own header actions («Изменить», «＋»): a row under the title */
+  actions?: ReactNode;
+  onOpen: () => void;
+  onClose: () => void;
+  children: ReactNode;
+}) {
   const { c } = useTheme();
   const { t } = useI18n();
   return (
@@ -38,6 +48,17 @@ export function ListPanel({ title, subtitle, onOpen, onClose, children }: { titl
             </View>
           </RowView>
         </RowView>
+        {/* the card screen's header actions: a row of their own under the title — 360 has no room beside it */}
+        {actions ? (
+          <View testID="list-panel-actions">
+            <RowView gap={space[1]}>{actions}</RowView>
+          </View>
+        ) : null}
+        {outside ? (
+          <View testID="list-panel-outside" style={{ alignSelf: "flex-start" }}>
+            <StatusChip status="neutral" label={t("card.panel.outside")} />
+          </View>
+        ) : null}
         {children}
       </ScrollView>
     </View>

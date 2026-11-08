@@ -61,6 +61,20 @@
 - Тесты: T130, unit `stripeConnectFn` (поддельный Stripe), `onlinePay`, e2e 182 (демо).
 - Долги из ревью 20б: CORS `*` (вход по Bearer, у телефона нет Origin) — сузить до сайта при 20в; лимит частоты `start` на компанию — позже; `stripe_account_sync` сверять `metadata.company_id` — в 20г (вебхук); старая колонка `companies.stripe_account_id` не читается, удалить по правилу 16 отдельным PR.
 
+## 4а. 20в — оплата с /p/ (миграция 20261109030000, «Деньги и отчёты» №4)
+- `public.stripe_pay_open(token, invoice)` (service_role): токен `/p/` → смета → работа → **этот** счёт, ссылка открыта, компания не закрыта — только потом `app.payment_attempt_open` на весь онлайн-остаток (ACH в пути не просим снова). IDOR закрыт в базе. `public.stripe_pay_set_intent`. `portal_estimate` += `online_pay`, `pending` (ACH в пути по счетам). T131.
+- Edge `stripe-pay` (verify_jwt = false): CORS — одна константа `ALLOWED_ORIGINS` (сейчас `https://octodex.expo.app`; позже gorix.app), чужой Origin → 403. Попытка с PaymentIntent → читаем его: можно платить — тот же client_secret; processing — «в обработке»; canceled — «позже» (вебхук закроет попытку). Новый PI — direct charge, `Stripe-Account`, Idempotency-Key = ключ попытки, metadata attempt/company/invoice, `payment_method_types` ACH первым от $1,000. `application_fee_amount` нет до В3. Секреты: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` (pk_test_).
+- `/p/`: Payment Element (только `@stripe/stripe-js` 10.1.0, без react-stripe-js), только web; имитация — только если `online_pay` нет и компания демо. После подтверждения — «Платёж в обработке»; ACH в пути — «ACH в обработке: $…». Экран счёта (InvoiceCard) — то же по `db.pendingPayments` (#435). e2e 183.
+- Старые PaymentIntent того же счёта (другая сумма, старая вкладка, неудачная попытка) `stripe-pay` отменяет до выдачи нового (`stale_intents`) и сразу закрывает их попытки (`public.stripe_pay_close_attempt`). Если отмена не прошла, старый PI перечитывается: processing / succeeded → «в обработке», новый не выдаётся (вкладка A оплатила, вебхука нет — вкладка B второй раз не платит); всё ещё можно оплатить → 502, двух оплачиваемых PI на счёт не бывает.
+- CORS — только вежливость браузера, не защита: ключ — токен `/p/`.
+- **Обязательно до live:** лимит частоты `stripe-pay` по токену и IP (как в lead-intake) и Radar.
+
+## 4б. 20г — вебхук (миграция 20261109040000)
+- Edge `stripe-webhook` (verify_jwt = false), Connect-эндпоинт («события подключённых аккаунтов»). Сначала подпись `Stripe-Signature`: HMAC-SHA256 «t.сырое тело», допуск 300 с, сравнение за постоянное время, любой из нескольких v1. До подписи тело как JSON не читается. Неверная подпись → 400.
+- Для `payment_intent.*` PI читается обратно (`expand[]=payment_method`, `latest_charge.balance_transaction`) на аккаунте события: метод (card / `us_bank_account` → ach) и комиссия Stripe — только `stripe_fee` из `fee_details` (application fee — отдельно, `platform_fee_cents`). PI читается только наш (в metadata есть `attempt_id`) и только для четырёх применяемых типов. Временный сбой чтения у `succeeded` (5xx, 429, нет ответа) → 500, Stripe повторит; постоянный отказ (401/403/404, чужой id) → событие применяется без метода и комиссии, платёж не теряется. Live-событие → 200 `ignored`, в базу не идёт (пока только test mode). Тело больше 1 МБ → 413.
+- `public.stripe_webhook_apply(event, method, fee)` (service_role): `metadata.company_id` ≠ компания аккаунта → журнал `ignored / company_mismatch`; неизвестный аккаунт — `unknown_account`; повтор — `duplicate`. Иначе `app.stripe_event_apply` и `fee_cents` платежа: только из 0 в известную, в том числе на повторе (ACH: у `processing` комиссии нет, у `succeeded` есть); не уменьшается и не меняется. 55000 → 500 (ничего не записано, Stripe повторит); 22023 у подписанного события → 200 `rejected` с записью в лог, без трёх дней повторов.
+- Секреты: `STRIPE_WEBHOOK_SECRET` (whsec_ Connect-эндпоинта), `STRIPE_SECRET_KEY` (test). Хранение `app.stripe_events` — как в 20а; срок — спека 21. T132, `test/stripeWebhookFn.test.ts` на подписанных фикстурах.
+
 ## 5. План PR
 | PR | Что | Тесты |
 |---|---|---|

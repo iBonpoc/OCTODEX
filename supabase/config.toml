@@ -23,6 +23,14 @@ verify_jwt = false
 [functions.stripe-connect]
 verify_jwt = true
 
+# Оплата с /p/ (docs/specs/35, 20в): the client's browser has no JWT — the /p/ token is checked in public.stripe_pay_open.
+[functions.stripe-pay]
+verify_jwt = false
+
+# Вебхук Stripe (docs/specs/35, 20г): Stripe has no JWT — its signature over the raw body is checked first.
+[functions.stripe-webhook]
+verify_jwt = false
+
 # LOCAL stack only (supabase start — the nightly cloud scenarios, docs/specs/21 §7). release.yml runs `db push`,
 # never `config push`, so nothing below reaches the hosted project.
 [auth]

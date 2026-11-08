@@ -8,9 +8,9 @@
 | Чат | id | Направление | Состояние |
 |---|---|---|---|
 | Руководитель №5 | `session_015CqH6AYWnjNhg5RZy2re5D` | CLAUDE.md, docs/ai/*, 10-build-plan §0, 15-story-map | план, приёмка, вливание сборками |
-| Карточки списков №8 | `session_015CqH66bdTBKTgPfknA5z82` | listPanel*, leads.tsx, features/lead/LeadCard.tsx | панель 1280 «Лиды» (e2e 157), затем каталог/долги |
+| Лиды и клиенты №13 | `session_015CqH67mXYcoVoL5GKnUime` | controls.tsx (Segmented), hierarchy.ts, Fab.tsx, features/photoUri.ts, LeadCard.tsx | мелкие долги UI: #440; PR B Segmented, дубль в панели, фото лида |
 | Сметы №3 | `session_015CqH68FFv5zHgyQV88Jvva` | шаблоны смет: estimate/**, estimateTemplate.ts, ops/store (шаблоны), миграция 20261108230000 | E3a #423 влит; E3b экраны (e2e 177), E3c слот модулей (e2e 180) |
-| Деньги и отчёты №4 | `session_015CqH66hzCgPgL8zYoAg7rn` | supabase/functions/stripe-*, миграции 202611090xxxxx, спека 35, features/payments | Stripe test mode: 20а–20б сданы №3; №4 — 20в оплата с /p/ (e2e 183, @stripe/stripe-js 10.1.0), pendingPayments, 20г вебхук (T131–T132); ждёт основателя В1–В6 |
+| Деньги и отчёты №5 | `session_015CqH69czeKQQz4r6pDxxwJ` | supabase/functions/stripe-*, миграции 202611090xxxxx, спека 35, features/payments | Stripe 20д возвраты (T133, e2e 185); ждёт основателя В1–В6 |
 | Правки Gutters (личный чат основателя) | `session_015CqH66K82f6Sc1E161JFM2` | src/modules/gutters/** (кроме registry/module/estimateLink без согласования), e2e 168–174 | правки основателя; архив только по его слову |
 | Бренд (личный чат основателя) | `session_015CqH69WWiSwHTpW9sTb2km` | бренд GoRix | архив только по слову основателя |
 
@@ -122,6 +122,17 @@
 - Дальше: 20в stripe-pay + Payment Element на /p/ (public-обёртки service_role для payment_attempt_open/set_intent; сверка токена /p/ со счётом против IDOR; переиспользовать попытку с PaymentIntent; CORS до сайта; @stripe/stripe-js и react-stripe-js по CHECKS §4; ACH первым ≥ $1,000; e2e 183). 20г webhook (подпись по сырому телу; p_method из expand; fee из balance transaction; сверка metadata.company_id; 55000 → 500; хранение stripe_events; T131–T132). 20д возвраты (T133, e2e 184). 20е чеки после В5 (e2e 185).
 - Долги: лимит частоты start; удалить companies.stripe_account_id (правило 16); ACH return не обрабатывается.
 - Уроки: app.* через supabase-js не вызвать — public-обёртка service_role; security-check на каждом PR с деньгами находил настоящие дыры; новый экран → tabBarRule и NO_FILTER; i18n через json.dumps; stacked — брать main и добавлять свой блок.
+
+### Памятка Карточки списков №8 (session_015CqH66bdTBKTgPfknA5z82, 08.11) — архив
+- Сдал #434 («Лиды» на панель 1280, LeadCard, e2e 157) и #438 (↑/↓ прокручивают к строке; «Изменить»/«＋» в панели клиента; метка «Нет в списке — другой фильтр»; вкладки лида листаются вбок на 390; e2e 158).
+- Панель 1280 на клиентах, сметах, счетах, лидах; useListPanel даёт openId, outside, open, close, full. features/lead/LeadCard.tsx возвращается «Лидам и клиентам».
+- Дальше: Segmented scroll (controls.tsx) прокручивать к выбранной вкладке; «возможный дубль» в панели лида — панелью; каталог и «Требует внимания» на панель не переводить (спека 06).
+### Памятка Деньги и отчёты №4 (session_015CqH66hzCgPgL8zYoAg7rn, 08.11)
+- Сдал #435 (db.pendingPayments), #437 (20в: Edge stripe-pay, Payment Element на /p/, миграция 20261109030000, T131, e2e 183; /p/ ошибки сети и revoked на языке клиента, e2e 184), #439 (20г: stripe-webhook, подпись по сырому телу, миграция 20261109040000, T132). Порядок #433 → #435 → #437 → #439.
+- Дальше: 20д возвраты (stripe-refund, ручной возврат, refundAllocation, T133, e2e 185); 20е чеки после В5.
+- Долги: лимит запросов stripe-pay по токену/IP + Radar — до live; ручная проверка 3DS (4000 0025 0000 3155) и ACH на test Stripe после секретов; S12a/S12b в карту §4; хранение app.stripe_events (спека 21); application_fee_amount после В3.
+- Секреты основателю: STRIPE_SECRET_KEY (sk_test_), STRIPE_PUBLISHABLE_KEY (pk_test_), STRIPE_WEBHOOK_SECRET (whsec_ Connect-эндпоинта …/functions/v1/stripe-webhook).
+- Уроки: раннер e2e падает на ошибке консоли — 4xx в page.route отдавать 200 с error, офлайн подменой fetch; serverContract считает admin.rpc в Edge вызовом приложения — через обёртку rpc(); платежи нельзя мягко удалить.
 
 ## Памятки-передачи 07.11 (руководитель №4)
 ### Памятка «Лиды и клиенты» №10 (session_015CqH6A7brPRZCibvSZzhLd, архив 07.11; дела у №11 `session_015CqH6AXexfSJUxpzdXPpY4`)
