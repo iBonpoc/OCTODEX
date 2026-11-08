@@ -27,6 +27,16 @@ const hmacKey = IP_SECRET
 const ORIGIN = /^https:\/\/octodex(--[a-z0-9-]+)?\.expo\.app$/;
 
 Deno.serve(async (req: Request) => {
+  try {
+    return await serve(req);
+  } catch {
+    // anything unexpected: «busy», no detail, nothing of the request in the log
+    console.warn("intake: unexpected error");
+    return new Response(JSON.stringify({ ok: false, code: "busy" }), { status: 503, headers: { "Content-Type": "application/json" } });
+  }
+});
+
+async function serve(req: Request): Promise<Response> {
   const res = await handleIntake(
     { method: req.method, url: req.url, header: (n) => req.headers.get(n), text: () => req.text() },
     {
@@ -49,11 +59,12 @@ Deno.serve(async (req: Request) => {
       sha256: async (s) => hex(await crypto.subtle.digest("SHA-256", enc.encode(s))),
       hmac: hmacKey ? async (s) => hex(await crypto.subtle.sign("HMAC", await hmacKey, enc.encode(s))) : null,
       allowedOrigin: (o) => ORIGIN.test(o),
-      ipHeaders: ["cf-connecting-ip", "x-forwarded-for"],
+      // only Cloudflare's header: x-forwarded-for may carry what the client wrote (director's check of #421)
+      ipHeaders: ["cf-connecting-ip"],
       now: () => Date.now(),
       wait: (ms) => new Promise((r) => setTimeout(r, ms)),
       log: (m) => console.warn(m),
     },
   );
   return new Response(res.status === 204 ? null : res.body, { status: res.status, headers: res.headers });
-});
+}

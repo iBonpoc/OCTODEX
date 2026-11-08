@@ -9,7 +9,7 @@ import { createHash, createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  CONSENT_VERSION, MAX_BODY, MAX_FILL_MS, ipKey, MIN_ANSWER_MS, MIN_FILL_MS, canonical, cleanPayload, clientIp, handleIntake,
+  CONSENT_VERSION, MAX_BODY, MAX_FILL_MS, ipKey, netKey, MIN_ANSWER_MS, MIN_FILL_MS, canonical, cleanPayload, clientIp, handleIntake,
   type IntakeCall, type IntakeDeps, type Req,
 } from "../../../supabase/functions/lead-intake/handler";
 
@@ -53,7 +53,7 @@ function deps(o: { status?: string; throws?: boolean; captcha?: { success: boole
     sha256: async (s) => sha(s),
     hmac: async (s) => createHmac("sha256", "secret").update(s).digest("hex"),
     allowedOrigin: (x) => /^https:\/\/octodex(--[a-z0-9-]+)?\.expo\.app$/.test(x),
-    ipHeaders: ["cf-connecting-ip", "x-forwarded-for"],
+    ipHeaders: ["cf-connecting-ip"],
     now: () => NOW,
     wait: async (ms) => {
       waits.push(ms);
@@ -76,7 +76,7 @@ describe("lead-intake: the page's request", () => {
     expect(c.tokenHash).toBe(sha(FORM));
     expect(c.ipHash).toBe(createHmac("sha256", "secret").update("203.0.113.7").digest("hex"));
     expect(c.ipHash).not.toBe(sha("203.0.113.7")); // a plain hash of an IPv4 is enumerable
-    expect(c.checks).toEqual({ bot: "false", captcha: "none", consent: "false" }); // no captcha token sent
+    expect(c.checks).toEqual({ bot: "false", captcha: "none", consent: "false" }); // no captcha token sent; IPv4 — no /48
     expect(c.payload).toEqual({ name: "Ann Lee", phone: "(626) 555-0113", message: "Clean gutters" });
     expect(c.payloadHash).toBe(sha(canonical(c.payload)));
   });
@@ -110,11 +110,14 @@ describe("lead-intake: the page's request", () => {
     const prev = deps();
     expect((await handleIntake(req({ headers: { origin: "https://octodex--abc123.expo.app" }, body: form() }), prev.d)).status).toBe(200);
   });
-  it("a honeypot, a fill faster than 3 s or no opening time — a bot (kept for the limits, never a lead)", async () => {
-    for (const extra of [{ website: "http://spam" }, { filled_ms: MIN_FILL_MS - 1 }, { filled_ms: undefined }, { filled_ms: -5 }, { filled_ms: MAX_FILL_MS + 1 }]) {
+  it("the trap field refuses; a wrong fill time only says «time» (the database holds it for a person)", async () => {
+    const trap = deps();
+    await handleIntake(req({ body: form({ website: "http://spam" }) }), trap.d);
+    expect(trap.calls[0].checks.bot).toBe("trap");
+    for (const extra of [{ filled_ms: MIN_FILL_MS - 1 }, { filled_ms: undefined }, { filled_ms: -5 }, { filled_ms: MAX_FILL_MS + 1 }]) {
       const { d, calls } = deps();
       await handleIntake(req({ body: form(extra) }), d);
-      expect(calls[0].checks.bot, JSON.stringify(extra)).toBe("true");
+      expect(calls[0].checks.bot, JSON.stringify(extra)).toBe("time");
     }
   });
   it("the captcha: verified on the server (success, our hostname, our action); none without a token", async () => {
@@ -149,6 +152,9 @@ describe("lead-intake: the page's request", () => {
       expect(r.status, body.slice(0, 20)).toBe(400);
       expect(calls).toHaveLength(0);
     }
+  });
+  it("bidi overrides, zero-width and C1 characters are cut out of a field", () => {
+    expect(cleanPayload({ name: "Ann\u202eeL\u200b \u0085Lee\ufeff" }, "form").name).toBe("Ann eL Lee");
   });
   it("a page sets no price or provider; only known fields, cut, no control characters", () => {
     const p = cleanPayload({ name: ` A\u0000nn${"x".repeat(200)}`, cost_cents: "100", provider: "thumbtack", is_admin: true, phone: 6265550113,
@@ -190,6 +196,22 @@ describe("lead-intake: the client's IP", () => {
     expect(ipKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
     expect(ipKey("2001:db8:aa:bc::1")).not.toBe(ipKey("2001:db8:aa:bb::1"));
     expect(ipKey("203.0.113.7")).toBe("203.0.113.7");
+    expect(ipKey("::ffff:203.0.113.7")).toBe("203.0.113.7"); // IPv4 written as IPv6 is the same client
+    expect(netKey("2001:db8:aa:bb::1")).toBe("2001:db8:aa::/48");
+    expect(netKey("2001:db8:aa:cc::9")).toBe(netKey("2001:db8:aa:bb::1"));
+    expect(netKey("203.0.113.7")).toBeNull();
+  });
+  it("an IPv6 client: the /48 goes as a second HMAC (checks.net)", async () => {
+    const { d, calls } = deps();
+    await handleIntake(req({ headers: { "cf-connecting-ip": "2001:db8:aa:bb::1" }, body: form() }), d);
+    expect(calls[0].checks.net).toBe(createHmac("sha256", "secret").update("2001:db8:aa::/48").digest("hex"));
+  });
+  it("only cf-connecting-ip is trusted: without it — no IP (held by the database) and a log line with the header names only", async () => {
+    const { d, calls, logs } = deps();
+    await handleIntake(req({ headers: { "cf-connecting-ip": "", "x-forwarded-for": "6.6.6.6, 198.51.100.2" }, body: form() }), d);
+    expect(calls[0].ipHash).toBeNull();
+    expect(logs).toEqual(["intake: no trusted ip header (cf-connecting-ip); came: x-forwarded-for"]);
+    expect(logs.join(" ")).not.toMatch(/6\.6|198\.51/);
   });
   it("a phone whose clock is 10 minutes ahead is still a person (the fill time is the page's own)", async () => {
     const { d, calls } = deps();
@@ -223,7 +245,7 @@ describe("lead-intake: the page reads its form", () => {
   it("a refused request is logged by its outcome only", async () => {
     const { d, logs } = deps({ status: "rejected" });
     await handleIntake(req({ body: form({ website: "x" }) }), d);
-    expect(logs).toEqual(["intake: form rejected bot"]);
+    expect(logs).toEqual(["intake: form rejected bot:trap"]);
   });
   it("OPTIONS: CORS only for our origins", async () => {
     const { d } = deps();
@@ -275,6 +297,7 @@ describe("lead-intake: the deployment", () => {
     expect(rel).toMatch(/supabase functions deploy lead-intake --project-ref "\$PROJECT_REF" --yes/);
     const src = readFileSync(new URL("../../../supabase/functions/lead-intake/index.ts", import.meta.url), "utf8");
     expect(src).not.toMatch(/console\.(log|warn|error)\([^)]*(req|body|payload|ip)/i);
-    expect(src).toMatch(/"cf-connecting-ip", "x-forwarded-for"/);
+    expect(src).toMatch(/ipHeaders: \["cf-connecting-ip"\]/);
+    expect(src).toMatch(/catch \{[\s\S]*?"busy"/); // any unexpected error → busy
   });
 });

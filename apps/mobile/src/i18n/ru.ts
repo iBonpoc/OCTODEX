@@ -1485,6 +1485,9 @@ export const ru = {
   /* list cards (docs/specs/06-list-cards.md) */
   "card.fact.num": "Номер",
   "card.fact.client": "Клиент",
+  // панель открытой карточки на 1280 (06 «Панель 1280»)
+  "card.panel.open": "Открыть",
+  "card.panel.close": "Закрыть панель",
   "card.fact.phone": "Телефон",
   "card.fact.email": "Email",
   "card.fact.addr": "Адрес",
@@ -2919,10 +2922,17 @@ export const ru = {
   "intake.set.heldTitle": "Заявка ждёт решения",
   "intake.set.reason.ip_limit": "Много заявок с одного адреса за час — похоже на спам.",
   "intake.set.reason.daily_limit": "Дневной лимит формы исчерпан.",
+  "intake.set.reason.too_fast": "Форму заполнили слишком быстро — так делают боты. Проверьте и решите.",
+  "intake.set.reason.no_ip": "Сервер не узнал адрес отправителя — лимиты не сработали. Проверьте и решите.",
+  "intake.set.reason.old_link": "Заявка пришла по старой ссылке (её сменили). Обновите ссылку на сайте.",
+  "intake.set.reason.net_limit": "Много заявок из одной сети за час — похоже на спам.",
   "intake.set.reason.other": "Заявка отложена.",
   "intake.set.accept": "Принять — сделать лидом",
   "intake.set.reject": "Отклонить",
   "tl.intake": "Повторная заявка (не подтверждено)",
+  // «Шаблоны чек-листов» CH2b: «Не сделано» in «Требует внимания» (docs/specs/08 §8)
+  // step 14 CH3 (чек-листы): the office edits a visit's checklist
+  // step 14 CH3b: starter checklist templates of a module
   // ---- «Деньги и отчёты»: онлайн-оплата (docs/specs/35, 20b)
   "opay.title": "Онлайн-оплата",
   "opay.entryHint": "Клиент платит картой или с банковского счёта по ссылке (Stripe)",
@@ -2961,4 +2971,3 @@ export const ru = {
 
 export type DictKey = keyof typeof ru;
 export type Dict = Record<DictKey, string>;
-
