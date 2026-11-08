@@ -8733,6 +8733,21 @@ update public.estimate_versions set totals = '{"total": 12000, "deposit": 0, "ma
 :as_office_a
 select tst.ok((select margin_pct is null from public.estimate_version_costs where version_id = 'a1060000-0000-4000-8000-000000000002'),
   'T106 the tech changed the total: the margin is «not counted», not the old 40.0');
+-- director's review №2: the same total, other lines — another margin: «not counted» too; only the note — the margin stays
+update public.estimate_versions set calc_inputs = '{"note": "a", "options": [{"id": "x", "lines": [{"id": "1", "unitPriceCents": 20000}]}]}',
+       totals = '{"total": 12000, "deposit": 0, "marginPct": "40.0"}' where id = 'a1060000-0000-4000-8000-000000000002';
+:as_tech_a
+update public.estimate_versions set calc_inputs = '{"note": "b", "options": [{"id": "x", "lines": [{"id": "1", "unitPriceCents": 20000}]}]}',
+       totals = '{"total": 12000, "deposit": 0, "marginPct": null}' where id = 'a1060000-0000-4000-8000-000000000002';
+:as_office_a
+select tst.ok((select margin_pct = '40.0' from public.estimate_version_costs where version_id = 'a1060000-0000-4000-8000-000000000002'),
+  'T106 the tech changed only the note: the margin stays');
+:as_tech_a
+update public.estimate_versions set calc_inputs = '{"note": "b", "options": [{"id": "x", "lines": [{"id": "2", "unitPriceCents": 20000}]}]}',
+       totals = '{"total": 12000, "deposit": 0, "marginPct": null}' where id = 'a1060000-0000-4000-8000-000000000002';
+:as_office_a
+select tst.ok((select margin_pct is null from public.estimate_version_costs where version_id = 'a1060000-0000-4000-8000-000000000002'),
+  'T106 the tech swapped a line, the total is the same: the margin is «not counted»');
 -- the option and its line come back (an op resent later, an undo): the cost comes back with the same line id
 :as_tech_a
 insert into public.estimate_options (id, company_id, version_id, name, position) values
@@ -8748,14 +8763,15 @@ insert into public.estimate_line_items (id, company_id, option_id, name, quantit
   ('a1060000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a2', 'Guard (test)', 5, 2000);
 select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b3'$q$) = 0,
   'T106 the office deletes and inserts: no cost comes back by itself');
--- review №1: a cost the tech's delete kept aside does not come back on the office's insert (the office cleared it)
+-- director's review №1: the tech's save stopped between its delete and its insert (no network); the office saves the
+-- same lines (it never saw their cost) — the kept cost comes back to it, the tech's resend has nothing left to lose
 :as_tech_a
 delete from public.estimate_line_items where id = 'a1060000-0000-4000-8000-0000000000b1';
 :as_office_a
 insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
   ('a1060000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a1', 'Gutter (test)', 12, 1000);
-select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b1'$q$) = 0,
-  'T106 the office''s insert takes no kept cost back (a cost it cleared stays cleared)');
+select tst.ok((select unit_cost_cents = 600 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b1'),
+  'T106 the tech''s save broke off: the office''s insert of the same line takes the kept cost back');
 -- the office's margin still works
 update public.estimate_versions set totals = '{"total": 12000, "deposit": 0, "marginPct": "38.5"}' where id = 'a1060000-0000-4000-8000-000000000002';
 select tst.ok((select margin_pct = '38.5' from public.estimate_version_costs where version_id = 'a1060000-0000-4000-8000-000000000002'), 'T106 the office sets the margin');
@@ -8767,7 +8783,18 @@ select tst.blocked('select * from public.estimate_line_costs_kept', 'T106 the te
 select tst.ok((select count(*) = 1 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000b2'),
   'T106 the cost of the removed line waits aside (30 days)');
 select tst.ok(not exists (select 1 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000b1'),
-  'T106 the office''s insert dropped what was kept for its line');
+  'T106 what was kept for the line is used up');
+-- the 30-day sweep: an old kept cost goes on the next line insert, a fresh one stays
+insert into public.estimate_line_costs_kept (line_item_id, company_id, version_id, unit_cost_cents, currency, kept_at) values
+  ('a1060000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-000000000002', 1, 'USD', now() - interval '31 days'),
+  ('a1060000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-000000000002', 2, 'USD', now() - interval '29 days');
+:as_tech_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('a1060000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a1', 'Sweep (test)', 1, 100);
+:as_super
+select tst.ok(not exists (select 1 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000f1')
+              and exists (select 1 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000f2'),
+  'T106 a kept cost older than 30 days goes, a fresh one stays');
 select tst.ok((select count(*) = 3 from pg_trigger where tgenabled = 'O'
                 and tgname in ('t35_cost_keep', 't95_cost_restore', 't45_margin_move')), 'T106 the three triggers are on');
 -- another company: a cost kept for B under some id never goes to A's line with that id (the tech's restore path)
