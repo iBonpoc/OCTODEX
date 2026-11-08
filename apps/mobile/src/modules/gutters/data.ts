@@ -65,7 +65,7 @@ export function latestFor(g: GutterData, by: { leadId?: string; propertyId?: str
 }
 
 /** the measurement's own fields (what measurement.save writes) */
-export const ownFields = (m: MeasurementRow): MeasurementRow => ({ id: m.id, label: m.label, status: m.status, propertyId: m.propertyId, leadId: m.leadId, accuracy: m.accuracy ?? "rough" });
+export const ownFields = (m: MeasurementRow): MeasurementRow => ({ id: m.id, label: m.label, status: m.status, propertyId: m.propertyId, leadId: m.leadId, ...(m.accuracy ? { accuracy: m.accuracy } : {}) });
 
 /**
  * S1b «Сделать заявкой»: the new lead made from a draft takes it (ModuleDef.leadCreated). A measurement the store does
@@ -149,7 +149,7 @@ export function removePhoto(store: ModuleStore, id: string) {
 
 /* ---------- module.op → the server ---------- */
 export const measurementToDb = (m: MeasurementRow, companyId: string) => ({
-  id: m.id, company_id: companyId, property_id: m.propertyId, lead_id: m.leadId, label: m.label, status: m.status, accuracy: m.accuracy ?? "rough", deleted_at: null,
+  id: m.id, company_id: companyId, property_id: m.propertyId, lead_id: m.leadId, label: m.label, status: m.status, ...(m.accuracy ? { accuracy: m.accuracy } : {}), deleted_at: null,
 });
 export const elementToDb = (e: ElementRow, companyId: string) => ({
   id: e.id, company_id: companyId, measurement_id: e.measurementId, kind: e.kind, geom: e.geom, attrs: e.attrs, confidence: e.confidence, deleted_at: null,
