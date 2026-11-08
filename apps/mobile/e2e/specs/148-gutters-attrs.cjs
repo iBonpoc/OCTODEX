@@ -83,10 +83,11 @@ exports.run = async (h) => {
   if (!wide) {
     // 390 (П20.9): storey, size, colour and the tape on top; the rest under «Ещё»
     for (const id of ["attr-story", "attr-size", "attr-color", "attr-length"]) h.expect((await tid(id).count()) === 1, `390: ${id} on top`);
+    h.expect((await tid("attr-finish").count()) === 1, "390: the finish beside the colour");
     h.expect((await tid("attr-profile").count()) === 0 && (await tid("attr-hanger").count()) === 0, "390: profile and hangers under «Ещё»");
     h.expect(/профиль/.test(await tid("attr-more").innerText()), "«Ещё» says what is in it");
     await h.shot("props");
-  }
+  } else h.expect((await tid("attr-profile").count()) === 1 && (await tid("attr-more").count()) === 0, "820/1280: every field of the gutter, no «Ещё»");
   await more();
   h.expect(/нарисовано/.test(await tid("attr-confidence").innerText()), "a drawn length says «нарисовано»");
   h.expect((await chosen("attr-profile")) === "K", "K-style by default");
@@ -131,6 +132,12 @@ exports.run = async (h) => {
   await p.mouse.click(b.x + b.width * 0.25, y + 3);
   await waitFor(async () => (await svg().locator("circle").count()) === 1, "a downspout");
   await openAttrs();
+  if (!wide) {
+    // 390 (П20.9): size, colour, elbows on top; one «Ещё» for the rest — closed again for this new element
+    for (const id of ["attr-ds-size", "attr-color", "attr-elbow-qty"]) h.expect((await tid(id).count()) === 1, `390: ${id} on top`);
+    for (const id of ["attr-shape", "attr-bottom", "attr-wall", "attr-head"]) h.expect((await tid(id).count()) === 0, `390: ${id} under «Ещё»`);
+    h.expect((await tid("attr-more").count()) === 1, "390: one «Ещё», closed for the new element");
+  } else h.expect((await tid("attr-shape").count()) === 1, "820/1280: the shape without «Ещё»");
   await more();
   h.expect((await chosen("attr-shape")) === "Прямоугольный", "rectangular by default");
   await choose("attr-shape", "Круглый");

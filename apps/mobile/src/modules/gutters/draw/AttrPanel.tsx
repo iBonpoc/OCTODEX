@@ -101,7 +101,7 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
 }
 
 /** stock shared by runs and downspouts: material → gauge; paint → colour (copper and zinc are bare) */
-function Stock<A extends { material: string; gauge?: string; finish?: "mill" | "painted"; color?: string }>({ a, set, ch, part = "all" }: { a: A; set: (p: Partial<A>) => void; ch: Choices; /** 390 (П20.9): the colour on top, the rest under «Ещё» */ part?: "all" | "color" | "rest" }) {
+function Stock<A extends { material: string; gauge?: string; finish?: "mill" | "painted"; color?: string }>({ a, set, ch, part = "all" }: { a: A; set: (p: Partial<A>) => void; ch: Choices; /** 390 (П20.9): finish and colour on top, the rest under «Ещё» */ part?: "all" | "color" | "rest" }) {
   const { t } = useI18n();
   const colorLabel = useColorLabel();
   const materials = withCurrent(ch.offer.materials, a.material);
@@ -115,7 +115,8 @@ function Stock<A extends { material: string; gauge?: string; finish?: "mill" | "
     <>
       {rest ? <Pick label={t(k("material"))} testID="attr-material" offered={ch.offer.materials} items={materials.map((m) => ({ key: m, label: t(k(`m.${m}`)) }))} value={a.material} onChange={(material) => set({ material } as Partial<A>)} /> : null}
       {rest && gauges.length ? <Pick label={t(k("gauge"))} testID="attr-gauge" offered={ch.offer.gauges[a.material]} items={gauges.map((g) => ({ key: g, label: g }))} value={a.gauge ?? gauges[0]!} onChange={(gauge) => set({ gauge } as Partial<A>)} /> : null}
-      {rest && !mill ? (
+      {/* the finish goes with the colour (390 on top): «Без покраски» hides the colour, so the way back stands beside it */}
+      {color && !mill ? (
         <Pick label={t(k("finish"))} testID="attr-finish" items={(["painted", "mill"] as const).map((f) => ({ key: f, label: t(k(`f.${f}`)) }))} value={finish} onChange={(f) => set({ finish: f } as Partial<A>)} />
       ) : null}
       {color && !mill && finish === "painted" ? (

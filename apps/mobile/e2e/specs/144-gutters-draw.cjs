@@ -87,11 +87,9 @@ exports.run = async (h) => {
   const m2 = await money();
 
   // a downspout on the first run — the next step is offered under the $ (П20.9)
-  h.expect(/Дальше: поставьте водостоки/.test(await tid("draw-next").innerText()), "what next: the downspouts");
-  await h.shot("next");
-  await tid("draw-next").getByRole("button").click();
+  h.expect((await tid("draw-next").count()) === 0, "off: no «what next» — no estimate comes of it");
+  await tid("draw-tool-ds").getByRole("button").click();
   await tid("draw-hint").waitFor({ timeout: 3000 });
-  h.expect((await tid("draw-next").count()) === 0, "the downspout tool is on: no «what next» line");
   h.expect(/Нажмите на желоб, где водосток/.test(await tid("draw-hint").innerText()), "the downspout tool says where to tap");
   await h.shot("hint");
   await p.mouse.click((x0 + x1) / 2, y + 3);
@@ -177,7 +175,13 @@ exports.run = async (h) => {
   const b2 = await box();
   const yy = b2.y + b2.height * 0.42;
   await stroke([b2.x + b2.width * 0.25, yy], [b2.x + b2.width * 0.7, yy]);
-  await tid("draw-tool-ds").getByRole("button").click();
+  // on: the next step is offered under the $ (П20.9) and turns the downspout tool on
+  await tid("draw-next").waitFor({ timeout: 3000 });
+  h.expect(/Дальше: поставьте водостоки/.test(await tid("draw-next").innerText()), "what next: the downspouts");
+  await h.shot("next");
+  await tid("draw-next").getByRole("button").click();
+  await tid("draw-hint").waitFor({ timeout: 3000 });
+  h.expect((await tid("draw-next").count()) === 0, "the downspout tool is on: no «what next» line");
   await p.mouse.click(b2.x + b2.width * 0.47, yy + 3);
   await waitFor(async () => (await count("circle")) === 1, "a downspout");
   await tid("draw-saved").waitFor({ timeout: 5000 });

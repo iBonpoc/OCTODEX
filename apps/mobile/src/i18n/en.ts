@@ -2459,7 +2459,7 @@ export const en: Dict = {
   "mod.gutters.set.paletteFull": "A palette holds up to {n} colors",
   // module M7c: rules, use, rare downspout fields, corners (spec 33 П22)
   "mod.gutters.attr.more": "More: height, offsets, reducer, top",
-  "mod.gutters.attr.moreRun": "More: profile, material, mounting, corners",
+  "mod.gutters.attr.moreRun": "More: profile, material, mounting, hangers",
   "mod.gutters.attr.moreDs": "More: shape, material, bottom, wall, height",
   "mod.gutters.attr.height": "Own height",
   "mod.gutters.attr.heightHint": "0 — by the story (story height from settings)",

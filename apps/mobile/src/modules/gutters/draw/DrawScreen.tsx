@@ -481,7 +481,7 @@ export default function DrawScreen() {
       <View testID="draw-more" style={grow ? { flex: 1 } : undefined}><ToolCell icon="more" label={t("mod.gutters.draw.more")} onPress={() => setMoreSheet(true)} grow={grow} /></View>
     </View>
   );
-  const nextDs = drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
+  const nextDs = canSave && drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
   const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
