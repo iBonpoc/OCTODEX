@@ -65,7 +65,7 @@ export function latestFor(g: GutterData, by: { leadId?: string; propertyId?: str
 }
 
 /** the measurement's own fields (what measurement.save writes) */
-export const ownFields = (m: MeasurementRow): MeasurementRow => ({ id: m.id, label: m.label, status: m.status, propertyId: m.propertyId, leadId: m.leadId });
+export const ownFields = (m: MeasurementRow): MeasurementRow => ({ id: m.id, label: m.label, status: m.status, propertyId: m.propertyId, leadId: m.leadId, accuracy: m.accuracy ?? "rough" });
 
 /**
  * S1b «Сделать заявкой»: the new lead made from a draft takes it (ModuleDef.leadCreated). A measurement the store does

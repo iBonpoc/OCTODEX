@@ -166,7 +166,7 @@ describe("unit:gutterData — the canvas's store on the queue (makeModuleStore)"
     const st = makeModuleStore(() => s as never, "m1", () => "2026-11-08T01:00:00Z");
     await st.save(M, { save: [E, { ...E, id: "e2" }], remove: [] });
     expect(sent.map((x) => [x.kind, x.coalesceKey])).toEqual([[K.mSave, "m1"], [K.eSave, "e1"], [K.eSave, "e2"]]);
-    expect(sent[0]!.payload).toEqual({ m: M });
+    expect(sent[0]!.payload).toEqual({ m: { ...M, accuracy: "rough" } });
     expect((await st.load())?.elements.map((e) => e.id)).toEqual(["e1", "e2"]);
     expect((await st.load())?.m.updatedAt).toBe("2026-11-08T01:00:00Z");
     sent.length = 0;
@@ -260,7 +260,7 @@ describe("review M5a: fixes", () => {
     // the phone changes its property: the row it sends keeps the server's lead and label
     sent.length = 0;
     await st.save({ ...opened, propertyId: "p7" }, { save: [], remove: [] });
-    expect(sent).toEqual([{ kind: K.mSave, payload: { m: { id: "m1", label: "Front", status: "draft", propertyId: "p7", leadId: "l9" } } }]);
+    expect(sent).toEqual([{ kind: K.mSave, payload: { m: { id: "m1", label: "Front", status: "draft", propertyId: "p7", leadId: "l9", accuracy: "rough" } } }]);
   });
   it("M8b: the status is the store's — a stale screen never sets it back; a change of the drawing after «Смета» makes it a draft", async () => {
     const { makeModuleStore } = await import("../src/modules/gutters/canvas/moduleStore");
@@ -334,7 +334,7 @@ describe("unit:gutterData — M5b: places and «Сделать заявкой» 
       },
     };
     const undo = linkLead(s as never, "m1", "lead-9");
-    expect(sent).toEqual([{ kind: K.mSave, payload: { m: { id: "m1", label: "Draft", status: "draft", propertyId: null, leadId: "lead-9" } }, coalesceKey: "m1" }]);
+    expect(sent).toEqual([{ kind: K.mSave, payload: { m: { id: "m1", label: "Draft", status: "draft", propertyId: null, leadId: "lead-9", accuracy: "rough" } }, coalesceKey: "m1" }]);
     expect(gutterData(s.db).measurements[0]!.leadId).toBe("lead-9");
     undo!();
     expect(undone).toBe(1);

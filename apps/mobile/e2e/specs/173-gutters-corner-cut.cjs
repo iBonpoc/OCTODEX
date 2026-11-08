@@ -40,9 +40,7 @@ exports.run = async (h) => {
   };
   const cuts = async () => {
     const out = [];
-    for (const card of await p.locator('[data-testid^="corner-cut-"]:visible').all()) {
-      const id = await card.getAttribute("data-testid");
-      if (id === "corner-cut-angle") continue;
+    for (const card of await p.locator('[data-testid^="corner-cut-"]:visible:has([data-testid="cut-back"])').all()) {
       out.push({ back: inches(await card.getByTestId("cut-back").innerText()), front: inches(await card.getByTestId("cut-front").innerText()) });
     }
     return out;
