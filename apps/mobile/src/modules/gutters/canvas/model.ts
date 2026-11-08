@@ -103,5 +103,6 @@ export function applyChange(rows: readonly ElementRow[], ch: { save: ElementRow[
 /** where the drawing is kept (M4: on the phone; M5: module.op — П19 tables) */
 export interface MeasurementStore {
   load(): Promise<{ m: MeasurementRow; elements: ElementRow[] } | null>;
-  save(m: MeasurementRow, ch: { save: ElementRow[]; remove: string[] }): Promise<void>;
+  /** `rows`: every element now — a store that lost the measurement sends them all */
+  save(m: MeasurementRow, ch: { save: ElementRow[]; remove: string[] }, rows?: readonly ElementRow[]): Promise<void>;
 }

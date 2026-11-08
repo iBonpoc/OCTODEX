@@ -6,7 +6,7 @@
  * 44 to touch — rule 3) sits at the bottom, under the right hand or under the left; the $ is always at the bottom —
  * a preview from the engine with TEST rates (rule 9), the estimate is M8. Storeys by colour + «эт N» (founder О3).
  * Saved 1 s after a gesture ends through the core's queue (module.op, spec 33 П21 M5a; tables П19), offline too;
- * `?m=<id>` opens a measurement, none — a new one (a draft of M4b kept on the phone is moved in once); a module that is off or past its
+ * `?m=<id>` opens a measurement, none — a new one; a module that is off or past its
  * trial draws but saves nothing, and says so before the work starts (§6, founder О2). Delete → «Отменить» 5 s (rule 5).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -29,7 +29,7 @@ import { RowView } from "@/ui/surfaces";
 import { CanvasView, useLive } from "../canvas/CanvasView";
 import { addDownspout, endAt, finishStroke, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { ftIn } from "../canvas/format";
-import { forgetOldDraft, loadToolbarPlace, saveToolbarPlace, takeOldDraft, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
+import { forgetOldDraft, loadToolbarPlace, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf } from "../data";
 import { makeSaver } from "../canvas/draftStore";
@@ -88,32 +88,26 @@ export default function DrawScreen() {
   const storeRef = useRef(store);
   storeRef.current = store;
   const mid = useRef(typeof params.m === "string" && params.m ? params.m : Crypto.randomUUID()).current;
-  const saver = useRef(makeSaver(makeModuleStore(() => storeRef.current, mid))).current;
+  const mstore = useRef(makeModuleStore(() => storeRef.current, mid)).current;
+  const saver = useRef(makeSaver(mstore)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** a draft of M4b moved in: forgotten on the phone once it is in the queue */
-  const importing = useRef(false);
+  /** the address names the measurement after its first save, once, and only while this screen is shown (review M5a №5) */
+  const named = useRef(!!params.m);
+  const shown = useRef(true);
 
   useEffect(() => {
     let on = true;
-    const v = measurementOf(gutterData(storeRef.current.db), mid);
-    if (v) {
-      setM(v.m);
-      saver.seed(v.elements);
-      setDrawing(fromElements(v.elements));
-    } else if (params.m) {
-      setM({ id: mid, label: null, status: "draft", propertyId: null, leadId: null });
-    } else {
-      // a new measurement; the one draft M4b kept on the phone comes in as it (its elements are sent with the first save)
-      void takeOldDraft().then((old) => {
-        if (!on) return;
-        if (old) {
-          importing.current = true;
-          setM(old.m);
-          setDrawing(fromElements(old.elements));
-          later.current();
-        } else setM({ id: mid, label: null, status: "draft", propertyId: null, leadId: null });
-      });
-    }
+    // the draft M4b kept on the phone (device-wide, no owner): not moved into a company — it would go to whoever is
+    // signed in (review M5a №6); M4b never reached the phones' channel
+    void forgetOldDraft();
+    void mstore.load().then((v) => {
+      if (!on) return;
+      if (v) {
+        saver.seed(v.elements);
+        setDrawing(fromElements(v.elements));
+      }
+      setM(v?.m ?? { id: mid, label: null, status: "draft", propertyId: null, leadId: null });
+    });
     void loadToolbarPlace().then((p) => on && setPlace(p));
     return () => {
       on = false;
@@ -131,13 +125,13 @@ export default function DrawScreen() {
     if (!mm || !ok) return;
     void saver.flush(mm, toElements(d, mm.id)).then((r) => {
       if (r === "saved") {
+        if (!shown.current) return;
         setSavedOnce(true);
-        if (importing.current) {
-          importing.current = false;
-          void forgetOldDraft();
-        }
         // a reload (web) or «back» and in again opens this measurement, not a new one
-        if (params.m !== mm.id) router.setParams({ m: mm.id });
+        if (!named.current) {
+          named.current = true;
+          router.setParams({ m: mm.id });
+        }
       }
       // the write failed: its change is still unsent — try again a bit later
       else if (r === "failed") later.current();
@@ -151,6 +145,7 @@ export default function DrawScreen() {
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
     flush();
+    shown.current = false;
   }, [flush]);
 
   /** one finished edit: history, the drawing, the save */

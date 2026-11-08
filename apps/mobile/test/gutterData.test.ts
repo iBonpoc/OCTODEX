@@ -185,3 +185,92 @@ describe("unit:gutterData — the canvas's store on the queue (makeModuleStore)"
     expect(s.db.moduleData).toBeUndefined();
   });
 });
+
+describe("review M5a: fixes", () => {
+  const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+  const MID = U(1), A = U(2), B = U(3);
+  const ME = { userId: "u1", companyId: "c1" };
+  const save = (e: string, x: number) =>
+    ({ k: "module.op", module: "gutters", kind: K.eSave, payload: { e: { ...E, id: e, measurementId: MID, geom: { a: [0, 0], b: [x, 0] } } }, coalesceKey: e, made: [e] }) as Op;
+  const it_ = (id: string, op: Op, owner: object | null = ME) => ({ id, op, at: "2026-11-08T00:00:00Z", tries: 0, ...(owner ? { owner } : {}) });
+
+  it("№2: moves of one element of a measurement are one waiting write, though every element points at the measurement (real UUIDs)", async () => {
+    const { coalesceAt } = await import("../src/data/outboxCoalesce");
+    const mSave = { k: "module.op", module: "gutters", kind: K.mSave, payload: { m: { ...M, id: MID } }, coalesceKey: MID, made: [MID] } as Op;
+    const q = [it_("m", mSave), it_("a", save(A, 10)), it_("b", save(B, 20))] as never[];
+    expect(coalesceAt(q, save(A, 30), ME, null)).toBe(1);
+    expect(coalesceAt(q, save(B, 40), ME, null)).toBe(2);
+    // the measurement's own later write: its elements after it refer to what it makes — it goes to the end
+    expect(coalesceAt(q, mSave, ME, null)).toBe(-1);
+    // a remove of A after A's save: the newer save of A goes after it (else the remove would delete the newer)
+    const rm = { k: "module.op", module: "gutters", kind: K.eRemove, payload: { id: A } } as Op;
+    expect(coalesceAt([...q, it_("r", rm)] as never[], save(A, 50), ME, null)).toBe(-1);
+  });
+
+  it("dropModuleOps: only my ops of that module; others', another module's and the core's stay; owner-less ones are mine (they go as mine)", async () => {
+    const { dropModuleOps, moduleRejected } = await import("../src/data/outboxRejected");
+    const other = { k: "module.op", module: "roofing", kind: "x", payload: {} } as Op;
+    const core = { k: "note.add" } as unknown as Op;
+    const q = [it_("1", save(A, 1)), it_("2", save(B, 1), { userId: "u2", companyId: "c1" }), it_("3", other), it_("4", core), it_("5", save(A, 2), null)] as never[];
+    const { kept, gone } = dropModuleOps(q, "gutters", ME);
+    expect(gone.map((x: { id: string }) => x.id)).toEqual(["1", "5"]);
+    expect(kept.map((x: { id: string }) => x.id)).toEqual(["2", "3", "4"]);
+    // one card per module and person; a second batch adds to its count
+    const one = moduleRejected([], "gutters", 2, "no", 1000, ME, "mod.gutters.rejected");
+    const two = moduleRejected(one, "gutters", 3, "no", 2000, ME, "mod.gutters.rejected");
+    expect(two).toHaveLength(1);
+    expect(two[0]).toMatchObject({ what: "module", module: "gutters", count: 5, href: "/company/modules", labelKey: "mod.gutters.rejected", owner: ME });
+    expect(moduleRejected(two, "gutters", 1, "no", 3000, { userId: "u2", companyId: "c1" })).toHaveLength(2);
+  });
+
+  it("№3: the card tells a tech to ask the owner and gives no «Открыть» to a screen he cannot open", async () => {
+    const { rejectedHint, rejectedOpens } = await import("../src/features/attention");
+    const r = { what: "module" as const, href: "/company/modules" };
+    expect(rejectedHint(r, "director")).toBe("sync.rejected.moduleHint");
+    expect(rejectedOpens(r, "director")).toBe(true);
+    for (const role of ["tech", "sales"] as const) {
+      expect(rejectedHint(r, role)).toBe("sync.rejected.moduleHintAsk");
+      expect(rejectedOpens(r, role)).toBe(false);
+    }
+    expect(rejectedHint({ what: "payment", href: "/invoice/i1" }, "tech")).toBe("sync.rejected.hint");
+  });
+
+  const harness = () => {
+    const sent: { kind: string; payload: Record<string, unknown> }[] = [];
+    const s = {
+      db: makeSeed(),
+      moduleOp: (_m: string, c: { kind: string; payload: Record<string, unknown>; apply: (d: never) => never }) => {
+        sent.push({ kind: c.kind, payload: c.payload });
+        s.db = c.apply(s.db as never);
+        return () => {};
+      },
+    };
+    return { s, sent };
+  };
+  it("№1: what the server changed meanwhile (a lead linked, a label) is kept — the canvas sends only its own changes", async () => {
+    const { makeModuleStore } = await import("../src/modules/gutters/canvas/moduleStore");
+    const { s, sent } = harness();
+    s.db = withGutterData(s.db, putMeasurement({ ...M, leadId: null }));
+    const st = makeModuleStore(() => s as never, "m1");
+    const opened = (await st.load())!.m;
+    // the office linked the lead and named it; the next read brought it
+    s.db = withGutterData(s.db, putMeasurement({ ...opened, leadId: "l9", label: "Front" }));
+    await st.save(opened, { save: [E], remove: [] });
+    expect(sent.map((x) => x.kind)).toEqual([K.eSave]); // the measurement is not written back
+    // the phone changes the status: the row it sends keeps the server's lead and label
+    sent.length = 0;
+    await st.save({ ...opened, status: "ready" }, { save: [], remove: [] });
+    expect(sent).toEqual([{ kind: K.mSave, payload: { m: { id: "m1", label: "Front", status: "ready", propertyId: null, leadId: "l9" } } }]);
+  });
+  it("№4: the store lost the measurement (its waiting changes were dropped) — the next save sends it whole with every element", async () => {
+    const { makeModuleStore } = await import("../src/modules/gutters/canvas/moduleStore");
+    const { s, sent } = harness();
+    const st = makeModuleStore(() => s as never, "m1");
+    await st.save(M, { save: [E], remove: [] }, [E]);
+    s.db = { ...s.db, moduleData: {} }; // dropped
+    sent.length = 0;
+    const e2 = { ...E, id: "e2" };
+    await st.save(M, { save: [e2], remove: [] }, [E, e2]);
+    expect(sent.map((x) => [x.kind, (x.payload.e as { id?: string } | undefined)?.id])).toEqual([[K.mSave, undefined], [K.eSave, "e1"], [K.eSave, "e2"]]);
+  });
+});

@@ -11,6 +11,7 @@ import { jobAwaitingClose } from "@/features/jobDone";
 import { goneId } from "./team";
 import type { DictKey } from "@/i18n";
 import type { RejectedOp } from "@/data/outboxRejected";
+import { canOpen } from "@/nav/roles";
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
   /* E2b-2 (docs/specs/07 «E2b — экраны подписи» §3, §7, §8) */
@@ -69,6 +70,12 @@ const SUBJECT_PATH: Record<Task["subjectType"], string> = { lead: "/lead", custo
 /** the words of a refused change: a module's own text (ModuleDef.rejectedKey), else the kind's */
 export const rejectedLabel = (r: Pick<RejectedOp, "what" | "labelKey">): DictKey => (r.labelKey ?? `att.rejected.${r.what}`) as DictKey;
 
+/** what to do about a refused change: «Открыть» → «Подключить» for who may open where it leads, else «ask the owner» */
+export const rejectedHint = (r: Pick<RejectedOp, "what" | "href">, role: Role): DictKey =>
+  r.what !== "module" ? "sync.rejected.hint" : canOpen(role, r.href) ? "sync.rejected.moduleHint" : "sync.rejected.moduleHintAsk";
+/** «Открыть» on a refused change: only where this role may go (a module's card for a tech: nowhere — review M5a №3) */
+export const rejectedOpens = (r: Pick<RejectedOp, "href">, role: Role) => canOpen(role, r.href);
+
 /** "Требует внимания" / triage queue: everything that needs a human decision now, most urgent first. */
 /** a refused money change is always first: above every other score (a lead waiting N minutes is 1000 + N, review #263 №1) */
 export const REJECTED_SCORE = Number.MAX_SAFE_INTEGER;
@@ -78,7 +85,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   for (const r of extra.rejected ?? []) {
     out.push({
       id: `rej-${r.id}`, kind: "rejected", refId: r.id, name: "", label: rejectedLabel(r), params: r.what === "module" ? { count: r.count ?? 0 } : {}, chip: "att.rejectedChip",
-      status: "bad", amountCents: r.amountCents, score: REJECTED_SCORE, href: r.href, ...(r.what === "module" ? { hint: "sync.rejected.moduleHint" as DictKey } : {}),
+      status: "bad", amountCents: r.amountCents, score: REJECTED_SCORE, href: r.href, ...(r.what === "module" ? { hint: rejectedHint(r, role) } : {}),
     });
   }
   // Leads by "whose turn" (docs/14-leads-spec.md §3.2, §7.4): reply · remind · lost or wait? · no step · back from snooze.

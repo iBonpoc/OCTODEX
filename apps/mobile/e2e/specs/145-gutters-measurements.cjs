@@ -4,7 +4,7 @@
  *   the queue sends with module.op); the address gets the measurement's id, a reload opens it again;
  * - a new canvas is a second measurement, its own; the first one opens by its id with its own drawing;
  * - a deleted run leaves the store (element.remove), its downspout too;
- * - a draft the previous version kept on the phone (M4b) comes in once as a measurement and is forgotten on the phone.
+ * - a draft the previous version kept on the phone (M4b, device-wide, no owner) is forgotten, never moved in.
  * Finds things by testID; waits on what it checks.
  */
 const DB_KEY = "octo.db.v5";
@@ -85,19 +85,11 @@ exports.run = async (h) => {
   await waitFor(async () => (await runs()) === 1 && (await svg().locator("circle").count()) === 1, "the first measurement's drawing");
   await h.shot("reopened");
 
-  // a draft the previous version kept on the phone: comes in once
-  const oldId = "0b6f1c7e-1111-4aaa-8bbb-000000000145";
-  const runId = "0b6f1c7e-2222-4aaa-8bbb-000000000145";
-  await p.evaluate(([k, v]) => localStorage.setItem(k, v), [OLD, JSON.stringify({
-    m: { id: oldId, label: null, status: "draft", propertyId: null, leadId: null },
-    elements: [{ id: runId, measurementId: oldId, kind: "run", geom: { a: [0, 0], b: [240, 0] }, attrs: { story: 1 }, confidence: "drawn" }],
-  })]);
+  // a draft the previous version kept on the phone (device-wide, no owner): forgotten, never moved into the company
+  // signed in (review M5a №6)
+  await p.evaluate(([k, v]) => localStorage.setItem(k, v), [OLD, JSON.stringify({ m: { id: "0b6f1c7e-1111-4aaa-8bbb-000000000145" }, elements: [] })]);
   await openCanvas();
-  await waitFor(async () => (await runs()) === 1, "the old draft is on the canvas");
-  await waitFor(() => idInUrl() === oldId, "and saved as a measurement with its own id");
-  await waitFor(async () => (await data()).elements.some((e) => e.id === runId && e.measurementId === oldId), "its run in the store");
-  await waitFor(() => p.evaluate((k) => localStorage.getItem(k) === null, OLD), "forgotten on the phone");
-  await openCanvas();
-  h.expect((await runs()) === 0, "it comes in only once: the next new canvas is empty");
-  h.expect((await data()).measurements.length === 3, "three measurements");
+  await waitFor(() => p.evaluate((k) => localStorage.getItem(k) === null, OLD), "the old draft is forgotten on the phone");
+  h.expect((await runs()) === 0, "a new canvas is empty");
+  h.expect((await data()).measurements.length === 2, "still two measurements: the old draft did not come in");
 };

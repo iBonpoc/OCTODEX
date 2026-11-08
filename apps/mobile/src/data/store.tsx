@@ -656,7 +656,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const msg = e instanceof Error ? e.message : String(e);
           // the server's error that may be this op's alone (500, a timeout) is told by its card «Не отправлено» in our own
           // words — not again as the server's English text in «Ошибка синхронизации» (cloud e2e 114)
-          if (!maybeOpOnly(e)) setSyncError(msg);
+          // module_inactive is told by its own card in our words, not as the server's English text (review M5a)
+          if (!maybeOpOnly(e) && !isModuleInactive(e)) setSyncError(msg);
           // no answer, or the server's «not now» (5xx, 429, an expired sign-in…): not a try — the op stays as it is,
           // the next send waits longer (review #244)
           if (classify(e) !== "refusal") {
@@ -690,6 +691,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const { kept, gone } = dropModuleOps(outboxRef.current, mod, w);
             outboxRef.current = kept;
             for (const g of gone) opPause.current.delete(g.id);
+            // the phone's copy of the module's data holds what was just dropped: it goes until the next read (a canvas
+            // that saves again then sends its measurement whole — review M5a №4)
+            const cur = dbRef.current;
+            if (cur.moduleData && mod in cur.moduleData) {
+              const { [mod]: _gone, ...rest } = cur.moduleData;
+              dbRef.current = { ...cur, moduleData: rest };
+              setDb(dbRef.current);
+            }
             dropped = true;
             setRejected((prev) => moduleRejected(prev, mod, gone.length, msg, Date.now(), w, moduleDef(mod)?.rejectedKey));
             setOutbox(outboxRef.current);

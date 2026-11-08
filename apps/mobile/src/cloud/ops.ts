@@ -260,7 +260,9 @@ async function moduleActiveOnServer(companyId: string, module: string): Promise<
   try {
     // one row (company, module key is unique); read() throws on a failed request → «not known»
     const { data } = await read(supabase.from("company_modules").select("module_key, enabled, trial_ends_at, paid_until, settings, row_version").eq("company_id", companyId).eq("module_key", module).maybeSingle());
-    const a = moduleState(companyModulesFromRows(data ? [data as Record<string, unknown>] : [])[module]).access;
+    // the phone's clock may run ahead of the server's: near the trial's end judge it 10 minutes late, so another refusal
+    // is never read as «not active» (then it stays a plain refusal — review M5a)
+    const a = moduleState(companyModulesFromRows(data ? [data as Record<string, unknown>] : [])[module], Date.now() - 10 * 60_000).access;
     return a === "trial" || a === "paid";
   } catch {
     return undefined;

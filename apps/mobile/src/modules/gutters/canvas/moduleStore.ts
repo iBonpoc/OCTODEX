@@ -24,12 +24,21 @@ export class ModuleNotActive extends Error {
   override name = "ModuleNotActive";
 }
 
+/**
+ * The measurement's own fields go only when the phone changed them since it opened it (or last sent them): what the
+ * server changed meanwhile (the office linked a lead, «Сделать заявкой») is kept — the write is the store's copy with
+ * the phone's changes on top (review M5a №1). A measurement the store does not have (new, or its module's waiting
+ * changes were dropped — the server has nothing) is sent whole: the row, then every element (review M5a №4).
+ */
 export function makeModuleStore(get: () => StoreLike, id: string, now = () => new Date().toISOString()): MeasurementStore {
+  let base: MeasurementRow | null = null;
   return {
     async load() {
-      return measurementOf(gutterData(get().db), id);
+      const v = measurementOf(gutterData(get().db), id);
+      base = v ? own(v.m) : null;
+      return v;
     },
-    async save(m, ch) {
+    async save(m, ch, rows) {
       const { db, moduleOp } = get();
       const send = (kind: string, payload: Record<string, unknown>, apply: (d: DB) => DB, key?: string) => {
         const at = now();
@@ -37,7 +46,22 @@ export function makeModuleStore(get: () => StoreLike, id: string, now = () => ne
         if (ok == null) throw new ModuleNotActive("the module is not active");
       };
       const was = gutterData(db).measurements.find((x) => x.id === m.id);
-      if (!was || !same(was, m)) send(K.mSave, { m: own(m) }, (d) => withGutterData(d, putMeasurement({ ...own(m), ...(was?.updatedAt ? { updatedAt: was.updatedAt } : {}) })), m.id);
+      const putM = (row: MeasurementRow) => send(K.mSave, { m: row }, (d) => withGutterData(d, putMeasurement({ ...row, ...(was?.updatedAt ? { updatedAt: was.updatedAt } : {}) })), m.id);
+      const mine = own(m);
+      if (!was) {
+        putM(mine);
+        base = mine;
+        const removed = new Set(ch.remove);
+        for (const e of rows ?? ch.save) if (!removed.has(e.id)) send(K.eSave, { e: e as ElementRow & Record<string, unknown> }, (d) => withGutterData(d, putElement(e)), e.id);
+        return;
+      }
+      const from = base ?? own(was);
+      const changed = (Object.keys(mine) as (keyof MeasurementRow)[]).filter((k) => mine[k] !== from[k]);
+      if (changed.length) {
+        const row = { ...own(was), ...Object.fromEntries(changed.map((k) => [k, mine[k]])) } as MeasurementRow;
+        if (!same(row, was)) putM(row);
+        base = mine;
+      }
       for (const e of ch.save) send(K.eSave, { e: e as ElementRow & Record<string, unknown> }, (d) => withGutterData(d, putElement(e)), e.id);
       for (const x of ch.remove) send(K.eRemove, { id: x }, (d) => withGutterData(d, dropElement(x)));
     },

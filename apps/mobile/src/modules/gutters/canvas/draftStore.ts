@@ -1,4 +1,7 @@
-/** The phone's draft store, without React Native (testable): one draft, saves in a row (spec 33 П20.7). */
+/**
+ * The saver of the canvas (what was written, the next save sends the difference) and the M4b draft store on the phone —
+ * the app no longer writes it (spec 33 П21: the queue does), kept for the saver's tests and the old draft's key.
+ */
 import { applyChange, diffElements, type ElementRow, type MeasurementRow, type MeasurementStore } from "./model";
 
 export const DRAFT_KEY = "octo.mod.gutters.draft.v1";
@@ -50,7 +53,7 @@ export function makeSaver(store: MeasurementStore) {
       const ch = diffElements(saved, rows);
       if (!ch.save.length && !ch.remove.length) return "nothing";
       try {
-        await store.save(m, ch);
+        await store.save(m, ch, rows);
         saved = rows;
         return "saved";
       } catch {
