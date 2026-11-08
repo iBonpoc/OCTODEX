@@ -59,7 +59,7 @@ import type { CatalogItem, DB, Estimate, Job, PurchaseOrder } from "../src/data/
 type Value = {
   db: DB;
   mode: string;
-  makeJobOrders: (jobId: string) => { ids: string[]; undo: () => void };
+  makeJobOrders: (jobId: string) => { ids: string[]; made: number; undo: () => void };
   savePurchaseOrder: (o: PurchaseOrder) => () => void;
   sendPurchaseOrder: (id: string) => boolean;
   cancelPurchaseOrder: (id: string) => void;
@@ -127,7 +127,9 @@ describe("unit:purchaseOrdersStore — spec 37 SUP2", () => {
     await settle();
     expect(ids).toHaveLength(1);
     expect(orders(r)[0]).toMatchObject({ jobId: JOB, supplierId: S1, status: "draft", lines: [{ qty: "2", unit: "box", bomQty: "65", costCents: 1850 }] });
-    expect(valueOf(r).makeJobOrders(JOB).ids).toEqual(ids);
+    const again = valueOf(r).makeJobOrders(JOB);
+    expect(again.ids).toEqual(ids);
+    expect(again.made).toBe(0);
     await settle();
     expect(orders(r)).toHaveLength(1);
     await tick();

@@ -379,7 +379,7 @@ interface StoreCtx {
   /** spec 36: the supplier's purchase tax into its items that have another one (new estimate lines follow) */
   applySupplierTax: (id: ID) => Undo;
   /** spec 37: the job's drafts per supplier (an open draft of that supplier is kept, not doubled); the ids to open */
-  makeJobOrders: (jobId: ID) => { ids: ID[]; undo: Undo };
+  makeJobOrders: (jobId: ID) => { ids: ID[]; made: number; undo: Undo };
   /** spec 37: a new empty draft (for stock, or a job), or a changed order (lines of a draft / sent order) */
   savePurchaseOrder: (o: PurchaseOrder) => Undo;
   /** spec 37: sent — the supplier's snapshot, a new revision; false — not allowed (no supplier, no lines, a closed order) */
@@ -2176,7 +2176,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       makeJobOrders: (jobId) => {
         const d0 = dbRef.current;
-        if (!canEditOrders(role) || d0.purchaseOrdersLegacy) return { ids: [], undo: noop };
+        if (!canEditOrders(role) || d0.purchaseOrdersLegacy) return { ids: [], made: 0, undo: noop };
         const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), d0.costsVisible !== false);
         const job = d0.jobs.find((j) => j.id === jobId);
         const addr = job ? d0.properties.find((x) => x.id === job.propertyId) : undefined;
@@ -2197,7 +2197,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           ids.push(o.id);
           undos.push(putOrder(o, []));
         }
-        return { ids, undo: () => [...undos].reverse().forEach((u) => u()) };
+        return { ids, made: undos.length, undo: () => [...undos].reverse().forEach((u) => u()) };
       },
       savePurchaseOrder: (o) => {
         const d0 = dbRef.current;

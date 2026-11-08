@@ -28,11 +28,9 @@ exports.run = async (h, { seed, admin }) => {
   await p.evaluate(() => Object.keys(localStorage).filter((k) => k.startsWith("octo.cloud.v1.")).forEach((k) => localStorage.removeItem(k)));
   await h.go("/purchase-orders");
   await p.getByRole("button", { name: "Новый заказ" }).first().click();
-  await p.waitForURL(/\/purchase-order\//, { timeout: 10000 });
-  const id = p.url().split("/purchase-order/")[1].split(/[?#]/)[0];
-  const [made] = await waitRows(admin, `purchase_orders?select=id,number,status&id=eq.${id}`, (r) => r.length === 1 && /^PO-/.test(r[0].number), "the new order with the server's number");
-  h.expect(made.status === "draft", "a new order is a draft");
-
+  await p.waitForURL(/\/purchase-order\/new/, { timeout: 10000 });
+  // nothing is made on opening (review SUP2-б №4): no empty numbered order
+  h.expect((await admin(`purchase_orders?select=id&company_id=eq.${a1.companyId}&supplier_id=is.null`)).length === 0, "opening «Новый заказ» makes nothing on the server");
   await tap("po-supplier");
   await h.sheet().getByTestId(`sup-pick-${sup.id}`).locator('[role="button"]').first().click();
   await tap("po-add");
@@ -40,6 +38,8 @@ exports.run = async (h, { seed, admin }) => {
   await h.sheet().getByText(`${tag} bracket (test)`, { exact: true }).first().click();
   await p.getByTestId("po-qty-0").locator("visible=true").first().locator("input").first().fill("2");
   await tap("po-send");
+  const [made] = await waitRows(admin, `purchase_orders?select=id,number&supplier_id=eq.${sup.id}`, (r) => r.length === 1 && /^PO-/.test(r[0].number), "the order with the server's number");
+  const id = made.id;
   const [sent] = await waitRows(admin, `purchase_orders?select=status,revision,supplier_id,supplier_name&id=eq.${id}`, (r) => r[0]?.status === "sent", "the sent order");
   h.expect(sent.revision === 1 && sent.supplier_id === sup.id && sent.supplier_name === `${tag} Supply`, `sent with the supplier's snapshot (${JSON.stringify(sent)})`);
   const [line] = await waitRows(admin, `purchase_order_lines?select=id,qty,unit,check_pack&po_id=eq.${id}&deleted_at=is.null`, (r) => r.length === 1, "the line");

@@ -3271,6 +3271,7 @@ export const es: Dict = {
   "po.checkPack": "revise el empaque",
   "po.addItem": "Agregar artículo",
   "po.removeLine": "Quitar artículo",
+  "po.lineRemoved": "Quitado: {name}",
   "po.total": "Total esperado sin impuesto: {amount}",
   "po.printPrices": "Imprimir precios",
   "po.send": "Enviar al proveedor",

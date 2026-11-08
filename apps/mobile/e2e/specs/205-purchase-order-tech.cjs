@@ -37,6 +37,8 @@ exports.run = async (h) => {
   await tap("po-recv-save", h.sheet());
   await p.waitForFunction(() => document.body.innerText.includes("Получен частично"), null, { timeout: 5000 });
   h.expect(/Получен частично/.test(await status()), "one of two lines → «Получен частично»");
+  // the lines show what came at once (the form follows the store — review SUP2-б №1)
+  h.expect(/12 \/ 12 ea/.test(await p.getByTestId("po-line-0").locator("visible=true").first().innerText()), "the line shows 12 / 12 at once");
 
   // everything → received; «Отменить» → partially again
   await tap("po-receive");

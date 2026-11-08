@@ -3,7 +3,7 @@
  * a change of a sent one is a new revision when sent again), «Отправить» (the PDF in English to share), «Отменить
  * заказ» (asked first). The tech of the job: where to pick it up, the lines without prices, «Отметить получение».
  */
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, component } from "@octo/design-tokens";
@@ -29,14 +29,31 @@ export default function PurchaseOrderScreen() {
   const { db, role } = store;
   const { t, money } = useI18n();
   const toast = useToast();
-  const found = (db.purchaseOrders ?? []).find((x) => x.id === id);
+  // «new» — an order for stock made on the first «Сохранить» / «Отправить» (not on opening: no empty numbered orders —
+  // review SUP2-б №4)
+  const isNew = id === "new";
+  const [blank] = useState<PurchaseOrder>(() => ({ id: uid(), status: "draft", revision: 0, fulfillment: "delivery", printPrices: false, createdAt: new Date().toISOString(), lines: [] }));
+  const stored = (db.purchaseOrders ?? []).find((x) => x.id === (isNew ? blank.id : id));
+  const found = stored ?? (isNew ? blank : undefined);
   const [o, setO] = useState<PurchaseOrder | undefined>(found);
+  const [touched, setTouched] = useState(false);
+  const sending = useRef(false);
   const [dateText, setDateText] = useState(() => usDate(found?.neededOn));
+  // the form follows the store until it is edited: the server's number, a marking, another phone's send, a late load
+  // (review SUP2-б №1)
+  useEffect(() => {
+    if (!touched && stored) {
+      setO(stored);
+      setDateText(usDate(stored.neededOn));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [stored, touched]);
   const [pickSup, setPickSup] = useState(false);
   const [pickItem, setPickItem] = useState(false);
   const [askCancel, setAskCancel] = useState(false);
   const [receiving, setReceiving] = useState<Record<string, string> | null>(null);
-  const back = () => (router.canGoBack() ? router.back() : router.replace(canEditOrders(role) ? "/purchase-orders" : "/"));
+  const back = () =>
+    router.canGoBack() ? router.back() : router.replace(canEditOrders(role) ? "/purchase-orders" : found?.jobId ? `/job/${found.jobId}` : "/");
   if (!found || !o) {
     return (
       <Screen title={t("po.order")} back={back}>
@@ -45,27 +62,44 @@ export default function PurchaseOrderScreen() {
     );
   }
   const office = canEditOrders(role);
-  const edit = office && linesEditable(found);
+  const edit = office && linesEditable(found) && !db.purchaseOrdersLegacy;
   const costs = db.costsVisible !== false && office;
   const job = o.jobId ? db.jobs.find((j) => j.id === o.jobId) : undefined;
   const sup = o.supplierId ? (db.suppliers ?? []).find((s) => s.id === o.supplierId) : undefined;
   const supName = sup?.name ?? o.supplierName;
-  const set = (p: Partial<PurchaseOrder>) => setO((x) => (x ? { ...x, ...p } : x));
+  const set = (p: Partial<PurchaseOrder>) => {
+    setTouched(true);
+    setO((x) => (x ? { ...x, ...p } : x));
+  };
   const setLine = (lid: string, p: Partial<PurchaseOrderLine>) => set({ lines: o.lines.map((l) => (l.id === lid ? { ...l, ...p } : l)) });
-  const dirty = JSON.stringify(o) !== JSON.stringify(found);
+  const dirty = isNew ? touched : touched && JSON.stringify(o) !== JSON.stringify(found);
   const dateBad = !!dateText.trim() && !isoDate(dateText);
   const total = costs ? orderTotalCents(o) : undefined;
-  const title = found.number ? t("po.number", { number: found.number }) : t("po.noNumber");
+  const title = found.number ? t("po.number", { number: found.number }) : isNew ? t("po.new") : t("po.noNumber");
 
   const save = () => {
     toast.show(t("po.saved"), store.savePurchaseOrder(o));
+    setTouched(false);
+    if (isNew) router.replace(`/purchase-order/${o.id}`);
   };
   const send = () => {
-    if (dirty) store.savePurchaseOrder(o);
-    if (!store.sendPurchaseOrder(o.id)) return;
-    const after = (store.db.purchaseOrders ?? []).find((x) => x.id === o.id) ?? o;
-    toast.show(t("po.sent", { name: supName ?? "" }));
-    const html = poHtml(db, { ...after, ...o, status: "sent", revision: found.revision + 1, sentAt: new Date().toISOString(), supplierName: supName }, companyForPortal(db, store.companyName ?? "OCTODEX"), { lang: "en" });
+    // one tap is one send (review SUP2-б №2)
+    if (sending.current) return;
+    sending.current = true;
+    if (dirty || isNew) store.savePurchaseOrder(o);
+    if (!store.sendPurchaseOrder(o.id)) {
+      sending.current = false;
+      return;
+    }
+    setTouched(false);
+    toast.show(t("po.sent", { name: sup?.name ?? "" }));
+    // the snapshot is the supplier's now (a re-send after a change of supplier — review SUP2-б №3)
+    const html = poHtml(
+      db,
+      { ...o, status: "sent", revision: found.revision + 1, sentAt: new Date().toISOString(), supplierName: sup?.name, supplierPhone: sup?.phone, supplierEmail: sup?.email, supplierAddress: sup?.address },
+      companyForPortal(db, store.companyName ?? "OCTODEX"),
+      { lang: "en" },
+    );
     saveEstimatePdf(html, `PO ${found.number ?? ""}`.trim()).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
     back();
   };
@@ -138,10 +172,19 @@ export default function PurchaseOrderScreen() {
                     <QtyField qty={l.qty} onChange={(q) => setLine(l.id, { qty: q })} />
                   </View>
                   <T v="caption" tone="mut">{l.unit}</T>
-                  <IconButton icon="trash" label={t("po.removeLine")} onPress={() => set({ lines: o.lines.filter((x) => x.id !== l.id) })} />
+                  <IconButton
+                    icon="trash"
+                    label={t("po.removeLine")}
+                    onPress={() => {
+                      const before = o.lines;
+                      set({ lines: o.lines.filter((x) => x.id !== l.id) });
+                      // «Отменить» 5 s (rule 5): the line back where it was
+                      toast.show(t("po.lineRemoved", { name: l.name }), () => set({ lines: before }));
+                    }}
+                  />
                 </>
               ) : (
-                <T v="body" tabular>{`${found.status === "draft" || found.status === "cancelled" ? "" : `${l.receivedQty} / `}${l.qty} ${l.unit}`}</T>
+                <T v="body" tabular>{`${found.status === "draft" || found.status === "cancelled" ? "" : `${found.lines.find((x) => x.id === l.id)?.receivedQty ?? l.receivedQty} / `}${l.qty} ${l.unit}`}</T>
               )}
             </RowView>
           </View>

@@ -3271,6 +3271,7 @@ export const en: Dict = {
   "po.checkPack": "check the pack size",
   "po.addItem": "Add an item",
   "po.removeLine": "Remove the item",
+  "po.lineRemoved": "Removed: {name}",
   "po.total": "Expected total before tax: {amount}",
   "po.printPrices": "Print prices on the order",
   "po.send": "Send to the supplier",

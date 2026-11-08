@@ -8,7 +8,6 @@ import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import type { PurchaseOrder } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { uid } from "@/features/estimateDoc";
 import { PO_TONE, receivedCount } from "@/features/purchaseOrders";
 import { Button } from "@/ui/controls";
 import { FilterBar } from "@/ui/filterBar";
@@ -22,8 +21,7 @@ type Lane = "open" | "done";
 const OPEN = new Set(["draft", "sent", "partially_received"]);
 
 export default function PurchaseOrders() {
-  const store = useStore();
-  const { db } = store;
+  const { db } = useStore();
   const { t, day } = useI18n();
   const { device } = useDevice();
   const [q, setQ] = useState("");
@@ -42,11 +40,8 @@ export default function PurchaseOrders() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [all, lane, q, db.suppliers, db.jobs],
   );
-  const newOrder = () => {
-    const id = uid();
-    store.savePurchaseOrder({ id, status: "draft", revision: 0, fulfillment: "delivery", printPrices: false, createdAt: new Date().toISOString(), lines: [] });
-    router.push(`/purchase-order/${id}`);
-  };
+  // the order is made on its first «Сохранить» / «Отправить», not here (review SUP2-б №4)
+  const newOrder = () => router.push("/purchase-order/new");
   const card = (o: PurchaseOrder) => {
     const job = jobOf(o);
     return (
@@ -71,7 +66,7 @@ export default function PurchaseOrders() {
       title={t("po.title")}
       back={back}
       help={t("po.help")}
-      right={<Button label={t("po.new")} icon="plus" size="sm" variant="secondary" onPress={newOrder} />}
+      right={db.purchaseOrdersLegacy ? undefined : <Button label={t("po.new")} icon="plus" size="sm" variant="secondary" onPress={newOrder} />}
     >
       <FilterBar<Lane>
         search={{ value: q, onChange: setQ, placeholder: t("po.title") }}

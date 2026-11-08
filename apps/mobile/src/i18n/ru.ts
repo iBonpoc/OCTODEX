@@ -3271,6 +3271,7 @@ export const ru = {
   "po.checkPack": "проверьте упаковку",
   "po.addItem": "Добавить позицию",
   "po.removeLine": "Убрать позицию",
+  "po.lineRemoved": "Убрано: {name}",
   "po.total": "Ожидаемая сумма без налога: {amount}",
   "po.printPrices": "Печатать цены в заказе",
   "po.send": "Отправить поставщику",

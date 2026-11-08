@@ -47,10 +47,22 @@ exports.run = async (h) => {
   await h.sheet().getByPlaceholder(/Найти|Search|Поиск/).first().fill("GFCI");
   await h.sheet().getByText("GFCI outlet 20A", { exact: true }).first().click();
   await p.getByTestId("po-qty-0").locator("visible=true").first().locator("input").first().fill("13");
-  await tap("po-send");
+  // two quick taps are one send (review SUP2-б №2)
+  const send = p.getByTestId("po-send").locator("visible=true").first().locator('[role="button"]').first();
+  await send.click();
+  await send.click({ timeout: 1000 }).catch(() => {});
   db = await dbWhen((d) => d.purchaseOrders.find((o) => o.id === ord.id)?.status === "sent");
   const sent = db.purchaseOrders.find((o) => o.id === ord.id);
   h.expect(sent.revision === 1 && sent.supplierName === "Home Depot" && sent.lines.length === 3 && sent.lines.some((l) => l.qty === "13"), "sent: revision 1, the supplier's snapshot, the lines as edited");
+
+  // a re-send to another supplier: revision 2, the new supplier's snapshot (review SUP2-б №3)
+  await h.go(`/purchase-order/${ord.id}`);
+  await tap("po-supplier");
+  await h.sheet().getByTestId("sup-pick-sup-sw").locator('[role="button"]').first().click();
+  await tap("po-send");
+  db = await dbWhen((d) => d.purchaseOrders.find((o) => o.id === ord.id)?.revision === 2);
+  const re = db.purchaseOrders.find((o) => o.id === ord.id);
+  h.expect(re.revision === 2 && re.supplierId === "sup-sw" && re.supplierName === "Sherwin-Williams" && re.supplierPhone === "(555) 010-0200", "re-sent: revision 2, the new supplier's snapshot");
 
   // the job and the list show it
   await h.go("/job/j2");

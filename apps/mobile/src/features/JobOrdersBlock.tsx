@@ -25,12 +25,13 @@ export function JobOrdersBlock({ job }: { job: Job }) {
   const office = canEditOrders(role) && !db.purchaseOrdersLegacy;
   if (!office && !orders.length) return null;
   const make = () => {
-    const { ids, undo } = store.makeJobOrders(job.id);
+    const { ids, made, undo } = store.makeJobOrders(job.id);
     if (!ids.length) {
       toast.show(t("po.jobNone"));
       return;
     }
-    toast.show(t("po.made", { n: ids.length }), undo);
+    // only what was made now (an open draft is opened, not counted — review SUP2-б №5)
+    if (made) toast.show(t("po.made", { n: made }), undo);
     if (ids.length === 1) router.push(`/purchase-order/${ids[0]}`);
   };
   return (
@@ -54,7 +55,12 @@ export function JobOrdersBlock({ job }: { job: Job }) {
                 testID={`job-po-${o.id}`}
                 lead={{ kind: "icon", icon: "truck" }}
                 title={name}
-                when={[o.number, o.status === "draft" ? undefined : t("po.receivedOf", { done: receivedCount(o), n: o.lines.length })].filter(Boolean).join(" · ")}
+                when={[
+                  o.number,
+                  o.status === "draft" ? undefined : t("po.receivedOf", { done: receivedCount(o), n: o.lines.length }),
+                  // spec 37 §6: where to pick it up, on the card (the tech)
+                  o.fulfillment === "pickup" && o.status !== "draft" ? t("po.pickupAt", { where: [o.supplierName, o.supplierAddress].filter(Boolean).join(", ") }) : undefined,
+                ].filter(Boolean).join(" · ")}
                 status={{ tone: PO_TONE[o.status], label: t(`po.status.${o.status}` as DictKey) }}
                 onPress={() => router.push(`/purchase-order/${o.id}`)}
               />
