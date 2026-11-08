@@ -85,6 +85,12 @@ export default function CompanyLeads() {
           </ReadOnly>
         </View>
       </Card>
+      {/* step 16 (docs/specs/34 PR 3): the request form, the Zapier key and the request log — their own screen */}
+      <Card>
+        <View testID="intake-entry">
+          <ListRow title={t("intake.set.entry")} subtitle={t("intake.set.entryHint")} onPress={() => router.push("/company/intake")} right={<Icon name="chevronRight" />} />
+        </View>
+      </Card>
 
       <Sheet visible={open} onClose={() => setOpen(false)} title={t("co.leads.assignee")}>
         <View>
