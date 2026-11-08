@@ -10,11 +10,11 @@
 | Руководитель №5 | `session_015CqH6AYWnjNhg5RZy2re5D` | CLAUDE.md, docs/ai/*, 10-build-plan §0, 15-story-map | план, приёмка, вливание сборками |
 | Лиды и клиенты №14 | `session_015CqH66PePGjJasrpJgtqH3` | спека 04 §13, clientDuplicates.ts, client/**, clients.tsx, LeadCard.tsx, миграция 20261109120000 | C3 дубли и слияние клиентов (T134, e2e 189) |
 | Сметы №3 | `session_015CqH68FFv5zHgyQV88Jvva` | шаблоны смет: estimate/**, estimateTemplate.ts, ops/store (шаблоны), миграция 20261108230000 | E3a #423 влит; E3b экраны (e2e 177), E3c слот модулей (e2e 180) |
-| Деньги и отчёты №5 | `session_015CqH69czeKQQz4r6pDxxwJ` | supabase/functions/stripe-*, миграции 202611090xxxxx, спека 35, features/payments | Stripe 20д возвраты (T133, e2e 185); ждёт основателя В1–В6 |
+| Деньги и отчёты №6 | `session_015CqH68oEGqeAYaK5CRygU5` | features/payments/*, cloud/refund.ts, functions/stripe-*, миграции 20261109150000+ | долги: аванс (платёж без счёта), ACH-возврат после принятия, fee_cents, мелкие шторки; T с T135, e2e с 190 |
 | Правки Gutters (личный чат основателя) | `session_015CqH66K82f6Sc1E161JFM2` | src/modules/gutters/** (кроме registry/module/estimateLink без согласования), e2e 168–174 | правки основателя; архив только по его слову |
 | Бренд (личный чат основателя) | `session_015CqH69WWiSwHTpW9sTb2km` | бренд GoRix | архив только по слову основателя |
 
-**Долги:** ACH-возврат, принятый Stripe и потом failed/canceled, остаётся в refunded_cents (+needs_review) — нужна дверь исправления (после 20д); лимит запросов stripe-pay до live; rule16 шаг 2 (старые колонки себестоимости, companies.stripe_account_id).
+**Долги:** лимит запросов stripe-pay до live; rule16 шаг 2 (старые колонки себестоимости, companies.stripe_account_id).
 
 **Ждут ответа основателя (08.11):** приём заявок В1 галочка SMS, В2 текст о данных, В3 Turnstile, В4 адрес формы (gorix.app); задаток быстрых смет (pct «0.1» читается как 0); Stripe В1 аккаунт, В2 Standard/Express, В3 комиссия платформы, В4 без надбавки за карту, В5 ИИ для чеков, В6 проигранный спор; VGS (выпуски 2⅜/2¾, колена A/B, box miter, straight face cap); секреты INTAKE_IP_SECRET, TURNSTILE_SECRET (заводит сам); было/стало за 08.11.
 
@@ -143,6 +143,14 @@
 - Осталось: modules/gutters/photoUri.ts → features/photoUri.ts (личный «Правки Gutters»); тест фильтра дублей под монтажника.
 - Ловушки: e2e run.cjs флаги только через «=» (--width=1280); RNW без aria-selected у вкладок — ждать содержимое по testID; nicheGuard ловит слово gutter даже в комментарии ядра; useRef ScrollView — ScrollViewInstance.
 - Свободно: e2e с 189, T с T133 (T133 занят «Деньгами» №5).
+
+### Памятка Деньги и отчёты №5 (session_015CqH69czeKQQz4r6pDxxwJ, 08.11) — архив после сборки #445
+- Сдал #443 (20д-1: refund_record, stripe_refund_open/settle/inflight, Edge stripe-refund, гард платежей, T133, upgrade-фикстура) и #444 (20д-2: «Вернуть деньги» на квитанции, чип «Проверить», e2e 185, unit refundApp, cloudRefund).
+- Держал: миграция 20261109050000_refunds.sql, functions/stripe-refund, features/payments/*, cloud/refund.ts, receipt/[id].tsx.
+- tg_payment_guard зовёт app.merging_customer(uuid,uuid) через to_regprocedure+EXECUTE — функцию создаёт «Лиды» №14 (20261109120000).
+- Демо: amountCents уменьшается при возврате (как приходит из облака: amount − refunded).
+- Долги: ACH-возврат после принятия failed/canceled — двери нет; платёж без счёта (аванс) не виден; fee_cents в приложение; предел в шторке не вычитает возвраты в пути; 42501 «company closed» показывается как «только владелец/админ».
+- Дальше: 20е чтение чека (после В5 основателя).
 
 ## Памятки-передачи 07.11 (руководитель №4)
 ### Памятка «Лиды и клиенты» №10 (session_015CqH6A7brPRZCibvSZzhLd, архив 07.11; дела у №11 `session_015CqH6AXexfSJUxpzdXPpY4`)
