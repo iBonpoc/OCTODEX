@@ -12,9 +12,9 @@
  *    the contractor's account, the attempt's key as the Idempotency-Key, the attempt in metadata (the webhook finds it);
  * 4) the answer is what the Payment Element needs: client secret, the account, the publishable key, the order of methods —
  *    ACH first from $1,000 (spec 35 §2 п.3: the contractor pays less).
- * 5) rate limits (spec 35 §4д) before the link is looked at: per token (sha256), per IP (HMAC of «pay:» + the address; IPv6 by
- *    /64 and /48), one ceiling for the whole function when there is no IP; after the link is checked — per invoice (the
- *    expensive step). Over a limit → 429 {error:"rate_limited", retryAfter} + Retry-After. The limit itself failing lets the
+ * 5) rate limits (spec 35 §4д): before the link is looked at — per link (sha256); a link that is NOT found — per address
+ *    (HMAC of «pay:» + the IP; IPv6 by /64 and /48; no address — one ceiling for the whole function); a real link never
+ *    counts by address; after the link is checked — per invoice (the expensive step). Over a limit → 429 {error:"rate_limited", retryAfter} + Retry-After. The limit itself failing lets the
  *    request through (a payment is never refused for our fault), with a line in the log.
  * Test mode only: a live key is refused until the founder says (spec 35 §3). The key never appears in a log or an answer;
  * Stripe's own error text is not passed on either. Money is never written here: only the webhook (20г) records a payment.
@@ -58,8 +58,10 @@ export interface PayDeps {
   keyMode: "test" | "live" | null;
   /** STRIPE_PUBLISHABLE_KEY (pk_test_…): not a secret, but kept beside the secret key so the two always match */
   publishableKey: string;
-  /** public.pay_rate_take(token hash, ip hash, net hash) → null (go on) or seconds to wait; throws when the database fails */
-  rate: (tokenHash: string, ipHash: string | null, netHash: string | null) => Promise<number | null>;
+  /** public.pay_rate_take(token hash) → null (go on) or seconds to wait; throws when the database fails */
+  rate: (tokenHash: string) => Promise<number | null>;
+  /** public.pay_rate_miss(ip hash, net hash): the link was not found — the address pays; null or seconds to wait */
+  rateMiss: (ipHash: string | null, netHash: string | null) => Promise<number | null>;
   /** public.pay_invoice_rate_take(invoice) → null or seconds to wait */
   invoiceRate: (invoiceId: string) => Promise<number | null>;
   sha256: (s: string) => Promise<string>;
@@ -206,21 +208,24 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
     const s = Math.min(MAX_WAIT_S, Math.max(1, Math.ceil(wait)));
     return { ...json(429, { error: "rate_limited", retryAfter: s }), headers: { ...c, "Content-Type": "application/json", "Retry-After": String(s) } };
   };
-  // the limits by the link and the address — before the database looks at the link (spec 35 §4д)
-  try {
+  // the address of a miss: HMAC of «pay:» + the IP (IPv6 by /64 and /48); no secret, no trusted header or a failing HMAC —
+  // no address, then the whole-function ceiling counts (never «no limit»)
+  const missWait = async (): Promise<number | null> => {
     const ip = clientIp(req, deps.ipHeaders);
     if (!deps.hmac || !ip) deps.log?.(`stripe-pay: no ${deps.hmac ? "trusted ip header" : "ip secret"} — the whole-function ceiling counts`);
-    // an HMAC that fails (the secret could not be loaded) counts as no IP: the whole-function ceiling, never no limit at all
     const hmac = deps.hmac;
     const net = ip ? netKey(ip) : null;
-    const hashed = hmac && ip
+    const [ipHash, netHash] = hmac && ip
       ? await Promise.all([hmac(`pay:${ipKey(ip)}`), net ? hmac(`pay:${net}`) : Promise.resolve(null)]).catch(() => {
           deps.log?.("stripe-pay: ip hmac failed — the whole-function ceiling counts");
           return [null, null] as const;
         })
       : ([null, null] as const);
-    const [ipHash, netHash] = hashed;
-    const wait = await deps.rate(await deps.sha256(body.token), ipHash, netHash);
+    return deps.rateMiss(ipHash, netHash);
+  };
+  // the limit by the link — before the database looks at it (spec 35 §4д)
+  try {
+    const wait = await deps.rate(await deps.sha256(body.token));
     if (wait !== null && wait !== undefined) return busy(wait);
   } catch {
     deps.log?.("stripe-pay: rate limit failed — let through");
@@ -230,7 +235,17 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
   try {
     a = await deps.open(body.token, body.invoiceId);
   } catch (e) {
-    const r = refused(e instanceof DbError ? e.code : null);
+    const code = e instanceof DbError ? e.code : null;
+    // an unknown link or a foreign invoice: the ADDRESS pays for the miss (a request with a real link never counts by address —
+    // director's review of #454: a neighbour on the same network must not block the honest client)
+    if (code === "P0002" || code === "22023") {
+      const wait = await missWait().catch(() => {
+        deps.log?.("stripe-pay: miss limit failed");
+        return null;
+      });
+      if (wait !== null && wait !== undefined) return busy(wait);
+    }
+    const r = refused(code);
     if (r.status === 500) deps.log?.("stripe-pay: open failed");
     return json(r.status, { error: r.error });
   }

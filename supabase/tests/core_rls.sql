@@ -10925,36 +10925,41 @@ select tst.ok((select count(*) = 3 from app.status_transitions where entity_type
 -- ======================================================================================================================
 :as_owner_a
 select tst.fails($q$select public.pay_rate_take(repeat('a', 64))$q$, 'T140 a person does not call the pay limit');
+select tst.fails($q$select public.pay_rate_miss(repeat('a', 64))$q$, 'T140 …nor the miss limit');
 select tst.fails($q$select public.refund_rate_take('a0000000-0000-0000-0000-000000000001')$q$, 'T140 …nor the refund limit');
 select tst.ok(not has_table_privilege('authenticated', 'app.rate_hits', 'SELECT'), 'T140 nobody but the server reads the hits');
 :as_service
 select tst.fails($q$select public.pay_rate_take('not-a-hash')$q$, 'T140 the token comes as sha256 hex, never plain');
-select tst.fails($q$select public.pay_rate_take(repeat('a', 64), '1.2.3.4')$q$, 'T140 …and the IP as its HMAC, never plain');
+select tst.fails($q$select public.pay_rate_miss('1.2.3.4')$q$, 'T140 …and the IP as its HMAC, never plain');
 select tst.fails($q$select app.rate_take(array['x:1'], array[1, 2], interval '1 minute')$q$, 'T140 one limit per key');
 select tst.fails($q$select app.rate_take(array['x:1'], array[null]::int[], interval '1 minute')$q$, 'T140 an empty limit is no «no limit»');
 select tst.fails($q$select app.rate_take(array['x:1'], array[0], interval '1 minute')$q$, 'T140 …nor a zero one');
--- 10 per token: the 11th is refused with a wait, and writes nothing
-select tst.ok((select bool_and(public.pay_rate_take(repeat('1', 64), repeat('2', 64), repeat('3', 64)) is null) from generate_series(1, 10)), 'T140 ten tries of one link pass');
-select tst.ok((select public.pay_rate_take(repeat('1', 64), repeat('2', 64), repeat('3', 64)) between 1 and 600), 'T140 the 11th waits (seconds, at most the window)');
+-- 10 per link: the 11th is refused with a wait, and writes nothing
+select tst.ok((select bool_and(public.pay_rate_take(repeat('1', 64)) is null) from generate_series(1, 10)), 'T140 ten tries of one link pass');
+select tst.ok((select public.pay_rate_take(repeat('1', 64)) between 1 and 600), 'T140 the 11th waits (seconds, at most the window)');
 :as_super
-select tst.ok((select count(*) = 10 from app.rate_hits where key = 'pay_token:' || repeat('1', 64))
-          and (select count(*) = 10 from app.rate_hits where key = 'pay_ip:' || repeat('2', 64)), 'T140 a refused try writes no hit (a flood does not grow the table)');
--- all or nothing: the token is full, so the IP's turn is not spent either
-select tst.ok((select count(*) = 10 from app.rate_hits where key = 'pay_net:' || repeat('3', 64)), 'T140 …not for the IP network either');
+select tst.ok((select count(*) = 10 from app.rate_hits where key = 'pay_token:' || repeat('1', 64)), 'T140 a refused try writes no hit (a flood does not grow the table)');
 :as_service
--- the IP limit: 30 from one address over many links
-select tst.ok((select bool_and(public.pay_rate_take(lpad(to_hex(g), 64, '0'), repeat('2', 64)) is null) from generate_series(1, 20) g), 'T140 other links from the same address pass up to 30');
-select tst.ok(public.pay_rate_take(lpad(to_hex(99), 64, '0'), repeat('2', 64)) is not null, 'T140 the 31st try of one address is refused — guessing links does not work');
-select tst.ok(public.pay_rate_take(lpad(to_hex(99), 64, '0'), repeat('4', 64)) is null, 'T140 another address is not affected');
--- no IP (no secret / no header): one ceiling for the whole function
-select tst.ok((select bool_and(public.pay_rate_take(lpad(to_hex(1000 + g), 64, '0')) is null) from generate_series(1, 300) g), 'T140 without an IP 300 tries pass');
-select tst.ok(public.pay_rate_take(lpad(to_hex(5000), 64, '0')) is not null, 'T140 …the 301st is refused: never «no limit»');
+-- misses (a link not found) count by the address: 30 per IP
+select tst.ok((select bool_and(public.pay_rate_miss(repeat('2', 64)) is null) from generate_series(1, 30)), 'T140 30 misses of one address pass');
+select tst.ok(public.pay_rate_miss(repeat('2', 64)) is not null, 'T140 the 31st miss waits — guessing links is slow');
+select tst.ok(public.pay_rate_miss(repeat('4', 64)) is null, 'T140 another address is not affected');
+-- director's review of #454: a neighbour in the same /48 sends 100 random links from 4 /64 (25 each, under the IP limit)
+select tst.ok((select bool_and(public.pay_rate_miss(lpad(to_hex(g % 4 + 16), 64, '0'), repeat('5', 64)) is null) from generate_series(1, 100) g), 'T140 100 misses of one /48 pass');
+select tst.ok(public.pay_rate_take(repeat('6', 64)) is null, 'T140 …the honest client of that /48 with a real link still pays');
+select tst.ok(public.pay_rate_miss(lpad(to_hex(99), 64, '0'), repeat('5', 64)) is not null, 'T140 …while the 101st miss of the /48 waits');
+:as_super
+select tst.ok((select count(*) = 0 from app.rate_hits where key = 'pay_ip:' || lpad(to_hex(99), 64, '0')), 'T140 all or nothing: the full /48 does not spend the address''s turn');
+:as_service
+-- no IP (no secret / no header): one ceiling of misses for the whole function — and a real link still pays
+select tst.ok((select bool_and(public.pay_rate_miss() is null) from generate_series(1, 300)), 'T140 without an IP 300 misses pass');
+select tst.ok(public.pay_rate_miss() is not null, 'T140 …the 301st waits: never «no limit»');
+select tst.ok(public.pay_rate_take(repeat('7', 64)) is null, 'T140 …a real link is not blocked by the ceiling');
 -- the window moves: old hits do not count
 :as_super
-update app.rate_hits set at = now() - interval '11 minutes' where key = 'pay_token:' || repeat('1', 64);
-update app.rate_hits set at = now() - interval '11 minutes' where key like 'pay_ip:%';
+update app.rate_hits set at = now() - interval '11 minutes' where key = 'pay_token:' || repeat('1', 64) or key = 'pay_ip:' || repeat('2', 64);
 :as_service
-select tst.ok(public.pay_rate_take(repeat('1', 64), repeat('2', 64)) is null, 'T140 after the window the link pays again');
+select tst.ok(public.pay_rate_take(repeat('1', 64)) is null and public.pay_rate_miss(repeat('2', 64)) is null, 'T140 after the window it counts again');
 -- the invoice and the person
 select tst.ok((select bool_and(public.pay_invoice_rate_take('11400000-0000-4000-8000-000000000001') is null) from generate_series(1, 20)), 'T140 20 intents per invoice');
 select tst.ok(public.pay_invoice_rate_take('11400000-0000-4000-8000-000000000001') is not null, 'T140 …the 21st waits, whatever link or address');

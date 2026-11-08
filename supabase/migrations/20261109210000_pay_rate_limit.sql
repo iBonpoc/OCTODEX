@@ -1,6 +1,6 @@
 -- Security before live (docs/specs/35-stripe.md §4д, «Деньги и отчёты» №7). Test mode only. Everything is added (rule 16).
 -- 1. Rate limits of the Edge functions stripe-pay (anonymous, the /p/ token is the key) and stripe-refund (owner/admin):
---    app.rate_hits keeps one row per allowed request — key = scope + sha256 of the token / HMAC of the IP / the invoice or the
+--    app.rate_hits keeps one row per counted request — key = scope + sha256 of the token / HMAC of the IP / the invoice or the
 --    person; no plain token or IP. A refused request writes nothing (a flood does not grow the table); every key of a request
 --    is checked first, then all are written (a refusal on the IP does not spend the token's turn).
 -- 2. Retention of app.stripe_events: the payload is emptied after 30 days (it may hold a client's details), the row lives
@@ -54,31 +54,41 @@ end;
 $$;
 revoke all on function app.rate_take(text[], int[], interval) from public, anon, authenticated;
 
--- stripe-pay before the /p/ link is looked at: 10 per 10 min per token, 30 per IP (an IPv6 /64), 100 per IPv6 /48.
--- No IP (no secret, no Cloudflare header): one ceiling for the whole function, 300 per 10 min — never «no limit».
-create or replace function public.pay_rate_take(p_token_hash text, p_ip_hash text default null, p_net_hash text default null)
+-- stripe-pay before the /p/ link is looked at: 10 per 10 min per link (its sha256). Only the link: an address is never
+-- counted for a request with a real link (director's review of #454 — a neighbour in the same /48, CGNAT or Wi-Fi sending
+-- random links would block the honest client).
+create or replace function public.pay_rate_take(p_token_hash text)
 returns int language plpgsql security definer set search_path = '' as $$
-declare
-  v_keys   text[] := array['pay_token:' || p_token_hash];
-  v_limits int[]  := array[10];
 begin
-  if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$'
-     or (p_ip_hash is not null and p_ip_hash !~ '^[0-9a-f]{64}$') or (p_net_hash is not null and p_net_hash !~ '^[0-9a-f]{64}$') then
+  if p_token_hash is null or p_token_hash !~ '^[0-9a-f]{64}$' then
     raise exception 'pay_rate_take: a hash is 64 hex' using errcode = '22023';
   end if;
-  if p_ip_hash is null then
-    v_keys := v_keys || 'pay_all:all'::text; v_limits := v_limits || 300;
-  else
-    v_keys := v_keys || ('pay_ip:' || p_ip_hash); v_limits := v_limits || 30;
-    if p_net_hash is not null then
-      v_keys := v_keys || ('pay_net:' || p_net_hash); v_limits := v_limits || 100;
-    end if;
-  end if;
-  return app.rate_take(v_keys, v_limits, interval '10 minutes');
+  return app.rate_take(array['pay_token:' || p_token_hash], array[10], interval '10 minutes');
 end;
 $$;
-revoke all on function public.pay_rate_take(text, text, text) from public, anon, authenticated;
-grant execute on function public.pay_rate_take(text, text, text) to service_role;
+revoke all on function public.pay_rate_take(text) from public, anon, authenticated;
+grant execute on function public.pay_rate_take(text) to service_role;
+
+-- stripe-pay when the link was NOT found (an unknown link, a foreign invoice): the address pays for it — 30 misses per 10 min
+-- per IP (an IPv6 /64), 100 per IPv6 /48; no IP (no secret, no Cloudflare header) — one ceiling of 300 misses for the whole
+-- function. Over it the miss is answered 429 (and not written). Links are 160+ bits: guessing never works; this keeps a
+-- guesser slow and loud, and never touches a request with a real link.
+create or replace function public.pay_rate_miss(p_ip_hash text default null, p_net_hash text default null)
+returns int language plpgsql security definer set search_path = '' as $$
+begin
+  if (p_ip_hash is not null and p_ip_hash !~ '^[0-9a-f]{64}$') or (p_net_hash is not null and p_net_hash !~ '^[0-9a-f]{64}$') then
+    raise exception 'pay_rate_miss: a hash is 64 hex' using errcode = '22023';
+  end if;
+  if p_ip_hash is null then
+    return app.rate_take(array['pay_all:all'], array[300], interval '10 minutes');
+  elsif p_net_hash is null then
+    return app.rate_take(array['pay_ip:' || p_ip_hash], array[30], interval '10 minutes');
+  end if;
+  return app.rate_take(array['pay_ip:' || p_ip_hash, 'pay_net:' || p_net_hash], array[30, 100], interval '10 minutes');
+end;
+$$;
+revoke all on function public.pay_rate_miss(text, text) from public, anon, authenticated;
+grant execute on function public.pay_rate_miss(text, text) to service_role;
 
 -- stripe-pay after the link is checked: the expensive step (cancel / create a PaymentIntent) — 20 per 10 min per invoice,
 -- whatever token or address it comes from

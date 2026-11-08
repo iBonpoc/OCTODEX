@@ -84,6 +84,7 @@ function deps(opt: Partial<PayDeps> & { a?: Attempt | Error; answers?: Record<st
     keyMode: "test",
     publishableKey: "pk_test_PUBLIC",
     rate: async () => null,
+    rateMiss: async () => null,
     invoiceRate: async () => null,
     sha256: async (x) => `sha(${x})`,
     hmac: async (x) => `hmac(${x})`,
@@ -273,31 +274,48 @@ describe("stripe-pay: the PaymentIntent", () => {
 });
 
 describe("stripe-pay: rate limits (spec 35 §4д)", () => {
-  type Rated = [string, string | null, string | null];
-  it("the link and the address are counted as hashes, before the database looks at the link", async () => {
-    const seen: Rated[] = [];
-    const { d, opened } = deps({ rate: async (t, i, n) => (seen.push([t, i, n]), null) });
+  type Miss = [string | null, string | null];
+  const unknown = () => new DbError("P0002");
+  it("the link is counted as its hash, before the database looks at it; a real link is never counted by address", async () => {
+    const seen: string[] = [];
+    const misses: Miss[] = [];
+    const { d, opened } = deps({ rate: async (t) => (seen.push(t), null), rateMiss: async (i, n) => (misses.push([i, n]), null) });
     expect((await handlePay(req(), d)).status).toBe(200);
-    expect(seen).toEqual([[`sha(${TOKEN})`, "hmac(pay:203.0.113.7)", null]]);
+    expect(seen).toEqual([`sha(${TOKEN})`]);
     expect(opened.length).toBe(1);
+    expect(misses).toEqual([]);   // director's review of #454: a neighbour's misses never block a real link
   });
-  it("only Cloudflare's header; IPv6 by its /64 and /48", async () => {
-    const seen: Rated[] = [];
-    const { d } = deps({ rate: async (t, i, n) => (seen.push([t, i, n]), null) });
+  it("a link that is not found: the address pays (HMAC of «pay:» + IP); only Cloudflare's header; IPv6 by /64 and /48", async () => {
+    const misses: Miss[] = [];
+    const { d } = deps({ a: unknown(), rateMiss: async (i, n) => (misses.push([i, n]), null) });
+    expect(body(await handlePay(req(), d))).toEqual({ error: "nothing_to_pay" });
     await handlePay(req({ ip: "2001:db8:abcd:12:1:2:3:4" }), d);
-    expect(seen[0][1]).toBe("hmac(pay:2001:db8:abcd:12::/64)");
-    expect(seen[0][2]).toBe("hmac(pay:2001:db8:abcd::/48)");
-    seen.length = 0;
-    await handlePay(req({ ip: null }), d); // x-forwarded-for is what the client wrote: not trusted
-    expect(seen[0][1]).toBeNull();
+    await handlePay(req({ ip: null }), d);   // x-forwarded-for is what the client wrote: not trusted
+    expect(misses).toEqual([["hmac(pay:203.0.113.7)", null], ["hmac(pay:2001:db8:abcd:12::/64)", "hmac(pay:2001:db8:abcd::/48)"], [null, null]]);
   });
-  it("over the limit: 429 with Retry-After and CORS, the link is not looked at, Stripe is not called", async () => {
-    const { d, opened, calls } = deps({ rate: async () => 240 });
+  it("a foreign invoice (22023) is a miss too; a closed company or a database failure is not", async () => {
+    let n = 0;
+    for (const [e, want] of [[new DbError("22023"), 1], [new DbError("42501"), 0], [new DbError(null), 0]] as const) {
+      n = 0;
+      const { d } = deps({ a: e, rateMiss: async () => (n++, null) });
+      await handlePay(req(), d);
+      expect(n).toBe(want);
+    }
+  });
+  it("too many misses: 429 with Retry-After and CORS (the page may read it)", async () => {
+    const { d, calls } = deps({ a: unknown(), rateMiss: async () => 240 });
     const r = await handlePay(req(), d);
     expect(r.status).toBe(429);
     expect(body(r)).toEqual({ error: "rate_limited", retryAfter: 240 });
     expect(r.headers["Retry-After"]).toBe("240");
     expect(r.headers["Access-Control-Allow-Origin"]).toBe(SITE);
+    expect(r.headers["Access-Control-Expose-Headers"]).toBe("Retry-After");
+    expect(calls).toEqual([]);
+  });
+  it("too many tries of one link: 429, the link is not looked at, Stripe is not called", async () => {
+    const { d, opened, calls } = deps({ rate: async () => 120 });
+    const r = await handlePay(req(), d);
+    expect(r.status).toBe(429);
     expect(opened).toEqual([]);
     expect(calls).toEqual([]);
   });
@@ -310,29 +328,23 @@ describe("stripe-pay: rate limits (spec 35 §4д)", () => {
     expect(opened.length).toBe(1);
     expect(calls).toEqual([]);
   });
-  it("no IP secret: the link still counts (with no address — the whole-function ceiling), and it is in the log", async () => {
-    const seen: Rated[] = [];
-    const { d, logs } = deps({ hmac: null, rate: async (t, i, n) => (seen.push([t, i, n]), null) });
-    expect((await handlePay(req(), d)).status).toBe(200);
-    expect(seen).toEqual([[`sha(${TOKEN})`, null, null]]);
-    expect(logs.join(" ")).toContain("no ip secret");
-    expect(logs.join(" ")).not.toContain("203.0.113.7");
+  it("no IP secret, or an HMAC that fails: a miss counts with no address (the whole-function ceiling), logged", async () => {
+    for (const hmac of [null, async () => { throw new Error("key"); }]) {
+      const misses: Miss[] = [];
+      const { d, logs } = deps({ a: unknown(), hmac, rateMiss: async (i, n) => (misses.push([i, n]), null) });
+      await handlePay(req(), d);
+      expect(misses).toEqual([[null, null]]);
+      expect(logs.join(" ")).toMatch(/no ip secret|ip hmac failed/);
+      expect(logs.join(" ")).not.toContain("203.0.113.7");
+    }
   });
-  it("an HMAC that fails counts as no IP (the whole-function ceiling), never no limit", async () => {
-    const seen: Rated[] = [];
-    const { d, logs } = deps({ hmac: async () => { throw new Error("key"); }, rate: async (t, i, n) => (seen.push([t, i, n]), null) });
-    expect((await handlePay(req(), d)).status).toBe(200);
-    expect(seen).toEqual([[`sha(${TOKEN})`, null, null]]);
-    expect(logs.join(" ")).toContain("ip hmac failed");
-  });
-  it("the page may read Retry-After", async () => {
-    const { d } = deps({ rate: async () => 60 });
-    expect((await handlePay(req(), d)).headers["Access-Control-Expose-Headers"]).toBe("Retry-After");
-  });
-  it("the limit failing lets the payment through, with a line in the log", async () => {
-    const { d, logs } = deps({ rate: async () => { throw new Error("db"); }, invoiceRate: async () => { throw new Error("db"); } });
-    expect((await handlePay(req(), d)).status).toBe(200);
-    expect(logs.join(" ")).toContain("rate limit failed");
+  it("the limits failing let the payment through (a miss keeps its own answer), with a line in the log", async () => {
+    const boom = async () => { throw new Error("db"); };
+    const ok = deps({ rate: boom, invoiceRate: boom });
+    expect((await handlePay(req(), ok.d)).status).toBe(200);
+    expect(ok.logs.join(" ")).toContain("rate limit failed");
+    const miss = deps({ a: unknown(), rateMiss: boom });
+    expect(body(await handlePay(req(), miss.d))).toEqual({ error: "nothing_to_pay" });
   });
   it("a wait is whole seconds between 1 and 600", async () => {
     for (const [w, want] of [[0.2, "1"], [9999, "600"]] as const) {

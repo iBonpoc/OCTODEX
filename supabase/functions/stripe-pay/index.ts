@@ -52,8 +52,8 @@ Deno.serve(async (req: Request) => {
       stripe: KEY ? stripe : null,
       keyMode,
       publishableKey: PK,
-      rate: (tokenHash, ipHash, netHash) =>
-        rpc<number | null>("pay_rate_take", { p_token_hash: tokenHash, p_ip_hash: ipHash, p_net_hash: netHash }),
+      rate: (tokenHash) => rpc<number | null>("pay_rate_take", { p_token_hash: tokenHash }),
+      rateMiss: (ipHash, netHash) => rpc<number | null>("pay_rate_miss", { p_ip_hash: ipHash, p_net_hash: netHash }),
       invoiceRate: (invoiceId) => rpc<number | null>("pay_invoice_rate_take", { p_invoice_id: invoiceId }),
       sha256: async (s) => hex(await crypto.subtle.digest("SHA-256", enc.encode(s))),
       hmac: hmacKey ? async (s) => hex(await crypto.subtle.sign("HMAC", await hmacKey, enc.encode(s))) : null,
