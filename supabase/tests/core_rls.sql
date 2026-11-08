@@ -7907,5 +7907,42 @@ delete from public.gutter_measurements where company_id = 'ca000000-0000-0000-00
 delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000';
 update public.memberships set status = 'disabled' where user_id::text like 'a9400000-%';
 \echo 'T94 measurement photos: seen like the measurement, added only while the module is active, same measurement ok'
+-- ---------------------------------------------------------------- T95: the measurement limits answer P0001 + hint limit_reached (docs/specs/33-gutters-settings П22.2 №17)
+-- 54000 reached the phone as HTTP 500 and was retried for ever; P0001 is HTTP 400, the server's «no».
+:as_super
+insert into public.company_modules (company_id, module_key, enabled, trial_ends_at) values ('ca000000-0000-0000-0000-000000000000', 'gutters', true, now() + interval '7 days')
+  on conflict (company_id, module_key) do update set enabled = true, trial_ends_at = now() + interval '7 days';
+insert into public.gutter_measurements (id, company_id) values ('9e950000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000');
+insert into public.gutter_measurement_elements (company_id, measurement_id, kind)
+  select 'ca000000-0000-0000-0000-000000000000', '9e950000-0000-4000-8000-000000000001', 'point' from generate_series(1, 1000);
+insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version)
+  select 'ca000000-0000-0000-0000-000000000000', '9e950000-0000-4000-8000-000000000001', g, '[]', 'x' from generate_series(1, 100) g;
+do $$
+declare v_state text; v_hint text;
+begin
+  begin
+    insert into public.gutter_measurement_elements (company_id, measurement_id, kind) values ('ca000000-0000-0000-0000-000000000000', '9e950000-0000-4000-8000-000000000001', 'point');
+    raise exception 'T95 FAILED: the 1001st element was saved';
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate, v_hint = pg_exception_hint;
+    if v_state <> 'P0001' or v_hint is distinct from 'limit_reached' then
+      raise exception 'T95 FAILED: the 1001st element answered % / %', v_state, v_hint;
+    end if;
+  end;
+  begin
+    insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e950000-0000-4000-8000-000000000001', 101, '[]', 'x');
+    raise exception 'T95 FAILED: the 101st revision was saved';
+  exception when others then
+    get stacked diagnostics v_state = returned_sqlstate, v_hint = pg_exception_hint;
+    if v_state <> 'P0001' or v_hint is distinct from 'limit_reached' then
+      raise exception 'T95 FAILED: the 101st revision answered % / %', v_state, v_hint;
+    end if;
+  end;
+end $$;
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurement_elements where measurement_id = '9e950000-0000-4000-8000-000000000001'$q$) = 1000, 'T95 the 1001st element is not saved');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_gutter_limits()', 'execute'), 'T95 nobody calls the limit function directly');
+delete from public.gutter_measurements where id = '9e950000-0000-4000-8000-000000000001';
+delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T95 measurement limits: P0001 limit_reached ok'
 
 \echo 'ALL TESTS PASSED'
