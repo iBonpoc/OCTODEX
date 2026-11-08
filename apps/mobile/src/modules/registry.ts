@@ -86,6 +86,24 @@ export interface ModuleRead {
   live(table: string, cols: string): Promise<Record<string, unknown>[]>;
 }
 
+/**
+ * A starter checklist template of a module (docs/specs/08 §2, §11.7 №12, §11.11; step 14 CH3b). The office adds it on
+ * «Компания → Чек-листы» (the text in the app's language at that moment; then it is the company's own and is edited
+ * there). Item ids are the module's fixed uuids: they tell that a company has the starter already (an archived one too)
+ * and keep a visit's snapshot free of doubles. The template's own id is the company's (a new one).
+ */
+export interface StarterChecklist {
+  /** unique within the module; testID `chk-starter-<module>-<key>` */
+  key: string;
+  nameKey: DictKey;
+  items: { id: string; labelKey: DictKey; kind: "check" | "photo"; required: boolean; hintKey?: DictKey }[];
+  everyVisit?: boolean;
+  visitKinds?: ("inspection" | "work")[];
+  /** 1..20: raise the company's minimum of photos (never lower) */
+  minPhotosBefore?: number;
+  minPhotosAfter?: number;
+}
+
 export interface ModuleDef {
   /** = company_modules.module_key: ^[a-z][a-z0-9_]{1,30}$ */
   key: string;
@@ -116,6 +134,8 @@ export interface ModuleDef {
   leadCreated?: (x: { ref: string; leadId: string }, store: ModuleStore) => (() => void) | null | undefined;
   /** its words on an open (draft / sent) estimate; `data` — DB.moduleData[key]. Pure: called on every render */
   estimateNotes?: (e: import("@/data/types").Estimate, db: import("@/data/types").DB, data: unknown) => ModuleNote[];
+  /** starter checklist templates the office may add (optional; a module without them adds none) */
+  checklistTemplates?: StarterChecklist[];
   /** the text of «not saved: the trial is over» (a refused batch of this module's changes, spec 33 П21.1); params {count} */
   rejectedKey?: DictKey;
 }
@@ -177,6 +197,13 @@ const defs = new Map<string, ModuleDef>();
 
 export function registerModule(def: ModuleDef): void {
   if (!/^[a-z][a-z0-9_]{1,30}$/.test(def.key)) throw new Error(`module key ${def.key}: ^[a-z][a-z0-9_]{1,30}$`);
+  // starter items: lowercase uuids (the server's app.valid_checklist_items), unique across the module's starters
+  const ids = (def.checklistTemplates ?? []).flatMap((t) => t.items.map((i) => i.id));
+  const bad = ids.find((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id));
+  if (bad !== undefined || new Set(ids).size !== ids.length) throw new Error(`module ${def.key}: starter item ids — unique lowercase uuids`);
+  const starters = def.checklistTemplates ?? [];
+  if (starters.some((t) => t.items.length < 1 || t.items.length > 100) || new Set(starters.map((t) => t.key)).size !== starters.length)
+    throw new Error(`module ${def.key}: a starter has 1..100 items and its own key`);
   defs.set(def.key, def);
 }
 export const moduleDef = (key: string): ModuleDef | undefined => defs.get(key);

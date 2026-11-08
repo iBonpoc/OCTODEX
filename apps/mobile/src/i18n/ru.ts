@@ -264,6 +264,10 @@ export const ru = {
   "sync.rejected.moduleHint": "Модуль выключен или его пробный период закончился, и сервер не принял эти изменения. Чтобы сохранять снова, подключите модуль: «Открыть» → «Подключить».",
   "sync.rejected.moduleHintAsk": "Модуль выключен или его пробный период закончился, и сервер не принял эти изменения. Попросите владельца компании подключить модуль.",
   "sync.rejected.settingsHint": "Пока вы правили, настройки изменил другой человек. Приложение перечитало их с сервера — откройте и внесите свои изменения заново.",
+  // Сметы: refusals we can explain (outboxRejected REJECT_REASONS)
+  "att.rejected.estimate": "Смета не отправлена",
+  "sync.stuck.reason.estimateLines": "Строки сметы на сервере не совпали с её документом, и сервер не отправил её клиенту. Смета снова черновик: откройте её, сохраните и отправьте ещё раз.",
+  "sync.stuck.reason.estimateLinesSigned": "Строки сметы на сервере не совпали с её документом: сервер не принял подпись, и подпись клиента не сохранилась. Откройте смету, сохраните её и возьмите подпись клиента заново.",
   "sync.stuck.retry": "Повторить сейчас",
   "sync.stuck.discard": "Отменить изменение…",
   "sync.stuck.sure": "Отменить это изменение? На сервер оно не попадёт, на телефоне вернутся данные сервера.",
@@ -401,6 +405,8 @@ export const ru = {
   "more.data": "Данные",
   "today.techs": "Мастера",
   "est.margin": "Маржа {p}%",
+  // «Сметы» №2: the office sees why the margin is not counted (debt 5)
+  "est.marginMissing": "Маржа не посчитана · строк без себестоимости: {n}",
   "est.deposit": "Депозит {amount}",
   "est.lines": "Позиции",
   "est.optional": "по желанию",
@@ -564,7 +570,9 @@ export const ru = {
   "account.noCompany": "Аккаунт есть, компании ещё нет.",
   "account.synced": "Всё отправлено в базу",
   "account.pending": "Ждут отправки: {n}",
-  "account.error": "Ошибка синхронизации: {msg}",
+  // «Сметы» №2: the sync error in our own words (debt 2) — the server's text is never shown
+  "account.syncErr.network": "Нет связи с сервером",
+  "account.syncErr.general": "Ошибка синхронизации",
   "account.refresh": "Обновить данные",
   "account.emptyHint": "Компания пустая. Добавьте лид через «+» — он появится во «Входящих».",
   "ue.title": "Смета",
@@ -2811,7 +2819,24 @@ export const ru = {
   "chk3.addedN": "Добавлено пунктов: {n}",
   "chk3.from": "из «{name}»",
   "chk3.requiredShort": "обязательный",
+  "chk3.starters": "Шаблоны модулей",
+  "chk3.starterAdded": "Шаблон добавлен",
   "chk3.optional": "необязательный",
+  // step 14 CH3b: starter checklist templates of a module
+  "mod.gutters.chk.pre": "Перед монтажом",
+  "mod.gutters.chk.pre1": "Проверить лобовую доску на гниль",
+  "mod.gutters.chk.pre2": "Согласовать с клиентом места водосточных труб",
+  "mod.gutters.chk.pre3": "Фото лобовой доски",
+  "mod.gutters.chk.pre4": "Проверить цвет и размер желобов в машине",
+  "mod.gutters.chk.handover": "Сдача работы",
+  "mod.gutters.chk.handover1": "Пролить желоба водой — нет протечек",
+  "mod.gutters.chk.handover2": "Трубы отводят воду от дома",
+  "mod.gutters.chk.handover3": "Фото каждой стороны дома",
+  "mod.gutters.chk.handover4": "Собрать мусор и саморезы",
+  "mod.gutters.chk.clean": "Чистка",
+  "mod.gutters.chk.clean1": "Фото до чистки",
+  "mod.gutters.chk.clean2": "Прочистить водосточные трубы",
+  "mod.gutters.chk.clean3": "Фото после чистки",
 } as const;
 
 export type DictKey = keyof typeof ru;

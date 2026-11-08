@@ -17,8 +17,24 @@ export { REJECTED_KEY };
 /** a refused change older than this leaves the list by itself (review #263 №10) */
 export const REJECTED_KEEP_MS = 30 * 24 * 3600_000;
 
-/** module: a batch of an add-on module's changes the server refused because the module is not active (spec 33 П21.1) */
-export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module";
+/** module: a batch of an add-on module's changes the server refused because the module is not active (spec 33 П21.1);
+ *  estimate: a send the server refused for a known reason (REJECT_REASONS) */
+export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate";
+/**
+ * The server's refusals we can explain: its hint (a code we chose in a migration) → our own words. Only these: the
+ * server's text is never shown (review #259). estimate_lines_mismatch — the lock check of a version (migration
+ * 20261108190000, Н1 of spec 33 П23.9).
+ */
+export const REJECT_REASONS = {
+  estimate_lines_mismatch: "sync.stuck.reason.estimateLines",
+} as const;
+export type RejectReason = keyof typeof REJECT_REASONS;
+/** a refused signature (estimate.sign, estimate.approve): the client's signature was not kept — take it again (review #415 №4) */
+const SIGNED_KINDS: readonly string[] = ["estimate.sign", "estimate.approve"];
+export const rejectReasonKey = (reason: RejectReason, kind?: string) =>
+  kind && SIGNED_KINDS.includes(kind) ? ("sync.stuck.reason.estimateLinesSigned" as const) : REJECT_REASONS[reason];
+export const rejectReasonOf = (hint: unknown): RejectReason | undefined =>
+  typeof hint === "string" && Object.prototype.hasOwnProperty.call(REJECT_REASONS, hint) ? (hint as RejectReason) : undefined;
 export interface RejectedOp {
   /** the outbox item's id */
   id: string;
@@ -32,6 +48,8 @@ export interface RejectedOp {
   module?: string;
   count?: number;
   labelKey?: string;
+  /** a refusal we can explain (REJECT_REASONS): the card says why in our words */
+  reason?: RejectReason;
   /** the server's text, kept for support; never shown (our own words on the card, review #259) */
   error: string;
   at: string;
@@ -41,11 +59,16 @@ export interface RejectedOp {
  * a refused op → what to keep about it; null when it is not money. Whose: the op's owner, else the person signed in
  * when it was refused (an op of an older version has none — never «everybody's», review #263 №6)
  */
-export function rejectedOf(item: OwnedItem, error: string, now: number, who: Owner | null): RejectedOp | null {
-  if (!isMoneyOp(item, MONEY_KINDS)) return null;
+export function rejectedOf(item: OwnedItem, error: string, now: number, who: Owner | null, hint?: unknown): RejectedOp | null {
   const op = item.op;
   const owner = item.owner ?? who ?? undefined;
   const base = { id: item.id, ...(owner ? { owner } : {}), kind: op.k, error, at: new Date(now).toISOString() };
+  // a send refused for a reason we can explain: the estimate is back to a draft on the server, the card says why
+  const reason = rejectReasonOf(hint);
+  // (estimate.sign sends first: a quick estimate signed on site — the client's signature is not lost silently, review №1)
+  // estimate.approve (the client signs on site / by link) sends first too (review #415 №3)
+  if ((op.k === "estimate.send" || op.k === "estimate.sign" || op.k === "estimate.approve") && reason === "estimate_lines_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, reason };
+  if (!isMoneyOp(item, MONEY_KINDS)) return null;
   switch (op.k) {
     case "estimate.deposit": return { ...base, what: "deposit", href: `/estimate/${op.id}`, amountCents: op.depositCents };
     // the client's approval / the company's countersign that makes the deposit invoice: the estimate it was about

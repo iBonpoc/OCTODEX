@@ -126,6 +126,8 @@ grant execute on all functions in schema tst to authenticated, anon;
 -- SEED
 -- =============================================================================
 :as_super
+-- the lock check (migration 20261108190000) stays on for every test (review #415 №1): the fixtures below lock versions
+-- written by hand with no document, which it does not check — as the old quick estimate
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a0000000-0000-0000-0000-000000000001', 'owner@a.test',  '{"full_name":"Owner A","locale":"ru"}'),
   ('a0000000-0000-0000-0000-000000000002', 'office@a.test', '{"full_name":"Dispatcher A"}'),
@@ -515,11 +517,13 @@ end $$;
 -- =============================================================================
 -- T6. Отправленная версия сметы неизменяема; доступ к ролям
 -- =============================================================================
+-- the fixture version has lines and no document: locked as setup (no JWT — the lock check of T107 guards a member's send)
+:as_super
+update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000001';
 :as_owner_a
 do $$ begin
   perform tst.fails($q$insert into public.estimate_line_items (company_id, option_id, name, unit_price_cents, client_visible)
                        values ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000001', 'BOM', 100, false)$q$, 'BOM line with price');
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000001';
   perform tst.fails($q$update public.estimate_versions set intro_text = 'changed' where id = '0e2a0000-0000-0000-0000-000000000001'$q$, 'edit locked version');
   perform tst.fails($q$update public.estimate_line_items set unit_price_cents = 1 where id = '0e4a0000-0000-0000-0000-000000000001'$q$, 'edit line of locked version');
   perform tst.fails($q$delete from public.estimate_line_items where id = '0e4a0000-0000-0000-0000-000000000001'$q$, 'delete line of locked version');
@@ -587,7 +591,14 @@ do $$ begin
   perform tst.set_token('0e1a0000-0000-0000-0000-000000000010', 'tok_test_0123456789abcdef');
   insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, deposit_rule, calc_inputs) values
     ('0e2a0000-0000-0000-0000-000000000010', 'ca000000-0000-0000-0000-000000000000', '0e1a0000-0000-0000-0000-000000000010', 1,
-     true, 950, '{"kind":"pct","bps":1000}', '{"options":[]}');
+     true, 950, '{"kind":"pct","bps":1000}',
+     -- the document the page draws = the lines below (T107: a version is locked only when both sides match)
+     '{"options":[{"id":"0e3a0000-0000-0000-0000-000000000010","name":"Standard","recommended":true,"lines":[
+        {"id":"0e4a0000-0000-0000-0000-000000000011","name":"Install railing","group":"labor","quantity":"1","unit":"ea","unitPriceCents":25000},
+        {"id":"0e4a0000-0000-0000-0000-000000000012","name":"Bracket","group":"material","quantity":"12","unit":"ea","unitPriceCents":1213},
+        {"id":"0e4a0000-0000-0000-0000-000000000013","name":"Deep clean","group":"service","quantity":"1","unit":"ea","unitPriceCents":9000,"optional":true}]}],
+      "settings":{"discount":{"kind":"fixed","cents":1000},"tax":{"enabled":true,"rateBps":950,"groups":{"service":false,"labor":false,"material":true}},
+                  "deposit":{"kind":"pct","bps":1000}}}');
   update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000010' where id = '0e1a0000-0000-0000-0000-000000000010';
   insert into public.estimate_options (id, company_id, version_id, name, is_recommended, discount_mode, discount_value) values
     ('0e3a0000-0000-0000-0000-000000000010', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000010', 'Standard', true, 'fixed', 1000);
@@ -5127,7 +5138,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
-    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by',
     -- erased (app.erase_personal_rows)
     'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id', 'push_prefs.user_id',
     -- unlinked (set to null)
@@ -5140,7 +5151,7 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
-    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by',
     'member_prefs.user_id', 'user_locations.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
  where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
@@ -8846,8 +8857,11 @@ insert into public.estimate_line_items (id, company_id, option_id, name, quantit
 select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b2'$q$) = 0,
   'T106 the tech moves a line to another estimate: its cost does not go with it');
 -- a locked version: the tech's delete fails and keeps nothing
-:as_owner_a
+:as_super
+-- the T106 document is a fake (lines do not match it): locked past the lock check of T107 — this test is about the cost keeping
+alter table public.estimate_versions disable trigger t50_lock_lines_match;
 update public.estimate_versions set locked_at = now() where id = 'a1060000-0000-4000-8000-000000000002';
+alter table public.estimate_versions enable trigger t50_lock_lines_match;
 :as_tech_a
 select tst.fails($q$delete from public.estimate_line_items where id = 'a1060000-0000-4000-8000-0000000000c1'$q$, 'T106 the tech deletes a line of a locked version');
 :as_super
@@ -8856,5 +8870,443 @@ select tst.ok(not exists (select 1 from public.estimate_line_costs_kept where li
 select tst.ok(not has_table_privilege('anon', 'public.estimate_line_costs_kept', 'select')
               and not has_table_privilege('authenticated', 'public.estimate_line_costs_kept', 'select'), 'T106 no grant on estimate_line_costs_kept');
 \echo 'T106 a tech''s edit of a draft keeps the office''s costs and margin ok'
+-- ---------------------------------------------------------------- T107: a version is locked only when its lines match its document (Н1, spec 33 П23.9)
+-- The page /p/ draws app.client_doc(calc_inputs); the server's sums come from estimate_line_items. send_estimate
+-- locks a version only when, per option, the client-visible lines with a non-zero amount are the same on both sides.
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1070000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T107 lock match');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, deposit_rule, calc_inputs)
+  values ('a1070000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000001', 1, false, '{"kind":"none"}', $j${"options":[
+   {"id":"a1070000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
+     {"id":"a1070000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
+     {"id":"a1070000-0000-4000-8000-0000000000b2","name":"Guards","group":"material","quantity":"1","unit":"ea","unitPriceCents":5000,"optional":true},
+     {"id":"a1070000-0000-4000-8000-0000000000b3","name":"Hanger (BOM)","group":"material","quantity":"40","unit":"ea","unitPriceCents":0,"optional":true,"clientVisible":false},
+     {"id":"a1070000-0000-4000-8000-0000000000b4","name":"Left out","group":"material","quantity":"0","unit":"ea","unitPriceCents":7000,"optional":true}]},
+   {"id":"a1070000-0000-4000-8000-0000000000a2","name":"B","lines":[
+     {"id":"a1070000-0000-4000-8000-0000000000b5","name":"Other add-on","group":"service","quantity":"1","unit":"ea","unitPriceCents":3000,"optional":true}]}],
+ "settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"},"discount":null}}$j$);
+update public.estimates set current_version_id = 'a1070000-0000-4000-8000-000000000002' where id = 'a1070000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended) values
+  ('a1070000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000002', 'A', 0, true), ('a1070000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000002', 'B', 1, false);
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, is_optional, client_visible, taxable) values
+  ('a1070000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Install', 1, 10001, false, true, false),   -- one cent apart from the document
+  ('a1070000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Guards', 1, 5000, true, true, false),
+  ('a1070000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Hanger (BOM)', 40, 0, true, false, false),
+  ('a1070000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Left out', 0, 7000, true, true, false),
+  ('a1070000-0000-4000-8000-0000000000b5', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a2', 'Other add-on', 1, 3000, true, true, false);
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a line one cent apart: not sent');
+select tst.ok((select locked_at is null from public.estimate_versions where id = 'a1070000-0000-4000-8000-000000000002')
+              and (select status = 'draft' from public.estimates where id = 'a1070000-0000-4000-8000-000000000001'), 'T107 nothing locked, still a draft');
+update public.estimate_line_items set unit_price_cents = 10000 where id = 'a1070000-0000-4000-8000-0000000000b1';
+-- a line the client would pay for but never see
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, taxable) values
+  ('a1070000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Not on the page', 1, 100, false);
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a line missing from the document: not sent');
+delete from public.estimate_line_items where id = 'a1070000-0000-4000-8000-0000000000b9';
+-- an add-on on one side, a plain line on the other
+update public.estimate_line_items set is_optional = false where id = 'a1070000-0000-4000-8000-0000000000b2';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 add-on vs plain line: not sent');
+update public.estimate_line_items set is_optional = true where id = 'a1070000-0000-4000-8000-0000000000b2';
+-- security-check В1: an option id twice in the document (the page shows «Basic» $100 and «Premium» $900 under one id,
+-- the server sums both) — and a line twice in one option
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options}', (calc_inputs -> 'options') || jsonb_build_array(calc_inputs #> '{options,0}')) where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 an option id twice: not sent');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options}', (calc_inputs -> 'options') - 2) where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines}', (calc_inputs #> '{options,0,lines}') || jsonb_build_array(calc_inputs #> '{options,0,lines,0}')) where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a line twice in the document: not sent');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines}', (calc_inputs #> '{options,0,lines}') - 4) where id = 'a1070000-0000-4000-8000-000000000002';
+-- security-check В2: no document (no options array) but paid lines — the page would show nothing
+update public.estimate_versions set calc_inputs = '{"note": "hi"}' where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 no document, paid lines: not sent');
+-- security-check of the review fix: «drawing» does not open the skip — only a version with no calc_inputs at all
+update public.estimate_versions set source = 'drawing' where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 source drawing, a document with no options, paid lines: not sent');
+update public.estimate_versions set source = 'scratch' where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_versions set calc_inputs = $j${"options":[
+   {"id":"a1070000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
+     {"id":"a1070000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
+     {"id":"a1070000-0000-4000-8000-0000000000b2","name":"Guards","group":"material","quantity":"1","unit":"ea","unitPriceCents":5000,"optional":true},
+     {"id":"a1070000-0000-4000-8000-0000000000b3","name":"Hanger (BOM)","group":"material","quantity":"40","unit":"ea","unitPriceCents":0,"optional":true,"clientVisible":false},
+     {"id":"a1070000-0000-4000-8000-0000000000b4","name":"Left out","group":"material","quantity":"0","unit":"ea","unitPriceCents":7000,"optional":true}]},
+   {"id":"a1070000-0000-4000-8000-0000000000a2","name":"B","lines":[
+     {"id":"a1070000-0000-4000-8000-0000000000b5","name":"Other add-on","group":"service","quantity":"1","unit":"ea","unitPriceCents":3000,"optional":true}]}],
+ "settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"},"discount":null}}$j$ where id = 'a1070000-0000-4000-8000-000000000002';
+-- security-check С1: the discount, the tax and the deposit as the document says
+update public.estimate_options set discount_mode = 'pct', discount_value = 5000 where id = 'a1070000-0000-4000-8000-0000000000a1';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%(discount)%', 'T107 a discount the document does not have: not sent');
+update public.estimate_options set discount_mode = null, discount_value = null where id = 'a1070000-0000-4000-8000-0000000000a1';
+update public.estimate_versions set tax_enabled = true, tax_rate_bps = 2000 where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%(tax)%', 'T107 a tax the document does not have: not sent');
+update public.estimate_versions set tax_enabled = false where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_versions set deposit_rule = '{"kind":"pct","bps":10000}' where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%(deposit)%', 'T107 a deposit the document does not have: not sent');
+update public.estimate_versions set deposit_rule = '{"kind":"none"}' where id = 'a1070000-0000-4000-8000-000000000002';
+-- a quantity that is not a number: the page cannot count it — never matches
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"one"') where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a quantity that is not a number: not sent');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"1"') where id = 'a1070000-0000-4000-8000-000000000002';
+-- a huge price: never matches, the same refusal (not «bigint out of range»)
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,unitPriceCents}', '1e300') where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a huge price: the same refusal');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,unitPriceCents}', '10000') where id = 'a1070000-0000-4000-8000-000000000002';
+-- review №4: «1e-7» (decimal.js writes a tiny quantity so) is a number: $0 on both sides, it matches
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,1,lines,0,quantity}', '"1e-7"') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 0.0000001 where id = 'a1070000-0000-4000-8000-0000000000b5';
+:as_super
+select tst.ok(tst.cnt($q$select 1 from app.version_lines_mismatch('a1070000-0000-4000-8000-000000000002')$q$) = 0, 'T107 a quantity of 1e-7: $0 both sides, it matches');
+:as_office_a
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,1,lines,0,quantity}', '"1"') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 1 where id = 'a1070000-0000-4000-8000-0000000000b5';
+-- security-check С3: a member cannot make a version that is locked from the start
+select tst.fails_like($q$insert into public.estimate_versions (id, company_id, estimate_id, version_no, locked_at)
+  values ('a1070000-0000-4000-8000-0000000000c9', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000001', 7, now())$q$, '%cannot be locked%', 'T107 a version born locked');
+-- a quantity with 5 decimals: both sides count the stored 1.2346 (the engine too, custom.test.ts) → $123.46
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"1.23455"') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 1.23455 where id = 'a1070000-0000-4000-8000-0000000000b1';
+select tst.ok((select quantity = 1.2346 and line_total_cents = 12346 from public.estimate_line_items where id = 'a1070000-0000-4000-8000-0000000000b1'), 'T107 the line keeps 1.2346 → $123.46');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from app.version_lines_mismatch('a1070000-0000-4000-8000-000000000002')$q$) = 0, 'T107 the two sides match (hidden BOM, quantity-0 line, other option)');
+:as_office_a
+select tst.ok(public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef') = 'tok_t107_0123456789abcdef', 'T107 matching lines: sent');
+select tst.ok((select locked_at is not null from public.estimate_versions where id = 'a1070000-0000-4000-8000-000000000002'), 'T107 the version is locked');
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'app.version_lines_mismatch(uuid)', 'execute')
+              and not has_function_privilege('anon', 'app.version_lines_mismatch(uuid)', 'execute'), 'T107 the check is not callable from the API');
+-- review #415 №2: a match exactly as saveEstimate writes it — a pct discount (Math.round(0.05 × 10000) = 500), the tax on
+-- with the material group taxed, a pct deposit {"kind":"pct","bps":1000} → sent
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1070000-0000-4000-8000-000000000101', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T107 as saveEstimate');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, deposit_rule, calc_inputs)
+  values ('a1070000-0000-4000-8000-000000000102', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000101', 1, true, 825, '{"kind":"pct","bps":1000}', $j${"options":[
+   {"id":"a1070000-0000-4000-8000-0000000001a1","name":"A","recommended":true,"lines":[
+     {"id":"a1070000-0000-4000-8000-0000000001b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
+     {"id":"a1070000-0000-4000-8000-0000000001b2","name":"Gutter","group":"material","quantity":"2","unit":"ft","unitPriceCents":2500}]}],
+ "settings":{"tax":{"enabled":true,"rateBps":825,"groups":{"service":false,"labor":false,"material":true}},"deposit":{"kind":"pct","bps":1000},"discount":{"kind":"pct","value":"0.05"}}}$j$);
+update public.estimates set current_version_id = 'a1070000-0000-4000-8000-000000000102' where id = 'a1070000-0000-4000-8000-000000000101';
+insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended, discount_mode, discount_value)
+  values ('a1070000-0000-4000-8000-0000000001a1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000102', 'A', 0, true, 'pct', 500);
+insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+  ('a1070000-0000-4000-8000-0000000001b1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000001a1', 'labor', 'Install', 1, 10000, false),
+  ('a1070000-0000-4000-8000-0000000001b2', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000001a1', 'material', 'Gutter', 2, 2500, true);
+select tst.ok(public.send_estimate('a1070000-0000-4000-8000-000000000101', 'tok_t107b_0123456789abcdef') = 'tok_t107b_0123456789abcdef', 'T107 discount, tax and deposit as saveEstimate writes them: sent');
+-- review #415 №1: the old quick estimate exactly as estimate.add writes it — no document, paid lines, a pct deposit —
+-- is not checked: sent and signed on site with the check on
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_via)
+  values ('a1070000-0000-4000-8000-000000000201', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T107 quick', 'drawing');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, engine_version, totals, deposit_rule, contract_type)
+  values ('a1070000-0000-4000-8000-000000000202', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000201', 1, 'drawing', '0.1.0',
+          '{"total":15000,"deposit":1500,"marginPct":null}', '{"kind":"pct","value":"0.1","contractType":"ca_hic"}', 'ca_home_improvement');
+insert into public.estimate_options (id, company_id, version_id, name, is_recommended)
+  values ('a1070000-0000-4000-8000-0000000002a1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000202', 'Quick', true);
+insert into public.estimate_line_items (company_id, option_id, position, name, quantity, unit_price_cents, is_optional, origin)
+  values ('ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000002a1', 0, 'Gutters', 1, 15000, false, 'assembly');
+update public.estimates set current_version_id = 'a1070000-0000-4000-8000-000000000202' where id = 'a1070000-0000-4000-8000-000000000201';
+:as_owner_a
+select tst.ok(public.send_estimate('a1070000-0000-4000-8000-000000000201') is not null, 'T107 a quick estimate with no document: sent');
+select tst.ok(public.sign_estimate_on_site('a1070000-0000-4000-8000-000000000201', 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign',
+  'T107 a quick estimate with no document: the client signs on site');
+-- security-check В2 stays: a scratch version with a document of no options and paid lines is not sent (above)
+:as_super
+\echo 'T107 a version is locked only when its lines match its document ok'
+
+-- ---------------------------------------------------------------- T108: portal_accept with ids of hidden add-ons (Н4а, spec 33 П23.9)
+-- The client's page cannot show a hidden BOM line or a quantity-0 add-on, but a crafted request can send their ids,
+-- an add-on of another option or a plain line: none of them moves the total.
+select tst.ok((select total = 12346 from app.estimate_option_totals('a1070000-0000-4000-8000-000000000002', 'a1070000-0000-4000-8000-0000000000a1', null)), 'T108 option A alone: $123.46');
+select tst.ok((select total = 12346 from app.estimate_option_totals('a1070000-0000-4000-8000-000000000002', 'a1070000-0000-4000-8000-0000000000a1',
+                 array['a1070000-0000-4000-8000-0000000000b3', 'a1070000-0000-4000-8000-0000000000b4', 'a1070000-0000-4000-8000-0000000000b5', 'a1070000-0000-4000-8000-0000000000b1']::uuid[])),
+  'T108 hidden BOM, quantity-0 add-on, another option''s add-on, a plain line: the total does not move');
+select tst.ok((select total = 17346 from app.estimate_option_totals('a1070000-0000-4000-8000-000000000002', 'a1070000-0000-4000-8000-0000000000a1', array['a1070000-0000-4000-8000-0000000000b2']::uuid[])), 'T108 the visible add-on counts: $173.46');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((public.portal_accept('tok_t107_0123456789abcdef', 'a1070000-0000-4000-8000-0000000000a1',
+                 array['a1070000-0000-4000-8000-0000000000b3', 'a1070000-0000-4000-8000-0000000000b4', 'a1070000-0000-4000-8000-0000000000b5']::uuid[], 'Ann Client', 'M0 0 L10 10', true)
+               -> 'approval' -> 'selection' ->> 'total')::bigint = 12346, 'T108 the client signs with hidden ids: the server total is $123.46');
+:as_super
+select tst.ok((select (selection ->> 'total')::bigint = 12346 from public.estimate_approvals where estimate_id = 'a1070000-0000-4000-8000-000000000001' and party = 'customer'),
+  'T108 the signed selection keeps $123.46');
+\echo 'T108 portal_accept: hidden add-on ids do not move the total ok'
+
+-- ---------------------------------------------------------------- T109: a percent discount longer than 4 digits (debt 3 of «Сметы» №1)
+-- The app writes round(fraction × 10000) bps (engine discountBps), the server counts floor(sub × bps / 10000 + 0.5),
+-- the lock check rounds the document's fraction the same way: 0.123456 → 1235 bps. The engine's numbers:
+-- packages/estimating-engine/test/estimate.test.ts T4b (3 × $333.33 − 12.35% = $876.49).
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1090000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T109 discount bps');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, deposit_rule, calc_inputs)
+  values ('a1090000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-000000000001', 1, false, '{"kind":"none"}', $j${"options":[
+   {"id":"a1090000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
+     {"id":"a1090000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"3","unit":"ea","unitPriceCents":33333}]}],
+ "settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"},"discount":{"kind":"pct","value":"0.123456"}}}$j$);
+update public.estimates set current_version_id = 'a1090000-0000-4000-8000-000000000002' where id = 'a1090000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended, discount_mode, discount_value)
+  values ('a1090000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-000000000002', 'A', 0, true, 'pct', 1234);   -- truncated, not rounded
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, taxable)
+  values ('a1090000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-0000000000a1', 'Install', 3, 33333, false);
+select tst.fails_like($q$select public.send_estimate('a1090000-0000-4000-8000-000000000001', 'tok_t109_0123456789abcdef')$q$, '%(discount)%', 'T109 1234 bps for 0.123456: not sent, the discount differs');
+update public.estimate_options set discount_value = 1235 where id = 'a1090000-0000-4000-8000-0000000000a1';
+select tst.ok(public.send_estimate('a1090000-0000-4000-8000-000000000001', 'tok_t109_0123456789abcdef') = 'tok_t109_0123456789abcdef', 'T109 1235 bps (the engine''s discountBps): sent');
+:as_super
+select tst.ok((select total = 87649 from app.estimate_option_totals('a1090000-0000-4000-8000-000000000002', 'a1090000-0000-4000-8000-0000000000a1', null)), 'T109 the server''s total = the engine''s $876.49');
+\echo 'T109 a percent discount counts whole bps on both sides ok'
+-- ---------------------------------------------------------------- T112–T119: lead intake from outside (docs/specs/34 §3, §3а)
+\set as_service 'reset role; reset request.jwt.claim.sub; set role service_role;'
+:as_super
+grant usage on schema tst to service_role;
+create table tst.intake_tok (k text primary key, id uuid, token text);
+grant all on tst.intake_tok to authenticated, service_role;
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- the Edge Function's call: the hash of the token, of the body and of the IP
+create function tst.intake(p_kind text, p_k text, p_key text, p_payload jsonb, p_ip text default null, p_checks jsonb default '{}')
+returns jsonb language sql as $$
+  select app.intake_lead(p_kind, encode(sha256(convert_to((select token from tst.intake_tok where k = p_k), 'UTF8')), 'hex'), p_key,
+    encode(sha256(convert_to(p_payload::text, 'UTF8')), 'hex'),
+    case when p_ip is not null then encode(sha256(convert_to(p_ip, 'UTF8')), 'hex') end, p_payload, p_checks);
+$$;
+-- T112: who may do what
+:as_owner_a
+insert into tst.intake_tok (k, id, token)
+  select 'form', (r ->> 'id')::uuid, r ->> 'token' from public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'form', '1a000000-0000-0000-0000-000000000001') r;
+insert into tst.intake_tok (k, id, token)
+  select 'hook', (r ->> 'id')::uuid, r ->> 'token' from public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'webhook', '1a000000-0000-0000-0000-000000000001') r;
+select tst.ok((select token ~ '^f[0-9a-f]{32}$' from tst.intake_tok where k = 'form') and (select token ~ '^gxk_[0-9a-f]{64}$' from tst.intake_tok where k = 'hook'),
+  'T112 a form token has 128 bits, a webhook key 256 bits with its prefix');
+select tst.ok((select public_token is not null from public.intake_endpoints where id = (select id from tst.intake_tok where k = 'form'))
+          and (select public_token is null from public.intake_endpoints where id = (select id from tst.intake_tok where k = 'hook')),
+  'T112 the owner reads the form link again; the webhook key is not kept');
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_daily_limit => 1000);
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'hook'), p_daily_limit => 1000);
+do $$ begin
+  perform tst.fails($q$select token_hash from public.intake_endpoints$q$, 'T112 nobody in the app reads the token hash');
+  perform tst.fails($q$insert into public.intake_endpoints (company_id, kind, token_hash, token_hint, source_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'webhook', repeat('a', 64), 'aaaa', '1a000000-0000-0000-0000-000000000001')$q$, 'T112 a way in is made only by the function');
+  perform tst.fails($q$select app.intake_lead('form', 'x', 'k', 'x', null, '{}', '{}')$q$, 'T112 the owner cannot call the pipeline');
+end $$;
+:as_office_a
+do $$ begin
+  perform tst.ok(tst.cnt('select id from public.intake_endpoints') = 0, 'T112 the office does not see the ways in (their links and keys)');
+  perform tst.fails($q$select public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'form', '1a000000-0000-0000-0000-000000000001')$q$, 'T112 the office makes no way in');
+  perform tst.fails($q$select public.intake_endpoint_rotate((select id from tst.intake_tok where k = 'form'))$q$, 'T112 the office changes no link');
+end $$;
+:as_owner_b
+do $$ begin
+  perform tst.ok(tst.cnt('select id from public.intake_endpoints') = 0 and tst.cnt('select id from public.intake_events') = 0, 'T112 company B sees nothing of A');
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => false)$q$, 'T112 company B switches off A''s form');
+end $$;
+reset role; set role anon;
+do $$ begin
+  perform tst.fails($q$select app.intake_lead('form', 'x', 'k', 'x', null, '{}', '{}')$q$, 'T112 anon cannot call the pipeline');
+  perform tst.fails($q$select app.intake_form_info('x')$q$, 'T112 anon cannot read a form''s company');
+  perform tst.fails($q$select id from public.intake_events$q$, 'T112 anon reads no journal');
+end $$;
+:as_super
+select tst.ok(has_function_privilege('service_role', 'app.intake_lead(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.intake_lead(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.intake_make_lead(public.intake_endpoints, uuid, jsonb, boolean)', 'execute')
+          and not has_function_privilege('service_role', 'app.intake_make_lead(public.intake_endpoints, uuid, jsonb, boolean)', 'execute'),
+  'T118 the pipeline runs only for service_role, its steps for nobody (rule 18)');
+
+-- T113: a repeat of an event is the same result, one lead; the same key with another body is refused
+:as_service
+select tst.ok(tst.intake('form', 'form', 'k113', '{"name":"Ann Lee","phone":"(626) 555-0113","message":"Clean gutters","language":"ru","utm":{"utm_source":"gbp","evil":"x"}}', '1.1.1.113') ->> 'status' = 'accepted',
+  'T113 a form request becomes a lead');
+select tst.ok((tst.intake('form', 'form', 'k113', '{"name":"Ann Lee","phone":"(626) 555-0113","message":"Clean gutters","language":"ru","utm":{"utm_source":"gbp","evil":"x"}}', '1.1.1.113') ->> 'repeat')::boolean,
+  'T113 a repeat is a repeat');
+select tst.ok(tst.intake('form', 'form', 'k113', '{"name":"Ann Lee","phone":"(626) 555-0199"}', '1.1.1.113') ->> 'status' = 'invalid', 'T113 the same key with another body is refused');
+select tst.ok(tst.intake('webhook', 'form', 'k113b', '{"name":"X","phone":"(626) 555-0114"}') ->> 'status' = 'unknown', 'T118 a form token does not open the webhook');
+:as_super
+select tst.ok((select count(*) from public.leads where phone = '(626) 555-0113') = 1, 'T113 one lead for the repeated event');
+select tst.ok((select status = 'new' and source_id = '1a000000-0000-0000-0000-000000000001' and language = 'ru' and utm = '{"utm_source":"gbp"}'::jsonb
+                  and intake_event_id is not null and created_by is null and number like 'LEA-%'
+                 from public.leads where phone = '(626) 555-0113'), 'T113 the lead: new, the source of the way in, its language, only known utm keys');
+select tst.ok((select c.preferred_language = 'ru' from public.contacts c join public.leads l on l.id = c.lead_id where l.phone = '(626) 555-0113' and c.is_primary),
+  'T113 the main person keeps Russian (t85)');
+select tst.ok((select status = 'accepted' and lead_id is not null and payload_hash ~ '^[0-9a-f]{64}$' from public.intake_events where event_key = 'k113'),
+  'T113 the journal row points to the lead');
+
+-- T114: the same person's open lead gets the request in its feed (≤ 3 a day), nothing else changes
+:as_service
+select tst.ok(tst.intake('form', 'form', 'k114a', '{"name":"Someone else","phone":"626.555.0113","message":"again"}', '1.1.1.114') ->> 'status' = 'merged', 'T114 a repeat request of an open lead is merged');
+select tst.intake('form', 'form', 'k114b', '{"phone":"6265550113","message":"2"}', '1.1.1.114');
+select tst.intake('form', 'form', 'k114c', '{"phone":"6265550113","message":"3"}', '1.1.1.114');
+select tst.ok(tst.intake('form', 'form', 'k114d', '{"phone":"6265550113","message":"4"}', '1.1.1.114') ->> 'status' = 'merged', 'T114 the 4th is merged too');
+:as_super
+select tst.ok((select count(*) from public.leads where right(regexp_replace(phone, '\D', '', 'g'), 10) = '6265550113') = 1, 'T114 no second lead');
+select tst.ok((select count(*) from public.activities a join public.leads l on l.id = a.subject_id
+                where l.phone = '(626) 555-0113' and a.kind = 'intake' and a.direction = 'in' and a.meta ->> 'unconfirmed' = '1' and a.actor_id is null) = 3,
+  'T114 three unconfirmed feed events a day, not more');
+select tst.ok((select contact_name = 'Ann Lee' and status = 'new' from public.leads where phone = '(626) 555-0113'), 'T114 the name and status of the lead stay');
+select tst.ok((select reason = 'repeat_cap' from public.intake_events where event_key = 'k114d'), 'T114 the capped one is in the journal');
+
+-- T115: a client's phone → a new lead linked to the client; a provider's price; a provider's lead once
+:as_service
+select tst.ok(tst.intake('webhook', 'hook', 'z115', '{"name":"Yuri","phone":"+1 323 555 0101","provider":"thumbtack","provider_ref":"tt-115","cost_cents":"3200"}') ->> 'status' = 'accepted',
+  'T115 a webhook request becomes a lead');
+select tst.ok(tst.intake('webhook', 'hook', 'z115-replay', '{"name":"Yuri","phone":"+1 323 555 0101","provider":"thumbtack","provider_ref":"tt-115","cost_cents":"3200"}') ->> 'status' = 'merged',
+  'T115 the same provider lead with another event key is the same lead');
+select tst.ok(tst.intake('webhook', 'hook', 'z115c', '{"email":"Big@Example.com","provider":"angi","cost_cents":"999999"}') ->> 'status' = 'accepted', 'T115 a lead with a wild price is still taken');
+select tst.ok(tst.intake('webhook', 'hook', 'z115d', '{"name":"No contact","message":"hi"}') ->> 'status' = 'invalid', 'T115 no phone and no email — refused');
+:as_super
+select tst.ok((select customer_id = 'c1a00000-0000-0000-0000-000000000001' and provider = 'thumbtack' and cost_origin = 'provider'
+                 from public.leads where provider_ref = 'tt-115'), 'T115 the lead knows the client ("already a client") and its provider');
+select tst.ok((select k.cost_cents = 3200 and k.origin = 'provider' from public.lead_costs k join public.leads l on l.id = k.lead_id where l.provider_ref = 'tt-115'),
+  'T115 the provider''s price in cents');
+select tst.ok((select parse_status = 'needs_review' and email = 'big@example.com' and not exists (select 1 from public.lead_costs k where k.lead_id = l.id)
+                 from public.leads l where l.provider = 'angi'), 'T115 a price over $500 is dropped, the lead marked for review');
+select tst.ok((select payload is null from public.intake_events where event_key = 'z115d'), 'T115 a refused request keeps no fields');
+
+-- T116: limits — a request is held, never lost; bots and a missing captcha are refused
+:as_service
+do $$ declare i int; begin
+  for i in 1..5 loop
+    perform tst.ok(tst.intake('form', 'form', 'ip116-' || i, jsonb_build_object('phone', '(818) 555-01' || (10 + i)), '9.9.9.9') ->> 'status' = 'accepted', 'T116 five from one IP pass');
+  end loop;
+  perform tst.ok(tst.intake('form', 'form', 'ip116-6', '{"phone":"(818) 555-0199"}', '9.9.9.9') ->> 'status' = 'held', 'T116 the 6th from one IP an hour is held');
+  perform tst.ok(tst.intake('form', 'form', 'ip116-7', '{"phone":"(818) 555-0198"}', '9.9.9.8') ->> 'status' = 'accepted', 'T116 another IP passes');
+  perform tst.ok(tst.intake('form', 'form', 'bot116', '{"phone":"(818) 555-0197"}', '9.9.9.7', '{"bot":true}') ->> 'status' = 'rejected', 'T116 a bot is refused');
+end $$;
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => true);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'cap116', '{"phone":"(818) 555-0196"}', '9.9.9.6') ->> 'status' = 'rejected', 'T116 the captcha is required and missing');
+select tst.ok(tst.intake('form', 'form', 'cap116ok', '{"phone":"(818) 555-0195"}', '9.9.9.6', '{"captcha":"ok"}') ->> 'status' = 'accepted', 'T116 a solved captcha passes');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 2);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'day116', '{"phone":"(818) 555-0194"}', '9.9.9.5') ->> 'status' = 'held', 'T116 over the form''s day limit — held');
+select tst.ok(tst.intake('webhook', 'hook', 'day116-hook', '{"phone":"(818) 555-0193"}') ->> 'status' = 'accepted', 'T116 the form''s spam does not hold the webhook''s leads');
+select tst.ok(tst.intake('form', 'form', 'noip116', '{"phone":"(818) 555-0192"}') ->> 'status' = 'rejected', 'T116 a form request without an IP is refused');
+select tst.ok(tst.intake('form', 'form', 'junk116', '{"phone":"(818) 555-0191"}', '9.9.9.4', '{"bot":"maybe","consent":"yes"}') ->> 'status' = 'held',
+  'T116 junk in the checks is not an error');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_daily_limit => 1);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'flood116', '{"phone":"(818) 555-0190"}', '9.9.9.3') ->> 'status' = 'rejected', 'T116 past ten days'' worth in a day — refused, not kept');
+:as_super
+select tst.ok((select payload is null and reason = 'flood' from public.intake_events where event_key = 'flood116'), 'T116 a flood keeps no fields');
+:as_super
+select tst.ok((select payload is not null and lead_id is null from public.intake_events where event_key = 'day116'), 'T116 a held request keeps its fields');
+select tst.ok((select payload is null from public.intake_events where event_key = 'bot116'), 'T116 a bot''s fields are not kept');
+:as_tech_a
+select tst.ok(tst.cnt('select id from public.intake_events') = 0, 'T112 a tech reads no journal');
+select tst.fails($q$select public.intake_event_decide((select id from public.intake_events where event_key = 'day116'), true)$q$, 'T116 a tech accepts nothing');
+:as_office_a
+select tst.ok(tst.cnt($q$select id from public.intake_events where event_key = 'day116'$q$) = 1, 'T112 the office reads the journal');
+select tst.ok(public.intake_event_decide((select id from public.intake_events where event_key = 'day116'), true) ->> 'status' = 'accepted', 'T116 the office accepts a held request');
+select tst.ok(public.intake_event_decide((select id from public.intake_events where event_key = 'day116'), true) ->> 'status' = 'accepted', 'T116 a second accept changes nothing');
+:as_super
+select tst.ok((select count(*) from public.leads where phone = '(818) 555-0194') = 1, 'T116 the accepted request made one lead');
+select tst.ok(not has_column_privilege('authenticated', 'public.intake_events', 'status', 'UPDATE')
+          and not has_table_privilege('authenticated', 'public.intake_events', 'INSERT')
+          and not has_column_privilege('authenticated', 'public.intake_events', 'ip_hash', 'SELECT'), 'T112 the app writes no journal and reads no IP hash');
+-- parallel requests: the advisory lock serialises the count (two sessions are not possible here; the lock is checked to exist)
+select tst.ok(position('pg_advisory_xact_lock' in pg_get_functiondef('app.intake_lead(text, text, text, text, text, jsonb, jsonb)'::regprocedure)) > 0,
+  'T116 the limits are counted under the company''s lock');
+
+-- T117: who gets the lead — the chosen person while active, else the owner
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_daily_limit => 1000);
+:as_super
+update public.companies set lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000002' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.intake('webhook', 'hook', 'z117a', '{"phone":"(213) 555-0117"}');
+:as_super
+update public.memberships set status = 'disabled' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.intake('webhook', 'hook', 'z117b', '{"phone":"(213) 555-0118"}');
+:as_super
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000002' from public.leads where phone = '(213) 555-0117'), 'T117 the chosen person gets the lead');
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000001' from public.leads where phone = '(213) 555-0118'), 'T117 a disabled person does not, the owner does');
+update public.memberships set status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+update public.companies set lead_default_assignee_id = null where id = 'ca000000-0000-0000-0000-000000000000';
+
+-- T118: a switched-off or rotated way in answers like an unknown one; the page reads only the company's name
+:as_service
+select tst.ok(app.intake_form_info(encode(sha256(convert_to((select token from tst.intake_tok where k = 'form'), 'UTF8')), 'hex')) ->> 'company' is not null,
+  'T118 the page gets the company''s name');
+select tst.ok(app.intake_form_info(repeat('0', 64)) = '{}'::jsonb, 'T118 an unknown token: an empty answer');
+:as_owner_a
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'hook';
+insert into tst.intake_tok (k, token) values ('hook-old', 'gxk_old');
+:as_super
+update tst.intake_tok set token = (select token from tst.intake_tok where k = 'hook') where k = 'hook-old';
+:as_owner_a
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'hook';
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => false);
+:as_service
+select tst.ok(tst.intake('webhook', 'hook-old', 'z118', '{"phone":"(213) 555-0119"}') ->> 'status' = 'unknown', 'T118 an old key stops after a rotation');
+select tst.ok(tst.intake('webhook', 'hook', 'z118', '{"phone":"(213) 555-0119"}') ->> 'status' = 'accepted', 'T118 the new key works');
+select tst.ok(tst.intake('form', 'form', 'f118', '{"phone":"(213) 555-0120"}') ->> 'status' = 'unknown', 'T118 a switched-off form answers like an unknown one');
+select tst.ok(app.intake_form_info(encode(sha256(convert_to((select token from tst.intake_tok where k = 'form'), 'UTF8')), 'hex')) = '{}'::jsonb,
+  'T118 the page of a switched-off form shows nothing');
+
+-- T119: a way in links only this company's source and kind of work
+:as_super
+insert into public.service_categories (id, company_id, name) values ('c1190000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'T119 B work');
+:as_owner_a
+do $$ begin
+  perform tst.fails($q$select public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'form', '1b000000-0000-0000-0000-000000000001')$q$, 'T119 company B''s source in A''s way in');
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_source_id => '1b000000-0000-0000-0000-000000000001')$q$, 'T119 a switch to B''s source');
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'),
+    p_service_category_id => 'c1190000-0000-4000-8000-000000000001')$q$, 'T119 B''s kind of work');
+  perform tst.fails($q$select public.intake_endpoint_create('cb000000-0000-0000-0000-000000000000', 'form', '1b000000-0000-0000-0000-000000000001')$q$, 'T119 A''s owner makes a way into B');
+end $$;
+:as_super
+insert into public.service_categories (id, company_id, name) values ('c1190000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T119 A work');
+:as_service
+select tst.intake('webhook', 'hook', 'cat119a', '{"phone":"(213) 555-0121","category_id":"c1190000-0000-4000-8000-0000000000a2"}');
+select tst.intake('webhook', 'hook', 'cat119b', '{"phone":"(213) 555-0122","category_id":"c1190000-0000-4000-8000-000000000001"}');
+:as_super
+select tst.ok((select service_category_id = 'c1190000-0000-4000-8000-0000000000a2' from public.leads where phone = '(213) 555-0121'), 'T119 the visitor''s kind of work of this company is kept');
+select tst.ok((select service_category_id is distinct from 'c1190000-0000-4000-8000-000000000001' from public.leads where phone = '(213) 555-0122'), 'T119 B''s kind of work from a request is ignored');
+-- T119 (cont.): a client or a person of another company is never linked; consent; deciding; size; purge
+:as_owner_b
+insert into public.customers (id, company_id, display_name) values ('c1190000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'T119 B client');
+insert into public.contacts (company_id, customer_id, name, phone, is_primary) values ('cb000000-0000-0000-0000-000000000000', 'c1190000-0000-4000-8000-0000000000b1', 'B person', '(213) 555-0123', true);
+:as_super
+update public.companies set lead_default_assignee_id = 'b0000000-0000-0000-0000-000000000001' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => true, p_daily_limit => 1000, p_sms_consent_enabled => true);
+:as_service
+select tst.intake('webhook', 'hook', 'x119', '{"phone":"(213) 555-0123","language":"ES"}');
+select tst.intake('form', 'form', 'consent119', '{"phone":"(213) 555-0124"}', '7.7.7.1', '{"consent":"true","consent_version":"sms-v1"}');
+select tst.ok(tst.intake('form', 'form', 'big119', jsonb_build_object('phone', '(213) 555-0125', 'message', repeat('x', 17000)), '7.7.7.2') ->> 'status' = 'invalid', 'T119 a body over 16 KB is refused');
+select tst.ok(tst.intake('form', 'form', 'arr119', '[1,2]', '7.7.7.3') ->> 'status' = 'invalid', 'T119 a body that is not an object is refused');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_sms_consent_enabled => false);
+:as_service
+select tst.intake('form', 'form', 'noconsent119', '{"phone":"(213) 555-0126"}', '7.7.7.4', '{"consent":"true"}');
+:as_super
+update public.companies set lead_default_assignee_id = null where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select customer_id is null and assigned_to = 'a0000000-0000-0000-0000-000000000001' and language = 'es' from public.leads where phone = '(213) 555-0123' and company_id = 'ca000000-0000-0000-0000-000000000000'),
+  'T119 B''s client with the same phone and B''s person as A''s choice are never used; «ES» is Spanish');
+select tst.ok((select c.sms_consent_status = 'opted_in' from public.contacts c join public.leads l on l.id = c.lead_id where l.phone = '(213) 555-0124' and c.is_primary)
+          and (select sms_consent and consent_text_version = 'sms-v1' from public.intake_events where event_key = 'consent119'), 'T119 the consent box: the person opted in, the record kept');
+select tst.ok((select c.sms_consent_status = 'unknown' from public.contacts c join public.leads l on l.id = c.lead_id where l.phone = '(213) 555-0126' and c.is_primary),
+  'T119 consent from a form without the box is ignored');
+-- a held one refused by hand; company B decides nothing of A
+update public.intake_events set status = 'held' where event_key = 'flood116';
+update public.intake_events set payload = '{"phone":"(818) 555-0190"}' where event_key = 'flood116';
+:as_owner_b
+select tst.fails($q$select public.intake_event_decide((select id from tst.intake_tok where k = 'form'), true)$q$, 'T119 an unknown event');
+:as_super
+insert into tst.intake_tok (k, id) select 'flood', id from public.intake_events where event_key = 'flood116';
+:as_owner_b
+select tst.fails($q$select public.intake_event_decide((select id from tst.intake_tok where k = 'flood'), true)$q$, 'T119 company B decides A''s request');
+:as_owner_a
+select tst.ok(public.intake_event_decide((select id from tst.intake_tok where k = 'flood'), false) ->> 'status' = 'rejected', 'T116 the owner refuses a held request');
+:as_super
+select tst.ok((select status = 'rejected' and reason = 'by_hand' and payload is null and decided_by = 'a0000000-0000-0000-0000-000000000001' from public.intake_events where event_key = 'flood116')
+          and (select lead_id is null from public.intake_events where event_key = 'flood116'), 'T116 a refused request makes no lead and keeps no fields');
+-- the purge: old fields and IP hashes go, the consent's IP hash stays
+update public.intake_events set received_at = now() - interval '100 days' where event_key in ('k113', 'consent119', 'day116');
+select app.purge_intake_events();
+select tst.ok((select payload is null and ip_hash is null from public.intake_events where event_key = 'k113')
+          and (select payload is null and ip_hash is not null from public.intake_events where event_key = 'consent119'), 'T112 the purge clears old fields and IPs, keeps the consent''s');
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select count(*) from public.intake_events where payload is not null and status = 'accepted') > 0, 'T112 the purge keeps fresh requests');
+\echo 'T112–T119 lead intake: rights, repeats, duplicates, client, limits, assignee, ways in ok'
 
 \echo 'ALL TESTS PASSED'
