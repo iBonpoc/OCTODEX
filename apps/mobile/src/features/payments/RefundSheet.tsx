@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { View } from "react-native";
 import { space } from "@octo/design-tokens";
-import type { Invoice, Payment } from "@/data/types";
+import type { AnyPayment, Invoice } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { Labeled, MoneyField } from "@/features/fields";
 import {
@@ -40,7 +40,7 @@ export function RefundSheet({
 }: {
   visible: boolean;
   onClose: () => void;
-  payment: Payment;
+  payment: AnyPayment;
   invoice?: Invoice;
   online: boolean;
   /** Stripe's processing fee of this payment, when known (it does not come back) */
@@ -210,7 +210,8 @@ export function RefundSheet({
             {t("mny.refund.confirmTitle", { amount: money(amount) })}
           </T>
           <T v="body" tone="mut">
-            {t("mny.refund.irreversible")}
+            {/* an advance has no invoice that would owe it again (spec 35 §4г) */}
+            {t(payment.invoiceId === null ? "mny.refund.irreversibleAdvance" : "mny.refund.irreversible")}
           </T>
           {err ? (
             <View testID="refund-error" style={{ gap: space[1] }}>

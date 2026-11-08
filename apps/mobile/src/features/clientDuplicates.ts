@@ -13,7 +13,8 @@ export interface ClientDup {
   reasons: DupReason[];
 }
 
-const emailKey = (e: string | undefined) => (e ?? "").trim().toLowerCase();
+/** an email as a key of a duplicate (server: app.email_key — test/matchKeys.test.ts, db T139) */
+export const emailKey = (e: string | undefined) => (e ?? "").trim().toLowerCase();
 const WORDS: Record<string, string> = {
   street: "st", avenue: "ave", av: "ave", road: "rd", drive: "dr", lane: "ln", court: "ct", boulevard: "blvd",
   place: "pl", terrace: "ter", circle: "cir", highway: "hwy", parkway: "pkwy", north: "n", south: "s", east: "e", west: "w",
@@ -33,7 +34,8 @@ export function addressKey(p: { address: string; unit?: string; city?: string; p
   const street = words(p.address);
   if (!/\d/.test(street)) return "";
   const zip = p.place?.zip?.trim().slice(0, 5) || (p.city ?? "").match(/\b\d{5}\b/)?.[0] || "";
-  const where = zip || words(p.place?.city ?? (p.city ?? "").split(",")[0]);
+  // the city before a comma («Pasadena, CA» = «Pasadena»), the same as app.address_key on the server (db T139)
+  const where = zip || words((p.place?.city ?? p.city ?? "").split(",")[0]);
   if (!where) return "";
   return [street, words(p.unit), where].join("|");
 }
