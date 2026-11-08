@@ -41,7 +41,10 @@ exports.run = async (h) => {
   await h.click("Готово");
   await h.expectText(/Выполненные · 1[\s\S]*Call in spring about painting/, "done task stays, under Done");
   await h.click("Вернуть");
-  await h.expectText(/Call in spring about painting[\s\S]*Готово/, "task reopened");
+  // the task is open again: the tick «Готово» (recipe E, 06 §3) is back and «Выполненные» is gone
+  await p.getByRole("button", { name: "Готово", exact: true }).first().waitFor({ timeout: 5000 });
+  const reopened = await h.text();
+  h.expect(/Call in spring about painting/.test(reopened) && !/Выполненные · /.test(reopened), "task reopened");
   await h.go("/client/c1");
   await row("Файлы");
   await h.expectText(/Фото с выездов|Файлов нет/, "files list renders");

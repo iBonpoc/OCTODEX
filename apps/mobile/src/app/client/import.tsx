@@ -18,7 +18,8 @@ import { guessMapping, IMPORT_FIELDS, IMPORT_MAX_BYTES, IMPORT_MAX_PARSED, IMPOR
 import { Button, StatusChip } from "@/ui/controls";
 import { Sheet, useToast } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
-import { Card, CardList, Divider, Empty, ItemCard, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Divider, Empty, ListRow, Screen, SectionTitle } from "@/ui/surfaces";
+import { ListCard } from "@/ui/listCard";
 
 const FIELD_LABEL: Record<ImportField, DictKey> = {
   firstName: "client.import.f.firstName",
@@ -166,11 +167,14 @@ export default function ImportClients() {
           {plan.skip.length ? (
             <CardList>
               {plan.skip.slice(0, SKIP_SHOWN).map((s) => (
-                <ItemCard
+                // a duplicate is skipped on purpose (grey); a broken row needs a look (warn edge)
+                <ListCard
                   key={s.row.line}
-                  status={s.reason === "dupClient" || s.reason === "dupFile" ? "neutral" : "warn"}
+                  density="compact"
+                  lead={s.reason === "dupClient" || s.reason === "dupFile" ? { kind: "icon", icon: "users" } : { kind: "icon", icon: "alert", tone: "warn" }}
+                  edge={s.reason === "dupClient" || s.reason === "dupFile" ? null : "warn"}
                   title={t("client.import.line", { n: s.row.line, name: s.row.name || "—" })}
-                  subtitle={[t(SKIP_LABEL[s.reason], { who: s.who ?? "", max: IMPORT_MAX_ROWS }), s.whoStatus ? t(clientStatusChip[s.whoStatus].l) : null].filter(Boolean).join(" · ")}
+                  when={[t(SKIP_LABEL[s.reason], { who: s.who ?? "", max: IMPORT_MAX_ROWS }), s.whoStatus ? t(clientStatusChip[s.whoStatus].l) : null].filter(Boolean).join(" · ")}
                 />
               ))}
               {plan.skip.length > SKIP_SHOWN ? (
