@@ -4,7 +4,9 @@
  * - a gutter, its length 10′ (the sheet), then a second from its end turning 90° → 10′ 0⅛″ → the line shows «10′ ⅛″»;
  * - a tap on the corner → the sheet «Угол» has «Раскрой»: «угол 90°», for each gutter along the wall and along the face;
  *   the face differs from the wall by the gutter size (5″): longer on an outside corner, shorter on an inside one;
- * - the other kind → the face lengths follow.
+ * - the other kind → the face lengths follow;
+ * - the corner's small drawing is there; the triangle: 10′, 10′ ⅛″ and between the ends for 110° → «угол 110°», the
+ *   drawing turns, the face differs by 5·tan 35° = 3½″; «90°» puts it back.
  * Finds things by testID; waits on what it checks.
  */
 
@@ -85,4 +87,20 @@ exports.run = async (h) => {
   await tid("corner-cut").waitFor({ timeout: 5000 });
   const c1 = await cuts();
   h.expect(c1.every((x) => Math.abs(x.front - x.back + sign * 5) < 0.01), `the other kind: the face ${sign > 0 ? "−" : "+"}5″ (${JSON.stringify(c1)})`);
+
+  h.expect((await tid("corner-sketch").count()) === 1, "the corner's small drawing");
+
+  // the triangle: the two gutters (prefilled) and straight between their ends for 110°
+  const a = 120, bb = 120.125;
+  const c = Math.sqrt(a * a + bb * bb - 2 * a * bb * Math.cos((110 * Math.PI) / 180));
+  await tid("tri-c").locator("input").first().fill(String(Math.floor(c / 12)));
+  await tid("tri-c").locator("input").nth(1).fill(String(Math.round((c % 12) * 8) / 8));
+  await tid("tri-count").getByRole("button").click();
+  await waitFor(async () => /110/.test(await tid("corner-cut-angle").innerText()), "the corner is 110° now");
+  h.expect(/110/.test(await tid("tri-result").innerText()), "the triangle says 110°");
+  const c2 = await cuts();
+  h.expect(c2.every((x) => Math.abs(Math.abs(x.front - x.back) - 3.5) < 0.01), `110°: the face differs by 3½″ (${JSON.stringify(c2)})`);
+  await h.shot("triangle");
+  await tid("tri-90").getByRole("button").click();
+  await waitFor(async () => /90°/.test(await tid("corner-cut-angle").innerText()), "«90°» puts it back");
 };

@@ -245,3 +245,58 @@ export function flipFace(d: Drawing, runId: string): Drawing {
   const chain = chainOf(d, runId);
   return { ...d, runs: d.runs.map((r) => (chain.has(r.id) ? { ...r, houseSide: houseSide(r, c) === "L" ? "R" : "L" } : r)) };
 }
+
+/**
+ * Set the angle between the walls at a corner (founder 08.11: measured by a triangle on site). The first run stays;
+ * the second turns about the corner — the same way it turns now — and what hangs on its far end turns with it.
+ * A closed line: only the second run's far end moves (its neighbours keep the join). Same drawing back when nothing
+ * changes or the angle is out of 20°…180°.
+ */
+export function setCornerAngle(d: Drawing, f: Pick<FoundCorner, "runs" | "at">, angleDeg: number): Drawing {
+  if (!(angleDeg >= 20 && angleDeg <= 180)) return d;
+  const A = d.runs.find((x) => x.id === f.runs[0].id);
+  const B = d.runs.find((x) => x.id === f.runs[1].id);
+  if (!A || !B) return d;
+  const c = f.at;
+  const aFar = f.runs[0].end ? A.a : A.b;
+  const bFar = f.runs[1].end ? B.a : B.b;
+  const vin: P = [c[0] - aFar[0], c[1] - aFar[1]];
+  const vout: P = [bFar[0] - c[0], bFar[1] - c[1]];
+  const cur = (Math.atan2(vin[0] * vout[1] - vin[1] * vout[0], vin[0] * vout[0] + vin[1] * vout[1]) * 180) / Math.PI;
+  const want = (cur >= 0 ? 1 : -1) * (180 - angleDeg);
+  const rad = ((want - cur) * Math.PI) / 180;
+  if (Math.abs(rad) < 1e-6) return d;
+  const cos = Math.cos(rad), sin = Math.sin(rad);
+  const rot = (p: P): P => {
+    const x = p[0] - c[0], y = p[1] - c[1];
+    return [Math.round(c[0] + x * cos - y * sin), Math.round(c[1] + x * sin + y * cos)];
+  };
+  const near = (p: P, q: P) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 1;
+  // what hangs on B's far end, not through the corner
+  const hang = new Set<string>();
+  const todo = [bFar];
+  const seenPts: P[] = [];
+  while (todo.length) {
+    const pt = todo.pop()!;
+    if (seenPts.some((q) => near(q, pt)) || near(pt, c)) continue;
+    seenPts.push(pt);
+    for (const o of d.runs) {
+      if (o.id === B.id || hang.has(o.id)) continue;
+      if (near(o.a, pt) || near(o.b, pt)) {
+        hang.add(o.id);
+        todo.push(near(o.a, pt) ? o.b : o.a);
+      }
+    }
+  }
+  const closed = hang.has(A.id);
+  const nb = rot(bFar);
+  return {
+    ...d,
+    runs: d.runs.map((x) => {
+      if (x.id === B.id) return f.runs[1].end ? { ...x, a: nb } : { ...x, b: nb };
+      if (!closed && hang.has(x.id)) return { ...x, a: rot(x.a), b: rot(x.b) };
+      if (closed && x.id !== A.id) return near(x.a, bFar) ? { ...x, a: nb } : near(x.b, bFar) ? { ...x, b: nb } : x;
+      return x;
+    }),
+  };
+}

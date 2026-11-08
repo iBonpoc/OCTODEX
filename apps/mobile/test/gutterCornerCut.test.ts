@@ -1,8 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { cornerCut, eighth, findCorners, type DrawnRun, type Drawing, type P } from "../src/modules/gutters/geometry";
+import { angleFromTriangle, cornerCut, eighth, findCorners, type DrawnRun, type Drawing, type P } from "../src/modules/gutters/geometry";
 import { ftIn } from "../src/modules/gutters/canvas/format";
 import { tapeIn } from "../src/modules/gutters/canvas/attrs";
-import { setLength } from "../src/modules/gutters/canvas/edit";
+import { setCornerAngle, setLength } from "../src/modules/gutters/canvas/edit";
 import { fromElements, toElements } from "../src/modules/gutters/canvas/model";
 
 /** docs/specs/33-gutters-canvas.md П20.14 — the cut of a corner and the tape to 1/8″ (founder 08.11). */
@@ -72,5 +72,39 @@ describe("the tape to 1/8″", () => {
     const d = setLength({ runs: [r("a", [0, 0], [ft(8), 0])], downspouts: [] }, "a", 105.25);
     expect(d.runs[0]!.lengthIn).toBe(105.25);
     expect(fromElements(toElements(d, "m1")).runs[0]!.lengthIn).toBe(105.25);
+  });
+});
+
+describe("the angle from a triangle measured on site (founder 08.11)", () => {
+  it("3-4-5 → 90°; end to end of 16′ and 12′ 6⅜″ at 90° → 90°", () => {
+    expect(angleFromTriangle(36, 48, 60)).toBe(90);
+    const a = 192, b = 150.375;
+    expect(angleFromTriangle(a, b, Math.hypot(a, b))).toBe(90);
+  });
+  it("110° and 70° come out; not a triangle → null", () => {
+    const tri = (deg: number) => Math.sqrt(36 * 36 + 48 * 48 - 2 * 36 * 48 * Math.cos((deg * Math.PI) / 180));
+    expect(angleFromTriangle(36, 48, tri(110))).toBe(110);
+    expect(angleFromTriangle(36, 48, tri(70))).toBe(70);
+    expect(angleFromTriangle(36, 48, 100)).toBeNull();
+    expect(angleFromTriangle(36, 48, 0)).toBeNull();
+  });
+  it("setCornerAngle turns the second gutter, the corner and the first stay; the cut follows", () => {
+    const d = square();
+    const f = findCorners(d)[0]!;
+    const t = setCornerAngle(d, f, 110);
+    const g = findCorners(t)[0]!;
+    expect(180 - g.turnDeg).toBe(110);
+    expect(t.runs.find((x) => x.id === "a")).toEqual(d.runs.find((x) => x.id === "a"));
+    expect(cornerCut(t, g).angleDeg).toBe(110);
+    expect(setCornerAngle(d, f, 90)).toBe(d);
+  });
+  it("what hangs on the far end turns with it", () => {
+    const d: Drawing = { runs: [r("a", [0, ft(10)], [ft(10), ft(10)]), r("b", [ft(10), ft(10)], [ft(10), 0]), r("c", [ft(10), 0], [0, 0])], downspouts: [] };
+    const f = findCorners(d).find((k) => k.runs.some((x) => x.id === "a"))!;
+    const t = setCornerAngle(d, f, 100);
+    const c = t.runs.find((x) => x.id === "c")!;
+    const b = t.runs.find((x) => x.id === "b")!;
+    expect(c.a).toEqual(b.b); // still joined
+    expect(Math.round(Math.hypot(c.b[0] - c.a[0], c.b[1] - c.a[1]))).toBe(ft(10)); // the same shape
   });
 });

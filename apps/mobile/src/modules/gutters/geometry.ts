@@ -273,3 +273,15 @@ export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method
   const downspouts: MeasuredDownspout[] = d.downspouts.filter((x) => byId.has(x.runId)).map(({ atIn: _at, ...x }) => x);
   return { runs, corners, downspouts };
 }
+
+/**
+ * The angle between the walls from a triangle measured on site (founder 08.11): `a` along one gutter from the corner,
+ * `b` along the other, `c` straight between the two marks (end cap to end cap, or 3′ and 4′ marks). Law of cosines.
+ * Not a triangle (c too long or too short) → null.
+ */
+export function angleFromTriangle(a: number, b: number, c: number): number | null {
+  if (!(a > 0 && b > 0 && c > 0)) return null;
+  const cos = (a * a + b * b - c * c) / (2 * a * b);
+  if (cos < -1 || cos > 1) return null;
+  return Math.round(((Math.acos(cos) * 180) / Math.PI) * 10) / 10;
+}

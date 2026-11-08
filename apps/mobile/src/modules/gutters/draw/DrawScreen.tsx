@@ -29,8 +29,9 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { ListRow, RowView } from "@/ui/surfaces";
 import { useHideTabBar } from "@/nav/tabBarHide";
 import { CanvasView, useLive } from "../canvas/CanvasView";
-import { addDownspout, endAt, finishStroke, flipFace, moveDs, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, endAt, finishStroke, flipFace, moveDs, setCornerAngle, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
+import { CornerSketch, CornerTriangle } from "./CornerSketch";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { ftIn } from "../canvas/format";
@@ -396,6 +397,7 @@ export default function DrawScreen() {
   const quick = quickRun ? drawing.runs.find((r) => r.id === quickRun) : undefined;
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
   const cut = corner ? cornerCut(drawing, corner) : null;
+  const [sketchW, setSketchW] = useState(0);
   const cornerKind = (kind: "in" | "out") => {
     if (corner && corner.kind !== kind && corner.kind !== "bay") commit(flipFace(cur.current.drawing, corner.runs[0].id));
     setCornerSheet(null);
@@ -776,9 +778,13 @@ export default function DrawScreen() {
                     </RowView>
                   </View>
                 ))}
+                <View onLayout={(e) => setSketchW(e.nativeEvent.layout.width)}>
+                  {sketchW > 0 ? <CornerSketch d={drawing} f={corner} cut={cut.runs} w={sketchW} /> : null}
+                </View>
                 <T v="caption" tone="mut">{t("mod.gutters.draw.cutNote", { off: cut.runs[0]!.offsetIn })}</T>
               </View>
             ) : null}
+            {<CornerTriangle key={corner.id} d={drawing} f={corner} onAngle={(deg) => commit(setCornerAngle(cur.current.drawing, corner, deg))} />}
           </View>
         ) : null}
       </Sheet>
