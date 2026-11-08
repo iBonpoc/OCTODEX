@@ -7,9 +7,11 @@
 --   companies.checklist_since the visits the «not done» card looks at start here (no flood of old visits, §11.5 №26)
 --   visits.checklist_reviewed_at/_by  the office pressed «Просмотрено» on the «not done» card
 -- Who (§8, founder В2 05.11): templates — the office reads (owner, admin, office, sales), owner/admin/office write.
--- Items — the office does anything except: a REQUIRED item is removed or made optional only by owner/admin. A tech
--- (assigned to the visit) ticks, skips and attaches photos; adds only an optional item; removes only his own optional
--- item; changes nothing once the client signed. Who ticked / skipped is the server's word (auth.uid()).
+-- Items — sales reads only. The office (owner, admin, office) does anything except: a REQUIRED item is removed or made
+-- optional only by owner/admin. A tech (assigned to the visit) ticks, skips and attaches photos of the visit; adds only
+-- an optional item; removes only his own optional item; once the visit is closed (signed, completed, cancelled,
+-- no-show) he only finishes what was left. Who ticked / skipped / reviewed is the server's word (auth.uid()); the
+-- phone's time is taken only at the moment of the tick or skip.
 -- Rule 16, step 1: visits.checklist (jsonb) stays. Rows → mirror into it ({id,label,done}) for old app versions; an old
 -- version writing the whole array moves only «done» of known items into the rows and adds its new optional items;
 -- anything else it writes is replaced by the mirror (that also closes the hole: a tech could rewrite the whole list).
@@ -29,8 +31,9 @@ returns boolean language sql immutable set search_path = '' as $$
        where e.key not in ('photosBeforeRequired', 'photosAfterRequired', 'minPhotosBefore', 'minPhotosAfter')
           or case
                when e.key in ('photosBeforeRequired', 'photosAfterRequired') then jsonb_typeof(e.value) <> 'boolean'
-               else jsonb_typeof(e.value) <> 'number'
-                    or (e.value #>> '{}')::numeric <> trunc((e.value #>> '{}')::numeric)
+               when jsonb_typeof(e.value) <> 'number' then true
+               -- a number only here: the cast never sees a string (OR does not promise an order)
+               else (e.value #>> '{}')::numeric <> trunc((e.value #>> '{}')::numeric)
                     or (e.value #>> '{}')::numeric not between 1 and 20
              end)
 $$;
@@ -130,7 +133,9 @@ alter table public.visits add column if not exists checklist_reviewed_by uuid;
 
 -- ---- move the old arrays into rows (before the triggers: nobody is signed in here) ---------------------------------
 -- An item becomes required (the app held the signature until every item was ticked) and a tick. An id that is not a
--- uuid, or the same id in two visits, gets a new id; the mirror below then gives old phones the new ids.
+-- uuid, or the same id in two visits, gets a new id; the mirror below then gives old phones the new ids. A known
+-- one-off risk: a tick still in an old phone's queue under such an id is lost (only local demo ids like «v1-c0» are
+-- not uuids; the app makes uuids).
 insert into public.visit_checklist_items (id, company_id, visit_id, position, label, kind, required, done, created_at, updated_at)
 select case when s.rn = 1 and s.raw_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
             then s.raw_id::uuid else public.uuid_generate_v7() end,
@@ -149,6 +154,14 @@ select case when s.rn = 1 and s.raw_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[
   ) s;
 
 -- ---- the mirror: rows → visits.checklist ----------------------------------------------------------------------------
+-- app.chk_mirror = 'on' says «this write is the mirror's own». A user could set the setting in his own transaction, so
+-- it counts only inside a nested trigger (pg_trigger_depth() > 1): a statement a user sends is always depth 1.
+create or replace function app.chk_in_mirror()
+returns boolean language sql stable set search_path = '' as $$
+  select coalesce(current_setting('app.chk_mirror', true), '') = 'on' and pg_trigger_depth() > 1
+$$;
+revoke all on function app.chk_in_mirror() from public, anon, authenticated;
+
 create or replace function app.chk_items_json(p_visit_id uuid)
 returns jsonb language sql stable security definer set search_path = '' as $$
   select coalesce(jsonb_agg(jsonb_build_object('id', i.id, 'label', i.label, 'done', i.done) order by i.position, i.created_at, i.id), '[]'::jsonb)
@@ -166,6 +179,9 @@ update public.visits v set checklist = app.chk_items_json(v.id)
 create or replace function app.chk_mirror(p_visit_id uuid)
 returns void language plpgsql security definer set search_path = '' as $$
 begin
+  -- lock the visit first: the next statement then reads the rows after every writer that held it (READ COMMITTED
+  -- would otherwise rebuild the array from a snapshot taken before the wait and lose a parallel tick)
+  perform 1 from public.visits where id = p_visit_id for update;
   -- the visit's own trigger (t04) must not read this write as an old phone's array
   perform set_config('app.chk_mirror', 'on', true);
   update public.visits set checklist = app.chk_items_json(p_visit_id)
@@ -178,7 +194,7 @@ revoke all on function app.chk_mirror(uuid) from public, anon, authenticated;
 create or replace function app.tg_chk_item_mirror()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
-  if coalesce(current_setting('app.chk_mirror', true), '') = 'on' then return null; end if;
+  if app.chk_in_mirror() then return null; end if;
   perform app.chk_mirror(new.visit_id);
   return null;
 end;
@@ -190,37 +206,56 @@ create or replace function app.tg_visit_checklist_legacy()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
   e jsonb;
+  v_uid uuid := auth.uid();
   v_id text;
   v_label text;
   v_pos integer;
+  v_done boolean;
+  v_new_id uuid;
+  v_office boolean;
   v_finish_only boolean;
 begin
-  if coalesce(current_setting('app.chk_mirror', true), '') = 'on' then return new; end if;
+  if app.chk_in_mirror() then return new; end if;
   if tg_op = 'UPDATE' and new.checklist is not distinct from old.checklist then return new; end if;
   -- an old phone never gets a refusal here (its queue would retry forever): what the rows' rules forbid is left out.
-  -- After the client signed a tech only finishes (ticks); the office and the server always may.
-  v_finish_only := auth.uid() is not null and not app.is_staff(new.company_id) and new.signed_at is not null;
+  -- Who may write through the array: the server, the office (owner, admin, office), a tech of the visit. Sales reads
+  -- items only: his array changes nothing.
+  v_office := v_uid is null or app.has_role(new.company_id, array['owner', 'admin', 'office']);
+  if not v_office and not (app.has_role(new.company_id, array['tech']) and app.is_visit_assignee(new.id)) then
+    new.checklist := app.chk_items_json(new.id);
+    return new;
+  end if;
+  -- once the visit is closed a tech only finishes (ticks)
+  v_finish_only := not v_office
+                   and (new.signed_at is not null or new.status in ('completed', 'cancelled', 'no_show'));
   perform set_config('app.chk_mirror', 'on', true);
   if jsonb_typeof(new.checklist) = 'array' then
     for e in select x from jsonb_array_elements(new.checklist) x where jsonb_typeof(x) = 'object' loop
       v_id := lower(e ->> 'id');
-      if v_id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then continue; end if;
-      if exists (select 1 from public.visit_checklist_items i where i.id = v_id::uuid) then
-        -- only «done» of a live item of this visit; label, order and the rest stay as the rows say
-        if jsonb_typeof(e -> 'done') = 'boolean' and not (v_finish_only and not (e ->> 'done')::boolean) then
+      if v_id is null or v_id !~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then continue; end if;
+      v_done := case when jsonb_typeof(e -> 'done') = 'boolean' then (e ->> 'done')::boolean end;
+      if exists (select 1 from public.visit_checklist_items i where i.id = v_id::uuid and i.visit_id = new.id) then
+        -- only «done» of a live item of this visit; label, order and the rest stay as the rows say.
+        -- A tick always comes through; an untick only of the writer's own tick (the whole array of an old phone must
+        -- not take off what the office or a teammate ticked meanwhile — last write wins is what rows end)
+        if v_done is not null and not (v_finish_only and not v_done) then
           update public.visit_checklist_items i
-             set done = (e ->> 'done')::boolean, skipped = false, na_reason = null, na_text = null
-           where i.id = v_id::uuid and i.visit_id = new.id and i.deleted_at is null and i.done is distinct from (e ->> 'done')::boolean;
+             set done = v_done, skipped = false, na_reason = null, na_text = null
+           where i.id = v_id::uuid and i.visit_id = new.id and i.deleted_at is null and i.done is distinct from v_done
+             and (v_done or v_uid is null or i.done_by = v_uid);
         end if;
       else
-        -- an item the old phone added on site (store addCheckItem): always optional
+        -- an item the old phone added on site (store addCheckItem): always optional (founder 08.11: a tech adds an
+        -- item on site). An id taken elsewhere gets a new one — the answer never tells whether it exists there
         v_label := left(regexp_replace(btrim(coalesce(e ->> 'label', '')), '[[:cntrl:]]', ' ', 'g'), 300);
         if length(v_label) = 0 or v_finish_only then continue; end if;
         if (select count(*) from public.visit_checklist_items i where i.visit_id = new.id and i.deleted_at is null) >= 200 then continue; end if;
+        v_new_id := case when exists (select 1 from public.visit_checklist_items i where i.id = v_id::uuid)
+                         then public.uuid_generate_v7() else v_id::uuid end;
         select coalesce(max(i.position) + 1, 0) into v_pos from public.visit_checklist_items i where i.visit_id = new.id;
         insert into public.visit_checklist_items (id, company_id, visit_id, position, label, kind, required, done)
-        values (v_id::uuid, new.company_id, new.id, least(v_pos, 100000), v_label, 'check', false,
-                coalesce(case when jsonb_typeof(e -> 'done') = 'boolean' then (e ->> 'done')::boolean end, false));
+        values (v_new_id, new.company_id, new.id, least(v_pos, 100000), v_label, 'check', false, coalesce(v_done, false))
+        on conflict (id) do nothing;
       end if;
     end loop;
   end if;
@@ -240,16 +275,24 @@ returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   if jsonb_typeof(new.checklist) <> 'array' or jsonb_array_length(new.checklist) = 0 then return null; end if;
   perform set_config('app.chk_mirror', 'on', true);
+  -- never a refusal (the visit must be made): the same id twice, an id that is not a uuid or is taken → a new id
   insert into public.visit_checklist_items (id, company_id, visit_id, position, label, kind, required, done)
-  select case when lower(x ->> 'id') ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
-                   and not exists (select 1 from public.visit_checklist_items i where i.id = (x ->> 'id')::uuid)
-              then (x ->> 'id')::uuid else public.uuid_generate_v7() end,
-         new.company_id, new.id, least((n - 1)::integer, 100000),
-         left(regexp_replace(btrim(x ->> 'label'), '[[:cntrl:]]', ' ', 'g'), 300), 'check', true,
-         coalesce(case when jsonb_typeof(x -> 'done') = 'boolean' then (x ->> 'done')::boolean end, false)
-    from jsonb_array_elements(new.checklist) with ordinality as t(x, n)
-   where jsonb_typeof(x) = 'object' and jsonb_typeof(x -> 'label') = 'string' and length(btrim(x ->> 'label')) > 0
-     and n <= 200;
+  select case when t.rn = 1 and t.raw_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                   and not exists (select 1 from public.visit_checklist_items i
+                                    where i.id = (case when t.raw_id ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'
+                                                       then t.raw_id end)::uuid)
+              then t.raw_id::uuid else public.uuid_generate_v7() end,
+         new.company_id, new.id, least((t.n - 1)::integer, 100000), t.label, 'check', true, t.done
+    from (
+      select lower(x ->> 'id') as raw_id, n,
+             left(regexp_replace(btrim(x ->> 'label'), '[[:cntrl:]]', ' ', 'g'), 300) as label,
+             coalesce(case when jsonb_typeof(x -> 'done') = 'boolean' then (x ->> 'done')::boolean end, false) as done,
+             row_number() over (partition by lower(x ->> 'id') order by n) as rn
+        from jsonb_array_elements(new.checklist) with ordinality as a(x, n)
+       where jsonb_typeof(x) = 'object' and jsonb_typeof(x -> 'label') = 'string' and length(btrim(x ->> 'label')) > 0
+         and n <= 200
+    ) t
+  on conflict (id) do nothing;
   perform set_config('app.chk_mirror', '', true);
   perform app.chk_mirror(new.id);
   return null;
@@ -264,8 +307,7 @@ create or replace function app.tg_visit_item_guard()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare
   v_uid uuid := auth.uid();
-  v_signed timestamptz;
-  v_visit_company uuid;
+  v_closed boolean;
   v_live integer;
 begin
   -- done and skipped never both: the newer one wins (ticking a skipped item does it; skipping a ticked one unticks)
@@ -275,13 +317,18 @@ begin
   end if;
   if not new.skipped then new.na_reason := null; new.na_text := null; end if;
   -- who ticked and who skipped is the server's word; the time is the phone's (offline), never in the future
+  -- the time is taken only at the moment of the change: later it is history, nobody moves it
   if tg_op = 'INSERT' or new.done is distinct from old.done then
     new.done_by := case when new.done then coalesce(v_uid, new.done_by) end;
     new.done_at := case when new.done then least(coalesce(new.done_at, now()), now()) end;
+  else
+    new.done_by := old.done_by; new.done_at := old.done_at;
   end if;
   if tg_op = 'INSERT' or new.skipped is distinct from old.skipped then
     new.na_by := case when new.skipped then coalesce(v_uid, new.na_by) end;
     new.na_at := case when new.skipped then least(coalesce(new.na_at, now()), now()) end;
+  else
+    new.na_by := old.na_by; new.na_at := old.na_at;
   end if;
   if tg_op = 'UPDATE' and new.visit_id is distinct from old.visit_id then
     raise exception 'an item stays on its visit' using errcode = '42501';
@@ -295,7 +342,16 @@ begin
   -- the server (no user) writes as it is
   if v_uid is null then return new; end if;
 
-  if app.is_staff(new.company_id) then
+  -- a photo of the item is a live photo of this visit (else a required photo item is «done» with any id)
+  if exists (select 1 from unnest(new.photo_ids) p(id)
+              where (tg_op = 'INSERT' or not (p.id = any (old.photo_ids)))
+                and not exists (select 1 from public.files f
+                                 where f.id = p.id and f.company_id = new.company_id and f.visit_id = new.visit_id
+                                   and f.kind = 'photo' and f.deleted_at is null)) then
+    raise exception 'a photo of an item is a photo of its visit' using errcode = '42501';
+  end if;
+
+  if app.has_role(new.company_id, array['owner', 'admin', 'office']) then
     -- a required item is the company's rule: only the director (owner, admin) removes it or makes it optional
     if not app.has_role(new.company_id, array['owner', 'admin']) and tg_op = 'UPDATE' and old.required
        and ((new.deleted_at is not null and old.deleted_at is null) or not new.required) then
@@ -304,16 +360,18 @@ begin
     return new;
   end if;
 
-  -- a tech of the visit (RLS let him in). After the client signed he may only finish what was left (§8: tick a missed
-  -- item, send a missing photo later) — never untick, skip, add or remove
-  select v.signed_at, v.company_id into v_signed, v_visit_company from public.visits v where v.id = new.visit_id;
-  if v_signed is not null and (tg_op = 'INSERT'
+  -- a tech of the visit (RLS let him in). Once the visit is closed (signed; an inspection or a visit finished without a
+  -- signature; cancelled) he may only finish what was left (§8: tick a missed item, send a missing photo later) —
+  -- never untick, skip, add or remove
+  select v.signed_at is not null or v.status in ('completed', 'cancelled', 'no_show') into v_closed
+    from public.visits v where v.id = new.visit_id;
+  if v_closed and (tg_op = 'INSERT'
        or (old.done and not new.done) or (new.skipped and not old.skipped)
        or not (new.photo_ids @> old.photo_ids)
        or new.deleted_at is distinct from old.deleted_at
        or new.na_reason is distinct from old.na_reason and new.skipped
        or new.na_text is distinct from old.na_text and new.skipped) then
-    raise exception 'the client signed: a technician only finishes what was left' using errcode = '42501';
+    raise exception 'the visit is closed: a technician only finishes what was left' using errcode = '42501';
   end if;
   if tg_op = 'INSERT' then
     if new.required or new.template_id is not null or new.template_name is not null then
@@ -344,17 +402,26 @@ select app.attach_standard_triggers('public.checklist_templates');
 select app.attach_standard_triggers('public.visit_checklist_items');
 
 -- ---- «Просмотрено»: who pressed it is the server's word ------------------------------------------------------------
+-- On every insert and update (not «update of checklist_reviewed_at»: a write of _by alone would pass by). Only the office
+-- (owner, admin, office) presses it; the tech's guard below also keeps a tech out.
 create or replace function app.tg_visit_checklist_review()
 returns trigger language plpgsql set search_path = '' as $$
 begin
-  if auth.uid() is not null then
-    new.checklist_reviewed_by := case when new.checklist_reviewed_at is null then null else auth.uid() end;
+  if auth.uid() is null then return new; end if;
+  if tg_op = 'UPDATE' and new.checklist_reviewed_at is not distinct from old.checklist_reviewed_at then
+    new.checklist_reviewed_by := old.checklist_reviewed_by;
+    return new;
   end if;
+  if (tg_op = 'UPDATE' or new.checklist_reviewed_at is not null)
+     and not app.has_role(new.company_id, array['owner', 'admin', 'office']) then
+    raise exception 'only the office marks a checklist as reviewed' using errcode = '42501';
+  end if;
+  new.checklist_reviewed_by := case when new.checklist_reviewed_at is null then null else auth.uid() end;
   return new;
 end;
 $$;
 revoke all on function app.tg_visit_checklist_review() from public, anon, authenticated;
-create trigger t04_visit_checklist_review before update of checklist_reviewed_at on public.visits
+create trigger t04_visit_checklist_review before insert or update on public.visits
   for each row execute function app.tg_visit_checklist_review();
 
 -- the technician's guard (20261107030000) + «Просмотрено» (the office's)
@@ -417,11 +484,12 @@ create policy checklist_templates_update on public.checklist_templates for updat
 create policy visit_checklist_items_select on public.visit_checklist_items for select to authenticated
   using (app.is_staff(company_id)
          or (app.has_role(company_id, array['tech']) and app.is_visit_assignee(visit_id)));
+-- sales reads only (§8, §11.5 №30): writes are the office's and the visit's tech's
 create policy visit_checklist_items_insert on public.visit_checklist_items for insert to authenticated
-  with check (app.is_staff(company_id)
+  with check (app.has_role(company_id, array['owner', 'admin', 'office'])
               or (app.has_role(company_id, array['tech']) and not required and app.is_visit_assignee(visit_id)));
 create policy visit_checklist_items_update on public.visit_checklist_items for update to authenticated
-  using (app.is_staff(company_id)
+  using (app.has_role(company_id, array['owner', 'admin', 'office'])
          or (app.has_role(company_id, array['tech']) and app.is_visit_assignee(visit_id)))
-  with check (app.is_staff(company_id)
+  with check (app.has_role(company_id, array['owner', 'admin', 'office'])
               or (app.has_role(company_id, array['tech']) and app.is_visit_assignee(visit_id)));
