@@ -49,6 +49,39 @@ const gutters: ModuleDef = {
   // the measurement's tables (spec 33 П19) and its changes (П21): DB.moduleData.gutters
   load: loadGutters,
   ops: guttersOps,
+  // starter checklist templates (docs/specs/08 §2, §11.11; CH3b): the office adds them on «Компания → Чек-листы»; they
+  // come into no visit by themselves — the office ties them to services of its catalog or adds them to a visit
+  checklistTemplates: [
+    {
+      key: "pre",
+      nameKey: "mod.gutters.chk.pre",
+      items: [
+      { id: "69385b0b-9477-4163-a2ae-2f60f172261c", labelKey: "mod.gutters.chk.pre1", kind: "check", required: true },
+      { id: "044f6e47-893c-4da4-ab3f-24df06b66640", labelKey: "mod.gutters.chk.pre2", kind: "check", required: true },
+      { id: "9c36ce75-22e7-4261-a1e7-2bd1ad2bf0da", labelKey: "mod.gutters.chk.pre3", kind: "photo", required: true },
+      { id: "0e0ddee8-7de7-44b1-b80e-6bc207adf996", labelKey: "mod.gutters.chk.pre4", kind: "check", required: false },
+      ],
+    },
+    {
+      key: "handover",
+      nameKey: "mod.gutters.chk.handover",
+      items: [
+      { id: "4c70b085-e445-47ac-80e9-949a63c7b31e", labelKey: "mod.gutters.chk.handover1", kind: "check", required: true },
+      { id: "5226a5d5-3184-4342-a28f-9fff88794b9f", labelKey: "mod.gutters.chk.handover2", kind: "check", required: true },
+      { id: "8254c7e9-ed22-41ca-bdbc-76fc1358e88c", labelKey: "mod.gutters.chk.handover3", kind: "photo", required: true },
+      { id: "7f180cd2-4f3f-461c-b74d-0626aac14226", labelKey: "mod.gutters.chk.handover4", kind: "check", required: true },
+      ],
+    },
+    {
+      key: "clean",
+      nameKey: "mod.gutters.chk.clean",
+      items: [
+      { id: "e2f4a9da-2e73-4b6a-b347-bb618ee52a96", labelKey: "mod.gutters.chk.clean1", kind: "photo", required: true },
+      { id: "2ddca2c3-981f-4c9e-ba28-3b7bd9c37c0a", labelKey: "mod.gutters.chk.clean2", kind: "check", required: true },
+      { id: "0d51f8ee-5dc9-4240-84ea-fb1129f12c7b", labelKey: "mod.gutters.chk.clean3", kind: "photo", required: true },
+      ],
+    },
+  ],
   rejectedKey: "mod.gutters.rejected",
   leadCreated: ({ ref, leadId }, store) => linkLead(store, ref, leadId),
   screens: {

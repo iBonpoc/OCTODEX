@@ -2802,6 +2802,21 @@ export const ru = {
   "chk3.starters": "Шаблоны модулей",
   "chk3.starterAdded": "Шаблон добавлен",
   "chk3.optional": "необязательный",
+  // step 14 CH3b: starter checklist templates of a module
+  "mod.gutters.chk.pre": "Перед монтажом",
+  "mod.gutters.chk.pre1": "Проверить лобовую доску на гниль",
+  "mod.gutters.chk.pre2": "Согласовать с клиентом места водосточных труб",
+  "mod.gutters.chk.pre3": "Фото лобовой доски",
+  "mod.gutters.chk.pre4": "Проверить цвет и размер желобов в машине",
+  "mod.gutters.chk.handover": "Сдача работы",
+  "mod.gutters.chk.handover1": "Пролить желоба водой — нет протечек",
+  "mod.gutters.chk.handover2": "Трубы отводят воду от дома",
+  "mod.gutters.chk.handover3": "Фото каждой стороны дома",
+  "mod.gutters.chk.handover4": "Собрать мусор и саморезы",
+  "mod.gutters.chk.clean": "Чистка",
+  "mod.gutters.chk.clean1": "Фото до чистки",
+  "mod.gutters.chk.clean2": "Прочистить водосточные трубы",
+  "mod.gutters.chk.clean3": "Фото после чистки",
 } as const;
 
 export type DictKey = keyof typeof ru;
