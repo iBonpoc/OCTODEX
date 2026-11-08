@@ -1,7 +1,10 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+vi.mock("../src/cloud/client", () => ({ supabase: {} }));
 import { computeCustomOption } from "@octo/estimating-engine";
 import type { CatalogItem, EstimateDoc } from "@/data/types";
-import { fromTemplate, templateFromCents, toTemplateDoc } from "@/features/estimateTemplate";
+import { cleanEstimateTemplate, fromTemplate, pickableTemplates, splitCosts, templateFromCents, toTemplateDoc, validTemplateDoc } from "@/features/estimateTemplate";
+import { estimateTemplateFromDb } from "../src/cloud/repo";
+import { estimateTemplateToDb } from "../src/cloud/ops";
 
 // test prices («тестовые», rule 9)
 const catalog: CatalogItem[] = [
@@ -81,5 +84,51 @@ describe("unit:estimateTemplate — save as template, estimate from template (do
     // 15000 + 2625 + 700 = 18325; −5% = 916.25 → 916; tax 9.25% on material 700 (discount spread) — the engine's numbers
     expect(got.subtotal).toBe(18325);
     expect(templateFromCents(tpl, catalog)).toBe(want.total);
+  });
+});
+
+
+describe("unit:estimateTemplate — the server's check on the phone, costs apart, rows (review E3b)", () => {
+  const one = (x: Partial<EstimateDoc["options"][0]["lines"][0]>) =>
+    toTemplateDoc({ ...estimate, options: [{ ...estimate.options[0]!, lines: [{ ...estimate.options[0]!.lines[1]!, ...x }] }] }, true);
+  it("long names and units are cut to what the server takes; a quantity that is not a number is refused, never 0", () => {
+    const t = one({ name: "x".repeat(400), unit: "linear feet of gutter" });
+    expect(t.options[0]!.lines[0]!.unit.length).toBe(20);
+    expect(validTemplateDoc(t)).toBe(true);
+    expect(validTemplateDoc(one({ quantity: "abc" }))).toBe(false);
+    expect(validTemplateDoc(one({ unitPriceCents: 10.5 }))).toBe(false);
+    expect(validTemplateDoc({ ...t, settings: { ...t.settings, deposit: { kind: "pct", bps: 10001 } } })).toBe(false);
+    expect(validTemplateDoc({ ...t, settings: { ...t.settings, discount: { kind: "pct", value: "1.5" } } })).toBe(false);
+  });
+  it("a tax-exempt client's estimate does not make a template without tax", () => {
+    const off = { ...estimate, settings: { ...estimate.settings, tax: { ...estimate.settings.tax, enabled: false } } };
+    expect(toTemplateDoc(off, true, true).settings.tax.enabled).toBe(false); // the company default (DEFAULT_TAX)
+    expect(toTemplateDoc(off, true, true).settings.tax).not.toBe(off.settings.tax);
+  });
+  it("save keeps our costs apart from the doc, and an estimate from it right away keeps them (no reload)", () => {
+    const clean = cleanEstimateTemplate({ id: "t1", name: " Tpl ", doc: toTemplateDoc(estimate, true) })!;
+    expect(clean.name).toBe("Tpl");
+    expect(clean.doc.options[0]!.lines.every((l) => l.unitCostCents === undefined)).toBe(true);
+    const { doc } = fromTemplate(clean.doc, [], clean.costs ?? {}, true);
+    expect(doc.options[0]!.lines[1]!.unitCostCents).toBe(333);
+    expect(cleanEstimateTemplate({ id: "t1", name: "  ", doc: clean.doc })).toBeNull();
+    expect(splitCosts(toTemplateDoc(estimate, true)).costs).toBeTruthy();
+  });
+  it("the row: costs merged back for the server, module_key only as sent; reading counts uses and the latest", () => {
+    const clean = cleanEstimateTemplate({ id: "t1", name: "Tpl", doc: toTemplateDoc(estimate, true), module: "gutters" })!;
+    const row = estimateTemplateToDb(clean, "c1") as { doc: EstimateDoc; module_key: string };
+    expect(row.doc.options[0]!.lines.filter((l) => l.unitCostCents !== undefined).length).toBe(2);
+    expect(row.module_key).toBe("gutters");
+    const t = estimateTemplateFromDb({ id: "t1", name: "Tpl", doc: clean.doc, module_key: null, archived_at: null },
+      [{ template_id: "t1", line_id: "a", unit_cost_cents: 5 }, { template_id: "t2", line_id: "b", unit_cost_cents: 7 }],
+      [{ template_id: "t1", estimate_id: "e1", used_at: "2026-11-08T10:00:00Z" }, { template_id: "t1", estimate_id: "e2", used_at: "2026-11-08T12:00:00Z" }]);
+    expect(t).toMatchObject({ costs: { a: 5 }, uses: 2, lastUsedAt: "2026-11-08T12:00:00Z" });
+  });
+  it("the picker: live only, last used first, then by name", () => {
+    const d = estimate;
+    const list = pickableTemplates([
+      { id: "a", name: "B", doc: d }, { id: "b", name: "A", doc: d }, { id: "c", name: "C", doc: d, lastUsedAt: "2026-11-08" }, { id: "d", name: "D", doc: d, archivedAt: "x" },
+    ]);
+    expect(list.map((x) => x.id)).toEqual(["c", "b", "a"]);
   });
 });

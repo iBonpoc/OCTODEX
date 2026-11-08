@@ -199,11 +199,11 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       if (isMissingTable(e)) return null;
       throw e;
     }),
-    every<Row>("estimate_template_line_costs", "template_id, line_id, unit_cost_cents", key("line_id")).catch((e) => {
+    every<Row>("estimate_template_line_costs", "template_id, line_id, unit_cost_cents", key("template_id", "line_id")).catch((e) => {
       if (isMissingTable(e)) return [] as Row[];
       throw e;
     }),
-    every<Row>("estimate_template_uses", "template_id, estimate_id, used_at", key("estimate_id")).catch((e) => {
+    every<Row>("estimate_template_uses", "template_id, estimate_id, used_at", key("template_id", "estimate_id")).catch((e) => {
       if (isMissingTable(e)) return [] as Row[];
       throw e;
     }),

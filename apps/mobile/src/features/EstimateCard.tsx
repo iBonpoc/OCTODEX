@@ -12,7 +12,7 @@ import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
 import { issueCount, isUniversal, mainOption, marginView, newToken, SEND_ISSUE_KINDS, sendIssues, uid, type SendIssues } from "@/features/estimateDoc";
-import { canEditEstimateTemplates, ESTIMATE_TEMPLATE_NAME_MAX, toTemplateDoc } from "@/features/estimateTemplate";
+import { canEditEstimateTemplates, cleanEstimateTemplate, ESTIMATE_TEMPLATE_NAME_MAX, toTemplateDoc } from "@/features/estimateTemplate";
 import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
@@ -668,10 +668,19 @@ function SaveTemplateSheet({ e, onClose }: { e: Estimate; onClose: () => void })
   const { t } = useI18n();
   const toast = useToast();
   const [name, setName] = useState(e.title);
+  const [done, setDone] = useState(false);
   const save = () => {
-    if (!e.doc) return;
+    if (!e.doc || done || !name.trim()) return;
     const seeCosts = store.db.costsVisible ?? store.role !== "tech";
-    const undo = store.saveEstimateTemplate({ id: uid(), name, doc: toTemplateDoc(e.doc, seeCosts) });
+    const exempt = !!store.db.customers.find((c) => c.id === e.customerId)?.taxExempt;
+    const tpl = { id: uid(), name, doc: toTemplateDoc(e.doc, seeCosts, exempt) };
+    // what the server would refuse is never queued: say so instead of «сохранён»
+    if (!cleanEstimateTemplate(tpl)) {
+      toast.show(t("est.tpl.cannot"));
+      return;
+    }
+    setDone(true);
+    const undo = store.saveEstimateTemplate(tpl);
     toast.show(store.online ? t("est.tpl.saved", { name: name.trim() }) : t("offline.queued"), undo);
     onClose();
   };
@@ -683,7 +692,7 @@ function SaveTemplateSheet({ e, onClose }: { e: Estimate; onClose: () => void })
           <TextField type="text" label={t("est.tpl.name")} value={name} onChangeText={(v) => setName(v.slice(0, ESTIMATE_TEMPLATE_NAME_MAX))} />
         </View>
         <View testID="est-tpl-save">
-          <Button label={t("est.tpl.saveAs")} icon="copy" full onPress={save} />
+          <Button label={t("est.tpl.saveAs")} icon="copy" full disabled={!name.trim() || done} onPress={save} />
         </View>
       </View>
     </Sheet>

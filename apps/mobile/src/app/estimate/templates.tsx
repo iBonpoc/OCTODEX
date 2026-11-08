@@ -38,7 +38,7 @@ export default function EstimateTemplates() {
   const card = (x: EstimateTemplate) => (
     <View key={x.id} testID={`est-tpl-${x.id}`}>
       <ListCard
-        density="compact"
+        density="regular"
         lead={{ kind: "icon", icon: "copy" }}
         title={x.name}
         when={`${t("est.tpl.options", { n: x.doc.options.length })} · ${t("est.tpl.used", { n: x.uses ?? 0 })}`}
@@ -83,7 +83,7 @@ export default function EstimateTemplates() {
                   <TextField type="text" label={t("est.tpl.name")} value={name} onChangeText={(v) => setName(v.slice(0, ESTIMATE_TEMPLATE_NAME_MAX))} />
                 </View>
                 <View testID="est-tpl-rename">
-                  <Button label={t("est.tpl.rename")} variant="secondary" full onPress={() => save({ ...open, name }, t("est.tpl.saved", { name: name.trim() }))} />
+                  <Button label={t("est.tpl.rename")} variant="secondary" full disabled={!name.trim() || name.trim() === open.name} onPress={() => save({ ...open, name }, t("est.tpl.saved", { name: name.trim() }))} />
                 </View>
                 <View testID="est-tpl-archive">
                   {open.archivedAt ? (

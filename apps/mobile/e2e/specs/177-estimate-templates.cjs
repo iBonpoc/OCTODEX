@@ -98,7 +98,7 @@ exports.run = async (h) => {
   // a tech uses templates but does not make or change them
   await role("tech");
   await h.go(`/estimate/${EID}`);
-  await p.waitForTimeout(500);
+  await tid("est-pdf").waitFor({ timeout: 8000 });
   h.expect((await tid("est-save-template").count()) === 0, "a tech: no «Сохранить как шаблон»");
   await h.go("/estimate/templates");
   await tid(`est-tpl-${tpl.id}`).click();
