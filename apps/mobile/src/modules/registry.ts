@@ -58,6 +58,16 @@ export interface ModuleStore {
   moduleOp: (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: import("@/data/types").DB) => import("@/data/types").DB; coalesceKey?: string; made?: string[] }) => unknown;
 }
 
+/**
+ * What a module that writes estimate lines gets of the store (spec 33 П23.8, M8b): the core's own two functions —
+ * a lead's client and property for its estimate (created from the lead when it has none, S3) and the estimate's save
+ * (money through the engine, the offline queue, «Отменить»). A module never writes an estimate any other way.
+ */
+export interface ModuleEstimateStore extends ModuleStore {
+  leadEstimateTarget: (leadId: string) => { customerId: string; propertyId: string; undo: () => void } | null;
+  saveEstimate: (e: { id: string; customerId: string; propertyId: string; title: string; doc: import("@/data/types").EstimateDoc; leadId?: string }) => () => void;
+}
+
 /** what a module's load gets: the company's live rows of one of its own tables (deleted_at is null), page by page */
 export interface ModuleRead {
   live(table: string, cols: string): Promise<Record<string, unknown>[]>;

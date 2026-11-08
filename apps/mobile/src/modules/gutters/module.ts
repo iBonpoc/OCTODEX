@@ -11,8 +11,14 @@ import { asGutterData, guttersOps, latestFor, linkLead, loadGutters } from "./da
 const draw = moduleHref("gutters", "draw");
 /** «Замер» on a lead or a property: its newest measurement opens, else a new one linked to it (S4g, spec 33 П21) */
 function measure(data: unknown, by: { leadId?: string; propertyId?: string }) {
-  const m = latestFor(asGutterData(data), by);
-  if (m) return [{ id: "measure", labelKey: "mod.gutters.measureOpen" as const, icon: "pencil" as const, href: `${draw}?m=${encodeURIComponent(m.id)}` }];
+  const g = asGutterData(data);
+  const m = latestFor(g, by);
+  if (m) {
+    const open = { id: "measure", labelKey: "mod.gutters.measureOpen" as const, icon: "pencil" as const, href: `${draw}?m=${encodeURIComponent(m.id)}` };
+    // M8b (S5g): something is drawn → «Смета из замера»: the canvas opens and makes or updates it (П23.8)
+    const drawn = g.elements.some((e) => e.measurementId === m.id && e.kind === "run");
+    return drawn ? [open, { id: "estimate", labelKey: "mod.gutters.est.fromLead" as const, icon: "plus" as const, href: `${draw}?m=${encodeURIComponent(m.id)}&estimate=1` }] : [open];
+  }
   const q = [by.leadId ? `lead=${encodeURIComponent(by.leadId)}` : "", by.propertyId ? `property=${encodeURIComponent(by.propertyId)}` : ""].filter(Boolean).join("&");
   return [{ id: "measure", labelKey: "mod.gutters.measure" as const, icon: "pencil" as const, href: `${draw}?${q}` }];
 }
