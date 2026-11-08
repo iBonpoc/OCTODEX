@@ -8,11 +8,13 @@
 | Чат | id | Направление | Состояние |
 |---|---|---|---|
 | Руководитель №5 | `session_015CqH6AYWnjNhg5RZy2re5D` | CLAUDE.md, docs/ai/*, 10-build-plan §0, 15-story-map | план, приёмка, вливание сборками |
-| Лиды и клиенты №13 | `session_015CqH67mXYcoVoL5GKnUime` | controls.tsx (Segmented), hierarchy.ts, Fab.tsx, features/photoUri.ts, LeadCard.tsx | мелкие долги UI: #440; PR B Segmented, дубль в панели, фото лида |
+| Лиды и клиенты №14 | `session_015CqH66PePGjJasrpJgtqH3` | спека 04 §13, clientDuplicates.ts, client/**, clients.tsx, LeadCard.tsx, миграция 20261109120000 | C3 дубли и слияние клиентов (T134, e2e 189) |
 | Сметы №3 | `session_015CqH68FFv5zHgyQV88Jvva` | шаблоны смет: estimate/**, estimateTemplate.ts, ops/store (шаблоны), миграция 20261108230000 | E3a #423 влит; E3b экраны (e2e 177), E3c слот модулей (e2e 180) |
 | Деньги и отчёты №5 | `session_015CqH69czeKQQz4r6pDxxwJ` | supabase/functions/stripe-*, миграции 202611090xxxxx, спека 35, features/payments | Stripe 20д возвраты (T133, e2e 185); ждёт основателя В1–В6 |
 | Правки Gutters (личный чат основателя) | `session_015CqH66K82f6Sc1E161JFM2` | src/modules/gutters/** (кроме registry/module/estimateLink без согласования), e2e 168–174 | правки основателя; архив только по его слову |
 | Бренд (личный чат основателя) | `session_015CqH69WWiSwHTpW9sTb2km` | бренд GoRix | архив только по слову основателя |
+
+**Долги:** ACH-возврат, принятый Stripe и потом failed/canceled, остаётся в refunded_cents (+needs_review) — нужна дверь исправления (после 20д); лимит запросов stripe-pay до live; rule16 шаг 2 (старые колонки себестоимости, companies.stripe_account_id).
 
 **Ждут ответа основателя (08.11):** приём заявок В1 галочка SMS, В2 текст о данных, В3 Turnstile, В4 адрес формы (gorix.app); задаток быстрых смет (pct «0.1» читается как 0); Stripe В1 аккаунт, В2 Standard/Express, В3 комиссия платформы, В4 без надбавки за карту, В5 ИИ для чеков, В6 проигранный спор; VGS (выпуски 2⅜/2¾, колена A/B, box miter, straight face cap); секреты INTAKE_IP_SECRET, TURNSTILE_SECRET (заводит сам); было/стало за 08.11.
 
@@ -133,6 +135,14 @@
 - Долги: лимит запросов stripe-pay по токену/IP + Radar — до live; ручная проверка 3DS (4000 0025 0000 3155) и ACH на test Stripe после секретов; S12a/S12b в карту §4; хранение app.stripe_events (спека 21); application_fee_amount после В3.
 - Секреты основателю: STRIPE_SECRET_KEY (sk_test_), STRIPE_PUBLISHABLE_KEY (pk_test_), STRIPE_WEBHOOK_SECRET (whsec_ Connect-эндпоинта …/functions/v1/stripe-webhook).
 - Уроки: раннер e2e падает на ошибке консоли — 4xx в page.route отдавать 200 с error, офлайн подменой fetch; serverContract считает admin.rpc в Edge вызовом приложения — через обёртку rpc(); платежи нельзя мягко удалить.
+
+### Памятка Лиды и клиенты №13 (session_015CqH67mXYcoVoL5GKnUime, 08.11) — архив
+- #440: крошка отчёта = название (REPORT_TITLE); qty строк работы через jobLineQty; фото выезда на вебе — liveUri/madeHere (features/photoUri.ts). e2e 186, 187.
+- #442 (на #438+#440): Segmented scroll (src/ui/segmentedScroll.ts); «Возможный дубль» в панели 1280; дубли фильтруются canSeeLead; фото лида liveUri + значок (lead-photo-<id>). e2e 188, unit segmentedScroll.
+- Файлы теперь за «Лидами и клиентами»: features/lead/LeadCard.tsx, app/(tabs)/leads.tsx.
+- Осталось: modules/gutters/photoUri.ts → features/photoUri.ts (личный «Правки Gutters»); тест фильтра дублей под монтажника.
+- Ловушки: e2e run.cjs флаги только через «=» (--width=1280); RNW без aria-selected у вкладок — ждать содержимое по testID; nicheGuard ловит слово gutter даже в комментарии ядра; useRef ScrollView — ScrollViewInstance.
+- Свободно: e2e с 189, T с T133 (T133 занят «Деньгами» №5).
 
 ## Памятки-передачи 07.11 (руководитель №4)
 ### Памятка «Лиды и клиенты» №10 (session_015CqH6A7brPRZCibvSZzhLd, архив 07.11; дела у №11 `session_015CqH6AXexfSJUxpzdXPpY4`)
