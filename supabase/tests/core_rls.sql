@@ -10920,4 +10920,99 @@ select tst.ok((select count(*) = 3 from app.status_transitions where entity_type
   'T137 the payment moves back exist (only the unwind makes them: T136)');
 \echo 'T137 doors ok'
 
+-- ======================================================================================================================
+-- T140 — rate limits of stripe-pay / stripe-refund (spec 35 §4д, migration 20261109210000)
+-- ======================================================================================================================
+:as_owner_a
+select tst.fails($q$select public.pay_rate_take(repeat('a', 64))$q$, 'T140 a person does not call the pay limit');
+select tst.fails($q$select public.pay_rate_miss(repeat('a', 64))$q$, 'T140 …nor the miss limit');
+select tst.fails($q$select public.refund_rate_take('a0000000-0000-0000-0000-000000000001')$q$, 'T140 …nor the refund limit');
+select tst.ok(not has_table_privilege('authenticated', 'app.rate_hits', 'SELECT'), 'T140 nobody but the server reads the hits');
+:as_service
+select tst.fails($q$select public.pay_rate_take('not-a-hash')$q$, 'T140 the token comes as sha256 hex, never plain');
+select tst.fails($q$select public.pay_rate_miss('1.2.3.4')$q$, 'T140 …and the IP as its HMAC, never plain');
+select tst.fails($q$select app.rate_take(array['x:1'], array[1, 2], interval '1 minute')$q$, 'T140 one limit per key');
+select tst.fails($q$select app.rate_take(array['x:1'], array[null]::int[], interval '1 minute')$q$, 'T140 an empty limit is no «no limit»');
+select tst.fails($q$select app.rate_take(array['x:1'], array[0], interval '1 minute')$q$, 'T140 …nor a zero one');
+-- 10 per link: the 11th is refused with a wait, and writes nothing
+select tst.ok((select bool_and(public.pay_rate_take(repeat('1', 64)) is null) from generate_series(1, 10)), 'T140 ten tries of one link pass');
+select tst.ok((select public.pay_rate_take(repeat('1', 64)) between 1 and 600), 'T140 the 11th waits (seconds, at most the window)');
+:as_super
+select tst.ok((select count(*) = 10 from app.rate_hits where key = 'pay_token:' || repeat('1', 64)), 'T140 a refused try writes no hit (a flood does not grow the table)');
+:as_service
+-- misses (a link not found) count by the address: 30 per IP
+select tst.ok((select bool_and(public.pay_rate_miss(repeat('2', 64)) is null) from generate_series(1, 30)), 'T140 30 misses of one address pass');
+select tst.ok(public.pay_rate_miss(repeat('2', 64)) is not null, 'T140 the 31st miss waits — guessing links is slow');
+select tst.ok(public.pay_rate_miss(repeat('4', 64)) is null, 'T140 another address is not affected');
+-- director's review of #454: a neighbour in the same /48 sends 100 random links from 4 /64 (25 each, under the IP limit)
+select tst.ok((select bool_and(public.pay_rate_miss(lpad(to_hex(g % 4 + 16), 64, '0'), repeat('5', 64)) is null) from generate_series(1, 100) g), 'T140 100 misses of one /48 pass');
+select tst.ok(public.pay_rate_take(repeat('6', 64)) is null, 'T140 …the honest client of that /48 with a real link still pays');
+select tst.ok(public.pay_rate_miss(lpad(to_hex(99), 64, '0'), repeat('5', 64)) is not null, 'T140 …while the 101st miss of the /48 waits');
+:as_super
+select tst.ok((select count(*) = 0 from app.rate_hits where key = 'pay_ip:' || lpad(to_hex(99), 64, '0')), 'T140 all or nothing: the full /48 does not spend the address''s turn');
+:as_service
+-- no IP (no secret / no header): one ceiling of misses for the whole function — and a real link still pays
+select tst.ok((select bool_and(public.pay_rate_miss() is null) from generate_series(1, 300)), 'T140 without an IP 300 misses pass');
+select tst.ok(public.pay_rate_miss() is not null, 'T140 …the 301st waits: never «no limit»');
+select tst.ok(public.pay_rate_take(repeat('7', 64)) is null, 'T140 …a real link is not blocked by the ceiling');
+-- the window moves: old hits do not count
+:as_super
+update app.rate_hits set at = now() - interval '11 minutes' where key = 'pay_token:' || repeat('1', 64) or key = 'pay_ip:' || repeat('2', 64);
+:as_service
+select tst.ok(public.pay_rate_take(repeat('1', 64)) is null and public.pay_rate_miss(repeat('2', 64)) is null, 'T140 after the window it counts again');
+-- the invoice and the person
+select tst.ok((select bool_and(public.pay_invoice_rate_take('11400000-0000-4000-8000-000000000001') is null) from generate_series(1, 20)), 'T140 20 intents per invoice');
+select tst.ok(public.pay_invoice_rate_take('11400000-0000-4000-8000-000000000001') is not null, 'T140 …the 21st waits, whatever link or address');
+select tst.ok((select bool_and(public.refund_rate_take('a0000000-0000-0000-0000-000000000001') is null) from generate_series(1, 20)), 'T140 20 refunds per person');
+select tst.ok(public.refund_rate_take('a0000000-0000-0000-0000-000000000001') is not null, 'T140 …the 21st waits');
+select tst.ok(public.refund_rate_take('a0000000-0000-0000-0000-000000000002') is null, 'T140 another person is not affected');
+:as_super
+select tst.ok(not exists (select 1 from app.rate_hits where key !~ '^[a-z_]+:[0-9a-f-]+$' and key <> 'pay_all:all'), 'T140 keys hold hashes and ids only');
+delete from app.rate_hits;
+\echo 'T140 rate limits ok'
+
+-- ======================================================================================================================
+-- T141 — the journal of Stripe events: retention, what is kept, order of account pictures, one flag per failed refund
+-- ======================================================================================================================
+:as_service
+-- an older picture of an account never overwrites a newer one (a resend, a late retry)
+select tst.ok(app.stripe_event_apply('{"id":"evt_T141a2","type":"account.updated","created":1700000000,"account":"acct_T126B","data":{"object":{"id":"acct_T126B","charges_enabled":true,"email":"owner@example.com","individual":{"first_name":"Ann"}},"previous_attributes":{"email":"old@example.com"}}}') = 'processed', 'T141 a newer account picture is applied');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T141a1","type":"account.updated","created":1600000000,"account":"acct_T126B","data":{"object":{"id":"acct_T126B","charges_enabled":false}}}') = 'ignored', 'T141 an older one comes late: not applied');
+:as_super
+select tst.ok((select charges_enabled from public.stripe_accounts where account_id = 'acct_T126B'), 'T141 …payments stay on');
+select tst.ok((select reason = 'stale' from app.stripe_events where event_id = 'evt_T141a1'), 'T141 …the journal says why');
+select tst.ok((select not (payload -> 'data' -> 'object' ? 'email') and not (payload -> 'data' -> 'object' ? 'individual') and not (payload -> 'data' ? 'previous_attributes')
+                 from app.stripe_events where event_id = 'evt_T141a2'), 'T141 the journal keeps no owner email, person or previous values');
+-- the same second is not «older» (whole seconds: the later arrival wins); our own read in stripe-connect is never compared
+select tst.ok(app.stripe_event_apply('{"id":"evt_T141a3","type":"account.updated","created":1700000000,"account":"acct_T126B","data":{"object":{"id":"acct_T126B","charges_enabled":true,"payouts_enabled":true}}}') = 'processed', 'T141 an event of the same second is applied');
+select public.stripe_account_save('cb000000-0000-0000-0000-000000000000', '{"id":"acct_T126B","charges_enabled":false}');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T141a4","type":"account.updated","created":1700000005,"account":"acct_T126B","data":{"object":{"id":"acct_T126B","charges_enabled":true}}}') = 'processed', 'T141 a newer event after our own read is applied (review: it was dropped as stale)');
+:as_super
+select tst.ok((select charges_enabled and last_event_at = to_timestamp(1700000005) from public.stripe_accounts where account_id = 'acct_T126B'), 'T141 …payments on, the last event''s time kept');
+:as_service
+-- a type we do not apply is kept without its payload
+select tst.ok(app.stripe_event_apply('{"id":"evt_T141c","type":"customer.updated","account":"acct_T126A","data":{"object":{"id":"cus_1","name":"Ann Client","email":"ann@example.com","phone":"+15555550100"}}}') = 'ignored', 'T141 another type is ignored');
+:as_super
+select tst.ok((select payload = '{"id":"evt_T141c","type":"customer.updated","account":"acct_T126A"}'::jsonb from app.stripe_events where event_id = 'evt_T141c'), 'T141 …and kept with its id and type only');
+-- a second event about the same failed refund does not raise the flag again after the owner looked
+select tst.ok((select r.status = 'failed' and p.refunded_cents > 0 from public.refunds r join public.payments p on p.id = r.payment_id where r.stripe_refund_id = 're_T128b'),
+  'T141 (the failed refund of T128, its payment has refunded money)');
+update public.payments set needs_review = false where id = (select payment_id from public.refunds where stripe_refund_id = 're_T128b');
+:as_service
+select app.stripe_event_apply('{"id":"evt_T141f","type":"refund.updated","account":"acct_T126A","data":{"object":{"id":"re_T128b","payment_intent":"pi_T128","amount":1000,"status":"failed"}}}');
+:as_super
+select tst.ok((select not needs_review from public.payments where id = (select payment_id from public.refunds where stripe_refund_id = 're_T128b')), 'T141 the owner cleared the flag: another event of the same failure does not raise it');
+-- retention: payload after 30 days, row after 180; a resend inside Stripe's 30 days is still a duplicate
+update app.stripe_events set received_at = now() - interval '31 days' where event_id = 'evt_T127s';
+update app.stripe_events set received_at = now() - interval '181 days' where event_id = 'evt_T141c';
+select app.purge_pay_security();
+select tst.ok((select payload = '{}'::jsonb and status = 'processed' from app.stripe_events where event_id = 'evt_T127s'), 'T141 after 30 days the payload is gone, the row stays');
+select tst.ok(not exists (select 1 from app.stripe_events where event_id = 'evt_T141c'), 'T141 after 180 days the row is gone');
+select tst.ok(exists (select 1 from app.stripe_events where event_id = 'evt_T141a2'), 'T141 a fresh row stays whole');
+:as_service
+select tst.ok(app.stripe_event_apply('{"id":"evt_T127s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T126a","amount":10000,"amount_received":10000}}}') = 'duplicate', 'T141 a resend after the payload is gone is still a duplicate');
+:as_super
+select tst.ok((select count(*) = 1 from public.payments where idempotency_key = 'stripe:pi_T126a'), 'T141 …one payment');
+\echo 'T141 Stripe journal ok'
+
 \echo 'ALL TESTS PASSED'

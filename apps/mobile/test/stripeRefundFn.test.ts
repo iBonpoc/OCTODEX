@@ -44,6 +44,7 @@ function deps(o: { open?: Opened | Error; answer?: StripeAnswer | Error; infligh
       return o.answer ?? { status: 200, body: { id: "re_T1", status: "succeeded", amount: 5000, payment_intent: "pi_T1" } };
     },
     keyMode: "test",
+    rate: async () => null,
     log: (m) => logs.push(m),
     ...o.over,
   };
@@ -176,5 +177,33 @@ describe("unit:stripeRefundFn — a refund that never got an answer (security 20
     const x = deps({ inflight: new DbError("42501", "only owner/admin can refund") });
     expect((await handleRefund(req(), x.d)).status).toBe(403);
     expect(x.calls).toHaveLength(0);
+  });
+});
+
+describe("unit:stripeRefundFn — the limit per person (spec 35 §4д)", () => {
+  it("over the limit: 429 «later» with Retry-After, nothing opened, Stripe not called; the person is the JWT's", async () => {
+    let asked: string | null = null;
+    let opened = 0;
+    const x = deps({ over: { rate: async (u) => ((asked = u), 120), open: async () => (opened++, ({}) as Opened) } });
+    const r = await handleRefund(req(), x.d);
+    expect(r.status).toBe(429);
+    expect(r.headers["Retry-After"]).toBe("120");
+    expect(parse(r)).toEqual({ error: "retry_later", retryAfter: 120 });
+    expect(asked).toBe(UID);
+    expect(opened).toBe(0);
+    expect(x.calls).toEqual([]);
+  });
+  it("the limit failing refuses: money never goes back unchecked", async () => {
+    const x = deps({ over: { rate: async () => { throw new Error("db down"); } } });
+    const r = await handleRefund(req(), x.d);
+    expect(parse(r)).toEqual({ error: "retry_later" });
+    expect(x.calls).toEqual([]);
+    expect(x.logs.join(" ")).toContain("rate limit failed");
+  });
+  it("no sign-in is refused before the limit counts anything", async () => {
+    let n = 0;
+    const x = deps({ over: { rate: async () => (n++, null) } });
+    expect((await handleRefund(req({ auth: null }), x.d)).status).toBe(401);
+    expect(n).toBe(0);
   });
 });
