@@ -8,9 +8,9 @@
 | Чат | id | Направление | Состояние |
 |---|---|---|---|
 | Руководитель №5 | `session_015CqH6AYWnjNhg5RZy2re5D` | CLAUDE.md, docs/ai/*, 10-build-plan §0, 15-story-map | план, приёмка, вливание сборками |
-| Лиды и клиенты №15 | `session_015CqH69sRZcUUW2cRGf1WKA` | features/client/**, app/client/**, clients.tsx, clientDuplicates.ts, миграция 20261109180000 | шаг 17 C3 закрыт (#446, #448, #450, #453) |
-| Сметы №3 | `session_015CqH68FFv5zHgyQV88Jvva` | шаблоны смет: estimate/**, estimateTemplate.ts, ops/store (шаблоны), миграция 20261108230000 | E3a #423 влит; E3b экраны (e2e 177), E3c слот модулей (e2e 180) |
-| Деньги и отчёты №7 | `session_015CqH67RW2jTTsHS1vVMLef` | functions/stripe-pay, stripe-refund, StripeCheckout, миграции 20261109210000+ | безопасность оплаты до live: лимит запросов, хранение stripe_events; затем токен /p/ не виден мастеру (2 шага) |
+| Лиды и клиенты №16 | `session_015CqH6AAZCH8R2mnXF6hkgw` | suppliers, purchase_orders, features/suppliers*, purchaseOrders*, спеки 36–37, миграции 20261110000000/090000 | SUP1 влит (#459); SUP2 заказ поставщику (#461 + экраны) |
+| Сметы №4 | `session_015CqH66Dtm64udddMKuajiu` | estimate/**, estimateTemplate.ts, registry.ts (слот estimateTemplates) | E3c влит (#462); долги §12.6 (T149, e2e 200) |
+| Деньги и отчёты №7 | `session_015CqH67RW2jTTsHS1vVMLef` | (уходит после #464) | сдал #454, #457, #464 |
 | Правки Gutters (личный чат основателя) | `session_015CqH66K82f6Sc1E161JFM2` | src/modules/gutters/** (кроме registry/module/estimateLink без согласования), e2e 168–174 | правки основателя; архив только по его слову |
 | Бренд (личный чат основателя) | `session_015CqH69WWiSwHTpW9sTb2km` | бренд GoRix | архив только по слову основателя |
 
@@ -163,6 +163,27 @@
 - Ждёт основателя: аванс в «собрано» (ADVANCES_COLLECTED в features/payments/collected.ts; при «да» поправить и today.tsx receivedIndex); переплата после упавшего возврата (needs_review); подписка вебхука на refund.created обязательна.
 - Долги: облачная проверка ACH-возврата и refund.failed в test mode после секретов; лимит запросов stripe-pay до live; хранение app.stripe_events (спека 21); rule16 шаг 2 (companies.stripe_account_id).
 - Уроки: изменение платежа void-счёта роняло событие Stripe (цепочка t85→invoices); «один раз на строку» — метка + for update; строки, привязанные этим же событием, блокировать и по нашему id; шаги app.* в тестах — от суперпользователя; vi.mockRejectedValue с repo.ts ловит чужой вызов — mockImplementationOnce.
+
+### Памятка Лиды и клиенты №15 (session_015CqH69sRZcUUW2cRGf1WKA, 08.11) — архив
+- Шаг 17 C3 «серверный импорт CSV» закрыт: #448 база (20261109180000; import_jobs/import_rows; app.email_key/address_key/customer_keys; import_customers_start/…/finish/undo; T138–T139), #450 экран (пакеты 250, «Продолжить», отчёт, «Отменить»; 5,000/10 МБ; e2e 192, облачная 193, правка 75), #453 «Импорты» (отмена ≤ 30 дней; e2e 194). Спека 04 §14. Импорт — только director/dispatcher.
+- Одно правило дублей: test/fixtures/matchKeys.json читают vitest и T139.
+- Долги: сироты заметок/задач после отмены (§14.11 №4); «обновление карточек из файла»; приём заявок (шаг 16) может взять app.customer_keys; старые версии импортируют построчно (запрет sales только в UI); демо «Импорты» до перезагрузки.
+- Ловушки: ошибка supabase-js — объект (importFailureOf, CHECKS §9 №6); облачная спека локально: dockerd → npx supabase@3.0.0 start -x studio,imgproxy,vector,logflare,supavisor,realtime,postgres-meta → cloud-seed → node e2e/cloud/cloud.cjs (нужен SUPABASE_SERVICE_ROLE_KEY); plpgsql: псевдоним таблицы = переменная цикла → «record has no field»; роли приложения director/dispatcher/sales/tech; новый экран → tabBarRule, filterGuard, directReads, SCREENS, hierarchy; ListCard без value уводит when вправо.
+- Номера: e2e 192–194, T138–T139.
+
+### Памятка Сметы №3 (session_015CqH68FFv5zHgyQV88Jvva, 08.11) — архив
+- Влито: #423 (E3a база шаблонов: estimate_templates, _line_costs, _uses; T122–T124). Сдал #458 (E3b приложение: «Сохранить как шаблон» — директор и офис; «С чего начать?»; смета из шаблона — текущая цена каталога, «проверьте цену»; /estimate/templates; estimate.save пишет source/template_id/created_via; validTemplateDoc = проверка сервера; e2e 177, unit estimateTemplate). Ссылка «Шаблоны смет» в app/company/index.tsx.
+- Файлы: features/estimateTemplate.ts, app/estimate/templates.tsx, SaveTemplateSheet в EstimateCard.tsx, new.tsx.
+- Дальше E3c: слот ModuleDef.estimateTemplates?: StarterEstimate[] в registry.ts и «Шаблоны модулей» на /estimate/templates по образцу CH3b (#416) — постоянный id компания+модуль+ключ, вставка без перезаписи; стартовые шаблоны Gutters — чату Gutters; e2e 180 занят облачной 180-cloud-lead-intake — новый номер.
+- Долги: тест базы «мастер сам делает смету из шаблона»; копия шаблона; правка строк шаблона без пересохранения сметы; метка модуля — сырой ключ («Из модуля gutters») → имя через реестр.
+- Было/стало: кнопка вместо меню «…», ссылка в «Компании».
+
+### Памятка Деньги и отчёты №7 (session_015CqH67RW2jTTsHS1vVMLef, 08.11) — архив
+- Сдал #454 (в #456): лимиты stripe-pay/stripe-refund (по ссылке; адрес — только за промах pay_rate_miss; по счёту после open), хранение stripe_events (payload 30 дн, строка 180), account.updated по created, повтор needs_review. 20261109210000, T140/T141, e2e 195.
+- #457 (в #460): подпись на месте мастера — accept_on_site + app.estimate_client_accept, отозванную ссылку на месте не подписать, мастеру скрыты «Отправить»/«Открыть как клиент». 20261109220000, T142, e2e 197, облачная 206.
+- #464: ссылки в app.estimate_tokens, public_token всегда null, estimate_links для офиса, перевыпуск видимого мастеру (история link_reissued), ≤5 ссылок — шестая гасит старую. 20261110030000, T147, upgrade, облачная 103.
+- Дальше: шаг 3 — удалить estimates.public_token (спека 35 §4е «К шагу 3»: переписать tg_estimate_send_and_guard, tg_no_service_guard, пересоздать t44, убрать t02); до live — INTAKE_IP_SECRET, cf-connecting-ip, функции только через Cloudflare, pg_cron pay-security-purge, Radar; вопрос основателю — подпись мастера на неотправленной смете.
+- Уроки: create or replace функции, которую меняет неслитый PR, затирает его правки — брать тело из последней версии (и из открытой сборки); column revoke ломает select * старых сборок — переносить в отдельную таблицу; облачные спеки локально, 114 зависит от порядка; в тестах базы — tst.set_token / tst.est_of.
 
 ## Памятки-передачи 07.11 (руководитель №4)
 ### Памятка «Лиды и клиенты» №10 (session_015CqH6A7brPRZCibvSZzhLd, архив 07.11; дела у №11 `session_015CqH6AXexfSJUxpzdXPpY4`)
