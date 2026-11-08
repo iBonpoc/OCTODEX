@@ -161,7 +161,8 @@ exports.run = async (h) => {
   const at = await svg().locator("line:not([id^=halo])").first().evaluate((l) => {
     const r = l.ownerSVGElement.getBoundingClientRect();
     const n = (k) => Number(l.getAttribute(k));
-    return [r.x + (n("x1") * 3 + n("x2")) / 4, r.y + (n("y1") * 3 + n("y2")) / 4];
+    // three quarters along: the downspout sits near the start (the tape redraws the line, П20.13)
+    return [r.x + (n("x1") + n("x2") * 3) / 4, r.y + (n("y1") + n("y2") * 3) / 4];
   });
   await p.mouse.click(at[0], at[1]);
   await waitFor(async () => /Желоб/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
