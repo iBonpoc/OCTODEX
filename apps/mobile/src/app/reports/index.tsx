@@ -1,16 +1,16 @@
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { canSeeReports, collectedReport, owedReport, REPORTS, salesReport, sourcesReport, type ReportId } from "@/features/reports";
+import { canSeeReports, categoryReport, collectedReport, NO_CATEGORY, owedReport, REPORTS, salesReport, sourcesReport, type ReportId } from "@/features/reports";
 import type { IconKey } from "@/ui/primitives";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useDevice } from "@/theme/ThemeProvider";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
 
-const TITLE: Record<ReportId, DictKey> = { owed: "rpt.owed.title", collected: "rpt.collected.title", sales: "rpt.sales.title", sources: "rpt.sources.title" };
-const ICON: Record<ReportId, IconKey> = { owed: "invoice", collected: "wallet", sales: "chart", sources: "megaphone" };
+const TITLE: Record<ReportId, DictKey> = { owed: "rpt.owed.title", collected: "rpt.collected.title", sales: "rpt.sales.title", sources: "rpt.sources.title", categories: "rpt.cat.title" };
+const ICON: Record<ReportId, IconKey> = { owed: "invoice", collected: "wallet", sales: "chart", sources: "megaphone", categories: "toolbox" };
 
-/** «Ещё» → Отчёты v1 (wave 8, 13 §3.15; S14): four reports, each a card with its headline number for this month. */
+/** «Ещё» → Отчёты v1 (wave 8, 13 §3.15; S14; «По направлениям» — step 12б, 18 §11): five reports, each a card with its headline number for this month. */
 export default function Reports() {
   const { db, role } = useStore();
   const { t, moneyWhole } = useI18n();
@@ -36,6 +36,10 @@ export default function Reports() {
     sources: (() => {
       const s = sourcesReport(db, "month");
       return { value: moneyWhole(s.totalCents), label: t("mny.p.month"), note: t("rpt.sources.note", { n: s.rows.length }) };
+    })(),
+    categories: (() => {
+      const c = categoryReport(db, "month");
+      return { value: moneyWhole(c.total.revenueCents), label: t("mny.p.month"), note: t("rpt.cat.note", { n: c.rows.filter((x) => x.key !== NO_CATEGORY).length }) };
     })(),
   };
   const card = (id: ReportId) => (
