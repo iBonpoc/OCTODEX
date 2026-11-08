@@ -194,7 +194,9 @@ export type Op =
   | { k: "property.gate"; id: string; code: string }
   | { k: "note.add"; id: string; subjectType: string; subjectId: string; body: string; visibility: "team" | "private" }
   | { k: "note.update"; id: string; pinned?: boolean; body?: string; deleted?: boolean }
-  | { k: "catalog.save"; item: CatalogItem }
+  /** onlyNew (spec 33 П22.10): «insert, or nothing if this id is there» — a module's items made with a fixed id; a second
+   *  phone or a second send never overwrites a price someone already set */
+  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
   | { k: "estimate.sign"; id: string; svg: string; signer?: string }
@@ -833,7 +835,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "catalog.save": {
       const it = op.item;
-      return run(
+      await run(
         supabase.from("catalog_items").upsert(
           {
             id: it.id, company_id: c, kind: it.kind, name: it.name, description: it.description ?? null, unit: it.unit,
@@ -845,9 +847,20 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
             ...(it.purchaseUnit !== undefined ? { purchase_unit: it.purchaseUnit.trim() || null } : {}),
             ...(it.packSize !== undefined ? { pack_size: it.packSize || null } : {}),
           },
-          { onConflict: "id" },
+          // onlyNew: INSERT … ON CONFLICT (id) DO NOTHING — the row there stays as it is; a refusal (RLS) stays a refusal
+          op.onlyNew ? { onConflict: "id", ignoreDuplicates: true } : { onConflict: "id" },
         ),
       );
+      if (!op.onlyNew) return;
+      // «nothing» is not «done» (security check #377): the row with this id must now be this company's
+      const { data: row } = await read(supabase.from("catalog_items").select("id, deleted_at").eq("id", it.id).eq("company_id", c).maybeSingle());
+      // not visible: the id is another company's row (RLS hides it) — the item was never made; the server's «no»
+      if (!row) throw new PermanentError("catalog item id is taken", 409, "23505", "id_taken");
+      // our own row deleted before: back in the list as it was — its price and properties are not touched
+      if ((row as { deleted_at: string | null }).deleted_at) {
+        await run(supabase.from("catalog_items").update({ deleted_at: null, is_active: true }).eq("id", it.id).eq("company_id", c));
+      }
+      return;
     }
     case "catalog.remove":
       return run(supabase.from("catalog_items").update({ deleted_at: new Date().toISOString(), is_active: false }).eq("id", op.id));

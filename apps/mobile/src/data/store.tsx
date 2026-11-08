@@ -320,8 +320,9 @@ interface StoreCtx {
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
   /** several items at once with one «Отменить» («create the items now», docs/specs/33 П16, core K1): each goes as its own
-   *  catalog.save through the queue; «Отменить» takes them all back */
-  saveCatalogItems: (items: CatalogItem[]) => Undo;
+   *  catalog.save through the queue; «Отменить» takes them all back. onlyNew (spec 33 П22.10): an item whose id is on the
+   *  phone already is left as it is (no op), and the server inserts only an id it does not have (ON CONFLICT DO NOTHING) */
+  saveCatalogItems: (items: CatalogItem[], opts?: { onlyNew?: boolean }) => Undo;
   readNotices: () => void;
   /** invite a person (demo: added as pending; cloud: email invites come with the email service) */
   inviteMember: (m: { name: string; email?: string; phone?: string; roles: Role[]; kind: "employee" | "sub" }) => Undo;
@@ -1762,12 +1763,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { k: "catalog.save", item: it },
         );
       },
-      saveCatalogItems: (items) => {
-        const undos = items.map(cleanCatalogItem).map((it) =>
+      saveCatalogItems: (items, opts) => {
+        const onlyNew = !!opts?.onlyNew;
+        const fresh = onlyNew ? items.filter((x) => !dbRef.current.catalog.some((c) => c.id === x.id)) : items;
+        const undos = fresh.map(cleanCatalogItem).map((it) =>
           mutate(
             "catalog.save",
-            (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it] }),
-            { k: "catalog.save", item: it },
+            (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? (onlyNew ? d.catalog : d.catalog.map((x) => (x.id === it.id ? it : x))) : [...d.catalog, it] }),
+            onlyNew ? { k: "catalog.save", item: it, onlyNew: true } : { k: "catalog.save", item: it },
           ),
         );
         // the last one first: each undo puts back the phone's state from before its own save
