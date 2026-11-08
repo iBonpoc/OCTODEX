@@ -11,7 +11,9 @@ import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { ChecklistTemplate } from "@/data/types";
-import { canEditTemplates, canEditVisitSettings, visitSettings } from "@/features/checklist";
+import { canEditTemplates, canEditVisitSettings, starterTemplate, startersToAdd, visitSettings } from "@/features/checklist";
+import { uid as newId } from "@/features/estimateDoc";
+import { activeModules } from "@/modules/registry";
 import { Button, ReadOnly, StatusChip, Stepper, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -57,6 +59,14 @@ export default function CompanyChecklists() {
     </View>
   );
 
+  // starter templates of the company's active modules not added yet (§11.11): one tap, then they are the company's own
+  const modules = activeModules(store.db.company);
+  const starters = edit && !store.db.checklistLegacy ? startersToAdd(modules, all) : [];
+  const addStarter = (module: string, starter: (typeof starters)[number]["starter"]) => {
+    const tpl = starterTemplate(module, starter, t, newId());
+    if (tpl) toast.show(store.online ? t("chk3.starterAdded") : t("offline.queued"), store.saveChecklistTemplate(tpl));
+  };
+
   return (
     <Screen title={t("chk2.title")} back={back} subtitle={t("chk2.who")}>
       {edit ? (
@@ -69,6 +79,28 @@ export default function CompanyChecklists() {
       ) : (
         <CardGrid>{live.map(card)}</CardGrid>
       )}
+      {starters.length ? (
+        <>
+          <T v="heading">{t("chk3.starters")}</T>
+          <CardGrid>
+            {starters.map(({ module, starter }) => {
+              const def = modules.find((m) => m.key === module);
+              return (
+                <View key={`${module}-${starter.key}`} testID={`chk-starter-${module}-${starter.key}`}>
+                  <ListCard
+                    density="compact"
+                    lead={{ kind: "icon", icon: "checklist" }}
+                    title={t(starter.nameKey)}
+                    when={`${t("chk2.items", { n: starter.items.length, m: starter.items.filter((i) => i.required).length })} · ${def ? t(def.titleKey) : module}`}
+                    action={{ label: t("check.add"), icon: "plus", onPress: () => addStarter(module, starter) }}
+                    onPress={() => addStarter(module, starter)}
+                  />
+                </View>
+              );
+            })}
+          </CardGrid>
+        </>
+      ) : null}
       {archived.length ? (
         showArchived ? (
           <CardGrid>{archived.map(card)}</CardGrid>

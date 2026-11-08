@@ -2799,5 +2799,7 @@ export const en: Dict = {
   "chk3.addedN": "Items added: {n}",
   "chk3.from": "from «{name}»",
   "chk3.requiredShort": "required",
+  "chk3.starters": "Module templates",
+  "chk3.starterAdded": "Template added",
   "chk3.optional": "optional",
 };

@@ -2799,6 +2799,8 @@ export const ru = {
   "chk3.addedN": "Добавлено пунктов: {n}",
   "chk3.from": "из «{name}»",
   "chk3.requiredShort": "обязательный",
+  "chk3.starters": "Шаблоны модулей",
+  "chk3.starterAdded": "Шаблон добавлен",
   "chk3.optional": "необязательный",
 } as const;
 

@@ -4,6 +4,8 @@
  * attached to a photo item). Skipped («Пропустить», `na`) is NOT done: the tech went on, the item stays «not done» in the
  * history, on the visit's card and in «Требует внимания».
  */
+import type { DictKey } from "@/i18n";
+import type { StarterChecklist } from "@/modules/registry";
 import type { ChecklistItem, ChecklistItemKind, ChecklistTemplate, ChecklistVisitKind, DB, ID, Photo, Role, TemplateItem, Visit, VisitSettings } from "@/data/types";
 
 export const VISIT_SETTINGS_DEFAULT: VisitSettings = { photosBeforeRequired: true, photosAfterRequired: true, minPhotosBefore: 1, minPhotosAfter: 1 };
@@ -257,6 +259,35 @@ export function itemsFromTemplate(v: Pick<Visit, "checklist">, t: ChecklistTempl
   return checklistFor({ kind: "work" }, [{ ...t, appliesTo: { everyVisit: true, visitKinds: [], catalogItemIds: [] } }], newId)
     .slice(0, room)
     .map((c, i) => ({ ...c, position: start + i }));
+}
+
+/* ---- starter templates of modules (§11.11, CH3b) ---- */
+
+/** a module's starter is in the company when any of its templates of that module (an archived one too) has its items */
+export function starterAdded(moduleKey: string, s: Pick<StarterChecklist, "items">, templates: readonly ChecklistTemplate[]): boolean {
+  const ids = new Set(s.items.map((i) => i.id));
+  return templates.some((t) => t.module === moduleKey && t.items.some((i) => ids.has(i.id)));
+}
+
+/** the starters of the given (active) modules the company has not added yet */
+export function startersToAdd(
+  mods: readonly { key: string; checklistTemplates?: readonly StarterChecklist[] }[],
+  templates: readonly ChecklistTemplate[],
+): { module: string; starter: StarterChecklist }[] {
+  return mods.flatMap((m) => (m.checklistTemplates ?? []).filter((s) => !starterAdded(m.key, s, templates)).map((starter) => ({ module: m.key, starter })));
+}
+
+/** a starter as the company's template: a new id, the text in `t`'s language, the module's item ids; clean as the server takes it */
+export function starterTemplate(moduleKey: string, s: StarterChecklist, t: (k: DictKey) => string, id: ID): ChecklistTemplate | null {
+  return cleanTemplate({
+    id,
+    name: t(s.nameKey),
+    items: s.items.map((i) => ({ id: i.id, label: t(i.labelKey), kind: i.kind, required: i.required, ...(i.hintKey ? { hint: t(i.hintKey) } : {}) })),
+    appliesTo: { everyVisit: !!s.everyVisit, visitKinds: [...(s.visitKinds ?? [])], catalogItemIds: [] },
+    ...(validCount(s.minPhotosBefore) ? { minPhotosBefore: s.minPhotosBefore } : {}),
+    ...(validCount(s.minPhotosAfter) ? { minPhotosAfter: s.minPhotosAfter } : {}),
+    module: moduleKey,
+  });
 }
 
 /* ---- text as the server takes it (no control characters — a new line is one; lengths of the columns) ---- */

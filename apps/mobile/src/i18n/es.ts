@@ -2799,5 +2799,7 @@ export const es: Dict = {
   "chk3.addedN": "Puntos agregados: {n}",
   "chk3.from": "de «{name}»",
   "chk3.requiredShort": "obligatorio",
+  "chk3.starters": "Plantillas de módulos",
+  "chk3.starterAdded": "Plantilla agregada",
   "chk3.optional": "opcional",
 };
