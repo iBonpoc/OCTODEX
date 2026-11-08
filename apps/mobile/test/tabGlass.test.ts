@@ -17,7 +17,7 @@ describe("tabSurface", () => {
   it("an iOS 26 beta without the API: the old panel, GlassView would crash", () => {
     expect(tabSurface({ os: "ios", load: mod(false, true) })).toBe("blur");
   });
-  it("a build without the native module (old TestFlight + a JS update): the old panel, no crash", () => {
+  it("require(\"expo-glass-effect\") throws — a build without the native module (old TestFlight + a JS update): the old panel, no crash", () => {
     const load = () => {
       throw new Error("Cannot find native module 'ExpoGlassEffect'");
     };
