@@ -21,6 +21,7 @@ export type SectionId =
   | "estimates"
   | "invoices"
   | "catalog"
+  | "suppliers"
   | "payments"
   | "reports"
   | "money"
@@ -66,6 +67,8 @@ export const SECTIONS: readonly Section[] = [
   { id: "estimates", label: "nav.estimates", icon: "invoice", group: "docs" },
   { id: "invoices", label: "nav.invoices", icon: "wallet", group: "docs", roles: OFFICE },
   { id: "catalog", label: "nav.catalog", icon: "note", group: "docs" },
+  // spec 36: owner, admin, office — the account number is not for the tech or sales
+  { id: "suppliers", label: "nav.suppliers", icon: "truck", group: "docs", roles: PLANNERS },
   // owner, admin, office (13 §4): not the technician, not sales
   { id: "payments", label: "mny.payments.title", icon: "dollar", group: "money", roles: PLANNERS },
   { id: "reports", label: "rpt.title", icon: "chart", group: "money", roles: PLANNERS },

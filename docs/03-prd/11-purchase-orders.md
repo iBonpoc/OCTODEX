@@ -1,6 +1,7 @@
 # 11. Заказы поставщикам (Purchase Orders)
 
 > Статус: черновик v0.1, ноябрь 2026. Сущности: `PurchaseOrder`, `Supplier`, `SupplierItem`, `CatalogItem`, `EstimateLineItem` (BOM), `Job`, `Expense` (`../04-domain-model.md` §3, §6, §9). Связанные: `04-catalog-suppliers.md`, `05-estimates.md` §7.8, `06-gutters-module.md` §7.7–7.8, `10-expenses-job-costing.md` §7.
+> **08.11.2026, спека 36 §3:** заказ поставщику — ядро (шаг 22, SUP2), не модуль; модуль добавляет только свои строки «для закупки» (стык S11g). Строки PO берут `catalog_items.supplier_id` и фасовку позиции (C3), не `SupplierItem`. Авто-PO при одобрении, RFQ — после SUP2.
 > MVP = **PDF и email поставщику**. API ABC Supply, SRS, Beacon закрытые и партнёрские (`01-competitor-analysis.md` §7), подключаются после первых клиентов.
 
 ## 1. Назначение

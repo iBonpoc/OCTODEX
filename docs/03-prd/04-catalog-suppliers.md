@@ -185,6 +185,7 @@
 - Каждая сборка хранит тест-кейсы (входы → ожидаемые количества). Сид-сборки поставляются с тест-кейсами из `06-gutters-module.md` §7.
 
 ### 7.4 Поставщики и позиции поставщика
+> **Заменено спекой `docs/specs/36-suppliers.md` (08.11.2026, руководитель принял):** отдельной таблицы `SupplierItem` с версиями нет. Позиция ссылается на основного поставщика (`catalog_items.supplier_id`, `supplier_sku`); себестоимость — одна, в `catalog_item_costs` (#383); история цены — журнал `catalog_cost_history` (триггер); фасовка — `purchase_unit`, `pack_size` позиции (C3); ставка поставщика `suppliers.purchase_tax_bps` копируется в `vendor_tax_bps` позиции. Правила ниже читать через эту замену.
 - SupplierItem версионируется: смена себестоимости = новая запись с `valid_from`, старая получает `valid_to`. Текущая = `valid_to IS NULL`.
 - `CatalogItem.supplier_item_id` указывает основного поставщика. Смена основного поставщика не меняет `unit_cost_cents` позиции автоматически: показывается предложение «обновить себестоимость с $X до $Y».
 - Обновление себестоимости позиции из SupplierItem: `unit_cost_cents = round_half_up(supplier_cost_cents / pack_size)`.
@@ -352,6 +353,7 @@ AI не создаёт цены из головы: если позиции не�
 - Ценник: время «фото → применено» (цель ≤ 20 с).
 
 ## 14. Изменения модели данных
+> Строки `SupplierItem`, `CatalogItem.supplier_item_id`, `Supplier.purchase_tax_rate_id`, `branches[]` — заменены или отложены спекой 36 (§4 «Оспаривание» №2–№7).
 | Сущность | Изменение | Зачем |
 |---|---|---|
 | CatalogItem | + `pricing_mode` (`fixed`/`cost_plus`), `markup_bps` | Cost-plus |

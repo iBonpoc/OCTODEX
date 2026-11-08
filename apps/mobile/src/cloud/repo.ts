@@ -7,10 +7,12 @@ import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFro
 import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, paymentMethodFromDb, paymentShown, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Advance, type PendingPayment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Advance, type PendingPayment, type Estimate, type EstimateDoc, type EstimateTemplate, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 import { legacyForEstimate } from "./legacyTotals";
+import { historyFromRow, supplierFromRow } from "@/features/suppliers";
+import type { CostHistoryEntry } from "@/data/types";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -78,6 +80,20 @@ export async function pages<T = Row>(build: () => unknown, order: Order[], cap =
 }
 const byId: Order[] = [{ col: "id" }];
 /** = app.can_view_costs on the server (migration 20261108130000), for the screens: no row — no costs */
+/** a row of estimate_templates + its costs and uses → the app's template (docs/specs/07 §11) */
+export function estimateTemplateFromDb(r: Row, costs: Row[], uses: Row[]): EstimateTemplate {
+  const id = String(r.id);
+  const mine = costs.filter((c) => c.template_id === id);
+  const used = uses.filter((u) => u.template_id === id).map((u) => String(u.used_at)).sort();
+  return {
+    id, name: String(r.name ?? ""), doc: r.doc as EstimateDoc,
+    ...(mine.length ? { costs: Object.fromEntries(mine.map((c) => [String(c.line_id), Number(c.unit_cost_cents)])) } : {}),
+    ...(r.module_key ? { module: String(r.module_key) } : {}),
+    uses: used.length, ...(used.length ? { lastUsedAt: used[used.length - 1] } : {}),
+    ...(r.archived_at ? { archivedAt: String(r.archived_at) } : {}),
+  };
+}
+
 export function costsVisibleFor(m: Row | undefined): boolean {
   if (!m || m.status !== "active") return false;
   if (["owner", "admin", "office"].includes(s(m.role))) return true;
@@ -116,7 +132,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("visit_assignees", "visit_id, user_id, created_at"),
       live<Row>("leads"),
       live<Row>("estimates"),
-      live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs, tax_enabled, tax_rate_bps, deposit_rule"),
+      live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs, tax_enabled, tax_rate_bps, deposit_rule, template_id"),
       live<Row>("estimate_options", "id, version_id, name, position, created_at, discount_mode, discount_value"),
       live<Row>("estimate_line_items", "id, option_id, name, quantity, line_total_cents, is_optional, client_visible, position, taxable"),
       every<Row>("estimate_approvals", "estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method"),
@@ -178,6 +194,31 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     }),
   ]);
   const chkByVisit = chkRows ? itemsByVisit(chkRows) : null;
+  // E3 (migration 20261108230000): templates, their costs (only who sees costs gets rows), their uses. A server before
+  // the migration: no templates, and the store saves none (estimateTemplatesMissing)
+  const [etRows, etCosts, etUses] = await Promise.all([
+    live<Row>("estimate_templates", "id, name, doc, module_key, archived_at").then((r) => r as Row[] | null, (e) => {
+      if (isMissingTable(e)) return null;
+      throw e;
+    }),
+    every<Row>("estimate_template_line_costs", "template_id, line_id, unit_cost_cents", key("template_id", "line_id")).catch((e) => {
+      if (isMissingTable(e)) return [] as Row[];
+      throw e;
+    }),
+    every<Row>("estimate_template_uses", "template_id, estimate_id, used_at", key("template_id", "estimate_id")).catch((e) => {
+      if (isMissingTable(e)) return [] as Row[];
+      throw e;
+    }),
+  ]);
+  // spec 36 (migration 20261110000000): suppliers (owner / admin / office by RLS; others read none). The history of
+  // costs is not read here: the item and the supplier screens read their own newest rows when opened (loadCostHistory;
+  // a company-wide cap would drop the old history of a big price list — director's check of #459 Н4). A server
+  // before the migration has no table: no suppliers, nothing written
+  const supplierRows = await live<Row>("suppliers", "id, name, contact_name, phone, email, account_number, address, payment_terms, terms_note, purchase_tax_bps, notes, is_active")
+    .then((r) => r as Row[] | null, (e) => {
+      if (isMissingTable(e)) return null;
+      throw e;
+    });
   // wave 7б-2 (migration 20261106210000): the company flag, who shares, the last points of open visits. Each read on its
   // own: before the migration (or if a read fails) the location stays off and the rest of the company still loads.
   const [locAllowed, shareRows, pointRows] = await Promise.all([
@@ -413,6 +454,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       marginPct: marginOf.has(s(ver?.id)) ? marginOf.get(s(ver?.id)) ?? null : totals.marginPct ?? null,
       signature: (appr?.signature_svg as string | null) ?? undefined,
       doc: withCosts(ver?.calc_inputs),
+      templateId: (ver?.template_id as string | null) ?? undefined,
       token: (e.public_token as string | null) ?? undefined,
       number: s(e.number) || undefined,
       viewedAt: (e.last_viewed_at as string | null) ?? undefined,
@@ -667,9 +709,14 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         }
       : null,
     checklistTemplates: templateRows.map(templateFromDb),
+    estimateTemplates: (etRows ?? []).map((r) => estimateTemplateFromDb(r, etCosts, etUses)),
+    ...(etRows ? {} : { estimateTemplatesMissing: true }),
     // a server before the checklist migration: the store writes the old whole list (rule 16)
     ...(chkByVisit ? {} : { checklistLegacy: true }),
     moduleData,
+    suppliers: (supplierRows ?? []).map(supplierFromRow),
+    costHistory: [],
+    ...(supplierRows ? {} : { suppliersLegacy: true }),
     notes: noteRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Note["subjectType"], subjectId: s(r.subject_id), body: s(r.body),
       visibility: r.visibility === "private" ? "private" : "team", pinned: !!r.pinned, authorId: s(r.created_by), at: s(r.created_at),
@@ -693,6 +740,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         placeholder: !!r.is_placeholder_price,
         // C3 (docs/specs/33 П16): empty before the migration and for items without properties
         ...catalogExtrasFromRow(r),
+        // spec 36: absent before the migration and for items without a supplier
+        ...(typeof r.supplier_id === "string" ? { supplierId: r.supplier_id } : {}),
+        ...(typeof r.supplier_sku === "string" ? { supplierSku: r.supplier_sku } : {}),
       })),
     memberSignatures: signatureRows.map((r) => ({
       id: s(r.id), userId: s(r.user_id), svg: s(r.svg), name: s(r.name), title: (r.title as string | null) ?? undefined,
@@ -811,4 +861,21 @@ export function pendingFromRows(rows: Row[]): PendingPayment[] {
     .filter((p) => p.invoice_id && s(p.status) === "pending" && n(p.amount_cents) > 0)
     .map((p) => ({ id: s(p.id), invoiceId: s(p.invoice_id), amountCents: n(p.amount_cents), method: paymentMethodFromDb(s(p.method)), at: s(p.received_at) }))
     .sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/**
+ * spec 36: the newest history rows of one item or of one supplier (catalog_cost_history; RLS: only who sees costs —
+ * others get none). Read when the item's or the supplier's screen opens. A server before the migration: none.
+ */
+export async function loadCostHistory(companyId: string, where: { itemId?: string; supplierId?: string }, limit = 20): Promise<CostHistoryEntry[]> {
+  let b = supabase.from("catalog_cost_history").select("id, item_id, supplier_id, unit_cost_cents, vendor_tax_bps, source, at").eq("company_id", companyId);
+  if (where.itemId) b = b.eq("item_id", where.itemId);
+  else if (where.supplierId) b = b.eq("supplier_id", where.supplierId);
+  else return [];
+  const { data, error } = await b.order("at", { ascending: false }).order("id", { ascending: false }).limit(limit);
+  if (error) {
+    if (isMissingTable(error)) return [];
+    throw error;
+  }
+  return (data as Row[]).map(historyFromRow);
 }

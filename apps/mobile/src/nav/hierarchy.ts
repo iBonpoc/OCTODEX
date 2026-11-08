@@ -135,6 +135,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
     }
     case "catalog":
       return id ? { section: "catalog", kind: "cat.item", up: { href: "/catalog", label: K("cat.title") } } : { section: "catalog" };
+    case "suppliers":
+      // spec 36: a supplier sits under «Поставщики»
+      return id ? { section: "suppliers", kind: "sup.edit", up: { href: "/suppliers", label: K("sup.title") } } : { section: "suppliers" };
     case "company":
       // the last crumb is the section itself («Адрес и часовой пояс», «Расписание»), not «Настройки компании» again
       // checklist templates (docs/specs/08 §7): the list under «Компания», a template under the list

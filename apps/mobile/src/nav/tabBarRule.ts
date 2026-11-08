@@ -29,6 +29,8 @@ export const NO_TAB_BAR = [
   "module/[key]/[screen]",
   "p/[token]",
   "settings/delete-account",
+  // a supplier is a form («Сохранить», spec 36)
+  "suppliers/[id]",
   // a wrong address: nothing to switch from (the walk of the fixes chat, 07.11)
   "+not-found",
 ] as const;
@@ -43,10 +45,10 @@ export const WITH_TAB_BAR = [
   "company/payments",
   "company/modules",
   "company/checklists",
-  "estimate/[id]", "estimates", "figures/[metric]", "help",
+  "estimate/[id]", "estimate/templates", "estimates", "figures/[metric]", "help",
   "invoice", "invoice/[id]", "job/[id]", "jobs", "lead/[id]", "leads",
   "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",
-  "receipt/[id]", "reports", "reports/[id]", "search", "settings", "settings/profile", "tasks", "team", "today", "triage", "visit/[id]", "visits",
+  "receipt/[id]", "reports", "reports/[id]", "search", "settings", "settings/profile", "suppliers", "tasks", "team", "today", "triage", "visit/[id]", "visits",
 ] as const;
 
 const hidden = new Set<string>(NO_TAB_BAR);
