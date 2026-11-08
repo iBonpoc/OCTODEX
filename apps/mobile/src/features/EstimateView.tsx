@@ -8,7 +8,7 @@ import { LINE_GROUPS, activeLines, type CustomOption } from "@octo/estimating-en
 import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { optionTotals, withAddons } from "./estimateDoc";
+import { optionTotals, shownQty, withAddons } from "./estimateDoc";
 import { StatusChip, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Card, Divider, RowView, SectionTitle } from "@/ui/surfaces";
@@ -91,7 +91,7 @@ export function EstimateView({
                     <View style={{ flex: 1 }}>
                       <T v="body">{l.name}</T>
                       <T v="caption" tone="mut" tabular>
-                        {String(l.quantity)} {l.unit} × {money(l.unitPriceCents)}
+                        {shownQty(l.quantity)} {l.unit} × {money(l.unitPriceCents)}
                       </T>
                     </View>
                     <T v="body" tabular>

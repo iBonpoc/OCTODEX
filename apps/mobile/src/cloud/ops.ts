@@ -8,7 +8,7 @@
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
 import { realJob } from "./inspectionBridge";
-import { ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
+import { discountBps, ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
 import type { BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
@@ -1123,7 +1123,7 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
       op.doc.options.map((o, i) => ({
         id: o.id, company_id: c, version_id: versionId, name: o.name, position: i, is_recommended: !!o.recommended,
         discount_mode: s.discount ? s.discount.kind : null,
-        discount_value: s.discount ? (s.discount.kind === "pct" ? Math.round(Number(s.discount.value) * 10000) : s.discount.cents) : null,
+        discount_value: s.discount ? (s.discount.kind === "pct" ? discountBps(s.discount.value) : s.discount.cents) : null,
       })),
     ),
   );

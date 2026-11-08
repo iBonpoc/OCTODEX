@@ -3,11 +3,11 @@ import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
 import { space, size } from "@octo/design-tokens";
-import { LINE_GROUPS, activeLines, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
+import { LINE_GROUPS, activeLines, discountBps, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, uid } from "@/features/estimateDoc";
+import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
 import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker } from "@/features/estimatePickers";
 import { LineSheet } from "@/features/LineSheet";
@@ -157,7 +157,7 @@ export default function EstimateBuilder() {
                     </T>
                   ) : null}
                   <T v="caption" tone="mut" tabular>
-                    {String(l.quantity)} {l.unit} × {money(l.unitPriceCents)} · {t(`ue.group.${l.group}` as DictKey)}
+                    {shownQty(l.quantity)} {l.unit} × {money(l.unitPriceCents)} · {t(`ue.group.${l.group}` as DictKey)}
                   </T>
                 </View>
                 <View style={{ alignItems: "flex-end", gap: space[1] }}>
@@ -250,7 +250,7 @@ export default function EstimateBuilder() {
                 ]}
               />
               {s.discount?.kind === "pct" ? (
-                <PctField bps={Math.round(Number(s.discount.value) * 10000)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} />
+                <PctField bps={discountBps(s.discount.value)} onChange={(b) => setSettings({ discount: { kind: "pct", value: String(Math.min(b, 10000) / 10000) } })} />
               ) : s.discount?.kind === "fixed" ? (
                 <MoneyField cents={s.discount.cents} onChange={(c) => setSettings({ discount: { kind: "fixed", cents: c } })} />
               ) : null}
