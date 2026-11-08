@@ -75,7 +75,8 @@ export function fromRaw(r: Raw): PortalData {
     title: r.title ?? "",
     status: r.status,
     sentAt: r.sent_at,
-    doc: r.doc && Array.isArray(r.doc.options) ? r.doc : null,
+    // no option to show (an empty list too): «link not valid», never a page that crashes on mainOption (security-check #415)
+    doc: r.doc && Array.isArray(r.doc.options) && r.doc.options.length > 0 ? r.doc : null,
     company: {
       name: r.company?.name ?? "", phone: r.company?.phone, email: r.company?.email, website: r.company?.website,
       address: r.company?.address || undefined, logo: r.company?.logo, color: r.company?.color, terms: r.company?.terms,

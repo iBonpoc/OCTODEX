@@ -99,7 +99,7 @@ import {
   type NaReason,
   type VisitSettings,
 } from "./types";
-import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitSettings, canRemoveItem, canReview, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, jobServices, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, visitSettingsOf } from "@/features/checklist";
+import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, visitSettingsOf } from "@/features/checklist";
 
 type Undo = () => void;
 /** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
@@ -192,10 +192,16 @@ interface StoreCtx {
   addVisitItem: (visitId: ID, label: string, required: boolean, kind?: ChecklistItemKind) => Undo;
   /** the office (a required one — the director); a tech — only his own optional item. The server checks */
   removeVisitItem: (visitId: ID, itemId: ID) => Undo;
+  /** the office before the visit (§7.4, CH3): an item's text and «Обязательный» (off — the director) */
+  editVisitItem: (visitId: ID, itemId: ID, patch: { label?: string; required?: boolean }) => Undo;
+  /** the office before the visit: «Выше» (-1) / «Ниже» (1) */
+  moveVisitItem: (visitId: ID, itemId: ID, dir: -1 | 1) => Undo;
+  /** the office before the visit: «Добавить из шаблона» — the template's items as a snapshot (§5, §11.8 №8) */
+  addVisitTemplate: (visitId: ID, templateId: ID) => Undo;
   /** «Просмотрено» on the «not done» card */
   reviewVisitMissed: (visitId: ID) => Undo;
   /** a checklist template, whole (new or changed; archive = archivedAt) */
-  saveChecklistTemplate: (t: ChecklistTemplate) => Undo;
+  saveChecklistTemplate: (t: ChecklistTemplate, opts?: { ifNew?: boolean }) => Undo;
   /** the company's photo rules (owner, admin) */
   setVisitSettings: (patch: Partial<VisitSettings>) => Undo;
   signVisit: (visitId: ID, path: string) => Undo;
@@ -774,7 +780,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // silently: it stays as «не записано на сервере» until the person says «Понятно» (docs/specs/23 §3)
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
-            const rej = rejectedOf(item, msg, Date.now(), w);
+            const rej = rejectedOf(item, msg, Date.now(), w, (e as { hint?: unknown } | null)?.hint);
             if (rej) setRejected((prev) => [...freshRejected(prev, Date.now()).filter((x) => x.id !== rej.id), rej]);
           } else {
             outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...x, tries: item.tries + 1, error: msg } : x));
@@ -1201,23 +1207,80 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!v || !item || !canRemoveItem(role, dbRef.current.me, v, item)) return noop;
         return chkMutate("check.remove", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist: x.checklist.filter((c) => c.id !== itemId) })), { k: "chk.item.remove", id: itemId, visitId });
       },
+      editVisitItem: (visitId, itemId, patch) => {
+        const v = visitOf(visitId);
+        const item = v?.checklist.find((c) => c.id === itemId);
+        if (!v || !item || !canEditVisitItems(role, v)) return noop;
+        const label = patch.label === undefined ? undefined : cleanText(patch.label);
+        // an empty text or «Обязательный» off by the dispatcher: the server would refuse it and hold the queue
+        if (label === "" || (patch.required !== undefined && patch.required !== itemRequired(item) && !canSetRequired(role, patch.required))) return noop;
+        const next = { ...(label !== undefined && label !== item.label ? { label } : {}), ...(patch.required !== undefined && patch.required !== itemRequired(item) ? { required: patch.required } : {}) };
+        if (!Object.keys(next).length) return noop;
+        return chkMutate("check.edit", visitId, (d) => patchItems(d, visitId, [itemId], (c) => ({ ...c, ...next })), { k: "chk.item.edit", id: itemId, visitId, ...next });
+      },
+      moveVisitItem: (visitId, itemId, dir) => {
+        const v = visitOf(visitId);
+        if (!v || !canEditVisitItems(role, v)) return noop;
+        const moves = moveItem(v.checklist, itemId, dir);
+        if (!moves.length) return noop;
+        const pos = new Map(moves.map((m) => [m.id, m.position]));
+        const apply = (d: DB) =>
+          patchVisit(d, visitId, (x) => {
+            const list = x.checklist.map((c) => (pos.has(c.id) ? { ...c, position: pos.get(c.id)! } : c));
+            return { ...x, checklist: [...list].sort((p, q) => (p.position ?? 0) - (q.position ?? 0)) };
+          });
+        if (dbRef.current.checklistLegacy) return chkMutate("check.move", visitId, apply, { k: "chk.item.edit", id: itemId, visitId });
+        const undos = moves.map((m, i) => mutate("check.move", i === 0 ? apply : (d) => d, { k: "chk.item.edit", id: m.id, visitId, position: m.position }));
+        return () => [...undos].reverse().forEach((u) => u());
+      },
+      addVisitTemplate: (visitId, templateId) => {
+        const d0 = dbRef.current;
+        const v = visitOf(visitId);
+        const tpl = (d0.checklistTemplates ?? []).find((x) => x.id === templateId);
+        if (!v || !tpl || !canEditVisitItems(role, v)) return noop;
+        const items = itemsFromTemplate(v, tpl, () => uid()).map((c) => ({ ...c, addedBy: d0.me }));
+        if (!items.length) return noop;
+        // the template's minimums raise the visit's, never lower them (§3.1)
+        const raised = snapshotPhotoMins([...v.checklist, ...items], d0.checklistTemplates ?? []);
+        const mins = raised || v.photoMins
+          ? { before: Math.max(raised?.before ?? 0, v.photoMins?.before ?? 0) || undefined, after: Math.max(raised?.after ?? 0, v.photoMins?.after ?? 0) || undefined }
+          : undefined;
+        const minsChanged = !!mins && (mins.before !== v.photoMins?.before || mins.after !== v.photoMins?.after);
+        const apply = (d: DB) => patchVisit(d, visitId, (x) => ({ ...x, checklist: [...x.checklist, ...items], ...(minsChanged ? { photoMins: mins } : {}) }));
+        if (d0.checklistLegacy) return chkMutate("check.template", visitId, apply, { k: "visit.checklist", visitId, checklist: [] });
+        const undos = items.map((c, i) =>
+          mutate("check.add", i === 0 ? apply : (d) => d, {
+            k: "chk.item.add",
+            item: { id: c.id, visitId, position: c.position ?? 0, label: c.label, kind: itemKind(c), required: itemRequired(c), ...(c.hint ? { hint: c.hint } : {}), templateId: tpl.id, templateName: c.templateName },
+          }),
+        );
+        if (minsChanged && mins) undos.push(mutate("check.mins", (d) => d, { k: "chk.visit.mins", visitId, before: mins.before ?? null, after: mins.after ?? null }));
+        return () => [...undos].reverse().forEach((u) => u());
+      },
       reviewVisitMissed: (visitId) => {
-        if (!visitOf(visitId) || !canReview(role)) return noop;
+        // an old server has no «Просмотрено» (and no card: attention.ts) — nothing that would come back after a reload
+        if (!visitOf(visitId) || !canReview(role) || dbRef.current.checklistLegacy) return noop;
         const at = new Date().toISOString();
         const me = dbRef.current.me;
-        return chkMutate("check.review", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: at, checklistReviewedBy: me })), { k: "chk.visit.review", visitId, at }, false);
+        mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: at, checklistReviewedBy: me })), { k: "chk.visit.review", visitId, at });
+        // «Отменить» (rule 5): the op may already be on the server (the outbox goes every 1.5 s) — a reverse op, not a
+        // take-back of the queue; while both wait they go in order, the last one wins
+        return () =>
+          void mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: undefined, checklistReviewedBy: undefined })), { k: "chk.visit.review", visitId, at: null });
       },
-      saveChecklistTemplate: (t) => {
+      saveChecklistTemplate: (t, opts) => {
         const clean = cleanTemplate(t);
         // no name: the server would refuse it; the old server has no templates
         if (!clean || !canEditTemplates(role) || dbRef.current.checklistLegacy) return noop;
+        // a starter (ifNew) already on the phone: nothing (a second tap, a second phone's after the next read)
+        if (opts?.ifNew && (dbRef.current.checklistTemplates ?? []).some((x) => x.id === clean.id)) return noop;
         return mutate(
           "checklist.template",
           (d) => {
             const list = d.checklistTemplates ?? [];
             return { ...d, checklistTemplates: list.some((x) => x.id === clean.id) ? list.map((x) => (x.id === clean.id ? clean : x)) : [...list, clean] };
           },
-          { k: "chk.template.save", template: clean },
+          { k: "chk.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true } : {}) },
         );
       },
       setVisitSettings: (patch) => {

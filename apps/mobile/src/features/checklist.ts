@@ -4,6 +4,8 @@
  * attached to a photo item). Skipped («Пропустить», `na`) is NOT done: the tech went on, the item stays «not done» in the
  * history, on the visit's card and in «Требует внимания».
  */
+import type { DictKey } from "@/i18n";
+import type { StarterChecklist } from "@/modules/registry";
 import type { ChecklistItem, ChecklistItemKind, ChecklistTemplate, ChecklistVisitKind, DB, ID, Photo, Role, TemplateItem, Visit, VisitSettings } from "@/data/types";
 
 export const VISIT_SETTINGS_DEFAULT: VisitSettings = { photosBeforeRequired: true, photosAfterRequired: true, minPhotosBefore: 1, minPhotosAfter: 1 };
@@ -215,13 +217,109 @@ export const canEditTemplates = (role: Role): boolean => office(role);
 /** the company's photo rules: the director (companies: owner, admin) */
 export const canEditVisitSettings = (role: Role): boolean => role === "director";
 
+/* ---- the office edits a visit's checklist before it starts (§7.4, CH3) ---- */
+
+/** the office edits the items (text, «Обязательный», order, «Добавить из шаблона») only before the visit starts */
+export const canEditVisitItems = (role: Role, v: Pick<Visit, "step" | "closed" | "signature">): boolean =>
+  office(role) && (v.step === "scheduled" || v.step === "en_route") && !visitClosed(v);
+/** «Обязательный» on: the office; off — the director only (the company's rule; the server's guard says the same) */
+export const canSetRequired = (role: Role, required: boolean): boolean => (required ? office(role) : role === "director");
+
+/** the visit's items in order (position, then as listed) */
+const ordered = (items: readonly ChecklistItem[]): ChecklistItem[] =>
+  items.map((it, i) => ({ it, i })).sort((a, b) => (a.it.position ?? a.i) - (b.it.position ?? b.i) || a.i - b.i).map((x) => x.it);
+
+/**
+ * «Выше» / «Ниже»: the new positions of the items that move. The list is renumbered 0..n-1 in its new order and only
+ * the items whose position changes are returned (two in a list numbered already — one op each).
+ */
+export function moveItem(items: readonly ChecklistItem[], itemId: ID, dir: -1 | 1): { id: ID; position: number }[] {
+  const list = ordered(items);
+  const at = list.findIndex((i) => i.id === itemId);
+  const to = at + dir;
+  if (at < 0 || to < 0 || to >= list.length) return [];
+  [list[at], list[to]] = [list[to], list[at]];
+  return list.flatMap((it, i) => (it.position === i ? [] : [{ id: it.id, position: i }]));
+}
+
+/** the templates the office may add to a visit: live ones; `added` — the visit already has items of it */
+export function templatesForVisit(v: Pick<Visit, "checklist">, templates: readonly ChecklistTemplate[]): { template: ChecklistTemplate; added: boolean }[] {
+  const used = new Set(v.checklist.map((i) => i.templateId).filter((x): x is ID => !!x));
+  return templates.filter((t) => !t.archivedAt && t.items.length > 0).map((template) => ({ template, added: used.has(template.id) }));
+}
+
+/**
+ * «Добавить из шаблона» (§5, §11.8 №8): the template's items as new items of the visit, after its own, up to the
+ * server's 200. A template the visit already has adds nothing (no doubles).
+ */
+export function itemsFromTemplate(v: Pick<Visit, "checklist">, t: ChecklistTemplate, newId: () => ID, max = 200): ChecklistItem[] {
+  if (t.archivedAt || v.checklist.some((i) => i.templateId === t.id)) return [];
+  const start = Math.max(-1, ...v.checklist.map((c, i) => c.position ?? i)) + 1;
+  const room = Math.max(0, max - v.checklist.length);
+  return checklistFor({ kind: "work" }, [{ ...t, appliesTo: { everyVisit: true, visitKinds: [], catalogItemIds: [] } }], newId)
+    .slice(0, room)
+    .map((c, i) => ({ ...c, position: start + i }));
+}
+
+/* ---- starter templates of modules (§11.11, CH3b) ---- */
+
+/**
+ * The same uuid for the same text (a starter's template id in one company: two phones adding it make one row). Not
+ * cryptographic — four 32-bit FNV-1a hashes with different seeds, shaped as a v4 uuid (the server checks the shape only).
+ */
+export function stableUuid(seed: string): string {
+  const part = (salt: number) => {
+    let h = (0x811c9dc5 ^ salt) >>> 0;
+    for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 0x01000193) >>> 0;
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+    return (Math.imul(h ^ (h >>> 13), 0x297a2d39) >>> 0) ^ (h >>> 16);
+  };
+  const hex = [0x9e37, 0x85eb, 0xc2b2, 0x27d4].map((salt) => (part(salt) >>> 0).toString(16).padStart(8, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${((parseInt(hex[16]!, 16) & 3) | 8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+/** the id of a module's starter template in a company: fixed, so a second add (another phone) is the same row */
+export const starterTemplateId = (companyId: ID, moduleKey: string, key: string): ID => stableUuid(`starter:${companyId}:${moduleKey}:${key}`);
+
+/**
+ * a module's starter is in the company when its template (by the fixed id) is there, or — added before the fixed id —
+ * any template of that module (an archived one too) has its items. Edited or archived, it is the company's own now.
+ */
+export function starterAdded(moduleKey: string, s: Pick<StarterChecklist, "key" | "items">, templates: readonly ChecklistTemplate[], companyId?: ID): boolean {
+  const own = companyId ? starterTemplateId(companyId, moduleKey, s.key) : null;
+  const ids = new Set(s.items.map((i) => i.id));
+  return templates.some((t) => t.id === own || (t.module === moduleKey && t.items.some((i) => ids.has(i.id))));
+}
+
+/** the starters of the given (active) modules the company has not added yet */
+export function startersToAdd(
+  mods: readonly { key: string; checklistTemplates?: readonly StarterChecklist[] }[],
+  templates: readonly ChecklistTemplate[],
+  companyId?: ID,
+): { module: string; starter: StarterChecklist }[] {
+  return mods.flatMap((m) => (m.checklistTemplates ?? []).filter((s) => !starterAdded(m.key, s, templates, companyId)).map((starter) => ({ module: m.key, starter })));
+}
+
+/** a starter as the company's template: a new id, the text in `t`'s language, the module's item ids; clean as the server takes it */
+export function starterTemplate(moduleKey: string, s: StarterChecklist, t: (k: DictKey) => string, id: ID): ChecklistTemplate | null {
+  return cleanTemplate({
+    id,
+    name: t(s.nameKey),
+    items: s.items.map((i) => ({ id: i.id, label: t(i.labelKey), kind: i.kind, required: i.required, ...(i.hintKey ? { hint: t(i.hintKey) } : {}) })),
+    appliesTo: { everyVisit: !!s.everyVisit, visitKinds: [...(s.visitKinds ?? [])], catalogItemIds: [] },
+    ...(validCount(s.minPhotosBefore) ? { minPhotosBefore: s.minPhotosBefore } : {}),
+    ...(validCount(s.minPhotosAfter) ? { minPhotosAfter: s.minPhotosAfter } : {}),
+    module: moduleKey,
+  });
+}
+
 /* ---- text as the server takes it (no control characters — a new line is one; lengths of the columns) ---- */
 export const LABEL_MAX = 300;
 export const TEMPLATE_NAME_MAX = 120;
 export const PHOTOS_PER_ITEM_MAX = 20;
 /** control characters (new lines, tabs) → a space; spaces trimmed; cut to `max` */
 export const cleanText = (s: string | undefined, max: number = LABEL_MAX): string =>
-  (s ?? "").replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").trim().slice(0, max).trim();
+  // line / paragraph separators too (the server's [[:cntrl:]] may take them); cut by characters, never half a pair
+  Array.from((s ?? "").replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, " ").trim()).slice(0, max).join("").trim();
 
 /** a template as the server takes it, or null when it would be refused (no name) */
 export function cleanTemplate(t: ChecklistTemplate): ChecklistTemplate | null {

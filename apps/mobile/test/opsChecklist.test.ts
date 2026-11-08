@@ -84,10 +84,25 @@ describe("ops: the other checklist ops", () => {
     expect(calls[0]).toMatchObject({ table: "visit_checklist_items", how: "update", eq: [["id", "i9"], ["visit_id", "v1"]] });
     expect(typeof calls[0]!.row.deleted_at).toBe("string");
   });
+  it("chk.item.edit (CH3): only the fields it names, text cleaned, on its visit; nothing to send — nothing sent", async () => {
+    await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", label: " Dog\tin the yard " }, "co", "u");
+    await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", required: false, position: 2 }, "co", "u");
+    await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", label: " \n " }, "co", "u");
+    await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", position: 250000.4 }, "co", "u");
+    expect(calls.map((c) => [c.how, c.row, c.eq])).toEqual([
+      ["update", { label: "Dog in the yard" }, [["id", "i9"], ["visit_id", "v1"]]],
+      ["update", { required: false, position: 2 }, [["id", "i9"], ["visit_id", "v1"]]],
+      ["update", { position: 100000 }, [["id", "i9"], ["visit_id", "v1"]]],
+    ]);
+  });
   it("chk.visit.review: «Просмотрено» and «Отменить» (the server writes who)", async () => {
     await applyOp({ k: "chk.visit.review", visitId: "v1", at: AT }, "co", "u");
     await applyOp({ k: "chk.visit.review", visitId: "v1", at: null }, "co", "u");
     expect(calls.map((c) => [c.table, c.row])).toEqual([["visits", { checklist_reviewed_at: AT }], ["visits", { checklist_reviewed_at: null }]]);
+  });
+  it("chk.template.save ifNew (a module's starter): inserted once, never over the office's edits", async () => {
+    await applyOp({ k: "chk.template.save", ifNew: true, template: { id: "t1", name: "Start", items: [], appliesTo: { everyVisit: false, visitKinds: [], catalogItemIds: [] }, module: "fakemod" } }, "co", "u");
+    expect(calls[0]).toMatchObject({ table: "checklist_templates", how: "upsert", opts: { onConflict: "id", ignoreDuplicates: true } });
   });
   it("chk.template.save: the whole template, trimmed", async () => {
     await applyOp({
@@ -121,6 +136,7 @@ describe("unit:outboxDeps — what the checklist ops make", () => {
     expect([...createdBy({ k: "chk.template.save", template: { id: T1, name: "x", items: [], appliesTo: { everyVisit: true, visitKinds: [], catalogItemIds: [] } } })]).toEqual([T1]);
     expect([...createdBy({ k: "chk.item.set", visitId: V1, itemIds: [I1], done: true, at: AT })]).toEqual([]);
     expect([...createdBy({ k: "chk.item.remove", id: I1, visitId: V1 })]).toEqual([]);
+    expect([...createdBy({ k: "chk.item.edit", id: I1, visitId: V1, position: 1 })]).toEqual([]);
     expect([...createdBy({ k: "chk.visit.review", visitId: V1, at: AT })]).toEqual([]);
   });
 });

@@ -19,7 +19,7 @@ import { estimateMessage } from "../src/features/sendEstimate";
 import { portalFromEstimate } from "../src/cloud/portal";
 import { translate, DOC_LANGS, type DocLang, type Lang } from "../src/i18n/translate";
 import { makeSeed } from "../src/data/seed";
-import { DEFAULT_SETTINGS } from "../src/features/estimateDoc";
+import { DEFAULT_SETTINGS, shownQty } from "../src/features/estimateDoc";
 import type { DB, Estimate, EstimateDoc } from "../src/data/types";
 
 const APP_LANGS: Lang[] = ["ru", "en", "es"];
@@ -79,6 +79,19 @@ describe("estimate PDF: in the client's language for every app language", () => 
       estimateHtml(p, {});
     };
     expect(typeof never).toBe("function");
+  });
+
+  it("debt 1: the quantity shown is the one counted (numeric(14,4), half away from zero), in every client language", () => {
+    expect([shownQty("1.23455"), shownQty("2.50"), shownQty(3), shownQty("0.00005"), shownQty("x")]).toEqual(["1.2346", "2.5", "3", "0.0001", "x"]);
+    for (const lang of DOC_LANGS) {
+      const { db, e } = dbWith(lang);
+      const odd = { ...doc, options: [{ ...doc.options[0]!, lines: [{ ...doc.options[0]!.lines[0]!, quantity: "1.23455", unitPriceCents: 10000 }] }] } as EstimateDoc;
+      const p = portalFromEstimate(db, { ...e, doc: odd }, "Acme");
+      const html = estimateHtml(p, { lang: p.lang });
+      expect(html).toContain(">1.2346 hr<");
+      expect(html).not.toContain("1.23455");
+      expect(html).toContain("$123.46");
+    }
   });
 
   it("text the contractor typed goes as typed, in any client language", () => {

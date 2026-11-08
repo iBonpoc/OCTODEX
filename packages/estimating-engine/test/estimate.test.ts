@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   computeOption, computeDeposit, depositTaxPart, refundAllocation, pretaxFromInclusive, purchaseTax,
-  ValidationError, type Line, type TaxContext,
+  ValidationError, discountBps, type Line, type TaxContext,
 } from "../src/estimate.js";
 
 const NO_TAX: TaxContext = { mode: "added_on_top", enabled: false, rateBps: 0 };
@@ -23,6 +23,13 @@ describe("PRD 05 §7.3 — estimate totals", () => {
   });
   it("T3: 2.5 ea × $0.33 = 82.5¢ → $0.83", () => {
     expect(computeOption([L("2.5", 33)], NO_TAX).total).toBe(83);
+  });
+  it("T4b: a percent discount longer than 4 digits counts whole bps, as the server (core_rls T109, debt 3)", () => {
+    // the server keeps round(fraction × 10000) bps and counts floor(sub × bps / 10000 + 0.5) — the same numbers in T109
+    expect([discountBps("0.123456"), discountBps("0.00015"), discountBps("0.05"), discountBps("0.99995")]).toEqual([1235, 2, 500, 10000]);
+    expect(computeOption([L(1, 1000000)], NO_TAX, { kind: "pct", value: "0.123456" }).discount).toBe(123500);
+    expect(computeOption([L(1, 1000000)], NO_TAX, { kind: "pct", value: "0.00015" }).discount).toBe(200);
+    expect(computeOption([L(3, 33333)], NO_TAX, { kind: "pct", value: "0.123456" }).total).toBe(87649);
   });
   it("T4: discount 10%, no tax", () => {
     const r = computeOption([L(150, 1200), L(40, 1100), L(1, 15000)], NO_TAX, { kind: "pct", value: "0.10" });

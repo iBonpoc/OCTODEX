@@ -68,9 +68,40 @@ export interface ModuleEstimateStore extends ModuleStore {
   saveEstimate: (e: { id: string; customerId: string; propertyId: string; title: string; doc: import("@/data/types").EstimateDoc; leadId?: string }) => () => void;
 }
 
+/**
+ * a module's word on an estimate (spec 33 П23.11, C5b): something the core cannot know — e.g. «the measurement changed
+ * after this estimate». The core shows it on the estimate (warn: icon + word) and asks to confirm before the estimate
+ * reaches the client (send, on-site signing, PDF) — never a hard stop. `action` — the module's way out.
+ */
+export interface ModuleNote {
+  /** unique within the module; testID `module-<key>-<id>` */
+  id: string;
+  labelKey: DictKey;
+  hintKey: DictKey;
+  action?: ModuleAction;
+}
+
 /** what a module's load gets: the company's live rows of one of its own tables (deleted_at is null), page by page */
 export interface ModuleRead {
   live(table: string, cols: string): Promise<Record<string, unknown>[]>;
+}
+
+/**
+ * A starter checklist template of a module (docs/specs/08 §2, §11.7 №12, §11.11; step 14 CH3b). The office adds it on
+ * «Компания → Чек-листы» (the text in the app's language at that moment; then it is the company's own and is edited
+ * there). Item ids are the module's fixed uuids: they tell that a company has the starter already (an archived one too)
+ * and keep a visit's snapshot free of doubles. The template's own id is the company's (a new one).
+ */
+export interface StarterChecklist {
+  /** unique within the module; testID `chk-starter-<module>-<key>` */
+  key: string;
+  nameKey: DictKey;
+  items: { id: string; labelKey: DictKey; kind: "check" | "photo"; required: boolean; hintKey?: DictKey }[];
+  everyVisit?: boolean;
+  visitKinds?: ("inspection" | "work")[];
+  /** 1..20: raise the company's minimum of photos (never lower) */
+  minPhotosBefore?: number;
+  minPhotosAfter?: number;
 }
 
 export interface ModuleDef {
@@ -101,6 +132,10 @@ export interface ModuleDef {
    * thing to the lead through the store it is given (moduleOp). The lead form is the core's, unchanged (spec 14).
    */
   leadCreated?: (x: { ref: string; leadId: string }, store: ModuleStore) => (() => void) | null | undefined;
+  /** its words on an open (draft / sent) estimate; `data` — DB.moduleData[key]. Pure: called on every render */
+  estimateNotes?: (e: import("@/data/types").Estimate, db: import("@/data/types").DB, data: unknown) => ModuleNote[];
+  /** starter checklist templates the office may add (optional; a module without them adds none) */
+  checklistTemplates?: StarterChecklist[];
   /** the text of «not saved: the trial is over» (a refused batch of this module's changes, spec 33 П21.1); params {count} */
   rejectedKey?: DictKey;
 }
@@ -162,6 +197,13 @@ const defs = new Map<string, ModuleDef>();
 
 export function registerModule(def: ModuleDef): void {
   if (!/^[a-z][a-z0-9_]{1,30}$/.test(def.key)) throw new Error(`module key ${def.key}: ^[a-z][a-z0-9_]{1,30}$`);
+  // starter items: lowercase uuids (the server's app.valid_checklist_items), unique across the module's starters
+  const ids = (def.checklistTemplates ?? []).flatMap((t) => t.items.map((i) => i.id));
+  const bad = ids.find((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id));
+  if (bad !== undefined || new Set(ids).size !== ids.length) throw new Error(`module ${def.key}: starter item ids — unique lowercase uuids`);
+  const starters = def.checklistTemplates ?? [];
+  if (starters.some((t) => t.items.length < 1 || t.items.length > 100) || new Set(starters.map((t) => t.key)).size !== starters.length)
+    throw new Error(`module ${def.key}: a starter has 1..100 items and its own key`);
   defs.set(def.key, def);
 }
 export const moduleDef = (key: string): ModuleDef | undefined => defs.get(key);
@@ -174,6 +216,12 @@ export const activeModules = (company: Pick<Company, "modules"> | null | undefin
 /** the actions the company's usable modules add to a place (a module not active adds nothing — founder О2) */
 export function placeActions(place: ModulePlace, company: Pick<Company, "modules"> | null | undefined, ctx: PlaceCtx, now = Date.now(), moduleData?: Record<string, unknown>): (ModuleAction & { module: string })[] {
   return activeModules(company, now).flatMap((d) => (d.places?.[place]?.(ctx, moduleData?.[d.key]) ?? []).map((a) => ({ ...a, module: d.key })));
+}
+
+/** the usable modules' words on an estimate; only an open one (draft / sent) — a signed one is a copy, more is a change order */
+export function estimateNotes(db: import("@/data/types").DB, e: import("@/data/types").Estimate, now = Date.now()): (ModuleNote & { module: string })[] {
+  if (e.status !== "draft" && e.status !== "sent") return [];
+  return activeModules(db.company, now).flatMap((d) => (d.estimateNotes?.(e, db, db.moduleData?.[d.key]) ?? []).map((n) => ({ ...n, module: d.key })));
 }
 
 /**

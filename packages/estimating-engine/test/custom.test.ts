@@ -31,6 +31,14 @@ describe("universal estimate", () => {
     expect(r.tax).toBe(0);
     expect(r.total).toBe(73356);
   });
+  it("Н1: a quantity with 5+ decimals counts as the server keeps it (numeric(14,4), half away from zero)", () => {
+    // a $10,000.00 price shows the 5th decimal: 1.23455 → 1.2346 → $12,346.00 (raw: $12,345.50)
+    const o = (q: string) => ({ id: "o", name: "o", lines: [L("material", q, 1000000)] });
+    expect(computeCustomOption(o("1.23455"), S()).total).toBe(1234600); // raw: 1234550
+    expect(computeCustomOption(o("2.00004"), S()).total).toBe(2000000); // raw: 2000040
+    expect(computeCustomOption(o("0.00005"), S()).total).toBe(100); // raw: 50
+    expect(computeCustomOption(o("1.2345"), S()).total).toBe(1234500); // 4 decimals as they are
+  });
   it("selected add-on is included", () => {
     const o = { ...HANDYMAN, lines: HANDYMAN.lines.map((l) => (l.optional ? { ...l, selected: true } : l)) };
     expect(computeCustomOption(o, S()).total).toBe(82356);
