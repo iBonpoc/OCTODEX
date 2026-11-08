@@ -592,6 +592,7 @@ export const ru = {
   "ue.check.review": "Проверьте перед отправкой",
   "ue.check.noPriceHint": "Поставьте цену: иначе клиент получит строку за $0. Деталь не нужна — количество 0.",
   "ue.check.forceHint": "Тестовая цена и строка не из замера уйдут клиенту как есть.",
+  "ue.check.moduleHint": "Смета уйдёт клиенту как есть.",
   "ue.check.edit": "Изменить смету",
   "ue.check.force": "Всё равно отправить",
   "ue.check.forcePdf": "Всё равно скачать PDF",
@@ -2684,6 +2685,9 @@ export const ru = {
   // M8b (spec 33 П23.8): «Смета» from the measurement
   "mod.gutters.est.make": "Смета",
   "mod.gutters.est.update": "Обновить смету",
+  "mod.gutters.est.stale": "Замер изменился после сметы",
+  "mod.gutters.est.staleHint": "Рисунок правили после того, как сделана смета: в ней старые количества.",
+  "mod.gutters.est.staleUpdate": "Обновить из замера",
   "mod.gutters.est.open": "Открыть смету",
   "mod.gutters.est.signed": "Смета подписана",
   "mod.gutters.est.made": "Смета создана из замера",

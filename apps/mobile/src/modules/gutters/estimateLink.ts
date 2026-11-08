@@ -43,6 +43,18 @@ export function estimateOfMeasurement(db: Pick<DB, "estimates">, measurementId: 
   return pool.reduce<Estimate | undefined>((best, e) => (!best || lastWrite(e) >= lastWrite(best) ? e : best), undefined);
 }
 
+/**
+ * C5b (spec 33 П23.11): the measurements this estimate was made of that changed after it — the measurement is a draft
+ * again (a real edit of the drawing, П23.8а №7) and this estimate is still its estimate (a newer one took over → not this
+ * one's business). Only something drawn: an emptied drawing makes no lines.
+ */
+export function staleMeasurements(db: Pick<DB, "estimates" | "moduleData">, e: Estimate): MeasurementRow[] {
+  const g = gutterData(db);
+  return g.measurements.filter(
+    (m) => m.status === "draft" && hasLinesOf(e, m.id) && g.elements.some((x) => x.measurementId === m.id && x.kind === "run") && estimateOfMeasurement(db, m.id)?.id === e.id,
+  );
+}
+
 /** the client's language for the lines of a measurement's estimate (rule 7): the lead's, else the property's client's */
 export function clientLangOf(db: DB, m: Pick<MeasurementRow, "leadId" | "propertyId">): DocLang {
   const prop = m.propertyId ? db.properties.find((p) => p.id === m.propertyId) : undefined;

@@ -7,6 +7,7 @@
  */
 import { moduleHref, type ModuleDef } from "../registry";
 import { asGutterData, guttersOps, latestFor, linkLead, loadGutters } from "./data";
+import { staleMeasurements } from "./estimateLink";
 
 const draw = moduleHref("gutters", "draw");
 /** «Замер» on a lead or a property: its newest measurement opens, else a new one linked to it (S4g, spec 33 П21) */
@@ -50,6 +51,13 @@ const gutters: ModuleDef = {
   load: loadGutters,
   ops: guttersOps,
   rejectedKey: "mod.gutters.rejected",
+  // C5b (spec 33 П23.11): the drawing changed after the estimate → «Обновить из замера» (the canvas's «Обновить смету»)
+  estimateNotes: (e, db) => {
+    const m = staleMeasurements(db, e)[0];
+    return m
+      ? [{ id: "stale", labelKey: "mod.gutters.est.stale", hintKey: "mod.gutters.est.staleHint", action: { id: "stale-update", labelKey: "mod.gutters.est.staleUpdate", icon: "pencil", href: `${draw}?m=${encodeURIComponent(m.id)}&estimate=1` } }]
+      : [];
+  },
   leadCreated: ({ ref, leadId }, store) => linkLead(store, ref, leadId),
   screens: {
     draw: () => require("./draw/DrawScreen").default,
