@@ -245,10 +245,73 @@ export type CancelReason = (typeof CANCEL_REASONS)[number];
 /** a visit the office cancelled: the visit as it was + why and when */
 export type CancelledVisit = Visit & { cancelReason: CancelReason; cancelText?: string; cancelledAt: string };
 
+/** a checklist item: a tick, or a photo (docs/specs/08 §3.2) */
+export type ChecklistItemKind = "check" | "photo";
+/** why an item was skipped (optional): not on the site, the client refused, unsafe, other (docs/specs/08 §3.2) */
+export const NA_REASONS = ["not_on_site", "client_refused", "unsafe", "other"] as const;
+export type NaReason = (typeof NA_REASONS)[number];
+
+/**
+ * One item of a visit's checklist (docs/specs/08 §3.2, §10.1; server: visit_checklist_items, one row each).
+ * Old saved data and old servers have only { id, label, done }: features/checklist.ts reads a missing kind as "check"
+ * and a missing required as true (the app held the signature until every item was ticked).
+ */
 export interface ChecklistItem {
   id: ID;
   label: string;
   done: boolean;
+  kind?: ChecklistItemKind;
+  required?: boolean;
+  /** a hint for the tech from the template */
+  hint?: string;
+  /** the template it came from (a snapshot: the name stays as it was) */
+  templateId?: ID;
+  templateName?: string;
+  /** who ticked and when (the server's word for who; the phone's time) */
+  doneBy?: ID;
+  doneAt?: string;
+  /** skipped («Пропустить»): NOT done; the reason is optional */
+  na?: { reason?: NaReason; text?: string; by?: ID; at: string };
+  /** a photo item: ids of the visit's photos (visit.photos) */
+  photoIds?: ID[];
+  /** who added it (a tech's own item on site is optional; he removes only his own, docs/specs/08 §11.2 №9) */
+  addedBy?: ID;
+  /** order in the visit */
+  position?: number;
+}
+
+/** an item of a template (docs/specs/08 §3.1): it comes into a visit as a snapshot with a new id */
+export interface TemplateItem {
+  id: ID;
+  label: string;
+  kind: ChecklistItemKind;
+  required: boolean;
+  hint?: string;
+}
+
+/** «work» = any visit of a job (install, service, follow-up); «inspection» = an inspection (§11.2 №3) */
+export type ChecklistVisitKind = "inspection" | "work";
+
+/** a company's checklist template (docs/specs/08 §3.1; server: checklist_templates) */
+export interface ChecklistTemplate {
+  id: ID;
+  name: string;
+  items: TemplateItem[];
+  appliesTo: { everyVisit: boolean; visitKinds: ChecklistVisitKind[]; catalogItemIds: ID[] };
+  /** raise the company's minimum of photos for visits with this template (never lower it) */
+  minPhotosBefore?: number;
+  minPhotosAfter?: number;
+  /** a module's starter template (the module's key) */
+  module?: string;
+  archivedAt?: string;
+}
+
+/** the company's photo rules for visits (docs/specs/08 §3.3; server: companies.visit_settings) */
+export interface VisitSettings {
+  photosBeforeRequired: boolean;
+  photosAfterRequired: boolean;
+  minPhotosBefore: number;
+  minPhotosAfter: number;
 }
 
 export interface Photo {
@@ -291,6 +354,9 @@ export interface Visit {
   kind?: VisitKind;
   /** when the office sent the client the time (SMS / email opened from «Сообщить клиенту?», docs/specs/03 §7.1) */
   customerNotifiedAt?: string;
+  /** «Просмотрено» on the «not done» card of the checklist (docs/specs/08 §8; server: visits.checklist_reviewed_at/_by) */
+  checklistReviewedAt?: string;
+  checklistReviewedBy?: ID;
 }
 
 /**
@@ -684,6 +750,11 @@ export interface Company {
   /** add-on modules by key (public.company_modules, docs/specs/33 П15; modules/registry.ts reads them). Written only
    *  through module.enable / module.disable / module.saveSettings, never by company.save; absent = none on this phone. */
   modules?: Record<string, import("@/modules/registry").CompanyModule>;
+  /** photo rules for visits (docs/specs/08 §3.3; features/checklist.ts visitSettings fills the gaps). Written only through
+   *  company.visitSettings, never by company.save; absent = the defaults */
+  visitSettings?: Partial<VisitSettings>;
+  /** the «not done» card looks at visits started from here (docs/specs/08 §11.5 №26; companies.checklist_since) */
+  checklistSince?: string;
   estimate: { validDays: number; depositBps: number | null; terms?: string };
   payment: { zelle?: string; checkPayableTo?: string };
   licenses: CompanyLicense[];
@@ -836,6 +907,10 @@ export interface DB {
   visitPoints?: VisitPoint[];
   /** directions of the business of the company (docs/specs/11-trade.md); archived ones stay for history */
   serviceCategories: ServiceCategory[];
+  /** step 14 (docs/specs/08): the company's checklist templates (absent in old saved data → []; a tech reads none) */
+  checklistTemplates?: ChecklistTemplate[];
+  /** the server has no visit_checklist_items yet (before migration 20261108140000): the store sends the old whole list */
+  checklistLegacy?: boolean;
   tasks: Task[];
   activities: Activity[];
   customers: Customer[];
