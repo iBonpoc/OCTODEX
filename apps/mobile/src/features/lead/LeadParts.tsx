@@ -464,7 +464,7 @@ export function TasksBlock({ subjectType, subjectId }: { subjectType: Task["subj
       <ListCard
         key={x.id}
         density="compact"
-        testID={`task-${x.id}`}
+        testID={`${subjectType}-task-${x.id}`}
         lead={{
           kind: "check",
           on: !!x.doneAt,

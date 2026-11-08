@@ -13,6 +13,7 @@ import {
 } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
 import { canSeeClientMoney, canServe, notServed } from "@/features/clients";
+import { estView } from "@/features/boards";
 import { CloseSheet, ContactActions, LeadHistory, LeadOverview, smsWithBody, TasksBlock } from "@/features/lead/LeadParts";
 import { BookSheet, CallResultSheet, LostOrWaitSheet, NextStepSheet, SnoozeSheet, StatusSheet } from "@/features/lead/LeadSheets";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
@@ -307,7 +308,7 @@ function LeadVisits({ leadId }: { leadId: string }) {
               density="compact"
               testID={`lead-visit-${v.id}`}
               lead={nobody ? { kind: "icon", icon: statusIcon.warn, tone: "warn" } : { kind: "icon", icon: "calendar" }}
-              title={(v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : undefined) ?? t("st.inspection")}
+              title={v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title || t("prop.h.visit") : t("st.inspection")}
               when={[day(v.start), time(v.start), memberLabel(tech, t) ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
               edge={nobody ? "warn" : null}
               onPress={() => router.push(`/visit/${v.id}`)}
@@ -344,10 +345,7 @@ function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew: () => v
               title={e.title || e.number || t("est.detail")}
               when={[e.title ? e.number : undefined, e.sentAt ? `${t("st.sent")} ${day(e.sentAt)}` : undefined, e.viewedAt ? t("ue.viewed", { date: day(e.viewedAt) }) : undefined].filter(Boolean).join(" · ") || undefined}
               value={canSeeClientMoney(role) ? money(e.totalCents) : undefined}
-              status={{
-                tone: e.status === "approved" ? "ok" : e.status === "sent" ? "info" : e.status === "awaiting_countersign" ? "warn" : "neutral",
-                label: t(e.status === "approved" ? "st.approved" : e.status === "sent" ? "st.sent" : e.status === "awaiting_countersign" ? "est.awaitingCountersign" : e.status === "declined" ? "st.declined" : "st.draft"),
-              }}
+              status={{ tone: estView[e.status].s, label: t(estView[e.status].l) }}
               onPress={() => router.push(`/estimate/${e.id}`)}
             />
           ))}
