@@ -123,3 +123,90 @@ export function centsToDecimal(c: number): string {
   const a = Math.abs(c);
   return `${sign}${Math.floor(a / 100)}.${String(a % 100).padStart(2, "0")}`;
 }
+
+/** a / b, whole, half up (b > 0); for cents and for % (×100 by the caller) */
+function divHalfUp(a: number, b: number): number {
+  const s = a < 0 ? -1 : 1;
+  return s * Math.floor((Math.abs(a) * 2 + b) / (2 * b));
+}
+
+/**
+ * «По направлениям» (step 12б, docs/specs/18-money-reports.md §11; spec 11 T4). The app picks what fell in the period and the
+ * direction of each record (an invoice — through its job); the engine counts. One fact per record.
+ */
+export type CategoryFact =
+  /** a lead received in the period; won = became a client */
+  | { kind: "lead"; key: string; won: boolean }
+  /** an estimate sent and/or signed in the period; cents = the signed value (0 unless signed) */
+  | { kind: "estimate"; key: string; sent: boolean; signed: boolean; cents: number }
+  /** an invoice sent in the period; cents = before tax (Revenue, PRD 14 §7) */
+  | { kind: "invoice"; key: string; jobId: string; cents: number };
+export interface CategoryRow {
+  key: string;
+  leads: number;
+  won: number;
+  /** won / leads, whole %, half up; 0 when no leads */
+  wonPct: number;
+  sent: number;
+  signed: number;
+  signedCents: number;
+  /** distinct jobs with an invoice in the period */
+  jobs: number;
+  invoices: number;
+  revenueCents: number;
+  /** revenue / jobs, to the cent, half up; 0 when no jobs */
+  avgCents: number;
+}
+const emptyRow = (key: string): CategoryRow => ({ key, leads: 0, won: 0, wonPct: 0, sent: 0, signed: 0, signedCents: 0, jobs: 0, invoices: 0, revenueCents: 0, avgCents: 0 });
+
+/** rows by direction (biggest revenue first, then most leads, then key; `noneKey` — «без направления» — always last) and the total */
+export function categoryTotals(facts: readonly CategoryFact[], noneKey: string): { rows: CategoryRow[]; total: CategoryRow } {
+  const m = new Map<string, CategoryRow>();
+  const jobs = new Map<string, Set<string>>();
+  const allJobs = new Set<string>();
+  const total = emptyRow("");
+  for (const f of facts) {
+    const r = m.get(f.key) ?? emptyRow(f.key);
+    for (const x of [r, total]) {
+      if (f.kind === "lead") {
+        x.leads += 1;
+        if (f.won) x.won += 1;
+      } else if (f.kind === "estimate") {
+        assertCents(f.cents);
+        if (f.sent) x.sent += 1;
+        if (f.signed) {
+          x.signed += 1;
+          x.signedCents += f.cents;
+        }
+      } else {
+        assertCents(f.cents);
+        x.invoices += 1;
+        x.revenueCents += f.cents;
+      }
+    }
+    if (f.kind === "invoice") {
+      const s = jobs.get(f.key) ?? new Set<string>();
+      s.add(f.jobId);
+      jobs.set(f.key, s);
+      allJobs.add(f.jobId);
+    }
+    m.set(f.key, r);
+  }
+  const finish = (x: CategoryRow, nJobs: number) => {
+    assertCents(x.revenueCents);
+    assertCents(x.signedCents);
+    x.jobs = nJobs;
+    x.wonPct = x.leads > 0 ? divHalfUp(x.won * 100, x.leads) : 0;
+    x.avgCents = nJobs > 0 ? divHalfUp(x.revenueCents, nJobs) : 0;
+    return x;
+  };
+  const rows = [...m.values()]
+    .map((r) => finish(r, jobs.get(r.key)?.size ?? 0))
+    .sort((a, b) =>
+      (a.key === noneKey ? 1 : 0) - (b.key === noneKey ? 1 : 0) ||
+      b.revenueCents - a.revenueCents ||
+      b.leads - a.leads ||
+      (a.key < b.key ? -1 : a.key > b.key ? 1 : 0),
+    );
+  return { rows, total: finish(total, allJobs.size) };
+}

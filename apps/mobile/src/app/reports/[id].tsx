@@ -3,7 +3,7 @@ import { AGING_BUCKETS, type AgingBucket, type CentsTotal } from "@octo/estimati
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { asPaymentPeriod, PAYMENT_PERIODS, type PaymentPeriod } from "@/features/moneyLists";
-import { asReport, canExportCsv, canSeeReports, collectedReport, csvMoney, owedReport, REPEAT, salesReport, sourcesReport, toCsv, UNKNOWN, type ReportId } from "@/features/reports";
+import { asReport, canExportCsv, canSeeReports, categoryReport, collectedReport, NO_CATEGORY, csvMoney, owedReport, REPEAT, salesReport, sourcesReport, toCsv, UNKNOWN, type ReportId } from "@/features/reports";
 import { shareCsv } from "@/features/csvShare";
 import { useDevice } from "@/theme/ThemeProvider";
 import { Button } from "@/ui/controls";
@@ -13,8 +13,9 @@ import { T } from "@/ui/primitives";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { Card, CardList, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { memberName } from "@/features/team";
+import { categoryLabel } from "@/features/serviceCategories";
 
-const TITLE: Record<ReportId, DictKey> = { owed: "rpt.owed.title", collected: "rpt.collected.title", sales: "rpt.sales.title", sources: "rpt.sources.title" };
+const TITLE: Record<ReportId, DictKey> = { owed: "rpt.owed.title", collected: "rpt.collected.title", sales: "rpt.sales.title", sources: "rpt.sources.title", categories: "rpt.cat.title" };
 const PERIOD: Record<PaymentPeriod, DictKey> = { today: "mny.p.today", week: "mny.p.week", month: "mny.p.month", all: "mny.p.all" };
 const AGE: Record<AgingBucket, DictKey> = { current: "rpt.age.current", d1_30: "rpt.age.d1_30", d31_60: "rpt.age.d31_60", d61_90: "rpt.age.d61_90", d90p: "rpt.age.d90p" };
 
@@ -129,6 +130,40 @@ export default function Report() {
           <Divider />
           {line(t("rpt.sales.pct"), `${s.signedPct}%`)}
         </Card>
+      </>
+    );
+  } else if (r === "categories") {
+    const c = categoryReport(db, p);
+    const cat = (k: string) => db.serviceCategories.find((x) => x.id === k);
+    const catName = (k: string) => (k === NO_CATEGORY ? t("dir.none") : categoryLabel(cat(k), t as never));
+    const rows = c.rows.map((x) => [catName(x.key), x.leads, x.won, x.wonPct, x.sent, x.signed, csvMoney(x.signedCents), x.jobs, csvMoney(x.revenueCents), csvMoney(x.avgCents)]);
+    const header = [t("rpt.cat.dir"), t("rpt.cat.leads"), t("rpt.cat.won"), t("rpt.cat.wonPct"), t("rpt.cat.sent"), t("rpt.cat.signedN"), t("rpt.sales.value"), t("rpt.cat.jobs"), t("rpt.cat.revenue"), t("rpt.cat.avg")];
+    // one card per direction: its figures are details of that one direction (rule 12)
+    const card = (x: (typeof c.rows)[number]) => (
+      <ListCard
+        key={x.key}
+        testID={`rpt-cat-${x.key}`}
+        title={catName(x.key)}
+        lead={{ kind: "icon", icon: "toolbox" }}
+        value={moneyWhole(x.revenueCents)}
+        valueLabel={t("rpt.cat.revenue")}
+        tags={cat(x.key)?.archivedAt ? [t("dir.archived")] : undefined}
+        figures={[
+          { label: t("rpt.cat.leads"), value: String(x.leads) },
+          { label: t("rpt.cat.won"), value: t("rpt.cat.wonVal", { won: x.won, pct: x.wonPct }) },
+          { label: t("rpt.cat.sent"), value: String(x.sent) },
+          { label: t("rpt.cat.signedN"), value: t("rpt.cat.signedVal", { n: x.signed, amount: moneyWhole(x.signedCents) }) },
+          { label: t("rpt.cat.jobs"), value: String(x.jobs) },
+          { label: t("rpt.cat.avg"), value: money(x.avgCents) },
+        ]}
+        density="rich"
+      />
+    );
+    body = (
+      <>
+        {head(csvBtn(rows, header))}
+        <View testID="rpt-cat-total">{total(t("rpt.cat.revenue"), c.total.revenueCents, t("rpt.cat.hint"))}</View>
+        {c.rows.length === 0 ? <Empty icon="toolbox" title={t("rpt.cat.empty")} /> : device === "tablet" ? <CardGrid>{c.rows.map(card)}</CardGrid> : <CardList>{c.rows.map(card)}</CardList>}
       </>
     );
   } else {

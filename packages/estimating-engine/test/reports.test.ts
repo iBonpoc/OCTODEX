@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { agingBucket, owedByClient, sumCents, totalsBy } from "../src/index.js";
+import { agingBucket, categoryTotals, owedByClient, sumCents, totalsBy } from "../src/index.js";
 
 describe("sumCents", () => {
   it("adds integer cents", () => expect(sumCents([10825, 1, 0, 999999])).toBe(1010825));
@@ -96,5 +96,53 @@ describe("T45 fixture — the same numbers as supabase/tests/core_rls.sql T45", 
   it("the invoice: paid 18000, owes 12000", () => {
     const [r] = owedByClient([{ customerId: "kim", totalCents: 30000, paidCents: sumCents(pays.map((p) => p.net)), daysOverdue: 9 }]);
     expect(r).toMatchObject({ owesCents: 12000, overdueCents: 12000, buckets: { d1_30: 12000 } });
+  });
+});
+
+describe("categoryTotals («По направлениям», 18 §11)", () => {
+  const NONE = "none";
+  it("leads, estimates, jobs, revenue by direction; conversion and average ticket half up; «none» last", () => {
+    const { rows, total } = categoryTotals(
+      [
+        { kind: "lead", key: "roof", won: true },
+        { kind: "lead", key: "roof", won: false },
+        { kind: "lead", key: "roof", won: false },
+        { kind: "estimate", key: "roof", sent: true, signed: true, cents: 150000 },
+        { kind: "estimate", key: "roof", sent: true, signed: false, cents: 0 },
+        { kind: "invoice", key: "roof", jobId: "j1", cents: 100001 },
+        { kind: "invoice", key: "roof", jobId: "j1", cents: 50000 },
+        { kind: "invoice", key: "roof", jobId: "j2", cents: 50000 },
+        { kind: "invoice", key: NONE, jobId: "j9", cents: 900000 },
+        { kind: "lead", key: "paint", won: true },
+      ],
+      NONE,
+    );
+    expect(rows.map((r) => r.key)).toEqual(["roof", "paint", NONE]);
+    expect(rows[0]).toEqual({ key: "roof", leads: 3, won: 1, wonPct: 33, sent: 2, signed: 1, signedCents: 150000, jobs: 2, invoices: 3, revenueCents: 200001, avgCents: 100001 });
+    expect(rows[1]).toMatchObject({ leads: 1, won: 1, wonPct: 100, jobs: 0, revenueCents: 0, avgCents: 0 });
+    expect(total).toMatchObject({ leads: 4, won: 2, wonPct: 50, sent: 2, signed: 1, jobs: 3, invoices: 4, revenueCents: 1100001, avgCents: 366667 });
+  });
+  it("2 of 3 leads = 67 % (half up); 1 of 8 = 13 %", () => {
+    const lead = (won: boolean) => ({ kind: "lead" as const, key: "a", won });
+    expect(categoryTotals([lead(true), lead(true), lead(false)], NONE).rows[0]!.wonPct).toBe(67);
+    expect(categoryTotals([lead(true), ...Array.from({ length: 7 }, () => lead(false))], NONE).rows[0]!.wonPct).toBe(13);
+  });
+  it("$100.00 over 3 jobs = $33.33; $0.05 over 2 = $0.03", () => {
+    const inv = (jobId: string, cents: number) => ({ kind: "invoice" as const, key: "a", jobId, cents });
+    expect(categoryTotals([inv("1", 10000), inv("2", 0), inv("3", 0)], NONE).rows[0]!.avgCents).toBe(3333);
+    expect(categoryTotals([inv("1", 5), inv("2", 0)], NONE).rows[0]!.avgCents).toBe(3);
+  });
+  it("ties: revenue, then leads, then key", () => {
+    const r = categoryTotals([{ kind: "lead", key: "b", won: false }, { kind: "lead", key: "c", won: false }, { kind: "lead", key: "c", won: false }, { kind: "estimate", key: "a", sent: true, signed: false, cents: 0 }], NONE);
+    expect(r.rows.map((x) => x.key)).toEqual(["c", "b", "a"]);
+  });
+  it("empty", () => {
+    const r = categoryTotals([], NONE);
+    expect(r.rows).toEqual([]);
+    expect(r.total).toMatchObject({ leads: 0, wonPct: 0, jobs: 0, avgCents: 0, revenueCents: 0 });
+  });
+  it("a fraction is a bug", () => {
+    expect(() => categoryTotals([{ kind: "invoice", key: "a", jobId: "1", cents: 1.5 }], NONE)).toThrow();
+    expect(() => categoryTotals([{ kind: "estimate", key: "a", sent: true, signed: true, cents: 0.1 }], NONE)).toThrow();
   });
 });
