@@ -107,7 +107,9 @@ export function LineSheet({
               <TextField type="unit" value={draft.unit} onChangeText={(v) => set({ unit: v })} placeholder="ea" />
             </Labeled>
             <Labeled label={t("ue.price")} flex={1.4}>
-              <MoneyField cents={draft.unitPriceCents} onChange={(c) => set({ unitPriceCents: c })} />
+              <View testID="ue-line-price">
+                <MoneyField cents={draft.unitPriceCents} onChange={(c) => set({ unitPriceCents: c })} />
+              </View>
             </Labeled>
           </RowView>
           <RowView style={{ justifyContent: "space-between" }}>
@@ -140,6 +142,7 @@ export function LineSheet({
             ) : (
               <Button label={t("ue.backToSearch")} icon="search" variant="ghost" size="sm" onPress={() => setDraft(null)} />
             )}
+            <View testID="ue-line-save">
             <Button
               label={t("ue.saveLine")}
               icon="check"
@@ -149,6 +152,7 @@ export function LineSheet({
                 onClose();
               }}
             />
+            </View>
           </RowView>
         </ScrollView>
       )}

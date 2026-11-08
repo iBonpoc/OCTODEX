@@ -2656,4 +2656,14 @@ export const en: Dict = {
   "mod.gutters.photo.measurement": "Measurement photos",
   "mod.gutters.photo.element": "Photos of this part",
   "mod.gutters.photo.open": "Photos",
+  // M8b (spec 33 П23.8): «Смета» from the measurement
+  "mod.gutters.est.make": "Estimate",
+  "mod.gutters.est.update": "Update estimate",
+  "mod.gutters.est.open": "Open estimate",
+  "mod.gutters.est.signed": "Estimate signed",
+  "mod.gutters.est.made": "Estimate made from the measurement",
+  "mod.gutters.est.updated": "Estimate updated: your hand changes stayed",
+  "mod.gutters.est.fromLead": "Estimate from measurement",
+  "mod.gutters.est.noClient": "No client for the estimate: make the measurement a lead or open it from a property",
+  "mod.gutters.est.off": "The module is off: the estimate would not be saved",
 };

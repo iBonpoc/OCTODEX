@@ -222,7 +222,9 @@ export default function EstimateBuilder() {
             </T>
           ) : null}
           <Button label={t("ue.saveSend")} icon="send" full disabled={!ok} onPress={() => save(true)} />
-          <Button label={t("ue.save")} icon="check" variant="secondary" full disabled={!ok} onPress={() => save(false)} />
+          <View testID="ue-save">
+            <Button label={t("ue.save")} icon="check" variant="secondary" full disabled={!ok} onPress={() => save(false)} />
+          </View>
         </View>
       </Grid>
 
