@@ -2,7 +2,7 @@ import { useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
-import { canMarkNoService, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
+import { canMarkNoService, canServe, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { useI18n } from "@/i18n";
 import { Button, IconButton } from "@/ui/controls";
@@ -16,6 +16,7 @@ import { CardGrid, ListCard, ListCardHeader, StatusPicker } from "@/ui/listCard"
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
 import { ListPanel } from "@/ui/listPanel";
+import { Fab } from "@/nav/Fab";
 import { useListPanel } from "@/nav/listPanel";
 import { ClientCardBody } from "@/features/client/ClientCard";
 import { space } from "@octo/design-tokens";
@@ -125,7 +126,25 @@ export default function Clients() {
       right={office ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
       aside={
         openC ? (
-          <ListPanel title={openC.name} onOpen={panel.full} onClose={panel.close}>
+          <ListPanel
+            title={openC.name}
+            outside={panel.outside}
+            // as the client's screen: «Изменить» (office) and «＋» with this client
+            actions={
+              office || canServe(db, openC.id) ? (
+                <>
+                  {office ? (
+                    <View testID="list-panel-edit">
+                      <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${openC.id}`)} />
+                    </View>
+                  ) : null}
+                  {canServe(db, openC.id) ? <Fab placement="header" set="client" ctx={{ customerId: openC.id }} /> : null}
+                </>
+              ) : undefined
+            }
+            onOpen={panel.full}
+            onClose={panel.close}
+          >
             <ClientCardBody key={openC.id} c={openC} />
           </ListPanel>
         ) : undefined

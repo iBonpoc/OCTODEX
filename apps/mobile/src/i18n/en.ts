@@ -1490,6 +1490,7 @@ export const en: Dict = {
   // панель открытой карточки на 1280 (06 «Панель 1280»)
   "card.panel.open": "Open",
   "card.panel.close": "Close panel",
+  "card.panel.outside": "Not in the list — another filter",
   "card.fact.phone": "Phone",
   "card.fact.email": "Email",
   "card.fact.addr": "Address",

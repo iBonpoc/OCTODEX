@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { neighbor, panelId, panelKey } from "@/nav/listPanelRule";
+import { isOutside, neighbor, panelId, panelKey } from "@/nav/listPanelRule";
 
 // the open card beside the list on 1280 (spec 06 «Панель 1280»)
 describe("listPanel", () => {
@@ -39,5 +39,11 @@ describe("listPanel", () => {
     expect(panelKey({ key: "ArrowDown" }, off)).toBeUndefined();
     expect(panelKey({ key: "Escape" }, off)).toBe("close");
     expect(panelKey({ key: "Escape", repeat: true }, free)).toBeUndefined();
+  });
+  it("isOutside: the open card not among the rows is marked; no panel or a row on screen — no mark", () => {
+    expect(isOutside(["a", "b"], "c")).toBe(true);
+    expect(isOutside(["a", "b"], "b")).toBe(false);
+    expect(isOutside([], "a")).toBe(true);
+    expect(isOutside(["a"], undefined)).toBe(false);
   });
 });
