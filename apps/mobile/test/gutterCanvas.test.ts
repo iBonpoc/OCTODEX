@@ -34,6 +34,11 @@ describe("labels never overlap", () => {
     const [l] = layoutLabels([{ id: "x", a: [50, 200], b: [350, 200], w: 40, h: 16, priority: 1 }], { w: 400, h: 400 }, 4);
     expect(Math.abs(l!.y - 200)).toBeGreaterThanOrEqual(8 + 4);
   });
+  it("the canvas: a run's label carries its storey (О3: colour + word)", () => {
+    const d = { runs: [{ id: "r", a: [0, 0] as [number, number], b: [150, 0] as [number, number], attrs: { story: 2 } as never }], downspouts: [] };
+    const s = buildScene(d, { ...opts(), view: fitView([[0, 0], [150, 0]], { w: 390, h: 700 }, 24), lenWithStory: true });
+    expect(s.labels.map((l) => l.text)).toEqual(["12′ 6″ · эт 2"]);
+  });
   it("keepAll (bench): all 150 labels are drawn", () => {
     const { drawing, marks } = benchDrawing();
     const view = fitView(drawing.runs.flatMap((r) => [r.a, r.b]), { w: 390, h: 700 }, 24);

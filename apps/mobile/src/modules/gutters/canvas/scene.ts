@@ -46,6 +46,8 @@ export interface SceneOpts {
   storyText: (n: Story) => string;
   /** extra labels (the bench: up to 150 in all) — anchored at a plan point */
   extra?: { id: string; at: P; text: string; kind: SceneLabel["kind"] }[];
+  /** the canvas: a run's label is «12′ · эт 2» (founder О3: colour + word); the bench marks storeys apart */
+  lenWithStory?: boolean;
   /** the speed bench: draw every label even where it would overlap (the worst load) */
   keepAll?: boolean;
 }
@@ -57,8 +59,8 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
   for (const s of d.downspouts) {
     const r = byId.get(s.runId);
     if (!r) continue;
-    const L = Math.hypot(r.b[0] - r.a[0], r.b[1] - r.a[1]) || 1;
-    const t = Math.min(1, Math.max(0, s.atIn / L));
+    // atIn is along the run's length (typed wins over drawn, geometry.ts)
+    const t = Math.min(1, Math.max(0, s.atIn / (runLengthIn(r) || 1)));
     const at: P = [r.a[0] + (r.b[0] - r.a[0]) * t, r.a[1] + (r.b[1] - r.a[1]) * t];
     ds.push({ id: s.id, at: toScreen(o.view, at), story: storyOf(r.attrs.story), selected: s.id === o.selected });
   }
@@ -71,7 +73,7 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
   };
   d.runs.forEach((r, i) => {
     const s = runs[i]!;
-    add(`len:${r.id}`, s.a, s.b, ftIn(runLengthIn(r)), "len", runLengthIn(r) + (s.selected ? 1e6 : 0));
+    add(`len:${r.id}`, s.a, s.b, o.lenWithStory ? `${ftIn(runLengthIn(r))} · ${o.storyText(s.story)}` : ftIn(runLengthIn(r)), "len", runLengthIn(r) + (s.selected ? 1e6 : 0));
   });
   ds.forEach((s, i) => add(`ds:${s.id}`, s.at, s.at, o.dsText(i + 1), "ds", -1));
   for (const x of o.extra ?? []) {

@@ -1,0 +1,104 @@
+/**
+ * Editing the drawing with a finger (docs/specs/33-gutters-canvas.md П20.4 M4b). Pure: plan inches in, a new drawing
+ * out. Tolerances come from the screen (a finger is ~22 px whatever the zoom) and are passed in as inches.
+ * Prilipanie (snapping) is geometry.ts: to the ends of other lines first, else the direction to 45° steps.
+ */
+import { nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type Drawing, type DrawnDownspout, type DrawnRun, type P } from "../geometry";
+import type { Story } from "./scene";
+
+/** shorter than this is a slip of the finger, not a line */
+export const MIN_RUN_IN = 12;
+
+export const endsOf = (d: Pick<Drawing, "runs">, except?: string): P[] => d.runs.filter((r) => r.id !== except).flatMap((r) => [r.a, r.b]);
+
+/** where a line starts: on an existing end if the finger is near one */
+export const startAt = (d: Drawing, p: P, tolIn: number): P => snapPoint(p, endsOf(d), tolIn);
+
+/** where a line being drawn ends: an existing end wins, else the direction snaps to 45° steps */
+export function endAt(d: Drawing, a: P, p: P, tolIn: number, except?: string): P {
+  const ends = endsOf(d, except).filter((e) => e[0] !== a[0] || e[1] !== a[1]);
+  const s = snapPoint(p, ends, tolIn);
+  const snapped = ends.some((e) => e[0] === s[0] && e[1] === s[1]);
+  return snapped ? s : snapDirection(a, s);
+}
+
+export function addRun(d: Drawing, id: string, a: P, b: P, attrs: DrawnRun["attrs"]): Drawing {
+  if (Math.hypot(b[0] - a[0], b[1] - a[1]) < MIN_RUN_IN) return d;
+  return { ...d, runs: [...d.runs, { id, a, b, attrs: { ...attrs } }] };
+}
+
+export type Hit = { kind: "ds"; id: string } | { kind: "end"; id: string; end: 0 | 1 } | { kind: "run"; id: string };
+
+/** what is under the finger: a downspout, then a line's end (to drag), then a line */
+export function hitTest(d: Drawing, p: P, tolIn: number): Hit | null {
+  let best: { h: Hit; dist: number } | null = null;
+  const take = (h: Hit, dist: number) => {
+    if (dist <= tolIn && (!best || dist < best.dist)) best = { h, dist };
+  };
+  const byId = new Map(d.runs.map((r) => [r.id, r]));
+  for (const s of d.downspouts) {
+    const r = byId.get(s.runId);
+    if (!r) continue;
+    const t = Math.min(1, Math.max(0, s.atIn / (runLengthIn(r) || 1)));
+    take({ kind: "ds", id: s.id }, Math.hypot(p[0] - (r.a[0] + (r.b[0] - r.a[0]) * t), p[1] - (r.a[1] + (r.b[1] - r.a[1]) * t)));
+  }
+  if (best) return (best as { h: Hit }).h;
+  for (const r of d.runs) {
+    take({ kind: "end", id: r.id, end: 0 }, Math.hypot(p[0] - r.a[0], p[1] - r.a[1]));
+    take({ kind: "end", id: r.id, end: 1 }, Math.hypot(p[0] - r.b[0], p[1] - r.b[1]));
+  }
+  if (best) return (best as { h: Hit }).h;
+  const n = nearestRun(d, p, tolIn);
+  return n ? { kind: "run", id: n.runId } : null;
+}
+
+/** drag one end of a line; it sticks to other lines' ends; a typed length no longer matches, so it is dropped */
+export function moveEnd(d: Drawing, runId: string, end: 0 | 1, p: P, tolIn: number): Drawing {
+  const r = d.runs.find((x) => x.id === runId);
+  if (!r) return d;
+  const fixed = end === 0 ? r.b : r.a;
+  const at = endAt(d, fixed, p, tolIn, runId);
+  if (Math.hypot(at[0] - fixed[0], at[1] - fixed[1]) < MIN_RUN_IN) return d;
+  const { lengthIn: _typed, ...rest } = r;
+  const moved: DrawnRun = end === 0 ? { ...rest, a: at } : { ...rest, b: at };
+  // downspouts stay on the line: at most its new length
+  const L = Math.round(Math.hypot(moved.b[0] - moved.a[0], moved.b[1] - moved.a[1]));
+  return {
+    ...d,
+    runs: d.runs.map((x) => (x.id === runId ? moved : x)),
+    downspouts: d.downspouts.map((s) => (s.runId === runId && s.atIn > L ? { ...s, atIn: L } : s)),
+  };
+}
+
+/** a downspout on the nearest line under the finger (none if no line is near) */
+export function addDownspout(d: Drawing, id: string, p: P, tolIn: number, attrs: Omit<DrawnDownspout, "id" | "runId" | "atIn">): Drawing {
+  const n = nearestRun(d, p, tolIn);
+  if (!n) return d;
+  const r = d.runs.find((x) => x.id === n.runId)!;
+  const L = runLengthIn(r);
+  const atIn = Math.min(L, Math.max(0, Math.round(projectOnRun(r, p).atIn)));
+  return { ...d, downspouts: [...d.downspouts, { ...attrs, id, runId: n.runId, atIn } as DrawnDownspout] };
+}
+
+/** remove a line (with its downspouts) or a downspout */
+export function removeElement(d: Drawing, id: string): Drawing {
+  if (d.runs.some((r) => r.id === id)) return { ...d, runs: d.runs.filter((r) => r.id !== id), downspouts: d.downspouts.filter((s) => s.runId !== id) };
+  return { ...d, downspouts: d.downspouts.filter((s) => s.id !== id) };
+}
+
+export function setStory(d: Drawing, id: string, story: Story): Drawing {
+  return { ...d, runs: d.runs.map((r) => (r.id === id ? { ...r, attrs: { ...r.attrs, story } } : r)) };
+}
+
+/** the own «назад» of the canvas (П14.2 №5): snapshots, at most `max` back */
+export interface History { past: Drawing[]; future: Drawing[] }
+export const HISTORY_MAX = 50;
+export const pushHistory = (h: History, prev: Drawing): History => ({ past: [...h.past, prev].slice(-HISTORY_MAX), future: [] });
+export function undo(h: History, cur: Drawing): { h: History; d: Drawing } | null {
+  const prev = h.past[h.past.length - 1];
+  return prev ? { h: { past: h.past.slice(0, -1), future: [cur, ...h.future] }, d: prev } : null;
+}
+export function redo(h: History, cur: Drawing): { h: History; d: Drawing } | null {
+  const next = h.future[0];
+  return next ? { h: { past: [...h.past, cur], future: h.future.slice(1) }, d: next } : null;
+}
