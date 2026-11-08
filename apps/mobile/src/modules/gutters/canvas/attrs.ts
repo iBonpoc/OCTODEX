@@ -178,6 +178,8 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsA
     const qty = n.elbows.reduce((s, e) => s + e.qty, 0);
     n.elbows = [{ style: ELBOW_STYLES[shape][0]!, qty }];
   }
+  // a reducer goes to a smaller size of the same shape: another shape's size, its own or a larger one — gone
+  if (n.reducers?.some((r) => !smallerSizes(shape, n.size).includes(r.to))) delete n.reducers;
   // a wall kit of the other shape: the same wall, this shape's default kit
   if (n.wall && !(WALLS as readonly string[]).includes(n.wall) && !WALLS.some((w) => wallKitsFor(shape, w).includes(n.wall!))) {
     const was = wallOf(a.shape, a.wall).wall;
@@ -205,3 +207,16 @@ export function tapeIn(ft: string, inch: string): number | null {
   const n = Math.round(f * 12 + i);
   return n > 0 && n <= MAX_RUN_IN ? n : null;
 }
+
+/** the sizes a downspout can reduce to: the smaller ones of its shape (DS_SIZES lists go small to large) */
+export function smallerSizes(shape: string, size: string): string[] {
+  const list = DS_SIZES[shape === "round" ? "round" : "rect"];
+  const i = list.indexOf(size);
+  return i > 0 ? list.slice(0, i) : [];
+}
+
+/** standard offsets (engine rule stdOffsetsIn): the panel offers these */
+export const OFFSETS_IN = [1, 2, 4] as const;
+export const DS_HEADS = ["none", "funnel", "conductor"] as const;
+/** the panel's «Своя высота», feet: 0 = by the storey */
+export const MAX_DS_HEIGHT_FT = 60;
