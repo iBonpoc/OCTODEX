@@ -1,18 +1,19 @@
 /**
- * M4: the drawing is kept on the phone (docs/specs/33-gutters-canvas.md П20.2 №5). One draft; the shape is the
- * database's (П19), so M5 replaces this file with module.op and nothing else changes. The toolbar's place is a
- * per-phone convenience.
+ * What the canvas keeps on the phone itself: the toolbar's place (a per-phone convenience) and the one draft M4b kept
+ * here before the measurement went to the core's queue (spec 33 П21 M5a) — moved in once, then forgotten.
  */
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { MeasurementStore } from "./model";
-import { makeLocalStore } from "./draftStore";
+import type { ElementRow, MeasurementRow } from "./model";
+import { DRAFT_KEY, makeLocalStore } from "./draftStore";
 
 const TOOLBAR = "octo.mod.gutters.toolbar.v1";
 
 export type ToolbarPlace = "bottom" | "right" | "left";
 export const TOOLBAR_PLACES: ToolbarPlace[] = ["bottom", "right", "left"];
 
-export const localStore: MeasurementStore = makeLocalStore(AsyncStorage);
+/** the M4b draft, if this phone has one */
+export const takeOldDraft = (): Promise<{ m: MeasurementRow; elements: ElementRow[] } | null> => makeLocalStore(AsyncStorage).load();
+export const forgetOldDraft = () => AsyncStorage.removeItem(DRAFT_KEY).catch(() => {});
 
 export async function loadToolbarPlace(): Promise<ToolbarPlace> {
   try {

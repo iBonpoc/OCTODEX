@@ -6,11 +6,12 @@
  *   its end sticks to it (a corner); the downspout tool puts one on a run; the storey button turns the picked run
  *   to storey 2 (label and colour); «Удалить» → «Отменить» brings it back; «Назад»/«Вперёд»;
  * - the toolbar goes bottom → under the right hand → under the left → bottom;
- * - off: nothing is stored; on (the 7-day trial): the drawing is kept on the phone in the database's shape (П19:
- *   run {a, b}, downspout {runId, atIn}, whole inches) and comes back after a reload.
+ * - off: nothing is stored; on (the 7-day trial): the drawing goes to the store (module.op, spec 33 П21 M5a) in the
+ *   database's shape (П19: run {a, b}, downspout {runId, atIn}, whole inches) and comes back after a reload.
  * Finds things by testID; waits on what it checks.
  */
-const KEY = "octo.mod.gutters.draft.v1";
+// the demo company's data on the phone: the module's slice DB.moduleData.gutters (spec 33 П21)
+const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
   const p = h.page;
@@ -33,7 +34,13 @@ exports.run = async (h) => {
     await p.mouse.up();
     await p.waitForTimeout(200);
   };
-  const stored = () => p.evaluate((k) => JSON.parse(localStorage.getItem(k) || "null"), KEY);
+  /** the one measurement in the store and its elements, or null */
+  const stored = () =>
+    p.evaluate((k) => {
+      const g = (JSON.parse(localStorage.getItem(k) || "null") || {}).db?.moduleData?.gutters;
+      const m = g && g.measurements[0];
+      return m ? { m, elements: g.elements.filter((e) => e.measurementId === m.id) } : null;
+    }, KEY);
 
   await h.go("/company/modules");
   await tid("module-gutters-draw").scrollIntoViewIfNeeded();
@@ -134,6 +141,7 @@ exports.run = async (h) => {
   await p.waitForURL(/\/module\/gutters\/draw$/, { timeout: 5000 });
   await tid("draw-surface").waitFor({ timeout: 8000 });
   h.expect((await tid("draw-not-saved").count()) === 0, "on: no warning");
+  // the canvas opens the saved measurement by its id after the first save (spec 33 П21): the reload below comes back to it
   const b2 = await box();
   const yy = b2.y + b2.height * 0.42;
   await stroke([b2.x + b2.width * 0.25, yy], [b2.x + b2.width * 0.7, yy]);
@@ -141,6 +149,7 @@ exports.run = async (h) => {
   await p.mouse.click(b2.x + b2.width * 0.47, yy + 3);
   await waitFor(async () => (await count("circle")) === 1, "a downspout");
   await tid("draw-saved").waitFor({ timeout: 5000 });
+  await waitFor(async () => ((await stored())?.elements.length ?? 0) === 2, "the store has both (written to the phone)");
   const s = await stored();
   h.expect(!!s && s.m.status === "draft" && s.elements.length === 2, `stored: one run and one downspout (${JSON.stringify(s && s.elements.map((e) => e.kind))})`);
   const run = s.elements.find((e) => e.kind === "run");

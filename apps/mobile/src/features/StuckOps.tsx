@@ -9,6 +9,7 @@ import { space } from "@octo/design-tokens";
 import { router, type Href } from "expo-router";
 import { useStore, type StuckOp } from "@/data/store";
 import type { RejectedOp } from "@/data/outboxRejected";
+import { rejectedLabel } from "@/features/attention";
 import { useI18n } from "@/i18n";
 import { stuckKindKey } from "@/data/syncLink";
 import { Button, StatusChip } from "@/ui/controls";
@@ -98,14 +99,14 @@ function RejectedCard({ r }: { r: RejectedOp }) {
       <View testID={`rejected-${r.id}`} style={{ gap: space[2] }}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
           <T v="body" w="semibold">
-            {t(`att.rejected.${r.what}`)}
+            {t(rejectedLabel(r), r.what === "module" ? { count: r.count ?? 0 } : {})}
             {r.amountCents != null ? ` · ${money(r.amountCents)}` : ""}
           </T>
           {/* rule 2: the status is an icon and a word */}
           <StatusChip status="bad" label={t("att.rejectedChip")} />
         </View>
         <T v="caption" tone="mut">
-          {`${day(r.at)} ${time(r.at)}`} · {t("sync.rejected.hint")}
+          {`${day(r.at)} ${time(r.at)}`} · {t(r.what === "module" ? "sync.rejected.moduleHint" : "sync.rejected.hint")}
         </T>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
           <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} />

@@ -12,6 +12,8 @@ export interface MeasurementRow {
   status: "draft" | "ready";
   propertyId: string | null;
   leadId: string | null;
+  /** the server's (or the phone's last) change time: the newest measurement of a lead opens first (M5b) */
+  updatedAt?: string;
 }
 export type ElementKind = "run" | "downspout";
 export interface ElementRow {

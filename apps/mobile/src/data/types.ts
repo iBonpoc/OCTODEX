@@ -848,4 +848,7 @@ export interface DB {
   payments: Payment[];
   /** employees' saved signatures (wave E2a); absent in old saved data */
   memberSignatures?: MemberSignature[];
+  /** spec 33 П21: each add-on module's own data by module key (its shape is the module's: ModuleDef.load reads it,
+   *  module.op changes it). The core never looks inside. Absent in old saved data → none. */
+  moduleData?: Record<string, unknown>;
 }

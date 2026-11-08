@@ -88,7 +88,7 @@ export default function Triage() {
             <T v="title">{cur.name || t(cur.label, cur.params)}</T>
           </View>
           <T v="body" tone="mut">
-            {cur.name ? t(cur.label, cur.params) : cur.kind === "rejected" ? t("sync.rejected.hint") : ""}
+            {cur.name ? t(cur.label, cur.params) : cur.kind === "rejected" ? t(cur.hint ?? "sync.rejected.hint") : ""}
           </T>
           {curWho ? (
             <T v="body" tone="mut">

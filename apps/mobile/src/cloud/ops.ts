@@ -13,7 +13,8 @@ import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from ".
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
 import { classify } from "@/data/outboxRetry";
-import { moduleDef } from "@/modules/registry";
+import { companyModulesFromRows, moduleDef, moduleState } from "@/modules/registry";
+import { MODULE_INACTIVE } from "@/data/outboxRetry";
 
 export type Op =
   /** at: when the tech left (step en_route), phone time — visits.en_route_at (П3c) */
@@ -252,6 +253,18 @@ export class ServerError extends Error {
 /** A refusal that will not change on retry (permission, constraint, a broken row): counted, dropped after the tries. */
 export class PermanentError extends ServerError {
   override name = "PermanentError";
+}
+
+/** is the company's module active on the server now (= app.module_active)? undefined — the read failed */
+async function moduleActiveOnServer(companyId: string, module: string): Promise<boolean | undefined> {
+  try {
+    // one row (company, module key is unique); read() throws on a failed request → «not known»
+    const { data } = await read(supabase.from("company_modules").select("module_key, enabled, trial_ends_at, paid_until, settings, row_version").eq("company_id", companyId).eq("module_key", module).maybeSingle());
+    const a = moduleState(companyModulesFromRows(data ? [data as Record<string, unknown>] : [])[module]).access;
+    return a === "trial" || a === "paid";
+  } catch {
+    return undefined;
+  }
 }
 
 /** the sign-in expired (401 / PGRST301): renew it quietly before the outbox tries again (review #244) */
@@ -564,7 +577,16 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       const handler = moduleDef(op.module)?.ops;
       // an app without the module (an older version, a module removed): the server would get nothing it knows — a try
       if (!handler) throw new PermanentError(`no handler for ${op.module}.${op.kind}`, 400, "22023");
-      return handler({ kind: op.kind, payload: op.payload }, { companyId: c, userId, run });
+      try {
+        return await handler({ kind: op.kind, payload: op.payload }, { companyId: c, userId, run });
+      } catch (e) {
+        // RLS says 42501 both for «not allowed» and for «the module is not active» (founder О2): after a refusal read the
+        // module's row — not active → module_inactive, and the queue drops this module's waiting changes at once instead of
+        // five tries each (spec 33 П21.1). A failed read says nothing: the refusal stays as it was.
+        if (classify(e) === "refusal" && (await moduleActiveOnServer(c, op.module)) === false)
+          throw new PermanentError(`module ${op.module} is not active`, 403, "42501", MODULE_INACTIVE);
+        throw e;
+      }
     }
     case "module.saveSettings":
       return run(supabase.rpc("module_save_settings", { p_company_id: c, p_module_key: op.module, p_settings: op.settings, p_base_row_version: op.baseRowVersion }));
