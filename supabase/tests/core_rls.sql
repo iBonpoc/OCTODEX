@@ -5127,7 +5127,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
-    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by',
     -- erased (app.erase_personal_rows)
     'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id', 'push_prefs.user_id',
     -- unlinked (set to null)
@@ -5140,7 +5140,7 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
-    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by',
     'member_prefs.user_id', 'user_locations.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
  where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
@@ -8684,5 +8684,203 @@ select tst.ok(not has_table_privilege('anon', 'public.estimate_version_costs', '
 select tst.ok(not exists (select 1 from public.estimate_versions where totals ? 'marginPct'), 'T100 no version anywhere keeps a margin in totals');
 select tst.ok(not exists (select 1 from pg_trigger where tgname = 't40_version_lock' and tgenabled <> 'O'), 'T100 t40_version_lock is on');
 \echo 'T100 an estimate''s margin: only who sees costs reads it; a sent version stays locked ok'
+
+-- ---------------------------------------------------------------- T112–T119: lead intake from outside (docs/specs/34 §3, §3а)
+\set as_service 'reset role; reset request.jwt.claim.sub; set role service_role;'
+:as_super
+grant usage on schema tst to service_role;
+create table tst.intake_tok (k text primary key, id uuid, token text);
+grant all on tst.intake_tok to authenticated, service_role;
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- the Edge Function's call: the hash of the token, of the body and of the IP
+create function tst.intake(p_kind text, p_k text, p_key text, p_payload jsonb, p_ip text default null, p_checks jsonb default '{}')
+returns jsonb language sql as $$
+  select app.intake_lead(p_kind, encode(sha256(convert_to((select token from tst.intake_tok where k = p_k), 'UTF8')), 'hex'), p_key,
+    encode(sha256(convert_to(p_payload::text, 'UTF8')), 'hex'),
+    case when p_ip is not null then encode(sha256(convert_to(p_ip, 'UTF8')), 'hex') end, p_payload, p_checks);
+$$;
+-- T112: who may do what
+:as_owner_a
+insert into tst.intake_tok (k, id, token)
+  select 'form', (r ->> 'id')::uuid, r ->> 'token' from public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'form', '1a000000-0000-0000-0000-000000000001') r;
+insert into tst.intake_tok (k, id, token)
+  select 'hook', (r ->> 'id')::uuid, r ->> 'token' from public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'webhook', '1a000000-0000-0000-0000-000000000001') r;
+select tst.ok((select token ~ '^f[0-9a-f]{32}$' from tst.intake_tok where k = 'form') and (select token ~ '^gxk_[0-9a-f]{64}$' from tst.intake_tok where k = 'hook'),
+  'T112 a form token has 128 bits, a webhook key 256 bits with its prefix');
+select tst.ok((select public_token is not null from public.intake_endpoints where id = (select id from tst.intake_tok where k = 'form'))
+          and (select public_token is null from public.intake_endpoints where id = (select id from tst.intake_tok where k = 'hook')),
+  'T112 the owner reads the form link again; the webhook key is not kept');
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_daily_limit => 1000);
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'hook'), p_daily_limit => 1000);
+do $$ begin
+  perform tst.fails($q$select token_hash from public.intake_endpoints$q$, 'T112 nobody in the app reads the token hash');
+  perform tst.fails($q$insert into public.intake_endpoints (company_id, kind, token_hash, token_hint, source_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'webhook', repeat('a', 64), 'aaaa', '1a000000-0000-0000-0000-000000000001')$q$, 'T112 a way in is made only by the function');
+  perform tst.fails($q$select app.intake_lead('form', 'x', 'k', 'x', null, '{}', '{}')$q$, 'T112 the owner cannot call the pipeline');
+end $$;
+:as_office_a
+do $$ begin
+  perform tst.ok(tst.cnt('select id from public.intake_endpoints') = 0, 'T112 the office does not see the ways in (their links and keys)');
+  perform tst.fails($q$select public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'form', '1a000000-0000-0000-0000-000000000001')$q$, 'T112 the office makes no way in');
+  perform tst.fails($q$select public.intake_endpoint_rotate((select id from tst.intake_tok where k = 'form'))$q$, 'T112 the office changes no link');
+end $$;
+:as_owner_b
+do $$ begin
+  perform tst.ok(tst.cnt('select id from public.intake_endpoints') = 0 and tst.cnt('select id from public.intake_events') = 0, 'T112 company B sees nothing of A');
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => false)$q$, 'T112 company B switches off A''s form');
+end $$;
+reset role; set role anon;
+do $$ begin
+  perform tst.fails($q$select app.intake_lead('form', 'x', 'k', 'x', null, '{}', '{}')$q$, 'T112 anon cannot call the pipeline');
+  perform tst.fails($q$select app.intake_form_info('x')$q$, 'T112 anon cannot read a form''s company');
+  perform tst.fails($q$select id from public.intake_events$q$, 'T112 anon reads no journal');
+end $$;
+:as_super
+select tst.ok(has_function_privilege('service_role', 'app.intake_lead(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.intake_lead(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.intake_make_lead(public.intake_endpoints, uuid, jsonb, boolean)', 'execute')
+          and not has_function_privilege('service_role', 'app.intake_make_lead(public.intake_endpoints, uuid, jsonb, boolean)', 'execute'),
+  'T118 the pipeline runs only for service_role, its steps for nobody (rule 18)');
+
+-- T113: a repeat of an event is the same result, one lead; the same key with another body is refused
+:as_service
+select tst.ok(tst.intake('form', 'form', 'k113', '{"name":"Ann Lee","phone":"(626) 555-0113","message":"Clean gutters","language":"ru","utm":{"utm_source":"gbp","evil":"x"}}', '1.1.1.113') ->> 'status' = 'accepted',
+  'T113 a form request becomes a lead');
+select tst.ok((tst.intake('form', 'form', 'k113', '{"name":"Ann Lee","phone":"(626) 555-0113","message":"Clean gutters","language":"ru","utm":{"utm_source":"gbp","evil":"x"}}', '1.1.1.113') ->> 'repeat')::boolean,
+  'T113 a repeat is a repeat');
+select tst.ok(tst.intake('form', 'form', 'k113', '{"name":"Ann Lee","phone":"(626) 555-0199"}', '1.1.1.113') ->> 'status' = 'invalid', 'T113 the same key with another body is refused');
+select tst.ok(tst.intake('webhook', 'form', 'k113b', '{"name":"X","phone":"(626) 555-0114"}') ->> 'status' = 'unknown', 'T118 a form token does not open the webhook');
+:as_super
+select tst.ok((select count(*) from public.leads where phone = '(626) 555-0113') = 1, 'T113 one lead for the repeated event');
+select tst.ok((select status = 'new' and source_id = '1a000000-0000-0000-0000-000000000001' and language = 'ru' and utm = '{"utm_source":"gbp"}'::jsonb
+                  and intake_event_id is not null and created_by is null and number like 'LEA-%'
+                 from public.leads where phone = '(626) 555-0113'), 'T113 the lead: new, the source of the way in, its language, only known utm keys');
+select tst.ok((select c.preferred_language = 'ru' from public.contacts c join public.leads l on l.id = c.lead_id where l.phone = '(626) 555-0113' and c.is_primary),
+  'T113 the main person keeps Russian (t85)');
+select tst.ok((select status = 'accepted' and lead_id is not null and payload_hash ~ '^[0-9a-f]{64}$' from public.intake_events where event_key = 'k113'),
+  'T113 the journal row points to the lead');
+
+-- T114: the same person's open lead gets the request in its feed (≤ 3 a day), nothing else changes
+:as_service
+select tst.ok(tst.intake('form', 'form', 'k114a', '{"name":"Someone else","phone":"626.555.0113","message":"again"}', '1.1.1.114') ->> 'status' = 'merged', 'T114 a repeat request of an open lead is merged');
+select tst.intake('form', 'form', 'k114b', '{"phone":"6265550113","message":"2"}', '1.1.1.114');
+select tst.intake('form', 'form', 'k114c', '{"phone":"6265550113","message":"3"}', '1.1.1.114');
+select tst.ok(tst.intake('form', 'form', 'k114d', '{"phone":"6265550113","message":"4"}', '1.1.1.114') ->> 'status' = 'merged', 'T114 the 4th is merged too');
+:as_super
+select tst.ok((select count(*) from public.leads where right(regexp_replace(phone, '\D', '', 'g'), 10) = '6265550113') = 1, 'T114 no second lead');
+select tst.ok((select count(*) from public.activities a join public.leads l on l.id = a.subject_id
+                where l.phone = '(626) 555-0113' and a.kind = 'intake' and a.direction = 'in' and a.meta ->> 'unconfirmed' = '1' and a.actor_id is null) = 3,
+  'T114 three unconfirmed feed events a day, not more');
+select tst.ok((select contact_name = 'Ann Lee' and status = 'new' from public.leads where phone = '(626) 555-0113'), 'T114 the name and status of the lead stay');
+select tst.ok((select reason = 'repeat_cap' from public.intake_events where event_key = 'k114d'), 'T114 the capped one is in the journal');
+
+-- T115: a client's phone → a new lead linked to the client; a provider's price; a provider's lead once
+:as_service
+select tst.ok(tst.intake('webhook', 'hook', 'z115', '{"name":"Yuri","phone":"+1 323 555 0101","provider":"thumbtack","provider_ref":"tt-115","cost_cents":"3200"}') ->> 'status' = 'accepted',
+  'T115 a webhook request becomes a lead');
+select tst.ok(tst.intake('webhook', 'hook', 'z115-replay', '{"name":"Yuri","phone":"+1 323 555 0101","provider":"thumbtack","provider_ref":"tt-115","cost_cents":"3200"}') ->> 'status' = 'merged',
+  'T115 the same provider lead with another event key is the same lead');
+select tst.ok(tst.intake('webhook', 'hook', 'z115c', '{"email":"Big@Example.com","provider":"angi","cost_cents":"999999"}') ->> 'status' = 'accepted', 'T115 a lead with a wild price is still taken');
+select tst.ok(tst.intake('webhook', 'hook', 'z115d', '{"name":"No contact","message":"hi"}') ->> 'status' = 'invalid', 'T115 no phone and no email — refused');
+:as_super
+select tst.ok((select customer_id = 'c1a00000-0000-0000-0000-000000000001' and provider = 'thumbtack' and cost_origin = 'provider'
+                 from public.leads where provider_ref = 'tt-115'), 'T115 the lead knows the client ("already a client") and its provider');
+select tst.ok((select k.cost_cents = 3200 and k.origin = 'provider' from public.lead_costs k join public.leads l on l.id = k.lead_id where l.provider_ref = 'tt-115'),
+  'T115 the provider''s price in cents');
+select tst.ok((select parse_status = 'needs_review' and email = 'big@example.com' and not exists (select 1 from public.lead_costs k where k.lead_id = l.id)
+                 from public.leads l where l.provider = 'angi'), 'T115 a price over $500 is dropped, the lead marked for review');
+select tst.ok((select payload is null from public.intake_events where event_key = 'z115d'), 'T115 a refused request keeps no fields');
+
+-- T116: limits — a request is held, never lost; bots and a missing captcha are refused
+:as_service
+do $$ declare i int; begin
+  for i in 1..5 loop
+    perform tst.ok(tst.intake('form', 'form', 'ip116-' || i, jsonb_build_object('phone', '(818) 555-01' || (10 + i)), '9.9.9.9') ->> 'status' = 'accepted', 'T116 five from one IP pass');
+  end loop;
+  perform tst.ok(tst.intake('form', 'form', 'ip116-6', '{"phone":"(818) 555-0199"}', '9.9.9.9') ->> 'status' = 'held', 'T116 the 6th from one IP an hour is held');
+  perform tst.ok(tst.intake('form', 'form', 'ip116-7', '{"phone":"(818) 555-0198"}', '9.9.9.8') ->> 'status' = 'accepted', 'T116 another IP passes');
+  perform tst.ok(tst.intake('form', 'form', 'bot116', '{"phone":"(818) 555-0197"}', '9.9.9.7', '{"bot":true}') ->> 'status' = 'rejected', 'T116 a bot is refused');
+end $$;
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => true);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'cap116', '{"phone":"(818) 555-0196"}', '9.9.9.6') ->> 'status' = 'rejected', 'T116 the captcha is required and missing');
+select tst.ok(tst.intake('form', 'form', 'cap116ok', '{"phone":"(818) 555-0195"}', '9.9.9.6', '{"captcha":"ok"}') ->> 'status' = 'accepted', 'T116 a solved captcha passes');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 1);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'day116', '{"phone":"(818) 555-0194"}', '9.9.9.5') ->> 'status' = 'held', 'T116 over the company''s day limit — held');
+:as_super
+select tst.ok((select payload is not null and lead_id is null from public.intake_events where event_key = 'day116'), 'T116 a held request keeps its fields');
+select tst.ok((select payload is null from public.intake_events where event_key = 'bot116'), 'T116 a bot''s fields are not kept');
+:as_tech_a
+select tst.ok(tst.cnt('select id from public.intake_events') = 0, 'T112 a tech reads no journal');
+select tst.fails($q$select public.intake_event_decide((select id from public.intake_events where event_key = 'day116'), true)$q$, 'T116 a tech accepts nothing');
+:as_office_a
+select tst.ok(tst.cnt($q$select id from public.intake_events where event_key = 'day116'$q$) = 1, 'T112 the office reads the journal');
+select tst.ok(public.intake_event_decide((select id from public.intake_events where event_key = 'day116'), true) ->> 'status' = 'accepted', 'T116 the office accepts a held request');
+select tst.ok(public.intake_event_decide((select id from public.intake_events where event_key = 'day116'), true) ->> 'status' = 'accepted', 'T116 a second accept changes nothing');
+:as_super
+select tst.ok((select count(*) from public.leads where phone = '(818) 555-0194') = 1, 'T116 the accepted request made one lead');
+select tst.ok(not has_column_privilege('authenticated', 'public.intake_events', 'status', 'UPDATE')
+          and not has_table_privilege('authenticated', 'public.intake_events', 'INSERT')
+          and not has_column_privilege('authenticated', 'public.intake_events', 'ip_hash', 'SELECT'), 'T112 the app writes no journal and reads no IP hash');
+-- parallel requests: the advisory lock serialises the count (two sessions are not possible here; the lock is checked to exist)
+select tst.ok(position('pg_advisory_xact_lock' in pg_get_functiondef('app.intake_lead(text, text, text, text, text, jsonb, jsonb)'::regprocedure)) > 0,
+  'T116 the limits are counted under the company''s lock');
+
+-- T117: who gets the lead — the chosen person while active, else the owner
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_daily_limit => 1000);
+:as_super
+update public.companies set lead_default_assignee_id = 'a0000000-0000-0000-0000-000000000002' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.intake('webhook', 'hook', 'z117a', '{"phone":"(213) 555-0117"}');
+:as_super
+update public.memberships set status = 'disabled' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.intake('webhook', 'hook', 'z117b', '{"phone":"(213) 555-0118"}');
+:as_super
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000002' from public.leads where phone = '(213) 555-0117'), 'T117 the chosen person gets the lead');
+select tst.ok((select assigned_to = 'a0000000-0000-0000-0000-000000000001' from public.leads where phone = '(213) 555-0118'), 'T117 a disabled person does not, the owner does');
+update public.memberships set status = 'active' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+update public.companies set lead_default_assignee_id = null where id = 'ca000000-0000-0000-0000-000000000000';
+
+-- T118: a switched-off or rotated way in answers like an unknown one; the page reads only the company's name
+:as_service
+select tst.ok(app.intake_form_info(encode(sha256(convert_to((select token from tst.intake_tok where k = 'form'), 'UTF8')), 'hex')) ->> 'company' is not null,
+  'T118 the page gets the company''s name');
+select tst.ok(app.intake_form_info(repeat('0', 64)) = '{}'::jsonb, 'T118 an unknown token: an empty answer');
+:as_owner_a
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'hook';
+insert into tst.intake_tok (k, token) values ('hook-old', 'gxk_old');
+:as_super
+update tst.intake_tok set token = (select token from tst.intake_tok where k = 'hook') where k = 'hook-old';
+:as_owner_a
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'hook';
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => false);
+:as_service
+select tst.ok(tst.intake('webhook', 'hook-old', 'z118', '{"phone":"(213) 555-0119"}') ->> 'status' = 'unknown', 'T118 an old key stops after a rotation');
+select tst.ok(tst.intake('webhook', 'hook', 'z118', '{"phone":"(213) 555-0119"}') ->> 'status' = 'accepted', 'T118 the new key works');
+select tst.ok(tst.intake('form', 'form', 'f118', '{"phone":"(213) 555-0120"}') ->> 'status' = 'unknown', 'T118 a switched-off form answers like an unknown one');
+select tst.ok(app.intake_form_info(encode(sha256(convert_to((select token from tst.intake_tok where k = 'form'), 'UTF8')), 'hex')) = '{}'::jsonb,
+  'T118 the page of a switched-off form shows nothing');
+
+-- T119: a way in links only this company's source and kind of work
+:as_super
+insert into public.service_categories (id, company_id, name) values ('c1190000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'T119 B work');
+:as_owner_a
+do $$ begin
+  perform tst.fails($q$select public.intake_endpoint_create('ca000000-0000-0000-0000-000000000000', 'form', '1b000000-0000-0000-0000-000000000001')$q$, 'T119 company B''s source in A''s way in');
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_source_id => '1b000000-0000-0000-0000-000000000001')$q$, 'T119 a switch to B''s source');
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'),
+    p_service_category_id => 'c1190000-0000-4000-8000-000000000001')$q$, 'T119 B''s kind of work');
+  perform tst.fails($q$select public.intake_endpoint_create('cb000000-0000-0000-0000-000000000000', 'form', '1b000000-0000-0000-0000-000000000001')$q$, 'T119 A''s owner makes a way into B');
+end $$;
+:as_super
+select app.purge_intake_events();
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select count(*) from public.intake_events where payload is not null and status = 'accepted') > 0, 'T112 the purge keeps fresh requests');
+\echo 'T112–T119 lead intake: rights, repeats, duplicates, client, limits, assignee, ways in ok'
 
 \echo 'ALL TESTS PASSED'
