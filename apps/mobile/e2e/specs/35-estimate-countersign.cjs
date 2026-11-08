@@ -86,7 +86,7 @@ exports.run = async (h) => {
   await h.go("/estimate/e35r");
   await h.page.getByRole("button", { name: "Отозвать ссылку" }).last().click(); await h.page.waitForTimeout(600);
   await h.go(`/p/${tokenOf("e35r")}`);
-  await h.expectText(/Ссылка больше не действует/, "revoked link: not valid");
+  await h.expectText(/This link is no longer valid/, "revoked link: not valid (client's language)");
   await h.go("/estimate/e6");
   h.expect(!(await h.text()).includes("Отозвать ссылку"), "a signed estimate has no «revoke»");
 
