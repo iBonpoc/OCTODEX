@@ -8047,7 +8047,7 @@ select tst.ok((select v.calc_inputs -> 'options' -> 0 -> 'lines' -> 0 -> 'source
                  join public.estimates e on e.current_version_id = v.id where e.title = 'T97 module lines') = '900', 'T97 the tech sees the source of his own draft');
 select tst.ok(not exists (select 1 from public.estimate_versions v join public.estimates e on e.current_version_id = v.id,
                             jsonb_array_elements(v.calc_inputs -> 'options' -> 0 -> 'lines') l, jsonb_object_keys(coalesce(l -> 'source', '{}')) k
-                           where e.title = 'T97 module lines' and k !~ '^(module|key|section|qty|priceCents|name|unit|noPrice|testPrice|gone|revisionId)$'),
+                           where e.title = 'T97 module lines' and k !~ '^(module|key|section|qty|priceCents|name|unit|noPrice|testPrice|gone|revisionId|measurementId)$'),
               'T97 the source has only the module''s words: no cost, markup or supplier field');
 :as_tech2_a
 select tst.ok(tst.cnt($q$select 1 from public.estimate_versions v join public.estimates e on e.id = v.estimate_id where e.title = 'T97 module lines'$q$) = 0,

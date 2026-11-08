@@ -2656,6 +2656,14 @@ export const ru = {
   "mod.gutters.photo.measurement": "Фото замера",
   "mod.gutters.photo.element": "Фото элемента",
   "mod.gutters.photo.open": "Фото",
+  // M8b (spec 33 П23.8): «Смета» from the measurement
+  "mod.gutters.est.make": "Смета",
+  "mod.gutters.est.update": "Обновить смету",
+  "mod.gutters.est.open": "Открыть смету",
+  "mod.gutters.est.signed": "Смета подписана",
+  "mod.gutters.est.made": "Смета создана из замера",
+  "mod.gutters.est.updated": "Смета обновлена: правленое руками осталось",
+  "mod.gutters.est.fromLead": "Смета из замера",
 } as const;
 
 export type DictKey = keyof typeof ru;

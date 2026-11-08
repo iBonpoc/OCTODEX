@@ -140,6 +140,7 @@ export function LineSheet({
             ) : (
               <Button label={t("ue.backToSearch")} icon="search" variant="ghost" size="sm" onPress={() => setDraft(null)} />
             )}
+            <View testID="ue-line-save">
             <Button
               label={t("ue.saveLine")}
               icon="check"
@@ -149,6 +150,7 @@ export function LineSheet({
                 onClose();
               }}
             />
+            </View>
           </RowView>
         </ScrollView>
       )}

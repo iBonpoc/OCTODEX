@@ -15,7 +15,6 @@ import { space } from "@octo/design-tokens";
 import type { PartQty } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import type { CatalogItem } from "@/data/types";
-import { attributesLine } from "@/features/catalogMatch";
 import { catalogUnitPrice } from "@/features/estimateDoc";
 import { useI18n, type DictKey } from "@/i18n";
 import { moduleState } from "@/modules/registry";
@@ -25,7 +24,7 @@ import { CardGrid, ListCard } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, CardList, ListRow, Screen } from "@/ui/surfaces";
-import { bindable, bindItem, findItem, laborRows, materialRows, matchAttrs, missingItems, PART_WORDS, WORK_WORDS, type PriceRow } from "../prices";
+import { bindable, bindItem, findItem, laborRows, materialRows, missingItems, partName, type PriceRow } from "../prices";
 
 const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
 export default function GutterPricesScreen() {
@@ -49,17 +48,7 @@ export default function GutterPricesScreen() {
   const [bindFor, setBindFor] = useState<PriceRow | null>(null);
 
   /** the item's name in the app's language at the moment it is made: company data from then on (the owner renames it) */
-  const nameOf = (p: PartQty): string => {
-    if (p.kind === "labor") {
-      const w = p.attrs.work ?? "";
-      const word = WORK_WORDS.has(w) ? t(k(`w.${w}`)) : w;
-      return p.attrs.story ? `${word} · ${t("mod.gutters.story", { n: p.attrs.story })}` : word;
-    }
-    const { part, ...rest } = matchAttrs(p);
-    const word = part && PART_WORDS.has(part) ? t(k(`p.${part}`)) : part ?? p.key;
-    const line = attributesLine(rest);
-    return line ? `${word} · ${line}` : word;
-  };
+  const nameOf = (p: PartQty): string => partName(t, p);
   const missing = useMemo(() => missingItems(companyId, [...labor, ...parts], catalog, nameOf), [companyId, labor, parts, catalog, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
   /** ids made from this page and not taken back: a second press before the page redraws makes nothing and never puts

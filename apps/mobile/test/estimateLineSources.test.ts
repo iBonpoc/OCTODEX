@@ -73,7 +73,7 @@ describe("C4: source строки модуля", () => {
   it("в source только слова модуля и цена продажи — ни себестоимости, ни наценки, ни поставщика (её читает мастер)", () => {
     const priced = list(1000).map((it) => (it.kind === "material" ? { ...it, costCents: 400, vendorTaxBps: 1000, markupBps: 5000 } : it));
     const lines = linesFromParts(parts, priced, name, uid, "rev1");
-    const allowed = new Set(["module", "key", "section", "qty", "priceCents", "name", "unit", "noPrice", "testPrice", "gone", "revisionId"]);
+    const allowed = new Set(["module", "key", "section", "qty", "priceCents", "name", "unit", "noPrice", "testPrice", "gone", "revisionId", "measurementId"]);
     for (const l of lines) {
       for (const k of Object.keys(l.source!)) expect(allowed.has(k), k).toBe(true);
       expect(l.source!.priceCents).toBe(l.unitPriceCents); // the sell price, the line's own

@@ -45,6 +45,8 @@ export interface LineSource extends CoreLineSource {
   gone?: true;
   /** the measurement revision the line was made from (M8b) */
   revisionId?: string;
+  /** the measurement the line was made from (M8b): «Обновить смету» of that measurement finds its lines by it */
+  measurementId?: string;
 }
 export type ModuleLine = Omit<CustomLine, "source"> & { source?: LineSource };
 
@@ -60,7 +62,7 @@ export const billQty = (q: string, unit: string) => (unit === "ft" ? dec(q).toDe
  * The module's lines for the parts of one measurement: one per item (the same item's parts add up — end caps left and
  * right), in section order. `name(p)` — the part's name in the app's language when no item has one; `uid()` — new ids.
  */
-export function linesFromParts(parts: readonly PartQty[], catalog: readonly CatalogItem[], name: (p: PartQty) => string, uid: () => string, revisionId?: string): ModuleLine[] {
+export function linesFromParts(parts: readonly PartQty[], catalog: readonly CatalogItem[], name: (p: PartQty) => string, uid: () => string, revisionId?: string, measurementId?: string): ModuleLine[] {
   const byKey = new Map<string, { part: PartQty; qty: ReturnType<typeof dec> }>();
   for (const p of parts) {
     if (p.use === "purchase") continue; // the supplier order's (stage 2), never the client's price
@@ -92,7 +94,7 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
       ...(it ? { catalogItemId: it.id } : {}),
       source: {
         module: "gutters", key, section: part.section, qty: quantity, priceCents, name: lineName, unit: part.unit,
-        ...(noPrice ? { noPrice: true as const } : {}), ...(it?.placeholder ? { testPrice: true as const } : {}), ...(revisionId ? { revisionId } : {}),
+        ...(noPrice ? { noPrice: true as const } : {}), ...(it?.placeholder ? { testPrice: true as const } : {}), ...(revisionId ? { revisionId } : {}), ...(measurementId ? { measurementId } : {}),
       },
     };
   });
