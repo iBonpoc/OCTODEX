@@ -10,7 +10,7 @@ import type { CatalogItem, DB, Supplier } from "../src/data/types";
 import { catalogUnitPrice } from "../src/features/estimateDoc";
 import {
   canSeeSuppliers, cleanSupplier, cleanSupplierLink, emailBad, expenseVendors, historyFromRow, historyOf, itemsOfSupplier,
-  itemsWithOtherTax, localHistoryEntry, pickSupplier, supplierFromRow, supplierName, supplierToRow,
+  itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory, pickSupplier, supplierFromRow, supplierName, supplierToRow,
 } from "../src/features/suppliers";
 
 const sup = (over: Partial<Supplier> = {}): Supplier => ({ id: "s1", name: "ABC Supply (test)", active: true, ...over });
@@ -95,7 +95,7 @@ describe("unit:suppliers — history", () => {
     expect(localHistoryEntry(a, a, "h1", "2026-11-08T12:00:00Z")).toBeNull();
     expect(localHistoryEntry(a, { ...a, markupBps: 2000 }, "h1", "2026-11-08T12:00:00Z")).toBeNull();
     expect(localHistoryEntry(a, { ...a, costCents: 1100 }, "h1", "2026-11-08T12:00:00Z")).toEqual({
-      id: "h1", itemId: "i1", supplierId: "s1", costCents: 1100, vendorTaxBps: 0, source: "manual", at: "2026-11-08T12:00:00Z",
+      id: "h1", itemId: "i1", supplierId: "s1", costCents: 1100, vendorTaxBps: 0, source: "manual", at: "2026-11-08T12:00:00Z", local: true,
     });
     expect(localHistoryEntry(undefined, mat({ costCents: undefined, vendorTaxBps: undefined }), "h", "t")).toBeNull();
   });
@@ -111,6 +111,32 @@ describe("unit:suppliers — history", () => {
     } as DB;
     expect(historyOf(db, { itemId: "i1" }, 5).map((h) => h.id)).toEqual(["b", "a"]);
     expect(historyOf(db, { supplierId: "s1" }, 1).map((h) => h.id)).toEqual(["b"]);
+  });
+});
+
+describe("unit:suppliers — the server's rows on open (director's check of #459 Н4)", () => {
+  const base = () =>
+    ({
+      ...makeSeed(),
+      catalog: [mat({ supplierId: "s1" }), mat({ id: "i2" })],
+      costHistory: [
+        { id: "loc", itemId: "i1", supplierId: "s1", source: "manual", at: "2026-11-08T12:00:00Z", costCents: 1100, local: true },
+        { id: "old", itemId: "i1", supplierId: "s1", source: "manual", at: "2026-11-01T00:00:00Z", costCents: 900 },
+        { id: "other", itemId: "i2", source: "manual", at: "2026-11-07T00:00:00Z", costCents: 5 },
+      ],
+    }) as DB;
+  it("an item's rows replace the phone's for that item (its own local row too), the rest stays", () => {
+    const rows = [{ id: "srv", itemId: "i1", supplierId: "s1", source: "manual", at: "2026-11-08T12:00:01Z", costCents: 1100 }];
+    expect(mergeHistory(base(), { itemId: "i1" }, rows).map((h) => h.id)).toEqual(["srv", "other"]);
+  });
+  it("a full read keeps the history read on open; not for whom costs are gone", () => {
+    const cur = base();
+    expect(keepCostHistory({ ...cur, costHistory: [] }, cur).costHistory).toHaveLength(3);
+    expect(keepCostHistory({ ...cur, costHistory: [], costsVisible: false }, cur).costHistory).toEqual([]);
+  });
+  it("a supplier's rows: its rows and the local rows of its items are replaced", () => {
+    const rows = [{ id: "srv", itemId: "i1", supplierId: "s1", source: "manual", at: "2026-11-08T12:00:01Z", costCents: 1100 }];
+    expect(mergeHistory(base(), { supplierId: "s1" }, rows).map((h) => h.id)).toEqual(["srv", "other"]);
   });
 });
 

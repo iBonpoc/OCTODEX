@@ -65,6 +65,28 @@ create policy suppliers_update on public.suppliers for update to authenticated
   using (app.has_role(company_id, array['owner', 'admin', 'office']))
   with check (app.has_role(company_id, array['owner', 'admin', 'office']));
 
+-- the key never changes (director's check of #459 Н3): the upsert above may send it, but a supplier's id is what items,
+-- the history and other phones' queues point to. The same for a cost row's item (catalog_item_costs, #383).
+create or replace function app.tg_keep_id()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  new.id := old.id;
+  return new;
+end;
+$$;
+create or replace function app.tg_keep_item_id()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  new.item_id := old.item_id;
+  return new;
+end;
+$$;
+revoke all on function app.tg_keep_id(), app.tg_keep_item_id() from public, anon, authenticated;
+create trigger t12_keep_id before update on public.suppliers
+  for each row execute function app.tg_keep_id();
+create trigger t12_keep_item_id before update on public.catalog_item_costs
+  for each row execute function app.tg_keep_item_id();
+
 -- ---- catalog_items: the main supplier --------------------------------------------------------------------------------
 -- MATCH SIMPLE: no supplier (null) is not checked; a supplier must be of the item's own company (T144). The table-wide
 -- grant select, insert, update to authenticated (20261106070000) covers the new columns; rights do not change
@@ -83,19 +105,27 @@ create index catalog_items_supplier_idx on public.catalog_items (company_id, sup
 
 -- who links an item to a supplier: owner / admin / office only (security check SUP1 №2). Sales edits the price list
 -- (catalog_items_update = is_staff) but reads no suppliers: whatever it sends for supplier_id / supplier_sku is ignored
--- (an update keeps the stored link, an insert gets none), and the name of a linked item (`vendor`) stays the supplier's.
--- No JWT (a migration, a server writer) — as sent. A refusal would stop an old sales phone's whole save: ignored instead.
+-- (an update keeps the stored link, an insert gets none). No JWT (a migration, a server writer) — as sent. A refusal
+-- would stop an old sales phone's whole save: ignored instead.
+-- A linked item's `vendor` is always its supplier's name, for every role (director's check of #459 Н2: an old owner
+-- phone typing «Lowes» would make vendor and supplier_id disagree).
 create or replace function app.tg_catalog_supplier_guard()
 returns trigger language plpgsql security definer set search_path = '' as $$
+declare
+  v text;
 begin
-  if auth.uid() is null or app.has_role(new.company_id, array['owner', 'admin', 'office']) then return new; end if;
-  if tg_op = 'INSERT' then
-    new.supplier_id := null;
-    new.supplier_sku := null;
-  else
-    new.supplier_id := old.supplier_id;
-    new.supplier_sku := old.supplier_sku;
-    if old.supplier_id is not null then new.vendor := old.vendor; end if;
+  if auth.uid() is not null and not app.has_role(new.company_id, array['owner', 'admin', 'office']) then
+    if tg_op = 'INSERT' then
+      new.supplier_id := null;
+      new.supplier_sku := null;
+    else
+      new.supplier_id := old.supplier_id;
+      new.supplier_sku := old.supplier_sku;
+    end if;
+  end if;
+  if new.supplier_id is not null then
+    select s.name into v from public.suppliers s where s.company_id = new.company_id and s.id = new.supplier_id;
+    if v is not null then new.vendor := v; end if;
   end if;
   return new;
 end;
@@ -103,6 +133,18 @@ $$;
 revoke all on function app.tg_catalog_supplier_guard() from public, anon, authenticated;
 create trigger t20_supplier_guard before insert or update on public.catalog_items
   for each row execute function app.tg_catalog_supplier_guard();
+-- a renamed supplier: the name of its items follows (sales, the tech and old phones read only `vendor`)
+create or replace function app.tg_supplier_renamed()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  update public.catalog_items i set vendor = new.name
+   where i.company_id = new.company_id and i.supplier_id = new.id and i.vendor is distinct from new.name;
+  return null;
+end;
+$$;
+revoke all on function app.tg_supplier_renamed() from public, anon, authenticated;
+create trigger t96_supplier_renamed after update of name on public.suppliers
+  for each row when (old.name is distinct from new.name) execute function app.tg_supplier_renamed();
 
 -- ---- catalog_cost_history ---------------------------------------------------------------------------------------------
 create table public.catalog_cost_history (

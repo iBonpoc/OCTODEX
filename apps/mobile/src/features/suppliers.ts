@@ -122,7 +122,7 @@ export function localHistoryEntry(
   if (cost === undefined && tax === undefined) return null;
   if (prev && prev.costCents === cost && prev.vendorTaxBps === tax) return null;
   return {
-    id, itemId: it.id, source: "manual", at,
+    id, itemId: it.id, source: "manual", at, local: true,
     ...(it.supplierId ? { supplierId: it.supplierId } : {}),
     ...(cost !== undefined ? { costCents: cost } : {}),
     ...(tax !== undefined ? { vendorTaxBps: tax } : {}),
@@ -174,4 +174,24 @@ export function expenseVendors(db: DB, usual: readonly string[]): string[] {
     if (!out.some((x) => x.toLowerCase() === n.toLowerCase())) out.push(n);
   }
   return out.slice(0, 8);
+}
+
+/**
+ * The server's rows of one item / one supplier into the phone's history: they replace what the phone holds for that
+ * scope (its own local rows of a save included — the server wrote its own), the rest stays. Newest first.
+ */
+export function mergeHistory(db: DB, where: { itemId?: string; supplierId?: string }, rows: CostHistoryEntry[]): CostHistoryEntry[] {
+  const items = where.supplierId ? new Set(itemsOfSupplier(db, where.supplierId).map((x) => x.id)) : null;
+  const inScope = (h: CostHistoryEntry) =>
+    where.itemId ? h.itemId === where.itemId : h.supplierId === where.supplierId || (!!h.local && !!items?.has(h.itemId));
+  const ids = new Set(rows.map((r) => r.id));
+  return [...rows, ...(db.costHistory ?? []).filter((h) => !inScope(h) && !ids.has(h.id))].sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0));
+}
+
+/**
+ * A full read of the company brings no history (the screens read it when opened): keep what the phone has read, so a
+ * reload right after does not blank the open screen. Not for whom the server no longer gives costs.
+ */
+export function keepCostHistory(next: DB, cur: DB): DB {
+  return next.costsVisible === false ? { ...next, costHistory: [] } : { ...next, costHistory: cur.costHistory ?? [] };
 }

@@ -3,7 +3,7 @@
  * their costs; archive with «Отменить» (rule 5). Owner, admin, office only (nav/roles.ts). «new» (or any id
  * not on the phone) — a new supplier.
  */
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -40,6 +40,13 @@ export default function SupplierScreen() {
   const ok = s.name.trim() !== "" && !emailBad(s.email);
   const costs = store.db.costsVisible !== false;
   const items = found ? itemsOfSupplier(store.db, found.id) : [];
+  // spec 36: the newest history rows of this supplier from the server, when opened (director's check of #459 Н4)
+  const loadHistory = store.loadCostHistory;
+  useEffect(() => {
+    if (found && costs) loadHistory({ supplierId: found.id });
+    // once per supplier: the store's functions are not stable across renders, the read would loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [found?.id, costs]);
 
   const save = () => {
     const undoSave = store.saveSupplier(s);

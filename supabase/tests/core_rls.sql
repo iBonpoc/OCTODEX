@@ -10935,6 +10935,10 @@ insert into public.suppliers (id, company_id, name, phone, is_active) values
   ('51430000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T143 Supply (test)', '555-0101', true)
   on conflict (id) do update set id = excluded.id, company_id = excluded.company_id, name = excluded.name, phone = excluded.phone, is_active = excluded.is_active;
 select tst.ok((select phone = '555-0101' from public.suppliers where id = '51430000-0000-4000-8000-000000000001'), 'T143 the app''s upsert changes a supplier');
+-- the key never changes (director's check of #459 Н3)
+update public.suppliers set id = '51430000-0000-4000-8000-0000000000ff' where id = '51430000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.suppliers where id = '51430000-0000-4000-8000-000000000001'$q$) = 1
+          and tst.cnt($q$select 1 from public.suppliers where id = '51430000-0000-4000-8000-0000000000ff'$q$) = 0, 'T143 a supplier''s id never changes');
 select tst.blocked($q$delete from public.suppliers where id = '51430000-0000-4000-8000-000000000001'$q$, 'T143 nobody deletes a supplier (archive only)');
 :as_tech_a
 select tst.ok(tst.cnt($q$select 1 from public.suppliers$q$) = 0, 'T143 the tech reads no supplier');
@@ -10969,6 +10973,14 @@ select tst.ok((select supplier_id = '51430000-0000-4000-8000-000000000001' and s
 select tst.fails($q$update public.catalog_items set supplier_id = '51440000-0000-4000-8000-0000000000b1' where id = '51440000-0000-4000-8000-000000000001'$q$,
   'T144 a supplier of another company is refused');
 select tst.fails($q$update public.catalog_items set supplier_sku = E'a\nb' where id = '51440000-0000-4000-8000-000000000001'$q$, 'T144 a line break in the SKU');
+-- an old owner phone types another vendor on a linked item: the supplier's name stays (director's check of #459 Н2)
+update public.catalog_items set vendor = 'Lowes' where id = '51440000-0000-4000-8000-000000000001';
+select tst.ok((select vendor = 'T143 Supply (test)' from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'),
+  'T144 a linked item''s vendor is always its supplier''s name');
+update public.suppliers set name = 'T143 Supply renamed (test)' where id = '51430000-0000-4000-8000-000000000001';
+select tst.ok((select vendor = 'T143 Supply renamed (test)' from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'),
+  'T144 a renamed supplier: its items carry the new name');
+update public.suppliers set name = 'T143 Supply (test)' where id = '51430000-0000-4000-8000-000000000001';
 -- sales edits the price list (is_staff) without reading suppliers: a save that does not send the columns keeps them
 :as_sales_a
 insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents)
@@ -11025,6 +11037,9 @@ select tst.ok((select supplier_id = '51430000-0000-4000-8000-000000000001' from 
   'T145 …the earlier row keeps the earlier supplier');
 :as_office_a
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 3, 'T145 the office reads the history');
+-- a cost row never moves to another item (director's check of #459 Н3)
+update public.catalog_item_costs set item_id = '99000000-0000-4000-8000-000000000001' where item_id = '51440000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.catalog_item_costs where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 1, 'T145 a cost row keeps its item');
 select tst.fails($q$insert into public.catalog_cost_history (company_id, item_id, unit_cost_cents) values ('ca000000-0000-0000-0000-000000000000', '51440000-0000-4000-8000-000000000001', 1)$q$,
   'T145 the office writes no history itself');
 select tst.blocked($q$update public.catalog_cost_history set unit_cost_cents = 1 where item_id = '51440000-0000-4000-8000-000000000001'$q$, 'T145 …changes none');
@@ -11054,6 +11069,9 @@ select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_cost_history()', 'execute')
           and not has_function_privilege('authenticated', 'app.tg_cost_history_supplier()', 'execute')
           and not has_function_privilege('authenticated', 'app.tg_catalog_supplier_guard()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_supplier_renamed()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_keep_id()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_keep_item_id()', 'execute')
           and not has_function_privilege('anon', 'app.sup_text_ok(text, integer)', 'execute')
           and not has_table_privilege('authenticated', 'public.suppliers', 'delete')
           and not has_table_privilege('authenticated', 'public.catalog_cost_history', 'insert')

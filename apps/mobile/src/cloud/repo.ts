@@ -12,6 +12,7 @@ import type { DbRole } from "./auth";
 import { supabase } from "./client";
 import { legacyForEstimate } from "./legacyTotals";
 import { historyFromRow, supplierFromRow } from "@/features/suppliers";
+import type { CostHistoryEntry } from "@/data/types";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -179,23 +180,15 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     }),
   ]);
   const chkByVisit = chkRows ? itemsByVisit(chkRows) : null;
-  // spec 36 (migration 20261110000000): suppliers (owner / admin / office by RLS; others read none) and the history of
-  // costs (only who sees costs; the newest 2000). A server before it has no tables: no suppliers, nothing written
-  const [supplierRows, historyRows] = await Promise.all([
-    live<Row>("suppliers", "id, name, contact_name, phone, email, account_number, address, payment_terms, terms_note, purchase_tax_bps, notes, is_active")
-      .then((r) => r as Row[] | null, (e) => {
-        if (isMissingTable(e)) return null;
-        throw e;
-      }),
-    pages<Row>(
-      () => supabase.from("catalog_cost_history").select("id, item_id, supplier_id, unit_cost_cents, vendor_tax_bps, source, at").eq("company_id", companyId),
-      [{ col: "at", asc: false }, { col: "id", asc: false }],
-      2000,
-    ).catch((e) => {
-      if (isMissingTable(e)) return [] as Row[];
+  // spec 36 (migration 20261110000000): suppliers (owner / admin / office by RLS; others read none). The history of
+  // costs is not read here: the item and the supplier screens read their own newest rows when opened (loadCostHistory;
+  // a company-wide cap would drop the old history of a big price list — director's check of #459 Н4). A server
+  // before the migration has no table: no suppliers, nothing written
+  const supplierRows = await live<Row>("suppliers", "id, name, contact_name, phone, email, account_number, address, payment_terms, terms_note, purchase_tax_bps, notes, is_active")
+    .then((r) => r as Row[] | null, (e) => {
+      if (isMissingTable(e)) return null;
       throw e;
-    }),
-  ]);
+    });
   // wave 7б-2 (migration 20261106210000): the company flag, who shares, the last points of open visits. Each read on its
   // own: before the migration (or if a read fails) the location stays off and the rest of the company still loads.
   const [locAllowed, shareRows, pointRows] = await Promise.all([
@@ -689,7 +682,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     ...(chkByVisit ? {} : { checklistLegacy: true }),
     moduleData,
     suppliers: (supplierRows ?? []).map(supplierFromRow),
-    costHistory: historyRows.map(historyFromRow),
+    costHistory: [],
     ...(supplierRows ? {} : { suppliersLegacy: true }),
     notes: noteRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Note["subjectType"], subjectId: s(r.subject_id), body: s(r.body),
@@ -835,4 +828,21 @@ export function pendingFromRows(rows: Row[]): PendingPayment[] {
     .filter((p) => p.invoice_id && s(p.status) === "pending" && n(p.amount_cents) > 0)
     .map((p) => ({ id: s(p.id), invoiceId: s(p.invoice_id), amountCents: n(p.amount_cents), method: paymentMethodFromDb(s(p.method)), at: s(p.received_at) }))
     .sort((a, b) => b.at.localeCompare(a.at));
+}
+
+/**
+ * spec 36: the newest history rows of one item or of one supplier (catalog_cost_history; RLS: only who sees costs —
+ * others get none). Read when the item's or the supplier's screen opens. A server before the migration: none.
+ */
+export async function loadCostHistory(companyId: string, where: { itemId?: string; supplierId?: string }, limit = 20): Promise<CostHistoryEntry[]> {
+  let b = supabase.from("catalog_cost_history").select("id, item_id, supplier_id, unit_cost_cents, vendor_tax_bps, source, at").eq("company_id", companyId);
+  if (where.itemId) b = b.eq("item_id", where.itemId);
+  else if (where.supplierId) b = b.eq("supplier_id", where.supplierId);
+  else return [];
+  const { data, error } = await b.order("at", { ascending: false }).order("id", { ascending: false }).limit(limit);
+  if (error) {
+    if (isMissingTable(error)) return [];
+    throw error;
+  }
+  return (data as Row[]).map(historyFromRow);
 }

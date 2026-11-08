@@ -12,7 +12,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
-import { appRoles, loadCompanyDB, loadCompanyModule } from "@/cloud/repo";
+import { appRoles, loadCompanyDB, loadCompanyModule, loadCostHistory } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, catalogCostChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
@@ -54,7 +54,7 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, keepModuleData, moduleActive, moduleDef } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
-import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, localHistoryEntry } from "@/features/suppliers";
+import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
 import {
   type CalendarEvent,
@@ -372,6 +372,8 @@ interface StoreCtx {
   setSupplierActive: (id: ID, active: boolean) => Undo;
   /** spec 36: the supplier's purchase tax into its items that have another one (new estimate lines follow) */
   applySupplierTax: (id: ID) => Undo;
+  /** spec 36: read the newest history of one item or one supplier from the server (cloud, online, who sees costs) */
+  loadCostHistory: (where: { itemId?: ID; supplierId?: ID }) => void;
   /** several items at once with one «Отменить» («create the items now», docs/specs/33 П16, core K1): each goes as its own
    *  catalog.save through the queue; «Отменить» takes them all back. onlyNew (spec 33 П22.10): an item whose id is on the
    *  phone already is left as it is (no op), and the server inserts only an id it does not have (ON CONFLICT DO NOTHING) */
@@ -618,7 +620,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
       // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
       if (!pendingLive()) {
-        setDb(keepModuleData(next, dbRef.current));
+        // spec 36: the history read on open stays (the full read has none)
+        setDb(keepCostHistory(keepModuleData(next, dbRef.current), dbRef.current));
         // the whole company read again: every module's settings are the server's now
         settingsStale.current.clear();
       }
@@ -2119,6 +2122,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // «Отменить» (rule 5): the op may already be on the server — a reverse op, the last one wins
         return () =>
           void mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? x : y)) }), { k: "supplier.save", supplier: x });
+      },
+      loadCostHistory: (where) => {
+        const cid = whoRef.current?.companyId;
+        if (modeRef.current !== "cloud" || !cid || !onlineRef.current || dbRef.current.costsVisible === false) return;
+        void loadCostHistory(cid, where)
+          .then((rows) => {
+            // another company signed in meanwhile: nothing
+            if (whoRef.current?.companyId !== cid) return;
+            dbRef.current = { ...dbRef.current, costHistory: mergeHistory(dbRef.current, where, rows) };
+            setDb(dbRef.current);
+          })
+          .catch(() => undefined);
       },
       applySupplierTax: (id) => {
         const d0 = dbRef.current;

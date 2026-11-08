@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, component } from "@octo/design-tokens";
@@ -46,6 +46,13 @@ export default function CatalogItemScreen() {
   // spec 36: who sees suppliers picks one (the server reads none for sales and the tech)
   const supPick = canSeeSuppliers(store.role) && !store.db.suppliersLegacy;
   const sup = supplierOf(store.db, it.supplierId);
+  // spec 36: the item's newest history rows from the server, when opened (only who sees costs)
+  const loadHistory = store.loadCostHistory;
+  useEffect(() => {
+    if (found && !noCosts && found.kind === "material") loadHistory({ itemId: found.id });
+    // once per item: the store's functions are not stable across renders, the read would loop
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [found?.id, noCosts]);
 
   const save = () => {
     const clean = editClean(it, store.db.catalog, noCosts);

@@ -18,8 +18,9 @@ begin
      or (select supplier_id from public.catalog_items where id = 'c1460000-0000-4000-8000-000000000006') is not null then
     raise exception 'FAILED: T146 the items point to their supplier';
   end if;
-  if (select vendor from public.catalog_items where id = 'c1460000-0000-4000-8000-000000000002') <> ' home depot ' then
-    raise exception 'FAILED: T146 the vendor text stays as it was (old phones)';
+  -- a linked item's vendor is its supplier's name (t20, director's check of #459 Н2): one spelling for old phones
+  if (select count(*) from public.catalog_items where supplier_id = hd and vendor = (select name from public.suppliers where id = hd)) <> 3 then
+    raise exception 'FAILED: T146 the linked items carry the supplier''s name in vendor';
   end if;
   if (select count(*) from public.catalog_cost_history where company_id = 'c1460000-0000-4000-8000-0000000000c1' and source = 'initial' and supplier_id = hd) <> 3 then
     raise exception 'FAILED: T146 the history starts with the three stored costs';

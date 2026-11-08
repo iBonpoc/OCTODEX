@@ -707,6 +707,8 @@ export interface CostHistoryEntry {
   vendorTaxBps?: number;
   source: string;
   at: string;
+  /** made by this phone at a save (shown at once); the server's rows replace it when the screen reads them */
+  local?: boolean;
 }
 
 /** visit.late — computed in the app for the office (docs/specs/03 П3c), never stored and not in the server notifications.kind */
