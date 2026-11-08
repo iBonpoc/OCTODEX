@@ -3,7 +3,8 @@
  * entry (index.ts) passes the real clients; vitest passes fakes (apps/mobile/test/stripePayFn.test.ts).
  *
  * POST {token, invoiceId} from the client's browser (no sign-in, verify_jwt = false):
- * 1) only our site may call it from a browser (CORS by the Origin, never «*»);
+ * 1) CORS for our site only (never «*») — a browser courtesy, NOT protection: any script can send any Origin; the /p/ token is
+ *    the only key;
  * 2) public.stripe_pay_open checks the /p/ token against the invoice IN THE DATABASE before an attempt is opened (IDOR) and
  *    gives the attempt for the whole online balance (ACH on its way is not asked again);
  * 3) an attempt that already has a PaymentIntent reuses it while the client can still pay it (an Idempotency-Key of Stripe
@@ -46,6 +47,8 @@ export interface PayDeps {
   open: (token: string, invoiceId: string) => Promise<Attempt>;
   /** public.stripe_pay_set_intent(attempt, intent) as service_role */
   setIntent: (attemptId: string, intentId: string) => Promise<unknown>;
+  /** public.stripe_pay_close_attempt(intent) as service_role: the attempt of an intent we cancelled is closed at once */
+  closeAttempt: (intentId: string) => Promise<unknown>;
   stripe: StripeCall | null;
   /** "test" (sk_test_ / rk_test_), "live" — refused for now */
   keyMode: "test" | "live" | null;
@@ -140,7 +143,7 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
     body: JSON.stringify(body),
     headers: { ...(c ?? {}), "Content-Type": "application/json" },
   });
-  // a browser on another site gets no CORS answer at all; a call without Origin is not a browser of ours either
+  // CORS only: a browser on another site gets no answer it may read. Not a protection — curl sends any Origin; the token is the key
   if (!c) return json(403, { error: "origin" });
   if (req.method === "OPTIONS") return { status: 204, body: "", headers: { ...c } };
   if (req.method !== "POST") return json(405, { error: "method not allowed" });
@@ -177,13 +180,25 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
     pi.currency === "usd" && typeof pi.client_secret === "string" &&
     (pi.metadata as Record<string, unknown> | undefined)?.attempt_id === a.attempt_id;
 
+  let reopened = false;
   try {
-    // an old tab, another amount, a failed try: their intents can still be paid — cancel them before this one is handed out
+    // an old tab, another amount, a failed try: their intents can still be paid — cancel them before this one is handed out.
+    // A refused cancel may mean that intent is already PAID or on its way (no webhook yet): then no new intent at all
+    // (director's review 20в №1 — tab A paid PI1, tab B must not get PI2)
     for (const old of a.stale_intents ?? []) {
       if (!PI.test(old) || old === a.payment_intent_id) continue;
       const c = await stripe("POST", `/v1/payment_intents/${old}/cancel`, { account: a.account_id }).catch(() => null);
-      // already processing / succeeded / canceled: Stripe refuses — the webhook decides for it, nothing to do here
-      if (c && c.status !== 200 && c.status !== 400) deps.log?.(`stripe-pay: cancel ${c.status}`);
+      let st = c?.status === 200 ? String(c.body?.status ?? "canceled") : null;
+      if (st === null) {
+        const g = await stripe("GET", `/v1/payment_intents/${old}`, { account: a.account_id }).catch(() => null);
+        st = g?.status === 200 && g.body?.id === old ? String(g.body.status) : null;
+      }
+      if (st === "processing" || st === "succeeded" || st === "requires_capture") return json(200, { state: "processing" });
+      if (st !== "canceled") {
+        deps.log?.(`stripe-pay: an older intent of attempt ${a.attempt_id} is still payable`);
+        return json(502, { error: "stripe" });   // never two payable intents for one invoice
+      }
+      await deps.closeAttempt(old).catch(() => deps.log?.("stripe-pay: close failed"));
     }
     if (a.payment_intent_id) {
       // the attempt already has an intent: never a second one while the first can still be paid or is on its way
@@ -192,9 +207,27 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
       const st = String(r.body.status);
       if (PAYABLE.has(st)) return ready(r.body);
       if (st === "processing" || st === "succeeded" || st === "requires_capture") return json(200, { state: "processing" });
-      // canceled: the webhook closes the attempt, then a new one opens
+      // canceled (by Stripe or an old tab of ours): close its attempt now and open a fresh one — once
+      if (st === "canceled" && !reopened) {
+        await deps.closeAttempt(a.payment_intent_id).catch(() => deps.log?.("stripe-pay: close failed"));
+        try {
+          a = await deps.open(body.token, body.invoiceId);
+        } catch (e) {
+          const rf = refused(e instanceof DbError ? e.code : null);
+          return json(rf.status, { error: rf.error });
+        }
+        reopened = true;
+        if (!a.payment_intent_id) return create();
+      }
       return json(409, { error: "retry_later" });
     }
+    return await create();
+  } catch {
+    deps.log?.("stripe-pay: failed");
+    return json(502, { error: "stripe" });
+  }
+
+  async function create(): Promise<Res> {
     const r = await stripe("POST", "/v1/payment_intents", { form: intentForm(a), idempotencyKey: a.idempotency_key, account: a.account_id });
     if (r.status !== 200 || !intentOk(r.body)) return fail("intent create", r);
     // keep the intent on the attempt; if this is lost the webhook still finds the attempt by its metadata
@@ -208,8 +241,5 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
       return json(502, { error: "stripe" });
     }
     return ready(r.body);
-  } catch {
-    deps.log?.("stripe-pay: failed");
-    return json(502, { error: "stripe" });
   }
 }

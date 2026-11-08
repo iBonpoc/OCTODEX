@@ -40,6 +40,7 @@ Deno.serve(async (req: Request) => {
     {
       open: (token, invoiceId) => rpc<Attempt>("stripe_pay_open", { p_token: token, p_invoice_id: invoiceId }),
       setIntent: (attemptId, intentId) => rpc("stripe_pay_set_intent", { p_attempt_id: attemptId, p_intent_id: intentId }),
+      closeAttempt: (intentId) => rpc("stripe_pay_close_attempt", { p_intent_id: intentId }),
       stripe: KEY ? stripe : null,
       keyMode,
       publishableKey: PK,

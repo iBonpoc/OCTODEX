@@ -53,6 +53,7 @@ function deps(opt: Partial<PayDeps> & { a?: Attempt | Error; answers?: Record<st
   const calls: Call[] = [];
   const opened: [string, string][] = [];
   const kept: [string, string][] = [];
+  const closed: string[] = [];
   const logs: string[] = [];
   let fails = setFails;
   const answers: Record<string, StripeAnswer> = { "POST /v1/payment_intents": { status: 200, body: pi() }, ...ans };
@@ -61,6 +62,9 @@ function deps(opt: Partial<PayDeps> & { a?: Attempt | Error; answers?: Record<st
       opened.push([t, i]);
       if (aOpt instanceof Error) throw aOpt;
       return aOpt ?? attempt();
+    },
+    closeAttempt: async (p) => {
+      closed.push(p);
     },
     setIntent: async (a, p) => {
       if (fails-- > 0) throw new Error("down");
@@ -75,7 +79,7 @@ function deps(opt: Partial<PayDeps> & { a?: Attempt | Error; answers?: Record<st
     log: (m) => logs.push(m),
     ...over,
   };
-  return { d, calls, opened, kept, logs };
+  return { d, calls, opened, kept, logs, closed };
 }
 const body = (r: { body: string }) => JSON.parse(r.body);
 
@@ -183,15 +187,46 @@ describe("stripe-pay: the PaymentIntent", () => {
     expect(r.body).not.toContain("secret");
     expect(lost.logs.join(" ")).toContain("not kept");
   });
-  it("the invoice's other payable intents are cancelled before a new one is handed out", async () => {
+  it("the invoice's other payable intents are cancelled, their attempts closed at once, before a new one is handed out", async () => {
     const a = attempt({ stale_intents: ["pi_Old1", "pi_Old2", "bad/../x"] });
-    const { d, calls } = deps({ a, answers: { "POST /v1/payment_intents/pi_Old1/cancel": { status: 200, body: {} }, "POST /v1/payment_intents/pi_Old2/cancel": { status: 400, body: {} } } });
+    const { d, calls, closed } = deps({
+      a,
+      answers: {
+        "POST /v1/payment_intents/pi_Old1/cancel": { status: 200, body: { status: "canceled" } },
+        "POST /v1/payment_intents/pi_Old2/cancel": { status: 400, body: {} },
+        "GET /v1/payment_intents/pi_Old2": { status: 200, body: { id: "pi_Old2", status: "canceled" } },
+      },
+    });
     expect((await handlePay(req(), d)).status).toBe(200);
     expect(calls.map((c) => `${c.method} ${c.path} ${c.account}`)).toEqual([
       "POST /v1/payment_intents/pi_Old1/cancel acct_T1",
       "POST /v1/payment_intents/pi_Old2/cancel acct_T1",
+      "GET /v1/payment_intents/pi_Old2 acct_T1",
       "POST /v1/payment_intents acct_T1",
     ]);
+    expect(closed).toEqual(["pi_Old1", "pi_Old2"]);
+  });
+  it("an older intent already paid or on its way (cancel refused, no webhook yet) — no new intent: «processing»", async () => {
+    for (const status of ["succeeded", "processing", "requires_capture"]) {
+      const a = attempt({ stale_intents: ["pi_Paid"] });
+      const { d, calls, closed } = deps({
+        a,
+        answers: {
+          "POST /v1/payment_intents/pi_Paid/cancel": { status: 400, body: { error: { type: "invalid_request_error" } } },
+          "GET /v1/payment_intents/pi_Paid": { status: 200, body: { id: "pi_Paid", status } },
+        },
+      });
+      const r = await handlePay(req(), d);
+      expect(body(r)).toEqual({ state: "processing" });
+      expect(calls.some((c) => c.path === "/v1/payment_intents" && c.method === "POST")).toBe(false);
+      expect(closed).toEqual([]);
+    }
+  });
+  it("an older intent that cannot be cancelled nor read — no second payable intent", async () => {
+    const a = attempt({ stale_intents: ["pi_Old1"] });
+    const { d, calls } = deps({ a, answers: { "POST /v1/payment_intents/pi_Old1/cancel": { status: 500, body: null }, "GET /v1/payment_intents/pi_Old1": { status: 500, body: null } } });
+    expect((await handlePay(req(), d)).status).toBe(502);
+    expect(calls.some((c) => c.path === "/v1/payment_intents" && c.method === "POST")).toBe(false);
   });
   it("an attempt with an intent reuses it — no second intent", async () => {
     const a = attempt({ payment_intent_id: "pi_Old1" });
@@ -205,10 +240,15 @@ describe("stripe-pay: the PaymentIntent", () => {
     const on = deps({ a, answers: { "GET /v1/payment_intents/pi_Old1": { status: 200, body: pi({ id: "pi_Old1", status: "processing" }) } } });
     expect(body(await handlePay(req(), on.d))).toEqual({ state: "processing" });
     expect(on.calls).toHaveLength(1);
-    const gone = deps({ a, answers: { "GET /v1/payment_intents/pi_Old1": { status: 200, body: pi({ id: "pi_Old1", status: "canceled" }) } } });
+    // canceled: its attempt is closed at once and a fresh one gets a new intent — no «retry later» until the webhook
+    let opens = 0;
+    const gone = deps({ answers: { "GET /v1/payment_intents/pi_Old1": { status: 200, body: pi({ id: "pi_Old1", status: "canceled" }) } } });
+    gone.d.open = async () => (opens++ === 0 ? a : attempt({ attempt_id: "a1310000-0000-4000-8000-000000000001", idempotency_key: "pa:new:2" }));
     const r = await handlePay(req(), gone.d);
-    expect([r.status, body(r).error]).toEqual([409, "retry_later"]);
-    expect(gone.calls).toHaveLength(1);
+    expect(body(r).state).toBe("ready");
+    expect(gone.closed).toEqual(["pi_Old1"]);
+    expect(gone.calls.map((c) => `${c.method} ${c.path}`)).toEqual(["GET /v1/payment_intents/pi_Old1", "POST /v1/payment_intents"]);
+    expect(gone.calls[1].idem).toBe("pa:new:2");
   });
   it("Stripe's error text and the key never reach the answer or the log", async () => {
     const { d, logs } = deps({ answers: { "POST /v1/payment_intents": { status: 400, body: { error: { type: "card_error", message: `bad ${KEY}` } } } } });

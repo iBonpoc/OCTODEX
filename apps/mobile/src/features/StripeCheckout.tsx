@@ -112,7 +112,7 @@ export function StripeCheckout({
     setPhase("paying");
     setErr(null);
     const r = await s.stripe
-      .confirmPayment({ elements: s.elements, redirect: "if_required", confirmParams: { return_url: `${window.location.href.split("?")[0]}?paid=${invoiceId}` } })
+      .confirmPayment({ elements: s.elements, redirect: "if_required", confirmParams: { return_url: `${window.location.origin}${window.location.pathname}?paid=${invoiceId}` } })
       .catch(() => ({ error: { message: undefined } }) as const);
     if ("error" in r && r.error) {
       // Stripe's message is for the client and already in their language (locale); without one — ours

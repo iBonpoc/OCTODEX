@@ -9962,6 +9962,16 @@ select tst.ok((public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000
   'T131 ACH on its way is not asked again: the attempt is the rest');
 select tst.ok(public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') -> 'stale_intents' = '["pi_T131A"]'::jsonb,
   'T131 the older attempt''s intent (the old amount) is handed to stripe-pay to cancel');
+select tst.fails($q$select public.stripe_pay_close_attempt('nope')$q$, 'T131 only a PaymentIntent id closes an attempt');
+select public.stripe_pay_close_attempt('pi_T131A');
+:as_super
+select tst.ok((select status = 'canceled' from public.payment_attempts where stripe_payment_intent_id = 'pi_T131A')
+          and not has_function_privilege('anon', 'public.stripe_pay_close_attempt(text)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_pay_close_attempt(text)', 'EXECUTE'),
+  'T131 the attempt of an intent stripe-pay cancelled is closed at once (service_role only)');
+:as_service
+select tst.ok(public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') -> 'stale_intents' = '[]'::jsonb,
+  'T131 …and is no longer handed to cancel');
 :as_super
 alter table public.companies disable trigger t06_company_closed_guard;
 update public.companies set closed_at = now() where id = 'ca000000-0000-0000-0000-000000000000';
