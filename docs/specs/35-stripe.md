@@ -68,6 +68,12 @@
 - Старые PaymentIntent того же счёта (другая сумма, старая вкладка, неудачная попытка) `stripe-pay` отменяет до выдачи нового (`stale_intents`), чтобы одно и то же не списали дважды.
 - Долг: лимит запросов к `stripe-pay` по токену и IP (как в lead-intake) и Radar — до live.
 
+## 4б. 20г — вебхук (миграция 20261109040000)
+- Edge `stripe-webhook` (verify_jwt = false), Connect-эндпоинт («события подключённых аккаунтов»). Сначала подпись `Stripe-Signature`: HMAC-SHA256 «t.сырое тело», допуск 300 с, сравнение за постоянное время, любой из нескольких v1. До подписи тело как JSON не читается. Неверная подпись → 400.
+- Для `payment_intent.*` PI читается обратно (`expand[]=payment_method`, `latest_charge.balance_transaction`) на аккаунте события: метод (card / `us_bank_account` → ach) и комиссия Stripe — только `stripe_fee` из `fee_details` (application fee — отдельно, `platform_fee_cents`). Если не прочиталось у `succeeded` → 500, Stripe повторит, комиссия не теряется. Live-событие и live-ключ — без чтения.
+- `public.stripe_webhook_apply(event, method, fee)` (service_role): `metadata.company_id` ≠ компания аккаунта → журнал `ignored / company_mismatch`; иначе `app.stripe_event_apply` и `fee_cents` платежа. 55000 → 500 (ничего не записано, Stripe повторит); 22023 → 400.
+- Секреты: `STRIPE_WEBHOOK_SECRET` (whsec_ Connect-эндпоинта), `STRIPE_SECRET_KEY` (test). Хранение `app.stripe_events` — как в 20а; срок — спека 21. T132, `test/stripeWebhookFn.test.ts` на подписанных фикстурах.
+
 ## 5. План PR
 | PR | Что | Тесты |
 |---|---|---|
