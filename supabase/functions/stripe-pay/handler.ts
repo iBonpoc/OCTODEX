@@ -12,6 +12,10 @@
  *    the contractor's account, the attempt's key as the Idempotency-Key, the attempt in metadata (the webhook finds it);
  * 4) the answer is what the Payment Element needs: client secret, the account, the publishable key, the order of methods —
  *    ACH first from $1,000 (spec 35 §2 п.3: the contractor pays less).
+ * 5) rate limits (spec 35 §4г) before the link is looked at: per token (sha256), per IP (HMAC of «pay:» + the address; IPv6 by
+ *    /64 and /48), one ceiling for the whole function when there is no IP; after the link is checked — per invoice (the
+ *    expensive step). Over a limit → 429 {error:"rate_limited", retryAfter} + Retry-After. The limit itself failing lets the
+ *    request through (a payment is never refused for our fault), with a line in the log.
  * Test mode only: a live key is refused until the founder says (spec 35 §3). The key never appears in a log or an answer;
  * Stripe's own error text is not passed on either. Money is never written here: only the webhook (20г) records a payment.
  */
@@ -54,6 +58,15 @@ export interface PayDeps {
   keyMode: "test" | "live" | null;
   /** STRIPE_PUBLISHABLE_KEY (pk_test_…): not a secret, but kept beside the secret key so the two always match */
   publishableKey: string;
+  /** public.pay_rate_take(token hash, ip hash, net hash) → null (go on) or seconds to wait; throws when the database fails */
+  rate: (tokenHash: string, ipHash: string | null, netHash: string | null) => Promise<number | null>;
+  /** public.pay_invoice_rate_take(invoice) → null or seconds to wait */
+  invoiceRate: (invoiceId: string) => Promise<number | null>;
+  sha256: (s: string) => Promise<string>;
+  /** HMAC-SHA256 with INTAKE_IP_SECRET; null when it is missing (then only the token and the whole-function ceiling count) */
+  hmac: ((s: string) => Promise<string>) | null;
+  /** the request headers trusted for the client's IP — in production only cf-connecting-ip (index.ts) */
+  ipHeaders: string[];
   log?: (msg: string) => void;
 }
 export interface Req {
@@ -77,6 +90,40 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const TOKEN = /^[A-Za-z0-9_-]{16,128}$/;
 const PI = /^pi_[A-Za-z0-9]{1,64}$/;
 export const SET_TRIES = 3;
+/** a refusal of the limit never asks to wait longer than this (the window is 10 minutes) */
+const MAX_WAIT_S = 600;
+
+// ---- the client's IP — the same rules as lead-intake (a function imports no other function's file; unit:stripePayFn checks
+// that the two give the same keys) ----
+/** cf-connecting-ip (Cloudflare) first; without it the LAST address of a list header. Production trusts cf-connecting-ip only */
+export function clientIp(req: Req, headers: string[]): string | null {
+  for (const h of headers) {
+    const v = req.header(h);
+    if (!v) continue;
+    const parts = v.split(",").map((s) => s.trim()).filter(Boolean);
+    const ip = parts[parts.length - 1];
+    if (ip && ip.length <= 45 && /^[0-9a-fA-F:.]+$/.test(ip)) return ip;
+  }
+  return null;
+}
+const v4mapped = (ip: string) => /^::ffff:(\d{1,3}(\.\d{1,3}){3})$/i.exec(ip)?.[1];
+/** an IPv6 client owns a whole /64: the limit counts the network, not one of its addresses */
+export function ipKey(ip: string): string {
+  const v4 = v4mapped(ip);
+  if (v4) return v4;
+  if (!ip.includes(":")) return ip;
+  const [head, tail] = ip.split("::");
+  const a = head ? head.split(":") : [];
+  const b = tail !== undefined ? (tail ? tail.split(":") : []) : [];
+  const full = tail !== undefined ? [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill("0"), ...b] : a;
+  return `${full.slice(0, 4).map((x) => (x || "0").toLowerCase().replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+/** the /48 of an IPv6 address (a site), for the second limit; null for IPv4 */
+export function netKey(ip: string): string | null {
+  const k = ipKey(ip);
+  if (!k.endsWith("::/64")) return null;
+  return `${k.split(":").slice(0, 3).join(":")}::/48`;
+}
 
 export function cors(origin: string | null): Record<string, string> | null {
   if (!origin || !ALLOWED_ORIGINS.includes(origin)) return null;
@@ -153,6 +200,23 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
   if (deps.keyMode !== "test" || !deps.publishableKey.startsWith("pk_test_")) return json(503, { error: "live_refused" });
   const stripe = deps.stripe;
 
+  const busy = (wait: number) => {
+    const s = Math.min(MAX_WAIT_S, Math.max(1, Math.ceil(wait)));
+    return { ...json(429, { error: "rate_limited", retryAfter: s }), headers: { ...c, "Content-Type": "application/json", "Retry-After": String(s) } };
+  };
+  // the limits by the link and the address — before the database looks at the link (spec 35 §4г)
+  try {
+    const ip = clientIp(req, deps.ipHeaders);
+    if (!deps.hmac || !ip) deps.log?.(`stripe-pay: no ${deps.hmac ? "trusted ip header" : "ip secret"} — the whole-function ceiling counts`);
+    const ipHash = deps.hmac && ip ? await deps.hmac(`pay:${ipKey(ip)}`) : null;
+    const net = ip ? netKey(ip) : null;
+    const netHash = deps.hmac && ipHash && net ? await deps.hmac(`pay:${net}`) : null;
+    const wait = await deps.rate(await deps.sha256(body.token), ipHash, netHash);
+    if (wait !== null && wait !== undefined) return busy(wait);
+  } catch {
+    deps.log?.("stripe-pay: rate limit failed — let through");
+  }
+
   let a: Attempt;
   try {
     a = await deps.open(body.token, body.invoiceId);
@@ -160,6 +224,13 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
     const r = refused(e instanceof DbError ? e.code : null);
     if (r.status === 500) deps.log?.("stripe-pay: open failed");
     return json(r.status, { error: r.error });
+  }
+  // the expensive step (cancel / create an intent): per invoice, whatever link or address it comes from
+  try {
+    const wait = await deps.invoiceRate(a.invoice_id);
+    if (wait !== null && wait !== undefined) return busy(wait);
+  } catch {
+    deps.log?.("stripe-pay: invoice rate limit failed — let through");
   }
   const fail = (what: string, r?: StripeAnswer) => {
     const type = r?.body && typeof r.body.error === "object" && r.body.error ? String((r.body.error as Record<string, unknown>).type ?? "") : "";

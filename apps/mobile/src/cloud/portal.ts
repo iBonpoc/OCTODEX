@@ -230,7 +230,7 @@ export async function paySimulated(token: string, invoiceId: string): Promise<Po
 export type OnlinePayStart =
   | { state: "ready"; clientSecret: string; account: string; publishableKey: string; amountCents: number; methods: string[] }
   | { state: "processing" }
-  | { state: "error"; error: string };
+  | { state: "error"; error: string; retryAfterS?: number };
 
 /** the edge function stripe-pay (verify_jwt = false: the client has no account; the /p/ token is the key) */
 export async function startOnlinePay(token: string, invoiceId: string): Promise<OnlinePayStart> {
@@ -251,7 +251,12 @@ export async function startOnlinePay(token: string, invoiceId: string): Promise<
         amountCents: Number(b.amountCents), methods: Array.isArray(b.methods) ? b.methods.map(String) : ["card"],
       };
     }
-    return { state: "error", error: typeof b?.error === "string" ? b.error : "failed" };
+    // too many tries (spec 35 §4г): how long to wait, in seconds — from the body, else from Retry-After
+    const wait = Number(b?.retryAfter ?? res.headers.get("retry-after") ?? NaN);
+    return {
+      state: "error", error: typeof b?.error === "string" ? b.error : res.status === 429 ? "rate_limited" : "failed",
+      ...(Number.isFinite(wait) && wait > 0 ? { retryAfterS: Math.ceil(wait) } : {}),
+    };
   } catch {
     return { state: "error", error: "network" };
   } finally {

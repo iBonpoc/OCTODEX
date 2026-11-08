@@ -3027,6 +3027,7 @@ export const es: Dict = {
   "pay.online.err.closed": "Este enlace ya no acepta pagos.",
   "pay.online.err.nothing": "No hay nada que pagar en esta factura.",
   "pay.online.err.retry": "No funcionó. Inténtelo de nuevo en un minuto.",
+  "pay.online.err.busy": "Demasiados intentos. Inténtelo de nuevo en {n} min.",
   "portal.offline": "Sin conexión. Revise internet y vuelva a cargar la página.",
   "portal.failed": "No funcionó. Inténtelo de nuevo.",
   "pay.online.wait": "Confirmaremos el pago en breve. No necesita pagar de nuevo.",
