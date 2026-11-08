@@ -202,29 +202,6 @@ export function CardList({ children }: { children: ReactNode }) {
   return <View style={{ gap: space[2] }}>{children}</View>;
 }
 
-export function ItemCard({
-  title,
-  subtitle,
-  left,
-  right,
-  onPress,
-  status,
-}: {
-  title: string;
-  subtitle?: string;
-  left?: ReactNode;
-  right?: ReactNode;
-  onPress?: () => void;
-  status?: StatusName;
-}) {
-  return (
-    // a list card's coloured edge only for warn / bad (06 §7.3): ok / info say it with the chip, not the edge
-    <Card status={status === "warn" || status === "bad" ? status : undefined} style={{ paddingVertical: space[1] }}>
-      <ListRow title={title} subtitle={subtitle} left={left} right={right} onPress={onPress} />
-    </Card>
-  );
-}
-
 export function Divider() {
   const { c } = useTheme();
   return <View style={{ height: StyleSheet.hairlineWidth, backgroundColor: c.bd }} />;

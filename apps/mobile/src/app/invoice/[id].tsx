@@ -20,7 +20,8 @@ import { RelatedBlock } from "@/features/RelatedBlock";
 import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, CardList, Divider, Empty, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
 
 const METHODS: PaymentMethod[] = ["card", "cash", "check", "zelle"];
 
@@ -134,17 +135,22 @@ export default function InvoiceScreen() {
 
       <SectionTitle title={t("rcpt.list")} right={pays.length ? <T v="caption" tone="mut">{pays.length}</T> : undefined} />
       {pays.length ? (
-        <CardList>
-          {pays.map((p, n) => (
-            <View key={p.id}>
-              <ItemCard
-                title={`${money(p.amountCents)} · ${t(`pay.${p.method}` as DictKey)}`}
-                subtitle={`${p.receiptNumber ?? t("rcpt.pendingNumber")} · ${day(p.at)}${p.reference ? ` · ${p.reference === "stripe-simulated" ? t("pay.testMode") : p.reference}` : ""}`}
-                onPress={() => router.push(`/receipt/${p.id}`)}
-              />
-            </View>
+        <CardGrid>
+          {pays.map((p) => (
+            // a receipt of this invoice (as the client's receipts, B1): how it was paid, number · date · reference, the sum on the right
+            <ListCard
+              key={p.id}
+              density="compact"
+              testID={`invoice-receipt-${p.id}`}
+              lead={{ kind: "icon", icon: "dollar" }}
+              title={t(`pay.${p.method}` as DictKey)}
+              when={[p.receiptNumber ?? t("rcpt.pendingNumber"), day(p.at), p.reference ? (p.reference === "stripe-simulated" ? t("pay.testMode") : p.reference) : undefined].filter(Boolean).join(" · ")}
+              value={money(p.amountCents)}
+              valueTone="ok"
+              onPress={() => router.push(`/receipt/${p.id}`)}
+            />
           ))}
-        </CardList>
+        </CardGrid>
       ) : (
         <T v="caption" tone="mut">
           {t("rcpt.none")}
