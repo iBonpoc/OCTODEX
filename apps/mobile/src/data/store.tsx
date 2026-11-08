@@ -38,10 +38,10 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
-import { backoffMs, classify, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
+import { backoffMs, classify, isModuleInactive, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { freshRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, type RejectedOp } from "./outboxRejected";
+import { dropModuleOps, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -49,7 +49,7 @@ import { unsentIn as unsentInOf, withoutUnsentIn } from "@/features/closedCompan
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
-import { enabledLocally, moduleActive, moduleDef } from "@/modules/registry";
+import { enabledLocally, keepModuleData, moduleActive, moduleDef } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
 import {
@@ -551,7 +551,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       const next = await loadCompanyDB(company.companyId, auth.userId);
       // signed out, another company or the device wiped while it loaded: the answer is not for this store (19 §6.12)
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
-      if (!pendingLive()) setDb(next);
+      // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
+      if (!pendingLive()) setDb(keepModuleData(next, dbRef.current));
       setSyncError(null);
       answered();
     } catch (e) {
@@ -655,7 +656,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           const msg = e instanceof Error ? e.message : String(e);
           // the server's error that may be this op's alone (500, a timeout) is told by its card «Не отправлено» in our own
           // words — not again as the server's English text in «Ошибка синхронизации» (cloud e2e 114)
-          if (!maybeOpOnly(e)) setSyncError(msg);
+          // module_inactive is told by its own card in our words, not as the server's English text (review M5a)
+          if (!maybeOpOnly(e) && !isModuleInactive(e)) setSyncError(msg);
           // no answer, or the server's «not now» (5xx, 429, an expired sign-in…): not a try — the op stays as it is,
           // the next send waits longer (review #244)
           if (classify(e) !== "refusal") {
@@ -682,6 +684,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           }
           // the server said «no»: a try; the last one drops it (never because of the network)
           clearFails(item.id);
+          // the module is not active on the server (trial over — founder О2): all its waiting changes go at once with
+          // one card that says what was not saved and where to connect it; the core's ops stay (spec 33 П21.1)
+          if (item.op.k === "module.op" && isModuleInactive(e)) {
+            const mod = item.op.module;
+            const { kept, gone } = dropModuleOps(outboxRef.current, mod, w);
+            outboxRef.current = kept;
+            for (const g of gone) opPause.current.delete(g.id);
+            // the phone's copy of the module's data holds what was just dropped: it goes until the next read (a canvas
+            // that saves again then sends its measurement whole — review M5a №4)
+            const cur = dbRef.current;
+            if (cur.moduleData && mod in cur.moduleData) {
+              const { [mod]: _gone, ...rest } = cur.moduleData;
+              dbRef.current = { ...cur, moduleData: rest };
+              setDb(dbRef.current);
+            }
+            dropped = true;
+            setRejected((prev) => moduleRejected(prev, mod, gone.length, msg, Date.now(), w, moduleDef(mod)?.rejectedKey));
+            setOutbox(outboxRef.current);
+            continue;
+          }
           if (item.tries + 1 >= MAX_TRIES) {
             // Will never succeed: drop it and reload the truth from the server. A money change is not dropped
             // silently: it stays as «не записано на сервере» until the person says «Понятно» (docs/specs/23 §3)

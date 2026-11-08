@@ -344,4 +344,54 @@ describe("unit:moduleOp — the store (C2c, rule 5, rule 6, О2)", () => {
     await settle();
     expect(server.sends.at(-1)!.op).toMatchObject({ payload: { x: 2 } });
   });
+  it("cloud: the module is not active on the server (module_inactive) — all its waiting changes go at once with one card; the core's change is sent (spec 33 П21.1)", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve(makeSeed()));
+    await settle();
+    valueOf(r).enableModule("op_demo");
+    await settle();
+    // offline: three module changes and a core note in between
+    for (const k of ["el-1", "el-2"]) valueOf(r).moduleOp("op_demo", { kind: "element.save", payload: { k }, apply: (d) => d, coalesceKey: k });
+    (valueOf(r) as unknown as { addNote: (n: object) => unknown }).addNote({ subjectType: "lead", subjectId: "l1", body: "core", visibility: "team" });
+    valueOf(r).moduleOp("op_demo", { kind: "element.remove", payload: { id: "el-1" }, apply: (d) => d });
+    await settle();
+    expect(valueOf(r).queue.map((x) => x.label)).toEqual(["module.enable", "module.op", "module.op", "note.add", "module.op"]);
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.resolve(); // module.enable
+    await settle();
+    appActive.cb?.();
+    await settle();
+    const { PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    expect(server.sends.at(-1)!.op).toMatchObject({ k: "module.op", payload: { k: "el-1" } });
+    server.sends.at(-1)!.d.reject(new PermanentError("module op_demo is not active", 403, "42501", "module_inactive"));
+    await settle();
+    // one refusal: every module change left the queue, the note did not; it is the next to go
+    expect(valueOf(r).queue.map((x) => x.label)).toEqual(["note.add"]);
+    expect(server.sends.at(-1)!.op).toMatchObject({ k: "note.add" });
+    const v = valueOf(r) as unknown as { rejectedOps: { what: string; module: string; count: number; href: string }[] };
+    expect(v.rejectedOps).toEqual([expect.objectContaining({ what: "module", module: "op_demo", count: 3, href: "/company/modules" })]);
+  });
+  it("cloud: a plain refusal of a module change (no module_inactive) stays a try — the other module changes wait", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve(makeSeed()));
+    await settle();
+    valueOf(r).enableModule("op_demo");
+    await settle();
+    for (const k of ["el-1", "el-2"]) valueOf(r).moduleOp("op_demo", { kind: "element.save", payload: { k }, apply: (d) => d, coalesceKey: k });
+    valueOf(r).setOnline(true);
+    await settle();
+    server.sends.at(-1)!.d.resolve();
+    await settle();
+    appActive.cb?.();
+    await settle();
+    server.sends.at(-1)!.d.reject(refusal());
+    await settle();
+    expect(valueOf(r).queue.filter((x) => x.label === "module.op")).toHaveLength(2);
+    expect((valueOf(r) as unknown as { rejectedOps: unknown[] }).rejectedOps).toEqual([]);
+  });
 });

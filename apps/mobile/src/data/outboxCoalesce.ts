@@ -7,7 +7,10 @@
  * or anything that is not a full write carries no coalesceKey and never merges.
  *
  * The newer op takes the waiting one's place only when nothing queued after that place is tied to either of them — no op
- * after it refers to or makes an id the older or the newer one makes or refers to (review #354 Б3, Б4). Otherwise it goes
+ * after it makes an id the older or the newer one names (Б3: the newer would go ahead of what it needs), and no op after
+ * it names an id the older or the newer one makes (Б4: what needs the older would lose it) (review #354). An id that
+ * both they and a later op only refer to — made before them, e.g. the measurement all its elements point at — is no tie
+ * (review M5a №2: else moves of one element never merge). Otherwise it goes
  * to the end, as any op, and both are sent in order. Never an op on its way to the server (in flight), never another
  * person's or an owner-less one, never another module's or another kind. Other kinds of ops never merge.
  */
@@ -22,6 +25,9 @@ function idsIn(op: Op, made?: readonly string[]): Set<string> {
   return out;
 }
 
+/** what an op in the queue makes: its own list (the queue's, a module.op's) or what its kind creates */
+const madeIn = (o: OwnedItem) => lower([...createdOf(o), ...(o.op.k === "module.op" ? o.op.made ?? [] : [])]);
+
 /** where the op merges into the queue, or -1 (append) */
 export function coalesceAt(items: readonly OwnedItem[], op: Op, who: Owner | null, inFlight: string | null): number {
   if (op.k !== "module.op" || !op.coalesceKey || !who) return -1;
@@ -31,8 +37,9 @@ export function coalesceAt(items: readonly OwnedItem[], op: Op, who: Owner | nul
     if (x.op.module !== op.module || x.op.kind !== op.kind || x.op.coalesceKey !== op.coalesceKey) continue;
     // an older version's op has no owner: it is nobody's to merge into
     if (!x.owner || !sameOwner(x.owner, who)) return -1;
-    const ids = new Set([...idsIn(x.op, x.made), ...idsIn(op)]);
-    const tied = items.slice(i + 1).some((y) => [...idsIn(y.op), ...createdOf(y)].some((id) => ids.has(id.toLowerCase())));
+    const named = new Set([...idsIn(x.op, x.made), ...idsIn(op)]);
+    const made = lower([...madeIn(x), ...(op.made ?? [])]);
+    const tied = items.slice(i + 1).some((y) => [...madeIn(y)].some((id) => named.has(id)) || [...idsIn(y.op, y.made)].some((id) => made.has(id)));
     return tied ? -1 : i;
   }
   return -1;

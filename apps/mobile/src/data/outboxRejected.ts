@@ -10,14 +10,15 @@
  */
 import type { Op } from "@/cloud/ops";
 import { isMoneyOp } from "./outboxDeps";
-import { REJECTED_KEY, type Owner, type OwnedItem } from "./outboxOwner";
+import { mineOf, REJECTED_KEY, sameOwner, type Owner, type OwnedItem } from "./outboxOwner";
 import { MONEY_KINDS } from "./syncLink";
 
 export { REJECTED_KEY };
 /** a refused change older than this leaves the list by itself (review #263 №10) */
 export const REJECTED_KEEP_MS = 30 * 24 * 3600_000;
 
-export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense";
+/** module: a batch of an add-on module's changes the server refused because the module is not active (spec 33 П21.1) */
+export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module";
 export interface RejectedOp {
   /** the outbox item's id */
   id: string;
@@ -27,6 +28,10 @@ export interface RejectedOp {
   /** where it opens: the record the change was about */
   href: string;
   amountCents?: number;
+  /** what = module: which module, how many changes were not saved, its own text (ModuleDef.rejectedKey; params {count}) */
+  module?: string;
+  count?: number;
+  labelKey?: string;
   /** the server's text, kept for support; never shown (our own words on the card, review #259) */
   error: string;
   at: string;
@@ -75,4 +80,26 @@ export function parseRejected(raw: string | null): RejectedOp[] {
   } catch {
     return [];
   }
+}
+
+/**
+ * The module is not active on the server (trial over, not paid — founder О2): every waiting change of this module of the
+ * person sending goes at once (each would be refused five times and hold the queue — spec 33 П21.1). Other people's ops
+ * and every other op (the core's: leads, payments…) stay as they are.
+ */
+export function dropModuleOps(items: readonly OwnedItem[], module: string, who: Owner | null): { kept: OwnedItem[]; gone: OwnedItem[] } {
+  const mine = new Set(mineOf(items, who).map((x) => x.id));
+  const isGone = (x: OwnedItem) => mine.has(x.id) && x.op.k === "module.op" && x.op.module === module;
+  return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/** the one card «not saved: the trial is over» per module and person; a later batch adds to its count */
+export function moduleRejected(prev: readonly RejectedOp[], module: string, count: number, error: string, now: number, who: Owner | null, labelKey?: string): RejectedOp[] {
+  const id = `module.${module}.${who?.userId ?? ""}.${who?.companyId ?? ""}`;
+  const was = prev.find((x) => x.id === id && sameOwner(x.owner ?? null, who));
+  const rec: RejectedOp = {
+    id, ...(who ? { owner: who } : {}), kind: "module.op", what: "module", href: "/company/modules", module, count: (was?.count ?? 0) + count,
+    ...(labelKey ? { labelKey } : {}), error, at: new Date(now).toISOString(),
+  };
+  return [...freshRejected(prev, now).filter((x) => x.id !== id), rec];
 }

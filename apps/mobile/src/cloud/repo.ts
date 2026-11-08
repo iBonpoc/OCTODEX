@@ -3,7 +3,7 @@
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
 import { companyFromDb } from "./companyMap";
-import { companyModulesFromRows } from "@/modules/registry";
+import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
 import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
@@ -131,6 +131,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const pushPrefs = pushPrefsFromRows(pushRows);
   // spec 33 П15 (C2a): the company's add-on modules; empty before the migration company_modules (C1) or if a read fails
   const moduleRows = await every<Row>("company_modules", "module_key, enabled, trial_ends_at, paid_until, settings, row_version", key("module_key")).catch(() => [] as Row[]);
+  const companyModules = companyModulesFromRows(moduleRows);
+  // spec 33 П21: each module reads its own tables (the core knows no trade); a failed read keeps the phone's copy
+  const moduleData = await loadModuleData(companyModules, { live: (table, cols) => live<Row>(table, cols) });
   // wave 7б-2 (migration 20261106210000): the company flag, who shares, the last points of open visits. Each read on its
   // own: before the migration (or if a read fails) the location stays off and the rest of the company still loads.
   const [locAllowed, shareRows, pointRows] = await Promise.all([
@@ -604,7 +607,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         receivedBy: (p.received_by as string | null) ?? undefined, refundedCents: n(p.refunded_cents) || undefined,
       }))
       .sort((a, b) => b.at.localeCompare(a.at)),
-    company: companyRows[0] ? { ...companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows), modules: companyModulesFromRows(moduleRows) } : null,
+    company: companyRows[0] ? { ...companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows), modules: companyModules } : null,
+    moduleData,
     notes: noteRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Note["subjectType"], subjectId: s(r.subject_id), body: s(r.body),
       visibility: r.visibility === "private" ? "private" : "team", pinned: !!r.pinned, authorId: s(r.created_by), at: s(r.created_at),

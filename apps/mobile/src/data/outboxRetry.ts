@@ -37,6 +37,9 @@ export function classify(e: unknown): Failure {
   const msg = e instanceof Error ? e.message : String(e ?? "");
   return NETWORK.test(msg) ? "network" : "refusal";
 }
+/** the hint of a refused module.op whose module is not active on the server (cloud/ops.ts; spec 33 П21.1) */
+export const MODULE_INACTIVE = "module_inactive";
+export const isModuleInactive = (e: unknown) => field(e, "hint") === MODULE_INACTIVE;
 export const isNetworkError = (e: unknown) => classify(e) === "network";
 /**
  * The server's «not now» that may be this op's alone (docs/specs/23 §3): an internal error (500 / XX000), a statement

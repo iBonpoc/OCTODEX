@@ -52,6 +52,11 @@ export type ModuleOpHandler = (
   ctx: { companyId: string; userId: string; run: (p: PromiseLike<{ error: { message: string; code?: string; hint?: string } | null; status?: number }>) => Promise<void> },
 ) => Promise<void>;
 
+/** what a module's load gets: the company's live rows of one of its own tables (deleted_at is null), page by page */
+export interface ModuleRead {
+  live(table: string, cols: string): Promise<Record<string, unknown>[]>;
+}
+
 export interface ModuleDef {
   /** = company_modules.module_key: ^[a-z][a-z0-9_]{1,30}$ */
   key: string;
@@ -69,6 +74,13 @@ export interface ModuleDef {
    * open (a function, so the registry and vitest never load screen code). Spec 33 П20.3.
    */
   screens?: Record<string, () => import("react").ComponentType>;
+  /**
+   * reads the module's own tables into DB.moduleData[key] (spec 33 П21.2 №4). Called when the company has the module's
+   * row (switched on once — after the trial drafts still open, founder О2). A failed read keeps what the phone had.
+   */
+  load?: (read: ModuleRead) => Promise<unknown>;
+  /** the text of «not saved: the trial is over» (a refused batch of this module's changes, spec 33 П21.1); params {count} */
+  rejectedKey?: DictKey;
 }
 
 /** off — not switched on; trial — in the trial; paid — paid; expired — switched on, trial over, not paid */
@@ -140,6 +152,33 @@ export const activeModules = (company: Pick<Company, "modules"> | null | undefin
 /** the actions the company's usable modules add to a place (a module not active adds nothing — founder О2) */
 export function placeActions(place: ModulePlace, company: Pick<Company, "modules"> | null | undefined, ctx: PlaceCtx, now = Date.now()): (ModuleAction & { module: string })[] {
   return activeModules(company, now).flatMap((d) => (d.places?.[place]?.(ctx) ?? []).map((a) => ({ ...a, module: d.key })));
+}
+
+/**
+ * every loading module's data the company has (spec 33 П21): modules with a load and a row in company_modules. A read
+ * that fails leaves its key out — keepModuleData then keeps the phone's copy.
+ */
+export async function loadModuleData(modules: Record<string, CompanyModule>, read: ModuleRead): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {};
+  await Promise.all(
+    allModules()
+      .filter((d) => d.load && modules[d.key])
+      .map(async (d) => {
+        try {
+          out[d.key] = await d.load!(read);
+        } catch {
+          /* kept from the phone (keepModuleData) */
+        }
+      }),
+  );
+  return out;
+}
+/** a fresh read without a module's data (its read failed) keeps the phone's copy of it */
+export function keepModuleData<T extends { moduleData?: Record<string, unknown>; company?: Pick<Company, "modules"> | null }>(next: T, prev: { moduleData?: Record<string, unknown> } | null | undefined): T {
+  const had = prev?.moduleData ?? {};
+  const keep = Object.keys(had).filter((k) => !(k in (next.moduleData ?? {})) && next.company?.modules?.[k] && moduleDef(k)?.load);
+  if (!keep.length) return next;
+  return { ...next, moduleData: { ...next.moduleData, ...Object.fromEntries(keep.map((k) => [k, had[k]])) } };
 }
 
 /** a module's screen by its address parts; unknown module or screen → undefined */

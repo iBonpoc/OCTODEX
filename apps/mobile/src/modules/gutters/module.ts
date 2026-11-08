@@ -5,6 +5,7 @@
  * the entry from a lead and a property is M5), /module/gutters/bench — the canvas speed check.
  */
 import { moduleHref, type ModuleDef } from "../registry";
+import { guttersOps, loadGutters } from "./data";
 
 const gutters: ModuleDef = {
   key: "gutters",
@@ -20,6 +21,10 @@ const gutters: ModuleDef = {
       { id: "bench", labelKey: "mod.gutters.bench.action", icon: "clock", href: moduleHref("gutters", "bench") },
     ],
   },
+  // the measurement's tables (spec 33 П19) and its changes (П21): DB.moduleData.gutters
+  load: loadGutters,
+  ops: guttersOps,
+  rejectedKey: "mod.gutters.rejected",
   screens: {
     draw: () => require("./draw/DrawScreen").default,
     bench: () => require("./bench/BenchScreen").default,

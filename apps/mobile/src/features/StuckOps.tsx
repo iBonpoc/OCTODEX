@@ -9,6 +9,7 @@ import { space } from "@octo/design-tokens";
 import { router, type Href } from "expo-router";
 import { useStore, type StuckOp } from "@/data/store";
 import type { RejectedOp } from "@/data/outboxRejected";
+import { rejectedHint, rejectedLabel, rejectedOpens } from "@/features/attention";
 import { useI18n } from "@/i18n";
 import { stuckKindKey } from "@/data/syncLink";
 import { Button, StatusChip } from "@/ui/controls";
@@ -91,24 +92,24 @@ function StuckCard({ op }: { op: StuckOp }) {
  */
 function RejectedCard({ r }: { r: RejectedOp }) {
   const { t, money, day, time } = useI18n();
-  const { dismissRejected } = useStore();
+  const { dismissRejected, role } = useStore();
   const toast = useToast();
   return (
     <Card status="bad">
       <View testID={`rejected-${r.id}`} style={{ gap: space[2] }}>
         <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: space[2] }}>
           <T v="body" w="semibold">
-            {t(`att.rejected.${r.what}`)}
+            {t(rejectedLabel(r), r.what === "module" ? { count: r.count ?? 0 } : {})}
             {r.amountCents != null ? ` · ${money(r.amountCents)}` : ""}
           </T>
           {/* rule 2: the status is an icon and a word */}
           <StatusChip status="bad" label={t("att.rejectedChip")} />
         </View>
         <T v="caption" tone="mut">
-          {`${day(r.at)} ${time(r.at)}`} · {t("sync.rejected.hint")}
+          {`${day(r.at)} ${time(r.at)}`} · {t(rejectedHint(r, role))}
         </T>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>
-          <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} />
+          {rejectedOpens(r, role) ? <Button label={t("sync.rejected.open")} icon="chevronRight" variant="secondary" onPress={() => router.push(r.href as Href)} /> : null}
           <Button label={t("sync.rejected.ok")} icon="check" variant="ghost" onPress={() => toast.show(t("sync.rejected.dismissed"), dismissRejected(r.id))} />
         </View>
       </View>

@@ -4,6 +4,7 @@ import { Linking } from "react-native";
 import { useStore, visitContext } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { attentionHref, buildAttention, type AttentionItem } from "@/features/attention";
+import { canOpen } from "@/nav/roles";
 import { AttentionRows } from "@/features/AttentionCards";
 import { subjectOf } from "@/features/attentionPeople";
 import { telHref } from "@/features/contactLinks";
@@ -57,7 +58,7 @@ export default function Triage() {
       case "rejected":
         return (
           <>
-            <Button label={t("sync.rejected.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it) as Href)} />
+            {canOpen(role, attentionHref(it)) ? <Button label={t("sync.rejected.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it) as Href)} /> : null}
             <Button label={t("sync.rejected.ok")} icon="check" variant="secondary" onPress={() => toast.show(t("sync.rejected.dismissed"), dismissRejected(it.refId))} />
           </>
         );
@@ -88,7 +89,7 @@ export default function Triage() {
             <T v="title">{cur.name || t(cur.label, cur.params)}</T>
           </View>
           <T v="body" tone="mut">
-            {cur.name ? t(cur.label, cur.params) : cur.kind === "rejected" ? t("sync.rejected.hint") : ""}
+            {cur.name ? t(cur.label, cur.params) : cur.kind === "rejected" ? t(cur.hint ?? "sync.rejected.hint") : ""}
           </T>
           {curWho ? (
             <T v="body" tone="mut">
