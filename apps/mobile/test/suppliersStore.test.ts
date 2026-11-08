@@ -163,6 +163,33 @@ describe("unit:suppliersStore — spec 36 SUP1", () => {
     await settle();
     expect(itemOf(r).vendorTaxBps).toBe(0);
   });
+  it("«Отменить» after the tax already went to the server: reverse ops put the old tax back there (review SUP1 №1)", async () => {
+    const r = await signedIn();
+    valueOf(r).saveSupplier({ id: SUP, name: "ABC Supply (test)", taxBps: 1025, active: true });
+    const undo = valueOf(r).applySupplierTax(SUP);
+    await tick();
+    server.sends.forEach((x) => x.d.resolve());
+    await tick();
+    server.sends.forEach((x) => x.d.resolve());
+    await tick();
+    expect(server.sends.some((x) => x.op.k === "catalog.save" && (x.op.item as CatalogItem).vendorTaxBps === 1025)).toBe(true);
+    undo();
+    await settle();
+    expect(itemOf(r).vendorTaxBps).toBe(0);
+    for (let i = 0; i < 3; i++) {
+      await tick();
+      server.sends.forEach((x) => x.d.resolve());
+    }
+    const last = [...server.sends].reverse().find((x) => x.op.k === "catalog.save")!;
+    expect((last.op.item as CatalogItem).vendorTaxBps).toBe(0);
+    expect(last.op).toMatchObject({ costs: { vendorTaxBps: 0 } });
+  }, 20000);
+  it("a rename: the new name goes into vendor of its items (sales, the tech and old phones read only that)", async () => {
+    const r2 = await signedIn();
+    valueOf(r2).saveSupplier({ id: SUP, name: "ABC Supply Co (test)", active: true });
+    await settle();
+    expect(itemOf(r2).vendor).toBe("ABC Supply Co (test)");
+  });
   it("an item's save: the link goes with it, the phone keeps a history row of the new cost", async () => {
     const r = await signedIn();
     valueOf(r).saveCatalogItem({ ...itemOf(r), costCents: 1100, supplierSku: " A-1 " });

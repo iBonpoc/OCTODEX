@@ -81,6 +81,29 @@ alter table public.catalog_items add constraint catalog_items_supplier_sku_check
 alter table public.catalog_items validate constraint catalog_items_supplier_sku_check;
 create index catalog_items_supplier_idx on public.catalog_items (company_id, supplier_id) where supplier_id is not null;  -- rule16: small (catalog_items is not a big table; the FK)
 
+-- who links an item to a supplier: owner / admin / office only (security check SUP1 №2). Sales edits the price list
+-- (catalog_items_update = is_staff) but reads no suppliers: whatever it sends for supplier_id / supplier_sku is ignored
+-- (an update keeps the stored link, an insert gets none), and the name of a linked item (`vendor`) stays the supplier's.
+-- No JWT (a migration, a server writer) — as sent. A refusal would stop an old sales phone's whole save: ignored instead.
+create or replace function app.tg_catalog_supplier_guard()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if auth.uid() is null or app.has_role(new.company_id, array['owner', 'admin', 'office']) then return new; end if;
+  if tg_op = 'INSERT' then
+    new.supplier_id := null;
+    new.supplier_sku := null;
+  else
+    new.supplier_id := old.supplier_id;
+    new.supplier_sku := old.supplier_sku;
+    if old.supplier_id is not null then new.vendor := old.vendor; end if;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_catalog_supplier_guard() from public, anon, authenticated;
+create trigger t20_supplier_guard before insert or update on public.catalog_items
+  for each row execute function app.tg_catalog_supplier_guard();
+
 -- ---- catalog_cost_history ---------------------------------------------------------------------------------------------
 create table public.catalog_cost_history (
   id               uuid primary key default public.uuid_generate_v7(),
@@ -129,6 +152,8 @@ begin
   return null;
 end;
 $$;
+-- The rows of this transaction are found by their time (now() is the same in one transaction, and only t96 above writes
+-- the table with at = now()); a later server writer that sets `at` by hand must keep that or mark its rows (review SUP1).
 create or replace function app.tg_cost_history_supplier()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin

@@ -95,8 +95,21 @@ exports.run = async (h) => {
 
   // sales and the tech: no suppliers
   for (const role of ["sales", "tech"]) {
+    // the menu: no «Поставщики» (phone: «Ещё»; 820/1280: the side menu)
+    await p.evaluate((r) => localStorage.setItem("octo.role.v1", JSON.stringify(r)), role);
+    await h.go("/more");
+    h.expect(!/Поставщики/.test(await p.locator("body").innerText()), `${role}: no «Поставщики» in the menu`);
     await p.evaluate((r) => localStorage.setItem("octo.role.v1", JSON.stringify(r)), role);
     await h.go("/suppliers");
     h.expect((await p.getByTestId(`sup-card-${zed.id}`).count()) === 0, `${role}: «Поставщики» is closed`);
+    // the item: no supplier picker and no history (our costs); the server tells them «no costs» (costsVisible false)
+    await p.evaluate(() => {
+      const k = "octo.db.v5";
+      const st = JSON.parse(localStorage.getItem(k));
+      st.db.costsVisible = false;
+      localStorage.setItem(k, JSON.stringify(st));
+    });
+    await h.go(`/catalog/${ITEM}`);
+    h.expect((await p.getByTestId("catalog-history").count()) === 0 && (await p.getByTestId("catalog-supplier").count()) === 0, `${role}: no picker, no history on the item`);
   }
 };

@@ -3200,4 +3200,9 @@ export const es: Dict = {
   "sup.src.ai_scan": "escaneo de lista",
   "sup.src.shelf_tag": "etiqueta",
   "sup.src.module": "módulo",
+  "sup.taxNone": "sin indicar",
+  "sup.taxClear": "Quitar el impuesto del proveedor",
+  "sup.taxNotSet": "Sin impuesto: los artículos conservan el suyo",
+  "sup.notFound": "Proveedor no encontrado: aún cargando o eliminado",
+  "sup.vendorLocked": "Vendedor: {name} (lo cambia la oficina)",
 };

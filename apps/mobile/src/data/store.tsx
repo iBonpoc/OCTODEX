@@ -54,7 +54,7 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, keepModuleData, moduleActive, moduleDef } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
-import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsWithOtherTax, localHistoryEntry } from "@/features/suppliers";
+import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, localHistoryEntry } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
 import {
   type CalendarEvent,
@@ -1070,6 +1070,28 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   const visitOf = (visitId: ID) => dbRef.current.visits.find((x) => x.id === visitId);
   const noop: Undo = () => {};
+  /**
+   * spec 36: change several price-list items at once (a supplier's tax or its new name) — each a catalog.save with its
+   * cost change and the phone's history row; «Отменить» sends the reverse ops (the change may already be on the
+   * server — review SUP1 №1), the last one wins.
+   */
+  const saveItemsBoth = (pairs: { prev: CatalogItem; next: CatalogItem }[]): Undo => {
+    if (!pairs.length) return noop;
+    const go = (from: CatalogItem, to: CatalogItem, at: string) => {
+      const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(from, to, uid(), at);
+      mutate(
+        "catalog.save",
+        (d) => ({ ...d, catalog: d.catalog.map((c) => (c.id === to.id ? to : c)), ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}) }),
+        { k: "catalog.save", item: to, costs: catalogCostChange(from, to) },
+      );
+    };
+    const at = new Date().toISOString();
+    pairs.forEach(({ prev, next }) => go(prev, next, at));
+    return () => {
+      const back = new Date().toISOString();
+      [...pairs].reverse().forEach(({ prev, next }) => go(next, prev, back));
+    };
+  };
   const checkItemFn = (visitId: ID, itemId: ID, done: boolean): Undo => {
     const v = visitOf(visitId);
     const item = v?.checklist.find((c) => c.id === itemId);
@@ -2062,15 +2084,32 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       saveSupplier: (x0) => {
         const x = cleanSupplier(x0);
-        if (!x || !canSeeSuppliers(role) || dbRef.current.suppliersLegacy) return noop;
-        return mutate(
-          "supplier.save",
-          (d) => {
-            const list = d.suppliers ?? [];
-            return { ...d, suppliers: list.some((y) => y.id === x.id) ? list.map((y) => (y.id === x.id ? x : y)) : [...list, x] };
-          },
-          { k: "supplier.save", supplier: x },
-        );
+        const d0 = dbRef.current;
+        if (!x || !canSeeSuppliers(role) || d0.suppliersLegacy) return noop;
+        const before = (d0.suppliers ?? []).find((y) => y.id === x.id);
+        const put = (v: Supplier | undefined) =>
+          mutate(
+            "supplier.save",
+            (d) => {
+              const list = d.suppliers ?? [];
+              if (!v) return { ...d, suppliers: list.filter((y) => y.id !== x.id) };
+              return { ...d, suppliers: list.some((y) => y.id === v.id) ? list.map((y) => (y.id === v.id ? v : y)) : [...list, v] };
+            },
+            v ? { k: "supplier.save", supplier: v } : undefined,
+          );
+        const undoSup = put(x);
+        // a rename: the name goes into `vendor` of its items too (sales, the tech and old phones read only that; spec 36 §1в)
+        const renamed = before && before.name !== x.name
+          ? itemsOfSupplier(dbRef.current, x.id).filter((it) => it.vendor !== x.name).map((it) => ({ prev: it, next: { ...it, vendor: x.name } }))
+          : [];
+        const undoItems = saveItemsBoth(renamed);
+        // «Отменить» (rule 5): a new supplier is taken back from the queue (nothing reached the server yet, or it stays
+        // as made); a changed one gets a reverse op — the change may already be on the server
+        return () => {
+          undoItems();
+          if (before) put(before);
+          else undoSup();
+        };
       },
       setSupplierActive: (id, active) => {
         const x = (dbRef.current.suppliers ?? []).find((y) => y.id === id);
@@ -2085,19 +2124,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const d0 = dbRef.current;
         const x = (d0.suppliers ?? []).find((y) => y.id === id);
         if (!x || x.taxBps === undefined || !canSeeSuppliers(role) || d0.costsVisible === false) return noop;
-        const items = itemsWithOtherTax(d0, x).map((it) => ({ ...it, vendorTaxBps: x.taxBps }));
-        if (!items.length) return noop;
-        const at = new Date().toISOString();
-        const undos = items.map((it) => {
-          const prev = dbRef.current.catalog.find((c) => c.id === it.id);
-          const hist = localHistoryEntry(prev, it, uid(), at);
-          return mutate(
-            "catalog.save",
-            (d) => ({ ...d, catalog: d.catalog.map((c) => (c.id === it.id ? it : c)), ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}) }),
-            { k: "catalog.save", item: it, costs: catalogCostChange(prev, it) },
-          );
-        });
-        return () => [...undos].reverse().forEach((u) => u());
+        return saveItemsBoth(itemsWithOtherTax(d0, x).map((it) => ({ prev: it, next: { ...it, vendorTaxBps: x.taxBps } })));
       },
       saveCatalogItems: (items, opts) => {
         const onlyNew = !!opts?.onlyNew;

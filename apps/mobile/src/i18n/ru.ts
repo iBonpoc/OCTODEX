@@ -3200,6 +3200,11 @@ export const ru = {
   "sup.src.ai_scan": "скан прайса",
   "sup.src.shelf_tag": "ценник",
   "sup.src.module": "модуль",
+  "sup.taxNone": "не задан",
+  "sup.taxClear": "Сбросить налог поставщика",
+  "sup.taxNotSet": "Налог не задан — у позиций остаётся их собственный",
+  "sup.notFound": "Поставщик не найден — возможно, ещё загружается или удалён",
+  "sup.vendorLocked": "Продавец: {name} (меняет офис)",
 } as const;
 
 export type DictKey = keyof typeof ru;

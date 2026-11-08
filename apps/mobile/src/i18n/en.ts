@@ -3200,4 +3200,9 @@ export const en: Dict = {
   "sup.src.ai_scan": "price scan",
   "sup.src.shelf_tag": "shelf tag",
   "sup.src.module": "module",
+  "sup.taxNone": "not set",
+  "sup.taxClear": "Clear the supplier tax",
+  "sup.taxNotSet": "No tax set — items keep their own",
+  "sup.notFound": "Supplier not found — still loading or removed",
+  "sup.vendorLocked": "Vendor: {name} (the office changes it)",
 };

@@ -112,7 +112,9 @@ SUP2 (для карты сразу): PurchaseOrder `draft` → `sent` → `recei
 
 ## 8. Права, офлайн, уведомления
 - RLS `suppliers`: select/insert/update — `app.has_role(company, owner/admin/office)`; delete — не выдаём. `catalog_cost_history`: select — `app.can_view_costs`; insert/update/delete — никому (триггер `security definer`). Функции триггеров — `revoke … from public, anon, authenticated` (правило 18).
-- Мастер и sales: меню «Поставщики» не видят (`sections.ts`), `suppliers` не читают (база), историю не читают (база); `supplier_id` позиции видят как непрозрачный id — имени по нему не получить.
+- Мастер и sales: меню «Поставщики» не видят (`sections.ts`), `suppliers` не читают (база), историю не читают (база, даже мастер с view_costs). Имя поставщика им видно, как и раньше, через `catalog_items.vendor` (приложение пишет туда имя; при переименовании — у всех его позиций); номер аккаунта, налог поставщика и история — нет.
+- Поставщика позиции меняют только owner/admin/office: триггер `t20_supplier_guard` у остальных (sales правит каталог) игнорирует `supplier_id`, `supplier_sku`, а у привязанной позиции и `vendor` (security-check SUP1 №2, T144). На экране у sales имя привязанного продавца — только чтение.
+- Позже: журнал цены растёт без предела (очистка или лимит — вместе с импортом прайса SUP3); `catalog_cost_history.supplier_id` без FK (исторический id; поставщики не удаляются).
 - Офлайн: `db.suppliers` в сторе; мутации `supplier.save`, `supplier.archive` (с `undo`), `catalog.save` + `supplierId`, `supplierSku`; без сети — в очередь. История — только с сервера (снимок для `costsVisible`), без сети — последняя загруженная. Старый сервер без таблицы — `orNoTable`, поставщики не пишутся (как C3).
 - Уведомлений нет (напоминание 180 дней — позже).
 

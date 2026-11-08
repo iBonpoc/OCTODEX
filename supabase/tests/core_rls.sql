@@ -10976,6 +10976,16 @@ insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_c
   on conflict (id) do update set name = excluded.name;
 select tst.ok((select supplier_id = '51430000-0000-4000-8000-000000000001' and supplier_sku = 'SKU-144' from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'),
   'T144 sales renames the item, its supplier and SKU stay');
+-- …and whatever sales sends for them is ignored (it reads no suppliers; security check SUP1 №2)
+update public.catalog_items set supplier_id = null, supplier_sku = 'X', vendor = 'Lowe''s' where id = '51440000-0000-4000-8000-000000000001';
+select tst.ok((select supplier_id = '51430000-0000-4000-8000-000000000001' and supplier_sku = 'SKU-144' and vendor = 'T143 Supply (test)'
+                 from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'),
+  'T144 sales does not unlink, re-SKU or rename the supplier of a linked item');
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, supplier_id, supplier_sku)
+  values ('51440000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'material', 'T144 sales item (test)', 'ea', 0,
+          '51430000-0000-4000-8000-000000000001', 'S1');
+select tst.ok((select supplier_id is null and supplier_sku is null from public.catalog_items where id = '51440000-0000-4000-8000-000000000002'),
+  'T144 sales makes an item without a supplier, whatever it sends');
 -- the tech reads the item (and its old vendor text) as before, the supplier id gives him nothing
 :as_tech_a
 select tst.ok((select vendor = 'T143 Supply (test)' from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'), 'T144 the tech reads the vendor text as before');
@@ -11023,16 +11033,27 @@ select tst.blocked($q$delete from public.catalog_cost_history where item_id = '5
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history$q$) = 0, 'T145 the tech reads no history (our costs)');
 :as_sales_a
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history$q$) = 0, 'T145 sales without view_costs reads none');
+:as_super
+update public.memberships set permissions_override = '{"view_costs": true}'::jsonb
+ where user_id in ('a0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000003') and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 3, 'T145 sales with view_costs reads the history');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history$q$) = 0, 'T145 the tech never, even with view_costs');
+:as_super
+update public.memberships set permissions_override = permissions_override - 'view_costs'
+ where user_id in ('a0000000-0000-0000-0000-000000000005', 'a0000000-0000-0000-0000-000000000003') and company_id = 'ca000000-0000-0000-0000-000000000000';
 :as_owner_b
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 0, 'T145 company B reads none of A''s');
 :as_super
-delete from public.catalog_items where id = '51440000-0000-4000-8000-000000000001';
+delete from public.catalog_items where id in ('51440000-0000-4000-8000-000000000001', '51440000-0000-4000-8000-000000000002');
 select tst.ok(tst.cnt($q$select 1 from public.catalog_cost_history where item_id = '51440000-0000-4000-8000-000000000001'$q$) = 0, 'T145 the history goes with its item');
 \echo 'T145 the cost history ok'
 
 -- ---------------------------------------------------------------- T146: who calls the new functions (rule 18); the move of vendor texts
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_cost_history()', 'execute')
           and not has_function_privilege('authenticated', 'app.tg_cost_history_supplier()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_catalog_supplier_guard()', 'execute')
           and not has_function_privilege('anon', 'app.sup_text_ok(text, integer)', 'execute')
           and not has_table_privilege('authenticated', 'public.suppliers', 'delete')
           and not has_table_privilege('authenticated', 'public.catalog_cost_history', 'insert')

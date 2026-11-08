@@ -3,7 +3,7 @@
  * their costs; archive with «Отменить» (rule 5). Owner, admin, office only (nav/roles.ts). «new» (or any id
  * not on the phone) — a new supplier.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -14,7 +14,8 @@ import { useI18n, type DictKey } from "@/i18n";
 import { uid } from "@/features/estimateDoc";
 import { emailBad, historyOf, itemsOfSupplier, itemsWithOtherTax, PAYMENT_TERMS } from "@/features/suppliers";
 import { mailtoHref, telHref } from "@/features/contactLinks";
-import { Labeled, PctField } from "@/features/fields";
+import { Labeled } from "@/features/fields";
+import { parsePctToBps } from "@octo/estimating-engine";
 import { CostHistory } from "@/features/SupplierParts";
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -32,6 +33,8 @@ export default function SupplierScreen() {
   const found = (store.db.suppliers ?? []).find((x) => x.id === id);
   const [s, setS] = useState<Supplier>(() => found ?? { id: uid(), name: "", active: true });
   const [ask, setAsk] = useState<{ n: number; pct: string } | null>(null);
+  const undoRef = useRef<(() => void) | null>(null);
+  const [taxText, setTaxText] = useState(() => (found?.taxBps === undefined ? "" : String(found.taxBps / 100)));
   const set = (p: Partial<Supplier>) => setS((x) => ({ ...x, ...p }));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/suppliers"));
   const ok = s.name.trim() !== "" && !emailBad(s.email);
@@ -39,7 +42,9 @@ export default function SupplierScreen() {
   const items = found ? itemsOfSupplier(store.db, found.id) : [];
 
   const save = () => {
-    toast.show(t("sup.saved", { name: s.name.trim() }), store.saveSupplier(s));
+    const undoSave = store.saveSupplier(s);
+    undoRef.current = undoSave;
+    toast.show(t("sup.saved", { name: s.name.trim() }), undoSave);
     // the tax changed and some of its items count with another one: ask before changing their prices
     const other = costs ? itemsWithOtherTax(store.db, { ...s, taxBps: s.taxBps }) : [];
     if (found && s.taxBps !== undefined && s.taxBps !== found.taxBps && other.length) {
@@ -50,7 +55,13 @@ export default function SupplierScreen() {
   };
   const apply = () => {
     const n = ask?.n ?? 0;
-    toast.show(t("sup.applied", { n }), store.applySupplierTax(s.id));
+    const undoApply = store.applySupplierTax(s.id);
+    const undoSave = undoRef.current;
+    // one «Отменить» for both: the items' tax and the supplier's own (review SUP1 №6 — the second toast replaces the first)
+    toast.show(t("sup.applied", { n }), () => {
+      undoApply();
+      undoSave?.();
+    });
     setAsk(null);
     back();
   };
@@ -58,6 +69,15 @@ export default function SupplierScreen() {
     toast.show(t(active ? "sup.restoredToast" : "sup.archivedToast", { name: s.name }), store.setSupplierActive(s.id, active));
     back();
   };
+  // an address of a supplier that is not on the phone (not loaded yet, another company's, archived elsewhere) is not a
+  // new one: a form with a fresh id would make a double (review SUP1 №4)
+  if (!found && id !== "new") {
+    return (
+      <Screen title={t("sup.edit")} back={back}>
+        <Empty icon="truck" title={t("sup.notFound")} />
+      </Screen>
+    );
+  }
   const tel = telHref(s.phone);
   const mail = mailtoHref(s.email);
   const terms: TermsKey = s.terms ?? "none";
@@ -98,9 +118,28 @@ export default function SupplierScreen() {
         ) : null}
         <Labeled label={t("sup.tax")}>
           <View testID="sup-tax">
-            <PctField bps={s.taxBps ?? 0} onChange={(b) => set({ taxBps: Math.min(b, 10000) })} />
+            {/* empty = not set (not 0%): its own text, the engine parses it */}
+            <TextField
+              type="percent"
+              value={taxText}
+              onChangeText={(v) => {
+                setTaxText(v);
+                const b = v.trim() === "" ? null : parsePctToBps(v);
+                if (v.trim() === "") set({ taxBps: undefined });
+                else if (b !== null) set({ taxBps: Math.min(b, 10000) });
+              }}
+              placeholder={t("sup.taxNone")}
+            />
           </View>
         </Labeled>
+        {/* not set ≠ 0%: a supplier without a tax leaves an item's own when picked (spec 36 §1г) */}
+        {s.taxBps !== undefined ? (
+          <View testID="sup-tax-clear">
+            <Button label={t("sup.taxClear")} variant="ghost" size="sm" onPress={() => { set({ taxBps: undefined }); setTaxText(""); }} />
+          </View>
+        ) : (
+          <T v="caption" tone="mut">{t("sup.taxNotSet")}</T>
+        )}
         <T v="caption" tone="mut">{t("sup.taxHint")}</T>
         <TextField type="note" value={s.notes ?? ""} onChangeText={(v) => set({ notes: v })} placeholder={t("sup.notes")} multiline />
       </Card>

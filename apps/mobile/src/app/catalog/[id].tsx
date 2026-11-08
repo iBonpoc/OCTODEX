@@ -96,6 +96,11 @@ export default function CatalogItemScreen() {
                 onPress={() => setPickSup(true)}
               />
             </View>
+          ) : it.supplierId ? (
+            // linked by the office: the name follows the supplier (a typed one would disagree with it — review SUP1 №3)
+            <View testID="catalog-vendor-locked">
+              <T v="caption" tone="mut">{t("sup.vendorLocked", { name: it.vendor ?? "—" })}</T>
+            </View>
           ) : (
             <TextField type="company" value={it.vendor ?? ""} onChangeText={(v) => set({ vendor: v })} placeholder={t("cat.vendor")} />
           )}
