@@ -129,7 +129,8 @@ export async function handleRefund(req: Req, deps: RefundDeps): Promise<Res> {
 
   const stripe = deps.stripe;
   const refused = (e: unknown, what: string) => {
-    if (e instanceof DbError && e.code === "42501") return json(403, { error: "not_allowed" });
+    // a closed company is not «only the owner»: its own word (20д debts)
+    if (e instanceof DbError && e.code === "42501") return json(403, { error: e.text.includes("company is closed") ? "company_closed" : "not_allowed" });
     const word = e instanceof DbError ? REFUSALS.find((w) => e.text.includes(w)) : undefined;
     if (word) return json(200, { error: word });
     deps.log?.(`stripe-refund: ${what} failed ${e instanceof DbError ? e.code ?? "" : ""}`.trim());

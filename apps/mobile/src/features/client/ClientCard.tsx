@@ -9,6 +9,7 @@ import { canSeeClientMoney, statusChoices, clientMoneyOf, clientStatusChip, noLa
 import { clientCounts, clientRecords, clientRowsFor, type ClientRow } from "@/features/clientRows";
 import { billingLine } from "@/features/clientForm";
 import { PersonRows } from "@/features/client/ClientSections";
+import { AdvancesBlock } from "@/features/payments/AdvancesBlock";
 import { CallSheet, type CallPreset } from "@/features/comms/CallSheet";
 import { useDialThenAsk } from "@/features/comms/dial";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
@@ -161,6 +162,8 @@ export function ClientCardBody({ c }: { c: Customer }) {
           </RowView>
         </Card>
       ) : null}
+      {/* spec 35 §4г («Деньги и отчёты»): the client's money without an invoice — apply or refund it on its receipt */}
+      {canSeeClientMoney(role) ? <AdvancesBlock customerId={c.id} /> : null}
 
       {/* the main person's phones and emails at hand; everyone else — row «People» */}
       {main && (main.phones.length || main.emails.length) ? (

@@ -6,6 +6,7 @@ import type { DB } from "@/data/types";
 import { addDays, addMonths, isoDayKey, todayKey, weekStart, type DayKey } from "./calendar";
 import { estimateListAmount } from "./estimateDoc";
 import { invoiceBalance } from "./invoiceStatus";
+import { collectedPayments } from "./payments/collected";
 import { clientMoney } from "@octo/estimating-engine";
 import { isOverdue } from "@/data/selectors";
 import { getZone, minuteIn } from "./zone";
@@ -51,7 +52,7 @@ export function periodNumbers(db: DB, p: Period, today?: DayKey): PeriodNumbers 
   const leads = db.leads.filter((l) => inRange(l.receivedAt, r)).length;
   const sent = db.estimates.filter((e) => inRange(e.sentAt, r)).length;
   const signedList = db.estimates.filter((e) => e.status === "approved" && inRange(e.approvedAt, r));
-  const pays = db.payments.filter((x) => inRange(x.at, r));
+  const pays = collectedPayments(db).filter((x) => inRange(x.at, r));
   return {
     leads,
     sent,
@@ -88,7 +89,7 @@ export function figureItems(db: DB, f: Figure, p: Period, today?: DayKey): Figur
     case "signed":
       return { ...none, estimates: db.estimates.filter((e) => e.status === "approved" && inRange(e.approvedAt, r)).sort(newest((e) => e.approvedAt)) };
     case "received":
-      return { ...none, payments: db.payments.filter((x) => inRange(x.at, r)).sort(newest((x) => x.at)) };
+      return { ...none, payments: collectedPayments(db).filter((x) => inRange(x.at, r)).sort(newest((x) => x.at)) };
     case "awaiting":
       return { ...none, invoices: db.invoices.filter((i) => invoiceBalance(i).owesCents > 0).sort((a, b) => (a.dueDate ?? "").localeCompare(b.dueDate ?? "")) };
   }
