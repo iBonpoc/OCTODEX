@@ -23,6 +23,8 @@ exports.run = async (h) => {
     await p.waitForTimeout(300);
   };
   const bar = () => tid("draw-toolbar").boundingBox();
+  // the middle of the canvas (820/1280: the attribute panel stands right of it)
+  const mid = async () => { const s = await p.getByTestId("draw-surface").boundingBox(); return s.x + s.width / 2; };
 
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
@@ -33,15 +35,15 @@ exports.run = async (h) => {
   h.expect(b0.width > b0.height, "at the bottom first: a row");
 
   await dragGrip([vp.width - 8, vp.height / 2]);
-  await waitFor(async () => { const b = await bar(); return b.height > b.width && b.x > vp.width / 2; }, "dropped at the right edge: a column on the right");
+  await waitFor(async () => { const b = await bar(); return b.height > b.width && b.x > (await mid()); }, "dropped at the right edge: a column on the right");
   await h.shot("right");
 
   await dragGrip([8, vp.height / 2]);
-  await waitFor(async () => { const b = await bar(); return b.height > b.width && b.x + b.width < vp.width / 2; }, "dropped at the left edge: a column on the left");
+  await waitFor(async () => { const b = await bar(); return b.height > b.width && b.x + b.width < (await mid()); }, "dropped at the left edge: a column on the left");
 
   await p.reload();
   await tid("draw-grip").waitFor({ timeout: 8000 });
-  await waitFor(async () => { const b = await bar(); return b.height > b.width && b.x + b.width < vp.width / 2; }, "after a reload: still on the left");
+  await waitFor(async () => { const b = await bar(); return b.height > b.width && b.x + b.width < (await mid()); }, "after a reload: still on the left");
 
   await dragGrip([vp.width / 2, vp.height - 8]);
   await waitFor(async () => { const b = await bar(); return b.width > b.height; }, "dropped at the bottom: a row again");
