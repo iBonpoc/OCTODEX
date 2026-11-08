@@ -24,6 +24,7 @@ type T = ReturnType<typeof useI18n>["t"];
 
 /** desktop row columns (spec 06 §5) */
 export const LEAD_COLUMNS: FactKey[] = ["phone", "src", "svc", "next"];
+export const LEAD_COLUMNS_PANEL: FactKey[] = ["phone"];
 export const EST_COLUMNS: FactKey[] = ["addr", "work", "valid"];
 export const INV_COLUMNS: FactKey[] = ["addr", "work", "due"];
 /** with the panel open on 1280 the row keeps one column of details (06 §4, «Панель 1280») */
@@ -48,9 +49,10 @@ export function leadCardSign(db: DB, l: Lead, t: T): CardSign | undefined {
   return undefined;
 }
 
-export function LeadListCard({ l, density, showResp, onStatus, onContact, onReply }: {
+export function LeadListCard({ l, density, showResp, onStatus, onContact, onReply, panel }: {
   l: Lead;
   density: Density;
+  panel?: PanelRow;
   /** «Responsible» only when the company has a team and the list is not «mine» */
   showResp?: boolean;
   onStatus?: () => void;
@@ -87,8 +89,9 @@ export function LeadListCard({ l, density, showResp, onStatus, onContact, onRepl
       onContact={onContact}
       action={l.status === "new" && onReply ? { label: t("inbox.reply"), onPress: onReply } : undefined}
       density={density}
-      columns={LEAD_COLUMNS}
-      onPress={() => router.push(`/lead/${l.id}`)}
+      columns={panel?.narrow ? LEAD_COLUMNS_PANEL : LEAD_COLUMNS}
+      selected={panel?.selected}
+      onPress={panel?.open ?? (() => router.push(`/lead/${l.id}`))}
     />
   );
 }

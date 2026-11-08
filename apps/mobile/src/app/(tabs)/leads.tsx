@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { useStore } from "@/data/store";
 import type { Lead, LeadStatus } from "@/data/types";
-import { filterLeads, isOpenLead, leadStatusView as statusOf, needsNextStep, openTasks, sourceName, waitingMinutes, waitStatus, type LeadFilter } from "@/features/leads";
+import { canSeeLead, canSeeLeadCost, filterLeads, isOpenLead, leadStatusView as statusOf, needsNextStep, openTasks, sourceName, waitingMinutes, waitStatus, type LeadFilter } from "@/features/leads";
 import { leadSigns } from "@/features/listSigns";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
 import { CallResultSheet } from "@/features/lead/LeadSheets";
 import { CardGrid, ListCardHeader, StatusPicker, openContact } from "@/ui/listCard";
-import { LEAD_COLUMNS, LeadListCard, leadCardSign } from "@/features/listCards";
+import { LEAD_COLUMNS, LEAD_COLUMNS_PANEL, LeadListCard, leadCardSign } from "@/features/listCards";
 import type { ContactAction } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
 import { View } from "react-native";
@@ -21,6 +21,9 @@ import { filterStoreKey } from "@/ui/filterBarRules";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
+import { ListPanel } from "@/ui/listPanel";
+import { useListPanel } from "@/nav/listPanel";
+import { LeadCardBody } from "@/features/lead/LeadCard";
 
 
 
@@ -35,25 +38,12 @@ const LANE: readonly LeadFilter[] = ["open", "waiting", "snoozed", "won", "close
  * (founder 07.11, spec 31 §7а): an old address /leads?tab=estimates|invoices goes there.
  */
 export default function Leads() {
-  const { t } = useI18n();
   const want = useLocalSearchParams<{ tab?: string }>().tab;
   useEffect(() => {
     if (want === "estimates") router.replace("/estimates");
     else if (want === "invoices") router.replace("/invoice");
   }, [want]);
-  const { role } = useStore();
-  return (
-    <Screen
-      title={t("sales.leads")}
-      help={t("help.inbox")}
-      hintKey="inbox"
-      // sales: this is «Главная» (13а §2) — the bell, the sync badge and the profile on the right
-      home={role === "sales"}
-      right={<Button label={t("quick.lead")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/lead/new")} />}
-    >
-      <LeadsBoard />
-    </Screen>
-  );
+  return <LeadsBoard />;
 }
 
 function LeadsBoard() {
@@ -97,13 +87,22 @@ function LeadsBoard() {
     setPicking(null);
     const move = pickerOptions("lead", l.status).find((o) => o.status === s);
     if (!move?.enabled) return;
-    if (move.how === "form") return router.push(`/lead/${l.id}`);
+    // the form is on the lead's card: on 1280 the panel, narrower — its screen
+    if (move.how === "form") return panel.open(l.id);
     toast.show(`${l.name}: ${t(statusOf[s as LeadStatus].label)}`, store.reopenLead(l.id));
   };
   // the one lead card (features/listCards.tsx), shared with the «Today» figures; this list adds its own actions
   const signOf = (l: Lead) => leadCardSign(db, l, t);
+  // urgent first (a sign or a new lead), then the rest in work
+  const urgent = leads.filter((l) => signOf(l) || l.status === "new");
+  const rest = leads.filter((l) => !urgent.includes(l));
+  // 1280: the open lead beside the list, `/leads?open=<id>` (spec 06 «Панель 1280», nav/listPanel.ts); ↑/↓ in the order on screen
+  const panel = useListPanel([...urgent, ...rest].map((l) => l.id), (id) => `/lead/${id}`, (id) => db.leads.some((l) => l.id === id && canSeeLead(role, db.me, l)));
+  const { openId } = panel;
+  const openL = openId ? db.leads.find((l) => l.id === openId) : undefined;
   const card = (l: Lead) => (
     <LeadListCard
+      panel={{ selected: l.id === openId, open: () => panel.open(l.id), narrow: !!openId }}
       key={l.id}
       l={l}
       density={device === "desktop" ? "row" : "rich"}
@@ -113,9 +112,6 @@ function LeadsBoard() {
       onReply={() => setReply(l.id)}
     />
   );
-  // urgent first (a sign or a new lead), then the rest in work
-  const urgent = leads.filter((l) => signOf(l) || l.status === "new");
-  const rest = leads.filter((l) => !urgent.includes(l));
   const section = (title: string, ls: Lead[]) =>
     ls.length ? (
       <View key={title} style={{ gap: space[2] }}>
@@ -124,7 +120,21 @@ function LeadsBoard() {
       </View>
     ) : null;
   return (
-    <>
+    <Screen
+      title={t("sales.leads")}
+      help={t("help.inbox")}
+      hintKey="inbox"
+      // sales: this is «Главная» (13а §2) — the bell, the sync badge and the profile on the right
+      home={role === "sales"}
+      right={<Button label={t("quick.lead")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/lead/new")} />}
+      aside={
+        openL ? (
+          <ListPanel title={openL.name} subtitle={[openL.number, sourceName(db, openL.sourceId), canSeeLeadCost(role) && openL.costCents ? money(openL.costCents) : null, day(openL.receivedAt)].filter(Boolean).join(" · ")} onOpen={panel.full} onClose={panel.close}>
+            <LeadCardBody key={openL.id} l={openL} />
+          </ListPanel>
+        ) : undefined
+      }
+    >
       {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane of statuses; sources and people in the sheet */}
       <FilterBar<LeadFilter>
         search={{ value: q, onChange: setQ, placeholder: t("lead.search") }}
@@ -165,13 +175,13 @@ function LeadsBoard() {
         </View>
       ) : (
         <>
-          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={COLUMNS} /> : null}
+          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={openId ? LEAD_COLUMNS_PANEL : COLUMNS} /> : null}
           {section(t("card.group.action"), urgent)}
           {section(t("card.group.inWork"), rest)}
         </>
       )}
       <ReplySheet leadId={reply} onClose={() => setReply(null)} />
-      {calling ? <CallResultSheet key={calling.id} l={calling} visible onClose={() => setCalling(null)} onAnswered={() => router.push(`/lead/${calling.id}`)} /> : null}
+      {calling ? <CallResultSheet key={calling.id} l={calling} visible onClose={() => setCalling(null)} onAnswered={() => panel.open(calling.id)} /> : null}
       {picking ? (
         <StatusPicker
           visible
@@ -184,6 +194,6 @@ function LeadsBoard() {
           onPick={(k) => pickStatus(picking, k)}
         />
       ) : null}
-    </>
+    </Screen>
   );
 }
