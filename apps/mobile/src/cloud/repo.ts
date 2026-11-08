@@ -5,7 +5,7 @@
 import { companyFromDb } from "./companyMap";
 import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFromDb, visitSettingsFromDb } from "./checklistMap";
 import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
-import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
+import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, paymentMethodFromDb, paymentShown, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
 import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
@@ -361,7 +361,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         amountDueCents: n(job?.contract_total_cents),
         signature: (v.signature_svg as string | null) ?? undefined,
         closed: v.status === "completed" || v.status === "no_show" || undefined,
-        payment: pay ? { method: s(pay.method) as Visit["payment"] extends infer P ? P extends { method: infer M } ? M : never : never, amountCents: n(pay.amount_cents), at: s(pay.received_at) } : undefined,
+        payment: pay ? { method: paymentMethodFromDb(s(pay.method)), amountCents: n(pay.amount_cents), at: s(pay.received_at) } : undefined,
       };
   };
   const placed = visits.filter((v) => v.job_id || v.property_id);
@@ -432,7 +432,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   });
 
   const lastPayment = new Map<string, Row>();
-  for (const p of payments) if (p.invoice_id) lastPayment.set(s(p.invoice_id), p);
+  for (const p of payments) if (p.invoice_id && paymentShown(s(p.status))) lastPayment.set(s(p.invoice_id), p);
   const mappedInvoices: Invoice[] = invoices
     // a draft is not sent, so not a debt (wave 8): it stays out like a void one until the app has drafts
     .filter((i) => i.status === "sent")
@@ -445,7 +445,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       // no due date = due on receipt: from the day it was sent
       dueDate: s(i.due_date) || s(i.sent_at) || s(i.created_at),
       paidAt: n(i.paid_cents) >= n(i.total_cents) && lastPayment.get(s(i.id)) ? s(lastPayment.get(s(i.id))?.received_at) : undefined,
-      method: (lastPayment.get(s(i.id))?.method as Invoice["method"]) ?? undefined,
+      method: lastPayment.has(s(i.id)) ? paymentMethodFromDb(s(lastPayment.get(s(i.id))?.method)) : undefined,
       kind: i.kind === "deposit" ? "deposit" : i.kind === "progress" ? "progress" : "final",
       number: s(i.number) || undefined,
       title: (i.title as string | null) ?? undefined,
@@ -647,12 +647,13 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     expenses: mappedExpenses,
     payments: payments
       // a fully refunded payment brought nothing: it is not in the list of payments (wave 8); partial — net, with refundedCents
-      .filter((p) => p.invoice_id && ["succeeded", "partially_refunded"].includes(s(p.status)) && n(p.amount_cents) - n(p.refunded_cents) > 0)
+      .filter((p) => p.invoice_id && paymentShown(s(p.status)) && n(p.amount_cents) - n(p.refunded_cents) > 0)
       .map((p) => ({
         id: s(p.id), invoiceId: s(p.invoice_id), customerId: s(p.customer_id), amountCents: n(p.amount_cents) - n(p.refunded_cents),
-        method: (["card", "cash", "check", "zelle"].includes(s(p.method)) ? s(p.method) : "card") as Payment["method"],
+        method: paymentMethodFromDb(s(p.method)),
         at: s(p.received_at), receiptNumber: (p.receipt_number as string | null) ?? undefined, reference: (p.reference as string | null) ?? undefined,
         receivedBy: (p.received_by as string | null) ?? undefined, refundedCents: n(p.refunded_cents) || undefined,
+        needsReview: p.needs_review === true || undefined,
       }))
       .sort((a, b) => b.at.localeCompare(a.at)),
     company: companyRows[0]

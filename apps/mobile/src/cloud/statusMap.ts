@@ -3,7 +3,7 @@
  * the app shows a shorter one. Pure data — test/storyMap.test.ts checks that every status allowed by the migrations
  * has a translation here, so a new status in the database can't silently fall back to a default.
  */
-import type { CustomerStatus, EstimateStatus, JobStatus, LeadStatus, MembershipStatus } from "@/data/types";
+import type { CustomerStatus, EstimateStatus, JobStatus, LeadStatus, MembershipStatus, PaymentMethod } from "@/data/types";
 
 /** app lead status → public.leads.status (what the app writes) */
 export const leadStatusToDb: Record<LeadStatus, string> = {
@@ -75,3 +75,23 @@ export const membershipStatus: Record<string, MembershipStatus> = {
   deleted: "deleted",
 };
 export const membershipDbOutOfList: readonly string[] = ["invited"];
+
+/** a payment in the database → is it money received, shown in the app's list of payments (docs/15 §5)?
+ *  pending (ACH on its way) and failed are not money yet; refunded / returned / voided brought nothing.
+ *  A status this version does not know (a newer server) is not shown — never a crash, never counted as money. */
+export const paymentStatusShown: Record<string, boolean> = {
+  pending: false,
+  succeeded: true,
+  failed: false,
+  partially_refunded: true,
+  refunded: false,
+  returned: false,
+  voided: false,
+};
+export const paymentShown = (status: string): boolean => paymentStatusShown[status] === true;
+
+/** payments.method → the app's method. tap_to_pay is a card; a method this version does not know shows as a card (as before) */
+export function paymentMethodFromDb(method: string): PaymentMethod {
+  if (method === "card" || method === "cash" || method === "check" || method === "zelle" || method === "ach") return method;
+  return "card";
+}

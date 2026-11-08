@@ -320,7 +320,8 @@ export interface Photo {
   uri?: string;
 }
 
-export type PaymentMethod = "card" | "cash" | "check" | "zelle";
+/** ach — a bank payment online (Stripe, step 20; docs/specs/35); people record only card / cash / check / zelle by hand */
+export type PaymentMethod = "card" | "cash" | "check" | "zelle" | "ach";
 
 export interface Visit {
   id: ID;
@@ -812,6 +813,8 @@ export interface Payment {
   receivedBy?: ID;
   /** already taken off amountCents (amountCents is net); > 0 = partially refunded (wave 8) */
   refundedCents?: number;
+  /** the server marked it for the owner (an online payment above the balance, a failed refund; docs/specs/35 §2) */
+  needsReview?: boolean;
 }
 
 export type ExpenseCategory = "materials" | "fuel" | "dump" | "tools" | "other";
