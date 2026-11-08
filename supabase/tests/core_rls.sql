@@ -7945,4 +7945,44 @@ delete from public.gutter_measurements where id = '9e950000-0000-4000-8000-00000
 delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T95 measurement limits: P0001 limit_reached ok'
 
+-- ---------------------------------------------------------------- T96: a module's item made with a fixed id, «insert or nothing» (docs/specs/33-gutters-settings П22.10)
+-- What the app sends for catalog.save onlyNew (PostgREST ignoreDuplicates): INSERT … ON CONFLICT (id) DO NOTHING. Two phones,
+-- two presses, the queue sending twice → one row; a price someone set is never overwritten by the test one; a refusal stays one.
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, attributes)
+  values ('96000000-0000-5000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'labor', 'Install, story 1 (test)', 'ft', 300, true, '{"work":"install","story":"1"}')
+  on conflict (id) do nothing;
+select tst.ok((select unit_price_cents = 300 and is_placeholder_price and pg_typeof(unit_price_cents) = 'bigint'::regtype from public.catalog_items where id = '96000000-0000-5000-8000-000000000001'),
+  'T96 the test item is saved: a whole-cent price, marked test (rule 9)');
+-- the owner sets the real price
+:as_owner_a
+update public.catalog_items set unit_price_cents = 455, is_placeholder_price = false where id = '96000000-0000-5000-8000-000000000001';
+-- the second phone presses «create now» with the same fixed id and the test price
+:as_office_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price, attributes)
+  values ('96000000-0000-5000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'labor', 'Install, story 1 (test)', 'ft', 300, true, '{"work":"install","story":"1"}')
+  on conflict (id) do nothing;
+select tst.ok(tst.cnt($q$select 1 from public.catalog_items where id = '96000000-0000-5000-8000-000000000001'$q$) = 1, 'T96 the same id twice is one row');
+select tst.ok((select unit_price_cents = 455 and not is_placeholder_price and name = 'Install, story 1 (test)' from public.catalog_items where id = '96000000-0000-5000-8000-000000000001'),
+  'T96 the price someone set is not overwritten by the test one');
+-- a tech may not make items: a refusal, also when the id is there already (ON CONFLICT DO NOTHING hides nothing)
+:as_tech_a
+do $$ begin
+  perform tst.fails($q$insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price)
+    values ('96000000-0000-5000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'labor', 'x', 'ft', 300, true) on conflict (id) do nothing$q$, 'T96 tech makes a new item');
+  perform tst.fails($q$insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price)
+    values ('96000000-0000-5000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'labor', 'x', 'ft', 1, true) on conflict (id) do nothing$q$, 'T96 tech: an existing id is still refused');
+end $$;
+-- another company with the same id: refused, A's row untouched
+:as_owner_b
+do $$ begin
+  perform tst.fails($q$insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents)
+    values ('96000000-0000-5000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'labor', 'x', 'ft', 1) on conflict (id) do nothing$q$, 'T96 company B writes into A');
+end $$;
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.catalog_items where id::text like '96000000-0000-5000-8000-00000000000%'$q$) = 1, 'T96 only the one item exists');
+select tst.ok((select unit_price_cents = 455 from public.catalog_items where id = '96000000-0000-5000-8000-000000000001'), 'T96 still the owner''s price');
+delete from public.catalog_items where id = '96000000-0000-5000-8000-000000000001';
+\echo 'T96 a module item with a fixed id: insert or nothing, one row, the set price stays, refusals stay refusals ok'
+
 \echo 'ALL TESTS PASSED'

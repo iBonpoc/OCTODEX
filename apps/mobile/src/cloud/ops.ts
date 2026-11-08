@@ -194,7 +194,9 @@ export type Op =
   | { k: "property.gate"; id: string; code: string }
   | { k: "note.add"; id: string; subjectType: string; subjectId: string; body: string; visibility: "team" | "private" }
   | { k: "note.update"; id: string; pinned?: boolean; body?: string; deleted?: boolean }
-  | { k: "catalog.save"; item: CatalogItem }
+  /** onlyNew (spec 33 П22.10): «insert, or nothing if this id is there» — a module's items made with a fixed id; a second
+   *  phone or a second send never overwrites a price someone already set */
+  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
   | { k: "estimate.sign"; id: string; svg: string; signer?: string }
@@ -845,7 +847,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
             ...(it.purchaseUnit !== undefined ? { purchase_unit: it.purchaseUnit.trim() || null } : {}),
             ...(it.packSize !== undefined ? { pack_size: it.packSize || null } : {}),
           },
-          { onConflict: "id" },
+          // onlyNew: INSERT … ON CONFLICT (id) DO NOTHING — the row there stays as it is; a refusal (RLS) stays a refusal
+          op.onlyNew ? { onConflict: "id", ignoreDuplicates: true } : { onConflict: "id" },
         ),
       );
     }
