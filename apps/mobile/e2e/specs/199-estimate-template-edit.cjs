@@ -82,7 +82,7 @@ exports.run = async (h) => {
   h.expect(copy.costs && Object.keys(copy.costs).length === 2 && Object.keys(copy.costs).every((k) => cl.some((l) => l.id === k)), "the costs follow the copy's lines");
   await tid(`est-tpl-${copy.id}`).waitFor({ timeout: 8000 });
   h.expect((await tpls()).find((x) => x.id === T_OWN).doc.options[0].lines.length === 2, "the original untouched");
-  // «Отменить» the copy: gone (removed on the server once sent — deleted_at, §12.7), not archived
+  // «Отменить» the copy: gone (the insert waits on the phone while the toast is up), not archived
   await p.getByRole("button", { name: /Отменить|Undo|Deshacer/ }).first().click();
   await waitFor(async () => !(await tpls()).some((x) => x.id === copy.id), "«Отменить» takes the copy away");
   h.expect((await tpls()).length === 2, "no copy left, not even archived");

@@ -131,7 +131,7 @@ export default function EstimateBuilder() {
       return;
     }
     // changed on another phone since this screen opened (the phone already read it): not over theirs (§12.7)
-    if (live.rowVersion !== tplEdit.rowVersion) {
+    if (tplEdit.rowVersion !== undefined && live.rowVersion !== tplEdit.rowVersion) {
       toast.show(t("est.tpl.editConflict"));
       return;
     }
@@ -142,9 +142,9 @@ export default function EstimateBuilder() {
       return;
     }
     // the server checks the same: over the version this screen opened on, else «не сохранено» (row_version_conflict)
-    store.saveEstimateTemplate(next, { baseRowVersion: tplEdit.rowVersion, clearCosts: clearedCosts(live, doc, seeCosts) });
-    // «Отменить» (rule 5): the template as it was, as a change of its own — the edit may have reached the server already
-    toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), () => void store.saveEstimateTemplate(live));
+    const undo = store.saveEstimateTemplate(next, { baseRowVersion: tplEdit.rowVersion, clearCosts: clearedCosts(live, doc, seeCosts) });
+    // «Отменить» (rule 5): the edit waits on the phone while the toast is up (SEND_AFTER_MS) — taken out of the queue
+    toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), undo);
     router.replace("/estimate/templates");
   };
 

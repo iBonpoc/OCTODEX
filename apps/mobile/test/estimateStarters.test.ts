@@ -21,7 +21,7 @@ const chain = (table: string): Record<string, unknown> => {
       writes.push(w);
       return c;
     };
-  for (const k of ["eq", "in", "is", "not", "lt", "order", "limit"])
+  for (const k of ["eq", "in", "is", "not", "order", "limit"])
     c[k] = (...a: unknown[]) => {
       w?.filters.push([k, ...a]);
       return c;
@@ -41,7 +41,9 @@ import {
 } from "@/features/estimateTemplate";
 import { starterTemplateId } from "@/features/checklist";
 import { registerModule, type ModuleDef, type StarterEstimate } from "../src/modules/registry";
-import { applyOp, estimateTemplateToDb } from "../src/cloud/ops";
+import { applyOp, estimateTemplateToDb, type Op } from "../src/cloud/ops";
+import { dropTemplateOps, templateRejected } from "../src/data/outboxRejected";
+import type { OwnedItem } from "../src/data/outboxOwner";
 import { estimateTemplateFromDb } from "../src/cloud/repo";
 
 // test prices («тестовые», rule 9)
@@ -191,20 +193,12 @@ describe("unit:estimateStarters", () => {
     expect(JSON.stringify(blind.doc)).not.toContain("unitCostCents");
   });
 
-  it("the queue: a starter is inserted once and never updated over the office's edits (ifNew) — only a removed one revives", async () => {
+  it("the queue: a starter is inserted once and never updated over the office's edits (ifNew); a plain save updates", async () => {
     const tpl = starterEstimateTemplate("fakemod", S, ctx())!;
-    await applyOp({ k: "est.template.save", template: tpl, ifNew: true, tappedAt: "2026-11-08T20:00:00.000Z" }, "c1", "u1");
-    expect(writes.map((w) => w.kind)).toEqual(["upsert", "update"]);
-    expect(writes[0]!.opts).toMatchObject({ onConflict: "id", ignoreDuplicates: true });
-    expect((writes[0]!.row as { module_key: string }).module_key).toBe("fakemod");
-    // the revive: only a row with deleted_at set (a live one — another phone's, maybe edited — is never touched)
-    expect(writes[1]!.row).toMatchObject({ deleted_at: null });
-    // … and only one removed BEFORE the tap: an old queued add sent late never undoes a later «Отменить»
-    expect(writes[1]!.filters).toEqual([["eq", "id", tpl.id], ["not", "deleted_at", "is", null], ["lt", "deleted_at", "2026-11-08T20:00:00.000Z"]]);
-    writes.length = 0;
-    // an add queued by an older build (no tap time): the insert only, nothing revived
     await applyOp({ k: "est.template.save", template: tpl, ifNew: true }, "c1", "u1");
     expect(writes.map((w) => w.kind)).toEqual(["upsert"]);
+    expect(writes[0]!.opts).toMatchObject({ onConflict: "id", ignoreDuplicates: true });
+    expect((writes[0]!.row as { module_key: string }).module_key).toBe("fakemod");
     writes.length = 0;
     await applyOp({ k: "est.template.save", template: tpl }, "c1", "u1");
     expect(writes.map((w) => w.kind)).toEqual(["upsert", "update"]);
@@ -218,7 +212,7 @@ describe("unit:estimateTemplateFollowups (§12.7)", () => {
   it("the builder's edit goes over its row_version; a moved one is «someone changed it first», never retried", async () => {
     await applyOp({ k: "est.template.save", template: tpl(), baseRowVersion: 4 }, "c1", "u1");
     expect(writes.map((w) => w.kind)).toEqual(["upsert", "update"]);
-    expect(writes[1]!.filters).toEqual([["eq", "id", "fixed"], ["eq", "row_version", 4]]);
+    expect(writes[1]!.filters).toEqual([["eq", "id", "fixed"], ["eq", "company_id", "c1"], ["eq", "row_version", 4]]);
     expect(writes[1]!.row).not.toHaveProperty("row_version");
     updated.rows = [];
     await expect(applyOp({ k: "est.template.save", template: tpl(), baseRowVersion: 4 }, "c1", "u1")).rejects.toMatchObject({ name: "PermanentError", hint: "row_version_conflict" });
@@ -239,12 +233,20 @@ describe("unit:estimateTemplateFollowups (§12.7)", () => {
     expect(l2 && l3).toBeTruthy();
   });
 
-  it("«Отменить» after sending: the template is removed (deleted_at), not deleted", async () => {
-    await applyOp({ k: "est.template.remove", id: "t9" }, "c1", "u1");
-    expect(writes).toHaveLength(1);
-    expect(writes[0]!.kind).toBe("update");
-    expect(Object.keys(writes[0]!.row as object)).toEqual(["deleted_at"]);
-    expect(writes[0]!.filters).toEqual([["eq", "id", "t9"]]);
+  it("a conflict: this save and the later ones of the same template leave the queue (never sent over the other change), one card", () => {
+    const who = { userId: "u1", companyId: "c1" };
+    const item = (id: string, op: Op): OwnedItem => ({ id, op, at: "2026-11-08T20:00:00.000Z", tries: 0, owner: who });
+    const x = tpl();
+    const items = [
+      item("a", { k: "est.template.save", template: x, baseRowVersion: 4 }),
+      item("b", { k: "est.template.save", template: { ...x, name: "other" } }),
+      item("c", { k: "est.template.save", template: { ...x, id: "another" } }),
+    ];
+    const { kept, gone } = dropTemplateOps(items, x.id, who);
+    expect(gone.map((g) => g.id)).toEqual(["a", "b"]);
+    expect(kept.map((g) => g.id)).toEqual(["c"]);
+    const card = templateRejected(items[0]!, "changed", Date.parse("2026-11-08T20:00:00Z"), who);
+    expect(card).toMatchObject({ id: "a", what: "estimate", href: "/estimate/templates", labelKey: "est.tpl.rejConflict", owner: who });
   });
 
   it("the phone reads row_version", () => {

@@ -44,7 +44,7 @@ import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePers
 import { backoffMs, classify, isModuleInactive, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { dropModuleOps, dropSettingsOps, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
+import { dropModuleOps, dropSettingsOps, dropTemplateOps, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -308,8 +308,6 @@ interface StoreCtx {
   /** E3 (docs/specs/07 §11): an estimate template, whole (new, changed, archived = archivedAt); director and office */
   /** ifNew: a module's starter (fixed id) — added once, never over the office's edits (docs/specs/07 §12 №6) */
   saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] }) => Undo;
-  /** «Отменить» of a template made here after it may have reached the server (a copy, a starter): deleted_at (§12.7) */
-  removeEstimateTemplate: (id: ID) => Undo;
   /** client + property for an estimate from a lead (creates a prospect card the first time) */
   leadEstimateTarget: (leadId: ID) => { customerId: ID; propertyId: ID; undo: Undo } | null;
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
@@ -801,6 +799,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // the phone's settings and version of this module are not the server's: no new save until this module is read
             // again — now, not after the whole queue (a live op in it holds the company's reload, review #374 №1)
             void rereadSettings(mod, w?.companyId);
+            continue;
+          }
+          // an estimate template changed on another phone first (spec 07 §12.7): this save and the later ones of the same
+          // template go now (each was built on this one's version), one card, the truth read again
+          if (item.op.k === "est.template.save" && isRowConflict(e)) {
+            const { kept, gone } = dropTemplateOps(outboxRef.current, item.op.template.id, w);
+            outboxRef.current = kept;
+            for (const g of gone) {
+              opPause.current.delete(g.id);
+              deadOps.current.add(g.id);
+            }
+            dropped = true;
+            const rej = templateRejected(item, msg, Date.now(), w);
+            setRejected((prev) => [...freshRejected(prev, Date.now()).filter((x) => x.id !== rej.id), rej]);
+            setOutbox(outboxRef.current);
             continue;
           }
           if (item.tries + 1 >= MAX_TRIES) {
@@ -1801,6 +1814,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!clean || !canEditEstimateTemplates(role) || dbRef.current.estimateTemplatesMissing) return noop;
         // a starter (ifNew) already on the phone: nothing (a second tap; a second phone's after the next read)
         if (opts?.ifNew && (dbRef.current.estimateTemplates ?? []).some((x) => x.id === clean.id)) return noop;
+        const base = opts?.baseRowVersion ?? (opts?.ifNew ? undefined : (dbRef.current.estimateTemplates ?? []).find((x) => x.id === clean.id)?.rowVersion);
         return mutate(
           "estimate.template",
           (d) => {
@@ -1808,21 +1822,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const old = list.find((x) => x.id === clean.id);
             // the server's row_version after this save, as far as the phone can tell (§12.7): an update +1; a new one —
             // insert 1, then the update 2; a starter (insert only, or a revived row) — not known
-            const rowVersion = old ? (old.rowVersion !== undefined ? old.rowVersion + 1 : undefined) : opts?.ifNew ? undefined : 2;
+            // a new one: not known (a cost in it makes the server's own extra update — review №С1) until the next read
+            const rowVersion = old?.rowVersion !== undefined ? old.rowVersion + 1 : undefined;
             const { rowVersion: _rv, ...rest } = clean;
             const next = { ...rest, uses: old?.uses ?? clean.uses, lastUsedAt: old?.lastUsedAt ?? clean.lastUsedAt, ...(rowVersion !== undefined ? { rowVersion } : {}) };
             return { ...d, estimateTemplates: old ? list.map((x) => (x.id === clean.id ? next : x)) : [...list, next] };
           },
           {
-            k: "est.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true, tappedAt: new Date().toISOString() } : {}),
-            ...(opts?.baseRowVersion !== undefined ? { baseRowVersion: opts.baseRowVersion } : {}),
+            k: "est.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true } : {}),
+            // every save of a template whose version the phone knows goes over it (rename, archive, «Отменить» too — review
+            // №С2); the builder gives the version it opened on
+            ...(base !== undefined ? { baseRowVersion: base } : {}),
             ...(opts?.clearCosts?.length ? { clearCosts: opts.clearCosts } : {}),
           },
         );
-      },
-      removeEstimateTemplate: (id) => {
-        if (!canEditEstimateTemplates(role) || dbRef.current.estimateTemplatesMissing) return noop;
-        return mutate("estimate.template", (d) => ({ ...d, estimateTemplates: (d.estimateTemplates ?? []).filter((x) => x.id !== id) }), { k: "est.template.remove", id });
       },
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);

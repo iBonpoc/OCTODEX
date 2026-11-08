@@ -11312,36 +11312,29 @@ select tst.ok((select name = 'T148 edited' and doc -> 'options' -> 0 ->> 'id' = 
   'T148 a starter sent again changes nothing: the office''s name, lines and costs stay');
 \echo 'T148 a tech makes an estimate from a template ok'
 
--- ---------------------------------------------------------------- T149: the builder's edit over row_version; «Отменить» = deleted_at, a re-added starter revives (docs/specs/07 §12.7)
+-- ---------------------------------------------------------------- T149: the builder's edit over row_version (docs/specs/07 §12.7)
 :as_office_a
 select row_version as rv from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000001' \gset t149_
 -- another phone saved in between: the edit made over the old version changes nothing (the phone reads 0 rows → conflict)
 update public.estimate_templates set name = 'T149 other phone' where id = 'e3c00000-0000-4000-8000-000000000001';
-with u as (update public.estimate_templates set name = 'T149 stale edit' where id = 'e3c00000-0000-4000-8000-000000000001' and row_version = :t149_rv returning 1)
+with u as (update public.estimate_templates set name = 'T149 stale edit' where id = 'e3c00000-0000-4000-8000-000000000001'
+             and company_id = 'ca000000-0000-0000-0000-000000000000' and row_version = :t149_rv returning 1)
 select tst.ok((select count(*) from u) = 0, 'T149 an edit over a moved row_version changes no row');
 select tst.ok((select name = 'T149 other phone' and row_version = :t149_rv + 1 from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000001'),
-              'T149 the other phone''s save stays; every save moves row_version by one');
--- «Отменить» of a starter after it was sent: deleted_at; the tech may not
-:as_tech_a
-select tst.blocked($q$update public.estimate_templates set deleted_at = now() where id = 'e3c00000-0000-4000-8000-000000000002'$q$, 'T149 a tech removes no template');
-:as_office_a
-update public.estimate_templates set deleted_at = now() where id = 'e3c00000-0000-4000-8000-000000000002';
--- the revive of a re-added starter touches a removed row only: a live one (another phone's) stays as it is
-update public.estimate_templates set name = 'T149 revived', deleted_at = null where id = 'e3c00000-0000-4000-8000-000000000001' and deleted_at is not null;
-select tst.ok((select name = 'T149 other phone' from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000001'), 'T149 a live template is not «revived» over');
--- an add tapped BEFORE the removal (an old phone's queue, sent late) revives nothing (the director's condition)
-update public.estimate_templates set name = 'T149 late', deleted_at = null
- where id = 'e3c00000-0000-4000-8000-000000000002' and deleted_at is not null and deleted_at < now() - interval '1 hour';
-select tst.ok((select deleted_at is not null and name <> 'T149 late' from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000002'),
-              'T149 an old queued add sent late does not undo «Отменить»');
--- a tech's «add again» revives nothing (no right to save templates)
-:as_tech_a
-select tst.blocked($q$update public.estimate_templates set deleted_at = null where id = 'e3c00000-0000-4000-8000-000000000002' and deleted_at is not null$q$, 'T149 a tech revives no template');
-:as_office_a
--- «Добавить» tapped after the removal: the row comes back fresh
-update public.estimate_templates set name = 'T149 revived', deleted_at = null
- where id = 'e3c00000-0000-4000-8000-000000000002' and deleted_at is not null and deleted_at < now() + interval '1 second';
-select tst.ok((select name = 'T149 revived' and deleted_at is null from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000002'), 'T149 a removed starter comes back on an add tapped after it');
-\echo 'T149 template edits over row_version, removal and revival ok'
+              'T149 the other phone''s save stays; a save moves row_version by one');
+-- why the phone does not guess a NEW template's version (review №С1): a cost in it makes the server's own extra update
+insert into public.estimate_templates (id, company_id, name, doc) values ('e3c00000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T149 with cost',
+  '{"options":[{"id":"o","name":"A","lines":[{"id":"l","name":"Call","group":"service","quantity":"1","unit":"ea","unitPriceCents":100,"unitCostCents":40}]}],"settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}}');
+select tst.ok((select row_version from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000003') = 2,
+              'T149 a new template with a cost is at version 2 right after its insert (the phone reads it, never assumes)');
+-- the edit over the right version goes through
+select row_version as rv2 from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000001' \gset t149_
+with u as (update public.estimate_templates set name = 'T149 my edit' where id = 'e3c00000-0000-4000-8000-000000000001' and row_version = :t149_rv2 returning 1)
+select tst.ok((select count(*) from u) = 1, 'T149 an edit over the current version saves');
+-- another company's office: the same update changes nothing of company A
+:as_owner_b
+with u as (update public.estimate_templates set name = 'T149 B' where id = 'e3c00000-0000-4000-8000-000000000001' returning 1)
+select tst.ok((select count(*) from u) = 0, 'T149 another company edits no template of A');
+\echo 'T149 template edits over row_version ok'
 
 \echo 'ALL TESTS PASSED'
