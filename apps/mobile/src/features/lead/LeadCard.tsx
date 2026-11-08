@@ -8,8 +8,8 @@ import { useI18n, type DictKey } from "@/i18n";
 import { usePersistentState } from "@/data/persist";
 import { peopleForLead, phonesOfPeople } from "@/data/people";
 import {
-  canSeeLead, canSeeLeadCost, findDuplicates, isClosedLead, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
-  responseMinutes, sourceName, type LeadTurn, type ManualWinReason,
+  findDuplicates, isClosedLead, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
+  responseMinutes, type LeadTurn, type ManualWinReason,
 } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
 import { canSeeClientMoney, canServe, notServed } from "@/features/clients";
@@ -46,7 +46,7 @@ export function LeadCardBody({ l, wrap }: { l: Lead; wrap?: (more: ReactNode, bo
   useTick();
   const store = useStore();
   const { db, role } = store;
-  const { t, day, money } = useI18n();
+  const { t, day } = useI18n();
   const toast = useToast();
   const [tab, setTab] = usePersistentState<Tab>("octo.leadTab.v2", "overview");
   const [sheet, setSheet] = useState<SheetName>(null);
@@ -100,7 +100,7 @@ export function LeadCardBody({ l, wrap }: { l: Lead; wrap?: (more: ReactNode, bo
     <>
       <Card status={turnChip.status}>
         <RowView style={{ justifyContent: "space-between", flexWrap: "wrap" }}>
-          <Press onPress={() => setSheet("status")} accessibilityRole="button" accessibilityLabel={`${t("lead.status.title")}: ${statusLabel}`} visibleHeight={component.chip.h}>
+          <Press testID="lead-status" onPress={() => setSheet("status")} accessibilityRole="button" accessibilityLabel={`${t("lead.status.title")}: ${statusLabel}`} visibleHeight={component.chip.h}>
             <StatusChip status={sv.status} label={`${statusLabel} ▾`} />
           </Press>
           {turnChip.label ? <StatusChip status={turnChip.status} label={turnChip.label} soft /> : null}

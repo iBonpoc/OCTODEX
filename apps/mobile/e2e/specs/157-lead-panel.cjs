@@ -52,7 +52,7 @@ exports.run = async (h) => {
   h.expect(await openIs(h, l0.id), `↑ → back to the first (${p.url()})`);
   h.expect((await p.evaluate(() => history.length)) === startLen, "open, ↓, ↑ replace the address, history does not grow");
   // Esc with the status sheet of the panel open closes the sheet only
-  await panel(h).getByRole("button", { name: /^Статус/ }).first().click();
+  await panel(h).getByTestId("lead-status").first().click();
   await p.locator('[aria-modal="true"]').first().waitFor();
   await p.keyboard.press("Escape");
   await p.locator('[aria-modal="true"]').first().waitFor({ state: "detached" });
@@ -66,11 +66,13 @@ exports.run = async (h) => {
   h.expect(await openIs(h, l0.id), "the panel again");
   // another status of the lane (empty ones are hidden)
   const lane = p.getByTestId("filter-lane").locator("visible=true").getByRole("radio");
-  await lane.filter({ hasNotText: "В работе" }).first().click();
-  await p.waitForTimeout(400);
+  const before = await cards.count();
+  await lane.nth(1).click();
+  // wait for the list to change, then check the panel is still there
+  await p.waitForFunction(([n, id]) => document.querySelectorAll('[data-testid="list-card"]').length !== n || !document.querySelector(`[data-testid="list-card"][aria-current="true"]`), [before, l0.id]);
   h.expect(await openIs(h, l0.id), `out of the filter → the panel stays (${p.url()})`);
   await panel(h).getByText(l0.name, { exact: true }).first().waitFor();
-  await lane.filter({ hasText: "В работе" }).first().click();
+  await lane.first().click();
   await cards.first().waitFor();
   // «✕» closes too
   await p.getByTestId("list-panel-close").locator("visible=true").getByRole("button").click();

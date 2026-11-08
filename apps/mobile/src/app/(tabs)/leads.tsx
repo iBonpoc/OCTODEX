@@ -87,7 +87,8 @@ function LeadsBoard() {
     setPicking(null);
     const move = pickerOptions("lead", l.status).find((o) => o.status === s);
     if (!move?.enabled) return;
-    if (move.how === "form") return router.push(`/lead/${l.id}`);
+    // the form is on the lead's card: on 1280 the panel, narrower — its screen
+    if (move.how === "form") return panel.open(l.id);
     toast.show(`${l.name}: ${t(statusOf[s as LeadStatus].label)}`, store.reopenLead(l.id));
   };
   // the one lead card (features/listCards.tsx), shared with the «Today» figures; this list adds its own actions
