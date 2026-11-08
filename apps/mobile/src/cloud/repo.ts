@@ -7,7 +7,7 @@ import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFro
 import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, paymentMethodFromDb, paymentShown, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type PendingPayment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Advance, type PendingPayment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 import { legacyForEstimate } from "./legacyTotals";
@@ -140,6 +140,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       every<Row>("estimate_version_costs", "version_id, margin_pct", key("version_id")).catch(orNoTable),
     ]);
   // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
+  // spec 35 §4г: refunds on their way (staff only by RLS; a server before 20а has no table — nothing on its way)
+  const refundRows = await every<Row>("refunds", "id, payment_id, amount_cents, status").catch(() => [] as Row[]);
   const signatureRows = await every<Row>("member_signatures", "id, user_id, svg, name, title, created_at, revoked_at").catch(() => [] as Row[]);
   // wave П-1: the company's job types (no deleted_at, archived ones stay); empty before the migration
   const jobTypeRows = await every<Row>("job_types", "id, seed_key, name, position, archived_at").catch(() => [] as Row[]);
@@ -653,17 +655,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     estimates: mappedEstimates,
     invoices: mappedInvoices,
     expenses: mappedExpenses,
-    payments: payments
-      // a fully refunded payment brought nothing: it is not in the list of payments (wave 8); partial — net, with refundedCents
-      .filter((p) => p.invoice_id && paymentShown(s(p.status)) && n(p.amount_cents) - n(p.refunded_cents) > 0)
-      .map((p) => ({
-        id: s(p.id), invoiceId: s(p.invoice_id), customerId: s(p.customer_id), amountCents: n(p.amount_cents) - n(p.refunded_cents),
-        method: paymentMethodFromDb(s(p.method)),
-        at: s(p.received_at), receiptNumber: (p.receipt_number as string | null) ?? undefined, reference: (p.reference as string | null) ?? undefined,
-        receivedBy: (p.received_by as string | null) ?? undefined, refundedCents: n(p.refunded_cents) || undefined,
-        needsReview: p.needs_review === true || undefined,
-      }))
-      .sort((a, b) => b.at.localeCompare(a.at)),
+    ...paymentsFromRows(payments, refundRows),
     pendingPayments: pendingFromRows(payments),
     company: companyRows[0]
       ? {
@@ -764,6 +756,40 @@ export async function loadCompanyModule(companyId: string, key: string): Promise
   if (error || !data) return null;
   const { companyModulesFromRows } = await import("@/modules/registry");
   return companyModulesFromRows([data as Record<string, unknown>])[key] ?? null;
+}
+
+/**
+ * Payments and the clients' advances (spec 35 §4г). A fully refunded payment brought nothing: it is not in the list (wave 8);
+ * partial — net, with refundedCents. A payment without an invoice (an online payment above the balance) is an advance —
+ * its own list, never in sums. refundPendingCents — what refund rows hold back beyond refunded_cents, as
+ * app.refund_available: amount − greatest(refunded, Σ pending + succeeded rows).
+ */
+export function paymentsFromRows(rows: Row[], refundRows: Row[] = []): { payments: Payment[]; advances: Advance[] } {
+  const held = new Map<string, number>();
+  for (const r of refundRows) {
+    if (!["pending", "succeeded"].includes(s(r.status))) continue;
+    held.set(s(r.payment_id), (held.get(s(r.payment_id)) ?? 0) + n(r.amount_cents));
+  }
+  const shown = rows.filter((p) => paymentShown(s(p.status)) && n(p.amount_cents) - n(p.refunded_cents) > 0);
+  const base = (p: Row) => {
+    const refunded = n(p.refunded_cents);
+    const net = n(p.amount_cents) - refunded;
+    const pending = Math.min(net, Math.max(0, (held.get(s(p.id)) ?? 0) - refunded));
+    return {
+      id: s(p.id), customerId: s(p.customer_id), amountCents: net,
+      method: paymentMethodFromDb(s(p.method)),
+      at: s(p.received_at), receiptNumber: (p.receipt_number as string | null) ?? undefined, reference: (p.reference as string | null) ?? undefined,
+      receivedBy: (p.received_by as string | null) ?? undefined, refundedCents: refunded || undefined,
+      needsReview: p.needs_review === true || undefined,
+      feeCents: n(p.fee_cents) > 0 ? n(p.fee_cents) : undefined,
+      refundPendingCents: pending > 0 ? pending : undefined,
+    };
+  };
+  const newest = <T extends { at: string }>(a: T, b: T) => b.at.localeCompare(a.at);
+  return {
+    payments: shown.filter((p) => p.invoice_id).map((p) => ({ ...base(p), invoiceId: s(p.invoice_id) })).sort(newest),
+    advances: shown.filter((p) => !p.invoice_id).map((p) => ({ ...base(p), invoiceId: null })).sort(newest),
+  };
 }
 
 /** ACH on its way (20в): payments.status = pending with an invoice — shown as «processing», never counted (statusMap.paymentShown) */
