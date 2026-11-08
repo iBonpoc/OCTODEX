@@ -96,6 +96,7 @@ jobs:
         run: |
           supabase functions deploy delete-account --project-ref "$PROJECT_REF" --yes
           supabase functions deploy send-push --project-ref "$PROJECT_REF" --yes
+          supabase functions deploy lead-intake --project-ref "$PROJECT_REF" --yes
 
   publish:
     name: Publish (Expo Go + web)

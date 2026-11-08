@@ -437,6 +437,7 @@
 | client_visible | bool | Внутренние строки (BOM) не видны клиенту и всегда с ценой 0 |
 | line_total_cents | int, вычисляемое | `round(quantity × unit_price)` |
 | line_cost_cents | int, вычисляемое | `round(quantity × (unit_cost + [include_purchase_tax_in_cost] × unit_material_cost × purchase_tax_bps / 10000))` (v0.3, PRD 19 §7.6) |
+| copied_from_line_id | uuid, null | (08.11, миграция `20261108200000`) Строка более ранней отправленной версии той же сметы, из которой скопирована эта строка при правке отправленной сметы. По ней сервер копирует себестоимость за единицу тому, кто её не видит (19 §9.1). Старые сборки не пишут |
 
 ### EstimateTemplate — шаблон сметы (новая)
 `company_id` (null = системный шаблон модуля), `name` («Чистка гаттеров», «Guards only», «Gutters G/B/B»), `module`, `options[]` (`name`, `is_recommended`, `input_overrides json` — пресеты G/B/B для движка, `lines`), `intro/scope/terms/exclusions`, `deposit_rule`, `is_system`. Цены при создании сметы берутся из **текущего** каталога.

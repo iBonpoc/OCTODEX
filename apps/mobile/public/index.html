@@ -2,6 +2,12 @@
 <html lang="en">
   <head>
     <meta charset="utf-8" />
+    <!-- No framing (clickjacking): the site is one page (web.output single), so it cannot send per-page frame headers
+         (spec 34 §3в). The page hides itself unless it is the top window; a site that frames it shows nothing. -->
+    <style id="anti-frame">html { display: none !important; }</style>
+    <script>
+      try { if (window.self === window.top) document.getElementById("anti-frame").remove(); } catch (e) { /* a cross-origin top: stay hidden */ }
+    </script>
     <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
     <!-- viewport-fit=cover: the app draws under the home indicator (and the notch in landscape); safe-area insets keep content clear. -->
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />

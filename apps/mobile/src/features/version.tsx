@@ -20,11 +20,11 @@ export function useVersionLabel(): string {
   return `OCTODEX v${v} · ${BUILD}${at ? ` · ${day(at)} ${time(at)}` : ""}`;
 }
 
-/** Small line at the top of every screen header; hidden on the client page (/p/…). */
+/** Small line at the top of every screen header; hidden on the client page (/p/…) and the request page (/f/…). */
 export function VersionBadge() {
   const label = useVersionLabel();
   const path = usePathname();
-  if (path.startsWith("/p/")) return null;
+  if (path.startsWith("/p/") || path.startsWith("/f/")) return null;
   return (
     <T v="micro" tone="mut" tabular numberOfLines={1}>
       {label}
