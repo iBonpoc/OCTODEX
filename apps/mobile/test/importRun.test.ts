@@ -1,7 +1,7 @@
 /** The run of a server import (docs/specs/04 §14.4): batches, a break and «Продолжить» without duplicates, the report. */
 import { describe, expect, it } from "vitest";
 import { IMPORT_BATCH, type ImportRow, type ServerRow } from "../src/features/client/csvImport";
-import { canImportClients, countsOf, importFailureOf, ImportStop, reportCsv, runImport, type ImportAnswer, type ImportDriver } from "../src/features/client/importRun";
+import { canImportClients, countsOf, importActions, importFailureOf, ImportStop, reportCsv, runImport, type ImportAnswer, type ImportDriver } from "../src/features/client/importRun";
 
 const rows: ImportRow[] = Array.from({ length: 600 }, (_, i) => ({ line: i + 2, name: `N${i}`, phone: `310${String(i).padStart(7, "0")}`, address: "", city: "" }));
 
@@ -71,5 +71,15 @@ describe("runImport", () => {
     expect(importFailureOf({ message: "upstream", code: "PGRST002" })).toBe("network");
     expect(importFailureOf(new TypeError("Failed to fetch"))).toBe("network");
     expect(importFailureOf(new ImportStop("row_changed"))).toBe("row_changed");
+  });
+  it("«Импорты»: an open import — «Продолжить»; a day silent — closed, undo 30 days from then; an applied one — undo until undo_until", () => {
+    const now = Date.parse("2026-11-08T12:00:00Z");
+    const h = (n: number) => new Date(now - n * 3600 * 1000).toISOString();
+    const base = { id: "j", fileName: "a.csv", createdAt: h(1), counts: {} };
+    expect(importActions({ ...base, status: "applying", lastBatchAt: h(1) }, now)).toEqual({ open: true, canContinue: true, canUndo: false });
+    expect(importActions({ ...base, status: "applying", lastBatchAt: h(25) }, now)).toEqual({ open: false, canContinue: false, canUndo: true });
+    expect(importActions({ ...base, status: "applying", lastBatchAt: h(32 * 24) }, now)).toEqual({ open: false, canContinue: false, canUndo: false });
+    expect(importActions({ ...base, status: "applied", undoUntil: h(-1) }, now).canUndo).toBe(true);
+    expect(importActions({ ...base, status: "applied", undoUntil: h(1) }, now).canUndo).toBe(false);
   });
 });
