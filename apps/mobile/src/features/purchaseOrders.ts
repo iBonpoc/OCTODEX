@@ -96,7 +96,8 @@ export function draftsForJob(db: DB, jobId: ID, moduleLines: ModulePurchaseLine[
   for (const n of [...needs.values()].sort((a, b) => a.item.name.localeCompare(b.item.name))) {
     let p: { packs: string; checkPack: boolean };
     try {
-      p = n.packed !== undefined ? { packs: n.packed, checkPack: false } : purchasePacks(n.qty, n.item.packSize ?? null);
+      // a module's packs are whole packs too (director's check of #461 №7): rounded up, at least 0.001
+      p = n.packed !== undefined ? (Number(n.packed) >= 0.001 ? purchasePacks(n.packed, "1") : { packs: "0", checkPack: false }) : purchasePacks(n.qty, n.item.packSize ?? null);
     } catch {
       // a bad quantity (negative, empty) of one line does not stop the whole order (review SUP2-а №6)
       continue;

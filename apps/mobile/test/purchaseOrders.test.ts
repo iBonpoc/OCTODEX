@@ -77,6 +77,11 @@ describe("unit:purchaseOrders — what a job needs", () => {
     // an item without a supplier → the group without one (pick it in the order)
     expect(g.find((x) => !x.supplierId)!.lines[0]).toMatchObject({ catalogItemId: "loose", qty: "7", checkPack: true });
   });
+  it("a module's packs are whole packs: 2.5 → 3; below 0.001 — left out (director's check of #461 №7)", () => {
+    const all = draftsForJob(company(), "jP", [{ catalogItemId: "hanger", qty: "2.5", packed: true }, { catalogItemId: "loose", qty: "0.0001", packed: true }], false).flatMap((g) => g.lines);
+    expect(all.find((l) => l.catalogItemId === "hanger")!.qty).toBe("3");
+    expect(all.some((l) => l.catalogItemId === "loose")).toBe(false);
+  });
   it("two module lines of one item are summed, their notes kept (review SUP2-а №4)", () => {
     const all = draftsForJob(company(), "jP", [
       { catalogItemId: "screw", qty: "10", note: "front" },

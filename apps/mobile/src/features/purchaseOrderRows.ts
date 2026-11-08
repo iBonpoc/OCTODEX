@@ -52,6 +52,7 @@ export function posFromRows(orders: Record<string, unknown>[], lines: Record<str
     return {
       id: String(r.id), status, revision: Number(r.revision ?? 0), fulfillment: r.fulfillment === "pickup" ? "pickup" : "delivery",
       printPrices: r.print_prices === true, createdAt: String(r.created_at ?? ""),
+      ...(typeof r.row_version === "number" || typeof r.row_version === "string" ? { rowVersion: Number(r.row_version) } : {}),
       lines: (linesOf.get(String(r.id)) ?? []).sort((a, b) => a.position - b.position),
       ...(str(r.number) ? { number: str(r.number) } : {}),
       ...(str(r.supplier_id) ? { supplierId: str(r.supplier_id) } : {}),

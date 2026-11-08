@@ -760,6 +760,8 @@ export interface PurchaseOrder {
   sentAt?: string;
   receivedAt?: string;
   createdAt: string;
+  /** the server's row_version as this phone knows it (po_receive refuses a stale marking — director's check of #461 №3) */
+  rowVersion?: number;
   lines: PurchaseOrderLine[];
 }
 

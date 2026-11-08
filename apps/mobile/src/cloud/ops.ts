@@ -55,7 +55,7 @@ export type Op =
   /** spec 37: a purchase order made or changed (header, its lines, the lines taken out) */
   | { k: "po.save"; order: PurchaseOrder; removedLineIds: string[] }
   /** spec 37: what came, line by line (public.po_receive) */
-  | { k: "po.receive"; id: string; lines: { id: string; received: string }[] }
+  | { k: "po.receive"; id: string; lines: { id: string; received: string }[]; rowVersion?: number }
   /** the company's photo rules, whole (owner, admin) */
   | { k: "company.visitSettings"; settings: VisitSettings }
   | { k: "visit.sign"; visitId: string; svg: string }
@@ -564,7 +564,10 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "po.save":
       return savePurchaseOrder(op, c);
     case "po.receive": {
-      const { error, status } = await supabase.rpc("po_receive", { p_po_id: op.id, p_lines: op.lines.map((l) => ({ id: l.id, received: Number(l.received) })) });
+      const { error, status } = await supabase.rpc("po_receive", {
+        p_po_id: op.id, p_lines: op.lines.map((l) => ({ id: l.id, received: Number(l.received) })),
+        ...(op.rowVersion !== undefined ? { p_row_version: op.rowVersion } : {}),
+      });
       return run(Promise.resolve({ error, status }));
     }
     case "supplier.save":

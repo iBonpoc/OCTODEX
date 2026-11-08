@@ -146,7 +146,7 @@ describe("unit:purchaseOrdersStore — spec 37 SUP2", () => {
   });
   it("the tech marks what came: partially → received, one po.receive each; «Отменить» sends what was before", async () => {
     const o: PurchaseOrder = {
-      id: "00000000-0000-4000-8000-0000000007e1", jobId: JOB, supplierId: S1, status: "sent", revision: 1, fulfillment: "pickup", printPrices: false, createdAt: "t",
+      id: "00000000-0000-4000-8000-0000000007e1", jobId: JOB, supplierId: S1, status: "sent", revision: 1, fulfillment: "pickup", printPrices: false, createdAt: "t", rowVersion: 3,
       lines: [
         { id: "00000000-0000-4000-8000-0000000007f1", position: 0, name: "A", qty: "2", unit: "box", receivedQty: "0", checkPack: false },
         { id: "00000000-0000-4000-8000-0000000007f2", position: 1, name: "B", qty: "1", unit: "ea", receivedQty: "0", checkPack: false },
@@ -166,7 +166,17 @@ describe("unit:purchaseOrdersStore — spec 37 SUP2", () => {
     await drain();
     const rec = server.sends.filter((s) => s.op.k === "po.receive").map((s) => s.op.lines);
     expect(rec[rec.length - 1]).toEqual([{ id: o.lines[1]!.id, received: "0" }]);
+    // each marking carries the row_version the phone knows (3, 4, 5): the server refuses a stale one (#461 №3)
+    expect(server.sends.filter((s) => s.op.k === "po.receive").map((s) => s.op.rowVersion)).toEqual([3, 4, 5]);
   }, 30000);
+  it("the tech does not take a received order back (the office does)", async () => {
+    const o = { id: "00000000-0000-4000-8000-0000000007e2", jobId: JOB, supplierId: S1, status: "received", revision: 1, fulfillment: "pickup", printPrices: false, createdAt: "t",
+      lines: [{ id: "00000000-0000-4000-8000-0000000007f3", position: 0, name: "A", qty: "1", unit: "ea", receivedQty: "1", checkPack: false }] } as PurchaseOrder;
+    const r = await signedIn({ purchaseOrders: [o] }, "tech");
+    valueOf(r).receivePurchaseOrder(o.id, [{ id: o.lines[0]!.id, received: "0" }]);
+    await settle();
+    expect(orders(r)[0]!.status).toBe("received");
+  });
   it("the tech and sales make no orders; a server without the table — nothing is written", async () => {
     for (const role of ["tech", "sales"]) {
       const r = await signedIn({}, role);
