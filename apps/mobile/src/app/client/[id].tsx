@@ -21,7 +21,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { Button, IconButton, StatusChip, TagChip } from "@/ui/controls";
 import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Menu, useToast } from "@/ui/overlays";
-import { Card, CardList, Empty, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { cleanPhone, mailtoHref, smsHref } from "@/features/contactLinks";
 
 const ROW_ICON: Record<ClientRow, IconKey> = {
@@ -197,17 +197,26 @@ export default function ClientScreen() {
         <>
           <SectionTitle title={t("client.next")} />
           <CardList>
+            {/* single hints about this client, not lists of objects (06 «10а, остаток» п.6): Card + ListRow */}
             {nextVisit ? (
-              <ItemCard
-                title={t("client.nextVisit")}
-                subtitle={[day(nextVisit.start), r.jobs.find((j) => j.id === nextVisit.jobId)?.title].filter(Boolean).join(" · ")}
-                left={<Icon name="route" />}
-                onPress={() => router.push(`/visit/${nextVisit.id}`)}
-              />
+              <Card style={{ paddingVertical: space[1] }}>
+                <ListRow
+                  title={t("client.nextVisit")}
+                  subtitle={[day(nextVisit.start), r.jobs.find((j) => j.id === nextVisit.jobId)?.title].filter(Boolean).join(" · ")}
+                  left={<Icon name="route" />}
+                  onPress={() => router.push(`/visit/${nextVisit.id}`)}
+                />
+              </Card>
             ) : null}
-            {openTasks.length ? <ItemCard title={t("client.openTasks", { n: openTasks.length })} subtitle={openTasks[0]!.title} left={<Icon name="check" />} onPress={() => open("tasks")} /> : null}
+            {openTasks.length ? (
+              <Card style={{ paddingVertical: space[1] }}>
+                <ListRow title={t("client.openTasks", { n: openTasks.length })} subtitle={openTasks[0]!.title} left={<Icon name="check" />} onPress={() => open("tasks")} />
+              </Card>
+            ) : null}
             {canSeeClientMoney(role) && m.owesCents > 0 ? (
-              <ItemCard title={t("client.unpaid", { amount: money(m.owesCents) })} left={<Icon name="invoice" />} status="warn" onPress={() => open("invoices")} />
+              <Card status="warn" style={{ paddingVertical: space[1] }}>
+                <ListRow title={t("client.unpaid", { amount: money(m.owesCents) })} left={<Icon name="invoice" />} onPress={() => open("invoices")} />
+              </Card>
             ) : null}
           </CardList>
         </>

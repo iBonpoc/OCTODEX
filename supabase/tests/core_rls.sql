@@ -8434,5 +8434,53 @@ delete from public.customers where id = 'c1020000-0000-4000-8000-0000000000c1';
 delete from public.checklist_templates where id = 'c1010000-0000-4000-8000-000000000101';
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T103 rule 16: an old phone array moves ticks (unticks only its own) and its own items into the rows, sales changes nothing, the mirror wins ok'
+-- ---------------------------------------------------------------- T105: a quantity-0 line never reaches the client page (spec 33 П23.9, C5 debt 2)
+-- 0 is how a contractor leaves a part out; the page shows no $0 row for it. The signature fingerprint and the server's
+-- totals read calc_inputs, never the page's copy: they do not move.
+:as_owner_a
+do $$
+declare v_cust uuid; v_prop uuid; v_e uuid; v_v uuid;
+begin
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'T105 Client') returning id into v_cust;
+  insert into public.properties (company_id, customer_id, address_line1, address_city) values ('ca000000-0000-0000-0000-000000000000', v_cust, '105 Zero St', 'Burbank') returning id into v_prop;
+  insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T105 zero lines') returning id into v_e;
+  insert into public.estimate_versions (company_id, estimate_id, version_no, calc_inputs) values ('ca000000-0000-0000-0000-000000000000', v_e, 1, $j${
+    "options": [{"id": "o1", "name": "Option", "lines": [
+      {"id": "keep", "name": "Gutter", "group": "material", "quantity": "10", "unit": "ft", "unitPriceCents": 1200},
+      {"id": "z1", "name": "Leaf guard", "group": "material", "quantity": "0", "unit": "ft", "unitPriceCents": 0},
+      {"id": "z2", "name": "End cap", "group": "material", "quantity": "0.00", "unit": "ea", "unitPriceCents": 900},
+      {"id": "z3", "name": "Elbow", "group": "material", "quantity": 0, "unit": "ea", "unitPriceCents": 500},
+      {"id": "z4", "name": "Offset", "group": "material", "quantity": " .0 ", "unit": "ea", "unitPriceCents": 500},
+      {"id": "small", "name": "Sealant", "group": "material", "quantity": "0.01", "unit": "ea", "unitPriceCents": 800},
+      {"id": "ten", "name": "Hanger", "group": "material", "quantity": "10.0", "unit": "ea", "unitPriceCents": 300},
+      {"id": "z5", "name": "Strap", "group": "material", "quantity": "-0", "unit": "ea", "unitPriceCents": 100},
+      {"id": "z6", "name": "Wedge", "group": "material", "quantity": "+0", "unit": "ea", "unitPriceCents": 100},
+      {"id": "z7", "name": "Rivet", "group": "material", "quantity": "0.", "unit": "ea", "unitPriceCents": 100},
+      {"id": "z8", "name": "Screw", "group": "material", "quantity": "00", "unit": "ea", "unitPriceCents": 100},
+      {"id": "dime", "name": "Caulk", "group": "material", "quantity": "0.10", "unit": "ea", "unitPriceCents": 100},
+      {"id": "lead0", "name": "Ferrule", "group": "material", "quantity": "010", "unit": "ea", "unitPriceCents": 100},
+      {"id": "exp", "name": "Paint", "group": "material", "quantity": "0e5", "unit": "ea", "unitPriceCents": 100},
+      {"id": "addz", "name": "Splash block", "group": "material", "quantity": "0", "unit": "ea", "unitPriceCents": 2500, "optional": true}
+    ]}],
+    "settings": {"tax": {"enabled": false, "rateBps": 0, "groups": {}}, "deposit": {"kind": "none"}, "discount": null}
+  }$j$::jsonb) returning id into v_v;
+  update public.estimates set current_version_id = v_v where id = v_e;
+  perform tst.set_token(v_e, 'tok_t105zero_0123456789ab');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare d jsonb := public.portal_estimate('tok_t105zero_0123456789ab') -> 'doc';
+begin
+  perform tst.ok((select array_agg(l ->> 'id' order by o) from jsonb_array_elements(d -> 'options' -> 0 -> 'lines') with ordinality x(l, o))
+                 = array['keep', 'small', 'ten', 'dime', 'lead0', 'exp'], 'T105 quantity-0 lines (any spelling, add-ons too) are not on the page: ' || d::text);
+end $$;
+:as_super
+select tst.ok(jsonb_array_length((select calc_inputs -> 'options' -> 0 -> 'lines' from public.estimate_versions v
+                 join public.estimates e on e.current_version_id = v.id where e.title = 'T105 zero lines')) = 15, 'T105 the stored document keeps every line');
+select tst.ok(app.client_doc('{"options":[{"id":"o","lines":[{"id":"a","name":"A","group":"labor","quantity":"0","unitPriceCents":1}]}]}'::jsonb)
+                -> 'options' -> 0 -> 'lines' = '[]'::jsonb, 'T105 an option of only quantity-0 lines has no lines');
+select tst.ok(not has_function_privilege('anon', 'app.client_doc(jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.client_doc(jsonb)', 'execute'), 'T105 nobody calls app.client_doc directly (rule 18)');
+\echo 'T105 quantity-0 lines: never on the client page ok'
 
 \echo 'ALL TESTS PASSED'
