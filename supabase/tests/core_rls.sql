@@ -10121,6 +10121,11 @@ insert into public.customer_tags (company_id, customer_id, tag_id) values
 insert into public.leads (id, company_id, source_id, customer_id, contact_name) values
   ('c1340000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000',
    (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by id limit 1), 'c1340000-0000-4000-8000-0000000000b1', 'T134 lead');
+-- the second card's person refused SMS and email and speaks Spanish; the second card is tax exempt
+update public.contacts set sms_consent_status = 'opted_out', sms_opted_out_at = now() - interval '3 days',
+       email_unsubscribed_at = now() - interval '2 days', preferred_language = 'es'
+ where id = 'c1340000-0000-4000-8000-0000000000b2';
+update public.customers set tax_exempt = true, tax_exempt_note = 'CERT-134' where id = 'c1340000-0000-4000-8000-0000000000b1';
 -- the second client is «do not service» (marked after its open work, as in life)
 update public.customers set status = 'do_not_service', do_not_service_reason = 'T134 unpaid' where id = 'c1340000-0000-4000-8000-0000000000b1';
 create table tst.t134 (k text primary key, n bigint, t text);
@@ -10196,6 +10201,10 @@ select tst.ok((select number = (select t from tst.t134 where k = 'num') and tota
           and (select sum(balance_cents) from public.customer_balances where customer_id = 'c1340000-0000-4000-8000-0000000000a1') = (select n from tst.t134 where k = 'owed'),
   'T134 numbers, amounts, the signed estimate and the debt are the same — now on one card');
 select tst.ok((select count(*) from public.customer_tags where customer_id = 'c1340000-0000-4000-8000-0000000000a1') = 2, 'T134 tags: both sets');
+select tst.ok((select sms_consent_status = 'opted_out' and sms_opted_out_at is not null and email_unsubscribed_at is not null and preferred_language = 'es'
+                 from public.contacts where id = 'c1340000-0000-4000-8000-0000000000a2'),
+  'T134 the same person keeps the refusals and the language of the merged one (TCPA / CAN-SPAM, rule 7)');
+select tst.ok((select tax_exempt and tax_exempt_note = 'CERT-134' from public.customers where id = 'c1340000-0000-4000-8000-0000000000a1'), 'T134 «no sales tax» of the other card stays, with its note');
 -- people: Yuri P (same phone) is Yuri now — his other phone and email moved; the tenant joined as another person
 select tst.ok((select deleted_at is not null from public.contacts where id = 'c1340000-0000-4000-8000-0000000000b2')
           and (select count(*) from public.contact_phones where contact_id = 'c1340000-0000-4000-8000-0000000000a2' and deleted_at is null) = 2
@@ -10255,6 +10264,38 @@ select tst.fails_like($q$select public.mark_not_duplicate('c1340000-0000-4000-80
 select tst.fails_like($q$select public.mark_not_duplicate('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000c1')$q$, 'not allowed', 'T134 another company does not mark');
 :as_super
 select tst.ok((select not_duplicate_ids = array['c1340000-0000-4000-8000-0000000000c1']::uuid[] from public.customers where id = 'c1340000-0000-4000-8000-0000000000a1'), 'T134 «not a duplicate»: one id, once');
+-- an old phone's whole people / tags list for the merged card: refused with our reason, the kept card untouched
+:as_owner_a
+select tst.fails_like($q$select public.save_customer_people('c1340000-0000-4000-8000-0000000000b1', '[]'::jsonb)$q$, 'customer_merged', 'T134 people of a merged card: refused');
+select tst.fails_like($q$select public.set_customer_tags('c1340000-0000-4000-8000-0000000000b1', '{}'::uuid[])$q$, 'customer_merged', 'T134 tags of a merged card: refused');
+:as_super
+select tst.ok((select count(*) from public.customer_tags where customer_id = 'c1340000-0000-4000-8000-0000000000a1') = 2
+          and exists (select 1 from public.contacts where id = 'c1340000-0000-4000-8000-0000000000a2' and deleted_at is null),
+  'T134 the kept card''s people and tags stay');
+-- the server's own jobs (service_role) still change a draft's client (no merge row: the guard just says «not a merge»)
+:as_service
+update public.estimates set customer_id = 'c1340000-0000-4000-8000-0000000000c1' where id = 'c1340000-0000-4000-8000-0000000000b5';
+update public.estimates set customer_id = 'c1340000-0000-4000-8000-0000000000a1' where id = 'c1340000-0000-4000-8000-0000000000b5';
+:as_super
+select tst.ok((select customer_id = 'c1340000-0000-4000-8000-0000000000a1' from public.estimates where id = 'c1340000-0000-4000-8000-0000000000b5'), 'T134 service_role moves a draft as before');
+-- lead → client (S3, app.move_lead_people): the same person keeps the lead person's refusal and language
+insert into public.contacts (id, company_id, customer_id, name, role, is_primary) values
+  ('c1340000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000c1', 'Third', 'main', true);
+insert into public.contact_phones (company_id, contact_id, number, is_primary) values
+  ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000c2', '2135550134', true);
+insert into public.leads (id, company_id, source_id, contact_name) values
+  ('c1340000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by id limit 1), 'T134 lead 2');
+-- (the lead's main person is made by the lead itself, t85)
+update public.contacts set sms_consent_status = 'opted_out', sms_opted_out_at = now(), preferred_language = 'ru'
+ where lead_id = 'c1340000-0000-4000-8000-0000000000f2' and is_primary and deleted_at is null;
+insert into public.contact_phones (company_id, contact_id, number, is_primary)
+select 'ca000000-0000-0000-0000-000000000000', id, '(213) 555-0134', true from public.contacts
+ where lead_id = 'c1340000-0000-4000-8000-0000000000f2' and is_primary and deleted_at is null;
+update public.leads set customer_id = 'c1340000-0000-4000-8000-0000000000c1' where id = 'c1340000-0000-4000-8000-0000000000f2';
+select tst.ok((select sms_consent_status = 'opted_out' and sms_opted_out_at is not null and preferred_language = 'ru'
+                 from public.contacts where id = 'c1340000-0000-4000-8000-0000000000c2'),
+  'T134 lead → client: the refusal and the language of the lead person are kept');
 \echo 'T134 client merge ok'
 
 \echo 'ALL TESTS PASSED'

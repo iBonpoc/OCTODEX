@@ -31,6 +31,8 @@ returns boolean language sql stable security definer set search_path = '' as $$
        and r.drop_id = p_old and r.keep_id = p_new and r.txid = txid_current());
 $$;
 revoke all on function app.merging_customer(uuid, uuid) from public, anon, authenticated;
+-- the server's own jobs (service_role) change a draft's client as before: without a merge row the answer is just false
+grant execute on function app.merging_customer(uuid, uuid) to service_role;
 
 /* ---------- guards: the same checks, plus the one merge change ---------- */
 
@@ -229,6 +231,10 @@ begin
   if tg_op = 'UPDATE' and new.customer_id is not distinct from old.customer_id then
     return new;
   end if;
+  -- another company's row: RLS refuses it; no lock and no wait on that company's clients
+  if auth.uid() is not null and not app.is_member(new.company_id) then
+    return new;
+  end if;
   loop
     exit when new.customer_id is null or v_n >= 10;
     -- for key share: a merge of this client in flight is waited for, and its result is read (no row lands on B)
@@ -255,6 +261,9 @@ returns trigger language plpgsql security definer set search_path = '' as $$
 declare v_to uuid; v_n int := 0;
 begin
   if new.subject_type <> 'customer' or (tg_op = 'UPDATE' and new.subject_id is not distinct from old.subject_id) then
+    return new;
+  end if;
+  if auth.uid() is not null and not app.is_member(new.company_id) then
     return new;
   end if;
   loop
@@ -427,6 +436,15 @@ begin
         from public.contact_emails e
        where e.contact_id = r.id and e.deleted_at is null
          and lower(trim(e.address)) not in (select k from app.contact_email_keys(v_target) t(k) where k is not null);
+      -- the person's refusals and language are never lost (TCPA / CAN-SPAM, rule 7): the strict side wins
+      update public.contacts t set
+        sms_consent_status = case when 'opted_out' in (t.sms_consent_status, r.sms_consent_status) then 'opted_out'
+                                  when 'pending_revocation_review' in (t.sms_consent_status, r.sms_consent_status) then 'pending_revocation_review'
+                                  when t.sms_consent_status = 'unknown' then r.sms_consent_status else t.sms_consent_status end,
+        sms_opted_out_at = least(t.sms_opted_out_at, r.sms_opted_out_at),
+        email_unsubscribed_at = least(t.email_unsubscribed_at, r.email_unsubscribed_at),
+        preferred_language = coalesce(t.preferred_language, r.preferred_language)
+       where t.id = v_target;
       update public.contact_phones set deleted_at = v_now where contact_id = r.id and deleted_at is null;
       update public.contact_emails set deleted_at = v_now where contact_id = r.id and deleted_at is null;
       update public.contacts set deleted_at = v_now, is_primary = false where id = r.id;
@@ -501,6 +519,9 @@ begin
     lead_source_id = coalesce(lead_source_id, b.lead_source_id),
     notes = case when coalesce(b.notes, '') = '' then notes when coalesce(notes, '') = '' then b.notes else notes || E'\n' || b.notes end,
     tags = array(select distinct x from unnest(tags || b.tags) x),
+    -- «no sales tax» if either card had it (the certificate came with the other card); its note goes with it
+    tax_exempt = tax_exempt or b.tax_exempt,
+    tax_exempt_note = case when tax_exempt then tax_exempt_note when b.tax_exempt then b.tax_exempt_note else tax_exempt_note end,
     primary_contact_id = coalesce(primary_contact_id, v_primary),
     status = case when b.status = 'do_not_service' and status <> 'do_not_service' then 'do_not_service'
                   when status = 'archived' and b.status <> 'archived' then 'active' else status end,
@@ -539,3 +560,175 @@ end;
 $$;
 revoke all on function public.mark_not_duplicate(uuid, uuid) from public, anon;
 grant execute on function public.mark_not_duplicate(uuid, uuid) to authenticated;
+
+/* ---------- an old phone's whole list for a merged card: refused with our reason, not written on the archive ---------- */
+CREATE OR REPLACE FUNCTION public.save_customer_people(p_customer_id uuid, p_people jsonb)
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+declare
+  v_company uuid;
+  v_now timestamptz := now();
+  v_ids uuid[];
+  v_p jsonb;
+  v_x jsonb;
+  v_i int := 0;
+  v_k int;
+  v_id uuid;
+begin
+  select company_id into v_company from public.customers where id = p_customer_id;
+  if v_company is null then raise exception 'client not found' using errcode = 'P0002'; end if;
+  if not app.is_staff(v_company) then raise exception 'not allowed' using errcode = '42501'; end if;
+  -- step 17 C3: an old phone's whole list for a merged card must not replace the kept card's people / tags
+  if exists (select 1 from public.customers where id = p_customer_id and merged_into_customer_id is not null) then
+    raise exception 'customer_merged' using errcode = '22023', hint = 'customer_merged';
+  end if;
+  select coalesce(array_agg((e ->> 'id')::uuid), '{}') into v_ids from jsonb_array_elements(coalesce(p_people, '[]')) e;
+  -- phones / emails of every current person of the client are replaced (also of people who are removed)
+  update public.contact_phones set deleted_at = v_now
+   where deleted_at is null and contact_id in (select id from public.contacts where customer_id = p_customer_id);
+  update public.contact_emails set deleted_at = v_now
+   where deleted_at is null and contact_id in (select id from public.contacts where customer_id = p_customer_id);
+  update public.contacts set is_primary = false where customer_id = p_customer_id and is_primary;
+  update public.contacts set deleted_at = v_now where customer_id = p_customer_id and deleted_at is null and not (id = any (v_ids));
+  for v_p in select * from jsonb_array_elements(coalesce(p_people, '[]')) loop
+    v_id := (v_p ->> 'id')::uuid;
+    insert into public.contacts (id, company_id, customer_id, name, role, is_primary, phone, email, preferred_language)
+    values (
+      v_id, v_company, p_customer_id, coalesce(nullif(trim(v_p ->> 'name'), ''), '—'), coalesce(v_p ->> 'role', 'other'), v_i = 0,
+      (select x ->> 'number' from jsonb_array_elements(coalesce(v_p -> 'phones', '[]')) with ordinality a(x, o) order by coalesce((x ->> 'primary')::boolean, false) desc, o limit 1),
+      (select x ->> 'address' from jsonb_array_elements(coalesce(v_p -> 'emails', '[]')) with ordinality a(x, o) order by coalesce((x ->> 'primary')::boolean, false) desc, o limit 1),
+      nullif(v_p ->> 'language', '')
+    )
+    on conflict (id) do update set
+      name = excluded.name, role = excluded.role, is_primary = excluded.is_primary, phone = excluded.phone, email = excluded.email,
+      preferred_language = excluded.preferred_language, deleted_at = null
+      where public.contacts.customer_id = p_customer_id;
+    if not exists (select 1 from public.contacts where id = v_id and customer_id = p_customer_id) then
+      raise exception 'person % belongs to another client', v_id using errcode = '42501';
+    end if;
+    v_k := 0;
+    for v_x in select * from jsonb_array_elements(coalesce(v_p -> 'phones', '[]')) loop
+      insert into public.contact_phones (company_id, contact_id, number, label, is_primary, position)
+      values (v_company, v_id, v_x ->> 'number', coalesce(v_x ->> 'label', 'mobile'), coalesce((v_x ->> 'primary')::boolean, false), v_k);
+      v_k := v_k + 1;
+    end loop;
+    v_k := 0;
+    for v_x in select * from jsonb_array_elements(coalesce(v_p -> 'emails', '[]')) loop
+      insert into public.contact_emails (company_id, contact_id, address, is_primary, position)
+      values (v_company, v_id, v_x ->> 'address', coalesce((v_x ->> 'primary')::boolean, false), v_k);
+      v_k := v_k + 1;
+    end loop;
+    v_i := v_i + 1;
+  end loop;
+  if array_length(v_ids, 1) > 0 then
+    update public.customers set primary_contact_id = v_ids[1] where id = p_customer_id;
+  end if;
+end;
+$function$;
+
+CREATE OR REPLACE FUNCTION public.set_customer_tags(p_customer_id uuid, p_tag_ids uuid[])
+ RETURNS void
+ LANGUAGE plpgsql
+ SET search_path TO ''
+AS $function$
+declare v_company uuid;
+begin
+  select company_id into v_company from public.customers where id = p_customer_id;
+  if v_company is null then raise exception 'client not found' using errcode = 'P0002'; end if;
+  if not app.is_staff(v_company) then raise exception 'not allowed' using errcode = '42501'; end if;
+  -- step 17 C3: an old phone's whole list for a merged card must not replace the kept card's people / tags
+  if exists (select 1 from public.customers where id = p_customer_id and merged_into_customer_id is not null) then
+    raise exception 'customer_merged' using errcode = '22023', hint = 'customer_merged';
+  end if;
+  delete from public.customer_tags where customer_id = p_customer_id;
+  insert into public.customer_tags (company_id, customer_id, tag_id)
+  select v_company, p_customer_id, t from unnest(coalesce(p_tag_ids, '{}')) t group by t;
+end;
+$function$;
+
+/* ---------- lead → client (S3): the same strict rule for a person's refusals and language ---------- */
+CREATE OR REPLACE FUNCTION app.move_lead_people(p_lead_id uuid, p_customer_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+ SET search_path TO ''
+AS $function$
+declare
+  r record;
+  v_target uuid;
+  v_company uuid;
+  v_primary uuid;
+  v_now timestamptz := now();
+  v_pos int;
+begin
+  select company_id, primary_contact_id into v_company, v_primary from public.customers where id = p_customer_id;
+  if v_company is null then return; end if;
+  if v_primary is null then
+    select id into v_primary from public.contacts where customer_id = p_customer_id and is_primary and deleted_at is null;
+  end if;
+  for r in select * from public.contacts where lead_id = p_lead_id and customer_id is null and deleted_at is null
+            order by is_primary desc, created_at, id loop
+    -- the same person on the client: a shared phone (last 10 digits) or email
+    select c.id into v_target
+      from public.contacts c
+     where c.customer_id = p_customer_id and c.deleted_at is null
+       and (exists (select 1 from app.contact_phone_keys(c.id) a(k) join app.contact_phone_keys(r.id) b(k) on a.k = b.k where a.k is not null)
+            or exists (select 1 from app.contact_email_keys(c.id) a(k) join app.contact_email_keys(r.id) b(k) on a.k = b.k))
+     order by c.is_primary desc, c.created_at
+     limit 1;
+    if v_target is not null then
+      -- a client person known only by its own columns (made by the app before C1) first gets them as rows,
+      -- so adding rows does not hide them
+      insert into public.contact_phones (company_id, contact_id, number, label, is_primary, position)
+      select c.company_id, c.id, trim(c.phone), 'mobile', true, 0 from public.contacts c
+       where c.id = v_target and coalesce(trim(c.phone), '') <> ''
+         and not exists (select 1 from public.contact_phones p where p.contact_id = c.id and p.deleted_at is null);
+      insert into public.contact_emails (company_id, contact_id, address, is_primary, position)
+      select c.company_id, c.id, trim(c.email), true, 0 from public.contacts c
+       where c.id = v_target and position('@' in coalesce(c.email, '')) > 1
+         and not exists (select 1 from public.contact_emails e where e.contact_id = c.id and e.deleted_at is null);
+      select coalesce(max(position) + 1, 0) into v_pos from public.contact_phones where contact_id = v_target and deleted_at is null;
+      insert into public.contact_phones (company_id, contact_id, number, label, is_primary, position)
+      select v_company, v_target, p.number, p.label,
+             not exists (select 1 from public.contact_phones x where x.contact_id = v_target and x.is_primary and x.deleted_at is null) and p.is_primary,
+             v_pos + p.position
+        from public.contact_phones p
+       where p.contact_id = r.id and p.deleted_at is null
+         and app.phone_key(p.number) is not null
+         and app.phone_key(p.number) not in (select k from app.contact_phone_keys(v_target) t(k) where k is not null);
+      select coalesce(max(position) + 1, 0) into v_pos from public.contact_emails where contact_id = v_target and deleted_at is null;
+      insert into public.contact_emails (company_id, contact_id, address, is_primary, position)
+      select v_company, v_target, e.address,
+             not exists (select 1 from public.contact_emails x where x.contact_id = v_target and x.is_primary and x.deleted_at is null) and e.is_primary,
+             v_pos + e.position
+        from public.contact_emails e
+       where e.contact_id = r.id and e.deleted_at is null
+         and lower(trim(e.address)) not in (select k from app.contact_email_keys(v_target) t(k));
+      -- the person's refusals and language are never lost (TCPA / CAN-SPAM, rule 7): the strict side wins
+      update public.contacts t set
+        sms_consent_status = case when 'opted_out' in (t.sms_consent_status, r.sms_consent_status) then 'opted_out'
+                                  when 'pending_revocation_review' in (t.sms_consent_status, r.sms_consent_status) then 'pending_revocation_review'
+                                  when t.sms_consent_status = 'unknown' then r.sms_consent_status else t.sms_consent_status end,
+        sms_opted_out_at = least(t.sms_opted_out_at, r.sms_opted_out_at),
+        email_unsubscribed_at = least(t.email_unsubscribed_at, r.email_unsubscribed_at),
+        preferred_language = coalesce(t.preferred_language, r.preferred_language)
+       where t.id = v_target;
+      update public.contact_phones set deleted_at = v_now where contact_id = r.id and deleted_at is null;
+      update public.contact_emails set deleted_at = v_now where contact_id = r.id and deleted_at is null;
+      update public.contacts set deleted_at = v_now, is_primary = false where id = r.id;
+    else
+      update public.contacts
+         set customer_id = p_customer_id,
+             is_primary = (v_primary is null),
+             role = case when r.role = 'main' and v_primary is not null then 'other' else r.role end
+       where id = r.id;
+      if v_primary is null then
+        v_primary := r.id;
+        update public.customers set primary_contact_id = r.id where id = p_customer_id;
+      end if;
+    end if;
+  end loop;
+end;
+$function$;

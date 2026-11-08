@@ -129,6 +129,13 @@ describe("the merge", () => {
     const both = { ...withTwin({ status: "archived" }), customers: withTwin({ status: "archived" }).customers.map((c) => (c.id === "c1" ? { ...c, status: "archived" as const } : c)) };
     expect(mergeCustomersDb(both, "cx", "c1").customers.find((c) => c.id === "cx")!.status).toBe("archived");
   });
+  it("«no sales tax» of either stays, with its note; the language of the same person is kept", () => {
+    const d0 = withTwin({ taxExempt: true, taxExemptNote: "CERT-1", people: [{ id: "tp", name: "S", role: "main", phones: [{ number: "626 555 0142", label: "mobile" }], emails: [], language: "es" }] });
+    const k = mergeCustomersDb(d0, "c1", "cx").customers.find((c) => c.id === "c1")!;
+    expect(k).toMatchObject({ taxExempt: true, taxExemptNote: "CERT-1" });
+    const sarahLang = peopleOf(base.customers.find((c) => c.id === "c1")!)[0]!.language;
+    expect(peopleOf(k)[0]!.language).toBe(sarahLang ?? "es");
+  });
   it("«do not service» of either stays on the kept card, with its reason", () => {
     expect(kept).toMatchObject({ status: "do_not_service", statusReason: "unpaid" });
   });
@@ -150,6 +157,9 @@ describe("a merge the server refused", () => {
     expect(rejectedOf(item(), "x", Date.now(), null, "merge_payment_in_flight")).toMatchObject({ what: "merge", href: "/client/c1", reason: "merge_payment_in_flight" });
     expect(rejectedOf(item(), "x", Date.now(), null, "merge_already_merged")?.reason).toBe("merge_already_merged");
     expect(rejectedOf(item(), "x", Date.now(), null)).toMatchObject({ what: "merge", href: "/client/c1" });
+    // an old phone's people / tags for a card merged meanwhile: not lost silently either
+    const people = { id: "o2", op: { k: "customer.people" as const, id: "cx", people: [] }, at: new Date().toISOString(), tries: 4 };
+    expect(rejectedOf(people, "x", Date.now(), null, "customer_merged")).toMatchObject({ what: "merge", href: "/client/cx", reason: "customer_merged", labelKey: "clientDup.rej.cardMergedTitle" });
   });
 });
 

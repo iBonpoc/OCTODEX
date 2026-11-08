@@ -30,6 +30,8 @@ export const REJECT_REASONS = {
   // step 17 C3 (migration 20261109120000): the merge of two clients
   merge_payment_in_flight: "clientDup.rej.inFlight",
   merge_already_merged: "clientDup.rej.merged",
+  // an old phone's people / tags for a card merged meanwhile (save_customer_people, set_customer_tags)
+  customer_merged: "clientDup.rej.cardMerged",
 } as const;
 export type RejectReason = keyof typeof REJECT_REASONS;
 /** a refused signature (estimate.sign, estimate.approve): the client's signature was not kept — take it again (review #415 №4) */
@@ -72,6 +74,7 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   // estimate.approve (the client signs on site / by link) sends first too (review #415 №3)
   if ((op.k === "estimate.send" || op.k === "estimate.sign" || op.k === "estimate.approve") && reason === "estimate_lines_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, reason };
   // a merge of two clients the phone showed as done (step 17 C3): never back silently — the kept card, and why
+  if ((op.k === "customer.people" || op.k === "customer.tags") && reason === "customer_merged") return { ...base, what: "merge", href: `/client/${op.id}`, labelKey: "clientDup.rej.cardMergedTitle", reason };
   if (op.k === "customer.merge") return { ...base, what: "merge", href: `/client/${op.keepId}`, ...(reason ? { reason } : {}) };
   if (!isMoneyOp(item, MONEY_KINDS)) return null;
   switch (op.k) {

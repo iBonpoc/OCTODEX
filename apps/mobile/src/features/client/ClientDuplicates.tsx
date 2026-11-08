@@ -87,6 +87,11 @@ function MergeSheet({ here, other, onClose }: { here: Customer; other: Customer;
       <T v="caption" tone="mut">
         {t("clientDup.fill")}
       </T>
+      {!!here.taxExempt !== !!other.taxExempt ? (
+        <T v="caption" tone="mut">
+          {t("clientDup.taxExempt")}
+        </T>
+      ) : null}
       {dns ? (
         <T v="caption" tone="mut">
           {t("clientDup.noService")}

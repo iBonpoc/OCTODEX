@@ -148,6 +148,9 @@ export function mergeCustomersDb(db: DB, keepId: ID, dropId: ID): DB {
     lastName: fill(a.lastName, b.lastName),
     companyName: fill(a.companyName, b.companyName),
     billing: a.billing ?? b.billing,
+    // «no sales tax» if either card had it, with that card's note (as on the server)
+    taxExempt: a.taxExempt || b.taxExempt || undefined,
+    taxExemptNote: a.taxExempt ? a.taxExemptNote : b.taxExempt ? b.taxExemptNote : a.taxExemptNote,
     sourceId: a.sourceId || b.sourceId,
     tagIds: [...new Set([...(a.tagIds ?? []), ...(b.tagIds ?? [])])],
     status: dns ? "do_not_service" : a.status === "archived" && b.status !== "archived" ? "active" : a.status,

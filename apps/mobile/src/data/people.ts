@@ -81,6 +81,8 @@ export function mergePeople(into: Person[], add: Person[]): Person[] {
     const mails = new Set(a.emails.map((x) => emailKey(x.address)).filter(Boolean));
     const t = out.find((p) => p.phones.some((x) => keys.has(fullPhoneKey(x.number))) || p.emails.some((x) => mails.has(emailKey(x.address))));
     if (t) {
+      // the language of what goes to the person is not lost (rule 7; server: move_lead_people / merge_customers)
+      if (!t.language && a.language) t.language = a.language;
       for (const x of a.phones) {
         const k = fullPhoneKey(x.number);
         if (k && !t.phones.some((y) => fullPhoneKey(y.number) === k)) t.phones.push({ ...x, primary: (t.phones.length === 0 && x.primary) || undefined });

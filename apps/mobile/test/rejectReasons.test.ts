@@ -25,6 +25,7 @@ describe("unit:rejectReasons — a refusal we can explain", () => {
       // step 17 C3: the merge of two clients (migration 20261109120000, db T134)
       merge_payment_in_flight: "clientDup.rej.inFlight",
       merge_already_merged: "clientDup.rej.merged",
+      customer_merged: "clientDup.rej.cardMerged",
     });
     for (const key of Object.values(REJECT_REASONS))
       for (const dict of [ru, en, es] as Record<string, string>[]) expect(dict[key], key).toMatch(/\S/);
