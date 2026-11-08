@@ -8807,9 +8807,19 @@ select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form
 select tst.ok(tst.intake('form', 'form', 'cap116', '{"phone":"(818) 555-0196"}', '9.9.9.6') ->> 'status' = 'rejected', 'T116 the captcha is required and missing');
 select tst.ok(tst.intake('form', 'form', 'cap116ok', '{"phone":"(818) 555-0195"}', '9.9.9.6', '{"captcha":"ok"}') ->> 'status' = 'accepted', 'T116 a solved captcha passes');
 :as_owner_a
-select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 1);
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_captcha_required => false, p_daily_limit => 2);
 :as_service
-select tst.ok(tst.intake('form', 'form', 'day116', '{"phone":"(818) 555-0194"}', '9.9.9.5') ->> 'status' = 'held', 'T116 over the company''s day limit — held');
+select tst.ok(tst.intake('form', 'form', 'day116', '{"phone":"(818) 555-0194"}', '9.9.9.5') ->> 'status' = 'held', 'T116 over the form''s day limit — held');
+select tst.ok(tst.intake('webhook', 'hook', 'day116-hook', '{"phone":"(818) 555-0193"}') ->> 'status' = 'accepted', 'T116 the form''s spam does not hold the webhook''s leads');
+select tst.ok(tst.intake('form', 'form', 'noip116', '{"phone":"(818) 555-0192"}') ->> 'status' = 'rejected', 'T116 a form request without an IP is refused');
+select tst.ok(tst.intake('form', 'form', 'junk116', '{"phone":"(818) 555-0191"}', '9.9.9.4', '{"bot":"maybe","consent":"yes"}') ->> 'status' = 'held',
+  'T116 junk in the checks is not an error');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_daily_limit => 1);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'flood116', '{"phone":"(818) 555-0190"}', '9.9.9.3') ->> 'status' = 'rejected', 'T116 past ten days'' worth in a day — refused, not kept');
+:as_super
+select tst.ok((select payload is null and reason = 'flood' from public.intake_events where event_key = 'flood116'), 'T116 a flood keeps no fields');
 :as_super
 select tst.ok((select payload is not null and lead_id is null from public.intake_events where event_key = 'day116'), 'T116 a held request keeps its fields');
 select tst.ok((select payload is null from public.intake_events where event_key = 'bot116'), 'T116 a bot''s fields are not kept');
@@ -8878,7 +8888,57 @@ do $$ begin
   perform tst.fails($q$select public.intake_endpoint_create('cb000000-0000-0000-0000-000000000000', 'form', '1b000000-0000-0000-0000-000000000001')$q$, 'T119 A''s owner makes a way into B');
 end $$;
 :as_super
+insert into public.service_categories (id, company_id, name) values ('c1190000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'T119 A work');
+:as_service
+select tst.intake('webhook', 'hook', 'cat119a', '{"phone":"(213) 555-0121","category_id":"c1190000-0000-4000-8000-0000000000a2"}');
+select tst.intake('webhook', 'hook', 'cat119b', '{"phone":"(213) 555-0122","category_id":"c1190000-0000-4000-8000-000000000001"}');
+:as_super
+select tst.ok((select service_category_id = 'c1190000-0000-4000-8000-0000000000a2' from public.leads where phone = '(213) 555-0121'), 'T119 the visitor''s kind of work of this company is kept');
+select tst.ok((select service_category_id is distinct from 'c1190000-0000-4000-8000-000000000001' from public.leads where phone = '(213) 555-0122'), 'T119 B''s kind of work from a request is ignored');
+-- T119 (cont.): a client or a person of another company is never linked; consent; deciding; size; purge
+:as_owner_b
+insert into public.customers (id, company_id, display_name) values ('c1190000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'T119 B client');
+insert into public.contacts (company_id, customer_id, name, phone, is_primary) values ('cb000000-0000-0000-0000-000000000000', 'c1190000-0000-4000-8000-0000000000b1', 'B person', '(213) 555-0123', true);
+:as_super
+update public.companies set lead_default_assignee_id = 'b0000000-0000-0000-0000-000000000001' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => true, p_daily_limit => 1000, p_sms_consent_enabled => true);
+:as_service
+select tst.intake('webhook', 'hook', 'x119', '{"phone":"(213) 555-0123","language":"ES"}');
+select tst.intake('form', 'form', 'consent119', '{"phone":"(213) 555-0124"}', '7.7.7.1', '{"consent":"true","consent_version":"sms-v1"}');
+select tst.ok(tst.intake('form', 'form', 'big119', jsonb_build_object('phone', '(213) 555-0125', 'message', repeat('x', 17000)), '7.7.7.2') ->> 'status' = 'invalid', 'T119 a body over 16 KB is refused');
+select tst.ok(tst.intake('form', 'form', 'arr119', '[1,2]', '7.7.7.3') ->> 'status' = 'invalid', 'T119 a body that is not an object is refused');
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_sms_consent_enabled => false);
+:as_service
+select tst.intake('form', 'form', 'noconsent119', '{"phone":"(213) 555-0126"}', '7.7.7.4', '{"consent":"true"}');
+:as_super
+update public.companies set lead_default_assignee_id = null where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select customer_id is null and assigned_to = 'a0000000-0000-0000-0000-000000000001' and language = 'es' from public.leads where phone = '(213) 555-0123' and company_id = 'ca000000-0000-0000-0000-000000000000'),
+  'T119 B''s client with the same phone and B''s person as A''s choice are never used; «ES» is Spanish');
+select tst.ok((select c.sms_consent_status = 'opted_in' from public.contacts c join public.leads l on l.id = c.lead_id where l.phone = '(213) 555-0124' and c.is_primary)
+          and (select sms_consent and consent_text_version = 'sms-v1' from public.intake_events where event_key = 'consent119'), 'T119 the consent box: the person opted in, the record kept');
+select tst.ok((select c.sms_consent_status = 'unknown' from public.contacts c join public.leads l on l.id = c.lead_id where l.phone = '(213) 555-0126' and c.is_primary),
+  'T119 consent from a form without the box is ignored');
+-- a held one refused by hand; company B decides nothing of A
+update public.intake_events set status = 'held' where event_key = 'flood116';
+update public.intake_events set payload = '{"phone":"(818) 555-0190"}' where event_key = 'flood116';
+:as_owner_b
+select tst.fails($q$select public.intake_event_decide((select id from tst.intake_tok where k = 'form'), true)$q$, 'T119 an unknown event');
+:as_super
+insert into tst.intake_tok (k, id) select 'flood', id from public.intake_events where event_key = 'flood116';
+:as_owner_b
+select tst.fails($q$select public.intake_event_decide((select id from tst.intake_tok where k = 'flood'), true)$q$, 'T119 company B decides A''s request');
+:as_owner_a
+select tst.ok(public.intake_event_decide((select id from tst.intake_tok where k = 'flood'), false) ->> 'status' = 'rejected', 'T116 the owner refuses a held request');
+:as_super
+select tst.ok((select status = 'rejected' and reason = 'by_hand' and payload is null and decided_by = 'a0000000-0000-0000-0000-000000000001' from public.intake_events where event_key = 'flood116')
+          and (select lead_id is null from public.intake_events where event_key = 'flood116'), 'T116 a refused request makes no lead and keeps no fields');
+-- the purge: old fields and IP hashes go, the consent's IP hash stays
+update public.intake_events set received_at = now() - interval '100 days' where event_key in ('k113', 'consent119', 'day116');
 select app.purge_intake_events();
+select tst.ok((select payload is null and ip_hash is null from public.intake_events where event_key = 'k113')
+          and (select payload is null and ip_hash is not null from public.intake_events where event_key = 'consent119'), 'T112 the purge clears old fields and IPs, keeps the consent''s');
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 select tst.ok((select count(*) from public.intake_events where payload is not null and status = 'accepted') > 0, 'T112 the purge keeps fresh requests');
 \echo 'T112–T119 lead intake: rights, repeats, duplicates, client, limits, assignee, ways in ok'

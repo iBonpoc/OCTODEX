@@ -2,3 +2,6 @@
 -- Its own file = its own transaction: validate takes SHARE UPDATE EXCLUSIVE and does not block reads or writes.
 -- The list only grew: every existing row passes.
 alter table public.activities validate constraint activities_kind_check;
+alter table public.leads validate constraint leads_provider_check;
+alter table public.leads validate constraint leads_provider_ref_check;
+alter table public.leads validate constraint leads_parse_status_check;

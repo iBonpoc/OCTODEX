@@ -87,10 +87,14 @@ grant select (id, company_id, endpoint_id, event_key, received_at, status, reaso
   on public.intake_events to authenticated;
 
 -- ---- 3. Leads and their feed ------------------------------------------------------------------------
-alter table public.leads add column if not exists provider        text check (provider ~ '^[a-z][a-z0-9_]{0,29}$');
-alter table public.leads add column if not exists provider_ref    text check (char_length(provider_ref) <= 120);
-alter table public.leads add column if not exists parse_status    text check (parse_status in ('ok', 'needs_review'));
+alter table public.leads add column if not exists provider        text;
+alter table public.leads add column if not exists provider_ref    text;
+alter table public.leads add column if not exists parse_status    text;
 alter table public.leads add column if not exists intake_event_id uuid;
+-- the checks without a scan of the big table under a lock; validated in 20261108210200
+alter table public.leads add constraint leads_provider_check check (provider ~ '^[a-z][a-z0-9_]{0,29}$') not valid;
+alter table public.leads add constraint leads_provider_ref_check check (char_length(provider_ref) <= 120) not valid;
+alter table public.leads add constraint leads_parse_status_check check (parse_status in ('ok', 'needs_review')) not valid;
 -- the unique (company, provider, provider_ref) index is built concurrently in 20261108210100 (leads is big, rule 16)
 
 -- not valid: no scan of the big table under a lock; validated in 20261108210200
@@ -185,7 +189,7 @@ returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   v_phone text := app.intake_text(p_payload, 'phone', 40);
   v_email text := lower(app.intake_text(p_payload, 'email', 254));
-  v_lang text := app.intake_text(p_payload, 'language', 2);
+  v_lang text := lower(app.intake_text(p_payload, 'language', 5));
   v_cost bigint;
   v_open uuid; v_lead uuid; v_parse text := 'ok';
   v_provider text := lower(app.intake_text(p_payload, 'provider', 30));
@@ -236,7 +240,11 @@ begin
   insert into public.leads (company_id, source_id, service_category_id, customer_id, contact_name, phone, email,
                             address_line1, address_city, address_state, address_zip, service_requested, message, language,
                             utm, assigned_to, provider, provider_ref, parse_status, intake_event_id, cost_origin)
-  values (p_ep.company_id, p_ep.source_id, p_ep.service_category_id, app.intake_customer(p_ep.company_id, v_phone, v_email),
+  values (p_ep.company_id, p_ep.source_id,
+          coalesce(p_ep.service_category_id, (select s.id from public.service_categories s
+             where s.company_id = p_ep.company_id and s.archived_at is null
+               and s.id::text = app.intake_text(p_payload, 'category_id', 36))),
+          app.intake_customer(p_ep.company_id, v_phone, v_email),
           app.intake_text(p_payload, 'name', 120), v_phone, v_email,
           app.intake_text(p_payload, 'address', 200), app.intake_text(p_payload, 'city', 80),
           upper(app.intake_text(p_payload, 'state', 2)), app.intake_text(p_payload, 'zip', 10),
@@ -295,17 +303,24 @@ begin
     return jsonb_build_object('status', v_old.status, 'event_id', v_old.id, 'repeat', true);
   end if;
 
-  v_consent := ep.sms_consent_enabled and coalesce((p_checks ->> 'consent')::boolean, false);
-  if coalesce((p_checks ->> 'bot')::boolean, false) then
+  v_consent := ep.sms_consent_enabled and coalesce(p_checks ->> 'consent', '') = 'true';
+  if coalesce(p_checks ->> 'bot', '') = 'true' then
     v_status := 'rejected'; v_reason := 'bot';
   elsif ep.captcha_required and coalesce(p_checks ->> 'captcha', 'none') <> 'ok' then
     v_status := 'rejected'; v_reason := 'captcha';
-  elsif octet_length(coalesce(p_payload, '{}'::jsonb)::text) > 16384 or jsonb_typeof(coalesce(p_payload, '{}'::jsonb)) <> 'object' then
+  elsif jsonb_typeof(coalesce(p_payload, '{}'::jsonb)) <> 'object' then
+    v_status := 'invalid'; v_reason := 'not_object';
+  elsif octet_length(p_payload::text) > 16384 then
     v_status := 'invalid'; v_reason := 'too_big';
+  elsif p_kind = 'form' and (p_ip_hash is null or p_ip_hash !~ '^[0-9a-f]{64}$') then
+    v_status := 'rejected'; v_reason := 'no_ip';
+  elsif (select count(*) from public.intake_events x where x.endpoint_id = ep.id
+          and x.received_at > now() - interval '1 day') >= 10 * ep.daily_limit then
+    v_status := 'rejected'; v_reason := 'flood';            -- past ten days' worth in a day: not even kept
   elsif p_ip_hash is not null and (select count(*) from public.intake_events x where x.company_id = ep.company_id
           and x.ip_hash = p_ip_hash and x.received_at > now() - interval '1 hour') >= 5 then
     v_status := 'held'; v_reason := 'ip_limit';
-  elsif (select count(*) from public.intake_events x where x.company_id = ep.company_id and x.status in ('accepted', 'merged', 'held')
+  elsif (select count(*) from public.intake_events x where x.endpoint_id = ep.id and x.status in ('accepted', 'merged', 'held')
           and x.received_at > now() - interval '1 day') >= ep.daily_limit then
     v_status := 'held'; v_reason := 'daily_limit';
   end if;
@@ -318,7 +333,8 @@ begin
   on conflict (endpoint_id, event_key) do nothing
   returning id into v_id;
   if v_id is null then  -- a parallel copy won (the lock is per company; this is belt and braces)
-    return jsonb_build_object('status', 'accepted', 'repeat', true);
+    select * into v_old from public.intake_events where endpoint_id = ep.id and event_key = p_event_key;
+    return jsonb_build_object('status', v_old.status, 'event_id', v_old.id, 'repeat', true);
   end if;
   if v_status is not null then
     return jsonb_build_object('status', v_status, 'event_id', v_id);
@@ -438,9 +454,13 @@ begin
   if ev.id is null or not app.has_role(ev.company_id, array['owner', 'admin', 'office']) then
     raise exception 'forbidden' using errcode = '42501';
   end if;
+  if exists (select 1 from public.companies c where c.id = ev.company_id and c.closed_at is not null) then
+    raise exception 'company closed' using errcode = '42501';
+  end if;
   if ev.status <> 'held' then
     return jsonb_build_object('status', ev.status, 'lead_id', ev.lead_id);
   end if;
+  perform pg_advisory_xact_lock(hashtextextended('intake:' || ev.company_id::text, 0));
   if not p_accept then
     update public.intake_events set status = 'rejected', reason = 'by_hand', decided_by = auth.uid(), decided_at = now(), payload = null
      where id = ev.id;
@@ -466,7 +486,8 @@ returns void language sql security definer set search_path = '' as $$
    where payload is not null
      and ((status in ('held', 'rejected', 'invalid') and received_at < now() - interval '30 days')
        or (status in ('accepted', 'merged') and received_at < now() - interval '90 days'));
-  update public.intake_events set ip_hash = null where ip_hash is not null and received_at < now() - interval '30 days';
+  -- the consent record keeps its IP hash (who agreed, from where)
+  update public.intake_events set ip_hash = null where ip_hash is not null and not sms_consent and received_at < now() - interval '30 days';
 $$;
 revoke all on function app.purge_intake_events() from public, anon, authenticated;
 

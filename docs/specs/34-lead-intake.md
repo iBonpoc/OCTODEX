@@ -31,13 +31,13 @@ Zapier ──POST Bearer key──►      │ размер ≤ 16 КБ, пол�
                        2 нормализация (телефон E.164, email lower, ZIP, язык en/es/ru)
                        3 дубль: открытый лид ≤30 дн по телефону/email → событие в ленту старого, без нового лида
                          совпал клиент → новый лид с customer_id (отметка «уже клиент»)
-                       4 источник = источник точки приёма; цена: провайдер → ставка источника → 0
+                       4 источник = источник точки приёма; цена: только от провайдера (целые центы ≤ $500), иначе нет
                        5 назначение: companies.lead_default_assignee_id (если участник в работе) → владелец
                        6 insert leads (status new) → t90 пуш, «Требует внимания»
 ```
-- **Таблицы.** `intake_endpoints` (company_id, kind form|webhook, public_token 128 бит для формы, secret_hash для вебхука, source_id, service_category_id?, enabled, rotated_at). `intake_events` (company_id, endpoint_id, event_key, received_at, ip_hash, status accepted|merged|duplicate_event|rejected|rate_limited|invalid, lead_id, payload jsonb урезанный, reason). Уникальность (endpoint_id, event_key). `leads` + `intake_event_id`, `provider`, `provider_ref` (уникально в компании, где не null), `parse_status`.
+- **Таблицы** (миграция `20261108210000`). `intake_endpoints` (kind form|webhook, `token_hash` для поиска, `public_token` только у формы, `token_hint`, source_id, service_category_id?, enabled, captcha_required, sms_consent_enabled, daily_limit, rotated_at). `intake_events` (endpoint_id, event_key, payload_hash, ip_hash, status accepted|merged|held|rejected|invalid, reason, lead_id, payload, sms_consent, consent_text_version, decided_by/at). Повтор события не пишется отдельной строкой — возвращается прежний статус. Уникальность (endpoint_id, event_key). `leads` + `intake_event_id`, `provider`, `provider_ref` (уникально в компании, где не null), `parse_status`.
 - **Права.** anon — ничего в базе (только Edge Function). `app.intake_lead` — только service_role (правило 18, T52). Точки приёма создаёт/выключает/меняет ключ owner/admin через RPC; читать журнал — owner/admin/office. Ключ вебхука показывается один раз, хранится хэшем.
-- **Лимиты** (в базе, атомарно, по `intake_events`): с одного ip_hash 5/час на компанию; на компанию 100/сутки (дальше `rate_limited`, лид не создаётся, в настройках счётчик «отклонено»). IP — только HMAC-хэш с секретом функции, сырой IP не храним.
+- **Лимиты** (в базе, под замком компании): с одного ip_hash 5/час на компанию → `held`; на точку приёма `daily_limit`/сутки (по умолчанию 100) → `held`; больше 10×лимита за сутки → `rejected/flood` без полей. Форма без IP → `rejected/no_ip`. Капча обязательна только при `captcha_required`. IP — только HMAC-хэш с секретом функции, сырой IP не храним.
 - **Чужая компания.** Компания определяется только токеном точки приёма; из тела запроса `company_id` не читается. Токен формы публичен по смыслу (он на сайте) — защищает не тайна, а лимиты и капча; «Сменить ссылку» отключает старый. Ключ вебхука — тайна; в браузерную форму не попадает.
 - **Содержимое — только данные** (14 §4 п.6): текст обрезается, хранится как текст, в приложении — `<Text>`, в письмах/PDF экранируется. Ссылки в сообщении не кликабельны.
 - **Язык клиента.** Страница: `?lang=` → язык браузера → `Company.docLanguage`; переключатель EN/ES/RU. Выбранный язык → `leads.language` → `docLanguageFor` (дальше всё клиенту на нём).
@@ -63,6 +63,14 @@ Zapier ──POST Bearer key──►      │ размер ≤ 16 КБ, пол�
 15. Триггер t85 знает только en/es — `ru` добавить (общая миграция). «Уже клиент»: новые телефон/email из заявки — в описание лида и событие, не в карточку клиента.
 16. Текст заявки — только данные и для ИИ; CSV-выгрузка экранирует формулы; тест «имя клиента не попадает в пуш».
 17. Индекс `provider_ref` — пометка rule16 или concurrently отдельным файлом; `created_by` null, в журнале actor `system`.
+
+## 3б. Как сделано в PR 1 (уточнения)
+- Посетитель формы выбирает вид работ из списка компании (`category_id`); чужой или архивный — пропускается. Если вид работ задан у точки приёма — берётся он.
+- `app.intake_form_info` отдаёт странице имя компании, язык компании, переключатели капчи и галочки и список видов работ (без них страницу не построить).
+- «Принять / Отклонить» отложенную заявку — `public.intake_event_decide` (owner/admin/office), под тем же замком; `created_by` лида — тот, кто принял (это решение человека). Поля отложенной хранятся 30 дней: после — «Принять» вернёт `invalid`.
+- Галочка SMS: при согласии главному человеку лида `contacts.sms_consent_status = opted_in`, запись согласия — строка журнала (время, версия текста, ip_hash хранится бессрочно).
+- Ставка источника не подставляется: `lead_sources.default_cost_cents` снят (19 §P4).
+- В PR 2 обязательно: наружу одинаковый ответ для accepted/merged/held/rejected (иначе по ответу видно, есть ли открытый лид у телефона), HMAC IP с секретом функции (простой sha256 перебирается).
 
 ## 4. Оспаривание
 | № | Утверждение | Откуда | Ответ | Почему | Что меняем |
