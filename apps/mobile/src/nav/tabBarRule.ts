@@ -40,6 +40,7 @@ export const WITH_TAB_BAR = [
   // a settings page saved from its sheet at once (no form to lose)
   "company/leads",
   "company/intake",
+  "company/payments",
   "company/modules",
   "company/checklists",
   "estimate/[id]", "estimates", "figures/[metric]", "help",
