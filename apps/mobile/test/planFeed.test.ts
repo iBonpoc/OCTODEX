@@ -6,7 +6,7 @@
 const phoneTz = process.env.TZ;
 process.env.TZ = "America/New_York";
 import { afterAll, describe, expect, it } from "vitest";
-import { daysFrom, eventFields, eventProblems, eventRange, groupByDay, itemTimes, matchPlanItem, matchVisit, planItems, spanDays, whoMatches } from "../src/features/planFeed";
+import { daysFrom, eventFields, eventProblems, eventRange, groupByDay, itemTimes, matchPlanItem, matchVisit, planItems, spanDays, timeLead, whoMatches } from "../src/features/planFeed";
 import { unassignedSoon } from "../src/features/schedule";
 import type { CalendarEvent, DB, Task, Visit } from "../src/data/types";
 
@@ -219,5 +219,17 @@ describe("the search of «План» (spec 31, one rule)", () => {
   it("the Day by person searches its visits the same way", () => {
     expect(matchVisit(full, full.visits[0]!, "gutters")).toBe(true);
     expect(matchVisit(full, full.visits[0]!, "meeting")).toBe(false);
+  });
+});
+
+describe("timeLead — the left block of a Plan card (recipe C, 06)", () => {
+  it("splits the hour and AM / PM on a plain, no-break or narrow no-break space", () => {
+    expect(timeLead("9:00 AM")).toEqual({ kind: "time", top: "9:00", bottom: "AM" });
+    expect(timeLead("10:30 PM")).toEqual({ kind: "time", top: "10:30", bottom: "PM" });
+    expect(timeLead("6:15 AM")).toEqual({ kind: "time", top: "6:15", bottom: "AM" });
+  });
+  it("keeps a string without AM / PM whole (never drops a word)", () => {
+    expect(timeLead("14:00")).toEqual({ kind: "time", top: "14:00", bottom: "" });
+    expect(timeLead("Todo el día")).toEqual({ kind: "time", top: "Todo el día", bottom: "" });
   });
 });
