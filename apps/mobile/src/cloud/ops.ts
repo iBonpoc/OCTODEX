@@ -216,7 +216,11 @@ export type Op =
   | { k: "note.update"; id: string; pinned?: boolean; body?: string; deleted?: boolean }
   /** onlyNew (spec 33 П22.10): «insert, or nothing if this id is there» — a module's items made with a fixed id; a second
    *  phone or a second send never overwrites a price someone already set */
-  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true }
+  /**
+   * costs: the cost fields this save changed (19 §9) — only these are written; a field left out keeps the server's value
+   * (a cache without costs never erases them). No `costs` (an op queued by an older build): every cost field as before.
+   */
+  | { k: "catalog.save"; item: CatalogItem; onlyNew?: true; costs?: CatalogCostChange }
   | { k: "catalog.remove"; id: string }
   | { k: "notice.read"; ids: string[] }
   | { k: "estimate.sign"; id: string; svg: string; signer?: string }
@@ -912,12 +916,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "catalog.save": {
       const it = op.item;
+      const costCols = catalogCostCols(op);
       await run(
         supabase.from("catalog_items").upsert(
           {
             id: it.id, company_id: c, kind: it.kind, name: it.name, description: it.description ?? null, unit: it.unit,
-            unit_price_cents: it.priceCents, unit_cost_cents: it.costCents ?? null, vendor: it.vendor ?? null,
-            vendor_tax_bps: it.vendorTaxBps ?? null, markup_bps: it.markupBps ?? null,
+            unit_price_cents: it.priceCents, vendor: it.vendor ?? null, ...costCols,
             components: (it.components ?? []).map((x) => ({ item_id: x.itemId, qty: x.qty })), is_placeholder_price: !!it.placeholder,
             // C3 (docs/specs/33 П16): only what is set — an item without them never writes the new columns
             ...(it.attributes !== undefined ? { attributes: it.attributes } : {}),
@@ -928,7 +932,16 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           op.onlyNew ? { onConflict: "id", ignoreDuplicates: true } : { onConflict: "id" },
         ),
       );
-      if (!op.onlyNew) return;
+      if (!op.onlyNew) {
+        // 19 §9: the server moves a cost sent above into catalog_item_costs, but a null there means «not sent» (old
+        // phones); the changed fields go to the side table as they are, so a cost can be cleared. Nothing changed —
+        // nothing written (an upsert sets only the columns it sends). No right to see costs (42501, sales) or a server
+        // before the migration (no table) — the item itself is saved.
+        if (!op.costs || !Object.keys(costCols).length) return;
+        const r = await supabase.from("catalog_item_costs").upsert({ item_id: it.id, company_id: c, ...costCols }, { onConflict: "item_id" });
+        if (r.error && !["42501", "42P01", "PGRST205"].includes(r.error.code ?? "")) await run(Promise.resolve(r));
+        return;
+      }
       // «nothing» is not «done» (security check #377): the row with this id must now be this company's
       const { data: row } = await read(supabase.from("catalog_items").select("id, deleted_at").eq("id", it.id).eq("company_id", c).maybeSingle());
       // not visible: the id is another company's row (RLS hides it) — the item was never made; the server's «no»
@@ -1014,6 +1027,24 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
         }),
       );
   }
+}
+
+/** the cost fields of a price-list item (CatalogItem) and their columns */
+export type CatalogCostChange = Partial<Record<"costCents" | "vendorTaxBps" | "markupBps", number | null>>;
+const COST_COL = { costCents: "unit_cost_cents", vendorTaxBps: "vendor_tax_bps", markupBps: "markup_bps" } as const;
+/** what changed between the item on the phone before and now (a new item: what it has); empty — nothing */
+export function catalogCostChange(prev: CatalogItem | undefined, it: CatalogItem): CatalogCostChange {
+  const out: CatalogCostChange = {};
+  for (const f of Object.keys(COST_COL) as (keyof typeof COST_COL)[]) {
+    const now = it[f] ?? null;
+    if (prev ? now !== (prev[f] ?? null) : now !== null) out[f] = now;
+  }
+  return out;
+}
+/** the cost columns a save writes: the changed ones; an old op without `costs` — all of them, as it did */
+function catalogCostCols(op: Extract<Op, { k: "catalog.save" }>): Record<string, number | null> {
+  const ch: CatalogCostChange = op.costs ?? { costCents: op.item.costCents ?? null, vendorTaxBps: op.item.vendorTaxBps ?? null, markupBps: op.item.markupBps ?? null };
+  return Object.fromEntries((Object.keys(ch) as (keyof typeof COST_COL)[]).map((f) => [COST_COL[f], ch[f] ?? null]));
 }
 
 /**
