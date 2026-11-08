@@ -9464,5 +9464,207 @@ end $$;
 :as_super
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T120 office and sales rights on intake ok'
+-- ---------------------------------------------------------------- T122–T124: estimate templates (docs/specs/07 §11, migration 20261108230000)
+-- T122 who reads and writes; our cost lives only in estimate_template_line_costs
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc) values
+  ('e3a00000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'Service + material', '{"options":[{"id":"o1","name":"Good","recommended":true,"lines":[
+  {"id":"l1","name":"Service call","group":"service","quantity":"1","unit":"ea","unitPriceCents":12999,"unitCostCents":4000},
+  {"id":"l2","name":"Material","group":"material","quantity":"2.5","unit":"ft","unitPriceCents":1050,"unitCostCents":333,"catalogItemId":"99000000-0000-4000-8000-000000000001"},
+  {"id":"l3","name":"Haul away","group":"labor","quantity":"1","unit":"ea","unitPriceCents":5000,"optional":true}]}],
+ "settings":{"discount":{"kind":"pct","value":"0.05"},"tax":{"enabled":true,"rateBps":925,"groups":{"service":false,"labor":false,"material":true}},"deposit":{"kind":"pct","bps":1000}},
+ "note":"Scope: front of the house"}');
+select tst.ok(tst.cnt($q$select 1 from public.estimate_templates where id = 'e3a00000-0000-4000-8000-000000000001'$q$) = 1, 'T122 the office makes a template');
+select tst.ok(tst.cnt($q$select 1 from public.estimate_templates where id = 'e3a00000-0000-4000-8000-000000000001'
+                        and jsonb_path_exists(doc, '$.options[*].lines[*].unitCostCents')$q$) = 0, 'T122 the stored document has no line cost');
+select tst.ok(tst.cnt($q$select 1 from public.estimate_template_line_costs where template_id = 'e3a00000-0000-4000-8000-000000000001'$q$) = 2,
+              'T122 the office reads the two costs sent (the add-on had none)');
+do $$ begin
+  perform tst.fails($q$insert into public.estimate_template_line_costs (template_id, line_id, company_id, unit_cost_cents)
+    values ('e3a00000-0000-4000-8000-000000000001', 'x', 'ca000000-0000-0000-0000-000000000000', 1)$q$, 'T122 nobody writes the costs directly');
+end $$;
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_templates where id = 'e3a00000-0000-4000-8000-000000000001'$q$) = 1, 'T122 sales uses templates');
+select tst.ok(tst.cnt('select 1 from public.estimate_template_line_costs') = 0, 'T122 sales without view_costs reads no cost');
+select tst.blocked($q$update public.estimate_templates set name = 'sales' where id = 'e3a00000-0000-4000-8000-000000000001'$q$, 'T122 sales does not change templates');
+do $$ begin
+  perform tst.fails($q$insert into public.estimate_templates (company_id, name, doc) values ('ca000000-0000-0000-0000-000000000000', 'sales',
+    '{"options":[{"id":"o","name":"A","lines":[]}],"settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}}')$q$, 'T122 sales does not make templates');
+end $$;
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_templates where id = 'e3a00000-0000-4000-8000-000000000001'$q$) = 1, 'T122 a tech reads templates (makes an estimate from one)');
+select tst.ok(tst.cnt('select 1 from public.estimate_template_line_costs') = 0, 'T122 a tech reads no cost');
+select tst.blocked($q$update public.estimate_templates set archived_at = now() where id = 'e3a00000-0000-4000-8000-000000000001'$q$, 'T122 a tech does not archive templates');
+do $$ begin
+  perform tst.fails($q$insert into public.estimate_templates (company_id, name, doc) values ('ca000000-0000-0000-0000-000000000000', 'tech',
+    '{"options":[{"id":"o","name":"A","lines":[]}],"settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}}')$q$, 'T122 a tech does not make templates');
+end $$;
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.estimate_templates where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'T122 another company sees no template');
+select tst.ok(tst.cnt('select 1 from public.estimate_template_line_costs') = 0, 'T122 another company sees no cost');
+do $$ begin
+  perform tst.fails($q$insert into public.estimate_templates (id, company_id, name, doc) values ('e3a00000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'B',
+    '{"options":[{"id":"o","name":"A","lines":[]}],"settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}}')
+    on conflict (id) do update set doc = excluded.doc$q$, 'T122 company B upserts over A''s template');
+  perform tst.fails($q$insert into public.estimate_templates (company_id, name, doc) values ('ca000000-0000-0000-0000-000000000000', 'B',
+    '{"options":[{"id":"o","name":"A","lines":[]}],"settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}}')$q$, 'T122 another company writes nothing');
+end $$;
+:as_super
+select tst.ok(not has_table_privilege('anon', 'public.estimate_templates', 'select')
+          and not has_table_privilege('anon', 'public.estimate_template_line_costs', 'select')
+          and not has_table_privilege('authenticated', 'public.estimate_templates', 'delete')
+          and not has_table_privilege('authenticated', 'public.estimate_template_uses', 'insert')
+          and not has_column_privilege('authenticated', 'public.estimate_templates', 'module_key', 'update')
+          and not has_table_privilege('authenticated', 'public.estimate_template_line_costs', 'insert')
+          and not has_function_privilege('anon', 'app.valid_estimate_template_doc(jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_template_costs_move()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_template_costs_inserted()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_template_used()', 'execute'), 'T122 grants: no anon, no delete, server-only fields and functions (rule 18)');
+\echo 'T122 estimate templates: who reads and writes, costs hidden ok'
+
+-- T122 the document the app really sends (newDoc: discount null, caHic, quantity a number, description, selected)
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc) values ('e3a00000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'App shape',
+  '{"options":[{"id":"o1","name":"Option 1","lines":[{"id":"l9","name":"Labor","description":"2 people","group":"labor","quantity":1.5,"unit":"hr","unitPriceCents":9000,"unitCostCents":null,"catalogItemId":null,"optional":true,"selected":false}]}],
+    "settings":{"discount":null,"tax":{"enabled":false,"rateBps":0,"groups":{"service":false,"labor":false,"material":true}},"deposit":{"kind":"pct","bps":1000},"caHic":true},"note":null}');
+select tst.ok(tst.cnt($q$select 1 from public.estimate_templates where id = 'e3a00000-0000-4000-8000-000000000002'$q$) = 1, 'T122 a template in the app''s own shape saves');
+\echo 'T122 the app''s document shape ok'
+
+-- T123 uses: version 1 of an estimate made from a template, counted by the server, never on the template row
+:as_super
+select row_version as rv from public.estimate_templates where id = 'e3a00000-0000-4000-8000-000000000001' \gset t123_
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e3a00000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T123 from template');
+-- the app's path (ops.ts saveEstimate): insert the version bare, then update source / template_id, then save again
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('e3a00000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'e3a00000-0000-4000-8000-0000000000e1', 1);
+select tst.ok(tst.cnt('select 1 from public.estimate_template_uses') = 0, 'T123 a bare version is no use');
+update public.estimate_versions set source = 'template', template_id = 'e3a00000-0000-4000-8000-000000000001' where id = 'e3a00000-0000-4000-8000-0000000000f1';
+update public.estimate_versions set source = 'template', template_id = 'e3a00000-0000-4000-8000-000000000001' where id = 'e3a00000-0000-4000-8000-0000000000f1';
+select tst.ok(tst.cnt($q$select 1 from public.estimate_template_uses where template_id = 'e3a00000-0000-4000-8000-000000000001' and estimate_id = 'e3a00000-0000-4000-8000-0000000000e1'$q$) = 1,
+              'T123 the update to source = template counts one use, the second save nothing');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, template_id) values
+  ('e3a00000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', 'e3a00000-0000-4000-8000-0000000000e1', 2, 'template', 'e3a00000-0000-4000-8000-000000000001');
+select tst.ok(tst.cnt('select 1 from public.estimate_template_uses') = 1, 'T123 version 2 of the same estimate is not a new use');
+-- a version 1 saved with source in the insert counts too; the template row is untouched by uses
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e3a00000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T123 second');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, template_id) values
+  ('e3a00000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'e3a00000-0000-4000-8000-0000000000e2', 1, 'template', 'e3a00000-0000-4000-8000-000000000001');
+select tst.ok(tst.cnt('select 1 from public.estimate_template_uses') = 2, 'T123 an insert with source = template counts');
+:as_super
+select tst.ok((select row_version = :t123_rv from public.estimate_templates where id = 'e3a00000-0000-4000-8000-000000000001'),
+              'T123 a use does not touch the template row (no row_version bump, no updated_by)');
+:as_tech_a
+select tst.ok(tst.cnt('select 1 from public.estimate_template_uses') = 2, 'T123 a tech reads the uses (sorts the picker)');
+do $$ begin
+  perform tst.fails($q$insert into public.estimate_template_uses (template_id, estimate_id, company_id) values
+    ('e3a00000-0000-4000-8000-000000000001', 'e3a00000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000')$q$, 'T123 nobody writes a use directly');
+end $$;
+-- a deleted template counts nothing
+:as_office_a
+update public.estimate_templates set deleted_at = now() where id = 'e3a00000-0000-4000-8000-000000000002';
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e3a00000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T123 deleted');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, template_id) values
+  ('e3a00000-0000-4000-8000-0000000000f4', 'ca000000-0000-0000-0000-000000000000', 'e3a00000-0000-4000-8000-0000000000e3', 1, 'template', 'e3a00000-0000-4000-8000-000000000002');
+select tst.ok(tst.cnt($q$select 1 from public.estimate_template_uses where template_id = 'e3a00000-0000-4000-8000-000000000002'$q$) = 0, 'T123 a deleted template counts nothing');
+:as_owner_b
+insert into public.customers (id, company_id, display_name) values ('e3a00000-0000-4000-8000-0000000000b1', 'cb000000-0000-0000-0000-000000000000', 'T123 B');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('e3a00000-0000-4000-8000-0000000000b2', 'cb000000-0000-0000-0000-000000000000', 'e3a00000-0000-4000-8000-0000000000b1', 'T123 B', 'Pasadena');
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e3a00000-0000-4000-8000-0000000000b3', 'cb000000-0000-0000-0000-000000000000', 'e3a00000-0000-4000-8000-0000000000b1', 'e3a00000-0000-4000-8000-0000000000b2', 'T123 B');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, template_id) values
+  ('e3a00000-0000-4000-8000-0000000000b4', 'cb000000-0000-0000-0000-000000000000', 'e3a00000-0000-4000-8000-0000000000b3', 1, 'template', 'e3a00000-0000-4000-8000-000000000001');
+select tst.ok(tst.cnt('select 1 from public.estimate_template_uses') = 0, 'T123 another company sees no use of A');
+:as_super
+select tst.ok(tst.cnt('select 1 from public.estimate_template_uses') = 2, 'T123 another company''s estimate naming A''s template counts nothing');
+\echo 'T123 uses are the server''s ok'
+
+-- T124 money in a template: whole cents kept exactly, refused otherwise (rule 8)
+:as_super
+select tst.ok((select doc #> '{options,0,lines,0,unitPriceCents}' = '12999'::jsonb
+                  and doc #> '{options,0,lines,1,quantity}' = '"2.5"'::jsonb
+                  and doc #> '{settings,discount}' = '{"kind":"pct","value":"0.05"}'::jsonb
+                  and doc #> '{settings,tax,rateBps}' = '925'::jsonb
+                  and doc #> '{settings,deposit}' = '{"kind":"pct","bps":1000}'::jsonb
+                  and doc ->> 'note' = 'Scope: front of the house'
+                  and doc #>> '{options,0,lines,1,catalogItemId}' = '99000000-0000-4000-8000-000000000001'
+                from public.estimate_templates where id = 'e3a00000-0000-4000-8000-000000000001'),
+              'T124 prices, quantity, discount, tax rate, deposit, note and catalog link are kept as sent');
+select tst.ok((select array_agg(line_id || '=' || unit_cost_cents order by line_id) = array['l1=4000', 'l2=333']
+                 from public.estimate_template_line_costs where template_id = 'e3a00000-0000-4000-8000-000000000001'),
+              'T124 the costs are the cents sent, per line');
+:as_office_a
+update public.estimate_templates set name = 'Renamed' where id = 'e3a00000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.estimate_template_line_costs where template_id = 'e3a00000-0000-4000-8000-000000000001'$q$) = 2, 'T124 a rename keeps the costs');
+-- the doc as the server hands it out (no costs) with one line renamed: the costs stay
+update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,name}', '"Service call (2)"') where id = 'e3a00000-0000-4000-8000-000000000001';
+select tst.ok((select array_agg(line_id || '=' || unit_cost_cents order by line_id) = array['l1=4000', 'l2=333']
+                 from public.estimate_template_line_costs where template_id = 'e3a00000-0000-4000-8000-000000000001'),
+              'T124 a doc without the cost key keeps the costs (an office phone that has not merged them back)');
+-- l1 a new cost, l2 removed: the side table follows; then l1 an explicit null clears it
+update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines}', jsonb_build_array(
+    jsonb_set(doc #> '{options,0,lines,0}', '{unitCostCents}', '4100'::jsonb), doc #> '{options,0,lines,2}'))
+  where id = 'e3a00000-0000-4000-8000-000000000001';
+select tst.ok((select array_agg(line_id || '=' || unit_cost_cents) = array['l1=4100']
+                 from public.estimate_template_line_costs where template_id = 'e3a00000-0000-4000-8000-000000000001'),
+              'T124 a new cost is set, a removed line loses its cost');
+-- an upsert of its own template (the app's plain save) moves the cost too
+insert into public.estimate_templates (id, company_id, name, doc)
+  select id, company_id, name, jsonb_set(doc, '{options,0,lines,0,unitCostCents}', '4200'::jsonb) from public.estimate_templates where id = 'e3a00000-0000-4000-8000-000000000001'
+  on conflict (id) do update set doc = excluded.doc;
+select tst.ok((select array_agg(line_id || '=' || unit_cost_cents) = array['l1=4200']
+                 from public.estimate_template_line_costs where template_id = 'e3a00000-0000-4000-8000-000000000001')
+          and tst.cnt($q$select 1 from public.estimate_templates where id = 'e3a00000-0000-4000-8000-000000000001' and jsonb_path_exists(doc, '$.options[*].lines[*].unitCostCents')$q$) = 0,
+              'T124 an upsert moves the cost and keeps it out of the doc');
+update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,unitCostCents}', 'null'::jsonb) where id = 'e3a00000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.estimate_template_line_costs where template_id = 'e3a00000-0000-4000-8000-000000000001'$q$) = 0, 'T124 an explicit null clears a cost');
+update public.estimate_templates set doc = jsonb_set(doc, '{options,0,lines,0,unitCostCents}', '4100'::jsonb) where id = 'e3a00000-0000-4000-8000-000000000001';
+do $$
+declare
+  ok_line text := '{"id":"l","name":"x","group":"labor","quantity":"1","unit":"ea","unitPriceCents":100}';
+  ok_set text := '{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}';
+  ins text := $q$insert into public.estimate_templates (company_id, name, doc) values ('ca000000-0000-0000-0000-000000000000', 'bad', %L)$q$;
+  bad record;
+begin
+  for bad in select * from (values
+    ('{"options":[{"id":"o","name":"A","lines":[' || replace(ok_line, '100}', '10.5}') || ']}],"settings":' || ok_set || '}', 'a price is whole cents'),
+    ('{"options":[{"id":"o","name":"A","lines":[' || replace(ok_line, '100}', '-1}') || ']}],"settings":' || ok_set || '}', 'a price is not negative'),
+    ('{"options":[{"id":"o","name":"A","lines":[' || replace(ok_line, '100}', '"100"}') || ']}],"settings":' || ok_set || '}', 'a price is a number, not a string'),
+    ('{"options":[{"id":"o","name":"A","lines":[' || replace(ok_line, '100}', '100.0}') || ']}],"settings":' || ok_set || '}', 'a price 100.0 is refused (digits only)'),
+    ('{"options":[{"id":"o","name":"A","lines":[' || replace(ok_line, '100}', '100,"unitCostCents":100.0}') || ']}],"settings":' || ok_set || '}', 'a cost 100.0 is a clean refusal, not a cast error'),
+    ('{"options":[{"id":"o","name":"A","lines":[' || replace(ok_line, ',"unitPriceCents":100', '') || ']}],"settings":' || ok_set || '}', 'a line without a price'),
+    ('{"options":[{"id":"o","name":"A","lines":[' || replace(ok_line, '"quantity":"1",', '') || ']}],"settings":' || ok_set || '}', 'a line without a quantity'),
+    ('{"options":[{"id":"o","name":"A","lines":[' || replace(ok_line, '"quantity":"1"', '"quantity":""') || ']}],"settings":' || ok_set || '}', 'an empty quantity'),
+    ('{"options":[{"id":"o","name":"A","lines":[' || replace(ok_line, '100}', '100,"source":{"module":"gutters"}}') || ']}],"settings":' || ok_set || '}', 'a module line source does not ride along'),
+    ('{"options":[{"id":"o","name":"A","lines":[' || ok_line || ',' || ok_line || ']}],"settings":' || ok_set || '}', 'two lines with one id'),
+    ('{"settings":' || ok_set || '}', 'no options'),
+    ('{"options":"x","settings":' || ok_set || '}', 'options not an array (a clean refusal)'),
+    ('{"options":[{"id":"o","name":"A","lines":[]}],"settings":{"tax":{"enabled":false,"groups":{}},"deposit":{"kind":"none"}}}', 'no tax rate'),
+    ('{"options":[{"id":"o","name":"A","lines":[]}],"settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"pct"}}}', 'a pct deposit without bps'),
+    ('{"options":[{"id":"o","name":"A","lines":[]}],"settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"pct","bps":10001}}}', 'a deposit is at most 100%'),
+    ('{"options":[{"id":"o","name":"A","lines":[]}],"settings":{"discount":{"kind":"fixed"},"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}}', 'a fixed discount without cents'),
+    ('{"options":[{"id":"o","name":"A","lines":[]}],"settings":{"discount":{"kind":"pct","value":"1.5"},"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}}', 'a pct discount is a share 0..1 (1.5 = 150%)')
+  ) v(doc, msg) loop
+    perform tst.fails_like(format(ins, bad.doc), '%estimate_templates_doc_check%', 'T124 ' || bad.msg);
+  end loop;
+  perform tst.fails(format($q$update public.estimate_templates set doc = %L where id = 'e3a00000-0000-4000-8000-000000000001'$q$,
+    '{"options":[{"id":"o","name":"A","lines":[' || replace(ok_line, '100}', '100,"unitCostCents":"x"}') || ']}],"settings":' || ok_set || '}'),
+    'T124 an update with a bad cost is refused before any cast');
+end $$;
+select tst.ok((select array_agg(line_id || '=' || unit_cost_cents) = array['l1=4100']
+                 from public.estimate_template_line_costs where template_id = 'e3a00000-0000-4000-8000-000000000001'), 'T124 a refused update keeps the costs');
+-- sales with view_costs reads the costs (matrix 04 §1)
+:as_super
+update public.memberships set permissions_override = coalesce(permissions_override, '{}'::jsonb) || '{"view_costs": true}'
+ where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_template_line_costs where template_id = 'e3a00000-0000-4000-8000-000000000001'$q$) = 1, 'T124 sales with view_costs reads the cost');
+:as_super
+update public.memberships set permissions_override = permissions_override - 'view_costs'
+ where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T124 money in a template: whole cents, kept exactly ok'
 
 \echo 'ALL TESTS PASSED'
