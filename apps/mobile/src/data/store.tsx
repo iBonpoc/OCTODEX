@@ -95,10 +95,12 @@ import {
   type ChecklistItem,
   type ChecklistItemKind,
   type ChecklistTemplate,
+  type EstimateTemplate,
   type ChecklistVisitKind,
   type NaReason,
   type VisitSettings,
 } from "./types";
+import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
 import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, visitSettingsOf } from "@/features/checklist";
 
 type Undo = () => void;
@@ -290,7 +292,9 @@ interface StoreCtx {
   /** progress (by stage) or final balance invoice for a job */
   issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo;
   /** create or update a universal estimate (draft) */
-  saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID }) => Undo;
+  saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID; templateId?: ID }) => Undo;
+  /** E3 (docs/specs/07 §11): an estimate template, whole (new, changed, archived = archivedAt); director and office */
+  saveEstimateTemplate: (t: EstimateTemplate) => Undo;
   /** client + property for an estimate from a lead (creates a prospect card the first time) */
   leadEstimateTarget: (leadId: ID) => { customerId: ID; propertyId: ID; undo: Undo } | null;
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
@@ -1731,7 +1735,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { k: "estimate.send", id, token },
         );
       },
-      saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0 }) => {
+      saveEstimateTemplate: (t) => {
+        const clean = cleanEstimateTemplate(t);
+        // a refusal is never queued (lesson of the director): no name, not the office, a server before the templates
+        if (!clean || !canEditEstimateTemplates(role) || dbRef.current.estimateTemplatesMissing) return noop;
+        return mutate(
+          "estimate.template",
+          (d) => {
+            const list = d.estimateTemplates ?? [];
+            const old = list.find((x) => x.id === clean.id);
+            const next = { ...clean, uses: old?.uses ?? clean.uses, lastUsedAt: old?.lastUsedAt ?? clean.lastUsedAt };
+            return { ...d, estimateTemplates: old ? list.map((x) => (x.id === clean.id ? next : x)) : [...list, next] };
+          },
+          { k: "est.template.save", template: clean },
+        );
+      },
+      saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
         if (prev?.status === "approved") return () => {};
         const doc = prev && prev.status !== "draft" ? reId(doc0) : doc0;
@@ -1743,15 +1762,20 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const next: Estimate = {
               ...(prev ?? {}),
               id, customerId, propertyId, title, doc, status: "draft", ...sum, leadId: leadId0 ?? prev?.leadId,
+              // E3: an estimate keeps the template it was made from; a new one from a template counts one use (demo too)
+              templateId: prev ? prev.templateId : templateId0,
               // «don't sign — change it»: the client signs the new version again (the old signature stays on the server)
               ...(prev?.status === "awaiting_countersign" ? { approval: undefined, signature: undefined } : {}),
               sentAt: prev?.status === "draft" ? prev.sentAt : undefined,
               // a new estimate takes the direction of its lead / client / company (S16); an existing one keeps its own
               serviceCategoryId: prev ? prev.serviceCategoryId : inheritCategory(d, { kind: "estimate", leadId: leadId0, customerId }),
             };
-            return { ...d, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
+            const used = !prev && templateId0
+              ? { estimateTemplates: (d.estimateTemplates ?? []).map((t) => (t.id === templateId0 ? { ...t, uses: (t.uses ?? 0) + 1, lastUsedAt: new Date().toISOString() } : t)) }
+              : {};
+            return { ...d, ...used, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
-          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, title, doc: storedDoc(doc), costs: costsOf(doc), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
+          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, templateId: prev ? prev.templateId : templateId0, title, doc: storedDoc(doc), costs: costsOf(doc), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
         );
       },
       approveEstimate: (id, a) => {

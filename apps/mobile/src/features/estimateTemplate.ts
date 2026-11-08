@@ -4,7 +4,8 @@
  * (current catalog, else the template's) and never sums anything itself.
  */
 import { parseQty, type CustomLine, type CustomOption } from "@octo/estimating-engine";
-import type { CatalogItem, EstimateDoc } from "@/data/types";
+import type { CatalogItem, EstimateDoc, EstimateTemplate } from "@/data/types";
+import { canEditTemplates } from "./checklist";
 import { catalogUnitCost, catalogUnitPrice, mainOption, optionTotals, uid } from "./estimateDoc";
 
 /** The keys of a template line the server takes (app.valid_estimate_template_doc); a module's `source` never rides along */
@@ -91,4 +92,25 @@ export function fromTemplate(tpl: EstimateDoc, catalog: CatalogItem[], costs: Re
 export function templateFromCents(tpl: EstimateDoc, catalog: CatalogItem[]): number {
   const { doc } = fromTemplate(tpl, catalog, {}, false);
   return optionTotals(doc, mainOption(doc)).total;
+}
+
+/** who makes, changes and archives templates (§8; server: owner / admin / office = the app's director and dispatcher —
+ *  the same rule as checklist templates); everyone uses them */
+export const canEditEstimateTemplates = canEditTemplates;
+
+export const ESTIMATE_TEMPLATE_NAME_MAX = 120;
+
+/** a template the server takes: a name 1..120 without control characters, at least one option (else null: not queued) */
+export function cleanEstimateTemplate(t: EstimateTemplate): EstimateTemplate | null {
+  // eslint-disable-next-line no-control-regex
+  const name = t.name.replace(/[\u0000-\u001f\u007f]/g, " ").trim().slice(0, ESTIMATE_TEMPLATE_NAME_MAX);
+  if (!name || t.doc.options.length < 1 || t.doc.options.length > 10) return null;
+  return { ...t, name };
+}
+
+/** the picker and the list: live ones, last used first, then by name */
+export function pickableTemplates(list: EstimateTemplate[]): EstimateTemplate[] {
+  return list
+    .filter((t) => !t.archivedAt)
+    .sort((a, b) => (b.lastUsedAt ?? "").localeCompare(a.lastUsedAt ?? "") || a.name.localeCompare(b.name));
 }

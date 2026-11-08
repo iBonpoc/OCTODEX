@@ -306,6 +306,22 @@ export interface ChecklistTemplate {
   archivedAt?: string;
 }
 
+/** a company's estimate template (docs/specs/07 §3.5, §11; server: estimate_templates + _line_costs + _uses) */
+export interface EstimateTemplate {
+  id: ID;
+  name: string;
+  /** options, lines, add-ons, discount, tax, deposit, note — no client, property or lead; never a cost inside */
+  doc: EstimateDoc;
+  /** our cost per unit by template line id (only who sees costs gets it; estimate_template_line_costs) */
+  costs?: Record<string, number>;
+  /** a module's starter template (the module's key) */
+  module?: string;
+  /** estimates made from it and the latest (estimate_template_uses; the server counts) */
+  uses?: number;
+  lastUsedAt?: string;
+  archivedAt?: string;
+}
+
 /** the company's photo rules for visits (docs/specs/08 §3.3; server: companies.visit_settings) */
 export interface VisitSettings {
   photosBeforeRequired: boolean;
@@ -632,6 +648,8 @@ export interface Estimate {
   viewedAt?: string;
   approval?: EstimateApproval;
   /* ---- wave E2a (docs/specs/07 §3.1) ---- */
+  /** E3: the template this estimate was made from (estimate_versions.template_id, source = 'template') */
+  templateId?: ID;
   /** the company's signature: with the client's it makes the contract (approved) */
   countersign?: EstimateCountersign;
   /** YYYY-MM-DD: an unsigned estimate's link works until this day (founder 05.11: 7 days by default) */
@@ -912,6 +930,10 @@ export interface DB {
   serviceCategories: ServiceCategory[];
   /** step 14 (docs/specs/08): the company's checklist templates (absent in old saved data → []; a tech reads none) */
   checklistTemplates?: ChecklistTemplate[];
+  /** step 19 E3 (docs/specs/07 §11): the company's estimate templates (absent in old saved data → []) */
+  estimateTemplates?: EstimateTemplate[];
+  /** the server has no estimate_templates yet (before migration 20261108230000): templates are not saved */
+  estimateTemplatesMissing?: boolean;
   /** the server has no visit_checklist_items yet (before migration 20261108140000): the store sends the old whole list */
   checklistLegacy?: boolean;
   tasks: Task[];
