@@ -14,7 +14,7 @@ import { placeActions, type ModulePlace, type PlaceCtx } from "./registry";
 export function ModulePlaces({ place, ctx }: { place: Exclude<ModulePlace, "home">; ctx: Omit<PlaceCtx, "role"> }) {
   const { db, role } = useStore();
   const { t } = useI18n();
-  const actions = placeActions(place, db.company, { ...ctx, role });
+  const actions = placeActions(place, db.company, { ...ctx, role }, undefined, db.moduleData);
   if (!actions.length) return null;
   return (
     <View testID={`module-place-${place}`} style={{ flexDirection: "row", flexWrap: "wrap", gap: space[2] }}>

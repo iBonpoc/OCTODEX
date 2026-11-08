@@ -63,7 +63,7 @@ export default function DrawScreen() {
   const { c } = useTheme();
   const toast = useToast();
   const store = useStore();
-  const params = useLocalSearchParams<{ m?: string }>();
+  const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string }>();
   const ins = useSafeAreaInsets();
   const access = moduleState(store.db.company?.modules?.gutters).access;
   const canSave = access === "trial" || access === "paid";
@@ -106,7 +106,9 @@ export default function DrawScreen() {
         saver.seed(v.elements);
         setDrawing(fromElements(v.elements));
       }
-      setM(v?.m ?? { id: mid, label: null, status: "draft", propertyId: null, leadId: null });
+      // a new one from a lead or a property is linked to it (S4g); from home — a draft without either (S1b)
+      const one = (x: string | string[] | undefined) => (typeof x === "string" && x ? x : null);
+      setM(v?.m ?? { id: mid, label: null, status: "draft", propertyId: one(params.property), leadId: one(params.lead) });
     });
     void loadToolbarPlace().then((p) => on && setPlace(p));
     return () => {
@@ -302,6 +304,16 @@ export default function DrawScreen() {
     setPlace(p);
     void saveToolbarPlace(p);
   };
+  // the measurement as the store has it now (a lead linked by «Сделать заявкой» or by the office shows at once)
+  const inStore = m ? gutterData(store.db).measurements.find((x) => x.id === m.id) : undefined;
+  const leadId = inStore?.leadId ?? m?.leadId ?? null;
+  const lead = leadId ? store.db.leads.find((l) => l.id === leadId) : undefined;
+  /** S1b: a saved draft without a lead → the core's new-lead form; the new lead takes the draft (ModuleDef.leadCreated) */
+  const toLead = () => {
+    if (timer.current) clearTimeout(timer.current);
+    flush();
+    if (m) router.push(`/lead/new?module=gutters&ref=${encodeURIComponent(m.id)}`);
+  };
   const back = () => {
     flush();
     if (router.canGoBack()) router.back();
@@ -355,11 +367,22 @@ export default function DrawScreen() {
           <View testID="draw-fit"><IconButton icon="expand" label={t("mod.gutters.draw.fit")} onPress={() => size.w && setView(fit(drawing, size))} /></View>
         </RowView>
         {canSave ? (
-          savedOnce ? (
-            <View testID="draw-saved" style={{ alignSelf: "flex-start" }}>
-              <StatusChip status="ok" label={t("mod.gutters.draw.saved")} soft />
-            </View>
-          ) : null
+          <RowView style={{ flexWrap: "wrap", gap: space[2] }}>
+            {savedOnce ? (
+              <View testID="draw-saved">
+                <StatusChip status="ok" label={t("mod.gutters.draw.saved")} soft />
+              </View>
+            ) : null}
+            {lead ? (
+              <View testID="draw-lead">
+                <Button label={lead.name} icon="user" size="sm" variant="ghost" onPress={() => router.push(`/lead/${lead.id}`)} />
+              </View>
+            ) : inStore && !leadId ? (
+              <View testID="draw-to-lead">
+                <Button label={t("mod.gutters.draw.toLead")} icon="plus" size="sm" variant="secondary" onPress={toLead} />
+              </View>
+            ) : null}
+          </RowView>
         ) : (
           <View testID="draw-not-saved" style={{ gap: space[2], padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
             <StatusChip status="warn" label={t("mod.gutters.draw.notSaved")} />

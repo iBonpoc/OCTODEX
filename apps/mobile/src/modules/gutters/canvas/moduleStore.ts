@@ -5,7 +5,7 @@
  * (moduleOp → null, founder О2) → the save fails and nothing is written. Pure but for the store it is given.
  */
 import type { DB } from "@/data/types";
-import { dropElement, gutterData, K, KEY, measurementOf, putElement, putMeasurement, withGutterData } from "../data";
+import { dropElement, gutterData, K, KEY, measurementOf, ownFields as own, putElement, putMeasurement, withGutterData } from "../data";
 import type { ElementRow, MeasurementRow, MeasurementStore } from "./model";
 
 type ModuleOp = (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: DB) => DB; coalesceKey?: string; made?: string[] }) => unknown;
@@ -14,7 +14,6 @@ export interface StoreLike {
   moduleOp: ModuleOp;
 }
 
-const own = (m: MeasurementRow): MeasurementRow => ({ id: m.id, label: m.label, status: m.status, propertyId: m.propertyId, leadId: m.leadId });
 const same = (a: MeasurementRow, b: MeasurementRow) => JSON.stringify(own(a)) === JSON.stringify(own(b));
 /** the measurement was changed now (its own fields or one of its elements): the newest opens first */
 const touched = (id: string, at: string) => (d: DB) =>

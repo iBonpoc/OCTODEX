@@ -2398,6 +2398,10 @@ export const ru = {
   "mod.gutters.draw.expired": "Пробный период закончился — рисунок не сохранится",
   "mod.gutters.draw.off": "Модуль не подключён — рисунок не сохранится",
   "mod.gutters.draw.connect": "Подключить",
+  "mod.gutters.measure": "Замер",
+  "mod.gutters.measureOpen": "Открыть замер",
+  "mod.gutters.measureHere": "Замерить здесь",
+  "mod.gutters.draw.toLead": "Сделать заявкой",
   "mod.gutters.draw.selRun": "Линия · {len} · эт {n}",
   "mod.gutters.draw.selDs": "Даунспот · эт {n}",
 } as const;

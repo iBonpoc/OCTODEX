@@ -30,7 +30,7 @@ export function useFabItems({ set, ctx, on }: FabProps): FabItem[] {
   const core = fabItems(set, role, ctx).filter((it) => !it.act || it.act === "photo" || !!on?.[it.act]);
   if (set !== "home") return core;
   // the home «＋»: what the company's usable modules add («Замерить здесь», docs/specs/33 П15.2); none — as before
-  const mods = placeActions("home", db.company, { role }).map((a): FabItem => ({ id: `module.${a.module}.${a.id}`, label: a.labelKey, icon: a.icon, href: a.href }));
+  const mods = placeActions("home", db.company, { role }, undefined, db.moduleData).map((a): FabItem => ({ id: `module.${a.module}.${a.id}`, label: a.labelKey, icon: a.icon, href: a.href }));
   return [...core, ...mods];
 }
 
