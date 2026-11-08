@@ -85,8 +85,24 @@ jobs:
         run: supabase link --project-ref "$PROJECT_REF"
       - name: Show pending
         run: supabase migration list --remote
+      # A migration merged after a later-dated one already reached the base is refused by db push (releases 205–212 stopped
+      # here, 08.11: 20261108130000_tech_no_costs after 20261108140000_checklists). Such a file is applied with --include-all
+      # only when the director listed it below after checking it changes nothing a later applied migration defines
+      # (CHECKS §9); any other out-of-order file still stops the release.
       - name: Apply new migrations
-        run: supabase db push --remote --yes
+        env:
+          OUT_OF_ORDER_OK: |
+            supabase/migrations/20261108130000_tech_no_costs.sql
+        run: |
+          set +e
+          out=$(supabase db push --remote --yes 2>&1); code=$?
+          echo "$out"
+          [ $code -eq 0 ] && exit 0
+          echo "$out" | grep -q "Rerun the command with --include-all" || exit $code
+          for f in $(echo "$out" | grep -oE 'supabase/migrations/[^ ]+\.sql'); do
+            echo "$OUT_OF_ORDER_OK" | grep -qxF "$f" || { echo "::error::$f is dated before a migration already on the base; give it a new time (CLAUDE.md: new file)"; exit 1; }
+          done
+          supabase db push --remote --yes --include-all
       # 7а-2a (S22): «Удалить аккаунт» closes the sign-in through Supabase Auth (docs/specs/19 §6.7). After the migrations
       # (the function calls public.delete_account); a failed deploy stops the release — the app never ships ahead of it.
       # --yes: the CLI asks for confirmation and fails without a terminal (releases after #214 stopped here, 06.11).
