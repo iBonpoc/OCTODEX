@@ -32,7 +32,9 @@ exports.run = async (h) => {
   await h.shot("unknown");
   await p.getByRole("radio", { name: "Chicago" }).click();
   await h.click("Сохранить");
+  // the save lands in the store a moment after the tap: wait for it, not one read (CHECKS §9)
   db = await h.db();
+  for (let i = 0; i < 30 && db.company.timezone !== "America/Chicago"; i++) { await p.waitForTimeout(200); db = await h.db(); }
   h.expect(db.company.timezone === "America/Chicago", `a chosen zone fixes it: ${db.company.timezone}`);
   await h.go("/company/schedule");
   h.expect(await p.getByTestId("tz-unknown").count() === 0, "no warning after the fix");
