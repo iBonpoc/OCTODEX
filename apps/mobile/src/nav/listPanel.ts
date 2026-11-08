@@ -21,7 +21,8 @@ export function usePanelKeys(on: boolean, act: (k: "up" | "down" | "close") => v
       const onKey = (e: KeyboardEvent) => {
         const el = document.activeElement as HTMLElement | null;
         const typing = !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
-        const k = panelKey(e, { typing, modal: !!document.querySelector('[aria-modal="true"]') });
+        const onList = !el || el === document.body || !!el.closest('[data-testid="list-card"]');
+        const k = panelKey(e, { typing, modal: !!document.querySelector('[aria-modal="true"]'), onList });
         if (!k) return;
         e.preventDefault();
         ref.current(k);
@@ -35,5 +36,7 @@ export function usePanelKeys(on: boolean, act: (k: "up" | "down" | "close") => v
 /** before «⤢ Открыть»: the focus goes to the selected row, so «back» from the card's screen lands on it (spec 10, Н3а) */
 export function focusSelectedRow() {
   if (Platform.OS !== "web" || typeof document === "undefined") return;
-  (document.querySelector('[aria-selected="true"]') as HTMLElement | null)?.focus?.({ preventScroll: true });
+  // the visible open row: hidden screens of the stack stay in the page (another list with its own open row)
+  const rows = [...document.querySelectorAll<HTMLElement>('[data-testid="list-card"][aria-current="true"]')];
+  rows.find((r) => r.offsetParent !== null)?.focus?.({ preventScroll: true });
 }

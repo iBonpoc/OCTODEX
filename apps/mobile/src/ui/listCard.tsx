@@ -247,7 +247,8 @@ export function ListCard(p: ListCardProps) {
       onPress={p.onPress}
       // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control
       accessibilityRole={p.onPress ? "button" : undefined}
-      aria-selected={p.selected || undefined}
+      // the open row (panel on 1280): «current item of the set», not «selected» — this is a button (ARIA)
+      {...({ "aria-current": p.selected ? "true" : undefined } as object)}
       accessibilityLabel={p.title}
       accessibilityActions={a11yActions}
       onAccessibilityAction={(e) => {
@@ -402,7 +403,8 @@ function ListCardRow(p: ListCardProps) {
       onPress={p.onPress}
       // a card without a tap (e.g. an expense) is not a button and is not dimmed like a disabled control
       accessibilityRole={p.onPress ? "button" : undefined}
-      aria-selected={p.selected || undefined}
+      // the open row (panel on 1280): «current item of the set», not «selected» — this is a button (ARIA)
+      {...({ "aria-current": p.selected ? "true" : undefined } as object)}
       accessibilityLabel={p.title}
       testID={p.testID ?? "list-card"}
       style={{

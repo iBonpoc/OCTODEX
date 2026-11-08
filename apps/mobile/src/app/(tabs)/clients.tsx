@@ -68,11 +68,20 @@ export default function Clients() {
   const openC = openId ? list.find((c) => c.id === openId) : undefined;
   const setOpen = (id: string | undefined) => router.setParams({ open: id });
   usePanelKeys(!!openId, (k) => setOpen(k === "close" ? undefined : neighbor(ids, openId, k === "down" ? 1 : -1)));
-  // a link with ?open= on a narrower window (or the window got narrower): the card on its own screen, as a tap there
-  const narrowOpen = !desktop && typeof openParam === "string" && clients.some((c) => c.id === openParam) ? openParam : undefined;
+  // a link with ?open= opened on a narrower window: the card's own screen, once, as a tap there; the list under it
+  // is left clean, so «back» does not bounce into the card again (review #425). Turning the tablet later only hides the panel.
   useEffect(() => {
-    if (narrowOpen) router.replace(`/client/${narrowOpen}`);
-  }, [narrowOpen]);
+    const id = typeof openParam === "string" ? openParam : undefined;
+    if (desktop || !id || !clients.some((c) => c.id === id)) return;
+    router.setParams({ open: undefined });
+    router.push(`/client/${id}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // 1280: the open client fell out of the list (a filter, the archive): the panel closes and the address says so
+  const stale = desktop && typeof openParam === "string" && openParam !== "" && !openId;
+  useEffect(() => {
+    if (stale) router.setParams({ open: undefined });
+  }, [stale]);
   const toast = useToast();
   const store = useStore();
   const [picking, setPicking] = useState<Customer | null>(null);

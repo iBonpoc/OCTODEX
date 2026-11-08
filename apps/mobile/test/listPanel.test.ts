@@ -23,14 +23,19 @@ describe("listPanel", () => {
     expect(panelId(undefined, ids, true)).toBeUndefined();
   });
   it("keys: ↑ ↓ Esc; nothing while typing, under a sheet or with a modifier", () => {
-    const free = { typing: false, modal: false };
+    const free = { typing: false, modal: false, onList: true };
     expect(panelKey({ key: "ArrowDown" }, free)).toBe("down");
     expect(panelKey({ key: "ArrowUp" }, free)).toBe("up");
     expect(panelKey({ key: "Escape" }, free)).toBe("close");
     expect(panelKey({ key: "Enter" }, free)).toBeUndefined();
-    expect(panelKey({ key: "ArrowDown" }, { typing: true, modal: false })).toBeUndefined();
-    expect(panelKey({ key: "Escape" }, { typing: false, modal: true })).toBeUndefined();
+    expect(panelKey({ key: "ArrowDown" }, { typing: true, modal: false, onList: true })).toBeUndefined();
+    expect(panelKey({ key: "Escape" }, { typing: false, modal: true, onList: true })).toBeUndefined();
     expect(panelKey({ key: "ArrowDown", shiftKey: true }, free)).toBeUndefined();
     expect(panelKey({ key: "Escape", defaultPrevented: true }, free)).toBeUndefined();
+    // ↑/↓ only from the rows (not the panel's scroll, the filter lane, the menu); Esc anywhere, not on a held key
+    const off = { typing: false, modal: false, onList: false };
+    expect(panelKey({ key: "ArrowDown" }, off)).toBeUndefined();
+    expect(panelKey({ key: "Escape" }, off)).toBe("close");
+    expect(panelKey({ key: "Escape", repeat: true }, free)).toBeUndefined();
   });
 });

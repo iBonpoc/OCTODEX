@@ -40,7 +40,7 @@ exports.run = async (h) => {
   await cards.first().click();
   h.expect(await openIs(h, id0), `a tap opens the panel (${p.url()})`);
   await panel(h).waitFor();
-  h.expect((await cards.first().getAttribute("aria-selected")) === "true", "the open row is marked");
+  h.expect((await cards.first().getAttribute("aria-current")) === "true", "the open row is marked (aria-current)");
   h.expect(new URL(p.url()).pathname === "/clients", `the list stays (${p.url()})`);
   await h.shot("panel");
 
@@ -53,6 +53,33 @@ exports.run = async (h) => {
   await p.keyboard.press("Escape");
   h.expect(await openIs(h, ""), `Esc closes the panel (${p.url()})`);
   await panel(h).waitFor({ state: "detached" });
+  // Esc with the status menu open inside the panel closes the menu only, the panel stays
+  await cards.first().click();
+  h.expect(await openIs(h, id0), "the panel again");
+  await panel(h).getByRole("button", { name: /^Статус клиента/ }).first().click();
+  await p.locator('[aria-modal="true"]').first().waitFor();
+  await p.keyboard.press("Escape");
+  await p.locator('[aria-modal="true"]').first().waitFor({ state: "detached" });
+  h.expect(await openIs(h, id0), `Esc closed the menu, the panel stays (${p.url()})`);
+  // ↓ with the focus in the side menu is the menu's, not the list's
+  await p.getByTestId("side-clients").focus();
+  await p.keyboard.press("ArrowDown");
+  await p.waitForTimeout(300);
+  h.expect(await openIs(h, id0), `↓ outside the rows does not move the panel (${p.url()})`);
+  // the open client falls out of the filter: the panel closes and the address drops ?open=, «Все» does not bring it back
+  const owing = (c) => db.invoices.some((i) => i.customerId === c.id && !i.void && i.totalCents > i.paidCents);
+  const quiet = db.customers.find((c) => names.some((n) => n.startsWith(c.name)) && !owing(c));
+  h.expect(quiet, "a client who owes nothing is in the list");
+  {
+    await cards.filter({ has: p.getByText(quiet.name, { exact: true }) }).first().click();
+    h.expect(await openIs(h, quiet.id), `the quiet client is open (${p.url()})`);
+    await p.getByText(/^Должны · \d+$/).last().click();
+    h.expect(await openIs(h, ""), `out of the filter → the panel closes (${p.url()})`);
+    await p.getByText(/^Все · \d+$/).last().click();
+    await p.waitForTimeout(300);
+    h.expect((await panel(h).count()) === 0, "back to «Все»: the panel stays closed");
+  }
+  await p.keyboard.press("Escape");
   // «✕» closes too
   await cards.nth(1).click();
   await panel(h).waitFor();

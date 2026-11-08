@@ -16,8 +16,11 @@ export function panelId(open: string | string[] | undefined, ids: readonly strin
   return desktop && id && ids.includes(id) ? id : undefined;
 }
 
-/** the key that moves the panel, or nothing (a field is typed in, a sheet or menu is open, a modifier is held) */
-export function panelKey(e: { key: string; altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; isComposing?: boolean; defaultPrevented?: boolean }, ctx: { typing: boolean; modal: boolean }): "up" | "down" | "close" | undefined {
+/** the key that moves the panel, or nothing: a field is typed in, a sheet or menu is open, a modifier is held;
+ *  ↑/↓ only when the focus is on the list's rows or nowhere (not in the panel's own scroll, the filter lane, the menu) */
+export function panelKey(e: { key: string; altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; isComposing?: boolean; defaultPrevented?: boolean; repeat?: boolean }, ctx: { typing: boolean; modal: boolean; onList: boolean }): "up" | "down" | "close" | undefined {
   if (e.defaultPrevented || e.isComposing || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey || ctx.typing || ctx.modal) return undefined;
-  return e.key === "ArrowDown" ? "down" : e.key === "ArrowUp" ? "up" : e.key === "Escape" ? "close" : undefined;
+  if (e.key === "Escape") return e.repeat ? undefined : "close";
+  if (!ctx.onList) return undefined;
+  return e.key === "ArrowDown" ? "down" : e.key === "ArrowUp" ? "up" : undefined;
 }
