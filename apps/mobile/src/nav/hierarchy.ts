@@ -135,6 +135,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       // checklist templates (docs/specs/08 §7): the list under «Компания», a template under the list
       if (id === "checklists") return { section: "company", kind: "chk2.title", up: { href: "/company", label: K("co.title") } };
       if (id === "checklist") return { section: "company", kind: "chk2.template", up: { href: "/company/checklists", label: K("chk2.title") } };
+      // «Приём заявок» (#422): under «Лиды» of the company settings
+      if (id === "intake") return { section: "company", kind: "intake.set.title", up: { href: "/company/leads", label: K("co.leads.title") } };
       return id
         ? { section: "company", kind: SETUP_STEPS.includes(id as SetupStep) ? stepTitle(id as SetupStep) : id === "schedule" ? "schs.title" : id === "leads" ? "co.leads.title" : id === "modules" ? "mod.title" : "co.title", up: { href: "/company", label: K("co.title") } }
         : { section: "company" };
