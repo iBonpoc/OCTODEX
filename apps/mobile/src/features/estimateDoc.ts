@@ -231,6 +231,25 @@ export function marginView(e: { marginPct?: string | null; doc?: EstimateDoc; ap
   return pct ? { kind: "pct", pct } : null;
 }
 
+/**
+ * Fresh ids for options/lines when a sent estimate is edited (the sent version stays immutable in the database);
+ * `from`: new line id → the sent line it was copied from — the server copies its cost for who cannot write costs
+ * (debt 4 of «Сметы» №1, migration 20261108200000, core_rls T110–T111). Pure: test/reIdDoc.test.ts.
+ */
+export function reIdDoc(doc: EstimateDoc, newId: () => string): { doc: EstimateDoc; from: Record<string, string> } {
+  const from: Record<string, string> = {};
+  const options = doc.options.map((o) => ({
+    ...o,
+    id: newId(),
+    lines: o.lines.map((l) => {
+      const id = newId();
+      from[id] = l.id;
+      return { ...l, id };
+    }),
+  }));
+  return { doc: { ...doc, options }, from };
+}
+
 /** Summary fields kept on Estimate for lists (total, deposit, visible lines of the main option). */
 export function summarize(doc: EstimateDoc, approved?: { optionId: string; addonIds: string[] }) {
   const base = (approved && doc.options.find((o) => o.id === approved.optionId)) || mainOption(doc);

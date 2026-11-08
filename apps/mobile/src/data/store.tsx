@@ -34,7 +34,7 @@ import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
-import { newToken, storedDoc, summarize } from "@/features/estimateDoc";
+import { newToken, reIdDoc, storedDoc, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
@@ -393,11 +393,6 @@ function withPayment(d: DB, p: Payment, demo: boolean): DB {
     ),
   };
 }
-/** Fresh ids for options/lines when a sent estimate is edited (the sent version stays immutable in the database). */
-const reId = (doc: EstimateDoc): EstimateDoc => ({
-  ...doc,
-  options: doc.options.map((o) => ({ ...o, id: uid(), lines: o.lines.map((l) => ({ ...l, id: uid() })) })),
-});
 const costsOf = (doc: EstimateDoc): Record<string, number> =>
   Object.fromEntries(doc.options.flatMap((o) => o.lines.filter((l) => l.unitCostCents !== undefined).map((l) => [l.id, l.unitCostCents!])));
 
@@ -1673,7 +1668,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);
         if (prev?.status === "approved") return () => {};
-        const doc = prev && prev.status !== "draft" ? reId(doc0) : doc0;
+        const re = prev && prev.status !== "draft" ? reIdDoc(doc0, uid) : null;
+        const doc = re ? re.doc : doc0;
         const sum = summarize(doc);
         const versionId = uid();
         return mutate(
@@ -1690,7 +1686,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             };
             return { ...d, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
-          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, title, doc: storedDoc(doc), costs: costsOf(doc), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
+          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, title, doc: storedDoc(doc), costs: costsOf(doc), ...(re ? { linesFrom: re.from } : {}), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
         );
       },
       approveEstimate: (id, a) => {

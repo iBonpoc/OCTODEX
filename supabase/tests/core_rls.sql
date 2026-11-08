@@ -8878,4 +8878,86 @@ select tst.ok(public.send_estimate('a1090000-0000-4000-8000-000000000001', 'tok_
 select tst.ok((select total = 87649 from app.estimate_option_totals('a1090000-0000-4000-8000-000000000002', 'a1090000-0000-4000-8000-0000000000a1', null)), 'T109 the server''s total = the engine''s $876.49');
 \echo 'T109 a percent discount counts whole bps on both sides ok'
 
+-- ---------------------------------------------------------------- T110: a new version of a sent estimate keeps the office's costs (debt 4)
+-- The app's edit of a sent estimate makes new line ids and sends copied_from_line_id (migration 20261108200000): for who
+-- does not see costs the server copies the cost of that line — only from an earlier locked version of the same estimate.
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('a1100000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T110 sent'), ('a1100000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T110 other');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('a1100000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000e1', 1), ('a1100000-0000-4000-8000-0000000000d2', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000e1', 2), ('a1100000-0000-4000-8000-0000000000d9', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000e2', 1);
+insert into public.estimate_options (id, company_id, version_id, name) values
+  ('a1100000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000d1', 'A'), ('a1100000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000d2', 'A'), ('a1100000-0000-4000-8000-0000000000a9', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000d9', 'A');
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('a1100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a1', 'Gutter', 10, 1200), ('a1100000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a9', 'Other', 1, 9000);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 400), ('a1100000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 7777);
+update public.estimate_versions set locked_at = now() where id in ('a1100000-0000-4000-8000-0000000000d1', 'a1100000-0000-4000-8000-0000000000d9');
+update public.estimates set current_version_id = 'a1100000-0000-4000-8000-0000000000d2' where id = 'a1100000-0000-4000-8000-0000000000e1';
+update public.estimates set current_version_id = 'a1100000-0000-4000-8000-0000000000d9' where id = 'a1100000-0000-4000-8000-0000000000e2';
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id)
+  values ('a1100000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter', 12, 1300, 'a1100000-0000-4000-8000-0000000000b1');
+select tst.ok(tst.cnt('select 1 from public.estimate_line_costs') = 0, 'T110 sales without view_costs still reads no cost');
+:as_super
+select tst.ok((select unit_cost_cents = 400 from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000c1'), 'T110 the new line has the sent line''s cost');
+\echo 'T110 a new version of a sent estimate keeps the costs ok'
+
+-- ---------------------------------------------------------------- T111: the copy takes no cost it should not (debt 4)
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id) values
+  ('a1100000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'From another estimate', 1, 9000, 'a1100000-0000-4000-8000-0000000000b9'),
+  ('a1100000-0000-4000-8000-0000000000c3', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'From the same open version', 1, 1300, 'a1100000-0000-4000-8000-0000000000c1'),
+  ('a1100000-0000-4000-8000-0000000000c4', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'From nothing', 1, 100, 'a1100000-0000-4000-8000-0000000000ff');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id in ('a1100000-0000-4000-8000-0000000000c2', 'a1100000-0000-4000-8000-0000000000c3', 'a1100000-0000-4000-8000-0000000000c4')$q$) = 0,
+  'T111 another estimate, an open version, a missing line: no cost copied');
+-- who sees costs writes its own: nothing is copied for the office (a cost it cleared stays cleared)
+:as_office_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id)
+  values ('a1100000-0000-4000-8000-0000000000c5', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Office copy', 1, 1200, 'a1100000-0000-4000-8000-0000000000b1');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000c5'$q$) = 0, 'T111 the office''s insert copies nothing');
+-- an earlier version only: a line of a LATER locked version is not a source
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values ('a1100000-0000-4000-8000-0000000000d3', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000e1', 3);
+insert into public.estimate_options (id, company_id, version_id, name) values ('a1100000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000d3', 'A');
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values ('a1100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a3', 'Later', 1, 500);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 300);
+update public.estimate_versions set locked_at = now() where id = 'a1100000-0000-4000-8000-0000000000d3';
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id)
+  values ('a1100000-0000-4000-8000-0000000000c6', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'From a later version', 1, 500, 'a1100000-0000-4000-8000-0000000000b3');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000c6'$q$) = 0, 'T111 a later version is not a source');
+select tst.ok(not has_function_privilege('authenticated', 'app.tg_line_cost_copy()', 'execute'), 'T111 the copy is not callable from the API');
+\echo 'T111 the copy takes no cost it should not ok'
+
+-- ---------------------------------------------------------------- T112: the old quick estimate — the client signs the number the phone shows
+-- A version with no document (estimate.add): the phone shows app.estimate_option_totals of the first option from its
+-- lines (apps/mobile/src/cloud/legacyTotals.ts, test/legacyTotals.test.ts — the same numbers), the server signs the same.
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_via) values
+  ('a1120000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T112 quick', 'drawing'), ('a1120000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T112 quick, tax', 'drawing');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, totals, deposit_rule, tax_enabled, tax_rate_bps) values
+  ('a1120000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000e1', 1, 'drawing', '{"total":10000,"deposit":1000}', '{"kind":"pct","value":"0.1","contractType":"ca_hic"}', false, null),
+  ('a1120000-0000-4000-8000-0000000000d2', 'ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000e2', 1, 'drawing', '{"total":15000,"deposit":1500}', '{"kind":"pct","bps":1000}', true, 825);
+insert into public.estimate_options (id, company_id, version_id, name, position, discount_mode, discount_value) values
+  ('a1120000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000d1', 'Quick', 0, null, null), ('a1120000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000d2', 'Quick', 0, 'pct', 500);
+-- $100.00 over 3 ft as estimate.add wrote it: round(10000 / 3) = 3333 → $99.99
+insert into public.estimate_line_items (company_id, option_id, position, name, quantity, unit_price_cents, taxable, is_optional) values
+  ('ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000a1', 0, 'Gutter', 3, 3333, false, false),
+  ('ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000a2', 0, 'Gutter', 3, 3333, false, false), ('ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000a2', 1, 'Guards', 1, 5000, true, false),
+  ('ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000a2', 2, 'Add-on', 1, 7000, false, true);
+update public.estimates set current_version_id = 'a1120000-0000-4000-8000-0000000000d1' where id = 'a1120000-0000-4000-8000-0000000000e1';
+update public.estimates set current_version_id = 'a1120000-0000-4000-8000-0000000000d2' where id = 'a1120000-0000-4000-8000-0000000000e2';
+:as_owner_a
+select tst.ok(public.send_estimate('a1120000-0000-4000-8000-0000000000e1') is not null and public.send_estimate('a1120000-0000-4000-8000-0000000000e2') is not null, 'T112 both quick estimates sent');
+select tst.ok(public.sign_estimate_on_site('a1120000-0000-4000-8000-0000000000e1', 'Walk-in', 'M0 0 L2 2') = 'awaiting_countersign'
+              and public.sign_estimate_on_site('a1120000-0000-4000-8000-0000000000e2', 'Walk-in', 'M0 0 L2 2') = 'awaiting_countersign', 'T112 both signed on site');
+:as_super
+select tst.ok((select (selection ->> 'total')::bigint = 9999 and (selection ->> 'deposit')::bigint = 0 from public.estimate_approvals
+                where estimate_id = 'a1120000-0000-4000-8000-0000000000e1' and party = 'customer'), 'T112 signed $99.99, no deposit — what the phone shows (not totals $100.00 / $10.00)');
+select tst.ok((select (selection ->> 'total')::bigint = 14641 and (selection ->> 'deposit')::bigint = 1464 from public.estimate_approvals
+                where estimate_id = 'a1120000-0000-4000-8000-0000000000e2' and party = 'customer'), 'T112 with discount, tax and a bps deposit: $146.41 / $14.64, as legacyTotals');
+\echo 'T112 the old quick estimate: the client signs what the phone shows ok'
+
 \echo 'ALL TESTS PASSED'

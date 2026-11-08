@@ -56,4 +56,18 @@ describe("unit:opsEstimateQty — the stored quantity (Н1)", () => {
       expect(opts[0]).toMatchObject({ discount_mode: "pct", discount_value: bps });
     }
   });
+  it("debt 4: a line copied from a sent version carries copied_from_line_id; other lines and older ops have none", async () => {
+    writes.length = 0;
+    const line = (id: string) => ({ id, name: id, group: "labor", quantity: "1", unit: "ea", unitPriceCents: 1000 });
+    const doc = { options: [{ id: "o1", name: "A", lines: [line("n1"), line("n2")] }], settings: { tax: { enabled: false, rateBps: 0, groups: {} }, deposit: { kind: "none" }, discount: null } };
+    const base = { k: "estimate.save", id: "e-1", versionId: "v-new", customerId: "c-1", propertyId: "p-1", title: "T", doc, costs: {}, totalCents: 0, depositCents: 0, marginPct: null };
+    await applyOp({ ...base, linesFrom: { n1: "s1" } } as unknown as Op, "co-1", "u-1");
+    const rows = writes.find((w) => w.table === "estimate_line_items" && w.kind === "insert")!.row as Record<string, unknown>[];
+    expect(rows.map((r) => [r.id, r.copied_from_line_id])).toEqual([["n1", "s1"], ["n2", undefined]]);
+    expect("copied_from_line_id" in rows[1]!).toBe(false);
+    writes.length = 0;
+    await applyOp(base as unknown as Op, "co-1", "u-1");
+    const old = writes.find((w) => w.table === "estimate_line_items" && w.kind === "insert")!.row as Record<string, unknown>[];
+    expect(old.every((r) => !("copied_from_line_id" in r))).toBe(true);
+  });
 });

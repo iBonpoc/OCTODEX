@@ -113,6 +113,9 @@ export type Op =
       doc: EstimateDoc;
       /** line id → unit cost incl. supplier tax (estimate_line_costs, hidden from tech) */
       costs: Record<string, number>;
+      /** a sent estimate edited: new line id → the line of the sent version it was copied from (the server copies its
+       *  cost to the new line for who cannot write costs — migration 20261108200000, debt 4); absent in older builds */
+      linesFrom?: Record<string, string>;
       totalCents: number;
       depositCents: number;
       marginPct: string | null;
@@ -1136,6 +1139,8 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
         // the stored quantity (numeric(14,4)) — the same the engine counts (Н1): the lock check finds no difference
         quantity: storedQty(l.quantity), unit: l.unit || "ea", unit_price_cents: l.unitPriceCents,
         taxable: taxOn && !!s.tax.groups[l.group], is_optional: !!l.optional,
+        // only when this save made new ids for a sent estimate (debt 4): the column stays out of older builds' rows
+        ...(op.linesFrom?.[l.id] ? { copied_from_line_id: op.linesFrom[l.id] } : {}),
       })),
   );
   if (lines.length) await run(supabase.from("estimate_line_items").insert(lines));
