@@ -1,5 +1,6 @@
 import { dec, bps, roundCents, type DecLike } from "./decimal.js";
 import { computeOption, type Discount, type Line, type OptionTotals } from "./estimate.js";
+import { jobLineQty } from "./jobLines.js";
 
 /**
  * Universal (trade-agnostic) estimate: free-form or catalog lines in three groups,
@@ -94,9 +95,11 @@ export function depositAmount(totalCents: number, rule: DepositSetting): number 
   return Math.max(0, Math.min(rule.cents, totalCents));
 }
 
+// The quantity as the server keeps it (estimate_line_items.quantity numeric(14,4), half away from zero): the page,
+// the PDF and the server's totals count the same number (Н1, spec 33 П23.9)
 const toLine = (l: CustomLine, tax: TaxSettings): Line => ({
   name: l.name,
-  quantity: l.quantity,
+  quantity: jobLineQty(l.quantity),
   unitPriceCents: l.unitPriceCents,
   unitCostCents: l.unitCostCents ?? 0,
   taxable: tax.enabled && tax.groups[l.group],
