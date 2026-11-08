@@ -14,6 +14,9 @@ let missing = new Set<string>();
 let dropped = new Set<string>();
 const writes: { table: string; row: unknown; opts: unknown }[] = [];
 const writeErr: Record<string, { code: string }> = {};
+/** onlyNew's read-back (#377): which tables were read back, and what this company sees under the id */
+const readBacks: string[] = [];
+const readBackRow: { value: { id: string; deleted_at: string | null } | null } = { value: { id: "i1", deleted_at: null } };
 function builder(table: string) {
   const b: Record<string, unknown> = {};
   for (const m of ["select", "eq", "is", "order", "limit", "in", "not", "range", "gte"]) b[m] = () => b;
@@ -25,7 +28,10 @@ function builder(table: string) {
         ? { data: null, error: { message: `relation "public.${table}" does not exist`, code: "PGRST205" }, status: 404 }
         : { data: rows[table] ?? [], error: null },
     ).then(ok, bad);
-  b.maybeSingle = () => Promise.resolve({ data: { id: "i1", deleted_at: null }, error: null });
+  b.maybeSingle = () => {
+    readBacks.push(table);
+    return Promise.resolve({ data: readBackRow.value, error: null });
+  };
   b.upsert = (row: unknown, opts: unknown) => {
     writes.push({ table, row, opts });
     const e = writeErr[table];
@@ -50,6 +56,8 @@ afterEach(() => {
   missing = new Set();
   dropped = new Set();
   writes.length = 0;
+  readBacks.length = 0;
+  readBackRow.value = { id: "i1", deleted_at: null };
   for (const k of Object.keys(writeErr)) delete writeErr[k];
 });
 
@@ -128,8 +136,22 @@ describe("unit:techNoCosts — write (catalog.save)", () => {
     writeErr.catalog_item_costs = { code: "08006" };
     await expect(applyOp({ k: "catalog.save", item: item({ costCents: 1 }) }, "co-1", "u-1")).rejects.toBeTruthy();
   });
-  it("onlyNew (a module's item) never writes the side table: an item already there keeps its cost", async () => {
+  it("onlyNew (a module's item, #377/#378) keeps its read-back and never writes the side table: an item already there keeps its cost", async () => {
     await applyOp({ k: "catalog.save", item: item({ costCents: 1 }), onlyNew: true }, "co-1", "u-1");
     expect(writes.map((w) => w.table)).toEqual(["catalog_items"]);
+    expect(writes[0]!.opts).toEqual({ onConflict: "id", ignoreDuplicates: true });
+    // the test cost goes with the insert; the server moves it to catalog_item_costs only for a row really inserted (T99)
+    expect(writes[0]!.row).toMatchObject({ unit_cost_cents: 1 });
+    expect(readBacks).toEqual(["catalog_items"]);
+    // another company's id: still the server's «no», side table untouched
+    readBackRow.value = null;
+    writes.length = 0;
+    await expect(applyOp({ k: "catalog.save", item: item({ costCents: 1 }), onlyNew: true }, "co-1", "u-1")).rejects.toMatchObject({ hint: "id_taken" });
+    expect(writes.map((w) => w.table)).toEqual(["catalog_items"]);
+  });
+  it("a plain save: no read-back, the side table written — both paths side by side", async () => {
+    await applyOp({ k: "catalog.save", item: item({ costCents: 5 }) }, "co-1", "u-1");
+    expect(readBacks).toEqual([]);
+    expect(writes.map((w) => w.table)).toEqual(["catalog_items", "catalog_item_costs"]);
   });
 });
