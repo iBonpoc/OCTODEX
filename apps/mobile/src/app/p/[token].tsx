@@ -3,7 +3,8 @@ import { Image, Platform, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
-import { I18nOverride, useI18n } from "@/i18n";
+import { I18nOverride, useI18n, type DictKey } from "@/i18n";
+import type { DocLang } from "@/i18n/translate";
 import type { EstimateDoc } from "@/data/types";
 import { acceptPortal, fetchPortal, licenseLine, localPortal, paySimulated, type PortalData } from "@/cloud/portal";
 import { SimulatedCheckout } from "@/features/SimulatedCheckout";
@@ -50,15 +51,12 @@ export default function ClientEstimatePage() {
     );
   }
   if (!data || !data.doc || data.status === "revoked") {
+    // rule 7: a revoked link speaks the client's language; with no answer at all (no network) the browser's — never the app's,
+    // and never a raw «TypeError: Failed to fetch» (review «Лиды и клиенты» №13)
     return (
-      <Screen title={t("portal.estimate")} back={back}>
-        {data === undefined && !error ? (
-          <Empty icon="clock" title={t("portal.loading")} />
-        ) : (
-          // not found or revoked: the token no longer leads anywhere
-          <Empty icon="alert" title={error ? t("portal.error", { msg: error }) : t("est.portal.invalid")} />
-        )}
-      </Screen>
+      <I18nOverride lang={data?.lang ?? browserLang()}>
+        <NoPage loading={data === undefined && !error} failed={!!error} back={back} />
+      </I18nOverride>
     );
   }
 
@@ -67,6 +65,32 @@ export default function ClientEstimatePage() {
     <I18nOverride lang={data.lang}>
       <PortalBody data={data} doc={data.doc} token={token!} back={back} setRemote={setRemote} />
     </I18nOverride>
+  );
+}
+
+/** the client's browser language among the document languages (en / es / ru), en otherwise */
+function browserLang(): DocLang {
+  const l = (typeof navigator !== "undefined" ? navigator.language : "en").slice(0, 2).toLowerCase();
+  return l === "es" || l === "ru" ? l : "en";
+}
+
+/** a failure on the client page in our words: «no connection» or «try again» — never the browser's or the server's text */
+function portalFail(t: (k: DictKey) => string, e: unknown): string {
+  const m = String((e as Error)?.message ?? e);
+  return /fetch|network|timeout|abort/i.test(m) ? t("portal.offline") : t("portal.failed");
+}
+
+function NoPage({ loading, failed, back }: { loading: boolean; failed: boolean; back?: () => void }) {
+  const { t } = useI18n();
+  return (
+    <Screen title={t("portal.estimate")} back={back}>
+      {loading ? (
+        <Empty icon="clock" title={t("portal.loading")} />
+      ) : (
+        // not found or revoked: the token no longer leads anywhere; no network: say so and how to retry
+        <Empty icon="alert" title={failed ? t("portal.offline") : t("est.portal.invalid")} />
+      )}
+    </Screen>
   );
 }
 
@@ -109,7 +133,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
         setRemote(await acceptPortal(token, { optionId: base.id, addonIds: addons, signer: name, svg }));
       }
     } catch (e) {
-      toast.show(t("portal.error", { msg: String((e as Error)?.message ?? e) }));
+      toast.show(portalFail(t, e));
     } finally {
       setBusy(false);
     }
@@ -124,7 +148,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
         setRemote(await paySimulated(token, payingInv.id));
       }
     } catch (e) {
-      toast.show(t("portal.error", { msg: String((e as Error)?.message ?? e) }));
+      toast.show(portalFail(t, e));
     }
   };
   const onlineInv = data.invoices.find((i) => i.id === online);
@@ -138,7 +162,7 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
   // the real Payment Element: the company's Stripe takes charges, in the client's browser; the simulation only otherwise
   const canOnline = data.onlinePay && data.source !== "local" && Platform.OS === "web";
   const pdf = () =>
-    saveEstimatePdf(estimateHtml(data, { lang: data.lang }), estimateFileName(data)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
+    saveEstimatePdf(estimateHtml(data, { lang: data.lang }), estimateFileName(data)).catch((e) => toast.show(portalFail(t, e)));
 
   return (
     <Screen

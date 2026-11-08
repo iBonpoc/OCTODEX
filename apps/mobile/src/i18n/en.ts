@@ -2982,5 +2982,7 @@ export const en: Dict = {
   "pay.online.err.closed": "This link no longer takes payments.",
   "pay.online.err.nothing": "There is nothing to pay on this invoice.",
   "pay.online.err.retry": "That didn't work. Please try again in a minute.",
+  "portal.offline": "No connection. Check the internet and reload the page.",
+  "portal.failed": "That didn't work. Please try again.",
   "pay.online.wait": "We'll confirm the payment shortly. You don't need to pay again.",
 };
