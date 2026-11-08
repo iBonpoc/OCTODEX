@@ -19,7 +19,7 @@ import { View } from "react-native";
 export default function Triage() {
   useTick();
   const { t, money } = useI18n();
-  const { db, role, rejectedOps, dismissRejected } = useStore();
+  const { db, role, rejectedOps, dismissRejected, online, reviewVisitMissed } = useStore();
   const toast = useToast();
   const [snoozed, setSnoozed] = useState<string[]>([]);
   const [reply, setReply] = useState<string | null>(null);
@@ -60,6 +60,14 @@ export default function Triage() {
           <>
             {canOpen(role, attentionHref(it)) ? <Button label={t("sync.rejected.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it) as Href)} /> : null}
             <Button label={t("sync.rejected.ok")} icon="check" variant="secondary" onPress={() => toast.show(t("sync.rejected.dismissed"), dismissRejected(it.refId))} />
+          </>
+        );
+      // «Не сделано» on a finished visit (docs/specs/08 §8): open it, or «Просмотрено» with «Отменить» 5 s
+      case "visitMissed":
+        return (
+          <>
+            <Button label={t("lead.open")} icon="chevronRight" onPress={() => router.push(attentionHref(it) as Href)} />
+            <Button label={t("chk2b.reviewed")} icon="check" variant="secondary" onPress={() => toast.show(online ? t("chk2b.reviewedToast") : t("offline.queued"), reviewVisitMissed(it.refId))} />
           </>
         );
       case "late": {

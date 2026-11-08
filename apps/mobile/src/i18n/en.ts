@@ -2749,4 +2749,9 @@ export const en: Dict = {
   "chk2.needItem": "Add at least one item",
   "chk2.notFound": "Template not found",
   "chk2.module": "Module: {m}",
+  // «Шаблоны чек-листов» CH2b: «Не сделано» in «Требует внимания» (docs/specs/08 §8)
+  "chk2b.att.missed": "{name} · visit {date}: {n} not done",
+  "chk2b.att.chip": "Not done",
+  "chk2b.reviewed": "Reviewed",
+  "chk2b.reviewedToast": "Marked as reviewed",
 };

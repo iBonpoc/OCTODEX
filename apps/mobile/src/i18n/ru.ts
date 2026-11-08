@@ -2749,6 +2749,11 @@ export const ru = {
   "chk2.needItem": "Добавьте хотя бы один пункт",
   "chk2.notFound": "Шаблон не найден",
   "chk2.module": "Модуль: {m}",
+  // «Шаблоны чек-листов» CH2b: «Не сделано» in «Требует внимания» (docs/specs/08 §8)
+  "chk2b.att.missed": "{name} · выезд {date}: не сделано {n}",
+  "chk2b.att.chip": "Не сделано",
+  "chk2b.reviewed": "Просмотрено",
+  "chk2b.reviewedToast": "Отмечено: просмотрено",
 } as const;
 
 export type DictKey = keyof typeof ru;
