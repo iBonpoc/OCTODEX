@@ -10974,7 +10974,7 @@ select tst.ok((select supplier_id = '51430000-0000-4000-8000-000000000001' and s
 select tst.ok((select vendor = 'T143 Supply (test)' from public.catalog_items where id = '51440000-0000-4000-8000-000000000001'), 'T144 the tech reads the vendor text as before');
 select tst.ok(tst.cnt($q$select 1 from public.suppliers s join public.catalog_items i on i.supplier_id = s.id where i.id = '51440000-0000-4000-8000-000000000001'$q$) = 0,
   'T144 …but not the supplier behind the id');
-\echo 'T144 an item''s supplier ok'
+\echo 'T144 the supplier of an item ok'
 
 -- ---------------------------------------------------------------- T145: the history of an item's cost (spec 36 §5, §8)
 :as_owner_a

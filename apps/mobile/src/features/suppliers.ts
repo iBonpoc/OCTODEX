@@ -166,3 +166,12 @@ export function historyFromRow(r: Record<string, unknown>): CostHistoryEntry {
     ...(typeof r.vendor_tax_bps === "number" ? { vendorTaxBps: r.vendor_tax_bps } : {}),
   };
 }
+
+/** the vendor chips of a new expense: the company's active suppliers first, then the usual ones; no doubles; at most 8 */
+export function expenseVendors(db: DB, usual: readonly string[]): string[] {
+  const out: string[] = [];
+  for (const n of [...sortedSuppliers(suppliersOf(db).filter((x) => x.active)).map((x) => x.name), ...usual]) {
+    if (!out.some((x) => x.toLowerCase() === n.toLowerCase())) out.push(n);
+  }
+  return out.slice(0, 8);
+}

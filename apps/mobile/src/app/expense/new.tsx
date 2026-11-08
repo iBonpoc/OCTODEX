@@ -11,9 +11,11 @@ import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Screen } from "@/ui/surfaces";
 import { isAssigned } from "@/features/schedule";
+import { expenseVendors } from "@/features/suppliers";
 
 const CATS: ExpenseCategory[] = ["materials", "fuel", "dump", "tools", "other"];
-const VENDORS = ["Home Depot", "Lowe's", "ABC Supply", "Chevron"];
+/** the usual vendors after the company's own suppliers (spec 36 §7) */
+const USUAL = ["Home Depot", "Lowe's", "ABC Supply", "Chevron"];
 
 /** Receipt → expense, linked to a job so job profit is real. AI reading of the receipt comes in wave 6. */
 export default function NewExpense() {
@@ -21,7 +23,8 @@ export default function NewExpense() {
   const { db, addExpense, online } = useStore();
   const toast = useToast();
   const [amount, setAmount] = useState("");
-  const [vendor, setVendor] = useState("Home Depot");
+  const VENDORS = expenseVendors(db, USUAL);
+  const [vendor, setVendor] = useState(VENDORS[0] ?? "Home Depot");
   const [category, setCategory] = useState<ExpenseCategory>("materials");
   const todays = db.visits.filter((v) => isToday(v.start) && isAssigned(v, db.me));
   const [jobId, setJobId] = useState<string>(todays[0]?.jobId ?? "none");
