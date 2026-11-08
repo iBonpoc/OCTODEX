@@ -8811,7 +8811,7 @@ select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form
 :as_service
 select tst.ok(tst.intake('form', 'form', 'day116', '{"phone":"(818) 555-0194"}', '9.9.9.5') ->> 'status' = 'held', 'T116 over the form''s day limit — held');
 select tst.ok(tst.intake('webhook', 'hook', 'day116-hook', '{"phone":"(818) 555-0193"}') ->> 'status' = 'accepted', 'T116 the form''s spam does not hold the webhook''s leads');
-select tst.ok(tst.intake('form', 'form', 'noip116', '{"phone":"(818) 555-0192"}') ->> 'status' = 'rejected', 'T116 a form request without an IP is refused');
+select tst.ok(tst.intake('form', 'form', 'noip116', '{"phone":"(818) 555-0192"}') ->> 'status' = 'held', 'T116 a form request without a trusted IP is held, not refused (§3д)');
 select tst.ok(tst.intake('form', 'form', 'junk116', '{"phone":"(818) 555-0191"}', '9.9.9.4', '{"bot":"maybe","consent":"yes"}') ->> 'status' = 'held',
   'T116 junk in the checks is not an error');
 :as_owner_a
@@ -8975,5 +8975,40 @@ end $$;
 :as_super
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T120 office and sales rights on intake ok'
+-- ---------------------------------------------------------------- T122: no request is lost silently (docs/specs/34 §3д; director's check of #421)
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => true, p_daily_limit => 1000);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'time122', '{"phone":"(310) 555-0122"}', '5.5.5.1', '{"bot":"time"}') ->> 'status' = 'held', 'T122 a «bot» by the fill time only is held');
+select tst.ok(tst.intake('form', 'form', 'trap122', '{"phone":"(310) 555-0123"}', '5.5.5.2', '{"bot":"trap"}') ->> 'status' = 'rejected', 'T122 the trap field refuses');
+:as_super
+select tst.ok((select payload is not null and reason = 'too_fast' from public.intake_events where event_key = 'time122'), 'T122 the held one keeps its fields for a person');
+select tst.ok((select payload is null and reason = 'bot' from public.intake_events where event_key = 'trap122'), 'T122 the trapped one keeps nothing');
+-- a changed link: its requests are held 30 days, its page still opens; a link changed twice ago is unknown
+:as_super
+insert into tst.intake_tok (k, token) select 'form-old', token from tst.intake_tok where k = 'form';
+:as_owner_a
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'form';
+:as_service
+select tst.ok(tst.intake('form', 'form-old', 'old122', '{"phone":"(310) 555-0124"}', '5.5.5.3') ->> 'status' = 'held', 'T122 a request by the old link is held, not dropped');
+select tst.ok(app.intake_form_info(encode(sha256(convert_to((select token from tst.intake_tok where k = 'form-old'), 'UTF8')), 'hex')) ->> 'company' is not null,
+  'T122 the old link''s page still opens (≤ 30 days)');
+select tst.ok(tst.intake('form', 'form', 'new122', '{"phone":"(310) 555-0125"}', '5.5.5.4') ->> 'status' = 'accepted', 'T122 the new link works');
+:as_super
+select tst.ok((select reason = 'old_link' and payload is not null from public.intake_events where event_key = 'old122'), 'T122 old_link with its fields');
+update public.intake_endpoints set prev_rotated_at = now() - interval '31 days' where id = (select id from tst.intake_tok where k = 'form');
+:as_service
+select tst.ok(tst.intake('form', 'form-old', 'old122b', '{"phone":"(310) 555-0126"}', '5.5.5.5') ->> 'status' = 'unknown', 'T122 past 30 days the old link is gone');
+-- the IPv6 /48: a second, higher limit (20 an hour per company)
+do $$ declare i int; n text := repeat('4', 64); begin
+  for i in 1..20 loop
+    perform tst.intake('form', 'form', 'net122-' || i, jsonb_build_object('phone', '(310) 555-02' || (10 + i)), 'v6-' || i, jsonb_build_object('net', n));
+  end loop;
+  perform tst.ok(tst.intake('form', 'form', 'net122-21', '{"phone":"(310) 555-0299"}', 'v6-21', jsonb_build_object('net', n)) ->> 'status' = 'held', 'T122 the 21st from one /48 an hour is held');
+  perform tst.ok(tst.intake('form', 'form', 'net122-x', '{"phone":"(310) 555-0298"}', 'v6-x', jsonb_build_object('net', 'junk')) ->> 'status' = 'accepted', 'T122 a malformed net hash is ignored');
+end $$;
+:as_super
+select tst.ok((select reason = 'net_limit' from public.intake_events where event_key = 'net122-21'), 'T122 net_limit in the journal');
+\echo 'T122 no request is lost silently: held by time, no IP, an old link; the /48 limit ok'
 
 \echo 'ALL TESTS PASSED'
