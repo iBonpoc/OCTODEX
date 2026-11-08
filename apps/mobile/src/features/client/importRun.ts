@@ -114,3 +114,25 @@ export function reportCsv(answers: readonly ImportAnswer[], rows: readonly Impor
 /** who imports: the office (the app's director = owner / admin, dispatcher = office) — like «Не обслуживаем»
  *  (canMarkNoService); sales and the tech do not (§14.4). The server: app.has_role owner / admin / office. */
 export const canImportClients = (role: Role | null | undefined) => role === "director" || role === "dispatcher";
+
+/** one import on «Импорты» (public.import_jobs; demo — this phone's memory) */
+export interface ImportJobRow {
+  id: string;
+  fileName: string;
+  createdAt: string;
+  status: "applying" | "applied" | "undone";
+  counts: { added?: number; dup_added?: number; skipped?: number; undone?: number; kept?: number };
+  undoUntil?: string | null;
+  lastBatchAt?: string | null;
+}
+const DAY = 24 * 3600 * 1000;
+/**
+ * What the office may do with an import (docs/specs/04 §14.4): an open one — «Продолжить» (choose the same file again;
+ * a day without batches closes it, as the server does); an applied one — «Отменить импорт» until undo_until (30 days).
+ */
+export function importActions(j: ImportJobRow, now: number): { canContinue: boolean; canUndo: boolean; open: boolean } {
+  const stale = j.status === "applying" && !!j.lastBatchAt && now - Date.parse(j.lastBatchAt) > DAY;
+  const open = j.status === "applying" && !stale;
+  const until = j.status === "applied" ? j.undoUntil : stale && j.lastBatchAt ? new Date(Date.parse(j.lastBatchAt) + 31 * DAY).toISOString() : null;
+  return { open, canContinue: open, canUndo: !!until && Date.parse(until) > now };
+}

@@ -18,6 +18,7 @@ const SMALL: Record<string, string> = {
   "src/cloud/ops.ts estimate_options": "the options of one estimate version (good / better / best)",
   "src/cloud/intakeSettings.ts intake_endpoints": "a company's ways in: at most 10 (intake_endpoint_create refuses more)",
   "src/cloud/intakeSettings.ts intake_events": "the journal screen: the last 50 requests (limit 50)",
+  "src/cloud/importCustomers.ts import_jobs": "«Импорты»: the last 50 imports (limit 50); the open job of one file (limit 1)",
 };
 
 export interface Read {

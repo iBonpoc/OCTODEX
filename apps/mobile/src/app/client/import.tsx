@@ -194,7 +194,7 @@ export default function ImportClients() {
     const driver = cloud
       ? cloudImportDriver({ companyId, jobId, fileName: fileName ?? "clients.csv", sha256: sha, total: rowsToSend.length, sourceId })
       : demoImportDriver({
-          jobId, sha256: sha, rows: rowsToSend, db: () => store.db,
+          jobId, fileName: fileName ?? "clients.csv", sha256: sha, rows: rowsToSend, db: () => store.db,
           add: (r) => {
             const x = store.addCustomer({ name: r.name, phone: r.phone, email: r.email, sourceId, address: r.address, city: r.city });
             const u2 = r.firstName || r.lastName || r.company ? store.updateCustomer(x.id, { firstName: r.firstName, lastName: r.lastName, companyName: r.company }) : null;
