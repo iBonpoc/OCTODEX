@@ -101,6 +101,24 @@ describe("unit:techNoCosts — read (loadCompanyDB)", () => {
     dropped = new Set(["estimate_version_costs"]);
     await expect(loadCompanyDB("co-1", "u-me")).rejects.toBeTruthy();
   });
+  it("estimate_line_costs: a dropped read fails the load (was «no cost of any line»); no table yet — no cost, the load goes on", async () => {
+    const doc = { options: [{ id: "o1", name: "A", lines: [{ id: "l1", name: "Gutter", group: "material", quantity: "1", unitPriceCents: 1000 }] }], settings: { tax: { enabled: false, rateBps: 0, groups: {} }, deposit: { kind: "none" }, discount: null } };
+    rows = {
+      ...base("office"),
+      estimate_versions: [{ id: "v-1", estimate_id: "e-1", totals: { total: 1000, deposit: 0 }, calc_inputs: doc }],
+      estimate_line_costs: [{ line_item_id: "l1", unit_cost_cents: 600 }],
+    };
+    dropped = new Set(["estimate_line_costs"]);
+    await expect(loadCompanyDB("co-1", "u-me")).rejects.toBeTruthy();
+    dropped = new Set();
+    const ok = await loadCompanyDB("co-1", "u-me");
+    expect(ok.estimates[0]!.doc!.options[0]!.lines[0]!.unitCostCents).toBe(600);
+    missing = new Set(["estimate_line_costs"]);
+    const old = await loadCompanyDB("co-1", "u-me");
+    expect(old.estimates[0]!.doc!.options[0]!.lines[0]!.unitCostCents).toBeUndefined();
+    expect(old.estimates[0]!.totalCents).toBe(1000);
+    expect(old.customers.map((c) => c.id)).toEqual(["c-1"]);
+  });
   it("the tech: the server gives no side rows and blank columns — no cost, no margin on the phone", async () => {
     rows = {
       ...base("tech"),
