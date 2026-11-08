@@ -74,6 +74,32 @@ exports.run = async (h) => {
   await p.waitForURL(/\/leads/, { timeout: 5000 });
   h.expect(path(h) === "/leads", `back from the lead → /leads (${p.url()})`);
 
+  // B3 (06 «Серия B»): the lead's estimates are compact cards — the tech sees what and its status, never the sum
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+    const e = raw.db.estimates.find((x) => x.totalCents > 0);
+    raw.db.estimates = [...raw.db.estimates, { ...e, id: "e127", leadId: "l1", title: "E127 water heater", number: "EST-0127" }];
+    localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+  });
+  await h.go("/lead/l1");
+  // the tab reads «Сметы · N» (the side menu at 820/1280 has a bare «Сметы»)
+  await p.getByText(/^Сметы · \d+$/).locator("visible=true").last().click();
+  const est = p.getByTestId("lead-estimate-e127").locator("visible=true");
+  await est.first().waitFor({ timeout: 5000 });
+  const card = await est.first().innerText();
+  h.expect(/E127 water heater/.test(card) && !/\$/.test(card), `the tech: the lead's estimate card has no sum (${card.replace(/\n/g, " | ")})`);
+  await p.getByText("Обзор", { exact: true }).locator("visible=true").first().click();
+  await p.waitForTimeout(300);
+  // the other side: the office sees the sum on the same card
+  await setRole(h, "director");
+  await h.go("/lead/l1");
+  await p.getByText(/^Сметы · \d+$/).locator("visible=true").last().click();
+  await est.first().waitFor({ timeout: 5000 });
+  h.expect(/\$/.test(await est.first().innerText()), "the director: the lead's estimate card has the sum");
+  await p.getByText("Обзор", { exact: true }).locator("visible=true").first().click();
+  await p.waitForTimeout(300);
+  await setRole(h, "tech");
+
   // Ivan's lead stays closed; /inbox stays the office's
   await h.go("/lead/l2");
   await h.expectText(/Этот лид ведёт другой человек/, "the tech cannot open Ivan's lead");

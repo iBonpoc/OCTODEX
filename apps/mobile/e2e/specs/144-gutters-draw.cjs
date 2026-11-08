@@ -8,6 +8,7 @@
  * - П20.8: every toolbar cell has its word under it, none cut off (Желоб, Водосток, Выбрать, Эт 1 / Этаж, Назад, Ещё);
  *   a picked tool says what to do («Нажмите на желоб, где водосток») until it is used; a downspout is «В1» on the canvas;
  *   «Удалить» stands by what is picked; «Вернуть» and the toolbar's place are in «Ещё»;
+ * - П20.9: after the first gutter «Дальше: поставьте водостоки» + «Водосток» turns the tool on;
  * - the toolbar goes bottom → under the right hand → under the left → bottom (from «Ещё»);
  * - off: nothing is stored; on (the 7-day trial): the drawing goes to the store (module.op, spec 33 П21 M5a) in the
  *   database's shape (П19: run {a, b}, downspout {runId, atIn}, whole inches) and comes back after a reload.
@@ -85,7 +86,8 @@ exports.run = async (h) => {
   await waitFor(async () => (await money()) > m1, "a corner and a run add to the $");
   const m2 = await money();
 
-  // a downspout on the first run
+  // a downspout on the first run — the next step is offered under the $ (П20.9)
+  h.expect((await tid("draw-next").count()) === 0, "off: no «what next» — no estimate comes of it");
   await tid("draw-tool-ds").getByRole("button").click();
   await tid("draw-hint").waitFor({ timeout: 3000 });
   h.expect(/Нажмите на желоб, где водосток/.test(await tid("draw-hint").innerText()), "the downspout tool says where to tap");
@@ -93,6 +95,7 @@ exports.run = async (h) => {
   await p.mouse.click((x0 + x1) / 2, y + 3);
   await waitFor(async () => (await count("circle")) === 1, "a downspout on the run");
   await waitFor(async () => (await tid("draw-hint").count()) === 0, "the hint is gone once the downspout is there");
+  h.expect((await tid("draw-next").count()) === 0, "a downspout is there: the next step is the estimate, no line");
   h.expect((await labels()).includes("В1"), "the downspout is «В1» on the canvas");
   h.expect(/Желоб: \d+ ft · водостоков: 1/.test(await tid("draw-total").innerText()), "summary in plain words: gutter feet, downspouts");
   h.expect((await money()) > m2, "the downspout adds to the $");
@@ -172,7 +175,13 @@ exports.run = async (h) => {
   const b2 = await box();
   const yy = b2.y + b2.height * 0.42;
   await stroke([b2.x + b2.width * 0.25, yy], [b2.x + b2.width * 0.7, yy]);
-  await tid("draw-tool-ds").getByRole("button").click();
+  // on: the next step is offered under the $ (П20.9) and turns the downspout tool on
+  await tid("draw-next").waitFor({ timeout: 3000 });
+  h.expect(/Дальше: поставьте водостоки/.test(await tid("draw-next").innerText()), "what next: the downspouts");
+  await h.shot("next");
+  await tid("draw-next").getByRole("button").click();
+  await tid("draw-hint").waitFor({ timeout: 3000 });
+  h.expect((await tid("draw-next").count()) === 0, "the downspout tool is on: no «what next» line");
   await p.mouse.click(b2.x + b2.width * 0.47, yy + 3);
   await waitFor(async () => (await count("circle")) === 1, "a downspout");
   await tid("draw-saved").waitFor({ timeout: 5000 });

@@ -1,7 +1,7 @@
 /**
  * Design-system guard (CLAUDE.md rule 1, "Naryad"): components use tokens only.
  * Fails on raw colors, raw numbers for size/spacing/radius/font, raw font families, and lists of objects
- * rendered as rows inside one card (rule 12 — use CardList / ItemCard).
+ * rendered as rows inside one card (rule 12 — ListCard in CardGrid / CardList), and the removed ItemCard.
  * A deliberate exception needs `// ds-allow: <reason>` on the same line.
  */
 import { describe, it, expect } from "vitest";
@@ -110,6 +110,18 @@ describe("design system: tokens only", () => {
         const line = s.slice(0, m.index).split("\n").length;
         if (!s.split("\n")[line - 1]!.includes("ds-allow")) hits.push(`${relative(ROOT, f)}:${line}`);
       }
+    }
+    expect(hits, hits.join("\n")).toEqual([]);
+  });
+
+  // 06 «Серия B» (B4): the old one-row ItemCard is gone — a list of objects is ListCard (compact for related objects),
+  // a single hint is Card + ListRow. Nothing in src may bring it back (definition, import or use).
+  it("no ItemCard anywhere in src (lists → ListCard, single hints → Card + ListRow)", () => {
+    const hits: string[] = [];
+    for (const f of files) {
+      readFileSync(f, "utf8").split("\n").forEach((line, i) => {
+        if (/\bItemCard\b/.test(line)) hits.push(`${relative(ROOT, f)}:${i + 1}  ${line.trim().slice(0, 100)}`);
+      });
     }
     expect(hits, hits.join("\n")).toEqual([]);
   });

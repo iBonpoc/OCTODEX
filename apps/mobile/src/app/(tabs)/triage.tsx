@@ -12,7 +12,7 @@ import { AssignSheet, ReplySheet, useTick } from "@/features/sheets";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, CardList, Divider, Empty, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Divider, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 import { View } from "react-native";
 
 /** Dispatcher home: one item at a time, most urgent first; resolve with one tap or snooze. */

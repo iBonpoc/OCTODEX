@@ -43,6 +43,9 @@ exports.run = async (h) => {
   h.expect((await p.getByRole("button", { name: "Составить смету" }).count()) === 0, "no «Составить смету»");
   h.expect((await p.getByRole("button", { name: "Открыть клиента" }).count()) >= 1, "«Открыть клиента» instead");
   await h.shot("lead");
+  // B3: the mark is a compact card of the client — it opens her card
+  await p.getByTestId("lead-noservice-c3").locator("visible=true").first().click();
+  await p.waitForURL(/\/client\/c3/, { timeout: 5000 });
 
   // a new lead with her phone: red mark, still saved
   await h.go("/lead/new");
