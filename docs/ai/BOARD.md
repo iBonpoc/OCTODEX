@@ -10,7 +10,7 @@
 | Руководитель №5 | `session_015CqH6AYWnjNhg5RZy2re5D` | CLAUDE.md, docs/ai/*, 10-build-plan §0, 15-story-map | план, приёмка, вливание сборками |
 | Карточки списков №8 | `session_015CqH66bdTBKTgPfknA5z82` | listPanel*, leads.tsx, features/lead/LeadCard.tsx | панель 1280 «Лиды» (e2e 157), затем каталог/долги |
 | Сметы №3 | `session_015CqH68FFv5zHgyQV88Jvva` | шаблоны смет: estimate/**, estimateTemplate.ts, ops/store (шаблоны), миграция 20261108230000 | E3a #423 влит; E3b экраны (e2e 177), E3c слот модулей (e2e 180) |
-| Деньги и отчёты №3 | `session_015CqH67PmMt1QCsV7jDGcdn` | supabase/functions/stripe-*, миграции 202611090xxxxx, спека 35, features/payments | Stripe test mode: 20а #428, общий #431, 20б подключение; ждёт основателя В1–В6 |
+| Деньги и отчёты №4 | `session_015CqH66hzCgPgL8zYoAg7rn` | supabase/functions/stripe-*, миграции 202611090xxxxx, спека 35, features/payments | Stripe test mode: 20а–20б сданы №3; №4 — 20в оплата с /p/ (e2e 183, @stripe/stripe-js 10.1.0), pendingPayments, 20г вебхук (T131–T132); ждёт основателя В1–В6 |
 | Правки Gutters (личный чат основателя) | `session_015CqH66K82f6Sc1E161JFM2` | src/modules/gutters/** (кроме registry/module/estimateLink без согласования), e2e 168–174 | правки основателя; архив только по его слову |
 | Бренд (личный чат основателя) | `session_015CqH69WWiSwHTpW9sTb2km` | бренд GoRix | архив только по слову основателя |
 
@@ -114,6 +114,14 @@
 - Долги: ↑/↓ не прокручивают к строке за краем; в панели нет «＋» и «Изменить»; выпавшая из фильтра карточка не отмечена — ↓ ведёт к первой.
 - Дальше: «Лиды» на панель (e2e 157), затем каталог / «Требует внимания».
 - Уроки: aria-selected на кнопке RNW не выводится — aria-current; e2e на 1280, нажимающие строку списка (28, 36, 78), идут через list-panel-open; чистые правила — в *Rule.ts без react-native.
+
+### Памятка Деньги и отчёты №3 (session_015CqH67PmMt1QCsV7jDGcdn, 08.11) — архив
+- Сдал #428 20а (база Stripe, миграция 20261109010000, T126–T129), #431 (statusMap paymentShown/paymentMethodFromDb, ach, карта §5 Payment), #433 20б (/company/payments, Edge stripe-connect, миграция 20261109020000, T130, e2e 182; подключает только владелец).
+- Спека 35-stripe.md: §2 решения, §4 база, §4а подключение (долги), §5 план. Ждут основателя В1–В6 (Standard-эквивалент — константа CONTROLLER в stripe-connect/handler.ts). ADR-007 и PRD 09 не правились до В2.
+- Основателю: STRIPE_SECRET_KEY (sk_test_) в Supabase → Edge Functions → Secrets.
+- Дальше: 20в stripe-pay + Payment Element на /p/ (public-обёртки service_role для payment_attempt_open/set_intent; сверка токена /p/ со счётом против IDOR; переиспользовать попытку с PaymentIntent; CORS до сайта; @stripe/stripe-js и react-stripe-js по CHECKS §4; ACH первым ≥ $1,000; e2e 183). 20г webhook (подпись по сырому телу; p_method из expand; fee из balance transaction; сверка metadata.company_id; 55000 → 500; хранение stripe_events; T131–T132). 20д возвраты (T133, e2e 184). 20е чеки после В5 (e2e 185).
+- Долги: лимит частоты start; удалить companies.stripe_account_id (правило 16); ACH return не обрабатывается.
+- Уроки: app.* через supabase-js не вызвать — public-обёртка service_role; security-check на каждом PR с деньгами находил настоящие дыры; новый экран → tabBarRule и NO_FILTER; i18n через json.dumps; stacked — брать main и добавлять свой блок.
 
 ## Памятки-передачи 07.11 (руководитель №4)
 ### Памятка «Лиды и клиенты» №10 (session_015CqH6A7brPRZCibvSZzhLd, архив 07.11; дела у №11 `session_015CqH6AXexfSJUxpzdXPpY4`)

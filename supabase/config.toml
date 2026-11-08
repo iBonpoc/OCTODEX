@@ -19,6 +19,10 @@ verify_jwt = false
 [functions.lead-intake]
 verify_jwt = false
 
+# Онлайн-оплата (docs/specs/35, 20b): the owner connects Stripe from the app — with their JWT.
+[functions.stripe-connect]
+verify_jwt = true
+
 # LOCAL stack only (supabase start — the nightly cloud scenarios, docs/specs/21 §7). release.yml runs `db push`,
 # never `config push`, so nothing below reaches the hosted project.
 [auth]
