@@ -797,6 +797,9 @@ export interface Invoice {
   sentAt?: string;
   /** before tax (server: invoices.subtotal_cents) — «revenue» in reports (PRD 14 §7, wave 8) */
   subtotalCents?: number;
+  /** the invoice's tax and its mode (server: tax_cents, tax_mode) — a refund's tax part (step 20д, PRD 19 §7.9) */
+  taxCents?: number;
+  taxMode?: "included_in_price" | "added_on_top" | "tax_inclusive_display" | "exempt";
 }
 
 /** One payment = one receipt (number RCT-… assigned by the server; locally in demo). */

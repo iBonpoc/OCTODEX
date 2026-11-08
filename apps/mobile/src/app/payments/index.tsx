@@ -63,6 +63,8 @@ export default function Payments() {
         value={`+${moneyWhole(x.amountCents)}`}
         valueTone="ok"
         valueLabel={t("card.val.paid")}
+        // the server asks the owner to look (an online payment above the balance, a failed refund — spec 35 §2 п.7, 20д)
+        status={x.needsReview ? { tone: "warn", label: t("mny.refund.review") } : undefined}
         tags={x.refundedCents ? [t("mny.refunded", { amount: money(x.refundedCents) })] : undefined}
         facts={{
           receipt: x.receiptNumber,
