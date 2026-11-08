@@ -90,6 +90,10 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext("/estimate/new", {}, db, "tech").up?.href).toBe("/estimates");
     expect(navContext("/catalog/x", {}, db, "director").up?.href).toBe("/catalog");
     expect(navContext("/company/profile", {}, db, "director").up?.href).toBe("/company");
+    // «Приём заявок» (#422): its crumb, «up» — the company's «Лиды»
+    const intake = navContext("/company/intake", {}, db, "director");
+    expect(intake.kind).toBe("intake.set.title");
+    expect(intake.up?.href).toBe("/company/leads");
   });
   it("every route with a parent has a section label", () => {
     for (const p of ["/lead/x", "/estimate/x", "/invoice/x", "/receipt/x", "/client/x", "/job/x", "/visit/x", "/catalog/x", "/company/address"]) {

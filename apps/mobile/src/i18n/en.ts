@@ -1004,6 +1004,7 @@ export const en: Dict = {
   "pay.cash": "Cash",
   "pay.check": "Check",
   "pay.zelle": "Zelle",
+  "pay.ach": "Bank (ACH)",
   "board.open": "Open",
   "board.noEstimates": "No estimates",
   "sales.title": "Sales",
