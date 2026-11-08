@@ -63,6 +63,14 @@ export function toElements(d: Drawing, measurementId: string): ElementRow[] {
 
 const isPt = (v: unknown): v is [number, number] => Array.isArray(v) && v.length === 2 && v.every((x) => typeof x === "number" && Number.isFinite(x));
 
+/**
+ * What a stored element always gets when it lacks it: the shape of the stock, never its gauge or colour — a zinc or
+ * mill element has none, and a reload must not paint it white or give it .027 (review M7b №2: the key and the price
+ * list would change).
+ */
+const { gauge: _rg, color: _rc, ...RUN_BASE } = DEFAULT_RUN_ATTRS;
+const { color: _dc, ...DS_BASE } = DEFAULT_DS_ATTRS;
+
 /** rows back to a drawing; a broken row is left out (an old phone, a bad write) */
 export function fromElements(rows: readonly ElementRow[]): Drawing {
   const runs: DrawnRun[] = [];
@@ -70,14 +78,14 @@ export function fromElements(rows: readonly ElementRow[]): Drawing {
   for (const e of rows) {
     if (e.kind === "run" && isPt(e.geom.a) && isPt(e.geom.b)) {
       const g = e.geom as { a: P; b: P; lengthIn?: number; houseSide?: "L" | "R"; noCap?: [boolean, boolean] };
-      runs.push({ id: e.id, a: g.a, b: g.b, ...(typeof g.lengthIn === "number" ? { lengthIn: g.lengthIn } : {}), ...(g.houseSide ? { houseSide: g.houseSide } : {}), ...(g.noCap ? { noCap: g.noCap } : {}), attrs: { ...DEFAULT_RUN_ATTRS, ...(e.attrs as Partial<DrawnRun["attrs"]>) } });
+      runs.push({ id: e.id, a: g.a, b: g.b, ...(typeof g.lengthIn === "number" ? { lengthIn: g.lengthIn } : {}), ...(g.houseSide ? { houseSide: g.houseSide } : {}), ...(g.noCap ? { noCap: g.noCap } : {}), attrs: { ...RUN_BASE, ...(e.attrs as Partial<DrawnRun["attrs"]>) } });
     }
   }
   const runIds = new Set(runs.map((r) => r.id));
   for (const e of rows) {
     const g = e.geom as { runId?: unknown; atIn?: unknown };
     if (e.kind === "downspout" && typeof g.runId === "string" && runIds.has(g.runId) && typeof g.atIn === "number")
-      downspouts.push({ ...DEFAULT_DS_ATTRS, ...(e.attrs as object), id: e.id, runId: g.runId, atIn: g.atIn } as DrawnDownspout);
+      downspouts.push({ ...DS_BASE, ...(e.attrs as object), id: e.id, runId: g.runId, atIn: g.atIn } as DrawnDownspout);
   }
   return { runs, downspouts };
 }

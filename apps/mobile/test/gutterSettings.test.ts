@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { computeGutterParts } from "@octo/estimating-engine";
 import { changeDs, changeRun, COLORS, hangerKitsFor, MATERIALS, PROFILES, SIZES_BY_PROFILE, wallKitsFor, wallOf, withCurrent } from "../src/modules/gutters/canvas/attrs";
 import { setDsAttrs, setRunAttrs } from "../src/modules/gutters/canvas/edit";
-import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS } from "../src/modules/gutters/canvas/model";
+import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import { toMeasurement, type Drawing } from "../src/modules/gutters/geometry";
 import {
-  choicesFor, colorName, keepsOne, MAX_PALETTE, MODULE_CHOICES, MODULE_OFFER, newDsAttrs, newRunAttrs, PALETTES, readPalette, settingsFit, setSetting,
+  choicesFor, colorName, MAX_PALETTE, MODULE_CHOICES, MODULE_OFFER, newDsAttrs, newRunAttrs, PALETTES, readPalette, setPath, settingsFit, toggleOffer,
 } from "../src/modules/gutters/settings";
 
 describe("чтение настроек", () => {
@@ -24,14 +24,15 @@ describe("чтение настроек", () => {
   });
   it("мусор не роняет и не протекает: чужие значения отбрасываются, пустой список = умолчание модуля", () => {
     const ch = choicesFor({
-      offer: { profiles: ["k", "roofing", 7], sizes: { k: ["9"], half_round: "6" }, materials: [], gauges: { aluminum: [".032", ".099"] }, hangers: ["nope"], dsSizes: { rect: ["3x4", "1x1"] }, bottoms: ["drain"] },
+      // «off» — what the company does not install; unknown values (a newer version's) are ignored
+      off: { profiles: ["half_round", "fascia", "box", "euro", "roofing", 7], sizes: { k: ["9"], half_round: "6" }, materials: MATERIALS, gauges: { aluminum: [".027", ".099"] }, hangers: ["nope"], dsSizes: { rect: ["2x3", "4x5", "1x1"] }, bottoms: ["extension", "splash_block", "flex", "lower_roof", "none"] },
       palette: ["  Musket   Brown ", "musket brown", "", "x".repeat(41), "bad\u0007", 12, "Clay"],
       run: { profile: "roofing", size: 99, color: "Nope" },
       hangerByMount: { k: { fascia: "hr_shank_fascia", rafter: "spike" } },
     });
     expect(ch.offer.profiles).toEqual(["k"]);
     expect(ch.offer.sizes.k).toEqual([...SIZES_BY_PROFILE.k]); // «9» не размер K — список модуля
-    expect(ch.offer.materials).toEqual([...MATERIALS]);
+    expect(ch.offer.materials).toEqual([...MATERIALS]); // all off — a broken store: all on
     expect(ch.offer.gauges.aluminum).toEqual([".032"]);
     expect(ch.offer.gauges.zinc).toEqual([]);
     expect(ch.offer.hangers).toEqual(MODULE_OFFER.hangers);
@@ -70,31 +71,62 @@ describe("чтение настроек", () => {
 });
 
 describe("запись настроек", () => {
-  it("одна правка не трогает остальное, даже незнакомые ключи (настройки новой версии M7c)", () => {
-    const raw = { v: 1, rules: { wastePct: "0.1" }, future: { x: 1 }, offer: { profiles: ["k"] } };
-    const next = setSetting(raw, "offer", "materials", ["aluminum"]);
-    expect(next).toEqual({ v: 1, rules: { wastePct: "0.1" }, future: { x: 1 }, offer: { profiles: ["k"], materials: ["aluminum"] } });
-    expect(raw.offer).toEqual({ profiles: ["k"] }); // не на месте
-    expect(setSetting(undefined, "palette", null, ["Black"])).toEqual({ v: 1, palette: ["Black"] });
+  it("одна правка пишет одно поле поверх сырого объекта: чужие ключи, вложенные незнакомые значения и v не трогает (ревью #372 №2)", () => {
+    const raw = { v: 2, rules: { wastePct: 6, future: 1 }, future: { x: 1 }, off: { profiles: ["roofing"], sizes: { k: ["9"] } }, run: { profile: "k", tomorrow: "x" } };
+    const next = setPath(raw, ["run", "size"], "6");
+    expect(next).toEqual({ ...raw, run: { profile: "k", tomorrow: "x", size: "6" } });
+    expect(raw.run).toEqual({ profile: "k", tomorrow: "x" }); // не на месте
+    expect(setPath(undefined, ["palette"], ["Black"])).toEqual({ v: 1, palette: ["Black"] });
+    expect(setPath({ v: 1, palette: ["Black"] }, ["palette"], undefined)).toEqual({ v: 1 });
+    expect(setPath(raw, ["hangerByMount", "k", "fascia"], "spike").hangerByMount).toEqual({ k: { fascia: "spike" } });
+  });
+  it("галочка: двигается только одно значение в списке «не ставим», незнакомые остаются (ревью #372 №2)", () => {
+    const raw = { off: { sizes: { k: ["9"], box: ["8"] } } };
+    const a = toggleOffer(raw, "sizes", "k", "7")!;
+    expect(a.off).toEqual({ sizes: { k: ["9", "7"], box: ["8"] } });
+    const b = toggleOffer(a, "sizes", "k", "7")!;
+    expect(b.off).toEqual({ sizes: { k: ["9"], box: ["8"] } });
+    expect(choicesFor(a).offer.sizes.k).toEqual(["5", "6"]);
+  });
+  it("новые размеры модуля появляются сами: хранится только снятое (ревью #372 №3)", () => {
+    // компания сняла K 7″; модуль потом добавит K 8″ — в «не ставим» его нет, значит он будет предложен
+    const raw = toggleOffer({}, "sizes", "k", "7")!;
+    expect(raw).toEqual({ v: 1, off: { sizes: { k: ["7"] } } });
+    expect(JSON.stringify(raw)).not.toContain('"5"');
+  });
+  it("последнюю галочку списка снять нельзя — null; у креплений — по семейству", () => {
+    let raw: Record<string, unknown> | null = {};
+    for (const s of ["6", "7"]) raw = toggleOffer(raw, "sizes", "fascia", s);
+    expect(raw).toBeNull(); // fascia: 6, 7 — второй снять нельзя
+    const one = toggleOffer({}, "sizes", "fascia", "6")!;
+    expect(toggleOffer(one, "sizes", "fascia", "7")).toBeNull();
+    let h: Record<string, unknown> | null = {};
+    const hr = ["hr_shank_fascia", "hr_shank_rafter", "hr_shank_sheathing", "hr_shank_crown", "hr_shank_angled", "hr_rival_strap", "hr_regal_bar", "hr_face_clip"];
+    for (const id of hr.slice(0, -1)) h = toggleOffer(h, "hangers", null, id, hr);
+    expect(h).not.toBeNull();
+    expect(toggleOffer(h, "hangers", null, hr[hr.length - 1]!, hr)).toBeNull();
   });
   it("размер: полная палитра 60 и все разделы влезают в 32 KB; огромное — нет", () => {
-    const big = { offer: MODULE_OFFER, palette: Array.from({ length: 60 }, (_, i) => `Color number ${i} long name xx`), run: MODULE_CHOICES.run, ds: MODULE_CHOICES.ds, hangerByMount: MODULE_CHOICES.hangerByMount, wallKitByWall: MODULE_CHOICES.wallKitByWall };
+    const big = { off: { profiles: ["box"] }, palette: Array.from({ length: 60 }, (_, i) => `Color number ${i} long name xx`), run: MODULE_CHOICES.run, ds: MODULE_CHOICES.ds, hangerByMount: MODULE_CHOICES.hangerByMount, wallKitByWall: MODULE_CHOICES.wallKitByWall };
     expect(settingsFit(big)).toBe(true);
     expect(settingsFit({ junk: "x".repeat(40000) })).toBe(false);
-  });
-  it("последнюю галочку снять нельзя", () => {
-    expect(keepsOne([])).toBe(false);
-    expect(keepsOne(["k"])).toBe(true);
   });
 });
 
 describe("шторка и новые элементы по настройкам компании", () => {
+  const KEEP_HANGERS = ["hidden", "spike", "rafter", "hr_shank_fascia"];
+  const KEEP_WALL = ["ds_strap", "sickle_hook", "brick_hook", "hinged_hook", "pipe_cleat"];
   const ch = choicesFor({
-    offer: { profiles: ["k", "half_round"], sizes: { k: ["6"] }, hangers: ["hidden", "spike", "rafter", "hr_shank_fascia"], wallKits: ["ds_strap", "sickle_hook", "brick_hook", "hinged_hook"] },
+    off: {
+      profiles: ["fascia", "box", "euro"],
+      sizes: { k: ["5", "7"] },
+      hangers: MODULE_OFFER.hangers.filter((id) => !KEEP_HANGERS.includes(id)),
+      wallKits: MODULE_OFFER.wallKits.filter((id) => !KEEP_WALL.includes(id)),
+    },
     palette: ["Musket Brown", "Black"],
     run: { profile: "k", size: "6", material: "aluminum", gauge: ".032", color: "Black", mount: "fascia" },
     hangerByMount: { k: { fascia: "spike" } },
-    wallKitByWall: { rect: { wood: "sickle_hook" } },
+    wallKitByWall: { rect: { wood: "sickle_hook" }, round: { wood: "pipe_cleat" } },
     ds: { shape: "rect", size: "3x4", color: "Black", wall: "wood" },
   });
   it("новая линия — профиль, размер, толщина, цвет и крепление компании", () => {
@@ -132,6 +164,11 @@ describe("шторка и новые элементы по настройкам 
     expect(m.hanger).toBe("rafter");
     const f = changeRun({ ...DEFAULT_RUN_ATTRS, hanger: "rafter", mount: "rafter" }, { mount: "fascia" }, ch);
     expect(f.hanger).toBe("spike");
+    // новый профиль — крепление из того, что компания ставит для него (ревью #372 №6)
+    const hr = changeRun({ ...DEFAULT_RUN_ATTRS, hanger: "hidden" }, { profile: "half_round" }, ch);
+    expect(hr.hanger).toBe("hr_shank_fascia");
+    const toK = changeRun({ ...DEFAULT_RUN_ATTRS, profile: "box", size: "6", hanger: "hidden_clip" }, { profile: "k" }, ch);
+    expect(toK.hanger).toBe("spike"); // hidden_clip годится K, но компания его не ставит
     // без настроек — как раньше (M5c)
     expect(changeRun({ ...DEFAULT_RUN_ATTRS, hanger: "rafter", mount: "rafter" }, { mount: "fascia" }).hanger).toBe("hidden");
   });
@@ -143,10 +180,28 @@ describe("шторка и новые элементы по настройкам 
     expect(wallOf(d.shape, d.wall)).toEqual({ wall: "wood", kit: "sickle_hook" });
     // набор модуля по умолчанию — записывается типом стены, как раньше
     expect(changeDs({ ...DEFAULT_DS_ATTRS }, { wall: "brick" }, ch).wall).toBe("brick");
+    // смена формы: стена остаётся, набор — компании для новой формы (ревью #372 №6)
+    const round = changeDs({ ...DEFAULT_DS_ATTRS, wall: "sickle_hook" }, { shape: "round" }, ch);
+    expect(round.wall).toBe("pipe_cleat");
+    expect(changeDs({ ...DEFAULT_DS_ATTRS }, { shape: "round" }, ch).wall).toBe("pipe_cleat");
+    expect(changeDs({ ...DEFAULT_DS_ATTRS, wall: "brick" }, { shape: "round" }, ch).wall).toBe("brick");
   });
   it("правка рисунка берёт выбор компании", () => {
     const D: Drawing = { runs: [{ id: "r", a: [0, 0], b: [240, 0], attrs: { ...DEFAULT_RUN_ATTRS, mount: "rafter", hanger: "rafter" } }], downspouts: [{ ...DEFAULT_DS_ATTRS, id: "d", runId: "r", atIn: 120 }] };
     expect(setRunAttrs(D, "r", { mount: "fascia" }, ch).runs[0]!.attrs.hanger).toBe("spike");
     expect(setDsAttrs(D, "d", { wall: "wood" }, ch).downspouts[0]!.wall).toBe("sickle_hook");
+  });
+});
+
+describe("перечитка элементов", () => {
+  it("цинк и некрашеное с умолчаний компании после перечитки остаются без толщины и цвета (ревью M7b №2)", () => {
+    const ch = choicesFor({ run: { material: "zinc" }, ds: { material: "aluminum", finish: "mill" } });
+    const D: Drawing = { runs: [{ id: "r", a: [0, 0], b: [240, 0], attrs: newRunAttrs(ch) }], downspouts: [{ ...newDsAttrs(ch), id: "d", runId: "r", atIn: 10 }] };
+    expect(D.runs[0]!.attrs.gauge).toBeUndefined();
+    const back = fromElements(toElements(D, "m"));
+    expect(back.runs[0]!.attrs).toEqual(D.runs[0]!.attrs);
+    expect(back.downspouts[0]).toEqual(D.downspouts[0]);
+    expect(back.runs[0]!.attrs.color).toBeUndefined();
+    expect(back.downspouts[0]!.color).toBeUndefined();
   });
 });

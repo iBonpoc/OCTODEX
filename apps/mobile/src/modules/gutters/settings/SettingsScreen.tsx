@@ -21,7 +21,7 @@ import { useToast } from "@/ui/overlays";
 import { Card, RowView, Screen } from "@/ui/surfaces";
 import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, WALLS } from "../canvas/attrs";
 import { useColorLabel } from "../draw/AttrPanel";
-import { choicesFor, colorName, familyKits, MAX_PALETTE, MODULE_OFFER, PALETTES, settingsFit, setSetting, type Choices } from "../settings";
+import { choicesFor, colorName, familyKits, MAX_PALETTE, MODULE_OFFER, PALETTES, setPath, settingsFit, toggleOffer, type Choices, type OfferGroup } from "../settings";
 
 const a = (s: string) => `mod.gutters.attr.${s}` as DictKey;
 const k = (s: string) => `mod.gutters.set.${s}` as DictKey;
@@ -53,7 +53,7 @@ function Field({ label, children, testID }: { label: string; children: React.Rea
  * MultiChips fills checked chips with the accent — a page of them would be all yellow, and yellow is kept for the one
  * main action (rule 2). TODO(ui): move into src/ui as MultiChips' look (a «Лиды и клиенты» file) — said in the PR.
  */
-function MultiChips<K extends string>({ items, value, onChange }: { items: { key: K; label: string }[]; value: K[]; onChange: (v: K[]) => void }) {
+function MultiChips<K extends string>({ items, value, onToggle, testID }: { items: { key: K; label: string }[]; value: K[]; onToggle: (k: K) => void; testID: string }) {
   const ro = useReadOnly();
   const { c } = useTheme();
   const h = component.button.sm;
@@ -64,7 +64,8 @@ function MultiChips<K extends string>({ items, value, onChange }: { items: { key
         return (
           <Press
             key={it.key}
-            onPress={() => onChange(sel ? value.filter((x) => x !== it.key) : [...value, it.key])}
+            onPress={() => onToggle(it.key)}
+            testID={`${testID}-${it.key}`}
             disabled={ro}
             visibleHeight={h}
             accessibilityRole="checkbox"
@@ -99,33 +100,45 @@ export default function GutterSettingsScreen() {
   const ro = !director || !active;
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company/modules"));
 
+  /**
+   * A refusal (the last choice, too large, a colour twice, the palette full) is said under its own field: a toast would
+   * take the place of the «Сохранено · Отменить» toast and its undo (rule 5, review #372 №5).
+   */
+  const [warn, setWarn] = useState<{ at: string; text: string } | null>(null);
   /** one change: the stored settings with it, saved at once; too large or the module off → nothing saved, said why */
-  const save = (next: Record<string, unknown>) => {
-    if (!settingsFit(next)) return toast.show(t(k("tooLarge")));
+  const save = (next: Record<string, unknown>, at: string) => {
+    if (!settingsFit(next)) return setWarn({ at, text: t(k("tooLarge")) });
+    setWarn(null);
     const undo = store.saveModuleSettings("gutters", next);
     if (undo) toast.show(store.online ? t(k("saved")) : t("offline.queued"), undo);
   };
-  /** a list from the «what we install» part: at least one stays (the panel needs something to offer) */
-  const setOffer = (key: string, list: string[]) => (list.length ? save(setSetting(raw, "offer", key, list)) : toast.show(t(k("keepOne"))));
-  const setNested = (key: string, sub: string, list: string[], all: Record<string, string[]>) =>
-    list.length ? save(setSetting(raw, "offer", key, { ...all, [sub]: list })) : toast.show(t(k("keepOne")));
-  /** a default: stored as the whole resolved default, so what is shown is what is kept (no stale size of another profile) */
-  const setRun = (p: Record<string, unknown>) => save(setSetting(raw, "run", null, choicesFor(setSetting(raw, "run", null, { ...ch.run, ...p })).run));
-  const setDs = (p: Record<string, unknown>) => save(setSetting(raw, "ds", null, choicesFor(setSetting(raw, "ds", null, { ...ch.ds, ...p })).ds));
-  const setPalette = (list: string[]) => save(setSetting(raw, "palette", null, list));
+  /** «what we install»: one value on or off; the last one of its list stays (spec П22.2 №8) */
+  const toggle = (at: string, group: OfferGroup, sub: string | null, value: string, known?: readonly string[]) => {
+    const next = toggleOffer(raw, group, sub, value, known);
+    if (next) save(next, at);
+    else setWarn({ at, text: t(k("keepOne")) });
+  };
+  /** one field of a default, a table cell, a rule: only that field is written (review #372 №2) */
+  const put = (at: string, path: string[], value: unknown) => save(setPath(raw, path, value), at);
+  const setRun = (key: string, v: unknown) => put(`gset-run-${key}`, ["run", key], v);
+  const setDs = (key: string, v: unknown) => put(`gset-ds-${key}`, ["ds", key], v);
+  const setPalette = (list: string[] | undefined) => put("gset-palette", ["palette"], list);
   const addColor = () => {
     const n = colorName(newColor);
     if (!n) return;
-    if (ch.palette.some((c) => c.toLowerCase() === n.toLowerCase())) return toast.show(t(k("colorTaken")));
-    if (ch.palette.length >= MAX_PALETTE) return toast.show(t(k("paletteFull"), { n: MAX_PALETTE }));
+    if (ch.palette.some((c) => c.toLowerCase() === n.toLowerCase())) return setWarn({ at: "gset-palette", text: t(k("colorTaken")) });
+    if (ch.palette.length >= MAX_PALETTE) return setWarn({ at: "gset-palette", text: t(k("paletteFull"), { n: MAX_PALETTE }) });
     setPalette([...ch.palette, n]);
     setNewColor("");
   };
+  const Warn = ({ at }: { at: string }) =>
+    warn?.at === at ? (
+      <View testID={`${at}-warn`}>
+        <StatusChip status="warn" label={warn.text} soft />
+      </View>
+    ) : null;
 
   const offer = ch.offer;
-  const sizesOffer = offer.sizes as Record<string, string[]>;
-  const gaugesOffer = offer.gauges;
-  const dsOffer = offer.dsSizes as Record<string, string[]>;
   const runProfile = ch.run.profile;
   const runGauges = offer.gauges[ch.run.material] ?? [];
   const dsGauges = offer.gauges[ch.ds.material] ?? [];
@@ -137,7 +150,7 @@ export default function GutterSettingsScreen() {
         {!active ? (
           <View testID="gset-locked" style={{ gap: space[2] }}>
             <StatusChip status="warn" label={t(k("locked"))} />
-            {director ? <Button label={t("mod.gutters.draw.connect")} variant="secondary" onPress={() => router.push("/company/modules")} /> : null}
+            {director ? <View testID="gset-connect"><Button label={t("mod.gutters.draw.connect")} variant="secondary" onPress={() => router.push("/company/modules")} /></View> : null}
           </View>
         ) : !director ? (
           <View testID="gset-ro">
@@ -148,48 +161,57 @@ export default function GutterSettingsScreen() {
         <ReadOnly value={ro}>
           <Part title={t(k("offer"))} hint={t(k("offerHint"))} testID="gset-offer">
             <Field label={t(k("profiles"))} testID="gset-profiles">
-              <MultiChips items={PROFILES.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={offer.profiles} onChange={(v) => setOffer("profiles", v)} />
+              <MultiChips items={PROFILES.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={offer.profiles} testID="gset-profiles" onToggle={(x) => toggle("gset-profiles", "profiles", null, x)} />
+              <Warn at="gset-profiles" />
             </Field>
             {offer.profiles.map((p) => (
               <Field key={p} label={t(k("sizesOf"), { what: t(a(`p.${p}`)) })} testID={`gset-sizes-${p}`}>
-                <MultiChips items={SIZES_BY_PROFILE[p].map((s) => ({ key: s, label: inch(s) }))} value={offer.sizes[p]} onChange={(v) => setNested("sizes", p, v, sizesOffer)} />
+                <MultiChips items={SIZES_BY_PROFILE[p].map((s) => ({ key: s, label: inch(s) }))} value={offer.sizes[p]} testID={`gset-sizes-${p}`} onToggle={(x) => toggle(`gset-sizes-${p}`, "sizes", p, x)} />
+                <Warn at={`gset-sizes-${p}`} />
               </Field>
             ))}
             <Field label={t(k("materials"))} testID="gset-materials">
-              <MultiChips items={MATERIALS.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={offer.materials} onChange={(v) => setOffer("materials", v)} />
+              <MultiChips items={MATERIALS.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={offer.materials} testID="gset-materials" onToggle={(x) => toggle("gset-materials", "materials", null, x)} />
+              <Warn at="gset-materials" />
             </Field>
             {offer.materials.filter((m) => (GAUGES_BY_MATERIAL[m] ?? []).length).map((m) => (
               <Field key={m} label={t(k("gaugesOf"), { what: t(a(`m.${m}`)) })} testID={`gset-gauges-${m}`}>
-                <MultiChips items={(GAUGES_BY_MATERIAL[m] ?? []).map((g) => ({ key: g, label: g }))} value={offer.gauges[m] ?? []} onChange={(v) => setNested("gauges", m, v, gaugesOffer)} />
+                <MultiChips items={(GAUGES_BY_MATERIAL[m] ?? []).map((g) => ({ key: g, label: g }))} value={offer.gauges[m] ?? []} testID={`gset-gauges-${m}`} onToggle={(x) => toggle(`gset-gauges-${m}`, "gauges", m, x)} />
+                <Warn at={`gset-gauges-${m}`} />
               </Field>
             ))}
             {/* two families (spec П18.6): the half-round kits hang half round and euro, the rest K, fascia and box; each keeps one */}
             {(["k", "half_round"] as const).map((fam) => {
               const kits = familyKits(fam);
-              const other = offer.hangers.filter((id) => !kits.includes(id));
               return (
                 <Field key={fam} label={t(k(fam === "k" ? "hangersK" : "hangersHR"))} testID={`gset-hangers-${fam}`}>
                   <MultiChips
                     items={kits.map((id) => ({ key: id, label: t(a(`k.${id}`)) }))}
                     value={offer.hangers.filter((id) => kits.includes(id))}
-                    onChange={(v) => (v.length ? save(setSetting(raw, "offer", "hangers", [...other, ...v])) : toast.show(t(k("keepOne"))))}
+                    testID={`gset-hangers-${fam}`}
+                    onToggle={(x) => toggle(`gset-hangers-${fam}`, "hangers", null, x, kits)}
                   />
+                  <Warn at={`gset-hangers-${fam}`} />
                 </Field>
               );
             })}
             {DS_SHAPES.map((sh) => (
               <Field key={sh} label={t(k("dsSizesOf"), { what: t(a(`sh.${sh}`)) })} testID={`gset-ds-${sh}`}>
-                <MultiChips items={DS_SIZES[sh].map((s) => ({ key: s, label: dsSize(s) }))} value={offer.dsSizes[sh]} onChange={(v) => setNested("dsSizes", sh, v, dsOffer)} />
+                <MultiChips items={DS_SIZES[sh].map((s) => ({ key: s, label: dsSize(s) }))} value={offer.dsSizes[sh]} testID={`gset-ds-${sh}`} onToggle={(x) => toggle(`gset-ds-${sh}`, "dsSizes", sh, x)} />
+                <Warn at={`gset-ds-${sh}`} />
               </Field>
             ))}
             <Field label={t(k("dsStyles"))} testID="gset-ds-styles">
-              <MultiChips items={DS_STYLES.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={offer.dsStyles} onChange={(v) => setOffer("dsStyles", v)} />
+              <MultiChips items={DS_STYLES.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={offer.dsStyles} testID="gset-ds-styles" onToggle={(x) => toggle("gset-ds-styles", "dsStyles", null, x)} />
+              <Warn at="gset-ds-styles" />
             </Field>
             <Field label={t(k("bottoms"))} testID="gset-bottoms">
-              <MultiChips items={DS_BOTTOMS.map((b) => ({ key: b, label: t(a(`b.${b}`)) }))} value={offer.bottoms} onChange={(v) => setOffer("bottoms", v)} />
+              <MultiChips items={DS_BOTTOMS.map((b) => ({ key: b, label: t(a(`b.${b}`)) }))} value={offer.bottoms} testID="gset-bottoms" onToggle={(x) => toggle("gset-bottoms", "bottoms", null, x)} />
+              <Warn at="gset-bottoms" />
             </Field>
             <Field label={t(k("wallKits"))} testID="gset-wall-kits">
-              <MultiChips items={MODULE_OFFER.wallKits.map((id) => ({ key: id, label: t(a(`wk.${id}`)) }))} value={offer.wallKits} onChange={(v) => setOffer("wallKits", v)} />
+              <MultiChips items={MODULE_OFFER.wallKits.map((id) => ({ key: id, label: t(a(`wk.${id}`)) }))} value={offer.wallKits} testID="gset-wall-kits" onToggle={(x) => toggle("gset-wall-kits", "wallKits", null, x)} />
+              <Warn at="gset-wall-kits" />
             </Field>
           </Part>
 
@@ -218,6 +240,7 @@ export default function GutterSettingsScreen() {
                     <Button label={t(k("colorAdd"))} size="sm" variant="secondary" onPress={addColor} />
                   </View>
                 </RowView>
+                <Warn at="gset-palette" />
                 <T v="caption" tone="mut">{t(k("paletteFrom"))}</T>
                 <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
                   <View testID="gset-palette-berger">
@@ -227,7 +250,7 @@ export default function GutterSettingsScreen() {
                     <Button label={t(k("palSP"), { n: PALETTES.servicePartners.length })} size="sm" variant="secondary" onPress={() => setPalette([...PALETTES.servicePartners])} />
                   </View>
                   <View testID="gset-palette-module">
-                    <Button label={t(k("palModule"))} size="sm" variant="ghost" onPress={() => save(setSetting(raw, "palette", null, undefined))} />
+                    <Button label={t(k("palModule"))} size="sm" variant="ghost" onPress={() => setPalette(undefined)} />
                   </View>
                 </RowView>
               </>
@@ -236,31 +259,31 @@ export default function GutterSettingsScreen() {
 
           <Part title={t(k("defRun"))} hint={t(k("defRunHint"))} testID="gset-def-run">
             <Field label={t(a("profile"))} testID="gset-run-profile">
-              <ChoiceChips items={offer.profiles.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={ch.run.profile} onChange={(profile) => setRun({ profile })} />
+              <ChoiceChips items={offer.profiles.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={ch.run.profile} onChange={(profile) => setRun("profile", profile)} />
             </Field>
             <Field label={t(a("size"))} testID="gset-run-size">
-              <ChoiceChips items={offer.sizes[runProfile].map((s) => ({ key: s, label: inch(s) }))} value={ch.run.size} onChange={(size) => setRun({ size })} />
+              <ChoiceChips items={offer.sizes[runProfile].map((s) => ({ key: s, label: inch(s) }))} value={ch.run.size} onChange={(size) => setRun("size", size)} />
             </Field>
             <Field label={t(a("material"))} testID="gset-run-material">
-              <ChoiceChips items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.run.material} onChange={(material) => setRun({ material })} />
+              <ChoiceChips items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.run.material} onChange={(material) => setRun("material", material)} />
             </Field>
             {runGauges.length ? (
               <Field label={t(a("gauge"))} testID="gset-run-gauge">
-                <ChoiceChips items={runGauges.map((g) => ({ key: g, label: g }))} value={ch.run.gauge ?? runGauges[0]!} onChange={(gauge) => setRun({ gauge })} />
+                <ChoiceChips items={runGauges.map((g) => ({ key: g, label: g }))} value={ch.run.gauge ?? runGauges[0]!} onChange={(gauge) => setRun("gauge", gauge)} />
               </Field>
             ) : null}
             {MILL_ONLY.has(ch.run.material) ? null : (
               <Field label={t(a("finish"))} testID="gset-run-finish">
-                <ChoiceChips items={(["painted", "mill"] as const).map((f) => ({ key: f, label: t(a(`f.${f}`)) }))} value={ch.run.finish} onChange={(finish) => setRun({ finish })} />
+                <ChoiceChips items={(["painted", "mill"] as const).map((f) => ({ key: f, label: t(a(`f.${f}`)) }))} value={ch.run.finish} onChange={(finish) => setRun("finish", finish)} />
               </Field>
             )}
             {ch.run.finish === "painted" ? (
               <Field label={t(a("color"))} testID="gset-run-color">
-                <ChoiceChips items={ch.palette.map((c) => ({ key: c, label: colorLabel(c) }))} value={ch.run.color ?? ch.palette[0]!} onChange={(color) => setRun({ color })} />
+                <ChoiceChips items={ch.palette.map((c) => ({ key: c, label: colorLabel(c) }))} value={ch.run.color ?? ch.palette[0]!} onChange={(color) => setRun("color", color)} />
               </Field>
             ) : null}
             <Field label={t(a("mount"))} testID="gset-run-mount">
-              <ChoiceChips items={GUTTER_MOUNTS.map((m) => ({ key: m, label: t(a(`mt.${m}`)) }))} value={ch.run.mount} onChange={(mount) => setRun({ mount })} />
+              <ChoiceChips items={GUTTER_MOUNTS.map((m) => ({ key: m, label: t(a(`mt.${m}`)) }))} value={ch.run.mount} onChange={(mount) => setRun("mount", mount)} />
             </Field>
             <T v="caption" tone="mut">{t(k("byMountHint"), { what: t(a(`p.${runProfile}`)) })}</T>
             {GUTTER_MOUNTS.map((m) => {
@@ -270,7 +293,7 @@ export default function GutterSettingsScreen() {
                   <ChoiceChips
                     items={(kits.length ? kits : familyKits(runProfile)).map((id) => ({ key: id, label: t(a(`k.${id}`)) }))}
                     value={ch.hangerByMount[runProfile][m]}
-                    onChange={(kit) => save(setSetting(raw, "hangerByMount", runProfile, { ...ch.hangerByMount[runProfile], [m]: kit }))}
+                    onChange={(kit) => put(`gset-mount-${m}`, ["hangerByMount", runProfile, m], kit)}
                   />
                 </Field>
               );
@@ -279,37 +302,37 @@ export default function GutterSettingsScreen() {
 
           <Part title={t(k("defDs"))} hint={t(k("defDsHint"))} testID="gset-def-ds">
             <Field label={t(a("shape"))} testID="gset-ds-shape">
-              <ChoiceChips items={DS_SHAPES.map((s) => ({ key: s, label: t(a(`sh.${s}`)) }))} value={ch.ds.shape} onChange={(shape) => setDs({ shape })} />
+              <ChoiceChips items={DS_SHAPES.map((s) => ({ key: s, label: t(a(`sh.${s}`)) }))} value={ch.ds.shape} onChange={(shape) => setDs("shape", shape)} />
             </Field>
             <Field label={t(a("size"))} testID="gset-ds-size">
-              <ChoiceChips items={offer.dsSizes[ch.ds.shape].map((s) => ({ key: s, label: dsSize(s) }))} value={ch.ds.size} onChange={(size) => setDs({ size })} />
+              <ChoiceChips items={offer.dsSizes[ch.ds.shape].map((s) => ({ key: s, label: dsSize(s) }))} value={ch.ds.size} onChange={(size) => setDs("size", size)} />
             </Field>
             <Field label={t(a("dsStyle"))} testID="gset-ds-style">
-              <ChoiceChips items={offer.dsStyles.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={ch.ds.dsStyle} onChange={(dsStyle) => setDs({ dsStyle })} />
+              <ChoiceChips items={offer.dsStyles.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={ch.ds.dsStyle} onChange={(dsStyle) => setDs("dsStyle", dsStyle)} />
             </Field>
             <Field label={t(a("material"))} testID="gset-ds-material">
-              <ChoiceChips items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.ds.material} onChange={(material) => setDs({ material })} />
+              <ChoiceChips items={offer.materials.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={ch.ds.material} onChange={(material) => setDs("material", material)} />
             </Field>
             {dsGauges.length ? (
               <Field label={t(a("gauge"))} testID="gset-ds-gauge">
-                <ChoiceChips items={dsGauges.map((g) => ({ key: g, label: g }))} value={ch.ds.gauge ?? dsGauges[0]!} onChange={(gauge) => setDs({ gauge })} />
+                <ChoiceChips items={dsGauges.map((g) => ({ key: g, label: g }))} value={ch.ds.gauge ?? dsGauges[0]!} onChange={(gauge) => setDs("gauge", gauge)} />
               </Field>
             ) : null}
             {MILL_ONLY.has(ch.ds.material) ? null : (
               <Field label={t(a("finish"))} testID="gset-ds-finish">
-                <ChoiceChips items={(["painted", "mill"] as const).map((f) => ({ key: f, label: t(a(`f.${f}`)) }))} value={ch.ds.finish} onChange={(finish) => setDs({ finish })} />
+                <ChoiceChips items={(["painted", "mill"] as const).map((f) => ({ key: f, label: t(a(`f.${f}`)) }))} value={ch.ds.finish} onChange={(finish) => setDs("finish", finish)} />
               </Field>
             )}
             {ch.ds.finish === "painted" ? (
               <Field label={t(a("color"))} testID="gset-ds-color">
-                <ChoiceChips items={ch.palette.map((c) => ({ key: c, label: colorLabel(c) }))} value={ch.ds.color ?? ch.palette[0]!} onChange={(color) => setDs({ color })} />
+                <ChoiceChips items={ch.palette.map((c) => ({ key: c, label: colorLabel(c) }))} value={ch.ds.color ?? ch.palette[0]!} onChange={(color) => setDs("color", color)} />
               </Field>
             ) : null}
             <Field label={t(a("bottom"))} testID="gset-ds-bottom">
-              <ChoiceChips items={offer.bottoms.map((b) => ({ key: b, label: t(a(`b.${b}`)) }))} value={ch.ds.bottom} onChange={(bottom) => setDs({ bottom })} />
+              <ChoiceChips items={offer.bottoms.map((b) => ({ key: b, label: t(a(`b.${b}`)) }))} value={ch.ds.bottom} onChange={(bottom) => setDs("bottom", bottom)} />
             </Field>
             <Field label={t(a("wall"))} testID="gset-ds-wall">
-              <ChoiceChips items={WALLS.map((w) => ({ key: w, label: t(a(`w.${w}`)) }))} value={ch.ds.wall} onChange={(wall) => setDs({ wall })} />
+              <ChoiceChips items={WALLS.map((w) => ({ key: w, label: t(a(`w.${w}`)) }))} value={ch.ds.wall} onChange={(wall) => setDs("wall", wall)} />
             </Field>
             <T v="caption" tone="mut">{t(k("byWallHint"), { what: t(a(`sh.${ch.ds.shape}`)) })}</T>
             {WALLS.map((w) => {
@@ -320,7 +343,7 @@ export default function GutterSettingsScreen() {
                   <ChoiceChips
                     items={(kits.length ? kits : all).map((id) => ({ key: id, label: t(a(`wk.${id}`)) }))}
                     value={ch.wallKitByWall[ch.ds.shape][w]}
-                    onChange={(kit) => save(setSetting(raw, "wallKitByWall", ch.ds.shape, { ...ch.wallKitByWall[ch.ds.shape], [w]: kit }))}
+                    onChange={(kit) => put(`gset-wall-${w}`, ["wallKitByWall", ch.ds.shape, w], kit)}
                   />
                 </Field>
               );
