@@ -405,3 +405,14 @@ describe("unit:gutterData — M5d: photos of a measurement and its element (spec
     expect(coalesceAt([it_("a", save(10))] as never[], save(20), ME, null)).toBe(0);
   });
 });
+
+describe("how the drawing was measured (docs/specs/33-gutters-canvas.md П20.16)", () => {
+  it("a row without accuracy (an old phone, an old server row) is rough; tape stays tape; written always with it", async () => {
+    const { measurementFromRow, measurementToDb } = await import("../src/modules/gutters/data");
+    expect(measurementFromRow({ id: "m1", status: "draft" })!.accuracy).toBe("rough");
+    expect(measurementFromRow({ id: "m1", status: "draft", accuracy: "tape" })!.accuracy).toBe("tape");
+    expect(measurementFromRow({ id: "m1", status: "draft", accuracy: "laser" })!.accuracy).toBe("rough");
+    expect(measurementToDb({ id: "m1", label: null, status: "draft", propertyId: null, leadId: null }, "c1").accuracy).toBe("rough");
+    expect(measurementToDb({ id: "m1", label: null, status: "draft", propertyId: null, leadId: null, accuracy: "tape" }, "c1").accuracy).toBe("tape");
+  });
+});

@@ -108,17 +108,3 @@ describe("the angle from a triangle measured on site (founder 08.11)", () => {
     expect(Math.round(Math.hypot(c.b[0] - c.a[0], c.b[1] - c.a[1]))).toBe(ft(10)); // the same shape
   });
 });
-
-import { measurementFromRow, measurementToDb } from "../src/modules/gutters/data";
-
-describe("how the drawing was measured (П20.16)", () => {
-  it("a row without accuracy (an old phone, an old server row) is rough; tape stays tape", () => {
-    expect(measurementFromRow({ id: "m1", status: "draft" })!.accuracy).toBe("rough");
-    expect(measurementFromRow({ id: "m1", status: "draft", accuracy: "tape" })!.accuracy).toBe("tape");
-    expect(measurementFromRow({ id: "m1", status: "draft", accuracy: "laser" })!.accuracy).toBe("rough");
-  });
-  it("written to the server always with accuracy (an old draft on the phone without it → rough)", () => {
-    expect(measurementToDb({ id: "m1", label: null, status: "draft", propertyId: null, leadId: null }, "c1").accuracy).toBe("rough");
-    expect(measurementToDb({ id: "m1", label: null, status: "draft", propertyId: null, leadId: null, accuracy: "tape" }, "c1").accuracy).toBe("tape");
-  });
-});
