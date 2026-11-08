@@ -43,6 +43,13 @@ export const WITH_TAB_BAR = [
 ] as const;
 
 const hidden = new Set<string>(NO_TAB_BAR);
+/**
+ * Without the bar, but not a form (founder 08.11, build 373: «Выйти без сохранения?» over «Модули» with nothing to
+ * save): a module's own screens save on their own — the canvas a second after each change, its settings and prices at
+ * once, the speed check keeps nothing. A tab over them never asks.
+ */
+export const NOT_A_FORM: readonly string[] = ["module/[key]/[screen]"];
+const notAForm = new Set<string>(NOT_A_FORM);
 
 /** "(tabs)/clients" → "clients", "company/index" → "company", "" → "index" */
 export function tabRouteKey(route: string): string {
@@ -64,7 +71,7 @@ export const showsTabBar = (route: string): boolean => !hidden.has(tabRouteKey(r
  */
 export function formsAbove(routes: readonly string[]): string[] {
   const tabsAt = routes.lastIndexOf("(tabs)");
-  return routes.slice(tabsAt + 1).filter((r) => hidden.has(tabRouteKey(r)));
+  return routes.slice(tabsAt + 1).filter((r) => hidden.has(tabRouteKey(r)) && !notAForm.has(tabRouteKey(r)));
 }
 
 /**
