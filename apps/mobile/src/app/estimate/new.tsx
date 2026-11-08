@@ -41,8 +41,9 @@ export default function EstimateBuilder() {
   const templates = pickableTemplates(db.estimateTemplates ?? []);
   const given = !existing && params.template ? templates.find((x) => x.id === params.template) : undefined;
   // §12 №10: the builder edits a template's lines (no client; «Сохранить шаблон») — the director and the office only
-  const tplEdit = !existing && !given && params.editTemplate && canEditEstimateTemplates(store.role) ? templates.find((x) => x.id === params.editTemplate) : undefined;
-  const [fromTpl] = useState(() => (given ? fromTemplate(given.doc, db.catalog, given.costs ?? {}, seeCosts) : null));
+  // fixed when the screen opens: a template archived meanwhile (a sync) must not turn this into a new estimate (security check №2)
+  const [tplEdit] = useState(() => (!existing && !given && params.editTemplate && canEditEstimateTemplates(store.role) ? templates.find((x) => x.id === params.editTemplate) : undefined));
+  const [fromTpl] = useState(() => (given ? fromTemplate(given.doc, db.catalog, given.costs ?? {}, seeCosts, !!given.module) : null));
   const [templateId, setTemplateId] = useState<string | undefined>(given?.id);
   const [checkPrice, setCheckPrice] = useState<string[]>(fromTpl?.checkPrice ?? []);
   const [startOpen, setStartOpen] = useState(() => !existing && !given && !tplEdit && templates.length > 0);
@@ -57,7 +58,7 @@ export default function EstimateBuilder() {
   const start = (x: EstimateTemplate | null) => {
     setStartOpen(false);
     if (x) {
-      const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts);
+      const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts, !!x.module);
       setDoc(r.doc);
       setCur(Math.max(0, r.doc.options.findIndex((o) => o.recommended)));
       setTemplateId(x.id);
@@ -123,13 +124,21 @@ export default function EstimateBuilder() {
 
   const saveTemplate = () => {
     if (!tplEdit) return;
-    const next = editedTemplate(tplEdit, doc, seeCosts, title.trim());
+    // onto the template as it is NOW (another phone's rename or archive since the screen opened stays theirs)
+    const live = (db.estimateTemplates ?? []).find((x) => x.id === tplEdit.id);
+    if (!live || live.archivedAt) {
+      toast.show(t("est.tpl.editArchived"));
+      return;
+    }
+    const name = title.trim() === tplEdit.name ? live.name : title.trim();
+    const next = editedTemplate(live, doc, seeCosts, name);
     if (!next) {
       toast.show(t("est.tpl.cannot"));
       return;
     }
-    const undo = store.saveEstimateTemplate(next);
-    toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), undo);
+    store.saveEstimateTemplate(next);
+    // «Отменить» (rule 5): the template as it was, as a change of its own — the edit may have reached the server already
+    toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), () => void store.saveEstimateTemplate(live));
     router.replace("/estimate/templates");
   };
 
@@ -191,7 +200,8 @@ export default function EstimateBuilder() {
 
           <SectionTitle title={t("ue.items")} right={act.length ? <T v="caption" tone="mut">{act.length}</T> : undefined} />
           {option.lines.map((l) => (
-            <Card key={l.id} onPress={() => setEditing(l)} accessibilityLabel={l.name}>
+            <View key={l.id} testID={`ue-line-${l.id}`}>
+            <Card onPress={() => setEditing(l)} accessibilityLabel={l.name}>
               <RowView style={{ alignItems: "flex-start" }}>
                 <View style={{ flex: 1, gap: space[1] }}>
                   <T v="body" w="semibold">
@@ -220,6 +230,7 @@ export default function EstimateBuilder() {
                 </View>
               ) : null}
             </Card>
+            </View>
           ))}
           <Button label={t("ue.addItem")} icon="plus" variant="secondary" full onPress={() => setEditing("new")} />
         </View>

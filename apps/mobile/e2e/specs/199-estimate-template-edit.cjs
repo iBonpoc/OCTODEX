@@ -37,6 +37,11 @@ exports.run = async (h) => {
         doc: { options: [{ id: "o-o", name: "Option", lines: [line("lo1", "Service call (test)"), line("lo2", "Haul away (test)", { group: "labor", unitPriceCents: 5000 })] }], settings },
       },
     ];
+    s.db.checklistTemplates = [...(s.db.checklistTemplates || []), {
+      id: "chk-e2e-199", name: "Module checklist (test)", module: "gutters",
+      items: [{ id: "0e199000-0000-4000-8000-000000000001", label: "Check (test)", kind: "check", required: true }],
+      appliesTo: { everyVisit: false, visitKinds: ["work"], catalogItemIds: [] },
+    }];
     localStorage.setItem(k, JSON.stringify(s));
     return s.db.estimates.length;
   }, { k: DB_KEY, mod: T_MOD, own: T_OWN });
@@ -47,6 +52,11 @@ exports.run = async (h) => {
   const card = await tid(`est-tpl-${T_MOD}`).innerText();
   h.expect(/Водостоки \(Gutters\)/.test(card) && !/модуля gutters/.test(card), `the module's name on the card: ${card}`);
   h.expect((await tid("est-starters").count()) === 0, "module off: no «Шаблоны модулей»");
+  // the same on a checklist template of the module
+  await h.go("/company/checklists");
+  await tid("chk-tpl-chk-e2e-199").waitFor({ timeout: 8000 });
+  const chk = await tid("chk-tpl-chk-e2e-199").innerText();
+  h.expect(/Водостоки \(Gutters\)/.test(chk) && !/Модуль: gutters/.test(chk), `the module's name on the checklist card: ${chk}`);
 
   // switched on, but the module has no starter estimates yet: still no section
   await h.go("/company/modules");
@@ -79,8 +89,8 @@ exports.run = async (h) => {
   await tid("est-tpl-editing").waitFor({ timeout: 8000 });
   h.expect((await tid("ue-save").count()) === 0 && (await tid("est-start").count()) === 0, "no client, no «Сохранить», no «С чего начать?»");
   await h.shot("edit");
-  await p.getByLabel("Haul away (test)").locator("visible=true").first().click();
-  await p.getByRole("button", { name: "Удалить строку" }).locator("visible=true").first().click();
+  await tid("ue-line-lo2").getByRole("button").first().click();
+  await tid("ue-line-remove").getByRole("button").click();
   await tid("ue-title").locator("input").fill("Service visit v2 (test)");
   await tid("est-tpl-save").getByRole("button").click();
   await p.waitForURL(/estimate\/templates/, { timeout: 8000 });
@@ -90,6 +100,12 @@ exports.run = async (h) => {
   h.expect(own.costs && own.costs.lo1 === 4000, "the kept line keeps its cost");
   h.expect(own.uses === 2, "editing is no use");
   h.expect((await h.db()).estimates.length === estimatesBefore, "no estimate made");
+  // «Отменить»: the template as it was (a change of its own — the edit may have been sent already)
+  await p.getByRole("button", { name: /Отменить|Undo|Deshacer/ }).first().click();
+  await waitFor(async () => {
+    const x = (await tpls()).find((y) => y.id === T_OWN);
+    return x?.name === "Service visit (test)" && x.doc.options[0].lines.length === 2;
+  }, "«Отменить» brings the template's lines and name back");
 
   // a tech uses, but neither copies nor edits
   await role("tech");

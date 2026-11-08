@@ -120,7 +120,7 @@ export interface FromTemplate {
  * price (PRD 05 EST-02) and cost; a line without a link keeps the template's price and cost (`costs`: the template's
  * side table, empty for who does not see costs). Costs never reach a phone that may not see them.
  */
-export function fromTemplate(tpl: EstimateDoc, catalog: CatalogItem[], costs: Record<string, number>, costsVisible: boolean): FromTemplate {
+export function fromTemplate(tpl: EstimateDoc, catalog: CatalogItem[], costs: Record<string, number>, costsVisible: boolean, fromModule = false): FromTemplate {
   const checkPrice: string[] = [];
   const options: CustomOption[] = tpl.options.map((o) => ({
     ...o,
@@ -138,7 +138,7 @@ export function fromTemplate(tpl: EstimateDoc, catalog: CatalogItem[], costs: Re
           return line;
         }
         checkPrice.push(id);
-      } else if (!l.unitPriceCents) checkPrice.push(id); // no link and no price: a module's line its catalog lacked (§12 №3)
+      } else if (fromModule && !l.unitPriceCents) checkPrice.push(id); // a module's starter: a line its catalog lacked (§12 №3); a company's own $0 line is meant
       const cost = costs[l.id];
       if (costsVisible && cost !== undefined) line.unitCostCents = cost;
       return line;

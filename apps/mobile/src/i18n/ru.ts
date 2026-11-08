@@ -2982,6 +2982,7 @@ export const ru = {
   "est.tpl.editTitle": "Шаблон сметы",
   "est.tpl.saveTemplate": "Сохранить шаблон",
   "est.tpl.editHint": "Клиента в шаблоне нет. Строки из каталога в новой смете возьмут текущую цену каталога.",
+  "est.tpl.editArchived": "Шаблон убран в архив, пока вы его меняли. Верните его из архива и повторите",
   // step 14 CH3b: starter checklist templates of a module
   "mod.gutters.chk.pre": "Перед монтажом",
   "mod.gutters.chk.pre1": "Проверить лобовую доску на гниль",

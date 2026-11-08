@@ -11281,12 +11281,35 @@ select tst.ok(tst.cnt($q$select 1 from public.estimate_template_uses where templ
                         and estimate_id = 'e3c00000-0000-4000-8000-0000000000e1'$q$) = 1, 'T148 the tech''s estimate from a template counts one use');
 -- another tech's property: no estimate, so no use
 do $$ begin
-  perform tst.fails($q$insert into public.estimates (company_id, customer_id, property_id, title) values
-    ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'T148 not his')$q$, 'T148 a tech makes no estimate on a property not his');
+  perform tst.fails_like($q$insert into public.estimates (company_id, customer_id, property_id, title) values
+    ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'T148 not his')$q$,
+    '%row-level security%', 'T148 a tech makes no estimate on a property not his');
+end $$;
+-- nor a use through a version of an estimate not his (the office's, on a property not his)
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e3c00000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'T148 office''s');
+:as_tech_a
+do $$ begin
+  perform tst.fails_like($q$insert into public.estimate_versions (company_id, estimate_id, version_no, source, template_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'e3c00000-0000-4000-8000-0000000000e2', 1, 'template', 'e3c00000-0000-4000-8000-000000000001')$q$,
+    '%row-level security%', 'T148 a tech writes no version (no use) on an estimate not his');
 end $$;
 select tst.ok(tst.cnt($q$select 1 from public.estimate_template_uses where template_id = 'e3c00000-0000-4000-8000-000000000001'$q$) = 1, 'T148 nothing else counted');
 -- the template itself untouched by his use; he still cannot change it
 select tst.blocked($q$update public.estimate_templates set name = 'tech' where id = 'e3c00000-0000-4000-8000-000000000001'$q$, 'T148 the tech does not change the template he used');
+-- a module's starter sent again (ifNew: insert … on conflict do nothing, §12 №6) keeps the office's edits and costs
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc, module_key) values ('e3c00000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T148 starter',
+  '{"options":[{"id":"o","name":"A","lines":[{"id":"l","name":"Call","group":"service","quantity":"1","unit":"ea","unitPriceCents":100,"unitCostCents":40}]}],"settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}}', 'gutters');
+update public.estimate_templates set name = 'T148 edited' where id = 'e3c00000-0000-4000-8000-000000000002';
+insert into public.estimate_templates (id, company_id, name, doc, module_key) values ('e3c00000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T148 starter',
+  '{"options":[{"id":"o2","name":"B","lines":[{"id":"l2","name":"Other","group":"service","quantity":"1","unit":"ea","unitPriceCents":999,"unitCostCents":1}]}],"settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}}', 'gutters')
+  on conflict (id) do nothing;
+select tst.ok((select name = 'T148 edited' and doc -> 'options' -> 0 ->> 'id' = 'o' from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000002')
+          and tst.cnt($q$select 1 from public.estimate_template_line_costs where template_id = 'e3c00000-0000-4000-8000-000000000002' and line_id = 'l' and unit_cost_cents = 40$q$) = 1
+          and tst.cnt($q$select 1 from public.estimate_template_line_costs where template_id = 'e3c00000-0000-4000-8000-000000000002' and line_id = 'l2'$q$) = 0,
+  'T148 a starter sent again changes nothing: the office''s name, lines and costs stay');
 \echo 'T148 a tech makes an estimate from a template ok'
 
 \echo 'ALL TESTS PASSED'

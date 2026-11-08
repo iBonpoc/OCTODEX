@@ -59,7 +59,7 @@ export default function EstimateTemplates() {
     pressed.current.add(id);
     const undo = store.saveEstimateTemplate(tpl, { ifNew: true });
     // lines the catalog lacked: price 0 — said at once (and «проверьте цену» in the builder)
-    const unpriced = fromTemplate(tpl.doc, store.db.catalog, {}, false).checkPrice;
+    const unpriced = fromTemplate(tpl.doc, store.db.catalog, {}, false, true).checkPrice;
     const msg = unpriced.length ? t("est.tpl.starterNoPrice", { n: unpriced.length }) : t("est.tpl.starterAdded", { name: tpl.name });
     toast.show(store.online ? msg : t("offline.queued"), () => {
       pressed.current.delete(id);

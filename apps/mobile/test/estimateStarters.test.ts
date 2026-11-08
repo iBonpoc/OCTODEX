@@ -120,12 +120,22 @@ describe("unit:estimateStarters", () => {
   it("who does not see costs gets none; a used starter: catalog lines at today's price, unpriced lines «проверьте цену»", () => {
     const tpl = starterEstimateTemplate("fakemod", S, ctx({ costsVisible: false }))!;
     expect(tpl.costs).toBeUndefined();
-    const used = fromTemplate(tpl.doc, catalog.map((x) => (x.id === "svc" ? { ...x, priceCents: 17500 } : x)), {}, false);
+    const used = fromTemplate(tpl.doc, catalog.map((x) => (x.id === "svc" ? { ...x, priceCents: 17500 } : x)), {}, false, true);
     const lines = used.doc.options[0]!.lines;
     expect(lines[0]!.unitPriceCents).toBe(17500);
     expect(used.checkPrice).toEqual([lines[2]!.id, lines[3]!.id]);
     // the engine sums (rule 8): 175.00 + 2.5 × 15.00 + 0 = 212.50; the add-on is not in the total
     expect(computeCustomOption(used.doc.options[0]!, used.doc.settings).subtotal).toBe(21250);
+  });
+
+  it("a company's own template: a $0 line without a link is meant (no «проверьте цену»); a gone item still is", () => {
+    const own = { options: [{ id: "o", name: "A", lines: [
+      { id: "free", name: "Free estimate", group: "service" as const, quantity: "1", unit: "ea", unitPriceCents: 0 },
+      { id: "gone", name: "Old", group: "service" as const, quantity: "1", unit: "ea", unitPriceCents: 500, catalogItemId: "not-there" },
+    ] }], settings: starterEstimateTemplate("fakemod", S, ctx())!.doc.settings };
+    const r = fromTemplate(own, catalog, {}, false);
+    expect(r.checkPrice).toEqual([r.doc.options[0]!.lines[1]!.id]);
+    expect(fromTemplate(own, catalog, {}, false, true).checkPrice).toHaveLength(2);
   });
 
   it("a copy: new ids, the name given, no module's mark, no uses; costs only for who sees them", () => {

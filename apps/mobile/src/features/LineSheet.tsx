@@ -131,6 +131,7 @@ export function LineSheet({
           </RowView>
           <RowView style={{ justifyContent: "space-between" }}>
             {line && onRemove ? (
+              <View testID="ue-line-remove">
               <IconButton
                 icon="trash"
                 label={t("ue.removeLine")}
@@ -139,6 +140,7 @@ export function LineSheet({
                   onClose();
                 }}
               />
+              </View>
             ) : (
               <Button label={t("ue.backToSearch")} icon="search" variant="ghost" size="sm" onPress={() => setDraft(null)} />
             )}
