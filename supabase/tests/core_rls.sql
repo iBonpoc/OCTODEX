@@ -8001,4 +8001,52 @@ select tst.ok((select unit_price_cents = 455 from public.catalog_items where id 
 delete from public.catalog_items where id = '96000000-0000-5000-8000-000000000001';
 \echo 'T96 a module item with a fixed id: insert or nothing, one row, the set price stays, refusals stay refusals ok'
 
+-- ---------------------------------------------------------------- T97: what a module wrote into a line stays the company's (spec 33 П23.7, C4)
+-- The app keeps `source` in calc_inputs («Обновить смету» needs it after a reload); the page must never show it.
+:as_owner_a
+do $$
+declare v_cust uuid; v_prop uuid; v_e uuid; v_v uuid;
+begin
+  insert into public.customers (company_id, display_name) values ('ca000000-0000-0000-0000-000000000000', 'T97 Client') returning id into v_cust;
+  insert into public.properties (company_id, customer_id, address_line1, address_city) values ('ca000000-0000-0000-0000-000000000000', v_cust, '97 Source St', 'Burbank') returning id into v_prop;
+  insert into public.estimates (company_id, customer_id, property_id, title) values ('ca000000-0000-0000-0000-000000000000', v_cust, v_prop, 'T97 module lines') returning id into v_e;
+  insert into public.estimate_versions (company_id, estimate_id, version_no, calc_inputs) values ('ca000000-0000-0000-0000-000000000000', v_e, 1, $j${
+    "options": [{"id": "o1", "name": "Option", "lines": [
+      {"id": "m1", "name": "K-style 5in", "group": "material", "quantity": "42.5", "unit": "ft", "unitPriceCents": 1200,
+       "source": {"module": "gutters", "key": "part=gutter", "section": "gutter", "qty": "42.5", "priceCents": 900, "name": "Gutter 5in",
+                  "unit": "ft", "testPrice": true, "revisionId": "r1"}},
+      {"id": "m2", "name": "Downspout", "group": "material", "quantity": "2", "unit": "ea", "unitPriceCents": 0,
+       "source": {"module": "gutters", "key": "part=ds", "section": "downspouts", "qty": "2", "priceCents": 0, "name": "Downspout", "unit": "ea", "noPrice": true, "gone": true}},
+      {"id": "own", "name": "Haul away", "group": "service", "quantity": "1", "unit": "ea", "unitPriceCents": 5000}
+    ]}],
+    "settings": {"tax": {"enabled": false, "rateBps": 0, "groups": {}}, "deposit": {"kind": "none"}, "discount": null}
+  }$j$::jsonb) returning id into v_v;
+  update public.estimates set current_version_id = v_v where id = v_e;
+  perform tst.set_token(v_e, 'tok_t97src_0123456789abcd');
+end $$;
+reset role; reset request.jwt.claim.sub; set role anon;
+do $$
+declare d jsonb := public.portal_estimate('tok_t97src_0123456789abcd') -> 'doc';
+begin
+  perform tst.ok(jsonb_array_length(d -> 'options' -> 0 -> 'lines') = 3, 'T97 the page shows all three lines');
+  perform tst.ok(d::text !~* '(source|testPrice|noPrice|gone|revisionId|"priceCents"|gutters|part=)', 'T97 no source, test-price or module word on the client page: ' || d::text);
+  perform tst.ok((d -> 'options' -> 0 -> 'lines' -> 0 ->> 'unitPriceCents') = '1200', 'T97 the client sees the line''s price, not the module''s');
+end $$;
+:as_office_a
+select tst.ok((select calc_inputs -> 'options' -> 0 -> 'lines' -> 0 -> 'source' ->> 'priceCents' from public.estimate_versions v
+                 join public.estimates e on e.current_version_id = v.id where e.title = 'T97 module lines') = '900', 'T97 the office reads the module''s source back');
+:as_super
+-- the tech who made the draft reads it: the source holds the client price per unit (the same as the line's), never a cost
+set session_replication_role = replica;  -- the service-fields trigger keeps created_by
+update public.estimates set created_by = 'a0000000-0000-0000-0000-000000000003' where title = 'T97 module lines';
+set session_replication_role = origin;
+:as_tech_a
+select tst.ok((select v.calc_inputs -> 'options' -> 0 -> 'lines' -> 0 -> 'source' ->> 'priceCents' from public.estimate_versions v
+                 join public.estimates e on e.current_version_id = v.id where e.title = 'T97 module lines') = '900', 'T97 the tech sees the source of his own draft');
+select tst.ok(not exists (select 1 from public.estimate_versions v join public.estimates e on e.current_version_id = v.id,
+                            jsonb_array_elements(v.calc_inputs -> 'options' -> 0 -> 'lines') l, jsonb_object_keys(coalesce(l -> 'source', '{}')) k
+                           where e.title = 'T97 module lines' and k !~ '^(module|key|section|qty|priceCents|name|unit|noPrice|testPrice|gone|revisionId)$'),
+              'T97 the source has only the module''s words: no cost, markup or supplier field');
+\echo 'T97 module line sources: kept for the company, never on the client page ok'
+
 \echo 'ALL TESTS PASSED'

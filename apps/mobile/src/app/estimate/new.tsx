@@ -7,7 +7,8 @@ import { LINE_GROUPS, activeLines, type CustomLine, type CustomOption, type Depo
 import { useStore } from "@/data/store";
 import type { EstimateDoc } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, newDoc, optionTotals, uid } from "@/features/estimateDoc";
+import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, uid } from "@/features/estimateDoc";
+import { LineMarks } from "@/features/LineMarks";
 import { ClientPicker } from "@/features/estimatePickers";
 import { LineSheet } from "@/features/LineSheet";
 import { Labeled, MoneyField, PctField } from "@/features/fields";
@@ -166,6 +167,7 @@ export default function EstimateBuilder() {
                   {l.optional ? <StatusChip status="neutral" label={t("ue.addonChip")} /> : null}
                 </View>
               </RowView>
+              <LineMarks marks={lineMarks(l)} lineId={l.id} />
             </Card>
           ))}
           <Button label={t("ue.addItem")} icon="plus" variant="secondary" full onPress={() => setEditing("new")} />

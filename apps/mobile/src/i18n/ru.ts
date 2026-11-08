@@ -581,6 +581,12 @@ export const ru = {
   "ue.price": "Цена, $",
   "ue.addon": "Доп. опция — клиент решает сам",
   "ue.addonChip": "доп. опция",
+  // C4 (spec 33 П23.7): marks of a line a module wrote
+  "ue.src.module": "Из замера",
+  "ue.src.noPrice": "Нет цены",
+  "ue.src.testPrice": "Тестовая цена",
+  "ue.src.gone": "Нет в замере",
+  "ue.src.hint": "Строку записал замер. «Обновить смету» пересчитает количество, цену и название, пока вы их не измените; изменённое останется как есть.",
   "ue.removeLine": "Удалить строку",
   "ue.lineRemoved": "Строка удалена",
   "ue.doneLine": "Готово",

@@ -6,13 +6,13 @@
  * company's item's (M7d, whole cents); no item → price 0 and `noPrice` (never a silent $0 — the screen says «нет цены»).
  *
  * Each module line carries `source` — what the module wrote: its key, section, quantity, price, name and unit. It is
- * the company's, not the client's: the core's clientDoc must drop it before anything leaves for the client (C4, П23.5). «Обновить
+ * the company's, not the client's: the core's clientDoc drops it before anything leaves the app for the client, the stored document keeps it and the server's page cuts it (C4, П23.7). «Обновить
  * смету» (resyncLines) tells a hand change by comparing the line with its `source`, not by a flag: an older app
  * version that knows nothing of `source` keeps it on edits (lines are spread) and its hand changes are still seen.
  * A line without `source` (typed by hand, or re-picked from the price list on an old phone) is the person's own: never
  * changed, never removed; a part whose price-list item such a line already uses is not added again.
  */
-import { dec, type CustomLine, type PartQty } from "@octo/estimating-engine";
+import { dec, type CustomLine, type LineSource as CoreLineSource, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogUnitCost, catalogUnitPrice } from "@/features/estimateDoc";
 import { findItem, matchKey } from "./prices";
@@ -26,7 +26,7 @@ export const sectionAt = (s: string) => {
 };
 
 /** what the module wrote into a line (П23.1): the base for telling a hand change at the next update */
-export interface LineSource {
+export interface LineSource extends CoreLineSource {
   module: "gutters";
   /** matchKey of the part: one line per price-list item */
   key: string;
@@ -46,7 +46,7 @@ export interface LineSource {
   /** the measurement revision the line was made from (M8b) */
   revisionId?: string;
 }
-export type ModuleLine = CustomLine & { source?: LineSource };
+export type ModuleLine = Omit<CustomLine, "source"> & { source?: LineSource };
 
 const isOurs = (l: ModuleLine): l is ModuleLine & { source: LineSource } => !!l.source && l.source.module === "gutters" && typeof l.source.key === "string";
 

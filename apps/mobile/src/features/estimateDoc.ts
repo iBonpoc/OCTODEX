@@ -13,6 +13,7 @@ import {
   type CustomSettings,
   type CustomTotals,
   type LineGroup,
+  type LineSource,
 } from "@octo/estimating-engine";
 import type { CatalogItem, Estimate, EstimateDoc } from "@/data/types";
 import { taxModeFor } from "@octo/estimating-engine";
@@ -130,12 +131,43 @@ export const withAddons = (o: CustomOption, addonIds: string[]): CustomOption =>
   lines: o.lines.map((l) => (l.optional ? { ...l, selected: addonIds.includes(l.id) } : l)),
 });
 
-/** Remove costs before anything leaves for the client (portal, PDF, calc_inputs in the database). */
+/**
+ * Remove costs and what a module wrote (`source`: its price, name, «test price») before anything leaves for the client
+ * from the app (the page /p/ on this device, PDF, letters). The server cuts the same on its side (app.client_doc).
+ */
 export function clientDoc(doc: EstimateDoc): EstimateDoc {
+  return {
+    ...doc,
+    options: doc.options.map((o) => ({ ...o, lines: o.lines.map(({ unitCostCents: _c, source: _s, ...l }) => l) })),
+  };
+}
+
+/**
+ * The document kept in estimate_versions.calc_inputs: without costs (they live in estimate_line_costs, hidden from the
+ * tech) but WITH `source` — «Обновить смету» needs it after a reload and on another phone (C4, spec 33 П23.7). The
+ * client page never gets it: app.client_doc (20261106180000) passes only the listed fields of a line (core_rls T60, T97).
+ */
+export function storedDoc(doc: EstimateDoc): EstimateDoc {
   return {
     ...doc,
     options: doc.options.map((o) => ({ ...o, lines: o.lines.map(({ unitCostCents: _c, ...l }) => l) })),
   };
+}
+
+const isSource = (v: unknown): v is LineSource =>
+  !!v && typeof v === "object" && !Array.isArray(v) && typeof (v as LineSource).module === "string" && typeof (v as LineSource).key === "string";
+
+/** The marks of a line on the company's estimate screen (C4): from a module; no price yet; a test price still there;
+ *  no longer in the module's data. The same words the check before sending uses (C5). */
+export type LineMark = "module" | "noPrice" | "testPrice" | "gone";
+export function lineMarks(l: CustomLine): LineMark[] {
+  const s = l.source;
+  if (!isSource(s)) return [];
+  const out: LineMark[] = ["module"];
+  if (s.gone) out.push("gone");
+  if (s.noPrice && l.unitPriceCents === 0) out.push("noPrice");
+  else if (s.testPrice && l.unitPriceCents === s.priceCents) out.push("testPrice");
+  return out;
 }
 
 /** Summary fields kept on Estimate for lists (total, deposit, visible lines of the main option). */
