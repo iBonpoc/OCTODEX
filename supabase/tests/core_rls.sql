@@ -10219,4 +10219,24 @@ select tst.ok((select status = 'succeeded' and stripe_refund_id = 're_T133c' and
 select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000005', null, 'goodwill', null, 'k133-null01')$q$, '%refund_above_available%', 'T133 an empty amount is our refusal, not a raw error');
 \echo 'T133 refunds ok'
 
+-- ---------------------------------------------------------------- T135: the client's advance (a payment without an invoice) applied to an invoice (docs/specs/35 §4г)
+:as_super
+insert into public.customers (id, company_id, display_name) values ('c1350000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T135 Other client');
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, sent_at) values
+  ('11350000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T135-1', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T135 small', 3000, 0, 3000, now()),
+  ('11350000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T135-2', 'c1350000-0000-4000-8000-000000000002', 'standalone', 'sent', 'T135 other client', 90000, 0, 90000, now()),
+  ('11350000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T135-3', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T135 fits', 12000, 0, 12000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, needs_review) values
+  ('21350000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'card', 5000, 'succeeded', 't135-adv-1', true);
+:as_owner_a
+select tst.fails_like($q$update public.payments set invoice_id = '11350000-0000-4000-8000-000000000002' where id = '21350000-0000-4000-8000-000000000001'$q$, '%advance_other_client%',
+  'T135 a direct update does not put an advance on another client''s invoice');
+select tst.fails_like($q$update public.payments set invoice_id = '11350000-0000-4000-8000-000000000001' where id = '21350000-0000-4000-8000-000000000001'$q$, '%advance_above_balance%',
+  'T135 …nor above the invoice''s balance ($50 on a $30 invoice)');
+:as_super
+select tst.ok((select invoice_id is null from public.payments where id = '21350000-0000-4000-8000-000000000001')
+          and (select paid_cents = 0 from public.invoices where id = '11350000-0000-4000-8000-000000000002'),
+  'T135 …the advance stays without an invoice, the other invoice is untouched');
+\echo 'T135 advances ok'
+
 \echo 'ALL TESTS PASSED'
