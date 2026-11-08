@@ -11,12 +11,12 @@ import { useStore } from "@/data/store";
 import type { ChecklistItem, Visit } from "@/data/types";
 import { useI18n } from "@/i18n";
 import { useTheme } from "@/theme/ThemeProvider";
-import { canAddItem, canAttachPhoto, canTick, itemDone, itemKind, itemRequired, itemSkipped, type Missing } from "@/features/checklist";
+import { canAddItem, canAttachPhoto, canRemoveItem, canSetRequired, canTick, cleanText, itemDone, itemKind, itemRequired, itemSkipped, itemsFromTemplate, LABEL_MAX, templatesForVisit, type Missing } from "@/features/checklist";
 import { PhotoStrip } from "@/features/PhotoStrip";
-import { Button, StatusChip, TextField } from "@/ui/controls";
+import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, RowView } from "@/ui/surfaces";
+import { Card, ListRow, RowView } from "@/ui/surfaces";
 
 /** the checklist card of a visit at work (or an inspection on site) */
 export function ChecklistCard({ v, missing }: { v: Visit; missing: Missing }) {
@@ -177,6 +177,176 @@ export function MissingSheet({ v, missing, open, onFill, onSkip, step }: {
         <View testID="chk-skip">
           <Button label={t("chk.skip")} variant="secondary" full onPress={onSkip} />
         </View>
+      </View>
+    </Sheet>
+  );
+}
+
+/**
+ * The office's checklist of a visit before it starts (§7.4, CH3; canEditVisitItems): each item's text and «Обязательный»
+ * (a sheet), «Выше» / «Ниже», «Убрать»; a new item; «Добавить из шаблона» — also for an inspection sales booked (it came
+ * without a snapshot, §11.8 №8). Every change is one row's op with «Отменить».
+ */
+export function ChecklistEditor({ v }: { v: Visit }) {
+  const store = useStore();
+  const { t } = useI18n();
+  const toast = useToast();
+  const [extra, setExtra] = useState("");
+  const [extraRequired, setExtraRequired] = useState(true);
+  const [editing, setEditing] = useState<ChecklistItem | null>(null);
+  const [picking, setPicking] = useState(false);
+  const say = (msg: string, undo: () => void) => toast.show(store.online ? msg : t("offline.queued"), undo);
+  const templates = templatesForVisit(v, store.db.checklistTemplates ?? []);
+  const add = () => {
+    if (!extra.trim()) return;
+    say(t("check.added"), store.addVisitItem(v.id, extra, extraRequired));
+    setExtra("");
+  };
+  return (
+    <View testID="chk-editor">
+      <Card>
+        <RowView style={{ justifyContent: "space-between" }}>
+          <T v="heading">{t("visit.checklist")}</T>
+          <T v="caption" tone="mut">
+            {t("check.preview", { n: v.checklist.length })}
+          </T>
+        </RowView>
+        <T v="caption" tone="mut">
+          {t("chk3.hint")}
+        </T>
+        {v.checklist.length === 0 ? (
+          <T v="body" tone="mut">
+            {t("chk3.empty")}
+          </T>
+        ) : null}
+        {v.checklist.map((item, i) => (
+          <View key={item.id} testID={`chk-edit-${i}`} style={{ gap: space[1] }}>
+            <RowView gap={space[2]}>
+              {itemKind(item) === "photo" ? (
+                <Icon name="camera" s={size.iconSm} />
+              ) : (
+                <T v="body" tone="mut">
+                  ○
+                </T>
+              )}
+              <T v="body" style={{ flex: 1 }}>
+                {item.label}
+              </T>
+            </RowView>
+            <T v="caption" tone="mut">
+              {[itemRequired(item) ? t("chk3.requiredShort") : t("chk3.optional"), item.templateName ? t("chk3.from", { name: item.templateName }) : null].filter(Boolean).join(" · ")}
+            </T>
+            <RowView gap={space[2]}>
+              <Button label={t("chk3.up")} size="sm" variant="ghost" disabled={i === 0} accessibilityLabel={`${t("chk3.up")} · ${item.label}`}
+                onPress={() => say(t("chk3.moved"), store.moveVisitItem(v.id, item.id, -1))} />
+              <Button label={t("chk3.down")} size="sm" variant="ghost" disabled={i === v.checklist.length - 1} accessibilityLabel={`${t("chk3.down")} · ${item.label}`}
+                onPress={() => say(t("chk3.moved"), store.moveVisitItem(v.id, item.id, 1))} />
+              <View style={{ flex: 1 }} />
+              <Button label={t("chk3.edit")} size="sm" variant="secondary" accessibilityLabel={`${t("chk3.edit")} · ${item.label}`} onPress={() => setEditing(item)} />
+            </RowView>
+          </View>
+        ))}
+        <RowView>
+          <View style={{ flex: 1 }}>
+            <TextField type="text" value={extra} onChangeText={(x) => setExtra(x.slice(0, LABEL_MAX))} placeholder={t("check.addPlaceholder")} icon="plus" />
+          </View>
+          <Button label={t("check.add")} size="sm" variant="secondary" disabled={!extra.trim()} onPress={add} />
+        </RowView>
+        <RowView style={{ justifyContent: "space-between" }}>
+          <T v="body" style={{ flex: 1 }}>
+            {t("chk3.required")}
+          </T>
+          <Toggle label={`${t("chk3.required")} · ${t("check.add")}`} on={extraRequired} onChange={setExtraRequired} />
+        </RowView>
+        <View testID="chk-from-template">
+          <Button label={t("chk3.fromTemplate")} icon="plus" variant="secondary" full onPress={() => setPicking(true)} />
+        </View>
+      </Card>
+
+      <Sheet visible={picking} onClose={() => setPicking(false)} title={t("chk3.templates")}>
+        <View testID="chk-templates" style={{ gap: space[1] }}>
+          {templates.length === 0 ? (
+            <T v="body" tone="mut">
+              {t("chk3.noTemplates")}
+            </T>
+          ) : null}
+          {templates.map(({ template, added }) => (
+            <ListRow
+              key={template.id}
+              title={template.name}
+              subtitle={added ? t("chk3.added") : t("check.preview", { n: template.items.length })}
+              onPress={
+                added
+                  ? undefined
+                  : () => {
+                      setPicking(false);
+                      // the count of what really comes (the 200 cap, doubles); nothing — no toast (its «Отменить» would do nothing)
+                      const cur = store.db.visits.find((x) => x.id === v.id) ?? v;
+                      const n = itemsFromTemplate(cur, template, () => "").length;
+                      if (n) say(t("chk3.addedN", { n }), store.addVisitTemplate(v.id, template.id));
+                    }
+              }
+            />
+          ))}
+        </View>
+      </Sheet>
+
+      {editing ? <EditItemSheet v={v} item={editing} onClose={() => setEditing(null)} /> : null}
+    </View>
+  );
+}
+
+function EditItemSheet({ v, item, onClose }: { v: Visit; item: ChecklistItem; onClose: () => void }) {
+  const store = useStore();
+  const { t } = useI18n();
+  const toast = useToast();
+  const [label, setLabel] = useState(item.label);
+  const [required, setRequired] = useState(itemRequired(item));
+  const lockedOn = itemRequired(item) && !canSetRequired(store.role, false);
+  // as the store will take it: an empty text keeps the old one; «Обязательный» off only when the role may
+  const clean = cleanText(label);
+  const next = {
+    ...(clean && clean !== item.label ? { label: clean } : {}),
+    ...(required !== itemRequired(item) && canSetRequired(store.role, required) ? { required } : {}),
+  };
+  const dirty = Object.keys(next).length > 0;
+  const say = (msg: string, undo: () => void) => toast.show(store.online ? msg : t("offline.queued"), undo);
+  const save = () => {
+    onClose();
+    if (dirty) say(t("chk3.edited"), store.editVisitItem(v.id, item.id, next));
+  };
+  return (
+    <Sheet visible onClose={onClose} title={t("chk3.editTitle")} dirty={dirty} onSave={save}>
+      <View testID="chk-edit-sheet" style={{ gap: space[2] }}>
+        <TextField label={t("chk3.label")} type="text" value={label} onChangeText={(x) => setLabel(x.slice(0, LABEL_MAX))} />
+        <RowView style={{ justifyContent: "space-between" }}>
+          <T v="body" style={{ flex: 1 }}>
+            {t("chk3.required")}
+          </T>
+          {lockedOn ? <StatusChip status="neutral" label={t("chk3.required")} /> : <Toggle label={t("chk3.required")} on={required} onChange={setRequired} />}
+        </RowView>
+        {lockedOn ? (
+          <T v="caption" tone="mut">
+            {t("chk3.directorOnly")}
+          </T>
+        ) : null}
+        <View testID="chk-edit-save">
+          <Button label={t("ue.save")} icon="check" full disabled={!dirty} onPress={save} />
+        </View>
+        {canRemoveItem(store.role, store.db.me, v, item) ? (
+          <View testID="chk-edit-remove">
+            <Button
+              label={t("chk3.remove")}
+              icon="trash"
+              variant="ghost"
+              full
+              onPress={() => {
+                onClose();
+                say(t("chk3.removed"), store.removeVisitItem(v.id, item.id));
+              }}
+            />
+          </View>
+        ) : null}
       </View>
     </Sheet>
   );

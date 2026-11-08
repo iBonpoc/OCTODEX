@@ -22,8 +22,8 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
 import { PhotoStrip } from "@/features/PhotoStrip";
-import { checklistGate, visitSettings } from "@/features/checklist";
-import { ChecklistCard, MissingSheet } from "@/features/VisitChecklist";
+import { canEditVisitItems, checklistGate, visitSettings } from "@/features/checklist";
+import { ChecklistCard, ChecklistEditor, MissingSheet } from "@/features/VisitChecklist";
 import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
 import { Button, IconButton, Segmented, StatusChip, Steps } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
@@ -177,7 +177,9 @@ export default function VisitScreen() {
         ))}
       </Card>
 
-      {v.checklist.length > 0 && (v.step === "scheduled" || v.step === "en_route" || v.step === "on_site") ? (
+      {/* the office edits the items before the visit (§7.4, CH3); an empty list too — «Добавить из шаблона» */}
+      {canEditVisitItems(store.role, v) ? <ChecklistEditor v={v} /> : null}
+      {!canEditVisitItems(store.role, v) && v.checklist.length > 0 && (v.step === "scheduled" || v.step === "en_route" || v.step === "on_site") ? (
         <Card>
           <RowView style={{ justifyContent: "space-between" }}>
             <T v="heading">{t("visit.checklist")}</T>

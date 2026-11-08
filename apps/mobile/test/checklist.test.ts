@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canAddItem, canAttachPhoto, canEditTemplates, canEditVisitSettings, canRemoveItem, canReview, canSkip, canTick, cleanTemplate, cleanText, visitClosed,
   checklistFor, checklistGate, jobServices, snapshotPhotoMins, checklistKindOf, itemDone, itemKind, itemRequired, itemSkipped, missedCount, photoMinimums, photoStageOf,
-  VISIT_SETTINGS_DEFAULT, visitMissed, visitSettings, visitSettingsOf,
+  VISIT_SETTINGS_DEFAULT, visitMissed, visitSettings, visitSettingsOf, canEditVisitItems, canSetRequired, moveItem, templatesForVisit, itemsFromTemplate,
 } from "../src/features/checklist";
 import type { ChecklistItem, ChecklistTemplate, Photo, Visit, VisitSettings } from "../src/data/types";
 
@@ -225,5 +225,64 @@ describe("unit:checklistFor — the snapshot's photo minimums and the job's serv
     const option = { lines: [{ id: "l1", catalogItemId: "cat1" }, { id: "l2", catalogItemId: "cat2", optional: true }, { id: "l3", catalogItemId: "cat3", optional: true }, { id: "l4" }] };
     expect(jobServices(option, ["l3"], [{ catalogItemId: "cat4" }, { catalogItemId: "cat1" }, {}])).toEqual(["cat1", "cat3", "cat4"]);
     expect(jobServices(undefined, [], [{ catalogItemId: "cat9" }])).toEqual(["cat9"]);
+  });
+});
+
+describe("unit:checklistOffice — the office edits a visit's items before it starts (§7.4, CH3)", () => {
+  it("only the office, only on a scheduled / en-route visit", () => {
+    for (const step of ["scheduled", "en_route"] as const) {
+      expect(canEditVisitItems("director", visit({ step }))).toBe(true);
+      expect(canEditVisitItems("dispatcher", visit({ step }))).toBe(true);
+      expect(canEditVisitItems("sales", visit({ step }))).toBe(false);
+      expect(canEditVisitItems("tech", visit({ step }))).toBe(false);
+    }
+    expect(canEditVisitItems("director", visit({ step: "on_site" }))).toBe(false);
+    expect(canEditVisitItems("director", visit({ step: "scheduled", closed: true }))).toBe(false);
+  });
+  it("«Обязательный» on — the office; off — the director (the server's guard)", () => {
+    expect(canSetRequired("dispatcher", true)).toBe(true);
+    expect(canSetRequired("dispatcher", false)).toBe(false);
+    expect(canSetRequired("director", false)).toBe(true);
+    expect(canSetRequired("sales", true)).toBe(false);
+  });
+  it("«Выше» / «Ниже»: the two swapped items, an unnumbered list renumbered; the ends do nothing", () => {
+    const list = [item("a", { position: 0 }), item("b", { position: 1 }), item("c", { position: 2 })];
+    expect(moveItem(list, "b", -1)).toEqual([{ id: "b", position: 0 }, { id: "a", position: 1 }]);
+    expect(moveItem(list, "b", 1)).toEqual([{ id: "c", position: 1 }, { id: "b", position: 2 }]);
+    expect(moveItem(list, "a", -1)).toEqual([]);
+    expect(moveItem(list, "c", 1)).toEqual([]);
+    expect(moveItem(list, "x", 1)).toEqual([]);
+    // positions equal (old data): the new order is numbered whole
+    const flat = [item("a", { position: 0 }), item("b", { position: 0 }), item("c", { position: 0 })];
+    expect(moveItem(flat, "c", -1)).toEqual([{ id: "c", position: 1 }, { id: "b", position: 2 }]);
+  });
+  it("templates for a visit: live with items; «added» when the visit has its items", () => {
+    const v = visit({ checklist: [item("x", { templateId: "t1" })] });
+    const out = templatesForVisit(v, [tpl("t1"), tpl("t2"), tpl("t3", { archivedAt: "2026-11-01T00:00:00Z" }), tpl("t4", { items: [] })]);
+    expect(out.map((x) => [x.template.id, x.added])).toEqual([["t1", true], ["t2", false]]);
+  });
+  it("«Добавить из шаблона»: new ids after the visit's own, the template's name; twice adds nothing; up to 200", () => {
+    let n = 0;
+    const id = () => `n${++n}`;
+    const t = tpl("t2", { items: [{ id: "i1", label: "one", kind: "check", required: true }, { id: "i2", label: "two", kind: "photo", required: false, hint: "h" }] });
+    const v = visit({ checklist: [item("x", { position: 4 })] });
+    const out = itemsFromTemplate(v, t, id);
+    expect(out).toEqual([
+      { id: "n1", label: "one", done: false, kind: "check", required: true, templateId: "t2", templateName: "T t2", position: 5 },
+      { id: "n2", label: "two", done: false, kind: "photo", required: false, hint: "h", templateId: "t2", templateName: "T t2", position: 6 },
+    ]);
+    expect(itemsFromTemplate(visit({ checklist: [...v.checklist, ...out] }), t, id)).toEqual([]);
+    expect(itemsFromTemplate(visit({ checklist: [] }), t, id)[0].position).toBe(0);
+    expect(itemsFromTemplate(v, t, id, 2)).toHaveLength(1);
+    expect(itemsFromTemplate(v, { ...t, archivedAt: "2026-11-01T00:00:00Z" }, id)).toEqual([]);
+  });
+});
+
+describe("unit:checklistText — what the server's [[:cntrl:]] may refuse (CH3 review)", () => {
+  it("line / paragraph separators become a space; the cut never leaves half a pair", () => {
+    expect(cleanText("a\u2028b\u2029c")).toBe("a b c");
+    const emoji = "🙂".repeat(3);
+    expect(cleanText(emoji, 2)).toBe("🙂🙂");
+    expect(Array.from(cleanText("x".repeat(299) + "🙂🙂"))).toHaveLength(300);
   });
 });
