@@ -274,3 +274,45 @@ describe("review M5a: fixes", () => {
     expect(sent.map((x) => [x.kind, (x.payload.e as { id?: string } | undefined)?.id])).toEqual([[K.mSave, undefined], [K.eSave, "e1"], [K.eSave, "e2"]]);
   });
 });
+
+describe("unit:gutterData — M5b: places and «Сделать заявкой» (S4g, S1b)", () => {
+  const on = { modules: { gutters: { enabled: true, trialEndsAt: new Date(Date.now() + DAY).toISOString(), settings: {}, rowVersion: 1 } } };
+  const g = (ms: Partial<MeasurementRow>[]) => ({ measurements: ms.map((m, i) => ({ ...M, id: `m${i}`, leadId: null, ...m })), elements: [] });
+  it("lead: no measurement → «Замер» linked to the lead (and its property); one or more → «Открыть замер» the newest", async () => {
+    const { placeActions } = await import("../src/modules/registry");
+    const ctx = { role: "tech" as const, leadId: "l1", propertyId: "p1" };
+    expect(placeActions("lead", on, ctx, undefined, {})).toEqual([expect.objectContaining({ labelKey: "mod.gutters.measure", href: "/module/gutters/draw?lead=l1&property=p1", module: "gutters" })]);
+    const data = { gutters: g([{ leadId: "l1", updatedAt: "2026-11-01" }, { leadId: "l1", updatedAt: "2026-11-05" }, { leadId: "l2", updatedAt: "2026-11-09" }]) };
+    expect(placeActions("lead", on, ctx, undefined, data)).toEqual([expect.objectContaining({ labelKey: "mod.gutters.measureOpen", href: "/module/gutters/draw?m=m1" })]);
+    expect(placeActions("lead", on, { role: "director" }, undefined, data)).toEqual([]);
+  });
+  it("property: its own measurements; home: «Замерить здесь» — a new draft; nothing while the module is not active", async () => {
+    const { placeActions } = await import("../src/modules/registry");
+    const data = { gutters: g([{ propertyId: "p1" }]) };
+    expect(placeActions("property", on, { role: "sales", propertyId: "p1" }, undefined, data)[0]).toMatchObject({ href: "/module/gutters/draw?m=m0" });
+    expect(placeActions("property", on, { role: "sales", propertyId: "p2" }, undefined, data)[0]).toMatchObject({ href: "/module/gutters/draw?property=p2" });
+    expect(placeActions("home", on, { role: "tech" })).toEqual([expect.objectContaining({ id: "here", labelKey: "mod.gutters.measureHere", href: "/module/gutters/draw" })]);
+    expect(placeActions("home", { modules: {} }, { role: "tech" })).toEqual([]);
+  });
+  it("linkLead: the new lead takes the saved draft (one full write of the measurement, «Отменить» back); already on a lead or never saved — nothing", async () => {
+    const { linkLead } = await import("../src/modules/gutters/data");
+    const sent: { kind: string; payload: Record<string, unknown>; coalesceKey?: string }[] = [];
+    let undone = 0;
+    const s = {
+      db: withGutterData(makeSeed(), putMeasurement({ ...M, leadId: null, label: "Draft" })),
+      moduleOp: (_k: string, c: { kind: string; payload: Record<string, unknown>; apply: (d: never) => never; coalesceKey?: string }) => {
+        sent.push({ kind: c.kind, payload: c.payload, coalesceKey: c.coalesceKey });
+        s.db = c.apply(s.db as never);
+        return () => void (undone += 1);
+      },
+    };
+    const undo = linkLead(s as never, "m1", "lead-9");
+    expect(sent).toEqual([{ kind: K.mSave, payload: { m: { id: "m1", label: "Draft", status: "draft", propertyId: null, leadId: "lead-9" } }, coalesceKey: "m1" }]);
+    expect(gutterData(s.db).measurements[0]!.leadId).toBe("lead-9");
+    undo!();
+    expect(undone).toBe(1);
+    expect(linkLead(s as never, "m1", "lead-10")).toBeNull(); // on a lead now
+    expect(linkLead(s as never, "nope", "lead-10")).toBeNull();
+    expect(sent).toHaveLength(1);
+  });
+});

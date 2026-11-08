@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import * as Clipboard from "expo-clipboard";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -14,6 +14,7 @@ import { formatPhoneUS } from "@/ui/inputFormat";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, CardList, ItemCard, RowView, Screen } from "@/ui/surfaces";
+import { moduleDef } from "@/modules/registry";
 
 /**
  * New lead in ~10 seconds, during the call: phone (paste), name, address, source, what they need.
@@ -24,6 +25,8 @@ export default function NewLead() {
   const store = useStore();
   const { db } = store;
   const toast = useToast();
+  // made from a module's thing (S1b «Сделать заявкой», spec 33 П21): the module links it to the new lead
+  const from = useLocalSearchParams<{ module?: string; ref?: string }>();
   const [phone, setPhone] = useState("");
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
@@ -46,7 +49,10 @@ export default function NewLead() {
       message: message.trim(),
       service: undefined,
     });
-    toast.show(store.online ? t("lead.saved", { name: name.trim() }) : t("offline.queued"), r.undo);
+    const linked = from.module && from.ref ? moduleDef(from.module)?.leadCreated?.({ ref: from.ref, leadId: r.id }, store) : undefined;
+    // «Отменить» takes the link back first, then the lead (rule 5)
+    const undo = typeof linked === "function" ? () => ((linked as () => void)(), r.undo()) : r.undo;
+    toast.show(store.online ? t("lead.saved", { name: name.trim() }) : t("offline.queued"), undo);
     router.replace(`/lead/${r.id}`);
   };
   return (

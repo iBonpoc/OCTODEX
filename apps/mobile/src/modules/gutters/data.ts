@@ -11,7 +11,7 @@
 import type { DB } from "@/data/types";
 import { supabase } from "@/cloud/client";
 import { PermanentError } from "@/cloud/ops";
-import type { ModuleOpHandler, ModuleRead } from "../registry";
+import type { ModuleOpHandler, ModuleRead, ModuleStore } from "../registry";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
 
 export const KEY = "gutters";
@@ -47,6 +47,30 @@ export const dropMeasurement = (id: string) => (g: GutterData): GutterData => ({
 export function measurementOf(g: GutterData, id: string): { m: MeasurementRow; elements: ElementRow[] } | null {
   const m = g.measurements.find((x) => x.id === id);
   return m ? { m, elements: g.elements.filter((e) => e.measurementId === id) } : null;
+}
+
+/** the module's data as a place gets it (DB.moduleData.gutters, unknown to the core) */
+export const asGutterData = (data: unknown): GutterData => gutterData({ moduleData: { [KEY]: data } });
+
+/** the newest measurement of a lead or a property (the place's «Открыть замер»), or undefined */
+export function latestFor(g: GutterData, by: { leadId?: string; propertyId?: string }): MeasurementRow | undefined {
+  const of = g.measurements.filter((m) => (by.leadId ? m.leadId === by.leadId : !!by.propertyId && m.propertyId === by.propertyId));
+  return of.sort((a, b) => (b.updatedAt ?? "").localeCompare(a.updatedAt ?? ""))[0];
+}
+
+/** the measurement's own fields (what measurement.save writes) */
+export const ownFields = (m: MeasurementRow): MeasurementRow => ({ id: m.id, label: m.label, status: m.status, propertyId: m.propertyId, leadId: m.leadId });
+
+/**
+ * S1b «Сделать заявкой»: the new lead made from a draft takes it (ModuleDef.leadCreated). A measurement the store does
+ * not have (never saved) or one already on a lead — nothing. Returns the store's «Отменить».
+ */
+export function linkLead(store: ModuleStore, ref: string, leadId: string): (() => void) | null {
+  const m = gutterData(store.db).measurements.find((x) => x.id === ref);
+  if (!m || m.leadId) return null;
+  const row = { ...ownFields(m), leadId };
+  const undo = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...m, leadId })), coalesceKey: m.id, made: [m.id] });
+  return typeof undo === "function" ? (undo as () => void) : null;
 }
 
 /* ---------- the server's rows ---------- */

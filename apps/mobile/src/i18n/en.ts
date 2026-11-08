@@ -2398,6 +2398,10 @@ export const en: Dict = {
   "mod.gutters.draw.expired": "The trial is over — the drawing will not be saved",
   "mod.gutters.draw.off": "The module is off — the drawing will not be saved",
   "mod.gutters.draw.connect": "Turn on",
+  "mod.gutters.measure": "Measure",
+  "mod.gutters.measureOpen": "Open measurement",
+  "mod.gutters.measureHere": "Measure here",
+  "mod.gutters.draw.toLead": "Make it a lead",
   "mod.gutters.draw.selRun": "Run · {len} · st {n}",
   "mod.gutters.draw.selDs": "Downspout · st {n}",
 };

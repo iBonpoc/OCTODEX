@@ -52,7 +52,7 @@ export default function CompanyModules() {
           <T v="caption" tone="mut">{t("mod.price", { days: d.trialDays, price: money(d.priceCentsMonthly) })}</T>
           {v.locked ? <T v="caption">{t("mod.lockedHint")}</T> : null}
           {/* the module's own card is its «settings» place: its tools that save nothing show for everyone, on or off (spec 33 П20.3) */}
-          {(d.places?.settings?.({ role: store.role }) ?? []).map((a) => (
+          {(d.places?.settings?.({ role: store.role }, store.db.moduleData?.[d.key]) ?? []).map((a) => (
             <View key={a.id} testID={`module-${d.key}-${a.id}`}>
               <Button label={t(a.labelKey)} icon={a.icon} variant="secondary" onPress={() => router.push(a.href as never)} />
             </View>

@@ -52,6 +52,12 @@ export type ModuleOpHandler = (
   ctx: { companyId: string; userId: string; run: (p: PromiseLike<{ error: { message: string; code?: string; hint?: string } | null; status?: number }>) => Promise<void> },
 ) => Promise<void>;
 
+/** what a module's hook gets of the store (store.tsx): the data and the module's own change */
+export interface ModuleStore {
+  db: import("@/data/types").DB;
+  moduleOp: (module: string, change: { kind: string; payload: Record<string, unknown>; apply: (d: import("@/data/types").DB) => import("@/data/types").DB; coalesceKey?: string; made?: string[] }) => unknown;
+}
+
 /** what a module's load gets: the company's live rows of one of its own tables (deleted_at is null), page by page */
 export interface ModuleRead {
   live(table: string, cols: string): Promise<Record<string, unknown>[]>;
@@ -65,8 +71,9 @@ export interface ModuleDef {
   trialDays: number;
   /** the add-on's price a month (founder О1); payment itself is the step «Оплаты» */
   priceCentsMonthly: number;
-  /** the module's actions by place; a place with nothing for this screen / role returns [] */
-  places?: Partial<Record<ModulePlace, (ctx: PlaceCtx) => ModuleAction[]>>;
+  /** the module's actions by place; a place with nothing for this screen / role returns []. `data` — the module's own
+   *  DB.moduleData[key] (e.g. «Открыть замер» when the lead has one) */
+  places?: Partial<Record<ModulePlace, (ctx: PlaceCtx, data: unknown) => ModuleAction[]>>;
   /** sends the module's own changes (module.op); a module without it has no changes of its own yet */
   ops?: ModuleOpHandler;
   /**
@@ -79,6 +86,11 @@ export interface ModuleDef {
    * row (switched on once — after the trial drafts still open, founder О2). A failed read keeps what the phone had.
    */
   load?: (read: ModuleRead) => Promise<unknown>;
+  /**
+   * a lead was made from a module's thing (S1b «Сделать заявкой»: /lead/new?module=<key>&ref=<id>): the module links its
+   * thing to the lead through the store it is given (moduleOp). The lead form is the core's, unchanged (spec 14).
+   */
+  leadCreated?: (x: { ref: string; leadId: string }, store: ModuleStore) => (() => void) | null | undefined;
   /** the text of «not saved: the trial is over» (a refused batch of this module's changes, spec 33 П21.1); params {count} */
   rejectedKey?: DictKey;
 }
@@ -150,8 +162,8 @@ export const activeModules = (company: Pick<Company, "modules"> | null | undefin
   allModules().filter((d) => moduleActive(company, d.key, now));
 
 /** the actions the company's usable modules add to a place (a module not active adds nothing — founder О2) */
-export function placeActions(place: ModulePlace, company: Pick<Company, "modules"> | null | undefined, ctx: PlaceCtx, now = Date.now()): (ModuleAction & { module: string })[] {
-  return activeModules(company, now).flatMap((d) => (d.places?.[place]?.(ctx) ?? []).map((a) => ({ ...a, module: d.key })));
+export function placeActions(place: ModulePlace, company: Pick<Company, "modules"> | null | undefined, ctx: PlaceCtx, now = Date.now(), moduleData?: Record<string, unknown>): (ModuleAction & { module: string })[] {
+  return activeModules(company, now).flatMap((d) => (d.places?.[place]?.(ctx, moduleData?.[d.key]) ?? []).map((a) => ({ ...a, module: d.key })));
 }
 
 /**

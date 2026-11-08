@@ -2398,6 +2398,10 @@ export const es: Dict = {
   "mod.gutters.draw.expired": "La prueba terminó — el dibujo no se guardará",
   "mod.gutters.draw.off": "El módulo está apagado — el dibujo no se guardará",
   "mod.gutters.draw.connect": "Activar",
+  "mod.gutters.measure": "Medir",
+  "mod.gutters.measureOpen": "Abrir medición",
+  "mod.gutters.measureHere": "Medir aquí",
+  "mod.gutters.draw.toLead": "Convertir en solicitud",
   "mod.gutters.draw.selRun": "Tramo · {len} · p {n}",
   "mod.gutters.draw.selDs": "Bajante · p {n}",
 };
