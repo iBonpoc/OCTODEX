@@ -358,6 +358,7 @@ export default function GutterSettingsScreen() {
               </Step>
             ))}
             <Switch testID="gset-use-sealantColor" on={use.sealantByColor} onChange={(v) => put("gset-use-sealantColor", ["use", "sealantByColor"], v)} label={t(k("u.sealantColor"))} />
+            {use.sealantByColor ? <T v="caption" tone="mut">{t(k("u.rebindHint"))}</T> : null}
             {/* spec П18.15: the supplier's fasteners — sizes only, never a brand; defaults «проверить» */}
             <Field label={t(k("u.woodScrew"))} testID="gset-use-woodScrew">
               <ChoiceChips items={WOOD_SCREWS.map((x) => ({ key: x, label: t(k(`u.screw.${SCREW_KEY[x]}`)) }))} value={use.woodScrew} onChange={(x) => put("gset-use-woodScrew", ["use", "woodScrew"], x)} />
@@ -366,7 +367,8 @@ export default function GutterSettingsScreen() {
             <Field label={t(k("u.anchor"))} testID="gset-use-anchor">
               <ChoiceChips items={ANCHORS.map((x) => ({ key: x, label: t(k(`u.anchor.${ANCHOR_KEY[x]}`)) }))} value={use.anchor} onChange={(x) => put("gset-use-anchor", ["use", "anchor"], x)} />
             </Field>
-            {SPIKE_SIZES.map((sz) => (
+            <Switch testID="gset-use-spikeBySize" on={use.spikeBySize} onChange={(v) => put("gset-use-spikeBySize", ["use", "spikeBySize"], v)} label={t(k("u.spikeBySize"))} />
+            {use.spikeBySize && SPIKE_SIZES.map((sz) => (
               <Field key={sz} label={t(k("u.spike"), { size: inch(sz) })} testID={`gset-use-spike-${sz}`}>
                 <ChoiceChips items={SPIKE_LENGTHS.map((x) => ({ key: x, label: inch(x) }))} value={use.spikeLenIn[sz]!} onChange={(x) => put(`gset-use-spike-${sz}`, ["use", "spikeLenIn", sz], x)} />
               </Field>

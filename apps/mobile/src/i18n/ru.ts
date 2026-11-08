@@ -2518,6 +2518,8 @@ export const ru = {
   "mod.gutters.set.u.anchor.any": "Любой",
   "mod.gutters.set.u.anchor.a316": "3/16 × 7/8″",
   "mod.gutters.set.u.anchor.a14": "¼ × 1″",
+  "mod.gutters.set.u.spikeBySize": "Длина spike по размеру желоба (своя позиция прайса на каждую длину)",
+  "mod.gutters.set.u.rebindHint": "Цены деталей с новым свойством (цвет, длина) поставьте заново в «Цены и прайс».",
   "mod.gutters.set.u.spike": "Длина spike для желоба {size}",
   "mod.gutters.set.u.fastenersHint": "Крепёж и длины spike — умолчания, проверьте под свою практику и поставщика.",
   "mod.gutters.set.rereading": "Не сохранено: настройки перечитываются с сервера после чужой правки. Повторите через минуту.",

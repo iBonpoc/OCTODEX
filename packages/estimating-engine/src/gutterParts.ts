@@ -6,7 +6,6 @@ import {
   DEFAULT_JOINTS,
   DEFAULT_WALL_KITS,
   DEFAULT_WALL_KIT_BY_WALL,
-  DEFAULT_SPIKE_LENGTH_IN,
   WOOD_SCREW,
   type GuardKit,
   type GutterMount,
@@ -196,7 +195,8 @@ export interface GutterRules {
   /** sealant in the joint's color (painted stock: one line per color; mill: plain sealant) — spec П18.15. Off by default:
    *  an item priced as plain «sealant» keeps its price until the company turns this on */
   sealantByColor: boolean;
-  /** a length attribute of a kit part by gutter size, inches: { spike: { "5": "7" } } (spec П18.15) */
+  /** a length attribute of a kit part by gutter size, inches: { spike: { "5": "7" } } (spec П18.15). Empty by default:
+   *  an item priced without a length keeps its price until the company turns lengths on (DEFAULT_SPIKE_LENGTH_IN) */
   kitLengthIn: Record<string, Record<string, string>>;
   /** the wood screw of the kits: its size and a washer (spec П18.15) */
   woodScrew: { screw: string; washer: boolean };
@@ -243,7 +243,7 @@ export const DEFAULT_GUTTER_RULES: GutterRules = {
   dsJoin: "rivet",
   jointsPerSealantTube: 8,
   sealantByColor: false,
-  kitLengthIn: { spike: DEFAULT_SPIKE_LENGTH_IN },
+  kitLengthIn: {},
   woodScrew: { screw: WOOD_SCREW, washer: false },
   anchor: "masonry",
   solderedMaterials: ["copper"],
@@ -284,9 +284,14 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
     guardKits: { ...d.guardKits, ...o.guardKits },
     joints,
     coilBlankIn: { ...d.coilBlankIn, ...o.coilBlankIn },
-    kitLengthIn: { ...d.kitLengthIn, ...o.kitLengthIn },
+    // only text lengths (a number would break the key); a copy, never the caller's object (review V1 №4, №7)
+    kitLengthIn: Object.fromEntries(
+      Object.entries({ ...d.kitLengthIn, ...o.kitLengthIn }).map(([part, t]) => [part, Object.fromEntries(Object.entries(t ?? {}).filter(([, v]) => typeof v === "string" && v.trim() !== ""))]),
+    ),
     woodScrew: { ...d.woodScrew, ...o.woodScrew },
   };
+  r.woodScrew = { ...r.woodScrew, washer: r.woodScrew.washer === true };
+  if (typeof r.sealantByColor !== "boolean") r.sealantByColor = d.sealantByColor;
   if (typeof r.woodScrew.screw !== "string" || !r.woodScrew.screw.trim()) r.woodScrew = { ...r.woodScrew, screw: d.woodScrew.screw };
   if (typeof r.anchor !== "string" || !r.anchor.trim()) r.anchor = d.anchor;
   for (const k of POSITIVE) if (!okPos(r[k])) (r as unknown as Record<string, unknown>)[k] = d[k];

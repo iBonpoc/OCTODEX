@@ -14,15 +14,20 @@ const run = (o: Partial<MeasuredRun> & { id: string; lengthIn: number }): Measur
 const ds = (o: Partial<MeasuredDownspout> & { id: string; runId: string }): MeasuredDownspout => ({
   shape: "rect", size: "3x4", material: "alu", color: "white", bottom: { kind: "extension" }, ...o,
 });
+const LEN = { kitLengthIn: { spike: DEFAULT_SPIKE_LENGTH_IN } };
 const one = (r: Partial<MeasuredRun>, d: Partial<MeasuredDownspout>[] = [], over?: Parameters<typeof computeGutterParts>[1]) =>
   computeGutterParts({ runs: [run({ id: "1", lengthIn: 480, ...r })], corners: [], downspouts: d.map((x, i) => ds({ id: `d${i}`, runId: "1", ...x })) }, over);
 const find = (parts: PartQty[], f: (p: PartQty) => boolean) => parts.filter(f);
 const part = (parts: PartQty[], name: string) => find(parts, (p) => p.attrs.part === name);
 
-describe("spike length by gutter size (a company setting, «проверить»)", () => {
-  it("defaults: K 5″ → 7″, 6″ → 8″, 7″ → 9″; the length is an attribute and a key segment", () => {
+describe("spike length by gutter size (a company setting, off by default, «проверить»)", () => {
+  it("off by default: no length, the old key (an item priced before keeps its price)", () => {
+    const s = part(one({ size: "6", hanger: "spike" }).parts, "spike");
+    expect(s.map((p) => [p.key, p.attrs.lengthIn])).toEqual([["spike.aluminum.k.6", undefined]]);
+  });
+  it("on, the table: K 5″ → 7″, 6″ → 8″, 7″ → 9″; the length is an attribute and a key segment", () => {
     for (const [size, len] of [["5", "7"], ["6", "8"], ["7", "9"]]) {
-      const s = part(one({ size, hanger: "spike" }).parts, "spike");
+      const s = part(one({ size, hanger: "spike" }, [], LEN).parts, "spike");
       expect(s.map((p) => [p.attrs.lengthIn, p.qty])).toEqual([[len, "20"]]);
       expect(s[0]!.key).toBe(`spike.${len}.aluminum.k.${size}`);
     }
@@ -34,8 +39,12 @@ describe("spike length by gutter size (a company setting, «проверить»
     expect(none.attrs.lengthIn).toBeUndefined();
     expect(none.key).toBe("spike.aluminum.k.6");
   });
+  it("only text lengths count: a number or a blank is dropped, never a crash", () => {
+    const s = part(one({ size: "6", hanger: "spike" }, [], { kitLengthIn: { spike: { "6": 8 as never, "5": " " } } }).parts, "spike")[0]!;
+    expect([s.key, s.attrs.lengthIn]).toEqual(["spike.aluminum.k.6", undefined]);
+  });
   it("ferrules have no length", () => {
-    expect(part(one({ hanger: "spike" }).parts, "ferrule").every((p) => p.attrs.lengthIn === undefined)).toBe(true);
+    expect(part(one({ hanger: "spike" }, [], LEN).parts, "ferrule").every((p) => p.attrs.lengthIn === undefined)).toBe(true);
   });
 });
 
@@ -55,6 +64,11 @@ describe("the kits' wood screw and anchor (company choice)", () => {
     expect(Number(wood[0]!.qty)).toBe(20 * 2 + 2 * 2 + 0); // 20 straps × 2 + the wall straps' 2 × 2
     expect(screws.find((p) => p.attrs.screw === "8x0.5")!.attrs.washer).toBeUndefined();
     expect(part(parts, "anchor").map((p) => p.attrs.anchor)).toEqual(["1/4x1"]);
+  });
+  it("a washer only for true; sealantByColor only for a boolean", () => {
+    const { parts } = one({ hanger: "fascia_strap" }, [], { woodScrew: { screw: "10x2", washer: "no" as never }, sealantByColor: "false" as never });
+    expect(part(parts, "screw").map((p) => p.attrs.washer)).toEqual([undefined]);
+    expect(part(parts, "sealant").map((p) => p.key)).toEqual(["sealant"]);
   });
   it("a blank choice keeps the default", () => {
     const { parts } = one({ hanger: "fascia_strap" }, [], { woodScrew: { screw: " ", washer: false }, anchor: "" });

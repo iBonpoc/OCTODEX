@@ -2518,6 +2518,8 @@ export const en: Dict = {
   "mod.gutters.set.u.anchor.any": "Any",
   "mod.gutters.set.u.anchor.a316": "3/16 × 7/8″",
   "mod.gutters.set.u.anchor.a14": "¼ × 1″",
+  "mod.gutters.set.u.spikeBySize": "Spike length by gutter size (a price item for each length)",
+  "mod.gutters.set.u.rebindHint": "Price the parts with the new property (color, length) again in «Prices and price list».",
   "mod.gutters.set.u.spike": "Spike length for a {size} gutter",
   "mod.gutters.set.u.fastenersHint": "Fasteners and spike lengths are defaults: check them against your practice and supplier.",
   "mod.gutters.set.rereading": "Not saved: the settings are being read again from the server after someone else's change. Try again in a minute.",

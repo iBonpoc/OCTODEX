@@ -12,7 +12,8 @@ describe("readUse: fasteners", () => {
   it("defaults: spike lengths of the engine, #10 × 1½″ without a washer, any anchor, one plain sealant", () => {
     const u = readUse({});
     expect(u.spikeLenIn).toEqual(Object.fromEntries(SPIKE_SIZES.map((s) => [s, DEFAULT_SPIKE_LENGTH_IN[s]])));
-    expect([u.woodScrew, u.washer, u.anchor, u.sealantByColor]).toEqual(["10x1.5", false, "masonry", false]);
+    expect([u.woodScrew, u.washer, u.anchor, u.sealantByColor, u.spikeBySize]).toEqual(["10x1.5", false, "masonry", false, false]);
+    expect(toRulesOverride({}).kitLengthIn).toEqual({ spike: {} });
   });
   it("only the listed values; anything else falls back (an older or a broken setting)", () => {
     const u = readUse({ use: { spikeLenIn: { "5": "6.5", "6": "99", "7": 9 }, woodScrew: "10x3", washer: "yes", anchor: "1/4x1", sealantByColor: true } });
@@ -24,7 +25,7 @@ describe("readUse: fasteners", () => {
 });
 
 describe("toRulesOverride → the engine", () => {
-  const raw = { use: { spikeLenIn: { "6": "7.5" }, woodScrew: "10x2", washer: true, anchor: "3/16x7/8", sealantByColor: true } };
+  const raw = { use: { spikeBySize: true, spikeLenIn: { "6": "7.5" }, woodScrew: "10x2", washer: true, anchor: "3/16x7/8", sealantByColor: true } };
   it("the choices reach the engine's rules", () => {
     const o = toRulesOverride(raw);
     expect(o.kitLengthIn?.spike?.["6"]).toBe("7.5");

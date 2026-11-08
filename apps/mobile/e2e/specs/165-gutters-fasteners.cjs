@@ -1,7 +1,7 @@
 /**
  * e2e 165 — крепёж и расходники поставщика в настройках Gutters (docs/specs/33-gutters-parts.md П18.15, V1). Every view.
- * - director, the trial on, «Настройки» → «Расходники»: wood screw #10 × 2″ with a washer, anchor ¼ × 1″, spike for a 6″
- *   gutter 7½″, sealant in the joint's color — each saved in the company's module settings;
+ * - director, the trial on, «Настройки» → «Расходники»: wood screw #10 × 2″ with a washer, anchor ¼ × 1″, spike lengths
+ *   on (off by default) and 7½″ for a 6″ gutter, sealant in the joint's color — each saved in the company's module settings;
  * - «Цены и прайс»: plain sealant before; after the switch the sealant row is the joint's color (white), the plain one gone.
  * Chips by place, not by words (rule 19); waits on what it checks.
  */
@@ -39,7 +39,8 @@ exports.run = async (h) => {
 
   await h.go("/module/gutters/settings");
   await tid("gset-use").waitFor({ timeout: 8000 });
-  h.expect((await chosenAt("gset-use-woodScrew")) === 1 && (await chosenAt("gset-use-anchor")) === 0 && (await chosenAt("gset-use-spike-6")) === 3, "defaults: #10 × 1½″, any anchor, 8″ spike for 6″");
+  h.expect((await chosenAt("gset-use-woodScrew")) === 1 && (await chosenAt("gset-use-anchor")) === 0, "defaults: #10 × 1½″, any anchor");
+  h.expect((await tid("gset-use-spike-6").count()) === 0, "spike lengths are off by default");
   await tid("gset-use-woodScrew").scrollIntoViewIfNeeded();
   await nth("gset-use-woodScrew", 2).click();
   await waitFor(async () => (await use()).woodScrew === "10x2", "#10 × 2″ saved");
@@ -47,6 +48,10 @@ exports.run = async (h) => {
   await waitFor(async () => (await use()).washer === true, "the washer saved");
   await nth("gset-use-anchor", 2).click();
   await waitFor(async () => (await use()).anchor === "1/4x1", "¼ × 1″ anchor saved");
+  await flip("gset-use-spikeBySize");
+  await waitFor(async () => (await use()).spikeBySize === true, "spike lengths on");
+  await tid("gset-use-spike-6").waitFor({ timeout: 5000 });
+  h.expect((await chosenAt("gset-use-spike-6")) === 3, "the 6″ gutter's spike is 8″ by default");
   await tid("gset-use-spike-6").scrollIntoViewIfNeeded();
   await nth("gset-use-spike-6", 2).click();
   await waitFor(async () => (await use()).spikeLenIn?.["6"] === "7.5", "7½″ spike for a 6″ gutter saved");

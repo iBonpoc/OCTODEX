@@ -2518,6 +2518,8 @@ export const es: Dict = {
   "mod.gutters.set.u.anchor.any": "Cualquiera",
   "mod.gutters.set.u.anchor.a316": "3/16 × 7/8″",
   "mod.gutters.set.u.anchor.a14": "¼ × 1″",
+  "mod.gutters.set.u.spikeBySize": "Largo del spike según la canaleta (un artículo de precio por largo)",
+  "mod.gutters.set.u.rebindHint": "Vuelva a poner precio a las piezas con la nueva propiedad (color, largo) en «Precios y lista de precios».",
   "mod.gutters.set.u.spike": "Largo del spike para canaleta de {size}",
   "mod.gutters.set.u.fastenersHint": "Las fijaciones y largos de spike son valores por defecto: revíselos según su práctica y proveedor.",
   "mod.gutters.set.rereading": "No guardado: los ajustes se están leyendo de nuevo del servidor tras el cambio de otra persona. Inténtelo en un minuto.",

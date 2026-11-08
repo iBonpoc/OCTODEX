@@ -342,6 +342,8 @@ export interface Use {
   touchUpPaint: boolean;
   dsJoin: "rivet" | "screw";
   guardPieceFt: Record<string, number>;
+  /** spike lengths by gutter size are on (off by default: a priced spike keeps its price) */
+  spikeBySize: boolean;
   /** spike length by gutter size, inches as text (spec П18.15, «проверить») */
   spikeLenIn: Record<string, (typeof SPIKE_LENGTHS)[number]>;
   woodScrew: (typeof WOOD_SCREWS)[number];
@@ -396,6 +398,7 @@ export function readUse(raw: unknown): Use {
     touchUpPaint: bool(u.touchUpPaint, DEFAULT_GUTTER_RULES.touchUpPaint),
     dsJoin: u.dsJoin === "screw" ? "screw" : "rivet",
     guardPieceFt: Object.fromEntries(GUARD_KINDS.map((id) => [id, num(g[id], USE_NUMS.guardPieceFt, Math.round(DEFAULT_GUARD_KITS[id]!.pieceIn / 12))])),
+    spikeBySize: bool(u.spikeBySize, false),
     spikeLenIn: Object.fromEntries(SPIKE_SIZES.map((sz) => [sz, one(obj(u.spikeLenIn)[sz], SPIKE_LENGTHS, DEFAULT_SPIKE_LENGTH_IN[sz] as (typeof SPIKE_LENGTHS)[number])])),
     woodScrew: one(u.woodScrew, WOOD_SCREWS, WOOD_SCREW as (typeof WOOD_SCREWS)[number]),
     washer: bool(u.washer, false),
@@ -432,7 +435,7 @@ export function toRulesOverride(raw: unknown): GutterRulesOverride {
     touchUpPaint: u.touchUpPaint,
     dsJoin: u.dsJoin,
     guardKits: Object.fromEntries(GUARD_KINDS.map((id) => [id, { ...DEFAULT_GUARD_KITS[id]!, pieceIn: u.guardPieceFt[id]! * 12 }])),
-    kitLengthIn: { spike: { ...u.spikeLenIn } },
+    kitLengthIn: { spike: u.spikeBySize ? { ...u.spikeLenIn } : {} },
     woodScrew: { screw: u.woodScrew, washer: u.washer },
     anchor: u.anchor,
     sealantByColor: u.sealantByColor,
