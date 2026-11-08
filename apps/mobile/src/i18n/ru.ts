@@ -2778,6 +2778,27 @@ export const ru = {
   "chk2.needItem": "Добавьте хотя бы один пункт",
   "chk2.notFound": "Шаблон не найден",
   "chk2.module": "Модуль: {m}",
+  // Приём заявок (docs/specs/34): the page /f/<token> — the client's language
+  "intake.title": "Заявка на расчёт",
+  "intake.intro": "Напишите {company}, что нужно сделать. Вам позвонят или напишут.",
+  "intake.name": "Ваше имя",
+  "intake.phone": "Телефон",
+  "intake.email": "Эл. почта",
+  "intake.address": "Адрес",
+  "intake.city": "Город",
+  "intake.state": "Штат",
+  "intake.zip": "Индекс",
+  "intake.service": "Вид работ",
+  "intake.message": "Что нужно сделать?",
+  "intake.consent": "Согласен получать SMS от {company} по моей заявке. Может взиматься плата за сообщения и данные. Ответьте STOP, чтобы отказаться.",
+  "intake.needContact": "Оставьте телефон или почту, чтобы вам ответили.",
+  "intake.send": "Отправить заявку",
+  "intake.sending": "Отправляем…",
+  "intake.sent": "Заявка отправлена",
+  "intake.sentHint": "{company} получила заявку и скоро свяжется с вами.",
+  "intake.error": "Не удалось отправить. Проверьте связь и попробуйте ещё раз.",
+  "intake.notFound": "Эта форма заявки недоступна.",
+  "intake.privacy": "Заявку получает {company}. OCTODEX обрабатывает её по поручению компании и не продаёт.",
 } as const;
 
 export type DictKey = keyof typeof ru;
