@@ -115,7 +115,7 @@ export default function EstimateScreen() {
           <RowView style={{ flexWrap: "wrap" }}>
             {/* a client-signed estimate changes only through «don't sign — change it» (with a reason) */}
             {isEstimateEditable(e.status) && e.status !== "awaiting_countersign" ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
-            {(e.status === "draft" || e.status === "sent") && canServe(db, e.customerId) ? <Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /> : null}
+            {(e.status === "draft" || e.status === "sent") && canServe(db, e.customerId) ? <View testID="est-send"><Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /></View> : null}
             {e.token ? <Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /> : null}
             <Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={pdf} />
             {/* E2b: only an unsigned link can be revoked (the signed client keeps their copy); director and office */}
@@ -222,11 +222,26 @@ function OnSiteSign({ e }: { e: Estimate }) {
   const [addonIds, setAddonIds] = useState<string[]>([]);
   useEffect(() => setOptionId(mainOption(doc).id), [doc]);
   const customer = store.db.customers.find((c) => c.id === e.customerId);
+  // C5 (spec 33 П23.9): the client signs on site what they would get by link — the same check first (review C5 №2)
+  const [force, setForce] = useState(false);
+  const check = beforeSend(store.db, e, { force });
+  const issues = !check.ok && check.reason === "lines" ? check : null;
   return (
     <>
       <EstimateView doc={doc} optionId={optionId} onOption={setOptionId} addonIds={addonIds} onAddons={setAddonIds} />
       <SectionTitle title={t("est.signOnSite")} />
-      {!canCountersign(store.db, store.db.me) ? (
+      {issues ? (
+        <Card>
+          <SendCheck
+            id="sign-check"
+            issues={issues.issues}
+            canForce={issues.canForce}
+            optionName={optionNameOf(doc)}
+            onEdit={isEstimateEditable(e.status) ? () => router.push(`/estimate/new?id=${e.id}`) : undefined}
+            onForce={() => setForce(true)}
+          />
+        </Card>
+      ) : !canCountersign(store.db, store.db.me) ? (
         <Card>
           <T v="body" tone="mut">
             {t("est.countersign.noRightOnSite")}
@@ -276,6 +291,7 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
       if (how === "sms") await openSms(customer?.phone ?? "", msg(url).text);
       if (how === "email") await openEmail(customer?.email ?? "", msg(url).subject, msg(url).text);
       if (how === "copy") await copyText(url);
+      setForce(false);
       toast.show(how === "copy" ? t("ue.linkCopied") : t("est.sentToast", { name: customer?.name ?? "" }), e.status === "draft" ? undo : undefined);
     } catch (err) {
       toast.show(t("portal.error", { msg: String((err as Error)?.message ?? err) }));
@@ -290,10 +306,10 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
         </T>
         {issues ? (
           <SendCheck
+            id="send-check"
             issues={issues.issues}
             canForce={issues.canForce}
-            multi={(e.doc?.options.length ?? 0) > 1}
-            optionName={(id) => e.doc?.options.find((o) => o.id === id)?.name ?? ""}
+            optionName={optionNameOf(e.doc)}
             onEdit={
               isEstimateEditable(e.status)
                 ? () => {
@@ -307,9 +323,9 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
         ) : null}
         <View testID="send-buttons">
         <RowView style={{ flexWrap: "wrap" }}>
-          <Button label={t("ue.sendSms")} icon="message" onPress={() => go("sms")} disabled={!!issues || !customer?.phone} />
-          <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => go("email")} disabled={!!issues || !customer?.email} />
-          <Button label={t("ue.copyLink")} icon="note" variant="secondary" onPress={() => go("copy")} disabled={!!issues} />
+          <View testID="send-sms"><Button label={t("ue.sendSms")} icon="message" onPress={() => go("sms")} disabled={!!issues || !customer?.phone} /></View>
+          <View testID="send-email"><Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => go("email")} disabled={!!issues || !customer?.email} /></View>
+          <View testID="send-copy"><Button label={t("ue.copyLink")} icon="note" variant="secondary" onPress={() => go("copy")} disabled={!!issues} /></View>
         </RowView>
         </View>
         <Divider />
@@ -334,20 +350,28 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
 const CHECK_WORD = { noPrice: "ue.src.noPrice", testPrice: "ue.src.testPrice", gone: "ue.src.gone" } as const;
 
 /** C5: what stops a send — by kind, icon + word + count and the lines' names (rule 2); a way out in one tap. */
-function SendCheck({ issues, canForce, multi, optionName, onEdit, onForce }: { issues: SendIssues; canForce: boolean; multi: boolean; optionName: (id: string) => string; onEdit?: () => void; onForce: () => void }) {
+/** the option a line is in, when there is more than one (a blank name → its number) */
+const optionNameOf = (doc: Estimate["doc"]) => (id: string) => {
+  const opts = doc?.options ?? [];
+  if (opts.length < 2) return "";
+  const i = opts.findIndex((o) => o.id === id);
+  return opts[i]?.name.trim() || `#${i + 1}`;
+};
+
+function SendCheck({ id, issues, canForce, optionName, onEdit, onForce }: { id: "send-check" | "sign-check"; issues: SendIssues; canForce: boolean; optionName: (id: string) => string; onEdit?: () => void; onForce: () => void }) {
   const { t } = useI18n();
   return (
-    <View testID="send-check" style={{ gap: space[2] }}>
-      <T v="heading">
-        {t(canForce ? "ue.check.review" : "ue.check.blocked")}
-      </T>
+    <View testID={id} style={{ gap: space[2] }}>
+      <View testID={`${id}-${canForce ? "review" : "blocked"}`}>
+        <T v="heading">{t(canForce ? "ue.check.review" : "ue.check.blocked")}</T>
+      </View>
       {SEND_ISSUE_KINDS.filter((k) => issues[k].length).map((k) => (
-        <View key={k} testID={`send-check-${k}`} style={{ gap: space[1] }}>
+        <View key={k} testID={`${id}-${k}`} style={{ gap: space[1] }}>
           <View style={{ flexDirection: "row" }}>
             <StatusChip status={k === "noPrice" ? "bad" : "warn"} label={`${t(CHECK_WORD[k])} · ${issues[k].length}`} />
           </View>
           <T v="caption" tone="mut">
-            {issues[k].map((l) => (multi ? `${l.name} (${optionName(l.optionId)})` : l.name)).join(", ")}
+            {issues[k].map((l) => (optionName(l.optionId) ? `${l.name} (${optionName(l.optionId)})` : l.name)).join(", ")}
           </T>
         </View>
       ))}
@@ -356,12 +380,12 @@ function SendCheck({ issues, canForce, multi, optionName, onEdit, onForce }: { i
       </T>
       <RowView style={{ flexWrap: "wrap" }}>
         {onEdit ? (
-          <View testID="send-check-edit">
+          <View testID={`${id}-edit`}>
             <Button label={t("ue.check.edit")} icon="pencil" variant="secondary" onPress={onEdit} />
           </View>
         ) : null}
         {canForce ? (
-          <View testID="send-check-force">
+          <View testID={`${id}-force`}>
             <Button label={t("ue.check.force")} icon="send" variant="secondary" onPress={onForce} />
           </View>
         ) : null}

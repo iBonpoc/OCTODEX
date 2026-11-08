@@ -1,6 +1,7 @@
 /**
  * e2e 164 — C5 «проверка перед отправкой сметы» (docs/specs/33-gutters-estimate.md П23.9). Every view.
  * A draft whose lines a module marked: «нет цены», «тестовая цена», «нет в замере», and a «нет цены» line with quantity 0.
+ * - on site: «Подписать на месте» is replaced by the same check (the client signs what they would get by link);
  * - «Отправить клиенту»: «Нельзя отправить», the send buttons are off, no «Всё равно отправить»; the quantity-0 line is
  *   not listed (0 is how a part is left out);
  * - «Изменить смету» → the editor; a price on the «нет цены» line → saved;
@@ -20,7 +21,8 @@ exports.run = async (h) => {
     h.expect(!!v, what);
   };
   const est = async () => ((await h.db())?.estimates ?? []).find((e) => e.id === EID);
-  const disabled = async (name) => (await h.sheet().getByRole("button", { name, exact: true }).getAttribute("aria-disabled")) === "true";
+  const disabled = async (key) => (await tid(`send-${key}`).getByRole("button").getAttribute("aria-disabled")) === "true";
+  const openSend = async () => { await tid("est-send").getByRole("button").click(); await tid("send-check").waitFor({ timeout: 8000 }); };
 
   await h.go("/today");
   await p.evaluate(({ k, id }) => {
@@ -42,14 +44,16 @@ exports.run = async (h) => {
 
   // the check: «нет цены» stops the send
   await h.go(`/estimate/${EID}`);
-  await p.getByRole("button", { name: "Отправить клиенту" }).first().click();
-  await tid("send-check").waitFor({ timeout: 8000 });
-  await h.expectText(/Нельзя отправить/, "«Нельзя отправить»");
+  // on site: the client cannot sign it either (review C5 №2)
+  await tid("sign-check-blocked").waitFor({ timeout: 8000 });
+  h.expect((await tid("sign-check-noPrice").count()) === 1, "on-site signing is stopped by «нет цены»");
+  await openSend();
+  h.expect((await tid("send-check-blocked").count()) === 1, "«Нельзя отправить»");
   for (const k of ["noPrice", "testPrice", "gone"]) h.expect((await tid(`send-check-${k}`).count()) === 1, `the ${k} group is listed`);
   h.expect(/Downspout 3x4/.test(await tid("send-check-noPrice").innerText()), "the «нет цены» line by name");
   h.expect(!/Leaf guard/.test(await tid("send-check").innerText()), "the quantity-0 line is not listed");
   h.expect((await tid("send-check-force").count()) === 0, "no «Всё равно отправить» while a line has no price");
-  h.expect(await disabled("Копировать ссылку"), "the send buttons are off");
+  h.expect(await disabled("copy"), "the send buttons are off");
   await h.shot("blocked");
 
   // «Изменить смету» → a price on the line → saved
@@ -66,16 +70,15 @@ exports.run = async (h) => {
 
   // again: only a test price and a line not in the measurement → can force
   await h.go(`/estimate/${EID}`);
-  await p.getByRole("button", { name: "Отправить клиенту" }).first().click();
-  await tid("send-check").waitFor({ timeout: 8000 });
-  await h.expectText(/Проверьте перед отправкой/, "«Проверьте перед отправкой»");
+  await openSend();
+  h.expect((await tid("send-check-review").count()) === 1, "«Проверьте перед отправкой»");
   h.expect((await tid("send-check-noPrice").count()) === 0, "no «нет цены» left");
-  h.expect(await disabled("Копировать ссылку"), "still off before «Всё равно отправить»");
+  h.expect(await disabled("copy"), "still off before «Всё равно отправить»");
   await h.shot("review");
   await tid("send-check-force").getByRole("button").click();
   await waitFor(async () => (await tid("send-check").count()) === 0, "the check is gone after «Всё равно отправить»");
-  await waitFor(async () => !(await disabled("Копировать ссылку")), "the send buttons are on");
-  await h.sheet().getByRole("button", { name: "Копировать ссылку", exact: true }).click();
+  await waitFor(async () => !(await disabled("copy")), "the send buttons are on");
+  await tid("send-copy").getByRole("button").click();
   await waitFor(async () => (await est())?.status === "sent", "the estimate is sent");
 
   // the client page: no quantity-0 line, no module words

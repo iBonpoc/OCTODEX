@@ -14,7 +14,7 @@ vi.mock("@/cloud/client", () => ({ supabase: {} }));
 vi.mock("@/config/backend", () => ({ WEB_APP_URL: "https://example.test" }));
 
 import { beforeSend } from "../src/features/sendEstimate";
-import { clientDoc, issueCount, newDoc, sendIssues, zeroQty } from "../src/features/estimateDoc";
+import { clientDoc, issueCount, newDoc, optionTotals, sendIssues, withAddons, zeroQty } from "../src/features/estimateDoc";
 import type { Customer, EstimateDoc } from "../src/data/types";
 import type { CustomLine } from "@octo/estimating-engine";
 
@@ -62,6 +62,20 @@ describe("zeroQty and the client's copy", () => {
   it("clientDoc drops a quantity-0 line in every option (demo /p/, PDF) — never a $0 row for the client", () => {
     const c = clientDoc(docOf([line("a"), line("z", { quantity: "0" })], [line("z2", { quantity: 0 as never, optional: true }), line("b")]));
     expect(c.options.map((o) => o.lines.map((l) => l.id))).toEqual([["a"], ["b"]]);
+  });
+});
+
+describe("the client's totals without the quantity-0 lines (review C5 №6)", () => {
+  it("discount, tax, deposit and a chosen add-on: the same totals as the company's", () => {
+    const d = docOf([line("a", { unitPriceCents: 1999, quantity: "2.5" }), line("z", { quantity: "0", unitPriceCents: 4999 }), line("add", { optional: true, unitPriceCents: 3000 }), line("addz", { optional: true, quantity: "0" })]);
+    d.settings.tax = { ...d.settings.tax, enabled: true, rateBps: 950, groups: { ...d.settings.tax.groups, material: true } };
+    d.settings.discount = { kind: "pct", value: "0.1" };
+    const c = clientDoc(d);
+    for (const addons of [[], ["add"], ["add", "addz"]]) {
+      const ours = optionTotals(d, withAddons(d.options[0]!, addons));
+      const theirs = optionTotals(c, withAddons(c.options[0]!, addons));
+      expect([theirs.total, theirs.deposit]).toEqual([ours.total, ours.deposit]);
+    }
   });
 });
 
