@@ -11,7 +11,9 @@
 import { ENGINE_VERSION, type PartQty } from "@octo/estimating-engine";
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
 import { estimateTitle, newDoc, uid } from "@/features/estimateDoc";
-import type { ModuleEstimateStore } from "../registry";
+import { moduleActive, type ModuleEstimateStore } from "../registry";
+import { docLanguageFor } from "@/data/people";
+import type { DocLang } from "@/i18n/translate";
 import { gutterData, K, KEY, ownFields, putMeasurement, withGutterData } from "./data";
 import { linesFromParts, resyncLines, type LineSource, type ModuleLine } from "./estimate";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
@@ -31,7 +33,21 @@ const hasLinesOf = (e: Estimate, measurementId: string) => !!e.doc?.options?.som
 export function estimateOfMeasurement(db: Pick<DB, "estimates">, measurementId: string): Estimate | undefined {
   const mine = db.estimates.filter((e) => e.status !== "declined" && hasLinesOf(e, measurementId));
   const open = mine.filter((e) => !SIGNED.has(e.status));
-  return (open.length ? open : mine).at(-1);
+  // the one written last (the cloud lists estimates by id — a random order, review M8b №3); ties: the later in the list
+  const lastWrite = (e: Estimate) =>
+    (e.doc?.options ?? []).flatMap((o) => o.lines).filter((l) => ofMeasurement(l, measurementId)).reduce((m, l) => {
+      const a = sourceOf(l)?.at;
+      return typeof a === "string" && a > m ? a : m;
+    }, "");
+  const pool = open.length ? open : mine;
+  return pool.reduce<Estimate | undefined>((best, e) => (!best || lastWrite(e) >= lastWrite(best) ? e : best), undefined);
+}
+
+/** the client's language for the lines of a measurement's estimate (rule 7): the lead's, else the property's client's */
+export function clientLangOf(db: DB, m: Pick<MeasurementRow, "leadId" | "propertyId">): DocLang {
+  const prop = m.propertyId ? db.properties.find((p) => p.id === m.propertyId) : undefined;
+  const lead = m.leadId ? db.leads.find((l) => l.id === m.leadId) : undefined;
+  return docLanguageFor(db, { ...(lead ? { leadId: lead.id } : {}), ...(prop ? { customerId: prop.customerId } : {}) });
 }
 
 export type EstimateAction =
@@ -54,7 +70,9 @@ export function estimateAction(db: Pick<DB, "estimates">, m: Pick<MeasurementRow
 /**
  * The document with the measurement's new lines: a new one (one option) when there is none; else every option with
  * lines of this measurement gets «Обновить» (resyncLines: hand changes and own lines stay); an option without them is
- * left alone. Lines of another measurement in the same option are someone's own here — never touched.
+ * left alone. Lines of another measurement in the same option are never touched and never hold back this one's
+ * (review M8b №5). A line someone deleted comes back on «Обновить» — to keep a part out, set its quantity to 0
+ * (a hand change: it stays 0); spec П23.8.
  */
 export function docWithLines(prev: EstimateDoc | undefined, next: readonly ModuleLine[], measurementId: string, fresh: () => EstimateDoc): EstimateDoc {
   if (!prev) {
@@ -68,16 +86,7 @@ export function docWithLines(prev: EstimateDoc | undefined, next: readonly Modul
       const mine = o.lines.some((l) => ofMeasurement(l, measurementId));
       // no option has lines of it (they were all removed by hand): the first option gets them again
       if (!mine && (touched || i > 0)) return o;
-      const others = new Map<string, (typeof o.lines)[number]>();
-      const masked = o.lines.map((l) => {
-        if (sourceOf(l)?.module === KEY && !ofMeasurement(l, measurementId)) {
-          others.set(l.id, l);
-          const { source: _s, ...own } = l;
-          return own as ModuleLine;
-        }
-        return l as ModuleLine;
-      });
-      const out = resyncLines(masked, next).map((l) => others.get(l.id) ?? l);
+      const out = resyncLines(o.lines as ModuleLine[], next, (l) => sourceOf(l)?.module === KEY && !ofMeasurement(l, measurementId));
       return { ...o, lines: out as typeof o.lines };
     }),
   };
@@ -93,28 +102,39 @@ export interface MakeInput {
   name: (p: PartQty) => string;
   /** the estimate's title when it has no lines to name it */
   fallbackTitle: string;
+  /** the clock (tests) */
+  now?: () => string;
 }
+
+export type MakeResult =
+  | { ok: true; estimateId: string; undo: () => void; updated: boolean }
+  /** off: the module is not active (О2); signed: never changed; noClient: no lead or property this person can make an estimate for */
+  | { ok: false; reason: "off" | "signed" | "noClient" };
 
 /**
  * «Смета» / «Обновить смету»: a revision of the measurement (the server numbers it, T98), the measurement is ready, and
- * the estimate saved through the core (offline: all of it waits in the queue, in this order). Returns the estimate's id
- * and the core's «Отменить» of the estimate — or null when the measurement has no client to make it for.
+ * the estimate saved through the core (offline: all of it waits in the queue, in this order). Nothing is written —
+ * not even the lead's client — when the module is off, the estimate is signed or there is no client to make it for.
  */
-export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): { estimateId: string; undo: () => void; updated: boolean } | null {
+export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): MakeResult {
   const db = store.db;
+  // the module first: a lead's client is made only for an estimate that will be (review M8b №1, rule 5)
+  if (!moduleActive(db.company, KEY)) return { ok: false, reason: "off" };
   const e = estimateOfMeasurement(db, x.m.id);
-  if (e && SIGNED.has(e.status)) return null;
-  // the client and the property: the estimate's own, else the lead's (made from it when it has none, S3), else the property's
+  if (e && SIGNED.has(e.status)) return { ok: false, reason: "signed" };
+  // the client and the property: the estimate's own, else the lead's (made from it when it has none, S3), else the
+  // property's — also when the lead is not seen here (a tech on his visit's property; review M8b №6)
   let target: { customerId: string; propertyId: string; undo: () => void; leadId?: string } | null = null;
   if (e) target = { customerId: e.customerId, propertyId: e.propertyId, undo: () => {}, ...(e.leadId ? { leadId: e.leadId } : {}) };
-  else if (x.m.leadId) {
+  if (!target && x.m.leadId && db.leads.some((l) => l.id === x.m.leadId)) {
     const t = store.leadEstimateTarget(x.m.leadId);
     if (t) target = { ...t, leadId: x.m.leadId };
-  } else if (x.m.propertyId) {
+  }
+  if (!target && x.m.propertyId) {
     const p = db.properties.find((q) => q.id === x.m.propertyId);
     if (p) target = { customerId: p.customerId, propertyId: p.id, undo: () => {} };
   }
-  if (!target) return null;
+  if (!target) return { ok: false, reason: "noClient" };
 
   const revisionId = uid();
   const rev = store.moduleOp(KEY, {
@@ -123,34 +143,36 @@ export function makeEstimate(store: ModuleEstimateStore, x: MakeInput): { estima
     apply: (d) => d,
     made: [revisionId],
   });
-  // the module is off (founder О2): nothing is written — the canvas says «Подключить»
-  if (rev == null) return null;
-  const was = gutterData(db).measurements.find((q) => q.id === x.m.id) ?? x.m;
-  let undoReady: unknown = null;
-  if (was.status !== "ready") {
-    const row = { ...ownFields(was), status: "ready" as const };
-    undoReady = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...was, status: "ready" })), coalesceKey: was.id, made: [was.id] });
+  if (rev == null) {
+    target.undo();
+    return { ok: false, reason: "off" };
   }
+  const was = gutterData(db).measurements.find((q) => q.id === x.m.id) ?? x.m;
+  // always: the screen's last save may have just made it a draft, and the store this function sees can be a render old
+  const row = { ...ownFields(was), status: "ready" as const };
+  const undoReady = store.moduleOp(KEY, { kind: K.mSave, payload: { m: row }, apply: (d) => withGutterData(d, putMeasurement({ ...was, status: "ready" })), coalesceKey: was.id, made: [was.id] });
 
-  const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id);
+  const lines = linesFromParts(x.parts, x.catalog, x.name, uid, revisionId, x.m.id, (x.now ?? (() => new Date().toISOString()))());
   const doc = docWithLines(e?.doc, lines, x.m.id, () => newDoc(db.company?.estimate?.depositBps));
   const estimateId = e?.id ?? uid();
+  const t = target;
   const undoSave = store.saveEstimate({
     id: estimateId,
-    customerId: target.customerId,
-    propertyId: target.propertyId,
+    customerId: t.customerId,
+    propertyId: t.propertyId,
     title: e?.title ?? estimateTitle(doc, x.fallbackTitle),
     doc,
-    ...(target.leadId ? { leadId: target.leadId } : {}),
+    ...(t.leadId ? { leadId: t.leadId } : {}),
   });
   return {
+    ok: true,
     estimateId,
     updated: !!e,
     undo: () => {
       undoSave();
       // the measurement is a draft again: «Смета» stays in reach (the revision itself is history, it stays)
       if (typeof undoReady === "function") (undoReady as () => void)();
-      target!.undo();
+      t.undo();
     },
   };
 }

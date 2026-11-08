@@ -2664,4 +2664,6 @@ export const en: Dict = {
   "mod.gutters.est.made": "Estimate made from the measurement",
   "mod.gutters.est.updated": "Estimate updated: your hand changes stayed",
   "mod.gutters.est.fromLead": "Estimate from measurement",
+  "mod.gutters.est.noClient": "No client for the estimate: make the measurement a lead or open it from a property",
+  "mod.gutters.est.off": "The module is off: the estimate would not be saved",
 };

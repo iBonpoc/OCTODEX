@@ -2664,6 +2664,8 @@ export const ru = {
   "mod.gutters.est.made": "Смета создана из замера",
   "mod.gutters.est.updated": "Смета обновлена: правленое руками осталось",
   "mod.gutters.est.fromLead": "Смета из замера",
+  "mod.gutters.est.noClient": "Нет клиента для сметы: сделайте замер заявкой или откройте его с объекта",
+  "mod.gutters.est.off": "Модуль не подключён: смета не сохранится",
 } as const;
 
 export type DictKey = keyof typeof ru;

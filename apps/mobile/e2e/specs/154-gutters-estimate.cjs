@@ -5,7 +5,7 @@
  * - a hand price on one line (the line sheet says «Обновить смету» keeps what you change) → saved;
  * - back on the canvas: «Открыть смету» (nothing changed); a second run → «Обновить смету» → the same estimate: the hand
  *   price stays, the line's quantity grows (S5g: hand changes and own lines are never touched);
- * - the lead has «Смета из замера».
+ * - the lead has «Смета из замера»: nothing changed → it opens the same estimate, never a second one.
  * Finds things by testID; waits on what it checks (CHECKS §9).
  */
 const DB_KEY = "octo.db.v5";
@@ -41,7 +41,7 @@ exports.run = async (h) => {
   h.expect(!!lead, "the demo has a lead");
   await h.go("/company/modules");
   await tid("module-gutters-enable").getByRole("button").click();
-  await tid("module-gutters-status").filter({ hasText: /^Пробный/ }).waitFor({ timeout: 5000 });
+  await waitFor(async () => !!(await db())?.company?.modules?.gutters?.enabled, "the trial is on");
 
   // the lead → «Замер» → a run → «Смета»
   await h.go(`/lead/${lead.id}`);
@@ -69,7 +69,7 @@ exports.run = async (h) => {
   const q1 = Number(g.quantity);
   await tid(`ue-line-marks-${g.id}`).click();
   await tid("ue-line-source-hint").waitFor({ timeout: 5000 });
-  await h.sheet().locator('input[inputmode="decimal"]').nth(1).fill("99");
+  await tid("ue-line-price").locator("input").fill("99");
   await tid("ue-line-save").getByRole("button").click();
   await waitFor(async () => (await tid("ue-line-source-hint").count()) === 0, "the line sheet closed");
   await tid("ue-save").getByRole("button").click();
@@ -92,8 +92,11 @@ exports.run = async (h) => {
   h.expect((await estimatesOf(mid)).length === 1, "one estimate of the measurement");
   await waitFor(async () => (await gutters()).measurements.some((m) => m.id === mid && m.status === "ready"), "ready again");
 
-  // the lead: «Смета из замера»
+  // the lead: «Смета из замера» → the canvas opens and, nothing changed, opens the same estimate (once)
   await h.go(`/lead/${lead.id}`);
   await tid("module-gutters-estimate").waitFor({ timeout: 8000 });
   await h.shot("lead");
+  await tid("module-gutters-estimate").getByRole("button").click();
+  await p.waitForURL(new RegExp(`/estimate/${eid}$`), { timeout: 8000 });
+  h.expect((await estimatesOf(mid)).length === 1, "«Смета из замера» made no second estimate");
 };

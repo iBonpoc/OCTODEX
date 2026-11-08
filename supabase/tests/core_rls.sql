@@ -8094,15 +8094,33 @@ insert into public.gutter_measurement_revisions (id, company_id, measurement_id,
 select tst.ok((select revision from public.gutter_measurement_revisions where id = '9e980000-0000-4000-8000-0000000000a2') = 2
               and (select revision from public.gutter_measurements where id = '9e980000-0000-4000-8000-000000000001') = 2,
               'T98 the next one is 2, the measurement follows');
--- the counter set back by hand: the next number is still past the newest revision
-:as_super
-update public.gutter_measurements set revision = 0 where id = '9e980000-0000-4000-8000-000000000001';
+-- the counter is the server's: a direct write of it is ignored (an old phone's full write still goes through)
 :as_office_a
+update public.gutter_measurements set revision = 0, label = 'T98' where id = '9e980000-0000-4000-8000-000000000001';
+select tst.ok((select revision = 2 and label = 'T98' from public.gutter_measurements where id = '9e980000-0000-4000-8000-000000000001'),
+              'T98 a phone cannot set the counter (the rest of its write goes through)');
 insert into public.gutter_measurement_revisions (id, company_id, measurement_id, revision, elements, parts, engine_version) values
   ('9e980000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', '9e980000-0000-4000-8000-000000000001', 1, '[]', '[]', 'x');
 select tst.ok((select revision from public.gutter_measurement_revisions where id = '9e980000-0000-4000-8000-0000000000a3') = 3
               and (select revision from public.gutter_measurements where id = '9e980000-0000-4000-8000-000000000001') = 3,
-              'T98 a counter set back never gives a taken number');
+              'T98 the next number is 3');
+-- a stranger gets one answer: the same code for a measurement that exists and one that does not (no probing)
+:as_owner_b
+do $$
+declare a text; b text;
+begin
+  begin
+    insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version)
+      values ('ca000000-0000-0000-0000-000000000000', '9e980000-0000-4000-8000-000000000001', 1, '[]', 'x');
+  exception when others then a := sqlstate;
+  end;
+  begin
+    insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version)
+      values ('ca000000-0000-0000-0000-000000000000', gen_random_uuid(), 1, '[]', 'x');
+  exception when others then b := sqlstate;
+  end;
+  perform tst.ok(a = '42501' and b = '42501', 'T98 another company: one answer whether the measurement exists or not (' || coalesce(a, 'none') || ' / ' || coalesce(b, 'none') || ')');
+end $$;
 -- who may not: another tech (not his), another company; nor with the module off
 :as_tech2_a
 select tst.blocked($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e980000-0000-4000-8000-000000000001', 1, '[]', 'x')$q$,
@@ -8117,10 +8135,22 @@ update public.company_modules set enabled = false where company_id = 'ca000000-0
 select tst.blocked($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e980000-0000-4000-8000-000000000001', 1, '[]', 'x')$q$,
           'T98 the module is off: no revision (founder О2)');
 :as_super
+-- a replay of the 100th revision (its answer was lost) is «nothing to do», never «limit reached»
+insert into public.gutter_measurements (id, company_id) values ('9e980000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000');
+insert into public.gutter_measurement_revisions (id, company_id, measurement_id, revision, elements, engine_version)
+  select ('9e981000-0000-4000-8000-' || lpad(g::text, 12, '0'))::uuid, 'ca000000-0000-0000-0000-000000000000', '9e980000-0000-4000-8000-000000000002', 1, '[]', 'x'
+    from generate_series(1, 100) g;
+insert into public.gutter_measurement_revisions (id, company_id, measurement_id, revision, elements, engine_version)
+  values ('9e981000-0000-4000-8000-000000000100', 'ca000000-0000-0000-0000-000000000000', '9e980000-0000-4000-8000-000000000002', 1, '[]', 'x')
+  on conflict (id) do nothing;
+select tst.ok((select revision from public.gutter_measurements where id = '9e980000-0000-4000-8000-000000000002') = 100,
+              'T98 the replay of the 100th adds nothing, refuses nothing, keeps the number');
+delete from public.gutter_measurements where id = '9e980000-0000-4000-8000-000000000002';
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_gutter_revision_number()', 'execute')
-          and not has_function_privilege('anon', 'app.tg_gutter_revision_number()', 'execute'), 'T98 nobody calls the numbering function directly (rule 18)');
+          and not has_function_privilege('anon', 'app.tg_gutter_revision_number()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_gutter_revision_kept()', 'execute'), 'T98 nobody calls the numbering functions directly (rule 18)');
 delete from public.gutter_measurements where id = '9e980000-0000-4000-8000-000000000001';
-delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000';
+delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
 \echo 'T98 revision numbers: the server gives them, a replay keeps them ok'
 
 \echo 'ALL TESTS PASSED'

@@ -25,7 +25,7 @@ import { computeGutterParts, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem, DB, Estimate, EstimateDoc } from "../src/data/types";
 import { makeSeed } from "../src/data/seed";
 import { gutterData, guttersOps, K, putMeasurement, withGutterData } from "../src/modules/gutters/data";
-import { docWithLines, estimateAction, estimateOfMeasurement, makeEstimate, ofMeasurement } from "../src/modules/gutters/estimateLink";
+import { clientLangOf, docWithLines, estimateAction, estimateOfMeasurement, makeEstimate, ofMeasurement, type MakeResult } from "../src/modules/gutters/estimateLink";
 import { linesFromParts, type ModuleLine } from "../src/modules/gutters/estimate";
 import { laborRows, materialRows, missingItems, partName, sampleJob } from "../src/modules/gutters/prices";
 import type { MeasurementRow } from "../src/modules/gutters/canvas/model";
@@ -48,6 +48,12 @@ const own = { id: "own", name: "Haul away", group: "service" as const, quantity:
 describe("which estimate is the measurement's, what the button does", () => {
   const mine = linesFromParts(parts, list(), name, uid, "r1", "m1");
   const other = linesFromParts(parts, list(), name, uid, "r9", "m9");
+  it("the one written last (by the lines' time), whatever order the list comes in (the cloud lists by id)", () => {
+    const at = (t: string) => linesFromParts(parts, list(), name, uid, "r", "m1", t);
+    const db = { estimates: [est("e-new", "draft", at("2026-11-08T10:00:00Z")), est("e-old", "draft", at("2026-11-08T09:00:00Z"))] };
+    expect(estimateOfMeasurement(db, "m1")?.id).toBe("e-new");
+    expect(estimateOfMeasurement({ estimates: [...db.estimates].reverse() }, "m1")?.id).toBe("e-new");
+  });
   it("the newest open one with its lines; a signed one only when no open one; a declined one never", () => {
     const db = { estimates: [est("e1", "sent", mine), est("e2", "draft", other), est("e3", "approved", mine), est("e4", "draft", mine), est("e5", "declined", mine)] };
     expect(estimateOfMeasurement(db, "m1")?.id).toBe("e4");
@@ -90,6 +96,18 @@ describe("the document after «Обновить смету»", () => {
   });
 });
 
+describe("another measurement in the same estimate (review M8b №5)", () => {
+  it("its lines with the same price-list items never hold back this measurement's new part", () => {
+    const first = linesFromParts(parts.filter((p) => p.section !== "downspouts"), list(), name, uid, "r1", "m1");
+    const garage = linesFromParts(parts.filter((p) => p.section === "downspouts"), list(), name, uid, "r9", "m9");
+    const next = linesFromParts(parts, list(), name, uid, "r2", "m1");
+    const out = docWithLines(docOf([...first, ...garage]), next, "m1", () => newDoc()).options[0]!.lines;
+    const ds = (mid: string) => out.filter((l) => ofMeasurement(l, mid) && (l.source as unknown as { section: string }).section === "downspouts");
+    expect(ds("m1").length).toBe(garage.length); // the house's downspouts are there
+    expect(ds("m9")).toEqual(garage); // the garage's as they were
+  });
+});
+
 describe("makeEstimate — through the core's store", () => {
   const harness = (db: DB, active = true) => {
     const sent: { kind: string; payload: Record<string, unknown> }[] = [];
@@ -113,11 +131,21 @@ describe("makeEstimate — through the core's store", () => {
     };
     return { s, sent, saved, targets, undone };
   };
-  const input = (m: MeasurementRow, p = parts) => ({ m, elements: [], parts: p, catalog: list(), name, fallbackTitle: "Gutters" });
+  const input = (m: MeasurementRow, p = parts) => ({ m, elements: [], parts: p, catalog: list(), name, fallbackTitle: "Gutters", now: () => "2026-11-08T12:00:00Z" });
+  /** the demo with the module on (trial) and the lead l1 */
+  const on = (d: DB, active = true): DB => ({
+    ...d,
+    company: { ...d.company!, modules: { gutters: { enabled: active, trialEndsAt: new Date(Date.now() + 86_400_000).toISOString(), settings: {}, rowVersion: 1 } } },
+    leads: d.leads.some((l) => l.id === "l1") ? d.leads : [...d.leads, { ...d.leads[0]!, id: "l1" }],
+  });
+  const ok = (r: MakeResult) => {
+    if (!r.ok) throw new Error(`not made: ${r.reason}`);
+    return r;
+  };
 
   it("«Смета» of a lead: the client from the lead, a revision first, the measurement ready, then the estimate", () => {
-    const h = harness(withGutterData(makeSeed(), putMeasurement(M)));
-    const r = makeEstimate(h.s, input(M))!;
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
+    const r = ok(makeEstimate(h.s, input(M)));
     expect(h.targets).toEqual(["l1"]);
     expect(h.sent.map((x) => x.kind)).toEqual([K.rAdd, K.mSave]);
     expect((h.sent[1]!.payload.m as MeasurementRow).status).toBe("ready");
@@ -131,29 +159,49 @@ describe("makeEstimate — through the core's store", () => {
     expect(h.undone).toEqual(["estimate", K.mSave, "target"]);
   });
   it("«Обновить смету»: the same estimate id, its own client; hand changes stay", () => {
-    const h = harness(withGutterData(makeSeed(), putMeasurement(M)));
-    const first = makeEstimate(h.s, input(M))!;
+    const h = harness(on(withGutterData(makeSeed(), putMeasurement(M))));
+    const first = ok(makeEstimate(h.s, input(M)));
     const doc = h.saved[0]!.doc;
     const l0 = doc.options[0]!.lines[0]!;
     h.s.db = { ...h.s.db, estimates: h.s.db.estimates.map((e) => (e.id === first.estimateId ? { ...e, doc: { ...doc, options: [{ ...doc.options[0]!, lines: [{ ...l0, unitPriceCents: 777 }, ...doc.options[0]!.lines.slice(1)] }] } } : e)) };
     h.s.db = withGutterData(h.s.db, putMeasurement({ ...M, status: "draft" })); // the drawing changed
-    const r = makeEstimate(h.s, input(M, fewer))!;
+    const r = ok(makeEstimate(h.s, input(M, fewer)));
     expect(r).toMatchObject({ estimateId: first.estimateId, updated: true });
     expect(h.targets).toEqual(["l1"]); // not asked again
     expect(h.saved[1]!.doc.options[0]!.lines.find((l) => l.id === l0.id)!.unitPriceCents).toBe(777);
   });
-  it("a signed estimate is never touched; a measurement without a client makes nothing; a module off writes nothing", () => {
+  it("a signed estimate is never touched; no client → nothing; the module off → nothing at all, not even the lead's client (review M8b №1)", () => {
     const lines = linesFromParts(parts, list(), name, uid, "r1", "m1");
-    const signed = harness({ ...withGutterData(makeSeed(), putMeasurement(M)), estimates: [est("e1", "approved", lines)] });
-    expect(makeEstimate(signed.s, input(M))).toBeNull();
-    expect(signed.sent).toEqual([]);
-    expect(signed.saved).toEqual([]);
-    const loose = harness(withGutterData(makeSeed(), putMeasurement({ ...M, leadId: null })));
-    expect(makeEstimate(loose.s, input({ ...M, leadId: null }))).toBeNull();
+    const signed = harness({ ...on(withGutterData(makeSeed(), putMeasurement(M))), estimates: [est("e1", "approved", lines)] });
+    expect(makeEstimate(signed.s, input(M))).toEqual({ ok: false, reason: "signed" });
+    expect([signed.sent, signed.saved, signed.targets]).toEqual([[], [], []]);
+    const loose = harness(on(withGutterData(makeSeed(), putMeasurement({ ...M, leadId: null }))));
+    expect(makeEstimate(loose.s, input({ ...M, leadId: null }))).toEqual({ ok: false, reason: "noClient" });
     expect(loose.sent).toEqual([]);
-    const off = harness(withGutterData(makeSeed(), putMeasurement(M)), false);
-    expect(makeEstimate(off.s, input(M))).toBeNull();
-    expect(off.saved).toEqual([]);
+    const off = harness(on(withGutterData(makeSeed(), putMeasurement(M)), false));
+    expect(makeEstimate(off.s, input(M))).toEqual({ ok: false, reason: "off" });
+    expect([off.sent, off.saved, off.targets]).toEqual([[], [], []]);
+  });
+  it("a lead this person does not see: the property's client (a tech on his visit's property, review M8b №6)", () => {
+    const d = on(withGutterData(makeSeed(), putMeasurement(M)));
+    const prop = d.properties[0]!;
+    const m = { ...M, leadId: "gone-lead", propertyId: prop.id };
+    const h = harness({ ...d, moduleData: withGutterData(d, putMeasurement(m)).moduleData });
+    ok(makeEstimate(h.s, input(m)));
+    expect(h.targets).toEqual([]);
+    expect(h.saved[0]).toMatchObject({ customerId: prop.customerId, propertyId: prop.id });
+  });
+});
+
+describe("the client's language (rule 7)", () => {
+  it("the lead's language, else the property's client's — never the app's", () => {
+    const d = makeSeed();
+    const lead = d.leads[0]!;
+    const es = { ...d, leads: d.leads.map((l) => (l.id === lead.id ? { ...l, customerId: undefined, people: undefined, contacts: [], language: "es" as const } : l)) } as DB;
+    expect(clientLangOf(es, { leadId: lead.id, propertyId: null })).toBe("es");
+    const ru = { ...es, leads: es.leads.map((l) => (l.id === lead.id ? { ...l, language: "ru" as const } : l)) } as DB;
+    expect(clientLangOf(ru, { leadId: lead.id, propertyId: null })).toBe("ru");
+    expect(clientLangOf(d, { leadId: null, propertyId: null })).toBe(d.company?.docLanguage ?? "en");
   });
 });
 
