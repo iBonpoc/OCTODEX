@@ -2,7 +2,7 @@
 import { describe, expect, it } from "vitest";
 import {
   canAddItem, canAttachPhoto, canEditTemplates, canEditVisitSettings, canRemoveItem, canReview, canSkip, canTick, cleanTemplate, cleanText, visitClosed,
-  checklistFor, checklistGate, checklistKindOf, itemDone, itemKind, itemRequired, itemSkipped, missedCount, photoMinimums, photoStageOf,
+  checklistFor, checklistGate, jobServices, snapshotPhotoMins, checklistKindOf, itemDone, itemKind, itemRequired, itemSkipped, missedCount, photoMinimums, photoStageOf,
   VISIT_SETTINGS_DEFAULT, visitMissed, visitSettings, visitSettingsOf,
 } from "../src/features/checklist";
 import type { ChecklistItem, ChecklistTemplate, Photo, Visit, VisitSettings } from "../src/data/types";
@@ -202,5 +202,28 @@ describe("unit:checklistText — text as the server takes it", () => {
     ] })!;
     expect(t.name).toHaveLength(120);
     expect(t.items).toEqual([{ id: "a", label: "A 1", kind: "check", required: true }]);
+  });
+});
+
+describe("unit:checklistFor — the snapshot's photo minimums and the job's services (CH2, §11.5 №24, §11.7 №7)", () => {
+  it("the highest minimum of the templates the items came from; none when no template raises one", () => {
+    const a = tpl("a", { minPhotosBefore: 2 });
+    const b = tpl("b", { minPhotosBefore: 4, minPhotosAfter: 3 });
+    const c = tpl("c", { minPhotosAfter: 9 });
+    const items = [item("x", { templateId: "a" }), item("y", { templateId: "b" })];
+    expect(snapshotPhotoMins(items, [a, b, c])).toEqual({ before: 4, after: 3 });
+    expect(snapshotPhotoMins([item("z")], [a, b, c])).toBeUndefined();
+    expect(snapshotPhotoMins([item("x", { templateId: "a" })], [a])).toEqual({ before: 2 });
+  });
+  it("the tech's phone (no templates) takes the visit's snapshot; it raises the company's, never lowers it", () => {
+    expect(photoMinimums(visit({ photoMins: { before: 3 } }), S, [])).toEqual({ before: 3, after: 1 });
+    expect(photoMinimums(visit({ photoMins: { after: 5 } }), { ...S, minPhotosAfter: 6 }, [])).toEqual({ before: 1, after: 6 });
+    expect(photoMinimums(visit({ photoMins: { before: 0, after: 99 } as never }), S, [])).toEqual({ before: 1, after: 1 });
+    expect(checklistGate(visit({ step: "on_site", photos: photos(2, 0), photoMins: { before: 3 } }), S).missing.photosBefore).toBe(1);
+  });
+  it("services: lines of the chosen option and its chosen add-ons, the job's own lines; no repeats", () => {
+    const option = { lines: [{ id: "l1", catalogItemId: "cat1" }, { id: "l2", catalogItemId: "cat2", optional: true }, { id: "l3", catalogItemId: "cat3", optional: true }, { id: "l4" }] };
+    expect(jobServices(option, ["l3"], [{ catalogItemId: "cat4" }, { catalogItemId: "cat1" }, {}])).toEqual(["cat1", "cat3", "cat4"]);
+    expect(jobServices(undefined, [], [{ catalogItemId: "cat9" }])).toEqual(["cat9"]);
   });
 });

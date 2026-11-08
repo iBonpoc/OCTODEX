@@ -2,9 +2,10 @@
  * Test data (placeholder prices — founder rule: real prices are never typed into seeds).
  * All times are relative to "now" so the demo always looks like a live day in Los Angeles.
  */
-import { JOB_TYPE_SEED_KEYS, MEMBER_PREFS_DEFAULT, type DB, type ChecklistItem, type CatalogItem, type Company, type EstimateDoc, type JobType, type ServiceCategory, type Source, type Tag } from "./types";
+import { JOB_TYPE_SEED_KEYS, MEMBER_PREFS_DEFAULT, type DB, type ChecklistItem, type ChecklistTemplate, type CatalogItem, type Company, type EstimateDoc, type JobType, type ServiceCategory, type Source, type Tag } from "./types";
 import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
 import { addDays } from "@/features/calendar";
+import { checklistFor } from "@/features/checklist";
 import { DEMO_ZONE, demoToday, wallToInstant } from "@/features/zone";
 
 /** Test catalog for several trades. All prices are PLACEHOLDERS (badge "test price"). */
@@ -107,16 +108,26 @@ export const SEED_TAGS: Tag[] = [
   { id: "tag-favorite", name: "Favorite", active: true, system: true, position: 3 },
   { id: "tag-late", name: "No calls after 6 pm", active: true, system: true, position: 4 },
 ];
-/** Generic job checklist (company templates come later; trade modules add their own). */
-const jobChecklist = (prefix: string): ChecklistItem[] =>
-  [
-    "Protect floors and furniture",
-    "Confirm scope with the client",
-    "Photos before work",
-    "Clean up the work area",
-    "Photos after work",
-    "Walk through with the client",
-  ].map((label, i) => ({ id: `${prefix}-c${i}`, label, done: false }));
+/**
+ * The demo company's template (docs/specs/08 §2, CH2): the visits of jobs get its items as a snapshot through the same
+ * checklistFor as a real visit (S9). Generic, nothing trade-specific; modules add their own (CH3). Not «every visit»:
+ * the demo inspection stays without a list (an inspection template is the director's choice, В6).
+ */
+export const DEMO_TEMPLATE: ChecklistTemplate = {
+  id: "tpl-job",
+  name: "Every job visit",
+  items: [
+    { id: "tpl-job-i0", label: "Protect floors and furniture", kind: "check", required: false },
+    { id: "tpl-job-i1", label: "Confirm scope with the client", kind: "check", required: true },
+    { id: "tpl-job-i2", label: "Clean up the work area", kind: "check", required: true },
+    { id: "tpl-job-i3", label: "Walk through with the client", kind: "check", required: true },
+  ],
+  appliesTo: { everyVisit: false, visitKinds: ["work"], catalogItemIds: [] },
+};
+const jobChecklist = (prefix: string): ChecklistItem[] => {
+  let n = 0;
+  return checklistFor({ kind: "work" }, [DEMO_TEMPLATE], () => `${prefix}-c${n++}`);
+};
 
 /** Demo directions of the business (presets, translated in the app). */
 /** the five common job types of a new company (13 §3.4 п. 8; server: app.seed_job_types) */
@@ -207,6 +218,7 @@ export function makeSeed(): DB {
       { id: "j6", number: "JOB-0006", customerId: "c6", jobTypeId: "jt-install", propertyId: "p6", title: "Panel upgrade 200A", status: "scheduled", amountCents: 518000 },
       { id: "j8", number: "JOB-0008", customerId: "c1", jobTypeId: "jt-install", propertyId: "p1b", title: "TV mount + shelves", status: "done", amountCents: 24000 },
     ],
+    checklistTemplates: [DEMO_TEMPLATE],
     visits: [
       {
         id: "v1", jobId: "j1", techId: "m-alex", start: at(0, 8, 30), durationMin: 240, step: "scheduled",
@@ -216,12 +228,12 @@ export function makeSeed(): DB {
       {
         id: "v2", jobId: "j2", techId: "m-alex", start: at(0, 13, 30), durationMin: 120, step: "scheduled",
         scope: ["Replace kitchen faucet", "Install 3/4 HP garbage disposal"],
-        checklist: jobChecklist("v2").slice(0, 4), photos: [], amountDueCents: 68000,
+        checklist: jobChecklist("v2"), photos: [], amountDueCents: 68000,
       },
       {
         id: "v3", jobId: "j3", techId: "m-alex", start: at(0, 16, 0), durationMin: 60, step: "scheduled",
         scope: ["Patch 2 drywall holes in hallway", "Prime and paint touch-up"],
-        checklist: jobChecklist("v3").slice(1, 4), photos: [], amountDueCents: 42000,
+        checklist: jobChecklist("v3"), photos: [], amountDueCents: 42000,
       },
       {
         id: "v4", jobId: "j5", techId: "m-ivan", start: at(0, 9, 0), durationMin: 180, step: "working",

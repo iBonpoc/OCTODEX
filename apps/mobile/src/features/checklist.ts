@@ -45,10 +45,13 @@ export const visitSettings = (db: Pick<DB, "company">): VisitSettings => visitSe
 export const checklistKindOf = (v: Pick<Visit, "kind" | "jobId">): ChecklistVisitKind => (v.kind === "inspection" || (!v.jobId && !v.kind) ? "inspection" : "work");
 
 /** the photo minimums of a visit: the company's, raised (never lowered) by the templates its items came from */
-export function photoMinimums(visit: Pick<Visit, "checklist">, settings: VisitSettings, templates: ChecklistTemplate[] = []): { before: number; after: number } {
+export function photoMinimums(visit: Pick<Visit, "checklist" | "photoMins">, settings: VisitSettings, templates: ChecklistTemplate[] = []): { before: number; after: number } {
   const used = new Set((visit.checklist ?? []).map((i) => i.templateId).filter((x): x is ID => !!x));
   let before = settings.minPhotosBefore;
   let after = settings.minPhotosAfter;
+  // the snapshot taken when the visit was made (S4, S9): the tech's phone does not read templates (§11.7 №7)
+  if (validCount(visit.photoMins?.before)) before = Math.max(before, visit.photoMins.before);
+  if (validCount(visit.photoMins?.after)) after = Math.max(after, visit.photoMins.after);
   for (const t of templates) {
     if (!used.has(t.id)) continue;
     if (validCount(t.minPhotosBefore)) before = Math.max(before, t.minPhotosBefore);
@@ -85,8 +88,8 @@ function missingOf(visit: Visit, settings: VisitSettings, templates: ChecklistTe
  *   inspection it is the one check before «Готово»: items and photos «before».
  * Skipped items do not warn again: «Пропустить» lets the tech go on. Short photos are not stored as skipped: after
  * «Пропустить» in the sheet the screen goes on for this one step (it does not ask again on the same press).
- * Photo minimums from templates are known where the templates are read (the office); the tech's phone uses the
- * company's — the snapshot of the minimums comes with CH2 (docs/specs/08 §11.7).
+ * Photo minimums: the company's, raised by the visit's snapshot (`photoMins`, taken with its items — the tech's phone
+ * reads no templates) and, where templates are read (the office), by the templates its items came from.
  */
 export function checklistGate(visit: Visit, settings: VisitSettings, templates: ChecklistTemplate[] = []): { warnBeforeWork: boolean; warnBeforeSign: boolean; missing: Missing } {
   const missing = missingOf(visit, settings, templates, false);
@@ -147,6 +150,36 @@ export function checklistFor(
     }
   }
   return out;
+}
+
+/**
+ * The minimums of photos the templates of a snapshot raise (§3.1, §11.7 №7): the highest of the templates its items came
+ * from. Nothing when no template raises one — the visit keeps the company's.
+ */
+export function snapshotPhotoMins(items: readonly ChecklistItem[], templates: readonly ChecklistTemplate[]): { before?: number; after?: number } | undefined {
+  const used = new Set(items.map((i) => i.templateId).filter((x): x is ID => !!x));
+  let before: number | undefined;
+  let after: number | undefined;
+  for (const t of templates) {
+    if (!used.has(t.id)) continue;
+    if (validCount(t.minPhotosBefore)) before = Math.max(before ?? 0, t.minPhotosBefore);
+    if (validCount(t.minPhotosAfter)) after = Math.max(after ?? 0, t.minPhotosAfter);
+  }
+  return before || after ? { ...(before ? { before } : {}), ...(after ? { after } : {}) } : undefined;
+}
+
+/** the services of a job for templates (§5, §11.5 №24): catalog items of the chosen option (its lines and the chosen
+ *  add-ons) and of the job's own lines (a job without an estimate, S17) */
+export function jobServices(
+  option: { lines: readonly { id: string; catalogItemId?: string; optional?: boolean }[] } | undefined,
+  addonIds: readonly string[],
+  jobLines: readonly { catalogItemId?: ID }[],
+): ID[] {
+  const ids = [
+    ...(option?.lines ?? []).filter((l) => !l.optional || addonIds.includes(l.id)).map((l) => l.catalogItemId),
+    ...jobLines.map((l) => l.catalogItemId),
+  ].filter((x): x is ID => !!x);
+  return [...new Set(ids)];
 }
 
 /** the photo stage of a photo item by the visit's step (§11.5 №27): before work — «before», then «after» */
