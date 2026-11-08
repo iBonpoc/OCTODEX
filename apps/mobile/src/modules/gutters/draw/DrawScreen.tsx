@@ -349,6 +349,7 @@ export default function DrawScreen() {
   const doUndo = () => {
     const u = undo(hist, drawing);
     if (!u) return;
+    setHint(null);
     setHist(u.h);
     setDrawing(u.d);
     setSelected(null);
@@ -357,6 +358,7 @@ export default function DrawScreen() {
   const doRedo = () => {
     const r = redo(hist, drawing);
     if (!r) return;
+    setHint(null);
     setHist(r.h);
     setDrawing(r.d);
     later.current();

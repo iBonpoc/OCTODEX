@@ -61,6 +61,7 @@ exports.run = async (h) => {
   for (const w of ["Желоб", "Водосток", "Выбрать", "Эт 1", "Этаж", "Назад", "Ещё"]) h.expect(bar.includes(w), `toolbar says «${w}» (${bar.replace(/\n/g, " | ")})`);
   const cut = await p.getByTestId("draw-toolbar").locator("visible=true").first().evaluate((el) => [...el.querySelectorAll("div")].filter((d) => d.childElementCount === 0 && d.textContent && d.scrollWidth > d.clientWidth + 1).map((d) => d.textContent));
   h.expect(cut.length === 0, `no word is cut off (${cut.join(", ")})`);
+  h.expect((await tid("draw-delete").count()) === 0, "«Удалить» only by what is picked: nothing picked — no button");
 
   // a run along the roof edge
   const b = await box();
@@ -99,8 +100,11 @@ exports.run = async (h) => {
 
   // pick the first run, storey 2
   await tid("draw-tool-select").getByRole("button").click();
+  await tid("draw-hint").waitFor({ timeout: 3000 });
+  h.expect(/Нажмите на желоб или водосток/.test(await tid("draw-hint").innerText()), "«Выбрать» says what to tap");
   await p.mouse.click(x0 + (x1 - x0) * 0.2, y);
   await waitFor(async () => /Желоб/.test(await tid("draw-selected").innerText().catch(() => "")), "picked the run");
+  await waitFor(async () => (await tid("draw-hint").count()) === 0, "the hint is gone once something is picked");
   const before = new Set(await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getAttribute("stroke"))));
   await tid("draw-story").click();
   await waitFor(async () => (await labels()).some((t) => / · эт 2$/.test(t)), "storey 2 on its label");

@@ -2382,7 +2382,6 @@ export const en: Dict = {
   "mod.gutters.draw.delete": "Delete",
   "mod.gutters.draw.deleted": "Deleted",
   "mod.gutters.draw.story": "Story {n}",
-  "mod.gutters.draw.place": "Move the toolbar",
   "mod.gutters.draw.storyShort": "St {n}",
   "mod.gutters.draw.storyCell": "Story",
   "mod.gutters.draw.more": "More",

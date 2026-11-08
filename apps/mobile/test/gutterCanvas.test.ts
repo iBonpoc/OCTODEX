@@ -132,4 +132,9 @@ describe("no label covers a downspout's mark (spec 33 П20.8)", () => {
     const s = buildScene(d as never, { ...opts(), view: { k: 1, ox: 50, oy: 300 }, dsPad: 12 });
     expect(s.labels.some((l) => l.kind === "len")).toBe(true);
   });
+  it("the bench path (keepAll) with marks: every label still placed", () => {
+    const want: LabelWant[] = Array.from({ length: 20 }, (_, i) => ({ id: `l${i}`, a: [100, 100] as [number, number], b: [100, 100] as [number, number], w: 30, h: 14, priority: i }));
+    const out = layoutLabels(want, { w: 200, h: 200 }, 4, true, [{ at: [100, 100], r: 12 }]);
+    expect(out).toHaveLength(20);
+  });
 });
