@@ -2,11 +2,12 @@ import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { space, component } from "@octo/design-tokens";
-import { catalogCost, catalogPrice } from "@octo/estimating-engine";
+import { catalogCost } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import type { CatalogItem, CatalogKind } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { uid, kitPrice } from "@/features/estimateDoc";
+import { uid } from "@/features/estimateDoc";
+import { countsFromCost, editClean, editOk, editPrice } from "@/features/catalogEdit";
 import { CatalogPicker, kindLabel } from "@/features/estimatePickers";
 import { attributesLine } from "@/features/catalogMatch";
 import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
@@ -33,18 +34,15 @@ export default function CatalogItemScreen() {
   const [pick, setPick] = useState(false);
   const set = (p: Partial<CatalogItem>) => setIt((x) => ({ ...x, ...p, placeholder: false }));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/catalog"));
-  const isMat = it.kind === "material";
-  const price = isMat ? catalogPrice(it.costCents ?? 0, it.vendorTaxBps ?? 0, it.markupBps ?? 0) : it.kind === "kit" ? kitPrice(it, store.db.catalog) : it.priceCents;
-  const ok = it.name.trim().length > 0 && (it.kind === "kit" ? (it.components ?? []).length > 0 : isMat ? (it.costCents ?? 0) > 0 : it.priceCents >= 0);
+  // 19 §9: who does not get our costs (sales without view_costs) edits a material's price as it is — counting it from
+  // a cost the phone does not have would overwrite the real price
+  const noCosts = store.db.costsVisible === false;
+  const isMat = countsFromCost(it, noCosts);
+  const price = editPrice(it, store.db.catalog, noCosts);
+  const ok = editOk(it, noCosts);
 
   const save = () => {
-    const clean: CatalogItem = {
-      ...it,
-      name: it.name.trim(),
-      unit: it.unit.trim() || "ea",
-      priceCents: isMat ? price : it.kind === "kit" ? 0 : it.priceCents,
-      costCents: isMat ? it.costCents : it.kind === "kit" ? undefined : it.costCents,
-    };
+    const clean = editClean(it, store.db.catalog, noCosts);
     toast.show(t("cat.saved", { name: clean.name }), store.saveCatalogItem(clean));
     back();
   };
@@ -71,10 +69,12 @@ export default function CatalogItemScreen() {
         ) : null}
       </Card>
 
-      {it.kind === "service" || it.kind === "labor" ? (
+      {it.kind === "service" || it.kind === "labor" || (it.kind === "material" && noCosts) ? (
         <Card>
           <Labeled label={t("cat.price")}>
-            <MoneyField cents={it.priceCents} onChange={(c) => set({ priceCents: c })} />
+            <View testID="catalog-price">
+              <MoneyField cents={it.priceCents} onChange={(c) => set({ priceCents: c })} />
+            </View>
           </Labeled>
         </Card>
       ) : null}
