@@ -30,6 +30,7 @@ import { CanvasView, useLive } from "../canvas/CanvasView";
 import { addDownspout, endAt, finishStroke, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
 import { AttrBody, DsAttrsView, RunAttrsView } from "./AttrPanel";
+import { MeasurePhotos } from "./Photos";
 import { ftIn } from "../canvas/format";
 import { forgetOldDraft, loadToolbarPlace, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
@@ -84,6 +85,8 @@ export default function DrawScreen() {
   const [ghost, setGhost] = useState<{ a: P; b: P } | null>(null);
   /** 390: the attribute sheet is open (820/1280 show the panel whenever something is picked) */
   const [sheet, setSheet] = useState(false);
+  /** 390: the sheet of the measurement's photos */
+  const [photoSheet, setPhotoSheet] = useState(false);
   const live = useLive();
 
   // the latest values for gesture callbacks and the delayed save
@@ -290,7 +293,18 @@ export default function DrawScreen() {
     const id = cur.current.selected;
     if (id) commit(setLength(cur.current.drawing, id, lengthIn));
   };
-  const attrs = !sel ? null : "a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} />;
+  // photos (П21.10): only of what the server has (a files row points at the measurement and its element — FK), and
+  // only while the module saves (founder О2)
+  const stored = gutterData(store.db);
+  const mStored = !!m && stored.measurements.some((x) => x.id === m.id);
+  const elPhotos = sel && m && canSave && stored.elements.some((e) => e.id === sel.id) ? <MeasurePhotos measurementId={m.id} elementId={sel.id} testID="attr-photos" onRemoved={() => setSheet(false)} /> : null;
+  const mPhotos = m && canSave && mStored ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} /> : null;
+  const attrs = !sel ? null : (
+    <>
+      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} />}
+      {elPhotos}
+    </>
+  );
   /** 820/1280: the panel is a column on the right, always there; the canvas and its bars stay left of it */
   const panelSide = wide ? ins.right + component.panelW + space[3] : 0;
 
@@ -406,6 +420,11 @@ export default function DrawScreen() {
                 <Button label={t("mod.gutters.draw.toLead")} icon="plus" size="sm" variant="secondary" onPress={toLead} />
               </View>
             ) : null}
+            {mPhotos && !wide ? (
+              <View testID="draw-photos-open">
+                <Button label={t("mod.gutters.photo.open")} icon="camera" size="sm" variant="ghost" onPress={() => setPhotoSheet(true)} />
+              </View>
+            ) : null}
           </RowView>
         ) : (
           <View testID="draw-not-saved" style={{ gap: space[2], padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
@@ -469,14 +488,20 @@ export default function DrawScreen() {
               <AttrBody>{attrs}</AttrBody>
             </>
           ) : (
-            <View testID="draw-panel-empty" style={{ flex: 1, justifyContent: "center" }}>
-              <T tone="mut" center>{t("mod.gutters.attr.none")}</T>
+            <View style={{ flex: 1, gap: space[4] }}>
+              {mPhotos}
+              <View testID="draw-panel-empty" style={{ flex: 1, justifyContent: "center" }}>
+                <T tone="mut" center>{t("mod.gutters.attr.none")}</T>
+              </View>
             </View>
           )}
         </View>
       ) : null}
       <Sheet visible={!wide && sheet && !!attrs} onClose={() => setSheet(false)}>
         <AttrBody>{attrs}</AttrBody>
+      </Sheet>
+      <Sheet visible={!wide && photoSheet && !!mPhotos} onClose={() => setPhotoSheet(false)}>
+        {mPhotos}
       </Sheet>
     </View>
   );

@@ -2508,6 +2508,9 @@ export const ru = {
   "mod.gutters.attr.wk.pipe_cleat": "Pipe cleat",
   "mod.gutters.attr.wk.pipe_cleat_masonry": "Pipe cleat + анкеры",
   "mod.gutters.attr.none": "Нажмите на линию или даунспот — здесь будут их свойства",
+  "mod.gutters.photo.measurement": "Фото замера",
+  "mod.gutters.photo.element": "Фото элемента",
+  "mod.gutters.photo.open": "Фото",
 } as const;
 
 export type DictKey = keyof typeof ru;
