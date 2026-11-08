@@ -7,6 +7,7 @@ import { jobProfit, useStore } from "@/data/store";
 import { findJob } from "@/data/jobs";
 import type { DB, Job } from "@/data/types";
 import { canSeeProfit } from "@/nav/roles";
+import { JobOrdersBlock } from "@/features/JobOrdersBlock";
 import { useI18n, type DictKey } from "@/i18n";
 import { ContractStatement } from "@/features/ContractStatement";
 import { jobServable, jobStatusView } from "@/features/jobs";
@@ -230,6 +231,9 @@ export default function JobScreen() {
           {t("job3.noVisit")}
         </T>
       )}
+
+      {/* spec 37: the job's supplier orders (the office makes them; the tech sees where to pick up, no prices) */}
+      <JobOrdersBlock job={j} />
 
       <Card>
         <JobTypeTags job={j} canEdit={canEditJobLines(store.role)} />

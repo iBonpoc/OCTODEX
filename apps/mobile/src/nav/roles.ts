@@ -40,6 +40,10 @@ export const routeRoles: Record<string, readonly Role[]> = {
   company: ["director", "dispatcher"],
   // spec 36 §8: owner, admin, office (suppliers_select in the database is the same)
   suppliers: PLANNERS,
+  // spec 37: the list is the office's; one order (/purchase-order/<id>) opens for the tech of its job too (RLS)
+  "purchase-orders": PLANNERS,
+  // one order: the office and the tech of its job (RLS); not sales (spec 36 В3) — review SUP2-б
+  "purchase-order": [...PLANNERS, "tech"],
 };
 
 /** the first part of an address: "/company/hours?x=1" → "company", "/" → "" */

@@ -12,3 +12,4 @@ export * from "./reports.js";
 export * from "./jobLines.js";
 export * from "./caContract.js";
 export const ENGINE_VERSION = "0.1.2"; // 0.1.2: a percent discount counts whole bps, as the server; 0.1.1: a custom line counts the stored quantity (4 decimals, Н1)
+export * from "./purchase.js";

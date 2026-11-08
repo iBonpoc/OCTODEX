@@ -29,4 +29,15 @@ async function waitRows(admin, query, ok, what, timeout = 20000) {
   throw new Error(`the server never had ${what} (${query}): ${JSON.stringify(rows).slice(0, 400)}`);
 }
 
-module.exports = { signIn, waitRows };
+/**
+ * Put changes into the phone's queue (localStorage) for the next page load. Written from a same-origin page where the
+ * app does not run (the favicon): the running app writes its own queue when it is left (pagehide, data/appActive.ts)
+ * and would overwrite what the test put there — the order-dependent failure of e2e 114 (CHECKS §9 п.3).
+ */
+async function seedOutbox(h, items) {
+  const p = h.page;
+  await p.goto(new URL("/favicon.ico", p.url()).href);
+  await p.evaluate(([v]) => localStorage.setItem("octo.outbox.v1", JSON.stringify(v)), [items]);
+}
+
+module.exports = { signIn, waitRows, seedOutbox };
