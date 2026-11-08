@@ -8026,6 +8026,12 @@ insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_c
     vendor_tax_bps = excluded.vendor_tax_bps, markup_bps = excluded.markup_bps;
 select tst.ok((select unit_cost_cents = 1000 and markup_bps = 1000 from public.catalog_item_costs where item_id = '99000000-0000-4000-8000-000000000001'),
   'T99 null from an old phone never erases the cost');
+-- review #383 №2: the new app's save of a phone without costs sends no cost column at all — the side table keeps all
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents)
+  values ('99000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T99 bracket renamed (test)', 'ea', 1300)
+  on conflict (id) do update set name = excluded.name, unit_price_cents = excluded.unit_price_cents;
+select tst.ok((select row(unit_cost_cents, vendor_tax_bps, markup_bps) = row(1000::bigint, 1025, 1000) from public.catalog_item_costs
+                where item_id = '99000000-0000-4000-8000-000000000001'), 'T99 a save without cost columns keeps cost, supplier tax and markup');
 -- an old build sends a new cost in the old column: it lands in the side table, the row stays blank
 update public.catalog_items set unit_cost_cents = 1100 where id = '99000000-0000-4000-8000-000000000001';
 select tst.ok((select k.unit_cost_cents = 1100 and k.markup_bps = 1000 and i.unit_cost_cents is null

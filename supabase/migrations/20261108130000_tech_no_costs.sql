@@ -219,9 +219,12 @@ begin
                 and not exists (select 1 from public.lead_costs c where c.lead_id = l.id)) then
     raise exception 'leads.cost_cents has values missing from lead_costs — copy them first';
   end if;
+  -- a source's default cost has no other home: nothing writes it (no app version, no function) — it must be empty
+  if exists (select 1 from public.lead_sources where default_cost_cents is not null) then
+    raise exception 'lead_sources.default_cost_cents has values — decide where they go before this migration';
+  end if;
 end $$;
 update public.leads set cost_cents = null where cost_cents is not null;
-update public.lead_sources set default_cost_cents = null where default_cost_cents is not null;
 -- and nobody writes them again (rule 16 step 1: a check, no drop; no app version writes them)
 alter table public.leads add constraint leads_cost_cents_retired check (cost_cents is null) not valid;
 alter table public.lead_sources add constraint lead_sources_default_cost_retired check (default_cost_cents is null) not valid;

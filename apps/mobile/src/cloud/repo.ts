@@ -75,6 +75,13 @@ export async function pages<T = Row>(build: () => unknown, order: Order[], cap =
   return out;
 }
 const byId: Order[] = [{ col: "id" }];
+/** = app.can_view_costs on the server (migration 20261108130000), for the screens: no row — no costs */
+export function costsVisibleFor(m: Row | undefined): boolean {
+  if (!m || m.status !== "active") return false;
+  if (["owner", "admin", "office"].includes(s(m.role))) return true;
+  if (["tech", "subcontractor"].includes(s(m.role))) return false;
+  return (m.permissions_override as { view_costs?: unknown } | null)?.view_costs === true;
+}
 /**
  * A table the server does not have yet (a PR preview on an older database): [] — the caller reads the old place.
  * Any other failure (no network, 5xx) fails the load: «no rows» from a dropped read would look like «no cost», and the
@@ -97,7 +104,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const every = <T,>(table: string, cols: string, order = byId) => pages<T>(() => supabase.from(table).select(cols).eq("company_id", companyId), order);
   const [mems, sources, customers, contacts, properties, jobs, visits, assignees, leads, estimates, versions, options, lines, approvals, invoices, payments, files, expenses, catalogRows, lineCosts, notifications, itemCosts, versionCosts] =
     await Promise.all([
-      pages<Row>(() => supabase.from("memberships").select("user_id, role, status, can_sign_contracts, title, his_registration_number, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).in("status", ["active", "disabled"]).is("deleted_at", null), byId),
+      pages<Row>(() => supabase.from("memberships").select("user_id, role, status, can_sign_contracts, title, his_registration_number, permissions_override, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).in("status", ["active", "disabled"]).is("deleted_at", null), byId),
       live<Row>("lead_sources", "id, name, kind, phone, email, customer_id, note, is_active, is_system, position"),
       live<Row>("customers"),
       live<Row>("contacts", "id, customer_id, lead_id, name, role, phone, email, is_primary, preferred_language, created_at"),
@@ -635,6 +642,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       id: s(r.id), subjectType: s(r.subject_type) as Note["subjectType"], subjectId: s(r.subject_id), body: s(r.body),
       visibility: r.visibility === "private" ? "private" : "team", pinned: !!r.pinned, authorId: s(r.created_by), at: s(r.created_at),
     })),
+    costsVisible: costsVisibleFor(mems.find((m) => m.user_id === userId)),
     catalog: catalogRows
       .filter((r) => r.is_active !== false)
       .map((r): Row => ({ ...r, ...itemCostOf.get(s(r.id)) }))

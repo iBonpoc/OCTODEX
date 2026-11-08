@@ -847,6 +847,12 @@ export interface DB {
   invoices: Invoice[];
   expenses: Expense[];
   catalog: CatalogItem[];
+  /**
+   * 19 §9: does this person get our costs from the server (app.can_view_costs: owner / admin / office, others with
+   * view_costs, never a tech or a subcontractor)? false — the price list comes without cost, supplier tax and markup,
+   * so a material's price is edited as it is. undefined — not known (demo, a cache from before): as before.
+   */
+  costsVisible?: boolean;
   notices: Notice[];
   company: Company | null;
   notes: Note[];

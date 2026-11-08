@@ -21,7 +21,7 @@ insert into public.leads (id, company_id, source_id, contact_name, phone, cost_c
 select 'c1300000-0000-4000-8000-0000000000b1', 'c1300000-0000-4000-8000-000000000001', s.id, 'T99 lead', '(818) 555-0399', 4500
   from public.lead_sources s where s.company_id = 'c1300000-0000-4000-8000-000000000001' order by position, name limit 1;
 insert into public.lead_costs (lead_id, company_id, cost_cents) values ('c1300000-0000-4000-8000-0000000000b1', 'c1300000-0000-4000-8000-000000000001', 4500);
-update public.lead_sources set default_cost_cents = 3000 where company_id = 'c1300000-0000-4000-8000-000000000001' and name = 'Thumbtack';
+-- (lead_sources.default_cost_cents: nothing ever wrote it — the migration checks it is empty and stops otherwise)
 -- a draft with tax for a client made tax exempt after it (t17 refuses its next write — the migration must not trip on it)
 update public.estimate_versions set tax_enabled = true, tax_rate_bps = 950 where id = 'c1300000-0000-4000-8000-0000000000f1';
 update public.customers set tax_exempt = true where id = 'c1300000-0000-4000-8000-0000000000c1';

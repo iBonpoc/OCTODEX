@@ -42,8 +42,9 @@ function builder(table: string) {
 vi.mock("../src/cloud/client", () => ({
   supabase: { from: (t: string) => builder(t), rpc: () => Promise.resolve({ data: null, error: null }) },
 }));
-import { loadCompanyDB } from "../src/cloud/repo";
-import { applyOp } from "../src/cloud/ops";
+import { costsVisibleFor, loadCompanyDB } from "../src/cloud/repo";
+import { applyOp, catalogCostChange } from "../src/cloud/ops";
+import { editClean, editOk, editPrice } from "../src/features/catalogEdit";
 
 const base = (role: string) => ({
   memberships: [{ user_id: "u-me", role, status: "active", users: { full_name: "Me" } }],
@@ -118,23 +119,39 @@ describe("unit:techNoCosts — read (loadCompanyDB)", () => {
 const item = (over: object = {}) => ({ id: "i1", kind: "material" as const, name: "Bracket (test)", unit: "ea", priceCents: 1213, placeholder: true, ...over });
 
 describe("unit:techNoCosts — write (catalog.save)", () => {
-  it("the item, then its exact cost in catalog_item_costs — a cleared markup is sent as null", async () => {
-    await applyOp({ k: "catalog.save", item: item({ costCents: 1000, vendorTaxBps: 1025 }) }, "co-1", "u-1");
+  it("only the changed cost fields go to the server; a cleared markup is sent as null", async () => {
+    const prev = item({ costCents: 900, vendorTaxBps: 1025, markupBps: 1000 });
+    const now = item({ costCents: 1000, vendorTaxBps: 1025 });
+    const costs = catalogCostChange(prev, now);
+    expect(costs).toEqual({ costCents: 1000, markupBps: null });
+    await applyOp({ k: "catalog.save", item: now, costs }, "co-1", "u-1");
     expect(writes.map((w) => w.table)).toEqual(["catalog_items", "catalog_item_costs"]);
-    expect(writes[1]).toMatchObject({
-      row: { item_id: "i1", company_id: "co-1", unit_cost_cents: 1000, vendor_tax_bps: 1025, markup_bps: null },
-      opts: { onConflict: "item_id" },
-    });
+    expect(writes[0]!.row).not.toHaveProperty("vendor_tax_bps");
+    expect(writes[0]!.row).toMatchObject({ unit_cost_cents: 1000, markup_bps: null });
+    expect(writes[1]).toEqual({ table: "catalog_item_costs", row: { item_id: "i1", company_id: "co-1", unit_cost_cents: 1000, markup_bps: null }, opts: { onConflict: "item_id" } });
+  });
+  it("review #383 №2: a phone without costs (old cache, a failed load, sales made office) saves a name — no cost is sent, nothing is erased", async () => {
+    const cached = item({ name: "Bracket" }); // no cost on the phone
+    const costs = catalogCostChange(cached, { ...cached, name: "Bracket 2" });
+    expect(costs).toEqual({});
+    await applyOp({ k: "catalog.save", item: { ...cached, name: "Bracket 2" }, costs }, "co-1", "u-1");
+    expect(writes.map((w) => w.table)).toEqual(["catalog_items"]);
+    for (const col of ["unit_cost_cents", "vendor_tax_bps", "markup_bps"]) expect(writes[0]!.row).not.toHaveProperty(col);
+  });
+  it("a new item sends what it has; an op queued by an older build (no costs) writes every cost column as it did", async () => {
+    expect(catalogCostChange(undefined, item({ costCents: 5 }))).toEqual({ costCents: 5 });
+    await applyOp({ k: "catalog.save", item: item({ costCents: 5 }) }, "co-1", "u-1");
+    expect(writes[0]!.row).toMatchObject({ unit_cost_cents: 5, vendor_tax_bps: null, markup_bps: null });
   });
   it("no right to see costs (sales, 42501) or no table yet: the item is saved, no error", async () => {
     writeErr.catalog_item_costs = { code: "42501" };
-    await expect(applyOp({ k: "catalog.save", item: item({ costCents: 1 }) }, "co-1", "u-1")).resolves.toBeUndefined();
+    await expect(applyOp({ k: "catalog.save", item: item({ costCents: 1 }), costs: { costCents: 1 } }, "co-1", "u-1")).resolves.toBeUndefined();
     writeErr.catalog_item_costs = { code: "PGRST205" };
-    await expect(applyOp({ k: "catalog.save", item: item({ costCents: 1 }) }, "co-1", "u-1")).resolves.toBeUndefined();
+    await expect(applyOp({ k: "catalog.save", item: item({ costCents: 1 }), costs: { costCents: 1 } }, "co-1", "u-1")).resolves.toBeUndefined();
   });
   it("any other failure of the cost stops the op (the queue retries)", async () => {
     writeErr.catalog_item_costs = { code: "08006" };
-    await expect(applyOp({ k: "catalog.save", item: item({ costCents: 1 }) }, "co-1", "u-1")).rejects.toBeTruthy();
+    await expect(applyOp({ k: "catalog.save", item: item({ costCents: 1 }), costs: { costCents: 1 } }, "co-1", "u-1")).rejects.toBeTruthy();
   });
   it("onlyNew (a module's item, #377/#378) keeps its read-back and never writes the side table: an item already there keeps its cost", async () => {
     await applyOp({ k: "catalog.save", item: item({ costCents: 1 }), onlyNew: true }, "co-1", "u-1");
@@ -150,8 +167,40 @@ describe("unit:techNoCosts — write (catalog.save)", () => {
     expect(writes.map((w) => w.table)).toEqual(["catalog_items"]);
   });
   it("a plain save: no read-back, the side table written — both paths side by side", async () => {
-    await applyOp({ k: "catalog.save", item: item({ costCents: 5 }) }, "co-1", "u-1");
+    await applyOp({ k: "catalog.save", item: item({ costCents: 5 }), costs: { costCents: 5 } }, "co-1", "u-1");
     expect(readBacks).toEqual([]);
     expect(writes.map((w) => w.table)).toEqual(["catalog_items", "catalog_item_costs"]);
+  });
+});
+
+describe("unit:techNoCosts — who gets costs (= app.can_view_costs)", () => {
+  it("owner / admin / office yes; tech and sub never, also with view_costs; sales only with view_costs; no row or not active — no", () => {
+    for (const role of ["owner", "admin", "office"]) expect(costsVisibleFor({ role, status: "active" })).toBe(true);
+    for (const role of ["tech", "subcontractor"]) expect(costsVisibleFor({ role, status: "active", permissions_override: { view_costs: true } })).toBe(false);
+    expect(costsVisibleFor({ role: "sales", status: "active" })).toBe(false);
+    expect(costsVisibleFor({ role: "sales", status: "active", permissions_override: { view_costs: true } })).toBe(true);
+    expect(costsVisibleFor({ role: "owner", status: "disabled" })).toBe(false);
+    expect(costsVisibleFor(undefined)).toBe(false);
+  });
+  it("loadCompanyDB says it for me", async () => {
+    rows = { ...base("sales") };
+    expect((await loadCompanyDB("co-1", "u-me")).costsVisible).toBe(false);
+    rows = { ...base("office") };
+    expect((await loadCompanyDB("co-1", "u-me")).costsVisible).toBe(true);
+  });
+});
+
+describe("unit:techNoCosts — the item editor without costs (review #383 №1)", () => {
+  const mat = item({ priceCents: 1213 });
+  it("sales without costs: a material's price is kept / edited as it is, never counted from a cost they do not have", () => {
+    const typed = { ...mat, name: "Bracket renamed", costCents: 1000 }; // even a cost typed in by hand changes nothing
+    expect(editPrice(typed, [], true)).toBe(1213);
+    expect(editOk({ ...mat, costCents: undefined }, true)).toBe(true);
+    expect(editClean({ ...mat, name: " Bracket renamed " }, [], true)).toMatchObject({ name: "Bracket renamed", priceCents: 1213, costCents: undefined });
+  });
+  it("who gets costs: the price is counted from the cost as before ($10 + 10.25% + 10% = $12.13)", () => {
+    const m = { ...mat, costCents: 1000, vendorTaxBps: 1025, markupBps: 1000 };
+    expect(editPrice(m, [], false)).toBe(1213);
+    expect(editOk({ ...m, costCents: undefined }, false)).toBe(false);
   });
 });

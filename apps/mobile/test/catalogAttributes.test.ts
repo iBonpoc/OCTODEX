@@ -184,8 +184,8 @@ describe("unit:catalogAttributes — onlyNew: a module's items with a fixed id, 
     expect((rpcCalls[1]!.args as { filters: unknown }).filters).toEqual([["id", "i0"], ["company_id", "co-1"]]);
     rpcCalls.length = 0;
     await applyOp({ k: "catalog.save", item: it0({}) }, "co-1", "u-1");
-    // a plain save also sets the item's exact cost in the side table (19 §9, test/techNoCosts.test.ts)
-    expect(rpcCalls.map((x) => [x.name, (x.args as { opts?: object }).opts])).toEqual([["catalog_items", { onConflict: "id" }], ["catalog_item_costs", { onConflict: "item_id" }]]);
+    // a plain save; the side table is written only for changed cost fields (19 §9, test/techNoCosts.test.ts)
+    expect(rpcCalls.map((x) => [x.name, (x.args as { opts?: object }).opts])).toEqual([["catalog_items", { onConflict: "id" }]]);
   });
   it("security check #377: the id is not ours (another company's row, RLS hides it) → a refusal «id taken», never a quiet success", async () => {
     const { applyOp, PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
