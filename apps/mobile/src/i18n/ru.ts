@@ -3169,6 +3169,12 @@ export const ru = {
   "clientDup.onlyOwner": "Слить может владелец или администратор",
   "clientDup.merged": "Карточка слита",
   "clientDup.mergedHint": "Всё перешло в «{name}»",
+  // spec 37: why the server refused a purchase order change (outboxRejected)
+  "po.rej.receiving": "Заказ уже принимается — правки позиций не сохранены",
+  "po.rej.cancelled": "Заказ отменён — правки не сохранены",
+  "po.rej.stale": "Заказ изменился на другом телефоне — отметка получения не сохранена. Откройте заказ и отметьте снова",
+  "po.rej.officeOnly": "Полученный заказ меняет только офис",
+  "po.rej.notOpen": "Заказ ещё не отправлен или отменён — получение не отмечено",
   // spec 36: suppliers (SUP1, «Лиды и клиенты»)
   "nav.suppliers": "Поставщики",
   "sup.title": "Поставщики",

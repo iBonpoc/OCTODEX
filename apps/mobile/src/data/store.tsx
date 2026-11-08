@@ -1090,8 +1090,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   const visitOf = (visitId: ID) => dbRef.current.visits.find((x) => x.id === visitId);
   const noop: Undo = () => {};
   /** spec 37: an order on the phone and in the queue (header, lines, the lines taken out) */
-  const putOrder = (o: PurchaseOrder, removedLineIds: ID[]): Undo =>
-    mutate(
+  const putOrder = (o0: PurchaseOrder, removedLineIds: ID[]): Undo => {
+    // the server moves row_version by one per save (a new order: the insert, then the update → 2) — mirrored here so a
+    // marking after it is not refused as stale (po_receive p_row_version); unknown stays unknown
+    const prev = (dbRef.current.purchaseOrders ?? []).find((x) => x.id === o0.id);
+    const o: PurchaseOrder = prev ? (prev.rowVersion !== undefined ? { ...o0, rowVersion: prev.rowVersion + 1 } : o0) : { ...o0, rowVersion: 2 };
+    return mutate(
       "po.save",
       (d) => {
         const list = d.purchaseOrders ?? [];
@@ -1099,6 +1103,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       { k: "po.save", order: o, removedLineIds },
     );
+  };
   /**
    * spec 36: change several price-list items at once (a supplier's tax or its new name) — each a catalog.save with its
    * cost change and the phone's history row; «Отменить» sends the reverse ops (the change may already be on the
@@ -2221,11 +2226,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       receivePurchaseOrder: (id, lines) => {
         const o = (dbRef.current.purchaseOrders ?? []).find((x) => x.id === id);
         if (!o || !canReceive(role) || !["sent", "partially_received", "received"].includes(o.status)) return noop;
+        // a received order is changed by the office only (director 08.11, #461 №3; po_receive refuses the tech)
+        if (o.status === "received" && !canEditOrders(role)) return noop;
         const apply = (src: PurchaseOrder, ls: { id: ID; received: string }[]) => {
           const next = { ...src, lines: src.lines.map((l) => { const r = ls.find((x) => x.id === l.id); return r ? { ...l, receivedQty: r.received } : l; }) };
           const st = statusAfterReceive(next);
-          const done = { ...next, status: st, ...(st === "received" ? { receivedAt: new Date().toISOString() } : { receivedAt: undefined }) };
-          mutate("po.receive", (d) => ({ ...d, purchaseOrders: (d.purchaseOrders ?? []).map((x) => (x.id === id ? done : x)) }), { k: "po.receive", id, lines: ls });
+          const done = {
+            ...next, status: st, ...(st === "received" ? { receivedAt: new Date().toISOString() } : { receivedAt: undefined }),
+            ...(src.rowVersion !== undefined ? { rowVersion: src.rowVersion + 1 } : {}),
+          };
+          mutate("po.receive", (d) => ({ ...d, purchaseOrders: (d.purchaseOrders ?? []).map((x) => (x.id === id ? done : x)) }), {
+            k: "po.receive", id, lines: ls, ...(src.rowVersion !== undefined ? { rowVersion: src.rowVersion } : {}),
+          });
         };
         const before = o.lines.filter((l) => lines.some((x) => x.id === l.id)).map((l) => ({ id: l.id, received: l.receivedQty }));
         apply(o, lines);

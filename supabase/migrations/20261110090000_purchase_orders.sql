@@ -43,8 +43,27 @@ create index purchase_orders_company_idx on public.purchase_orders (company_id, 
 create index purchase_orders_job_idx on public.purchase_orders (company_id, job_id) where job_id is not null;  -- the FK; a new table
 create index purchase_orders_supplier_idx on public.purchase_orders (company_id, supplier_id) where supplier_id is not null;  -- the FK; a new table
 select app.attach_standard_triggers('public.purchase_orders');
+-- The number (director's check of #461 №1): the app saves with «insert if new» (ON CONFLICT DO NOTHING) — a BEFORE
+-- INSERT trigger runs before the conflict is found, so the shared tg_assign_number would take a number from the counter
+-- on every save. Here a row that is already there keeps its number and the counter is not touched.
+create or replace function app.tg_po_number()
+returns trigger language plpgsql security definer set search_path = '' as $$
+begin
+  if tg_op = 'UPDATE' then
+    new.number := old.number;
+  elsif exists (select 1 from public.purchase_orders p where p.id = new.id) then
+    -- a repeat of a save: no number is taken (the row is not inserted: the conflict); another company's id gets none
+    new.number := coalesce((select p.number from public.purchase_orders p where p.id = new.id and p.company_id = new.company_id), '');
+  else
+    new.number := app.next_document_number(new.company_id, 'purchase_order', 'PO');
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_po_number() from public, anon, authenticated;
 create trigger t20_number before insert or update on public.purchase_orders
-  for each row execute function app.tg_assign_number('purchase_order', 'PO');
+  for each row execute function app.tg_po_number();
+create unique index purchase_orders_number_uq on public.purchase_orders (company_id, number) where number <> '';  -- a new table
 create trigger t30_guard_status before update on public.purchase_orders
   for each row execute function app.tg_guard_status('purchase_order');
 create trigger t90_status_event after insert or update on public.purchase_orders
@@ -54,27 +73,26 @@ create trigger t12_keep_id before update on public.purchase_orders
 
 -- What the app may change in an order (security check SUP2-а №1, №2, №6). Ignored rather than refused: a stale change
 -- from an offline queue must not stop the queue (CHECKS §9) — the next read shows the server's order.
---   * a new order is a draft, whatever is sent (the app sends the status in its upsert: sent comes as the next update);
---   * received / partially_received only through po_receive (it says so with app.po_receiving), never by hand;
---   * a received or cancelled order does not change at all (its job, supplier, snapshot, note);
---   * po_receive itself changes only the status and received_at.
+--   * a new order is a draft, whatever is sent (the app saves «insert if new», then an update);
+--   * received / partially_received only through po_receive, never by hand;
+--   * a received or cancelled order does not change at all (its job, supplier, snapshot, note).
+-- the guard runs as the caller (it must tell the app from po_receive); the list of moves is read here
+create or replace function app.po_move_ok(p_from text, p_to text)
+returns boolean language sql stable security definer set search_path = '' as $$
+  select exists (select 1 from app.status_transitions t where t.entity_type = 'purchase_order' and t.from_status = p_from and t.to_status = p_to);
+$$;
+revoke all on function app.po_move_ok(text, text) from public, anon;
+grant execute on function app.po_move_ok(text, text) to authenticated;
+
 create or replace function app.tg_po_guard()
-returns trigger language plpgsql security definer set search_path = '' as $$
-declare
-  st text;
-  ra timestamptz;
+returns trigger language plpgsql set search_path = '' as $$
 begin
+  -- only the app is guarded (director's check of #461 №6: not a session setting): po_receive runs as the owner of the
+  -- tables (security definer) and changes only the status and received_at; t10 stamps it as usual (№2)
+  if current_user is distinct from 'authenticated' then return new; end if;
   if tg_op = 'INSERT' then
     new.status := 'draft';
     new.received_at := null;
-    return new;
-  end if;
-  if coalesce(current_setting('app.po_receiving', true), '') = 'on' then
-    st := new.status;
-    ra := new.received_at;
-    new := old;
-    new.status := st;
-    new.received_at := ra;
     return new;
   end if;
   if old.status in ('received', 'cancelled') then return old; end if;
@@ -82,8 +100,7 @@ begin
   -- SUP2-а №5) keeps the stored one instead of refusing the whole save
   if new.status is distinct from old.status
      and (new.status in ('received', 'partially_received') or old.status = 'partially_received' and new.status = 'sent'
-          or not exists (select 1 from app.status_transitions t where t.entity_type = 'purchase_order'
-                          and t.from_status = old.status and t.to_status = new.status)) then
+          or not app.po_move_ok(old.status, new.status)) then
     new.status := old.status;
   end if;
   new.received_at := old.received_at;
@@ -160,11 +177,9 @@ create trigger t11_company_id_immutable before update on public.purchase_order_l
 create trigger t12_keep_line_id before update on public.purchase_order_line_costs
   for each row execute function app.tg_keep_line_id();
 
--- ---- an order of a closed state is not edited (received / cancelled): its lines neither ---------------------------
--- po_receive (below) changes received_qty of a received order back to partially_received — it runs as the owner of the
--- table and says so with app.po_receiving; the app's own edits of a received or cancelled order are refused.
+-- ---- the lines of an order being received or closed are not edited ---------------------------------------------
 create or replace function app.tg_po_line_lock()
-returns trigger language plpgsql security definer set search_path = '' as $$
+returns trigger language plpgsql set search_path = '' as $$
 declare
   st text;
   po uuid := coalesce(new.po_id, old.po_id);
@@ -172,22 +187,18 @@ begin
   if tg_op = 'UPDATE' and new.po_id is distinct from old.po_id then
     raise exception 'a line never moves to another order' using errcode = 'check_violation';
   end if;
-  -- po_receive changes received_qty of its lines and nothing else (security check SUP2-а №4)
-  if coalesce(current_setting('app.po_receiving', true), '') = 'on' then
-    if tg_op <> 'UPDATE' then raise exception 'po_receive only updates lines' using errcode = 'check_violation'; end if;
-    declare q numeric := new.received_qty; begin
-      new := old;
-      new.received_qty := q;
-    end;
-    return new;
-  end if;
+  -- po_receive (the owner of the tables) sets received_qty; the app has no grant on it (#461 №6: not a session setting)
+  if current_user is distinct from 'authenticated' then return new; end if;
   select p.status into st from public.purchase_orders p where p.id = po;
-  -- a closed order's lines stay as they are: ignored, not refused (a cancel sends the order with its lines — review
-  -- SUP2-а №1; a refusal would stop the queue)
-  if st in ('received', 'cancelled', 'partially_received') then
-    return case when tg_op = 'UPDATE' then old else null end;
+  -- the lines of an order being received or closed do not change: a clear refusal, not silence (#461 №4) — the app
+  -- never sends them (ops.ts: linesEditable); a stale phone gets «the order is already being received» in the card
+  if st in ('partially_received', 'received') then
+    raise exception 'purchase order % is %: its lines are not changed', po, st using errcode = 'check_violation', hint = 'po_receiving';
   end if;
-  return coalesce(new, old);
+  if st = 'cancelled' then
+    raise exception 'purchase order % is cancelled', po using errcode = 'check_violation', hint = 'po_cancelled';
+  end if;
+  return new;
 end;
 $$;
 revoke all on function app.tg_po_line_lock() from public, anon, authenticated;
@@ -196,7 +207,7 @@ create trigger t25_po_line_lock before insert or update on public.purchase_order
 
 -- the expected cost of a line of a closed (partially received, received, cancelled) order stays as it was
 create or replace function app.tg_po_cost_lock()
-returns trigger language plpgsql security definer set search_path = '' as $$
+returns trigger language plpgsql set search_path = '' as $$
 declare
   st text;
 begin
@@ -272,50 +283,63 @@ create policy purchase_order_line_costs_update on public.purchase_order_line_cos
 
 -- ---- what came: the tech of the job or the office (spec 37 §5) ---------------------------------------------------
 -- p_lines: [{"id": <line>, "received": <qty>}] — the received quantity of each line as it is now (not added: a repeat
--- of the same call changes nothing). The order becomes received when every line has its qty, partially_received when
--- something came, sent again when every tick is taken back (the undo). Only a sent / partially received / received
--- order. Returns the new status.
-create or replace function public.po_receive(p_po_id uuid, p_lines jsonb)
+-- of the same call changes nothing), 0..qty of the line (more than ordered — not yet, spec 37 §5). The status after:
+-- every line has its qty → received; something came → partially_received; every tick taken back → sent again (the
+-- undo of a marking). Only a sent / partially received / received order; a received one only by the office (director
+-- 08.11, #461 №3). p_row_version — the order's row_version the phone knows: another change meanwhile (an office edit,
+-- another marking) refuses a stale offline marking with a clear code instead of turning «all came» back. Each call
+-- moves the order's row_version by one. Returns the new status.
+create or replace function public.po_receive(p_po_id uuid, p_lines jsonb, p_row_version bigint default null)
 returns text language plpgsql security definer set search_path = '' as $$
 declare
   po public.purchase_orders;
   l jsonb;
   q numeric;
+  lq numeric;
   st text;
+  office boolean;
 begin
   -- the order locked: two markings at once give one final status (security check SUP2-а №5)
   select * into po from public.purchase_orders where id = p_po_id and deleted_at is null for update;
-  if po.id is null or not (app.has_role(po.company_id, array['owner', 'admin', 'office'])
-                           or (po.job_id is not null and app.has_role(po.company_id, array['tech']) and app.is_job_assignee(po.job_id))) then
+  office := po.id is not null and app.has_role(po.company_id, array['owner', 'admin', 'office']);
+  if po.id is null or not (office or (po.job_id is not null and app.has_role(po.company_id, array['tech']) and app.is_job_assignee(po.job_id))) then
     raise exception 'purchase order not found' using errcode = 'P0002';
   end if;
   if po.status not in ('sent', 'partially_received', 'received') then
-    raise exception 'purchase order is %: nothing to receive', po.status using errcode = 'check_violation';
+    raise exception 'purchase order is %: nothing to receive', po.status using errcode = 'check_violation', hint = 'po_not_open';
   end if;
-  if jsonb_typeof(p_lines) is distinct from 'array' or jsonb_array_length(p_lines) > 500 then
-    raise exception 'lines: an array of at most 500' using errcode = '22023';
+  if po.status = 'received' and not office then
+    raise exception 'a received order is changed by the office' using errcode = 'check_violation', hint = 'po_received_office';
   end if;
-  perform set_config('app.po_receiving', 'on', true);
+  if p_row_version is not null and p_row_version is distinct from po.row_version then
+    raise exception 'the order changed meanwhile' using errcode = 'check_violation', hint = 'po_stale';
+  end if;
+  if jsonb_typeof(p_lines) is distinct from 'array' or jsonb_array_length(p_lines) not between 1 and 500 then
+    raise exception 'lines: an array of 1..500' using errcode = '22023';
+  end if;
+  if not exists (select 1 from public.purchase_order_lines x where x.po_id = po.id and x.deleted_at is null) then
+    raise exception 'the order has no lines' using errcode = '22023';
+  end if;
   for l in select x from jsonb_array_elements(p_lines) x loop
-    if jsonb_typeof(l -> 'received') is distinct from 'number' or (l ->> 'received')::numeric < 0 or (l ->> 'received')::numeric > 1000000 then
-      raise exception 'received: a number 0..1000000' using errcode = '22023';
+    if jsonb_typeof(l -> 'received') is distinct from 'number' or (l ->> 'received')::numeric < 0 then
+      raise exception 'received: a number ≥ 0' using errcode = '22023';
     end if;
     q := round((l ->> 'received')::numeric, 3);
-    update public.purchase_order_lines set received_qty = q
-     where po_id = po.id and company_id = po.company_id and id::text = (l ->> 'id') and deleted_at is null;
+    select x.qty into lq from public.purchase_order_lines x
+     where x.po_id = po.id and x.company_id = po.company_id and x.id::text = (l ->> 'id') and x.deleted_at is null;
+    -- a line of another order is ignored
+    if lq is null then continue; end if;
+    if q > lq then raise exception 'received more than ordered' using errcode = '22023'; end if;
+    update public.purchase_order_lines set received_qty = q where id::text = (l ->> 'id') and po_id = po.id;
   end loop;
   select case
            when not exists (select 1 from public.purchase_order_lines x where x.po_id = po.id and x.deleted_at is null and x.received_qty < x.qty) then 'received'
            when exists (select 1 from public.purchase_order_lines x where x.po_id = po.id and x.deleted_at is null and x.received_qty > 0) then 'partially_received'
-           -- nothing came after all (every tick taken back — the undo of a marking): sent again
            else 'sent'
          end into st;
-  if st is distinct from po.status then
-    update public.purchase_orders set status = st, received_at = case when st = 'received' then now() else null end where id = po.id;
-  end if;
-  perform set_config('app.po_receiving', '', true);
+  update public.purchase_orders set status = st, received_at = case when st = 'received' then coalesce(received_at, now()) else null end where id = po.id;
   return st;
 end;
 $$;
-revoke all on function public.po_receive(uuid, jsonb) from public, anon;
-grant execute on function public.po_receive(uuid, jsonb) to authenticated;
+revoke all on function public.po_receive(uuid, jsonb, bigint) from public, anon;
+grant execute on function public.po_receive(uuid, jsonb, bigint) to authenticated;

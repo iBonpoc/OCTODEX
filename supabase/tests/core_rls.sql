@@ -11324,12 +11324,22 @@ select tst.ok((select number like 'PO-%' from public.purchase_orders where id = 
 :as_owner_a
 update public.purchase_orders set id = '51550000-0000-4000-8000-0000000000ff' where id = '51550000-0000-4000-8000-000000000001';
 select tst.ok(tst.cnt($q$select 1 from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001'$q$) = 1, 'T156 the id cannot be changed');
+-- «insert if new» of an order that is there takes no number (the app's save; #461 №1)
+:as_super
+create temp table t156n as select last_value from app.company_numbering where company_id = 'ca000000-0000-0000-0000-000000000000' and doc_type = 'purchase_order';
+:as_owner_a
+insert into public.purchase_orders (id, company_id) values ('51550000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000') on conflict (id) do nothing;
+insert into public.purchase_orders (id, company_id) values ('51550000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000') on conflict (id) do nothing;
+:as_super
+select tst.ok((select last_value from app.company_numbering where company_id = 'ca000000-0000-0000-0000-000000000000' and doc_type = 'purchase_order') = (select last_value from t156n),
+  'T156 a repeated save takes no number from the counter');
+drop table t156n;
+:as_owner_a
 update public.purchase_orders set status = 'cancelled' where id = '51550000-0000-4000-8000-000000000002';
 update public.purchase_orders set status = 'draft' where id = '51550000-0000-4000-8000-000000000002';
 select tst.ok((select status = 'cancelled' from public.purchase_orders where id = '51550000-0000-4000-8000-000000000002'), 'T156 a cancelled order stays cancelled');
-insert into public.purchase_order_lines (company_id, po_id, name, qty) values ('ca000000-0000-0000-0000-000000000000', '51550000-0000-4000-8000-000000000002', 'late', 1);
-select tst.ok(tst.cnt($q$select 1 from public.purchase_order_lines where po_id = '51550000-0000-4000-8000-000000000002' and name = 'late'$q$) = 0,
-  'T156 a cancelled order takes no lines (ignored, not refused: the queue goes on)');
+select tst.fails_like($q$insert into public.purchase_order_lines (company_id, po_id, name, qty) values ('ca000000-0000-0000-0000-000000000000', '51550000-0000-4000-8000-000000000002', 'late', 1)$q$,
+  '%cancelled%', 'T156 a cancelled order takes no lines');
 update public.purchase_orders set note = 'late', job_id = 'e1a00000-0000-0000-0000-000000000001' where id = '51550000-0000-4000-8000-000000000002';
 select tst.ok((select note is null and job_id = 'e1a00000-0000-0000-0000-000000000002' from public.purchase_orders where id = '51550000-0000-4000-8000-000000000002'),
   'T156 a cancelled order does not change at all (its job, its note)');
@@ -11359,15 +11369,26 @@ select tst.ok(public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":
 select tst.ok(public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b1","received":2}]') = 'partially_received',
   'T157 the same call again changes nothing (the quantity as it is, not added)');
 select tst.fails($q$select public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b2","received":-1}]')$q$, 'T157 a negative quantity');
-select tst.ok(public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b2","received":1}]') = 'received',
-  'T157 everything came → received');
+select tst.fails($q$select public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b2","received":2}]')$q$, 'T157 more than ordered');
+select tst.fails($q$select public.po_receive('51550000-0000-4000-8000-000000000001', '[]')$q$, 'T157 an empty list');
+select tst.fails_like($q$select public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b2","received":1}]', 1)$q$, '%changed meanwhile%',
+  'T157 a stale row_version (the order changed meanwhile) — a clear refusal');
+select tst.ok(public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b2","received":1}]',
+  (select row_version from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001')) = 'received',
+  'T157 everything came → received (the row_version the phone knows)');
+select tst.fails_like($q$select public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b2","received":0}]')$q$, '%changed by the office%',
+  'T157 the tech does not take a received order back (the office does)');
 :as_super
-select tst.ok((select status = 'received' and received_at is not null from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001')
+select tst.ok((select status = 'received' and received_at is not null and updated_by = 'a0000000-0000-0000-0000-000000000003' from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001')
           and (select received_qty = 2 from public.purchase_order_lines where id = '51550000-0000-4000-8000-0000000000b1'),
-  'T157 the order and its lines say so');
+  'T157 the order and its lines say so; updated_by is the tech who marked it (#461 №2)');
 :as_office_a
-update public.purchase_order_lines set qty = 5 where id = '51550000-0000-4000-8000-0000000000b1';
-select tst.ok((select qty = 2 from public.purchase_order_lines where id = '51550000-0000-4000-8000-0000000000b1'), 'T157 a received order''s lines are not edited');
+select tst.fails_like($q$update public.purchase_order_lines set qty = 5 where id = '51550000-0000-4000-8000-0000000000b1'$q$, '%lines are not changed%',
+  'T157 a received order''s lines are not edited — a clear refusal (hint po_receiving), not silence');
+-- a session setting does not open the lock (#461 №6)
+select set_config('app.po_receiving', 'on', false);
+select tst.fails($q$update public.purchase_order_lines set qty = 5 where id = '51550000-0000-4000-8000-0000000000b1'$q$, 'T157 …even with app.po_receiving set by the caller');
+select set_config('app.po_receiving', '', false);
 update public.purchase_orders set status = 'sent', note = 'stale' where id = '51550000-0000-4000-8000-000000000001';
 select tst.ok((select status = 'received' and note is distinct from 'stale' from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001'),
   'T157 a received order does not change (a stale save from a queue)');
@@ -11416,8 +11437,9 @@ select tst.ok((select unit_cost_cents = 4200 from public.purchase_order_line_cos
 \echo 'T158 line costs ok'
 
 -- ---------------------------------------------------------------- T159: who calls the new functions (rule 18)
-select tst.ok(has_function_privilege('authenticated', 'public.po_receive(uuid, jsonb)', 'execute')
-          and not has_function_privilege('anon', 'public.po_receive(uuid, jsonb)', 'execute')
+select tst.ok(has_function_privilege('authenticated', 'public.po_receive(uuid, jsonb, bigint)', 'execute')
+          and not has_function_privilege('anon', 'public.po_receive(uuid, jsonb, bigint)', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_po_number()', 'execute')
           and not has_function_privilege('authenticated', 'app.tg_po_line_lock()', 'execute')
           and not has_function_privilege('authenticated', 'app.tg_keep_line_id()', 'execute')
           and not has_function_privilege('authenticated', 'app.tg_po_guard()', 'execute')

@@ -3169,6 +3169,12 @@ export const en: Dict = {
   "clientDup.onlyOwner": "Only the owner or an admin can merge",
   "clientDup.merged": "Card merged",
   "clientDup.mergedHint": "Everything moved to “{name}”",
+  // spec 37: why the server refused a purchase order change (outboxRejected)
+  "po.rej.receiving": "The order is already being received — item changes were not saved",
+  "po.rej.cancelled": "The order is cancelled — changes were not saved",
+  "po.rej.stale": "The order changed on another phone — the marking was not saved. Open the order and mark again",
+  "po.rej.officeOnly": "Only the office changes a received order",
+  "po.rej.notOpen": "The order is not sent or is cancelled — nothing was marked",
   // spec 36: suppliers (SUP1, «Лиды и клиенты»)
   "nav.suppliers": "Suppliers",
   "sup.title": "Suppliers",

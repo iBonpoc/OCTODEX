@@ -32,6 +32,12 @@ export const REJECT_REASONS = {
   merge_already_merged: "clientDup.rej.merged",
   // an old phone's people / tags for a card merged meanwhile (save_customer_people, set_customer_tags)
   customer_merged: "clientDup.rej.cardMerged",
+  // spec 37 (migration 20261110090000): purchase orders
+  po_receiving: "po.rej.receiving",
+  po_cancelled: "po.rej.cancelled",
+  po_stale: "po.rej.stale",
+  po_received_office: "po.rej.officeOnly",
+  po_not_open: "po.rej.notOpen",
 } as const;
 export type RejectReason = keyof typeof REJECT_REASONS;
 /** a refused signature (estimate.sign, estimate.approve): the client's signature was not kept — take it again (review #415 №4) */

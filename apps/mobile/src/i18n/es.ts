@@ -3169,6 +3169,12 @@ export const es: Dict = {
   "clientDup.onlyOwner": "Solo el dueño o un administrador puede unir",
   "clientDup.merged": "Ficha unida",
   "clientDup.mergedHint": "Todo pasó a «{name}»",
+  // spec 37: why the server refused a purchase order change (outboxRejected)
+  "po.rej.receiving": "El pedido ya se está recibiendo: los cambios no se guardaron",
+  "po.rej.cancelled": "El pedido está cancelado: los cambios no se guardaron",
+  "po.rej.stale": "El pedido cambió en otro teléfono: la marca no se guardó. Ábralo y marque de nuevo",
+  "po.rej.officeOnly": "Solo la oficina cambia un pedido recibido",
+  "po.rej.notOpen": "El pedido no está enviado o está cancelado: no se marcó nada",
   // spec 36: suppliers (SUP1, «Лиды и клиенты»)
   "nav.suppliers": "Proveedores",
   "sup.title": "Proveedores",
