@@ -226,15 +226,11 @@ export function RunAttrsView({
   const profiles = withCurrent(ch.offer.profiles, a.profile);
   const sizes = withCurrent(ch.offer.sizes[a.profile] ?? [], a.size);
   const kits = withCurrent(hangerKitsFor(a.profile, ch), a.hanger);
-  const taped = run.lengthIn !== undefined;
   return (
     <>
       <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
         <T v="heading" w="semibold">{`${t(k("run"))} · ${ftIn(run.lengthIn ?? drawnLengthIn(run))}`}</T>
-        <View testID="attr-confidence">
-          {/* icon + word (rule 2): the tape is a measured length, the drawing a sketch */}
-          <StatusChip status={taped ? "ok" : "neutral"} label={t(k(taped ? "taped" : "drawn"))} />
-        </View>
+        {/* no «рулетка / нарисовано» per line any more: how the drawing was measured is one choice (П20.16) */}
       </RowView>
       {compact ? (
         <>

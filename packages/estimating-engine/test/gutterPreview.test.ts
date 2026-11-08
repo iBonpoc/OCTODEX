@@ -34,6 +34,19 @@ describe("gutterPreview", () => {
     expect(r.gutterFt).toBe("40");
     expect(r.totalCents).toBe(parts.filter((p) => p.use !== "purchase").reduce((s, p) => s + Number(p.qty) * 100, 0));
   });
+  it("a length to 1/8″ (founder 08.11: 8′ 9¼″) is cut to 1/8″ but priced by the whole inch — one rounding, in the engine; whole cents", () => {
+    const out = (lengthIn: number) => computeGutterParts({
+      runs: [{ id: "1", profile: "k", size: "5", material: "aluminum", gauge: ".027", color: "white", story: 1, hanger: "hidden", lengthIn, ends: [{ kind: "cap" }, { kind: "cap" }], houseSide: "R" }],
+      corners: [],
+      downspouts: [],
+    });
+    const frac = out(105.25);
+    expect(frac.advice.some((a) => a.code === "input_fixed")).toBe(true); // 105.25 → 105, said so
+    expect(frac.parts).toEqual(out(105).parts); // the same as typing 105″
+    const r = gutterPreview(frac.parts, { "gutter.ft": 1199 });
+    expect(Number.isInteger(r.totalCents)).toBe(true);
+    expect(out(105.5).parts).toEqual(out(106).parts); // half up, as everywhere
+  });
   it("nothing drawn → $0", () => expect(gutterPreview([], {})).toEqual({ totalCents: 0, unpriced: 0, gutterFt: "0", listed: 0 }));
   describe("the company's price list first (M7d, spec 33 П22.10)", () => {
     const gut = part({ key: "g", qty: "40.5", attrs: { part: "gutter" } });

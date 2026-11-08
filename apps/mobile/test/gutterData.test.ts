@@ -75,7 +75,7 @@ describe("unit:gutterData — the read (ModuleDef.load)", () => {
           : [{ id: "e1", measurement_id: "m1", kind: "run", geom: { a: [0, 0], b: [1, 0] }, attrs: {}, confidence: "taped" }, { id: "e9", measurement_id: "gone", kind: "run", geom: {}, attrs: {} }],
     };
     const g = await loadGutters(read);
-    expect(g.measurements).toEqual([{ id: "m1", label: "Front", status: "ready", propertyId: null, leadId: "l1", updatedAt: "2026-11-08T00:00:00Z" }]);
+    expect(g.measurements).toEqual([{ id: "m1", label: "Front", status: "ready", propertyId: null, leadId: "l1", accuracy: "rough", updatedAt: "2026-11-08T00:00:00Z" }]);
     expect(g.elements.map((e) => [e.id, e.confidence])).toEqual([["e1", "taped"]]);
   });
   it("the core: loads a module only when the company has its row; a failed read keeps the phone's copy", async () => {

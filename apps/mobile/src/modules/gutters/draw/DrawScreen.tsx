@@ -164,7 +164,7 @@ export default function DrawScreen() {
       }
       // a new one from a lead or a property is linked to it (S4g); from home — a draft without either (S1b)
       const one = (x: string | string[] | undefined) => (typeof x === "string" && x ? x : null);
-      setM(v?.m ?? { id: mid, label: null, status: "draft", propertyId: one(params.property), leadId: one(params.lead) });
+      setM(v?.m ?? { id: mid, label: null, status: "draft", accuracy: "rough", propertyId: one(params.property), leadId: one(params.lead) });
     });
     void loadToolbarPlace().then((p) => on && setPlace(p));
     return () => {
@@ -395,6 +395,11 @@ export default function DrawScreen() {
     if (id) commit(setLength(cur.current.drawing, id, lengthIn));
   };
   const quick = quickRun ? drawing.runs.find((r) => r.id === quickRun) : undefined;
+  const tape = m?.accuracy === "tape";
+  const setAccuracy = (a: "rough" | "tape") => {
+    setM((x) => (x ? { ...x, accuracy: a } : x));
+    later.current();
+  };
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
   const cut = corner ? cornerCut(drawing, corner) : null;
   const [sketchW, setSketchW] = useState(0);
@@ -618,6 +623,11 @@ export default function DrawScreen() {
         </RowView>
         {flat && canSave ? null : canSave ? (
           <RowView style={{ flexWrap: "wrap", gap: space[2] }}>
+            <View testID="draw-accuracy">
+              <Press onPress={() => setMoreSheet(true)} accessibilityRole="button" accessibilityLabel={t("mod.gutters.draw.accTitle")}>
+                <StatusChip status={tape ? "ok" : "warn"} label={t(tape ? "mod.gutters.draw.accTapeShort" : "mod.gutters.draw.accRoughShort")} soft />
+              </Press>
+            </View>
             {savedOnce ? (
               <View testID="draw-saved">
                 <StatusChip status="ok" label={t("mod.gutters.draw.saved")} soft />
@@ -778,6 +788,7 @@ export default function DrawScreen() {
                     </RowView>
                   </View>
                 ))}
+                {!tape ? <View testID="corner-cut-rough"><StatusChip status="warn" label={t("mod.gutters.draw.accRoughCut")} soft /></View> : null}
                 <View onLayout={(e) => setSketchW(e.nativeEvent.layout.width)}>
                   {sketchW > 0 ? <CornerSketch d={drawing} f={corner} cut={cut.runs} w={sketchW} /> : null}
                 </View>
@@ -790,6 +801,17 @@ export default function DrawScreen() {
       </Sheet>
       <Sheet visible={moreSheet} onClose={() => setMoreSheet(false)}>
         <View testID="draw-more-sheet" style={{ gap: space[2] }}>
+          {/* how it was measured — one choice for the whole drawing (founder 08.11, П20.16) */}
+          {canSave && m ? (
+            <View testID="draw-accuracy-pick" style={{ gap: space[1] }}>
+              <T v="caption" tone="mut">{t("mod.gutters.draw.accTitle")}</T>
+              <ChoiceChips
+                items={(["rough", "tape"] as const).map((a) => ({ key: a, label: t(a === "tape" ? "mod.gutters.draw.accTape" : "mod.gutters.draw.accRough") }))}
+                value={tape ? "tape" : "rough"}
+                onChange={(a) => setAccuracy(a)}
+              />
+            </View>
+          ) : null}
           <View testID="draw-redo">
             <ListRow title={t("mod.gutters.draw.redo")} left={<Icon name="redo" s={sizes.iconMd} color={c.ink} />} onPress={() => { setMoreSheet(false); doRedo(); }} />
           </View>

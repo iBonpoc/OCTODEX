@@ -12,6 +12,9 @@ export interface MeasurementRow {
   status: "draft" | "ready";
   propertyId: string | null;
   leadId: string | null;
+  /** how it was measured, for the whole drawing (founder 08.11, П20.16): a tape — good to cut by; rough — a satellite,
+   *  a wheel or by eye. Old drafts on a phone have none: rough. */
+  accuracy?: "rough" | "tape";
   /** the server's (or the phone's last) change time: the newest measurement of a lead opens first (M5b) */
   updatedAt?: string;
 }
