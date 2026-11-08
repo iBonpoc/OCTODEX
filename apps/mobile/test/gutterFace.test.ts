@@ -122,3 +122,14 @@ describe("a downspout dragged (founder 08.11)", () => {
     expect(s.labels.find((l) => l.kind === "ds")!.text).toBe("AABO⁴");
   });
 });
+
+import { placeAt } from "../src/modules/gutters/canvas/localStore";
+
+describe("the toolbar dropped by its grip (founder 08.11)", () => {
+  it("sticks to the nearest edge: bottom, left or right", () => {
+    expect(placeAt(195, 800, 390, 844)).toBe("bottom");
+    expect(placeAt(10, 400, 390, 844)).toBe("left");
+    expect(placeAt(380, 400, 390, 844)).toBe("right");
+    expect(placeAt(640, 880, 1280, 900)).toBe("bottom");
+  });
+});

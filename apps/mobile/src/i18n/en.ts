@@ -2492,6 +2492,7 @@ export const en: Dict = {
   "mod.gutters.draw.cornerSplash": "{k} · splash guard",
   "mod.gutters.draw.cornerTitle": "Corner",
   "mod.gutters.draw.cornerNote": "The whole line's face flips: the L/R end caps and the other corners too. An inside corner gets a splash guard.",
+  "mod.gutters.draw.grip": "Move the toolbar: drag the dots",
   "mod.gutters.bench.action": "Speed check",
   "mod.gutters.bench.title": "Canvas speed check",
   "mod.gutters.bench.intro": "Drawing: 50 runs, 40 downspouts, 150 labels. Tap «Start» and do not touch the screen for about 20 seconds.",

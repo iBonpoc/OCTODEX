@@ -2492,6 +2492,7 @@ export const es: Dict = {
   "mod.gutters.draw.cornerSplash": "{k} · protector",
   "mod.gutters.draw.cornerTitle": "Esquina",
   "mod.gutters.draw.cornerNote": "Cambia el frente de toda la línea: las tapas L/R y las otras esquinas también. Una esquina interior lleva protector.",
+  "mod.gutters.draw.grip": "Mover la barra: arrastre los puntos",
   "mod.gutters.bench.action": "Prueba de velocidad",
   "mod.gutters.bench.title": "Prueba de velocidad del lienzo",
   "mod.gutters.bench.intro": "Dibujo: 50 tramos, 40 bajantes, 150 etiquetas. Toque «Iniciar» y no toque la pantalla unos 20 segundos.",

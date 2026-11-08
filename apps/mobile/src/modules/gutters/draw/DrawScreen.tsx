@@ -10,7 +10,7 @@
  * trial draws but saves nothing, and says so before the work starts (§6, founder О2). Delete → «Отменить» 5 s (rule 5).
  */
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { View } from "react-native";
+import { useWindowDimensions, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Crypto from "expo-crypto";
 import Svg, { Line } from "react-native-svg";
@@ -33,7 +33,7 @@ import type { DsAttrs, RunAttrs } from "../canvas/attrs";
 import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { ftIn } from "../canvas/format";
-import { forgetOldDraft, loadToolbarPlace, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
+import { forgetOldDraft, loadToolbarPlace, placeAt, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf, photosOf } from "../data";
 import { makeSaver } from "../canvas/draftStore";
@@ -441,6 +441,20 @@ export default function DrawScreen() {
     setStoryN(n);
     if (selected && drawing.runs.some((r) => r.id === selected)) commit(setStory(drawing, selected, n));
   };
+  /** how far the toolbar is dragged by its grip, px */
+  const [gripAt, setGripAt] = useState<[number, number]>([0, 0]);
+  const screen = useWindowDimensions();
+  const gripPan = usePanGesture({
+    runOnJS: true,
+    onUpdate: (e) => setGripAt([e.translationX, e.translationY]),
+    onDeactivate: (e) => {
+      setGripAt([0, 0]);
+      if (e.canceled) return;
+      const p = placeAt(e.absoluteX, e.absoluteY, screen.width, screen.height);
+      setPlace(p);
+      void saveToolbarPlace(p);
+    },
+  });
   const pickPlace = (p: ToolbarPlace) => {
     setPlace(p);
     setMoreSheet(false);
@@ -533,10 +547,19 @@ export default function DrawScreen() {
     ) : null;
 
   const side = place !== "bottom";
+  // the grip (founder 08.11): drag the toolbar, let go — it sticks to the nearest edge
+  const grip = (
+    <GestureDetector gesture={gripPan}>
+      <View testID="draw-grip" accessibilityRole="adjustable" accessibilityLabel={t("mod.gutters.draw.grip")} style={{ minWidth: side ? sizes.hitMin : sizes.iconMd, minHeight: side ? sizes.iconMd : sizes.hitMin, alignItems: "center", justifyContent: "center" }}>
+        <Icon name="grip" s={sizes.iconMd} color={c.mut} />
+      </View>
+    </GestureDetector>
+  );
   /** 390 at the bottom: the row takes the width, six cells share it */
   const grow = !side && !wide;
   const tools = (
-    <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+    <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, transform: [{ translateX: gripAt[0] }, { translateY: gripAt[1] }] }}>
+      {grip}
       <View testID="draw-tool-line" style={grow ? { flex: 1 } : undefined}><ToolCell icon="pencil" label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} /></View>
       <View testID="draw-tool-ds" style={grow ? { flex: 1 } : undefined}><ToolCell icon="downspout" label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} /></View>
       <View testID="draw-tool-select" style={grow ? { flex: 1 } : undefined}><ToolCell icon="cursor" label={t("mod.gutters.draw.select")} active={tool === "select"} onPress={() => pick("select")} grow={grow} /></View>

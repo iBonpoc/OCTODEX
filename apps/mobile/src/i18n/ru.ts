@@ -2492,6 +2492,7 @@ export const ru = {
   "mod.gutters.draw.cornerSplash": "{k} · отбойник",
   "mod.gutters.draw.cornerTitle": "Угол",
   "mod.gutters.draw.cornerNote": "Сменится сторона всей линии: заглушки L/R и другие углы тоже. На внутреннем угле — отбойник.",
+  "mod.gutters.draw.grip": "Переставить панель: тяните за точки",
   "mod.gutters.bench.action": "Проверка скорости",
   "mod.gutters.bench.title": "Проверка скорости холста",
   "mod.gutters.bench.intro": "Рисунок: 50 желобов, 40 водостоков, 150 подписей. Нажмите «Начать» и не трогайте экран около 20 секунд.",
