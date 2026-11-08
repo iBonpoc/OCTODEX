@@ -1,5 +1,5 @@
 /**
- * Security before live (docs/specs/35-stripe.md §4г, «Деньги и отчёты» №7): the edge function stripe-pay refuses too many
+ * Security before live (docs/specs/35-stripe.md §4д, «Деньги и отчёты» №7): the edge function stripe-pay refuses too many
  * tries (one /p/ link, one address, one invoice) with «rate_limited» and how long to wait. The client page says it in the
  * CLIENT's language, in whole minutes — never the server's text, never a raw error; after the wait the form opens again.
  * No network: page.route puts in portal_estimate and stripe-pay (a 4xx in page.route is a console error for the runner, so the

@@ -11,7 +11,7 @@
  * 4) public.stripe_refund_settle keeps Stripe's answer. Stripe said no → «failed», no money moved. No answer (a timeout,
  *    5xx, 429) → the row stays pending: only ITS key resumes it; another key waits until the row is idle ≥ 2 min, then the
  *    function asks Stripe (by metadata) whether it was made — kept, or freed as «not_sent» — so nothing doubles.
- * 5) a limit per person before anything else (spec 35 §4г): 20 per 10 minutes → 429 {error:"retry_later", retryAfter} and
+ * 5) a limit per person before anything else (spec 35 §4д): 20 per 10 minutes → 429 {error:"retry_later", retryAfter} and
  *    Retry-After (older apps already show «later» for it and keep the same key — nothing was done). The limit failing refuses
  *    too: money never goes back unchecked.
  * Refusals the person can act on are 200 {error}: the app shows our words, never Stripe's text. Test mode only.
@@ -146,7 +146,8 @@ export async function handleRefund(req: Req, deps: RefundDeps): Promise<Res> {
     return { ...r, headers: { ...r.headers, "Retry-After": String(sec) } };
   }
   const refused = (e: unknown, what: string) => {
-    if (e instanceof DbError && e.code === "42501") return json(403, { error: "not_allowed" });
+    // a closed company is not «only the owner»: its own word (20д debts)
+    if (e instanceof DbError && e.code === "42501") return json(403, { error: e.text.includes("company is closed") ? "company_closed" : "not_allowed" });
     const word = e instanceof DbError ? REFUSALS.find((w) => e.text.includes(w)) : undefined;
     if (word) return json(200, { error: word });
     deps.log?.(`stripe-refund: ${what} failed ${e instanceof DbError ? e.code ?? "" : ""}`.trim());

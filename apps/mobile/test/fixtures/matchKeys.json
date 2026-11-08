@@ -1,0 +1,304 @@
+{
+  "_": "One rule on the phone and on the server (docs/specs/04 \u00a714.5 \u211610): test/matchKeys.test.ts (TS) and T139 in supabase/tests/core_rls.sql (SQL) read this same file. key null = no key.",
+  "phones": [
+    {
+      "in": "(626) 555-0101",
+      "key": "6265550101"
+    },
+    {
+      "in": "+1 626 555 0101",
+      "key": "6265550101"
+    },
+    {
+      "in": "626.555.0101",
+      "key": "6265550101"
+    },
+    {
+      "in": "16265550101",
+      "key": "6265550101"
+    },
+    {
+      "in": "555-0101",
+      "key": null
+    },
+    {
+      "in": "",
+      "key": null
+    },
+    {
+      "in": "N/A",
+      "key": null
+    }
+  ],
+  "emails": [
+    {
+      "in": "Anna@Example.com",
+      "key": "anna@example.com"
+    },
+    {
+      "in": "  anna@example.com  ",
+      "key": "anna@example.com"
+    },
+    {
+      "in": "",
+      "key": null
+    }
+  ],
+  "addresses": [
+    {
+      "street": "123 Main Street",
+      "unit": "Apt 4",
+      "city": "Pasadena",
+      "zip": "91101",
+      "key": "123 main st|4|91101"
+    },
+    {
+      "street": "123 main st.",
+      "unit": "#4",
+      "city": "Pasadena",
+      "zip": "91101-2233",
+      "key": "123 main st|4|91101"
+    },
+    {
+      "street": "123 Main St",
+      "unit": null,
+      "city": "Pasadena, CA 91101",
+      "zip": null,
+      "key": "123 main st||91101"
+    },
+    {
+      "street": "45 North Lake Avenue",
+      "unit": "Suite 200",
+      "city": "Pasadena, CA",
+      "zip": null,
+      "key": "45 n lake ave|200|pasadena"
+    },
+    {
+      "street": "77 West Boulevard",
+      "unit": "",
+      "city": "Glendale",
+      "zip": "",
+      "key": "77 w blvd||glendale"
+    },
+    {
+      "street": "Main Street",
+      "unit": null,
+      "city": "Pasadena",
+      "zip": "91101",
+      "key": null
+    },
+    {
+      "street": "12 Oak Dr",
+      "unit": null,
+      "city": "",
+      "zip": "",
+      "key": null
+    },
+    {
+      "street": "5 Elm St",
+      "unit": null,
+      "city": "Pasadena, CA",
+      "zip": "",
+      "key": "5 elm st||pasadena"
+    }
+  ],
+  "rows": {
+    "_": "existing cards of the company, then the rows of one import in order, and what each row becomes",
+    "existing": [
+      {
+        "id": "e1",
+        "name": "Anna Old",
+        "phone": "(626) 555-0101",
+        "email": "anna@example.com",
+        "address": "123 Main Street",
+        "city": "Pasadena",
+        "zip": "91101",
+        "status": "active"
+      },
+      {
+        "id": "e2",
+        "name": "Boris Archived",
+        "phone": "626-555-0202",
+        "email": null,
+        "address": "9 Elm St",
+        "city": "Glendale",
+        "zip": "91201",
+        "status": "archived"
+      },
+      {
+        "id": "e3",
+        "name": "Carl Dns",
+        "phone": null,
+        "email": "carl@example.com",
+        "address": "5 Pine Rd",
+        "city": "Burbank",
+        "zip": "91501",
+        "status": "do_not_service"
+      }
+    ],
+    "import": [
+      {
+        "line": 2,
+        "name": "",
+        "phone": "626 555 0301",
+        "email": "",
+        "address": "",
+        "city": ""
+      },
+      {
+        "line": 3,
+        "name": "Bad Phone",
+        "phone": "555-0301",
+        "email": "",
+        "address": "",
+        "city": ""
+      },
+      {
+        "line": 4,
+        "name": "Bad Email",
+        "phone": "",
+        "email": "nope@",
+        "address": "",
+        "city": ""
+      },
+      {
+        "line": 5,
+        "name": "No Contact",
+        "phone": "",
+        "email": "",
+        "address": "1 A St",
+        "city": "Pasadena"
+      },
+      {
+        "line": 6,
+        "name": "Anna Again",
+        "phone": "+1 626 555 0101",
+        "email": "",
+        "address": "",
+        "city": ""
+      },
+      {
+        "line": 7,
+        "name": "Boris Again",
+        "phone": "6265550202",
+        "email": "",
+        "address": "",
+        "city": ""
+      },
+      {
+        "line": 8,
+        "name": "Carl Again",
+        "phone": "",
+        "email": "CARL@example.com",
+        "address": "",
+        "city": ""
+      },
+      {
+        "line": 9,
+        "name": "Dina New",
+        "phone": "626 555 0404",
+        "email": "dina@example.com",
+        "address": "8 Oak Ave",
+        "city": "Pasadena, CA 91101"
+      },
+      {
+        "line": 10,
+        "name": "Dina Twice",
+        "phone": "",
+        "email": "Dina@Example.com",
+        "address": "",
+        "city": ""
+      },
+      {
+        "line": 11,
+        "name": "Eva Tenant",
+        "phone": "626 555 0505",
+        "email": "",
+        "address": "123 main st.",
+        "city": "Pasadena, CA 91101"
+      },
+      {
+        "line": 12,
+        "name": "Fred Near Archived",
+        "phone": "626 555 0606",
+        "email": "",
+        "address": "9 Elm Street",
+        "city": "Glendale 91201"
+      },
+      {
+        "line": 13,
+        "name": "\u00a0\u200b",
+        "phone": "626 555 0707",
+        "email": "",
+        "address": "",
+        "city": ""
+      }
+    ],
+    "expect": [
+      {
+        "line": 2,
+        "result": "skipped",
+        "reason": "noName"
+      },
+      {
+        "line": 3,
+        "result": "skipped",
+        "reason": "badPhone"
+      },
+      {
+        "line": 4,
+        "result": "skipped",
+        "reason": "badEmail"
+      },
+      {
+        "line": 5,
+        "result": "skipped",
+        "reason": "noContact"
+      },
+      {
+        "line": 6,
+        "result": "skipped",
+        "reason": "dupClient",
+        "who": "Anna Old"
+      },
+      {
+        "line": 7,
+        "result": "skipped",
+        "reason": "dupClient",
+        "who": "Boris Archived",
+        "who_status": "archived"
+      },
+      {
+        "line": 8,
+        "result": "skipped",
+        "reason": "dupClient",
+        "who": "Carl Dns",
+        "who_status": "do_not_service"
+      },
+      {
+        "line": 9,
+        "result": "added"
+      },
+      {
+        "line": 10,
+        "result": "skipped",
+        "reason": "dupFile",
+        "who": "Dina New"
+      },
+      {
+        "line": 11,
+        "result": "dup_added",
+        "who": "Anna Old"
+      },
+      {
+        "line": 12,
+        "result": "added"
+      },
+      {
+        "line": 13,
+        "result": "skipped",
+        "reason": "noName"
+      }
+    ]
+  }
+}

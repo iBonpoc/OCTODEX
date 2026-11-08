@@ -251,7 +251,7 @@ export async function startOnlinePay(token: string, invoiceId: string): Promise<
         amountCents: Number(b.amountCents), methods: Array.isArray(b.methods) ? b.methods.map(String) : ["card"],
       };
     }
-    // too many tries (spec 35 §4г): how long to wait, in seconds — from the body, else from Retry-After
+    // too many tries (spec 35 §4д): how long to wait, in seconds — from the body, else from Retry-After
     const wait = Number(b?.retryAfter ?? res.headers.get("retry-after") ?? NaN);
     return {
       state: "error", error: typeof b?.error === "string" ? b.error : res.status === 429 ? "rate_limited" : "failed",

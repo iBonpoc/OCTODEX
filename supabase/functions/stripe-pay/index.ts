@@ -3,7 +3,7 @@
 // pays from /p/ without an account — the /p/ token is the key, checked in public.stripe_pay_open.
 // Secrets of the function (Supabase → Edge Functions → Secrets; the founder sets them, never in chat or the repo):
 // STRIPE_SECRET_KEY — test mode only (sk_test_ / rk_test_); STRIPE_PUBLISHABLE_KEY — pk_test_ of the same Stripe account;
-// INTAKE_IP_SECRET — the same secret as lead-intake (the HMAC of the client's IP for the rate limit, spec 35 §4г; the value is
+// INTAKE_IP_SECRET — the same secret as lead-intake (the HMAC of the client's IP for the rate limit, spec 35 §4д; the value is
 // prefixed «pay:», so the two functions' hashes never match). Without it the limit counts the link and one ceiling for all.
 import { createClient } from "npm:@supabase/supabase-js@2.118.0";
 import { DbError, handlePay, type Attempt, type StripeAnswer } from "./handler.ts";

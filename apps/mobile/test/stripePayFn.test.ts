@@ -272,7 +272,7 @@ describe("stripe-pay: the PaymentIntent", () => {
   });
 });
 
-describe("stripe-pay: rate limits (spec 35 §4g)", () => {
+describe("stripe-pay: rate limits (spec 35 §4д)", () => {
   type Rated = [string, string | null, string | null];
   it("the link and the address are counted as hashes, before the database looks at the link", async () => {
     const seen: Rated[] = [];

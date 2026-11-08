@@ -1,4 +1,4 @@
--- Security before live (docs/specs/35-stripe.md §4г, «Деньги и отчёты» №7). Test mode only. Everything is added (rule 16).
+-- Security before live (docs/specs/35-stripe.md §4д, «Деньги и отчёты» №7). Test mode only. Everything is added (rule 16).
 -- 1. Rate limits of the Edge functions stripe-pay (anonymous, the /p/ token is the key) and stripe-refund (owner/admin):
 --    app.rate_hits keeps one row per allowed request — key = scope + sha256 of the token / HMAC of the IP / the invoice or the
 --    person; no plain token or IP. A refused request writes nothing (a flood does not grow the table); every key of a request
@@ -200,7 +200,7 @@ begin
   end if;
   insert into app.stripe_events (event_id, type, account_id, livemode, payload)
   values (v_id, left(v_type, 100), v_account, coalesce((p_event ->> 'livemode')::boolean, false),
-          -- the journal keeps no client's name, email, phone, address or card details (spec 35 §3, §4г)
+          -- the journal keeps no client's name, email, phone, address or card details (spec 35 §3, §4д)
           app.stripe_event_journal(p_event))
   on conflict (event_id) do nothing;
   get diagnostics v_n = row_count;
@@ -252,7 +252,7 @@ begin
              updated_at = now();
       -- a refund that failed after it lowered the balance: refunded_cents never goes down by itself — the owner looks
       -- only when THIS event turns the row into «failed»: another event about the same failure (refund.updated, then
-      -- refund.failed, a resend) does not raise the flag again after the owner looked (§4г)
+      -- refund.failed, a resend) does not raise the flag again after the owner looked (§4д)
       if (o ->> 'status') = 'failed' and p.refunded_cents > 0 and v_prev is distinct from 'failed' then
         update public.payments set needs_review = true where id = p.id;
       end if;
@@ -287,12 +287,9 @@ begin
 end;
 $$;
 
-create or replace function public.stripe_webhook_apply(p_event jsonb, p_method text DEFAULT NULL::text, p_fee_cents bigint DEFAULT NULL::bigint)
- RETURNS text
- LANGUAGE plpgsql
- SECURITY DEFINER
- SET search_path TO ''
-AS $$
+-- public.stripe_webhook_apply of 20261109150000 (#452) as it is, only the journal's payload through app.stripe_event_journal
+create or replace function public.stripe_webhook_apply(p_event jsonb, p_method text default null, p_fee_cents bigint default null)
+returns text language plpgsql security definer set search_path = '' as $$
 declare
   o         jsonb := p_event -> 'data' -> 'object';
   v_meta    text := p_event -> 'data' -> 'object' -> 'metadata' ->> 'company_id';
@@ -301,6 +298,9 @@ declare
   v_r       text;
   v_pi      text;
   v_rid     uuid;
+  v_was     public.refunds;
+  v_now     public.refunds;
+  v_refund  boolean := p_event ->> 'type' in ('refund.created', 'refund.updated', 'refund.failed', 'charge.refund.updated');
 begin
   if p_event ->> 'id' is null or p_event ->> 'id' !~ '^evt_[A-Za-z0-9]{1,64}$' or jsonb_typeof(o) <> 'object' then
     raise exception 'not a Stripe event' using errcode = '22023';
@@ -322,6 +322,18 @@ begin
       on conflict (event_id) do nothing;
       return 'ignored';
     end if;
+  end if;
+
+  -- 20д debts: the row of this Stripe refund as it was before the event (counted = succeeded, or pending with its id)
+  if v_refund and o ->> 'id' ~ '^(re|pyr)_[A-Za-z0-9]{1,64}$' then
+    -- by Stripe's id, or by our id in metadata (stripe-refund may be tying it right now: we wait for its transaction and
+    -- read the row as it committed — director's review of #449 №1)
+    select * into v_was from public.refunds
+     where stripe_refund_id = o ->> 'id'
+        or (v_ours ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' and id = v_ours::uuid
+            and idempotency_key like 'octo:%')
+     order by (stripe_refund_id = o ->> 'id') desc nulls last limit 1
+       for update;
   end if;
 
   -- 20д: Stripe may tell about our refund before stripe-refund keeps its answer. The row is found by its id in metadata —
@@ -346,6 +358,21 @@ begin
 
   if v_rid is not null then
     perform app.refund_sync_money(v_rid);              -- Stripe accepted it: the money as if stripe-refund kept the answer
+  end if;
+
+  -- 20д debts: an accepted refund that failed later (ACH: the bank sent it back) gives the money back to the invoice, once —
+  -- by the change of the row (a repeat of the event finds it failed already). Any other refund.* of a known payment: the
+  -- money follows the rows (a refund made in Stripe's dashboard after a failure — charge.refunded no longer decides).
+  if v_refund and v_r = 'processed' and o ->> 'id' ~ '^(re|pyr)_[A-Za-z0-9]{1,64}$' then
+    select * into v_now from public.refunds where stripe_refund_id = o ->> 'id';
+    if v_now.status in ('failed', 'canceled') and (v_was.id is null or v_was.status not in ('failed', 'canceled')) then
+      -- this event made it failed: surely counted when it was succeeded / pending with its id before; else maybe (above)
+      perform app.refund_unwind(v_now.id, v_was.id is not null and v_was.stripe_refund_id is not null
+                                          and v_was.status in ('succeeded', 'pending'));
+      perform app.refund_sync_money(v_now.payment_id);
+    elsif v_now.id is not null then
+      perform app.refund_sync_money(v_now.payment_id);
+    end if;
   end if;
 
   -- Stripe's fee of this payment (not our application fee): only from unknown (0) to known — a repeat of the event may bring

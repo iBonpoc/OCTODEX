@@ -120,6 +120,15 @@ describe("stripe-webhook: method and fee", () => {
     expect(applied[0].fee).toBe(500);
     expect(applied[0].event).toEqual(ev());
   });
+  it("spec 35 §4г: a failed ACH refund (refund.failed) reaches the database as Stripe signed it — no intent read, no fee", async () => {
+    const e = ev({ id: "evt_rf1", type: "refund.failed", data: { object: { id: "re_1", status: "failed", amount: 150000, payment_intent: "pi_1", metadata: { company_id: "ca000000-0000-0000-0000-000000000000", octo_refund_id: "r1" } } } });
+    const body = JSON.stringify(e);
+    const { d, applied, reads } = deps();
+    const r = await handleHook(req(body, await signed(body)), d);
+    expect(r.status).toBe(200);
+    expect(reads).toEqual([]);
+    expect(applied).toEqual([{ event: e, method: null, fee: null }]);
+  });
   it("methodAndFee: a card; no balance transaction yet — no fee", () => {
     expect(methodAndFee({ payment_method: { type: "card" }, latest_charge: "ch_1" })).toEqual({ method: "card", fee: null });
     expect(methodAndFee({ payment_method: "pm_1" })).toEqual({ method: null, fee: null });

@@ -12,7 +12,7 @@
  *    the contractor's account, the attempt's key as the Idempotency-Key, the attempt in metadata (the webhook finds it);
  * 4) the answer is what the Payment Element needs: client secret, the account, the publishable key, the order of methods —
  *    ACH first from $1,000 (spec 35 §2 п.3: the contractor pays less).
- * 5) rate limits (spec 35 §4г) before the link is looked at: per token (sha256), per IP (HMAC of «pay:» + the address; IPv6 by
+ * 5) rate limits (spec 35 §4д) before the link is looked at: per token (sha256), per IP (HMAC of «pay:» + the address; IPv6 by
  *    /64 and /48), one ceiling for the whole function when there is no IP; after the link is checked — per invoice (the
  *    expensive step). Over a limit → 429 {error:"rate_limited", retryAfter} + Retry-After. The limit itself failing lets the
  *    request through (a payment is never refused for our fault), with a line in the log.
@@ -204,7 +204,7 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
     const s = Math.min(MAX_WAIT_S, Math.max(1, Math.ceil(wait)));
     return { ...json(429, { error: "rate_limited", retryAfter: s }), headers: { ...c, "Content-Type": "application/json", "Retry-After": String(s) } };
   };
-  // the limits by the link and the address — before the database looks at the link (spec 35 §4г)
+  // the limits by the link and the address — before the database looks at the link (spec 35 §4д)
   try {
     const ip = clientIp(req, deps.ipHeaders);
     if (!deps.hmac || !ip) deps.log?.(`stripe-pay: no ${deps.hmac ? "trusted ip header" : "ip secret"} — the whole-function ceiling counts`);

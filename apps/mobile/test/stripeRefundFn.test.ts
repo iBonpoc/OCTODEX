@@ -79,6 +79,10 @@ describe("unit:stripeRefundFn — who and what", () => {
   it("the database refuses: 403 for the role, our word for the rest, never Stripe", async () => {
     const role = deps({ open: new DbError("42501", "only owner/admin can refund") });
     expect((await handleRefund(req(), role.d)).status).toBe(403);
+    // a closed company is 42501 too — its own word, not «only the owner» (spec 35 §4г)
+    const closed = await handleRefund(req(), deps({ open: new DbError("42501", "the company is closed") }).d);
+    expect([closed.status, parse(closed).error]).toEqual([403, "company_closed"]);
+    expect(parse(await handleRefund(req(), role.d)).error).toBe("not_allowed");
     for (const w of ["refund_above_available", "refund_disputed", "refund_in_progress", "refund_not_stripe"]) {
       const x = deps({ open: new DbError("23514", w) });
       const r = await handleRefund(req(), x.d);
@@ -176,7 +180,7 @@ describe("unit:stripeRefundFn — a refund that never got an answer (security 20
   });
 });
 
-describe("unit:stripeRefundFn — the limit per person (spec 35 §4г)", () => {
+describe("unit:stripeRefundFn — the limit per person (spec 35 §4д)", () => {
   it("over the limit: 429 «later» with Retry-After, nothing opened, Stripe not called; the person is the JWT's", async () => {
     let asked: string | null = null;
     let opened = 0;

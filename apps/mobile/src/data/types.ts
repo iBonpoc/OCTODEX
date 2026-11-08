@@ -823,7 +823,21 @@ export interface Payment {
   refundedCents?: number;
   /** the server marked it for the owner (an online payment above the balance, a failed refund; docs/specs/35 §2) */
   needsReview?: boolean;
+  /** Stripe's processing fee (payments.fee_cents, the webhook); it does not come back on a refund. Staff only, never to the client */
+  feeCents?: number;
+  /** refunds on their way that are not in refundedCents yet (as app.refund_available): not refundable twice (spec 35 §4г) */
+  refundPendingCents?: number;
+  /** a refund of it is still «pending», or went less than 30 days ago (the bank may send it back): an advance is not applied
+   *  meanwhile (t41: advance_refund_in_progress / advance_refund_settling) */
+  refundOpen?: boolean;
 }
+/** the client's advance (spec 35 §4г): a payment without an invoice (an online payment above the balance, kept for the owner
+ *  to refund or apply to an invoice). Not in payments, sums or balances until it is applied (moneyLists.ADVANCES_COLLECTED). */
+export interface Advance extends Omit<Payment, "invoiceId"> {
+  invoiceId: null;
+}
+/** a payment or an advance: what a receipt and a refund need */
+export type AnyPayment = Payment | Advance;
 
 export type ExpenseCategory = "materials" | "fuel" | "dump" | "tools" | "other";
 export interface Expense {
@@ -959,6 +973,8 @@ export interface DB {
   /** online payments on their way (ACH «pending», step 20в): NOT money yet — never in payments, sums or balances; only shown
    *  as «ACH processing» on the invoice. Filled by the cloud load; absent in demo and old saved data. */
   pendingPayments?: PendingPayment[];
+  /** the clients' advances (payments without an invoice, spec 35 §4г) — filled by the cloud load; absent in old saved data */
+  advances?: Advance[];
   /** employees' saved signatures (wave E2a); absent in old saved data */
   memberSignatures?: MemberSignature[];
   /** spec 33 П21: each add-on module's own data by module key (its shape is the module's: ModuleDef.load reads it,

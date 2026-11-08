@@ -70,7 +70,7 @@ export function StripeCheckout({
       if (gone) return;
       if (r.state === "processing") return onDone("processing");
       if (r.state === "error") {
-        // too many tries (spec 35 §4г): how long to wait, in whole minutes
+        // too many tries (spec 35 §4д): how long to wait, in whole minutes
         if (r.error === "rate_limited") setErr(t("pay.online.err.busy", { n: Math.max(1, Math.ceil((r.retryAfterS ?? 600) / 60)) }));
         else setErr(t(ERR[r.error] ?? "pay.online.err.retry"));
         return setPhase("error");

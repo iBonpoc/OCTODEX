@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { canImportClients } from "@/features/client/importRun";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
@@ -137,7 +138,8 @@ export default function Clients() {
       hintKey="clients"
       subtitle={t("clients.count", { n: count("all") })}
       fab="clients"
-      right={office ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
+      // «…» holds only «Импорт из CSV»: the office's (owner, admin, office), not sales (04 §14.4)
+      right={canImportClients(role) ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
       aside={
         openC ? (
           <ListPanel
