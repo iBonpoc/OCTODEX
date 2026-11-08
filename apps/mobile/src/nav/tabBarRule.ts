@@ -85,7 +85,7 @@ export function tabLeave(routes: readonly string[]): "dismissTo" | "navigate" {
   return tabsAt >= 0 && tabsAt < routes.length - 1 ? "dismissTo" : "navigate";
 }
 
-export type NavState = { routeNames?: readonly string[]; routes?: readonly { name: string; state?: NavState }[]; index?: number } | undefined;
+export type NavState = { routeNames?: readonly string[]; routes?: readonly { name: string; params?: object; state?: NavState }[]; index?: number } | undefined;
 /** the route names of the app's own stack (app/_layout: the one that has «(tabs)»), bottom first; expo-router wraps it
  *  in its «__root» navigator */
 export function appStackRoutes(state: NavState): string[] {
@@ -94,6 +94,37 @@ export function appStackRoutes(state: NavState): string[] {
     s = s.routes?.[s.index ?? 0]?.state;
   }
   return [];
+}
+
+/** the app's own stack (app/_layout: the one that has «(tabs)»), or undefined */
+function appStack(state: NavState): NavState {
+  for (let s = state, depth = 0; s && depth < 4; depth++) {
+    if (s.routeNames?.includes("(tabs)")) return s;
+    s = s.routes?.[s.index ?? 0]?.state;
+  }
+  return undefined;
+}
+
+/**
+ * «‹ Лиды» on a lead card opened from Leads (founder 08.11): the tab right under the cards is that very screen — pop the
+ * cards (how many to pop), so the tab keeps its own params. dismissTo('/leads?tab=leads') replaced them and lost
+ * `from=more`: Leads opened from «Ещё» came back without «‹ Ещё» and without the back swipe. 0 — not this case
+ * (another tab under the cards, the href asks other params, nothing above the tabs): goTo works as before.
+ */
+export function popsToTab(state: NavState, href: string): number {
+  const s = appStack(state);
+  const routes = s?.routes ?? [];
+  let tabsAt = -1;
+  routes.forEach((r, i) => r.name === "(tabs)" && (tabsAt = i));
+  if (tabsAt < 0 || tabsAt === routes.length - 1) return 0;
+  const tabs = routes[tabsAt]!.state;
+  const tab = tabs?.routes?.[tabs.index ?? 0];
+  const [path = "", query = ""] = href.split("?");
+  const segs = path.split("/").filter(Boolean);
+  if (!tab || segs.length !== 1 || segs[0] !== tab.name) return 0;
+  const has = (tab.params ?? {}) as Record<string, unknown>;
+  for (const [k, v] of new URLSearchParams(query)) if (String(has[k] ?? "") !== v) return 0;
+  return routes.length - 1 - tabsAt;
 }
 
 /**

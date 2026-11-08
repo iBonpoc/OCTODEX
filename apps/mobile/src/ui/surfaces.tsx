@@ -6,6 +6,8 @@ import { isAppPath, navInsets } from "@/nav/shell";
 import { goTo } from "@/nav/go";
 import { rememberFocus, takeFocus } from "@/nav/focusMemory";
 import { isTabScreen } from "@/nav/roles";
+import { BackSwipe } from "@/nav/BackSwipe";
+import { tabBackSwipe } from "@/nav/backSwipe";
 import { showsTabBar } from "@/nav/tabBarRule";
 import { useAuth } from "@/cloud/auth";
 import { useTabBarHidden } from "@/nav/tabBarHide";
@@ -471,6 +473,11 @@ export function Screen({
   /** tablet/desktop: the address bar is pinned above the scroll, with a round «‹» (spec 10, Н2) */
   // a tab opened from «More» (Plan, Triage…) has a parent too, but it lives in the tab navigator that already draws the pill
   const pinned = wide && !!up && !isTabScreen(routeName);
+  /** phone, a section opened from «Ещё» (Jobs, Money, Catalog…; Leads with from=more): «‹ Ещё» — no ☰ any more (variant Б) */
+  const backMore = !wide && menuRoot && (!isTabScreen(routeName) || params.from === "more");
+  const toMore = () => go("/more");
+  /** a tab screen with a header «back» swipes back from the left edge too, by the same handler (nav/backSwipe.ts) */
+  const swipeBack = tabBackSwipe({ tabScreen: isTabScreen(routeName), wide, os: Platform.OS, back: hasUp || backMore, keyboard: kb > 0 });
   // Esc = one level up on the web (spec 10, Н3); only screens with a parent (not the client page /p, not sign-in).
   const goUpRef = useRef(goUp);
   goUpRef.current = goUp;
@@ -588,10 +595,10 @@ export function Screen({
         <RowView style={{ justifyContent: "space-between", minHeight: size.hitMin, flexWrap: "wrap", rowGap: space[2] }}>
           <RowView style={{ flexGrow: 1, flexShrink: 0, maxWidth: "100%", gap: space[1] }}>
             {/* phone, a section opened from «Ещё» outside the tabs (Jobs, Money, Catalog…): «‹ Ещё» — no ☰ any more (variant Б) */}
-            {!wide && menuRoot && (!isTabScreen(routeName) || params.from === "more") ? (
+            {backMore ? (
               <Press
                 testID="back-more"
-                onPress={() => go("/more")}
+                onPress={toMore}
                 visibleHeight={component.dockBtn}
                 accessibilityRole="button"
                 accessibilityLabel={t("nav.more")}
@@ -667,67 +674,69 @@ export function Screen({
   /** the pinned bar is outside the scroll: the sticky-tabs area below is one screen minus the bar */
   const [barH, setBarH] = useState(0);
   return (
-    <View style={{ flex: 1 }}>
-      <Background />
-      {pinned ? (
-        <View
-          onLayout={(e) => setBarH(e.nativeEvent.layout.height)}
-          style={{ paddingTop: navInsets.safeTop + space[3], paddingBottom: space[1], paddingLeft: navInsets.left, paddingRight: navInsets.right, gap: space[2], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
-        >
-          <View style={column}>{addressRow}</View>
-        </View>
-      ) : null}
-      {scroll ? (
-        <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
-          <ScrollView
-            ref={scrollRef}
-            scrollEnabled={!scrollLocked}
-            contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
-            keyboardShouldPersistTaps="handled"
-            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-            automaticallyAdjustKeyboardInsets
-            stickyHeaderIndices={tabs ? [1] : undefined}
-            scrollEventThrottle={16}
-            onScroll={(e) => {
-              const y = e.nativeEvent.contentOffset.y;
-              offset.current = y;
-              const now = y > 0;
-              if (now !== under) setUnder(now);
-            }}
+    <BackSwipe enabled={swipeBack} edge={navInsets.left} onBack={hasUp ? goUp : toMore}>
+      <View style={{ flex: 1 }}>
+        <Background />
+        {pinned ? (
+          <View
+            onLayout={(e) => setBarH(e.nativeEvent.layout.height)}
+            style={{ paddingTop: navInsets.safeTop + space[3], paddingBottom: space[1], paddingLeft: navInsets.left, paddingRight: navInsets.right, gap: space[2], borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
           >
-            <ScrollLockCtx.Provider value={setScrollLocked}>{content}</ScrollLockCtx.Provider>
-            {tabs ? (
-              <View
-                onLayout={(e) => (tabsY.current = e.nativeEvent.layout.y)}
-                // glass (--ov + blur), not a solid plate: in the light theme the bar blends with the page (unslop 05.11)
-                style={{ backgroundColor: c.ov, overflow: "hidden", paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
-              >
-                <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
-                <View style={column}>{tabs}</View>
-              </View>
-            ) : null}
-            {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - top - navInsets.bottom - (pinned ? barH : 0) }]}>{below}</View> : null}
-          </ScrollView>
-        </KeyboardAvoidingView>
-      ) : (
-        <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right }}>{content}</View>
-      )}
-      {/* the status bar backdrop: the same glass as the bars (--ov + blur), only while something is under the clock */}
-      {scroll && under && !pinned && navInsets.safeTop > 0 ? (
-        // the hairline makes the cut-off card go under the glass, not end at a line; it fades in (none with reduced motion)
-        <Animated.View
-          testID="status-backdrop"
-          pointerEvents="none"
-          entering={reduce ? undefined : FadeIn.duration(motion.durFast)}
-          exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
-          style={{ position: "absolute", top: 0, left: 0, right: 0, height: navInsets.safeTop, backgroundColor: c.ov, overflow: "hidden", borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
-        >
-          <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
-        </Animated.View>
-      ) : null}
-      {floatFab && !kb ? (
-        <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} right={navInsets.right} bottom={showsTabBar(routeName) && !barAway ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
-      ) : null}
-    </View>
+            <View style={column}>{addressRow}</View>
+          </View>
+        ) : null}
+        {scroll ? (
+          <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === "android" ? avoidBehavior : undefined} enabled={Platform.OS === "android"}>
+            <ScrollView
+              ref={scrollRef}
+              scrollEnabled={!scrollLocked}
+              contentContainerStyle={{ paddingTop: top, paddingBottom: kb ? space[6] : navInsets.bottom + (floatFab ? component.fab + space[3] : 0), paddingLeft: navInsets.left, paddingRight: navInsets.right }}
+              keyboardShouldPersistTaps="handled"
+              keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+              automaticallyAdjustKeyboardInsets
+              stickyHeaderIndices={tabs ? [1] : undefined}
+              scrollEventThrottle={16}
+              onScroll={(e) => {
+                const y = e.nativeEvent.contentOffset.y;
+                offset.current = y;
+                const now = y > 0;
+                if (now !== under) setUnder(now);
+              }}
+            >
+              <ScrollLockCtx.Provider value={setScrollLocked}>{content}</ScrollLockCtx.Provider>
+              {tabs ? (
+                <View
+                  onLayout={(e) => (tabsY.current = e.nativeEvent.layout.y)}
+                  // glass (--ov + blur), not a solid plate: in the light theme the bar blends with the page (unslop 05.11)
+                  style={{ backgroundColor: c.ov, overflow: "hidden", paddingVertical: space[2], marginHorizontal: -space[4], paddingHorizontal: space[4] }}
+                >
+                  <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
+                  <View style={column}>{tabs}</View>
+                </View>
+              ) : null}
+              {tabs ? <View style={[column, { gap: space[3], paddingTop: space[2], minHeight: winH - top - navInsets.bottom - (pinned ? barH : 0) }]}>{below}</View> : null}
+            </ScrollView>
+          </KeyboardAvoidingView>
+        ) : (
+          <View style={{ flex: 1, paddingTop: top, paddingBottom: navInsets.bottom, paddingLeft: navInsets.left, paddingRight: navInsets.right }}>{content}</View>
+        )}
+        {/* the status bar backdrop: the same glass as the bars (--ov + blur), only while something is under the clock */}
+        {scroll && under && !pinned && navInsets.safeTop > 0 ? (
+          // the hairline makes the cut-off card go under the glass, not end at a line; it fades in (none with reduced motion)
+          <Animated.View
+            testID="status-backdrop"
+            pointerEvents="none"
+            entering={reduce ? undefined : FadeIn.duration(motion.durFast)}
+            exiting={reduce ? undefined : FadeOut.duration(motion.durFast)}
+            style={{ position: "absolute", top: 0, left: 0, right: 0, height: navInsets.safeTop, backgroundColor: c.ov, overflow: "hidden", borderBottomWidth: component.hairline, borderBottomColor: c.bd }}
+          >
+            <BlurView intensity={c.blur * 3} tint={c.blurTint} style={StyleSheet.absoluteFill} />
+          </Animated.View>
+        ) : null}
+        {floatFab && !kb ? (
+          <Fab placement="float" set={fab!} ctx={fabCtx} on={fabOn} right={navInsets.right} bottom={showsTabBar(routeName) && !barAway ? navInsets.tabBottom + size.tabbarH + space[3] : navInsets.tabBottom + space[2]} />
+        ) : null}
+      </View>
+    </BackSwipe>
   );
 }
