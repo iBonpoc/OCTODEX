@@ -267,6 +267,12 @@ export function editedTemplate(x: EstimateTemplate, doc: EstimateDoc, costsVisib
   return cleanEstimateTemplate({ ...x, name, doc: d, costs: costsVisible ? costs : undefined });
 }
 
+/** lines whose cost the builder wiped (who sees costs): the server keeps a cost unless told null (§12.7, T124) */
+export function clearedCosts(x: EstimateTemplate, doc: EstimateDoc, costsVisible: boolean): string[] {
+  if (!costsVisible || !x.costs) return [];
+  return doc.options.flatMap((o) => o.lines).filter((l) => x.costs![l.id] !== undefined && l.unitCostCents === undefined).map((l) => l.id);
+}
+
 /** the template's doc for editing in the builder: its own ids; costs into the lines for who sees them */
 export function templateForEdit(x: EstimateTemplate, costsVisible: boolean): EstimateDoc {
   const doc = JSON.parse(JSON.stringify(x.doc)) as EstimateDoc;

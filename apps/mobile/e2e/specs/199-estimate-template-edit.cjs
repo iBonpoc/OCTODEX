@@ -3,7 +3,8 @@
  * - a module's template shows the module's NAME («Из модуля Водостоки (Gutters)»), never its key «gutters»;
  * - a module switched on with no starter estimates of its own: no «Шаблоны модулей» section (the core has none, В6);
  *   the section itself with a module's starters — unit:estimateStarters (no stand-in module in the app, §12 №13);
- * - «Копировать»: a new template «… (копия)», the company's own (no module's mark), the original untouched;
+ * - «Копировать»: a new template «… (копия)», the company's own (no module's mark), the original untouched; «Отменить»
+ *   takes it away (not to the archive);
  * - «Изменить строки»: the builder in the template's mode (no client, «Сохранить шаблон»): a line removed and the name
  *   changed → the SAME template, the kept line keeps its id (its cost stays its own), no estimate is made;
  * - a tech: no «Копировать», no «Изменить строки».
@@ -81,12 +82,17 @@ exports.run = async (h) => {
   h.expect(copy.costs && Object.keys(copy.costs).length === 2 && Object.keys(copy.costs).every((k) => cl.some((l) => l.id === k)), "the costs follow the copy's lines");
   await tid(`est-tpl-${copy.id}`).waitFor({ timeout: 8000 });
   h.expect((await tpls()).find((x) => x.id === T_OWN).doc.options[0].lines.length === 2, "the original untouched");
+  // «Отменить» the copy: gone (removed on the server once sent — deleted_at, §12.7), not archived
+  await p.getByRole("button", { name: /Отменить|Undo|Deshacer/ }).first().click();
+  await waitFor(async () => !(await tpls()).some((x) => x.id === copy.id), "«Отменить» takes the copy away");
+  h.expect((await tpls()).length === 2, "no copy left, not even archived");
 
   // «Изменить строки»: the builder in the template's mode
   await tid(`est-tpl-${T_OWN}`).click();
   await tid("est-tpl-edit").getByRole("button").click();
   await p.waitForURL(new RegExp(`estimate/new\\?editTemplate=${T_OWN}`), { timeout: 8000 });
   await tid("est-tpl-editing").waitFor({ timeout: 8000 });
+  h.expect(/Шаблоны смет/.test(await h.text()), "the crumb leads back to «Шаблоны смет», not «Новая смета»");
   h.expect((await tid("ue-save").count()) === 0 && (await tid("est-start").count()) === 0, "no client, no «Сохранить», no «С чего начать?»");
   await h.shot("edit");
   await tid("ue-line-lo2").getByRole("button").first().click();

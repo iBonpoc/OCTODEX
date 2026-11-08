@@ -307,7 +307,9 @@ interface StoreCtx {
   saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID; templateId?: ID }) => Undo;
   /** E3 (docs/specs/07 §11): an estimate template, whole (new, changed, archived = archivedAt); director and office */
   /** ifNew: a module's starter (fixed id) — added once, never over the office's edits (docs/specs/07 §12 №6) */
-  saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean }) => Undo;
+  saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] }) => Undo;
+  /** «Отменить» of a template made here after it may have reached the server (a copy, a starter): deleted_at (§12.7) */
+  removeEstimateTemplate: (id: ID) => Undo;
   /** client + property for an estimate from a lead (creates a prospect card the first time) */
   leadEstimateTarget: (leadId: ID) => { customerId: ID; propertyId: ID; undo: Undo } | null;
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
@@ -1804,11 +1806,23 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => {
             const list = d.estimateTemplates ?? [];
             const old = list.find((x) => x.id === clean.id);
-            const next = { ...clean, uses: old?.uses ?? clean.uses, lastUsedAt: old?.lastUsedAt ?? clean.lastUsedAt };
+            // the server's row_version after this save, as far as the phone can tell (§12.7): an update +1; a new one —
+            // insert 1, then the update 2; a starter (insert only, or a revived row) — not known
+            const rowVersion = old ? (old.rowVersion !== undefined ? old.rowVersion + 1 : undefined) : opts?.ifNew ? undefined : 2;
+            const { rowVersion: _rv, ...rest } = clean;
+            const next = { ...rest, uses: old?.uses ?? clean.uses, lastUsedAt: old?.lastUsedAt ?? clean.lastUsedAt, ...(rowVersion !== undefined ? { rowVersion } : {}) };
             return { ...d, estimateTemplates: old ? list.map((x) => (x.id === clean.id ? next : x)) : [...list, next] };
           },
-          { k: "est.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true } : {}) },
+          {
+            k: "est.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true } : {}),
+            ...(opts?.baseRowVersion !== undefined ? { baseRowVersion: opts.baseRowVersion } : {}),
+            ...(opts?.clearCosts?.length ? { clearCosts: opts.clearCosts } : {}),
+          },
         );
+      },
+      removeEstimateTemplate: (id) => {
+        if (!canEditEstimateTemplates(role) || dbRef.current.estimateTemplatesMissing) return noop;
+        return mutate("estimate.template", (d) => ({ ...d, estimateTemplates: (d.estimateTemplates ?? []).filter((x) => x.id !== id) }), { k: "est.template.remove", id });
       },
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
         const prev = dbRef.current.estimates.find((e) => e.id === id);

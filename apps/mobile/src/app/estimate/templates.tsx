@@ -63,13 +63,20 @@ export default function EstimateTemplates() {
     const msg = unpriced.length ? t("est.tpl.starterNoPrice", { n: unpriced.length }) : t("est.tpl.starterAdded", { name: tpl.name });
     toast.show(store.online ? msg : t("offline.queued"), () => {
       pressed.current.delete(id);
+      // the insert may have left already: taken back here, and removed on the server (deleted_at; a re-add revives it)
       undo();
+      store.removeEstimateTemplate(id);
     });
   };
   const copy = (x: EstimateTemplate) => {
     const c = copyTemplate(x, t("est.tpl.copyName", { name: x.name }), seeCosts);
     if (!c) return;
-    save(c, t("est.tpl.copied", { name: c.name }));
+    const undo = store.saveEstimateTemplate(c);
+    toast.show(store.online ? t("est.tpl.copied", { name: c.name }) : t("offline.queued"), () => {
+      undo();
+      store.removeEstimateTemplate(c.id);
+    });
+    setOpen(null);
   };
 
   const save = (x: EstimateTemplate, msg: string) => {

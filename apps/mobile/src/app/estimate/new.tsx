@@ -6,7 +6,7 @@ import { space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, discountBps, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import type { EstimateDoc, EstimateTemplate } from "@/data/types";
-import { canEditEstimateTemplates, editedTemplate, fromTemplate, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
+import { canEditEstimateTemplates, clearedCosts, editedTemplate, fromTemplate, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
 import { useI18n, type DictKey } from "@/i18n";
 import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
 import { LineMarks } from "@/features/LineMarks";
@@ -130,13 +130,19 @@ export default function EstimateBuilder() {
       toast.show(t("est.tpl.editArchived"));
       return;
     }
+    // changed on another phone since this screen opened (the phone already read it): not over theirs (§12.7)
+    if (live.rowVersion !== tplEdit.rowVersion) {
+      toast.show(t("est.tpl.editConflict"));
+      return;
+    }
     const name = title.trim() === tplEdit.name ? live.name : title.trim();
     const next = editedTemplate(live, doc, seeCosts, name);
     if (!next) {
       toast.show(t("est.tpl.cannot"));
       return;
     }
-    store.saveEstimateTemplate(next);
+    // the server checks the same: over the version this screen opened on, else «не сохранено» (row_version_conflict)
+    store.saveEstimateTemplate(next, { baseRowVersion: tplEdit.rowVersion, clearCosts: clearedCosts(live, doc, seeCosts) });
     // «Отменить» (rule 5): the template as it was, as a change of its own — the edit may have reached the server already
     toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), () => void store.saveEstimateTemplate(live));
     router.replace("/estimate/templates");
