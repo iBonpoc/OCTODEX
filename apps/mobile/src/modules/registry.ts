@@ -64,6 +64,11 @@ export interface ModuleDef {
   places?: Partial<Record<ModulePlace, (ctx: PlaceCtx) => ModuleAction[]>>;
   /** sends the module's own changes (module.op); a module without it has no changes of its own yet */
   ops?: ModuleOpHandler;
+  /**
+   * the module's own screens, opened at /module/<key>/<screen> (src/app/module/[key]/[screen].tsx). Loaded on first
+   * open (a function, so the registry and vitest never load screen code). Spec 33 П20.3.
+   */
+  screens?: Record<string, () => import("react").ComponentType>;
 }
 
 /** off — not switched on; trial — in the trial; paid — paid; expired — switched on, trial over, not paid */
@@ -136,6 +141,11 @@ export const activeModules = (company: Pick<Company, "modules"> | null | undefin
 export function placeActions(place: ModulePlace, company: Pick<Company, "modules"> | null | undefined, ctx: PlaceCtx, now = Date.now()): (ModuleAction & { module: string })[] {
   return activeModules(company, now).flatMap((d) => (d.places?.[place]?.(ctx) ?? []).map((a) => ({ ...a, module: d.key })));
 }
+
+/** a module's screen by its address parts; unknown module or screen → undefined */
+export const moduleScreen = (key: string | undefined, screen: string | undefined): (() => import("react").ComponentType) | undefined =>
+  key && screen ? defs.get(key)?.screens?.[screen] : undefined;
+export const moduleHref = (key: string, screen: string) => `/module/${key}/${screen}`;
 
 type Ctx = { keys(): string[]; (id: string): { default?: ModuleDef } };
 /** registers every `<key>/module.ts` a context gives (Metro: require.context below; tests: a stand-in) */

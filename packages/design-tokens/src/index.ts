@@ -207,6 +207,9 @@ export interface ThemeColors {
   blurTint: "dark" | "light";
   glow: GlowSpot[];
   status: Record<StatusName, { fill: string; text: string; on: string }>;
+  /** the drawing canvas only (founder О3, 07.11.2026 — the one exception to «colour only for status»): a node, and the
+   *  storeys 1..4 of a drawn line, always with the label «эт N»; ≥ 3:1 to the canvas (bg) in both themes */
+  drawing: { node: string; story: readonly [string, string, string, string] };
 }
 
 const statusFill = { ok: "#7CE08A", info: "#8FA2FF", warn: "#FF8A3D", bad: "#FF6B6B" } as const;
@@ -243,6 +246,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       bad: { fill: statusFill.bad, text: "#FFAAAA", on: statusOn },
       neutral: { fill: "rgba(255,255,255,0.11)", text: "#CDD1DA", on: "#F2F3F5" },
     },
+    drawing: { node: "#F2F3F5", story: ["#7FD4FF", "#FFC46B", "#D59BFF", "#7CEBC6"] },
   },
   light: {
     page: "#DDD9D2",
@@ -274,6 +278,7 @@ export const themes: Record<ThemeName, ThemeColors> = {
       bad: { fill: statusFill.bad, text: "#B4232A", on: statusOn },
       neutral: { fill: "rgba(20,22,30,0.09)", text: "#575C68", on: "#15161A" },
     },
+    drawing: { node: "#15161A", story: ["#0B6290", "#8A4F00", "#7A3DB8", "#0B6E50"] },
   },
 };
 
@@ -312,6 +317,10 @@ export const print = {
 } as const;
 
 /** Status glyph (DS: always icon + word). Maps to icons.ts names. */
+/** sizes on the drawing canvas (design/naryad-ds/tokens/foundation.css --draw-*): line widths, a downspout, a node,
+ *  the gap between a length label and its line; colours are themes[t].drawing */
+export const drawing = { runW: 4, runWSel: 6, dsR: 7, nodeR: 5, labelGap: 4 } as const;
+
 export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close" | "note"> = {
   ok: "check",
   info: "clock",
@@ -324,5 +333,5 @@ export const statusIcon: Record<StatusName, "check" | "clock" | "alert" | "close
 /** Estimate follow-up thresholds. Lead thresholds are company settings (apps/mobile/src/features/leadSettings.ts), not tokens. */
 export const timing = { estimateWarnDays: 2, estimateBadDays: 5 } as const;
 
-export const tokens = { font, space, spaceHalf, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print } as const;
+export const tokens = { font, space, spaceHalf, radius, size, motion, z, component, breakpoint, layout, themes, statusIcon, timing, print, drawing } as const;
 export type Tokens = typeof tokens;

@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { component, font, icons, motion, print, radius, size, space, spaceHalf, themes } from "../src/index";
+import { component, drawing, font, icons, motion, print, radius, size, space, spaceHalf, themes } from "../src/index";
 
 /**
  * The founder's design system (design/naryad-ds/tokens/*.css, icons.json) is the source of truth.
@@ -71,6 +71,9 @@ describe("app tokens mirror the founder's DS css", () => {
     expect([size.iconXs, size.iconSm, size.iconMd, size.iconLg, size.iconStroke]).toEqual([px("icon-xs"), px("icon-sm"), px("icon-md"), px("icon-lg"), px("icon-stroke")]);
     expect([size.statusbarH, size.tabbarH, size.safeBottom, size.fab]).toEqual([px("statusbar-h"), px("tabbar-h"), px("safe-bottom"), px("fab")]);
   });
+  it("drawing canvas sizes", () => {
+    expect(drawing).toEqual({ runW: px("draw-run-w"), runWSel: px("draw-run-w-sel"), dsR: px("draw-ds-r"), nodeR: px("draw-node-r"), labelGap: px("draw-label-gap") });
+  });
   it("motion", () => {
     expect([motion.durFast, motion.durBase, motion.durSlow, motion.durChart]).toEqual([px("dur-fast"), px("dur-base"), px("dur-slow"), px("dur-chart")]);
     const bez = (n: string) => v(n).match(/cubic-bezier\(([^)]+)\)/)![1]!.split(",").map(Number);
@@ -94,6 +97,10 @@ describe("app tokens mirror the founder's DS css", () => {
         expect(norm(c.status[k].text), `${k} text`).toBe(norm(v(`st-${k}-text`, t)));
         expect(norm(c.status[k].on)).toBe(norm(v("st-on", t)));
       }
+    });
+    it("drawing canvas: node and storeys (founder О3)", () => {
+      expect(norm(c.drawing.node)).toBe(norm(v("draw-node", t)));
+      c.drawing.story.forEach((s, i) => expect(norm(s), `story${i + 1}`).toBe(norm(v(`draw-story${i + 1}`, t))));
     });
     it("background glow spots (opacity per theme)", () => {
       const ops = [...v("glow", t).matchAll(/rgba\([^)]*,\s*([\d.]+)\)/g)].map((m) => Number(m[1]));

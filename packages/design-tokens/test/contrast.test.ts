@@ -53,6 +53,18 @@ describe.each(names)("%s theme contrast (DS rule: text ≥ 4.5:1)", (name) => {
   });
 });
 
+describe.each(names)("%s drawing canvas (founder О3: storeys by colour + «эт N», ≥ 3:1 to the canvas)", (name) => {
+  const c = themes[name];
+  const canvas = { bg: parse(c.bg), card: over(c.surf, c.bg) };
+  for (const [sname, s] of Object.entries(canvas)) {
+    it(`storeys and node on ${sname}`, () => {
+      c.drawing.story.forEach((st, i) => expect(ratio(parse(st), s), `story${i + 1}`).toBeGreaterThanOrEqual(3));
+      expect(ratio(parse(c.drawing.node), s)).toBeGreaterThanOrEqual(3);
+    });
+  }
+  it("four different storeys", () => expect(new Set(c.drawing.story.map((x) => x.toLowerCase())).size).toBe(4));
+});
+
 describe("print contrast on paper (documents for the client: text ≥ 4.5:1)", () => {
   const paper = parse(print.paper);
   it.each([["ink", print.ink], ["mut", print.mut], ["okText", print.okText]])("%s on paper", (_n, c) => {
