@@ -4,6 +4,7 @@
  * The contents of the old tabs (docs/specs/04 §7.2) moved here unchanged.
  */
 import { useState } from "react";
+import { space } from "@octo/design-tokens";
 import { Linking, View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
@@ -25,10 +26,11 @@ import { callPlaceForClient } from "@/features/comms/comms";
 import { newProperty, PropertySheet } from "@/features/client/PropertySheets";
 import { propertyTitle } from "@/features/properties";
 import { mailtoHref } from "@/features/contactLinks";
-import { Button, ChoiceChips, StatusChip, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, CardList, Empty, ItemCard, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { Card, CardList, Empty, ListRow, SectionTitle } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
 
 const PHONE_KEY: Record<string, DictKey> = { mobile: "phone.mobile", home: "phone.home", work: "phone.work", other: "phone.other" };
 
@@ -84,21 +86,23 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
           {r.properties.length === 0 ? (
             <Empty icon="home2" title={t("client.empty.properties")} hint={t("client.empty.propertiesHint")} />
           ) : (
-            <CardList>
+            <CardGrid>
               {r.properties.map((p) => {
                 const open = r.jobs.filter((j) => j.propertyId === p.id && j.status !== "done").length;
                 return (
-                  <ItemCard
+                  <ListCard
                     key={p.id}
+                    density="compact"
+                    testID={`client-property-${p.id}`}
+                    lead={{ kind: "icon", icon: "pin" }}
                     title={propertyTitle(p)}
-                    subtitle={[p.city, p.label].filter(Boolean).join(" · ")}
-                    left={<Icon name="pin" />}
-                    right={open ? <StatusChip status="info" label={t("prop.openJobs", { n: open })} /> : undefined}
+                    when={[p.city, p.label].filter(Boolean).join(" · ") || undefined}
+                    status={open ? { tone: "info", label: t("prop.openJobs", { n: open }) } : undefined}
                     onPress={() => router.push(`/property/${p.id}`)}
                   />
                 );
               })}
-            </CardList>
+            </CardGrid>
           )}
           <PropertySheet value={newProp} onClose={() => setNewProp(null)} />
         </>
@@ -128,61 +132,72 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
       return r.jobs.length === 0 ? (
         <Empty icon="wrench" title={t("client.empty.jobs")} hint={office ? t("client.empty.jobsHint") : undefined} />
       ) : (
-        <CardList>
+        <CardGrid>
           {r.jobs.map((j) => {
             const v = jobStatusView[j.status];
             const p = db.properties.find((x) => x.id === j.propertyId);
             return (
-              <ItemCard
+              <ListCard
                 key={j.id}
-                title={[j.number, j.title].filter(Boolean).join(" · ")}
-                subtitle={[p ? propertyTitle(p) : null, office ? money(j.amountCents) : null].filter(Boolean).join(" · ")}
-                right={<StatusChip status={v.status} label={t(v.label)} />}
+                density="compact"
+                testID={`client-job-${j.id}`}
+                lead={{ kind: "icon", icon: "wrench" }}
+                title={j.title || j.number || ""}
+                when={[j.title ? j.number : null, p ? propertyTitle(p) : null].filter(Boolean).join(" · ") || undefined}
+                value={office ? money(j.amountCents) : undefined}
+                status={{ tone: v.status, label: t(v.label) }}
                 onPress={() => router.push(`/job/${j.id}`)}
               />
             );
           })}
-        </CardList>
+        </CardGrid>
       );
 
     case "leads":
       return r.leads.length === 0 ? (
         <Empty icon="inbox" title={t("client.empty.leads")} />
       ) : (
-        <CardList>
+        <CardGrid>
           {r.leads.map((l) => {
             const v = leadStatusView[l.status];
             return (
-              <ItemCard
+              <ListCard
                 key={l.id}
-                title={[l.number, l.service ?? l.name].filter(Boolean).join(" · ")}
-                subtitle={day(l.receivedAt)}
-                right={<StatusChip status={v.status} label={t(v.label)} />}
+                density="compact"
+                testID={`client-lead-${l.id}`}
+                lead={{ kind: "icon", icon: "inbox" }}
+                title={l.service ?? l.name ?? l.number ?? ""}
+                when={[l.number, day(l.receivedAt)].filter(Boolean).join(" · ")}
+                status={{ tone: v.status, label: t(v.label) }}
                 onPress={() => router.push(`/lead/${l.id}`)}
               />
             );
           })}
-        </CardList>
+        </CardGrid>
       );
 
     case "estimates":
       return r.estimates.length === 0 ? (
         <Empty icon="invoice" title={t("client.empty.estimates")} hint={t("client.empty.documentsHint")} />
       ) : (
-        <CardList>
+        <CardGrid>
           {r.estimates.map((e) => {
             const v = estView[e.status];
             return (
-              <ItemCard
+              <ListCard
                 key={e.id}
-                title={[e.number, e.title].filter(Boolean).join(" · ")}
-                subtitle={office ? money(e.totalCents) : undefined}
-                right={<StatusChip status={v.s} label={t(v.l)} />}
+                density="compact"
+                testID={`client-estimate-${e.id}`}
+                lead={{ kind: "icon", icon: "invoice" }}
+                title={e.title || e.number || ""}
+                when={e.title ? e.number : undefined}
+                value={office ? money(e.totalCents) : undefined}
+                status={{ tone: v.s, label: t(v.l) }}
                 onPress={() => router.push(`/estimate/${e.id}`)}
               />
             );
           })}
-        </CardList>
+        </CardGrid>
       );
 
     case "invoices":
@@ -191,32 +206,40 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
       ) : (
         <>
           {r.invoices.length ? <SectionTitle title={t("client.invoices")} /> : null}
-          <CardList>
+          <CardGrid>
             {r.invoices.map((inv) => {
               const ic = invoiceChip(inv);
               return (
-                <ItemCard
+                <ListCard
                   key={inv.id}
-                  title={`${money(inv.totalCents)}${inv.number ? ` · ${inv.number}` : ""}`}
-                  subtitle={[inv.title, findJob(db, inv.jobId)?.title].filter(Boolean).join(" · ")}
-                  right={<StatusChip status={ic.s} label={t(ic.l)} />}
+                  density="compact"
+                  testID={`client-invoice-${inv.id}`}
+                  lead={{ kind: "icon", icon: "invoice" }}
+                  title={inv.title || findJob(db, inv.jobId)?.title || inv.number || ""}
+                  when={[inv.number, inv.title ? findJob(db, inv.jobId)?.title : null].filter(Boolean).join(" · ") || undefined}
+                  value={money(inv.totalCents)}
+                  status={{ tone: ic.s, label: t(ic.l) }}
                   onPress={() => router.push(`/invoice/${inv.id}`)}
                 />
               );
             })}
-          </CardList>
+          </CardGrid>
           {r.receipts.length ? <SectionTitle title={t("client.receipts")} /> : null}
-          <CardList>
+          <CardGrid>
             {r.receipts.map((p) => (
-              <ItemCard
+              <ListCard
                 key={p.id}
-                title={`${money(p.amountCents)}${p.receiptNumber ? ` · ${p.receiptNumber}` : ""}`}
-                subtitle={day(p.at)}
-                left={<Icon name="dollar" />}
+                density="compact"
+                testID={`client-receipt-${p.id}`}
+                lead={{ kind: "icon", icon: "dollar" }}
+                title={p.receiptNumber ?? t("rcpt.title")}
+                when={day(p.at)}
+                value={money(p.amountCents)}
+                valueTone="ok"
                 onPress={() => router.push(`/receipt/${p.id}`)}
               />
             ))}
-          </CardList>
+          </CardGrid>
         </>
       );
 
@@ -230,47 +253,37 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
           <TaskSheet value={taskEdit} onClose={() => setTaskEdit(null)} />
           {open.length === 0 && done.length === 0 ? <Empty icon="check" title={t("client.empty.tasks")} hint={office ? t("client.empty.tasksHint") : undefined} /> : null}
           {open.length ? (
-            <CardList>
+            <CardGrid>
               {open.map((x) => (
-                <ItemCard
+                // recipe E (06 §3): the tick on the left closes the task (undo in the toast), the card opens the form
+                <ListCard
                   key={x.id}
+                  density="compact"
+                  testID={`client-task-${x.id}`}
+                  lead={{ kind: "check", on: false, label: t("client.taskDone"), onToggle: () => toast.show(t("client.taskDoneToast"), store.saveTask({ ...x, doneAt: new Date().toISOString() }).undo) }}
                   title={x.title}
-                  subtitle={x.dueAt ? day(x.dueAt) : undefined}
-                  left={<Icon name="check" />}
+                  when={x.dueAt ? day(x.dueAt) : undefined}
                   onPress={() => setTaskEdit(x)}
-                  right={
-                    <Button
-                      label={t("client.taskDone")}
-                      variant="secondary"
-                      size="sm"
-                      onPress={() => toast.show(t("client.taskDoneToast"), store.saveTask({ ...x, doneAt: new Date().toISOString() }).undo)}
-                    />
-                  }
                 />
               ))}
-            </CardList>
+            </CardGrid>
           ) : null}
           {done.length ? (
             <>
               <SectionTitle title={t("client.doneTasks", { n: done.length })} />
-              <CardList>
+              <CardGrid>
                 {done.map((x) => (
-                  <Card key={x.id}>
-                    <RowView>
-                      <Icon name="check" />
-                      <View style={{ flex: 1 }}>
-                        <T v="body" tone="mut" style={{ textDecorationLine: "line-through" }}>
-                          {x.title}
-                        </T>
-                        <T v="caption" tone="mut">
-                          {t("client.doneOn", { date: day(x.doneAt!) })}
-                        </T>
-                      </View>
-                      <Button label={t("client.taskReopen")} variant="ghost" size="sm" onPress={() => toast.show(t("client.taskReopened"), store.saveTask({ ...x, doneAt: undefined }).undo)} />
-                    </RowView>
-                  </Card>
+                  // the tick taken off reopens the task (undo in the toast)
+                  <ListCard
+                    key={x.id}
+                    density="compact"
+                    testID={`client-task-done-${x.id}`}
+                    lead={{ kind: "check", on: true, label: t("client.taskReopen"), onToggle: () => toast.show(t("client.taskReopened"), store.saveTask({ ...x, doneAt: undefined }).undo) }}
+                    title={x.title}
+                    when={t("client.doneOn", { date: day(x.doneAt!) })}
+                  />
                 ))}
-              </CardList>
+              </CardGrid>
             </>
           ) : null}
         </>
@@ -284,9 +297,10 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
       return r.photos.length + r.files.length === 0 ? (
         <Empty icon="camera" title={t("client.empty.files")} hint={t("client.empty.filesHint")} />
       ) : (
-        <CardList>
-          <ItemCard title={t("client.photos", { n: r.photos.length + r.files.length })} subtitle={t("client.photosHint")} left={<Icon name="image" />} />
-        </CardList>
+        // one hint, not a list of objects (06 «10а, остаток» п.6): Card + ListRow
+        <Card style={{ paddingVertical: space[1] }}>
+          <ListRow title={t("client.photos", { n: r.photos.length + r.files.length })} subtitle={t("client.photosHint")} left={<Icon name="image" />} />
+        </Card>
       );
 
     case "history": {
@@ -302,18 +316,19 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
           {items.length === 0 ? (
             <Empty icon="clock" title={t("client.empty.history")} hint={t("client.empty.historyHint")} />
           ) : (
-            <CardList>
+            <CardGrid>
               {items.map((h) => (
-                <ItemCard
+                <ListCard
                   key={h.id}
+                  density="compact"
+                  lead={{ kind: "icon", icon: h.icon }}
                   title={t(h.title)}
-                  subtitle={[day(h.at), h.detail].filter(Boolean).join(" · ")}
-                  left={<Icon name={h.icon} />}
-                  right={h.cents !== undefined ? <T v="body" tabular>{money(h.cents)}</T> : undefined}
+                  when={[day(h.at), h.detail].filter(Boolean).join(" · ")}
+                  value={h.cents !== undefined ? money(h.cents) : undefined}
                   onPress={h.href ? () => router.push(h.href as never) : undefined}
                 />
               ))}
-            </CardList>
+            </CardGrid>
           )}
         </>
       );

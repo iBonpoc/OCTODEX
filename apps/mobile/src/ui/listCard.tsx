@@ -155,7 +155,7 @@ export interface CardFigure {
 /* ---------- props ---------- */
 export interface ListCardProps {
   title: string;
-  /** "3 min ago", "since Nov 2026" — under the title; goes to the right when there is no value */
+  /** "3 min ago", "since Nov 2026" — under the title; goes to the right when there is no value (compact: always under the title) */
   when?: string;
   lead: CardLead;
   value?: string;
@@ -231,7 +231,7 @@ export function ListCard(p: ListCardProps) {
       <Txt v="heading" w="semibold" color={p.valueTone && p.valueTone !== "neutral" ? c.status[p.valueTone].text : c.ink} tabular>{p.value}</Txt>
       {p.valueLabel ? <Txt v="caption" w="semibold" color={c.mut}>{p.valueLabel}</Txt> : null}
     </View>
-  ) : p.when ? (
+  ) : p.when && !compact ? (
     <Txt v="caption" color={c.mut}>{p.when}</Txt>
   ) : null;
 
@@ -277,7 +277,8 @@ export function ListCard(p: ListCardProps) {
         <Lead lead={p.lead} small={compact} />
         <View style={{ flex: 1, minWidth: 0, gap: spaceHalf.hair }}>
           <Txt v={compact ? "body" : "heading"} w="semibold" color={c.ink}>{p.title}</Txt>
-          {p.when && p.value ? <Txt v="caption" color={c.mut}>{p.when}</Txt> : null}
+          {/* compact: the one detail line («J-1001 · 12 Oak St») always under the title, never squeezed beside it */}
+          {p.when && (p.value || compact) ? <Txt v="caption" color={c.mut}>{p.when}</Txt> : null}
           {compact && chips.length ? <View style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1], marginTop: space[1] }}>{chips}</View> : null}
         </View>
         {valueText}
