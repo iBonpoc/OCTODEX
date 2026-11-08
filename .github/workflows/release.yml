@@ -99,7 +99,9 @@ jobs:
           echo "$out"
           [ $code -eq 0 ] && exit 0
           echo "$out" | grep -q "Rerun the command with --include-all" || exit $code
-          for f in $(echo "$out" | grep -oE 'supabase/migrations/[^ ]+\.sql'); do
+          files=$(echo "$out" | grep -oE 'supabase/migrations/[^ ]+\.sql')
+          [ -n "$files" ] || exit $code
+          for f in $files; do
             echo "$OUT_OF_ORDER_OK" | grep -qxF "$f" || { echo "::error::$f is dated before a migration already on the base; give it a new time (CLAUDE.md: new file)"; exit 1; }
           done
           supabase db push --remote --yes --include-all
