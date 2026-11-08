@@ -397,6 +397,9 @@ describe("unit:checklistStore — «Просмотрено» and «Отмени�
     expect(visitOf(r).checklistReviewedAt).toBeUndefined();
     await tick();
     expect(server.sends.map((x) => [x.op.k, x.op.at === null])).toEqual([["chk.visit.review", false], ["chk.visit.review", true]]);
+  });
+});
+
 describe("unit:checklistOfficeStore — the office edits a visit before it starts (§7.4, CH3)", () => {
   const TPL = {
     id: "00000000-0000-4000-8000-0000000000e1", name: "Inspection",
