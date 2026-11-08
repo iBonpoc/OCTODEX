@@ -31,6 +31,10 @@ verify_jwt = false
 [functions.stripe-webhook]
 verify_jwt = false
 
+# Возврат картой/ACH (docs/specs/35, 20д): only a signed-in person; owner/admin is checked in public.stripe_refund_open.
+[functions.stripe-refund]
+verify_jwt = true
+
 # LOCAL stack only (supabase start — the nightly cloud scenarios, docs/specs/21 §7). release.yml runs `db push`,
 # never `config push`, so nothing below reaches the hosted project.
 [auth]
