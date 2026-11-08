@@ -352,3 +352,5 @@ B4, было / стало: `docs/specs/img/06-b4-*-before-after.png`. `ItemCard`
 | 8 | Адрес корня `/leads?tab=leads` | hierarchy.ts | подтверждаем | `setParams` сохраняет `tab`; старые `?tab=estimates|invoices` уводят, как раньше |
 
 **Файлы.** `app/(tabs)/leads.tsx`, `app/lead/[id].tsx` (только перенос тела), `features/lead/LeadCard.tsx` (новый), `features/listCards.tsx` (`LeadListCard panel`), e2e 157, `version.ts`. Общих файлов и новых строк i18n нет.
+
+**PR — «Лиды».** Снимки 1280: ![было](img/06-panel-leads-before-light.png) ![стало](img/06-panel-leads-after-light.png) — тёмная: `img/06-panel-leads-*-dark.png`. Выбор статуса с формой из строки на 1280 тоже открывает панель. Долги: вкладки лида в 360 не помещаются («Файлы» уходит за край, прокрутка вбок) — `Segmented` общий; «возможный дубль» в теле ведёт на экран лида, как связанные объекты у «Клиентов».
