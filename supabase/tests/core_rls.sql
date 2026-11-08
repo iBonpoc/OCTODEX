@@ -5125,7 +5125,8 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'email_outbox.requested_by', 'email_outbox.to_email_set_by', 'estimate_approvals.signer_user_id', 'estimates.owner_user_id',
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
-    'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by', 'legal_acceptance.user_id', 'users.id',
+    'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id',
     -- erased (app.erase_personal_rows)
     'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id', 'push_prefs.user_id',
     -- unlinked (set to null)
@@ -5137,7 +5138,8 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
     'email_outbox.requested_by', 'email_outbox.to_email_set_by', 'estimate_approvals.signer_user_id', 'estimates.owner_user_id',
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
-    'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by', 'legal_acceptance.user_id', 'users.id',
+    'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id',
     'member_prefs.user_id', 'user_locations.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
  where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
@@ -8000,5 +8002,191 @@ select tst.ok(tst.cnt($q$select 1 from public.catalog_items where id::text like 
 select tst.ok((select unit_price_cents = 455 from public.catalog_items where id = '96000000-0000-5000-8000-000000000001'), 'T96 still the owner''s price');
 delete from public.catalog_items where id = '96000000-0000-5000-8000-000000000001';
 \echo 'T96 a module item with a fixed id: insert or nothing, one row, the set price stays, refusals stay refusals ok'
+
+-- ---------------------------------------------------------------- T101: checklist templates (docs/specs/08 §8, migration 20261108140000)
+:as_office_a
+insert into public.checklist_templates (id, company_id, name, items, applies_every_visit) values
+  ('c1010000-0000-4000-8000-000000000101', 'ca000000-0000-0000-0000-000000000000', 'Every visit',
+   '[{"id":"c1010000-0000-4000-8000-0000000001a1","label":"Confirm scope","kind":"check","required":true},
+     {"id":"c1010000-0000-4000-8000-0000000001a2","label":"Photo of the area","kind":"photo","required":false,"hint":"wide"}]', true);
+select tst.ok(tst.cnt($q$select 1 from public.checklist_templates where id = 'c1010000-0000-4000-8000-000000000101'$q$) = 1, 'T101 the office makes a template (founder В2)');
+update public.checklist_templates set name = 'Every visit (v2)' where id = 'c1010000-0000-4000-8000-000000000101';
+do $$ begin
+  perform tst.fails($q$insert into public.checklist_templates (company_id, name, items) values ('ca000000-0000-0000-0000-000000000000', 'bad', '[{"id":"x","label":"a","kind":"check","required":true}]')$q$, 'T101 an item id must be a uuid');
+  perform tst.fails($q$insert into public.checklist_templates (company_id, name, items) values ('ca000000-0000-0000-0000-000000000000', 'bad', '[{"id":"c1010000-0000-4000-8000-0000000001a9","label":"a","kind":"text","required":true}]')$q$, 'T101 only check / photo items');
+  perform tst.fails($q$insert into public.checklist_templates (company_id, name, items) values ('ca000000-0000-0000-0000-000000000000', 'bad', '[{"id":"c1010000-0000-4000-8000-0000000001a9","label":"a","kind":"check","required":true,"x":1}]')$q$, 'T101 no unknown keys in an item');
+  perform tst.fails($q$insert into public.checklist_templates (company_id, name, items) values ('ca000000-0000-0000-0000-000000000000', 'bad', '[{"id":"c1010000-0000-4000-8000-0000000001a9","label":"a","kind":"check","required":true},{"id":"c1010000-0000-4000-8000-0000000001a9","label":"b","kind":"check","required":true}]')$q$, 'T101 no two items with one id');
+  perform tst.fails($q$insert into public.checklist_templates (company_id, name, applies_visit_kinds) values ('ca000000-0000-0000-0000-000000000000', 'bad', '{estimate}')$q$, 'T101 visit kinds are inspection / work');
+end $$;
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.checklist_templates where name = 'Every visit (v2)'$q$) = 1, 'T101 the director sees the office''s change');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.checklist_templates where id = 'c1010000-0000-4000-8000-000000000101'$q$) = 1, 'T101 sales reads templates');
+select tst.blocked($q$update public.checklist_templates set name = 'sales' where id = 'c1010000-0000-4000-8000-000000000101'$q$, 'T101 sales does not change templates');
+do $$ begin
+  perform tst.fails($q$insert into public.checklist_templates (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'sales')$q$, 'T101 sales does not make templates');
+end $$;
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.checklist_templates$q$) = 0, 'T101 a tech does not read templates (the snapshot is in his visit)');
+do $$ begin
+  perform tst.fails($q$insert into public.checklist_templates (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'tech')$q$, 'T101 a tech does not make templates');
+end $$;
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.checklist_templates where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'T101 another company sees nothing');
+do $$ begin
+  perform tst.fails($q$insert into public.checklist_templates (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'B')$q$, 'T101 another company writes nothing');
+end $$;
+:as_owner_a
+do $$ begin
+  perform tst.fails($q$update public.companies set visit_settings = '{"minPhotosBefore":0}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T101 the minimum of photos is 1..20');
+  perform tst.fails($q$update public.companies set visit_settings = '{"photosBefore":true}' where id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T101 no unknown photo settings');
+end $$;
+update public.companies set visit_settings = '{"photosBeforeRequired":true,"photosAfterRequired":false,"minPhotosBefore":2}' where id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select visit_settings ->> 'minPhotosBefore' = '2' from public.companies where id = 'ca000000-0000-0000-0000-000000000000'), 'T101 the director saves the photo settings');
+update public.companies set visit_settings = '{}' where id = 'ca000000-0000-0000-0000-000000000000';
+:as_super
+select tst.ok(not has_function_privilege('anon', 'app.valid_checklist_items(jsonb)', 'execute')
+          and not has_function_privilege('anon', 'app.valid_visit_settings(jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.chk_mirror(uuid)', 'execute')
+          and not has_function_privilege('authenticated', 'app.chk_items_json(uuid)', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_visit_item_guard()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_visit_checklist_legacy()', 'execute'), 'T101 the helpers are not callable (rule 18)');
+\echo 'T101 checklist templates: the office writes, sales and tech read / nothing, another company nothing; photo settings ok'
+
+-- ---------------------------------------------------------------- T102: items of a visit (docs/specs/08 §8, §11.3)
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c1020000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T102 Home');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('c1020000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000c1', '102 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('c1020000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T102 job', 'c1020000-0000-4000-8000-0000000000c1', 'c1020000-0000-4000-8000-0000000000d1', 'draft');
+  insert into public.visits (id, company_id, job_id, starts_at) values
+    ('c1020000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000e1', now()),
+    ('c1020000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000e1', now() + interval '1 day');
+  insert into public.visit_assignees (company_id, visit_id, user_id) values
+    ('ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000f1', 'a0000000-0000-0000-0000-000000000003');
+end $$;
+:as_office_a
+-- the snapshot of a template, as the office's phone sends it (S9)
+insert into public.visit_checklist_items (id, company_id, visit_id, position, label, kind, required, template_id, template_name) values
+  ('c1020000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000f1', 0, 'Confirm scope', 'check', true, 'c1010000-0000-4000-8000-000000000101', 'Every visit'),
+  ('c1020000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000f1', 1, 'Photo of the area', 'photo', false, 'c1010000-0000-4000-8000-000000000101', 'Every visit'),
+  ('c1020000-0000-4000-8000-0000000000a3', 'ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000f1', 2, 'Walk through', 'check', true, null, null),
+  ('c1020000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000f2', 0, 'Other visit', 'check', true, null, null);
+select tst.ok((select checklist = '[{"id":"c1020000-0000-4000-8000-0000000000a1","done":false,"label":"Confirm scope"},{"id":"c1020000-0000-4000-8000-0000000000a2","done":false,"label":"Photo of the area"},{"id":"c1020000-0000-4000-8000-0000000000a3","done":false,"label":"Walk through"}]'::jsonb
+                 from public.visits where id = 'c1020000-0000-4000-8000-0000000000f1'), 'T102 the rows are mirrored into visits.checklist for old phones');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.visit_checklist_items where visit_id = 'c1020000-0000-4000-8000-0000000000f1'$q$) = 3, 'T102 the tech sees the items of his visit');
+select tst.ok(tst.cnt($q$select 1 from public.visit_checklist_items where visit_id = 'c1020000-0000-4000-8000-0000000000f2'$q$) = 0, 'T102 the tech does not see a visit he is not on');
+-- a tick: who is the server's word, the phone's time (offline), never in the future
+update public.visit_checklist_items set done = true, done_at = now() - interval '10 minutes'
+ where id = 'c1020000-0000-4000-8000-0000000000a1';
+select tst.ok((select done and done_by = 'a0000000-0000-0000-0000-000000000003' and done_at < now() - interval '9 minutes'
+                 from public.visit_checklist_items where id = 'c1020000-0000-4000-8000-0000000000a1'), 'T102 the tick: by the tech, at the phone''s time');
+update public.visit_checklist_items set skipped = true, na_reason = 'client_refused', na_at = now() + interval '1 day'
+ where id = 'c1020000-0000-4000-8000-0000000000a3';
+select tst.ok((select skipped and not done and na_by = 'a0000000-0000-0000-0000-000000000003' and na_at <= now()
+                 from public.visit_checklist_items where id = 'c1020000-0000-4000-8000-0000000000a3'), 'T102 a skip is not done; a future time becomes now');
+update public.visit_checklist_items set photo_ids = array['c1020000-0000-4000-8000-000000000011'::uuid], done = true
+ where id = 'c1020000-0000-4000-8000-0000000000a2';
+-- he adds an optional item of his own on site and removes it again
+insert into public.visit_checklist_items (id, company_id, visit_id, position, label) values
+  ('c1020000-0000-4000-8000-0000000000a4', 'ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000f1', 3, 'Dog in the yard');
+update public.visit_checklist_items set deleted_at = now() where id = 'c1020000-0000-4000-8000-0000000000a4';
+do $$ begin
+  perform tst.fails($q$update public.visit_checklist_items set done_by = 'a0000000-0000-0000-0000-000000000001' where id = 'c1020000-0000-4000-8000-0000000000a1'$q$, 'T102 done_by is not the tech''s to write');
+  perform tst.fails($q$update public.visit_checklist_items set label = 'easier' where id = 'c1020000-0000-4000-8000-0000000000a3'$q$, 'T102 the tech does not change what an item says');
+  perform tst.fails($q$update public.visit_checklist_items set required = false where id = 'c1020000-0000-4000-8000-0000000000a3'$q$, 'T102 the tech does not make an item optional');
+  perform tst.fails($q$update public.visit_checklist_items set deleted_at = now() where id = 'c1020000-0000-4000-8000-0000000000a3'$q$, 'T102 the tech does not remove a required item');
+  perform tst.fails($q$update public.visit_checklist_items set deleted_at = now() where id = 'c1020000-0000-4000-8000-0000000000a2'$q$, 'T102 the tech does not remove the office''s item');
+  perform tst.fails($q$insert into public.visit_checklist_items (company_id, visit_id, label, required) values ('ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000f1', 'mine', true)$q$, 'T102 the tech adds only an optional item');
+  perform tst.fails($q$insert into public.visit_checklist_items (company_id, visit_id, label) values ('ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000f2', 'not mine')$q$, 'T102 the tech adds nothing to another visit');
+  perform tst.fails($q$update public.visit_checklist_items set visit_id = 'c1020000-0000-4000-8000-0000000000f2' where id = 'c1020000-0000-4000-8000-0000000000a1'$q$, 'T102 an item stays on its visit');
+  perform tst.fails($q$update public.visits set checklist_reviewed_at = now() where id = 'c1020000-0000-4000-8000-0000000000f1'$q$, 'T102 the tech does not press «Просмотрено»');
+end $$;
+select tst.blocked($q$update public.visit_checklist_items set done = true where id = 'c1020000-0000-4000-8000-0000000000b1'$q$, 'T102 the tech does not tick a visit he is not on');
+-- staff that is not the director (here sales; office_a is admin by now, see line 536)
+:as_sales_a
+do $$ begin
+  perform tst.fails($q$update public.visit_checklist_items set deleted_at = now() where id = 'c1020000-0000-4000-8000-0000000000b1'$q$, 'T102 staff other than the director does not remove a required item');
+  perform tst.fails($q$update public.visit_checklist_items set required = false where id = 'c1020000-0000-4000-8000-0000000000b1'$q$, 'T102 staff other than the director does not make a required item optional');
+end $$;
+update public.visit_checklist_items set done = true where id = 'c1020000-0000-4000-8000-0000000000b1';
+update public.visit_checklist_items set done = false where id = 'c1020000-0000-4000-8000-0000000000b1';
+:as_office_a
+update public.visit_checklist_items set label = 'Walk through with the client', position = 5 where id = 'c1020000-0000-4000-8000-0000000000a3';
+update public.visits set checklist_reviewed_at = now() where id = 'c1020000-0000-4000-8000-0000000000f1';
+select tst.ok((select checklist_reviewed_by = 'a0000000-0000-0000-0000-000000000002' from public.visits where id = 'c1020000-0000-4000-8000-0000000000f1'), 'T102 «Просмотрено»: the server writes who pressed it');
+update public.visits set checklist_reviewed_at = null where id = 'c1020000-0000-4000-8000-0000000000f1';
+select tst.ok((select checklist_reviewed_by is null from public.visits where id = 'c1020000-0000-4000-8000-0000000000f1'), 'T102 «Отменить» clears who pressed it');
+:as_owner_a
+update public.visit_checklist_items set deleted_at = now() where id = 'c1020000-0000-4000-8000-0000000000b1';
+select tst.ok((select checklist = '[]'::jsonb from public.visits where id = 'c1020000-0000-4000-8000-0000000000f2'), 'T102 the director removes a required item; the mirror follows');
+-- the client signs: a tech only finishes what was left
+update public.visits set status = 'on_site', work_started_at = now(), signed_at = now() where id = 'c1020000-0000-4000-8000-0000000000f1';
+:as_tech_a
+update public.visit_checklist_items set done = true where id = 'c1020000-0000-4000-8000-0000000000a3';
+select tst.ok((select done and not skipped and na_reason is null from public.visit_checklist_items where id = 'c1020000-0000-4000-8000-0000000000a3'), 'T102 after the signature the tech still finishes a skipped item (§8)');
+do $$ begin
+  perform tst.fails($q$update public.visit_checklist_items set done = false where id = 'c1020000-0000-4000-8000-0000000000a1'$q$, 'T102 after the signature the tech does not untick');
+  perform tst.fails($q$update public.visit_checklist_items set skipped = true, done = false where id = 'c1020000-0000-4000-8000-0000000000a2'$q$, 'T102 after the signature the tech does not skip');
+  perform tst.fails($q$update public.visit_checklist_items set photo_ids = '{}' where id = 'c1020000-0000-4000-8000-0000000000a2'$q$, 'T102 after the signature the tech does not take a photo off');
+  perform tst.fails($q$insert into public.visit_checklist_items (company_id, visit_id, label) values ('ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000f1', 'late')$q$, 'T102 after the signature the tech adds nothing');
+end $$;
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.visit_checklist_items where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'T102 another company sees no items');
+do $$ begin
+  perform tst.fails($q$insert into public.visit_checklist_items (company_id, visit_id, label) values ('ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000f1', 'B')$q$, 'T102 another company adds nothing');
+end $$;
+\echo 'T102 visit items: the tech ticks, skips, adds / removes his optional item, finishes after the signature; the office edits, the director removes required ones ok'
+
+-- ---------------------------------------------------------------- T103: rule 16 — an old phone writes the whole array (step 1)
+:as_owner_a
+insert into public.visits (id, company_id, job_id, starts_at) values
+  ('c1030000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000e1', now() + interval '2 days');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'c1030000-0000-4000-8000-0000000000f1', 'a0000000-0000-0000-0000-000000000003');
+insert into public.visit_checklist_items (id, company_id, visit_id, position, label, required) values
+  ('c1030000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'c1030000-0000-4000-8000-0000000000f1', 6, 'Required for T103', true);
+:as_tech_a
+-- the old app (ops visit.checklist): the whole list with one tick changed, a label rewritten, an item dropped, its own new item
+update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"REWRITTEN","done":true},
+                                      {"id":"c1030000-0000-4000-8000-0000000000a2","label":"Old phone item","done":false},
+                                      {"id":"c1020000-0000-4000-8000-0000000000b1","label":"another visit","done":true}]'
+ where id = 'c1030000-0000-4000-8000-0000000000f1';
+select tst.ok((select done and label = 'Required for T103' and required and done_by = 'a0000000-0000-0000-0000-000000000003'
+                 from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a1'), 'T103 an old phone''s tick reaches the row; its label rewrite does not');
+select tst.ok((select not required and label = 'Old phone item' and created_by = 'a0000000-0000-0000-0000-000000000003'
+                 from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a2'), 'T103 an old phone''s new item is the tech''s optional one');
+select tst.ok(tst.cnt($q$select 1 from public.visit_checklist_items where visit_id = 'c1030000-0000-4000-8000-0000000000f1' and deleted_at is null$q$) = 2,
+  'T103 items the old array left out are not removed');
+:as_owner_a
+select tst.ok((select not done and deleted_at is not null from public.visit_checklist_items where id = 'c1020000-0000-4000-8000-0000000000b1'), 'T103 an id of another visit changes nothing there');
+:as_super
+select tst.ok((select v.checklist = app.chk_items_json(v.id) and jsonb_array_length(v.checklist) = 2 from public.visits v where v.id = 'c1030000-0000-4000-8000-0000000000f1'),
+  'T103 after an old write the array is the mirror of the rows again (the old hole: a tech rewriting the whole list)');
+:as_owner_a
+update public.visits set status = 'on_site', work_started_at = now(), signed_at = now() where id = 'c1030000-0000-4000-8000-0000000000f1';
+:as_tech_a
+-- after the signature an old phone unticking gets no refusal (its queue would retry forever): the untick is left out
+update public.visits set checklist = '[{"id":"c1030000-0000-4000-8000-0000000000a1","label":"x","done":false},{"id":"c1030000-0000-4000-8000-0000000000a9","label":"late","done":false}]'
+ where id = 'c1030000-0000-4000-8000-0000000000f1';
+:as_owner_a
+select tst.ok((select done from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a1'), 'T103 after the signature an old phone does not untick');
+select tst.ok(tst.cnt($q$select 1 from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000a9'$q$) = 0, 'T103 after the signature an old phone adds nothing');
+-- a visit inserted with an old array (the office's old phone): rows, then the mirror
+insert into public.visits (id, company_id, job_id, starts_at, checklist) values
+  ('c1030000-0000-4000-8000-0000000000f3', 'ca000000-0000-0000-0000-000000000000', 'c1020000-0000-4000-8000-0000000000e1', now() + interval '3 days',
+   '[{"id":"c1030000-0000-4000-8000-0000000000b1","label":"From old insert","done":false}]');
+:as_super
+select tst.ok((select required from public.visit_checklist_items where id = 'c1030000-0000-4000-8000-0000000000b1')
+          and (select checklist = app.chk_items_json(id) from public.visits where id = 'c1030000-0000-4000-8000-0000000000f3'), 'T103 an old insert with a list becomes rows');
+delete from public.visits where id in ('c1020000-0000-4000-8000-0000000000f1', 'c1030000-0000-4000-8000-0000000000f1', 'c1020000-0000-4000-8000-0000000000f2', 'c1030000-0000-4000-8000-0000000000f3');
+delete from public.jobs where id = 'c1020000-0000-4000-8000-0000000000e1';
+delete from public.properties where id = 'c1020000-0000-4000-8000-0000000000d1';
+delete from public.customers where id = 'c1020000-0000-4000-8000-0000000000c1';
+delete from public.checklist_templates where id = 'c1010000-0000-4000-8000-000000000101';
+\echo 'T103 rule 16: an old phone array moves only ticks and its own items into the rows, the mirror wins ok'
 
 \echo 'ALL TESTS PASSED'
