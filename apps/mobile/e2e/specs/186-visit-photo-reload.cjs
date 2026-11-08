@@ -29,6 +29,12 @@ exports.run = async (h) => {
   await waitFor(async () => (await photo())?.uri?.startsWith("blob:"), "the photo is saved with this page's blob:");
   // this page's photo loads
   await waitFor(async () => (await p.locator('img[src^="blob:"]').count()) > 0, "this page's photo is shown");
+  // «Создать» → «Фото» picks one too: it is this page's as well and is shown at once (Fab registers it)
+  await p.getByRole("button", { name: "Создать", exact: true }).locator("visible=true").last().click();
+  const [ch2] = await Promise.all([p.waitForEvent("filechooser"), p.getByRole("button", { name: "Фото", exact: true }).locator("visible=true").last().click()]);
+  await ch2.setFiles({ name: "before2.png", mimeType: "image/png", buffer: PNG });
+  await waitFor(async () => ((await h.db()).visits.find((v) => v.id === v0.id)?.photos?.length ?? 0) === 2, "the «＋» photo is saved");
+  await waitFor(async () => (await p.locator('img[src^="blob:"]').count()) >= 2, "the «＋» photo is shown at once");
 
   // record every image the page asks for, then reload
   await p.addInitScript(() => {
@@ -36,7 +42,6 @@ exports.run = async (h) => {
     const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
     Object.defineProperty(HTMLImageElement.prototype, "src", { ...d, set(v) { seen.push(String(v)); d.set.call(this, v); } });
   });
-  await p.waitForTimeout(1300); // the store saves the photo before the reload
   await p.reload();
   const tile = p.getByRole("button", { name: "Фото 1" }).locator("visible=true").first();
   await tile.waitFor({ timeout: 8000 });
@@ -51,5 +56,5 @@ exports.run = async (h) => {
   h.expect((await h.sheet().locator("img").count()) === 0, "the viewer shows the sign");
   h.expect((await p.evaluate(() => (window.__imgSrc || []).filter((u) => u.startsWith("blob:")).length)) === 0, "the viewer does not load it either");
   await h.sheet().getByRole("button", { name: "Удалить фото" }).click();
-  await waitFor(async () => !(await photo()), "a dead photo can still be deleted");
+  await waitFor(async () => ((await h.db()).visits.find((v) => v.id === v0.id)?.photos?.length ?? 0) === 1, "a dead photo can still be deleted");
 };
