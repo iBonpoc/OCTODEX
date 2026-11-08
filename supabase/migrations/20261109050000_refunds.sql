@@ -13,6 +13,7 @@
 -- ---- 0. The payment guard: + Stripe fields and refunds only through the doors (create or replace of core's) -------------
 create or replace function app.tg_payment_guard()
 returns trigger language plpgsql security definer set search_path = '' as $$
+declare v_merge boolean;
 begin
   if tg_op = 'INSERT' then
     if new.status not in ('pending', 'succeeded') then
@@ -42,7 +43,12 @@ begin
     -- the client of a payment changes only when two client cards are merged (public.merge_customers, «Лиды и клиенты»,
     -- migration 20261109120000 brings app.merging_customer); until then — and for a person ever — refused as before
     if new.customer_id is distinct from old.customer_id then
-      if not app.merging_customer(old.customer_id, new.customer_id) then
+      -- to_regprocedure: before that migration the answer is the same refusal as ever, not «function does not exist»
+      v_merge := false;
+      if to_regprocedure('app.merging_customer(uuid,uuid)') is not null then
+        execute 'select app.merging_customer($1, $2)' into v_merge using old.customer_id, new.customer_id;   -- not parsed before it exists
+      end if;
+      if not coalesce(v_merge, false) then
         raise exception 'payment % is immutable except status (use void/refund)', old.id using errcode = '42501';
       end if;
     end if;
@@ -51,16 +57,19 @@ begin
        or new.fee_cents is distinct from old.fee_cents or new.platform_fee_cents is distinct from old.platform_fee_cents) then
       raise exception 'Stripe fields are written by Stripe' using errcode = '42501';
     end if;
-    -- 20д: a refund is a refunds row with its tax part. A person cannot write refunds rows (only the doors do), so a person's
-    -- change of refunded_cents or of a refund status must equal what the refunds rows say — public.refund_record writes its
-    -- row first; a direct UPDATE has none. (Inside this SECURITY DEFINER trigger current_user is the owner, and a setting
-    -- can be set by anyone: neither tells a door from a person.) Stripe's own changes come without a person (service_role).
+    -- 20д: a refund is a refunds row with its tax part. A person cannot write refunds rows (only the doors do), so what a
+    -- person adds to refunded_cents must be exactly the refunds rows made in THIS transaction (created_at = now(), the
+    -- transaction's start) — public.refund_record writes its row first; a direct UPDATE has none. A refund status only with
+    -- money that grew. Old payments refunded before 20д (no rows) still take a new refund: only the growth is compared.
+    -- (Inside this SECURITY DEFINER trigger current_user is the owner, and a setting can be set by anyone: neither tells a
+    -- door from a person.) Stripe's own changes come without a person (service_role).
     if auth.uid() is not null
        and (new.refunded_cents is distinct from old.refunded_cents
             or (new.status in ('partially_refunded', 'refunded') and new.status is distinct from old.status))
-       and (case when new.status = 'refunded' then new.amount_cents else new.refunded_cents end)
-           is distinct from (select coalesce(sum(r.amount_cents), 0) from public.refunds r
-                              where r.payment_id = new.id and r.status = 'succeeded') then
+       and ((case when new.status = 'refunded' then new.amount_cents else new.refunded_cents end) - old.refunded_cents <= 0
+            or (case when new.status = 'refunded' then new.amount_cents else new.refunded_cents end) - old.refunded_cents
+               is distinct from (select coalesce(sum(r.amount_cents), 0) from public.refunds r
+                                  where r.payment_id = new.id and r.status = 'succeeded' and r.created_at = now())) then
       raise exception 'refunds go through refund_record' using errcode = '42501';
     end if;
     if new.refunded_cents < old.refunded_cents then
