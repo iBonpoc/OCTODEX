@@ -9960,6 +9960,17 @@ select tst.ok((public.portal_estimate('tok_inv_0123456789abcdef') -> 'pending' -
 :as_service
 select tst.ok((public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') ->> 'amount_cents')::bigint = 110000,
   'T131 ACH on its way is not asked again: the attempt is the rest');
+select tst.ok(public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') -> 'stale_intents' = '["pi_T131A"]'::jsonb,
+  'T131 the older attempt''s intent (the old amount) is handed to stripe-pay to cancel');
+:as_super
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = now() where id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.fails_like($q$select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%company closed%', 'T131 a closed company takes no payment');
+:as_super
+update public.companies set closed_at = null where id = 'ca000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t06_company_closed_guard;
 :as_super
 select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126A","charges_enabled":false}');
 :as_service

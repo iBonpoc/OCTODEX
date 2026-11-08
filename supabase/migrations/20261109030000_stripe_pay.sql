@@ -8,6 +8,7 @@
 -- (pending: {invoice id: cents}). PostgREST shows only public: these are the doors, app.* stays closed (rule 18, T52).
 -- Rule 16: only additions; portal_estimate keeps every field it had.
 
+
 create or replace function public.stripe_pay_open(p_token text, p_invoice_id uuid)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
@@ -42,7 +43,14 @@ begin
   return jsonb_build_object('attempt_id', a.id, 'company_id', a.company_id, 'invoice_id', a.invoice_id,
                             'amount_cents', a.amount_cents, 'idempotency_key', a.idempotency_key,
                             'account_id', a.stripe_account_id, 'payment_intent_id', a.stripe_payment_intent_id,
-                            'status', a.status);
+                            'status', a.status,
+                            -- intents of this invoice's OTHER attempts the client could still pay (another amount, an old tab,
+                            -- a failed try): stripe-pay cancels them, so one invoice is never charged twice (review 20в)
+                            'stale_intents', coalesce((select jsonb_agg(o.stripe_payment_intent_id order by o.attempt_no)
+                                                         from public.payment_attempts o
+                                                        where o.invoice_id = inv.id and o.id <> a.id and o.status in ('open', 'failed')
+                                                          and o.stripe_payment_intent_id is not null
+                                                          and o.stripe_account_id = a.stripe_account_id), '[]'::jsonb));
 end;
 $$;
 revoke all on function public.stripe_pay_open(text, uuid) from public, anon, authenticated;
@@ -82,13 +90,15 @@ begin
     'doc_language', app.estimate_doc_language(v_id),
     'simulated_pay', app.company_simulates_payments(v_company),
     -- the company's Stripe account takes charges; the page then shows the real Payment Element
-    'online_pay', exists (select 1 from public.stripe_accounts s where s.company_id = v_company and s.charges_enabled),
+    'online_pay', exists (select 1 from public.stripe_accounts s where s.company_id = v_company and s.charges_enabled)
+                  and exists (select 1 from public.estimates e where e.id = v_id and app.estimate_link_open(e)),
     -- ACH on its way per invoice of this estimate: not money yet, but the client must not pay it twice
     'pending', coalesce((select jsonb_object_agg(x.invoice_id, x.cents)
                            from (select p.invoice_id, sum(p.amount_cents) as cents
                                    from public.payments p join public.invoices i on i.id = p.invoice_id
                                    join public.jobs j on j.id = i.job_id
-                                  where j.estimate_id = v_id and p.status = 'pending'
+                                  where j.estimate_id = v_id and p.status = 'pending' and p.deleted_at is null
+                                    and i.deleted_at is null and i.status = 'sent'
                                   group by p.invoice_id) x), '{}'::jsonb));
 end;
 $$;

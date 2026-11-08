@@ -6,8 +6,7 @@ import { startOnlinePay } from "@/cloud/portal";
 import { useTheme } from "@/theme/ThemeProvider";
 import { Button, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Sheet } from "@/ui/overlays";
-import { RowView } from "@/ui/surfaces";
+import { Card, RowView } from "@/ui/surfaces";
 import { loadStripeJs, type StripeLike } from "./stripeJs";
 
 export type OnlineOutcome = "succeeded" | "processing";
@@ -29,6 +28,8 @@ const ERR: Record<string, DictKey> = {
  * Stripe takes charges. Web only (the client's browser). The card or bank details go from the client's browser straight to Stripe
  * (js.stripe.com) — never through our server or this code. ACH comes first from $1,000 (the order comes from stripe-pay).
  * Nothing is recorded here: the payment appears when Stripe's webhook reaches the server (20г).
+ * A panel on the page, NOT a Sheet: a modal's focus trap (react-native-web) would pull the focus back from Stripe's own windows
+ * (3DS, the bank link of ACH), which Stripe.js puts straight into <body> — the client could not type there (review 20в №1).
  */
 export function StripeCheckout({
   visible,
@@ -54,13 +55,16 @@ export function StripeCheckout({
   const [phase, setPhase] = useState<Phase>("loading");
   const [err, setErr] = useState<string | null>(null);
   const [amount, setAmount] = useState(amountCents);
+  const busy = useRef(false);
 
   useEffect(() => {
     if (!visible || !invoiceId || Platform.OS !== "web") return;
     let gone = false;
     setPhase("loading");
     setErr(null);
+    setAmount(amountCents);   // this invoice's sum from the first frame — never the last invoice's or $0
     session.current = null;
+    busy.current = false;
     (async () => {
       const r = await startOnlinePay(token, invoiceId);
       if (gone) return;
@@ -85,7 +89,11 @@ export function StripeCheckout({
       });
       const el = elements.create("payment", { layout: "tabs", paymentMethodOrder: r.methods });
       const node = host.current;
-      if (!node) return;
+      if (!node) {
+        setErr(t("pay.online.err.retry"));
+        return setPhase("error");
+      }
+      (node as HTMLElement & { scrollIntoView?: (o: object) => void }).scrollIntoView?.({ block: "nearest" });
       el.mount(node);
       session.current = { stripe, elements };
       setAmount(r.amountCents || amountCents);
@@ -99,25 +107,31 @@ export function StripeCheckout({
 
   const pay = async () => {
     const s = session.current;
-    if (!s) return;
+    if (!s || busy.current) return;   // two taps in one frame are one payment
+    busy.current = true;
     setPhase("paying");
     setErr(null);
     const r = await s.stripe
-      .confirmPayment({ elements: s.elements, redirect: "if_required", confirmParams: { return_url: window.location.href.split("?")[0] + "?paid=1" } })
+      .confirmPayment({ elements: s.elements, redirect: "if_required", confirmParams: { return_url: `${window.location.href.split("?")[0]}?paid=${invoiceId}` } })
       .catch(() => ({ error: { message: undefined } }) as const);
     if ("error" in r && r.error) {
       // Stripe's message is for the client and already in their language (locale); without one — ours
       setErr(r.error.message ?? t("pay.online.err.retry"));
+      busy.current = false;
       return setPhase("ready");
     }
     const st = "paymentIntent" in r ? r.paymentIntent?.status : undefined;
     onDone(st === "succeeded" ? "succeeded" : "processing");
   };
 
+  if (!visible) return null;
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("pay.online.title")}>
-      <View style={{ gap: space[3] }}>
-        <StatusChip status="warn" label={t("pay.testMode")} />
+    <Card>
+      <View style={{ gap: space[3] }} testID="stripe-checkout">
+        <RowView style={{ justifyContent: "space-between" }}>
+          <T v="heading">{t("pay.online.title")}</T>
+          <StatusChip status="warn" label={t("pay.testMode")} />
+        </RowView>
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="body" tone="mut">
             {title}
@@ -154,7 +168,10 @@ export function StripeCheckout({
             </View>
           </>
         )}
+        <View testID="stripe-close">
+          <Button label={t("common.close")} variant="ghost" full disabled={phase === "paying"} onPress={onClose} />
+        </View>
       </View>
-    </Sheet>
+    </Card>
   );
 }
