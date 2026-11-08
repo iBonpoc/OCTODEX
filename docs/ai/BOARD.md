@@ -8,15 +8,15 @@
 | Чат | id | Направление | Состояние |
 |---|---|---|---|
 | Руководитель №5 | `session_015CqH6AYWnjNhg5RZy2re5D` | CLAUDE.md, docs/ai/*, 10-build-plan §0, 15-story-map | план, приёмка, вливание сборками |
-| Лиды и клиенты №14 | `session_015CqH66PePGjJasrpJgtqH3` | спека 04 §13, clientDuplicates.ts, client/**, clients.tsx, LeadCard.tsx, миграция 20261109120000 | C3 дубли и слияние клиентов (T134, e2e 189) |
+| Лиды и клиенты №15 | `session_015CqH69sRZcUUW2cRGf1WKA` | features/client/**, app/client/**, clients.tsx, clientDuplicates.ts, миграция 20261109180000 | шаг 17 C3 закрыт (#446, #448, #450, #453) |
 | Сметы №3 | `session_015CqH68FFv5zHgyQV88Jvva` | шаблоны смет: estimate/**, estimateTemplate.ts, ops/store (шаблоны), миграция 20261108230000 | E3a #423 влит; E3b экраны (e2e 177), E3c слот модулей (e2e 180) |
-| Деньги и отчёты №6 | `session_015CqH68oEGqeAYaK5CRygU5` | features/payments/*, cloud/refund.ts, functions/stripe-*, миграции 20261109150000+ | долги: аванс (платёж без счёта), ACH-возврат после принятия, fee_cents, мелкие шторки; T с T135, e2e с 190 |
+| Деньги и отчёты №7 | `session_015CqH67RW2jTTsHS1vVMLef` | functions/stripe-pay, stripe-refund, StripeCheckout, миграции 20261109210000+ | безопасность оплаты до live: лимит запросов, хранение stripe_events; затем токен /p/ не виден мастеру (2 шага) |
 | Правки Gutters (личный чат основателя) | `session_015CqH66K82f6Sc1E161JFM2` | src/modules/gutters/** (кроме registry/module/estimateLink без согласования), e2e 168–174 | правки основателя; архив только по его слову |
 | Бренд (личный чат основателя) | `session_015CqH69WWiSwHTpW9sTb2km` | бренд GoRix | архив только по слову основателя |
 
 **Долги:** лимит запросов stripe-pay до live; rule16 шаг 2 (старые колонки себестоимости, companies.stripe_account_id).
 
-**Ждут ответа основателя (08.11):** включить Stripe Radar до перехода на live (защита от перебора карт); аванс без счёта в «собрано» до зачёта (сейчас нет); переплата счёта после упавшего возврата (сейчас needs_review); при настройке вебхука Stripe — подписать события из спеки 35 §4б (refund.created обязателен); приём заявок В1 галочка SMS, В2 текст о данных, В3 Turnstile, В4 адрес формы (gorix.app); задаток быстрых смет (pct «0.1» читается как 0); Stripe В1 аккаунт, В2 Standard/Express, В3 комиссия платформы, В4 без надбавки за карту, В5 ИИ для чеков, В6 проигранный спор; VGS (выпуски 2⅜/2¾, колена A/B, box miter, straight face cap); секреты INTAKE_IP_SECRET, TURNSTILE_SECRET (заводит сам); было/стало за 08.11.
+**Ждут ответа основателя (08.11):** поставщики В1 заказ поставщику — в бету или к запуску (рекоменд.: сразу после SUP1, без авто и RFQ), В2 у кого и как заказываете, В3 видит ли продавец поставщиков (по умолчанию нет); подписи на месте мастеров с правом подписи до исправления могли не дойти до сервера — проверить такие сметы; включить Stripe Radar до перехода на live (защита от перебора карт); аванс без счёта в «собрано» до зачёта (сейчас нет); переплата счёта после упавшего возврата (сейчас needs_review); при настройке вебхука Stripe — подписать события из спеки 35 §4б (refund.created обязателен); приём заявок В1 галочка SMS, В2 текст о данных, В3 Turnstile, В4 адрес формы (gorix.app); задаток быстрых смет (pct «0.1» читается как 0); Stripe В1 аккаунт, В2 Standard/Express, В3 комиссия платформы, В4 без надбавки за карту, В5 ИИ для чеков, В6 проигранный спор; VGS (выпуски 2⅜/2¾, колена A/B, box miter, straight face cap); секреты INTAKE_IP_SECRET, TURNSTILE_SECRET (заводит сам); было/стало за 08.11.
 
 Прежняя таблица 07.11 — в истории файла.
 
@@ -151,6 +151,18 @@
 - Демо: amountCents уменьшается при возврате (как приходит из облака: amount − refunded).
 - Долги: ACH-возврат после принятия failed/canceled — двери нет; платёж без счёта (аванс) не виден; fee_cents в приложение; предел в шторке не вычитает возвраты в пути; 42501 «company closed» показывается как «только владелец/админ».
 - Дальше: 20е чтение чека (после В5 основателя).
+
+### Памятка Лиды и клиенты №14 (session_015CqH66PePGjJasrpJgtqH3, 08.11) — архив
+- Сдал #446 (в сборке #447): шаг 17 C3 — дубли клиентов и слияние. Миграция 20261109120000: merge_customers, mark_not_duplicate, app.merging_customer (+ app.customer_merge_runs, RLS force), триггеры t01_follow_merged_customer/subject, t02_customer_merge_guard; узкий пропуск в гардах счетов, смет, «не обслуживаем»; save_customer_people и set_customer_tags отказывают слитой карточке (hint customer_merged); move_lead_people сохраняет отказы от SMS и язык. T134, e2e 189, unit clientDuplicates, leadDuplicatesFor. S3d в карте, спека 04 §13, PRD 03 CUST-US-12.
+- Договорённости: «Деньги» №6 пересоздают tg_payment_guard (20261109150000) и сохраняют вызов app.merging_customer (to_regprocedure+EXECUTE); блок авансов в features/client/ClientCard.tsx делают «Деньги» №6.
+- Ограничения (спека 04 §13.4): правки слитой карточки со старого телефона (customer.update, свои поля) ложатся на архивную; откат после сервера — только поддержка по audit_log (А16, ответа основателя нет).
+- Дальше по шагу 17: серверный импорт CSV (+ match_key / серверный поиск дублей для приёма заявок). Было/стало C3: docs/specs/img/leads14/.
+
+### Памятка Деньги и отчёты №6 (session_015CqH68oEGqeAYaK5CRygU5, 08.11) — архив
+- Сдал #449 (в сборке #452): аванс клиента (db.advances, «Без счёта», блок на ClientCard, «Зачесть»/«Вернуть»); public.advance_apply + t41; откат упавшего возврата Stripe только по подписанному событию (app.refund_unwind, refunds.unwound_at); recalc_invoice_payment не пишет void; fee_cents; предел − в пути; 42501 company closed; CSV-инъекция reports.ts. Миграция 20261109150000. T135–T137 (+T128), e2e 190, 191. Спека 35 §4г, список событий вебхука §4б.
+- Ждёт основателя: аванс в «собрано» (ADVANCES_COLLECTED в features/payments/collected.ts; при «да» поправить и today.tsx receivedIndex); переплата после упавшего возврата (needs_review); подписка вебхука на refund.created обязательна.
+- Долги: облачная проверка ACH-возврата и refund.failed в test mode после секретов; лимит запросов stripe-pay до live; хранение app.stripe_events (спека 21); rule16 шаг 2 (companies.stripe_account_id).
+- Уроки: изменение платежа void-счёта роняло событие Stripe (цепочка t85→invoices); «один раз на строку» — метка + for update; строки, привязанные этим же событием, блокировать и по нашему id; шаги app.* в тестах — от суперпользователя; vi.mockRejectedValue с repo.ts ловит чужой вызов — mockImplementationOnce.
 
 ## Памятки-передачи 07.11 (руководитель №4)
 ### Памятка «Лиды и клиенты» №10 (session_015CqH6A7brPRZCibvSZzhLd, архив 07.11; дела у №11 `session_015CqH6AXexfSJUxpzdXPpY4`)

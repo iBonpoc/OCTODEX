@@ -54,6 +54,8 @@ exports.run = async (h) => {
   // Esc with the status sheet of the panel open closes the sheet only
   await panel(h).getByTestId("lead-status").first().click();
   await p.locator('[aria-modal="true"]').first().waitFor();
+  // the sheet takes Esc only once it has opened (its key handler mounts with the content) — CHECKS §9 п.3
+  await h.sheet().getByRole("button").first().waitFor();
   await p.keyboard.press("Escape");
   await p.locator('[aria-modal="true"]').first().waitFor({ state: "detached" });
   h.expect(await openIs(h, l0.id), `Esc closed the sheet, the panel stays (${p.url()})`);

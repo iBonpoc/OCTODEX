@@ -2,7 +2,8 @@
  * e2e 193 — the server import of clients against a real Supabase (docs/specs/04 §14, map S3e). 300 rows go in two
  * batches; the answer of the second is lost AFTER the server wrote it (page.route lets the call through, then breaks
  * the answer) → «Импорт остановлен на строке 252 · нет связи с сервером» → «Продолжить» → the server answers the
- * repeated batch with what it stored: exactly 300 clients, none twice; the result and the list.
+ * repeated batch with what it stored: exactly 300 clients, none twice; the result and the list; «Импорты» → «Отменить
+ * импорт» → the server takes the 300 cards back (nothing was added to them).
  */
 const { signIn } = require("../signIn.cjs");
 
@@ -46,4 +47,18 @@ exports.run = async (h, { seed, admin }) => {
   await p.getByRole("button", { name: "К клиентам" }).click();
   await h.expectText(new RegExp(`${tag} 000`), "the imported clients are in the list");
   await h.shot("done");
+
+  // «Импорты» (PR 3): the job from the server, «Отменить импорт» → the server takes the 300 cards back
+  await p.getByRole("button", { name: "Ещё действия" }).first().click();
+  await h.sheet().getByRole("button", { name: "Импорты" }).click();
+  const card = p.locator('[data-testid^="import-job-"]').filter({ hasText: "cloud193.csv" }).locator("visible=true").first();
+  await card.waitFor({ timeout: 15000 });
+  const text = await card.innerText();
+  h.expect(/добавлено 300/.test(text) && /Загружен/.test(text), `the server's import on «Импорты» (${text})`);
+  await card.getByRole("button", { name: "Отменить импорт" }).click();
+  await h.sheet().getByRole("button", { name: "Да, отменить импорт" }).click();
+  await p.getByText(/Импорт отменён: снято клиентов 300/).first().waitFor({ timeout: 20000 });
+  const left = await admin(`customers?select=id&company_id=eq.${a1.companyId}&deleted_at=is.null&display_name=like.${encodeURIComponent(tag)}*`);
+  h.expect(left.length === 0, `the server took the import back (${left.length} left)`);
+  await h.shot("undone");
 };

@@ -4,21 +4,25 @@
  */
 import type { DB, ID } from "@/data/types";
 import { planImport, type ImportRow, type ServerRow } from "./csvImport";
-import type { ImportAnswer, ImportDriver } from "./importRun";
+import type { ImportAnswer, ImportDriver, ImportJobRow } from "./importRun";
 
 type Undo = () => void;
-const jobs = new Map<string, { answers: Map<number, ImportAnswer>; undos: Undo[] }>();
+const jobs = new Map<string, { answers: Map<number, ImportAnswer>; undos: Undo[]; row: ImportJobRow }>();
 const files = new Map<string, string>();
 
 export function demoImportDriver(x: {
   jobId: string;
+  fileName: string;
   sha256: string;
   rows: readonly ImportRow[];
   db: () => Pick<DB, "customers" | "properties">;
   add: (r: ImportRow) => { id: ID; undo: Undo };
 }): ImportDriver {
   let plan: ReturnType<typeof planImport> | null = null;
-  const job = jobs.get(x.jobId) ?? { answers: new Map<number, ImportAnswer>(), undos: [] };
+  const job = jobs.get(x.jobId) ?? {
+    answers: new Map<number, ImportAnswer>(), undos: [],
+    row: { id: x.jobId, fileName: x.fileName, createdAt: new Date().toISOString(), status: "applying", counts: {}, lastBatchAt: new Date().toISOString() } as ImportJobRow,
+  };
   jobs.set(x.jobId, job);
   const byLine = new Map(x.rows.map((r) => [r.line, r]));
   return {
@@ -49,17 +53,18 @@ export function demoImportDriver(x: {
         job.answers.set(s.line, a);
         out.push(a);
       }
+      job.row.lastBatchAt = new Date().toISOString();
+      job.row.counts = countsOfJob(job.answers);
       return out;
     },
     async finish() {
       files.set(x.sha256, new Date().toISOString());
+      if (job.row.status === "applying") {
+        job.row.status = "applied";
+        job.row.undoUntil = new Date(Date.now() + 30 * 24 * 3600 * 1000).toISOString();
+      }
     },
-    async undo() {
-      const n = job.undos.length;
-      for (const u of job.undos.reverse()) u();
-      job.undos = [];
-      return { undone: n, kept: 0 };
-    },
+    undo: () => demoUndo(x.jobId),
   };
 }
 
@@ -67,3 +72,21 @@ export function demoImportDriver(x: {
 const open = new Map<string, string>();
 export const demoOpenJob = (sha: string) => open.get(sha) ?? null;
 export const demoMarkOpen = (sha: string, jobId: string | null) => (jobId ? open.set(sha, jobId) : open.delete(sha));
+
+const countsOfJob = (a: Map<number, ImportAnswer>) => {
+  const v = [...a.values()];
+  return { added: v.filter((x) => x.result === "added").length, dup_added: v.filter((x) => x.result === "dup_added").length, skipped: v.filter((x) => x.result === "skipped").length };
+};
+/** the demo's imports, newest first (this phone's memory: gone after a reload) */
+export const demoImports = (): ImportJobRow[] => [...jobs.values()].map((j) => ({ ...j.row, counts: { ...j.row.counts } })).reverse();
+/** the demo's undo: every card this import added, back (the demo has no server to ask what was added since) */
+export async function demoUndo(jobId: string): Promise<{ undone: number; kept: number }> {
+  const job = jobs.get(jobId);
+  if (!job || job.row.status === "undone") return { undone: job?.row.counts.undone ?? 0, kept: 0 };
+  const n = job.undos.length;
+  for (const u of job.undos.reverse()) u();
+  job.undos = [];
+  job.row.status = "undone";
+  job.row.counts = { ...job.row.counts, undone: n, kept: 0 };
+  return { undone: n, kept: 0 };
+}
