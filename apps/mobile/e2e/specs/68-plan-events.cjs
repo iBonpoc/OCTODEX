@@ -33,7 +33,9 @@ exports.run = async (h) => {
   let db = await h.db();
   const ev = (db.calendarEvents || []).find((e) => e.title === "T68 crew meeting");
   h.expect(ev && ev.kind === "event" && !ev.userId && !ev.allDay && ev.startsAt === atMinute(today, 9 * 60) && ev.endsAt === atMinute(today, 10 * 60), `the event of the company, 9–10 AM today (${JSON.stringify(ev)})`);
-  await h.expectText(/9:00 AM · T68 crew meeting/, "the event is in the Feed");
+  // ListCard (10а): the event's name, «9:00 / AM» on the left
+  await h.expectText(/T68 crew meeting/, "the event is in the Feed");
+  h.expect((await p.getByRole("button", { name: "T68 crew meeting", exact: true }).filter({ hasText: "9:00" }).count()) > 0, "at 9:00 AM");
 
   // a day off: «Сохранить» off until a person; 2 days, all day → both days in the Feed
   await openAdd(h);
@@ -49,8 +51,8 @@ exports.run = async (h) => {
   db = await h.db();
   const off = db.calendarEvents.find((e) => e.kind === "time_off" && e.userId === "m-ivan");
   h.expect(off && off.allDay && off.startsAt === atMinute(today, 0) && off.endsAt === atMinute(addDays(today, 2), 0), `two days off of Ivan from the company's midnight (${JSON.stringify(off)})`);
-  const feed = await p.getByTestId("plan-feed").last().innerText();
-  h.expect((feed.match(/Выходной · Ivan Sokolov/g) || []).length === 2, "the day off is on both days of the Feed");
+  const offCards = p.getByTestId("plan-feed").last().getByRole("button", { name: "Выходной", exact: true }).filter({ hasText: "Ivan Sokolov" });
+  h.expect((await offCards.count()) === 2, "the day off is on both days of the Feed");
 
   // a card opens the form: a new name saves on the same event
   await p.getByText(/T68 crew meeting/).first().click(); await p.waitForTimeout(400);
@@ -61,7 +63,7 @@ exports.run = async (h) => {
   h.expect(db.calendarEvents.filter((e) => e.kind === "event" && /^T68/.test(e.title || "")).map((e) => `${e.id}:${e.title}`).join() === `${ev.id}:T68 crew meeting moved`, "the same event, renamed");
 
   // the two days off of Ivan open with 2 days and stay 2 days after a save
-  await p.getByText(/Выходной · Ivan Sokolov/).first().click(); await p.waitForTimeout(400);
+  await offCards.first().click(); await p.waitForTimeout(400);
   await h.expectText(/Дней/, "all day: the number of days");
   await h.sheet().getByPlaceholder("Необязательно: отпуск, врач…").fill("T68 vacation");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500);

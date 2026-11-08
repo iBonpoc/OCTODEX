@@ -233,3 +233,9 @@ export function matchVisit(db: DB, v: Visit, q: string): boolean {
   const needle = q.trim().toLowerCase();
   return !needle || visitWords(db, v).some((x) => (x ?? "").toLowerCase().includes(needle));
 }
+
+/** the left block of recipe C: «9:00» over «AM»; the space before AM / PM may be a narrow no-break one (U+202F) */
+export function timeLead(hm: string): { kind: "time"; top: string; bottom: string } {
+  const m = /^(.*\d)[\s\u00a0\u202f]*([AaPp]\.?[Mm]\.?)$/.exec(hm.trim());
+  return m ? { kind: "time", top: m[1], bottom: m[2] } : { kind: "time", top: hm.trim(), bottom: "" };
+}

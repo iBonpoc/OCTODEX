@@ -57,12 +57,15 @@ exports.run = async (h) => {
   await h.clickText("Лента"); await p.waitForTimeout(400);
   const feed = p.getByTestId("plan-feed").last();
   // Linda's card in the feed (other demo visits of today may be late — not ours)
-  // the smallest block with her name and «Весь день» together (her timed visit of today is another card)
-  const card = feed.locator("xpath=.//div[contains(., 'Linda Alvarez') and contains(., 'Весь день') and not(.//div[contains(., 'Linda Alvarez') and contains(., 'Весь день')])]");
+  // the whole card (ListCard, 10а: name, chips, facts) with her name and «Весь день» (her timed visit of today is another card)
+  const card = feed.getByTestId("list-card").filter({ hasText: "Linda Alvarez" }).filter({ hasText: "Весь день" });
   h.expect((await card.count()) === 1, "the all-day visit is in the Plan's feed");
   const text = await card.innerText();
   h.expect(/Весь день/.test(text), `the Plan card says «Весь день» (${text.replace(/\s+/g, " ").slice(0, 120)})`);
   h.expect(!/12:00 AM/.test(text), "no «12:00 AM» on the Plan card");
+  // «Весь день» once, whole, under the name — the left block is an icon, not the words cut in two
+  h.expect((text.match(/Весь/g) || []).length === 1, `«Весь день» once on the card (${text.replace(/\s+/g, " ").slice(0, 120)})`);
+  h.expect(/Осмотр|Работа/.test(text), `the card's kind tag is inside the checked block, the checks below are not blind (${text.replace(/\s+/g, " ").slice(0, 160)})`);
   h.expect(!/Накладка/.test(text), "no «Накладка» on the all-day visit");
   h.expect(!/[Оо]паздывает/.test(text), "not «опаздывает»");
   await h.shot("plan");
