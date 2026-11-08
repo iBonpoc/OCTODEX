@@ -26,7 +26,8 @@ exports.run = async (h) => {
   const n = async (sel) => svg.locator(sel).count();
   const lines = await n("line");
   const dots = await n("circle");
-  const labels = await n("text");
+  // the labels (chips); the marks have their own text inside («D1», «L») — not labels
+  const labels = await n('[id^="lbl-"]');
   h.expect(lines === 50, `50 lines (${lines})`);
   h.expect(dots === 40, `40 downspouts (${dots})`);
   h.expect(labels === 150, `150 labels (${labels})`);

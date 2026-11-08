@@ -452,6 +452,7 @@ export function TextField({
   icon,
   multiline,
   onSubmit,
+  autoFocus,
 }: {
   value: string;
   onChangeText: (s: string) => void;
@@ -464,6 +465,8 @@ export function TextField({
   multiline?: boolean;
   /** return key on the keyboard */
   onSubmit?: () => void;
+  /** focus (and the keyboard) as soon as the field appears — a sheet opened for one value */
+  autoFocus?: boolean;
 }) {
   const ro = useReadOnly();
   const { c } = useTheme();
@@ -506,6 +509,7 @@ export function TextField({
         maxLength={f.max}
         returnKeyType={multi ? "default" : f.ret ?? (onSubmit ? "done" : "next")}
         onSubmitEditing={onSubmit}
+        autoFocus={autoFocus && !ro}
         submitBehavior={multi ? "newline" : "blurAndSubmit"}
         accessibilityLabel={label ?? placeholder}
         style={{

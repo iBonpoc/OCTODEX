@@ -101,6 +101,31 @@ export function autoHouseSide(r: Pick<DrawnRun, "a" | "b">, c: P): "L" | "R" {
 
 export const houseSide = (r: DrawnRun, c: P) => r.houseSide ?? autoHouseSide(r, c);
 
+/**
+ * The end cap at a run's start (0) / end (1): left or right, looking at the gutter's face (from outside the house).
+ * The same rule as the engine's (gutterParts.ts): the start is R when the house is on the right, and the other way.
+ */
+export const capSide = (end: 0 | 1, side: "L" | "R"): "L" | "R" => ((end === 0) === (side === "R") ? "R" : "L");
+
+/** The runs joined end to end with `runId` (itself included): one gutter line round the house — one face side. */
+export function chainOf(d: Pick<Drawing, "runs">, runId: string, tolIn = 1): Set<string> {
+  const seen = new Set<string>([runId]);
+  const todo = [runId];
+  while (todo.length) {
+    const id = todo.pop();
+    const r = d.runs.find((x) => x.id === id);
+    if (!r) continue;
+    for (const o of d.runs) {
+      if (seen.has(o.id)) continue;
+      if ([o.a, o.b].some((p) => dist(p, r.a) <= tolIn || dist(p, r.b) <= tolIn)) {
+        seen.add(o.id);
+        todo.push(o.id);
+      }
+    }
+  }
+  return seen;
+}
+
 export interface FoundCorner {
   id: string;
   /** the two runs and which of their ends meet: 0 = start (a), 1 = end (b) */
@@ -207,7 +232,9 @@ export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method
     const choice = d.corners?.[f.id] ?? cornerChoiceOf(d, f) ?? defaultCorner;
     // the corner is made of the first run's stock: gauge and finish too, or the coil splits into two lines
     const { profile, size, material, gauge, finish, color, story } = first.attrs;
-    return { id: f.id, kind: f.kind, method: choice.method, splashGuard: choice.splashGuard, profile, size, material, gauge, finish, color, story };
+    // an inside corner gets a splash guard by itself (founder 08.11): water from two roofs meets there
+    const splashGuard = choice.splashGuard ?? (f.kind === "in" ? true : undefined);
+    return { id: f.id, kind: f.kind, method: choice.method, ...(splashGuard !== undefined ? { splashGuard } : {}), profile, size, material, gauge, finish, color, story };
   });
   const downspouts: MeasuredDownspout[] = d.downspouts.filter((x) => byId.has(x.runId)).map(({ atIn: _at, ...x }) => x);
   return { runs, corners, downspouts };
