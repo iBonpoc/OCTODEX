@@ -1,6 +1,6 @@
 // e2e 82: reports v1 (wave 8)
 /**
- * «Ещё» → Отчёты v1 (wave 8, 13 §3.15; S14), every view: 4 reports; each number = the same records the lists show.
+ * «Ещё» → Отчёты v1 (wave 8, 13 §3.15; S14), every view: 5 reports (the 5th is e2e 159); each number = the same records the lists show.
  * - «Кто должен»: total = every balance; a client card opens that client's debts in «Счета»;
  * - «Собрано за период» (Всё время): total = Σ payments, by method and «Кто принял»;
  * - «Продажи», «Источник лида → выручка» open with their numbers;
@@ -15,7 +15,7 @@ exports.run = async (h) => {
   await h.go("/reports");
   const db = await h.db();
   const cards = p.locator('[data-testid="list-card"]');
-  h.expect((await cards.count()) === 4, "four reports");
+  h.expect((await cards.count()) === 5, "five reports (the 5th — «По направлениям», e2e 159)");
   for (const s of ["Кто должен", "Собрано за период", "Продажи", "Источник лида → выручка"]) h.expect((await h.text()).includes(s), `report «${s}»`);
   await h.shot("index");
 
