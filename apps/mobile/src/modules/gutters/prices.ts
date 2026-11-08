@@ -47,6 +47,14 @@ export function findItem(catalog: readonly CatalogItem[], p: Pick<PartQty, "key"
   return catalogMatch(catalog.filter((it) => live(it) && it.unit.trim().toLowerCase() === unit), matchAttrs(p))[0];
 }
 
+/** parts with a word of their own; any other part (a kit's) shows its code — data, like an item's name */
+export const PART_WORDS = new Set([
+  "gutter", "downspout", "end_cap", "hanger", "ds_strap", "elbow", "outlet", "end_outlet", "extension", "splash_block", "flex", "drain", "drain_adapter", "splash_pan", "sealant",
+  "shank", "spike", "circle", "bolt", "screw", "anchor", "ferrule", "flat_coil",
+  "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
+]);
+export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "tearoff", "tile"]);
+
 /* ---------- the parts the company prices ---------- */
 
 export type PriceRow = { key: string; part: PartQty };

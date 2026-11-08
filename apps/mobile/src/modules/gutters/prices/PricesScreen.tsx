@@ -8,7 +8,7 @@
  * The director and the office (catalog rights, staff) change them; only while the module is active (founder О2).
  * Every object is a card (rule 12); the bind picker in a sheet lists rows.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
@@ -24,16 +24,9 @@ import { CardGrid, ListCard } from "@/ui/listCard";
 import { useToast, Sheet } from "@/ui/overlays";
 import { T } from "@/ui/primitives";
 import { Card, CardList, ListRow, Screen } from "@/ui/surfaces";
-import { bindable, bindItem, findItem, laborRows, materialRows, matchAttrs, missingItems, type PriceRow } from "../prices";
+import { bindable, bindItem, findItem, laborRows, materialRows, matchAttrs, missingItems, PART_WORDS, WORK_WORDS, type PriceRow } from "../prices";
 
 const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
-/** parts with a word of their own; any other part (a kit's) shows its code — data, like an item's name */
-export const PART_WORDS = new Set([
-  "gutter", "downspout", "end_cap", "hanger", "ds_strap", "elbow", "outlet", "end_outlet", "extension", "splash_block", "flex", "drain", "drain_adapter", "splash_pan", "sealant",
-  "slip_joint", "miter", "splash_guard", "expansion_joint", "guard_run", "offset", "reducer", "funnel", "conductor_head", "diverter", "eave_box", "outlet_screen", "wye", "rain_chain", "rain_chain_adapter",
-]);
-export const WORK_WORDS = new Set(["install", "downspout", "corner_cut", "tearoff", "tile"]);
-
 export default function GutterPricesScreen() {
   const store = useStore();
   const { t, money } = useI18n();
@@ -43,7 +36,8 @@ export default function GutterPricesScreen() {
   const raw = cm?.settings;
   const access = moduleState(cm).access;
   const active = access === "trial" || access === "paid";
-  const staff = store.role === "director" || store.role === "dispatcher";
+  // the price list's writers (catalog_items: app.is_staff — owner, admin, office, sales; the core's /catalog: all but a tech)
+  const staff = store.role !== "tech";
   const ro = !staff || !active;
   const catalog = store.db.catalog;
   const companyId = store.db.company?.id ?? "demo";
@@ -67,10 +61,18 @@ export default function GutterPricesScreen() {
   };
   const missing = useMemo(() => missingItems(companyId, [...labor, ...parts], catalog, nameOf), [companyId, labor, parts, catalog, t]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  /** ids made from this page and not taken back: a second press before the page redraws makes nothing and never puts
+   *  an empty «Отменить» in place of the first one's (review M7d №2, rule 5) */
+  const made = useRef(new Set<string>());
   const make = (items: CatalogItem[]) => {
-    if (!items.length) return;
-    const undo = store.saveCatalogItems(items, { onlyNew: true });
-    toast.show(store.online ? t(k("made"), { n: items.length }) : t("offline.queued"), undo);
+    const fresh = items.filter((it) => !made.current.has(it.id));
+    if (!fresh.length) return;
+    fresh.forEach((it) => made.current.add(it.id));
+    const undo = store.saveCatalogItems(fresh, { onlyNew: true });
+    toast.show(store.online ? t(k("made"), { n: fresh.length }) : t("offline.queued"), () => {
+      fresh.forEach((it) => made.current.delete(it.id));
+      undo();
+    });
   };
   const bind = (it: CatalogItem, row: PriceRow) => {
     setBindFor(null);
@@ -82,12 +84,11 @@ export default function GutterPricesScreen() {
     const it = findItem(catalog, row.part);
     const title = it ? it.name : nameOf(row.part);
     const unit = row.part.unit;
-    const id = `gpr-${row.part.key}`;
     if (it) {
       return (
         <ListCard
           key={row.key}
-          testID={id}
+          testID={`gpr-${it.placeholder ? "test" : "found"}-${row.part.key}`}
           title={title}
           lead={{ kind: "icon", icon: row.part.kind === "labor" ? "clock" : "box" }}
           value={`${money(it.priceCents)} / ${unit}`}
@@ -101,7 +102,7 @@ export default function GutterPricesScreen() {
     return (
       <ListCard
         key={row.key}
-        testID={id}
+        testID={`gpr-miss-${row.part.key}`}
         title={title}
         lead={{ kind: "icon", icon: row.part.kind === "labor" ? "clock" : "box" }}
         value={`— / ${unit}`}
@@ -131,7 +132,9 @@ export default function GutterPricesScreen() {
 
         <View testID="gpr-make-all">
           <Card>
-            <T v="heading">{missing.length ? t(k("missingN"), { n: missing.length }) : t(k("allFound"))}</T>
+            <View testID={missing.length ? "gpr-missing-n" : "gpr-all-found"}>
+              <T v="heading">{missing.length ? t(k("missingN"), { n: missing.length }) : t(k("allFound"))}</T>
+            </View>
             <T v="caption" tone="mut">{t(k("makeHint"))}</T>
             {!ro && missing.length ? (
               <View testID="gpr-make-all-btn">

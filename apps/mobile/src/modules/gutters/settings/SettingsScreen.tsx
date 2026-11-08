@@ -22,7 +22,7 @@ import { Card, RowView, Screen } from "@/ui/surfaces";
 import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, WALLS } from "../canvas/attrs";
 import { useColorLabel } from "../draw/AttrPanel";
 import {
-  choicesFor, colorName, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
+  choicesFor, colorName, notSavedKey, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
   type Choices, type OfferGroup,
 } from "../settings";
 
@@ -152,7 +152,7 @@ export default function GutterSettingsScreen() {
     if (undo) toast.show(store.online ? t(k("saved")) : t("offline.queued"), undo);
     // not saved while the module is read again after someone else's change (core #374: null until re-read) — said under
     // the field, not silently (debt №7, spec П22.10 №6)
-    else setWarn({ at, text: t(k("rereading")) });
+    else setWarn({ at, text: t(k(notSavedKey(moduleState(store.db.company?.modules?.gutters).access))) });
   };
   /** «what we install»: one value on or off; the last one of its list stays (spec П22.2 №8) */
   const toggle = (at: string, group: OfferGroup, sub: string | null, value: string, known?: readonly string[]) => {

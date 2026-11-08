@@ -5,7 +5,9 @@ import type { CatalogItem } from "../src/data/types";
 import { TEST_RATES } from "../src/modules/gutters/canvas/testRates";
 import {
   bindable, bindItem, findItem, LABOR_PARTS, laborRows, listPreview, matchAttrs, matchKey, materialRows, missingItems, sampleJob, stableItemId, testPriceCents,
+  PART_WORDS, WORK_WORDS,
 } from "../src/modules/gutters/prices";
+import { notSavedKey } from "../src/modules/gutters/settings";
 import { uuidV5 } from "../src/modules/gutters/uuid5";
 
 const item = (o: Partial<CatalogItem>): CatalogItem => ({ id: "i", kind: "material", name: "x", unit: "ft", priceCents: 100, ...o });
@@ -110,7 +112,8 @@ describe("создать позиции сразу — тестовые цены
   });
   it("uuid v5 — эталон RFC: www.example.com в пространстве DNS", () => {
     expect(uuidV5("6ba7b810-9dad-11d1-80b4-00c04fd430c8", "www.example.com")).toBe("2ed6657d-e927-568b-95e1-2665a8aea6a2");
-    expect(uuidV5("6ba7b811-9dad-11d1-80b4-00c04fd430c8", "http://www.ietf.org/rfc/rfc4122.txt")).toBe(uuidV5("6ba7b811-9dad-11d1-80b4-00c04fd430c8", "http://www.ietf.org/rfc/rfc4122.txt"));
+    // Python's uuid.uuid5(NAMESPACE_DNS, "python.org") — a second known vector
+    expect(uuidV5("6ba7b810-9dad-11d1-80b4-00c04fd430c8", "python.org")).toBe("886313e1-3b8a-5372-9b90-0c9aee199e5d");
     // a long name (several SHA-1 blocks) and non-ASCII
     expect(uuidV5(C, "ж".repeat(200))).toMatch(/^[0-9a-f-]{36}$/);
     expect(() => uuidV5("nope", "x")).toThrow();
@@ -142,5 +145,20 @@ describe("$ под рисунком из прайса компании", () => {
   it("в прайсе тестовая позиция — «тестовые цены» остаются", () => {
     const made = missingItems(C, [...materialRows({}), ...laborRows()], [], name);
     expect(listPreview(parts, made).test).toBe(true);
+  });
+});
+
+describe("слова деталей и причина «не сохранено»", () => {
+  it("у каждой детали образца любого профиля и материала есть своё слово (не код), у каждой работы — тоже", () => {
+    for (const profile of ["k", "half_round", "euro", "fascia", "box"])
+      for (const material of ["aluminum", "copper", "steel"]) {
+        for (const r of materialRows({ run: { profile, material } })) expect(PART_WORDS.has(matchAttrs(r.part).part!), `${profile} ${material}: ${matchAttrs(r.part).part}`).toBe(true);
+      }
+    for (const r of laborRows()) expect(WORK_WORDS.has(r.part.attrs.work!)).toBe(true);
+  });
+  it("saveModuleSettings → null: модуль активен — «перечитывается»; не подключён или пробный кончился — «не подключён»", () => {
+    expect(notSavedKey("trial")).toBe("rereading");
+    expect(notSavedKey("paid")).toBe("rereading");
+    for (const a of ["expired", "off", "never", undefined]) expect(notSavedKey(a)).toBe("notActive");
   });
 });

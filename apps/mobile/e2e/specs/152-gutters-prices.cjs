@@ -7,7 +7,7 @@
  * - «Создать позиции сразу»: all the missing ones, each a TEST price (placeholder), «Отменить» takes them back; again → made;
  *   a second press is not offered, the catalog has no duplicates (one item per id and per properties);
  * - the $ under the drawing: with every item at a real price — no «тестовые цены», and the $ follows the install price;
- * - a tech has no way in; the office makes items; the trial over: read only.
+ * - the office and sales change prices; a tech reads only; the trial over: read only.
  * Finds things by testID and the store; waits on what it checks.
  */
 const KEY = "octo.db.v5";
@@ -32,8 +32,9 @@ exports.run = async (h) => {
     localStorage.setItem(k, JSON.stringify(s));
   }, [KEY, fn.toString()]);
   const money = async () => Number((await tid("draw-money").innerText()).replace(/[^\d.]/g, ""));
-  const card = (key) => tid(`gpr-${key}`);
-  const missingCards = () => p.locator("[data-testid^=gpr-]").filter({ hasText: "нет в прайсе" }).locator("visible=true").count();
+  // a card's testID says its state: gpr-miss-<part> (not in the list), gpr-test-<part> (a test price), gpr-found-<part>
+  const card = (state, key) => tid(`gpr-${state}-${key}`);
+  const missingCards = () => p.locator("[data-testid^=gpr-miss-]").locator("visible=true").count();
 
   await h.go("/today");
   await setRole(h, "director");
@@ -46,31 +47,33 @@ exports.run = async (h) => {
   await p.waitForURL(/\/module\/gutters\/prices$/, { timeout: 5000 });
   await tid("gpr-screen").waitFor({ timeout: 5000 });
   h.expect((await tid("gpr-ro").count()) === 0 && (await tid("gpr-locked").count()) === 0, "the director in the trial changes them");
-  await card("labor.install.story1").waitFor({ timeout: 5000 });
-  h.expect(/нет в прайсе/.test(await card("labor.install.story1").innerText()), "install, story 1: not in the price list");
-  h.expect(/Нет в прайсе: \d+/.test(await tid("gpr-make-all").innerText()), "the count of the missing ones");
+  await card("miss", "labor.install.story1").waitFor({ timeout: 5000 });
+  await tid("gpr-missing-n").waitFor({ timeout: 5000 });
   const n0 = await missingCards();
   h.expect(n0 >= 15, `labor and parts are all missing (${n0})`);
   await h.shot("missing");
 
   // bind: install, story 4 → the own item
-  await card("labor.install.story4").click();
+  await card("miss", "labor.install.story4").click();
   await tid("gpr-bind").waitFor({ timeout: 5000 });
   await tid("gpr-bind-own-install-4").click();
   await waitFor(async () => {
     const it = (await catalog()).find((x) => x.id === "own-install-4");
     return it && it.attributes && it.attributes.work === "install" && it.attributes.story === "4";
   }, "the own item has the part's properties");
-  await waitFor(async () => /в прайсе/.test(await card("labor.install.story4").innerText()) && /\$7(\.00)? \/ ft/.test(await card("labor.install.story4").innerText()), `story 4: found, $7.00 (${await card("labor.install.story4").innerText()})`);
+  await card("found", "labor.install.story4").waitFor({ timeout: 5000 });
+  h.expect(/\$7(\.00)? \/ ft/.test(await card("found", "labor.install.story4").innerText()), "story 4: found, its own $7 / ft");
 
   // one row: a test item
-  await card("labor.tile").getByRole("button", { name: "Создать с тестовой ценой" }).click();
-  await waitFor(async () => (await gutterItems()).some((x) => x.attributes.work === "tile" && x.placeholder === true), "tile: one test item");
-  await waitFor(async () => /тестовая цена/.test(await card("labor.tile").innerText()), "tile: marked test price");
+  await card("miss", "labor.tile").click();
+  await tid("gpr-bind-make").getByRole("button").click();
+  await waitFor(async () => (await gutterItems()).filter((x) => x.attributes.work === "tile" && x.placeholder === true).length === 1, "tile: one test item");
+  await card("test", "labor.tile").waitFor({ timeout: 5000 });
 
   // all at once: test prices, «Отменить», again
   const before = (await gutterItems()).length;
-  await tid("gpr-make-all-btn").getByRole("button").click();
+  // a double press: the second makes nothing and keeps the first one's «Отменить» (rule 5)
+  await tid("gpr-make-all-btn").getByRole("button").dblclick();
   await waitFor(async () => (await gutterItems()).length > before + 10, "all the missing items made");
   const made = (await gutterItems()).filter((x) => x.id !== "own-install-4");
   h.expect(made.every((x) => x.placeholder === true && Number.isInteger(x.priceCents) && x.priceCents >= 0), "every made item is a test price in whole cents (rule 9)");
@@ -78,7 +81,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await gutterItems()).length === before, "«Отменить»: the made items are gone");
   await tid("gpr-make-all-btn").getByRole("button").click();
   await waitFor(async () => (await gutterItems()).length > before + 10, "made again");
-  await waitFor(async () => (await tid("gpr-make-all-btn").count()) === 0 && /Всё есть в прайсе/.test(await tid("gpr-make-all").innerText()), "nothing left to make: no second press");
+  await waitFor(async () => (await tid("gpr-make-all-btn").count()) === 0 && (await tid("gpr-all-found").count()) === 1, "nothing left to make: no second press");
   h.expect((await missingCards()) === 0, "no row is missing");
   const all = await gutterItems();
   const sig = all.map((x) => `${x.unit}|${JSON.stringify(Object.entries(x.attributes).sort())}`);
@@ -115,13 +118,14 @@ exports.run = async (h) => {
   await waitFor(async () => (await money()) > m0, `the $ follows the install price (${m0} → ${await money()})`);
   await h.shot("drawing");
 
-  // the office: may make items (catalog rights)
-  await h.go("/today");
-  await setRole(h, "dispatcher");
-  await h.go("/module/gutters/prices");
-  await tid("gpr-screen").waitFor({ timeout: 5000 });
-  h.expect((await tid("gpr-ro").count()) === 0, "the office changes prices");
-  // a tech: no way in on the module's card
+  // the office and sales write the price list (app.is_staff, the core's /catalog); a tech has no way in and reads only
+  for (const role of ["dispatcher", "sales"]) {
+    await h.go("/today");
+    await setRole(h, role);
+    await h.go("/module/gutters/prices");
+    await tid("gpr-screen").waitFor({ timeout: 5000 });
+    h.expect((await tid("gpr-ro").count()) === 0, `${role} changes prices`);
+  }
   await h.go("/today");
   await setRole(h, "tech");
   await h.go("/module/gutters/prices");

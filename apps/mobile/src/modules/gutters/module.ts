@@ -33,13 +33,9 @@ const gutters: ModuleDef = {
     // the canvas draws even when off: it says at once that nothing will be saved (§6, founder О2)
     // «Настройки» (M7b, spec 33 П22): the director changes them, the office reads them; a tech or a seller never needs the page
     settings: (ctx) => [
-      ...(ctx.role === "director" || ctx.role === "dispatcher"
-        ? [
-            { id: "settings", labelKey: "mod.gutters.set.action" as const, icon: "sliders" as const, href: moduleHref("gutters", "settings") },
-            // «Цены и прайс» (M7d, spec 33 П22.10): labor prices and the parts' items of the company's price list
-            { id: "prices", labelKey: "mod.gutters.pr.action" as const, icon: "box" as const, href: moduleHref("gutters", "prices") },
-          ]
-        : []),
+      ...(ctx.role === "director" || ctx.role === "dispatcher" ? [{ id: "settings", labelKey: "mod.gutters.set.action" as const, icon: "sliders" as const, href: moduleHref("gutters", "settings") }] : []),
+      // «Цены и прайс» (M7d, spec 33 П22.10): who writes the price list (all but a tech — app.is_staff, the core's /catalog)
+      ...(ctx.role !== "tech" ? [{ id: "prices", labelKey: "mod.gutters.pr.action" as const, icon: "box" as const, href: moduleHref("gutters", "prices") }] : []),
       { id: "draw", labelKey: "mod.gutters.draw.action", icon: "pencil", href: draw },
       { id: "bench", labelKey: "mod.gutters.bench.action", icon: "clock", href: moduleHref("gutters", "bench") },
     ],
