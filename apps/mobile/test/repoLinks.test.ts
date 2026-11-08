@@ -38,8 +38,10 @@ describe("the client link comes from estimate_links", () => {
     expect(db.estimates.find((e) => e.id === "e-1")?.token).toBe("doorTokenE1_0123456789abc");
     expect(db.estimates.find((e) => e.id === "e-2")?.token).toBeUndefined();   // not from the row any more
   });
-  it("a tech: the door gives nothing — no link on his phone", async () => {
+  it("a tech: the door gives nothing — no link on his phone, even when an old server's row still had one", async () => {
+    rows.memberships = [{ user_id: "u-me", role: "tech", status: "active", users: { full_name: "Ted Tech" } }];
     const db = await loadCompanyDB("co-1", "u-me");
+    expect(db.members.find((m) => m.id === "u-me")?.roles).toContain("tech");
     expect(db.estimates.every((e) => e.token === undefined)).toBe(true);
   });
   it("a server before the migration (PGRST202): the row's link, as before", async () => {

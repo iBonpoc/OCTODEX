@@ -39,6 +39,9 @@ begin
   if e.company_id is distinct from new.company_id then
     raise exception 'the link belongs to its estimate''s company' using errcode = '23514';
   end if;
+  if e.status in ('awaiting_countersign', 'approved') then
+    return new;                                  -- the client's signed copy: a new link to it is not new work (as before)
+  end if;
   v_closed := app.no_service_among(e.company_id, app.no_service_clients('estimates', e.company_id, e.customer_id, e.property_id, null, null));
   if cardinality(v_closed) > 0 then
     raise exception 'customer_do_not_service' using errcode = 'P0001',
@@ -93,18 +96,27 @@ $$;
 revoke all on function app.tg_public_token_null() from public, anon, authenticated;
 create trigger t02_public_token_null before insert or update on public.estimates for each row execute function app.tg_public_token_null();
 
--- ---- 3. The links a tech could read: issued anew (open estimates only; a signed one keeps its link — the client's copy) ---
+-- (for the reissue below only) the person is the office side of the company today: owner, admin, office, sales, active
+create or replace function app.staff_now(p_company_id uuid, p_user_id uuid)
+returns boolean language sql stable set search_path = '' as $$
+  select exists (select 1 from public.memberships m where m.company_id = p_company_id and m.user_id = p_user_id
+                   and m.status = 'active' and m.deleted_at is null and m.role in ('owner', 'admin', 'office', 'sales'));
+$$;
+revoke all on function app.staff_now(uuid, uuid) from public, anon, authenticated;
+
+-- ---- 3. The links a tech could read: issued anew — every status (a signed one can be reopened and sent again with the
+-- same link; a deleted one restored), and every person who could read it and is not the office side today (a tech, a
+-- former tech, someone whose role changed). Production 08.11: no active tech, no such estimate. A signed copy's new link
+-- goes to the client again through «Новая ссылка» (reissue_estimate_link).
 do $$
 declare r record; v_token text;
 begin
   for r in select e.id, e.company_id from public.estimates e
-            where e.status in ('draft', 'sent', 'viewed') and e.deleted_at is null
-              and exists (select 1 from app.estimate_tokens k where k.estimate_id = e.id)
-              and (exists (select 1 from public.memberships m where m.company_id = e.company_id and m.user_id = e.created_by
-                             and m.role = 'tech' and m.deleted_at is null)
+            where exists (select 1 from app.estimate_tokens k where k.estimate_id = e.id)
+              and ((e.created_by is not null and not app.staff_now(e.company_id, e.created_by))
                    or exists (select 1 from public.visits v join public.visit_assignees a on a.visit_id = v.id
-                                join public.memberships m on m.company_id = a.company_id and m.user_id = a.user_id and m.role = 'tech'
-                               where v.company_id = e.company_id and v.property_id = e.property_id))
+                               where v.company_id = e.company_id and v.property_id = e.property_id
+                                 and not app.staff_now(e.company_id, a.user_id)))
   loop
     perform app.estimate_tokens_revoke(r.id);
     v_token := encode(extensions.gen_random_bytes(24), 'hex');
@@ -472,10 +484,11 @@ begin
   -- the phone's own token (an older app shows and copies the link it made itself): kept as one more live link of this
   -- estimate, so what the office already sent works (spec 35 §4е, step 2); a new estimate's first link is the same
   if p_token is not null and length(p_token) >= 20 and p_token ~ '^[A-Za-z0-9_-]+$' and p_token is distinct from v_token
+     and (select count(*) from app.estimate_tokens k where k.estimate_id = e.id) < 5   -- no endless pile of links
      and not exists (select 1 from public.revoked_link_tokens r where r.token_hash = encode(sha256(convert_to(p_token, 'UTF8')), 'hex'))
      and not exists (select 1 from app.estimate_tokens k where k.token = p_token) then
     insert into app.estimate_tokens (token, estimate_id, company_id) values (p_token, e.id, e.company_id);
-    v_token := coalesce(v_token, p_token);
+    v_token := p_token;                          -- the newest: the one the office sees (estimate_link, estimate_links)
     update public.estimates set link_revoked_at = null where id = e.id;
   elsif v_token is null then
     v_token := encode(extensions.gen_random_bytes(24), 'hex');

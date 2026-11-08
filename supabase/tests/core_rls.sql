@@ -1883,7 +1883,7 @@ begin
   perform tst.ok(v_tok is not null and v_tok <> 'tok_exp_0123456789abcdef', 'a revoked token never comes back: the server made a new one');
   perform tst.ok((select link_revoked_at is null from public.estimates where id = e), 'the new link is open');
   -- the row never carries a link (spec 35 §4е, step 2): a direct write is dropped, the revoked token opens nothing
-  begin execute format($q$update public.estimates set public_token = 'tok_exp_0123456789abcdef' where id = %L$q$, e); exception when others then null; end;
+  execute format($q$update public.estimates set public_token = 'tok_exp_0123456789abcdef' where id = %L$q$, e);   -- no error: the value is dropped
   perform tst.ok(tst.est_of('tok_exp_0123456789abcdef') is null and (select public_token is null from public.estimates where id = e), 'the token cannot be set directly');
   -- …and not on ANOTHER estimate either: the old SMS link to client X must never open client Y's estimate
   insert into public.estimates (company_id, customer_id, property_id, title) values
@@ -2950,7 +2950,7 @@ begin
   t := public.reissue_estimate_link(current_setting('tst.t37_on')::uuid);
   perform tst.ok(t <> current_setting('tst.t37_tok_t37on') and length(t) >= 20, 'a new token');
   perform set_config('tst.t37_newtok', t, false);
-  begin update public.estimates set public_token = 'tok_t37_planted_0123456789' where id = current_setting('tst.t37_on')::uuid; exception when others then null; end;
+  update public.estimates set public_token = 'tok_t37_planted_0123456789' where id = current_setting('tst.t37_on')::uuid;   -- dropped, no error
   perform tst.ok(tst.est_of('tok_t37_planted_0123456789') is null, 'the link still changes only through the functions');
 end $$;
 reset role; reset request.jwt.claim.sub; set role anon;
@@ -11325,12 +11325,49 @@ select tst.ok((select count(*) = 2 from public.revoked_link_tokens where estimat
 :as_owner_a
 select tst.ok(public.send_estimate('e1470000-0000-4000-8000-000000000001', 'T147oldAppTokenItMadeItself0123456789') <> 'T147oldAppTokenItMadeItself0123456789',
   'T147 a revoked link never comes back: sent again, the server makes a new one');
+-- the newest link is the one the office sees; send returns it too (review of step 2)
+select public.send_estimate('e1470000-0000-4000-8000-000000000001', 'T147secondPhoneOwnToken0123456789ab') as t147_second \gset
+select tst.ok(:'t147_second' = 'T147secondPhoneOwnToken0123456789ab'
+          and public.estimate_link('e1470000-0000-4000-8000-000000000001') = :'t147_second'
+          and (select token from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001') = :'t147_second',
+  'T147 send, estimate_link and estimate_links give the same, newest link');
+-- no endless pile: at most 5 live links of one estimate
+select public.send_estimate('e1470000-0000-4000-8000-000000000001', 'T147pile' || g || 'x0123456789abcdefghij') from generate_series(1, 6) g;
+:as_super
+select tst.ok((select count(*) from app.estimate_tokens where estimate_id = 'e1470000-0000-4000-8000-000000000001') = 5, 'T147 at most 5 live links per estimate');
+:as_tech_a
+select tst.fails_like($q$select public.send_estimate('e1470000-0000-4000-8000-000000000001', 'T147aTechAddsHisOwnLink012345678')$q$, '%only the office%', 'T147 a tech cannot add a link of his own');
+select tst.fails_like($q$select public.estimate_link('e1470000-0000-4000-8000-000000000001')$q$, '%only the office%', 'T147 …nor read one through estimate_link');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.fails($q$select * from public.estimate_links('ca000000-0000-0000-0000-000000000000')$q$, 'T147 nobody without an account calls estimate_links');
+:as_owner_a
+-- an expired estimate sent again keeps working; reissue and the customer's mark end every live link
+select public.revoke_estimate_link('e1470000-0000-4000-8000-000000000001');
+select public.send_estimate('e1470000-0000-4000-8000-000000000001', 'T147afterRevokeA0123456789abcdef');
+select public.send_estimate('e1470000-0000-4000-8000-000000000001', 'T147afterRevokeB0123456789abcdef');
+:as_super
+select tst.set_expires('e1470000-0000-4000-8000-000000000001', current_date - 1);
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((public.portal_estimate('T147afterRevokeA0123456789abcdef') ->> 'status') = 'expired', 'T147 past «valid until» both links say «expired» (as before)');
+:as_owner_a
+select public.send_estimate('e1470000-0000-4000-8000-000000000001', null);
+:as_super
 -- the client marked «do not service» gets no new link (the guard moved with the links)
 :as_super
 update public.customers set status = 'do_not_service', do_not_service_reason = 'T147' where id = 'c1470000-0000-4000-8000-000000000001';
-select tst.ok(not tst.has_link('e1470000-0000-4000-8000-000000000001'), 'T147 the mark revokes the open link');
+select tst.ok(not tst.has_link('e1470000-0000-4000-8000-000000000001'), 'T147 the mark revokes every open link (two live ones)');
+select tst.ok((select count(*) from public.revoked_link_tokens where estimate_id = 'e1470000-0000-4000-8000-000000000001'
+                 and token_hash in (encode(sha256(convert_to('T147afterRevokeA0123456789abcdef', 'UTF8')), 'hex'), encode(sha256(convert_to('T147afterRevokeB0123456789abcdef', 'UTF8')), 'hex'))) = 2,
+  'T147 …both kept as revoked');
 select tst.fails_like($q$select tst.set_token('e1470000-0000-4000-8000-000000000001', 'T147aLinkForAClosedClient0123')$q$, '%customer_do_not_service%',
   'T147 a client marked «do not service» gets no new link');
+-- a client's signed copy keeps getting a new link even when the client is marked (as before: not new work)
+:as_super
+update public.customers set status = 'do_not_service', do_not_service_reason = 'T147 signed' where id = 'c3700000-0000-4000-8000-000000000001';
+:as_owner_a
+select tst.ok(length(public.reissue_estimate_link('e1420000-0000-4000-8000-000000000001')) >= 20, 'T147 a signed copy of a marked client still gets a new link');
+:as_super
+update public.customers set status = 'active', do_not_service_reason = null where id = 'c3700000-0000-4000-8000-000000000001';
 \echo 'T147 client links out of the row ok'
 
 \echo 'ALL TESTS PASSED'
