@@ -1486,6 +1486,9 @@ export const es: Dict = {
   /* list cards (docs/specs/06-list-cards.md) */
   "card.fact.num": "Número",
   "card.fact.client": "Cliente",
+  // панель открытой карточки на 1280 (06 «Панель 1280»)
+  "card.panel.open": "Abrir",
+  "card.panel.close": "Cerrar panel",
   "card.fact.phone": "Teléfono",
   "card.fact.email": "Email",
   "card.fact.addr": "Dirección",
