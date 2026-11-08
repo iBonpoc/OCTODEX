@@ -9,7 +9,7 @@ import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
 import { realJob } from "./inspectionBridge";
 import { discountBps, ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
-import type { BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
+import type { EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
@@ -42,6 +42,8 @@ export type Op =
   | { k: "chk.visit.review"; visitId: string; at: string | null }
   /** the photo minimums of the visit's templates, with the snapshot (S4, S9; docs/specs/08 §11.7 №7); null — the company's */
   | { k: "chk.visit.mins"; visitId: string; before: number | null; after: number | null }
+  /** an estimate template, whole (owner, admin, office; docs/specs/07 §11); archive = archivedAt */
+  | { k: "est.template.save"; template: EstimateTemplate }
   /** a checklist template, whole (owner, admin, office) */
   /** ifNew: a module's starter (fixed id) — inserted once, never over the office's edits (another phone added it first) */
   | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
@@ -111,6 +113,8 @@ export type Op =
       customerId: string;
       propertyId: string;
       leadId?: string;
+      /** E3: made from this template (version source = 'template'; the server counts the use) */
+      templateId?: string;
       title: string;
       /** client-visible content (no costs) */
       doc: EstimateDoc;
@@ -367,6 +371,23 @@ export function templateToDb(t: ChecklistTemplate, companyId: string): Record<st
   };
 }
 
+/** an estimate template → its row (server estimate_templates). The doc carries unitCostCents only for who sees costs
+ *  (toTemplateDoc): the server moves them to estimate_template_line_costs and keeps a line's cost when the key is absent. */
+export function estimateTemplateToDb(t: EstimateTemplate, companyId: string): Record<string, unknown> {
+  const doc = t.costs
+    ? { ...t.doc, options: t.doc.options.map((o) => ({ ...o, lines: o.lines.map((l) => (t.costs![l.id] !== undefined ? { ...l, unitCostCents: t.costs![l.id] } : l)) })) }
+    : t.doc;
+  return { id: t.id, company_id: companyId, name: cleanText(t.name, TEMPLATE_NAME_MAX), doc, module_key: t.module ?? null, archived_at: t.archivedAt ?? null };
+}
+async function saveEstimateTemplate(t: EstimateTemplate, c: string) {
+  // module_key only on insert (no update grant, an upsert would send it in the update too): insert if new (a retry or
+  // another phone's insert does nothing), then the update of what may change
+  const row = estimateTemplateToDb(t, c);
+  const { module_key: _m, id: _id, company_id: _c, ...upd } = row;
+  await run(ins("estimate_templates", row));
+  return run(supabase.from("estimate_templates").update(upd).eq("id", t.id));
+}
+
 /** Insert by client-made id; a retry after a partial failure does not duplicate rows (ON CONFLICT DO NOTHING). */
 function ins(table: string, row: Record<string, unknown>) {
   return supabase.from(table).upsert(row, { onConflict: "id", ignoreDuplicates: true });
@@ -529,6 +550,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       if (r.error && (r.error.code === "PGRST204" || r.error.code === "42703")) return;
       return run(Promise.resolve(r));
     }
+    case "est.template.save":
+      return saveEstimateTemplate(op.template, c);
     case "chk.template.save":
       return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id", ...(op.ifNew ? { ignoreDuplicates: true } : {}) }));
     case "company.visitSettings":
@@ -1109,7 +1132,7 @@ const storedQty = (q: DecLike): string | number => {
 };
 async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) {
   await run(
-    ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, lead_id: op.leadId ?? null, title: op.title, created_via: "manual", number: "" }),
+    ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, lead_id: op.leadId ?? null, title: op.title, created_via: op.templateId ? "template" : "manual", number: "" }),
   );
   // the connection dropped after the insert: «try later», never «not visible» (that would drop the estimate, review #244)
   const { data: est } = await read(supabase.from("estimates").select("status, current_version_id").eq("id", op.id).maybeSingle());
@@ -1140,7 +1163,9 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
     supabase
       .from("estimate_versions")
       .update({
-        calc_inputs: op.doc, engine_version: ENGINE_VERSION, source: "scratch", intro_text: op.doc.note ?? null,
+        calc_inputs: op.doc, engine_version: ENGINE_VERSION,
+        // E3: the server counts a use on version 1 (estimate_template_uses); every save keeps the same source
+        source: op.templateId ? "template" : "scratch", template_id: op.templateId ?? null, intro_text: op.doc.note ?? null,
         totals: { total: op.totalCents, deposit: op.depositCents, marginPct: op.marginPct },
         tax_enabled: taxOn, tax_rate_bps: s.tax.rateBps, tax_mode: "added_on_top", deposit_rule: s.deposit,
         contract_type: s.caHic ? "ca_home_improvement" : "non_hic",

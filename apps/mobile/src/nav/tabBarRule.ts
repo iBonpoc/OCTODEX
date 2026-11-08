@@ -43,7 +43,7 @@ export const WITH_TAB_BAR = [
   "company/payments",
   "company/modules",
   "company/checklists",
-  "estimate/[id]", "estimates", "figures/[metric]", "help",
+  "estimate/[id]", "estimate/templates", "estimates", "figures/[metric]", "help",
   "invoice", "invoice/[id]", "job/[id]", "jobs", "lead/[id]", "leads",
   "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",
   "receipt/[id]", "reports", "reports/[id]", "search", "settings", "settings/profile", "tasks", "team", "today", "triage", "visit/[id]", "visits",

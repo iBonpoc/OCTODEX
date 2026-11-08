@@ -92,6 +92,22 @@ export default function CompanyScreen() {
           </RowView>
         </Card>
       </View>
+      {/* E3 (docs/specs/07 §6, §11): estimate templates — a link only; the screen is the estimates' */}
+      <View testID="company-estimate-templates">
+        <Card onPress={() => router.push("/estimate/templates")} accessibilityLabel={t("est.tpl.title")}>
+          <RowView style={{ alignItems: "flex-start" }}>
+            <Icon name="copy" />
+            <View style={{ flex: 1, gap: space[1] }}>
+              <T v="body" w="semibold">
+                {t("est.tpl.title")}
+              </T>
+              <T v="caption" tone="mut">
+                {t("est.tpl.hint")}
+              </T>
+            </View>
+          </RowView>
+        </Card>
+      </View>
       {/* not a setup step either: whom new leads go to (docs/14-leads-spec.md §6.4) */}
       <View testID="company-leads">
         <Card onPress={() => router.push("/company/leads")} accessibilityLabel={t("co.leads.title")}>

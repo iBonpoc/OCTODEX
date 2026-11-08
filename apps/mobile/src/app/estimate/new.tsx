@@ -5,7 +5,8 @@ import * as Haptics from "expo-haptics";
 import { space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, discountBps, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
-import type { EstimateDoc } from "@/data/types";
+import type { EstimateDoc, EstimateTemplate } from "@/data/types";
+import { fromTemplate, pickableTemplates, templateFromCents } from "@/features/estimateTemplate";
 import { useI18n, type DictKey } from "@/i18n";
 import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
 import { LineMarks } from "@/features/LineMarks";
@@ -15,7 +16,7 @@ import { Labeled, MoneyField, PctField } from "@/features/fields";
 import { Avatar, Button, Segmented, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, Divider, Grid, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
 type SettingKind = "discount" | "tax" | "deposit" | null;
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
@@ -26,7 +27,7 @@ const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join
  * Type of a line (service / labor / material) only drives which lines are taxed.
  */
 export default function EstimateBuilder() {
-  const params = useLocalSearchParams<{ id?: string; customerId?: string; propertyId?: string; leadId?: string }>();
+  const params = useLocalSearchParams<{ id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string }>();
   const store = useStore();
   const { db } = store;
   const { t, money } = useI18n();
@@ -35,12 +36,33 @@ export default function EstimateBuilder() {
   const [estimateId] = useState(() => existing?.id ?? uid());
   const [customerId, setCustomerId] = useState(existing?.customerId ?? params.customerId);
   const [propertyId, setPropertyId] = useState(existing?.propertyId ?? params.propertyId);
-  const [doc, setDoc] = useState<EstimateDoc>(() => (existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : newDoc(db.company?.estimate.depositBps)));
-  const [title, setTitle] = useState(existing?.doc ? existing.title : "");
+  // E3 (S5t): a template to start from — given by the templates screen, or picked in «С чего начать?»
+  const seeCosts = db.costsVisible ?? store.role !== "tech";
+  const templates = pickableTemplates(db.estimateTemplates ?? []);
+  const given = !existing && params.template ? templates.find((x) => x.id === params.template) : undefined;
+  const [fromTpl] = useState(() => (given ? fromTemplate(given.doc, db.catalog, given.costs ?? {}, seeCosts) : null));
+  const [templateId, setTemplateId] = useState<string | undefined>(given?.id);
+  const [checkPrice, setCheckPrice] = useState<string[]>(fromTpl?.checkPrice ?? []);
+  const [startOpen, setStartOpen] = useState(() => !existing && !given && templates.length > 0);
+  const [doc, setDoc] = useState<EstimateDoc>(() => (existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps)));
+  const [title, setTitle] = useState(existing?.doc ? existing.title : given?.name ?? "");
   const [cur, setCur] = useState(() => Math.max(0, doc.options.findIndex((o) => o.recommended)));
   const [editing, setEditing] = useState<CustomLine | null | "new">(null);
   const [setting, setSetting] = useState<SettingKind>(null);
-  const [clientPicker, setClientPicker] = useState(!customerId);
+  const [clientPicker, setClientPicker] = useState(!customerId && !startOpen);
+  const start = (x: EstimateTemplate | null) => {
+    setStartOpen(false);
+    if (x) {
+      const r = fromTemplate(x.doc, db.catalog, x.costs ?? {}, seeCosts);
+      setDoc(r.doc);
+      setCur(Math.max(0, r.doc.options.findIndex((o) => o.recommended)));
+      setTemplateId(x.id);
+      setCheckPrice(r.checkPrice);
+      if (!title.trim()) setTitle(x.name);
+      toast.show(r.checkPrice.length ? t("est.tpl.checkPrice", { n: r.checkPrice.length }) : t("est.tpl.applied", { name: x.name }));
+    }
+    if (!customerId) setClientPicker(true);
+  };
 
   const customer = db.customers.find((c) => c.id === customerId);
   const property = db.properties.find((p) => p.id === propertyId) ?? db.properties.find((p) => p.customerId === customerId);
@@ -88,7 +110,7 @@ export default function EstimateBuilder() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
     const clean: EstimateDoc = exemptDoc({ ...doc, options: doc.options.map((o) => ({ ...o, lines: activeLines(o.lines) })) }, customer.taxExempt);
     const undo = store.saveEstimate({
-      id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId,
+      id: estimateId, customerId: customer.id, propertyId: property.id, doc: clean, leadId: params.leadId, templateId,
       title: title.trim() || estimateTitle(clean, t("ue.title")),
     });
     toast.show(store.online ? t("ue.saved", { name: customer.name }) : t("offline.queued"), undo);
@@ -168,6 +190,11 @@ export default function EstimateBuilder() {
                 </View>
               </RowView>
               <LineMarks marks={lineMarks(l)} lineId={l.id} />
+              {checkPrice.includes(l.id) ? (
+                <View testID={`est-checkprice-${l.id}`}>
+                  <StatusChip status="warn" label={t("est.tpl.checkLine")} />
+                </View>
+              ) : null}
             </Card>
           ))}
           <Button label={t("ue.addItem")} icon="plus" variant="secondary" full onPress={() => setEditing("new")} />
@@ -314,6 +341,25 @@ export default function EstimateBuilder() {
             </>
           ) : null}
           <Button label={t("common.gotIt")} icon="check" full onPress={() => setSetting(null)} />
+        </View>
+      </Sheet>
+      {/* «С чего начать?» (spec 07 §7.4): a choice menu in a sheet — rows (rule 12) */}
+      <Sheet visible={startOpen} onClose={() => start(null)} title={t("est.tpl.start")}>
+        <View testID="est-start" style={{ gap: space[1] }}>
+          <View testID="est-start-blank">
+            <ListRow title={t("est.tpl.blank")} subtitle={t("est.tpl.blankHint")} left={<Icon name="plus" />} onPress={() => start(null)} />
+          </View>
+          {templates.map((x) => (
+            <View key={x.id} testID={`est-start-${x.id}`}>
+              <Divider />
+              <ListRow
+                title={x.name}
+                subtitle={`${t("est.tpl.options", { n: x.doc.options.length })} · ${t("est.tpl.from", { sum: money(templateFromCents(x.doc, db.catalog)) })}`}
+                left={<Icon name="copy" />}
+                onPress={() => start(x)}
+              />
+            </View>
+          ))}
         </View>
       </Sheet>
       <ClientPicker
