@@ -47,7 +47,34 @@ export interface SceneDs {
   dim?: boolean;
 }
 export interface SceneLabel extends PlacedLabel { text: string; kind: "len" | "ds" | "story" | "corner" }
-export interface Scene { runs: SceneRun[]; ds: SceneDs[]; caps: SceneCap[]; corners: SceneCorner[]; labels: SceneLabel[] }
+/** the grid under the drawing (founder 08.11, as in CAD): minor and major lines as two paths; `stepIn` — a minor cell */
+export interface SceneGrid { minor: string; major: string; stepIn: number }
+export interface Scene { runs: SceneRun[]; ds: SceneDs[]; caps: SceneCap[]; corners: SceneCorner[]; labels: SceneLabel[]; grid?: SceneGrid }
+
+/** a grid cell, inches: 1 ft, 5 ft, 10 ft, 50 ft, 100 ft, 500 ft — the smallest not finer than `minPx` on the screen */
+export const GRID_STEPS_IN = [12, 60, 120, 600, 1200, 6000] as const;
+export function gridStepIn(k: number, minPx: number): number {
+  return GRID_STEPS_IN.find((s) => s * k >= minPx) ?? GRID_STEPS_IN[GRID_STEPS_IN.length - 1]!;
+}
+
+/** the grid lines over the viewport: every 5th is a major one (the next step up) */
+export function buildGrid(v: View, vp: { w: number; h: number }, minPx: number): SceneGrid {
+  const step = gridStepIn(v.k, minPx);
+  const [x0, y1] = toPlan(v, [0, 0]);
+  const [x1, y0] = toPlan(v, [vp.w, vp.h]);
+  let minor = "", major = "";
+  for (let i = Math.ceil(x0 / step); i * step <= x1; i++) {
+    const sx = (i * step * v.k + v.ox).toFixed(1);
+    const seg = `M${sx} 0V${vp.h}`;
+    if (i % 5 === 0) major += seg; else minor += seg;
+  }
+  for (let j = Math.ceil(y0 / step); j * step <= y1; j++) {
+    const sy = (-j * step * v.k + v.oy).toFixed(1);
+    const seg = `M0 ${sy}H${vp.w}`;
+    if (j % 5 === 0) major += seg; else minor += seg;
+  }
+  return { minor, major, stepIn: step };
+}
 
 export interface SceneOpts {
   view: View;
@@ -71,6 +98,8 @@ export interface SceneOpts {
   lenWithStory?: boolean;
   /** a downspout just put, on its off beat: drawn dim (the blink) */
   dimDs?: string | null;
+  /** the grid (founder 08.11): its smallest cell on the screen, px; none — no grid (the speed bench) */
+  gridMinPx?: number;
   /** the speed bench: draw every label even where it would overlap (the worst load) */
   keepAll?: boolean;
 }
@@ -135,5 +164,5 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
   }
   const marks = o.dsPad ? [...ds.map((x) => x.at), ...caps.map((x) => x.at), ...corners.map((x) => x.at)].map((at) => ({ at, r: o.dsPad! })) : [];
   const placed = layoutLabels(want, o.viewport, o.gap, o.keepAll, marks);
-  return { runs, ds, caps, corners, labels: placed.map((p) => ({ ...p, ...texts.get(p.id)! })) };
+  return { runs, ds, caps, corners, labels: placed.map((p) => ({ ...p, ...texts.get(p.id)! })), ...(o.gridMinPx ? { grid: buildGrid(o.view, o.viewport, o.gridMinPx) } : {}) };
 }

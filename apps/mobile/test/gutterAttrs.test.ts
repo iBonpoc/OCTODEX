@@ -124,10 +124,10 @@ describe("правки рисунка", () => {
     const next = setDsAttrs(D, "d1", { shape: "round" });
     expect(next.downspouts[0]).toMatchObject({ id: "d1", runId: "r1", atIn: 120, shape: "round", size: "3" });
   });
-  it("setLength: рулетка → taped, длина в смете; рисунок не двигается; даунспот на том же месте; null → снова нарисовано", () => {
+  it("setLength: рулетка → taped, длина в смете; линия на рисунке — той же длины (основатель 08.11); даунспот на той же доле; null → снова нарисовано", () => {
     const t = setLength(D, "r1", 306);
     expect(t.runs[0]!.a).toEqual([0, 0]);
-    expect(t.runs[0]!.b).toEqual([240, 0]);
+    expect(t.runs[0]!.b).toEqual([306, 0]);
     expect(runLengthIn(t.runs[0]!)).toBe(306);
     expect(t.downspouts[0]!.atIn).toBe(153); // 120 of 240 → the same half of 306
     expect(toElements(t, "m1").find((e) => e.id === "r1")?.confidence).toBe("taped");
@@ -135,6 +135,7 @@ describe("правки рисунка", () => {
     expect(setLength(t, "r1", 306)).toBe(t);
     const back = setLength(t, "r1", null);
     expect("lengthIn" in back.runs[0]!).toBe(false);
+    expect(back.runs[0]!.b).toEqual([306, 0]); // «по рисунку»: the line stays where it is
     expect(toElements(back, "m1").find((e) => e.id === "r1")?.confidence).toBe("drawn");
   });
   it("атрибуты и длина переживают запись в строки и обратно", () => {
@@ -146,3 +147,27 @@ describe("правки рисунка", () => {
     expect(back.downspouts[0]).toMatchObject({ wall: "brick", bottom: { kind: "splash_block" } });
   });
 });
+
+describe("рулетка двигает рисунок (основатель 08.11)", () => {
+  const a = { ...run, id: "a", a: [0, 0] as [number, number], b: [240, 0] as [number, number] };
+  const b = { ...run, id: "b", a: [240, 0] as [number, number], b: [240, 120] as [number, number] };
+  const other = { ...run, id: "o", a: [0, 600] as [number, number], b: [240, 600] as [number, number] };
+  it("500 ft и 40 ft больше не одной длины: конец b уходит по линии", () => {
+    const t = setLength({ runs: [a], downspouts: [] }, "a", 6000);
+    expect(t.runs[0]!.b).toEqual([6000, 0]);
+  });
+  it("то, что висит на конце, едет целиком — форма та же, угол не рвётся; чужой не трогается", () => {
+    const t = setLength({ runs: [a, b, other], downspouts: [] }, "a", 360);
+    expect(t.runs.find((x) => x.id === "b")!.a).toEqual([360, 0]);
+    expect(t.runs.find((x) => x.id === "b")!.b).toEqual([360, 120]);
+    expect(t.runs.find((x) => x.id === "o")).toEqual(other);
+  });
+  it("замкнутый контур: двигаются только соединённые концы", () => {
+    const c = { ...run, id: "c", a: [240, 120] as [number, number], b: [0, 0] as [number, number] };
+    const t = setLength({ runs: [a, b, c], downspouts: [] }, "a", 360);
+    expect(t.runs.find((x) => x.id === "b")!.a).toEqual([360, 0]);
+    expect(t.runs.find((x) => x.id === "b")!.b).toEqual([240, 120]);
+    expect(t.runs.find((x) => x.id === "c")).toEqual(c);
+  });
+});
+

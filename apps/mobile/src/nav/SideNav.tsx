@@ -12,6 +12,7 @@ import { meIsSub, menuGroups, sectionHref, type SectionId } from "./sections";
 import { GROUP_TITLE, useMenuCurrent, useNavMenu } from "./NavMenu";
 import { openSection } from "./go";
 import { isAppPath, sideNavWidth } from "./shell";
+import { useTabBarHidden } from "./tabBarHide";
 
 export { isAppPath };
 
@@ -31,7 +32,9 @@ export function SideNav() {
   const menu = useNavMenu();
   const current = useMenuCurrent();
   const path = usePathname();
-  if (!wide || !isAppPath(path)) return null;
+  // a screen that needs the whole screen (useHideTabBar: the signature pad, a drawing canvas on a phone in landscape)
+  const hidden = useTabBarHidden();
+  if (!wide || hidden || !isAppPath(path)) return null;
   const open = device === "desktop" && menu.sideOpen;
   const me = db.members.find((m) => m.id === db.me);
   const who = mode === "cloud" ? (companyName ?? "") : t(`role.${role}`);
