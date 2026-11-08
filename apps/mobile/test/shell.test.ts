@@ -53,6 +53,8 @@ describe("safe areas (docs/specs/32)", () => {
   it("the staff menu lives inside the app only", () => {
     expect(isAppPath("/clients")).toBe(true);
     expect(isAppPath("/p/abc")).toBe(false);
+    expect(isAppPath("/f/f0123456789abcdef0123456789abcdef")).toBe(false); // the request page: no app menu
+    expect(isAppPath("/figures/leads")).toBe(true);
     expect(isAppPath("/auth")).toBe(false);
   });
 });
