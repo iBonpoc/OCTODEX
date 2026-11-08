@@ -12,7 +12,7 @@ import { useStore } from "@/data/store";
 import { uid } from "@/features/estimateDoc";
 import type { Job, JobLineItem, Role } from "@/data/types";
 import { useI18n } from "@/i18n";
-import { caContractWarning, jobClientExempt, lineChangeRefusal, linesEditable, linesOf, nextLinePosition, percentToBps, totalOf, withJobLine, withJobTax, withoutJobLine, type LineRefusal } from "@/features/jobLines";
+import { caContractWarning, jobClientExempt, lineChangeRefusal, linesEditable, linesOf, nextLinePosition, percentToBps, shownLineQty, totalOf, withJobLine, withJobTax, withoutJobLine, type LineRefusal } from "@/features/jobLines";
 import { Button, StatusChip, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
@@ -113,7 +113,7 @@ export function JobLinesBlock({ job }: { job: Job }) {
             <ListRow
               key={l.id}
               title={l.name}
-              subtitle={`${l.quantity} × ${money(l.unitPriceCents)}${l.taxable ? "" : ` · ${t("job5.lines.noTax")}`}`}
+              subtitle={`${shownLineQty(l.quantity)} × ${money(l.unitPriceCents)}${l.taxable ? "" : ` · ${t("job5.lines.noTax")}`}`}
               right={<T v="body" tabular>{money(l.totalCents)}</T>}
               onPress={editable ? () => open(l) : undefined}
             />
@@ -174,3 +174,4 @@ export function JobLinesBlock({ job }: { job: Job }) {
     </View>
   );
 }
+

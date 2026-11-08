@@ -5,7 +5,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
-import { caContractWarning, jobClientExempt, lineChangeRefusal, lineSaveUndo, linesEditable, linesOf, nextLinePosition, percentToBps, taxBefore, withJobLine, withJobTax, withoutJobLine } from "../src/features/jobLines";
+import { caContractWarning, jobClientExempt, lineChangeRefusal, lineSaveUndo, linesEditable, linesOf, nextLinePosition, percentToBps, shownLineQty, taxBefore, withJobLine, withJobTax, withoutJobLine } from "../src/features/jobLines";
 import type { DB, JobLineItem } from "../src/data/types";
 
 const line = (x: Partial<JobLineItem> & { id: string; jobId: string }): Omit<JobLineItem, "totalCents"> => ({
@@ -127,5 +127,14 @@ describe("job lines in the app", () => {
     const out880 = { ...taxedLine, invoices: taxedLine.invoices.map((i) => (i.id === "i-t" ? { ...i, totalCents: 88_000 } : i)) };
     expect(lineChangeRefusal(out880, withJobTax(out880, "j3", taxBefore(d1, "j3")), "j3")).toBe("belowInvoiced");
     expect(lineChangeRefusal(taxedLine, withJobTax(taxedLine, "j3", taxBefore(d1, "j3")), "j3")).toBeNull();
+  });
+});
+
+describe("shownLineQty (Сметы №2: JobLinesBlock showed the raw quantity)", () => {
+  it("shows the quantity the total counts", () => {
+    expect(shownLineQty("1.23455")).toBe("1.2346");
+    expect(shownLineQty("2.50")).toBe("2.5");
+    expect(shownLineQty("3")).toBe("3");
+    expect(shownLineQty("abc")).toBe("abc");
   });
 });

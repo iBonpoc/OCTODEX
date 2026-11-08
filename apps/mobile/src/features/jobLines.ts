@@ -4,7 +4,7 @@
  * Refused before the store: a job from an estimate (its lines are the estimate's, t20), a job that is done, and a change
  * that brings the total below what is already invoiced (engine jobLinesBelowInvoiced, db T69).
  */
-import { caWrittenContractRequired, dec, jobLinesBelowInvoiced, jobLinesTotals, roundCents } from "@octo/estimating-engine";
+import { caWrittenContractRequired, dec, jobLineQty, jobLinesBelowInvoiced, jobLinesTotals, roundCents } from "@octo/estimating-engine";
 import type { DB, ID, Job, JobLineItem } from "@/data/types";
 import { findJob } from "@/data/jobs";
 
@@ -112,4 +112,14 @@ export function caContractWarning(d: Pick<DB, "jobs" | "cancelledJobs" | "proper
     hasEstimate: !!j.estimateId,
     totalCents: j.amountCents,
   });
+}
+
+/** the quantity as the total counts it (4 places, half up, no trailing zeros: "1.23455" → "1.2346"), like the estimate's
+ *  shownQty (#417); a quantity that is not a number is shown as typed */
+export function shownLineQty(q: string): string {
+  try {
+    return jobLineQty(q);
+  } catch {
+    return String(q);
+  }
 }

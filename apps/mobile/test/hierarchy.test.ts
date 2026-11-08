@@ -54,7 +54,10 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext("/invoice", { f: "owed" }, db, "director")).toEqual({ section: "invoices" });
     expect(navContext("/payments", {}, db, "dispatcher")).toEqual({ section: "payments" });
     expect(navContext("/reports", {}, db, "dispatcher")).toEqual({ section: "reports" });
-    expect(navContext("/reports/revenue", {}, db, "director")).toMatchObject({ section: "reports", up: { href: "/reports" } });
+    expect(navContext("/reports/revenue", {}, db, "director")).toMatchObject({ section: "reports", kind: "rpt.title", up: { href: "/reports" } });
+    // the last crumb is the report itself, not «Отчёты» again (Деньги №2, 08.11)
+    expect(navContext("/reports/owed", {}, db, "director")).toMatchObject({ section: "reports", kind: "rpt.owed.title", up: { href: "/reports", label: { key: "rpt.title" } } });
+    expect(navContext("/reports/categories", {}, db, "dispatcher").kind).toBe("rpt.cat.title");
     const loose = { ...db, invoices: [{ ...db.invoices[0]!, id: "iLoose", jobId: "no-such-job" }] };
     expect(navContext("/invoice/iLoose", {}, loose, "director")).toMatchObject({ section: "invoices", up: { href: "/invoice", label: { key: "nav.invoices" } } });
     // the technician has no invoices list: his invoice sits under his Home
