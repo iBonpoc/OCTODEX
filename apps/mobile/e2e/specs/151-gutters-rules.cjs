@@ -24,6 +24,10 @@ exports.run = async (h) => {
   const stored = async () => ((await db()).moduleData?.gutters?.elements) || [];
   const chosen = (field) => tid(field).locator('[aria-checked="true"]').innerText();
   const choose = (field, name) => tid(field).getByRole("radio", { name, exact: true }).click();
+  /** the n-th chip of a field (0-based) and which one is chosen — by place, not by its words (rule 19) */
+  const nth = (field, n) => tid(field).getByRole("radio").nth(n);
+  const chosenAt = (field) => tid(field).getByRole("radio").evaluateAll((rs) => rs.findIndex((r) => r.getAttribute("aria-checked") === "true"));
+  // corner chips: 0 — the company's, 1 — field cut, 2 — + strip miter, 3 — ready-made
   const money = async () => Number((await tid("draw-money").innerText()).replace(/[^\d.]/g, ""));
   const svg = () => p.getByTestId("draw-svg").first();
   const panel = () => tid("attr-panel");
@@ -59,7 +63,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await settings()).rules?.storyFt === 11, "story height 11 ft saved");
   await tid("gset-rule-wastePct").getByRole("button", { name: "Запас на отход +1" }).click();
   await waitFor(async () => (await settings()).rules?.wastePct === 6, "waste 6 % saved");
-  await choose("gset-rule-corner", "Готовый угол");
+  await nth("gset-rule-corner", 2).click();
   await waitFor(async () => (await settings()).rules?.corner === "prefab", "corners by default: ready-made");
   await h.shot("rules");
 
@@ -76,10 +80,10 @@ exports.run = async (h) => {
   // the new run is picked: its corner
   await openAttrs();
   await tid("attr-corner-0").waitFor({ timeout: 5000 });
-  h.expect((await chosen("attr-corner-0")) === "Готовый угол", "the corner follows the company: ready-made");
+  h.expect((await chosenAt("attr-corner-0")) === 0, "the corner follows the company («Как у компании»)");
   const m0 = await money();
-  await choose("attr-corner-0", "Вырезать на месте");
-  await waitFor(async () => (await chosen("attr-corner-0")) === "Вырезать на месте", "this corner: field cut");
+  await nth("attr-corner-0", 1).click();
+  await waitFor(async () => (await chosenAt("attr-corner-0")) === 1, "this corner: field cut");
   await waitFor(async () => (await money()) !== m0, "the $ follows the corner");
   await waitFor(async () => {
     const runs = (await stored()).filter((e) => e.kind === "run");
@@ -96,7 +100,7 @@ exports.run = async (h) => {
   await tid("attr-more").getByRole("button").click();
   await tid("attr-more-open").waitFor({ timeout: 5000 });
   const m1 = await money();
-  await choose("attr-head", "Leader head");
+  await nth("attr-head", 2).click();
   await waitFor(async () => (await money()) !== m1, "the $ follows the leader head");
   await tid("attr-diverter").getByRole("switch").click();
   await waitFor(async () => {
@@ -119,7 +123,19 @@ exports.run = async (h) => {
   await waitFor(async () => (await tid("draw-selected").count()) > 0, "the downspout picked");
   await openAttrs();
   await tid("attr-more-open").waitFor({ timeout: 5000 });
-  h.expect((await chosen("attr-head")) === "Leader head", "after a reload: the leader head, «Ещё» open by itself");
+  h.expect((await chosenAt("attr-head")) === 2, "after a reload: the leader head, «Ещё» open by itself");
+  // and the corner: pick the first run (its middle) — the corner kept its own method
+  if (!wide) await closeAttrs();
+  const mid = await svg().locator("line:not([id^=halo])").first().evaluate((l) => {
+    const r = l.ownerSVGElement.getBoundingClientRect();
+    const n = (k) => Number(l.getAttribute(k));
+    return [r.x + (n("x1") + n("x2")) / 2, r.y + (n("y1") + n("y2")) / 2];
+  });
+  await p.mouse.click(mid[0], mid[1]);
+  await waitFor(async () => /Линия/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "a run picked");
+  await openAttrs();
+  await tid("attr-corner-0").waitFor({ timeout: 5000 });
+  h.expect((await chosenAt("attr-corner-0")) === 1, "after a reload: the corner is field cut");
 
   // the office: read only (the role is switched on a plain page: the canvas page writes the app's state as it leaves)
   await h.go("/today");

@@ -3,10 +3,12 @@
  * palette and the defaults of a new run and downspout. Stored in company_modules.settings (≤ 32 KB, owner / admin, only
  * while the module is active — module_save_settings). Pure.
  *
- * The stored object is partial: a field the company never changed is absent and follows the module's default, so a
- * size the module adds later shows up. Reading never trusts it (any admin, any old app version wrote it): a field of the
- * wrong type, an unknown value or an empty list is dropped and the default is used. Writing keeps every key it does not
- * know (rules and use of M7c, a newer version's fields) — an older phone never deletes a newer phone's settings.
+ * The stored object holds only what the company touched: a field it never changed is absent and follows the module's
+ * default. «What we install» is stored as what the company does NOT install (`off`), so a size the module adds later
+ * shows up by itself. Reading never trusts it (any admin, any old app version wrote it): a field of the wrong type or an
+ * unknown value is ignored and the default is used. Writing changes one field over the stored object as it is — every
+ * other key and value, also the ones this version does not know (a newer version's sizes, kits, sections), and `v`
+ * stay untouched (review #372 №2–3): an older phone never deletes a newer phone's settings.
  */
 import {
   DEFAULT_GUARD_KITS, DEFAULT_GUTTER_RULES, DEFAULT_HANGER_BY_MOUNT, DEFAULT_HANGER_KITS, DEFAULT_JOINTS, DEFAULT_WALL_KITS, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile,
@@ -95,10 +97,10 @@ export const MODULE_OFFER: Offer = {
 };
 
 const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : {});
-/** the stored list kept to the known values, in the module's order; nothing usable → the default list */
-function subset<K extends string>(v: unknown, known: readonly K[]): K[] {
-  if (!Array.isArray(v)) return [...known];
-  const got = known.filter((k) => v.includes(k));
+/** what is offered: the module's values minus what the company switched off; all off (a broken store) → all */
+function subset<K extends string>(off: unknown, known: readonly K[]): K[] {
+  if (!Array.isArray(off)) return [...known];
+  const got = known.filter((k) => !off.includes(k));
   return got.length ? got : [...known];
 }
 const one = <K extends string>(v: unknown, list: readonly K[], fallback: K): K => ((list as readonly unknown[]).includes(v) ? (v as K) : list.includes(fallback) ? fallback : list[0] ?? fallback);
@@ -125,7 +127,7 @@ export function readPalette(v: unknown): string[] {
 }
 
 function readOffer(raw: Record<string, unknown>): Offer {
-  const o = obj(raw.offer);
+  const o = obj(raw.off);
   const sz = obj(o.sizes);
   const ga = obj(o.gauges);
   const ds = obj(o.dsSizes);
@@ -232,21 +234,58 @@ export function newDsAttrs(ch: Choices) {
 }
 
 /**
- * One change of the stored settings: `section.key = value` (or `section = value` without a key), every other stored
- * key kept as it was — also the ones this version does not know. The settings themselves are never changed in place.
+ * One change of the stored settings: the value at `path` (undefined — the key is removed, the default again). Every other
+ * stored key and value is kept as it was, `v` too (only a store without it gets 1). Never changes the settings in place.
  */
-export function setSetting(raw: unknown, section: string, key: string | null, value: unknown): Record<string, unknown> {
-  const r: Record<string, unknown> = { ...obj(raw), v: 1 };
-  if (key === null) r[section] = value;
-  else r[section] = { ...obj(r[section]), [key]: value };
-  return r;
+export function setPath(raw: unknown, path: readonly string[], value: unknown): Record<string, unknown> {
+  const root: Record<string, unknown> = { ...obj(raw) };
+  if (root.v === undefined) root.v = 1;
+  let at = root;
+  path.forEach((key, i) => {
+    if (i === path.length - 1) {
+      if (value === undefined) delete at[key];
+      else at[key] = value;
+      return;
+    }
+    const next = { ...obj(at[key]) };
+    at[key] = next;
+    at = next;
+  });
+  return root;
+}
+
+/** the groups of «what we install» and the module's values of each (by sub-group: a profile, a material, a shape) */
+export const OFFER_GROUPS = {
+  profiles: () => PROFILES,
+  sizes: (p: string) => SIZES_BY_PROFILE[p as GutterProfile] ?? [],
+  materials: () => MATERIALS,
+  gauges: (m: string) => GAUGES_BY_MATERIAL[m] ?? [],
+  hangers: () => ALL_HANGERS,
+  dsSizes: (sh: string) => DS_SIZES[sh as DsShape] ?? [],
+  dsStyles: () => DS_STYLES,
+  bottoms: () => DS_BOTTOMS,
+  wallKits: () => ALL_WALL_KITS,
+} as const satisfies Record<string, (sub: string) => readonly string[]>;
+export type OfferGroup = keyof typeof OFFER_GROUPS;
+
+/**
+ * Switch one value of «what we install» on or off: only that value moves in the stored `off` list (other values, also
+ * unknown ones, stay). Off for the last offered value of its list → null: the company installs at least one.
+ * `known` — the values this switch is about (the hanger switches are per profile family: at least one kit a family).
+ */
+export function toggleOffer(raw: unknown, group: OfferGroup, sub: string | null, value: string, known: readonly string[] = OFFER_GROUPS[group](sub ?? "")): Record<string, unknown> | null {
+  const path = sub === null ? ["off", group] : ["off", group, sub];
+  const g = obj(obj(raw).off)[group];
+  const cur = sub === null ? g : obj(g)[sub];
+  const off = Array.isArray(cur) ? (cur as unknown[]) : [];
+  const turnOff = !off.includes(value);
+  const next = turnOff ? [...off, value] : off.filter((x) => x !== value);
+  if (turnOff && !known.some((k) => !next.includes(k))) return null;
+  return setPath(raw, path, next.length ? next : undefined);
 }
 
 /** the settings fit what the server takes (≤ 32 KB) — checked before saving, so the owner sees why */
 export const settingsFit = (raw: unknown) => new TextEncoder().encode(JSON.stringify(raw ?? {})).length <= MAX_SETTINGS_BYTES;
-
-/** a list without its last item is not saved: the company installs at least one profile, size, material… */
-export const keepsOne = (list: readonly unknown[]) => list.length > 0;
 
 /* ---------- M7c: rules (spec П4) and use («проверить», П18.8) ---------- */
 
@@ -348,12 +387,13 @@ export function readUse(raw: unknown): Use {
 
 /**
  * The engine's company rules from the settings (spec П22.1): only the whitelisted fields, in the engine's units
- * (inches, a decimal waste). The wall table goes too, so a downspout stored with a wall type counts the company's kit.
+ * (inches, a decimal waste). The company's wall table does NOT go: a downspout stores the company's kit itself when it
+ * differs (wallValue), so a wall type means the module's kit on the panel and in the engine alike, and a change of the
+ * table never changes old drawings (review M7c №1, spec П22.6).
  */
 export function toRulesOverride(raw: unknown): GutterRulesOverride {
   const r = readRules(raw);
   const u = readUse(raw);
-  const ch = choicesFor(raw);
   return {
     storyHeightIn: r.storyFt * 12,
     hangerSpacingIn: Object.fromEntries(Object.keys(DEFAULT_HANGER_KITS).map((id) => [id, r.hangerSpacingIn])),
@@ -367,7 +407,6 @@ export function toRulesOverride(raw: unknown): GutterRulesOverride {
     dsShareOffcuts: r.dsShareOffcuts,
     dsExtensionIn: r.dsExtensionIn,
     seamless: r.seamless,
-    wallKitByWall: ch.wallKitByWall,
     joints: Object.fromEntries(JOINT_KINDS.map((k) => [k, u.joints[k]])),
     jointsPerSealantTube: u.pointsPerTube,
     solderPointsPerLb: u.solderPointsPerLb,

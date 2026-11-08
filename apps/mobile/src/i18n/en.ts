@@ -2439,6 +2439,7 @@ export const en: Dict = {
   "mod.gutters.attr.cm.cut": "Field cut",
   "mod.gutters.attr.cm.strip": "Field cut + strip miter",
   "mod.gutters.attr.cm.prefab": "Ready-made miter",
+  "mod.gutters.attr.cmDefault": "Company's ({m})",
   "mod.gutters.set.ft": "ft",
   "mod.gutters.set.in": "in",
   "mod.gutters.set.rules": "How we count",

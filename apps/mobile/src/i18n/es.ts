@@ -2439,6 +2439,7 @@ export const es: Dict = {
   "mod.gutters.attr.cm.cut": "Corte en obra",
   "mod.gutters.attr.cm.strip": "Corte + strip miter",
   "mod.gutters.attr.cm.prefab": "Esquina prefabricada",
+  "mod.gutters.attr.cmDefault": "Como la empresa ({m})",
   "mod.gutters.set.ft": "ft",
   "mod.gutters.set.in": "in",
   "mod.gutters.set.rules": "Cómo calculamos",

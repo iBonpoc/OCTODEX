@@ -302,10 +302,10 @@ export default function DrawScreen() {
           .filter((f) => f.runs.some((x) => x.id === sel.id))
           .map((f) => {
             const own = cornerChoiceOf(drawing, f);
-            return { found: f, method: own?.method ?? rules.corner, own: !!own };
+            return { found: f, method: own?.method ?? rules.corner, own: !!own, def: rules.corner };
           })
       : [];
-  const onCorner = (f: FoundCorner, method: CornerChoice["method"]) => commit(setCornerMethod(cur.current.drawing, f, method));
+  const onCorner = (f: FoundCorner, method: CornerChoice["method"] | null) => commit(setCornerMethod(cur.current.drawing, f, method));
   const onLength = (lengthIn: number | null) => {
     const id = cur.current.selected;
     if (id) commit(setLength(cur.current.drawing, id, lengthIn));

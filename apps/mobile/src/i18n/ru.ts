@@ -2439,6 +2439,7 @@ export const ru = {
   "mod.gutters.attr.cm.cut": "Вырезать на месте",
   "mod.gutters.attr.cm.strip": "Вырезать + strip miter",
   "mod.gutters.attr.cm.prefab": "Готовый угол",
+  "mod.gutters.attr.cmDefault": "Как у компании ({m})",
   "mod.gutters.set.ft": "ft",
   "mod.gutters.set.in": "in",
   "mod.gutters.set.rules": "Правила расчёта",

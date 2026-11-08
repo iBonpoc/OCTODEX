@@ -182,13 +182,14 @@ export function nearestRun(d: Pick<Drawing, "runs">, p: P, tolIn = 36): { runId:
 }
 
 /** The drawing → the engine's measurement input (docs/specs/33 S5g). */
-/** the method stored on the corner's runs (first run first); none → undefined */
+/**
+ * The corner's own method: only when BOTH runs hold the same one at their meeting ends (setCornerMethod writes both).
+ * A run deleted, or a new run drawn to an end that kept a method, is a new corner — the company's default again
+ * (review M7c №4). None → undefined.
+ */
 export function cornerChoiceOf(d: Pick<Drawing, "runs">, f: Pick<FoundCorner, "runs">): CornerChoice | undefined {
-  for (const end of f.runs) {
-    const m = d.runs.find((r) => r.id === end.id)?.attrs.cornerMethod?.[end.end ? "b" : "a"];
-    if (m) return { method: m };
-  }
-  return undefined;
+  const [x, y] = f.runs.map((end) => d.runs.find((r) => r.id === end.id)?.attrs.cornerMethod?.[end.end ? "b" : "a"]);
+  return x && x === y ? { method: x } : undefined;
 }
 
 export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method: "cut" }): MeasurementInput {

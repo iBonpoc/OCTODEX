@@ -14,7 +14,7 @@ import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_SHAPES, DS_SIZES, ELBOW_STYLES, MAX_DS_HEIGHT_FT, OFFSETS_IN, elbowsOf, hangerKitsFor, MILL_ONLY, MOUNTS, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_SHAPES, ELBOW_STYLES, smallerSizes, MAX_DS_HEIGHT_FT, OFFSETS_IN, elbowsOf, hangerKitsFor, MILL_ONLY, MOUNTS, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { ftIn } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
@@ -124,9 +124,9 @@ function Stock<A extends { material: string; gauge?: string; finish?: "mill" | "
 }
 
 /** a corner of the picked run and how it is made (M7c): stored on the run, else the company's default */
-export interface RunCorner { found: FoundCorner; method: CornerChoice["method"]; own: boolean }
+export interface RunCorner { found: FoundCorner; method: CornerChoice["method"]; own: boolean; /** the company's method */ def: CornerChoice["method"] }
 
-function Corners({ corners, onCorner }: { corners: RunCorner[]; onCorner: (f: FoundCorner, m: CornerChoice["method"]) => void }) {
+function Corners({ corners, onCorner }: { corners: RunCorner[]; onCorner: (f: FoundCorner, m: CornerChoice["method"] | null) => void }) {
   const { t } = useI18n();
   if (!corners.length) return null;
   return (
@@ -134,7 +134,12 @@ function Corners({ corners, onCorner }: { corners: RunCorner[]; onCorner: (f: Fo
       {corners.map((c, i) => (
         <View key={c.found.id} style={{ gap: space[1] }} testID={`attr-corner-${i}`}>
           <T v="caption">{t(k("cornerN"), { n: i + 1, kind: t(k(`ck.${c.found.kind}`)) })}</T>
-          <ChoiceChips items={(["cut", "strip", "prefab"] as const).map((m) => ({ key: m, label: t(k(`cm.${m}`)) }))} value={c.method} onChange={(m) => onCorner(c.found, m)} />
+          {/* «Как у компании» — the company's method, followed when it changes; a method picked here stays (review M7c №5) */}
+          <ChoiceChips
+            items={[{ key: "default" as const, label: t(k("cmDefault"), { m: t(k(`cm.${c.def}`)) }) }, ...(["cut", "strip", "prefab"] as const).map((m) => ({ key: m, label: t(k(`cm.${m}`)) }))]}
+            value={c.own ? c.method : "default"}
+            onChange={(m) => onCorner(c.found, m === "default" ? null : m)}
+          />
         </View>
       ))}
     </Field>
@@ -143,7 +148,7 @@ function Corners({ corners, onCorner }: { corners: RunCorner[]; onCorner: (f: Fo
 
 export function RunAttrsView({
   run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner,
-}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"]) => void }) {
+}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void }) {
   const { t } = useI18n();
   const a = run.attrs;
   const profiles = withCurrent(ch.offer.profiles, a.profile);
@@ -210,7 +215,7 @@ function DsMore({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAt
   const off = ds.offsets?.[0];
   const offLen = String(off?.lengthIn ?? OFFSETS_IN[0]) as `${(typeof OFFSETS_IN)[number]}`;
   const head = ds.head ?? (ds.funnel ? "funnel" : "none");
-  const smaller = DS_SIZES[ds.shape].filter((s) => s !== ds.size);
+  const smaller = smallerSizes(ds.shape, ds.size);
   if (!open) return <View testID="attr-more"><Button label={t(k("more"))} size="sm" variant="ghost" onPress={() => setOpen(true)} /></View>;
   return (
     <View style={{ gap: space[4] }} testID="attr-more-open">
@@ -218,10 +223,13 @@ function DsMore({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAt
         <Stepper label={t(k("height"))} unit={t(k("ft"))} value={Math.round((ds.heightIn ?? 0) / 12)} min={0} max={MAX_DS_HEIGHT_FT} onChange={(ft) => onAttrs({ heightIn: ft ? ft * 12 : undefined })} />
         <T v="caption" tone="mut">{t(k("heightHint"))}</T>
       </View>
-      <Pick label={t(k("offsets"))} testID="attr-offset-len" items={OFFSETS_IN.map((n) => ({ key: String(n) as typeof offLen, label: inch(String(n)) }))} value={offLen} onChange={(v) => onAttrs({ offsets: [{ lengthIn: Number(v), qty: off?.qty || 1 }] })} />
+      {/* the count makes offsets; the length is picked only once there are some (review M7c №6) */}
       <View testID="attr-offset-qty">
         <Stepper label={t(k("offsetQty"))} value={off?.qty ?? 0} min={0} max={8} onChange={(qty) => onAttrs({ offsets: qty ? [{ lengthIn: Number(offLen), qty }] : undefined })} />
       </View>
+      {off?.qty ? (
+        <Pick label={t(k("offsets"))} testID="attr-offset-len" items={OFFSETS_IN.map((n) => ({ key: String(n) as typeof offLen, label: inch(String(n)) }))} value={offLen} onChange={(v) => onAttrs({ offsets: [{ lengthIn: Number(v), qty: off.qty }] })} />
+      ) : null}
       <Pick label={t(k("reducer"))} testID="attr-reducer" items={[{ key: "", label: t(k("reducerNone")) }, ...smaller.map((s) => ({ key: s, label: dsSize(s) }))]} value={ds.reducers?.[0]?.to ?? ""} onChange={(to) => onAttrs({ reducers: to ? [{ to, qty: 1 }] : undefined })} />
       <Pick label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)) }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
       <Switch testID="attr-diverter" on={!!ds.diverter} onChange={(v) => onAttrs({ diverter: v || undefined })} label={t(k("diverter"))} />

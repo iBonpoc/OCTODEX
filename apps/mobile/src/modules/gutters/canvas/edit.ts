@@ -173,8 +173,8 @@ export function redo(h: History, cur: Drawing): { h: History; d: Drawing } | nul
 }
 
 /**
- * How a corner is made (M7c, spec 33 П22.2 №15): stored on both runs that meet there (each at its own end), so either
- * run's panel shows it and deleting one run leaves no stale choice on the other's corner. `null` — the company's default.
+ * How a corner is made (M7c, spec 33 П22.2 №15): stored on both runs that meet there (each at its own end); it counts
+ * only while both hold it (cornerChoiceOf), so a deleted run leaves no live choice behind. `null` — the company's default.
  */
 export function setCornerMethod(d: Drawing, corner: Pick<FoundCorner, "runs">, method: CornerChoice["method"] | null): Drawing {
   let changed = false;

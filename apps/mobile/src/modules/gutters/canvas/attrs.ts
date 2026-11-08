@@ -136,7 +136,8 @@ export function changeRun(a: RunAttrs, patch: Partial<RunAttrs>, ch?: Choices): 
   }
   n = fixFinish(n, defaultColor(ch));
   // a new roof edge (or a profile whose kits are another family) puts the company's default kit back
-  const kits = hangerKitsFor(profile);
+  // a new profile takes a kit the company installs for it (review #372 №6); otherwise only a kit of another family is fixed
+  const kits = patch.profile !== undefined && patch.profile !== a.profile ? hangerKitsFor(profile, ch) : hangerKitsFor(profile);
   if ((patch.mount !== undefined && patch.mount !== a.mount) || !kits.includes(n.hanger)) {
     const mount = (n.mount ?? "fascia") as GutterMount;
     n.hanger = ch ? ch.hangerByMount[profile][mount] : defaultHangerKit(profile, mount);
@@ -162,15 +163,23 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsA
   if (gauges && n.gauge && !gauges.includes(n.gauge)) n.gauge = firstOf(ch?.offer.gauges[n.material], gauges);
   if (gauges && !gauges.length) delete n.gauge;
   n = fixFinish(n, ch?.ds.color ?? defaultColor(ch));
-  // a wall type picked on the panel: the company's kit for it (wallValue), so the engine counts what the panel shows
-  if (ch && patch.wall !== undefined && (WALLS as readonly string[]).includes(patch.wall)) n.wall = wallValue(shape, patch.wall as Wall, ch);
+  // a wall type picked on the panel, or a new shape over a wall type: the company's kit for it (wallValue), so the engine
+  // counts what the panel shows (review #372 №6)
+  const shapeChanged = patch.shape !== undefined && patch.shape !== a.shape;
+  if (ch && n.wall !== undefined && (WALLS as readonly string[]).includes(n.wall) && (patch.wall !== undefined || shapeChanged)) n.wall = wallValue(shape, n.wall as Wall, ch);
+  // no wall stored is wood: a new shape takes the company's wood kit when it is not the module's
+  else if (ch && shapeChanged && n.wall === undefined && wallValue(shape, "wood", ch) !== "wood") n.wall = wallValue(shape, "wood", ch);
+  // a company kit of the old shape standing for a wall: the same wall, this shape's company kit
+  else if (ch && shapeChanged && n.wall !== undefined && !(WALLS as readonly string[]).includes(n.wall) && !WALLS.some((w) => wallKitsFor(shape, w).includes(n.wall!))) {
+    n.wall = wallValue(shape, wallOf(a.shape, a.wall).wall, ch);
+  }
   // elbows of the other shape (A on a round one) become this shape's first style, the count stays
   if (n.elbows?.some((e) => !ELBOW_STYLES[shape].includes(e.style))) {
     const qty = n.elbows.reduce((s, e) => s + e.qty, 0);
     n.elbows = [{ style: ELBOW_STYLES[shape][0]!, qty }];
   }
-  // a size change to the other shape's size (or to its own size) is no change any more
-  if (n.reducers?.some((r) => !DS_SIZES[shape].includes(r.to) || r.to === n.size)) delete n.reducers;
+  // a reducer goes to a smaller size of the same shape: another shape's size, its own or a larger one — gone
+  if (n.reducers?.some((r) => !smallerSizes(shape, n.size).includes(r.to))) delete n.reducers;
   // a wall kit of the other shape: the same wall, this shape's default kit
   if (n.wall && !(WALLS as readonly string[]).includes(n.wall) && !WALLS.some((w) => wallKitsFor(shape, w).includes(n.wall!))) {
     const was = wallOf(a.shape, a.wall).wall;
@@ -197,6 +206,13 @@ export function tapeIn(ft: string, inch: string): number | null {
   if (!Number.isFinite(f) || !Number.isFinite(i) || f < 0 || i < 0 || i >= 12 || !Number.isInteger(f)) return null;
   const n = Math.round(f * 12 + i);
   return n > 0 && n <= MAX_RUN_IN ? n : null;
+}
+
+/** the sizes a downspout can reduce to: the smaller ones of its shape (DS_SIZES lists go small to large) */
+export function smallerSizes(shape: string, size: string): string[] {
+  const list = DS_SIZES[shape === "round" ? "round" : "rect"];
+  const i = list.indexOf(size);
+  return i > 0 ? list.slice(0, i) : [];
 }
 
 /** standard offsets (engine rule stdOffsetsIn): the panel offers these */
