@@ -58,9 +58,11 @@ exports.run = async (h) => {
   const asked = [];
   await p.route("**/rest/v1/rpc/portal_estimate*", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify(answer) }));
+  let payAnswer = null;   // null — a ready form; otherwise {status, body}
   await p.route("**/functions/v1/stripe-pay*", (route) => {
     const b = JSON.parse(route.request().postData() || "{}");
     asked.push(b);
+    if (payAnswer) return route.fulfill({ status: payAnswer.status, contentType: "application/json", body: JSON.stringify(payAnswer.body) });
     const big = b.invoiceId === "a1830000-0000-4000-8000-000000000001";
     return route.fulfill({
       status: 200, contentType: "application/json",
@@ -89,10 +91,11 @@ exports.run = async (h) => {
     "Stripe.js on the contractor's account, in the client's language");
   await h.expectText(/Test mode/, "test mode is said");
   await h.expectText(/We never see your card or bank details/, "who handles the card");
+  await h.expectText(/Pay \$1,500(?!\d)/, "the button names this invoice's sum");
   await h.shot("element");
   await p.getByTestId("stripe-pay").getByRole("button").click();
   await h.expectText(/Payment is processing/, "after confirming: processing");
-  await h.expectText(/up to 4 business days/, "how long ACH takes");
+  await h.expectText(/You don't need to pay again/, "the client knows not to pay again");
   h.expect((await p.evaluate(() => window.__stripe.confirmed)) === 1, "confirmed once");
   h.expect((await p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000001").count()) === 0, "no second «Pay online» for that invoice");
   await h.shot("processing");
@@ -102,17 +105,46 @@ exports.run = async (h) => {
   await small.scrollIntoViewIfNeeded();
   await small.getByRole("button").click();
   await h.expectText(/Fake Payment Element: card > us_bank_account/, "below $1,000 a card comes first");
-  await p.keyboard.press("Escape");
-  await p.waitForTimeout(400);
+  await h.expectText(/Pay \$500(?!\d)/, "…and its own sum, not the last invoice's");
+  await p.getByTestId("stripe-close").getByRole("button").click();
+  h.expect((await p.getByTestId("stripe-checkout").count()) === 0, "the panel closes");
+
+  // the server's refusal is said in the client's words; «on its way» from the server needs no form
+  payAnswer = { status: 200, body: { error: "nothing_to_pay" } };   // the code is read from the body (a 409 would be a console error here)
+  await small.getByRole("button").click();
+  await h.expectText(/There is nothing to pay on this invoice/, "a refusal in the client's words");
+  await p.getByTestId("stripe-close").getByRole("button").click();
+  payAnswer = { status: 200, body: { state: "processing" } };
+  await small.getByRole("button").click();
+  await h.expectText(/We'll confirm the payment shortly/, "already on its way: no second form");
+  payAnswer = null;
 
   // 2) ACH already on its way
   const fresh = () => h.go(`/p/${TOKEN}`);   // a full load: the page reads the server anew
   answer = portal({ pending: { "a1830000-0000-4000-8000-000000000001": 150000 } });
   await fresh();
   await h.expectText(/ACH processing: \$1,500(?!\d)/, "the ACH on its way is on the invoice");
+  await h.expectText(/up to 4 business days/, "how long ACH takes");
   h.expect((await p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000001").count()) === 0, "nothing to pay again");
   h.expect((await p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000002").count()) === 1, "the other invoice can still be paid");
   await h.shot("pending");
+
+  // part of the balance on its way: the line, and the rest can still be paid
+  answer = portal({ pending: { "a1830000-0000-4000-8000-000000000001": 40000 } });
+  await fresh();
+  await h.expectText(/ACH processing: \$400(?!\d)/, "the part on its way");
+  await h.expectText(/\$1,100(?!\d)/, "the rest to pay");
+  h.expect((await p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000001").count()) === 1, "the rest can be paid");
+
+  // back from the bank's / 3DS page: only that invoice is «processing», and the address is cleaned
+  answer = portal({});
+  await h.go(`/p/${TOKEN}?paid=a1830000-0000-4000-8000-000000000001&redirect_status=processing&payment_intent=pi_E2E1`);
+  await h.expectText(/We'll confirm the payment shortly/, "the paid invoice: processing");
+  h.expect((await p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000001").count()) === 0, "…no second button");
+  h.expect((await p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000002").count()) === 1, "the other invoice is not touched");
+  await h.go(`/p/${TOKEN}?paid=a1830000-0000-4000-8000-000000000001&redirect_status=failed`);
+  await h.expectText(/INV-1 · Final/, "the page");
+  h.expect((await p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000001").count()) === 1, "a failed return keeps the button");
 
   // 3) a demo company keeps the simulation; without Stripe and demo — no payment
   answer = portal({ online_pay: false, simulated_pay: true });

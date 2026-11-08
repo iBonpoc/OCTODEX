@@ -121,7 +121,7 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
             label={t("inv.takePayment")}
             icon="dollar"
             onPress={() => {
-              setAmount(balance);
+              setAmount(Math.max(0, balance - pendingCents));   // ACH on its way: the rest, not the whole balance (review 20в №7)
               setPay(true);
             }}
           />

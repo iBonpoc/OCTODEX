@@ -23,6 +23,8 @@ export interface Attempt {
   account_id: string;
   payment_intent_id: string | null;
   status: string;
+  /** intents of this invoice's other attempts the client could still pay — cancelled here (one invoice, one charge) */
+  stale_intents?: string[];
 }
 export interface StripeAnswer {
   status: number;
@@ -119,14 +121,13 @@ export function intentForm(a: Attempt): Record<string, string> {
 /** the database's refusal → what the page is told (never the database's text) */
 function refused(code: string | null): { status: number; error: string } {
   switch (code) {
-    case "P0002":
-      return { status: 404, error: "not_found" };
+    case "P0002": // an unknown link answers as a foreign invoice does: no «this token exists» oracle
+    case "22023":
+      return { status: 409, error: "nothing_to_pay" };
     case "42501":
       return { status: 403, error: "closed" };
     case "55000":
       return { status: 409, error: "not_connected" };
-    case "22023":
-      return { status: 409, error: "nothing_to_pay" };
     default:
       return { status: 500, error: "failed" };
   }
@@ -177,6 +178,13 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
     (pi.metadata as Record<string, unknown> | undefined)?.attempt_id === a.attempt_id;
 
   try {
+    // an old tab, another amount, a failed try: their intents can still be paid — cancel them before this one is handed out
+    for (const old of a.stale_intents ?? []) {
+      if (!PI.test(old) || old === a.payment_intent_id) continue;
+      const c = await stripe("POST", `/v1/payment_intents/${old}/cancel`, { account: a.account_id }).catch(() => null);
+      // already processing / succeeded / canceled: Stripe refuses — the webhook decides for it, nothing to do here
+      if (c && c.status !== 200 && c.status !== 400) deps.log?.(`stripe-pay: cancel ${c.status}`);
+    }
     if (a.payment_intent_id) {
       // the attempt already has an intent: never a second one while the first can still be paid or is on its way
       const r = await stripe("GET", `/v1/payment_intents/${a.payment_intent_id}`, { account: a.account_id });
@@ -194,7 +202,11 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
     for (let i = 0; i < SET_TRIES && !kept; i++) {
       kept = await deps.setIntent(a.attempt_id, r.body.id as string).then(() => true, () => false);
     }
-    if (!kept) deps.log?.(`stripe-pay: intent ${String(r.body.id)} not kept on attempt ${a.attempt_id}`);
+    if (!kept) {
+      // not handed out: after Stripe's 24 h the same key would make a second intent the webhook could not match (security 20в №3)
+      deps.log?.(`stripe-pay: intent ${String(r.body.id)} not kept on attempt ${a.attempt_id}`);
+      return json(502, { error: "stripe" });
+    }
     return ready(r.body);
   } catch {
     deps.log?.("stripe-pay: failed");

@@ -108,7 +108,7 @@ describe("stripe-pay: who may call", () => {
   });
   it("the database's refusals become short codes, never its text", async () => {
     const cases: [string | null, number, string][] = [
-      ["P0002", 404, "not_found"],
+      ["P0002", 409, "nothing_to_pay"],
       ["42501", 403, "closed"],
       ["22023", 409, "nothing_to_pay"],
       ["55000", 409, "not_connected"],
@@ -173,13 +173,25 @@ describe("stripe-pay: the PaymentIntent", () => {
       expect((await handlePay(req(), d)).status).toBe(502);
     }
   });
-  it("the intent is kept after a few tries; when it is not, the page still pays (the webhook finds the attempt by metadata)", async () => {
+  it("the intent is kept after a few tries; when it is not, it is not handed out (a retry gets the same intent by the key)", async () => {
     const two = deps({ setFails: 2 });
     expect((await handlePay(req(), two.d)).status).toBe(200);
     expect(two.kept).toHaveLength(1);
     const lost = deps({ setFails: 9 });
-    expect((await handlePay(req(), lost.d)).status).toBe(200);
+    const r = await handlePay(req(), lost.d);
+    expect(r.status).toBe(502);
+    expect(r.body).not.toContain("secret");
     expect(lost.logs.join(" ")).toContain("not kept");
+  });
+  it("the invoice's other payable intents are cancelled before a new one is handed out", async () => {
+    const a = attempt({ stale_intents: ["pi_Old1", "pi_Old2", "bad/../x"] });
+    const { d, calls } = deps({ a, answers: { "POST /v1/payment_intents/pi_Old1/cancel": { status: 200, body: {} }, "POST /v1/payment_intents/pi_Old2/cancel": { status: 400, body: {} } } });
+    expect((await handlePay(req(), d)).status).toBe(200);
+    expect(calls.map((c) => `${c.method} ${c.path} ${c.account}`)).toEqual([
+      "POST /v1/payment_intents/pi_Old1/cancel acct_T1",
+      "POST /v1/payment_intents/pi_Old2/cancel acct_T1",
+      "POST /v1/payment_intents acct_T1",
+    ]);
   });
   it("an attempt with an intent reuses it — no second intent", async () => {
     const a = attempt({ payment_intent_id: "pi_Old1" });

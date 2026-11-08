@@ -2982,6 +2982,7 @@ export const ru = {
   "pay.online.err.closed": "Эта ссылка больше не принимает оплату.",
   "pay.online.err.nothing": "По этому счёту нечего платить.",
   "pay.online.err.retry": "Не получилось. Попробуйте ещё раз через минуту.",
+  "pay.online.wait": "Мы подтвердим платёж в ближайшее время. Платить ещё раз не нужно.",
 } as const;
 
 export type DictKey = keyof typeof ru;
