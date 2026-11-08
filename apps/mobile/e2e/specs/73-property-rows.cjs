@@ -33,9 +33,17 @@ exports.run = async (h) => {
   await p.waitForTimeout(600);
   h.expect(/\/property\/p1$/.test(p.url()), `back → the property (${p.url()})`);
 
-  // jobs → a job
+  // «Сейчас на объекте»: an open job is a card that opens the job
+  const nowJob = p.locator('[data-testid^="property-now-job-"]').locator("visible=true").first();
+  await nowJob.waitFor({ timeout: 5000 });
+  await nowJob.click(); await p.waitForURL(/\/job\//, { timeout: 5000 });
+  await h.go("/property/p1");
+
+  // jobs → a job; the office sees the job's sum on its card
   await row("Работы");
-  await p.getByRole("button", { name: new RegExp(`^${jobs[0].number}`) }).first().click();
+  await p.getByTestId(`property-job-${jobs[0].id}`).locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect(/\$\d/.test(await p.getByTestId(`property-job-${jobs[0].id}`).locator("visible=true").first().innerText()), "office: the sum on the job card");
+  await p.getByTestId(`property-job-${jobs[0].id}`).first().click();
   await p.waitForTimeout(600);
   h.expect(p.url().includes(`/job/${jobs[0].id}`), `a job card opens the job (${p.url()})`);
 
@@ -60,4 +68,11 @@ exports.run = async (h) => {
   h.expect(!/Лиды/.test(txt) && !/Счета/.test(txt), `tech: no leads or invoices rows (${txt})`);
   const mine = visits.filter((v) => v.techId === db0.me || (v.assigneeIds ?? []).includes(db0.me)).length;
   h.expect((await rowCount("Выезды")) === String(mine), `tech: only his visits (${mine})`);
+  // the property's jobs: the cards are there, the sums are not (value only for the office)
+  await h.go("/property/p1?s=jobs");
+  await p.locator('[data-testid^="property-job-"]').locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect(!/\$\d/.test(await h.text()), "tech: no sums on the property's job cards");
+  await h.go("/property/p1");
+  await p.locator('[data-testid^="property-now-job-"]').locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect(!/\$\d/.test(await h.text()), "tech: no sums in «Сейчас на объекте»");
 };
