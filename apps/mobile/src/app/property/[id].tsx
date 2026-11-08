@@ -18,7 +18,10 @@ import { jobStatusView } from "@/features/jobs";
 import { canServe } from "@/features/clients";
 import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { Icon, T, type IconKey } from "@/ui/primitives";
-import { Card, CardList, Empty, ItemCard, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Empty, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
+import { estView } from "@/features/boards";
+import { space } from "@octo/design-tokens";
 import { useToast } from "@/ui/overlays";
 import { VisitFormSheet } from "@/features/VisitForm";
 import { ModulePlaces } from "@/modules/ModulePlaces";
@@ -117,35 +120,51 @@ export default function PropertyScreen() {
 
       <SectionTitle title={t("prop.now")} />
       {now.estimates.length || now.jobs.length || now.nextVisit ? (
-        <CardList>
+        <>
+          {/* the next visit is one hint, not a list (06 «10а, остаток» п.6): Card + ListRow */}
           {now.nextVisit ? (
-            <ItemCard
-              title={`${day(now.nextVisit.start)} · ${time(now.nextVisit.start)}`}
-              subtitle={t("prop.nextVisit")}
-              left={<Icon name="calendar" />}
-              onPress={() => router.push(`/visit/${now.nextVisit!.id}`)}
-            />
+            <Card style={{ paddingVertical: space[1] }}>
+              <ListRow
+                title={`${day(now.nextVisit.start)} · ${time(now.nextVisit.start)}`}
+                subtitle={t("prop.nextVisit")}
+                left={<Icon name="calendar" />}
+                onPress={() => router.push(`/visit/${now.nextVisit!.id}`)}
+              />
+            </Card>
           ) : null}
-          {now.jobs.map((j) => (
-            <ItemCard
-              key={j.id}
-              title={j.title}
-              status={jobStatusView[j.status].status}
-              right={<StatusChip status={jobStatusView[j.status].status} label={t(jobStatusView[j.status].label)} />}
-              left={<Icon name="wrench" />}
-              onPress={() => router.push(`/job/${j.id}`)}
-            />
-          ))}
-          {now.estimates.map((e) => (
-            <ItemCard
-              key={e.id}
-              title={[e.number, e.title].filter(Boolean).join(" · ")}
-              right={office ? <T v="body" tabular>{money(e.totalCents)}</T> : undefined}
-              left={<Icon name="invoice" />}
-              onPress={() => router.push(`/estimate/${e.id}`)}
-            />
-          ))}
-        </CardList>
+          {/* open jobs and estimates of the property: related objects → compact list cards */}
+          {now.jobs.length || now.estimates.length ? (
+            <CardGrid>
+              {[
+                ...now.jobs.map((j) => (
+                  <ListCard
+                    key={j.id}
+                    density="compact"
+                    testID={`property-now-job-${j.id}`}
+                    lead={{ kind: "icon", icon: "wrench" }}
+                    title={j.title || j.number || ""}
+                    when={j.title ? j.number : undefined}
+                    status={{ tone: jobStatusView[j.status].status, label: t(jobStatusView[j.status].label) }}
+                    onPress={() => router.push(`/job/${j.id}`)}
+                  />
+                )),
+                ...now.estimates.map((e) => (
+                  <ListCard
+                    key={e.id}
+                    density="compact"
+                    testID={`property-now-estimate-${e.id}`}
+                    lead={{ kind: "icon", icon: "invoice" }}
+                    title={e.title || e.number || ""}
+                    when={e.title ? e.number : undefined}
+                    value={office ? money(e.totalCents) : undefined}
+                    status={{ tone: estView[e.status].s, label: t(estView[e.status].l) }}
+                    onPress={() => router.push(`/estimate/${e.id}`)}
+                  />
+                )),
+              ]}
+            </CardGrid>
+          ) : null}
+        </>
       ) : (
         <T v="caption" tone="mut">
           {t("prop.nothingNow")}

@@ -19,7 +19,7 @@ import { useToast } from "@/ui/overlays";
 import { Card, RowView, Screen } from "@/ui/surfaces";
 import { CanvasView, useLive } from "../canvas/CanvasView";
 import { buildScene, fitView, type Story, type View as PlanView } from "../canvas/scene";
-import { LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
+import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { fpsP90, fromHistogram, intervals, LIMITS, passes, pct, reportText, type BenchKey, type BenchResult } from "../canvas/stats";
 import type { Drawing } from "../geometry";
 import { benchDrawing } from "./benchScene";
@@ -83,6 +83,8 @@ export default function BenchScreen() {
             gap: space[1],
             selected,
             keepAll: true,
+            // the canvas's load: labels go round the downspouts' marks (spec 33 П20.8)
+            dsPad: DS_MARK_R,
             dsText: (n) => t("mod.gutters.ds", { n }),
             storyText: (n: Story) => t("mod.gutters.story", { n }),
             extra: base.marks.map((m) => ({ id: m.id, at: m.at, text: t("mod.gutters.story", { n: m.story }), kind: "story" as const })),

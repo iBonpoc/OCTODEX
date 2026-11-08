@@ -13,6 +13,11 @@
 import {
   DEFAULT_GUARD_KITS, DEFAULT_GUTTER_RULES, DEFAULT_HANGER_BY_MOUNT, DEFAULT_HANGER_KITS, DEFAULT_JOINTS, DEFAULT_WALL_KITS, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile,
   type GutterRulesOverride, type JointKind,
+  ANCHORS,
+  DEFAULT_SPIKE_LENGTH_IN,
+  SPIKE_LENGTHS,
+  WOOD_SCREW,
+  WOOD_SCREWS,
 } from "@octo/estimating-engine";
 import { COLORS, DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, wallValue, WALLS, type Wall } from "./canvas/attrs";
 
@@ -337,7 +342,18 @@ export interface Use {
   touchUpPaint: boolean;
   dsJoin: "rivet" | "screw";
   guardPieceFt: Record<string, number>;
+  /** spike lengths by gutter size are on (off by default: a priced spike keeps its price) */
+  spikeBySize: boolean;
+  /** spike length by gutter size, inches as text (spec П18.15, «проверить») */
+  spikeLenIn: Record<string, (typeof SPIKE_LENGTHS)[number]>;
+  woodScrew: (typeof WOOD_SCREWS)[number];
+  washer: boolean;
+  anchor: (typeof ANCHORS)[number];
+  /** a sealant tube per joint color (or one plain sealant) */
+  sealantByColor: boolean;
 }
+/** gutter sizes a spike hangs (K, fascia, box) */
+export const SPIKE_SIZES = Object.keys(DEFAULT_SPIKE_LENGTH_IN);
 
 const num = (v: unknown, r: NumRule, def = r.def) => (typeof v === "number" && Number.isInteger(v) && v >= r.min && v <= r.max ? v : def);
 const bool = (v: unknown, def: boolean) => (typeof v === "boolean" ? v : def);
@@ -382,6 +398,12 @@ export function readUse(raw: unknown): Use {
     touchUpPaint: bool(u.touchUpPaint, DEFAULT_GUTTER_RULES.touchUpPaint),
     dsJoin: u.dsJoin === "screw" ? "screw" : "rivet",
     guardPieceFt: Object.fromEntries(GUARD_KINDS.map((id) => [id, num(g[id], USE_NUMS.guardPieceFt, Math.round(DEFAULT_GUARD_KITS[id]!.pieceIn / 12))])),
+    spikeBySize: bool(u.spikeBySize, false),
+    spikeLenIn: Object.fromEntries(SPIKE_SIZES.map((sz) => [sz, one(obj(u.spikeLenIn)[sz], SPIKE_LENGTHS, DEFAULT_SPIKE_LENGTH_IN[sz] as (typeof SPIKE_LENGTHS)[number])])),
+    woodScrew: one(u.woodScrew, WOOD_SCREWS, WOOD_SCREW as (typeof WOOD_SCREWS)[number]),
+    washer: bool(u.washer, false),
+    anchor: one(u.anchor, ANCHORS, "masonry"),
+    sealantByColor: bool(u.sealantByColor, DEFAULT_GUTTER_RULES.sealantByColor),
   };
 }
 
@@ -413,6 +435,10 @@ export function toRulesOverride(raw: unknown): GutterRulesOverride {
     touchUpPaint: u.touchUpPaint,
     dsJoin: u.dsJoin,
     guardKits: Object.fromEntries(GUARD_KINDS.map((id) => [id, { ...DEFAULT_GUARD_KITS[id]!, pieceIn: u.guardPieceFt[id]! * 12 }])),
+    kitLengthIn: { spike: u.spikeBySize ? { ...u.spikeLenIn } : {} },
+    woodScrew: { screw: u.woodScrew, washer: u.washer },
+    anchor: u.anchor,
+    sealantByColor: u.sealantByColor,
   };
 }
 

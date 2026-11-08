@@ -158,7 +158,7 @@ describe("unit:catalogAttributes — write (catalog.save)", () => {
   it("an item without them never writes the new columns (works before the migration, rule 16)", async () => {
     const { applyOp } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
     await applyOp({ k: "catalog.save", item: it0({}) }, "co-1", "u-1");
-    const row = (rpcCalls.at(-1)!.args as { row: Record<string, unknown> }).row;
+    const row = (rpcCalls.filter((x) => x.name === "catalog_items").at(-1)!.args as { row: Record<string, unknown> }).row;
     expect(row).not.toHaveProperty("attributes");
     expect(row).not.toHaveProperty("purchase_unit");
     expect(row).not.toHaveProperty("pack_size");
@@ -166,9 +166,9 @@ describe("unit:catalogAttributes — write (catalog.save)", () => {
   it("set ones are written; a blank purchase unit or pack size is cleared (null)", async () => {
     const { applyOp } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
     await applyOp({ k: "catalog.save", item: it0({ attributes: { profile: "k" }, purchaseUnit: " coil ", packSize: "1.5" }) }, "co-1", "u-1");
-    expect((rpcCalls.at(-1)!.args as { row: object }).row).toMatchObject({ attributes: { profile: "k" }, purchase_unit: "coil", pack_size: "1.5" });
+    expect((rpcCalls.filter((x) => x.name === "catalog_items").at(-1)!.args as { row: object }).row).toMatchObject({ attributes: { profile: "k" }, purchase_unit: "coil", pack_size: "1.5" });
     await applyOp({ k: "catalog.save", item: it0({ attributes: {}, purchaseUnit: " ", packSize: "" }) }, "co-1", "u-1");
-    expect((rpcCalls.at(-1)!.args as { row: object }).row).toMatchObject({ attributes: {}, purchase_unit: null, pack_size: null });
+    expect((rpcCalls.filter((x) => x.name === "catalog_items").at(-1)!.args as { row: object }).row).toMatchObject({ attributes: {}, purchase_unit: null, pack_size: null });
   });
 });
 
@@ -184,6 +184,7 @@ describe("unit:catalogAttributes — onlyNew: a module's items with a fixed id, 
     expect((rpcCalls[1]!.args as { filters: unknown }).filters).toEqual([["id", "i0"], ["company_id", "co-1"]]);
     rpcCalls.length = 0;
     await applyOp({ k: "catalog.save", item: it0({}) }, "co-1", "u-1");
+    // a plain save; the side table is written only for changed cost fields (19 §9, test/techNoCosts.test.ts)
     expect(rpcCalls.map((x) => [x.name, (x.args as { opts?: object }).opts])).toEqual([["catalog_items", { onConflict: "id" }]]);
   });
   it("security check #377: the id is not ours (another company's row, RLS hides it) → a refusal «id taken», never a quiet success", async () => {

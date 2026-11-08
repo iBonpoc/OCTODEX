@@ -68,6 +68,11 @@ exports.run = async (h) => {
   db = await h.db();
   h.expect(db.properties.find((x) => x.id === pr.id).contactIds.includes("pp-c1-2"), "Tom is a person of this property");
   await h.expectText(/Tom Mitchell/, "person in the list");
+  // a person of the property is a card with its own call and SMS buttons (06 «Серия B», B2)
+  const tom = p.getByTestId("property-person-pp-c1-2").locator("visible=true");
+  await tom.waitFor({ timeout: 5000 });
+  h.expect((await tom.getByRole("button", { name: /^Позвонить: / }).count()) === 1, "Tom's card: call button");
+  h.expect((await tom.getByRole("button", { name: /^SMS: / }).count()) === 1, "Tom's card: SMS button");
   await h.shot("property-card");
 
   // a task and a note of the property; empty documents and files say so

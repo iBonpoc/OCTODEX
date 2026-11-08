@@ -68,7 +68,7 @@ VERBOSE=1 supabase/tests/run.sh   # плюс текст каждой ожида�
 | `Lead.name/phone/city/message/receivedAt` | `contact_name/phone/address_text/message/received_at` | `message` добавлено |
 | `Estimate.status` `draft`/`sent`/`approved`/`declined` | `estimates.status` | Совпадает, в БД есть и другие статусы §9 |
 | `Estimate.totalCents/lines` | `estimate_versions.totals`, `estimate_line_items` выбранного варианта | |
-| `Estimate.marginPct` | считается из `estimate_line_costs` | Tech не видит |
+| `Estimate.marginPct` | `estimate_version_costs.margin_pct` (телефон пишет `totals.marginPct`, триггер переносит; миграция 20261108130000) | видит только `app.can_view_costs` |
 | `Estimate.signature/depositPaidAt` | `EstimateApproval`, deposit-инвойс | Позже |
 | `Invoice.totalCents/paidCents/dueDate/kind` | `invoices.total_cents/paid_cents/due_date/kind` | `paid_cents` ведёт триггер |
 | `Invoice.paidAt/method` | из `payments` | |
@@ -86,7 +86,8 @@ VERBOSE=1 supabase/tests/run.sh   # плюс текст каждой ожида�
 - `catalog_items` — услуги / работа / материалы / комплекты (`components` = `[{item_id, qty}]`). Материал: `unit_cost_cents` (закупка без налога) × (1 + `vendor_tax_bps`) × (1 + `markup_bps`) = цена в смете.
 - Смета из приложения: документ без себестоимости — в `estimate_versions.calc_inputs`; варианты и строки зеркалируются в `estimate_options` / `estimate_line_items` (те же id, `line_group` = service/labor/material, `taxable` по группе); себестоимость строк — в `estimate_line_costs`.
 - `estimates.public_token` (≥ 20 символов, приложение даёт 40) — ссылка `/p/<token>`. `public.portal_estimate` и `public.portal_accept` — `security definer`, доступны `anon` намеренно (предупреждение Supabase advisor ожидаемое): видно только клиентское, итог и депозит пересчитывает сервер по строкам; одобрение создаёт работу без даты (`jobs.status = draft`, в приложении «Ждёт даты») и уведомление; выезд создаёт подрядчик (op `job.schedule`, миграция `20261104030000_approval_needs_scheduling.sql`).
-- **Упрощения:** себестоимость в `catalog_items` видна всем участникам компании (включая tech); клиент пока не платит депозит онлайн (нужен Stripe) — депозит отмечает подрядчик; SMS/email уходят с телефона подрядчика (`sms:` / `mailto:`), автоматическая отправка — после подключения сервиса.
+- Себестоимость, налог продавца и наценка позиции — в `catalog_item_costs` (только `app.can_view_costs`); одноимённые колонки `catalog_items` всегда пустые (правило 16, шаг 1; спека 19 §9).
+- **Упрощения:** клиент пока не платит депозит онлайн (нужен Stripe) — депозит отмечает подрядчик; SMS/email уходят с телефона подрядчика (`sms:` / `mailto:`), автоматическая отправка — после подключения сервиса.
 - Тест: `supabase/tests/core_rls.sql` T8.
 
 ## Открытые вопросы

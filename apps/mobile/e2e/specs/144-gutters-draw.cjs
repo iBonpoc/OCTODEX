@@ -4,8 +4,11 @@
  *   the empty canvas asks to draw the first run; $0;
  * - one finger draws a run → a line with «… · эт 1», the $ (TEST rates, «тестовые цены») grows; a second run from
  *   its end sticks to it (a corner); the downspout tool puts one on a run; the storey button turns the picked run
- *   to storey 2 (label and colour); «Удалить» → «Отменить» brings it back; «Назад»/«Вперёд»;
- * - the toolbar goes bottom → under the right hand → under the left → bottom;
+ *   to storey 2 (label and colour); «Удалить» → «Отменить» brings it back; «Назад»/«Вернуть»;
+ * - П20.8: every toolbar cell has its word under it, none cut off (Желоб, Водосток, Выбрать, Эт 1 / Этаж, Назад, Ещё);
+ *   a picked tool says what to do («Нажмите на желоб, где водосток») until it is used; a downspout is «В1» on the canvas;
+ *   «Удалить» stands by what is picked; «Вернуть» and the toolbar's place are in «Ещё»;
+ * - the toolbar goes bottom → under the right hand → under the left → bottom (from «Ещё»);
  * - off: nothing is stored; on (the 7-day trial): the drawing goes to the store (module.op, spec 33 П21 M5a) in the
  *   database's shape (П19: run {a, b}, downspout {runId, atIn}, whole inches) and comes back after a reload.
  * Finds things by testID; waits on what it checks.
@@ -53,6 +56,12 @@ exports.run = async (h) => {
   h.expect((await money()) === 0, "empty → $0");
   h.expect((await tid("tab-bar").count()) === 0, "no bottom bar over the canvas");
   await h.shot("empty");
+  // П20.8: the words under the icons, whole
+  const bar = await tid("draw-toolbar").innerText();
+  for (const w of ["Желоб", "Водосток", "Выбрать", "Эт 1", "Этаж", "Назад", "Ещё"]) h.expect(bar.includes(w), `toolbar says «${w}» (${bar.replace(/\n/g, " | ")})`);
+  const cut = await p.getByTestId("draw-toolbar").locator("visible=true").first().evaluate((el) => [...el.querySelectorAll("div")].filter((d) => d.childElementCount === 0 && d.textContent && d.scrollWidth > d.clientWidth + 1).map((d) => d.textContent));
+  h.expect(cut.length === 0, `no word is cut off (${cut.join(", ")})`);
+  h.expect((await tid("draw-delete").count()) === 0, "«Удалить» only by what is picked: nothing picked — no button");
 
   // a run along the roof edge
   const b = await box();
@@ -65,7 +74,7 @@ exports.run = async (h) => {
   const m1 = await money();
   h.expect(m1 > 0, `the $ grows (${m1})`);
   h.expect(/тестовые цены/.test(await tid("draw-total").innerText()), "marked as test prices");
-  h.expect(/Линия · .* · эт 1/.test(await tid("draw-selected").innerText()), "the new run is picked");
+  h.expect(/Желоб · .* · эт 1/.test(await tid("draw-selected").innerText()), "the new run is picked");
   h.expect((await tid("draw-empty").count()) === 0, "the empty hint is gone");
 
   // a second run from near its end: sticks to it → a corner, more $
@@ -78,16 +87,24 @@ exports.run = async (h) => {
 
   // a downspout on the first run
   await tid("draw-tool-ds").getByRole("button").click();
+  await tid("draw-hint").waitFor({ timeout: 3000 });
+  h.expect(/Нажмите на желоб, где водосток/.test(await tid("draw-hint").innerText()), "the downspout tool says where to tap");
+  await h.shot("hint");
   await p.mouse.click((x0 + x1) / 2, y + 3);
   await waitFor(async () => (await count("circle")) === 1, "a downspout on the run");
-  h.expect(/· 1 даунсп\./.test(await tid("draw-total").innerText()), "summary counts it");
+  await waitFor(async () => (await tid("draw-hint").count()) === 0, "the hint is gone once the downspout is there");
+  h.expect((await labels()).includes("В1"), "the downspout is «В1» on the canvas");
+  h.expect(/Желоб: \d+ ft · водостоков: 1/.test(await tid("draw-total").innerText()), "summary in plain words: gutter feet, downspouts");
   h.expect((await money()) > m2, "the downspout adds to the $");
   await h.shot("drawn");
 
   // pick the first run, storey 2
   await tid("draw-tool-select").getByRole("button").click();
+  await tid("draw-hint").waitFor({ timeout: 3000 });
+  h.expect(/Нажмите на желоб или водосток/.test(await tid("draw-hint").innerText()), "«Выбрать» says what to tap");
   await p.mouse.click(x0 + (x1 - x0) * 0.2, y);
-  await waitFor(async () => /Линия/.test(await tid("draw-selected").innerText().catch(() => "")), "picked the run");
+  await waitFor(async () => /Желоб/.test(await tid("draw-selected").innerText().catch(() => "")), "picked the run");
+  await waitFor(async () => (await tid("draw-hint").count()) === 0, "the hint is gone once something is picked");
   const before = new Set(await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => l.getAttribute("stroke"))));
   await tid("draw-story").click();
   await waitFor(async () => (await labels()).some((t) => / · эт 2$/.test(t)), "storey 2 on its label");
@@ -104,8 +121,11 @@ exports.run = async (h) => {
   // the canvas's own «назад» / «вперёд»
   await tid("draw-undo").getByRole("button").click();
   await waitFor(async () => (await count("circle")) === 0 && (await count("line")) === 1, "«Назад» = the delete again");
+  await tid("draw-more").getByRole("button").click();
+  await tid("draw-more-sheet").waitFor({ timeout: 3000 });
+  await h.shot("more");
   await tid("draw-redo").getByRole("button").click();
-  await waitFor(async () => (await count("circle")) === 1, "«Вперёд»");
+  await waitFor(async () => (await count("circle")) === 1, "«Ещё» → «Вернуть»");
 
   // «Выбрать»: drag the free end of the second run — it grows
   const ends = await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => ["x1", "y1", "x2", "y2"].map((k) => Number(l.getAttribute(k)))));
@@ -124,12 +144,17 @@ exports.run = async (h) => {
   const vw = 2 * cb.x + cb.width;
   const t0 = await tx();
   h.expect(t0.w > t0.h, "bottom: a row");
-  await tid("draw-place").getByRole("button").click();
+  const placeTo = async (k) => {
+    await tid("draw-more").getByRole("button").click();
+    await tid(`draw-place-${k}`).getByRole("button").click();
+    await tid("draw-more-sheet").waitFor({ state: "hidden", timeout: 3000 });
+  };
+  await placeTo("right");
   await waitFor(async () => { const t = await tx(); return t.h > t.w && t.cx > vw / 2; }, "under the right hand: a column on the right");
   await h.shot("right");
-  await tid("draw-place").getByRole("button").click();
+  await placeTo("left");
   await waitFor(async () => { const t = await tx(); return t.h > t.w && t.cx < vw / 2; }, "under the left hand: a column on the left");
-  await tid("draw-place").getByRole("button").click();
+  await placeTo("bottom");
   await waitFor(async () => { const t = await tx(); return t.w > t.h; }, "back to the bottom");
 
   await p.waitForTimeout(1500);

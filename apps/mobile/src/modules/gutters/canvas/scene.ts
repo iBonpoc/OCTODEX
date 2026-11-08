@@ -41,6 +41,8 @@ export interface SceneOpts {
   padX: number;
   gap: number;
   selected?: string | null;
+  /** the radius of a downspout's mark: its label stays off it (П20.8) */
+  dsPad?: number;
   /** text of a downspout label and a storey label (i18n: «DS 3», «эт 2») */
   dsText: (n: number) => string;
   storyText: (n: Story) => string;
@@ -67,19 +69,19 @@ export function buildScene(d: Drawing, o: SceneOpts): Scene {
   const h = Math.ceil(o.fontSize * 1.4);
   const texts = new Map<string, { text: string; kind: SceneLabel["kind"] }>();
   const want: LabelWant[] = [];
-  const add = (id: string, a: [number, number], b: [number, number], text: string, kind: SceneLabel["kind"], priority: number) => {
+  const add = (id: string, a: [number, number], b: [number, number], text: string, kind: SceneLabel["kind"], priority: number, pad?: number) => {
     texts.set(id, { text, kind });
-    want.push({ id, a, b, w: labelWidth(text, o.fontSize, o.padX), h, priority });
+    want.push({ id, a, b, w: labelWidth(text, o.fontSize, o.padX), h, priority, pad });
   };
   d.runs.forEach((r, i) => {
     const s = runs[i]!;
     add(`len:${r.id}`, s.a, s.b, o.lenWithStory ? `${ftIn(runLengthIn(r))} · ${o.storyText(s.story)}` : ftIn(runLengthIn(r)), "len", runLengthIn(r) + (s.selected ? 1e6 : 0));
   });
-  ds.forEach((s, i) => add(`ds:${s.id}`, s.at, s.at, o.dsText(i + 1), "ds", -1));
+  ds.forEach((s, i) => add(`ds:${s.id}`, s.at, s.at, o.dsText(i + 1), "ds", -1, o.dsPad));
   for (const x of o.extra ?? []) {
     const p = toScreen(o.view, x.at);
     add(`x:${x.id}`, p, p, x.text, x.kind, -2);
   }
-  const placed = layoutLabels(want, o.viewport, o.gap, o.keepAll);
+  const placed = layoutLabels(want, o.viewport, o.gap, o.keepAll, o.dsPad ? ds.map((x) => ({ at: x.at, r: o.dsPad! })) : []);
   return { runs, ds, labels: placed.map((p) => ({ ...p, ...texts.get(p.id)! })) };
 }
