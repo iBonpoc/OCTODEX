@@ -176,8 +176,9 @@ insert into public.properties (id, company_id, customer_id, address_line1, addre
   ('d1a00000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', '1 Elm St', 'Pasadena', 2),
   ('d1a00000-0000-0000-0000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '9 Oak Ave', 'Glendale', 1);
 
-insert into public.leads (company_id, source_id, contact_name, phone, cost_cents) values
-  ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'Neighbor', '+13235550199', 4500);
+-- (a lead's price lives in lead_costs; leads.cost_cents is retired — 20261108130000, 19 §9 P4)
+insert into public.leads (company_id, source_id, contact_name, phone) values
+  ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'Neighbor', '+13235550199');
 
 -- номер, присланный клиентом, игнорируется
 insert into public.jobs (id, company_id, number, title, customer_id, property_id, status) values
@@ -5292,9 +5293,16 @@ select tst.ok((public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc')::t
               jsonb_array_length(public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc' -> 'options' -> 0 -> 'lines') = 2,
               'the sent version is cut the same way');
 :as_super
--- the stored document is untouched (locked versions keep their signed text), only the client's copy is cut
-select tst.ok((select calc_inputs -> 'options' -> 0 -> 'lines' -> 0 ->> 'unitCostCents' from public.estimate_versions v
-                 join public.estimates e on e.current_version_id = v.id where e.title = 'T60 costs') = '4000', 'the app still reads its own costs');
+-- the stored document: since 20261108130000 (19 §9, M1) an OPEN version never keeps a line's unitCostCents (an assigned
+-- tech reads calc_inputs; the app's costs live in estimate_line_costs) — the rest of the line stays as it was stored
+select tst.ok((select calc_inputs -> 'options' -> 0 -> 'lines' -> 0 from public.estimate_versions v
+                 join public.estimates e on e.current_version_id = v.id where e.title = 'T60 costs')
+              = $j${"id": "l1", "name": "Install", "description": "Labor", "group": "labor", "quantity": "2", "unit": "hr", "unitPriceCents": 9000,
+                   "catalogItemId": "cat-1", "vendor": "ABC Supply",
+                   "optional": false, "selected": false, "clientVisible": true}$j$::jsonb,
+              'T100 the stored open document has no line cost, supplier tax or markup, the rest is kept');
+select tst.ok(not jsonb_path_exists((select calc_inputs from public.estimate_versions v join public.estimates e on e.current_version_id = v.id
+                                      where e.title = 'T60 costs'), '$.options[*].lines[*].unitCostCents'), 'T100 no line of it keeps unitCostCents');
 select tst.ok(app.client_doc(null) is null and app.client_doc('"x"') is null and app.client_doc('{}') = '{"options": []}', 'odd documents give nothing or an empty one');
 -- rule 18: only the page function (security definer) calls them
 select tst.ok(not has_function_privilege('anon', 'app.client_doc(jsonb)', 'execute')
@@ -8532,5 +8540,149 @@ delete from public.properties where id = 'c1040000-0000-4000-8000-0000000000d1';
 delete from public.customers where id = 'c1040000-0000-4000-8000-0000000000c1';
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T104 photo minimums of a visit: only the office sets them (1..20), a tech and sales cannot ok'
+-- ---------------------------------------------------------------- T99: the tech does not see the price list's costs (19 §9, P1)
+-- catalog_items keeps its old cost columns (rule 16 step 1) but they are always null: a trigger moves what a phone
+-- writes into catalog_item_costs, which only app.can_view_costs reads (owner / admin / office, view_costs).
+:as_owner_a
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, unit_cost_cents, vendor_tax_bps, markup_bps)
+  values ('99000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T99 bracket (test)', 'ea', 1213, 1000, 1025, 1000);
+select tst.ok((select row(unit_cost_cents, vendor_tax_bps, markup_bps) = row(1000::bigint, 1025, 1000) from public.catalog_item_costs
+                where item_id = '99000000-0000-4000-8000-000000000001'), 'T99 the owner reads the cost from catalog_item_costs');
+select tst.ok((select unit_cost_cents is null and vendor_tax_bps is null and markup_bps is null and unit_price_cents = 1213
+                 from public.catalog_items where id = '99000000-0000-4000-8000-000000000001'), 'T99 the item row keeps the price, its cost columns are blank');
+-- an old office build: loaded null costs, saves the item with a new price and null costs — the cost stays
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, unit_cost_cents, vendor_tax_bps, markup_bps)
+  values ('99000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T99 bracket (test)', 'ea', 1300, null, null, null)
+  on conflict (id) do update set unit_price_cents = excluded.unit_price_cents, unit_cost_cents = excluded.unit_cost_cents,
+    vendor_tax_bps = excluded.vendor_tax_bps, markup_bps = excluded.markup_bps;
+select tst.ok((select unit_cost_cents = 1000 and markup_bps = 1000 from public.catalog_item_costs where item_id = '99000000-0000-4000-8000-000000000001'),
+  'T99 null from an old phone never erases the cost');
+-- review #383 №2: the new app's save of a phone without costs sends no cost column at all — the side table keeps all
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents)
+  values ('99000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'T99 bracket renamed (test)', 'ea', 1300)
+  on conflict (id) do update set name = excluded.name, unit_price_cents = excluded.unit_price_cents;
+select tst.ok((select row(unit_cost_cents, vendor_tax_bps, markup_bps) = row(1000::bigint, 1025, 1000) from public.catalog_item_costs
+                where item_id = '99000000-0000-4000-8000-000000000001'), 'T99 a save without cost columns keeps cost, supplier tax and markup');
+-- an old build sends a new cost in the old column: it lands in the side table, the row stays blank
+update public.catalog_items set unit_cost_cents = 1100 where id = '99000000-0000-4000-8000-000000000001';
+select tst.ok((select k.unit_cost_cents = 1100 and k.markup_bps = 1000 and i.unit_cost_cents is null
+                 from public.catalog_item_costs k join public.catalog_items i on i.id = k.item_id where k.item_id = '99000000-0000-4000-8000-000000000001'),
+  'T99 a cost written the old way moves to catalog_item_costs');
+-- «insert or nothing» (a module item, a replay) on an existing row does not touch its cost
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, unit_cost_cents)
+  values ('99000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'material', 'x', 'ea', 1, 1) on conflict (id) do nothing;
+select tst.ok((select unit_cost_cents = 1100 from public.catalog_item_costs where item_id = '99000000-0000-4000-8000-000000000001'),
+  'T99 ON CONFLICT DO NOTHING keeps the cost');
+:as_owner_b
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, unit_cost_cents)
+  values ('99000000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'material', 'B', 'ea', 1, 1) on conflict (id) do nothing;
+select tst.ok(tst.cnt('select 1 from public.catalog_item_costs where item_id = ''99000000-0000-4000-8000-000000000001''') = 0, 'T99 company B does not see A''s cost');
+select tst.blocked($q$update public.catalog_item_costs set unit_cost_cents = 1 where item_id = '99000000-0000-4000-8000-000000000001'$q$, 'T99 company B changes A''s cost');
+:as_office_a
+select tst.ok((select unit_cost_cents = 1100 from public.catalog_item_costs where item_id = '99000000-0000-4000-8000-000000000001'),
+  'T99 company B''s «insert or nothing» with A''s id left A''s cost alone; the office reads it');
+-- the new app clears a cost in the side table itself, the way ops.ts catalog.save does it (PostgREST upsert)
+insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents, vendor_tax_bps, markup_bps)
+  values ('99000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 1100, 1025, null)
+  on conflict (item_id) do update set item_id = excluded.item_id, company_id = excluded.company_id, unit_cost_cents = excluded.unit_cost_cents,
+    vendor_tax_bps = excluded.vendor_tax_bps, markup_bps = excluded.markup_bps;
+select tst.ok((select markup_bps is null and unit_cost_cents = 1100 from public.catalog_item_costs where item_id = '99000000-0000-4000-8000-000000000001'),
+  'T99 the office clears the markup');
+:as_tech_a
+do $$ begin
+  -- the old app's `select *` still works for the tech; no cost anywhere
+  perform tst.ok(tst.cnt('select * from public.catalog_items') > 0, 'T99 the tech still reads the price list with select *');
+  perform tst.ok(tst.cnt('select 1 from public.catalog_items where unit_cost_cents is not null or vendor_tax_bps is not null or markup_bps is not null') = 0,
+    'T99 the tech sees no cost, supplier tax or markup in catalog_items');
+  perform tst.ok(tst.cnt('select 1 from public.catalog_item_costs') = 0, 'T99 the tech reads nothing from catalog_item_costs');
+  perform tst.fails($q$insert into public.catalog_item_costs (item_id, company_id, unit_cost_cents)
+    values ('99000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 1)$q$, 'T99 the tech writes a cost');
+  perform tst.blocked($q$update public.catalog_item_costs set unit_cost_cents = 1$q$, 'T99 the tech changes a cost');
+end $$;
+-- company B «upserts» (ON CONFLICT DO UPDATE, the app's plain save) with A's id: RLS refuses before any trigger
+:as_owner_b
+select tst.fails($q$insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, unit_cost_cents)
+  values ('99000000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'material', 'B', 'ea', 1, 1)
+  on conflict (id) do update set unit_cost_cents = excluded.unit_cost_cents, unit_price_cents = excluded.unit_price_cents$q$, 'T99 company B upserts over A''s item');
+:as_super
+select tst.ok((select unit_cost_cents = 1100 from public.catalog_item_costs where item_id = '99000000-0000-4000-8000-000000000001'), 'T99 A''s cost after B''s upsert');
+:as_sales_a
+select tst.ok(tst.cnt('select 1 from public.catalog_item_costs') = 0, 'T99 sales without view_costs reads no cost');
+-- sales edit the price list but not our costs: a cost sent the old way is blanked, not moved
+update public.catalog_items set unit_cost_cents = 1, markup_bps = 1 where id = '99000000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select k.unit_cost_cents = 1100 and i.unit_cost_cents is null and i.markup_bps is null
+                 from public.catalog_item_costs k join public.catalog_items i on i.id = k.item_id where k.item_id = '99000000-0000-4000-8000-000000000001'),
+  'T99 sales without view_costs cannot change a cost through the old column');
+-- a tech never sees costs, also with view_costs switched on by mistake (matrix 04 §1)
+update public.memberships set permissions_override = coalesce(permissions_override, '{}'::jsonb) || '{"view_costs": true}'
+ where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+:as_tech_a
+select tst.ok(tst.cnt('select 1 from public.catalog_item_costs') = 0 and tst.cnt('select 1 from public.estimate_line_costs') = 0,
+  'T99 a tech with view_costs still reads no cost');
+:as_super
+update public.memberships set permissions_override = permissions_override - 'view_costs'
+ where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+:as_sales_a
+select tst.ok(tst.cnt('select 1 from public.catalog_items where unit_cost_cents is not null or markup_bps is not null') = 0, 'T99 sales sees no cost in catalog_items');
+:as_super
+select tst.ok(not exists (select 1 from public.catalog_items where unit_cost_cents is not null or vendor_tax_bps is not null or markup_bps is not null),
+  'T99 no item anywhere keeps a cost in its own row');
+select tst.ok(not has_table_privilege('anon', 'public.catalog_item_costs', 'select'), 'T99 anon has no access to catalog_item_costs');
+delete from public.catalog_items where id = '99000000-0000-4000-8000-000000000001';
+select tst.ok(not exists (select 1 from public.catalog_item_costs where item_id = '99000000-0000-4000-8000-000000000001'), 'T99 the cost goes with its item');
+\echo 'T99 the price list''s cost, supplier tax and markup: only who sees costs reads them; old phones keep working ok'
+
+-- ---------------------------------------------------------------- T100: the tech does not see an estimate's margin (19 §9, P2)
+-- totals is «only what the client sees»: totals.marginPct moves to estimate_version_costs (can_view_costs).
+:as_tech_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T100 tech draft');
+-- an old tech build writes the margin it counted (as the app did): it is not his to read back
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, totals)
+  values ('a1000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a1000000-0000-4000-8000-000000000001', 1,
+          '{"total": 50000, "deposit": 5000, "marginPct": "33.3"}') on conflict (id) do nothing;
+select tst.ok((select totals = '{"total": 50000, "deposit": 5000}'::jsonb from public.estimate_versions where id = 'a1000000-0000-4000-8000-000000000002'),
+  'T100 the tech reads his version: total and deposit, no margin');
+select tst.ok(tst.cnt('select 1 from public.estimate_version_costs') = 0, 'T100 the tech reads nothing from estimate_version_costs');
+select tst.ok(tst.cnt($q$select 1 from public.estimate_versions where totals ? 'marginPct'$q$) = 0, 'T100 no version the tech reads has a margin');
+select tst.fails($q$insert into public.estimate_version_costs (version_id, company_id, margin_pct)
+  values ('a1000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '99')$q$, 'T100 the tech writes a margin');
+:as_office_a
+select tst.ok((select margin_pct = '33.3' from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'),
+  'T100 the office reads the margin from estimate_version_costs');
+update public.estimate_versions set totals = '{"total": 52000, "deposit": 5200, "marginPct": "35.0"}' where id = 'a1000000-0000-4000-8000-000000000002';
+select tst.ok((select margin_pct = '35.0' from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'), 'T100 a new margin replaces the old');
+update public.estimate_versions set totals = '{"total": 52000, "deposit": 5200}' where id = 'a1000000-0000-4000-8000-000000000002';
+select tst.ok((select margin_pct = '35.0' from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'), 'T100 no key — the margin stays');
+update public.estimate_versions set totals = '{"total": 52000, "deposit": 5200, "marginPct": null}' where id = 'a1000000-0000-4000-8000-000000000002';
+select tst.ok((select margin_pct is null from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'), 'T100 null — costs not complete, no margin');
+select tst.blocked($q$update public.estimate_version_costs set margin_pct = '1'$q$, 'T100 the office writes the margin table directly');
+:as_sales_a
+select tst.ok(tst.cnt('select 1 from public.estimate_version_costs') = 0, 'T100 sales without view_costs reads no margin');
+-- company B «insert or nothing» with A's version id: no margin of A changes (AFTER INSERT fires only for a new row)
+:as_owner_b
+select tst.blocked($q$insert into public.estimate_versions (id, company_id, estimate_id, version_no, totals)
+  values ('a1000000-0000-4000-8000-000000000002', 'cb000000-0000-0000-0000-000000000000', 'a1000000-0000-4000-8000-000000000001', 9, '{"marginPct": "99"}')
+  on conflict (id) do nothing$q$, 'T100 company B inserts with A''s version id');
+:as_office_a
+select tst.ok((select margin_pct is null from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'), 'T100 B''s insert left A''s margin');
+-- the margin is a number as the engine writes it, nothing else (a huge loss is still a number)
+update public.estimate_versions set totals = '{"total": 1, "marginPct": "-10000000.0"}' where id = 'a1000000-0000-4000-8000-000000000002';
+select tst.ok((select margin_pct = '-10000000.0' from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'), 'T100 a huge negative margin is kept');
+select tst.fails($q$update public.estimate_versions set totals = '{"total": 1, "marginPct": "lots"}' where id = 'a1000000-0000-4000-8000-000000000002'$q$, 'T100 a margin that is not a number');
+-- P4: the retired lead cost columns take no value again
+select tst.fails($q$update public.leads set cost_cents = 100 where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T99 leads.cost_cents is retired');
+select tst.fails($q$update public.lead_sources set default_cost_cents = 100 where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T99 lead_sources.default_cost_cents is retired');
+-- a sent version stays locked (t40 is on again after the migration)
+:as_owner_a
+update public.estimate_versions set locked_at = now() where id = 'a1000000-0000-4000-8000-000000000002';
+select tst.fails($q$update public.estimate_versions set totals = '{"total": 1, "marginPct": "9"}' where id = 'a1000000-0000-4000-8000-000000000002'$q$,
+  'T100 a locked version does not change, margin or not');
+:as_super
+select tst.ok(not has_table_privilege('anon', 'public.estimate_version_costs', 'select'), 'T100 anon has no access to estimate_version_costs');
+select tst.ok(not exists (select 1 from public.estimate_versions where totals ? 'marginPct'), 'T100 no version anywhere keeps a margin in totals');
+select tst.ok(not exists (select 1 from pg_trigger where tgname = 't40_version_lock' and tgenabled <> 'O'), 'T100 t40_version_lock is on');
+\echo 'T100 an estimate''s margin: only who sees costs reads it; a sent version stays locked ok'
 
 \echo 'ALL TESTS PASSED'

@@ -12,7 +12,7 @@ import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
 import { appRoles, loadCompanyDB, loadCompanyModule } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
-import { applyOp, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
+import { applyOp, catalogCostChange, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
 import { defaultLeadAssignee } from "@/features/leadAssignee";
 import { keepLast, stepPending } from "@/features/location";
@@ -1943,10 +1943,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // the server's rules for properties first (features/catalogExtras.ts): a bad one never loses the whole save
       saveCatalogItem: (it0) => {
         const it = cleanCatalogItem(it0);
+        // 19 §9: only the cost fields changed here go to the server — a phone without costs never erases them
+        const costs = catalogCostChange(dbRef.current.catalog.find((x) => x.id === it.id), it);
         return mutate(
           "catalog.save",
           (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it] }),
-          { k: "catalog.save", item: it },
+          { k: "catalog.save", item: it, costs },
         );
       },
       saveCatalogItems: (items, opts) => {
@@ -1956,7 +1958,9 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           mutate(
             "catalog.save",
             (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? (onlyNew ? d.catalog : d.catalog.map((x) => (x.id === it.id ? it : x))) : [...d.catalog, it] }),
-            onlyNew ? { k: "catalog.save", item: it, onlyNew: true } : { k: "catalog.save", item: it },
+            onlyNew
+              ? { k: "catalog.save", item: it, onlyNew: true, costs: catalogCostChange(undefined, it) }
+              : { k: "catalog.save", item: it, costs: catalogCostChange(dbRef.current.catalog.find((x) => x.id === it.id), it) },
           ),
         );
         // the last one first: each undo puts back the phone's state from before its own save
