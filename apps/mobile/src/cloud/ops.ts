@@ -44,7 +44,8 @@ export type Op =
   /** the photo minimums of the visit's templates, with the snapshot (S4, S9; docs/specs/08 §11.7 №7); null — the company's */
   | { k: "chk.visit.mins"; visitId: string; before: number | null; after: number | null }
   /** an estimate template, whole (owner, admin, office; docs/specs/07 §11); archive = archivedAt */
-  | { k: "est.template.save"; template: EstimateTemplate }
+  /** ifNew: a module's starter (fixed id) — inserted once, never updated over the office's edits (spec 07 §12 №6) */
+  | { k: "est.template.save"; template: EstimateTemplate; ifNew?: boolean }
   /** a checklist template, whole (owner, admin, office) */
   /** ifNew: a module's starter (fixed id) — inserted once, never over the office's edits (another phone added it first) */
   | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
@@ -382,12 +383,14 @@ export function estimateTemplateToDb(t: EstimateTemplate, companyId: string): Re
     : t.doc;
   return { id: t.id, company_id: companyId, name: cleanText(t.name, TEMPLATE_NAME_MAX), doc, module_key: t.module ?? null, archived_at: t.archivedAt ?? null };
 }
-async function saveEstimateTemplate(t: EstimateTemplate, c: string) {
+async function saveEstimateTemplate(t: EstimateTemplate, c: string, ifNew = false) {
   // module_key only on insert (no update grant, an upsert would send it in the update too): insert if new (a retry or
   // another phone's insert does nothing), then the update of what may change
   const row = estimateTemplateToDb(t, c);
   const { module_key: _m, id: _id, company_id: _c, ...upd } = row;
   await run(ins("estimate_templates", row));
+  // a starter: the insert only — another phone added it first and the office may have edited it since
+  if (ifNew) return;
   return run(supabase.from("estimate_templates").update(upd).eq("id", t.id));
 }
 
@@ -554,7 +557,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(Promise.resolve(r));
     }
     case "est.template.save":
-      return saveEstimateTemplate(op.template, c);
+      return saveEstimateTemplate(op.template, c, !!op.ifNew);
     case "supplier.save":
       return run(supabase.from("suppliers").upsert(supplierToRow(op.supplier, c), { onConflict: "id" }));
     case "chk.template.save":

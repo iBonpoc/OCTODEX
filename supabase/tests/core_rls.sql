@@ -11266,4 +11266,27 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_cost_history()
 -- the move on a database with data: upgrade/20261110000000_suppliers.after.sql
 \echo 'T146 doors ok'
 
+-- ---------------------------------------------------------------- T148: a tech makes an estimate from a template himself (docs/specs/07 §12 №12)
+:as_office_a
+insert into public.estimate_templates (id, company_id, name, doc) values ('e3c00000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T148 template',
+  '{"options":[{"id":"o","name":"A","lines":[{"id":"l","name":"Call","group":"service","quantity":"1","unit":"ea","unitPriceCents":100}]}],"settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"}}}');
+:as_tech_a
+-- his own property (a visit of his job there, T3): the estimate and its version 1 from the template — one use, counted by the server
+insert into public.estimates (id, company_id, customer_id, property_id, title) values
+  ('e3c00000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T148 tech from template');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values
+  ('e3c00000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'e3c00000-0000-4000-8000-0000000000e1', 1);
+update public.estimate_versions set source = 'template', template_id = 'e3c00000-0000-4000-8000-000000000001' where id = 'e3c00000-0000-4000-8000-0000000000f1';
+select tst.ok(tst.cnt($q$select 1 from public.estimate_template_uses where template_id = 'e3c00000-0000-4000-8000-000000000001'
+                        and estimate_id = 'e3c00000-0000-4000-8000-0000000000e1'$q$) = 1, 'T148 the tech''s estimate from a template counts one use');
+-- another tech's property: no estimate, so no use
+do $$ begin
+  perform tst.fails($q$insert into public.estimates (company_id, customer_id, property_id, title) values
+    ('ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', 'd1a00000-0000-0000-0000-000000000002', 'T148 not his')$q$, 'T148 a tech makes no estimate on a property not his');
+end $$;
+select tst.ok(tst.cnt($q$select 1 from public.estimate_template_uses where template_id = 'e3c00000-0000-4000-8000-000000000001'$q$) = 1, 'T148 nothing else counted');
+-- the template itself untouched by his use; he still cannot change it
+select tst.blocked($q$update public.estimate_templates set name = 'tech' where id = 'e3c00000-0000-4000-8000-000000000001'$q$, 'T148 the tech does not change the template he used');
+\echo 'T148 a tech makes an estimate from a template ok'
+
 \echo 'ALL TESTS PASSED'

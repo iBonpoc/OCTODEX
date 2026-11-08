@@ -12,7 +12,7 @@ import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { ChecklistTemplate } from "@/data/types";
 import { canEditTemplates, canEditVisitSettings, starterTemplate, starterTemplateId, startersToAdd, visitSettings } from "@/features/checklist";
-import { activeModules } from "@/modules/registry";
+import { activeModules, moduleDef } from "@/modules/registry";
 import { Button, ReadOnly, StatusChip, Stepper, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
@@ -26,6 +26,11 @@ export default function CompanyChecklists() {
   const [showArchived, setShowArchived] = useState(false);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/company"));
   const all = store.db.checklistTemplates ?? [];
+  // the module's name, not its key (a module the app no longer has — its key as is)
+  const moduleName = (key: string) => {
+    const d = moduleDef(key);
+    return d ? t(d.titleKey) : key;
+  };
   const live = all.filter((x) => !x.archivedAt);
   const archived = all.filter((x) => x.archivedAt);
   const edit = canEditTemplates(store.role);
@@ -52,7 +57,7 @@ export default function CompanyChecklists() {
         lead={{ kind: "icon", icon: "checklist" }}
         title={x.name}
         when={`${t("chk2.items", { n: x.items.length, m: x.items.filter((i) => i.required).length })} · ${when(x)}`}
-        status={x.archivedAt ? { tone: "neutral", label: t("chk2.archived") } : x.module ? { tone: "info", label: t("chk2.module", { m: x.module }) } : undefined}
+        status={x.archivedAt ? { tone: "neutral", label: t("chk2.archived") } : x.module ? { tone: "info", label: t("chk2.module", { m: moduleName(x.module) }) } : undefined}
         onPress={() => router.push(`/company/checklist/${x.id}`)}
       />
     </View>

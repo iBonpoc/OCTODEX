@@ -306,7 +306,8 @@ interface StoreCtx {
   /** create or update a universal estimate (draft) */
   saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID; templateId?: ID }) => Undo;
   /** E3 (docs/specs/07 §11): an estimate template, whole (new, changed, archived = archivedAt); director and office */
-  saveEstimateTemplate: (t: EstimateTemplate) => Undo;
+  /** ifNew: a module's starter (fixed id) — added once, never over the office's edits (docs/specs/07 §12 №6) */
+  saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean }) => Undo;
   /** client + property for an estimate from a lead (creates a prospect card the first time) */
   leadEstimateTarget: (leadId: ID) => { customerId: ID; propertyId: ID; undo: Undo } | null;
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
@@ -1792,10 +1793,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { k: "estimate.send", id, token },
         );
       },
-      saveEstimateTemplate: (t) => {
+      saveEstimateTemplate: (t, opts) => {
         const clean = cleanEstimateTemplate(t);
         // a refusal is never queued (lesson of the director): no name, not the office, a server before the templates
         if (!clean || !canEditEstimateTemplates(role) || dbRef.current.estimateTemplatesMissing) return noop;
+        // a starter (ifNew) already on the phone: nothing (a second tap; a second phone's after the next read)
+        if (opts?.ifNew && (dbRef.current.estimateTemplates ?? []).some((x) => x.id === clean.id)) return noop;
         return mutate(
           "estimate.template",
           (d) => {
@@ -1804,7 +1807,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const next = { ...clean, uses: old?.uses ?? clean.uses, lastUsedAt: old?.lastUsedAt ?? clean.lastUsedAt };
             return { ...d, estimateTemplates: old ? list.map((x) => (x.id === clean.id ? next : x)) : [...list, next] };
           },
-          { k: "est.template.save", template: clean },
+          { k: "est.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true } : {}) },
         );
       },
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {

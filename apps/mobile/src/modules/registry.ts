@@ -104,6 +104,39 @@ export interface StarterChecklist {
   minPhotosAfter?: number;
 }
 
+/**
+ * A starter estimate template of a module (docs/specs/07 §12, E3c). The office adds it on «Шаблоны смет»: the template's
+ * name in the app's language (only the team sees it), options, lines and note in the company's DOCUMENT language (they
+ * reach the client, rule 7). No prices here (rule 9): a line names its catalog item by the item's properties (`match`,
+ * as catalogMatch) and unit; found — the item's link and today's price, not found — price 0 and «проверьте цену».
+ * Tax and deposit come from the company's settings; no discount. Then it is the company's own template.
+ */
+export interface StarterEstimate {
+  /** unique within the module; testID `est-starter-<module>-<key>` */
+  key: string;
+  nameKey: DictKey;
+  noteKey?: DictKey;
+  /** 1..10 */
+  options: {
+    key: string;
+    nameKey: DictKey;
+    recommended?: boolean;
+    /** 0..200; a line's key is unique within the template */
+    lines: {
+      key: string;
+      nameKey: DictKey;
+      group: "service" | "labor" | "material";
+      /** the engine's decimal, e.g. "1", "2.5" */
+      quantity: string;
+      /** ≤ 20 characters; the catalog item must have the same unit */
+      unit: string;
+      /** the catalog item's properties (catalog_items.attributes) */
+      match?: Record<string, string>;
+      optional?: boolean;
+    }[];
+  }[];
+}
+
 export interface ModuleDef {
   /** = company_modules.module_key: ^[a-z][a-z0-9_]{1,30}$ */
   key: string;
@@ -136,6 +169,8 @@ export interface ModuleDef {
   estimateNotes?: (e: import("@/data/types").Estimate, db: import("@/data/types").DB, data: unknown) => ModuleNote[];
   /** starter checklist templates the office may add (optional; a module without them adds none) */
   checklistTemplates?: StarterChecklist[];
+  /** starter estimate templates the office may add (optional; docs/specs/07 §12) */
+  estimateTemplates?: StarterEstimate[];
   /** the text of «not saved: the trial is over» (a refused batch of this module's changes, spec 33 П21.1); params {count} */
   rejectedKey?: DictKey;
 }
@@ -204,6 +239,20 @@ export function registerModule(def: ModuleDef): void {
   const starters = def.checklistTemplates ?? [];
   if (starters.some((t) => t.items.length < 1 || t.items.length > 100) || new Set(starters.map((t) => t.key)).size !== starters.length)
     throw new Error(`module ${def.key}: a starter has 1..100 items and its own key`);
+  const est = def.estimateTemplates ?? [];
+  const qty = /^([0-9]{1,12}([.][0-9]{1,12})?|[.][0-9]{1,12})$/;
+  if (
+    new Set(est.map((t) => t.key)).size !== est.length ||
+    est.some((t) => {
+      const lines = t.options.flatMap((o) => o.lines);
+      return (
+        t.options.length < 1 || t.options.length > 10 || t.options.some((o) => o.lines.length > 200) ||
+        new Set(t.options.map((o) => o.key)).size !== t.options.length || new Set(lines.map((l) => l.key)).size !== lines.length ||
+        lines.some((l) => !qty.test(l.quantity) || !l.unit || Array.from(l.unit).length > 20)
+      );
+    })
+  )
+    throw new Error(`module ${def.key}: a starter estimate has its own key, 1..10 options, ≤ 200 lines, own line keys, a decimal quantity, a unit ≤ 20`);
   defs.set(def.key, def);
 }
 export const moduleDef = (key: string): ModuleDef | undefined => defs.get(key);

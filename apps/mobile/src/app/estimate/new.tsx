@@ -6,7 +6,7 @@ import { space, size } from "@octo/design-tokens";
 import { LINE_GROUPS, activeLines, discountBps, type CustomLine, type CustomOption, type DepositSetting, type LineGroup } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import type { EstimateDoc, EstimateTemplate } from "@/data/types";
-import { fromTemplate, pickableTemplates, templateFromCents } from "@/features/estimateTemplate";
+import { canEditEstimateTemplates, editedTemplate, fromTemplate, pickableTemplates, templateForEdit, templateFromCents } from "@/features/estimateTemplate";
 import { useI18n, type DictKey } from "@/i18n";
 import { MAX_OPTIONS, cloneOption, costComplete, estimateTitle, exemptDoc, hasContent, lineMarks, newDoc, optionTotals, shownQty, uid } from "@/features/estimateDoc";
 import { LineMarks } from "@/features/LineMarks";
@@ -27,7 +27,7 @@ const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join
  * Type of a line (service / labor / material) only drives which lines are taxed.
  */
 export default function EstimateBuilder() {
-  const params = useLocalSearchParams<{ id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string }>();
+  const params = useLocalSearchParams<{ id?: string; customerId?: string; propertyId?: string; leadId?: string; template?: string; editTemplate?: string }>();
   const store = useStore();
   const { db } = store;
   const { t, money } = useI18n();
@@ -40,16 +40,20 @@ export default function EstimateBuilder() {
   const seeCosts = db.costsVisible ?? store.role !== "tech";
   const templates = pickableTemplates(db.estimateTemplates ?? []);
   const given = !existing && params.template ? templates.find((x) => x.id === params.template) : undefined;
+  // §12 №10: the builder edits a template's lines (no client; «Сохранить шаблон») — the director and the office only
+  const tplEdit = !existing && !given && params.editTemplate && canEditEstimateTemplates(store.role) ? templates.find((x) => x.id === params.editTemplate) : undefined;
   const [fromTpl] = useState(() => (given ? fromTemplate(given.doc, db.catalog, given.costs ?? {}, seeCosts) : null));
   const [templateId, setTemplateId] = useState<string | undefined>(given?.id);
   const [checkPrice, setCheckPrice] = useState<string[]>(fromTpl?.checkPrice ?? []);
-  const [startOpen, setStartOpen] = useState(() => !existing && !given && templates.length > 0);
-  const [doc, setDoc] = useState<EstimateDoc>(() => (existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps)));
-  const [title, setTitle] = useState(existing?.doc ? existing.title : given?.name ?? "");
+  const [startOpen, setStartOpen] = useState(() => !existing && !given && !tplEdit && templates.length > 0);
+  const [doc, setDoc] = useState<EstimateDoc>(() =>
+    existing?.doc ? (JSON.parse(JSON.stringify(existing.doc)) as EstimateDoc) : tplEdit ? templateForEdit(tplEdit, seeCosts) : fromTpl?.doc ?? newDoc(db.company?.estimate.depositBps),
+  );
+  const [title, setTitle] = useState(existing?.doc ? existing.title : tplEdit?.name ?? given?.name ?? "");
   const [cur, setCur] = useState(() => Math.max(0, doc.options.findIndex((o) => o.recommended)));
   const [editing, setEditing] = useState<CustomLine | null | "new">(null);
   const [setting, setSetting] = useState<SettingKind>(null);
-  const [clientPicker, setClientPicker] = useState(!customerId && !startOpen);
+  const [clientPicker, setClientPicker] = useState(!customerId && !startOpen && !tplEdit);
   const start = (x: EstimateTemplate | null) => {
     setStartOpen(false);
     if (x) {
@@ -117,6 +121,18 @@ export default function EstimateBuilder() {
     router.replace(`/estimate/${estimateId}${send ? "?send=1" : ""}`);
   };
 
+  const saveTemplate = () => {
+    if (!tplEdit) return;
+    const next = editedTemplate(tplEdit, doc, seeCosts, title.trim());
+    if (!next) {
+      toast.show(t("est.tpl.cannot"));
+      return;
+    }
+    const undo = store.saveEstimateTemplate(next);
+    toast.show(store.online ? t("est.tpl.saved", { name: next.name }) : t("offline.queued"), undo);
+    router.replace("/estimate/templates");
+  };
+
   const act = activeLines(option.lines);
   const lineTotal = (l: CustomLine) => totals.lineTotals[act.indexOf(l)] ?? 0;
   const taxGroups = LINE_GROUPS.filter((g) => s.tax.groups[g]);
@@ -125,7 +141,7 @@ export default function EstimateBuilder() {
   const depValue = s.deposit.kind === "none" ? t("ue.none") : s.deposit.kind === "pct" ? `${s.deposit.bps / 100}% · ${money(totals.deposit)}` : money(totals.deposit);
 
   return (
-    <Screen title={existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder">
+    <Screen title={tplEdit ? t("est.tpl.editTitle") : existing ? t("ue.title") : t("ue.newTitle")} back={back} help={t("ue.help")} hintKey="estimate-builder">
       {existing && existing.status !== "draft" ? (
         <T v="caption" tone="warn">
           {t("ue.editSentNote")}
@@ -133,6 +149,11 @@ export default function EstimateBuilder() {
       ) : null}
       <Grid>
         <View style={{ gap: space[3] }}>
+          {tplEdit ? (
+            <View testID="est-tpl-editing">
+              <T v="caption" tone="mut">{t("est.tpl.editHint")}</T>
+            </View>
+          ) : (
           <Card onPress={() => setClientPicker(true)} accessibilityLabel={t("est.for")}>
             <RowView>
               {customer ? <Avatar initials={initials(customer.name)} /> : <Icon name="user" />}
@@ -149,7 +170,10 @@ export default function EstimateBuilder() {
               <Icon name="chevronRight" s={size.iconSm} />
             </RowView>
           </Card>
-          <TextField type="title" value={title} onChangeText={setTitle} placeholder={t("ue.jobTitle")} icon="note" />
+          )}
+          <View testID="ue-title">
+            <TextField type="title" value={title} onChangeText={setTitle} placeholder={tplEdit ? t("est.tpl.name") : t("ue.jobTitle")} icon="note" />
+          </View>
 
           {doc.options.length > 1 ? (
             <Card>
@@ -243,15 +267,23 @@ export default function EstimateBuilder() {
             </View>
           ) : null}
           <TextField type="note" value={doc.note ?? ""} onChangeText={(v) => setDoc((d) => ({ ...d, note: v }))} placeholder={t("ue.note")} />
-          {!ok ? (
-            <T v="caption" tone="mut">
-              {customer ? t("ue.empty") : t("ue.pickClient")}
-            </T>
-          ) : null}
-          <Button label={t("ue.saveSend")} icon="send" full disabled={!ok} onPress={() => save(true)} />
-          <View testID="ue-save">
-            <Button label={t("ue.save")} icon="check" variant="secondary" full disabled={!ok} onPress={() => save(false)} />
-          </View>
+          {tplEdit ? (
+            <View testID="est-tpl-save">
+              <Button label={t("est.tpl.saveTemplate")} icon="check" full disabled={!title.trim()} onPress={saveTemplate} />
+            </View>
+          ) : (
+            <>
+              {!ok ? (
+                <T v="caption" tone="mut">
+                  {customer ? t("ue.empty") : t("ue.pickClient")}
+                </T>
+              ) : null}
+              <Button label={t("ue.saveSend")} icon="send" full disabled={!ok} onPress={() => save(true)} />
+              <View testID="ue-save">
+                <Button label={t("ue.save")} icon="check" variant="secondary" full disabled={!ok} onPress={() => save(false)} />
+              </View>
+            </>
+          )}
         </View>
       </Grid>
 
