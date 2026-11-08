@@ -223,12 +223,14 @@ export function Segmented<K extends string>({
   const ready = Object.keys(layouts).length === items.length;
   // scroll: the line follows the selected tab (a remembered tab past the edge is brought into view)
   const strip = useRef<ScrollViewInstance>(null);
-  const view = useRef({ w: 0, offset: 0, content: 0 });
+  const view = useRef({ w: 0, offset: 0 });
   const [viewW, setViewW] = useState(0);
   useEffect(() => {
     const l = layouts[value];
     if (!scroll || !l || !viewW) return;
-    const to = offsetToShow(l, view.current, space[3]);
+    // the line's width from the tabs themselves (not a separate content-size event that may come later)
+    const content = Math.max(...Object.values(layouts).map((x) => x.x + x.w)) + component.segmented.pad;
+    const to = offsetToShow(l, { ...view.current, content }, space[3]);
     if (to !== null) strip.current?.scrollTo({ x: to, animated: !reduce });
   }, [scroll, value, layouts, viewW, reduce]);
 
@@ -317,9 +319,6 @@ export function Segmented<K extends string>({
         onLayout={(e) => {
           view.current.w = e.nativeEvent.layout.width;
           setViewW(e.nativeEvent.layout.width);
-        }}
-        onContentSizeChange={(w) => {
-          view.current.content = w;
         }}
       >
         {bar}

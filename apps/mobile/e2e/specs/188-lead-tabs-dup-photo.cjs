@@ -43,8 +43,9 @@ exports.run = async (h) => {
     await h.go(`/lead/${a.id}`);
     const tab = p.getByRole("tab", { name: /^Файлы/ }).locator("visible=true").first();
     await tab.waitFor({ timeout: 8000 });
-    // the remembered tab is open: its «Фото» section is shown (RNW does not output aria-selected)
-    await p.getByText("Фото", { exact: true }).locator("visible=true").first().waitFor({ timeout: 4000 });
+    // the remembered tab is open: its photo tile is shown (RNW does not output aria-selected)
+    const tile = p.getByTestId("lead-photo-ph-e2e-188").locator("visible=true").first();
+    await tile.waitFor({ timeout: 4000 });
     let inside = false;
     for (let i = 0; i < 30 && !inside; i++) {
       const b = await tab.boundingBox();
@@ -53,7 +54,7 @@ exports.run = async (h) => {
     }
     h.expect(inside, `${h.layout.width}: the remembered «Файлы» is scrolled into view (${JSON.stringify(await tab.boundingBox())})`);
     // the dead photo: the sign, never loaded
-    await p.waitForTimeout(300);
+    h.expect((await tile.locator("img").count()) === 0, "the dead photo is the picture sign");
     h.expect((await dead()) === 0, "the dead blob: of the lead's photo is never loaded");
     await h.shot("tabs-files");
     return;
@@ -69,7 +70,9 @@ exports.run = async (h) => {
   const ok = await p.waitForFunction((w) => location.pathname === "/leads" && new URLSearchParams(location.search).get("open") === w, a.id, { timeout: 4000 }).then(() => true, () => false);
   h.expect(ok, `the duplicate opens in the panel (${p.url()})`);
   await panel.getByRole("tab", { name: /^Файлы/ }).first().click();
-  await p.waitForTimeout(300);
+  const tile = panel.getByTestId("lead-photo-ph-e2e-188");
+  await tile.waitFor({ timeout: 4000 });
+  h.expect((await tile.locator("img").count()) === 0, "1280: the dead photo is the picture sign");
   h.expect((await dead()) === 0, "1280: the dead blob: of the lead's photo is never loaded");
   await h.shot("dup-panel");
 };

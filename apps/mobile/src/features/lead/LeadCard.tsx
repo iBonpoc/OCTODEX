@@ -8,7 +8,7 @@ import { useI18n, type DictKey } from "@/i18n";
 import { usePersistentState } from "@/data/persist";
 import { peopleForLead, phonesOfPeople } from "@/data/people";
 import {
-  findDuplicates, isClosedLead, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
+  canSeeLead, findDuplicates, isClosedLead, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
   responseMinutes, type LeadTurn, type ManualWinReason,
 } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
@@ -60,7 +60,9 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
   const turn = leadTurn(db, l, leadSettingsOf(db.company));
   const replied = responseMinutes(l);
   const mine = peopleForLead(db, l);
-  const dups = findDuplicates(db, { phones: phonesOfPeople(mine), emails: mine.flatMap((p) => p.emails.map((e) => e.address)) }, l.id);
+  const found = findDuplicates(db, { phones: phonesOfPeople(mine), emails: mine.flatMap((p) => p.emails.map((e) => e.address)) }, l.id);
+  // only leads this role may open (a tech sees his own): another's lead is neither shown nor opened
+  const dups = { ...found, leads: found.leads.filter((d) => canSeeLead(role, db.me, d)) };
   // «do not service» (04 §4, §12): the client of this lead, or a client with the same phone / email — a red mark
   const ownClient = l.customerId ? db.customers.find((c) => c.id === l.customerId) : undefined;
   const closed = notServed([...(ownClient ? [ownClient] : []), ...dups.customers.filter((c) => c.id !== l.customerId)]);
@@ -358,7 +360,7 @@ function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew: () => v
       {photos.length ? (
         <Grid>
           {photos.map((p) => (
-            <View key={p.id} style={{ height: component.mediaH, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+            <View key={p.id} testID={`lead-photo-${p.id}`} style={{ height: component.mediaH, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
               {/* a dead `blob:` of a page that is gone (web, after a reload) is the picture sign, never loaded (features/photoUri) */}
               {liveUri(p.uri) ? <Image source={{ uri: liveUri(p.uri) }} style={{ width: "100%", height: "100%" }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
             </View>
