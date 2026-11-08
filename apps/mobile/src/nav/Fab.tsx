@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { madeHere } from "@/features/photoUri";
 import { router, type Href } from "expo-router";
 import { component, radius, size, space, z } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -44,7 +45,9 @@ function useRun({ ctx, on }: Pick<FabProps, "ctx" | "on">) {
     const v = db.visits.find((x) => x.id === visitId);
     if (!v) return;
     const kind = v.step === "working" || v.step === "signed" ? "after" : "before";
-    toast.show(t("toast.photo"), addPhoto(v.id, kind, res.assets[0]?.uri));
+    const uri = res.assets[0]?.uri;
+    madeHere(uri);
+    toast.show(t("toast.photo"), addPhoto(v.id, kind, uri));
   };
   return (it: FabItem) => {
     if (it.href) router.push(it.href as Href);

@@ -3,7 +3,7 @@ import { AGING_BUCKETS, type AgingBucket, type CentsTotal } from "@octo/estimati
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { asPaymentPeriod, PAYMENT_PERIODS, type PaymentPeriod } from "@/features/moneyLists";
-import { asReport, canExportCsv, canSeeReports, categoryReport, collectedReport, NO_CATEGORY, csvMoney, owedReport, REPEAT, salesReport, sourcesReport, toCsv, UNKNOWN, type ReportId } from "@/features/reports";
+import { asReport, canExportCsv, canSeeReports, categoryReport, collectedReport, NO_CATEGORY, csvMoney, owedReport, REPEAT, salesReport, sourcesReport, toCsv, UNKNOWN, type ReportId, REPORT_TITLE } from "@/features/reports";
 import { shareCsv } from "@/features/csvShare";
 import { useDevice } from "@/theme/ThemeProvider";
 import { Button } from "@/ui/controls";
@@ -15,7 +15,7 @@ import { Card, CardList, Divider, Empty, ListRow, RowView, Screen, SectionTitle 
 import { memberName } from "@/features/team";
 import { categoryLabel } from "@/features/serviceCategories";
 
-const TITLE: Record<ReportId, DictKey> = { owed: "rpt.owed.title", collected: "rpt.collected.title", sales: "rpt.sales.title", sources: "rpt.sources.title", categories: "rpt.cat.title" };
+const TITLE = REPORT_TITLE;
 const PERIOD: Record<PaymentPeriod, DictKey> = { today: "mny.p.today", week: "mny.p.week", month: "mny.p.month", all: "mny.p.all" };
 const AGE: Record<AgingBucket, DictKey> = { current: "rpt.age.current", d1_30: "rpt.age.d1_30", d31_60: "rpt.age.d31_60", d61_90: "rpt.age.d61_90", d90p: "rpt.age.d90p" };
 

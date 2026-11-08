@@ -23,7 +23,7 @@ import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Empty, Grid, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
-import { useTheme } from "@/theme/ThemeProvider";
+import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { statusIcon, type StatusName } from "@octo/design-tokens";
 import { memberLabel } from "@/features/team";
 import { ModulePlaces } from "@/modules/ModulePlaces";
@@ -41,7 +41,9 @@ type SheetName = "won" | "close" | "reply" | "call" | "next" | "book" | "snooze"
  * The same body on the lead's own screen (`/lead/<id>`) and in the panel beside the list on 1280
  * (`/leads?open=<id>`, docs/specs/06-list-cards.md «Панель 1280») — so the panel never shows more than the screen.
  */
-export function LeadCardBody({ l, wrap }: { l: Lead; wrap?: (more: ReactNode, body: ReactNode) => ReactElement }) {
+export function LeadCardBody({ l, wrap, inPanel }: { l: Lead; wrap?: (more: ReactNode, body: ReactNode) => ReactElement; inPanel?: boolean }) {
+  // five tabs do not fit a phone or the 360 panel: one line that scrolls sideways there (Segmented `scroll`)
+  const narrow = useDevice().device === "phone" || !!inPanel;
   useTick();
   const store = useStore();
   const { db, role } = store;
@@ -168,7 +170,8 @@ export function LeadCardBody({ l, wrap }: { l: Lead; wrap?: (more: ReactNode, bo
       {/* add-on modules' place (docs/specs/33 П15): nothing unless a module is switched on */}
       <ModulePlaces place="lead" ctx={{ leadId: l.id, customerId: l.customerId, propertyId: l.propertyId }} />
       <Segmented
-        full
+        full={!narrow}
+        scroll={narrow}
         value={tab}
         onChange={setTab}
         items={[

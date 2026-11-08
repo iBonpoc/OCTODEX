@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Image, ScrollView, View } from "react-native";
 import * as ImagePicker from "expo-image-picker";
+import { liveUri, madeHere } from "./photoUri";
 import { component, radius, size, space } from "@octo/design-tokens";
 import type { Photo } from "@/data/types";
 import { useI18n } from "@/i18n";
@@ -15,7 +16,11 @@ const THUMB = component.photoThumb;
 export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile) */ onAdd?: (uri?: string) => void; onRemove?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
-  const [open, setOpen] = useState<Photo | null>(null);
+  const [opened, setOpen] = useState<Photo | null>(null);
+  // a `blob:` of a page that is gone (web, after a reload) is shown as the picture sign, never loaded (an empty preview
+  // and a console error otherwise)
+  const shown = photos.map((p) => ({ ...p, uri: liveUri(p.uri) }));
+  const open = opened ? { ...opened, uri: liveUri(opened.uri) } : null;
   const pick = async () => {
     const perm = await ImagePicker.requestCameraPermissionsAsync().catch(() => null);
     const res =
@@ -23,7 +28,9 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
         ? await ImagePicker.launchCameraAsync({ quality: 0.7 }).catch(() => null)
         : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 }).catch(() => null);
     if (!res || res.canceled) return;
-    onAdd?.(res.assets[0]?.uri);
+    const uri = res.assets[0]?.uri;
+    madeHere(uri);
+    onAdd?.(uri);
   };
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
@@ -51,7 +58,7 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
           </T>
         </Press>
       ) : null}
-      {photos.map((p, i) => (
+      {shown.map((p, i) => (
         <Press
           key={p.id}
           onPress={() => setOpen(p)}

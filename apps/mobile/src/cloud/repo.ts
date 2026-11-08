@@ -7,7 +7,7 @@ import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFro
 import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, paymentMethodFromDb, paymentShown, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
-import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
+import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type PendingPayment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 import { legacyForEstimate } from "./legacyTotals";
@@ -665,6 +665,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         needsReview: p.needs_review === true || undefined,
       }))
       .sort((a, b) => b.at.localeCompare(a.at)),
+    pendingPayments: pendingFromRows(payments),
     company: companyRows[0]
       ? {
           ...companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows), modules: companyModules,
@@ -764,4 +765,12 @@ export async function loadCompanyModule(companyId: string, key: string): Promise
   if (error || !data) return null;
   const { companyModulesFromRows } = await import("@/modules/registry");
   return companyModulesFromRows([data as Record<string, unknown>])[key] ?? null;
+}
+
+/** ACH on its way (20в): payments.status = pending with an invoice — shown as «processing», never counted (statusMap.paymentShown) */
+export function pendingFromRows(rows: Row[]): PendingPayment[] {
+  return rows
+    .filter((p) => p.invoice_id && s(p.status) === "pending" && n(p.amount_cents) > 0)
+    .map((p) => ({ id: s(p.id), invoiceId: s(p.invoice_id), amountCents: n(p.amount_cents), method: paymentMethodFromDb(s(p.method)), at: s(p.received_at) }))
+    .sort((a, b) => b.at.localeCompare(a.at));
 }

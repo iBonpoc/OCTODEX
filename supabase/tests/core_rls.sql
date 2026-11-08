@@ -1660,8 +1660,8 @@ end $$;
 do $$ begin
   perform tst.ok(
     (select array_agg(k order by k) from jsonb_object_keys(public.portal_estimate('tok_lang_0123456789abcdef')) k)
-    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language' union all select 'simulated_pay') x),
-    'answer keys = base keys + doc_language + simulated_pay (T54), nothing else');
+    = (select array_agg(k order by k) from (select jsonb_object_keys(app.portal_estimate_base('tok_lang_0123456789abcdef')) k union all select 'doc_language' union all select 'simulated_pay' union all select 'online_pay' union all select 'pending') x),
+    'answer keys = base keys + doc_language + simulated_pay (T54) + online_pay, pending (T131), nothing else');
 end $$;
 reset role; reset request.jwt.claim.sub; set role anon;
 do $$ begin
@@ -9919,6 +9919,159 @@ update public.companies set closed_at = null where id = 'cb000000-0000-0000-0000
 alter table public.companies enable trigger t06_company_closed_guard;
 \echo 'T130 Stripe connect doors ok'
 
+-- ---------------------------------------------------------------- T131: paying online from /p/ — the doors of stripe-pay (docs/specs/35, 20в)
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.stripe_pay_open(text,uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_pay_open(text,uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.stripe_pay_set_intent(uuid,text)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_pay_set_intent(uuid,text)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.stripe_pay_open(text,uuid)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.stripe_pay_set_intent(uuid,text)', 'EXECUTE'),
+  'T131 only the Edge Function (service_role) opens an attempt and keeps its PaymentIntent');
+insert into public.invoices (id, company_id, number, customer_id, job_id, kind, status, title, subtotal_cents, total_cents, sent_at)
+select '11310000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T131-1', 'c1a00000-0000-0000-0000-000000000001',
+       j.id, 'progress', 'sent', 'T131 progress', 150000, 150000, now()
+  from public.jobs j where j.estimate_id = '0e1a0000-0000-0000-0000-000000000088';
+:as_service
+select tst.fails_like($q$select public.stripe_pay_open('tok_lead_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%does not belong%', 'T131 another estimate''s link does not open an attempt on this invoice (IDOR)');
+select tst.fails_like($q$select public.stripe_pay_open('tok_nobody_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%estimate not found%', 'T131 an unknown link opens nothing');
+select tst.fails($q$select public.stripe_pay_open(null, '11310000-0000-4000-8000-000000000001')$q$, 'T131 no link — nothing');
+create temp table t131 as select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') as a;
+select tst.ok((select (a ->> 'amount_cents')::bigint = 150000 and a ->> 'account_id' = 'acct_T126A' and a ->> 'payment_intent_id' is null
+                      and a ->> 'company_id' = 'ca000000-0000-0000-0000-000000000000' from t131),
+  'T131 the link''s own invoice: an attempt for the whole balance on the company''s account');
+select tst.ok((select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') ->> 'attempt_id' = a ->> 'attempt_id' from t131),
+  'T131 a second tap is the same attempt');
+select tst.fails($q$select public.stripe_pay_set_intent((select (a ->> 'attempt_id')::uuid from t131), 'not_a_pi')$q$, 'T131 only a PaymentIntent id is kept');
+select public.stripe_pay_set_intent((select (a ->> 'attempt_id')::uuid from t131), 'pi_T131A');
+select tst.ok(public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') ->> 'payment_intent_id' = 'pi_T131A',
+  'T131 the attempt comes back with its PaymentIntent (stripe-pay reuses it)');
+select tst.fails($q$select public.stripe_pay_set_intent((select (a ->> 'attempt_id')::uuid from t131), 'pi_T131B')$q$, 'T131 an attempt keeps its one PaymentIntent');
+:as_super
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, reference)
+values ('ca000000-0000-0000-0000-000000000000', '11310000-0000-4000-8000-000000000001', 'c1a00000-0000-0000-0000-000000000001',
+        'ach', 40000, 'pending', 'stripe:pi_T131P', 'pi_T131P');
+set role anon;
+select tst.ok((public.portal_estimate('tok_inv_0123456789abcdef') -> 'pending' ->> '11310000-0000-4000-8000-000000000001')::bigint = 40000
+          and (public.portal_estimate('tok_inv_0123456789abcdef') ->> 'online_pay')::boolean,
+  'T131 the client page knows online payments are on and sees the ACH on its way');
+:as_service
+select tst.ok((public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') ->> 'amount_cents')::bigint = 110000,
+  'T131 ACH on its way is not asked again: the attempt is the rest');
+select tst.ok(public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') -> 'stale_intents' = '["pi_T131A"]'::jsonb,
+  'T131 the older attempt''s intent (the old amount) is handed to stripe-pay to cancel');
+select tst.fails($q$select public.stripe_pay_close_attempt('nope')$q$, 'T131 only a PaymentIntent id closes an attempt');
+select public.stripe_pay_close_attempt('pi_T131A');
+:as_super
+select tst.ok((select status = 'canceled' from public.payment_attempts where stripe_payment_intent_id = 'pi_T131A')
+          and not has_function_privilege('anon', 'public.stripe_pay_close_attempt(text)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_pay_close_attempt(text)', 'EXECUTE'),
+  'T131 the attempt of an intent stripe-pay cancelled is closed at once (service_role only)');
+:as_service
+select tst.ok(public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001') -> 'stale_intents' = '[]'::jsonb,
+  'T131 …and is no longer handed to cancel');
+:as_super
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = now() where id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.fails_like($q$select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%company closed%', 'T131 a closed company takes no payment');
+:as_super
+update public.companies set closed_at = null where id = 'ca000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t06_company_closed_guard;
+:as_super
+select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126A","charges_enabled":false}');
+:as_service
+select tst.fails_like($q$select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%not connected%', 'T131 Stripe stopped charges: no attempt');
+set role anon;
+select tst.ok(not (public.portal_estimate('tok_inv_0123456789abcdef') ->> 'online_pay')::boolean, 'T131 …and the page shows no online payment');
+:as_super
+select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126A","charges_enabled":true}');
+do $$ begin
+  perform set_config('app.signing_estimate', '0e1a0000-0000-0000-0000-000000000088', true);
+  update public.estimates set link_revoked_at = now() where id = '0e1a0000-0000-0000-0000-000000000088';
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+:as_service
+select tst.fails_like($q$select public.stripe_pay_open('tok_inv_0123456789abcdef', '11310000-0000-4000-8000-000000000001')$q$,
+  '%link is closed%', 'T131 a revoked link takes no payment');
+:as_super
+do $$ begin
+  perform set_config('app.signing_estimate', '0e1a0000-0000-0000-0000-000000000088', true);
+  update public.estimates set link_revoked_at = null where id = '0e1a0000-0000-0000-0000-000000000088';
+  perform set_config('app.signing_estimate', '', true);
+end $$;
+drop table t131;
+\echo 'T131 Stripe pay doors ok'
+
+-- ---------------------------------------------------------------- T132: Stripe's webhook — the door of stripe-webhook (docs/specs/35, 20г)
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.stripe_webhook_apply(jsonb,text,bigint)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_webhook_apply(jsonb,text,bigint)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.stripe_webhook_apply(jsonb,text,bigint)', 'EXECUTE'),
+  'T132 only the Edge Function (service_role) applies a signed event');
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('11320000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T132-1', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T132 card', 20000, 20000, now()),
+  ('11320000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T132-2', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T132 early refund', 7000, 7000, now());
+:as_service
+select app.payment_attempt_set_intent((select id from app.payment_attempt_open('11320000-0000-4000-8000-000000000001', 20000)), 'pi_T132');
+select app.payment_attempt_set_intent((select id from app.payment_attempt_open('11320000-0000-4000-8000-000000000002', 7000)), 'pi_T132R');
+-- an object that names another company: by no right ours — journal only, no money
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132x","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132","amount":20000,"amount_received":20000,"metadata":{"company_id":"cb000000-0000-0000-0000-000000000000"}}}}', 'card', 610) = 'ignored',
+  'T132 metadata.company_id of another company: ignored');
+:as_super
+select tst.ok((select status = 'ignored' and reason = 'company_mismatch' from app.stripe_events where event_id = 'evt_T132x')
+          and not exists (select 1 from public.payments where stripe_payment_intent_id = 'pi_T132'),
+  'T132 …kept in the journal, no payment');
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132","amount":20000,"amount_received":20000,"payment_method_types":["card","us_bank_account"],"metadata":{"company_id":"CA000000-0000-0000-0000-000000000000"}}}}', 'bitcoin', 610) = 'processed',
+  'T132 our company: applied');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132","amount":20000,"amount_received":20000}}}', 'card', 9999) = 'duplicate',
+  'T132 a repeat is a duplicate and changes no fee');
+:as_super
+select tst.ok((select status = 'succeeded' and method = 'card' and fee_cents = 610 from public.payments where stripe_payment_intent_id = 'pi_T132'),
+  'T132 the payment carries Stripe''s fee; an unknown method falls back to the event''s');
+:as_service
+-- a refund of our payment before the payment itself: 55000 — nothing is written, the Edge Function answers 500, Stripe retries
+select tst.fails_like($q$select public.stripe_webhook_apply('{"id":"evt_T132r","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T132R","payment_intent":"pi_T132R","amount_refunded":7000}}}')$q$,
+  '%retry later%', 'T132 an event that came too early is refused (55000) for Stripe to send again');
+:as_super
+select tst.ok(not exists (select 1 from app.stripe_events where event_id = 'evt_T132r'), 'T132 …and is not in the journal (so the retry is applied)');
+:as_service
+select tst.fails($q$select public.stripe_webhook_apply('{"id":"nope","type":"x","data":{"object":{}}}')$q$, 'T132 not a Stripe event is refused');
+-- ACH: processing has no fee, succeeded brings it; a repeat may bring a fee the first delivery lacked — never lowers or changes it
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('11320000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T132-3', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T132 ach', 5000, 5000, now()),
+  ('11320000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T132-4', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T132 late fee', 3000, 3000, now());
+:as_service
+select app.payment_attempt_set_intent((select id from app.payment_attempt_open('11320000-0000-4000-8000-000000000003', 5000)), 'pi_T132A');
+select app.payment_attempt_set_intent((select id from app.payment_attempt_open('11320000-0000-4000-8000-000000000004', 3000)), 'pi_T132L');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132ap","type":"payment_intent.processing","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132A","amount":5000}}}', 'ach', null) = 'processed', 'T132 ACH processing');
+:as_super
+select tst.ok((select status = 'pending' and method = 'ach' and fee_cents = 0 from public.payments where stripe_payment_intent_id = 'pi_T132A'), 'T132 ACH on its way: no fee yet');
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132as","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132A","amount":5000,"amount_received":5000}}}', 'ach', 40) = 'processed', 'T132 ACH succeeded');
+:as_super
+select tst.ok((select status = 'succeeded' and fee_cents = 40 from public.payments where stripe_payment_intent_id = 'pi_T132A'), 'T132 the ACH fee comes with succeeded');
+:as_service
+select public.stripe_webhook_apply('{"id":"evt_T132ls","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132L","amount":3000,"amount_received":3000}}}', 'card', null);
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132ls","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132L","amount":3000,"amount_received":3000}}}', 'card', -5) = 'duplicate', 'T132 a repeat');
+select public.stripe_webhook_apply('{"id":"evt_T132ls","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132L","amount":3000,"amount_received":3000}}}', 'card', 77);
+select public.stripe_webhook_apply('{"id":"evt_T132ls","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T132L","amount":3000,"amount_received":3000}}}', 'card', 99);
+:as_super
+select tst.ok((select fee_cents = 77 from public.payments where stripe_payment_intent_id = 'pi_T132L'),
+  'T132 the fee the first delivery lacked comes with a repeat; a negative one is not taken, a known one is not changed');
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T132u","type":"payment_intent.succeeded","account":"acct_Nobody","data":{"object":{"currency":"usd","id":"pi_T132U","amount":1,"metadata":{"company_id":"ca000000-0000-0000-0000-000000000000"}}}}') = 'ignored'
+          and public.stripe_webhook_apply('{"id":"evt_T132u","type":"payment_intent.succeeded","account":"acct_Nobody","data":{"object":{"currency":"usd","id":"pi_T132U","amount":1,"metadata":{"company_id":"ca000000-0000-0000-0000-000000000000"}}}}') = 'duplicate',
+  'T132 an unknown account naming our company: ignored once, then a duplicate');
+:as_super
+select tst.ok((select reason = 'unknown_account' from app.stripe_events where event_id = 'evt_T132u'), 'T132 …the journal says why');
+\echo 'T132 Stripe webhook door ok'
 -- ---------------------------------------------------------------- T134: merging two clients (docs/specs/04 §13, map S3d)
 :as_super
 insert into public.customers (id, company_id, display_name, created_at) values

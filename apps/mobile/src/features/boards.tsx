@@ -69,6 +69,7 @@ export function EstimatesBoard({ wrap }: { wrap: (body: ReactNode, aside?: React
       title={[openE.number, openE.title].filter(Boolean).join(" · ") || t("est.detail")}
       // as the estimate's screen: the client and the address under the title
       subtitle={estimateSubtitle(db, openE)}
+      outside={panel.outside}
       onOpen={panel.full} onClose={panel.close}>
       <EstimateCardBody key={openE.id} e={openE} />
     </ListPanel>

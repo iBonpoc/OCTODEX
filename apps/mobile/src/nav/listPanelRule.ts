@@ -17,6 +17,11 @@ export function panelId(open: string | string[] | undefined, desktop: boolean, k
   return desktop && id && known(id) ? id : undefined;
 }
 
+/** the open card is not among the rows now (another filter, the search): the panel marks it «Нет в списке» */
+export function isOutside(ids: readonly string[], openId: string | undefined): boolean {
+  return !!openId && !ids.includes(openId);
+}
+
 /** the key that moves the panel, or nothing: a field is typed in, a sheet or menu is open, a modifier is held;
  *  ↑/↓ only when the focus is on the list's rows or nowhere (not in the panel's own scroll, the filter lane, the menu) */
 export function panelKey(e: { key: string; altKey?: boolean; ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; isComposing?: boolean; defaultPrevented?: boolean; repeat?: boolean }, ctx: { typing: boolean; modal: boolean; onList: boolean }): "up" | "down" | "close" | undefined {
