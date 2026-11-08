@@ -50,9 +50,16 @@ describe("estimate.approve on site", () => {
     expect(JSON.stringify(sign?.args)).not.toContain("tokFromThePhone");
     expect(calls.some((c) => c.fn === "portal_accept")).toBe(false);
   });
-  it("the office: sends first (a draft gets its locked version), then the same door", async () => {
+  it("the office: sends first with the phone's token (a draft gets its locked version), then the same door", async () => {
     await applyOp(approve("on_site"), "co-1", "u-office");
     expect(calls.map((c) => c.fn)).toEqual(["send_estimate", "accept_on_site"]);
+    expect(calls[0].args).toEqual({ p_estimate_id: E, p_token: "tokFromThePhone0123456789abcdef" });
+  });
+  it("a server without the new door yet (PGRST202): the old way by the token — nothing hangs", async () => {
+    answers = { accept_on_site: { error: { message: "Could not find the function public.accept_on_site", code: "PGRST202" } } };
+    await applyOp(approve("on_site"), "co-1", "u-office");
+    expect(calls.map((c) => c.fn)).toEqual(["send_estimate", "accept_on_site", "send_estimate", "portal_accept"]);
+    expect(calls[3].args.p_channel).toBe("on_site");
   });
   it("lines that changed (the send's own refusal) still stop it: no signature on a version the client did not see", async () => {
     answers = { send_estimate: { error: { message: "lines", code: "22023", hint: "estimate_lines_mismatch" } } };
@@ -70,17 +77,23 @@ describe("estimate.approve on site", () => {
   });
 });
 
-import { canSeeClientLink } from "../src/features/estimateSign";
+import { canSeeClientLink, canSignDraftOnSite } from "../src/features/estimateSign";
+import { tFor } from "../src/i18n/translate";
 import { rejectedOf } from "../src/data/outboxRejected";
 
 describe("the client's page and a lost signature", () => {
-  const db = { members: [{ id: "d", roles: ["director"] }, { id: "s", roles: ["sales"] }, { id: "o", roles: ["dispatcher"] }, { id: "t", roles: ["tech"] }] } as never;
   it("«Open as client» — the office side only, never a tech", () => {
-    expect(["d", "s", "o", "t", "nobody"].map((u) => canSeeClientLink(db, u))).toEqual([true, true, true, false, false]);
+    expect((["director", "sales", "dispatcher", "tech"] as const).map((r) => canSeeClientLink(r))).toEqual([true, true, true, false]);
+  });
+  it("a draft is signed on site only by the office side (a tech may not send it — the server would refuse)", () => {
+    expect((["director", "sales", "dispatcher", "tech"] as const).map((r) => canSignDraftOnSite(r, "draft"))).toEqual([true, true, true, false]);
+    expect(canSignDraftOnSite("tech", "sent")).toBe(true);
+    expect(tFor("ru")("est.signOnSite.afterSend")).toMatch(/после того, как офис отправит смету/);
   });
   it("a refused on-site signature says it is the client's signature, not «a deposit»", () => {
     const r = rejectedOf({ id: "x", op: approve("on_site") } as never, "refused", Date.parse("2026-11-08T12:00:00Z"), null);
     expect(r?.labelKey).toBe("est.rej.signatureLost");
     expect(r?.href).toBe(`/estimate/${E}`);
+    expect(tFor("ru")(r!.labelKey as never)).toBe("Подпись клиента не записана на сервере");
   });
 });

@@ -10940,11 +10940,15 @@ begin
     (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 40000);
 end $$;
 select tst.t142_estimate(1, 'a0000000-0000-0000-0000-000000000003'), tst.t142_estimate(2, 'a0000000-0000-0000-0000-000000000003'),
-       tst.t142_estimate(3, 'a0000000-0000-0000-0000-000000000003'), tst.t142_estimate(4, 'a0000000-0000-0000-0000-000000000001');
+       tst.t142_estimate(3, 'a0000000-0000-0000-0000-000000000003'), tst.t142_estimate(4, 'a0000000-0000-0000-0000-000000000001'),
+       tst.t142_estimate(5, 'a0000000-0000-0000-0000-000000000003');
+select id as t142_job, (select id from public.invoices limit 1) as t142_inv from public.jobs limit 1 \gset
+select tst.ok(:'t142_job' <> '' and :'t142_inv' <> '', 'T142 (fixture: an existing job and invoice)');
 :as_owner_a
 select public.send_estimate('e1420000-0000-4000-8000-000000000001', 'T142tokenOneSentByTheOffice0123456789ab');
 select public.send_estimate('e1420000-0000-4000-8000-000000000002', 'T142tokenTwoSentByTheOffice0123456789ab');
 select public.send_estimate('e1420000-0000-4000-8000-000000000004', 'T142tokenFourSentByTheOffice012345678ab');
+select public.send_estimate('e1420000-0000-4000-8000-000000000005', null);
 select tst.ok(public.estimate_link('e1420000-0000-4000-8000-000000000001') = 'T142tokenOneSentByTheOffice0123456789ab', 'T142 the director gets the client link through its door');
 :as_office_a
 select tst.ok(public.estimate_link('e1420000-0000-4000-8000-000000000001') is not null, 'T142 …the office too');
@@ -10958,6 +10962,9 @@ select tst.ok((public.accept_on_site('e1420000-0000-4000-8000-000000000001', 'e1
   'T142 the client signs on the tech''s device without a token');
 select tst.ok((public.accept_on_site('e1420000-0000-4000-8000-000000000001', 'e1420000-0000-4000-8000-0000000000b1', null, 'Ann Client', 'M0 0 L1 1', true) ->> 'result') = 'repeat',
   'T142 a repeat (no network) changes nothing');
+-- the device's job / invoice ids that are already other records': not taken (the countersign must not fail on a key)
+select tst.ok((public.accept_on_site('e1420000-0000-4000-8000-000000000005', 'e1420000-0000-4000-8000-0000000000b5', null, 'Ann', 'M0 0 L1 1', true, :'t142_job', :'t142_inv') ->> 'status') = 'awaiting_countersign',
+  'T142 another record''s job / invoice id from the device: still signed');
 select tst.fails_like($q$select public.accept_on_site('e1420000-0000-4000-8000-000000000003', 'e1420000-0000-4000-8000-0000000000b3', null, 'Ann', 'M0 0 L1 1', true)$q$, '%not sent yet%', 'T142 a draft is not signed on site');
 select tst.fails_like($q$select public.accept_on_site('e1420000-0000-4000-8000-000000000004', 'e1420000-0000-4000-8000-0000000000b4', null, 'Ann', 'M0 0 L1 1', true)$q$, '%not found%', 'T142 an estimate the tech does not see: «not found»');
 select tst.fails_like($q$select public.accept_on_site('e1420000-0000-4000-8000-000000000002', 'e1420000-0000-4000-8000-0000000000b2', null, 'Ann', 'M0 0 L1 1', false)$q$, '%consent%', 'T142 the same guards: no E-SIGN consent, no signature');
@@ -10966,6 +10973,8 @@ select tst.ok((select a.channel = 'on_site' and a.signer_user_id = 'a0000000-000
                  from public.estimate_approvals a where a.estimate_id = 'e1420000-0000-4000-8000-000000000001'),
   'T142 …recorded as on site, on the tech''s device, with the server''s total');
 select tst.ok((select count(*) = 1 from public.estimate_approvals where estimate_id = 'e1420000-0000-4000-8000-000000000001'), 'T142 …once');
+select tst.ok((select selection ->> 'job_id' is null and selection ->> 'invoice_id' is null from public.estimate_approvals where estimate_id = 'e1420000-0000-4000-8000-000000000005'),
+  'T142 …those ids are not taken: the server makes its own');
 update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
 :as_tech_a
 select tst.fails_like($q$select public.accept_on_site('e1420000-0000-4000-8000-000000000002', 'e1420000-0000-4000-8000-0000000000b2', null, 'Ann', 'M0 0 L1 1', true)$q$, '%may sign contracts%', 'T142 without the right to sign contracts: refused, as on the page');

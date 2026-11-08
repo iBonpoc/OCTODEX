@@ -778,7 +778,8 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           p_estimate_id: op.id, p_option_id: op.optionId, p_addon_ids: op.addonIds, p_signer: op.signer, p_svg: op.svg, p_consent: true,
           p_job_id: op.jobId, p_invoice_id: op.invoiceId ?? null,
         });
-        return run(Promise.resolve({ error, status }));
+        // a server without the door yet (PostgREST «no such function»): the old way — by the token, as before
+        if (error?.code !== "PGRST202") return run(Promise.resolve({ error, status }));
       }
       await applyOp({ k: "estimate.send", id: op.id, token: op.token }, c, userId);
       const { error, status } = await supabase.rpc("portal_accept", {

@@ -8,7 +8,7 @@
  */
 import { addDays } from "./calendar";
 import { dayKeyIn, getZone } from "./zone";
-import type { DB, Estimate, EstimateApproval, EstimateCountersign, ID, Member } from "@/data/types";
+import type { DB, Estimate, EstimateApproval, EstimateCountersign, ID, Member, Role } from "@/data/types";
 import { summarize } from "./estimateDoc";
 import { jobOfEstimate } from "@/data/jobs";
 
@@ -45,14 +45,21 @@ export function hisWarning(d: Pick<DB, "members" | "company">, userId: ID): bool
 /** a closed lead is not won by a signature (the same set as the server: won, lost, declined; archived is a flag) */
 const CLOSED_LEAD = ["won", "lost", "declined"];
 
-/** Who may revoke a client link or reopen a client-signed estimate: director and office (server: owner / admin / office). */
-/** Who sees the client's page of an estimate («Open as client»): the office side — director, dispatcher, sales (the server's
+/** Who sees the client's page of an estimate («Open as client», «Send» with its «Copy link»), by the role the person works in
+ *  now: the office side — director, dispatcher, sales (the server's
  *  estimate_link: owner, admin, office, sales). A tech never: with the link anyone can sign as the client (spec 35 §4д п.10). */
-export function canSeeClientLink(d: Pick<DB, "members">, userId: ID): boolean {
-  const m = d.members.find((x) => x.id === userId);
-  return !!m && m.roles.some((r) => r === "director" || r === "dispatcher" || r === "sales");
+export function canSeeClientLink(role: Role): boolean {
+  return role === "director" || role === "dispatcher" || role === "sales";
 }
 
+/** A draft is signed on site only by someone who may send it (the office side): the server signs only a sent, locked version,
+ *  and a tech may not send — his signature of a draft would never be kept (review of §4д п.10). A sent estimate: the right
+ *  to sign contracts decides, as before. */
+export function canSignDraftOnSite(role: Role, status: Estimate["status"]): boolean {
+  return status !== "draft" || canSeeClientLink(role);
+}
+
+/** Who may revoke a client link or reopen a client-signed estimate: director and office (server: owner / admin / office). */
 export function canManageLink(d: Pick<DB, "members">, userId: ID): boolean {
   const m = d.members.find((x) => x.id === userId);
   return !!m && (m.roles.includes("director") || m.roles.includes("dispatcher"));

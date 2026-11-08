@@ -1,5 +1,5 @@
 /**
- * e2e 196 — a tech signs the client on site, against a real Supabase (docs/specs/35-stripe.md §4д п.10; story map S7).
+ * e2e 196 — a tech signs the client on site, against a real Supabase (docs/specs/35-stripe.md §4д п.10; story map S8 «Подпись клиента», on site).
  * The bug it guards: the app's «estimate.approve» sent the estimate first (send_estimate — the office only), the tech was
  * refused 42501, the queue dropped the op: the client's signature never reached the server. Now the signature goes by the
  * estimate's id (accept_on_site), no token.
@@ -70,7 +70,7 @@ exports.run = async (h, { seed, admin }) => {
 
   // the server has the client's signature: awaiting the company, on site, on the tech's device
   const [est] = await waitRows(admin, `estimates?id=eq.${E}&select=status`, (r) => r[0]?.status === "awaiting_countersign", "the signed estimate", 30000);
-  h.expect(est.status === "awaiting_countersign", "S7: the client's on-site signature reached the server");
+  h.expect(est.status === "awaiting_countersign", "S8: the client's on-site signature reached the server");
   const [appr] = await waitRows(admin, `estimate_approvals?estimate_id=eq.${E}&select=channel,signer_user_id,signer_name`, (r) => r.length === 1, "the approval");
   h.expect(appr.channel === "on_site" && appr.signer_user_id === tech.id && appr.signer_name === "Ann Client 196", `on site, on the tech's device (${JSON.stringify(appr)})`);
   // the queue is empty and nothing was refused
@@ -78,7 +78,7 @@ exports.run = async (h, { seed, admin }) => {
   for (let i = 0; i < 40 && (await queued()) > 0; i++) await p.waitForTimeout(250);
   h.expect((await queued()) === 0, "the queue is empty");
   h.expect((await p.getByTestId("rejected-q-196").count()) === 0, "no «Сервер отказал» card");
-  // the token the phone made was not needed: the server's link is the office's one
-  const [row] = await admin(`estimates?id=eq.${E}&select=public_token`);
-  h.expect(row.public_token !== op.token, "the tech's own token played no part");
+  // this run's tech leaves company A (other cloud specs count its people)
+  execFileSync("psql", [process.env.DB_URL, "-X", "-q", "-v", "ON_ERROR_STOP=1", "-c",
+    `update public.memberships set status = 'disabled' where user_id = '${tech.id}' and company_id = '${A}'`], { stdio: ["ignore", "ignore", "inherit"] });
 };

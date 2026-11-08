@@ -5,7 +5,8 @@
 -- * public.accept_on_site — fixes the tech's on-site signature: the app sent the estimate first (send_estimate, staff only →
 --   42501, the op was dropped, the client's signature never reached the server — T142). Only an estimate the person sees by
 --   RLS (staff; a tech — his own or on a property he is assigned to), only sent / viewed (a repeat of a signed one is a no-op).
--- * public.estimate_link — the client link for those who manage it (owner, admin, office, sales); the app reads it here.
+-- * public.estimate_link — the client link for those who manage it (owner, admin, office, sales). Not read by the app yet:
+--   until step 2 the row still carries public_token (a tech hides only the buttons now); step 2 moves the app to this door.
 -- Step 2 (a separate PR, when no app version reads estimates.public_token): revoke the column from authenticated, reissue the
 -- links a tech could read.
 
@@ -50,6 +51,14 @@ begin
   select * into o from public.estimate_options where id = p_option_id and version_id = v.id and deleted_at is null;
   if not found then
     raise exception 'option does not belong to the sent version' using errcode = '22023';
+  end if;
+  -- the device's ids for the job and the deposit invoice: an id that is already another record's is not taken (a tech's
+  -- device must not make the countersign fail on a primary key — security review of §4д п.10); the server makes its own
+  if p_job_id is not null and exists (select 1 from public.jobs j where j.id = p_job_id and j.estimate_id is distinct from e.id) then
+    p_job_id := null;
+  end if;
+  if p_invoice_id is not null and exists (select 1 from public.invoices i where i.id = p_invoice_id) then
+    p_invoice_id := null;
   end if;
   select * into t from app.estimate_option_totals(v.id, o.id, p_addon_ids);
 
