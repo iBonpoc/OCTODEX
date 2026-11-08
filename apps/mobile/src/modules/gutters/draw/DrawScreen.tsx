@@ -21,13 +21,15 @@ import { component, drawing as dt, radius, size as sizes, space } from "@octo/de
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { moduleState } from "@/modules/registry";
-import { useTheme } from "@/theme/ThemeProvider";
+import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, IconButton, StatusChip } from "@/ui/controls";
 import { Press, T } from "@/ui/primitives";
-import { useToast } from "@/ui/overlays";
+import { Sheet, useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import { CanvasView, useLive } from "../canvas/CanvasView";
-import { addDownspout, endAt, finishStroke, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import { addDownspout, endAt, finishStroke, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
+import type { DsAttrs, RunAttrs } from "../canvas/attrs";
+import { AttrBody, DsAttrsView, RunAttrsView } from "./AttrPanel";
 import { ftIn } from "../canvas/format";
 import { forgetOldDraft, loadToolbarPlace, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
@@ -61,6 +63,7 @@ function StoryButton({ n, onPress, label }: { n: Story; onPress: () => void; lab
 export default function DrawScreen() {
   const { t, money } = useI18n();
   const { c } = useTheme();
+  const { wide } = useDevice();
   const toast = useToast();
   const store = useStore();
   const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string }>();
@@ -79,6 +82,8 @@ export default function DrawScreen() {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [view, setView] = useState<PlanView | null>(null);
   const [ghost, setGhost] = useState<{ a: P; b: P } | null>(null);
+  /** 390: the attribute sheet is open (820/1280 show the panel whenever something is picked) */
+  const [sheet, setSheet] = useState(false);
   const live = useLive();
 
   // the latest values for gesture callbacks and the delayed save
@@ -270,6 +275,25 @@ export default function DrawScreen() {
       ? t("mod.gutters.draw.selRun", { len: ftIn(runLengthIn(sel)), n: storyOf(sel.attrs.story) })
       : t("mod.gutters.draw.selDs", { n: storyOf(drawing.runs.find((r) => r.id === sel.runId)?.attrs.story) });
 
+  // the attribute panel (П21.8): one choice = one edit of the drawing, taken back by «Назад»
+  const onRunAttrs = (p: Partial<RunAttrs>) => {
+    const id = cur.current.selected;
+    if (!id) return;
+    if (p.story !== undefined) setStoryN(storyOf(p.story));
+    commit(setRunAttrs(cur.current.drawing, id, p));
+  };
+  const onDsAttrs = (p: Partial<DsAttrs>) => {
+    const id = cur.current.selected;
+    if (id) commit(setDsAttrs(cur.current.drawing, id, p));
+  };
+  const onLength = (lengthIn: number | null) => {
+    const id = cur.current.selected;
+    if (id) commit(setLength(cur.current.drawing, id, lengthIn));
+  };
+  const attrs = !sel ? null : "a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} />;
+  /** 820/1280: the panel is a column on the right, always there; the canvas and its bars stay left of it */
+  const panelSide = wide ? ins.right + component.panelW + space[3] : 0;
+
   const doUndo = () => {
     const u = undo(hist, drawing);
     if (!u) return;
@@ -341,7 +365,7 @@ export default function DrawScreen() {
   return (
     <View style={{ flex: 1, backgroundColor: c.bg }} testID="draw-screen">
       {/* the drawing under everything */}
-      <View style={{ position: "absolute", left: 0, right: 0, top: 0, bottom: 0 }}>
+      <View style={{ position: "absolute", left: 0, right: panelSide, top: 0, bottom: 0 }}>
         <CanvasView view={view ?? { k: 1, ox: 0, oy: 0 }} onView={setView} live={live} size={size} onSize={setSize} panPointers={2} testID="draw-canvas">
           <GestureDetector gesture={fingers}>
             <View style={{ width: size.w, height: size.h }} testID="draw-surface">
@@ -359,7 +383,7 @@ export default function DrawScreen() {
       </View>
 
       {/* top: back, title, the save state; a module that is off or past the trial says it before the work starts */}
-      <View pointerEvents="box-none" style={{ paddingTop: ins.top + space[2], paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3], gap: space[2] }}>
+      <View pointerEvents="box-none" style={{ paddingTop: ins.top + space[2], paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, gap: space[2] }}>
         <RowView>
           <View testID="draw-back"><IconButton icon="chevronLeft" label={t("mod.title")} onPress={back} /></View>
           <T v="heading" w="semibold">{t("mod.gutters.draw.title")}</T>
@@ -395,24 +419,31 @@ export default function DrawScreen() {
       </View>
 
       {!drawing.runs.length && !ghost ? (
-        <View pointerEvents="none" style={{ position: "absolute", left: space[6], right: space[6], top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }} testID="draw-empty">
+        <View pointerEvents="none" style={{ position: "absolute", left: space[6], right: space[6] + panelSide, top: 0, bottom: 0, alignItems: "center", justifyContent: "center" }} testID="draw-empty">
           <T tone="mut" center>{t("mod.gutters.draw.empty")}</T>
         </View>
       ) : null}
       {ghost ? (
-        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: 0, top: ins.top + space[8] + space[6], alignItems: "center" }}>
+        <View pointerEvents="none" style={{ position: "absolute", left: 0, right: panelSide, top: ins.top + space[8] + space[6], alignItems: "center" }}>
           <StatusChip status="neutral" label={ftIn(ghostLen)} />
         </View>
       ) : null}
 
       {/* bottom: the toolbar (bottom / right hand / left hand) and the $ — always at the bottom */}
-      <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3], paddingBottom: ins.bottom + space[3], gap: space[2] }}>
+      <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
         <View pointerEvents="box-none" style={{ alignItems: place === "bottom" ? "center" : place === "right" ? "flex-end" : "flex-start" }}>{tools}</View>
         <View testID="draw-total" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[1] }}>
           {selText ? (
-            <View testID="draw-selected">
-              <T v="caption" w="semibold">{selText}</T>
-            </View>
+            <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
+              <View testID="draw-selected" style={{ flex: 1 }}>
+                <T v="caption" w="semibold">{selText}</T>
+              </View>
+              {!wide ? (
+                <View testID="draw-props">
+                  <Button label={t("mod.gutters.attr.props")} icon="ruler" size="sm" variant="secondary" onPress={() => setSheet(true)} />
+                </View>
+              ) : null}
+            </RowView>
           ) : null}
           <RowView style={{ justifyContent: "space-between" }}>
             <View testID="draw-money">
@@ -426,6 +457,27 @@ export default function DrawScreen() {
           </RowView>
         </View>
       </View>
+
+      {/* 820/1280: the panel on the right (what is picked, or how to pick); 390: the sheet from «Свойства» */}
+      {wide ? (
+        <View testID="draw-panel" style={{ position: "absolute", right: ins.right + space[3], top: ins.top + space[2], bottom: ins.bottom + space[3], width: component.panelW, padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[2] }}>
+          {attrs ? (
+            <>
+              <RowView style={{ justifyContent: "flex-end" }}>
+                <View testID="draw-panel-close"><IconButton icon="close" label={t("mod.gutters.attr.close")} onPress={() => setSelected(null)} /></View>
+              </RowView>
+              <AttrBody>{attrs}</AttrBody>
+            </>
+          ) : (
+            <View testID="draw-panel-empty" style={{ flex: 1, justifyContent: "center" }}>
+              <T tone="mut" center>{t("mod.gutters.attr.none")}</T>
+            </View>
+          )}
+        </View>
+      ) : null}
+      <Sheet visible={!wide && sheet && !!attrs} onClose={() => setSheet(false)}>
+        <AttrBody>{attrs}</AttrBody>
+      </Sheet>
     </View>
   );
 }

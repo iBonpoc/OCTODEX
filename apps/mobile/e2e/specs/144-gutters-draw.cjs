@@ -119,7 +119,9 @@ exports.run = async (h) => {
 
   // the toolbar: bottom → right hand → left hand → bottom
   const tx = async () => { const r = await tid("draw-toolbar").boundingBox(); return { cx: r.x + r.width / 2, w: r.width, h: r.height }; };
-  const vw = p.viewportSize().width;
+  // the middle of the canvas (on 820/1280 the attribute panel stands right of it — spec 33 П21.8)
+  const cb = await p.getByTestId("draw-surface").boundingBox();
+  const vw = 2 * cb.x + cb.width;
   const t0 = await tx();
   h.expect(t0.w > t0.h, "bottom: a row");
   await tid("draw-place").getByRole("button").click();
