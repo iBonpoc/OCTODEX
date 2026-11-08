@@ -332,4 +332,6 @@ B4, было / стало: `docs/specs/img/06-b4-*-before-after.png`. `ItemCard`
 
 **Было / стало (1280).** ![было](img/06-panel-before-light.png) ![стало](img/06-panel-after-light.png) — тёмная: `img/06-panel-*-dark.png`.
 
+**PR 2 — «Сметы» и «Счета» (#425 → этот PR).** Общий хук `useListPanel(ids, href, known)` в `src/nav/listPanel.ts` (открыть/закрыть/«Открыть», клавиши, ссылка на узком окне, выпадение из фильтра) — «Клиенты» переведены на него. Тела карточек: `features/EstimateCard.tsx` (`EstimateCardBody`, весь экран сметы без шапки; `?send=1` → `openSend`), `features/invoice/InvoiceCard.tsx` (`InvoiceCardBody`). Строки: `EstimateListCard`/`InvoiceListCard` получают `panel` (выбрана, открыть, узко); при открытой панели одна колонка — «Работа» у сметы, «Срок» у счёта. Список счетов хранит `?f=`, `?customer=` вместе с `?open=`. Мастер: маржи нет и в панели (e2e 156); список счетов мастеру закрыт, как был. Снимки: `img/06-panel-estimates-*`, `img/06-panel-invoice-*`.
+
 **Долги.** ↓/↑ не прокручивают список к выбранной строке, если она ушла за край; на открытой панели «＋» карточки клиента нет (есть на её экране).
