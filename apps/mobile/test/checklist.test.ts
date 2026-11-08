@@ -59,14 +59,18 @@ describe("unit:checklistGate — before work and before the signature", () => {
     const off = { ...S, photosBeforeRequired: false, photosAfterRequired: false };
     expect(checklistGate(visit({ step: "on_site" }), off)).toMatchObject({ warnBeforeWork: false, warnBeforeSign: false });
   });
-  it("an inspection: no «after», one check before «Готово» (items and photos «before», §11.5 №25)", () => {
+  it("an inspection: no photo minimums (no work); one check before «Готово» — by its own items only (§11.5 №25, В6)", () => {
     const insp = visit({ jobId: undefined, kind: "inspection", step: "on_site" });
     expect(checklistKindOf(insp)).toBe("inspection");
     const g = checklistGate(insp, S);
     expect(g.warnBeforeWork).toBe(false);
-    expect(g.missing.photosAfter).toBe(0);
-    expect(g.warnBeforeSign).toBe(true);
-    expect(checklistGate({ ...insp, photos: photos(1, 0) }, S).warnBeforeSign).toBe(false);
+    expect(g.missing).toEqual({ items: [], photosBefore: 0, photosAfter: 0 });
+    expect(g.warnBeforeSign).toBe(false);
+    const withItem = checklistGate({ ...insp, checklist: [item("r")] }, S);
+    expect(withItem.warnBeforeSign).toBe(true);
+    expect(withItem.missing.items).toEqual(["r"]);
+    expect(checklistGate({ ...insp, checklist: [item("o", { required: false })] }, S).warnBeforeSign).toBe(false);
+    expect(visitMissed({ ...insp, step: "done" }, S)).toEqual({ items: [], photosBefore: 0, photosAfter: 0 });
   });
   it("a template raises the minimum of photos, never lowers it", () => {
     const v = visit({ checklist: [item("a", { templateId: "t1", done: true })], photos: photos(1, 1) });
