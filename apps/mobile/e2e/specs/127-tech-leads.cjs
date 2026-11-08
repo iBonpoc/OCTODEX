@@ -90,6 +90,15 @@ exports.run = async (h) => {
   h.expect(/E127 water heater/.test(card) && !/\$/.test(card), `the tech: the lead's estimate card has no sum (${card.replace(/\n/g, " | ")})`);
   await p.getByText("Обзор", { exact: true }).locator("visible=true").first().click();
   await p.waitForTimeout(300);
+  // the other side: the office sees the sum on the same card
+  await setRole(h, "director");
+  await h.go("/lead/l1");
+  await p.getByText(/^Сметы · \d+$/).locator("visible=true").last().click();
+  await est.first().waitFor({ timeout: 5000 });
+  h.expect(/\$/.test(await est.first().innerText()), "the director: the lead's estimate card has the sum");
+  await p.getByText("Обзор", { exact: true }).locator("visible=true").first().click();
+  await p.waitForTimeout(300);
+  await setRole(h, "tech");
 
   // Ivan's lead stays closed; /inbox stays the office's
   await h.go("/lead/l2");

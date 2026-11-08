@@ -108,7 +108,7 @@ export default function NewLead() {
                     key={c.id}
                     density="compact"
                     testID={`new-lead-dup-client-${c.id}`}
-                    lead={{ kind: "icon", icon: "user" }}
+                    lead={{ kind: "icon", icon: statusIcon.warn, tone: "warn" }}
                     title={c.name}
                     when={t("lead.dupClient")}
                     edge="warn"
@@ -121,7 +121,7 @@ export default function NewLead() {
                   key={l.id}
                   density="compact"
                   testID={`new-lead-dup-lead-${l.id}`}
-                  lead={{ kind: "icon", icon: "inbox" }}
+                  lead={{ kind: "icon", icon: statusIcon.warn, tone: "warn" }}
                   title={l.name}
                   when={t("lead.dupLead", { date: day(l.receivedAt) })}
                   edge="warn"
