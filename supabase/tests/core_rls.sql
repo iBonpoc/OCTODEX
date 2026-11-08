@@ -10922,7 +10922,8 @@ select tst.ok((select count(*) = 3 from app.status_transitions where entity_type
 
 -- ======================================================================================================================
 -- T140 — rate limits of stripe-pay / stripe-refund (spec 35 §4д, migration 20261109210000)
--- ===============================================================================================================:as_owner_a
+-- ======================================================================================================================
+:as_owner_a
 select tst.fails($q$select public.pay_rate_take(repeat('a', 64))$q$, 'T140 a person does not call the pay limit');
 select tst.fails($q$select public.pay_rate_miss(repeat('a', 64))$q$, 'T140 …nor the miss limit');
 select tst.fails($q$select public.refund_rate_take('a0000000-0000-0000-0000-000000000001')$q$, 'T140 …nor the refund limit');
