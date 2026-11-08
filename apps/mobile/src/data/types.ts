@@ -357,6 +357,9 @@ export interface Visit {
   /** «Просмотрено» on the «not done» card of the checklist (docs/specs/08 §8; server: visits.checklist_reviewed_at/_by) */
   checklistReviewedAt?: string;
   checklistReviewedBy?: ID;
+  /** the photo minimums of its templates, taken with the snapshot of the items (S4, S9; docs/specs/08 §11.7 №7;
+   *  server: visits.checklist_min_photos_before/_after) — they raise the company's, never lower it */
+  photoMins?: { before?: number; after?: number };
 }
 
 /**

@@ -60,6 +60,8 @@ import type { DB, Visit } from "../src/data/types";
 type Value = {
   db: DB;
   mode: string;
+  scheduleJob: (jobId: string, s: { start: string; durationMin: number; techId: string | null }) => () => void;
+  addInspection: (propertyId: string, at: { start: string; durationMin: number; techId: string | null }) => { id: string; undo: () => void };
   checkItem: (visitId: string, itemId: string, done: boolean) => () => void;
   toggleCheck: (visitId: string, itemId: string) => () => void;
   skipItems: (visitId: string, itemIds: string[], reason?: string, text?: string) => () => void;
@@ -269,7 +271,7 @@ describe("unit:checklistStore — what the server would refuse is not queued (it
     valueOf(r).saveChecklistTemplate(t);
     valueOf(r).saveChecklistTemplate({ ...t, name: "Every visit v2" });
     await settle();
-    expect(valueOf(r).db.checklistTemplates!.map((x) => x.name)).toEqual(["Every visit v2"]);
+    expect(valueOf(r).db.checklistTemplates!.filter((x) => x.id === t.id).map((x) => x.name)).toEqual(["Every visit v2"]);
     await tick();
     expect(server.sends.map((x) => [x.op.k, (x.op.template as { name: string }).name])).toEqual([["chk.template.save", "Every visit"]]);
   });
@@ -297,5 +299,62 @@ describe("unit:checklistStore — offline in the demo (no cloud)", () => {
     valueOf(r).checkItem(v.id, v.checklist[0]!.id, !v.checklist[0]!.done);
     await settle();
     expect(valueOf(r).db.visits.find((x) => x.id === v.id)!.checklist[0]!.done).toBe(!v.checklist[0]!.done);
+  });
+});
+
+describe("unit:checklistStore — the snapshot of templates in a new visit (S4, S9; docs/specs/08 §5, §11.7 №7)", () => {
+  const TPL = {
+    id: "00000000-0000-4000-8000-0000000000d1", name: "Install",
+    items: [{ id: "00000000-0000-4000-8000-0000000000d2", label: "Check the slope", kind: "check" as const, required: true }],
+    appliesTo: { everyVisit: false, visitKinds: ["work" as const], catalogItemIds: [] }, minPhotosAfter: 3,
+  };
+  const INSPECT = { ...TPL, id: "00000000-0000-4000-8000-0000000000d3", name: "Inspection", minPhotosAfter: undefined, appliesTo: { everyVisit: false, visitKinds: ["inspection" as const], catalogItemIds: [] } };
+  const drain = async () => {
+    for (let i = 0; i < 6; i++) {
+      await tick();
+      server.sends.forEach((s) => s.d.resolve());
+    }
+  };
+  it("S9: the visit gets the items and the minimums; job.schedule goes first, then each item, then the minimums", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistTemplates: [TPL, INSPECT] });
+    valueOf(r).scheduleJob("j2", { start: new Date().toISOString(), durationMin: 60, techId: null });
+    await settle();
+    const v = valueOf(r).db.visits.at(-1)!;
+    expect(v.checklist.map((c) => [c.label, c.templateName, c.required])).toEqual([["Check the slope", "Install", true]]);
+    expect(v.checklist[0]!.id).not.toBe(TPL.items[0]!.id);
+    expect(v.photoMins).toEqual({ after: 3 });
+    await drain();
+    expect(server.sends.map((x) => x.op.k)).toEqual(["job.schedule", "chk.item.add", "chk.visit.mins"]);
+    expect(server.sends[1]!.op.item).toMatchObject({ visitId: v.id, label: "Check the slope", templateId: TPL.id });
+    expect(server.sends[2]!.op).toMatchObject({ visitId: v.id, before: null, after: 3 });
+  });
+  it("S4: an inspection gets the inspection's template; «Отменить» takes back the visit and its items", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistTemplates: [TPL, INSPECT] });
+    const n = valueOf(r).db.visits.length;
+    const { id, undo } = valueOf(r).addInspection("p1", { start: new Date().toISOString(), durationMin: 45, techId: null });
+    await settle();
+    const v = valueOf(r).db.visits.find((x) => x.id === id)!;
+    expect(v.checklist.map((c) => c.templateName)).toEqual(["Inspection"]);
+    expect(v.photoMins).toBeUndefined();
+    undo();
+    await settle();
+    expect(valueOf(r).db.visits.length).toBe(n);
+    await drain();
+    expect(server.sends).toEqual([]);
+  });
+  it("a template changed later does not change the visit (the snapshot)", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistTemplates: [TPL] });
+    valueOf(r).scheduleJob("j2", { start: new Date().toISOString(), durationMin: 60, techId: null });
+    await settle();
+    const id = valueOf(r).db.visits.at(-1)!.id;
+    valueOf(r).saveChecklistTemplate({ ...TPL, items: [{ ...TPL.items[0]!, label: "Changed" }] });
+    await settle();
+    expect(valueOf(r).db.visits.find((x) => x.id === id)!.checklist.map((c) => c.label)).toEqual(["Check the slope"]);
+  });
+  it("an old server: the snapshot goes as the old whole list", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistTemplates: [TPL], checklistLegacy: true });
+    valueOf(r).scheduleJob("j2", { start: new Date().toISOString(), durationMin: 60, techId: null });
+    await drain();
+    expect(server.sends.map((x) => x.op.k)).toEqual(["job.schedule", "visit.checklist"]);
   });
 });

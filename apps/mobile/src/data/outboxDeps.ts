@@ -73,7 +73,7 @@ const none = () => [];
  */
 const CREATES: Creates = {
   "visit.step": none, "photo.add": (o) => [o.id], "photo.remove": none, "visit.checklist": none, "visit.sign": none,
-  "chk.item.set": none, "chk.item.add": (o) => [o.item.id], "chk.item.remove": none, "chk.visit.review": none,
+  "chk.item.set": none, "chk.item.add": (o) => [o.item.id], "chk.item.remove": none, "chk.visit.review": none, "chk.visit.mins": none,
   "chk.template.save": (o) => [o.template.id], "company.visitSettings": none,
   "visit.pay": (o) => [o.invoiceId, o.paymentId], "lead.reply": none,
   "lead.book": (o) => [o.customerId, o.contactId, o.propertyId, o.jobId, o.visitId],

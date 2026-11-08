@@ -8435,4 +8435,50 @@ delete from public.checklist_templates where id = 'c1010000-0000-4000-8000-00000
 update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T103 rule 16: an old phone array moves ticks (unticks only its own) and its own items into the rows, sales changes nothing, the mirror wins ok'
 
+-- ---------------------------------------------------------------- T104: photo minimums of a visit's snapshot (docs/specs/08 §11.7 №7)
+:as_super
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+do $$ begin
+  insert into public.customers (id, company_id, display_name) values ('c1040000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'T104 Home');
+  insert into public.properties (id, company_id, customer_id, address_line1, address_city) values
+    ('c1040000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000c1', '104 Home St', 'Pasadena');
+  insert into public.jobs (id, company_id, title, customer_id, property_id, status) values
+    ('c1040000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T104 job', 'c1040000-0000-4000-8000-0000000000c1', 'c1040000-0000-4000-8000-0000000000d1', 'draft');
+end $$;
+:as_office_a
+-- the office makes a visit with the minimums of its templates (S9), then changes them
+insert into public.visits (id, company_id, job_id, starts_at, checklist_min_photos_before, checklist_min_photos_after) values
+  ('c1040000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now(), 2, 3);
+update public.visits set checklist_min_photos_after = 4 where id = 'c1040000-0000-4000-8000-0000000000f1';
+select tst.ok((select checklist_min_photos_before = 2 and checklist_min_photos_after = 4 from public.visits where id = 'c1040000-0000-4000-8000-0000000000f1'),
+  'T104 the office sets the photo minimums of a visit');
+do $$ begin
+  perform tst.fails($q$update public.visits set checklist_min_photos_before = 21 where id = 'c1040000-0000-4000-8000-0000000000f1'$q$, 'T104 a minimum above 20 is refused');
+  perform tst.fails($q$update public.visits set checklist_min_photos_after = 0 where id = 'c1040000-0000-4000-8000-0000000000f1'$q$, 'T104 a minimum of 0 is refused (null is the company''s)');
+end $$;
+:as_owner_a
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000f1', 'a0000000-0000-0000-0000-000000000003');
+:as_tech_a
+do $$ begin
+  perform tst.fails($q$update public.visits set checklist_min_photos_before = null where id = 'c1040000-0000-4000-8000-0000000000f1'$q$, 'T104 a tech does not lower the minimums of his visit');
+end $$;
+update public.visits set notes = 'tech note' where id = 'c1040000-0000-4000-8000-0000000000f1';
+:as_sales_a
+do $$ begin
+  perform tst.fails($q$update public.visits set checklist_min_photos_after = 1 where id = 'c1040000-0000-4000-8000-0000000000f1'$q$, 'T104 sales does not change the minimums');
+  perform tst.fails($q$insert into public.visits (id, company_id, job_id, starts_at, checklist_min_photos_before) values
+    ('c1040000-0000-4000-8000-0000000000f2', 'ca000000-0000-0000-0000-000000000000', 'c1040000-0000-4000-8000-0000000000e1', now(), 5)$q$, 'T104 sales does not make a visit with minimums');
+end $$;
+:as_super
+select tst.ok((select checklist_min_photos_before = 2 and checklist_min_photos_after = 4 and notes = 'tech note' from public.visits where id = 'c1040000-0000-4000-8000-0000000000f1'),
+  'T104 the tech''s other edit of the visit passes, the minimums stay');
+delete from public.visits where id = 'c1040000-0000-4000-8000-0000000000f1';
+delete from public.jobs where id = 'c1040000-0000-4000-8000-0000000000e1';
+delete from public.properties where id = 'c1040000-0000-4000-8000-0000000000d1';
+delete from public.customers where id = 'c1040000-0000-4000-8000-0000000000c1';
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T104 photo minimums of a visit: only the office sets them (1..20), a tech and sales cannot ok'
+
 \echo 'ALL TESTS PASSED'
