@@ -2,13 +2,13 @@ import { useState, type ReactElement, type ReactNode } from "react";
 import { visitPropertyId } from "@/data/selectors";
 import { Image, Linking, View } from "react-native";
 import { router } from "expo-router";
-import { component, radius, space } from "@octo/design-tokens";
+import { component, radius, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { usePersistentState } from "@/data/persist";
 import { peopleForLead, phonesOfPeople } from "@/data/people";
 import {
-  findDuplicates, isClosedLead, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
+  canSeeLead, findDuplicates, isClosedLead, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
   responseMinutes, type LeadTurn, type ManualWinReason,
 } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
@@ -21,6 +21,7 @@ import { NotesBlock } from "@/features/NotesBlock";
 import { ReplySheet, useTick } from "@/features/sheets";
 import { Button, ChoiceChips, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { Icon, Press, T } from "@/ui/primitives";
+import { liveUri } from "@/features/photoUri";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Empty, Grid, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
 import { CardGrid, ListCard } from "@/ui/listCard";
@@ -42,7 +43,7 @@ type SheetName = "won" | "close" | "reply" | "call" | "next" | "book" | "snooze"
  * The same body on the lead's own screen (`/lead/<id>`) and in the panel beside the list on 1280
  * (`/leads?open=<id>`, docs/specs/06-list-cards.md «Панель 1280») — so the panel never shows more than the screen.
  */
-export function LeadCardBody({ l, wrap, inPanel }: { l: Lead; wrap?: (more: ReactNode, body: ReactNode) => ReactElement; inPanel?: boolean }) {
+export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (more: ReactNode, body: ReactNode) => ReactElement; inPanel?: boolean; /** the panel: another lead (a possible duplicate) opens in the panel, not as the whole screen */ openLead?: (id: string) => void }) {
   // five tabs do not fit a phone or the 360 panel: one line that scrolls sideways there (Segmented `scroll`)
   const narrow = useDevice().device === "phone" || !!inPanel;
   useTick();
@@ -59,7 +60,9 @@ export function LeadCardBody({ l, wrap, inPanel }: { l: Lead; wrap?: (more: Reac
   const turn = leadTurn(db, l, leadSettingsOf(db.company));
   const replied = responseMinutes(l);
   const mine = peopleForLead(db, l);
-  const dups = findDuplicates(db, { phones: phonesOfPeople(mine), emails: mine.flatMap((p) => p.emails.map((e) => e.address)) }, l.id);
+  const found = findDuplicates(db, { phones: phonesOfPeople(mine), emails: mine.flatMap((p) => p.emails.map((e) => e.address)) }, l.id);
+  // only leads this role may open (a tech sees his own): another's lead is neither shown nor opened
+  const dups = { ...found, leads: found.leads.filter((d) => canSeeLead(role, db.me, d)) };
   // «do not service» (04 §4, §12): the client of this lead, or a client with the same phone / email — a red mark
   const ownClient = l.customerId ? db.customers.find((c) => c.id === l.customerId) : undefined;
   const closed = notServed([...(ownClient ? [ownClient] : []), ...dups.customers.filter((c) => c.id !== l.customerId)]);
@@ -153,7 +156,7 @@ export function LeadCardBody({ l, wrap, inPanel }: { l: Lead; wrap?: (more: Reac
                 when={d.name}
                 status={{ tone: leadStatusView[d.status].status, label: t(leadStatusView[d.status].label) }}
                 edge="warn"
-                onPress={() => router.push(`/lead/${d.id}`)}
+                onPress={() => (openLead ? openLead(d.id) : router.push(`/lead/${d.id}`))}
               />
             )),
           ]}
@@ -357,8 +360,9 @@ function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew: () => v
       {photos.length ? (
         <Grid>
           {photos.map((p) => (
-            <View key={p.id} style={{ height: component.mediaH, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2 }}>
-              {p.uri ? <Image source={{ uri: p.uri }} style={{ width: "100%", height: "100%" }} /> : null}
+            <View key={p.id} testID={`lead-photo-${p.id}`} style={{ height: component.mediaH, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
+              {/* a dead `blob:` of a page that is gone (web, after a reload) is the picture sign, never loaded (features/photoUri) */}
+              {liveUri(p.uri) ? <Image source={{ uri: liveUri(p.uri) }} style={{ width: "100%", height: "100%" }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
             </View>
           ))}
         </Grid>

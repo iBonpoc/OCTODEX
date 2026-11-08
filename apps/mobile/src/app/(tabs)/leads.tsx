@@ -130,7 +130,7 @@ function LeadsBoard() {
       aside={
         openL ? (
           <ListPanel title={openL.name} subtitle={[openL.number, sourceName(db, openL.sourceId), canSeeLeadCost(role) && openL.costCents ? money(openL.costCents) : null, day(openL.receivedAt)].filter(Boolean).join(" · ")} outside={panel.outside} onOpen={panel.full} onClose={panel.close}>
-            <LeadCardBody key={openL.id} l={openL} inPanel />
+            <LeadCardBody key={openL.id} l={openL} inPanel openLead={panel.open} />
           </ListPanel>
         ) : undefined
       }
