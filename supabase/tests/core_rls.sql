@@ -10941,7 +10941,8 @@ begin
 end $$;
 select tst.t142_estimate(1, 'a0000000-0000-0000-0000-000000000003'), tst.t142_estimate(2, 'a0000000-0000-0000-0000-000000000003'),
        tst.t142_estimate(3, 'a0000000-0000-0000-0000-000000000003'), tst.t142_estimate(4, 'a0000000-0000-0000-0000-000000000001'),
-       tst.t142_estimate(5, 'a0000000-0000-0000-0000-000000000003');
+       tst.t142_estimate(5, 'a0000000-0000-0000-0000-000000000003'), tst.t142_estimate(6, 'a0000000-0000-0000-0000-000000000003'),
+       tst.t142_estimate(7, 'a0000000-0000-0000-0000-000000000003');
 select id as t142_job, (select id from public.invoices limit 1) as t142_inv from public.jobs limit 1 \gset
 select tst.ok(:'t142_job' <> '' and :'t142_inv' <> '', 'T142 (fixture: an existing job and invoice)');
 :as_owner_a
@@ -10949,6 +10950,11 @@ select public.send_estimate('e1420000-0000-4000-8000-000000000001', 'T142tokenOn
 select public.send_estimate('e1420000-0000-4000-8000-000000000002', 'T142tokenTwoSentByTheOffice0123456789ab');
 select public.send_estimate('e1420000-0000-4000-8000-000000000004', 'T142tokenFourSentByTheOffice012345678ab');
 select public.send_estimate('e1420000-0000-4000-8000-000000000005', null);
+-- 6 and 7: sent, then the office revokes the link (a wrong price) — closed on site too (review #457)
+select public.send_estimate('e1420000-0000-4000-8000-000000000006', null), public.send_estimate('e1420000-0000-4000-8000-000000000007', null);
+select public.revoke_estimate_link('e1420000-0000-4000-8000-000000000006'), public.revoke_estimate_link('e1420000-0000-4000-8000-000000000007');
+select tst.fails_like($q$select public.sign_estimate_on_site('e1420000-0000-4000-8000-000000000007', 'Ann', 'M0 0 L1 1')$q$, '%revoked%',
+  'T142 the quick on-site signature: a revoked link is closed too');
 select tst.ok(public.estimate_link('e1420000-0000-4000-8000-000000000001') = 'T142tokenOneSentByTheOffice0123456789ab', 'T142 the director gets the client link through its door');
 :as_office_a
 select tst.ok(public.estimate_link('e1420000-0000-4000-8000-000000000001') is not null, 'T142 …the office too');
@@ -10962,6 +10968,8 @@ select tst.ok((public.accept_on_site('e1420000-0000-4000-8000-000000000001', 'e1
   'T142 the client signs on the tech''s device without a token');
 select tst.ok((public.accept_on_site('e1420000-0000-4000-8000-000000000001', 'e1420000-0000-4000-8000-0000000000b1', null, 'Ann Client', 'M0 0 L1 1', true) ->> 'result') = 'repeat',
   'T142 a repeat (no network) changes nothing');
+select tst.fails_like($q$select public.accept_on_site('e1420000-0000-4000-8000-000000000006', 'e1420000-0000-4000-8000-0000000000b6', null, 'Ann', 'M0 0 L1 1', true)$q$, '%revoked%',
+  'T142 the office revoked the link: the tech does not take the signature on site (the employee waives only the date)');
 -- the device's job / invoice ids that are already other records': not taken (the countersign must not fail on a key)
 select tst.ok((public.accept_on_site('e1420000-0000-4000-8000-000000000005', 'e1420000-0000-4000-8000-0000000000b5', null, 'Ann', 'M0 0 L1 1', true, :'t142_job', :'t142_inv') ->> 'status') = 'awaiting_countersign',
   'T142 another record''s job / invoice id from the device: still signed');
@@ -10990,7 +10998,11 @@ select tst.ok((public.portal_accept('T142tokenTwoSentByTheOffice0123456789ab', '
   'T142 the client still signs on the page by the link');
 :as_super
 select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = 'e1420000-0000-4000-8000-000000000002'), 'T142 …signed');
-select tst.ok(not has_function_privilege('authenticated', 'app.estimate_client_accept(uuid, uuid, uuid[], text, text, boolean, text, uuid, uuid)', 'EXECUTE'), 'T142 the shared body is not a door');
+select tst.ok(not has_function_privilege('authenticated', 'app.estimate_client_accept(uuid, text, uuid, uuid[], text, text, boolean, text, uuid, uuid)', 'EXECUTE'), 'T142 the shared body is not a door');
+-- the link is checked again under the row's lock: a token that is no longer the estimate's (revoked + sent again meanwhile)
+select tst.fails_like($q$select app.estimate_client_accept('e1420000-0000-4000-8000-000000000003', 'T142aTokenThatIsNotThisEstimates0123456', 'e1420000-0000-4000-8000-0000000000b3', null, 'Ann', 'M0 0 L1 1', true, 'portal', null, null)$q$, '%not found%',
+  'T142 an old link does not sign after the lock');
+select tst.ok((select status from public.estimates where id = 'e1420000-0000-4000-8000-000000000006') = 'sent', 'T142 …and the revoked one stays unsigned');
 :as_owner_a
 select tst.ok((public.portal_accept('T142tokenFourSentByTheOffice012345678ab', 'e1420000-0000-4000-8000-0000000000b4', null, 'Bob Client', 'M0 0 L1 1', true, 'on_site') ->> 'status') is not null,
   'T142 an old app on site (portal_accept by the token) keeps working');

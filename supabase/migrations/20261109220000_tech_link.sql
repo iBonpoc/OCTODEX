@@ -10,8 +10,11 @@
 -- Step 2 (a separate PR, when no app version reads estimates.public_token): revoke the column from authenticated, reissue the
 -- links a tech could read.
 
-create or replace function app.estimate_client_accept(p_estimate_id uuid, p_option_id uuid, p_addon_ids uuid[], p_signer text,
-                                                      p_svg text, p_consent boolean, p_channel text, p_job_id uuid, p_invoice_id uuid)
+-- p_token: the link the page came with (portal_accept) — checked again under the row's lock (a revoke + a new send between the
+-- lookup and the lock must not let an old link sign); null — on site, by the estimate's id
+create or replace function app.estimate_client_accept(p_estimate_id uuid, p_token text, p_option_id uuid, p_addon_ids uuid[],
+                                                      p_signer text, p_svg text, p_consent boolean, p_channel text, p_job_id uuid,
+                                                      p_invoice_id uuid)
 returns text language plpgsql security definer set search_path = '' as $$
 declare
   e public.estimates; v public.estimate_versions; o public.estimate_options; member boolean;
@@ -21,7 +24,7 @@ begin
     raise exception 'E-SIGN consent, name and signature are required' using errcode = '22023';
   end if;
   select * into e from public.estimates where id = p_estimate_id and deleted_at is null for update;
-  if not found then
+  if not found or (p_token is not null and e.public_token is distinct from p_token) then
     raise exception 'estimate not found' using errcode = 'P0002';
   end if;
   -- 7а-3 (S22a): first — before «on site» and before the repeat branch (the page then reloads and shows «closed»)
@@ -40,6 +43,10 @@ begin
     raise exception 'estimate is not open for approval (status %)', e.status using errcode = '22023';
   end if;
   -- the page link must be open; on site the employee is present, so the date does not stop the signature
+  -- a link the office revoked (a wrong price, say) is closed on site too: the employee present waives only the date (review #457)
+  if e.link_revoked_at is not null then
+    raise exception 'the estimate link was revoked' using errcode = '22023';
+  end if;
   if not (p_channel = 'on_site' and member) and not app.estimate_link_open(e) then
     raise exception 'the estimate link has expired or was revoked' using errcode = '22023';
   end if;
@@ -82,7 +89,7 @@ begin
   return 'signed';
 end;
 $$;
-revoke all on function app.estimate_client_accept(uuid, uuid, uuid[], text, text, boolean, text, uuid, uuid) from public, anon, authenticated;
+revoke all on function app.estimate_client_accept(uuid, text, uuid, uuid[], text, text, boolean, text, uuid, uuid) from public, anon, authenticated;
 
 create or replace function public.portal_accept(p_token text, p_option_id uuid, p_addon_ids uuid[], p_signer text, p_svg text,
                                                 p_consent boolean, p_channel text default 'portal', p_job_id uuid default null,
@@ -94,7 +101,7 @@ begin
   if not found or p_token is null then
     raise exception 'estimate not found' using errcode = 'P0002';
   end if;
-  perform app.estimate_client_accept(v_id, p_option_id, p_addon_ids, p_signer, p_svg, p_consent, p_channel, p_job_id, p_invoice_id);
+  perform app.estimate_client_accept(v_id, p_token, p_option_id, p_addon_ids, p_signer, p_svg, p_consent, p_channel, p_job_id, p_invoice_id);
   return public.portal_estimate(p_token);
 end;
 $$;
@@ -114,7 +121,7 @@ begin
   if e.status not in ('sent', 'viewed', 'awaiting_countersign', 'approved') then
     raise exception 'the estimate is not sent yet (status %)', e.status using errcode = '22023';
   end if;
-  v_r := app.estimate_client_accept(e.id, p_option_id, p_addon_ids, p_signer, p_svg, p_consent, 'on_site', p_job_id, p_invoice_id);
+  v_r := app.estimate_client_accept(e.id, null, p_option_id, p_addon_ids, p_signer, p_svg, p_consent, 'on_site', p_job_id, p_invoice_id);
   return jsonb_build_object('result', v_r, 'status', (select status from public.estimates where id = e.id));
 end;
 $$;
@@ -134,3 +141,47 @@ end;
 $$;
 revoke all on function public.estimate_link(uuid) from public, anon;
 grant execute on function public.estimate_link(uuid) to authenticated;
+
+-- the quick estimate's on-site signature (20261105240000): the same — a revoked link is closed on site too (review #457)
+create or replace function public.sign_estimate_on_site(p_estimate_id uuid, p_signer text, p_svg text)
+returns text language plpgsql security definer set search_path = '' as $$
+declare e public.estimates; v public.estimate_versions; o public.estimate_options; t record;
+begin
+  if coalesce(trim(p_signer), '') = '' or coalesce(p_svg, '') = '' then
+    raise exception 'name and signature are required' using errcode = '22023';
+  end if;
+  select * into e from public.estimates where id = p_estimate_id and deleted_at is null for update;
+  if not found or not app.is_staff(e.company_id) and not app.can_read_estimate(e.id) then
+    raise exception 'estimate not found' using errcode = 'P0002';
+  end if;
+  if not app.can_sign_contracts(e.company_id) then
+    -- the client signs on an employee's device: only someone who may sign contracts (security-check 05.11)
+    raise exception 'on-site signature requires an employee who may sign contracts' using errcode = '42501';
+  end if;
+  if e.status in ('awaiting_countersign', 'approved') then
+    return e.status;                                      -- repeat: nothing doubles
+  end if;
+  if e.status not in ('sent', 'viewed') then
+    raise exception 'estimate is not open for approval (status %)', e.status using errcode = '22023';
+  end if;
+  if e.link_revoked_at is not null then
+    raise exception 'the estimate link was revoked' using errcode = '22023';
+  end if;
+  select * into v from public.estimate_versions where id = e.sent_version_id;
+  if not found or v.locked_at is null then
+    raise exception 'the estimate was not sent (no locked version)' using errcode = '22023';
+  end if;
+  select * into o from public.estimate_options where version_id = v.id and deleted_at is null order by position, created_at limit 1;
+  select * into t from app.estimate_option_totals(v.id, o.id, '{}');
+  insert into public.estimate_approvals (company_id, estimate_id, version_id, option_id, decision, signer_name, signature_svg,
+                                         esign_consent, channel, selection, party, document_hash, signer_user_id)
+  values (e.company_id, e.id, v.id, o.id, 'approved', trim(p_signer), p_svg, true, 'on_site',
+          jsonb_build_object('addon_ids', '[]'::jsonb, 'subtotal', t.subtotal, 'discount', t.discount, 'tax', t.tax, 'total', t.total, 'deposit', t.deposit),
+          'customer', encode(sha256(convert_to(coalesce(v.calc_inputs::text, '') || coalesce(v.id::text, ''), 'UTF8')), 'hex'),
+          auth.uid());                                    -- whose device the client signed on
+  perform set_config('app.signing_estimate', e.id::text, true);
+  update public.estimates set status = 'awaiting_countersign' where id = e.id;
+  perform set_config('app.signing_estimate', '', true);
+  return 'awaiting_countersign';
+end;
+$$;
