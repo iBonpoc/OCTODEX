@@ -25,25 +25,35 @@ const blank = (): ChecklistTemplate => ({
   appliesTo: { everyVisit: true, visitKinds: [], catalogItemIds: [] },
 });
 
+const backToList = () => (router.canGoBack() ? router.back() : router.replace("/company/checklists"));
+
 export default function ChecklistTemplateScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const store = useStore();
   const { t } = useI18n();
-  const toast = useToast();
   const saved = (store.db.checklistTemplates ?? []).find((x) => x.id === id);
   const isNew = id === "new";
-  const [tpl, setTpl] = useState<ChecklistTemplate>(() => saved ?? blank());
-  const [picking, setPicking] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const back = () => (router.canGoBack() ? router.back() : router.replace("/company/checklists"));
-  const ro = !canEditTemplates(store.role);
   if (!saved && !isNew) {
     return (
-      <Screen title={t("chk2.template")} back={back}>
+      <Screen title={t("chk2.template")} back={backToList}>
         <Empty icon="checklist" title={t("chk2.notFound")} />
       </Screen>
     );
   }
+  // keyed by the saved template: a template that arrives after the first render (a reload in the cloud) fills the
+  // form, not a blank with a new id (that would save a second template)
+  return <TemplateForm key={saved?.id ?? "new"} saved={saved} isNew={isNew} />;
+}
+
+function TemplateForm({ saved, isNew }: { saved?: ChecklistTemplate; isNew: boolean }) {
+  const store = useStore();
+  const { t } = useI18n();
+  const toast = useToast();
+  const [tpl, setTpl] = useState<ChecklistTemplate>(() => saved ?? blank());
+  const [picking, setPicking] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const back = backToList;
+  const ro = !canEditTemplates(store.role);
   const set = (p: Partial<ChecklistTemplate>) => {
     setError(null);
     setTpl((x) => ({ ...x, ...p }));

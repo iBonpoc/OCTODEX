@@ -1080,7 +1080,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     const d0 = dbRef.current;
     if (!canEditTemplates(role)) return { items: [] };
     const templates = d0.checklistTemplates ?? [];
-    const items = checklistFor({ kind, catalogItemIds: services }, templates, () => uid()).map((c) => ({ ...c, addedBy: d0.me }));
+    // 200 items per visit is the server's limit (54000): more would be refused and hold the queue
+    const items = checklistFor({ kind, catalogItemIds: services }, templates, () => uid()).slice(0, 200).map((c) => ({ ...c, addedBy: d0.me }));
     return { items, mins: snapshotPhotoMins(items, templates) };
   };
   /** the snapshot's ops after the op that makes the visit: each item waits for the visit (outboxDeps refs) */

@@ -3,20 +3,19 @@
 -- know only the company's minimum. Null — the company's (companies.visit_settings); a value raises it, never lowers it.
 -- Who: only the office (owner, admin, office) sets them — on insert and on update; a tech and sales cannot (their
 -- write is refused, not silently dropped). Two new nullable columns: no rewrite of visits; the range checks are added
--- «not valid» and validated after (no long lock on visits).
+-- «not valid» here and validated in 20261108150100 (its own transaction: the scan does not hold this file's lock).
 -- Rule 16: nothing renamed or dropped.
 
+set lock_timeout = '5s';
 alter table public.visits add column if not exists checklist_min_photos_before smallint;
 alter table public.visits add column if not exists checklist_min_photos_after smallint;
 
 alter table public.visits drop constraint if exists visits_checklist_min_photos_before_range;
 alter table public.visits add constraint visits_checklist_min_photos_before_range
   check (checklist_min_photos_before is null or checklist_min_photos_before between 1 and 20) not valid;
-alter table public.visits validate constraint visits_checklist_min_photos_before_range;
 alter table public.visits drop constraint if exists visits_checklist_min_photos_after_range;
 alter table public.visits add constraint visits_checklist_min_photos_after_range
   check (checklist_min_photos_after is null or checklist_min_photos_after between 1 and 20) not valid;
-alter table public.visits validate constraint visits_checklist_min_photos_after_range;
 
 -- only the office writes the minimums (the tech's guard does not list these columns; this trigger covers every role)
 create or replace function app.tg_visit_checklist_mins()

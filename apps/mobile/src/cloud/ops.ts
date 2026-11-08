@@ -500,8 +500,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(supabase.from("visit_checklist_items").update({ deleted_at: new Date().toISOString() }).eq("id", op.id).eq("visit_id", op.visitId));
     case "chk.visit.review":
       return run(supabase.from("visits").update({ checklist_reviewed_at: op.at }).eq("id", op.visitId));
-    case "chk.visit.mins":
-      return run(supabase.from("visits").update({ checklist_min_photos_before: op.before, checklist_min_photos_after: op.after }).eq("id", op.visitId));
+    case "chk.visit.mins": {
+      const r = await supabase.from("visits").update({ checklist_min_photos_before: op.before, checklist_min_photos_after: op.after }).eq("id", op.visitId);
+      // a server before migration 20261108150000 has no such columns: the minimums stay on the phone, the queue goes on
+      if (r.error && (r.error.code === "PGRST204" || r.error.code === "42703")) return;
+      return run(Promise.resolve(r));
+    }
     case "chk.template.save":
       return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id" }));
     case "company.visitSettings":
