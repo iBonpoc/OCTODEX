@@ -1202,10 +1202,15 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return chkMutate("check.remove", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist: x.checklist.filter((c) => c.id !== itemId) })), { k: "chk.item.remove", id: itemId, visitId });
       },
       reviewVisitMissed: (visitId) => {
-        if (!visitOf(visitId) || !canReview(role)) return noop;
+        // an old server has no «Просмотрено» (and no card: attention.ts) — nothing that would come back after a reload
+        if (!visitOf(visitId) || !canReview(role) || dbRef.current.checklistLegacy) return noop;
         const at = new Date().toISOString();
         const me = dbRef.current.me;
-        return chkMutate("check.review", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: at, checklistReviewedBy: me })), { k: "chk.visit.review", visitId, at }, false);
+        mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: at, checklistReviewedBy: me })), { k: "chk.visit.review", visitId, at });
+        // «Отменить» (rule 5): the op may already be on the server (the outbox goes every 1.5 s) — a reverse op, not a
+        // take-back of the queue; while both wait they go in order, the last one wins
+        return () =>
+          void mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: undefined, checklistReviewedBy: undefined })), { k: "chk.visit.review", visitId, at: null });
       },
       saveChecklistTemplate: (t) => {
         const clean = cleanTemplate(t);

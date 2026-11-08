@@ -38,6 +38,10 @@ describe("unit:attention — «Не сделано» of a checklist (docs/specs/
   it("«Просмотрено» takes it away", () => {
     expect(missed(withVisit({ checklistReviewedAt: "2026-11-06T00:00:00.000Z" }))).toEqual([]);
   });
+  it("an old server (no checklist migration, no checklistSince): no cards — not a flood of old visits", () => {
+    const db = withVisit({}, { checklistSince: undefined });
+    expect(missed({ ...db, checklistLegacy: true })).toEqual([]);
+  });
   it("the office only: not a tech, not sales", () => {
     expect(missed(withVisit({}), "dispatcher")).toHaveLength(1);
     expect(missed(withVisit({}), "tech")).toEqual([]);

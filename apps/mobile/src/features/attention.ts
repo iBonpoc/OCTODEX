@@ -179,7 +179,8 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   // «Не сделано» (docs/specs/08 §8, В4): one card per finished visit with required items or photos left undone — warn,
   // not red; until the office presses «Просмотрено» or the tech finishes them. Visits before the company turned
   // checklists on (checklistSince) are left alone. The office only (the same who may press «Просмотрено»).
-  if (canReview(role)) {
+  // an old server (no checklist migration): no checklistSince, no «Просмотрено» — no cards at all, not a flood of old visits
+  if (canReview(role) && !db.checklistLegacy) {
     const vs = visitSettings(db);
     for (const v of db.visits) {
       if (v.checklistReviewedAt) continue;

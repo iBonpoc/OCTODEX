@@ -2,7 +2,7 @@
  * e2e 162 — «Не сделано» in «Требует внимания» (docs/specs/08 §8, В4; step 14 CH2b; S15).
  * A signed visit with a required item left open: one warn card «{client} · выезд {date}: не сделано 1». «Просмотрено»
  * takes it away (the item stays «not done» in the visit), «Отменить» brings it back. The item done later — the card
- * goes by itself. A tech does not see it.
+ * goes by itself.
  */
 exports.run = async (h) => {
   const p = h.page;
@@ -39,11 +39,7 @@ exports.run = async (h) => {
   h.expect(!(await h.db()).visits.find((x) => x.id === id).checklistReviewedAt, "«Отменить»: not reviewed again");
   await reviewed.waitFor();
 
-  // a tech does not see it
-  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));
-  await h.go("/today");
-  h.expect(!/не сделано 1/.test(await h.text()), "a tech has no such card");
-  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
+  // who sees it (the office only, not a tech or sales): unit attentionChecklist — a tech has no «Требует внимания» screen
 
   // the item done later (the tech finishes it): the card goes by itself
   await p.evaluate((vid) => {

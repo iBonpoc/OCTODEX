@@ -279,12 +279,12 @@ describe("unit:checklistStore — what the server would refuse is not queued (it
 });
 
 describe("unit:checklistStore — a server before the checklist migration (rule 16)", () => {
-  it("a tick goes as the old whole list; «Просмотрено» stays on the phone", { timeout: 15_000 }, async () => {
+  it("a tick goes as the old whole list; no «Просмотрено» (nothing the server keeps)", { timeout: 15_000 }, async () => {
     const r = await signedIn({ checklistLegacy: true });
     valueOf(r).checkItem(VISIT, ITEM, true);
     valueOf(r).reviewVisitMissed(VISIT);
     await settle();
-    expect(visitOf(r).checklistReviewedAt).toBeDefined();
+    expect(visitOf(r).checklistReviewedAt).toBeUndefined();
     await tick();
     expect(server.sends.map((x) => x.op.k)).toEqual(["visit.checklist"]);
     expect(server.sends[0]!.op.checklist).toEqual([{ id: ITEM, label: "Confirm scope", done: true }, { id: PHOTO_ITEM, label: "Photo of the area", done: false }]);
@@ -379,5 +379,20 @@ describe("unit:checklistStore — the snapshot of templates in a new visit (S4, 
     valueOf(r).scheduleJob("j2", { start: new Date().toISOString(), durationMin: 60, techId: null });
     await drain();
     expect(server.sends.map((x) => x.op.k)).toEqual(["job.schedule", "visit.checklist"]);
+  });
+});
+
+describe("unit:checklistStore — «Просмотрено» and «Отменить» after it was sent (CH2b, rule 5)", () => {
+  it("«Отменить» after the op went to the server sends the reverse op", { timeout: 15_000 }, async () => {
+    const r = await signedIn();
+    const undo = valueOf(r).reviewVisitMissed(VISIT);
+    await tick();
+    server.sends.forEach((s) => s.d.resolve());
+    await settle();
+    undo();
+    await settle();
+    expect(visitOf(r).checklistReviewedAt).toBeUndefined();
+    await tick();
+    expect(server.sends.map((x) => [x.op.k, x.op.at === null])).toEqual([["chk.visit.review", false], ["chk.visit.review", true]]);
   });
 });
