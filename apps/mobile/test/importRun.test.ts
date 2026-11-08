@@ -1,7 +1,7 @@
 /** The run of a server import (docs/specs/04 §14.4): batches, a break and «Продолжить» without duplicates, the report. */
 import { describe, expect, it } from "vitest";
 import { IMPORT_BATCH, type ImportRow, type ServerRow } from "../src/features/client/csvImport";
-import { canImportClients, countsOf, ImportStop, reportCsv, runImport, type ImportAnswer, type ImportDriver } from "../src/features/client/importRun";
+import { canImportClients, countsOf, importFailureOf, ImportStop, reportCsv, runImport, type ImportAnswer, type ImportDriver } from "../src/features/client/importRun";
 
 const rows: ImportRow[] = Array.from({ length: 600 }, (_, i) => ({ line: i + 2, name: `N${i}`, phone: `310${String(i).padStart(7, "0")}`, address: "", city: "" }));
 
@@ -61,5 +61,15 @@ describe("runImport", () => {
   });
   it("who imports: the office, not sales nor the tech (was: everyone but the tech)", () => {
     expect((["director", "dispatcher", "sales", "tech"] as const).map(canImportClients)).toEqual([true, true, false, false]);
+  });
+  it("the server's answer as a reason: a lost answer is «no connection», not a refusal (cloud e2e 193)", () => {
+    // what supabase-js returns: plain objects, never an Error
+    expect(importFailureOf({ message: "TypeError: Failed to fetch", details: "", hint: "", code: "" })).toBe("network");
+    expect(importFailureOf({ message: "import_busy", code: "P0001", details: null, hint: null })).toBe("import_busy");
+    expect(importFailureOf({ message: "not allowed", code: "42501" })).toBe("not_allowed");
+    expect(importFailureOf({ message: "duplicate key", code: "23505" })).toBe("other");
+    expect(importFailureOf({ message: "upstream", code: "PGRST002" })).toBe("network");
+    expect(importFailureOf(new TypeError("Failed to fetch"))).toBe("network");
+    expect(importFailureOf(new ImportStop("row_changed"))).toBe("row_changed");
   });
 });

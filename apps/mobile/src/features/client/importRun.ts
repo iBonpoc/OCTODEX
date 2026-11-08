@@ -4,6 +4,7 @@
  * there with the same job — the server answers a repeated batch with what it stored (no duplicates). Pure apart from
  * the driver: the cloud one calls the rpc (cloud/importCustomers.ts), the demo one the store. test/importRun.test.ts.
  */
+import { classify } from "@/data/outboxRetry";
 import type { Role } from "@/data/types";
 import { batchesOf, type ImportRow, type ServerRow, type SkipReason } from "./csvImport";
 
@@ -28,6 +29,22 @@ export class ImportStop extends Error {
   constructor(public code: ImportFailure) {
     super(code);
   }
+}
+
+const SERVER_CODES: ImportFailure[] = ["import_busy", "import_daily_limit", "import_closed", "row_changed", "import_too_big", "import_undo_expired"];
+/**
+ * The server's answer as the screen's reason. supabase-js gives a plain object ({message, code, details}), not an Error,
+ * also when the answer never came («TypeError: Failed to fetch») — read its message, or a lost answer looks like a
+ * refusal (cloud e2e 193, build #452).
+ */
+export function importFailureOf(e: unknown): ImportFailure {
+  if (e instanceof ImportStop) return e.code;
+  const msg = String((e as { message?: unknown } | null)?.message ?? e ?? "");
+  const code = SERVER_CODES.find((c) => msg.includes(c));
+  if (code) return code;
+  if (/not allowed/.test(msg)) return "not_allowed";
+  const asError = e instanceof Error ? e : Object.assign(new Error(msg), typeof e === "object" && e ? e : {});
+  return classify(asError) === "refusal" ? "other" : "network";
 }
 export interface ImportDriver {
   start(): Promise<ImportState>;

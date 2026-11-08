@@ -2,18 +2,10 @@
  * The cloud driver of a client import (docs/specs/04 §14.4): the rpc of migration 20261109180000. Not through the
  * outbox — 5,000 rows must not hold the phone's other changes (§14.4 «Офлайн»); a break is «Продолжить».
  */
-import { classify } from "@/data/outboxRetry";
-import { ImportStop, type ImportAnswer, type ImportDriver, type ImportFailure } from "@/features/client/importRun";
+import { importFailureOf, ImportStop, type ImportAnswer, type ImportDriver } from "@/features/client/importRun";
 import { supabase } from "./client";
 
-const CODES: ImportFailure[] = ["import_busy", "import_daily_limit", "import_closed", "row_changed", "import_too_big", "import_undo_expired"];
-function stop(e: unknown): ImportStop {
-  const msg = String((e as { message?: unknown })?.message ?? e ?? "");
-  const code = CODES.find((c) => msg.includes(c));
-  if (code) return new ImportStop(code);
-  if (/not allowed/.test(msg)) return new ImportStop("not_allowed");
-  return new ImportStop(classify(e) === "refusal" ? "other" : "network");
-}
+const stop = (e: unknown) => new ImportStop(importFailureOf(e));
 async function rpc<T>(fn: string, args: Record<string, unknown>): Promise<T> {
   let res: { data: unknown; error: unknown };
   try {
