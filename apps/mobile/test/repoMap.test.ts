@@ -18,7 +18,7 @@ function builder(table: string) {
   };
   return b;
 }
-vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => builder(t) } }));
+vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => builder(t), rpc: (fn: string) => builder(fn) } }));
 import { loadCompanyDB } from "../src/cloud/repo";
 
 const CO = "co-1";
