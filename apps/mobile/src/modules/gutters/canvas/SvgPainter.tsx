@@ -15,7 +15,7 @@ const RunLine = memo(function RunLine({ r, color, halo }: { r: SceneRun; color: 
   const w = r.selected ? drawing.runWSel : drawing.runW;
   return (
     <G>
-      {r.selected ? <Line x1={r.a[0]} y1={r.a[1]} x2={r.b[0]} y2={r.b[1]} stroke={halo} strokeWidth={w + drawing.labelGap} strokeLinecap="round" /> : null}
+      {r.selected ? <Line id={`halo-${r.id}`} x1={r.a[0]} y1={r.a[1]} x2={r.b[0]} y2={r.b[1]} stroke={halo} strokeWidth={w + drawing.labelGap} strokeLinecap="round" /> : null}
       <Line x1={r.a[0]} y1={r.a[1]} x2={r.b[0]} y2={r.b[1]} stroke={color} strokeWidth={w} strokeLinecap="round" />
     </G>
   );
