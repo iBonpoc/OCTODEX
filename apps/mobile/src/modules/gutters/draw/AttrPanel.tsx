@@ -2,7 +2,7 @@
  * The attribute panel of the canvas (docs/specs/33-gutters-screens.md П21.8 M5c): what the picked run or downspout
  * is made of. One component: on 390 it sits in the core's Sheet, on 820/1280 it is the column on the right of the
  * canvas. Every choice is one edit of the drawing at once (the canvas's «Назад» takes it back, saved 1 s later) —
- * no «Save» button, like the storey. The tape: feet + inches, «Записать» → confidence `taped` (icon + word, rule 2).
+ * no «Save» button, like the storey. The tape: feet + inches, «Применить» → confidence `taped` (icon + word, rule 2).
  * Colours are words, never swatches (rule 2). The lists are what the company installs and its palette (settings, M7b);
  * an element's own value the company no longer offers stays as one more chip «нет в списке» (spec 33 П22.2 №7).
  */
@@ -62,7 +62,7 @@ function Pick<K extends string>({ label, testID, items, value, onChange, offered
   );
 }
 
-/** the tape: feet and inches; «Записать» sets the length, «По рисунку» puts the drawn one back */
+/** the tape: feet and inches; «Применить» sets the length, «По рисунку» puts the drawn one back */
 function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | null) => void }) {
   const { t } = useI18n();
   const cur = run.lengthIn ?? drawnLengthIn(run);

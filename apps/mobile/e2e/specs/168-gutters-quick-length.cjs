@@ -3,7 +3,7 @@
  * Every view.
  * - a gutter drawn → the sheet «Длина желоба» opens at once; the feet field has the focus (the number keyboard on a
  *   phone) and the drawn length as its hint;
- * - 25 ft 6 in → «Записать» → the run is 306″ by tape («рулетка»), the sheet is gone; in the store too;
+ * - 25 ft 6 in → «Применить» → the run is 306″ by tape («рулетка»), the sheet is gone; in the store too;
  * - a bad length (inches 12) says so and keeps the sheet;
  * - the next gutter → the sheet again → «Пропустить» keeps the drawn length (no tape);
  * - nothing drawn (a tap) → no sheet.
@@ -63,10 +63,10 @@ exports.run = async (h) => {
   await tid("quick-length-bad").waitFor({ timeout: 3000 });
   h.expect((await tid("quick-length").count()) === 1, "a bad length keeps the sheet");
 
-  // 25′ 6″ → «Записать»
+  // 25′ 6″ → «Применить»
   await field("quick-length-in").fill("6");
   await tid("quick-length-apply").getByRole("button").click();
-  await waitFor(async () => (await tid("quick-length").count()) === 0, "the sheet is gone after «Записать»");
+  await waitFor(async () => (await tid("quick-length").count()) === 0, "the sheet is gone after «Применить»");
   await waitFor(async () => (await runs()).some((r) => r.geom?.lengthIn === 306), "the run is 306″ by tape in the store");
   await waitFor(async () => /25′ 6″/.test(await tid("draw-selected").innerText()), "the picked bar shows 25′ 6″");
 

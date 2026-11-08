@@ -113,8 +113,8 @@ export function setDsAttrs(d: Drawing, id: string, patch: Partial<DsAttrs>, ch?:
 }
 
 /**
- * The tape: the typed length wins over the drawn one (confidence `taped`); null puts the drawn length back.
- * The drawing does not move — its ends hold the corners; labels and the estimate take the typed length.
+ * The tape: the typed length wins over the drawn one (confidence `taped`) and the line is redrawn to it; null drops
+ * the tape (the line stays where it is — «по рисунку»).
  * A downspout stays where it is drawn: its distance along the run scales with the new length.
  */
 export function setLength(d: Drawing, id: string, lengthIn: number | null): Drawing {
@@ -123,13 +123,43 @@ export function setLength(d: Drawing, id: string, lengthIn: number | null): Draw
   const want = lengthIn === null ? undefined : Math.round(lengthIn);
   if (r.lengthIn === want) return d;
   const { lengthIn: _was, ...rest } = r;
-  const next: DrawnRun = want === undefined ? rest : { ...rest, lengthIn: want };
+  if (want === undefined) return { ...d, runs: d.runs.map((x) => (x.id === id ? rest : x)) };
+  // the line takes the typed length on the drawing too (founder 08.11: 500 ft and 40 ft were the same size): its end
+  // b moves along the line; what is joined beyond it moves along, so the corners hold
+  const vx = r.b[0] - r.a[0], vy = r.b[1] - r.a[1];
+  const D = Math.hypot(vx, vy) || 1;
+  const nb: P = [Math.round(r.a[0] + (vx / D) * want), Math.round(r.a[1] + (vy / D) * want)];
+  const near = (p: P, q: P) => Math.hypot(p[0] - q[0], p[1] - q[1]) <= 1;
+  const at = (p: P) => near(p, r.b);
+  const next: DrawnRun = { ...rest, b: nb, lengthIn: want };
   const was = runLengthIn(r) || 1;
-  const L = runLengthIn(next);
+  // what hangs on end b (joined end to end, not through this run): it moves as a whole, keeping its shape — unless it
+  // comes round to end a (a closed line), then only the joined ends move
+  const beyond = new Set<string>();
+  const todo = d.runs.filter((x) => x.id !== id && (at(x.a) || at(x.b))).map((x) => x.id);
+  todo.forEach((x) => beyond.add(x));
+  while (todo.length) {
+    const cid = todo.pop();
+    const cur = d.runs.find((x) => x.id === cid)!;
+    for (const o of d.runs) {
+      if (o.id === id || beyond.has(o.id)) continue;
+      if ([o.a, o.b].some((p) => near(p, cur.a) || near(p, cur.b))) {
+        beyond.add(o.id);
+        todo.push(o.id);
+      }
+    }
+  }
+  const closed = d.runs.some((x) => beyond.has(x.id) && (near(x.a, r.a) || near(x.b, r.a)));
+  const dx = nb[0] - r.b[0], dy = nb[1] - r.b[1];
+  const shift = (p: P): P => [p[0] + dx, p[1] + dy];
   return {
     ...d,
-    runs: d.runs.map((x) => (x.id === id ? next : x)),
-    downspouts: d.downspouts.map((s) => (s.runId === id ? { ...s, atIn: Math.min(L, Math.round((s.atIn * L) / was)) } : s)),
+    runs: d.runs.map((x) => {
+      if (x.id === id) return next;
+      if (!closed && beyond.has(x.id)) return { ...x, a: shift(x.a), b: shift(x.b) };
+      return at(x.a) ? { ...x, a: nb } : at(x.b) ? { ...x, b: nb } : x;
+    }),
+    downspouts: d.downspouts.map((s) => (s.runId === id ? { ...s, atIn: Math.min(want, Math.round((s.atIn * want) / was)) } : s)),
   };
 }
 

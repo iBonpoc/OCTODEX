@@ -2554,7 +2554,7 @@ export const en: Dict = {
   "mod.gutters.attr.length": "Taped length",
   "mod.gutters.attr.ft": "ft",
   "mod.gutters.attr.in": "in",
-  "mod.gutters.attr.apply": "Set",
+  "mod.gutters.attr.apply": "Apply",
   "mod.gutters.attr.reset": "From drawing",
   "mod.gutters.attr.badLength": "Length 1″ to 500′, inches 0 to 11",
   "mod.gutters.attr.quickTitle": "Gutter length",
