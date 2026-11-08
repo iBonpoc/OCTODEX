@@ -14,10 +14,18 @@ describe("legacyTotals", () => {
     const v = { taxEnabled: true, taxRateBps: 825, depositRule: { kind: "pct", bps: 1000 }, discountMode: "pct", discountValue: 500 };
     expect(legacyTotals([line(9999), line(5000, { taxable: true }), line(7000, { optional: true }), line(4000, { clientVisible: false })], v)).toEqual({ totalCents: 14641, depositCents: 1464 });
   });
+  it("a fixed discount, a fixed deposit above the total, taxable lines with the tax off, no lines", () => {
+    const v = { taxEnabled: false, taxRateBps: 825, depositRule: { kind: "fixed", cents: 999999 }, discountMode: "fixed", discountValue: 1000 };
+    expect(legacyTotals([line(9999, { taxable: true })], v)).toEqual({ totalCents: 8999, depositCents: 8999 });
+    expect(legacyTotals([], plain)).toEqual({ totalCents: 0, depositCents: 0 });
+  });
   it("deposit rules as the server reads them", () => {
     expect(serverDepositRule({ kind: "pct", bps: 1000 })).toEqual({ kind: "pct", bps: 1000 });
     expect(serverDepositRule({ kind: "fixed", cents: 5000 })).toEqual({ kind: "fixed", cents: 5000 });
     expect(serverDepositRule({ kind: "pct", value: "0.1" })).toEqual({ kind: "none" });
     expect(serverDepositRule(null)).toEqual({ kind: "none" });
+    // the server casts the text: "1000" is 10% there too (review PR-B №6)
+    expect(serverDepositRule({ kind: "pct", bps: "1000" })).toEqual({ kind: "pct", bps: 1000 });
+    expect(serverDepositRule({ kind: "pct", bps: "ten" })).toEqual({ kind: "none" });
   });
 });

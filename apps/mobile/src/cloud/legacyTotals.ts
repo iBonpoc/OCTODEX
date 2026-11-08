@@ -4,7 +4,7 @@
  * stored line totals, the option's discount, the version's tax and deposit rule. The phone showed totals.total and the
  * deposit the old app wrote instead (estimate.add: price = round(total / qty) is cents apart; its deposit rule
  * {"kind":"pct","value":"0.1"} has no bps — the server takes no deposit). Now both come from the same lines and the
- * same rule, through the engine (rule 8). Review #415, security-check №2. Pure: test/legacyTotals.test.ts (and T112).
+ * same rule, through the engine (rule 8). Not mirrored: negative sums (a legacy estimate has none). Review #415, security-check №2. Pure: test/legacyTotals.test.ts (and T112).
  */
 import { computeOption, depositAmount, type DepositSetting } from "@octo/estimating-engine";
 
@@ -24,9 +24,11 @@ export interface LegacyVersion {
 
 /** the server's deposit rule: pct by bps, fixed by cents; anything else (the old {"value": "0.1"}) — none */
 export function serverDepositRule(rule: unknown): DepositSetting {
+  // the server reads (rule ->> 'bps')::numeric and (rule ->> 'cents')::bigint: a number or a numeric string (review PR-B №6)
   const r = (rule ?? {}) as { kind?: unknown; bps?: unknown; cents?: unknown };
-  if (r.kind === "pct" && typeof r.bps === "number" && Number.isFinite(r.bps)) return { kind: "pct", bps: r.bps };
-  if (r.kind === "fixed" && typeof r.cents === "number" && Number.isFinite(r.cents)) return { kind: "fixed", cents: r.cents };
+  const num = (v: unknown) => (typeof v === "number" || (typeof v === "string" && /^\s*-?\d+(\.\d+)?\s*$/.test(v)) ? Number(v) : NaN);
+  if (r.kind === "pct" && Number.isFinite(num(r.bps))) return { kind: "pct", bps: num(r.bps) };
+  if (r.kind === "fixed" && Number.isFinite(num(r.cents))) return { kind: "fixed", cents: num(r.cents) };
   return { kind: "none" };
 }
 

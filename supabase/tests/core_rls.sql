@@ -8891,6 +8891,10 @@ insert into public.estimate_options (id, company_id, version_id, name) values
 insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
   ('a1100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a1', 'Gutter', 10, 1200), ('a1100000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a9', 'Other', 1, 9000);
 insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 400), ('a1100000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 7777);
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, unit) values
+  ('a1100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a1', 'Downspout', 1, 900, 'ea'), ('a1100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a1', 'Removed', 1, 900, 'ea');
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 50), ('a1100000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 60);
+update public.estimate_line_items set deleted_at = now() where id = 'a1100000-0000-4000-8000-0000000000b4';   -- a deleted source (T111)
 update public.estimate_versions set locked_at = now() where id in ('a1100000-0000-4000-8000-0000000000d1', 'a1100000-0000-4000-8000-0000000000d9');
 update public.estimates set current_version_id = 'a1100000-0000-4000-8000-0000000000d2' where id = 'a1100000-0000-4000-8000-0000000000e1';
 update public.estimates set current_version_id = 'a1100000-0000-4000-8000-0000000000d9' where id = 'a1100000-0000-4000-8000-0000000000e2';
@@ -8899,7 +8903,8 @@ insert into public.estimate_line_items (id, company_id, option_id, name, quantit
   values ('a1100000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter', 12, 1300, 'a1100000-0000-4000-8000-0000000000b1');
 select tst.ok(tst.cnt('select 1 from public.estimate_line_costs') = 0, 'T110 sales without view_costs still reads no cost');
 :as_super
-select tst.ok((select unit_cost_cents = 400 from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000c1'), 'T110 the new line has the sent line''s cost');
+select tst.ok((select unit_cost_cents = 400 and line_cost_cents is null from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000c1'),
+  'T110 the new line has the sent line''s unit cost (not its line cost: the quantity changed 10 → 12)');
 \echo 'T110 a new version of a sent estimate keeps the costs ok'
 
 -- ---------------------------------------------------------------- T111: the copy takes no cost it should not (debt 4)
@@ -8928,6 +8933,30 @@ insert into public.estimate_line_items (id, company_id, option_id, name, quantit
   values ('a1100000-0000-4000-8000-0000000000c6', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'From a later version', 1, 500, 'a1100000-0000-4000-8000-0000000000b3');
 :as_super
 select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000c6'$q$) = 0, 'T111 a later version is not a source');
+-- security-check: another item of the same sent version (a cost planted on another line), another unit, a deleted
+-- source, a line of company B — nothing
+:as_super
+insert into public.estimates (id, company_id, customer_id, property_id, title) values ('a1100000-0000-4000-8000-0000000000eb', 'cb000000-0000-0000-0000-000000000000', 'c1b00000-0000-0000-0000-000000000001', 'd1b00000-0000-0000-0000-000000000001', 'T111 B');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no) values ('a1100000-0000-4000-8000-0000000000db', 'cb000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000eb', 1);
+insert into public.estimate_options (id, company_id, version_id, name) values ('a1100000-0000-4000-8000-0000000000ab', 'cb000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000db', 'A');
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values ('a1100000-0000-4000-8000-0000000000bb', 'cb000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000ab', 'Gutter', 1, 1200);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values ('a1100000-0000-4000-8000-0000000000bb', 'cb000000-0000-0000-0000-000000000000', 999);
+update public.estimate_versions set locked_at = now() where id = 'a1100000-0000-4000-8000-0000000000db';
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, unit, copied_from_line_id) values
+  ('a1100000-0000-4000-8000-0000000000c7', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter guard', 1, 5000, 'ea', 'a1100000-0000-4000-8000-0000000000b2'),
+  ('a1100000-0000-4000-8000-0000000000c8', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter', 10, 1200, 'ft', 'a1100000-0000-4000-8000-0000000000b1'),
+  ('a1100000-0000-4000-8000-0000000000c9', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Removed', 1, 900, 'ea', 'a1100000-0000-4000-8000-0000000000b4'),
+  ('a1100000-0000-4000-8000-0000000000ca', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', 'Gutter', 1, 1200, 'ea', 'a1100000-0000-4000-8000-0000000000bb');
+:as_super
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id in ('a1100000-0000-4000-8000-0000000000c7', 'a1100000-0000-4000-8000-0000000000c8', 'a1100000-0000-4000-8000-0000000000c9', 'a1100000-0000-4000-8000-0000000000ca')$q$) = 0,
+  'T111 another item, another unit, a deleted source, company B: no cost copied');
+-- the same name with other spaces and case is the same line
+:as_sales_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, copied_from_line_id)
+  values ('a1100000-0000-4000-8000-0000000000cb', 'ca000000-0000-0000-0000-000000000000', 'a1100000-0000-4000-8000-0000000000a2', '  gutter ', 12, 1300, 'a1100000-0000-4000-8000-0000000000b1');
+:as_super
+select tst.ok((select unit_cost_cents = 400 from public.estimate_line_costs where line_item_id = 'a1100000-0000-4000-8000-0000000000cb'), 'T111 «  gutter » = «Gutter»: copied');
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_line_cost_copy()', 'execute'), 'T111 the copy is not callable from the API');
 \echo 'T111 the copy takes no cost it should not ok'
 
