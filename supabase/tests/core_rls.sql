@@ -8130,7 +8130,9 @@ select tst.blocked($q$insert into public.estimate_versions (id, company_id, esti
   on conflict (id) do nothing$q$, 'T100 company B inserts with A''s version id');
 :as_office_a
 select tst.ok((select margin_pct is null from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'), 'T100 B''s insert left A''s margin');
--- the margin is a number as the engine writes it, nothing else
+-- the margin is a number as the engine writes it, nothing else (a huge loss is still a number)
+update public.estimate_versions set totals = '{"total": 1, "marginPct": "-10000000.0"}' where id = 'a1000000-0000-4000-8000-000000000002';
+select tst.ok((select margin_pct = '-10000000.0' from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'), 'T100 a huge negative margin is kept');
 select tst.fails($q$update public.estimate_versions set totals = '{"total": 1, "marginPct": "lots"}' where id = 'a1000000-0000-4000-8000-000000000002'$q$, 'T100 a margin that is not a number');
 -- P4: the retired lead cost columns take no value again
 select tst.fails($q$update public.leads set cost_cents = 100 where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T99 leads.cost_cents is retired');

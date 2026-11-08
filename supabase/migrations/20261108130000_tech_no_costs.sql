@@ -67,7 +67,7 @@ grant select, insert (item_id, company_id, unit_cost_cents, vendor_tax_bps, mark
 create table public.estimate_version_costs (
   version_id   uuid primary key,
   company_id   uuid not null references public.companies (id),
-  margin_pct   text check (margin_pct is null or margin_pct ~ '^-?[0-9]{1,7}([.][0-9]{1,2})?$'),
+  margin_pct   text check (margin_pct is null or margin_pct ~ '^-?[0-9]{1,12}([.][0-9]{1,2})?$'),
   updated_at   timestamptz not null default now(),
   foreign key (company_id, version_id) references public.estimate_versions (company_id, id) on delete cascade
 );
