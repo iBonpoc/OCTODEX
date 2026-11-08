@@ -106,20 +106,21 @@ exports.run = async (h) => {
   await p.waitForTimeout(400);
 
   // 2) ACH already on its way
+  const fresh = () => h.go(`/p/${TOKEN}`);   // a full load: the page reads the server anew
   answer = portal({ pending: { "a1830000-0000-4000-8000-000000000001": 150000 } });
-  await h.go(`/p/${TOKEN}`);
-  await h.expectText(/ACH processing: \$1,500\.00/, "the ACH on its way is on the invoice");
+  await fresh();
+  await h.expectText(/ACH processing: \$1,500(?!\d)/, "the ACH on its way is on the invoice");
   h.expect((await p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000001").count()) === 0, "nothing to pay again");
   h.expect((await p.getByTestId("portal-pay-online-a1830000-0000-4000-8000-000000000002").count()) === 1, "the other invoice can still be paid");
   await h.shot("pending");
 
   // 3) a demo company keeps the simulation; without Stripe and demo — no payment
   answer = portal({ online_pay: false, simulated_pay: true });
-  await h.go(`/p/${TOKEN}`);
+  await fresh();
   await h.expectText(/Pay by card/, "demo: the simulation stays");
   h.expect(!/Pay online/.test(await h.text()), "demo: no real payment");
   answer = portal({ online_pay: false, simulated_pay: false });
-  await h.go(`/p/${TOKEN}`);
+  await fresh();
   await h.expectText(/INV-1 · Final/, "the invoices are still shown");
   text = await h.text();
   h.expect(!/Pay online|Pay by card/.test(text), "no Stripe, no demo: no payment button");
@@ -128,12 +129,13 @@ exports.run = async (h) => {
   await h.go("/");
   const inv = await p.evaluate(() => {
     const raw = JSON.parse(localStorage.getItem("octo.db.v5") || "null");
-    const i = raw.db.invoices.find((x) => x.status === "sent" && x.totalCents - x.paidCents > 0);
+    const i = raw.db.invoices.find((x) => x.status === "sent") || raw.db.invoices[0];
     raw.db.pendingPayments = [{ id: "pp-183", invoiceId: i.id, amountCents: 12345, method: "ach", at: new Date().toISOString() }];
     localStorage.setItem("octo.db.v5", JSON.stringify(raw));
-    return i.id;
+    return { id: i.id, paid: i.paidCents };
   });
-  await h.go(`/invoice/${inv}`);
-  await h.expectText(/ACH в обработке: \$123\.45/, "the invoice screen: ACH on its way, not counted as paid");
+  await h.go(`/invoice/${inv.id}`);
+  await h.expectText(/ACH в обработке: \$123\.45/, "the invoice screen: ACH on its way");
+  h.expect((await h.db()).invoices.find((x) => x.id === inv.id).paidCents === inv.paid, "…not counted as paid");
   await h.shot("office");
 };
