@@ -6,7 +6,7 @@
  * - «Требует внимания» has it first in «Разобрать» (by testID) and on «Главная»; «Открыть» opens the record;
  * - «Понятно» in «Разобрать» takes it away from both.
  */
-const { signIn } = require("../signIn.cjs");
+const { signIn, seedOutbox } = require("../signIn.cjs");
 
 const uuid = () => "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
 
@@ -20,10 +20,7 @@ exports.run = async (h, { seed }) => {
 
   const owner = { userId: a1.userId, companyId: a1.companyId };
   const at = new Date(Date.now() - 60_000).toISOString();
-  await p.evaluate(
-    ([items]) => localStorage.setItem("octo.outbox.v1", JSON.stringify(items)),
-    [[{ id: "q-rej", op: { k: "expense.add", id: uuid(), jobId: null, vendor: "Nightly 118", category: "materials", amountCents: 4321 }, at, tries: 4, owner }]],
-  );
+  await seedOutbox(h, [{ id: "q-rej", op: { k: "expense.add", id: uuid(), jobId: null, vendor: "Nightly 118", category: "materials", amountCents: 4321 }, at, tries: 4, owner }]);
   const refuse = async (route) => {
     if (route.request().method() === "GET" || !/expenses/.test(route.request().url())) return route.continue();
     return route.fulfill({ status: 403, contentType: "application/json", body: JSON.stringify({ code: "42501", message: "new row violates row-level security policy for table \"expenses\"" }) });

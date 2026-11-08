@@ -1,5 +1,5 @@
 /**
- * e2e 196 — a tech signs the client on site, against a real Supabase (docs/specs/35-stripe.md §4д п.10; story map S8 «Подпись клиента», on site).
+ * e2e 206 (cloud) — a tech signs the client on site, against a real Supabase (docs/specs/35-stripe.md §4д п.10; story map S8 «Подпись клиента», on site).
  * The bug it guards: the app's «estimate.approve» sent the estimate first (send_estimate — the office only), the tech was
  * refused 42501, the queue dropped the op: the client's signature never reached the server. Now the signature goes by the
  * estimate's id (accept_on_site), no token.
@@ -9,7 +9,7 @@
  * The data is this run's own (rule 19, CHECKS §9 п.6).
  */
 const { execFileSync } = require("node:child_process");
-const { signIn, waitRows } = require("../signIn.cjs");
+const { signIn, waitRows, seedOutbox } = require("../signIn.cjs");
 
 const uuid = () => "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
 
@@ -64,7 +64,7 @@ exports.run = async (h, { seed, admin }) => {
     k: "estimate.approve", id: E, token: `tokFromTheTechPhone${run}0123456789`, optionId: O, addonIds: [], signer: "Ann Client 196",
     svg: "M0 0 L10 10", channel: "on_site", jobId: uuid(), invoiceId: uuid(),
   };
-  await p.evaluate(([items]) => localStorage.setItem("octo.outbox.v1", JSON.stringify(items)), [[{ id: "q-196", op, at, tries: 0, owner: ownerOf }]]);
+  await seedOutbox(h, [{ id: "q-196", op, at, tries: 0, owner: ownerOf }]);
   await h.go("/settings/profile");
   await p.evaluate(() => window.dispatchEvent(new Event("online")));
 

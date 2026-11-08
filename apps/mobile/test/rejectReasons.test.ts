@@ -26,6 +26,12 @@ describe("unit:rejectReasons — a refusal we can explain", () => {
       merge_payment_in_flight: "clientDup.rej.inFlight",
       merge_already_merged: "clientDup.rej.merged",
       customer_merged: "clientDup.rej.cardMerged",
+      // spec 37: purchase orders (migration 20261110090000, db T156, T157)
+      po_receiving: "po.rej.receiving",
+      po_cancelled: "po.rej.cancelled",
+      po_stale: "po.rej.stale",
+      po_received_office: "po.rej.officeOnly",
+      po_not_open: "po.rej.notOpen",
     });
     for (const key of Object.values(REJECT_REASONS))
       for (const dict of [ru, en, es] as Record<string, string>[]) expect(dict[key], key).toMatch(/\S/);

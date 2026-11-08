@@ -36,7 +36,7 @@ function builder(table: string) {
   };
   return b;
 }
-vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => builder(t) } }));
+vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => builder(t), rpc: (fn: string) => (fn === "estimate_links" ? builder(fn) : Promise.resolve({ data: null, error: { message: "no such function" } })) } }));
 import { loadCompanyDB, pages, PAGE } from "../src/cloud/repo";
 import { classify } from "../src/data/outboxRetry";
 const supabaseFrom = (t: string) => builder(t) as unknown as { select: (c: string) => unknown };

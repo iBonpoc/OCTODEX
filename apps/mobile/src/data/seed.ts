@@ -291,6 +291,17 @@ export function makeSeed(): DB {
     ],
     catalog: SEED_CATALOG,
     suppliers: SEED_SUPPLIERS,
+    // spec 37: one sent order of the bathroom job (test: names and counts only, no prices)
+    purchaseOrders: [
+      {
+        id: "po-demo-1", number: "PO-0001", supplierId: "sup-hd", jobId: "j1", status: "sent", revision: 1, fulfillment: "pickup", printPrices: false,
+        supplierName: "Home Depot", supplierPhone: "(555) 010-0100", sentAt: daysAgo(1), createdAt: daysAgo(1),
+        lines: [
+          { id: "pol-demo-1", position: 0, catalogItemId: "cat-bracket", name: "Railing bracket", qty: "12", unit: "ea", receivedQty: "0", checkPack: true },
+          { id: "pol-demo-2", position: 1, catalogItemId: "cat-gfci", name: "GFCI outlet 20A", qty: "2", unit: "ea", receivedQty: "0", checkPack: true },
+        ],
+      },
+    ],
     costHistory: [],
     notices: [],
     company: DEMO_COMPANY,

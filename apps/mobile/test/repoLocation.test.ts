@@ -23,7 +23,7 @@ function builder(table: string) {
 vi.mock("../src/cloud/client", () => ({
   supabase: {
     from: (t: string) => builder(t),
-    rpc: (name: string) =>
+    rpc: (name: string) => name === "estimate_links" ? builder(name) :
       Promise.resolve(name === "company_location_sharing" && flag !== "no-function" ? { data: flag, error: null } : { data: null, error: { message: "no such function" } }),
   },
 }));

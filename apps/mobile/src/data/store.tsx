@@ -44,7 +44,7 @@ import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePers
 import { backoffMs, classify, isModuleInactive, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { dropModuleOps, dropSettingsOps, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
+import { dropModuleOps, dropSettingsOps, dropTemplateOps, templateRejected, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -52,8 +52,9 @@ import { unsentIn as unsentInOf, withoutUnsentIn } from "@/features/closedCompan
 export { mineOf, type OwnedItem } from "./outboxOwner";
 import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
-import { enabledLocally, keepModuleData, moduleActive, moduleDef } from "@/modules/registry";
+import { enabledLocally, keepModuleData, moduleActive, moduleDef, modulePurchaseLines } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
+import { canEditOrders, canMove, canReceive, draftsForJob, linesEditable, openDraft, statusAfterReceive } from "@/features/purchaseOrders";
 import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsOfSupplier, itemsWithOtherTax, keepCostHistory, localHistoryEntry, mergeHistory } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
 import {
@@ -104,6 +105,7 @@ import {
   type NaReason,
   type VisitSettings,
   type Supplier,
+  type PurchaseOrder,
 } from "./types";
 import { cleanEstimateTemplate, canEditEstimateTemplates } from "@/features/estimateTemplate";
 import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, visitSettingsOf } from "@/features/checklist";
@@ -307,7 +309,7 @@ interface StoreCtx {
   saveEstimate: (e: { id: ID; customerId: ID; propertyId: ID; title: string; doc: EstimateDoc; leadId?: ID; templateId?: ID }) => Undo;
   /** E3 (docs/specs/07 §11): an estimate template, whole (new, changed, archived = archivedAt); director and office */
   /** ifNew: a module's starter (fixed id) — added once, never over the office's edits (docs/specs/07 §12 №6) */
-  saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean }) => Undo;
+  saveEstimateTemplate: (t: EstimateTemplate, opts?: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] }) => Undo;
   /** client + property for an estimate from a lead (creates a prospect card the first time) */
   leadEstimateTarget: (leadId: ID) => { customerId: ID; propertyId: ID; undo: Undo } | null;
   /** manual "make a client" with a reason (paper contract, verbal, paid…) */
@@ -377,6 +379,16 @@ interface StoreCtx {
   setSupplierActive: (id: ID, active: boolean) => Undo;
   /** spec 36: the supplier's purchase tax into its items that have another one (new estimate lines follow) */
   applySupplierTax: (id: ID) => Undo;
+  /** spec 37: the job's drafts per supplier (an open draft of that supplier is kept, not doubled); the ids to open */
+  makeJobOrders: (jobId: ID) => { ids: ID[]; made: number; undo: Undo };
+  /** spec 37: a new empty draft (for stock, or a job), or a changed order (lines of a draft / sent order) */
+  savePurchaseOrder: (o: PurchaseOrder) => Undo;
+  /** spec 37: sent — the supplier's snapshot, a new revision; false — not allowed (no supplier, no lines, a closed order) */
+  sendPurchaseOrder: (id: ID) => boolean;
+  /** spec 37: cancelled (the screen asks first: it cannot be undone) */
+  cancelPurchaseOrder: (id: ID) => void;
+  /** spec 37: what came, line by line (the tech of the job or the office); «Отменить» sends what was before */
+  receivePurchaseOrder: (id: ID, lines: { id: ID; received: string }[]) => Undo;
   /** spec 36: read the newest history of one item or one supplier from the server (cloud, online, who sees costs) */
   loadCostHistory: (where: { itemId?: ID; supplierId?: ID }) => void;
   /** several items at once with one «Отменить» («create the items now», docs/specs/33 П16, core K1): each goes as its own
@@ -801,6 +813,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             void rereadSettings(mod, w?.companyId);
             continue;
           }
+          // an estimate template changed on another phone first (spec 07 §12.7): this save and the later ones of the same
+          // template go now (each was built on this one's version), one card, the truth read again
+          if (item.op.k === "est.template.save" && isRowConflict(e)) {
+            const { kept, gone } = dropTemplateOps(outboxRef.current, item.op.template.id, w);
+            outboxRef.current = kept;
+            for (const g of gone) {
+              opPause.current.delete(g.id);
+              deadOps.current.add(g.id);
+            }
+            dropped = true;
+            const rej = templateRejected(item, msg, Date.now(), w);
+            setRejected((prev) => [...freshRejected(prev, Date.now()).filter((x) => x.id !== rej.id), rej]);
+            setOutbox(outboxRef.current);
+            continue;
+          }
           if (item.tries + 1 >= MAX_TRIES) {
             // Will never succeed: drop it and reload the truth from the server. A money change is not dropped
             // silently: it stays as «не записано на сервере» until the person says «Понятно» (docs/specs/23 §3)
@@ -1078,6 +1105,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
   };
   const visitOf = (visitId: ID) => dbRef.current.visits.find((x) => x.id === visitId);
   const noop: Undo = () => {};
+  /** spec 37: an order on the phone and in the queue (header, lines, the lines taken out) */
+  const putOrder = (o0: PurchaseOrder, removedLineIds: ID[]): Undo => {
+    // the server moves row_version by one per save (a new order: the insert, then the update → 2) — mirrored here so a
+    // marking after it is not refused as stale (po_receive p_row_version); unknown stays unknown
+    const prev = (dbRef.current.purchaseOrders ?? []).find((x) => x.id === o0.id);
+    const o: PurchaseOrder = prev ? (prev.rowVersion !== undefined ? { ...o0, rowVersion: prev.rowVersion + 1 } : o0) : { ...o0, rowVersion: 2 };
+    return mutate(
+      "po.save",
+      (d) => {
+        const list = d.purchaseOrders ?? [];
+        return { ...d, purchaseOrders: list.some((x) => x.id === o.id) ? list.map((x) => (x.id === o.id ? o : x)) : [o, ...list] };
+      },
+      { k: "po.save", order: o, removedLineIds },
+    );
+  };
   /**
    * spec 36: change several price-list items at once (a supplier's tax or its new name) — each a catalog.save with its
    * cost change and the phone's history row; «Отменить» sends the reverse ops (the change may already be on the
@@ -1799,15 +1841,27 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!clean || !canEditEstimateTemplates(role) || dbRef.current.estimateTemplatesMissing) return noop;
         // a starter (ifNew) already on the phone: nothing (a second tap; a second phone's after the next read)
         if (opts?.ifNew && (dbRef.current.estimateTemplates ?? []).some((x) => x.id === clean.id)) return noop;
+        const base = opts?.baseRowVersion ?? (opts?.ifNew ? undefined : (dbRef.current.estimateTemplates ?? []).find((x) => x.id === clean.id)?.rowVersion);
         return mutate(
           "estimate.template",
           (d) => {
             const list = d.estimateTemplates ?? [];
             const old = list.find((x) => x.id === clean.id);
-            const next = { ...clean, uses: old?.uses ?? clean.uses, lastUsedAt: old?.lastUsedAt ?? clean.lastUsedAt };
+            // the server's row_version after this save, as far as the phone can tell (§12.7): an update +1; a new one —
+            // insert 1, then the update 2; a starter (insert only, or a revived row) — not known
+            // a new one: not known (a cost in it makes the server's own extra update — review №С1) until the next read
+            const rowVersion = old?.rowVersion !== undefined ? old.rowVersion + 1 : undefined;
+            const { rowVersion: _rv, ...rest } = clean;
+            const next = { ...rest, uses: old?.uses ?? clean.uses, lastUsedAt: old?.lastUsedAt ?? clean.lastUsedAt, ...(rowVersion !== undefined ? { rowVersion } : {}) };
             return { ...d, estimateTemplates: old ? list.map((x) => (x.id === clean.id ? next : x)) : [...list, next] };
           },
-          { k: "est.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true } : {}) },
+          {
+            k: "est.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true } : {}),
+            // every save of a template whose version the phone knows goes over it (rename, archive, «Отменить» too — review
+            // №С2); the builder gives the version it opened on
+            ...(base !== undefined ? { baseRowVersion: base } : {}),
+            ...(opts?.clearCosts?.length ? { clearCosts: opts.clearCosts } : {}),
+          },
         );
       },
       saveEstimate: ({ id, customerId, propertyId, title, doc: doc0, leadId: leadId0, templateId: templateId0 }) => {
@@ -2149,6 +2203,79 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         // «Отменить» (rule 5): the op may already be on the server — a reverse op, the last one wins
         return () =>
           void mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? x : y)) }), { k: "supplier.save", supplier: x });
+      },
+      makeJobOrders: (jobId) => {
+        const d0 = dbRef.current;
+        if (!canEditOrders(role) || d0.purchaseOrdersLegacy) return { ids: [], made: 0, undo: noop };
+        const groups = draftsForJob(d0, jobId, modulePurchaseLines(d0, jobId), d0.costsVisible !== false);
+        const job = d0.jobs.find((j) => j.id === jobId);
+        const addr = job ? d0.properties.find((x) => x.id === job.propertyId) : undefined;
+        const ids: ID[] = [];
+        const undos: Undo[] = [];
+        for (const g of groups) {
+          const open = openDraft(dbRef.current, jobId, g.supplierId);
+          if (open) {
+            ids.push(open.id);
+            continue;
+          }
+          const o: PurchaseOrder = {
+            id: uid(), status: "draft", revision: 0, fulfillment: "delivery", printPrices: false, createdAt: new Date().toISOString(), jobId,
+            ...(g.supplierId ? { supplierId: g.supplierId } : {}),
+            ...(addr ? { deliverTo: [addr.address, addr.city].filter(Boolean).join(", ") } : {}),
+            lines: g.lines.map((l, i) => ({ ...l, id: uid(), position: i })),
+          };
+          ids.push(o.id);
+          undos.push(putOrder(o, []));
+        }
+        return { ids, made: undos.length, undo: () => [...undos].reverse().forEach((u) => u()) };
+      },
+      savePurchaseOrder: (o) => {
+        const d0 = dbRef.current;
+        if (!canEditOrders(role) || d0.purchaseOrdersLegacy) return noop;
+        const prev = (d0.purchaseOrders ?? []).find((x) => x.id === o.id);
+        if (prev && !linesEditable(prev) && JSON.stringify(prev.lines) !== JSON.stringify(o.lines)) return noop;
+        const removed = (prev?.lines ?? []).filter((l) => !o.lines.some((x) => x.id === l.id)).map((l) => l.id);
+        return putOrder({ ...o, lines: o.lines.map((l, i) => ({ ...l, position: i })) }, removed);
+      },
+      sendPurchaseOrder: (id) => {
+        const d0 = dbRef.current;
+        const o = (d0.purchaseOrders ?? []).find((x) => x.id === id);
+        const sup = o?.supplierId ? (d0.suppliers ?? []).find((x) => x.id === o.supplierId) : undefined;
+        if (!o || !sup || !o.lines.length || !canEditOrders(role) || !(o.status === "draft" || o.status === "sent")) return false;
+        putOrder({
+          ...o, status: "sent", revision: o.revision + 1, sentAt: new Date().toISOString(),
+          supplierName: sup.name, supplierPhone: sup.phone, supplierEmail: sup.email, supplierAddress: sup.address,
+        }, []);
+        return true;
+      },
+      cancelPurchaseOrder: (id) => {
+        const o = (dbRef.current.purchaseOrders ?? []).find((x) => x.id === id);
+        if (!o || !canEditOrders(role) || !canMove(o.status, "cancelled")) return;
+        putOrder({ ...o, status: "cancelled" }, []);
+      },
+      receivePurchaseOrder: (id, lines) => {
+        const o = (dbRef.current.purchaseOrders ?? []).find((x) => x.id === id);
+        if (!o || !canReceive(role) || !["sent", "partially_received", "received"].includes(o.status)) return noop;
+        // a received order is changed by the office only (director 08.11, #461 №3; po_receive refuses the tech)
+        if (o.status === "received" && !canEditOrders(role)) return noop;
+        const apply = (src: PurchaseOrder, ls: { id: ID; received: string }[]) => {
+          const next = { ...src, lines: src.lines.map((l) => { const r = ls.find((x) => x.id === l.id); return r ? { ...l, receivedQty: r.received } : l; }) };
+          const st = statusAfterReceive(next);
+          const done = {
+            ...next, status: st, ...(st === "received" ? { receivedAt: new Date().toISOString() } : { receivedAt: undefined }),
+            ...(src.rowVersion !== undefined ? { rowVersion: src.rowVersion + 1 } : {}),
+          };
+          mutate("po.receive", (d) => ({ ...d, purchaseOrders: (d.purchaseOrders ?? []).map((x) => (x.id === id ? done : x)) }), {
+            k: "po.receive", id, lines: ls, ...(src.rowVersion !== undefined ? { rowVersion: src.rowVersion } : {}),
+          });
+        };
+        const before = o.lines.filter((l) => lines.some((x) => x.id === l.id)).map((l) => ({ id: l.id, received: l.receivedQty }));
+        apply(o, lines);
+        // «Отменить» (rule 5): the quantities as they were — the op may already be on the server, a reverse call
+        return () => {
+          const cur = (dbRef.current.purchaseOrders ?? []).find((x) => x.id === id);
+          if (cur) apply(cur, before);
+        };
       },
       loadCostHistory: (where) => {
         const cid = whoRef.current?.companyId;
