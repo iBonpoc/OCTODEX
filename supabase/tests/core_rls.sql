@@ -5139,7 +5139,7 @@ where c not in ('created_by', 'updated_by')   -- history of who wrote a row: kep
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
-    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by',
     -- erased (app.erase_personal_rows)
     'member_prefs.user_id', 'user_locations.user_id', 'push_devices.user_id', 'push_outbox.user_id', 'push_prefs.user_id',
     -- unlinked (set to null)
@@ -5152,7 +5152,7 @@ select coalesce(string_agg(e, ', '), '') as t50_stale from unnest(array[
     'invitations.invited_by', 'invitations.accepted_by', 'invoices.voided_by', 'leads.assigned_to', 'member_signatures.user_id',
     'memberships.user_id', 'memberships.invited_by', 'payments.received_by', 'payments.voided_by', 'status_events.actor_id',
     'tasks.assignee_id', 'tasks.done_by', 'visit_assignees.user_id', 'visits.cancelled_by',
-    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by',
+    'visit_checklist_items.done_by', 'visit_checklist_items.na_by', 'visits.checklist_reviewed_by', 'legal_acceptance.user_id', 'users.id', 'intake_events.decided_by', 'import_jobs.undone_by',
     'member_prefs.user_id', 'user_locations.user_id', 'company_contacts.user_id', 'companies.lead_default_assignee_id']) e
  where not exists (select 1 from information_schema.columns c where c.table_schema = 'public'
                      and format('%s.%s', c.table_name, c.column_name) = e) \gset
@@ -10443,5 +10443,195 @@ select tst.ok((select status = 'succeeded' and stripe_refund_id = 're_T133c' and
 :as_owner_a
 select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000005', null, 'goodwill', null, 'k133-null01')$q$, '%refund_above_available%', 'T133 an empty amount is our refusal, not a raw error');
 \echo 'T133 refunds ok'
+
+-- ---------------------------------------------------------------- T138: server import of clients from CSV (docs/specs/04 §14, map S3e)
+\set t138_rows '[{"line":2,"name":"T138 Ann Lee","first_name":"Ann","last_name":"Lee","company":"Lee LLC","phone":"(909) 138-0001","email":"Ann.T138@example.com","address":"1 T138 Way","city":"Pasadena"},{"line":3,"name":"T138 Bob","phone":"909 138 0002","email":"","address":"","city":""},{"line":4,"name":"T138 Second Person","phone":"909-138-0099","email":"","address":"","city":""},{"line":5,"name":"","phone":"909 138 0005","email":"","address":"","city":""}]'
+:as_super
+-- a card whose SECOND person has the phone of row 4 (any person of a card counts)
+insert into public.customers (id, company_id, display_name, created_at) values
+  ('c1380000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'T138 Existing', now() - interval '3 days');
+insert into public.contacts (company_id, customer_id, name, phone, is_primary) values
+  ('ca000000-0000-0000-0000-000000000000', 'c1380000-0000-4000-8000-0000000000e1', 'T138 Main', '(909) 138-0050', true),
+  ('ca000000-0000-0000-0000-000000000000', 'c1380000-0000-4000-8000-0000000000e1', 'T138 Spouse', '909.138.0099', false);
+-- who may start: owner / admin / office of THIS company
+:as_tech_a
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', repeat('a', 64), 4, '1a000000-0000-0000-0000-000000000001')$q$, '%not allowed%', 'T138 a tech does not import');
+:as_sales_a
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', repeat('a', 64), 4, '1a000000-0000-0000-0000-000000000001')$q$, '%not allowed%', 'T138 sales does not import (was: everyone but the tech)');
+:as_owner_b
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', repeat('a', 64), 4, '1b000000-0000-0000-0000-000000000001')$q$, '%not allowed%', 'T138 another company does not import into A');
+:as_office_a
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', repeat('a', 64), 4, '1b000000-0000-0000-0000-000000000001')$q$, '%import_bad_source%', 'T138 a source of another company is refused');
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', repeat('a', 64), 5001, '1a000000-0000-0000-0000-000000000001')$q$, '%import_too_big%', 'T138 more than 5,000 rows — refused');
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000009', 'a.csv', 'nothex', 4, '1a000000-0000-0000-0000-000000000001')$q$, '%import_bad_file%', 'T138 a hash that is not sha256 — refused');
+select tst.ok((select j ->> 'status' = 'applying' and (j ->> 'next_line')::int = 2 and j ->> 'same_file_at' is null
+                 from (select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000001', 'clients.csv', repeat('a', 64), 4, '1a000000-0000-0000-0000-000000000001') j) x),
+  'T138 the office starts an import');
+select tst.ok((select (j ->> 'id')::uuid = 'f1380000-0000-4000-8000-000000000001'
+                 from (select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000001', 'clients.csv', repeat('a', 64), 4, '1a000000-0000-0000-0000-000000000001') j) x),
+  'T138 the same start again — the same job');
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000002', 'other.csv', repeat('b', 64), 4, '1a000000-0000-0000-0000-000000000001')$q$, '%import_busy%', 'T138 a second open import of the company — import_busy (two phones)');
+-- somebody else's job id (security-check §14.9 №1): nothing about it, no rows into it
+:as_owner_b
+select tst.fails_like($q$select public.import_customers_start('cb000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000001', 'x.csv', repeat('c', 64), 4, '1b000000-0000-0000-0000-000000000001')$q$, '%not allowed%', 'T138 another company''s job id in start — not allowed, no state');
+select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$, :'t138_rows'), '%not allowed%', 'T138 another company sends rows into A''s job — not allowed');
+:as_owner_a
+select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$, :'t138_rows'), '%not allowed%', 'T138 only the author sends batches');
+-- the batch
+:as_office_a
+create temp table t138 as select public.import_customers('f1380000-0000-4000-8000-000000000001', :'t138_rows') j;
+select tst.ok((select jsonb_agg(jsonb_build_object('l', e ->> 'line', 'r', e ->> 'result', 's', e ->> 'reason') order by (e ->> 'line')::int)
+                 from t138, jsonb_array_elements(j) e)
+              = '[{"l":"2","r":"added","s":null},{"l":"3","r":"added","s":null},{"l":"4","r":"skipped","s":"dupClient"},{"l":"5","r":"skipped","s":"noName"}]'::jsonb,
+  'T138 every row checked by the server: two added, the second person''s phone is a duplicate, no name — skipped');
+select tst.ok((select e ->> 'who' = 'T138 Existing' and (e ->> 'customer_id')::uuid = 'c1380000-0000-4000-8000-0000000000e1' from t138, jsonb_array_elements(j) e where e ->> 'line' = '4'),
+  'T138 …with the card it matched');
+:as_super
+select tst.ok((select c.first_name = 'Ann' and c.last_name = 'Lee' and c.company_name = 'Lee LLC' and c.status = 'active'
+                      and c.lead_source_id = '1a000000-0000-0000-0000-000000000001' and k.phone = '(909) 138-0001' and k.email = 'ann.t138@example.com'
+                      and k.is_primary and c.primary_contact_id = k.id and p.address_line1 = '1 T138 Way' and p.address_city = 'Pasadena'
+                 from public.customers c join public.contacts k on k.customer_id = c.id join public.properties p on p.customer_id = c.id
+                where c.display_name = 'T138 Ann Lee'),
+  'T138 an added row: card (name parts, company, source, active), main person, property');
+select count(*) as t138_cards from public.customers where display_name like 'T138 %' \gset
+-- the answer was lost: the same batch again
+:as_office_a
+select tst.ok((select jsonb_agg(e ->> 'result' order by (e ->> 'line')::int) from jsonb_array_elements(public.import_customers('f1380000-0000-4000-8000-000000000001', :'t138_rows')) e)
+              = '["added","added","skipped","skipped"]'::jsonb, 'T138 the same batch again — the same answers');
+:as_super
+select tst.ok((select count(*) from public.customers where display_name like 'T138 %') = :t138_cards, 'T138 …and no new cards');
+:as_office_a
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":3,"name":"T138 Bob Changed","phone":"909 138 0002"}]')$q$, '%row_changed%', 'T138 the same line with other content — row_changed');
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":6,"name":"T138 Past The End","phone":"909 138 0006"}]')$q$, '%import_bad_line%', 'T138 a line past the total — refused');
+select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$,
+                        (select jsonb_agg(jsonb_build_object('line', 2, 'name', 'x')) from generate_series(1, 251))), '%import_too_big%', 'T138 more than 250 rows in a batch — refused');
+select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$,
+                        jsonb_build_array(jsonb_build_object('line', 5, 'name', repeat('x', 201)))), '%import_too_big%', 'T138 a cell over 200 characters — refused');
+-- nobody writes the tables, the keys are closed (§14.9 №2)
+select tst.blocked($q$insert into public.import_jobs (id, company_id, file_name, file_sha256, total_rows, lead_source_id, created_by) values (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'x', repeat('a', 64), 1, '1a000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002')$q$, 'T138 the app does not write import_jobs');
+select tst.blocked($q$update public.import_rows set result = 'added' where job_id = 'f1380000-0000-4000-8000-000000000001'$q$, 'T138 …nor import_rows');
+select tst.fails($q$select * from app.customer_keys('ca000000-0000-0000-0000-000000000000')$q$, 'T138 app.customer_keys (every phone and email of a company) — not for the app');
+select tst.ok((select count(*) from public.import_rows where job_id = 'f1380000-0000-4000-8000-000000000001') = 4, 'T138 the office reads the rows');
+:as_sales_a
+select tst.ok((select count(*) from public.import_jobs) = 0 and (select count(*) from public.import_rows) = 0, 'T138 sales reads no imports');
+:as_owner_b
+select tst.ok((select count(*) from public.import_jobs where id = 'f1380000-0000-4000-8000-000000000001') = 0, 'T138 another company reads no imports');
+:as_super
+select tst.ok(not has_function_privilege('anon', 'public.import_customers(uuid,jsonb)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.import_customers_start(uuid,uuid,text,text,int,uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.import_customers_finish(uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.undo_customer_import(uuid)', 'EXECUTE')
+          and has_function_privilege('authenticated', 'public.import_customers(uuid,jsonb)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.customer_keys(uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.address_key(text,text,text,text)', 'EXECUTE'), 'T138 rights of the functions (rule 18)');
+-- finish: one audit line, no file name (§14.9 №10)
+:as_office_a
+select tst.ok((select j ->> 'status' = 'applied' and (j -> 'counts' ->> 'added')::int = 2 and (j -> 'counts' ->> 'skipped')::int = 2
+                 from (select public.import_customers_finish('f1380000-0000-4000-8000-000000000001') j) x), 'T138 finish: applied, counts');
+select tst.ok((select j ->> 'status' = 'applied' from (select public.import_customers_finish('f1380000-0000-4000-8000-000000000001') j) x), 'T138 finish again — the same');
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":5,"name":"T138 Late","phone":"909 138 0007"}]')$q$, '%import_closed%', 'T138 no batch into a finished import');
+:as_super
+select tst.ok((select count(*) = 1 and bool_and(not (after ? 'file_name') and after ->> 'total' = '4') from public.audit_log
+                where entity_type = 'import_job' and entity_id = 'f1380000-0000-4000-8000-000000000001' and action = 'apply'), 'T138 one audit line, no file name');
+-- the same file again: a warning
+:as_office_a
+select tst.ok((select j ->> 'same_file_at' is not null
+                 from (select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000003', 'clients.csv', repeat('a', 64), 1, '1a000000-0000-0000-0000-000000000001') j) x),
+  'T138 the same file again — «already imported on …»');
+select tst.ok((select e ->> 'reason' = 'dupClient' and e ->> 'who' = 'T138 Ann Lee'
+                 from jsonb_array_elements(public.import_customers('f1380000-0000-4000-8000-000000000003', '[{"line":2,"name":"T138 Ann Lee","phone":"(909) 138-0001"}]')) e),
+  'T138 …and its rows are the existing clients now');
+select public.import_customers_finish('f1380000-0000-4000-8000-000000000003');
+-- undo (§14.9 №3): the card this import made and nobody touched — gone; a card with a note — kept; the matched card — never
+:as_super
+insert into public.notes (company_id, subject_type, subject_id, body, visibility)
+select 'ca000000-0000-0000-0000-000000000000', 'customer', id, 'T138 called back', 'team' from public.customers where display_name = 'T138 Bob';
+:as_tech_a
+select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-000000000001')$q$, '%not allowed%', 'T138 a tech does not undo');
+:as_owner_b
+select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-000000000001')$q$, '%not allowed%', 'T138 another company does not undo');
+:as_office_a
+select tst.ok((select j ->> 'status' = 'undone' and (j -> 'counts' ->> 'undone')::int = 1 and (j -> 'counts' ->> 'kept')::int = 1
+                 from (select public.undo_customer_import('f1380000-0000-4000-8000-000000000001') j) x), 'T138 undo: one card taken back, one kept');
+:as_super
+select tst.ok((select deleted_at is not null from public.customers where display_name = 'T138 Ann Lee' and id in (select customer_id from public.import_rows where job_id = 'f1380000-0000-4000-8000-000000000001'))
+          and not exists (select 1 from public.contacts k join public.import_rows r on r.customer_id = k.customer_id where r.job_id = 'f1380000-0000-4000-8000-000000000001' and r.line = 2 and k.deleted_at is null)
+          and not exists (select 1 from public.properties p join public.import_rows r on r.customer_id = p.customer_id where r.job_id = 'f1380000-0000-4000-8000-000000000001' and r.line = 2 and p.deleted_at is null),
+  'T138 …the untouched card with its person and property');
+select tst.ok((select deleted_at is null from public.customers where display_name = 'T138 Bob'), 'T138 …the card with a note stays');
+select tst.ok((select deleted_at is null from public.customers where id = 'c1380000-0000-4000-8000-0000000000e1')
+          and (select count(*) = 2 from public.contacts where customer_id = 'c1380000-0000-4000-8000-0000000000e1' and deleted_at is null),
+  'T138 …the card a row matched is never touched');
+:as_office_a
+select tst.ok((select j ->> 'status' = 'undone' and (j -> 'counts' ->> 'undone')::int = 1 from (select public.undo_customer_import('f1380000-0000-4000-8000-000000000001') j) x), 'T138 undo again — the same');
+:as_super
+update public.import_jobs set undo_until = now() - interval '1 minute' where id = 'f1380000-0000-4000-8000-000000000003';
+:as_office_a
+select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-000000000003')$q$, '%import_undo_expired%', 'T138 after 30 days — no undo');
+-- an import left open a day closes itself; at most 10 imports a day
+:as_super
+insert into public.import_jobs (id, company_id, file_name, file_sha256, total_rows, lead_source_id, created_by, last_batch_at)
+values ('f1380000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'lost.csv', repeat('d', 64), 10, '1a000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', now() - interval '25 hours');
+:as_office_a
+select tst.ok((select j ->> 'status' = 'applying'
+                 from (select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000005', 'next.csv', repeat('f', 64), 1, '1a000000-0000-0000-0000-000000000001') j) x),
+  'T138 a new import starts though one was left open for a day…');
+:as_super
+select tst.ok((select status = 'applied' and undo_until is not null from public.import_jobs where id = 'f1380000-0000-4000-8000-000000000004'), 'T138 …that one is closed with what it had');
+:as_office_a
+select public.import_customers_finish('f1380000-0000-4000-8000-000000000005');
+:as_super
+insert into public.import_jobs (id, company_id, file_name, file_sha256, total_rows, lead_source_id, created_by, status)
+select gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', 'day.csv', repeat('e', 64), 1, '1a000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', 'applied'
+  from generate_series(1, 6);
+:as_office_a
+select tst.fails_like($q$select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000006', 'more.csv', repeat('f', 64), 1, '1a000000-0000-0000-0000-000000000001')$q$, '%import_daily_limit%', 'T138 the 11th import of a day — refused');
+:as_super
+delete from public.import_jobs where file_name = 'day.csv';
+drop table t138;
+\echo 'T138 server import of clients ok'
+
+-- ---------------------------------------------------------------- T139: one rule on the phone and on the server (apps/mobile/test/fixtures/matchKeys.json, read by test/matchKeys.test.ts too)
+\set match_json `cat :match_keys`
+:as_super
+select tst.ok(coalesce(string_agg(x ->> 'in', ', '), '') = '', format('T139 phone keys as in the app: %s', coalesce(string_agg(x ->> 'in', ', '), '')))
+  from jsonb_array_elements((:'match_json')::jsonb -> 'phones') x where app.phone_key(x ->> 'in') is distinct from x ->> 'key';
+select tst.ok(coalesce(string_agg(x ->> 'in', ', '), '') = '', format('T139 email keys as in the app: %s', coalesce(string_agg(x ->> 'in', ', '), '')))
+  from jsonb_array_elements((:'match_json')::jsonb -> 'emails') x where app.email_key(x ->> 'in') is distinct from x ->> 'key';
+select tst.ok(coalesce(string_agg(x ->> 'street', ', '), '') = '', format('T139 address keys as in the app: %s', coalesce(string_agg((x ->> 'street') || ' → ' || coalesce(app.address_key(x ->> 'street', x ->> 'unit', x ->> 'city', x ->> 'zip'), 'null'), ', '), '')))
+  from jsonb_array_elements((:'match_json')::jsonb -> 'addresses') x
+ where app.address_key(x ->> 'street', x ->> 'unit', x ->> 'city', x ->> 'zip') is distinct from x ->> 'key';
+-- the rows of an import: a company of its own, the same existing cards, the same answers
+select set_config('tst.match_json', :'match_json', false) is not null as t139_set \gset
+insert into auth.users (id, email, raw_user_meta_data) values ('a1390000-0000-4000-8000-000000000001', 'owner139@c.test', '{"full_name":"Olga 139"}');
+insert into public.companies (id, name) values ('c1390000-0000-4000-8000-000000000000', 'T139 Co');
+insert into public.memberships (company_id, user_id, role, status) values ('c1390000-0000-4000-8000-000000000000', 'a1390000-0000-4000-8000-000000000001', 'owner', 'active');
+insert into public.lead_sources (id, company_id, name, kind) values ('1c139000-0000-4000-8000-000000000001', 'c1390000-0000-4000-8000-000000000000', 'T139 source', 'marketplace');
+do $$
+declare e jsonb; n int := 0; v_id uuid;
+begin
+  for e in select * from jsonb_array_elements((current_setting('tst.match_json')::jsonb) -> 'rows' -> 'existing') loop
+    n := n + 1;
+    insert into public.customers (company_id, display_name, status, do_not_service_reason, created_at)
+    values ('c1390000-0000-4000-8000-000000000000', e ->> 'name', e ->> 'status',
+            case when e ->> 'status' = 'do_not_service' then 'T139' end, now() - make_interval(days => 10 - n))
+    returning id into v_id;
+    insert into public.contacts (company_id, customer_id, name, phone, email, is_primary)
+    values ('c1390000-0000-4000-8000-000000000000', v_id, e ->> 'name', e ->> 'phone', e ->> 'email', true);
+    insert into public.properties (company_id, customer_id, address_line1, address_city, address_zip, stories)
+    values ('c1390000-0000-4000-8000-000000000000', v_id, e ->> 'address', e ->> 'city', e ->> 'zip', 1);
+  end loop;
+end $$;
+reset role; set request.jwt.claim.sub = 'a1390000-0000-4000-8000-000000000001'; set role authenticated;
+select public.import_customers_start('c1390000-0000-4000-8000-000000000000', 'f1390000-0000-4000-8000-000000000001', 'fixture.csv', repeat('9', 64),
+  jsonb_array_length((:'match_json')::jsonb -> 'rows' -> 'import'), '1c139000-0000-4000-8000-000000000001') is not null as t139_started \gset
+create temp table t139 as select e from jsonb_array_elements(public.import_customers('f1390000-0000-4000-8000-000000000001', (:'match_json')::jsonb -> 'rows' -> 'import')) e;
+select tst.ok(coalesce(string_agg(x ->> 'line', ', '), '') = '', format('T139 import rows as in the app (lines %s)', coalesce(string_agg((x ->> 'line') || ': ' || coalesce(t.e::text, 'none'), '; '), '')))
+  from jsonb_array_elements((:'match_json')::jsonb -> 'rows' -> 'expect') x
+  left join t139 t on t.e ->> 'line' = x ->> 'line'
+ where t.e is null or t.e ->> 'result' is distinct from x ->> 'result' or t.e ->> 'reason' is distinct from x ->> 'reason'
+    or t.e ->> 'who' is distinct from x ->> 'who' or t.e ->> 'who_status' is distinct from x ->> 'who_status';
+drop table t139;
+\echo 'T139 one rule for keys and rows ok'
 
 \echo 'ALL TESTS PASSED'

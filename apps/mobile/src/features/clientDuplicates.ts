@@ -13,7 +13,8 @@ export interface ClientDup {
   reasons: DupReason[];
 }
 
-const emailKey = (e: string | undefined) => (e ?? "").trim().toLowerCase();
+/** an email as a key of a duplicate (server: app.email_key — test/matchKeys.test.ts, db T139) */
+export const emailKey = (e: string | undefined) => (e ?? "").trim().toLowerCase();
 const WORDS: Record<string, string> = {
   street: "st", avenue: "ave", av: "ave", road: "rd", drive: "dr", lane: "ln", court: "ct", boulevard: "blvd",
   place: "pl", terrace: "ter", circle: "cir", highway: "hwy", parkway: "pkwy", north: "n", south: "s", east: "e", west: "w",

@@ -33,6 +33,8 @@ mkdir -p "$DATA" "$SOCK"
 WORK="$TMP/sql"; mkdir -p "$WORK"
 cp "$HERE"/auth_stub.sql "$HERE"/core_rls.sql "$HERE"/catalog.sql "$WORK"/
 cp "$ROOT"/migrations/*.sql "$WORK"/
+# one rule on the phone and on the server: the same examples as apps/mobile/test/matchKeys.test.ts (T139)
+cp "$ROOT"/../apps/mobile/test/fixtures/matchKeys.json "$WORK"/
 [[ ${#RUN_AS[@]} -gt 0 ]] && chown -R "$RUN_USER" "$WORK"
 
 cleanup() {
@@ -66,4 +68,4 @@ if [[ -n "${CATALOG_OUT:-}" ]]; then
 fi
 echo "== tests core_rls.sql"
 VERB=(); [[ "${VERBOSE:-}" == "1" ]] && VERB=(-v verbose=1)
-"${PSQL[@]}" "${VERB[@]}" -f "$WORK/core_rls.sql"
+"${PSQL[@]}" "${VERB[@]}" -v match_keys="$WORK/matchKeys.json" -f "$WORK/core_rls.sql"
