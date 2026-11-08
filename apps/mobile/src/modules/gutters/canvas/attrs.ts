@@ -1,12 +1,15 @@
 /**
  * What a run and a downspout are made of: the choices of the attribute panel and the rules that keep them valid
  * (docs/specs/33-gutters-screens.md П21.8 M5c; engine input — docs/specs/33-gutters-parts.md П18.4, kits П18.6–П18.7).
- * Pure. The lists are the module's defaults until the company's settings exist (M7: sizes, gauges, the palette).
+ * Pure. The lists here are everything the module knows; the company's settings (M7b, ../settings.ts — `Choices`) narrow
+ * them to what it installs, give its palette and its defaults. An element's own value is never thrown away because the
+ * company stopped offering it (spec 33 П22.2 №7): validity is the module's lists, replacements come from the company's.
  * Changing a choice another one depends on (profile → size and hanger kit, material → gauge and finish, shape →
  * size and elbows, mount → the default kit, wall → the default wall kit) fixes the dependent fields in the same step.
  */
 import { DEFAULT_HANGER_KITS, DEFAULT_WALL_KIT_BY_WALL, DEFAULT_WALL_KITS, defaultHangerKit, GUTTER_MOUNTS, type DsBottomKind, type GutterMount, type GutterProfile } from "@octo/estimating-engine";
 import type { DrawnDownspout, DrawnRun } from "../geometry";
+import type { Choices } from "../settings";
 
 export type RunAttrs = DrawnRun["attrs"];
 export type DsAttrs = Omit<DrawnDownspout, "id" | "runId" | "atIn">;
@@ -31,14 +34,17 @@ export const GAUGES_BY_MATERIAL: Record<string, readonly string[]> = {
 };
 /** bare metal only: no paint, no color (the engine's stock key has no color then) */
 export const MILL_ONLY = new Set(["copper", "zinc"]);
-/** colour names, said as a word — never a swatch (rule 2). A placeholder until the company's palette (M7). */
+/** colour names, said as a word — never a swatch (rule 2): the module's palette until the company sets its own (M7b) */
 export const COLORS = ["white", "almond", "linen", "clay", "brown", "musket", "bronze", "black", "gray"] as const;
 export const MOUNTS: readonly GutterMount[] = GUTTER_MOUNTS;
 
 /** the half-round kits (shanks, Rival, Regal, face clip) hang half round and euro; the rest K, fascia and box */
 const roundFamily = (p: string) => p === "half_round" || p === "euro";
-export const hangerKitsFor = (profile: string): string[] =>
-  Object.keys(DEFAULT_HANGER_KITS).filter((id) => id.startsWith("hr_") === roundFamily(profile));
+export const hangerKitsFor = (profile: string, ch?: Choices): string[] => {
+  const all = Object.keys(DEFAULT_HANGER_KITS).filter((id) => id.startsWith("hr_") === roundFamily(profile));
+  const mine = ch ? all.filter((id) => ch.offer.hangers.includes(id)) : all;
+  return mine.length ? mine : all;
+};
 
 export const DS_SHAPES = ["rect", "round"] as const;
 export const DS_SIZES: Record<(typeof DS_SHAPES)[number], readonly string[]> = { rect: ["2x3", "3x4", "4x5"], round: ["3", "4"] };
@@ -52,7 +58,7 @@ export const WALLS = ["wood", "stucco", "brick"] as const;
 export type Wall = (typeof WALLS)[number];
 
 /** wall kits a downspout of this shape can use on this wall (П18.7): the default first, then the others that fit */
-const WALL_KITS: Record<string, Record<Wall, readonly string[]>> = {
+export const WALL_KITS_BY_WALL: Record<(typeof DS_SHAPES)[number], Record<Wall, readonly string[]>> = {
   rect: {
     wood: ["ds_strap", "sickle_hook", "u_bracket", "conductor_bracket", "coil_strap"],
     stucco: ["ds_strap_masonry", "u_bracket_masonry"],
@@ -64,8 +70,14 @@ const WALL_KITS: Record<string, Record<Wall, readonly string[]>> = {
     brick: ["conductor_band_masonry", "brick_hook_hd"],
   },
 };
-export const wallKitsFor = (shape: string, wall: Wall): string[] =>
-  (WALL_KITS[shape]?.[wall] ?? []).filter((id) => id in DEFAULT_WALL_KITS);
+export const wallKitsFor = (shape: string, wall: Wall, ch?: Choices): string[] => {
+  const all = (WALL_KITS_BY_WALL[shape === "round" ? "round" : "rect"]?.[wall] ?? []).filter((id) => id in DEFAULT_WALL_KITS);
+  const mine = ch ? all.filter((id) => ch.offer.wallKits.includes(id)) : all;
+  // the company's kit for this wall first (its default), then the others it installs
+  const def = ch?.wallKitByWall[shape === "round" ? "round" : "rect"]?.[wall];
+  const list = mine.length ? mine : all;
+  return def && list.includes(def) ? [def, ...list.filter((x) => x !== def)] : list;
+};
 
 /**
  * The engine's `wall` holds a wall type («wood») or a kit id («sickle_hook»). Which wall it is, and which kit:
@@ -81,17 +93,30 @@ export function wallOf(shape: string, wall: string | undefined): { wall: Wall; k
   return wallOf(sh, "wood");
 }
 
+/**
+ * The `wall` to store for a wall type: the type itself while the company's kit is the module's default for it (the
+ * engine finds that kit), else the company's kit id — what the panel shows is what the engine counts (M7b, no rules yet).
+ */
+export function wallValue(shape: string, wall: Wall, ch?: Choices): string {
+  const sh = shape === "round" ? "round" : "rect";
+  const kit = ch?.wallKitByWall[sh]?.[wall];
+  return kit && kit !== DEFAULT_WALL_KIT_BY_WALL[sh]?.[wall] ? kit : wall;
+}
+
+/** a list to offer on the panel: what the company installs, plus the element's own value when it is not in it */
+export const withCurrent = <K extends string>(offered: readonly K[], cur: K | undefined): K[] => (cur === undefined || offered.includes(cur) ? [...offered] : [...offered, cur]);
+
 const pick = <K extends string>(list: readonly K[], v: unknown): K | undefined => (list as readonly unknown[]).includes(v) ? (v as K) : list[0];
 
-/** paint follows the material: copper and zinc are bare (no color); painted metal keeps a color */
-function fixFinish<T extends { material: string; finish?: "mill" | "painted"; color?: string }>(a: T): T {
+/** paint follows the material: copper and zinc are bare (no color); painted metal keeps a color (the company's default) */
+function fixFinish<T extends { material: string; finish?: "mill" | "painted"; color?: string }>(a: T, color: string): T {
   const out = { ...a };
   if (MILL_ONLY.has(a.material)) {
     out.finish = "mill";
     delete out.color;
   } else if (out.finish === "mill") delete out.color;
   // painted (or unset: a colour means painted — the engine) keeps a colour
-  else if (!out.color) out.color = COLORS[0];
+  else if (!out.color) out.color = color;
   return out;
 }
 
@@ -99,33 +124,55 @@ function fixFinish<T extends { material: string; finish?: "mill" | "painted"; co
  * A run's attributes after one change: the change itself, then whatever depends on it made valid again.
  * The same object back when nothing changes (no empty «назад» step).
  */
-export function changeRun(a: RunAttrs, patch: Partial<RunAttrs>): RunAttrs {
+export function changeRun(a: RunAttrs, patch: Partial<RunAttrs>, ch?: Choices): RunAttrs {
   let n: RunAttrs = { ...a, ...patch };
   const profile = pick(PROFILES, n.profile)!;
   n.profile = profile;
-  if (!SIZES_BY_PROFILE[profile].includes(n.size)) n.size = SIZES_BY_PROFILE[profile][0]!;
+  if (!SIZES_BY_PROFILE[profile].includes(n.size)) n.size = firstOf(ch?.offer.sizes[profile], SIZES_BY_PROFILE[profile], ch?.run.profile === profile ? ch.run.size : undefined);
   const gauges = GAUGES_BY_MATERIAL[n.material];
   if (gauges) {
     if (!gauges.length) delete n.gauge;
-    else if (!n.gauge || !gauges.includes(n.gauge)) n.gauge = gauges[0];
+    else if (!n.gauge || !gauges.includes(n.gauge)) n.gauge = firstOf(ch?.offer.gauges[n.material], gauges, ch?.run.material === n.material ? ch.run.gauge : undefined);
   }
-  n = fixFinish(n);
+  n = fixFinish(n, defaultColor(ch));
   // a new roof edge (or a profile whose kits are another family) puts the company's default kit back
-  const kits = hangerKitsFor(profile);
-  if ((patch.mount !== undefined && patch.mount !== a.mount) || !kits.includes(n.hanger)) n.hanger = defaultHangerKit(profile, (n.mount ?? "fascia") as GutterMount);
+  // a new profile takes a kit the company installs for it (review #372 №6); otherwise only a kit of another family is fixed
+  const kits = patch.profile !== undefined && patch.profile !== a.profile ? hangerKitsFor(profile, ch) : hangerKitsFor(profile);
+  if ((patch.mount !== undefined && patch.mount !== a.mount) || !kits.includes(n.hanger)) {
+    const mount = (n.mount ?? "fascia") as GutterMount;
+    n.hanger = ch ? ch.hangerByMount[profile][mount] : defaultHangerKit(profile, mount);
+  }
   return same(a, n) ? a : n;
 }
 
+/** a replacement value: the company's default if it fits, else the first the company installs, else the module's first */
+function firstOf(offered: readonly string[] | undefined, known: readonly string[], def?: string): string {
+  const ok = (offered ?? []).filter((x) => known.includes(x));
+  if (def && ok.includes(def)) return def;
+  return ok[0] ?? known[0]!;
+}
+const defaultColor = (ch?: Choices) => ch?.run.color ?? ch?.palette[0] ?? COLORS[0];
+
 /** a downspout's attributes after one change (see changeRun) */
-export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>): DsAttrs {
+export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>, ch?: Choices): DsAttrs {
   let n: DsAttrs = { ...a, ...patch };
   const shape = pick(DS_SHAPES, n.shape)!;
   n.shape = shape;
-  if (!DS_SIZES[shape].includes(n.size)) n.size = DS_SIZES[shape][0]!;
+  if (!DS_SIZES[shape].includes(n.size)) n.size = firstOf(ch?.offer.dsSizes[shape], DS_SIZES[shape], ch?.ds.shape === shape ? ch.ds.size : undefined);
   const gauges = GAUGES_BY_MATERIAL[n.material];
-  if (gauges && n.gauge && !gauges.includes(n.gauge)) n.gauge = gauges[0];
+  if (gauges && n.gauge && !gauges.includes(n.gauge)) n.gauge = firstOf(ch?.offer.gauges[n.material], gauges);
   if (gauges && !gauges.length) delete n.gauge;
-  n = fixFinish(n);
+  n = fixFinish(n, ch?.ds.color ?? defaultColor(ch));
+  // a wall type picked on the panel, or a new shape over a wall type: the company's kit for it (wallValue), so the engine
+  // counts what the panel shows (review #372 №6)
+  const shapeChanged = patch.shape !== undefined && patch.shape !== a.shape;
+  if (ch && n.wall !== undefined && (WALLS as readonly string[]).includes(n.wall) && (patch.wall !== undefined || shapeChanged)) n.wall = wallValue(shape, n.wall as Wall, ch);
+  // no wall stored is wood: a new shape takes the company's wood kit when it is not the module's
+  else if (ch && shapeChanged && n.wall === undefined && wallValue(shape, "wood", ch) !== "wood") n.wall = wallValue(shape, "wood", ch);
+  // a company kit of the old shape standing for a wall: the same wall, this shape's company kit
+  else if (ch && shapeChanged && n.wall !== undefined && !(WALLS as readonly string[]).includes(n.wall) && !WALLS.some((w) => wallKitsFor(shape, w).includes(n.wall!))) {
+    n.wall = wallValue(shape, wallOf(a.shape, a.wall).wall, ch);
+  }
   // elbows of the other shape (A on a round one) become this shape's first style, the count stays
   if (n.elbows?.some((e) => !ELBOW_STYLES[shape].includes(e.style))) {
     const qty = n.elbows.reduce((s, e) => s + e.qty, 0);
@@ -134,7 +181,7 @@ export function changeDs(a: DsAttrs, patch: Partial<DsAttrs>): DsAttrs {
   // a wall kit of the other shape: the same wall, this shape's default kit
   if (n.wall && !(WALLS as readonly string[]).includes(n.wall) && !WALLS.some((w) => wallKitsFor(shape, w).includes(n.wall!))) {
     const was = wallOf(a.shape, a.wall).wall;
-    n.wall = was;
+    n.wall = ch ? wallValue(shape, was, ch) : was;
   }
   return same(a, n) ? a : n;
 }

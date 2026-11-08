@@ -6,6 +6,7 @@
 import { nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type Drawing, type DrawnDownspout, type DrawnRun, type P } from "../geometry";
 import type { Story } from "./scene";
 import { changeDs, changeRun, type DsAttrs } from "./attrs";
+import type { Choices } from "../settings";
 
 /** shorter than this is a slip of the finger, not a line */
 export const MIN_RUN_IN = 12;
@@ -95,19 +96,19 @@ export function setStory(d: Drawing, id: string, story: Story): Drawing {
 }
 
 /** a run's attributes changed in the panel (П21.8): the same drawing back when nothing changes */
-export function setRunAttrs(d: Drawing, id: string, patch: Partial<DrawnRun["attrs"]>): Drawing {
+export function setRunAttrs(d: Drawing, id: string, patch: Partial<DrawnRun["attrs"]>, ch?: Choices): Drawing {
   const r = d.runs.find((x) => x.id === id);
   if (!r) return d;
-  const attrs = changeRun(r.attrs, patch);
+  const attrs = changeRun(r.attrs, patch, ch);
   return attrs === r.attrs ? d : { ...d, runs: d.runs.map((x) => (x.id === id ? { ...x, attrs } : x)) };
 }
 
 /** a downspout's attributes changed in the panel */
-export function setDsAttrs(d: Drawing, id: string, patch: Partial<DsAttrs>): Drawing {
+export function setDsAttrs(d: Drawing, id: string, patch: Partial<DsAttrs>, ch?: Choices): Drawing {
   const s = d.downspouts.find((x) => x.id === id);
   if (!s) return d;
   const { id: _id, runId, atIn, ...was } = s;
-  const attrs = changeDs(was, patch);
+  const attrs = changeDs(was, patch, ch);
   return attrs === was ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...attrs, id, runId, atIn } : x)) };
 }
 

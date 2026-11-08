@@ -50,7 +50,8 @@ exports.run = async (h) => {
   await tid("draw-to-lead").waitFor({ timeout: 6000 });
   const mid = new URL(p.url()).searchParams.get("m");
   h.expect(!!mid, "saved as a measurement");
-  h.expect((await data()).measurements.some((m) => m.id === mid && !m.leadId && !m.propertyId), "a draft without a lead or a property");
+  // the phone's copy is written with a pause after the save: wait on it (rule 19), do not read it once
+  await waitFor(async () => (await data()).measurements.some((m) => m.id === mid && !m.leadId && !m.propertyId), "a draft without a lead or a property");
   await h.shot("draft");
 
   // «Сделать заявкой» → the core's new-lead form
