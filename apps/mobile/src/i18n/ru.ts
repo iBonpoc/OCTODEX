@@ -2705,6 +2705,19 @@ export const ru = {
   "mod.gutters.est.fromLead": "Смета из замера",
   "mod.gutters.est.noClient": "Нет клиента для сметы: сделайте замер заявкой или откройте его с объекта",
   "mod.gutters.est.off": "Модуль не подключён: смета не сохранится",
+  // step 14 (docs/specs/08 §7.3): the checklist on the visit screen
+  "chk.left": "Осталось обязательных: {n}",
+  "chk.optional": "необязательный",
+  "chk.skipped": "Пропущен",
+  "chk.photoItem": "Фото к пункту",
+  "chk.sheetTitle": "Не заполнено: {n}",
+  "chk.sheetHint": "Можно вернуться и заполнить или пропустить — пропущенное останется «не сделано» в истории выезда.",
+  "chk.noBefore": "Нет фото до работы",
+  "chk.needBefore": "Фото до работы: ещё {n}",
+  "chk.needAfter": "Фото после работы: ещё {n}",
+  "chk.fill": "Заполнить",
+  "chk.skip": "Пропустить",
+  "chk.skippedToast": "Пропущено: {n}",
 } as const;
 
 export type DictKey = keyof typeof ru;
