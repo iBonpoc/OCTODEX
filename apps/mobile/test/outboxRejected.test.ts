@@ -1,12 +1,12 @@
 /** A money change the server refused stays visible (docs/specs/23 §3): what is kept, where it opens, «Требует внимания». */
 import { describe, expect, it } from "vitest";
 import type { Op } from "../src/cloud/ops";
-import { freshRejected, REJECTED_KEEP_MS, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, type RejectedOp } from "../src/data/outboxRejected";
+import { dropSettingsOps, freshRejected, REJECTED_KEEP_MS, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "../src/data/outboxRejected";
 import { wipedOnDelete } from "../src/data/outboxOwner";
 import type { DB } from "../src/data/types";
 import { MONEY_KINDS } from "../src/data/syncLink";
 import type { OwnedItem } from "../src/data/outboxOwner";
-import { attentionHref, buildAttention } from "../src/features/attention";
+import { attentionHref, buildAttention, rejectedHint } from "../src/features/attention";
 import { isDeviceKey } from "../src/features/deleteAccount";
 import { makeSeed } from "../src/data/seed";
 
@@ -86,5 +86,33 @@ describe("unit:outboxRejected — «Требует внимания»", () => {
     const d = makeSeed();
     expect(buildAttention(d, "director", 0)).toEqual(buildAttention(d, "director", 0, {}));
     expect(buildAttention(d, "director", 0).some((x) => x.kind === "rejected")).toBe(false);
+  });
+});
+
+describe("unit:outboxRejected — a module's settings changed by someone else first (review #374)", () => {
+  const other = { userId: "u2", companyId: "c1" };
+  const set = (id: string, module: string, owner = me, base = 3): OwnedItem => ({ id, op: { k: "module.saveSettings", module, settings: {}, baseRowVersion: base } as Op, at: "2026-11-07T10:00:00.000Z", tries: 0, owner });
+  const modOp = (id: string): OwnedItem => ({ id, op: { k: "module.op", module: "gutters", kind: "element.save", payload: {} } as Op, at: "2026-11-07T10:00:00.000Z", tries: 0, owner: me });
+  it("dropSettingsOps: my settings writes of this module go; its module.op, another module's settings, another person's stay", () => {
+    const items = [set("s1", "gutters"), modOp("m1"), set("s2", "gutters", me, 4), set("r1", "roofing"), set("o1", "gutters", other)];
+    const { kept, gone } = dropSettingsOps(items, "gutters", me);
+    expect(gone.map((x) => x.id)).toEqual(["s1", "s2"]);
+    expect(kept.map((x) => x.id)).toEqual(["m1", "r1", "o1"]);
+  });
+  it("settingsRejected: one card per module and person, the count adds up; two people's cards never merge", () => {
+    let list = settingsRejected([], "gutters", 2, "conflict", NOW, me);
+    list = settingsRejected(list, "gutters", 1, "conflict", NOW + 1000, me);
+    expect(list).toHaveLength(1);
+    expect(list[0]).toMatchObject({ kind: "module.saveSettings", what: "module", module: "gutters", count: 3, labelKey: "mod.settingsConflict", owner: me, href: "/company/modules" });
+    list = settingsRejected(list, "gutters", 1, "conflict", NOW, other);
+    expect(list).toHaveLength(2);
+    expect(list.find((x) => x.owner?.userId === "u2")?.count).toBe(1);
+    // a card «trial over» of the same module is another card
+    expect(new Set(list.map((x) => x.id)).size).toBe(2);
+  });
+  it("the hint says «read again, make it again», not «the module is off» (review #374 №3)", () => {
+    const [card] = settingsRejected([], "gutters", 1, "conflict", NOW, me);
+    expect(rejectedHint(card!, "director")).toBe("sync.rejected.settingsHint");
+    expect(rejectedHint({ what: "module", href: "/company/modules", kind: "module.op" }, "director")).toBe("sync.rejected.moduleHint");
   });
 });
