@@ -8857,8 +8857,11 @@ insert into public.estimate_line_items (id, company_id, option_id, name, quantit
 select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b2'$q$) = 0,
   'T106 the tech moves a line to another estimate: its cost does not go with it');
 -- a locked version: the tech's delete fails and keeps nothing
-:as_owner_a
+:as_super
+-- the T106 document is a fake (lines do not match it): locked past the lock check of T107 — this test is about the cost keeping
+alter table public.estimate_versions disable trigger t50_lock_lines_match;
 update public.estimate_versions set locked_at = now() where id = 'a1060000-0000-4000-8000-000000000002';
+alter table public.estimate_versions enable trigger t50_lock_lines_match;
 :as_tech_a
 select tst.fails($q$delete from public.estimate_line_items where id = 'a1060000-0000-4000-8000-0000000000c1'$q$, 'T106 the tech deletes a line of a locked version');
 :as_super
