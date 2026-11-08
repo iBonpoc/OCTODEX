@@ -9,8 +9,9 @@
 |---|---|---|---|
 | Руководитель №5 | `session_015CqH6AYWnjNhg5RZy2re5D` | CLAUDE.md, docs/ai/*, 10-build-plan §0, 15-story-map | план, приёмка, вливание сборками |
 | Карточки списков №7 | `session_015CqH69vCkcxb4Suu1ksNze` | src/nav/listPanel.ts, hierarchy.ts, clients.tsx, features/client/ClientCard.tsx | панель открытой карточки 1280: PR1 «Клиенты» (e2e 155), PR2 «Сметы»+«Счета» (156); «Лиды» (157) — следующему |
-| Шаблоны чек-листов №3 | `session_015CqH69yWSFEmK6wpcRbheB` | visit/[id], VisitChecklist, checklist.ts, checklistMap.ts, company/checklist* | #403 CH2 влит (#402); дальше CH2b attention.ts (e2e 162), CH3 (163) |
-| Модуль Gutters №12 | `session_015CqH68ajBr1RyuC22bStTg` | modules/gutters/**, registry.ts (хук estimateNotes), estimate/[id] минимально | PR1 PDF через C5 (e2e 166), PR2 C5b «замер изменился» (e2e 167) |
+| Сметы №1 | `session_015CqH661aLVst69Yr9qB3TS` | ops.ts (estimate.save), repo.ts, миграции 20261108180000/190000, T106–T108, e2e 175, StuckOp.reason | PR1 себестоимость строк мастера + costs-обрыв; PR2 Н1 сверка при блокировке + Н4а |
+| Шаблоны чек-листов №4 | `session_015CqH6629KseSSe7gT6mPeM` | visit/[id], VisitChecklist, checklist.ts, ops.ts (chk.*), store.tsx, registry.ts (checklistTemplates) | CH3a правка пунктов в выезде (e2e 163), CH3b стартовые шаблоны модуля |
+| Правки Gutters (личный чат основателя) | `session_015CqH66K82f6Sc1E161JFM2` | src/modules/gutters/** (кроме registry/module/estimateLink без согласования), e2e 168–174 | правки основателя; архив только по его слову |
 | Бренд (личный чат основателя) | `session_015CqH69WWiSwHTpW9sTb2km` | бренд GoRix | архив только по слову основателя |
 
 Прежняя таблица 07.11 — в истории файла.
@@ -72,6 +73,17 @@
 - Долги: EN/ES местами «Run/Tramo»; знак водостока на слабом Android не замерен.
 - Уроки: ячейку «Назад» не называть «Отменить» (e2e ищут тост по имени); layoutLabels принимает marks.
 - e2e 166 свободен.
+
+### Памятка Модуль Gutters №12 (session_015CqH68ajBr1RyuC22bStTg, 08.11) — архив
+- Сдал #408 (C5 для PDF, П23.10, e2e 166) и #410 (C5b «замер изменился после сметы», реестр estimateNotes, П23.11, e2e 167, unit 6). Карта §4 S6/S5g: PDF — дверь C5 (e2e 166), C5b (e2e 167).
+- Долги: linesOrNotes без unit; несколько устаревших замеров — заметка ведёт к первому; у подписанной сметы заметки нет (change order, этап 4).
+- Основателю было/стало: снимки e2e 166 blocked/review, 167 stale/send-check.
+- Уроки: в демо-прайсе нет gutter-позиций — смета из замера всегда «нет цены»; ручная цена переживает «Обновить»; «PDF не создан» — ждать ≥1 с.
+### Памятка Шаблоны чек-листов №3 (session_015CqH69yWSFEmK6wpcRbheB, 08.11) — архив
+- Сдал #403 CH2 (влит в #402) и #411 CH2b («Требует внимания»: visitMissed «Не сделано», «Просмотрено» с «Отменить», e2e 162). Исправил осмотр в #401 (e2e 40).
+- Карта: S4/S9 — снимок чек-листа (пункты + минимумы фото); S15 — «Не сделано» + «Просмотрено»; §5 — вычисляемый признак «не сделано обязательных».
+- Дальше CH3 (e2e 163): правка пунктов офисом в работе/выезде, «Добавить из шаблона» (и для осмотров продавца — §11.8 №8), слот модуля для стартовых шаблонов (§11.7 №12), пересмотр applies_catalog_item_ids/module_key на сервере (§11.6).
+- По умолчанию: В3 один текст, В6 осмотр с чек-листом; порядок пунктов «Выше/Ниже» (основателю было/стало); демо-шаблон только для работ.
 
 ## Памятки-передачи 07.11 (руководитель №4)
 ### Памятка «Лиды и клиенты» №10 (session_015CqH6A7brPRZCibvSZzhLd, архив 07.11; дела у №11 `session_015CqH6AXexfSJUxpzdXPpY4`)

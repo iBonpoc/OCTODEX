@@ -34,6 +34,8 @@ export type Op =
   | { k: "chk.item.set"; visitId: string; itemIds: string[]; done?: boolean; skipped?: boolean; naReason?: NaReason | null; naText?: string | null; addPhotoId?: string; at: string }
   /** a new item of a visit (the office's; a tech's own — always optional) */
   | { k: "chk.item.add"; item: { id: string; visitId: string; position: number; label: string; kind: ChecklistItemKind; required: boolean; hint?: string; templateId?: string; templateName?: string } }
+  /** the office edits an item before the visit (§7.4, CH3): only the fields it names; «required» off — the director */
+  | { k: "chk.item.edit"; id: string; visitId: string; label?: string; required?: boolean; position?: number }
   /** an item removed (soft: deleted_at, undo 5 s) */
   | { k: "chk.item.remove"; id: string; visitId: string }
   /** «Просмотрено» on the «not done» card (at = null: «Отменить»); the server writes who */
@@ -502,6 +504,15 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           hint: cleanText(it.hint) || null, template_id: it.templateId ?? null, template_name: cleanText(it.templateName, TEMPLATE_NAME_MAX) || null,
         }),
       );
+    }
+    case "chk.item.edit": {
+      const row: Record<string, unknown> = {};
+      const label = op.label === undefined ? "" : cleanText(op.label);
+      if (label) row.label = label;
+      if (op.required !== undefined) row.required = op.required;
+      if (op.position !== undefined) row.position = Math.max(0, Math.min(100000, Math.round(op.position)));
+      if (!Object.keys(row).length) return;
+      return run(supabase.from("visit_checklist_items").update(row).eq("id", op.id).eq("visit_id", op.visitId));
     }
     case "chk.item.remove":
       return run(supabase.from("visit_checklist_items").update({ deleted_at: new Date().toISOString() }).eq("id", op.id).eq("visit_id", op.visitId));

@@ -68,6 +68,19 @@ export interface ModuleEstimateStore extends ModuleStore {
   saveEstimate: (e: { id: string; customerId: string; propertyId: string; title: string; doc: import("@/data/types").EstimateDoc; leadId?: string }) => () => void;
 }
 
+/**
+ * a module's word on an estimate (spec 33 П23.11, C5b): something the core cannot know — e.g. «the measurement changed
+ * after this estimate». The core shows it on the estimate (warn: icon + word) and asks to confirm before the estimate
+ * reaches the client (send, on-site signing, PDF) — never a hard stop. `action` — the module's way out.
+ */
+export interface ModuleNote {
+  /** unique within the module; testID `module-<key>-<id>` */
+  id: string;
+  labelKey: DictKey;
+  hintKey: DictKey;
+  action?: ModuleAction;
+}
+
 /** what a module's load gets: the company's live rows of one of its own tables (deleted_at is null), page by page */
 export interface ModuleRead {
   live(table: string, cols: string): Promise<Record<string, unknown>[]>;
@@ -101,6 +114,8 @@ export interface ModuleDef {
    * thing to the lead through the store it is given (moduleOp). The lead form is the core's, unchanged (spec 14).
    */
   leadCreated?: (x: { ref: string; leadId: string }, store: ModuleStore) => (() => void) | null | undefined;
+  /** its words on an open (draft / sent) estimate; `data` — DB.moduleData[key]. Pure: called on every render */
+  estimateNotes?: (e: import("@/data/types").Estimate, db: import("@/data/types").DB, data: unknown) => ModuleNote[];
   /** the text of «not saved: the trial is over» (a refused batch of this module's changes, spec 33 П21.1); params {count} */
   rejectedKey?: DictKey;
 }
@@ -174,6 +189,12 @@ export const activeModules = (company: Pick<Company, "modules"> | null | undefin
 /** the actions the company's usable modules add to a place (a module not active adds nothing — founder О2) */
 export function placeActions(place: ModulePlace, company: Pick<Company, "modules"> | null | undefined, ctx: PlaceCtx, now = Date.now(), moduleData?: Record<string, unknown>): (ModuleAction & { module: string })[] {
   return activeModules(company, now).flatMap((d) => (d.places?.[place]?.(ctx, moduleData?.[d.key]) ?? []).map((a) => ({ ...a, module: d.key })));
+}
+
+/** the usable modules' words on an estimate; only an open one (draft / sent) — a signed one is a copy, more is a change order */
+export function estimateNotes(db: import("@/data/types").DB, e: import("@/data/types").Estimate, now = Date.now()): (ModuleNote & { module: string })[] {
+  if (e.status !== "draft" && e.status !== "sent") return [];
+  return activeModules(db.company, now).flatMap((d) => (d.estimateNotes?.(e, db, db.moduleData?.[d.key]) ?? []).map((n) => ({ ...n, module: d.key })));
 }
 
 /**

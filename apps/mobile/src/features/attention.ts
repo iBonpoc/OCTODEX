@@ -12,6 +12,7 @@ import { goneId } from "./team";
 import type { DictKey } from "@/i18n";
 import { rejectReasonKey, type RejectedOp } from "@/data/outboxRejected";
 import { canOpen } from "@/nav/roles";
+import { canReview, missedCount, visitMissed, visitSettings } from "./checklist";
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
   /* E2b-2 (docs/specs/07 «E2b — экраны подписи» §3, §7, §8) */
@@ -23,7 +24,9 @@ export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "la
   /* docs/specs/23 §3 («Лиды и клиенты»): a money change the server refused — not written, the phone showed it */
   | "rejected"
   /* docs/specs/03 §5.2, §13 (S15): the inspection has passed N working days ago and there is no estimate yet */
-  | "inspectionNoEstimate";
+  | "inspectionNoEstimate"
+  /* docs/specs/08 §8 (CH2b): a finished visit left required items or photos undone — until «Просмотрено» or done */
+  | "visitMissed";
 export interface AttentionItem {
   id: string;
   kind: AttentionKind;
@@ -59,7 +62,8 @@ export function attentionHref(it: AttentionItem): string {
     case "estimateExpired":
     case "estimateDeclined": return `/estimate/${it.refId}`;
     case "unassigned":
-    case "late": return `/visit/${it.refId}`;
+    case "late":
+    case "visitMissed": return `/visit/${it.refId}`;
     default: return `/lead/${it.refId}`;
   }
 }
@@ -172,6 +176,21 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
       const late = lateToday(v, db.members, now, sch, tz);
       if (late)
         out.push({ id: `late-${v.id}`, kind: "late", refId: v.id, name: tech, label: "att.late", params: { name: `${tech} → ${client}` }, chip: late === "en_route" ? "late.enRoute" : "late.notLeft", status: "warn", score: 850 });
+    }
+  }
+  // «Не сделано» (docs/specs/08 §8, В4): one card per finished visit with required items or photos left undone — warn,
+  // not red; until the office presses «Просмотрено» or the tech finishes them. Visits before the company turned
+  // checklists on (checklistSince) are left alone. The office only (the same who may press «Просмотрено»).
+  // an old server (no checklist migration): no checklistSince, no «Просмотрено» — no cards at all, not a flood of old visits
+  if (canReview(role) && !db.checklistLegacy) {
+    const vs = visitSettings(db);
+    for (const v of db.visits) {
+      if (v.checklistReviewedAt) continue;
+      const n = missedCount(visitMissed(v, vs, db.checklistTemplates ?? [], db.company?.checklistSince));
+      if (!n) continue;
+      const { client } = visitWho(db, v);
+      const date = new Date(v.start).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: tz });
+      out.push({ id: `miss-${v.id}`, kind: "visitMissed", refId: v.id, name: client, label: "chk2b.att.missed", params: { name: client, date, n }, chip: "chk2b.att.chip", status: "warn", score: 620 });
     }
   }
   for (const j of db.jobs) {

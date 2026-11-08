@@ -129,6 +129,8 @@ exports.run = async (h) => {
   await h.shot("more");
   await tid("draw-redo").getByRole("button").click();
   await waitFor(async () => (await count("circle")) === 1, "«Ещё» → «Вернуть»");
+  // «Вернуть» closes the sheet with an animation: a drag before it is gone lands on the closing sheet, not the canvas (CHECKS §9)
+  await tid("draw-more-sheet").waitFor({ state: "hidden", timeout: 3000 });
 
   // «Выбрать»: drag the free end of the second run — it grows
   const ends = await svg().locator("line:not([id^=halo])").evaluateAll((ls) => ls.map((l) => ["x1", "y1", "x2", "y2"].map((k) => Number(l.getAttribute(k)))));
