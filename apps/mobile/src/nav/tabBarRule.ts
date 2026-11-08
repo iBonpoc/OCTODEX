@@ -20,6 +20,8 @@ export const NO_TAB_BAR = [
   "company/checklist/[id]",
   "estimate/new", "estimate/signature",
   "expense/new",
+  // the request page of a company (docs/specs/34): a homeowner without the app — no app menu
+  "f/[token]",
   "job/new", "job/schedule",
   "lead/new",
   "legal/[doc]",

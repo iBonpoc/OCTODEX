@@ -9432,5 +9432,21 @@ select tst.ok((select (selection ->> 'total')::bigint = 9999 and (selection ->> 
 select tst.ok((select (selection ->> 'total')::bigint = 14641 and (selection ->> 'deposit')::bigint = 1464 from public.estimate_approvals
                 where estimate_id = 'a1120000-0000-4000-8000-0000000000e2' and party = 'customer'), 'T121 with discount, tax and a bps deposit: $146.41 / $14.64, as legacyTotals');
 \echo 'T121 the old quick estimate: the client signs what the phone shows ok'
+-- ---------------------------------------------------------------- T120: the doors of the Edge Function lead-intake (docs/specs/34 PR 2)
+:as_super
+select tst.ok(has_function_privilege('service_role', 'public.intake_submit(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and has_function_privilege('service_role', 'public.intake_form(text)', 'execute')
+          and not has_function_privilege('anon', 'public.intake_submit(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'public.intake_submit(text, text, text, text, text, jsonb, jsonb)', 'execute')
+          and not has_function_privilege('anon', 'public.intake_form(text)', 'execute')
+          and not has_function_privilege('authenticated', 'public.intake_form(text)', 'execute'), 'T120 only service_role opens the doors');
+:as_service
+select tst.ok(public.intake_form(repeat('0', 64)) = '{}'::jsonb, 'T120 the page door: an unknown token is empty');
+select tst.ok(public.intake_submit('webhook', repeat('0', 64), 'k120', repeat('0', 64), null, '{}', null) ->> 'status' = 'unknown', 'T120 the submit door: an unknown key');
+reset role; set role anon;
+select tst.fails($q$select public.intake_submit('webhook', 'x', 'k', 'x', null, '{}', '{}')$q$, 'T120 anon cannot submit around the function');
+:as_owner_a
+select tst.fails($q$select public.intake_form('x')$q$, 'T120 a member cannot read a form''s info directly');
+\echo 'T120 lead intake doors: service_role only ok'
 
 \echo 'ALL TESTS PASSED'
