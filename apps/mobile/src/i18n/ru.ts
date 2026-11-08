@@ -2968,6 +2968,20 @@ export const ru = {
   "opay.dueHint": "Откройте «Продолжить в Stripe»",
   "opay.how": "Комиссии и выплаты — в кабинете Stripe. После формы Stripe вернитесь сюда: состояние обновится само.",
   "opay.refresh": "Обновить",
+  // ---- 20в: online payment on /p/ («Деньги и отчёты»)
+  "pay.online.button": "Оплатить онлайн",
+  "pay.online.title": "Онлайн-оплата",
+  "pay.online.loading": "Открываем защищённую форму оплаты…",
+  "pay.online.secure": "Оплату проводит Stripe. Мы не видим данные вашей карты или банка.",
+  "pay.online.webOnly": "Онлайн-оплата открывается в браузере по ссылке.",
+  "pay.online.processing": "Платёж в обработке",
+  "pay.online.processingHint": "Банковский перевод (ACH) идёт до 4 рабочих дней. Платить ещё раз не нужно.",
+  "pay.online.succeeded": "Платёж получен. Спасибо!",
+  "pay.online.pending": "ACH в обработке: {amount}",
+  "pay.online.err.unavailable": "Онлайн-оплата сейчас недоступна. Свяжитесь с компанией.",
+  "pay.online.err.closed": "Эта ссылка больше не принимает оплату.",
+  "pay.online.err.nothing": "По этому счёту нечего платить.",
+  "pay.online.err.retry": "Не получилось. Попробуйте ещё раз через минуту.",
 } as const;
 
 export type DictKey = keyof typeof ru;

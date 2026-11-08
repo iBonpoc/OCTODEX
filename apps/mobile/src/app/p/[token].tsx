@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Image, View } from "react-native";
+import { Image, Platform, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -7,6 +7,7 @@ import { I18nOverride, useI18n } from "@/i18n";
 import type { EstimateDoc } from "@/data/types";
 import { acceptPortal, fetchPortal, licenseLine, localPortal, paySimulated, type PortalData } from "@/cloud/portal";
 import { SimulatedCheckout } from "@/features/SimulatedCheckout";
+import { StripeCheckout, type OnlineOutcome } from "@/features/StripeCheckout";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { mainOption, optionTotals, withAddons } from "@/features/estimateDoc";
@@ -75,6 +76,10 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [paying, setPaying] = useState<string | null>(null);
+  // 20в: the invoice paid through the real Payment Element, and what Stripe said (the payment itself comes by the webhook)
+  const [online, setOnline] = useState<string | null>(null);
+  const { paid: returned } = useLocalSearchParams<{ paid?: string }>();
+  const [outcome, setOutcome] = useState<Record<string, OnlineOutcome>>({});
   const [optionId, setOptionId] = useState<string | null>(null);
   const [addonIds, setAddonIds] = useState<string[]>([]);
 
@@ -112,6 +117,16 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
       toast.show(t("portal.error", { msg: String((e as Error)?.message ?? e) }));
     }
   };
+  const onlineInv = data.invoices.find((i) => i.id === online);
+  const onlineDone = (o: OnlineOutcome) => {
+    if (!onlineInv) return;
+    setOutcome((m) => ({ ...m, [onlineInv.id]: o }));
+    setOnline(null);
+    // the webhook may already have recorded it: the page reads the server again (ACH shows as «processing»)
+    fetchPortal(token).then((d) => d && setRemote(d)).catch(() => {});
+  };
+  // the real Payment Element: the company's Stripe takes charges, in the client's browser; the simulation only otherwise
+  const canOnline = data.onlinePay && data.source !== "local" && Platform.OS === "web";
   const pdf = () =>
     saveEstimatePdf(estimateHtml(data, { lang: data.lang }), estimateFileName(data)).catch((e) => toast.show(t("portal.error", { msg: String(e?.message ?? e) })));
 
@@ -165,18 +180,43 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
               <CardList>
                 {data.invoices.map((inv) => {
                   const bal = Math.max(0, inv.totalCents - inv.paidCents);
+                  // ACH on its way is not money yet, but the client must not be asked for it again
+                  const toPay = Math.max(0, bal - inv.pendingCents);
+                  const sent = outcome[inv.id] ?? (returned === "1" && bal > 0 ? "processing" : undefined);
+                  const waiting = bal > 0 && (inv.pendingCents > 0 || !!sent);
                   return (
-                    <Card key={inv.id} status={bal === 0 ? "ok" : "warn"}>
+                    <Card key={inv.id} status={bal === 0 ? "ok" : waiting ? "info" : "warn"}>
                       <RowView style={{ justifyContent: "space-between" }}>
                         <T v="body" w="semibold" style={{ flex: 1 }}>
                           {[inv.number, inv.title].filter(Boolean).join(" · ")}
                         </T>
-                        <StatusChip status={bal === 0 ? "ok" : "warn"} label={bal === 0 ? t("money.paid") : t("money.awaiting")} />
+                        <StatusChip
+                          status={bal === 0 ? "ok" : waiting ? "info" : "warn"}
+                          label={bal === 0 ? t("money.paid") : waiting ? t("pay.online.processing") : t("money.awaiting")}
+                        />
                       </RowView>
                       <T v="title" tabular>
                         {money(bal === 0 ? inv.totalCents : bal)}
                       </T>
-                      {bal > 0 && data.simulatedPay ? <Button label={t("pay.payByCard")} icon="wallet" full onPress={() => setPaying(inv.id)} /> : null}
+                      {inv.pendingCents > 0 ? (
+                        <View testID={`portal-pending-${inv.id}`}>
+                          <T v="body" tone="info">
+                            {t("pay.online.pending", { amount: money(inv.pendingCents) })}
+                          </T>
+                        </View>
+                      ) : null}
+                      {waiting && bal > 0 ? (
+                        <T v="caption" tone="mut">
+                          {sent === "succeeded" ? t("pay.online.succeeded") : t("pay.online.processingHint")}
+                        </T>
+                      ) : null}
+                      {toPay > 0 && !sent && canOnline ? (
+                        <View testID={`portal-pay-online-${inv.id}`}>
+                          <Button label={t("pay.online.button")} icon="wallet" full onPress={() => setOnline(inv.id)} />
+                        </View>
+                      ) : toPay > 0 && !sent && !data.onlinePay && data.simulatedPay ? (
+                        <Button label={t("pay.payByCard")} icon="wallet" full onPress={() => setPaying(inv.id)} />
+                      ) : null}
                     </Card>
                   );
                 })}
@@ -211,6 +251,15 @@ function PortalBody({ data, doc, token, back, setRemote }: { data: PortalData; d
         title={payingInv ? [payingInv.number, payingInv.title].filter(Boolean).join(" · ") : ""}
         onClose={() => setPaying(null)}
         onPaid={paySim}
+      />
+      <StripeCheckout
+        visible={!!onlineInv}
+        token={token}
+        invoiceId={onlineInv?.id ?? null}
+        title={onlineInv ? [onlineInv.number, onlineInv.title].filter(Boolean).join(" · ") : ""}
+        amountCents={onlineInv ? Math.max(0, onlineInv.totalCents - onlineInv.paidCents - onlineInv.pendingCents) : 0}
+        onClose={() => setOnline(null)}
+        onDone={onlineDone}
       />
       {data.company.phone ? (
         <T v="caption" tone="mut">

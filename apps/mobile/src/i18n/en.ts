@@ -2968,4 +2968,18 @@ export const en: Dict = {
   "opay.dueHint": "Open «Continue in Stripe»",
   "opay.how": "Fees and payouts are in the Stripe dashboard. After Stripe's form come back here: the state updates by itself.",
   "opay.refresh": "Refresh",
+  // ---- 20в: online payment on /p/ («Деньги и отчёты»)
+  "pay.online.button": "Pay online",
+  "pay.online.title": "Online payment",
+  "pay.online.loading": "Opening a secure payment form…",
+  "pay.online.secure": "Payments are processed by Stripe. We never see your card or bank details.",
+  "pay.online.webOnly": "Online payment opens in the browser from the link.",
+  "pay.online.processing": "Payment is processing",
+  "pay.online.processingHint": "A bank payment (ACH) takes up to 4 business days. You don't need to pay again.",
+  "pay.online.succeeded": "Payment received. Thank you!",
+  "pay.online.pending": "ACH processing: {amount}",
+  "pay.online.err.unavailable": "Online payment is not available right now. Please contact the company.",
+  "pay.online.err.closed": "This link no longer takes payments.",
+  "pay.online.err.nothing": "There is nothing to pay on this invoice.",
+  "pay.online.err.retry": "That didn't work. Please try again in a minute.",
 };
