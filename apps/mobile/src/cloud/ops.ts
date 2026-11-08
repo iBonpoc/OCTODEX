@@ -47,6 +47,9 @@ export type Op =
   /** ifNew: a module's starter (fixed id) — inserted once, never updated over the office's edits (spec 07 §12 №6) */
   | {
       k: "est.template.save"; template: EstimateTemplate; ifNew?: boolean;
+      /** a starter's «Добавить» tapped at this time: it revives its row removed BEFORE the tap only — an old queued add
+       *  (tapped before the removal, sent late from an old phone) never brings back what was taken away (§12.7) */
+      tappedAt?: string;
       /** the builder's edit (spec 07 §12.7): saved only over this row_version, else «someone changed it first» */
       baseRowVersion?: number;
       /** lines whose cost was wiped (who sees costs): sent as unitCostCents null — the server clears it (T124) */
@@ -398,7 +401,7 @@ export function estimateTemplateToDb(t: EstimateTemplate, companyId: string, cle
     : t.doc;
   return { id: t.id, company_id: companyId, name: cleanText(t.name, TEMPLATE_NAME_MAX), doc, module_key: t.module ?? null, archived_at: t.archivedAt ?? null };
 }
-async function saveEstimateTemplate(t: EstimateTemplate, c: string, o: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] } = {}) {
+async function saveEstimateTemplate(t: EstimateTemplate, c: string, o: { ifNew?: boolean; tappedAt?: string; baseRowVersion?: number; clearCosts?: string[] } = {}) {
   // module_key only on insert (no update grant, an upsert would send it in the update too): insert if new (a retry or
   // another phone's insert does nothing), then the update of what may change
   const row = estimateTemplateToDb(t, c, o.clearCosts);
@@ -406,7 +409,10 @@ async function saveEstimateTemplate(t: EstimateTemplate, c: string, o: { ifNew?:
   await run(ins("estimate_templates", row));
   // a starter: the insert only — another phone added it first and the office may have edited it since. One removed by
   // «Отменить» (deleted_at) comes back fresh: only a deleted row is touched (§12.7)
-  if (o.ifNew) return run(supabase.from("estimate_templates").update({ ...upd, deleted_at: null }).eq("id", t.id).not("deleted_at", "is", null));
+  if (o.ifNew) {
+    if (!o.tappedAt) return;
+    return run(supabase.from("estimate_templates").update({ ...upd, deleted_at: null }).eq("id", t.id).not("deleted_at", "is", null).lt("deleted_at", o.tappedAt));
+  }
   if (o.baseRowVersion !== undefined) {
     // the builder's edit: over the version it was opened on, or nothing — then «someone changed it first» (never a retry)
     const { data, error, status } = await supabase.from("estimate_templates").update(upd).eq("id", t.id).eq("row_version", o.baseRowVersion).select("id");
@@ -580,7 +586,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(Promise.resolve(r));
     }
     case "est.template.save":
-      return saveEstimateTemplate(op.template, c, { ifNew: op.ifNew, baseRowVersion: op.baseRowVersion, clearCosts: op.clearCosts });
+      return saveEstimateTemplate(op.template, c, { ifNew: op.ifNew, tappedAt: op.tappedAt, baseRowVersion: op.baseRowVersion, clearCosts: op.clearCosts });
     case "est.template.remove":
       return run(supabase.from("estimate_templates").update({ deleted_at: new Date().toISOString() }).eq("id", op.id));
     case "supplier.save":

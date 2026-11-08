@@ -11329,8 +11329,19 @@ update public.estimate_templates set deleted_at = now() where id = 'e3c00000-000
 -- the revive of a re-added starter touches a removed row only: a live one (another phone's) stays as it is
 update public.estimate_templates set name = 'T149 revived', deleted_at = null where id = 'e3c00000-0000-4000-8000-000000000001' and deleted_at is not null;
 select tst.ok((select name = 'T149 other phone' from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000001'), 'T149 a live template is not «revived» over');
-update public.estimate_templates set name = 'T149 revived', deleted_at = null where id = 'e3c00000-0000-4000-8000-000000000002' and deleted_at is not null;
-select tst.ok((select name = 'T149 revived' and deleted_at is null from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000002'), 'T149 a removed starter comes back on re-add');
+-- an add tapped BEFORE the removal (an old phone's queue, sent late) revives nothing (the director's condition)
+update public.estimate_templates set name = 'T149 late', deleted_at = null
+ where id = 'e3c00000-0000-4000-8000-000000000002' and deleted_at is not null and deleted_at < now() - interval '1 hour';
+select tst.ok((select deleted_at is not null and name <> 'T149 late' from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000002'),
+              'T149 an old queued add sent late does not undo «Отменить»');
+-- a tech's «add again» revives nothing (no right to save templates)
+:as_tech_a
+select tst.blocked($q$update public.estimate_templates set deleted_at = null where id = 'e3c00000-0000-4000-8000-000000000002' and deleted_at is not null$q$, 'T149 a tech revives no template');
+:as_office_a
+-- «Добавить» tapped after the removal: the row comes back fresh
+update public.estimate_templates set name = 'T149 revived', deleted_at = null
+ where id = 'e3c00000-0000-4000-8000-000000000002' and deleted_at is not null and deleted_at < now() + interval '1 second';
+select tst.ok((select name = 'T149 revived' and deleted_at is null from public.estimate_templates where id = 'e3c00000-0000-4000-8000-000000000002'), 'T149 a removed starter comes back on an add tapped after it');
 \echo 'T149 template edits over row_version, removal and revival ok'
 
 \echo 'ALL TESTS PASSED'

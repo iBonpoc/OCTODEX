@@ -1814,7 +1814,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             return { ...d, estimateTemplates: old ? list.map((x) => (x.id === clean.id ? next : x)) : [...list, next] };
           },
           {
-            k: "est.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true } : {}),
+            k: "est.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true, tappedAt: new Date().toISOString() } : {}),
             ...(opts?.baseRowVersion !== undefined ? { baseRowVersion: opts.baseRowVersion } : {}),
             ...(opts?.clearCosts?.length ? { clearCosts: opts.clearCosts } : {}),
           },

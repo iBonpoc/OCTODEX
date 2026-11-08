@@ -21,7 +21,7 @@ const chain = (table: string): Record<string, unknown> => {
       writes.push(w);
       return c;
     };
-  for (const k of ["eq", "in", "is", "not", "order", "limit"])
+  for (const k of ["eq", "in", "is", "not", "lt", "order", "limit"])
     c[k] = (...a: unknown[]) => {
       w?.filters.push([k, ...a]);
       return c;
@@ -193,13 +193,18 @@ describe("unit:estimateStarters", () => {
 
   it("the queue: a starter is inserted once and never updated over the office's edits (ifNew) — only a removed one revives", async () => {
     const tpl = starterEstimateTemplate("fakemod", S, ctx())!;
-    await applyOp({ k: "est.template.save", template: tpl, ifNew: true }, "c1", "u1");
+    await applyOp({ k: "est.template.save", template: tpl, ifNew: true, tappedAt: "2026-11-08T20:00:00.000Z" }, "c1", "u1");
     expect(writes.map((w) => w.kind)).toEqual(["upsert", "update"]);
     expect(writes[0]!.opts).toMatchObject({ onConflict: "id", ignoreDuplicates: true });
     expect((writes[0]!.row as { module_key: string }).module_key).toBe("fakemod");
     // the revive: only a row with deleted_at set (a live one — another phone's, maybe edited — is never touched)
     expect(writes[1]!.row).toMatchObject({ deleted_at: null });
-    expect(writes[1]!.filters).toEqual([["eq", "id", tpl.id], ["not", "deleted_at", "is", null]]);
+    // … and only one removed BEFORE the tap: an old queued add sent late never undoes a later «Отменить»
+    expect(writes[1]!.filters).toEqual([["eq", "id", tpl.id], ["not", "deleted_at", "is", null], ["lt", "deleted_at", "2026-11-08T20:00:00.000Z"]]);
+    writes.length = 0;
+    // an add queued by an older build (no tap time): the insert only, nothing revived
+    await applyOp({ k: "est.template.save", template: tpl, ifNew: true }, "c1", "u1");
+    expect(writes.map((w) => w.kind)).toEqual(["upsert"]);
     writes.length = 0;
     await applyOp({ k: "est.template.save", template: tpl }, "c1", "u1");
     expect(writes.map((w) => w.kind)).toEqual(["upsert", "update"]);
