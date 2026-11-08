@@ -9,6 +9,7 @@
  * - everything is in the store (DB.moduleData.gutters) and comes back after a reload.
  * Finds things by testID; waits on what it checks.
  */
+const { skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -35,6 +36,7 @@ exports.run = async (h) => {
     await p.mouse.down();
     for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + ((b[1] - a[1]) * i) / 12);
     await p.mouse.up();
+    await skipLength(p);
     await p.waitForTimeout(200);
   };
   const stored = () =>

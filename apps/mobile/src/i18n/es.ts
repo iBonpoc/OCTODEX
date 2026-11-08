@@ -2550,6 +2550,9 @@ export const es: Dict = {
   "mod.gutters.attr.apply": "Guardar",
   "mod.gutters.attr.reset": "Del dibujo",
   "mod.gutters.attr.badLength": "Largo de 1″ a 500′, pulgadas de 0 a 11",
+  "mod.gutters.attr.quickTitle": "Largo de la canaleta",
+  "mod.gutters.attr.quickDrawn": "Según el dibujo: {len}",
+  "mod.gutters.attr.quickSkip": "Omitir",
   // module M7b: company settings (spec 33 П22)
   "mod.gutters.attr.notOffered": "no se ofrece",
   "mod.gutters.set.action": "Ajustes",

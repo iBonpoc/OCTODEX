@@ -15,6 +15,7 @@
  * Finds things by testID; waits on what it checks.
  */
 // the demo company's data on the phone: the module's slice DB.moduleData.gutters (spec 33 П21)
+const { skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -36,6 +37,7 @@ exports.run = async (h) => {
     await p.mouse.down();
     for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + ((b[1] - a[1]) * i) / 12);
     await p.mouse.up();
+    await skipLength(p);
     await p.waitForTimeout(200);
   };
   /** the one measurement in the store and its elements, or null */

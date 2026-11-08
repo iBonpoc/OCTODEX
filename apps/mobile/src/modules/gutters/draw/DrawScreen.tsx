@@ -29,7 +29,7 @@ import { ListRow, RowView } from "@/ui/surfaces";
 import { CanvasView, useLive } from "../canvas/CanvasView";
 import { addDownspout, endAt, finishStroke, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
-import { AttrBody, DsAttrsView, RunAttrsView, type RunCorner } from "./AttrPanel";
+import { AttrBody, DsAttrsView, QuickLength, RunAttrsView, type RunCorner } from "./AttrPanel";
 import { MeasurePhotos } from "./Photos";
 import { ftIn } from "../canvas/format";
 import { forgetOldDraft, loadToolbarPlace, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
@@ -99,6 +99,8 @@ export default function DrawScreen() {
   const [photoSheet, setPhotoSheet] = useState(false);
   /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
   const [moreSheet, setMoreSheet] = useState(false);
+  /** the gutter just drawn: its length by hand at once (просьба основателя 08.11) */
+  const [quickRun, setQuickRun] = useState<string | null>(null);
   /** the hint of the tool just picked; gone after the first thing done with it (П20.8) */
   const [hint, setHint] = useState<Tool | null>(null);
   const live = useLive();
@@ -241,6 +243,7 @@ export default function DrawScreen() {
       if (next !== d) {
         commit(next, d);
         setSelected(id);
+        if (next.runs.some((r) => r.id === id)) setQuickRun(id);
       }
     },
   });
@@ -327,6 +330,7 @@ export default function DrawScreen() {
     const id = cur.current.selected;
     if (id) commit(setLength(cur.current.drawing, id, lengthIn));
   };
+  const quick = quickRun ? drawing.runs.find((r) => r.id === quickRun) : undefined;
   // photos (П21.10): only of what the server has (a files row points at the measurement and its element — FK). The
   // module does not save (off, past the trial — founder О2): the photos it has are shown, nothing is added (M5e)
   const stored = gutterData(store.db);
@@ -638,6 +642,9 @@ export default function DrawScreen() {
       ) : null}
       <Sheet visible={!wide && sheet && !!attrs} onClose={() => setSheet(false)}>
         <AttrBody>{attrs}</AttrBody>
+      </Sheet>
+      <Sheet visible={canSave && !!quick} onClose={() => setQuickRun(null)}>
+        {quick ? <QuickLength run={quick} onLength={(n) => commit(setLength(cur.current.drawing, quick.id, n))} onDone={() => setQuickRun(null)} /> : null}
       </Sheet>
       <Sheet visible={moreSheet} onClose={() => setMoreSheet(false)}>
         <View testID="draw-more-sheet" style={{ gap: space[2] }}>

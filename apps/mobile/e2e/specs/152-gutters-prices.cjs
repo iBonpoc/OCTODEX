@@ -10,6 +10,7 @@
  * - the office and sales change prices; a tech reads only; the trial over: read only.
  * Finds things by testID and the store; waits on what it checks.
  */
+const { skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 
@@ -105,6 +106,7 @@ exports.run = async (h) => {
   await p.mouse.down();
   for (let i = 1; i <= 12; i++) await p.mouse.move(b.x + b.width * (0.1 + (0.4 * i) / 12), y);
   await p.mouse.up();
+  await skipLength(p);
   await waitFor(async () => (await p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count()) === 1, "one run");
   await waitFor(async () => (await money()) > 0, "a $ under the drawing");
   h.expect((await tid("draw-test-prices").count()) === 0, "every part from the price list at a real price: no «тестовые цены»");

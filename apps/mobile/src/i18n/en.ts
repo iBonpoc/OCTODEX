@@ -2550,6 +2550,9 @@ export const en: Dict = {
   "mod.gutters.attr.apply": "Set",
   "mod.gutters.attr.reset": "From drawing",
   "mod.gutters.attr.badLength": "Length 1″ to 500′, inches 0 to 11",
+  "mod.gutters.attr.quickTitle": "Gutter length",
+  "mod.gutters.attr.quickDrawn": "Drawn: {len}",
+  "mod.gutters.attr.quickSkip": "Skip",
   // module M7b: company settings (spec 33 П22)
   "mod.gutters.attr.notOffered": "not offered",
   "mod.gutters.set.action": "Settings",

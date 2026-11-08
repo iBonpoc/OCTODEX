@@ -9,6 +9,7 @@
  * - web: a photo picked before a reload (a dead blob:) is never loaded — the tile shows the picture sign (CI 08.11).
  * Finds things by testID; waits on what it checks.
  */
+const { skipLength } = require("../gutters.cjs");
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
 
 exports.run = async (h) => {
@@ -25,6 +26,7 @@ exports.run = async (h) => {
     await p.mouse.down();
     for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + ((b[1] - a[1]) * i) / 12);
     await p.mouse.up();
+    await skipLength(p);
     await p.waitForTimeout(200);
   };
   const db = () => h.db();

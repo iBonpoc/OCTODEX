@@ -10,6 +10,7 @@
  * - the office (dispatcher): read only, «ask the owner».
  * Finds things by testID and the store; waits on what it checks (the toast's «Отменить» has no testID — by its name).
  */
+const { skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 const setRole = (h, r) => h.page.evaluate((x) => localStorage.setItem("octo.role.v1", JSON.stringify(x)), r);
 /** an in-app move: a full load would put the demo back online */
@@ -96,6 +97,7 @@ exports.run = async (h) => {
   await p.mouse.down();
   for (let i = 1; i <= 12; i++) await p.mouse.move(a0[0] + ((a1[0] - a0[0]) * i) / 12, y);
   await p.mouse.up();
+  await skipLength(p);
   await waitFor(async () => (await p.getByTestId("draw-svg").first().locator("line:not([id^=halo])").count()) === 1, "one run");
   await waitFor(async () => (((await db()).moduleData?.gutters?.elements) || []).some((e) => e.kind === "run" && e.attrs.color === pal[4]), "a new run has the company's colour");
   if (!wide) await tid("draw-props").getByRole("button").click();

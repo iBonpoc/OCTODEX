@@ -2550,6 +2550,9 @@ export const ru = {
   "mod.gutters.attr.apply": "Записать",
   "mod.gutters.attr.reset": "По рисунку",
   "mod.gutters.attr.badLength": "Длина от 1″ до 500′, дюймы — от 0 до 11",
+  "mod.gutters.attr.quickTitle": "Длина желоба",
+  "mod.gutters.attr.quickDrawn": "По рисунку: {len}",
+  "mod.gutters.attr.quickSkip": "Пропустить",
   // module M7b: company settings (spec 33 П22)
   "mod.gutters.attr.notOffered": "не ставим",
   "mod.gutters.set.action": "Настройки",

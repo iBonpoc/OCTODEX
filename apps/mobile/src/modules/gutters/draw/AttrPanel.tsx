@@ -100,6 +100,47 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
   );
 }
 
+/**
+ * Right after a gutter is drawn (просьба основателя 08.11): the length by hand at once — feet focused, the number
+ * keyboard up. Empty fields keep the drawn length (it is the placeholder); «Пропустить» does the same.
+ */
+export function QuickLength({ run, onLength, onDone }: { run: DrawnRun; onLength: (lengthIn: number) => void; onDone: () => void }) {
+  const { t } = useI18n();
+  const drawn = drawnLengthIn(run);
+  const [ft, setFt] = useState("");
+  const [inc, setInc] = useState("");
+  const [bad, setBad] = useState(false);
+  const apply = () => {
+    if (ft.trim() === "" && inc.trim() === "") return onDone();
+    const n = tapeIn(ft, inc);
+    setBad(n === null);
+    if (n === null) return;
+    onLength(n);
+    onDone();
+  };
+  return (
+    <View testID="quick-length" style={{ gap: space[3] }}>
+      <T v="heading" w="semibold">{t(k("quickTitle"))}</T>
+      <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
+        <View style={{ width: component.qtyFieldW }} testID="quick-length-ft">
+          <TextField type="integer" value={ft} onChangeText={setFt} label={t(k("ft"))} placeholder={String(Math.floor(drawn / 12))} onSubmit={apply} autoFocus />
+        </View>
+        <T v="body" tone="mut">{t(k("ft"))}</T>
+        <View style={{ width: component.qtyFieldW }} testID="quick-length-in">
+          <TextField type="integer" value={inc} onChangeText={setInc} label={t(k("in"))} placeholder={String(drawn % 12)} onSubmit={apply} />
+        </View>
+        <T v="body" tone="mut">{t(k("in"))}</T>
+      </RowView>
+      <T v="caption" tone="mut">{t(k("quickDrawn"), { len: ftIn(drawn) })}</T>
+      {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
+      <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>
+        <View testID="quick-length-skip"><Button label={t(k("quickSkip"))} size="sm" variant="ghost" onPress={onDone} /></View>
+        <View testID="quick-length-apply"><Button label={t(k("apply"))} size="sm" onPress={apply} /></View>
+      </RowView>
+    </View>
+  );
+}
+
 /** stock shared by runs and downspouts: material → gauge; paint → colour (copper and zinc are bare) */
 function Stock<A extends { material: string; gauge?: string; finish?: "mill" | "painted"; color?: string }>({ a, set, ch, part = "all" }: { a: A; set: (p: Partial<A>) => void; ch: Choices; /** 390 (П20.9): finish and colour on top, the rest under «Ещё» */ part?: "all" | "color" | "rest" }) {
   const { t } = useI18n();
