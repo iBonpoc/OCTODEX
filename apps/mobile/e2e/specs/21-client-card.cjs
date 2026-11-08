@@ -38,13 +38,28 @@ exports.run = async (h) => {
   await h.sheet().getByPlaceholder("Например: перезвонить и уточнить объём").fill("Call in spring about painting");
   await h.sheet().getByRole("button", { name: "Сохранить", exact: true }).last().click(); await p.waitForTimeout(500);
   await h.expectText(/Call in spring about painting/, "task added");
-  await h.click("Готово");
+  // recipe E (06 §3): the tick on the left closes the task; «Отменить» in the toast takes it back
+  const taskId = (await h.db()).tasks.find((x) => x.title === "Call in spring about painting").id;
+  // the store is written to disk a moment after the tap: wait for the saved task, not for seconds
+  const savedOpen = () => p.waitForFunction((id) => !JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db.tasks.find((x) => x.id === id)?.doneAt, taskId, { timeout: 5000 }).then(() => true, () => false);
+  const openCard = p.getByTestId(`client-task-${taskId}`).locator("visible=true");
+  const doneCard = p.getByTestId(`client-task-done-${taskId}`).locator("visible=true");
+  await openCard.getByRole("button", { name: "Готово", exact: true }).click();
+  await doneCard.waitFor({ timeout: 5000 });
+  await h.expectText(/Задача выполнена/, "the toast says done");
   await h.expectText(/Выполненные · 1[\s\S]*Call in spring about painting/, "done task stays, under Done");
-  await h.click("Вернуть");
-  // the task is open again: the tick «Готово» (recipe E, 06 §3) is back and «Выполненные» is gone
-  await p.getByRole("button", { name: "Готово", exact: true }).first().waitFor({ timeout: 5000 });
-  const reopened = await h.text();
-  h.expect(/Call in spring about painting/.test(reopened) && !/Выполненные · /.test(reopened), "task reopened");
+  // «Отменить» works only toastArmMs after the toast showed (ui/toastArm.ts), as in e2e 90
+  await p.waitForTimeout(500);
+  await h.click("Отменить");
+  await openCard.waitFor({ timeout: 5000 });
+  h.expect(await savedOpen(), "«Отменить» took the tick back");
+  // close again, then the tick of the done task reopens it
+  await openCard.getByRole("button", { name: "Готово", exact: true }).click();
+  await doneCard.waitFor({ timeout: 5000 });
+  await doneCard.getByRole("button", { name: "Вернуть", exact: true }).click();
+  await openCard.waitFor({ timeout: 5000 });
+  await h.expectText(/Задача снова открыта/, "the toast says reopened");
+  h.expect((await savedOpen()) && (await doneCard.count()) === 0, "task reopened");
   await h.go("/client/c1");
   await row("Файлы");
   await h.expectText(/Фото с выездов|Файлов нет/, "files list renders");
@@ -103,6 +118,10 @@ exports.run = async (h) => {
   await h.go("/client/c2");
   const txt = await h.text();
   h.expect(/David Kim/.test(txt) && !/Должен/.test(txt) && !/Оплатил всего/.test(txt), "tech sees own client without money");
+  // the client's jobs: the cards are there, the sums are not (value only for the office)
+  await h.go("/client/c2?s=jobs");
+  await p.locator('[data-testid^="client-job-"]').locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect(!/\$\d/.test(await h.text()), "tech: no sums on the client's job cards");
   await h.go("/client/c7");
   await h.expectText(/Ничего не найдено/, "tech does not open other clients");
 };

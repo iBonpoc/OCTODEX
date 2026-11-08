@@ -259,6 +259,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
                 <ListCard
                   key={x.id}
                   density="compact"
+                  testID={`client-task-${x.id}`}
                   lead={{ kind: "check", on: false, label: t("client.taskDone"), onToggle: () => toast.show(t("client.taskDoneToast"), store.saveTask({ ...x, doneAt: new Date().toISOString() }).undo) }}
                   title={x.title}
                   when={x.dueAt ? day(x.dueAt) : undefined}
@@ -276,6 +277,7 @@ export function ClientSection({ c, s }: { c: Customer; s: ClientRow }) {
                   <ListCard
                     key={x.id}
                     density="compact"
+                    testID={`client-task-done-${x.id}`}
                     lead={{ kind: "check", on: true, label: t("client.taskReopen"), onToggle: () => toast.show(t("client.taskReopened"), store.saveTask({ ...x, doneAt: undefined }).undo) }}
                     title={x.title}
                     when={t("client.doneOn", { date: day(x.doneAt!) })}

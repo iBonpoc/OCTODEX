@@ -155,7 +155,7 @@ export interface CardFigure {
 /* ---------- props ---------- */
 export interface ListCardProps {
   title: string;
-  /** "3 min ago", "since Nov 2026" — under the title; goes to the right when there is no value */
+  /** "3 min ago", "since Nov 2026" — under the title; goes to the right when there is no value (compact: always under the title) */
   when?: string;
   lead: CardLead;
   value?: string;
