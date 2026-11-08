@@ -12,9 +12,9 @@
 --     does not move a sum and is not compared (blank rows the app skips, quantity-0 lines client_doc hides);
 --   * the money settings, as ops.ts writes them from the document: the discount of every option, the tax (on/off,
 --     rate) and the deposit rule of the version;
---   * a version with no document (calc_inputs null, or source 'drawing' with no options array — the old quick
---     estimate, estimate.add) is not checked, as before this migration (review #415 №1): it has nothing to compare, and its
---     on-site signature must not be refused with no way to save it again. A document of another source with no
+--   * a version with no document (calc_inputs null — the old quick estimate, estimate.add never writes one) is not
+--     checked, as before this migration (review #415 №1): it has nothing to compare, and its
+--     on-site signature must not be refused with no way to save it again. A document (any source) with no
 --     options and paid lines does not match: the page would show nothing.
 -- Different → 22023 (hint estimate_lines_mismatch: the app's card «Смета не отправлена»), nothing is locked or sent:
 -- saving the estimate again writes both sides from one document. Not checked: a lock without a JWT (a migration, the
@@ -129,9 +129,8 @@ begin
     return null;
   end if;
   -- no document: nothing to compare (the old quick estimate; review #415 №1)
-  -- (a document of another source without options and with paid lines still does not match: security-check В2)
-  if new.calc_inputs is null
-     or (new.source = 'drawing' and jsonb_typeof(new.calc_inputs -> 'options') is distinct from 'array') then
+  -- (any document, of any source, without options and with paid lines still does not match: security-check В2)
+  if new.calc_inputs is null then
     return null;
   end if;
   select * into m from app.version_lines_mismatch(new.id) limit 1;

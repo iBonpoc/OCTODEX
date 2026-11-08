@@ -8745,6 +8745,10 @@ update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{optio
 -- security-check В2: no document (no options array) but paid lines — the page would show nothing
 update public.estimate_versions set calc_inputs = '{"note": "hi"}' where id = 'a1070000-0000-4000-8000-000000000002';
 select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 no document, paid lines: not sent');
+-- security-check of the review fix: «drawing» does not open the skip — only a version with no calc_inputs at all
+update public.estimate_versions set source = 'drawing' where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 source drawing, a document with no options, paid lines: not sent');
+update public.estimate_versions set source = 'scratch' where id = 'a1070000-0000-4000-8000-000000000002';
 update public.estimate_versions set calc_inputs = $j${"options":[
    {"id":"a1070000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
      {"id":"a1070000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
