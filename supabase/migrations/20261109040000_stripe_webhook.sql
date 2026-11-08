@@ -28,12 +28,15 @@ begin
   if v_meta is not null then
     select s.company_id into v_company from public.stripe_accounts s where s.account_id = p_event ->> 'account';
     if v_company is null or v_company::text <> lower(v_meta) then
+      if exists (select 1 from app.stripe_events where event_id = p_event ->> 'id') then
+        return 'duplicate';
+      end if;
       insert into app.stripe_events (event_id, type, account_id, livemode, payload, status, reason, processed_at)
       values (p_event ->> 'id', left(p_event ->> 'type', 100), p_event ->> 'account', coalesce((p_event ->> 'livemode')::boolean, false),
               -- the journal keeps no client's details (as app.stripe_event_apply)
               jsonb_set(p_event, '{data,object}', o - array['billing_details', 'payment_method_details', 'shipping', 'receipt_email',
                                                            'customer_details', 'evidence', 'description', 'last_payment_error']),
-              'ignored', 'company_mismatch', now())
+              'ignored', case when v_company is null then 'unknown_account' else 'company_mismatch' end, now())
       on conflict (event_id) do nothing;
       return 'ignored';
     end if;
@@ -41,12 +44,12 @@ begin
 
   v_r := app.stripe_event_apply(p_event, p_method);
 
-  -- Stripe's fee of this payment (not our application fee): only grows from unknown to known, never for someone else's payment
+  -- Stripe's fee of this payment (not our application fee): only from unknown (0) to known — a repeat of the event may bring
+  -- it when the first delivery could not (ACH: processing has none, succeeded has); never lowered, never someone else's payment
   v_pi := case when p_event ->> 'type' like 'payment_intent.%' then o ->> 'id' else o ->> 'payment_intent' end;
-  if v_r = 'processed' and p_fee_cents is not null and p_fee_cents >= 0 and v_pi ~ '^pi_[A-Za-z0-9]{1,64}$' then
+  if v_r in ('processed', 'duplicate') and p_fee_cents is not null and p_fee_cents > 0 and v_pi ~ '^pi_[A-Za-z0-9]{1,64}$' then
     update public.payments set fee_cents = p_fee_cents
-     where idempotency_key = 'stripe:' || v_pi and stripe_payment_intent_id = v_pi
-       and fee_cents is distinct from p_fee_cents
+     where idempotency_key = 'stripe:' || v_pi and stripe_payment_intent_id = v_pi and fee_cents = 0
        and company_id = (select s.company_id from public.stripe_accounts s where s.account_id = p_event ->> 'account');
   end if;
   return v_r;

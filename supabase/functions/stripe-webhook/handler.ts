@@ -8,7 +8,8 @@
  * 2) for a PaymentIntent event the intent is read back from Stripe with its payment method and the charge's balance
  *    transaction: the method (card / ACH) and Stripe's fee — the event itself carries neither;
  * 3) public.stripe_webhook_apply(event, method, fee): metadata.company_id is checked against the account's company there;
- * 4) the answer tells Stripe whether to send again: 55000 («not recorded yet») and any failure → 500; a bad signature → 400.
+ * 4) the answer tells Stripe whether to send again: 55000 («not recorded yet»), a passing failure → 500; a bad signature → 400;
+ *    a lasting refusal to read the intent → applied without method and fee; a live event → ignored (test mode only).
  * Test mode only: no live key is used to read. Nothing of the event (no client's data) and no secret goes to a log.
  */
 export interface StripeAnswer {
@@ -44,6 +45,10 @@ export interface Res {
 }
 
 export const TOLERANCE_S = 300;
+/** Stripe's events are a few KB; a larger body is not read at all */
+export const MAX_BODY = 1_000_000;
+/** the PaymentIntent events app.stripe_event_apply applies — the only ones worth reading back */
+const APPLIED = new Set(["payment_intent.processing", "payment_intent.succeeded", "payment_intent.payment_failed", "payment_intent.canceled"]);
 const EVT = /^evt_[A-Za-z0-9]{1,64}$/;
 const PI = /^pi_[A-Za-z0-9]{1,64}$/;
 const ACCT = /^acct_[A-Za-z0-9]{1,64}$/;
@@ -104,7 +109,10 @@ export function methodAndFee(pi: Record<string, unknown> | null): { method: "car
 export async function handleHook(req: Req, deps: HookDeps): Promise<Res> {
   if (req.method !== "POST") return json(405, { error: "method not allowed" });
   if (!deps.secret) return json(503, { error: "not_configured" });
+  const len = Number(req.header("content-length") ?? "0");
+  if (len > MAX_BODY) return json(413, { error: "too large" });
   const raw = await req.text().catch(() => "");
+  if (raw.length > MAX_BODY) return json(413, { error: "too large" });
   // the signature first: not a byte of the body is read as JSON before it
   if (!(await verifySignature(raw, req.header("stripe-signature"), deps.secret, deps.now()))) return json(400, { error: "signature" });
   let ev: Record<string, unknown>;
@@ -118,19 +126,28 @@ export async function handleHook(req: Req, deps: HookDeps): Promise<Res> {
     return json(400, { error: "bad event" });
   }
 
+  // test mode only: a live event is never applied (it could flip the account's livemode, security 20г №3)
+  if (ev.livemode === true) return json(200, { result: "ignored" });
+
   let method: "card" | "ach" | null = null;
   let fee: number | null = null;
   const account = typeof ev.account === "string" && ACCT.test(ev.account) ? ev.account : null;
-  if (ev.type.startsWith("payment_intent.") && typeof obj.id === "string" && PI.test(obj.id) && account && ev.livemode !== true && deps.stripe && deps.keyMode === "test") {
+  const meta = obj.metadata as Record<string, unknown> | undefined;
+  // read back only an intent of OURS (the attempt is in its metadata) and only for the types the database applies:
+  // the contractor's own Stripe sales and other types never cost a call or a retry (review 20г №1, №7)
+  if (APPLIED.has(ev.type) && typeof obj.id === "string" && PI.test(obj.id) && typeof meta?.attempt_id === "string" && account && deps.stripe && deps.keyMode === "test") {
     const r = await deps
       .stripe(`/v1/payment_intents/${obj.id}?expand[]=payment_method&expand[]=latest_charge.balance_transaction`, account)
       .catch(() => null);
     if (r?.status === 200 && r.body?.id === obj.id) {
       ({ method, fee } = methodAndFee(r.body));
-    } else if (ev.type === "payment_intent.succeeded") {
-      // the money has come: its fee must not be lost — Stripe sends the event again
-      deps.log?.(`stripe-webhook: intent read ${r?.status ?? "no answer"} for ${ev.id}`);
+    } else if (ev.type === "payment_intent.succeeded" && (!r || r.status >= 500 || r.status === 429)) {
+      // a passing failure: the money has come, its fee is worth a retry — Stripe sends the event again
+      deps.log?.(`stripe-webhook: intent read ${r?.status ?? "no answer"} for ${ev.id}, retry`);
       return json(500, { error: "retry" });
+    } else {
+      // a lasting refusal (401/403/404, another id): the payment is recorded all the same — never lost for its fee
+      deps.log?.(`stripe-webhook: intent read ${r?.status ?? "no answer"} for ${ev.id}, applied without method and fee`);
     }
   }
 
@@ -139,7 +156,11 @@ export async function handleHook(req: Req, deps: HookDeps): Promise<Res> {
     return json(200, { result });
   } catch (e) {
     const code = e instanceof DbError ? e.code : null;
-    if (code === "22023") return json(400, { error: "bad event" });
+    // a signed event the database refuses as malformed: 200, or Stripe would send it for three days (it is logged)
+    if (code === "22023") {
+      deps.log?.(`stripe-webhook: rejected ${ev.id}`);
+      return json(200, { result: "rejected" });
+    }
     // 55000: the payment is not recorded yet — the transaction rolled back, the journal has no row; Stripe retries
     deps.log?.(`stripe-webhook: apply ${code ?? "failed"} for ${ev.id}`);
     return json(500, { error: "retry" });
