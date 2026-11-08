@@ -59,7 +59,8 @@ exports.run = async (h) => {
   // 2 leads today (the third is yesterday's), 1 won = 50 %; one job, two invoices before tax $1,500.01 → average $1,500.01
   h.expect(a.includes("Roof 159"), "direction name");
   h.expect(/Лиды\s+2\b/.test(a) && /Выиграно\s+1 · 50%/.test(a), `leads of Roof 159: ${a}`);
-  h.expect(a.includes(money(150001).replace(/\.\d\d$/, "")), `revenue of Roof 159 (${a})`);
+  // the card's own figure: whole dollars, right before its label (not the «$1,500.01» of the average ticket)
+  h.expect(/(^|\n)\$1,500\s*\n\s*Выручка/.test(a), `revenue of Roof 159 = $1,500 (${a})`);
   h.expect(a.includes(money(150001)), `average ticket $1,500.01 (${a})`);
   const old = await card("cat159old").innerText();
   h.expect(old.includes("в архиве"), "archived direction keeps its card, marked");
@@ -69,7 +70,7 @@ exports.run = async (h) => {
   const db = await h.db();
   const revenue = db.invoices.filter((i) => i.sentAt && dayKey(i.sentAt) === today).reduce((s, i) => s + (i.subtotalCents ?? i.totalCents), 0);
   const tot = await p.getByTestId("rpt-cat-total").locator("visible=true").first().innerText();
-  h.expect(tot.includes(cents2.format(revenue / 100)), `total revenue ${cents2.format(revenue / 100)} (${tot})`);
+  h.expect(tot.includes(money(revenue)), `total revenue ${money(revenue)} (${tot})`);
   // «Без направления» is its own card when today has a record without one
   const noneToday =
     db.leads.some((l) => !l.serviceCategoryId && dayKey(l.receivedAt) === today) ||
