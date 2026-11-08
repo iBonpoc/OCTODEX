@@ -6,6 +6,10 @@
  */
 exports.run = async (h) => {
   const p = h.page;
+  // /f/ asks the lead-intake function for its form (#421): answered here, no network (as e2e 178)
+  await p.route("**/functions/v1/lead-intake*", (route) =>
+    route.fulfill({ status: 200, contentType: "application/json", headers: { "access-control-allow-origin": "*" }, body: '{"ok":false,"code":"unknown"}' }),
+  );
   await h.go("/today");
   const origin = new URL(p.url()).origin;
   h.expect(await p.evaluate(() => getComputedStyle(document.documentElement).display) !== "none", "opened directly, the app is shown");
