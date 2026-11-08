@@ -93,6 +93,13 @@
       "city": "",
       "zip": "",
       "key": null
+    },
+    {
+      "street": "5 Elm St",
+      "unit": null,
+      "city": "Pasadena, CA",
+      "zip": "",
+      "key": "5 elm st||pasadena"
     }
   ],
   "rows": {
