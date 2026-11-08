@@ -75,6 +75,36 @@
 - `public.stripe_webhook_apply(event, method, fee)` (service_role): `metadata.company_id` ≠ компания аккаунта → журнал `ignored / company_mismatch`; неизвестный аккаунт — `unknown_account`; повтор — `duplicate`. Иначе `app.stripe_event_apply` и `fee_cents` платежа: только из 0 в известную, в том числе на повторе (ACH: у `processing` комиссии нет, у `succeeded` есть); не уменьшается и не меняется. 55000 → 500 (ничего не записано, Stripe повторит); 22023 у подписанного события → 200 `rejected` с записью в лог, без трёх дней повторов.
 - Секреты: `STRIPE_WEBHOOK_SECRET` (whsec_ Connect-эндпоинта), `STRIPE_SECRET_KEY` (test). Хранение `app.stripe_events` — как в 20а; срок — спека 21. T132, `test/stripeWebhookFn.test.ts` на подписанных фикстурах.
 
+## 4в. 20д — возвраты (этап 0, «Деньги и отчёты» №5)
+Что нужно подрядчику: с телефона вернуть клиенту часть или всю оплату — по ошибке, по отказу, по доброй воле — и видеть, что деньги ушли, счёт снова с остатком, налог в отчёте уменьшился.
+
+Варианты: (А) возврат с экрана квитанции (платёж = квитанция), шторка суммы и причины, затем шторка «необратимо»; (Б) отдельный раздел «Возвраты» в «Оплатах»; (В) возврат со счёта целиком. **Решение — А**: один платёж = одна квитанция, сумма ограничена именно этим платежом; Б и В — лишние экраны, счёт может иметь платежи разными методами.
+
+| Утверждение | Источник | Итог | Доказательство |
+|---|---|---|---|
+| Возврат только owner/admin, сервер проверяет роль, office — 403 | PRD 09 INV-US-08, §139 | подтверждено | `tg_payment_guard` проверяет роль только при `auth.uid()`; у service_role его нет → роль проверяет каждая дверь 20д сама |
+| Сумма ≤ оплачено − уже возвращено | PRD 09 §139 | подтверждено, уточнено | ещё минус возвраты «в пути» (pending): два нажатия в двух вкладках не вернут дважды; строка платежа блокируется `for update` |
+| Карта/ACH → Stripe refund с Idempotency-Key | INV-US-08 | подтверждено | ключ = `refunds.idempotency_key` строки, созданной до вызова Stripe; повтор после обрыва — та же строка, тот же ключ |
+| Наличные/чек/Zelle → запись с причиной | PRD 09 §139 | подтверждено | `financing` — тоже запись (деньги шли не через нас) |
+| Комиссия Stripe не возвращается, показать до подтверждения | PRD 09 §139 | подтверждено | Stripe не возвращает processing fee; в шторке «Комиссия Stripe $x не вернётся» при известной `fee_cents` |
+| Комиссия платформы — пропорционально (`refund_application_fee`) | PRD 09 §139 | подтверждено | параметр работает для direct charges; пока `application_fee_amount` нет (В3) — передаём всё равно |
+| Налог/выручка по режиму документа, по умолчанию пропорционально | 19 §7.9, TX13–TX16 | подтверждено | `refundAllocation` в движке уже есть с TX13–TX16; сервер считает то же в SQL и хранит `tax_cents/net_cents` |
+| Варианты «по строке» и «вручную» | 19 §7.9, INV-US-17 | **оспорено** | у возврата нет строк, ручная правка — риск ошибки в налоге; в 20д только `proportional`, колонка `allocation_method` готова к остальным |
+| Отказ клиента: `due_by`, задача «вернуть до +10 дней» | INV-US-20 | **оспорено** (не в 20д) | это юр. шаг отказа (LEG-09); в 20д причина `rescission` выбирается, срок и задача — позже |
+| Возврат офлайн недоступен | PRD 16 §86, §105 | подтверждено | кнопка без сети неактивна; запись идёт только на сервер, не в очередь |
+| e2e 184 для 20д | §5 | **опровергнуто** | 184 занят (`184-portal-errors`), 20д — e2e 185, 20е — 186 |
+| Строки `refunds` пишет вебхук | §4 | **оспорено** | наш возврат создаёт строку до Stripe; `refund.created` может прийти раньше ответа → вторая строка. Вебхук ищет строку по `metadata.octo_refund_id` |
+| `refunded_cents` — максимум из Stripe | §2 п.6 | подтверждено | наш ответ Stripe ставит Σ succeeded-возвратов тем же `stripe_apply_refunded` (только растёт) |
+| Спор по платежу | — | новое | при `dispute_status` open/lost возврат запрещён (Stripe отказывает `charge_disputed`) |
+
+База (миграция `20261109050000_refunds.sql`, добавлением): `refunds` + `method`, `tax_cents`, `net_cents`, `allocation_method`, `failure_reason`; аудит.
+- `public.refund_record(payment, amount, kind, reason, key)` — authenticated, только owner/admin активные; методы не Stripe; сразу `succeeded`, `refunded_cents += amount`.
+- `public.stripe_refund_open(user, payment, amount, kind, reason, key)` — service_role: роль, остаток, спор, строка `pending`; отдаёт аккаунт, PI, ключ. `public.stripe_refund_settle(refund, stripe_refund)` — ответ Stripe: id, статус; succeeded → `refunded_cents`; failed → без денег.
+- `needs_review` показывается: чип «Проверить» на квитанции и в «Оплатах», с причиной.
+- Edge `stripe-refund` (verify_jwt = true): JWT → user → `stripe_refund_open` → `POST /v1/refunds` (`Stripe-Account`, `Idempotency-Key`, `payment_intent`, `amount`, `refund_application_fee=true`, `metadata.octo_refund_id`) → `stripe_refund_settle`. Таймаут — строка остаётся pending, повтор безопасен.
+- Тесты: движок (TX13–TX16 + края), T133 (роль, остаток, pending, гонка, спор, повтор ключа, налог как в движке, вебхук по metadata), unit `stripeRefundFn` (поддельный Stripe), e2e 185.
+- PR: 20д-1 база + Edge + T133; 20д-2 экран + e2e 185.
+
 ## 5. План PR
 | PR | Что | Тесты |
 |---|---|---|
@@ -83,5 +113,5 @@
 | 20б | Edge `stripe-connect` + «Настройки → Деньги → Онлайн-оплата» | e2e 182 |
 | 20в | Edge `stripe-pay` + Payment Element на `/p/` (p/[token].tsx — руководитель отдаёт) | e2e 183 |
 | 20г | Edge `stripe-webhook`: подпись по сырому телу, `fee_cents` | Deno-тесты на подписанных фикстурах, T130–T132 |
-| 20д | возвраты: экран платежа, Edge `stripe-refund`, ручной возврат, движок `refundAllocation` | T133, e2e 184 |
-| 20е | чтение чека (после В5) | e2e 185 |
+| 20д | возвраты: экран платежа, Edge `stripe-refund`, ручной возврат, движок `refundAllocation` | T133, e2e 185 |
+| 20е | чтение чека (после В5) | e2e 186 |
