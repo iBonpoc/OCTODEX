@@ -12,18 +12,19 @@ import {
   responseMinutes, sourceName, type LeadTurn, type ManualWinReason,
 } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
-import { canServe, notServed } from "@/features/clients";
+import { canSeeClientMoney, canServe, notServed } from "@/features/clients";
 import { CloseSheet, ContactActions, LeadHistory, LeadOverview, smsWithBody, TasksBlock } from "@/features/lead/LeadParts";
 import { BookSheet, CallResultSheet, LostOrWaitSheet, NextStepSheet, SnoozeSheet, StatusSheet } from "@/features/lead/LeadSheets";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
 import { NotesBlock } from "@/features/NotesBlock";
 import { ReplySheet, useTick } from "@/features/sheets";
 import { Button, ChoiceChips, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
-import { Press, T } from "@/ui/primitives";
+import { Icon, Press, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, CardList, Empty, Grid, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Empty, Grid, ListRow, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
 import { useTheme } from "@/theme/ThemeProvider";
-import type { StatusName } from "@octo/design-tokens";
+import { statusIcon, type StatusName } from "@octo/design-tokens";
 import { memberLabel } from "@/features/team";
 import { ModulePlaces } from "@/modules/ModulePlaces";
 import { liveAssignees } from "@/features/schedule";
@@ -120,27 +121,57 @@ export default function LeadScreen() {
         <ContactActions l={l} onCall={() => setSheet("call")} />
       </Card>
 
-      {closed.length ? (
-        <CardList>
-          {closed.map((c) => (
-            <ItemCard key={c.id} status="bad" title={t("lead.noService", { name: c.name })} subtitle={c.statusReason ? `${t("lead.noServiceHint")} · ${t("client.reason", { r: c.statusReason })}` : t("lead.noServiceHint")} right={<StatusChip status="bad" label={t("client.st.doNotService")} />} onPress={() => router.push(`/client/${c.id}`)} />
-          ))}
-        </CardList>
-      ) : null}
-      {dupCustomers.length || dups.leads.length ? (
-        <CardList>
-          {dupCustomers.map((c) => (
-            <ItemCard key={c.id} status="warn" title={`⚠ ${t("lead.alreadyClient", { name: c.name })}`} subtitle={t("lead.alreadyClientHint")} onPress={() => router.push(`/client/${c.id}`)} />
-          ))}
-          {dups.leads.map((d) => (
-            <ItemCard key={d.id} status="warn" title={`⚠ ${t("lead.possibleDup", { date: day(d.receivedAt) })}`} subtitle={`${d.name} · ${t(leadStatusView[d.status].label)}`} onPress={() => router.push(`/lead/${d.id}`)} />
-          ))}
-        </CardList>
+      {/* clients / leads found by the same phone or email — related objects, there can be several: compact cards (06 «Серия B», B3) */}
+      {closed.length || dupCustomers.length || dups.leads.length ? (
+        <CardGrid>
+          {[
+            ...closed.map((c) => (
+              <ListCard
+                key={c.id}
+                density="compact"
+                testID={`lead-noservice-${c.id}`}
+                lead={{ kind: "icon", icon: statusIcon.bad, tone: "bad" }}
+                title={t("lead.noService", { name: c.name })}
+                when={c.statusReason ? `${t("lead.noServiceHint")} · ${t("client.reason", { r: c.statusReason })}` : t("lead.noServiceHint")}
+                status={{ tone: "bad", label: t("client.st.doNotService") }}
+                onPress={() => router.push(`/client/${c.id}`)}
+              />
+            )),
+            ...dupCustomers.map((c) => (
+              <ListCard
+                key={c.id}
+                density="compact"
+                testID={`lead-dup-client-${c.id}`}
+                lead={{ kind: "icon", icon: statusIcon.warn, tone: "warn" }}
+                title={t("lead.alreadyClient", { name: c.name })}
+                when={t("lead.alreadyClientHint")}
+                edge="warn"
+                onPress={() => router.push(`/client/${c.id}`)}
+              />
+            )),
+            ...dups.leads.map((d) => (
+              <ListCard
+                key={d.id}
+                density="compact"
+                testID={`lead-dup-lead-${d.id}`}
+                lead={{ kind: "icon", icon: statusIcon.warn, tone: "warn" }}
+                title={t("lead.possibleDup", { date: day(d.receivedAt) })}
+                when={d.name}
+                status={{ tone: leadStatusView[d.status].status, label: t(leadStatusView[d.status].label) }}
+                edge="warn"
+                onPress={() => router.push(`/lead/${d.id}`)}
+              />
+            )),
+          ]}
+        </CardGrid>
       ) : null}
 
       {main}
       {turn.kind === "step" && turn.title ? (
-        <ItemCard title={turn.title} subtitle={turn.dueAt ? `${t("lead.nextTask")} · ${day(turn.dueAt)}` : t("lead.nextTask")} status={turn.status === "bad" ? "bad" : undefined} onPress={() => setTab("tasks")} />
+        // one hint about this lead, not a list: Card + ListRow
+        <Card status={turn.status === "bad" ? "bad" : undefined} style={{ paddingVertical: space[1] }}>
+          <ListRow title={turn.title} subtitle={turn.dueAt ? `${t("lead.nextTask")} · ${day(turn.dueAt)}` : t("lead.nextTask")} left={<Icon name="check" />} onPress={() => setTab("tasks")} />
+        </Card>
       ) : null}
 
       {/* add-on modules' place (docs/specs/33 П15): nothing unless a module is switched on */}
@@ -164,11 +195,17 @@ export default function LeadScreen() {
           <ServiceCategoryRow value={l.serviceCategoryId} onChange={(id) => toast.show(t("dir.changed"), store.updateLead(l.id, { serviceCategoryId: id }))} />
           <SectionTitle title={t("lead.recent")} right={<Button label={t("lead.recent.all")} size="sm" variant="ghost" onPress={() => setTab("history")} />} />
           {events.length ? (
-            <CardList>
+            <CardGrid>
               {events.slice(0, 3).map((e) => (
-                <ItemCard key={e.id} title={t(e.key, Object.fromEntries(Object.entries(e.params ?? {}).map(([k, v]) => [k, v.startsWith("lead.") ? t(v as DictKey) : v])))} subtitle={day(e.at)} />
+                <ListCard
+                  key={e.id}
+                  density="compact"
+                  lead={{ kind: "icon", icon: "clock" }}
+                  title={t(e.key, Object.fromEntries(Object.entries(e.params ?? {}).map(([k, v]) => [k, v.startsWith("lead.") ? t(v as DictKey) : v])))}
+                  when={day(e.at)}
+                />
               ))}
-            </CardList>
+            </CardGrid>
           ) : null}
         </>
       ) : null}
@@ -259,27 +296,32 @@ function LeadVisits({ leadId }: { leadId: string }) {
   return (
     <View style={{ gap: space[2] }}>
       <SectionTitle title={t("lead.visits")} />
-      <CardList>
+      <CardGrid>
         {visits.map((v) => {
           const tech = db.members.find((m) => m.id === v.techId);
+          const nobody = !liveAssignees(v, db.members).length;
           return (
-            <ItemCard
+            // as the property's visits (B2): what the visit is for, then date · time · who; nobody on it — warn icon + edge
+            <ListCard
               key={v.id}
-              status={liveAssignees(v, db.members).length ? "info" : "warn"}
-              title={`${day(v.start)} · ${time(v.start)}`}
-              subtitle={[v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : t("st.inspection"), memberLabel(tech, t) ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
+              density="compact"
+              testID={`lead-visit-${v.id}`}
+              lead={nobody ? { kind: "icon", icon: statusIcon.warn, tone: "warn" } : { kind: "icon", icon: "calendar" }}
+              title={(v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : undefined) ?? t("st.inspection")}
+              when={[day(v.start), time(v.start), memberLabel(tech, t) ?? t("plan.unassigned")].filter(Boolean).join(" · ")}
+              edge={nobody ? "warn" : null}
               onPress={() => router.push(`/visit/${v.id}`)}
             />
           );
         })}
-      </CardList>
+      </CardGrid>
     </View>
   );
 }
 
 /** Estimates of the lead + photos taken on its visits. */
 function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew: () => void; part: "estimates" | "files" }) {
-  const { db } = useStore();
+  const { db, role } = useStore();
   const { t, money, day } = useI18n();
   const { c } = useTheme();
   const l = db.leads.find((x) => x.id === leadId)!;
@@ -291,23 +333,25 @@ function LeadEstimates({ leadId, onNew, part }: { leadId: string; onNew: () => v
       <>
       <SectionTitle title={t("client.estimates")} right={isOpenLead(l) ? <Button label={t("lead.makeEstimateShort")} icon="plus" size="sm" variant="ghost" onPress={onNew} /> : undefined} />
       {estimates.length ? (
-        <CardList>
+        <CardGrid>
           {estimates.map((e) => (
-            <ItemCard
+            // title — what the estimate is for, under it number · sent · viewed; the sum only to who sees client money (not the tech)
+            <ListCard
               key={e.id}
-              status={e.status === "approved" ? "ok" : e.status === "sent" ? "info" : undefined}
-              title={[e.number, e.title].filter(Boolean).join(" · ")}
-              subtitle={`${money(e.totalCents)}${e.sentAt ? ` · ${t("st.sent")} ${day(e.sentAt)}` : ""}${e.viewedAt ? ` · ${t("ue.viewed", { date: day(e.viewedAt) })}` : ""}`}
-              right={
-                <StatusChip
-                  status={e.status === "approved" ? "ok" : e.status === "sent" ? "info" : e.status === "awaiting_countersign" ? "warn" : "neutral"}
-                  label={t(e.status === "approved" ? "st.approved" : e.status === "sent" ? "st.sent" : e.status === "awaiting_countersign" ? "est.awaitingCountersign" : e.status === "declined" ? "st.declined" : "st.draft")}
-                />
-              }
+              density="compact"
+              testID={`lead-estimate-${e.id}`}
+              lead={{ kind: "icon", icon: "invoice" }}
+              title={e.title || e.number || t("est.detail")}
+              when={[e.title ? e.number : undefined, e.sentAt ? `${t("st.sent")} ${day(e.sentAt)}` : undefined, e.viewedAt ? t("ue.viewed", { date: day(e.viewedAt) }) : undefined].filter(Boolean).join(" · ") || undefined}
+              value={canSeeClientMoney(role) ? money(e.totalCents) : undefined}
+              status={{
+                tone: e.status === "approved" ? "ok" : e.status === "sent" ? "info" : e.status === "awaiting_countersign" ? "warn" : "neutral",
+                label: t(e.status === "approved" ? "st.approved" : e.status === "sent" ? "st.sent" : e.status === "awaiting_countersign" ? "est.awaitingCountersign" : e.status === "declined" ? "st.declined" : "st.draft"),
+              }}
               onPress={() => router.push(`/estimate/${e.id}`)}
             />
           ))}
-        </CardList>
+        </CardGrid>
       ) : (
         <T v="caption" tone="mut">{t("lead.noEstimates")}</T>
       )}

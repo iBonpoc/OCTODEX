@@ -90,7 +90,7 @@ exports.run = async (h) => {
     await p.getByPlaceholder("Имя", { exact: true }).last().fill("Typed Lead");
     await p.getByPlaceholder("(555) 555-0100").last().fill("8185550170");
     await h.expectText(/Этот номер уже есть/, "the duplicate warning");
-    await p.getByText(/Ваш клиент — откройте|Лид от /).locator("visible=true").first().click();
+    await p.locator('[data-testid^="new-lead-dup-"]').locator("visible=true").first().click();
     await p.waitForTimeout(700);
     h.expect(/^\/(client|lead)\/(?!new)/.test(new URL(p.url()).pathname), `the duplicate's card from the new lead (${p.url()})`);
     await p.getByRole("tab", { name: "Главная", exact: true }).click();
@@ -102,7 +102,7 @@ exports.run = async (h) => {
     await p.goBack();
     await p.waitForTimeout(700);
     h.expect((await p.getByPlaceholder("Имя", { exact: true }).last().inputValue()) === "Typed Lead", "the form kept what was typed");
-    await p.getByText(/Ваш клиент — откройте|Лид от /).locator("visible=true").first().click();
+    await p.locator('[data-testid^="new-lead-dup-"]').locator("visible=true").first().click();
     await p.waitForTimeout(700);
     await p.getByRole("tab", { name: "Главная", exact: true }).click();
     await p.waitForTimeout(500);

@@ -21,7 +21,8 @@ import { InterestPicker, MissingBlock } from "./LeadSheets";
 import { Avatar, Button, ChoiceChips, IconButton, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { Icon, T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, CardList, Divider, Empty, ItemCard, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, Empty, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
 import { mailtoHref, smsHref } from "@/features/contactLinks";
 import { dayAtHour } from "./bookRules";
 import { TaskSheet } from "@/features/tasks/TaskSheet";
@@ -146,17 +147,22 @@ export function LeadOverview({ l }: { l: Lead }) {
           right={canEditPeople ? <Button label={t("lead.addPerson")} icon="plus" size="sm" variant="ghost" onPress={() => setPeopleOpen(true)} /> : undefined}
         />
         {others.length ? (
-          <CardList>
+          <CardGrid>
             {others.map((p) => (
-              <ItemCard
+              // a person of the lead (as the property's people, B2): role beside the name, phones and emails as facts;
+              // no call buttons here — a call to the lead goes through ContactActions above («did you get through?», Р13)
+              <ListCard
                 key={p.id}
+                density="regular"
+                testID={`lead-person-${p.id}`}
+                lead={{ kind: "icon", icon: "user" }}
                 title={p.name || "—"}
-                subtitle={[t(`person.role.${p.role}` as DictKey), ...p.phones.map((x) => x.number), ...p.emails.map((x) => x.address)].join(" · ")}
-                left={<Icon name="user" />}
+                when={t(`person.role.${p.role}` as DictKey)}
+                facts={{ phone: p.phones.map((x) => x.number).join(", ") || undefined, email: p.emails.map((x) => x.address).join(", ") || undefined }}
                 onPress={canEditPeople ? () => setPeopleOpen(true) : undefined}
               />
             ))}
-          </CardList>
+          </CardGrid>
         ) : (
           <T v="caption" tone="mut">
             {t("lead.noPeople")}
@@ -454,20 +460,20 @@ export function TasksBlock({ subjectType, subjectId }: { subjectType: Task["subj
     const who = db.members.find((m) => m.id === x.assigneeId);
     const overdue = isOverdueTask(x);
     return (
-      <ItemCard
+      // recipe E (06 §3), as the client's tasks (B1): the tick on the left closes / reopens the task (undo in the toast), the card opens the form
+      <ListCard
         key={x.id}
-        status={x.doneAt ? "ok" : overdue ? "bad" : undefined}
+        density="compact"
+        testID={`task-${x.id}`}
+        lead={{
+          kind: "check",
+          on: !!x.doneAt,
+          label: x.doneAt ? t("task.undo") : t("task.done"),
+          onToggle: () => saved(store.saveTask({ ...x, doneAt: x.doneAt ? undefined : new Date().toISOString() }).undo, x.doneAt ? t("task.reopened") : t("task.doneToast")),
+        }}
         title={x.title}
-        subtitle={[x.dueAt ? `${day(x.dueAt)} ${time(x.dueAt)}` : t("task.noDate"), memberLabel(who, t)].filter(Boolean).join(" · ")}
-        left={
-          <IconButton
-            icon={x.doneAt ? "check" : "clock"}
-            label={x.doneAt ? t("task.undo") : t("task.done")}
-            active={!!x.doneAt}
-            onPress={() => saved(store.saveTask({ ...x, doneAt: x.doneAt ? undefined : new Date().toISOString() }).undo, x.doneAt ? t("task.reopened") : t("task.doneToast"))}
-          />
-        }
-        right={overdue ? <StatusChip status="bad" label={t("task.overdue")} /> : undefined}
+        when={[x.dueAt ? `${day(x.dueAt)} ${time(x.dueAt)}` : t("task.noDate"), memberLabel(who, t)].filter(Boolean).join(" · ")}
+        signs={overdue ? [{ tone: "bad", label: t("task.overdue") }] : undefined}
         onPress={() => setEdit(x)}
       />
     );
@@ -478,11 +484,11 @@ export function TasksBlock({ subjectType, subjectId }: { subjectType: Task["subj
         title={t("task.title")}
         right={<Button label={t("task.new")} icon="plus" size="sm" variant="ghost" onPress={() => setEdit({ subjectType, subjectId, title: "", assigneeId: db.me, dueAt: at(1, 9) })} />}
       />
-      {open.length ? <CardList>{open.map(card)}</CardList> : <T v="caption" tone="mut">{t("task.none")}</T>}
+      {open.length ? <CardGrid>{open.map(card)}</CardGrid> : <T v="caption" tone="mut">{t("task.none")}</T>}
       {done.length ? (
         <>
           <T v="micro" tone="mut" w="semibold">{t("task.doneList")}</T>
-          <CardList>{done.slice(0, 5).map(card)}</CardList>
+          <CardGrid>{done.slice(0, 5).map(card)}</CardGrid>
         </>
       ) : null}
       <TaskSheet value={edit} onClose={() => setEdit(null)} />
