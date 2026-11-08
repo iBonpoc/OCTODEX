@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { capSide, chainOf, centre, findCorners, houseSide, toMeasurement, type DrawnRun, type Drawing, type P } from "../src/modules/gutters/geometry";
 import { flipFace } from "../src/modules/gutters/canvas/edit";
+import { computeGutterParts } from "@octo/estimating-engine";
 import { buildScene } from "../src/modules/gutters/canvas/scene";
 
 /** docs/specs/33-gutters-canvas.md П20.11 — the face, end caps L/R, corners inside/outside (founder 08.11). */
@@ -62,6 +63,16 @@ describe("corners inside / outside", () => {
     expect(m.corners.some((k) => k.kind === "in")).toBe(true);
     const id = m.corners.find((k) => k.kind === "in")!.id;
     expect(toMeasurement({ ...x, corners: { [id]: { method: "cut", splashGuard: false } } }).corners.find((k) => k.id === id)!.splashGuard).toBe(false);
+  });
+  it("the engine counts the splash guard of the inside corner — one part, none for the outside one", () => {
+    const parts = computeGutterParts(toMeasurement(d(L))).parts.filter((p) => p.key.startsWith("splashguard."));
+    expect(parts).toHaveLength(1);
+    expect(parts[0]!.qty.toString()).toBe("1");
+    const flipped = computeGutterParts(toMeasurement(flipFace(d(L), "a"))).parts.filter((p) => p.key.startsWith("splashguard."));
+    expect(flipped.map((p) => p.qty.toString())).toEqual(["1"]); // the other corner is the inside one now
+    const off = toMeasurement(d(L));
+    const inId = off.corners.find((k) => k.kind === "in")!.id;
+    expect(computeGutterParts(toMeasurement({ ...d(L), corners: { [inId]: { method: "cut", splashGuard: false } } })).parts.some((p) => p.key.startsWith("splashguard."))).toBe(false);
   });
   it("the scene: a mark and a chip per corner, no caps where runs meet", () => {
     const s = sceneOf(d(L));
