@@ -55,7 +55,7 @@ export interface JointRule {
 }
 
 /** screws, anchors and per-kit counts are company defaults («проверить», spec П18.6–П18.8), not manufacturer figures */
-const SCREW_WOOD = { part: "screw", per: 2, attrs: { screw: "10x1.5" } } as const;
+const SCREW_WOOD = { part: "screw", per: 2, attrs: { screw: "10x1.5" } } as const; // WOOD_SCREW
 const main = (): KitPart => ({ part: "hanger", per: 1, byKit: true, bySize: true, use: "both" });
 const shank = (n: string): HangerKit => ({
   spacingIn: 24,
@@ -74,6 +74,9 @@ export const DEFAULT_HANGER_KITS: Record<string, HangerKit> = {
   hidden_clip: { spacingIn: 24, parts: [main()] },
   hidden_boss: { spacingIn: 24, parts: [main()] },
   hidden_hd: { spacingIn: 24, parts: [main()] },
+  /** speed screw hidden hangers (screw in the hanger), without and with a clip (spec П18.15, VGS list) */
+  hidden_speed: { spacingIn: 24, parts: [main()] },
+  hidden_speed_clip: { spacingIn: 24, parts: [main()] },
   hangfast: { spacingIn: 24, parts: [main()] },
   spike: { spacingIn: 24, parts: [{ part: "spike", per: 1, bySize: true, use: "both" }, { part: "ferrule", per: 1, bySize: true }] },
   fascia_strap: { spacingIn: 24, parts: [main(), { ...SCREW_WOOD }] },
@@ -137,7 +140,19 @@ export const DEFAULT_WALL_KIT_BY_WALL: Record<string, Record<string, string>> = 
 export const DEFAULT_GUARD_KITS: Record<string, GuardKit> = {
   micromesh: { pieceIn: 48, parts: [{ part: "screw", per: 3, attrs: { screw: "8x0.5" } }] },
   screen: { pieceIn: 72, parts: [{ part: "screw", per: 2, attrs: { screw: "8x0.5" } }] },
+  /** a guard that locks onto the gutter lip (spec П18.15): 4 ft pieces, 2 screws a piece («проверить») */
+  lock_screen: { pieceIn: 48, parts: [{ part: "screw", per: 2, attrs: { screw: "8x0.5" } }] },
 };
+
+/** the wood screw every kit uses (SCREW_WOOD) — the company may take another size or one with a washer (spec П18.15) */
+export const WOOD_SCREW = "10x1.5";
+export const WOOD_SCREWS = ["10x1", "10x1.5", "10x2"] as const;
+/** masonry anchors: any (the default) or a size (spec П18.15) */
+export const ANCHORS = ["masonry", "3/16x7/8", "1/4x1"] as const;
+/** spike lengths, inches, sold by suppliers (spec П18.15) */
+export const SPIKE_LENGTHS = ["6.5", "7", "7.5", "8", "9", "10"] as const;
+/** spike length by gutter size, inches («проверить»): K 5″ → 7″, 6″ → 8″, 7″ → 9″, 8″ → 10″ */
+export const DEFAULT_SPIKE_LENGTH_IN: Record<string, string> = { "5": "7", "6": "8", "7": "9", "8": "10" };
 
 /** Rivets, sealant points and touch-up paint per joint (spec П18.8, «проверить»). */
 export const DEFAULT_JOINTS: Record<JointKind, JointRule> = {

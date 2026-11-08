@@ -189,7 +189,7 @@ describe("rules a company can change", () => {
   });
   it("company spacing by kit: spike every 30 in → 16 spikes and 16 ferrules", () => {
     const { parts } = computeGutterParts({ runs: [run({ id: "1", lengthIn: 480, hanger: "spike" })], corners: [], downspouts: [] }, { hangerSpacingIn: { spike: 30 } });
-    expect(q(parts, "spike.aluminum.k.6")).toBe("16");
+    expect(q(parts, "spike.8.aluminum.k.6")).toBe("16");
     expect(q(parts, "ferrule.aluminum.k.6")).toBe("16");
   });
   it("guards on part of a run", () => {
@@ -269,7 +269,7 @@ describe("П18.6: hanger kits", () => {
   });
   it("spike and ferrule in pairs", () => {
     const { parts } = one({ hanger: "spike" });
-    expect(q(parts, "spike.aluminum.k.6")).toBe("20");
+    expect(q(parts, "spike.8.aluminum.k.6")).toBe("20");
     expect(q(parts, "ferrule.aluminum.k.6")).toBe("20");
     expect(q(parts, "hanger.spike.k.6")).toBeUndefined();
   });

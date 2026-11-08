@@ -14,6 +14,7 @@ import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { moduleHref, moduleState } from "@/modules/registry";
+import { ANCHORS, SPIKE_LENGTHS, WOOD_SCREWS } from "@octo/estimating-engine";
 import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -22,13 +23,16 @@ import { Card, RowView, Screen } from "@/ui/surfaces";
 import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, WALLS } from "../canvas/attrs";
 import { useColorLabel } from "../draw/AttrPanel";
 import {
-  choicesFor, colorName, notSavedKey, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
+  choicesFor, colorName, notSavedKey, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, SPIKE_SIZES, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
   type Choices, type OfferGroup,
 } from "../settings";
 
 const a = (s: string) => `mod.gutters.attr.${s}` as DictKey;
 const k = (s: string) => `mod.gutters.set.${s}` as DictKey;
 const inch = (s: string) => `${s}″`;
+/** i18n keys of the fastener choices (a value has dots and slashes) */
+const SCREW_KEY = { "10x1": "s10x1", "10x1.5": "s10x15", "10x2": "s10x2" } as const;
+const ANCHOR_KEY = { masonry: "any", "3/16x7/8": "a316", "1/4x1": "a14" } as const;
 const dsSize = (s: string) => (s.includes("x") ? s.replace("x", "×") : inch(s));
 
 /** the refusal or note said under one field (by its testID): the last choice, too large, being read again */
@@ -353,6 +357,21 @@ export default function GutterSettingsScreen() {
                 <Stepper label={t(k("u.guardPiece"), { what: t(k(`g.${g}`)) })} unit={t(k("ft"))} value={use.guardPieceFt[g]!} min={USE_NUMS.guardPieceFt.min} max={USE_NUMS.guardPieceFt.max} onChange={(v) => put(`gset-use-guard-${g}`, ["use", "guardPieceFt", g], v)} />
               </Step>
             ))}
+            <Switch testID="gset-use-sealantColor" on={use.sealantByColor} onChange={(v) => put("gset-use-sealantColor", ["use", "sealantByColor"], v)} label={t(k("u.sealantColor"))} />
+            {/* spec П18.15: the supplier's fasteners — sizes only, never a brand; defaults «проверить» */}
+            <Field label={t(k("u.woodScrew"))} testID="gset-use-woodScrew">
+              <ChoiceChips items={WOOD_SCREWS.map((x) => ({ key: x, label: t(k(`u.screw.${SCREW_KEY[x]}`)) }))} value={use.woodScrew} onChange={(x) => put("gset-use-woodScrew", ["use", "woodScrew"], x)} />
+            </Field>
+            <Switch testID="gset-use-washer" on={use.washer} onChange={(v) => put("gset-use-washer", ["use", "washer"], v)} label={t(k("u.washer"))} />
+            <Field label={t(k("u.anchor"))} testID="gset-use-anchor">
+              <ChoiceChips items={ANCHORS.map((x) => ({ key: x, label: t(k(`u.anchor.${ANCHOR_KEY[x]}`)) }))} value={use.anchor} onChange={(x) => put("gset-use-anchor", ["use", "anchor"], x)} />
+            </Field>
+            {SPIKE_SIZES.map((sz) => (
+              <Field key={sz} label={t(k("u.spike"), { size: inch(sz) })} testID={`gset-use-spike-${sz}`}>
+                <ChoiceChips items={SPIKE_LENGTHS.map((x) => ({ key: x, label: inch(x) }))} value={use.spikeLenIn[sz]!} onChange={(x) => put(`gset-use-spike-${sz}`, ["use", "spikeLenIn", sz], x)} />
+              </Field>
+            ))}
+            <T v="caption" tone="mut">{t(k("u.fastenersHint"))}</T>
           </Part>
 
           <Part title={t(k("defRun"))} hint={t(k("defRunHint"))} testID="gset-def-run">
