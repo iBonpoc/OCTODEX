@@ -21,6 +21,8 @@ export const NO_TAB_BAR = [
   "job/new", "job/schedule",
   "lead/new",
   "legal/[doc]",
+  // a module's own screen (spec 33 П20.3): the drawing canvas and its speed check take the whole screen
+  "module/[key]/[screen]",
   "p/[token]",
   "settings/delete-account",
   // a wrong address: nothing to switch from (the walk of the fixes chat, 07.11)

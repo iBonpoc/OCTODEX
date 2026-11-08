@@ -208,7 +208,7 @@ export interface ThemeColors {
   glow: GlowSpot[];
   status: Record<StatusName, { fill: string; text: string; on: string }>;
   /** the drawing canvas only (founder О3, 07.11.2026 — the one exception to «colour only for status»): a node, and the
-   *  storeys 1..4 of a gutter line, always with the label «эт N»; ≥ 3:1 to the canvas (bg) in both themes */
+   *  storeys 1..4 of a drawn line, always with the label «эт N»; ≥ 3:1 to the canvas (bg) in both themes */
   drawing: { node: string; story: readonly [string, string, string, string] };
 }
 

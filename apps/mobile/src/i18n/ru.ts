@@ -2352,6 +2352,27 @@ export const ru = {
   "mod.disabled": "Модуль отключён. Данные остались",
   "mod.gutters.title": "Водостоки (Gutters)",
   "mod.gutters.hint": "Замер дома пальцем на телефоне: линии водостоков, даунспоты, этажи → детали и смета из вашего прайса.",
+  // модуль: холст замера и проверка скорости (спека 33 П20)
+  "mod.noScreen": "Такого экрана у модуля нет",
+  "mod.gutters.story": "эт {n}",
+  "mod.gutters.ds": "DS {n}",
+  "mod.gutters.bench.action": "Проверка скорости",
+  "mod.gutters.bench.title": "Проверка скорости холста",
+  "mod.gutters.bench.intro": "Рисунок: 50 линий, 40 даунспотов, 150 подписей. Нажмите «Начать» и не трогайте экран около 20 секунд.",
+  "mod.gutters.bench.start": "Начать",
+  "mod.gutters.bench.again": "Ещё раз",
+  "mod.gutters.bench.running": "Идёт замер: {what}",
+  "mod.gutters.bench.copy": "Скопировать итог",
+  "mod.gutters.bench.copied": "Итог скопирован — пришлите его руководителю",
+  "mod.gutters.bench.send": "Пришлите итог руководителю: текстом или снимком экрана. Напишите модель телефона.",
+  "mod.gutters.bench.pan": "Сдвиг и зум",
+  "mod.gutters.bench.drag": "Перетаскивание точки",
+  "mod.gutters.bench.tap": "Тап → видно",
+  "mod.gutters.bench.open": "Открытие рисунка",
+  "mod.gutters.bench.pass": "прошло",
+  "mod.gutters.bench.fail": "не прошло",
+  "mod.gutters.bench.fps": "{n} кадров/с · нужно ≥ {limit}",
+  "mod.gutters.bench.ms": "{n} мс · нужно < {limit}",
 } as const;
 
 export type DictKey = keyof typeof ru;
