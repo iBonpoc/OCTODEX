@@ -141,12 +141,10 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
             {(e.status === "draft" || e.status === "sent") && canServe(db, e.customerId) && canSeeClientLink(store.role) ? <View testID="est-send"><Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /></View> : null}
             {/* the client's page only for the office side: a tech with the link could sign as the client (spec 35 §4д п.10) */}
             {e.token && canSeeClientLink(store.role) ? <View testID="est-open-client"><Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /></View> : null}
-            {(e.status === "draft" || e.status === "sent") && canServe(db, e.customerId) ? <View testID="est-send"><Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /></View> : null}
             {/* E3 (spec 07 §11): any status; the director and the office (the server refuses others — never queued) */}
             {e.doc && canEditEstimateTemplates(store.role) && !store.db.estimateTemplatesMissing ? (
               <View testID="est-save-template"><Button label={t("est.tpl.saveAs")} icon="copy" variant="ghost" onPress={() => setTplOpen(true)} /></View>
             ) : null}
-            {e.token ? <Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /> : null}
             <View testID="est-pdf"><Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={() => pdf()} /></View>
             {/* E2b: only an unsigned link can be revoked (the signed client keeps their copy); director and office */}
             {e.token && !e.linkRevokedAt && (e.status === "sent" || e.status === "draft") && canManageLink(store.db, store.db.me) ? (
