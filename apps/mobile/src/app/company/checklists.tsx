@@ -4,15 +4,14 @@
  * sales and a tech do not come here (nav/roles.ts: the company section). A template comes into a visit as a snapshot
  * when the visit is made (S4, S9) — editing it here changes only new visits.
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import type { ChecklistTemplate } from "@/data/types";
-import { canEditTemplates, canEditVisitSettings, starterTemplate, startersToAdd, visitSettings } from "@/features/checklist";
-import { uid as newId } from "@/features/estimateDoc";
+import { canEditTemplates, canEditVisitSettings, starterTemplate, starterTemplateId, startersToAdd, visitSettings } from "@/features/checklist";
 import { activeModules } from "@/modules/registry";
 import { Button, ReadOnly, StatusChip, Stepper, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -61,10 +60,21 @@ export default function CompanyChecklists() {
 
   // starter templates of the company's active modules not added yet (§11.11): one tap, then they are the company's own
   const modules = activeModules(store.db.company);
-  const starters = edit && !store.db.checklistLegacy ? startersToAdd(modules, all) : [];
+  const companyId = store.db.company?.id ?? "demo";
+  const starters = edit && !store.db.checklistLegacy ? startersToAdd(modules, all, companyId) : [];
+  // a second tap before the card goes (it would land on the next card): once per screen, «Отменить» frees it
+  const pressed = useRef(new Set<string>());
   const addStarter = (module: string, starter: (typeof starters)[number]["starter"]) => {
-    const tpl = starterTemplate(module, starter, t, newId());
-    if (tpl) toast.show(store.online ? t("chk3.starterAdded") : t("offline.queued"), store.saveChecklistTemplate(tpl));
+    const id = starterTemplateId(companyId, module, starter.key);
+    if (pressed.current.has(id)) return;
+    const tpl = starterTemplate(module, starter, t, id);
+    if (!tpl) return;
+    pressed.current.add(id);
+    const undo = store.saveChecklistTemplate(tpl, { ifNew: true });
+    toast.show(store.online ? t("chk3.starterAdded") : t("offline.queued"), () => {
+      pressed.current.delete(id);
+      undo();
+    });
   };
 
   return (
@@ -93,7 +103,6 @@ export default function CompanyChecklists() {
                     title={t(starter.nameKey)}
                     when={`${t("chk2.items", { n: starter.items.length, m: starter.items.filter((i) => i.required).length })} · ${def ? t(def.titleKey) : module}`}
                     action={{ label: t("check.add"), icon: "plus", onPress: () => addStarter(module, starter) }}
-                    onPress={() => addStarter(module, starter)}
                   />
                 </View>
               );

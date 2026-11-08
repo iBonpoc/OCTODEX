@@ -186,6 +186,9 @@ export function registerModule(def: ModuleDef): void {
   const ids = (def.checklistTemplates ?? []).flatMap((t) => t.items.map((i) => i.id));
   const bad = ids.find((id) => !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(id));
   if (bad !== undefined || new Set(ids).size !== ids.length) throw new Error(`module ${def.key}: starter item ids — unique lowercase uuids`);
+  const starters = def.checklistTemplates ?? [];
+  if (starters.some((t) => t.items.length < 1 || t.items.length > 100) || new Set(starters.map((t) => t.key)).size !== starters.length)
+    throw new Error(`module ${def.key}: a starter has 1..100 items and its own key`);
   defs.set(def.key, def);
 }
 export const moduleDef = (key: string): ModuleDef | undefined => defs.get(key);

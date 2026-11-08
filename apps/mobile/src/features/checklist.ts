@@ -263,18 +263,40 @@ export function itemsFromTemplate(v: Pick<Visit, "checklist">, t: ChecklistTempl
 
 /* ---- starter templates of modules (§11.11, CH3b) ---- */
 
-/** a module's starter is in the company when any of its templates of that module (an archived one too) has its items */
-export function starterAdded(moduleKey: string, s: Pick<StarterChecklist, "items">, templates: readonly ChecklistTemplate[]): boolean {
+/**
+ * The same uuid for the same text (a starter's template id in one company: two phones adding it make one row). Not
+ * cryptographic — four 32-bit FNV-1a hashes with different seeds, shaped as a v4 uuid (the server checks the shape only).
+ */
+export function stableUuid(seed: string): string {
+  const part = (salt: number) => {
+    let h = (0x811c9dc5 ^ salt) >>> 0;
+    for (let i = 0; i < seed.length; i++) h = Math.imul(h ^ seed.charCodeAt(i), 0x01000193) >>> 0;
+    h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d) >>> 0;
+    return (Math.imul(h ^ (h >>> 13), 0x297a2d39) >>> 0) ^ (h >>> 16);
+  };
+  const hex = [0x9e37, 0x85eb, 0xc2b2, 0x27d4].map((salt) => (part(salt) >>> 0).toString(16).padStart(8, "0")).join("");
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-${((parseInt(hex[16]!, 16) & 3) | 8).toString(16)}${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+/** the id of a module's starter template in a company: fixed, so a second add (another phone) is the same row */
+export const starterTemplateId = (companyId: ID, moduleKey: string, key: string): ID => stableUuid(`starter:${companyId}:${moduleKey}:${key}`);
+
+/**
+ * a module's starter is in the company when its template (by the fixed id) is there, or — added before the fixed id —
+ * any template of that module (an archived one too) has its items. Edited or archived, it is the company's own now.
+ */
+export function starterAdded(moduleKey: string, s: Pick<StarterChecklist, "key" | "items">, templates: readonly ChecklistTemplate[], companyId?: ID): boolean {
+  const own = companyId ? starterTemplateId(companyId, moduleKey, s.key) : null;
   const ids = new Set(s.items.map((i) => i.id));
-  return templates.some((t) => t.module === moduleKey && t.items.some((i) => ids.has(i.id)));
+  return templates.some((t) => t.id === own || (t.module === moduleKey && t.items.some((i) => ids.has(i.id))));
 }
 
 /** the starters of the given (active) modules the company has not added yet */
 export function startersToAdd(
   mods: readonly { key: string; checklistTemplates?: readonly StarterChecklist[] }[],
   templates: readonly ChecklistTemplate[],
+  companyId?: ID,
 ): { module: string; starter: StarterChecklist }[] {
-  return mods.flatMap((m) => (m.checklistTemplates ?? []).filter((s) => !starterAdded(m.key, s, templates)).map((starter) => ({ module: m.key, starter })));
+  return mods.flatMap((m) => (m.checklistTemplates ?? []).filter((s) => !starterAdded(m.key, s, templates, companyId)).map((starter) => ({ module: m.key, starter })));
 }
 
 /** a starter as the company's template: a new id, the text in `t`'s language, the module's item ids; clean as the server takes it */

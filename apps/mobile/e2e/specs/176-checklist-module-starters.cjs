@@ -29,12 +29,12 @@ exports.run = async (h) => {
   await h.shot("starters");
 
   // «Добавить»: the company's template, the module's mark and item ids; the offer is gone
-  await tid("chk-starter-gutters-pre").getByRole("button", { name: /Перед монтажом/ }).first().click();
+  await tid("chk-starter-gutters-pre").getByRole("button", { name: "Добавить" }).first().click();
   await h.expectText(/Шаблон добавлен/, "the toast");
   let list = await until((l) => l.some((x) => x.module === "gutters"));
   const t = list.find((x) => x.module === "gutters");
   h.expect(t && t.name === "Перед монтажом" && t.items.length === 4 && t.items[0].label === "Проверить лобовую доску на гниль", `the template: ${JSON.stringify(t)}`);
-  h.expect(t.items.every((i) => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(i.id)) && t.id !== "pre", "the module's item ids, a new template id");
+  h.expect(t.items.every((i) => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(i.id)) && /^[0-9a-f-]{36}$/.test(t.id), "the module's item ids, the company's template id");
   await tid(`chk-tpl-${t.id}`).waitFor();
   h.expect((await p.getByTestId("chk-starter-gutters-pre").count()) === 0, "added: not offered");
 
@@ -45,9 +45,10 @@ exports.run = async (h) => {
   await tid("chk-starter-gutters-pre").waitFor();
 
   // added again and archived: still not offered (the company's choice)
-  await tid("chk-starter-gutters-pre").getByRole("button", { name: /Перед монтажом/ }).first().click();
+  await tid("chk-starter-gutters-pre").getByRole("button", { name: "Добавить" }).first().click();
   list = await until((l) => l.some((x) => x.module === "gutters"));
   const again = list.find((x) => x.module === "gutters");
+  h.expect(again.id === t.id, "the same starter is the same row (fixed id: two phones make one)");
   await h.go(`/company/checklist/${again.id}`);
   await tid("chk-tpl-archive").getByRole("button").click();
   await until((l) => l.find((x) => x.id === again.id)?.archivedAt);

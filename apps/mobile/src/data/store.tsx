@@ -201,7 +201,7 @@ interface StoreCtx {
   /** «Просмотрено» on the «not done» card */
   reviewVisitMissed: (visitId: ID) => Undo;
   /** a checklist template, whole (new or changed; archive = archivedAt) */
-  saveChecklistTemplate: (t: ChecklistTemplate) => Undo;
+  saveChecklistTemplate: (t: ChecklistTemplate, opts?: { ifNew?: boolean }) => Undo;
   /** the company's photo rules (owner, admin) */
   setVisitSettings: (patch: Partial<VisitSettings>) => Undo;
   signVisit: (visitId: ID, path: string) => Undo;
@@ -1263,17 +1263,19 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const me = dbRef.current.me;
         return chkMutate("check.review", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: at, checklistReviewedBy: me })), { k: "chk.visit.review", visitId, at }, false);
       },
-      saveChecklistTemplate: (t) => {
+      saveChecklistTemplate: (t, opts) => {
         const clean = cleanTemplate(t);
         // no name: the server would refuse it; the old server has no templates
         if (!clean || !canEditTemplates(role) || dbRef.current.checklistLegacy) return noop;
+        // a starter (ifNew) already on the phone: nothing (a second tap, a second phone's after the next read)
+        if (opts?.ifNew && (dbRef.current.checklistTemplates ?? []).some((x) => x.id === clean.id)) return noop;
         return mutate(
           "checklist.template",
           (d) => {
             const list = d.checklistTemplates ?? [];
             return { ...d, checklistTemplates: list.some((x) => x.id === clean.id) ? list.map((x) => (x.id === clean.id ? clean : x)) : [...list, clean] };
           },
-          { k: "chk.template.save", template: clean },
+          { k: "chk.template.save", template: clean, ...(opts?.ifNew ? { ifNew: true } : {}) },
         );
       },
       setVisitSettings: (patch) => {
