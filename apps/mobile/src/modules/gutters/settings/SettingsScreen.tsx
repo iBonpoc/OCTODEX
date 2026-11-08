@@ -6,14 +6,14 @@
  * The module switched off or past its trial: the page is read-only with «Подключить» (founder О2).
  * Colours are words, never swatches (rule 2).
  */
-import { useMemo, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { GUTTER_MOUNTS } from "@octo/estimating-engine";
 import { component, radius, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { moduleState } from "@/modules/registry";
+import { moduleHref, moduleState } from "@/modules/registry";
 import { Button, ChoiceChips, IconButton, ReadOnly, StatusChip, Stepper, TextField, Toggle, useReadOnly } from "@/ui/controls";
 import { Press, T } from "@/ui/primitives";
 import { useTheme } from "@/theme/ThemeProvider";
@@ -22,7 +22,7 @@ import { Card, RowView, Screen } from "@/ui/surfaces";
 import { DS_BOTTOMS, DS_SHAPES, DS_SIZES, DS_STYLES, GAUGES_BY_MATERIAL, MATERIALS, MILL_ONLY, PROFILES, SIZES_BY_PROFILE, WALL_KITS_BY_WALL, WALLS } from "../canvas/attrs";
 import { useColorLabel } from "../draw/AttrPanel";
 import {
-  choicesFor, colorName, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
+  choicesFor, colorName, notSavedKey, CORNER_METHODS, familyKits, GUARD_KINDS, JOINT_KINDS, MAX_PALETTE, MODULE_OFFER, PALETTES, readRules, readUse, RULE_NUMS, setPath, settingsFit, STICK_FT, toggleOffer, USE_NUMS,
   type Choices, type OfferGroup,
 } from "../settings";
 
@@ -30,6 +30,26 @@ const a = (s: string) => `mod.gutters.attr.${s}` as DictKey;
 const k = (s: string) => `mod.gutters.set.${s}` as DictKey;
 const inch = (s: string) => `${s}″`;
 const dsSize = (s: string) => (s.includes("x") ? s.replace("x", "×") : inch(s));
+
+/** the refusal or note said under one field (by its testID): the last choice, too large, being read again */
+const WarnCtx = createContext<{ at: string; text: string } | null>(null);
+function FieldWarn({ at }: { at: string }) {
+  const warn = useContext(WarnCtx);
+  return warn?.at === at ? (
+    <View testID={`${at}-warn`}>
+      <StatusChip status="warn" label={warn.text} soft />
+    </View>
+  ) : null;
+}
+/** a stepper with its note under it */
+function Step({ testID, children }: { testID: string; children: React.ReactNode }) {
+  return (
+    <View testID={testID}>
+      {children}
+      <FieldWarn at={testID} />
+    </View>
+  );
+}
 
 function Part({ title, hint, children, testID }: { title: string; hint: string; children: React.ReactNode; testID: string }) {
   return (
@@ -45,10 +65,13 @@ function Part({ title, hint, children, testID }: { title: string; hint: string; 
 /** a switch with its words beside it (the core's Toggle carries the words for screen readers only) */
 function Switch({ label, on, onChange, testID }: { label: string; on: boolean; onChange: (v: boolean) => void; testID: string }) {
   return (
-    <RowView style={{ gap: space[3], justifyContent: "space-between" }}>
-      <T v="body" style={{ flex: 1 }}>{label}</T>
-      <View testID={testID}><Toggle on={on} onChange={onChange} label={label} /></View>
-    </RowView>
+    <View style={{ gap: space[1] }}>
+      <RowView style={{ gap: space[3], justifyContent: "space-between" }}>
+        <T v="body" style={{ flex: 1 }}>{label}</T>
+        <View testID={testID}><Toggle on={on} onChange={onChange} label={label} /></View>
+      </RowView>
+      <FieldWarn at={testID} />
+    </View>
   );
 }
 
@@ -57,6 +80,7 @@ function Field({ label, children, testID }: { label: string; children: React.Rea
     <View style={{ gap: space[2] }} testID={testID}>
       <T v="caption" tone="mut" w="semibold">{label}</T>
       {children}
+      <FieldWarn at={testID} />
     </View>
   );
 }
@@ -126,6 +150,9 @@ export default function GutterSettingsScreen() {
     setWarn(null);
     const undo = store.saveModuleSettings("gutters", next);
     if (undo) toast.show(store.online ? t(k("saved")) : t("offline.queued"), undo);
+    // not saved while the module is read again after someone else's change (core #374: null until re-read) — said under
+    // the field, not silently (debt №7, spec П22.10 №6)
+    else setWarn({ at, text: t(k(notSavedKey(moduleState(store.db.company?.modules?.gutters).access))) });
   };
   /** «what we install»: one value on or off; the last one of its list stays (spec П22.2 №8) */
   const toggle = (at: string, group: OfferGroup, sub: string | null, value: string, known?: readonly string[]) => {
@@ -136,16 +163,17 @@ export default function GutterSettingsScreen() {
   /** one field of a default, a table cell, a rule: only that field is written (review #372 №2) */
   const put = (at: string, path: string[], value: unknown) => save(setPath(raw, path, value), at);
   const setRun = (key: string, v: unknown) => put(`gset-run-${key}`, ["run", key], v);
-  const setDs = (key: string, v: unknown) => put(`gset-ds-${key}`, ["ds", key], v);
+  // the field's testID: «gset-ds-style» for dsStyle (the others are «gset-ds-<key>»)
+  const setDs = (key: string, v: unknown) => put(`gset-ds-${key === "dsStyle" ? "style" : key}`, ["ds", key], v);
   const setPalette = (list: string[] | undefined) => put("gset-palette", ["palette"], list);
   const setRule = (key: string, v: unknown) => put(`gset-rule-${key}`, ["rules", key], v);
   /** a number rule as a stepper: its unit, range and step (spec П4) */
   const num = (key: keyof typeof RULE_NUMS, unit: string, label: string) => {
     const r = RULE_NUMS[key];
     return (
-      <View testID={`gset-rule-${key}`}>
+      <Step testID={`gset-rule-${key}`}>
         <Stepper label={label} unit={unit} value={rules[key]} min={r.min} max={r.max} step={r.step} onChange={(v) => setRule(key, v)} />
-      </View>
+      </Step>
     );
   };
   const addColor = () => {
@@ -156,12 +184,6 @@ export default function GutterSettingsScreen() {
     setPalette([...ch.palette, n]);
     setNewColor("");
   };
-  const Warn = ({ at }: { at: string }) =>
-    warn?.at === at ? (
-      <View testID={`${at}-warn`}>
-        <StatusChip status="warn" label={warn.text} soft />
-      </View>
-    ) : null;
 
   const offer = ch.offer;
   const runProfile = ch.run.profile;
@@ -169,6 +191,7 @@ export default function GutterSettingsScreen() {
   const dsGauges = offer.gauges[ch.ds.material] ?? [];
 
   return (
+    <WarnCtx.Provider value={warn}>
     <Screen title={t(k("title"))} back={back} subtitle={t("mod.gutters.title")}>
       <View style={{ gap: space[4] }} testID="gset-screen">
         <T v="body" tone="mut">{t(k("intro"))}</T>
@@ -183,26 +206,31 @@ export default function GutterSettingsScreen() {
           </View>
         ) : null}
 
+        {/* M7d (spec П22.10): prices live in the company's price list — their own page */}
+        <View testID="gset-prices">
+          <Card>
+            <T v="heading">{t("mod.gutters.pr.title")}</T>
+            <T v="caption" tone="mut">{t("mod.gutters.pr.fromSettings")}</T>
+            <Button label={t("mod.gutters.pr.open")} icon="box" variant="secondary" size="sm" onPress={() => router.push(moduleHref("gutters", "prices"))} />
+          </Card>
+        </View>
+
         <ReadOnly value={ro}>
           <Part title={t(k("offer"))} hint={t(k("offerHint"))} testID="gset-offer">
             <Field label={t(k("profiles"))} testID="gset-profiles">
               <MultiChips items={PROFILES.map((p) => ({ key: p, label: t(a(`p.${p}`)) }))} value={offer.profiles} testID="gset-profiles" onToggle={(x) => toggle("gset-profiles", "profiles", null, x)} />
-              <Warn at="gset-profiles" />
             </Field>
             {offer.profiles.map((p) => (
               <Field key={p} label={t(k("sizesOf"), { what: t(a(`p.${p}`)) })} testID={`gset-sizes-${p}`}>
                 <MultiChips items={SIZES_BY_PROFILE[p].map((s) => ({ key: s, label: inch(s) }))} value={offer.sizes[p]} testID={`gset-sizes-${p}`} onToggle={(x) => toggle(`gset-sizes-${p}`, "sizes", p, x)} />
-                <Warn at={`gset-sizes-${p}`} />
               </Field>
             ))}
             <Field label={t(k("materials"))} testID="gset-materials">
               <MultiChips items={MATERIALS.map((m) => ({ key: m, label: t(a(`m.${m}`)) }))} value={offer.materials} testID="gset-materials" onToggle={(x) => toggle("gset-materials", "materials", null, x)} />
-              <Warn at="gset-materials" />
             </Field>
             {offer.materials.filter((m) => (GAUGES_BY_MATERIAL[m] ?? []).length).map((m) => (
               <Field key={m} label={t(k("gaugesOf"), { what: t(a(`m.${m}`)) })} testID={`gset-gauges-${m}`}>
                 <MultiChips items={(GAUGES_BY_MATERIAL[m] ?? []).map((g) => ({ key: g, label: g }))} value={offer.gauges[m] ?? []} testID={`gset-gauges-${m}`} onToggle={(x) => toggle(`gset-gauges-${m}`, "gauges", m, x)} />
-                <Warn at={`gset-gauges-${m}`} />
               </Field>
             ))}
             {/* two families (spec П18.6): the half-round kits hang half round and euro, the rest K, fascia and box; each keeps one */}
@@ -216,27 +244,22 @@ export default function GutterSettingsScreen() {
                     testID={`gset-hangers-${fam}`}
                     onToggle={(x) => toggle(`gset-hangers-${fam}`, "hangers", null, x, kits)}
                   />
-                  <Warn at={`gset-hangers-${fam}`} />
                 </Field>
               );
             })}
             {DS_SHAPES.map((sh) => (
               <Field key={sh} label={t(k("dsSizesOf"), { what: t(a(`sh.${sh}`)) })} testID={`gset-ds-${sh}`}>
                 <MultiChips items={DS_SIZES[sh].map((s) => ({ key: s, label: dsSize(s) }))} value={offer.dsSizes[sh]} testID={`gset-ds-${sh}`} onToggle={(x) => toggle(`gset-ds-${sh}`, "dsSizes", sh, x)} />
-                <Warn at={`gset-ds-${sh}`} />
               </Field>
             ))}
             <Field label={t(k("dsStyles"))} testID="gset-ds-styles">
               <MultiChips items={DS_STYLES.map((s) => ({ key: s, label: t(a(`st.${s}`)) }))} value={offer.dsStyles} testID="gset-ds-styles" onToggle={(x) => toggle("gset-ds-styles", "dsStyles", null, x)} />
-              <Warn at="gset-ds-styles" />
             </Field>
             <Field label={t(k("bottoms"))} testID="gset-bottoms">
               <MultiChips items={DS_BOTTOMS.map((b) => ({ key: b, label: t(a(`b.${b}`)) }))} value={offer.bottoms} testID="gset-bottoms" onToggle={(x) => toggle("gset-bottoms", "bottoms", null, x)} />
-              <Warn at="gset-bottoms" />
             </Field>
             <Field label={t(k("wallKits"))} testID="gset-wall-kits">
               <MultiChips items={MODULE_OFFER.wallKits.map((id) => ({ key: id, label: t(a(`wk.${id}`)) }))} value={offer.wallKits} testID="gset-wall-kits" onToggle={(x) => toggle("gset-wall-kits", "wallKits", null, x)} />
-              <Warn at="gset-wall-kits" />
             </Field>
           </Part>
 
@@ -265,7 +288,7 @@ export default function GutterSettingsScreen() {
                     <Button label={t(k("colorAdd"))} size="sm" variant="secondary" onPress={addColor} />
                   </View>
                 </RowView>
-                <Warn at="gset-palette" />
+                <FieldWarn at="gset-palette" />
                 <T v="caption" tone="mut">{t(k("paletteFrom"))}</T>
                 <RowView style={{ gap: space[2], flexWrap: "wrap" }}>
                   <View testID="gset-palette-berger">
@@ -315,20 +338,20 @@ export default function GutterSettingsScreen() {
                 <Stepper label={t(k("u.sealant"))} value={use.joints[j].sealant} min={USE_NUMS.sealant.min} max={USE_NUMS.sealant.max} onChange={(v) => put(`gset-joint-${j}`, ["use", "joints", j, "sealant"], v)} />
               </Field>
             ))}
-            <View testID="gset-use-pointsPerTube">
+            <Step testID="gset-use-pointsPerTube">
               <Stepper label={t(k("u.pointsPerTube"))} value={use.pointsPerTube} min={USE_NUMS.pointsPerTube.min} max={USE_NUMS.pointsPerTube.max} onChange={(v) => put("gset-use-pointsPerTube", ["use", "pointsPerTube"], v)} />
-            </View>
-            <View testID="gset-use-solder">
-              <Stepper label={t(k("u.solder"))} value={use.solderPointsPerLb} min={USE_NUMS.solderPointsPerLb.min} max={USE_NUMS.solderPointsPerLb.max} onChange={(v) => put("gset-use-solderPointsPerLb", ["use", "solderPointsPerLb"], v)} />
-            </View>
-            <Switch testID="gset-use-paint" on={use.touchUpPaint} onChange={(v) => put("gset-use-touchUpPaint", ["use", "touchUpPaint"], v)} label={t(k("u.paint"))} />
+            </Step>
+            <Step testID="gset-use-solder">
+              <Stepper label={t(k("u.solder"))} value={use.solderPointsPerLb} min={USE_NUMS.solderPointsPerLb.min} max={USE_NUMS.solderPointsPerLb.max} onChange={(v) => put("gset-use-solder", ["use", "solderPointsPerLb"], v)} />
+            </Step>
+            <Switch testID="gset-use-paint" on={use.touchUpPaint} onChange={(v) => put("gset-use-paint", ["use", "touchUpPaint"], v)} label={t(k("u.paint"))} />
             <Field label={t(k("u.dsJoin"))} testID="gset-use-dsJoin">
               <ChoiceChips items={(["rivet", "screw"] as const).map((x) => ({ key: x, label: t(k(`u.join.${x}`)) }))} value={use.dsJoin} onChange={(x) => put("gset-use-dsJoin", ["use", "dsJoin"], x)} />
             </Field>
             {GUARD_KINDS.map((g) => (
-              <View key={g} testID={`gset-use-guard-${g}`}>
+              <Step key={g} testID={`gset-use-guard-${g}`}>
                 <Stepper label={t(k("u.guardPiece"), { what: t(k(`g.${g}`)) })} unit={t(k("ft"))} value={use.guardPieceFt[g]!} min={USE_NUMS.guardPieceFt.min} max={USE_NUMS.guardPieceFt.max} onChange={(v) => put(`gset-use-guard-${g}`, ["use", "guardPieceFt", g], v)} />
-              </View>
+              </Step>
             ))}
           </Part>
 
@@ -427,5 +450,6 @@ export default function GutterSettingsScreen() {
         </ReadOnly>
       </View>
     </Screen>
+    </WarnCtx.Provider>
   );
 }

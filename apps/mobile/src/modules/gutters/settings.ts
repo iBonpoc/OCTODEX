@@ -415,3 +415,10 @@ export function toRulesOverride(raw: unknown): GutterRulesOverride {
     guardKits: Object.fromEntries(GUARD_KINDS.map((id) => [id, { ...DEFAULT_GUARD_KITS[id]!, pieceIn: u.guardPieceFt[id]! * 12 }])),
   };
 }
+
+/**
+ * Why the store saved nothing (saveModuleSettings → null): the module is off or its trial ended while the page was open,
+ * or — the module active — its settings are being read again after someone else's change (core #374). Said under the
+ * field (debt №7, spec П22.10 №6; review M7d №3).
+ */
+export const notSavedKey = (access: string | undefined): "notActive" | "rereading" => (access === "trial" || access === "paid" ? "rereading" : "notActive");
