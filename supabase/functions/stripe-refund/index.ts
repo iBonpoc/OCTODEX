@@ -38,7 +38,7 @@ Deno.serve(async (req: Request) => {
         p_user_id: userId, p_payment_id: b.paymentId, p_amount_cents: b.amountCents,
         p_reason_kind: b.reasonKind, p_reason: b.reason, p_key: b.key,
       }),
-      inflight: (userId, paymentId) => rpc("stripe_refund_inflight", { p_user_id: userId, p_payment_id: paymentId }),
+      inflight: (userId, paymentId, key) => rpc("stripe_refund_inflight", { p_user_id: userId, p_payment_id: paymentId, p_key: key }),
       settle: (refundId, s) => rpc("stripe_refund_settle", { p_refund_id: refundId, p_stripe: s }),
       stripe: KEY ? stripe : null,
       keyMode,

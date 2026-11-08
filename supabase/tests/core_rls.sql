@@ -10141,17 +10141,23 @@ select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-00
 select tst.fails_like($q$select public.stripe_refund_open('b0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 1000, 'goodwill', null, 'k133-st-othr')$q$, '%owner/admin%', 'T133 …and another company');
 select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000003', 100, 'goodwill', null, 'k133-st-chk1')$q$, '%refund_disputed%', 'T133 a disputed payment: nothing to Stripe');
 select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000005', 100, 'goodwill', null, 'k133-st-cash')$q$, '%refund_not_stripe%', 'T133 a cash payment is not sent to Stripe');
-select tst.fails_like($q$select public.stripe_refund_inflight('b0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002')$q$, '%owner/admin%', 'T133 another company learns nothing about a refund on its way');
-select tst.ok(public.stripe_refund_inflight('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002') is null, 'T133 nothing on its way yet');
+select tst.fails_like($q$select public.stripe_refund_inflight('b0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 'k133-any-key')$q$, '%owner/admin%', 'T133 another company learns nothing about a refund on its way');
+select tst.ok(public.stripe_refund_inflight('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 'k133-any-key') is null, 'T133 nothing on its way yet');
 create temp table t133 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 10000, 'goodwill', null, 'k133-st-own1') j;
 select tst.ok((select j ->> 'status' = 'pending' and j ->> 'account_id' = 'acct_T126A' and j ->> 'payment_intent' = 'pi_T133C'
                       and j ->> 'idempotency_key' = 'octodex-refund-' || (j ->> 'id') and (j ->> 'tax_cents')::bigint = 0 from t133),
   'T133 a pending refund of the exempt invoice: tax 0, the account and the intent for Stripe');
-select tst.ok((select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 10000, 'goodwill', null, 'k133-st-own2') ->> 'id' = j ->> 'id' from t133),
-  'T133 another tab, the same amount: the refund that never reached Stripe is resumed, not a second one');
+select tst.ok((select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 10000, 'goodwill', null, 'k133-st-own1') ->> 'id' = j ->> 'id' from t133),
+  'T133 a retry with its key resumes the refund that never reached Stripe');
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 10000, 'goodwill', null, 'k133-st-own2')$q$, '%refund_in_progress%',
+  'T133 another tab (another key), even the same amount, does not adopt it — that key could make a second refund later');
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000005', null, 'goodwill', null, 'k133-st-null')$q$, '%refund_not_stripe%', 'T133 a cash payment first says «not Stripe»');
 select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 5000, 'goodwill', null, 'k133-st-own3')$q$, '%refund_in_progress%', 'T133 …another amount waits for it');
-select tst.ok((select public.stripe_refund_inflight('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002') ->> 'id' = j ->> 'id' from t133),
-  'T133 the Edge Function sees the refund on its way, to ask Stripe about it first');
+select tst.ok((select x ->> 'id' = j ->> 'id' and x ->> 'own' = 'false' and (x ->> 'age_s')::bigint < 60
+                 from t133, lateral (select public.stripe_refund_inflight('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 'k133-st-own3') x) y),
+  'T133 the Edge Function sees the refund on its way (not its own, just tried) — to ask Stripe about it when it is idle');
+select tst.ok((select public.stripe_refund_settle((j ->> 'id')::uuid, '{"error":"not_sent"}') ->> 'status' = 'pending' from t133),
+  'T133 «not_sent» does not free a row someone tried a moment ago');
 select tst.fails_like($q$select public.stripe_refund_open('b0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 5000, 'goodwill', null, 'k133-st-othr2')$q$, '%owner/admin%', 'T133 another company gets «not allowed», not «in progress»');
 select public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"error":"insufficient_funds"}');
 :as_super
@@ -10182,12 +10188,33 @@ select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-00
 -- a check «not sent» that came too early, then Stripe's answer: Stripe's word wins, the money counts
 drop table t133;
 create temp table t133 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 4000, 'goodwill', null, 'k133-st-own7') j;
+select tst.fails_like($q$select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', null, 'goodwill', null, 'k133-st-own8')$q$, '%refund_in_progress%', 'T133 one at a time, whatever the amount');
+:as_super
+update public.refunds set updated_at = now() - interval '5 minutes' where id = (select (j ->> 'id')::uuid from t133);
+:as_service
 select public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"error":"not_sent"}');
-select tst.ok(public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"id":"re_T133b","status":"succeeded","amount":4000,"payment_intent":"pi_T133C"}') ->> 'status' = 'succeeded', 'T133 a row marked not_sent takes Stripe''s answer');
+select tst.ok((select status = 'failed' and failure_reason = 'not_sent' from public.refunds where id = (select (j ->> 'id')::uuid from t133)), 'T133 an idle row Stripe has not got is freed');
+select tst.ok((select x ->> 'status' = 'succeeded' and x ->> 'failure_reason' is null
+                 from (select public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"id":"re_T133b","status":"succeeded","amount":4000,"payment_intent":"pi_T133C"}') x) y),
+  'T133 …but Stripe made it after all: Stripe''s answer wins, no failure reason left');
 :as_super
 select tst.ok((select refunded_cents = 24000 from public.payments where id = '21330000-0000-4000-8000-000000000002'), 'T133 …and its money');
 :as_service
 select tst.fails($q$select public.stripe_refund_settle('21330000-0000-4000-8000-000000000002', '{"error":"x"}')$q$, 'T133 settle takes only a refund row');
+-- the webhook ties a row freed as not_sent too: Stripe's word, the money counts
+drop table t133;
+create temp table t133 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21330000-0000-4000-8000-000000000002', 1000, 'goodwill', null, 'k133-st-own9') j;
+:as_super
+update public.refunds set updated_at = now() - interval '5 minutes' where id = (select (j ->> 'id')::uuid from t133);
+:as_service
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t133), '{"error":"not_sent"}');
+select tst.ok(public.stripe_webhook_apply(format('{"id":"evt_T133r3","type":"refund.updated","account":"acct_T126A","data":{"object":{"id":"re_T133c","status":"succeeded","amount":1000,"payment_intent":"pi_T133C","metadata":{"company_id":"ca000000-0000-0000-0000-000000000000","octo_refund_id":"%s"}}}}', (select j ->> 'id' from t133))::jsonb) = 'processed', 'T133 refund.updated about a freed row');
+:as_super
+select tst.ok((select status = 'succeeded' and stripe_refund_id = 're_T133c' and failure_reason is null from public.refunds where id = (select (j ->> 'id')::uuid from t133))
+          and (select refunded_cents = 25000 from public.payments where id = '21330000-0000-4000-8000-000000000002'),
+  'T133 …it is tied, succeeded, counted');
+:as_owner_a
+select tst.fails_like($q$select public.refund_record('21330000-0000-4000-8000-000000000005', null, 'goodwill', null, 'k133-null01')$q$, '%refund_above_available%', 'T133 an empty amount is our refusal, not a raw error');
 \echo 'T133 refunds ok'
 
 \echo 'ALL TESTS PASSED'

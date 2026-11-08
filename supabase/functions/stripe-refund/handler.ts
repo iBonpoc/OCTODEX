@@ -9,7 +9,8 @@
  * 3) POST /v1/refunds on the connected account with Idempotency-Key = the row (one row — one Stripe refund) and
  *    metadata.octo_refund_id (the webhook ties to the row even when it comes first);
  * 4) public.stripe_refund_settle keeps Stripe's answer. Stripe said no → «failed», no money moved. No answer (a timeout,
- *    5xx, 429) → the row stays pending: the next tap resumes it with the same key, nothing doubles.
+ *    5xx, 429) → the row stays pending: only ITS key resumes it; another key waits until the row is idle ≥ 2 min, then the
+ *    function asks Stripe (by metadata) whether it was made — kept, or freed as «not_sent» — so nothing doubles.
  * Refusals the person can act on are 200 {error}: the app shows our words, never Stripe's text. Test mode only.
  */
 export interface Opened {
@@ -44,7 +45,7 @@ export interface RefundDeps {
   /** public.stripe_refund_open as service_role; throws DbError */
   open: (userId: string, b: RefundBody) => Promise<Opened>;
   /** public.stripe_refund_inflight as service_role: the refund of this payment that has not reached Stripe yet, or null */
-  inflight: (userId: string, paymentId: string) => Promise<Pick<Opened, "id" | "amount_cents" | "age_s" | "account_id" | "payment_intent" | "status"> | null>;
+  inflight: (userId: string, paymentId: string, key: string) => Promise<(Pick<Opened, "id" | "amount_cents" | "age_s" | "account_id" | "payment_intent" | "status"> & { own: boolean }) | null>;
   /** public.stripe_refund_settle as service_role */
   settle: (refundId: string, stripe: Record<string, unknown>) => Promise<Record<string, unknown>>;
   /** one call of the Stripe API on the connected account; form and key only for POST */
@@ -140,7 +141,7 @@ export async function handleRefund(req: Req, deps: RefundDeps): Promise<Res> {
   // and a stuck row never blocks another amount for ever (№5).
   let inf: Awaited<ReturnType<RefundDeps["inflight"]>>;
   try {
-    inf = await deps.inflight(uid, body.paymentId);
+    inf = await deps.inflight(uid, body.paymentId, body.key);
   } catch (e) {
     return refused(e, "inflight");
   }
@@ -160,11 +161,13 @@ export async function handleRefund(req: Req, deps: RefundDeps): Promise<Res> {
     try {
       if (made) {
         const kept = await deps.settle(inf.id, made);
-        if (inf.amount_cents === body.amountCents) return json(200, { refund: shown(kept) });   // that was this very refund
+        if (inf.own) return json(200, { refund: shown(kept) });   // that was this very try
       } else if (l.body!.has_more === true) {
         return json(200, { error: "retry_later" });
-      } else if (inf.amount_cents !== body.amountCents) {
-        await deps.settle(inf.id, { error: "not_sent" });   // Stripe never made it: the other amount may go
+      } else if (!inf.own) {
+        // Stripe never made it and nobody is sending it (idle ≥ STALE_S): freed — this request goes as its own refund.
+        // The asker's own try is resumed instead (open below, the same Idempotency-Key, safe: Stripe has none of it).
+        await deps.settle(inf.id, { error: "not_sent" });
       }
     } catch {
       deps.log?.("stripe-refund: settle failed");

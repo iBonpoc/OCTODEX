@@ -170,12 +170,13 @@ returns boolean language sql immutable set search_path = '' as $$
 $$;
 revoke all on function app.refund_is_stripe(public.payments) from public, anon, authenticated;
 
--- the answer of a door: no Stripe ids, no other company's anything; age_s — by the database's clock
+-- the answer of a door: no Stripe ids, no other company's anything; age_s — seconds since its last try (updated_at), by the
+-- database's clock: a row resumed for Stripe is touched, so «old» means no call to Stripe can be in flight (its timeout is 10 s)
 create or replace function app.refund_json(r public.refunds)
 returns jsonb language sql stable set search_path = '' as $$
   select jsonb_build_object('id', r.id, 'payment_id', r.payment_id, 'amount_cents', r.amount_cents, 'status', r.status,
                             'tax_cents', r.tax_cents, 'net_cents', r.net_cents, 'failure_reason', r.failure_reason,
-                            'age_s', floor(extract(epoch from now() - r.created_at))::bigint);
+                            'age_s', floor(extract(epoch from now() - r.updated_at))::bigint);
 $$;
 revoke all on function app.refund_json(public.refunds) from public, anon, authenticated;
 
@@ -207,7 +208,14 @@ begin
   if r.id is not null then
     return app.refund_json(r);
   end if;
+  if p_amount_cents is null then
+    raise exception 'refund_above_available' using errcode = 'check_violation';
+  end if;
   p := app.refund_guard(v_user, p_payment_id, p_amount_cents, p_reason_kind, p_reason, p_key);
+  r := app.refund_by_key(v_user, p_payment_id, p_key);   -- a double tap that waited for the lock: the same refund
+  if r.id is not null then
+    return app.refund_json(r);
+  end if;
   if app.refund_is_stripe(p) then
     raise exception 'refund_through_stripe' using errcode = 'check_violation';   -- a card taken by the contractor's own terminal: a record
   end if;
@@ -253,15 +261,18 @@ begin
       raise exception 'refund_not_stripe' using errcode = 'check_violation';
     end if;
     if r.id is null then
-      -- a refund of this payment that never reached Stripe (a timeout, a closed tab): resume it, never a second one beside it
-      select * into r from public.refunds
-       where payment_id = p.id and status = 'pending' and stripe_refund_id is null and idempotency_key like 'octo:%'
-       order by created_at limit 1;
-      if r.id is not null and r.amount_cents <> p_amount_cents then
-        raise exception 'refund_in_progress' using errcode = 'check_violation';
-      end if;
+      r := app.refund_by_key(p_user_id, p_payment_id, p_key);   -- the same key that waited for the lock
     end if;
     if r.id is null then
+      -- one refund on its way per payment; only ITS key resumes it (another tab, another key: wait — the Edge Function asks
+      -- Stripe about an old one first and frees it). Adopting it under another key would let that key make a second refund.
+      if exists (select 1 from public.refunds where payment_id = p.id and status = 'pending' and stripe_refund_id is null
+                                                  and idempotency_key like 'octo:%') then
+        raise exception 'refund_in_progress' using errcode = 'check_violation';
+      end if;
+      if p_amount_cents is null then
+        raise exception 'refund_above_available' using errcode = 'check_violation';
+      end if;
       perform app.refund_guard(p_user_id, p.id, p_amount_cents, p_reason_kind, p_reason, p_key);   -- the limit
       v_tax := app.refund_tax_part(p.invoice_id, p_amount_cents);
       insert into public.refunds (company_id, payment_id, amount_cents, reason_kind, reason, status, idempotency_key, created_by,
@@ -269,6 +280,8 @@ begin
       values (p.company_id, p.id, p_amount_cents, p_reason_kind, nullif(btrim(p_reason), ''), 'pending', 'octo:' || p_key, p_user_id,
               p.method, v_tax, p_amount_cents - v_tax)
       returning * into r;
+    else
+      update public.refunds set updated_at = now() where id = r.id returning * into r;   -- this try: «not old» while it calls Stripe
     end if;
   end if;
   select s.account_id into v_acct from public.stripe_accounts s where s.company_id = p.company_id;
@@ -287,7 +300,7 @@ grant execute on function public.stripe_refund_open(uuid, uuid, bigint, text, te
 
 -- the refund of this payment that has not reached Stripe yet (or null) — for the Edge Function to ask Stripe about it
 -- before anything else (a timeout long ago: did Stripe make it?). Owner/admin only, as every door.
-create or replace function public.stripe_refund_inflight(p_user_id uuid, p_payment_id uuid)
+create or replace function public.stripe_refund_inflight(p_user_id uuid, p_payment_id uuid, p_key text)
 returns jsonb language plpgsql security definer set search_path = '' as $$
 declare
   p public.payments;
@@ -304,11 +317,13 @@ begin
     return null;
   end if;
   return app.refund_json(r) || jsonb_build_object('account_id', (select s.account_id from public.stripe_accounts s where s.company_id = p.company_id),
-                                                  'payment_intent', p.stripe_payment_intent_id);
+                                                  'payment_intent', p.stripe_payment_intent_id,
+                                                  -- the asker's own try (its key): resumed, never freed under it
+                                                  'own', r.idempotency_key = 'octo:' || p_key);
 end;
 $$;
-revoke all on function public.stripe_refund_inflight(uuid, uuid) from public, anon, authenticated;
-grant execute on function public.stripe_refund_inflight(uuid, uuid) to service_role;
+revoke all on function public.stripe_refund_inflight(uuid, uuid, text) from public, anon, authenticated;
+grant execute on function public.stripe_refund_inflight(uuid, uuid, text) to service_role;
 
 -- the money of a payment after its Stripe refunds: Stripe accepted them (pending with an id, or succeeded) — only grows
 create or replace function app.refund_sync_money(p_payment_id uuid)
@@ -336,7 +351,9 @@ begin
   end if;
   select * into p from public.payments where id = r.payment_id for update;
   if p_stripe ? 'error' then
-    if r.status = 'pending' and r.stripe_refund_id is null then
+    -- «not_sent» (Stripe's list has no such refund) only for a row nobody is sending right now
+    if r.status = 'pending' and r.stripe_refund_id is null
+       and (p_stripe ->> 'error' <> 'not_sent' or r.updated_at < now() - interval '100 seconds') then
       update public.refunds set status = 'failed', failure_reason = left(coalesce(p_stripe ->> 'error', 'stripe'), 100), updated_at = now()
        where id = r.id returning * into r;
     end if;
@@ -355,7 +372,8 @@ begin
          -- final states stay (the webhook may have been first); an ACH refund that fails after succeeded — the webhook says
          -- a row never tied to Stripe takes Stripe's word, even one marked «not_sent» by a check that came too early
          status = case when stripe_refund_id is null then v_st when status in ('succeeded', 'failed', 'canceled') then status else v_st end,
-         failure_reason = coalesce(failure_reason, left(p_stripe ->> 'failure_reason', 100)),
+         failure_reason = case when v_st in ('failed', 'canceled') then left(coalesce(p_stripe ->> 'failure_reason', 'stripe'), 100)
+                               when stripe_refund_id is null then null else failure_reason end,
          updated_at = now()
    where id = r.id returning * into r;
   perform app.refund_sync_money(p.id);

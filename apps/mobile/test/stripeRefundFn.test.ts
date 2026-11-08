@@ -132,38 +132,38 @@ describe("unit:stripeRefundFn — Stripe", () => {
     expect(x.settled).toHaveLength(0);
   });
   it("the refund is on its way only a moment: nothing asked at Stripe, the database decides", async () => {
-    const x = deps({ inflight: { id: ROW, amount_cents: 9000, age_s: 5, account_id: "acct_T1", payment_intent: "pi_T1", status: "pending" }, open: new DbError("23514", "refund_in_progress") });
+    const x = deps({ inflight: { id: ROW, amount_cents: 9000, age_s: 5, account_id: "acct_T1", payment_intent: "pi_T1", status: "pending", own: false }, open: new DbError("23514", "refund_in_progress") });
     expect(parse(await handleRefund(req(), x.d)).error).toBe("refund_in_progress");
     expect(x.calls).toHaveLength(0);
   });
 });
 
 describe("unit:stripeRefundFn — a refund that never got an answer (security 20д №4, №5)", () => {
-  const old = (amount: number) => ({ id: ROW, amount_cents: amount, age_s: 3600 * 30, account_id: "acct_T1", payment_intent: "pi_T1", status: "pending" as const });
+  const old = (own: boolean) => ({ id: ROW, amount_cents: 5000, age_s: 3600 * 30, account_id: "acct_T1", payment_intent: "pi_T1", status: "pending" as const, own });
   it("Stripe made it after all: kept from Stripe's list, never POSTed again (24 h later too)", async () => {
     const made = { id: "re_Old", status: "succeeded", amount: 5000, payment_intent: "pi_T1", metadata: { octo_refund_id: ROW } };
-    const x = deps({ inflight: old(5000), list: { status: 200, body: { data: [{ id: "re_X", metadata: {} }, made], has_more: false } } });
+    const x = deps({ inflight: old(true), list: { status: 200, body: { data: [{ id: "re_X", metadata: {} }, made], has_more: false } } });
     const r = parse(await handleRefund(req(), x.d));
     expect(x.calls.map((c) => c.method)).toEqual(["GET"]);
     expect(x.calls[0]).toMatchObject({ path: "/v1/refunds?payment_intent=pi_T1&limit=100", account: "acct_T1" });
     expect(x.settled).toEqual([made]);
     expect(r.refund.status).toBe("succeeded");
   });
-  it("Stripe never made it, the same amount: one POST with the row's key", async () => {
-    const x = deps({ inflight: old(5000) });
+  it("Stripe never made it, the asker's own try: resumed — one POST with the row's key", async () => {
+    const x = deps({ inflight: old(true) });
     await handleRefund(req(), x.d);
     expect(x.calls.map((c) => c.method)).toEqual(["GET", "POST"]);
     expect(x.settled).toHaveLength(1);
   });
-  it("Stripe never made it, another amount: the old row is marked not_sent, the new amount goes", async () => {
-    const x = deps({ inflight: old(9000) });
+  it("Stripe never made it, another tab's try (another key): freed as not_sent, this request goes", async () => {
+    const x = deps({ inflight: old(false) });
     await handleRefund(req(), x.d);
     expect(x.settled[0]).toEqual({ error: "not_sent" });
     expect(x.calls.map((c) => c.method)).toEqual(["GET", "POST"]);
   });
   it("Stripe cannot be asked, or the list is cut: wait, never POST", async () => {
     for (const list of [{ status: 500, body: null }, { status: 200, body: { data: [], has_more: true } }] as StripeAnswer[]) {
-      const x = deps({ inflight: old(5000), list });
+      const x = deps({ inflight: old(false), list });
       expect(parse(await handleRefund(req(), x.d)).error).toBe("retry_later");
       expect(x.calls.map((c) => c.method)).toEqual(["GET"]);
     }
