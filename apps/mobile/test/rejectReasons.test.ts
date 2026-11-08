@@ -20,7 +20,13 @@ const SERVER_TEXT = "estimate lines do not match its document (option o1, line l
 
 describe("unit:rejectReasons — a refusal we can explain", () => {
   it("code → key: every known code has its words in RU, EN and ES", () => {
-    expect(REJECT_REASONS).toEqual({ estimate_lines_mismatch: "sync.stuck.reason.estimateLines" });
+    expect(REJECT_REASONS).toEqual({
+      estimate_lines_mismatch: "sync.stuck.reason.estimateLines",
+      // step 17 C3: the merge of two clients (migration 20261109120000, db T134)
+      merge_payment_in_flight: "clientDup.rej.inFlight",
+      merge_already_merged: "clientDup.rej.merged",
+      customer_merged: "clientDup.rej.cardMerged",
+    });
     for (const key of Object.values(REJECT_REASONS))
       for (const dict of [ru, en, es] as Record<string, string>[]) expect(dict[key], key).toMatch(/\S/);
     expect((ru as Record<string, string>)["sync.stuck.reason.estimateLines"]).toContain("сохраните");

@@ -14,6 +14,7 @@ import { useDialThenAsk } from "@/features/comms/dial";
 import { MessageSheet, type MessagePreset } from "@/features/comms/MessageSheet";
 import { callPlaceForClient } from "@/features/comms/comms";
 import { StatusSheet, TagsSheet } from "@/features/client/ClientSheets";
+import { ClientDupCards } from "@/features/client/ClientDuplicates";
 import { propertyTitle } from "@/features/properties";
 import { sourceName } from "@/features/leads";
 import type { Customer, CustomerStatus } from "@/data/types";
@@ -125,6 +126,8 @@ export function ClientCardBody({ c }: { c: Customer }) {
           {[c.statusReason ? t("client.reason", { r: c.statusReason }) : null, t("client.noServiceHint")].filter(Boolean).join(" · ")}
         </T>
       ) : null}
+      {/* step 17 C3: other clients with the same phone / email / address — «Слить» or «Не дубль» (docs/specs/04 §13) */}
+      <ClientDupCards c={c} />
 
       <RowView>
         {tel ? (
