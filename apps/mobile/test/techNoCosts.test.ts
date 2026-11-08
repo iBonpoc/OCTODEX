@@ -101,6 +101,14 @@ describe("unit:techNoCosts — read (loadCompanyDB)", () => {
     dropped = new Set(["estimate_version_costs"]);
     await expect(loadCompanyDB("co-1", "u-me")).rejects.toBeTruthy();
   });
+  it("estimate_line_costs: a dropped read fails the load (was «no cost of any line»); no table yet — no cost, the load goes on", async () => {
+    rows = base("office");
+    dropped = new Set(["estimate_line_costs"]);
+    await expect(loadCompanyDB("co-1", "u-me")).rejects.toBeTruthy();
+    dropped = new Set();
+    missing = new Set(["estimate_line_costs"]);
+    await expect(loadCompanyDB("co-1", "u-me")).resolves.toBeTruthy();
+  });
   it("the tech: the server gives no side rows and blank columns — no cost, no margin on the phone", async () => {
     rows = {
       ...base("tech"),

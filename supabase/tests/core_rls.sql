@@ -8649,8 +8649,9 @@ select tst.ok(tst.cnt($q$select 1 from public.estimate_versions where totals ? '
 select tst.fails($q$insert into public.estimate_version_costs (version_id, company_id, margin_pct)
   values ('a1000000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '99')$q$, 'T100 the tech writes a margin');
 :as_office_a
-select tst.ok((select margin_pct = '33.3' from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'),
-  'T100 the office reads the margin from estimate_version_costs');
+-- T106: a margin sent by who does not see costs is not kept (it was counted without them)
+select tst.ok(tst.cnt($q$select 1 from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'$q$) = 0,
+  'T100 a margin the tech sent is not kept (T106)');
 update public.estimate_versions set totals = '{"total": 52000, "deposit": 5200, "marginPct": "35.0"}' where id = 'a1000000-0000-4000-8000-000000000002';
 select tst.ok((select margin_pct = '35.0' from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'), 'T100 a new margin replaces the old');
 update public.estimate_versions set totals = '{"total": 52000, "deposit": 5200}' where id = 'a1000000-0000-4000-8000-000000000002';
@@ -8684,5 +8685,75 @@ select tst.ok(not has_table_privilege('anon', 'public.estimate_version_costs', '
 select tst.ok(not exists (select 1 from public.estimate_versions where totals ? 'marginPct'), 'T100 no version anywhere keeps a margin in totals');
 select tst.ok(not exists (select 1 from pg_trigger where tgname = 't40_version_lock' and tgenabled <> 'O'), 'T100 t40_version_lock is on');
 \echo 'T100 an estimate''s margin: only who sees costs reads it; a sent version stays locked ok'
+
+-- ---------------------------------------------------------------- T106: a tech's edit of a draft keeps the office's costs and margin (19 §9, debt after #383)
+-- Every app version saves a draft as «delete the lines, insert them again» (same ids). The delete cascades to
+-- estimate_line_costs; the tech cannot write them back — the server keeps them aside and gives them back.
+:as_tech_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1060000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T106 tech draft');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, totals)
+  values ('a1060000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-000000000001', 1, '{"total": 30000, "deposit": 0}');
+insert into public.estimate_options (id, company_id, version_id, name, position) values
+  ('a1060000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-000000000002', 'Good', 0),
+  ('a1060000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-000000000002', 'Better', 1);
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('a1060000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a1', 'Gutter (test)', 10, 1000),
+  ('a1060000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a1', 'Labor (test)', 1, 20000),
+  ('a1060000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a2', 'Guard (test)', 5, 2000);
+:as_office_a
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents) values
+  ('a1060000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 600),
+  ('a1060000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 12000),
+  ('a1060000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 1100);
+update public.estimate_versions set totals = '{"total": 30000, "deposit": 0, "marginPct": "40.0"}' where id = 'a1060000-0000-4000-8000-000000000002';
+-- the tech edits his draft as every app version does: lines out, lines in (the price of b1 changed, b2 left out)
+:as_tech_a
+delete from public.estimate_line_items where option_id = 'a1060000-0000-4000-8000-0000000000a1';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('a1060000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a1', 'Gutter (test)', 12, 1000);
+-- his app has no costs: it sends marginPct null
+update public.estimate_versions set totals = '{"total": 12000, "deposit": 0, "marginPct": null}' where id = 'a1060000-0000-4000-8000-000000000002';
+select tst.ok(tst.cnt('select 1 from public.estimate_line_costs') = 0, 'T106 the tech still reads no cost');
+-- the tech removes the whole second option (its lines first, as the app does)
+delete from public.estimate_line_items where option_id = 'a1060000-0000-4000-8000-0000000000a2';
+delete from public.estimate_options where id = 'a1060000-0000-4000-8000-0000000000a2';
+:as_office_a
+select tst.ok((select unit_cost_cents = 600 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b1'),
+  'T106 the line the tech saved again keeps the office''s cost');
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id in ('a1060000-0000-4000-8000-0000000000b2', 'a1060000-0000-4000-8000-0000000000b3')$q$) = 0,
+  'T106 a line (and a whole option) the tech removed has no cost');
+select tst.ok((select margin_pct = '40.0' from public.estimate_version_costs where version_id = 'a1060000-0000-4000-8000-000000000002'),
+  'T106 the tech''s null margin does not erase the office''s');
+select tst.ok((select not totals ? 'marginPct' from public.estimate_versions where id = 'a1060000-0000-4000-8000-000000000002'),
+  'T106 the tech''s margin key is taken out of totals all the same');
+-- the option and its line come back (an op resent later, an undo): the cost comes back with the same line id
+:as_tech_a
+insert into public.estimate_options (id, company_id, version_id, name, position) values
+  ('a1060000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-000000000002', 'Better', 1);
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('a1060000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a2', 'Guard (test)', 5, 2000);
+:as_office_a
+select tst.ok((select unit_cost_cents = 1100 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b3'),
+  'T106 a line that comes back gets its cost back');
+-- the office's own delete is not kept: a cost it cleared stays cleared
+delete from public.estimate_line_items where id = 'a1060000-0000-4000-8000-0000000000b3';
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('a1060000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a2', 'Guard (test)', 5, 2000);
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b3'$q$) = 0,
+  'T106 the office deletes and inserts: no cost comes back by itself');
+-- the office's margin still works
+update public.estimate_versions set totals = '{"total": 12000, "deposit": 0, "marginPct": "38.5"}' where id = 'a1060000-0000-4000-8000-000000000002';
+select tst.ok((select margin_pct = '38.5' from public.estimate_version_costs where version_id = 'a1060000-0000-4000-8000-000000000002'), 'T106 the office sets the margin');
+-- the kept costs: no one reads them
+select tst.blocked('select * from public.estimate_line_costs_kept', 'T106 the office reads the kept costs');
+:as_tech_a
+select tst.blocked('select * from public.estimate_line_costs_kept', 'T106 the tech reads the kept costs');
+:as_super
+select tst.ok((select count(*) = 1 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000b2'),
+  'T106 the cost of the removed line waits aside (30 days)');
+select tst.ok(not has_table_privilege('anon', 'public.estimate_line_costs_kept', 'select')
+              and not has_table_privilege('authenticated', 'public.estimate_line_costs_kept', 'select'), 'T106 no grant on estimate_line_costs_kept');
+\echo 'T106 a tech''s edit of a draft keeps the office''s costs and margin ok'
 
 \echo 'ALL TESTS PASSED'
