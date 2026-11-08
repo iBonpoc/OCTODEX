@@ -29,6 +29,10 @@ export const REJECT_REASONS = {
   estimate_lines_mismatch: "sync.stuck.reason.estimateLines",
 } as const;
 export type RejectReason = keyof typeof REJECT_REASONS;
+/** a refused signature (estimate.sign, estimate.approve): the client's signature was not kept — take it again (review #415 №4) */
+const SIGNED_KINDS: readonly string[] = ["estimate.sign", "estimate.approve"];
+export const rejectReasonKey = (reason: RejectReason, kind?: string) =>
+  kind && SIGNED_KINDS.includes(kind) ? ("sync.stuck.reason.estimateLinesSigned" as const) : REJECT_REASONS[reason];
 export const rejectReasonOf = (hint: unknown): RejectReason | undefined =>
   typeof hint === "string" && Object.prototype.hasOwnProperty.call(REJECT_REASONS, hint) ? (hint as RejectReason) : undefined;
 export interface RejectedOp {
@@ -62,7 +66,8 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   // a send refused for a reason we can explain: the estimate is back to a draft on the server, the card says why
   const reason = rejectReasonOf(hint);
   // (estimate.sign sends first: a quick estimate signed on site — the client's signature is not lost silently, review №1)
-  if ((op.k === "estimate.send" || op.k === "estimate.sign") && reason === "estimate_lines_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, reason };
+  // estimate.approve (the client signs on site / by link) sends first too (review #415 №3)
+  if ((op.k === "estimate.send" || op.k === "estimate.sign" || op.k === "estimate.approve") && reason === "estimate_lines_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, reason };
   if (!isMoneyOp(item, MONEY_KINDS)) return null;
   switch (op.k) {
     case "estimate.deposit": return { ...base, what: "deposit", href: `/estimate/${op.id}`, amountCents: op.depositCents };
