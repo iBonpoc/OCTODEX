@@ -109,6 +109,7 @@ exports.run = async (h) => {
   await p.waitForTimeout(600);
   h.expect(p.url().includes("/client/edit"), `Esc in a field stays (${p.url()})`);
 
+  let f = "";
   // Н3а: focus after a move. Down → the new screen's title; back up → where you left (the client's card in the list)
   await h.go("/clients");
   const card = p.getByRole("button", { name: new RegExp(cust.name) }).locator("visible=true").first();
@@ -116,15 +117,28 @@ exports.run = async (h) => {
   const cardLabel = await card.getAttribute("aria-label");
   await p.keyboard.press("Enter");
   await p.waitForTimeout(700);
+  if (h.layout.width >= 1280) {
+    // 1280: Enter opens the panel beside the list, the focus stays on the card; Esc closes it (spec 06 «Панель 1280»)
+    h.expect(p.url().includes(`open=${cust.id}`), `1280: Enter opens the panel (${p.url()})`);
+    await p.keyboard.press("Escape");
+    await p.waitForTimeout(500);
+    f = await focused();
+    h.expect(/\/clients$/.test(p.url()) && f.includes(cardLabel || cust.name), `1280: Esc closes the panel, focus on the card (${f})`);
+    await card.focus();
+    await p.keyboard.press("Enter");
+    await p.getByTestId("list-panel-open").locator("visible=true").click();
+    await p.waitForTimeout(700);
+  }
   h.expect(p.url().includes(`/client/${cust.id}`), `Enter opens the client (${p.url()})`);
-  let f = await focused();
+  f = await focused();
   h.expect(f.startsWith("heading|") && f.includes(cust.name), `focus on the new title (${f})`);
   const ring = await p.evaluate(() => getComputedStyle(document.activeElement).outlineStyle);
   h.expect(ring === "none", `the title has no focus ring (${ring})`);
   await p.keyboard.press("Escape");
   await p.waitForTimeout(700);
   f = await focused();
-  h.expect(/\/clients$/.test(p.url()) && f.includes(cardLabel || cust.name), `Esc back → focus on the card left (${f})`);
+  // 1280: back to the list with the same card open in the panel (spec 06 «Панель 1280»)
+  h.expect(/\/clients(\?open=[\w-]+)?$/.test(p.url()) && f.includes(cardLabel || cust.name), `Esc back → focus on the card left (${f})`);
   // nothing remembered (opened by a link): back up lands on the title
   await h.go(`/job/${job.id}`);
   await p.keyboard.press("Escape");

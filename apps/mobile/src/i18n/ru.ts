@@ -1477,6 +1477,9 @@ export const ru = {
   /* list cards (docs/specs/06-list-cards.md) */
   "card.fact.num": "Номер",
   "card.fact.client": "Клиент",
+  // панель открытой карточки на 1280 (06 «Панель 1280»)
+  "card.panel.open": "Открыть",
+  "card.panel.close": "Закрыть панель",
   "card.fact.phone": "Телефон",
   "card.fact.email": "Email",
   "card.fact.addr": "Адрес",
