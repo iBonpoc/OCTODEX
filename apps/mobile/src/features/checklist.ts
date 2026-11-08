@@ -74,7 +74,8 @@ function missingOf(visit: Visit, settings: VisitSettings, templates: ChecklistTe
   const after = photos.filter((p) => p.kind === "after").length;
   return {
     items: (visit.checklist ?? []).filter((i) => itemRequired(i) && !itemDone(i, photos) && (countSkipped || !itemSkipped(i, photos))).map((i) => i.id),
-    photosBefore: settings.photosBeforeRequired ? Math.max(0, min.before - before) : 0,
+    // an inspection has no work: the company's «photos before work» is not about it — only its own items (В6, e2e 40)
+    photosBefore: !inspection && settings.photosBeforeRequired ? Math.max(0, min.before - before) : 0,
     // an inspection has no «after»: it ends on site with «Готово» (§11.5 №25)
     photosAfter: !inspection && settings.photosAfterRequired ? Math.max(0, min.after - after) : 0,
   };
@@ -96,7 +97,7 @@ export function checklistGate(visit: Visit, settings: VisitSettings, templates: 
   return {
     missing,
     warnBeforeWork: !inspection && missing.photosBefore > 0,
-    warnBeforeSign: missing.items.length > 0 || missing.photosAfter > 0 || (inspection && missing.photosBefore > 0),
+    warnBeforeSign: missing.items.length > 0 || missing.photosAfter > 0,
   };
 }
 
