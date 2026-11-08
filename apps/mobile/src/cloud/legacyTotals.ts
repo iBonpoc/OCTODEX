@@ -4,7 +4,7 @@
  * stored line totals, the option's discount, the version's tax and deposit rule. The phone showed totals.total and the
  * deposit the old app wrote instead (estimate.add: price = round(total / qty) is cents apart; its deposit rule
  * {"kind":"pct","value":"0.1"} has no bps — the server takes no deposit). Now both come from the same lines and the
- * same rule, through the engine (rule 8). Not mirrored: negative sums (a legacy estimate has none). Review #415, security-check №2. Pure: test/legacyTotals.test.ts (and T112).
+ * same rule, through the engine (rule 8). Not mirrored: negative sums (a legacy estimate has none). Review #415, security-check №2. Pure: test/legacyTotals.test.ts (and T121).
  */
 import { computeOption, depositAmount, type DepositSetting } from "@octo/estimating-engine";
 

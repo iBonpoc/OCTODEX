@@ -9141,12 +9141,12 @@ select tst.ok((select unit_cost_cents = 400 from public.estimate_line_costs wher
 select tst.ok(not has_function_privilege('authenticated', 'app.tg_line_cost_copy()', 'execute'), 'T111 the copy is not callable from the API');
 \echo 'T111 the copy takes no cost it should not ok'
 
--- ---------------------------------------------------------------- T112: the old quick estimate — the client signs the number the phone shows
+-- ---------------------------------------------------------------- T121: the old quick estimate — the client signs the number the phone shows
 -- A version with no document (estimate.add): the phone shows app.estimate_option_totals of the first option from its
 -- lines (apps/mobile/src/cloud/legacyTotals.ts, test/legacyTotals.test.ts — the same numbers), the server signs the same.
 :as_office_a
 insert into public.estimates (id, company_id, customer_id, property_id, title, created_via) values
-  ('a1120000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T112 quick', 'drawing'), ('a1120000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T112 quick, tax', 'drawing');
+  ('a1120000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T121 quick', 'drawing'), ('a1120000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T121 quick, tax', 'drawing');
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, totals, deposit_rule, tax_enabled, tax_rate_bps) values
   ('a1120000-0000-4000-8000-0000000000d1', 'ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000e1', 1, 'drawing', '{"total":10000,"deposit":1000}', '{"kind":"pct","value":"0.1","contractType":"ca_hic"}', false, null),
   ('a1120000-0000-4000-8000-0000000000d2', 'ca000000-0000-0000-0000-000000000000', 'a1120000-0000-4000-8000-0000000000e2', 1, 'drawing', '{"total":15000,"deposit":1500}', '{"kind":"pct","bps":1000}', true, 825);
@@ -9160,14 +9160,14 @@ insert into public.estimate_line_items (company_id, option_id, position, name, q
 update public.estimates set current_version_id = 'a1120000-0000-4000-8000-0000000000d1' where id = 'a1120000-0000-4000-8000-0000000000e1';
 update public.estimates set current_version_id = 'a1120000-0000-4000-8000-0000000000d2' where id = 'a1120000-0000-4000-8000-0000000000e2';
 :as_owner_a
-select tst.ok(public.send_estimate('a1120000-0000-4000-8000-0000000000e1') is not null and public.send_estimate('a1120000-0000-4000-8000-0000000000e2') is not null, 'T112 both quick estimates sent');
+select tst.ok(public.send_estimate('a1120000-0000-4000-8000-0000000000e1') is not null and public.send_estimate('a1120000-0000-4000-8000-0000000000e2') is not null, 'T121 both quick estimates sent');
 select tst.ok(public.sign_estimate_on_site('a1120000-0000-4000-8000-0000000000e1', 'Walk-in', 'M0 0 L2 2') = 'awaiting_countersign'
-              and public.sign_estimate_on_site('a1120000-0000-4000-8000-0000000000e2', 'Walk-in', 'M0 0 L2 2') = 'awaiting_countersign', 'T112 both signed on site');
+              and public.sign_estimate_on_site('a1120000-0000-4000-8000-0000000000e2', 'Walk-in', 'M0 0 L2 2') = 'awaiting_countersign', 'T121 both signed on site');
 :as_super
 select tst.ok((select (selection ->> 'total')::bigint = 9999 and (selection ->> 'deposit')::bigint = 0 from public.estimate_approvals
-                where estimate_id = 'a1120000-0000-4000-8000-0000000000e1' and party = 'customer'), 'T112 signed $99.99, no deposit — what the phone shows (not totals $100.00 / $10.00)');
+                where estimate_id = 'a1120000-0000-4000-8000-0000000000e1' and party = 'customer'), 'T121 signed $99.99, no deposit — what the phone shows (not totals $100.00 / $10.00)');
 select tst.ok((select (selection ->> 'total')::bigint = 14641 and (selection ->> 'deposit')::bigint = 1464 from public.estimate_approvals
-                where estimate_id = 'a1120000-0000-4000-8000-0000000000e2' and party = 'customer'), 'T112 with discount, tax and a bps deposit: $146.41 / $14.64, as legacyTotals');
-\echo 'T112 the old quick estimate: the client signs what the phone shows ok'
+                where estimate_id = 'a1120000-0000-4000-8000-0000000000e2' and party = 'customer'), 'T121 with discount, tax and a bps deposit: $146.41 / $14.64, as legacyTotals');
+\echo 'T121 the old quick estimate: the client signs what the phone shows ok'
 
 \echo 'ALL TESTS PASSED'

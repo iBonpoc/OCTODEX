@@ -1,4 +1,4 @@
-/** The old quick estimate (no document): the phone shows what the server signs (core_rls T112 — the same numbers). */
+/** The old quick estimate (no document): the phone shows what the server signs (core_rls T121 — the same numbers). */
 import { describe, expect, it } from "vitest";
 import { legacyTotals, serverDepositRule } from "../src/cloud/legacyTotals";
 
