@@ -7747,4 +7747,108 @@ update public.leads set deleted_at = now() where id::text like '19200000-%';
 update public.memberships set status = 'disabled' where user_id::text like 'a9200000-%';
 \echo 'T93 gutter measurements after the trial: read yes, write no; revisions never change ok'
 
+-- ---------------------------------------------------------------- T94: photos of a measurement and its element (spec 33 П21.10, M5d)
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a9400000-0000-4000-8000-000000000001', 'tech94@a.test', '{"full_name":"Tia Tech"}'),
+  ('a9400000-0000-4000-8000-000000000002', 'tech94b@a.test', '{"full_name":"Tom Tech"}'),
+  ('a9400000-0000-4000-8000-000000000003', 'sub94@a.test', '{"full_name":"Sam Sub"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a9400000-0000-4000-8000-000000000001', 'tech', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a9400000-0000-4000-8000-000000000002', 'tech', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a9400000-0000-4000-8000-000000000003', 'subcontractor', 'active');
+\set as_tech94  'reset role; set request.jwt.claim.sub = ''a9400000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_tech94b 'reset role; set request.jwt.claim.sub = ''a9400000-0000-4000-8000-000000000002''; set role authenticated;'
+\set as_sub94   'reset role; set request.jwt.claim.sub = ''a9400000-0000-4000-8000-000000000003''; set role authenticated;'
+:as_owner_a
+select public.module_enable('ca000000-0000-0000-0000-000000000000', 'gutters');
+-- the office's measurement (no lead, no property) with a run
+insert into public.gutter_measurements (id, company_id, label) values ('9e940000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T94 office');
+insert into public.gutter_measurement_elements (id, company_id, measurement_id, kind) values
+  ('9e940000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', '9e940000-0000-4000-8000-000000000002', 'run');
+-- Tia's own measurement with a run
+:as_tech94
+insert into public.gutter_measurements (id, company_id, label) values ('9e940000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T94 Tia');
+insert into public.gutter_measurement_elements (id, company_id, measurement_id, kind) values
+  ('9e940000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '9e940000-0000-4000-8000-000000000001', 'run');
+-- a tech: a photo of her measurement and of its run
+insert into public.files (id, company_id, kind, measurement_id) values
+  ('f9400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000001');
+insert into public.files (id, company_id, kind, measurement_id, element_id) values
+  ('f9400000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000001', '9e940000-0000-4000-8000-0000000000e1');
+select tst.ok(tst.cnt($q$select 1 from public.files where measurement_id = '9e940000-0000-4000-8000-000000000001'$q$) = 2,
+          'T94 a tech adds photos to her measurement and to its run');
+-- …not to a measurement she does not see; not an element of another measurement; photos only; an element names its measurement
+select tst.blocked($q$insert into public.files (company_id, kind, measurement_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002')$q$,
+          'T94 a tech cannot add a photo to a measurement she does not see');
+select tst.fails($q$insert into public.files (company_id, kind, measurement_id, element_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000001', '9e940000-0000-4000-8000-0000000000e2')$q$,
+          'T94 an element of another measurement is refused');
+select tst.fails($q$insert into public.files (company_id, kind, element_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-0000000000e1')$q$,
+          'T94 an element''s photo names its measurement');
+select tst.fails($q$insert into public.files (company_id, kind, measurement_id) values ('ca000000-0000-0000-0000-000000000000', 'receipt', '9e940000-0000-4000-8000-000000000001')$q$,
+          'T94 a measurement holds photos only');
+select tst.fails($q$update public.files set measurement_id = '9e940000-0000-4000-8000-000000000002' where id = 'f9400000-0000-4000-8000-000000000001'$q$,
+          'T94 a tech cannot move her photo onto a measurement she does not see');
+-- the office: sees all, adds to any measurement
+:as_owner_a
+insert into public.files (id, company_id, kind, measurement_id) values
+  ('f9400000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000001'),
+  ('f9400000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002');
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f9400000-%'$q$) = 4, 'T94 the office sees and adds measurement photos');
+-- Tia sees the office's photo of her measurement (and its Storage object), not the one of the office's measurement
+:as_tech94
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f9400000-%'$q$) = 3
+          and app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f9400000-0000-4000-8000-000000000003.jpg')
+          and not app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f9400000-0000-4000-8000-000000000004.jpg'),
+          'T94 a tech sees the photos (and objects) of a measurement she sees, not of another');
+-- another tech and a subcontractor: nothing of hers
+:as_tech94b
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f9400000-%'$q$) = 0
+          and not app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f9400000-0000-4000-8000-000000000001.jpg'),
+          'T94 another tech does not see her measurement''s photos');
+select tst.blocked($q$insert into public.files (company_id, kind, measurement_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000001')$q$,
+          'T94 another tech cannot add to her measurement');
+:as_sub94
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f9400000-%'$q$) = 0, 'T94 a subcontractor sees no measurement photos');
+select tst.blocked($q$insert into public.files (company_id, kind, measurement_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002')$q$,
+          'T94 a subcontractor adds no measurement photos');
+-- another company: nothing
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f9400000-%'$q$) = 0, 'T94 another company sees nothing');
+select tst.fails($q$insert into public.files (company_id, kind, measurement_id) values ('cb000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000001')$q$,
+          'T94 another company cannot hang a photo on A''s measurement');
+-- after the trial (founder О2): read yes, add no — the office too; a visit's photo is not touched by the rule
+:as_super
+update public.company_modules set trial_ends_at = now() - interval '1 minute' where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
+:as_tech94
+select tst.ok(tst.cnt($q$select 1 from public.files where measurement_id = '9e940000-0000-4000-8000-000000000001'$q$) = 3, 'T94 after the trial the photos are still seen');
+select tst.blocked($q$insert into public.files (company_id, kind, measurement_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000001')$q$,
+          'T94 after the trial a tech adds no photo');
+:as_owner_a
+select tst.blocked($q$insert into public.files (company_id, kind, measurement_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002')$q$,
+          'T94 …nor the office');
+select tst.blocked($q$update public.files set deleted_at = now() where id = 'f9400000-0000-4000-8000-000000000004'$q$, 'T94 …nor removes one');
+insert into public.files (id, company_id, kind) values ('f9400000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'document');
+select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f9400000-0000-4000-8000-000000000009'$q$) = 1, 'T94 other files are saved as before');
+-- at most 300 photos per measurement (the server's own roles too)
+:as_super
+insert into public.files (company_id, kind, measurement_id)
+  select 'ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002' from generate_series(1, 299);
+select tst.fails_like($q$insert into public.files (company_id, kind, measurement_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002')$q$,
+          '%at most 300 photos%', 'T94 the 301st photo of a measurement is refused');
+-- rights (rule 18, T52)
+select tst.ok(not has_function_privilege('anon', 'app.tg_files_measurement_limit()', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.tg_files_measurement_limit()', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.can_read_file_object(text)', 'EXECUTE')
+          and not has_table_privilege('anon', 'public.files', 'SELECT')
+          and not has_table_privilege('authenticated', 'public.files', 'DELETE'),
+          'T94 rights: the trigger function is not callable; anon nothing; no deletes');
+-- clean up
+delete from public.files where company_id = 'ca000000-0000-0000-0000-000000000000' and (measurement_id is not null or id = 'f9400000-0000-4000-8000-000000000009');
+delete from public.gutter_measurement_elements where company_id = 'ca000000-0000-0000-0000-000000000000';
+delete from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000';
+delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000';
+update public.memberships set status = 'disabled' where user_id::text like 'a9400000-%';
+\echo 'T94 measurement photos: seen like the measurement, added only while the module is active, same measurement ok'
+
 \echo 'ALL TESTS PASSED'

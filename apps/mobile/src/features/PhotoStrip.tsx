@@ -12,7 +12,7 @@ import { Sheet } from "@/ui/overlays";
 const THUMB = component.photoThumb;
 
 /** Before/after photos. Camera on a phone; library/file picker on web. Tap a photo to view it or delete it. */
-export function PhotoStrip({ photos, onAdd, onRemove }: { photos: Photo[]; onAdd: (uri?: string) => void; onRemove?: (id: string) => void }) {
+export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]; onAdd: (uri?: string) => void; onRemove?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const [open, setOpen] = useState<Photo | null>(null);
@@ -60,7 +60,7 @@ export function PhotoStrip({ photos, onAdd, onRemove }: { photos: Photo[]; onAdd
           {p.uri ? <Image source={{ uri: p.uri }} style={{ width: THUMB, height: THUMB }} /> : <Icon name="image" s={size.iconLg} color={c.mut} />}
         </Press>
       ))}
-      <Sheet visible={!!open} onClose={() => setOpen(null)} title={open?.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore")}>
+      <Sheet visible={!!open} onClose={() => setOpen(null)} title={title ?? (open?.kind === "after" ? t("visit.photosAfter") : t("visit.photosBefore"))}>
         <View style={{ height: component.mediaH * 2, borderRadius: radius.inner, overflow: "hidden", backgroundColor: c.surf2, alignItems: "center", justifyContent: "center" }}>
           {open?.uri ? (
             <Image source={{ uri: open.uri }} style={{ width: "100%", height: "100%" }} resizeMode="contain" />

@@ -337,7 +337,8 @@ async function sourceRef(companyId: string, op: { sourceId?: string; source?: st
   return (rows.find((r) => r.name.toLowerCase() === name) ?? rows.find((r) => r.name === "Website") ?? rows[0])?.id ?? "";
 }
 
-async function uploadPhoto(companyId: string, fileId: string, uri: string) {
+/** a photo's bytes to Storage and its files row marked; shared with modules (a measurement's photo, spec 33 П21.10) */
+export async function uploadPhoto(companyId: string, fileId: string, uri: string) {
   let blob: Blob;
   try {
     blob = await (await fetch(uri)).blob();

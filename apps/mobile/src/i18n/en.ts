@@ -2508,4 +2508,7 @@ export const en: Dict = {
   "mod.gutters.attr.wk.pipe_cleat": "Pipe cleat",
   "mod.gutters.attr.wk.pipe_cleat_masonry": "Pipe cleat + anchors",
   "mod.gutters.attr.none": "Tap a run or a downspout to see its details here",
+  "mod.gutters.photo.measurement": "Measurement photos",
+  "mod.gutters.photo.element": "Photos of this part",
+  "mod.gutters.photo.open": "Photos",
 };
