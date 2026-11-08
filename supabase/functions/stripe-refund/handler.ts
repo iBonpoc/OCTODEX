@@ -11,6 +11,9 @@
  * 4) public.stripe_refund_settle keeps Stripe's answer. Stripe said no → «failed», no money moved. No answer (a timeout,
  *    5xx, 429) → the row stays pending: only ITS key resumes it; another key waits until the row is idle ≥ 2 min, then the
  *    function asks Stripe (by metadata) whether it was made — kept, or freed as «not_sent» — so nothing doubles.
+ * 5) a limit per person before anything else (spec 35 §4д): 20 per 10 minutes → 429 {error:"retry_later", retryAfter} and
+ *    Retry-After (older apps already show «later» for it and keep the same key — nothing was done). The limit failing refuses
+ *    too: money never goes back unchecked.
  * Refusals the person can act on are 200 {error}: the app shows our words, never Stripe's text. Test mode only.
  */
 export interface Opened {
@@ -51,6 +54,8 @@ export interface RefundDeps {
   /** one call of the Stripe API on the connected account; form and key only for POST */
   stripe: ((method: "GET" | "POST", path: string, account: string, form?: Record<string, string>, idempotencyKey?: string) => Promise<StripeAnswer>) | null;
   keyMode: "test" | "live" | null;
+  /** public.refund_rate_take(user) → null (go on) or seconds to wait; throws when the database fails */
+  rate: (userId: string) => Promise<number | null>;
   log?: (msg: string) => void;
 }
 export interface Req {
@@ -128,6 +133,18 @@ export async function handleRefund(req: Req, deps: RefundDeps): Promise<Res> {
   if (deps.keyMode !== "test") return json(200, { error: "live_refused" });
 
   const stripe = deps.stripe;
+  let wait: number | null;
+  try {
+    wait = await deps.rate(uid);
+  } catch {
+    deps.log?.("stripe-refund: rate limit failed");
+    return json(200, { error: "retry_later" });
+  }
+  if (wait !== null && wait !== undefined) {
+    const sec = Math.min(600, Math.max(1, Math.ceil(wait)));
+    const r = json(429, { error: "retry_later", retryAfter: sec });
+    return { ...r, headers: { ...r.headers, "Retry-After": String(sec) } };
+  }
   const refused = (e: unknown, what: string) => {
     // a closed company is not «only the owner»: its own word (20д debts)
     if (e instanceof DbError && e.code === "42501") return json(403, { error: e.text.includes("company is closed") ? "company_closed" : "not_allowed" });

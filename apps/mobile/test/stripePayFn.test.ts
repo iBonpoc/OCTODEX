@@ -15,15 +15,22 @@ import {
   type Attempt,
   type PayDeps,
   type StripeAnswer,
+  clientIp,
+  ipKey,
+  netKey,
 } from "../../../supabase/functions/stripe-pay/handler";
+import * as intake from "../../../supabase/functions/lead-intake/handler";
 
 const SITE = ALLOWED_ORIGINS[0];
 const TOKEN = "tok_inv_0123456789abcdef";
 const INV = "11310000-0000-4000-8000-000000000001";
 const KEY = "sk_test_SECRETxyz";
-const req = (o: { method?: string; origin?: string | null; body?: unknown } = {}) => ({
+const req = (o: { method?: string; origin?: string | null; body?: unknown; ip?: string | null } = {}) => ({
   method: o.method ?? "POST",
-  header: (n: string) => (n.toLowerCase() === "origin" ? (o.origin === undefined ? SITE : o.origin) : null),
+  header: (n: string) =>
+    n.toLowerCase() === "origin" ? (o.origin === undefined ? SITE : o.origin)
+      : n.toLowerCase() === "cf-connecting-ip" ? (o.ip === undefined ? "203.0.113.7" : o.ip)
+      : n.toLowerCase() === "x-forwarded-for" ? "198.51.100.9" : null,
   text: async () => (typeof o.body === "string" ? o.body : JSON.stringify(o.body ?? { token: TOKEN, invoiceId: INV })),
 });
 const attempt = (over: Partial<Attempt> = {}): Attempt => ({
@@ -76,6 +83,12 @@ function deps(opt: Partial<PayDeps> & { a?: Attempt | Error; answers?: Record<st
     },
     keyMode: "test",
     publishableKey: "pk_test_PUBLIC",
+    rate: async () => null,
+    rateMiss: async () => null,
+    invoiceRate: async () => null,
+    sha256: async (x) => `sha(${x})`,
+    hmac: async (x) => `hmac(${x})`,
+    ipHeaders: ["cf-connecting-ip"],
     log: (m) => logs.push(m),
     ...over,
   };
@@ -257,5 +270,103 @@ describe("stripe-pay: the PaymentIntent", () => {
     expect(r.body).not.toContain(KEY);
     expect(logs.join(" ")).not.toContain(KEY);
     expect(logs.join(" ")).toContain("card_error");
+  });
+});
+
+describe("stripe-pay: rate limits (spec 35 §4д)", () => {
+  type Miss = [string | null, string | null];
+  const unknown = () => new DbError("P0002");
+  it("the link is counted as its hash, before the database looks at it; a real link is never counted by address", async () => {
+    const seen: string[] = [];
+    const misses: Miss[] = [];
+    const { d, opened } = deps({ rate: async (t) => (seen.push(t), null), rateMiss: async (i, n) => (misses.push([i, n]), null) });
+    expect((await handlePay(req(), d)).status).toBe(200);
+    expect(seen).toEqual([`sha(${TOKEN})`]);
+    expect(opened.length).toBe(1);
+    expect(misses).toEqual([]);   // director's review of #454: a neighbour's misses never block a real link
+  });
+  it("a link that is not found: the address pays (HMAC of «pay:» + IP); only Cloudflare's header; IPv6 by /64 and /48", async () => {
+    const misses: Miss[] = [];
+    const { d } = deps({ a: unknown(), rateMiss: async (i, n) => (misses.push([i, n]), null) });
+    expect(body(await handlePay(req(), d))).toEqual({ error: "nothing_to_pay" });
+    await handlePay(req({ ip: "2001:db8:abcd:12:1:2:3:4" }), d);
+    await handlePay(req({ ip: null }), d);   // x-forwarded-for is what the client wrote: not trusted
+    expect(misses).toEqual([["hmac(pay:203.0.113.7)", null], ["hmac(pay:2001:db8:abcd:12::/64)", "hmac(pay:2001:db8:abcd::/48)"], [null, null]]);
+  });
+  it("a foreign invoice (22023) is a miss too; a closed company or a database failure is not", async () => {
+    let n = 0;
+    for (const [e, want] of [[new DbError("22023"), 1], [new DbError("42501"), 0], [new DbError(null), 0]] as const) {
+      n = 0;
+      const { d } = deps({ a: e, rateMiss: async () => (n++, null) });
+      await handlePay(req(), d);
+      expect(n).toBe(want);
+    }
+  });
+  it("too many misses: 429 with Retry-After and CORS (the page may read it)", async () => {
+    const { d, calls } = deps({ a: unknown(), rateMiss: async () => 240 });
+    const r = await handlePay(req(), d);
+    expect(r.status).toBe(429);
+    expect(body(r)).toEqual({ error: "rate_limited", retryAfter: 240 });
+    expect(r.headers["Retry-After"]).toBe("240");
+    expect(r.headers["Access-Control-Allow-Origin"]).toBe(SITE);
+    expect(r.headers["Access-Control-Expose-Headers"]).toBe("Retry-After");
+    expect(calls).toEqual([]);
+  });
+  it("too many tries of one link: 429, the link is not looked at, Stripe is not called", async () => {
+    const { d, opened, calls } = deps({ rate: async () => 120 });
+    const r = await handlePay(req(), d);
+    expect(r.status).toBe(429);
+    expect(opened).toEqual([]);
+    expect(calls).toEqual([]);
+  });
+  it("the invoice limit is checked after the link, before any intent is made or cancelled", async () => {
+    let inv = "";
+    const { d, opened, calls } = deps({ invoiceRate: async (i) => ((inv = i), 30), a: attempt({ stale_intents: ["pi_Old1"] }) });
+    const r = await handlePay(req(), d);
+    expect(r.status).toBe(429);
+    expect(inv).toBe(INV);
+    expect(opened.length).toBe(1);
+    expect(calls).toEqual([]);
+  });
+  it("no IP secret, or an HMAC that fails: a miss counts with no address (the whole-function ceiling), logged", async () => {
+    for (const hmac of [null, async () => { throw new Error("key"); }]) {
+      const misses: Miss[] = [];
+      const { d, logs } = deps({ a: unknown(), hmac, rateMiss: async (i, n) => (misses.push([i, n]), null) });
+      await handlePay(req(), d);
+      expect(misses).toEqual([[null, null]]);
+      expect(logs.join(" ")).toMatch(/no ip secret|ip hmac failed/);
+      expect(logs.join(" ")).not.toContain("203.0.113.7");
+    }
+  });
+  it("the limits failing let the payment through (a miss keeps its own answer), with a line in the log", async () => {
+    const boom = async () => { throw new Error("db"); };
+    const ok = deps({ rate: boom, invoiceRate: boom });
+    expect((await handlePay(req(), ok.d)).status).toBe(200);
+    expect(ok.logs.join(" ")).toContain("rate limit failed");
+    const miss = deps({ a: unknown(), rateMiss: boom });
+    expect(body(await handlePay(req(), miss.d))).toEqual({ error: "nothing_to_pay" });
+  });
+  it("a wait is whole seconds between 1 and 600", async () => {
+    for (const [w, want] of [[0.2, "1"], [9999, "600"]] as const) {
+      const { d } = deps({ rate: async () => w });
+      expect((await handlePay(req(), d)).headers["Retry-After"]).toBe(want);
+    }
+  });
+  it("a bad body is refused before anything is counted", async () => {
+    let n = 0;
+    const { d } = deps({ rate: async () => (n++, null) });
+    expect((await handlePay(req({ body: { token: "x" } }), d)).status).toBe(400);
+    expect(n).toBe(0);
+  });
+});
+
+describe("stripe-pay: the client's IP is read as lead-intake reads it", () => {
+  it("the same keys for IPv4, IPv4-in-IPv6, IPv6 and lists", () => {
+    for (const ip of ["203.0.113.7", "::ffff:203.0.113.7", "2001:db8:abcd:12:1:2:3:4", "2001:DB8::1", "::1", "fe80::"]) {
+      expect(ipKey(ip)).toBe(intake.ipKey(ip));
+      expect(netKey(ip)).toBe(intake.netKey(ip));
+    }
+    const r = { method: "POST", url: "https://x/", text: async () => "", header: (n: string): string | null => (n === "cf-connecting-ip" ? "10.0.0.1, 203.0.113.7" : n === "x-bad" ? "<script>" : null) };
+    for (const hs of [["cf-connecting-ip"], ["x-bad"], ["x-none"]]) expect(clientIp(r, hs)).toBe(intake.clientIp(r, hs));
   });
 });
