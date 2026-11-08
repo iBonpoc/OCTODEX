@@ -104,7 +104,8 @@ type Value = {
   queue: unknown[];
   mode: string;
   setOnline: (v: boolean) => number;
-  saveCatalogItems: (items: CatalogItem[]) => () => void;
+  saveCatalogItems: (items: CatalogItem[], opts?: { onlyNew?: boolean }) => () => void;
+  saveCatalogItem: (it: CatalogItem) => () => void;
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -154,6 +155,57 @@ describe("unit:catalogAttributes — write (catalog.save)", () => {
     expect((rpcCalls.at(-1)!.args as { row: object }).row).toMatchObject({ attributes: { profile: "k" }, purchase_unit: "coil", pack_size: "1.5" });
     await applyOp({ k: "catalog.save", item: it0({ attributes: {}, purchaseUnit: " ", packSize: "" }) }, "co-1", "u-1");
     expect((rpcCalls.at(-1)!.args as { row: object }).row).toMatchObject({ attributes: {}, purchase_unit: null, pack_size: null });
+  });
+});
+
+describe("unit:catalogAttributes — onlyNew: a module's items with a fixed id, never twice (spec 33 П22.10, T96)", () => {
+  it("the op inserts or does nothing (ON CONFLICT DO NOTHING); a plain save stays an upsert that overwrites", async () => {
+    const { applyOp } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    await applyOp({ k: "catalog.save", item: it0({}), onlyNew: true }, "co-1", "u-1");
+    expect((rpcCalls.at(-1)!.args as { opts: object }).opts).toEqual({ onConflict: "id", ignoreDuplicates: true });
+    await applyOp({ k: "catalog.save", item: it0({}) }, "co-1", "u-1");
+    expect((rpcCalls.at(-1)!.args as { opts: object }).opts).toEqual({ onConflict: "id" });
+  });
+  it("cloud: an id on the phone already is left as it is — no op, its price stays; the new ones go with onlyNew; «Отменить» takes them out", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve({ ...makeSeed(), catalog: [it0({ id: "m1", priceCents: 777, placeholder: false, name: "Mine" })] }));
+    await settle();
+    const before = valueOf(r).db.catalog;
+    valueOf(r).setOnline(false);
+    await settle();
+    const undo = valueOf(r).saveCatalogItems([it0({ id: "m1", priceCents: 100 }), it0({ id: "m2" })], { onlyNew: true });
+    await settle();
+    expect(valueOf(r).db.catalog.find((x) => x.id === "m1")).toMatchObject({ priceCents: 777, placeholder: false, name: "Mine" });
+    expect(valueOf(r).db.catalog.filter((x) => x.id === "m2")).toHaveLength(1);
+    expect(valueOf(r).queue).toHaveLength(1); // m2 only
+    undo();
+    await settle();
+    expect(valueOf(r).queue).toHaveLength(0);
+    expect(valueOf(r).db.catalog.map((x) => x.id).sort()).toEqual(before.map((x) => x.id).sort());
+    // made again and sent: the op says onlyNew
+    valueOf(r).saveCatalogItems([it0({ id: "m3" })], { onlyNew: true });
+    await settle();
+    valueOf(r).setOnline(true);
+    await settle();
+    const sent = server.sends.map((x) => x.op as { k: string; item: { id: string }; onlyNew?: boolean }).filter((o) => o.k === "catalog.save");
+    expect(sent.map((o) => [o.item.id, o.onlyNew])).toEqual([["m3", true]]);
+  });
+  it("cloud: pressed twice before sync — the second press makes nothing", async () => {
+    signIn("u1", "c1");
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    server.loads.splice(0).forEach((d) => d.resolve(makeSeed()));
+    await settle();
+    valueOf(r).setOnline(false);
+    await settle();
+    valueOf(r).saveCatalogItems([it0({ id: "s1" }), it0({ id: "s2" })], { onlyNew: true });
+    await settle();
+    valueOf(r).saveCatalogItems([it0({ id: "s1" }), it0({ id: "s2" })], { onlyNew: true });
+    await settle();
+    expect(valueOf(r).queue).toHaveLength(2);
+    expect(valueOf(r).db.catalog.filter((x) => x.id === "s1" || x.id === "s2")).toHaveLength(2);
   });
 });
 
