@@ -215,6 +215,50 @@ export const canEditTemplates = (role: Role): boolean => office(role);
 /** the company's photo rules: the director (companies: owner, admin) */
 export const canEditVisitSettings = (role: Role): boolean => role === "director";
 
+/* ---- the office edits a visit's checklist before it starts (§7.4, CH3) ---- */
+
+/** the office edits the items (text, «Обязательный», order, «Добавить из шаблона») only before the visit starts */
+export const canEditVisitItems = (role: Role, v: Pick<Visit, "step" | "closed" | "signature">): boolean =>
+  office(role) && (v.step === "scheduled" || v.step === "en_route") && !visitClosed(v);
+/** «Обязательный» on: the office; off — the director only (the company's rule; the server's guard says the same) */
+export const canSetRequired = (role: Role, required: boolean): boolean => (required ? office(role) : role === "director");
+
+/** the visit's items in order (position, then as listed) */
+const ordered = (items: readonly ChecklistItem[]): ChecklistItem[] =>
+  items.map((it, i) => ({ it, i })).sort((a, b) => (a.it.position ?? a.i) - (b.it.position ?? b.i) || a.i - b.i).map((x) => x.it);
+
+/**
+ * «Выше» / «Ниже»: the new positions of the items that move. The list is renumbered 0..n-1 in its new order and only
+ * the items whose position changes are returned (two in a list numbered already — one op each).
+ */
+export function moveItem(items: readonly ChecklistItem[], itemId: ID, dir: -1 | 1): { id: ID; position: number }[] {
+  const list = ordered(items);
+  const at = list.findIndex((i) => i.id === itemId);
+  const to = at + dir;
+  if (at < 0 || to < 0 || to >= list.length) return [];
+  [list[at], list[to]] = [list[to], list[at]];
+  return list.flatMap((it, i) => (it.position === i ? [] : [{ id: it.id, position: i }]));
+}
+
+/** the templates the office may add to a visit: live ones; `added` — the visit already has items of it */
+export function templatesForVisit(v: Pick<Visit, "checklist">, templates: readonly ChecklistTemplate[]): { template: ChecklistTemplate; added: boolean }[] {
+  const used = new Set(v.checklist.map((i) => i.templateId).filter((x): x is ID => !!x));
+  return templates.filter((t) => !t.archivedAt && t.items.length > 0).map((template) => ({ template, added: used.has(template.id) }));
+}
+
+/**
+ * «Добавить из шаблона» (§5, §11.8 №8): the template's items as new items of the visit, after its own, up to the
+ * server's 200. A template the visit already has adds nothing (no doubles).
+ */
+export function itemsFromTemplate(v: Pick<Visit, "checklist">, t: ChecklistTemplate, newId: () => ID, max = 200): ChecklistItem[] {
+  if (t.archivedAt || v.checklist.some((i) => i.templateId === t.id)) return [];
+  const start = Math.max(-1, ...v.checklist.map((c, i) => c.position ?? i)) + 1;
+  const room = Math.max(0, max - v.checklist.length);
+  return checklistFor({ kind: "work" }, [{ ...t, appliesTo: { everyVisit: true, visitKinds: [], catalogItemIds: [] } }], newId)
+    .slice(0, room)
+    .map((c, i) => ({ ...c, position: start + i }));
+}
+
 /* ---- text as the server takes it (no control characters — a new line is one; lengths of the columns) ---- */
 export const LABEL_MAX = 300;
 export const TEMPLATE_NAME_MAX = 120;

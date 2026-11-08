@@ -2775,6 +2775,28 @@ export const ru = {
   "chk2.needItem": "Добавьте хотя бы один пункт",
   "chk2.notFound": "Шаблон не найден",
   "chk2.module": "Модуль: {m}",
+  // step 14 CH3 (чек-листы): the office edits a visit's checklist
+  "chk3.hint": "Правка — до выезда мастера. Снять «Обязательный» может только директор.",
+  "chk3.empty": "Пунктов пока нет",
+  "chk3.edit": "Изменить",
+  "chk3.editTitle": "Пункт чек-листа",
+  "chk3.label": "Что сделать",
+  "chk3.required": "Обязательный",
+  "chk3.directorOnly": "Снять «Обязательный» может только директор",
+  "chk3.remove": "Убрать пункт",
+  "chk3.removed": "Пункт убран",
+  "chk3.edited": "Пункт изменён",
+  "chk3.moved": "Порядок изменён",
+  "chk3.up": "Выше",
+  "chk3.down": "Ниже",
+  "chk3.fromTemplate": "Добавить из шаблона",
+  "chk3.templates": "Шаблоны чек-листов",
+  "chk3.added": "Добавлен",
+  "chk3.noTemplates": "Шаблонов нет — их создают в «Компания → Чек-листы»",
+  "chk3.addedN": "Добавлено пунктов: {n}",
+  "chk3.from": "из «{name}»",
+  "chk3.requiredShort": "обязательный",
+  "chk3.optional": "необязательный",
 } as const;
 
 export type DictKey = keyof typeof ru;

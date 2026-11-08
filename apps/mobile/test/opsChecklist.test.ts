@@ -84,6 +84,15 @@ describe("ops: the other checklist ops", () => {
     expect(calls[0]).toMatchObject({ table: "visit_checklist_items", how: "update", eq: [["id", "i9"], ["visit_id", "v1"]] });
     expect(typeof calls[0]!.row.deleted_at).toBe("string");
   });
+  it("chk.item.edit (CH3): only the fields it names, text cleaned, on its visit; nothing to send — nothing sent", async () => {
+    await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", label: " Dog\tin the yard " }, "co", "u");
+    await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", required: false, position: 2 }, "co", "u");
+    await applyOp({ k: "chk.item.edit", id: "i9", visitId: "v1", label: " \n " }, "co", "u");
+    expect(calls.map((c) => [c.how, c.row, c.eq])).toEqual([
+      ["update", { label: "Dog in the yard" }, [["id", "i9"], ["visit_id", "v1"]]],
+      ["update", { required: false, position: 2 }, [["id", "i9"], ["visit_id", "v1"]]],
+    ]);
+  });
   it("chk.visit.review: «Просмотрено» and «Отменить» (the server writes who)", async () => {
     await applyOp({ k: "chk.visit.review", visitId: "v1", at: AT }, "co", "u");
     await applyOp({ k: "chk.visit.review", visitId: "v1", at: null }, "co", "u");
@@ -121,6 +130,7 @@ describe("unit:outboxDeps — what the checklist ops make", () => {
     expect([...createdBy({ k: "chk.template.save", template: { id: T1, name: "x", items: [], appliesTo: { everyVisit: true, visitKinds: [], catalogItemIds: [] } } })]).toEqual([T1]);
     expect([...createdBy({ k: "chk.item.set", visitId: V1, itemIds: [I1], done: true, at: AT })]).toEqual([]);
     expect([...createdBy({ k: "chk.item.remove", id: I1, visitId: V1 })]).toEqual([]);
+    expect([...createdBy({ k: "chk.item.edit", id: I1, visitId: V1, position: 1 })]).toEqual([]);
     expect([...createdBy({ k: "chk.visit.review", visitId: V1, at: AT })]).toEqual([]);
   });
 });
