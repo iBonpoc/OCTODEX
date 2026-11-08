@@ -17,6 +17,12 @@ const KNOWN: RefundError[] = [
   "refund_above_available", "refund_disputed", "refund_in_progress", "refund_not_refundable", "refund_not_stripe",
   "refund_through_stripe", "stripe_refused", "retry_later", "not_allowed", "not_configured", "live_refused", "offline",
 ];
+/** a final «no» from the server: nothing was refunded under this key, a next try is a new refund (a new key). Anything
+ *  else (no answer, «later», an unknown error) may have been kept: the next try sends the SAME key — never twice. */
+export const FINAL_REFUSALS: RefundError[] = [
+  "refund_above_available", "refund_disputed", "refund_not_refundable", "refund_through_stripe", "refund_not_stripe",
+  "stripe_refused", "not_allowed", "not_configured", "live_refused",
+];
 export const refundError = (word: unknown): RefundError =>
   typeof word === "string" ? (KNOWN.find((k) => word.includes(k)) ?? "failed") : "failed";
 

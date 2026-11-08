@@ -1739,6 +1739,8 @@ export const es: Dict = {
   "mny.refunded": "Reembolso {amount}",
   // 20д: refunds (docs/specs/35 §4в) — «Деньги и отчёты»
   "mny.refund.refundedLabel": "Reembolsado",
+  "mny.refund.chip.warn": "Atención",
+  "mny.refund.chip.bad": "No se hizo",
   "mny.refund.title": "Reembolsar",
   "mny.refund.action": "Reembolsar",
   "mny.refund.amount": "Monto del reembolso (hasta {max})",

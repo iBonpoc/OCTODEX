@@ -1738,6 +1738,8 @@ export const ru = {
   "mny.refunded": "Возврат {amount}",
   // 20д: refunds (docs/specs/35 §4в) — «Деньги и отчёты»
   "mny.refund.refundedLabel": "Возвращено",
+  "mny.refund.chip.warn": "Внимание",
+  "mny.refund.chip.bad": "Не вышло",
   "mny.refund.title": "Вернуть деньги",
   "mny.refund.action": "Вернуть деньги",
   "mny.refund.amount": "Сумма возврата (до {max})",

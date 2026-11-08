@@ -40,7 +40,12 @@ exports.run = async (h) => {
   await next.waitFor({ timeout: 3000 });
   const revenue = await sheet.getByTestId("refund-revenue").innerText();
   const tax = await sheet.getByTestId("refund-tax").innerText();
-  h.expect(TEN.test(revenue) || /\$/.test(tax), `tax ${tax} and revenue ${revenue} are shown`);
+  // the demo's invoices carry no tax: all of it is revenue (the split by mode — unit refundApp, db T133)
+  h.expect(TEN.test(revenue) && /\$0(\.00)?(?!\d)/.test(tax), `tax ${tax} and revenue ${revenue}`);
+  // «Другое» wants a reason
+  await sheet.getByRole("radio", { name: "Другое" }).click();
+  h.expect(await next.isDisabled(), "«Другое» without a reason: no next step");
+  await sheet.getByRole("radio", { name: "Уступка клиенту" }).click();
   await next.click();
   await sheet.getByTestId("refund-confirm").waitFor({ timeout: 3000 });
   h.expect(/Это нельзя отменить/.test(await sheet.innerText()), "it says it cannot be undone");

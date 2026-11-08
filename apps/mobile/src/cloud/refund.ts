@@ -32,10 +32,11 @@ export async function refundRecord(a: RefundAsk): Promise<RefundAnswer> {
     const { data, error } = await supabase.rpc("refund_record", {
       p_payment_id: a.paymentId, p_amount_cents: a.amountCents, p_reason_kind: a.reasonKind, p_reason: a.reason, p_key: a.key,
     });
-    if (error) return { ok: false, error: error.code === "42501" ? "not_allowed" : refundError(error.message) };
+    // no SQLSTATE = no answer from the database (the network, a gateway): the refund may have been kept — the same key again
+    if (error) return { ok: false, error: !error.code ? "retry_later" : error.code === "42501" ? "not_allowed" : refundError(error.message) };
     return fromRow(data as Record<string, unknown>) ?? { ok: false, error: "failed" };
   } catch {
-    return { ok: false, error: "offline" };
+    return { ok: false, error: "retry_later" };
   }
 }
 
@@ -55,6 +56,7 @@ export async function refundStripe(a: RefundAsk): Promise<RefundAnswer> {
     const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
     if (res.status === 403) return { ok: false, error: "not_allowed" };
     if (body?.error) return { ok: false, error: refundError(body.error) };
+    if (res.status >= 500 || !body) return { ok: false, error: "retry_later" };   // a gateway, a crash: the row may wait — same key
     return fromRow(body?.refund as Record<string, unknown>) ?? { ok: false, error: "failed" };
   } catch {
     return { ok: false, error: "retry_later" };   // no answer: the refund may be on its way; the same key resumes it
