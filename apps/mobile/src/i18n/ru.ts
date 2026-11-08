@@ -1809,6 +1809,7 @@ export const ru = {
   "mny.adv.err.advance_not_applicable": "Этот платёж нельзя зачесть",
   "mny.adv.err.advance_disputed": "По платежу открыт спор — зачёт недоступен",
   "mny.adv.err.advance_refund_in_progress": "Возврат этого аванса в пути — попробуйте позже",
+  "mny.adv.err.advance_refund_settling": "Возврат по этому авансу ещё может вернуться из банка (до 30 дней) — зачесть можно позже",
   "mny.adv.err.advance_above_balance": "Больше остатка счёта — сначала верните разницу",
   "mny.adv.err.advance_already_applied": "Аванс уже зачтён",
   "mny.adv.err.not_allowed": "Зачесть может только владелец или админ",

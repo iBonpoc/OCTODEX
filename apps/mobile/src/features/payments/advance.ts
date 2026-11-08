@@ -11,11 +11,11 @@ import { mayRefund, refundable } from "./refund";
 /** the server's word → the key of our text (mny.adv.err.*) */
 export type AdvanceError =
   | "advance_other_client" | "advance_invoice_not_open" | "advance_not_applicable" | "advance_disputed"
-  | "advance_refund_in_progress" | "advance_above_balance" | "advance_already_applied"
+  | "advance_refund_in_progress" | "advance_refund_settling" | "advance_above_balance" | "advance_already_applied"
   | "not_allowed" | "company_closed" | "retry_later" | "offline" | "failed";
 const KNOWN: AdvanceError[] = [
   "advance_other_client", "advance_invoice_not_open", "advance_not_applicable", "advance_disputed",
-  "advance_refund_in_progress", "advance_above_balance", "advance_already_applied", "company_closed",
+  "advance_refund_in_progress", "advance_refund_settling", "advance_above_balance", "advance_already_applied", "company_closed",
 ];
 export const advanceError = (word: unknown): AdvanceError =>
   typeof word === "string" ? (KNOWN.find((k) => word.includes(k)) ?? "failed") : "failed";

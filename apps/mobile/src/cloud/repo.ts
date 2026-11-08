@@ -141,7 +141,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     ]);
   // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
   // spec 35 §4г: refunds on their way (staff only by RLS; a server before 20а has no table — nothing on its way)
-  const refundRows = await every<Row>("refunds", "id, payment_id, amount_cents, status").catch(() => [] as Row[]);
+  const refundRows = await every<Row>("refunds", "id, payment_id, amount_cents, status, created_at").catch(() => [] as Row[]);
   const signatureRows = await every<Row>("member_signatures", "id, user_id, svg, name, title, created_at, revoked_at").catch(() => [] as Row[]);
   // wave П-1: the company's job types (no deleted_at, archived ones stay); empty before the migration
   const jobTypeRows = await every<Row>("job_types", "id, seed_key, name, position, archived_at").catch(() => [] as Row[]);
@@ -761,15 +761,21 @@ export async function loadCompanyModule(companyId: string, key: string): Promise
   return companyModulesFromRows([data as Record<string, unknown>])[key] ?? null;
 }
 
+/** the bank may send a refund back «up to 30 days from the post date» (docs.stripe.com/refunds) — as t41 in the database */
+export const REFUND_SETTLE_MS = 30 * 24 * 3600 * 1000;
+
 /**
  * Payments and the clients' advances (spec 35 §4г). A fully refunded payment brought nothing: it is not in the list (wave 8);
  * partial — net, with refundedCents. A payment without an invoice (an online payment above the balance) is an advance —
  * its own list, never in sums. refundPendingCents — what refund rows hold back beyond refunded_cents, as
  * app.refund_available: amount − greatest(refunded, Σ pending + succeeded rows).
  */
-export function paymentsFromRows(rows: Row[], refundRows: Row[] = []): { payments: Payment[]; advances: Advance[] } {
+export function paymentsFromRows(rows: Row[], refundRows: Row[] = [], now: number = Date.now()): { payments: Payment[]; advances: Advance[] } {
   const held = new Map<string, number>();
-  const open = new Set(refundRows.filter((r) => s(r.status) === "pending").map((r) => s(r.payment_id)));
+  // a refund still pending, or one that went less than 30 days ago (the bank may still send it back — t41
+  // advance_refund_settling): an advance waits with its apply
+  const settling = (r: Row) => s(r.status) === "succeeded" && now - Date.parse(s(r.created_at)) < REFUND_SETTLE_MS;
+  const open = new Set(refundRows.filter((r) => s(r.status) === "pending" || settling(r)).map((r) => s(r.payment_id)));
   for (const r of refundRows) {
     if (!["pending", "succeeded"].includes(s(r.status))) continue;
     held.set(s(r.payment_id), (held.get(s(r.payment_id)) ?? 0) + n(r.amount_cents));

@@ -1810,6 +1810,7 @@ export const es: Dict = {
   "mny.adv.err.advance_not_applicable": "Este pago no se puede aplicar",
   "mny.adv.err.advance_disputed": "El pago está en disputa: no se puede aplicar",
   "mny.adv.err.advance_refund_in_progress": "Un reembolso de este anticipo está en camino: intente más tarde",
+  "mny.adv.err.advance_refund_settling": "Un reembolso de este anticipo aún puede volver del banco (hasta 30 días): aplíquelo más tarde",
   "mny.adv.err.advance_above_balance": "Más que el saldo de la factura: primero reembolse la diferencia",
   "mny.adv.err.advance_already_applied": "El anticipo ya está aplicado",
   "mny.adv.err.not_allowed": "Solo el dueño o un administrador lo aplica",

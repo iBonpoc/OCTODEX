@@ -38,6 +38,14 @@ describe("unit:advance — from the cloud's rows", () => {
     const a = paymentsFromRows([row({ id: "a1", invoice_id: null, refunded_cents: 1000, status: "partially_refunded" })], [{ payment_id: "a1", amount_cents: 1000, status: "pending" }]).advances[0]!;
     expect([a.refundOpen, a.refundPendingCents, applicable(a)]).toEqual([true, undefined, false]);
   });
+  it("a Stripe refund of it that went less than 30 days ago (the bank may send it back) — no apply yet, as t41", () => {
+    const now = Date.parse("2026-11-08T18:00:00Z");
+    const fresh = [{ payment_id: "a1", amount_cents: 1000, status: "succeeded", created_at: "2026-10-20T18:00:00Z" }];
+    const old = [{ payment_id: "a1", amount_cents: 1000, status: "succeeded", created_at: "2026-10-01T18:00:00Z" }];
+    const r = (refunds: Record<string, unknown>[]) => paymentsFromRows([row({ id: "a1", invoice_id: null, refunded_cents: 1000, status: "partially_refunded" })], refunds, now).advances[0]!;
+    expect([applicable(r(fresh)), applicable(r(old))]).toEqual([false, true]);
+    expect(advanceError("advance_refund_settling")).toBe("advance_refund_settling");
+  });
   it("not money yet or no money left — in neither list (pending ACH, failed, fully refunded)", () => {
     const r = paymentsFromRows([row({ id: "a1", invoice_id: null, status: "pending" }), row({ id: "a2", invoice_id: null, status: "failed" }),
       row({ id: "a3", invoice_id: null, status: "refunded", refunded_cents: 5000 })]);

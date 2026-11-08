@@ -43,6 +43,12 @@ begin
   if exists (select 1 from public.refunds r where r.payment_id = new.id and r.status = 'pending') then
     raise exception 'advance_refund_in_progress' using errcode = 'check_violation';
   end if;
+  -- a Stripe refund of it may still come back from the bank («up to 30 days from the post date», docs.stripe.com/refunds):
+  -- applied meanwhile, its failure would leave the invoice paid above its total (director's review of #449 №2) — wait
+  if exists (select 1 from public.refunds r where r.payment_id = new.id and r.status = 'succeeded'
+                                             and r.created_at > now() - interval '30 days') then
+    raise exception 'advance_refund_settling' using errcode = 'check_violation';
+  end if;
   -- the whole advance or nothing: a payment is never split (its amount is immutable); the rest is refunded first
   v_net := new.amount_cents - new.refunded_cents;
   if v_net <= 0 or v_net > app.invoice_online_balance(inv.id) then
@@ -125,10 +131,12 @@ revoke all on function app.refund_counted(uuid) from public, anon, authenticated
 -- together — reviews of this PR) never takes it off a second time. Only the steps below write it; the app does not read it.
 alter table public.refunds add column unwound_at timestamptz;
 
--- a counted refund failed: its amount comes off refunded_cents, never below what the other rows prove; once per row (the
--- row is locked and marked). p_counted: the row was in the money before (succeeded, or pending with its id), or it is a
--- Stripe-made refund (dashboard) whose charge.refunded may have raised the money before its row came — then only what the
--- rows do not explain comes off. The owner is asked to look (needs_review), the reason is kept.
+-- a failed refund gives its money back: its amount comes off refunded_cents, never below what the other rows prove; once
+-- per row (the row is locked and marked). p_counted = true: the row surely was in the money (succeeded, or pending with its
+-- id, before this event). false: maybe — a row met first as failed (Stripe's dashboard refund whose refund.created is late,
+-- our row tied to Stripe by this very event): its money can only be in refunded_cents through charge.refunded, so it comes
+-- off only when the money the rows do not explain is at least its amount (director's review of #449 №1, №3: a $30 refund
+-- known by charge.refunded alone and a failed $50 one → the $30 stays). The owner is asked to look (needs_review).
 create or replace function app.refund_unwind(p_refund_id uuid, p_counted boolean default true)
 returns text language plpgsql security definer set search_path = '' as $$
 declare
@@ -138,8 +146,12 @@ declare
 begin
   select * into r from public.refunds where id = p_refund_id for update;
   select * into p from public.payments where id = r.payment_id for update;
-  if r.id is null or p.id is null or r.status not in ('failed', 'canceled') or r.unwound_at is not null or not p_counted then
+  if r.id is null or p.id is null or r.status not in ('failed', 'canceled') or r.unwound_at is not null then
     return 'stale';
+  end if;
+  if not p_counted and p.refunded_cents - app.refund_counted(p.id) < r.amount_cents then
+    update public.payments set needs_review = true where id = p.id;
+    return 'never_counted';                             -- not marked: nothing came off
   end if;
   update public.refunds set unwound_at = now() where id = r.id;
   v_new := greatest(app.refund_counted(p.id), p.refunded_cents - r.amount_cents, 0);
@@ -413,7 +425,14 @@ begin
 
   -- 20д debts: the row of this Stripe refund as it was before the event (counted = succeeded, or pending with its id)
   if v_refund and o ->> 'id' ~ '^(re|pyr)_[A-Za-z0-9]{1,64}$' then
-    select * into v_was from public.refunds where stripe_refund_id = o ->> 'id' for update;   -- the second event waits
+    -- by Stripe's id, or by our id in metadata (stripe-refund may be tying it right now: we wait for its transaction and
+    -- read the row as it committed — director's review of #449 №1)
+    select * into v_was from public.refunds
+     where stripe_refund_id = o ->> 'id'
+        or (v_ours ~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' and id = v_ours::uuid
+            and idempotency_key like 'octo:%')
+     order by (stripe_refund_id = o ->> 'id') desc nulls last limit 1
+       for update;
   end if;
 
   -- 20д: Stripe may tell about our refund before stripe-refund keeps its answer. The row is found by its id in metadata —
@@ -445,11 +464,10 @@ begin
   -- money follows the rows (a refund made in Stripe's dashboard after a failure — charge.refunded no longer decides).
   if v_refund and v_r = 'processed' and o ->> 'id' ~ '^(re|pyr)_[A-Za-z0-9]{1,64}$' then
     select * into v_now from public.refunds where stripe_refund_id = o ->> 'id';
-    if v_now.status in ('failed', 'canceled') then
-      -- counted before this event, or Stripe's own refund met first as failed (refund.created late): its money may be in
-      -- refunded_cents through charge.refunded — once per row, never below what the rows prove
-      perform app.refund_unwind(v_now.id, (v_was.id is not null and v_was.status in ('succeeded', 'pending'))
-                                          or (v_was.id is null and v_now.idempotency_key like 'stripe:%'));
+    if v_now.status in ('failed', 'canceled') and (v_was.id is null or v_was.status not in ('failed', 'canceled')) then
+      -- this event made it failed: surely counted when it was succeeded / pending with its id before; else maybe (above)
+      perform app.refund_unwind(v_now.id, v_was.id is not null and v_was.stripe_refund_id is not null
+                                          and v_was.status in ('succeeded', 'pending'));
       perform app.refund_sync_money(v_now.payment_id);
     elsif v_now.id is not null then
       perform app.refund_sync_money(v_now.payment_id);

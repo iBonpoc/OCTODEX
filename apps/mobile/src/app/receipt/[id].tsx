@@ -91,6 +91,14 @@ export default function ReceiptScreen() {
             <T v="caption" tone="mut">
               {t("mny.adv.notCounted")}
             </T>
+            {/* why «Зачесть» is not there yet: a refund of it may still come back (t41, 30 days) */}
+            {advance.refundOpen ? (
+              <View testID="rcpt-advance-wait">
+                <T v="caption" tone="mut">
+                  {t("mny.adv.err.advance_refund_settling")}
+                </T>
+              </View>
+            ) : null}
           </View>
         ) : null}
         {p.needsReview && !advance ? (

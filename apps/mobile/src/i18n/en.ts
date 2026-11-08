@@ -1810,6 +1810,7 @@ export const en: Dict = {
   "mny.adv.err.advance_not_applicable": "This payment cannot be applied",
   "mny.adv.err.advance_disputed": "The payment is disputed — no apply",
   "mny.adv.err.advance_refund_in_progress": "A refund of this advance is on its way — try later",
+  "mny.adv.err.advance_refund_settling": "A refund of this advance may still come back from the bank (up to 30 days) — apply it later",
   "mny.adv.err.advance_above_balance": "Above the invoice's balance — refund the difference first",
   "mny.adv.err.advance_already_applied": "The advance is already applied",
   "mny.adv.err.not_allowed": "Only the owner or an admin applies it",
