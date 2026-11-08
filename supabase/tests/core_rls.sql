@@ -7799,8 +7799,9 @@ select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f940000
 :as_tech94
 select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f9400000-%'$q$) = 3
           and app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f9400000-0000-4000-8000-000000000003.jpg')
-          and not app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f9400000-0000-4000-8000-000000000004.jpg'),
-          'T94 a tech sees the photos (and objects) of a measurement she sees, not of another');
+          and not app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f9400000-0000-4000-8000-000000000004.jpg')
+          and app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f9400000-0000-4000-8000-000000000001.jpg'),
+          'T94 a tech sees the photos (and objects) of a measurement she sees, not of another; uploads her own');
 -- another tech and a subcontractor: nothing of hers
 :as_tech94b
 select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f9400000-%'$q$) = 0
@@ -7817,6 +7818,42 @@ select tst.blocked($q$insert into public.files (company_id, kind, measurement_id
 select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f9400000-%'$q$) = 0, 'T94 another company sees nothing');
 select tst.fails($q$insert into public.files (company_id, kind, measurement_id) values ('cb000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000001')$q$,
           'T94 another company cannot hang a photo on A''s measurement');
+-- like the measurement: a tech also sees the photos of one on her lead and on the property of her visit
+:as_super
+insert into public.leads (id, company_id, source_id, contact_name, phone, assigned_to) values
+  ('19400000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T94 Lead', '+13235550941', 'a9400000-0000-4000-8000-000000000001');
+insert into public.visits (id, company_id, property_id, starts_at, ends_at) values
+  ('f9400000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'd1a00000-0000-0000-0000-000000000002', now(), now() + interval '2 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f9400000-0000-4000-8000-0000000000a1', 'a9400000-0000-4000-8000-000000000001');
+:as_owner_a
+insert into public.gutter_measurements (id, company_id, lead_id) values ('9e940000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '19400000-0000-4000-8000-000000000001');
+insert into public.gutter_measurements (id, company_id, property_id) values ('9e940000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.files (id, company_id, kind, measurement_id) values
+  ('f9410000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000003'),
+  ('f9410000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000004');
+:as_tech94
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f9410000-%'$q$) = 2
+          and app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f9410000-0000-4000-8000-000000000001.jpg')
+          and app.can_read_file_object('ca000000-0000-0000-0000-000000000000/f9410000-0000-4000-8000-000000000002.jpg'),
+          'T94 a tech sees the photos of a measurement on her lead and on her visit''s property');
+:as_tech94b
+select tst.ok(tst.cnt($q$select 1 from public.files where id::text like 'f9410000-%'$q$) = 0, 'T94 …another tech does not');
+select tst.blocked($q$update public.files set deleted_at = now() where id = 'f9400000-0000-4000-8000-000000000001'$q$, 'T94 another tech cannot remove her photo');
+-- a visit's photo is never also a measurement's (it would reach whoever sees the measurement — security-check №1)
+:as_owner_a
+insert into public.files (id, company_id, kind, visit_id) values
+  ('f9410000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'photo', 'f9400000-0000-4000-8000-0000000000a1');
+select tst.fails($q$update public.files set measurement_id = '9e940000-0000-4000-8000-000000000002' where id = 'f9410000-0000-4000-8000-000000000003'$q$,
+          'T94 a visit''s photo cannot be put on a measurement');
+select tst.fails($q$insert into public.files (company_id, kind, measurement_id, visit_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002', 'f9400000-0000-4000-8000-0000000000a1')$q$,
+          'T94 …nor made both at once');
+select tst.fails($q$insert into public.files (company_id, kind, measurement_id, customer_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002', 'c1a00000-0000-0000-0000-000000000001')$q$,
+          'T94 …nor a client''s');
+-- a photo's measurement is set once (security-check №2): no moving, no unpinning
+:as_tech94
+select tst.fails_like($q$update public.files set measurement_id = null, element_id = null where id = 'f9400000-0000-4000-8000-000000000002'$q$,
+          '%set once%', 'T94 a photo''s measurement is set once');
 -- after the trial (founder О2): read yes, add no — the office too; a visit's photo is not touched by the rule
 :as_super
 update public.company_modules set trial_ends_at = now() - interval '1 minute' where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
@@ -7828,6 +7865,15 @@ select tst.blocked($q$insert into public.files (company_id, kind, measurement_id
 select tst.blocked($q$insert into public.files (company_id, kind, measurement_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002')$q$,
           'T94 …nor the office');
 select tst.blocked($q$update public.files set deleted_at = now() where id = 'f9400000-0000-4000-8000-000000000004'$q$, 'T94 …nor removes one');
+select tst.fails($q$update public.files set measurement_id = null where id = 'f9400000-0000-4000-8000-000000000004'$q$, 'T94 …nor unpins one');
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f9400000-0000-4000-8000-000000000004.jpg'),
+          'T94 …nor uploads its bytes (security-check №3)');
+:as_tech94
+select tst.blocked($q$update public.files set storage_key = 'ca000000-0000-0000-0000-000000000000/f9400000-0000-4000-8000-000000000001.jpg', upload_status = 'uploaded' where id = 'f9400000-0000-4000-8000-000000000001'$q$,
+          'T94 after the trial a tech does not record an upload');
+select tst.ok(not app.can_write_file_object('ca000000-0000-0000-0000-000000000000/f9400000-0000-4000-8000-000000000001.jpg'),
+          'T94 …nor uploads the bytes of her photo');
+:as_owner_a
 insert into public.files (id, company_id, kind) values ('f9400000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000', 'document');
 select tst.ok(tst.cnt($q$select 1 from public.files where id = 'f9400000-0000-4000-8000-000000000009'$q$) = 1, 'T94 other files are saved as before');
 -- at most 300 photos per measurement (the server's own roles too)
@@ -7836,15 +7882,26 @@ insert into public.files (company_id, kind, measurement_id)
   select 'ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002' from generate_series(1, 299);
 select tst.fails_like($q$insert into public.files (company_id, kind, measurement_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002')$q$,
           '%at most 300 photos%', 'T94 the 301st photo of a measurement is refused');
+-- removed photos do not count (security-check №5а); bringing one back over the limit is refused
+update public.files set deleted_at = now()
+ where id in (select id from public.files where measurement_id = '9e940000-0000-4000-8000-000000000002' and deleted_at is null and id::text not like 'f94%' limit 1);
+insert into public.files (company_id, kind, measurement_id) values ('ca000000-0000-0000-0000-000000000000', 'photo', '9e940000-0000-4000-8000-000000000002');
+select tst.fails_like($q$update public.files set deleted_at = null where measurement_id = '9e940000-0000-4000-8000-000000000002' and deleted_at is not null$q$,
+          '%at most 300 photos%', 'T94 a removed photo frees its place; bringing it back over 300 is refused');
 -- rights (rule 18, T52)
 select tst.ok(not has_function_privilege('anon', 'app.tg_files_measurement_limit()', 'EXECUTE')
           and not has_function_privilege('authenticated', 'app.tg_files_measurement_limit()', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.tg_files_measurement_fixed()', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.can_write_file_object(text)', 'EXECUTE')
           and not has_function_privilege('anon', 'app.can_read_file_object(text)', 'EXECUTE')
           and not has_table_privilege('anon', 'public.files', 'SELECT')
           and not has_table_privilege('authenticated', 'public.files', 'DELETE'),
           'T94 rights: the trigger function is not callable; anon nothing; no deletes');
 -- clean up
-delete from public.files where company_id = 'ca000000-0000-0000-0000-000000000000' and (measurement_id is not null or id = 'f9400000-0000-4000-8000-000000000009');
+delete from public.files where company_id = 'ca000000-0000-0000-0000-000000000000' and (measurement_id is not null or id = 'f9400000-0000-4000-8000-000000000009' or id::text like 'f9410000-%');
+delete from public.visit_assignees where visit_id = 'f9400000-0000-4000-8000-0000000000a1';
+update public.visits set deleted_at = now() where id = 'f9400000-0000-4000-8000-0000000000a1';
+update public.leads set deleted_at = now() where id = '19400000-0000-4000-8000-000000000001';
 delete from public.gutter_measurement_elements where company_id = 'ca000000-0000-0000-0000-000000000000';
 delete from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000';
 delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000';
