@@ -99,8 +99,8 @@ exports.run = async (h) => {
   await p.keyboard.press("Escape"); await p.waitForTimeout(300);
   await h.go("/plan"); await p.waitForTimeout(300);
 
-  // 24 §B, the cut names: a late visit's chip says only «Опаздывает» (the detail is in the subtitle); a job number is the
-  // last part of a subtitle (cut first). Our own late visit: 40 minutes ago, not left (skipped in the company's first hour)
+  // 24 §B, the cut names: a late visit's chip says only «Опаздывает» (the detail is a tag); a job number is a whole
+  // fact of the card. Our own late visit: 40 minutes ago, not left (skipped in the company's first hour)
   if (minuteOf(Date.now()) >= 60) {
     await p.evaluate((start) => {
       const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
@@ -112,12 +112,14 @@ exports.run = async (h) => {
     await h.clickText("Неделя"); await p.waitForTimeout(300);
     h.expect((await p.getByText("Опаздывает · не выехал", { exact: true }).locator("visible=true").count()) === 0, "no long «Опаздывает · не выехал» chip");
     h.expect((await p.getByText("Опаздывает", { exact: true }).locator("visible=true").count()) > 0, "the chip says «Опаздывает»");
-    await h.expectText(/ · не выехал · /, "the detail is in the subtitle");
+    // ListCard (10а): the detail is a grey tag next to the chip
+    h.expect((await p.getByText("не выехал", { exact: true }).locator("visible=true").count()) > 0, "the detail «не выехал» is a tag of its own");
   }
   await h.clickText("Неделя"); await p.waitForTimeout(300);
-  const subs = await p.getByTestId("plan-feed").locator("visible=true").first().innerText();
-  const withJob = subs.split("\n").filter((l) => /JOB-\d+/.test(l));
-  h.expect(withJob.length > 0, "at least one subtitle carries a job number (the check below is not blind)");
-  h.expect(withJob.every((l) => /JOB-\d+$/.test(l.trim())), "a job number ends its subtitle");
+  // ListCard (10а): the job number is a fact of its own, whole (06 §0: no «…»)
+  const feedText = await p.getByTestId("plan-feed").locator("visible=true").first().innerText();
+  // the number is on the 1280 row-card; a phone / tablet card keeps to where and who (an overview of the day)
+  if (h.layout.width >= 1280) h.expect(/JOB-\d+/.test(feedText), "at least one card carries a job number");
+  h.expect(!feedText.includes("…"), "no «…» on the Week's cards");
 
 };

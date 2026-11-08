@@ -48,7 +48,7 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
               {r.people.map((x) => {
                 const ph = x.phones.find((y) => y.primary) ?? x.phones[0];
                 return (
-                  // a person of the property: role and phone under the name, the call button stays (not a compact card)
+                  // a person of the property: role beside the name, phone as a fact, call / SMS buttons of the card (regular, not compact)
                   <ListCard
                     key={x.id}
                     density="regular"
