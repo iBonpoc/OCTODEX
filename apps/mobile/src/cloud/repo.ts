@@ -614,6 +614,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         billing: billingOf(c),
         taxExempt: c.tax_exempt == null ? undefined : !!c.tax_exempt,
         taxExemptNote: (c.tax_exempt_note as string | null) ?? undefined,
+        // step 17 C3: a server before migration 20261109120000 has no not_duplicate_ids (undefined → none)
+        mergedIntoId: (c.merged_into_customer_id as string | null) ?? undefined,
+        notDuplicateIds: Array.isArray(c.not_duplicate_ids) && c.not_duplicate_ids.length ? (c.not_duplicate_ids as string[]) : undefined,
       };
     }),
     serviceCategories: catRows

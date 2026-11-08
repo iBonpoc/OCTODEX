@@ -1,6 +1,7 @@
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { canServe, visibleClients } from "@/features/clients";
+import { mergedTarget } from "@/features/clientDuplicates";
 import { clientRowsFor, isClientSection } from "@/features/clientRows";
 import { ClientSection } from "@/features/client/ClientSections";
 import { ClientCardBody } from "@/features/client/ClientCard";
@@ -20,6 +21,19 @@ export default function ClientScreen() {
   const c = visibleClients(db, role).find((x) => x.id === id);
   const toCard = () => router.replace(`/client/${id}`);
   const back = () => (router.canGoBack() ? router.back() : s ? toCard() : router.replace("/clients"));
+  // step 17 C3: an old link to a card merged into another — say where everything went (docs/specs/04 §13)
+  const kept = !c ? mergedTarget(db, id) : undefined;
+  if (!c && kept && visibleClients(db, role).some((x) => x.id === kept.id))
+    return (
+      <Screen title={t("clients.title")} back={back}>
+        <Empty
+          icon="user"
+          title={t("clientDup.merged")}
+          hint={t("clientDup.mergedHint", { name: kept.name })}
+          action={<Button label={t("clientDup.open", { name: kept.name })} onPress={() => router.replace(`/client/${kept.id}`)} />}
+        />
+      </Screen>
+    );
   if (!c)
     return (
       <Screen title={t("clients.title")} back={back}>

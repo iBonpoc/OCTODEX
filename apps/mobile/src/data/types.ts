@@ -94,6 +94,10 @@ export interface Customer {
   taxExempt?: boolean;
   /** certificate number or reason */
   taxExemptNote?: string;
+  /** step 17 C3 (docs/specs/04 §13): this card was merged into that one (server: merged_into_customer_id; it is archived) */
+  mergedIntoId?: ID;
+  /** clients the office said are not duplicates of this one (server: not_duplicate_ids) */
+  notDuplicateIds?: ID[];
 }
 export interface BillingAddress {
   line1: string;

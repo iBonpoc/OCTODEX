@@ -6,9 +6,8 @@ import { component, radius, size, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
 import { usePersistentState } from "@/data/persist";
-import { peopleForLead, phonesOfPeople } from "@/data/people";
 import {
-  canSeeLead, findDuplicates, isClosedLead, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
+  isClosedLead, leadDuplicatesFor, isOpenLead, leadStatusView, leadTimeline, leadTurn, MANUAL_WIN_REASONS,
   responseMinutes, type LeadTurn, type ManualWinReason,
 } from "@/features/leads";
 import { leadSettingsOf } from "@/features/leadSettings";
@@ -59,10 +58,8 @@ export function LeadCardBody({ l, wrap, inPanel, openLead }: { l: Lead; wrap?: (
   const sv = leadStatusView[l.status];
   const turn = leadTurn(db, l, leadSettingsOf(db.company));
   const replied = responseMinutes(l);
-  const mine = peopleForLead(db, l);
-  const found = findDuplicates(db, { phones: phonesOfPeople(mine), emails: mine.flatMap((p) => p.emails.map((e) => e.address)) }, l.id);
-  // only leads this role may open (a tech sees his own): another's lead is neither shown nor opened
-  const dups = { ...found, leads: found.leads.filter((d) => canSeeLead(role, db.me, d)) };
+  // a tech sees only the duplicate leads he may see (canSeeLead, review #442) — one rule, unit-tested
+  const dups = leadDuplicatesFor(db, role, l);
   // «do not service» (04 §4, §12): the client of this lead, or a client with the same phone / email — a red mark
   const ownClient = l.customerId ? db.customers.find((c) => c.id === l.customerId) : undefined;
   const closed = notServed([...(ownClient ? [ownClient] : []), ...dups.customers.filter((c) => c.id !== l.customerId)]);

@@ -95,7 +95,7 @@ const CREATES: Creates = {
   "customFieldValue.remove": none, "source.save": (o) => [o.source.id],
   "customer.create": (o) => [o.customerId, o.contactId, o.propertyId], "customer.update": none,
   "customer.people": (o) => o.people.map((x) => x.id), "lead.people": (o) => o.people.map((x) => x.id),
-  "customer.tags": none, "customer.status": none, "tag.save": (o) => [o.tag.id],
+  "customer.tags": none, "customer.status": none, "customer.merge": none, "customer.notDup": none, "tag.save": (o) => [o.tag.id],
   "serviceCategory.save": (o) => (o.isNew ? [o.category.id] : []), "job.category": none, "job.complete": none,
   "job.create": (o) => [o.id], "job.update": none, "job.tags": none, "jobLine.save": (o) => (o.isNew ? [o.line.id] : []),
   "jobLine.remove": none, "jobLine.restore": none, "jobType.save": (o) => (o.isNew ? [o.jobType.id] : []),
