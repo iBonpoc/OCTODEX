@@ -10931,6 +10931,8 @@ select tst.ok(not has_table_privilege('authenticated', 'app.rate_hits', 'SELECT'
 select tst.fails($q$select public.pay_rate_take('not-a-hash')$q$, 'T140 the token comes as sha256 hex, never plain');
 select tst.fails($q$select public.pay_rate_take(repeat('a', 64), '1.2.3.4')$q$, 'T140 …and the IP as its HMAC, never plain');
 select tst.fails($q$select app.rate_take(array['x:1'], array[1, 2], interval '1 minute')$q$, 'T140 one limit per key');
+select tst.fails($q$select app.rate_take(array['x:1'], array[null]::int[], interval '1 minute')$q$, 'T140 an empty limit is no «no limit»');
+select tst.fails($q$select app.rate_take(array['x:1'], array[0], interval '1 minute')$q$, 'T140 …nor a zero one');
 -- 10 per token: the 11th is refused with a wait, and writes nothing
 select tst.ok((select bool_and(public.pay_rate_take(repeat('1', 64), repeat('2', 64), repeat('3', 64)) is null) from generate_series(1, 10)), 'T140 ten tries of one link pass');
 select tst.ok((select public.pay_rate_take(repeat('1', 64), repeat('2', 64), repeat('3', 64)) between 1 and 600), 'T140 the 11th waits (seconds, at most the window)');
@@ -10976,12 +10978,12 @@ select tst.ok((select charges_enabled from public.stripe_accounts where account_
 select tst.ok((select reason = 'stale' from app.stripe_events where event_id = 'evt_T141a1'), 'T141 …the journal says why');
 select tst.ok((select not (payload -> 'data' -> 'object' ? 'email') and not (payload -> 'data' -> 'object' ? 'individual') and not (payload -> 'data' ? 'previous_attributes')
                  from app.stripe_events where event_id = 'evt_T141a2'), 'T141 the journal keeps no owner email, person or previous values');
--- stripe-connect read the account itself just now: an event made before that is older
-:as_service
-select public.stripe_account_save('cb000000-0000-0000-0000-000000000000', '{"id":"acct_T126B","charges_enabled":true}');
-select tst.ok(app.stripe_event_apply('{"id":"evt_T141a3","type":"account.updated","created":1750000000,"account":"acct_T126B","data":{"object":{"id":"acct_T126B","charges_enabled":false}}}') = 'ignored', 'T141 an event older than our own read is not applied');
+-- the same second is not «older» (whole seconds: the later arrival wins); our own read in stripe-connect is never compared
+select tst.ok(app.stripe_event_apply('{"id":"evt_T141a3","type":"account.updated","created":1700000000,"account":"acct_T126B","data":{"object":{"id":"acct_T126B","charges_enabled":true,"payouts_enabled":true}}}') = 'processed', 'T141 an event of the same second is applied');
+select public.stripe_account_save('cb000000-0000-0000-0000-000000000000', '{"id":"acct_T126B","charges_enabled":false}');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T141a4","type":"account.updated","created":1700000005,"account":"acct_T126B","data":{"object":{"id":"acct_T126B","charges_enabled":true}}}') = 'processed', 'T141 a newer event after our own read is applied (review: it was dropped as stale)');
 :as_super
-select tst.ok((select charges_enabled from public.stripe_accounts where account_id = 'acct_T126B'), 'T141 …payments stay on');
+select tst.ok((select charges_enabled and last_event_at = to_timestamp(1700000005) from public.stripe_accounts where account_id = 'acct_T126B'), 'T141 …payments on, the last event''s time kept');
 :as_service
 -- a type we do not apply is kept without its payload
 select tst.ok(app.stripe_event_apply('{"id":"evt_T141c","type":"customer.updated","account":"acct_T126A","data":{"object":{"id":"cus_1","name":"Ann Client","email":"ann@example.com","phone":"+15555550100"}}}') = 'ignored', 'T141 another type is ignored');

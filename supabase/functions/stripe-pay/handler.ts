@@ -131,6 +131,8 @@ export function cors(origin: string | null): Record<string, string> | null {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
     "Access-Control-Allow-Headers": "authorization, content-type, apikey, x-client-info",
+    // the page may read how long to wait (429)
+    "Access-Control-Expose-Headers": "Retry-After",
     Vary: "Origin",
   };
 }
@@ -208,9 +210,16 @@ export async function handlePay(req: Req, deps: PayDeps): Promise<Res> {
   try {
     const ip = clientIp(req, deps.ipHeaders);
     if (!deps.hmac || !ip) deps.log?.(`stripe-pay: no ${deps.hmac ? "trusted ip header" : "ip secret"} — the whole-function ceiling counts`);
-    const ipHash = deps.hmac && ip ? await deps.hmac(`pay:${ipKey(ip)}`) : null;
+    // an HMAC that fails (the secret could not be loaded) counts as no IP: the whole-function ceiling, never no limit at all
+    const hmac = deps.hmac;
     const net = ip ? netKey(ip) : null;
-    const netHash = deps.hmac && ipHash && net ? await deps.hmac(`pay:${net}`) : null;
+    const hashed = hmac && ip
+      ? await Promise.all([hmac(`pay:${ipKey(ip)}`), net ? hmac(`pay:${net}`) : Promise.resolve(null)]).catch(() => {
+          deps.log?.("stripe-pay: ip hmac failed — the whole-function ceiling counts");
+          return [null, null] as const;
+        })
+      : ([null, null] as const);
+    const [ipHash, netHash] = hashed;
     const wait = await deps.rate(await deps.sha256(body.token), ipHash, netHash);
     if (wait !== null && wait !== undefined) return busy(wait);
   } catch {

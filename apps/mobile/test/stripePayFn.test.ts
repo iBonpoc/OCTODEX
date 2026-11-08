@@ -318,6 +318,17 @@ describe("stripe-pay: rate limits (spec 35 §4д)", () => {
     expect(logs.join(" ")).toContain("no ip secret");
     expect(logs.join(" ")).not.toContain("203.0.113.7");
   });
+  it("an HMAC that fails counts as no IP (the whole-function ceiling), never no limit", async () => {
+    const seen: Rated[] = [];
+    const { d, logs } = deps({ hmac: async () => { throw new Error("key"); }, rate: async (t, i, n) => (seen.push([t, i, n]), null) });
+    expect((await handlePay(req(), d)).status).toBe(200);
+    expect(seen).toEqual([[`sha(${TOKEN})`, null, null]]);
+    expect(logs.join(" ")).toContain("ip hmac failed");
+  });
+  it("the page may read Retry-After", async () => {
+    const { d } = deps({ rate: async () => 60 });
+    expect((await handlePay(req(), d)).headers["Access-Control-Expose-Headers"]).toBe("Retry-After");
+  });
   it("the limit failing lets the payment through, with a line in the log", async () => {
     const { d, logs } = deps({ rate: async () => { throw new Error("db"); }, invoiceRate: async () => { throw new Error("db"); } });
     expect((await handlePay(req(), d)).status).toBe(200);

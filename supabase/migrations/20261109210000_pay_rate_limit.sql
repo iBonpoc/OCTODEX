@@ -5,7 +5,7 @@
 --    is checked first, then all are written (a refusal on the IP does not spend the token's turn).
 -- 2. Retention of app.stripe_events: the payload is emptied after 30 days (it may hold a client's details), the row lives
 --    180 days — longer than Stripe's 30 days of manual resend, so a resent event is still a «duplicate».
--- 3. app.stripe_event_apply: an older account.updated never overwrites a newer picture of the account; a second event about
+-- 3. app.stripe_event_apply: an older account.updated never overwrites a newer one (by the events' own «created»); a second event about
 --    the same failed refund does not raise needs_review again; types we do not apply are kept without their payload.
 
 -- ---- 1. Rate limits ---------------------------------------------------------------------------------------------------
@@ -28,7 +28,8 @@ declare
   v_wait int;
 begin
   if p_keys is null or p_limits is null or cardinality(p_keys) = 0 or cardinality(p_keys) <> cardinality(p_limits)
-     or p_window is null or p_window <= interval '0' or array_position(p_keys, null) is not null then
+     or p_window is null or p_window <= interval '0' or array_position(p_keys, null) is not null
+     or array_position(p_limits, null) is not null or exists (select 1 from unnest(p_limits) l where l < 1) then
     raise exception 'rate_take: bad arguments' using errcode = '22023';
   end if;
   -- one request of a key at a time; always the same order of locks (no deadlock between two requests of two keys)
@@ -122,6 +123,8 @@ returns jsonb language sql immutable set search_path = '' as $$
       jsonb_set(p_event #- '{data,previous_attributes}', '{data,object}',
                 (p_event -> 'data' -> 'object') - array['billing_details', 'payment_method_details', 'shipping', 'receipt_email',
                   'customer_details', 'evidence', 'description', 'last_payment_error',
+                  -- older API versions nest the charges (with their billing details) in a payment intent; an open receipt link
+                  'charges', 'receipt_url', 'destination_details',
                   -- an account: its owner's person, email, business profile, bank accounts
                   'email', 'individual', 'company', 'business_profile', 'external_accounts', 'settings', 'tos_acceptance',
                   -- a customer: name, phone, address
@@ -152,28 +155,9 @@ end;
 $$;
 
 -- ---- 3. Applying events: order of account pictures, one flag per failed refund ------------------------------------------
--- when the account picture we hold was taken: the event's «created», or the moment stripe-connect read the account itself
-alter table public.stripe_accounts add column if not exists synced_at timestamptz;
-
-create or replace function public.stripe_account_save(p_company_id uuid, p_account jsonb)
- returns jsonb
- language plpgsql
- security definer
- set search_path to ''
-as $$
-declare r public.stripe_accounts;
-begin
-  if exists (select 1 from public.companies where id = p_company_id and closed_at is not null) then
-    raise exception 'the company is closed' using errcode = '42501';
-  end if;
-  r := app.stripe_account_sync(p_company_id, p_account);
-  -- read from Stripe just now: an event made before this moment is older than what we hold
-  update public.stripe_accounts set synced_at = now() where company_id = p_company_id;
-  return jsonb_build_object('charges_enabled', r.charges_enabled, 'payouts_enabled', r.payouts_enabled,
-                            'details_submitted', r.details_submitted, 'requirements_due', r.requirements_due,
-                            'disabled_reason', r.disabled_reason, 'livemode', r.livemode);
-end;
-$$;
+-- the «created» of the last account.updated applied (Stripe's clock, whole seconds). Only events set it: our own read in
+-- stripe-connect (another clock, a moment between its GET and its save) is never compared with an event — review of §4д
+alter table public.stripe_accounts add column if not exists last_event_at timestamptz;
 
 create or replace function app.stripe_event_apply(p_event jsonb, p_method text DEFAULT NULL::text)
  RETURNS text
@@ -192,6 +176,7 @@ declare
   v_n       int;
   v_ours    boolean;
   v_prev    text;
+  v_last    timestamptz;
   -- when Stripe made the event (its «created», seconds); null in an event without it
   v_created timestamptz := case when p_event ->> 'created' ~ '^[0-9]{1,12}$' then to_timestamp((p_event ->> 'created')::bigint) end;
 begin
@@ -212,12 +197,17 @@ begin
     select company_id into v_company from public.stripe_accounts where account_id = o ->> 'id' and account_id = v_account;
     if v_company is null then
       v_reason := 'unknown_account';
-    elsif v_created is not null
-          and v_created < coalesce((select s.synced_at from public.stripe_accounts s where s.company_id = v_company), '-infinity') then
-      v_reason := 'stale';                 -- an older picture of the account (a resend, a late retry) never overwrites a newer one
     else
-      perform app.stripe_account_sync(v_company, o);
-      update public.stripe_accounts set synced_at = coalesce(v_created, now()) where company_id = v_company;
+      -- the row locked first: two events of one account at once are applied one after the other, never older-last
+      select s.last_event_at into v_last from public.stripe_accounts s where s.company_id = v_company for update;
+      if v_created is not null and v_created < v_last then
+        v_reason := 'stale';               -- an older picture of the account (a resend, a late retry) never overwrites a newer one
+      else
+        perform app.stripe_account_sync(v_company, o);
+        if v_created is not null then
+          update public.stripe_accounts set last_event_at = greatest(v_created, coalesce(last_event_at, v_created)) where company_id = v_company;
+        end if;
+      end if;
     end if;
 
   elsif v_type in ('payment_intent.processing', 'payment_intent.succeeded', 'payment_intent.payment_failed', 'payment_intent.canceled') then
