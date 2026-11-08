@@ -129,8 +129,8 @@ function LeadsBoard() {
       right={<Button label={t("quick.lead")} icon="plus" size="sm" variant="secondary" onPress={() => router.push("/lead/new")} />}
       aside={
         openL ? (
-          <ListPanel title={openL.name} subtitle={[openL.number, sourceName(db, openL.sourceId), canSeeLeadCost(role) && openL.costCents ? money(openL.costCents) : null, day(openL.receivedAt)].filter(Boolean).join(" · ")} onOpen={panel.full} onClose={panel.close}>
-            <LeadCardBody key={openL.id} l={openL} />
+          <ListPanel title={openL.name} subtitle={[openL.number, sourceName(db, openL.sourceId), canSeeLeadCost(role) && openL.costCents ? money(openL.costCents) : null, day(openL.receivedAt)].filter(Boolean).join(" · ")} outside={panel.outside} onOpen={panel.full} onClose={panel.close}>
+            <LeadCardBody key={openL.id} l={openL} inPanel />
           </ListPanel>
         ) : undefined
       }

@@ -42,6 +42,13 @@ export function focusSelectedRow() {
   rows.find((r) => r.offsetParent !== null)?.focus?.({ preventScroll: true });
 }
 
+/** after ↓/↑ (or any change of the open row): the row is scrolled into view if it went past the edge (долги №7) */
+export function scrollSelectedRow() {
+  if (Platform.OS !== "web" || typeof document === "undefined") return;
+  const rows = [...document.querySelectorAll<HTMLElement>('[data-testid="list-card"][aria-current="true"]')];
+  rows.find((r) => r.offsetParent !== null)?.scrollIntoView?.({ block: "nearest" });
+}
+
 /**
  * One list's panel: `ids` — the rows in their order on screen now; `href` — the card's own screen; `known` — the id
  * exists for this person at all (a link to someone else's card does nothing).
@@ -68,9 +75,17 @@ export function useListPanel(ids: readonly string[], href: (id: string) => strin
   useEffect(() => {
     if (stale) router.setParams({ open: undefined });
   }, [stale]);
+  useEffect(() => {
+    if (!openId || typeof requestAnimationFrame === "undefined") return;
+    // the row is marked on the next render
+    const id = requestAnimationFrame(scrollSelectedRow);
+    return () => cancelAnimationFrame(id);
+  }, [openId]);
   return {
     desktop,
     openId,
+    /** the open card is not among the rows now (out of the filter or the search): the panel says so */
+    outside: !!openId && !ids.includes(openId),
     open: (id: string) => (desktop ? setOpen(id) : router.push(href(id))),
     close: () => setOpen(undefined),
     full: () => {

@@ -1488,6 +1488,7 @@ export const ru = {
   // панель открытой карточки на 1280 (06 «Панель 1280»)
   "card.panel.open": "Открыть",
   "card.panel.close": "Закрыть панель",
+  "card.panel.outside": "Нет в списке — другой фильтр",
   "card.fact.phone": "Телефон",
   "card.fact.email": "Email",
   "card.fact.addr": "Адрес",
