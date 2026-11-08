@@ -1,13 +1,13 @@
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { canSeeReports, categoryReport, collectedReport, NO_CATEGORY, owedReport, REPORTS, salesReport, sourcesReport, type ReportId } from "@/features/reports";
+import { canSeeReports, categoryReport, collectedReport, NO_CATEGORY, owedReport, REPORTS, salesReport, sourcesReport, type ReportId, REPORT_TITLE } from "@/features/reports";
 import type { IconKey } from "@/ui/primitives";
 import { CardGrid, ListCard } from "@/ui/listCard";
 import { useDevice } from "@/theme/ThemeProvider";
 import { CardList, Empty, Screen } from "@/ui/surfaces";
 
-const TITLE: Record<ReportId, DictKey> = { owed: "rpt.owed.title", collected: "rpt.collected.title", sales: "rpt.sales.title", sources: "rpt.sources.title", categories: "rpt.cat.title" };
+const TITLE = REPORT_TITLE;
 const ICON: Record<ReportId, IconKey> = { owed: "invoice", collected: "wallet", sales: "chart", sources: "megaphone", categories: "toolbox" };
 
 /** «Ещё» → Отчёты v1 (wave 8, 13 §3.15; S14; «По направлениям» — step 12б, 18 §11): five reports, each a card with its headline number for this month. */
