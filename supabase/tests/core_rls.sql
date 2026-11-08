@@ -9794,7 +9794,9 @@ select app.stripe_event_apply('{"id":"evt_T128rr","type":"refund.updated","accou
 select app.stripe_event_apply('{"id":"evt_T128rr0","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T128","payment_intent":"pi_T128","amount":2000,"status":"pending"}}}');
 select app.stripe_event_apply('{"id":"evt_T128bd","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T128b","payment_intent":"pi_T128","amount":1000,"status":"succeeded","billing_details":{"name":"Kim","email":"kim@x.test"}}}}');
 select app.stripe_event_apply('{"id":"evt_T128bf","type":"refund.failed","account":"acct_T126A","data":{"object":{"id":"re_T128b","payment_intent":"pi_T128","amount":1000,"status":"failed"}}}');
-select tst.ok(app.stripe_event_apply('{"id":"evt_T128r2","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T128","payment_intent":"pi_T128","amount_refunded":5000}}}') = 'processed', 'T128 the rest refunded');
+-- 20д debts (T136): after a failed Stripe refund charge.amount_refunded no longer decides — the rest comes with its refund row
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128r2","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T128","payment_intent":"pi_T128","amount_refunded":5000}}}') = 'ignored', 'T128 the rest: charge.refunded alone after a failure');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T128r3","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T128c","payment_intent":"pi_T128","amount":3000,"status":"succeeded"}}}') = 'processed', 'T128 the rest refunded (its refund row)');
 select app.stripe_event_apply('{"id":"evt_T128d1","type":"charge.dispute.created","account":"acct_T126A","data":{"object":{"id":"dp_T128","payment_intent":"pi_T128","status":"needs_response"}}}');
 select app.stripe_event_apply('{"id":"evt_T128d2","type":"charge.dispute.closed","account":"acct_T126A","data":{"object":{"id":"dp_T128","payment_intent":"pi_T128","status":"won"}}}');
 select tst.ok(app.stripe_event_apply('{"id":"evt_T128d3","type":"charge.dispute.created","account":"acct_T126A","data":{"object":{"id":"dp_T128","payment_intent":"pi_T128"}}}') = 'ignored', 'T128 a late dispute event does not reopen a closed one');
@@ -10237,6 +10239,137 @@ select tst.fails_like($q$update public.payments set invoice_id = '11350000-0000-
 select tst.ok((select invoice_id is null from public.payments where id = '21350000-0000-4000-8000-000000000001')
           and (select paid_cents = 0 from public.invoices where id = '11350000-0000-4000-8000-000000000002'),
   'T135 …the advance stays without an invoice, the other invoice is untouched');
+-- the door: who, idempotent, the invoice gets the money, the owner is no longer asked, the team hears «paid»
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, sent_at) values
+  ('11350000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T135-4', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T135 void', 9000, 0, 9000, now()),
+  ('11350000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'T135-5', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T135 rest', 6000, 0, 6000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, needs_review) values
+  ('21350000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'ach', 4000, 'pending', 't135-adv-ach', true),
+  ('21350000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'cash', 8000, 'succeeded', 't135-adv-cash', true),
+  ('21350000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'check', 1000, 'succeeded', 't135-adv-disp', true),
+  ('21350000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', null, 'c1260000-0000-4000-8000-000000000001', 'cash', 1500, 'succeeded', 't135-adv-busy', true);
+update public.payments set dispute_status = 'open' where id = '21350000-0000-4000-8000-000000000004';
+update public.invoices set status = 'void', void_reason = 'T135' where id = '11350000-0000-4000-8000-000000000004';
+insert into public.refunds (company_id, payment_id, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', '21350000-0000-4000-8000-000000000005', 500, 'pending', 'octo:t135-busy-1');
+:as_office90
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000003')$q$, '%owner/admin%', 'T135 the office does not apply an advance');
+:as_tech_a
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000003')$q$, '%owner/admin%', 'T135 nor a tech');
+:as_owner_b
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000003')$q$, '%owner/admin%', 'T135 nor another company''s owner');
+:as_owner_a
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000002')$q$, '%advance_other_client%', 'T135 the door: not another client''s invoice');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000004')$q$, '%advance_invoice_not_open%', 'T135 not a void invoice');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000002', '11350000-0000-4000-8000-000000000003')$q$, '%advance_not_applicable%', 'T135 not ACH on its way');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000004', '11350000-0000-4000-8000-000000000003')$q$, '%advance_disputed%', 'T135 not while a dispute is open');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000005', '11350000-0000-4000-8000-000000000003')$q$, '%advance_refund_in_progress%', 'T135 not while a refund of it is on its way');
+select tst.fails_like($q$update public.payments set invoice_id = '11350000-0000-4000-8000-000000000003', status = 'voided' where id = '21350000-0000-4000-8000-000000000003'$q$, '%advance_not_applicable%', 'T135 applied as it is: no other change in the same update');
+select tst.ok((select (j ->> 'balance_cents')::bigint = 7000 and (j ->> 'paid_cents')::bigint = 5000
+                 from (select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000003') j) x),
+  'T135 $50 applied to a $120 invoice: paid $50, owes $70');
+select tst.ok((select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000003') ->> 'repeat') = 'true',
+  'T135 a repeat is the same answer');
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000001', '11350000-0000-4000-8000-000000000005')$q$, '%advance_already_applied%', 'T135 an applied advance does not move to another invoice');
+select tst.fails_like($q$update public.payments set invoice_id = '11350000-0000-4000-8000-000000000005' where id = '21350000-0000-4000-8000-000000000001'$q$, '%immutable%', 'T135 …not by a direct update either');
+-- a cash advance of $80 on a $60 invoice: refund the $20 first (a record, tax 0 without an invoice), then the rest fits
+select tst.fails_like($q$select public.advance_apply('21350000-0000-4000-8000-000000000003', '11350000-0000-4000-8000-000000000005')$q$, '%advance_above_balance%', 'T135 the whole advance or nothing');
+select tst.ok((public.refund_record('21350000-0000-4000-8000-000000000003', 2000, 'other', 'overpaid', 'k135-adv-rf1') ->> 'tax_cents')::bigint = 0,
+  'T135 an advance is refunded as any payment (no invoice — no tax part)');
+select tst.ok((public.advance_apply('21350000-0000-4000-8000-000000000003', '11350000-0000-4000-8000-000000000005') ->> 'balance_cents')::bigint = 0,
+  'T135 …then the $60 left pays the $60 invoice');
+:as_super
+select tst.ok((select needs_review = false and invoice_id = '11350000-0000-4000-8000-000000000003' from public.payments where id = '21350000-0000-4000-8000-000000000001')
+          and (select payment_status = 'partially_paid' from public.invoices where id = '11350000-0000-4000-8000-000000000003')
+          and (select payment_status = 'paid' and paid_cents = 6000 from public.invoices where id = '11350000-0000-4000-8000-000000000005')
+          and (select count(*) = 1 from public.notifications where invoice_id = '11350000-0000-4000-8000-000000000003' and kind = 'invoice.paid' and payload ->> 'advance' = 'true')
+          and (select count(*) >= 1 from public.audit_log where entity_type = 'payments' and entity_id = '21350000-0000-4000-8000-000000000001' and after ->> 'invoice_id' = '11350000-0000-4000-8000-000000000003'),
+  'T135 the invoices owe less, the owner is not asked any more, one «paid» notice, the audit log has it');
 \echo 'T135 advances ok'
+
+-- ---------------------------------------------------------------- T136: an accepted Stripe refund that failed later gives the money back (docs/specs/35 §4г)
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, tax_cents, total_cents, sent_at) values
+  ('11360000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T136-1', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T136 ach', 40000, 0, 40000, now()),
+  ('11360000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T136-2', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T136 card', 10000, 0, 10000, now());
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key, stripe_payment_intent_id) values
+  ('21360000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '11360000-0000-4000-8000-000000000001', 'c1260000-0000-4000-8000-000000000001', 'ach', 40000, 'succeeded', 'stripe:pi_T136A', 'pi_T136A'),
+  ('21360000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '11360000-0000-4000-8000-000000000002', 'c1260000-0000-4000-8000-000000000001', 'card', 10000, 'succeeded', 'stripe:pi_T136C', 'pi_T136C');
+:as_service
+drop table if exists t136;
+create temp table t136 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21360000-0000-4000-8000-000000000001', 40000, 'cancellation', null, 'k136-ach-01') j;
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136a","status":"pending","amount":40000,"payment_intent":"pi_T136A"}');
+:as_super
+select tst.ok((select refunded_cents = 40000 and status = 'refunded' from public.payments where id = '21360000-0000-4000-8000-000000000001')
+          and (select paid_cents = 0 from public.invoices where id = '11360000-0000-4000-8000-000000000001'),
+  'T136 Stripe accepted the ACH refund (pending with its id): counted, the invoice owes $400 again');
+:as_owner_a
+select tst.fails_like($q$update public.payments set refunded_cents = 0, status = 'succeeded' where id = '21360000-0000-4000-8000-000000000001'$q$, '%refund_record%',
+  'T136 the owner does not undo a refund by hand');
+select tst.fails_like($q$update public.payments set status = 'partially_refunded' where id = '21360000-0000-4000-8000-000000000001'$q$, '%refund%',
+  'T136 …nor moves its status back');
+:as_service
+select tst.fails_like($q$update public.payments set refunded_cents = 0, status = 'succeeded' where id = '21360000-0000-4000-8000-000000000001'$q$, '%only grow%',
+  'T136 not even the service lowers it below the refunds Stripe still accepts');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136f1","type":"refund.failed","account":"acct_T126A","data":{"object":{"id":"re_T136a","status":"failed","amount":40000,"payment_intent":"pi_T136A"}}}') = 'processed',
+  'T136 refund.failed (the bank sent the ACH refund back)');
+:as_super
+select tst.ok((select refunded_cents = 0 and status = 'succeeded' and needs_review from public.payments where id = '21360000-0000-4000-8000-000000000001')
+          and (select status = 'failed' from public.refunds where stripe_refund_id = 're_T136a')
+          and (select paid_cents = 40000 and payment_status = 'paid' from public.invoices where id = '11360000-0000-4000-8000-000000000001')
+          and (select count(*) = 1 from public.status_events where entity_id = '21360000-0000-4000-8000-000000000001' and from_status = 'refunded'
+                                                             and to_status = 'succeeded' and reason = 'refund_failed' and actor_type = 'system')
+          and (select count(*) >= 1 from public.audit_log where entity_type = 'payments' and entity_id = '21360000-0000-4000-8000-000000000001'
+                                                         and (before ->> 'refunded_cents')::bigint = 40000 and (after ->> 'refunded_cents')::bigint = 0),
+  'T136 …the money is back: the payment brings $400 again, the invoice is paid, the owner is asked to look, the reason and the audit are kept');
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136f2","type":"refund.updated","account":"acct_T126A","data":{"object":{"id":"re_T136a","status":"failed","amount":40000,"payment_intent":"pi_T136A"}}}') = 'processed',
+  'T136 refund.updated with the same failure');
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136c1","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T136a","payment_intent":"pi_T136A","amount_refunded":40000}}}') = 'ignored',
+  'T136 a late charge.refunded with the old amount_refunded');
+:as_super
+select tst.ok((select refunded_cents = 0 and status = 'succeeded' from public.payments where id = '21360000-0000-4000-8000-000000000001'),
+  'T136 …neither takes the money off a second time nor lifts it back');
+-- a card payment, two Stripe refunds, the second fails: only its part comes back
+:as_service
+drop table t136;
+create temp table t136 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21360000-0000-4000-8000-000000000002', 3000, 'goodwill', null, 'k136-card-1') j;
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136b","status":"succeeded","amount":3000,"payment_intent":"pi_T136C"}');
+drop table t136;
+create temp table t136 as select public.stripe_refund_open('a0000000-0000-0000-0000-000000000001', '21360000-0000-4000-8000-000000000002', 2000, 'goodwill', null, 'k136-card-2') j;
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136c","status":"pending","amount":2000,"payment_intent":"pi_T136C"}');
+:as_super
+select tst.ok((select refunded_cents = 5000 and status = 'partially_refunded' from public.payments where id = '21360000-0000-4000-8000-000000000002'), 'T136 two refunds counted');
+:as_service
+-- stripe-refund asks again later and Stripe now says failed: the same way back
+select public.stripe_refund_settle((select (j ->> 'id')::uuid from t136), '{"id":"re_T136c","status":"failed","amount":2000,"payment_intent":"pi_T136C","failure_reason":"lost_or_stolen_card"}');
+:as_super
+select tst.ok((select refunded_cents = 3000 and status = 'partially_refunded' and needs_review from public.payments where id = '21360000-0000-4000-8000-000000000002')
+          and (select paid_cents = 7000 from public.invoices where id = '11360000-0000-4000-8000-000000000002'),
+  'T136 the failed $20 comes back, the $30 that went stays refunded');
+:as_service
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136c2","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T136c","payment_intent":"pi_T136C","amount_refunded":5000}}}') = 'ignored',
+  'T136 charge.refunded after the failure');
+-- a refund made later in Stripe's dashboard: its rows bring the money (charge.refunded no longer decides alone)
+select tst.ok(public.stripe_webhook_apply('{"id":"evt_T136d1","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T136d","status":"succeeded","amount":1000,"payment_intent":"pi_T136C"}}}') = 'processed',
+  'T136 a dashboard refund after the failure');
+:as_super
+select tst.ok((select refunded_cents = 4000 from public.payments where id = '21360000-0000-4000-8000-000000000002'), 'T136 …counted from its row: $30 + $10');
+\echo 'T136 failed refunds ok'
+
+-- ---------------------------------------------------------------- T137: who calls the new doors and steps (rule 18)
+select tst.ok(has_function_privilege('authenticated', 'public.advance_apply(uuid, uuid)', 'execute')
+          and not has_function_privilege('anon', 'public.advance_apply(uuid, uuid)', 'execute')
+          and not has_function_privilege('authenticated', 'app.refund_unwind(uuid)', 'execute')
+          and not has_function_privilege('service_role', 'app.refund_unwind(uuid)', 'execute')
+          and not has_function_privilege('authenticated', 'app.refund_counted(uuid)', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_advance_apply()', 'execute')
+          and not has_function_privilege('authenticated', 'app.stripe_apply_refunded(uuid, bigint)', 'execute'),
+  'T137 advance_apply — the app; the unwind and its steps — nobody from outside');
+select tst.ok((select count(*) = 3 from app.status_transitions where entity_type = 'payment'
+                and (from_status, to_status) in (('refunded', 'partially_refunded'), ('refunded', 'succeeded'), ('partially_refunded', 'succeeded'))),
+  'T137 the payment moves back exist (only the unwind makes them: T136)');
+\echo 'T137 doors ok'
 
 \echo 'ALL TESTS PASSED'
