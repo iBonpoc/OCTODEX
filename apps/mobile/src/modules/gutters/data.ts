@@ -6,16 +6,20 @@
  *   element.save      {e}   a FULL write of one element, coalesceKey = its id (П15.6)
  *   element.remove    {id}  deleted_at; no key — never merged, keeps its place after the element's save
  *   measurement.remove {id} deleted_at; no key
+ *   photo.add         {f}   a photo of the measurement or of one element: a files row (measurement_id, element_id) and
+ *                           the bytes through the core's upload (spec П21.10); no key; `made` = the file id
+ *   photo.remove      {id}  deleted_at of that files row; no key
+ * The photos live in the core's DB.files (one list of files), the measurement only names them.
  * Pure but for `guttersOps` (the supabase client).
  */
-import type { DB } from "@/data/types";
+import type { DB, FileItem } from "@/data/types";
 import { supabase } from "@/cloud/client";
-import { PermanentError } from "@/cloud/ops";
+import { PermanentError, uploadPhoto } from "@/cloud/ops";
 import type { ModuleOpHandler, ModuleRead, ModuleStore } from "../registry";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
 
 export const KEY = "gutters";
-export const K = { mSave: "measurement.save", mRemove: "measurement.remove", eSave: "element.save", eRemove: "element.remove" } as const;
+export const K = { mSave: "measurement.save", mRemove: "measurement.remove", eSave: "element.save", eRemove: "element.remove", pAdd: "photo.add", pRemove: "photo.remove" } as const;
 
 export interface GutterData {
   measurements: MeasurementRow[];
@@ -116,6 +120,30 @@ export async function loadGutters(read: ModuleRead): Promise<GutterData> {
   return { measurements, elements };
 }
 
+/* ---------- photos (spec П21.10) ---------- */
+/** the photos of a measurement (elementId undefined), of one element (an id), newest last */
+export function photosOf(db: Pick<DB, "files">, measurementId: string, elementId?: string | null): FileItem[] {
+  return (db.files ?? [])
+    .filter((f) => f.kind === "photo" && f.measurementId === measurementId && (elementId === undefined ? !f.elementId : f.elementId === elementId))
+    .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+}
+
+/** a photo of the measurement (or of its element): on the phone at once, to the server through the queue */
+export function addPhoto(store: ModuleStore, x: { id: string; measurementId: string; elementId?: string | null; uri?: string; at: string }) {
+  const f: FileItem = { id: x.id, kind: "photo", measurementId: x.measurementId, ...(x.elementId ? { elementId: x.elementId } : {}), ...(x.uri ? { uri: x.uri } : {}), at: x.at };
+  return store.moduleOp(KEY, {
+    kind: K.pAdd,
+    payload: { f: { id: f.id, measurementId: f.measurementId, elementId: f.elementId ?? null, uri: f.uri ?? null } },
+    apply: (d) => ({ ...d, files: [...(d.files ?? []).filter((y) => y.id !== f.id), f] }),
+    made: [f.id],
+  });
+}
+
+/** a photo removed (deleted_at); the returned undo puts it back (rule 5) */
+export function removePhoto(store: ModuleStore, id: string) {
+  return store.moduleOp(KEY, { kind: K.pRemove, payload: { id }, apply: (d) => ({ ...d, files: (d.files ?? []).filter((y) => y.id !== id) }) });
+}
+
 /* ---------- module.op → the server ---------- */
 export const measurementToDb = (m: MeasurementRow, companyId: string) => ({
   id: m.id, company_id: companyId, property_id: m.propertyId, lead_id: m.leadId, label: m.label, status: m.status, deleted_at: null,
@@ -146,6 +174,27 @@ export const guttersOps: ModuleOpHandler = async (op, { companyId, run }) => {
       if (!id) throw bad(`${op.kind} without an id`);
       const table = op.kind === K.eRemove ? "gutter_measurement_elements" : "gutter_measurements";
       return run(supabase.from(table).update({ deleted_at: now }).eq("id", id).eq("company_id", companyId));
+    }
+    case K.pAdd: {
+      const f = isObj(p.f) ? p.f : null;
+      const id = f && str(f.id);
+      const mid = f && str(f.measurementId);
+      if (!f || !id || !mid) throw bad("photo.add without a photo");
+      const eid = str(f.elementId);
+      await run(
+        supabase.from("files").upsert(
+          { id, company_id: companyId, kind: "photo", measurement_id: mid, element_id: eid ?? null, taken_at: now },
+          { onConflict: "id", ignoreDuplicates: true },
+        ),
+      );
+      const uri = str(f.uri);
+      if (uri) await uploadPhoto(companyId, id, uri);
+      return;
+    }
+    case K.pRemove: {
+      const id = str(p.id);
+      if (!id) throw bad("photo.remove without an id");
+      return run(supabase.from("files").update({ deleted_at: now }).eq("id", id).eq("company_id", companyId));
     }
     default:
       throw bad(`unknown change ${op.kind}`);

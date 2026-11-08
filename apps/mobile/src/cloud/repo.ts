@@ -104,7 +104,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("invoices"),
       live<Row>("payments"),
       // wave П-1: customer_id is new — on a database without the migration read the old columns (preview of a PR)
-      live<Row>("files", "id, visit_id, job_id, customer_id, stage, storage_key, kind, created_at").catch(() => live<Row>("files", "id, visit_id, job_id, stage, storage_key, kind, created_at")),
+      // a server before M5d has no measurement_id / element_id; before wave П-1 no customer_id
+      live<Row>("files", "id, visit_id, job_id, customer_id, measurement_id, element_id, stage, storage_key, kind, created_at")
+        .catch(() => live<Row>("files", "id, visit_id, job_id, customer_id, stage, storage_key, kind, created_at"))
+        .catch(() => live<Row>("files", "id, visit_id, job_id, stage, storage_key, kind, created_at")),
       live<Row>("expenses"),
       live<Row>("catalog_items"),
       // Costs are visible only to owner/admin/office: for others the query returns nothing.
@@ -493,6 +496,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     id: s(f.id), kind: s(f.kind) as FileItem["kind"], jobId: (f.job_id as string | null) ?? undefined, visitId: (f.visit_id as string | null) ?? undefined,
     customerId: (f.customer_id as string | null) ?? undefined, stage: (f.stage as FileItem["stage"] | null) ?? undefined,
     storageKey: (f.storage_key as string | null) ?? undefined, at: s(f.created_at),
+    measurementId: (f.measurement_id as string | null) ?? undefined, elementId: (f.element_id as string | null) ?? undefined,
   }));
   const billingOf = (c: Row): BillingAddress | undefined =>
     c.billing_address_line1

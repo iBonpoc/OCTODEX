@@ -316,3 +316,65 @@ describe("unit:gutterData — M5b: places and «Сделать заявкой» 
     expect(sent).toHaveLength(1);
   });
 });
+
+describe("unit:gutterData — M5d: photos of a measurement and its element (spec 33 П21.10)", () => {
+  const run = async (p: PromiseLike<{ error: unknown }>) => void (await p);
+  const ctx = { companyId: "c1", userId: "u1", run };
+  it("photo.add: a files row on the measurement and the element, a repeat changes nothing; photo.remove: deleted_at", async () => {
+    await guttersOps({ kind: K.pAdd, payload: { f: { id: "f1", measurementId: "m1", elementId: "e1", uri: null } } }, ctx);
+    await guttersOps({ kind: K.pAdd, payload: { f: { id: "f2", measurementId: "m1", elementId: null } } }, ctx);
+    await guttersOps({ kind: K.pRemove, payload: { id: "f1" } }, ctx);
+    expect(calls.map((c) => [c.table, c.verb])).toEqual([["files", "upsert"], ["files", "upsert"], ["files", "update"]]);
+    expect(calls[0]).toMatchObject({ row: { id: "f1", company_id: "c1", kind: "photo", measurement_id: "m1", element_id: "e1" }, opts: { onConflict: "id", ignoreDuplicates: true } });
+    expect(calls[1]).toMatchObject({ row: { id: "f2", measurement_id: "m1", element_id: null } });
+    expect(calls[2]!.eq).toEqual([["id", "f1"], ["company_id", "c1"]]);
+  });
+  it("photo.add with a photo on the phone: the core's upload runs (a photo gone from the phone → marked failed, not retried)", async () => {
+    await guttersOps({ kind: K.pAdd, payload: { f: { id: "f3", measurementId: "m1", uri: "nope://gone.jpg" } } }, ctx);
+    expect(calls.map((c) => [c.table, c.verb])).toEqual([["files", "upsert"], ["files", "update"]]);
+    expect(calls[1]!.row).toEqual({ upload_status: "failed" });
+  });
+  it("a broken photo change: PermanentError, nothing sent", async () => {
+    for (const payload of [{}, { f: { id: "x" } }, { f: { measurementId: "m1" } }]) await expect(guttersOps({ kind: K.pAdd, payload }, ctx)).rejects.toMatchObject({ name: "PermanentError" });
+    await expect(guttersOps({ kind: K.pRemove, payload: {} }, ctx)).rejects.toMatchObject({ name: "PermanentError" });
+    expect(calls).toEqual([]);
+  });
+  it("photosOf / addPhoto / removePhoto: on the phone at once in DB.files; the measurement's own vs an element's", async () => {
+    const { addPhoto, photosOf, removePhoto } = await import("../src/modules/gutters/data");
+    let db = makeSeed();
+    const sent: { kind: string; payload: Record<string, unknown>; made?: string[] }[] = [];
+    const store = {
+      get db() { return db; },
+      moduleOp: (_m: string, ch: { kind: string; payload: Record<string, unknown>; apply: (d: typeof db) => typeof db; made?: string[] }) => {
+        const before = db;
+        db = ch.apply(db);
+        sent.push(ch);
+        return () => { db = before; };
+      },
+    };
+    addPhoto(store, { id: "p1", measurementId: "m1", at: "2026-11-08T10:00:00Z", uri: "file:///a.jpg" });
+    addPhoto(store, { id: "p2", measurementId: "m1", elementId: "e1", at: "2026-11-08T10:01:00Z" });
+    addPhoto(store, { id: "p3", measurementId: "m2", at: "2026-11-08T10:02:00Z" });
+    expect(photosOf(db, "m1").map((f) => f.id)).toEqual(["p1"]);
+    expect(photosOf(db, "m1", "e1").map((f) => f.id)).toEqual(["p2"]);
+    expect(photosOf(db, "m1")[0]).toMatchObject({ kind: "photo", uri: "file:///a.jpg" });
+    expect(sent[0]).toMatchObject({ kind: K.pAdd, payload: { f: { id: "p1", measurementId: "m1", elementId: null, uri: "file:///a.jpg" } }, made: ["p1"] });
+    const undo = removePhoto(store, "p2") as () => void;
+    expect(photosOf(db, "m1", "e1")).toEqual([]);
+    undo();
+    expect(photosOf(db, "m1", "e1").map((f) => f.id)).toEqual(["p2"]);
+  });
+  it("the queue: a newer write of an element never jumps ahead of a photo that names it (real UUIDs)", async () => {
+    const { coalesceAt } = await import("../src/data/outboxCoalesce");
+    const U = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
+    const MID = U(1), A = U(2), F = U(3);
+    const ME = { userId: "u1", companyId: "c1" };
+    const save = (x: number) => ({ k: "module.op", module: "gutters", kind: K.eSave, payload: { e: { ...E, id: A, measurementId: MID, geom: { a: [0, 0], b: [x, 0] } } }, coalesceKey: A, made: [A] }) as Op;
+    const photo = { k: "module.op", module: "gutters", kind: K.pAdd, payload: { f: { id: F, measurementId: MID, elementId: A } }, made: [F] } as Op;
+    const it_ = (id: string, o: Op) => ({ id, op: o, at: "2026-11-08T00:00:00Z", tries: 0, owner: ME });
+    // the element's save, then its photo: a later save of the element goes to the end, after the photo
+    expect(coalesceAt([it_("a", save(10)), it_("p", photo)] as never[], save(20), ME, null)).toBe(-1);
+    // without a photo after it, it merges as before
+    expect(coalesceAt([it_("a", save(10))] as never[], save(20), ME, null)).toBe(0);
+  });
+});

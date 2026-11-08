@@ -225,6 +225,11 @@ export interface FileItem {
   stage?: "before" | "during" | "after" | "other";
   storageKey?: string;
   at: string;
+  /** a module's measurement and its drawn element the photo belongs to (files.measurement_id / element_id, M5d) */
+  measurementId?: ID;
+  elementId?: ID;
+  /** the photo on this phone until it is uploaded (never sent as a field) */
+  uri?: string;
 }
 
 export type VisitStep = "scheduled" | "en_route" | "on_site" | "working" | "signed" | "paid" | "done";
