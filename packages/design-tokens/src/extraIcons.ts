@@ -5,6 +5,8 @@
 export const extraIcons = {
   // ☰ — the app menu (docs/specs/13 §2.2)
   menu: "M4 7h16M4 12h16M4 17h16",
+  // a grip to drag a panel by (a canvas toolbar, founder 08.11)
+  grip: "M9 6h.01M15 6h.01M9 12h.01M15 12h.01M9 18h.01M15 18h.01",
   // «Развернуть на весь экран» — the signature pad (spec 29)
   expand: "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7",
   navigate: "M3 11l18-8-8 18-2-8z",

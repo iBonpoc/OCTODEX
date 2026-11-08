@@ -3,7 +3,7 @@
  * out. Tolerances come from the screen (a finger is ~22 px whatever the zoom) and are passed in as inches.
  * Prilipanie (snapping) is geometry.ts: to the ends of other lines first, else the direction to 45° steps.
  */
-import { nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
+import { centre, chainOf, houseSide, nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type CornerChoice, type Drawing, type DrawnDownspout, type DrawnRun, type FoundCorner, type P } from "../geometry";
 import type { Story } from "./scene";
 import { changeDs, changeRun, type DsAttrs } from "./attrs";
 import type { Choices } from "../settings";
@@ -146,7 +146,16 @@ export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string)
 }
 
 /** a one-finger stroke in progress */
-export type Stroke = { kind: "line"; a: P } | { kind: "end"; id: string; end: 0 | 1; before: Drawing };
+export type Stroke = { kind: "line"; a: P } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | { kind: "ds"; id: string; before: Drawing };
+
+/** a downspout dragged by the finger (founder 08.11): it slides along its own run only */
+export function moveDs(d: Drawing, id: string, p: P): Drawing {
+  const s = d.downspouts.find((x) => x.id === id);
+  const r = s && d.runs.find((x) => x.id === s.runId);
+  if (!s || !r) return d;
+  const atIn = Math.min(runLengthIn(r), Math.max(0, projectOnRun(r, p).atIn));
+  return atIn === s.atIn ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...x, atIn } : x)) };
+}
 
 /**
  * The finger lifted (or the stroke was cancelled — a second finger came for the zoom): the drawing to keep.
@@ -155,6 +164,7 @@ export type Stroke = { kind: "line"; a: P } | { kind: "end"; id: string; end: 0 
  */
 export function finishStroke(g: Stroke, d: Drawing, p: P, tolIn: number, canceled: boolean, newRun: { id: string; attrs: DrawnRun["attrs"] }): Drawing {
   if (g.kind === "end") return canceled ? g.before : moveEnd(g.before, g.id, g.end, p, tolIn);
+  if (g.kind === "ds") return canceled ? g.before : moveDs(g.before, g.id, p);
   if (canceled) return d;
   return addRun(d, newRun.id, g.a, endAt(d, g.a, p, tolIn), newRun.attrs);
 }
@@ -192,4 +202,16 @@ export function setCornerMethod(d: Drawing, corner: Pick<FoundCorner, "runs">, m
     return { ...r, attrs: Object.keys(next).length ? { ...rest, cornerMethod: next } : rest };
   });
   return changed ? { ...d, runs } : d;
+}
+
+/**
+ * Flip the gutter's face (founder 08.11): a tap on an end cap swaps left ↔ right, a corner inside ↔ outside. The face
+ * is one side of the whole line round the house, so every run joined to this one flips with it; the caps and the
+ * corners follow (they are read from the house side).
+ */
+export function flipFace(d: Drawing, runId: string): Drawing {
+  if (!d.runs.some((r) => r.id === runId)) return d;
+  const c = centre(d.runs);
+  const chain = chainOf(d, runId);
+  return { ...d, runs: d.runs.map((r) => (chain.has(r.id) ? { ...r, houseSide: houseSide(r, c) === "L" ? "R" : "L" } : r)) };
 }

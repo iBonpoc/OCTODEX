@@ -7,6 +7,7 @@
  * - a draft the previous version kept on the phone (M4b, device-wide, no owner) is forgotten, never moved in.
  * Finds things by testID; waits on what it checks.
  */
+const { skipLength } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 const OLD = "octo.mod.gutters.draft.v1";
 
@@ -25,6 +26,7 @@ exports.run = async (h) => {
     await p.mouse.down();
     for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + ((b[1] - a[1]) * i) / 12);
     await p.mouse.up();
+    await skipLength(p);
     await p.waitForTimeout(200);
   };
   /** draws one run across the middle (at height share `at`) */

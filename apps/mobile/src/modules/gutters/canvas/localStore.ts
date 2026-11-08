@@ -21,3 +21,9 @@ export async function loadToolbarPlace(): Promise<ToolbarPlace> {
   }
 }
 export const saveToolbarPlace = (p: ToolbarPlace) => AsyncStorage.setItem(TOOLBAR, p).catch(() => {});
+
+/** the toolbar dropped by its grip (founder 08.11): it sticks to the nearest of the bottom, left and right edges */
+export function placeAt(x: number, y: number, w: number, h: number): ToolbarPlace {
+  const d = { left: x, right: w - x, bottom: h - y };
+  return (Object.entries(d) as [ToolbarPlace, number][]).sort((a, b) => a[1] - b[1])[0]![0];
+}

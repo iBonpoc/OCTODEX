@@ -107,11 +107,12 @@ describe("a downspout's label stays off its mark (spec 33 П20.8)", () => {
     const ny = Math.max(l!.y - l!.h / 2, Math.min(300, l!.y + l!.h / 2));
     expect(Math.hypot(nx - 200, ny - 300)).toBeGreaterThan(r);
   });
-  it("buildScene passes dsPad to the downspout's label; «В1» is its text", () => {
+  it("buildScene passes dsPad to the downspout's label: its fittings word over the mark, «D1» inside (founder 08.11)", () => {
     const d = { runs: [{ id: "r", a: [0, 0] as [number, number], b: [240, 0] as [number, number], attrs: { story: 1 } }], downspouts: [{ id: "s", runId: "r", atIn: 120 }] };
     const s = buildScene(d as never, { ...opts(), view: { k: 1, ox: 50, oy: 300 }, dsPad: 12, dsText: (n) => `В${n}` });
     const l = s.labels.find((x) => x.kind === "ds")!;
-    expect(l.text).toBe("В1");
+    expect(l.text).toBe("AAA"); // unset elbows: the engine's default 3 × A
+    expect(s.ds[0]!.text).toBe("В1");
     expect(Math.abs(l.y - s.ds[0]!.at[1])).toBeGreaterThan(12);
   });
 });

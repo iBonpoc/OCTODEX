@@ -6,6 +6,7 @@
  * - a property → «Замер»: its own new measurement linked to it.
  * Finds things by testID; waits on what it checks.
  */
+const { skipLength } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -26,6 +27,7 @@ exports.run = async (h) => {
     await p.mouse.down();
     for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((z[0] - a[0]) * i) / 12, y);
     await p.mouse.up();
+    await skipLength(p);
   };
   const db = () => p.evaluate((k) => (JSON.parse(localStorage.getItem(k) || "null") || {}).db, DB_KEY);
   const data = async () => (await db())?.moduleData?.gutters ?? { measurements: [], elements: [] };

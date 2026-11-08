@@ -6,6 +6,7 @@
  *   is now the lead's; the canvas shows the lead.
  * Finds things by testID; waits on what it checks.
  */
+const { skipLength } = require("../gutters.cjs");
 const DB_KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -47,6 +48,7 @@ exports.run = async (h) => {
   await p.mouse.down();
   for (let i = 1; i <= 12; i++) await p.mouse.move(b.x + b.width * (0.25 + (0.45 * i) / 12), y);
   await p.mouse.up();
+  await skipLength(p);
   await tid("draw-to-lead").waitFor({ timeout: 6000 });
   const mid = new URL(p.url()).searchParams.get("m");
   h.expect(!!mid, "saved as a measurement");

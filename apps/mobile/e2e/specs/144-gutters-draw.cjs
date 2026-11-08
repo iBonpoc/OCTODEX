@@ -6,7 +6,7 @@
  *   its end sticks to it (a corner); the downspout tool puts one on a run; the storey button turns the picked run
  *   to storey 2 (label and colour); «Удалить» → «Отменить» brings it back; «Назад»/«Вернуть»;
  * - П20.8: every toolbar cell has its word under it, none cut off (Желоб, Водосток, Выбрать, Эт 1 / Этаж, Назад, Ещё);
- *   a picked tool says what to do («Нажмите на желоб, где водосток») until it is used; a downspout is «В1» on the canvas;
+ *   a picked tool says what to do («Нажмите на желоб, где водосток») until it is used; a downspout is «D1» on the canvas;
  *   «Удалить» stands by what is picked; «Вернуть» and the toolbar's place are in «Ещё»;
  * - П20.9: after the first gutter «Дальше: поставьте водостоки» + «Водосток» turns the tool on;
  * - the toolbar goes bottom → under the right hand → under the left → bottom (from «Ещё»);
@@ -15,6 +15,7 @@
  * Finds things by testID; waits on what it checks.
  */
 // the demo company's data on the phone: the module's slice DB.moduleData.gutters (spec 33 П21)
+const { skipLength } = require("../gutters.cjs");
 const KEY = "octo.db.v5";
 
 exports.run = async (h) => {
@@ -36,6 +37,7 @@ exports.run = async (h) => {
     await p.mouse.down();
     for (let i = 1; i <= 12; i++) await p.mouse.move(a[0] + ((b[0] - a[0]) * i) / 12, a[1] + ((b[1] - a[1]) * i) / 12);
     await p.mouse.up();
+    await skipLength(p);
     await p.waitForTimeout(200);
   };
   /** the one measurement in the store and its elements, or null */
@@ -96,7 +98,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await count("circle")) === 1, "a downspout on the run");
   await waitFor(async () => (await tid("draw-hint").count()) === 0, "the hint is gone once the downspout is there");
   h.expect((await tid("draw-next").count()) === 0, "a downspout is there: the next step is the estimate, no line");
-  h.expect((await labels()).includes("В1"), "the downspout is «В1» on the canvas");
+  h.expect((await labels()).includes("D1"), "the downspout is «D1» on the canvas");
   h.expect(/Желоб: \d+ ft · водостоков: 1/.test(await tid("draw-total").innerText()), "summary in plain words: gutter feet, downspouts");
   h.expect((await money()) > m2, "the downspout adds to the $");
   await h.shot("drawn");
