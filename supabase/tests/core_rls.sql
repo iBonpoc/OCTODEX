@@ -176,8 +176,9 @@ insert into public.properties (id, company_id, customer_id, address_line1, addre
   ('d1a00000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', '1 Elm St', 'Pasadena', 2),
   ('d1a00000-0000-0000-0000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000002', '9 Oak Ave', 'Glendale', 1);
 
-insert into public.leads (company_id, source_id, contact_name, phone, cost_cents) values
-  ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'Neighbor', '+13235550199', 4500);
+-- (a lead's price lives in lead_costs; leads.cost_cents is retired — 20261108130000, 19 §9 P4)
+insert into public.leads (company_id, source_id, contact_name, phone) values
+  ('ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'Neighbor', '+13235550199');
 
 -- номер, присланный клиентом, игнорируется
 insert into public.jobs (id, company_id, number, title, customer_id, property_id, status) values
@@ -5290,9 +5291,16 @@ select tst.ok((public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc')::t
               jsonb_array_length(public.portal_estimate('tok_costs_0123456789abcdef') -> 'doc' -> 'options' -> 0 -> 'lines') = 2,
               'the sent version is cut the same way');
 :as_super
--- the stored document is untouched (locked versions keep their signed text), only the client's copy is cut
-select tst.ok((select calc_inputs -> 'options' -> 0 -> 'lines' -> 0 ->> 'unitCostCents' from public.estimate_versions v
-                 join public.estimates e on e.current_version_id = v.id where e.title = 'T60 costs') = '4000', 'the app still reads its own costs');
+-- the stored document: since 20261108130000 (19 §9, M1) an OPEN version never keeps a line's unitCostCents (an assigned
+-- tech reads calc_inputs; the app's costs live in estimate_line_costs) — the rest of the line stays as it was stored
+select tst.ok((select calc_inputs -> 'options' -> 0 -> 'lines' -> 0 from public.estimate_versions v
+                 join public.estimates e on e.current_version_id = v.id where e.title = 'T60 costs')
+              = $j${"id": "l1", "name": "Install", "description": "Labor", "group": "labor", "quantity": "2", "unit": "hr", "unitPriceCents": 9000,
+                   "catalogItemId": "cat-1", "vendor": "ABC Supply",
+                   "optional": false, "selected": false, "clientVisible": true}$j$::jsonb,
+              'T100 the stored open document has no line cost, supplier tax or markup, the rest is kept');
+select tst.ok(not jsonb_path_exists((select calc_inputs from public.estimate_versions v join public.estimates e on e.current_version_id = v.id
+                                      where e.title = 'T60 costs'), '$.options[*].lines[*].unitCostCents'), 'T100 no line of it keeps unitCostCents');
 select tst.ok(app.client_doc(null) is null and app.client_doc('"x"') is null and app.client_doc('{}') = '{"options": []}', 'odd documents give nothing or an empty one');
 -- rule 18: only the page function (security definer) calls them
 select tst.ok(not has_function_privilege('anon', 'app.client_doc(jsonb)', 'execute')
@@ -8054,8 +8062,31 @@ do $$ begin
     values ('99000000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 1)$q$, 'T99 the tech writes a cost');
   perform tst.blocked($q$update public.catalog_item_costs set unit_cost_cents = 1$q$, 'T99 the tech changes a cost');
 end $$;
+-- company B «upserts» (ON CONFLICT DO UPDATE, the app's plain save) with A's id: RLS refuses before any trigger
+:as_owner_b
+select tst.fails($q$insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, unit_cost_cents)
+  values ('99000000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'material', 'B', 'ea', 1, 1)
+  on conflict (id) do update set unit_cost_cents = excluded.unit_cost_cents, unit_price_cents = excluded.unit_price_cents$q$, 'T99 company B upserts over A''s item');
+:as_super
+select tst.ok((select unit_cost_cents = 1100 from public.catalog_item_costs where item_id = '99000000-0000-4000-8000-000000000001'), 'T99 A''s cost after B''s upsert');
 :as_sales_a
 select tst.ok(tst.cnt('select 1 from public.catalog_item_costs') = 0, 'T99 sales without view_costs reads no cost');
+-- sales edit the price list but not our costs: a cost sent the old way is blanked, not moved
+update public.catalog_items set unit_cost_cents = 1, markup_bps = 1 where id = '99000000-0000-4000-8000-000000000001';
+:as_super
+select tst.ok((select k.unit_cost_cents = 1100 and i.unit_cost_cents is null and i.markup_bps is null
+                 from public.catalog_item_costs k join public.catalog_items i on i.id = k.item_id where k.item_id = '99000000-0000-4000-8000-000000000001'),
+  'T99 sales without view_costs cannot change a cost through the old column');
+-- a tech never sees costs, also with view_costs switched on by mistake (matrix 04 §1)
+update public.memberships set permissions_override = coalesce(permissions_override, '{}'::jsonb) || '{"view_costs": true}'
+ where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+:as_tech_a
+select tst.ok(tst.cnt('select 1 from public.catalog_item_costs') = 0 and tst.cnt('select 1 from public.estimate_line_costs') = 0,
+  'T99 a tech with view_costs still reads no cost');
+:as_super
+update public.memberships set permissions_override = permissions_override - 'view_costs'
+ where company_id = 'ca000000-0000-0000-0000-000000000000' and user_id = 'a0000000-0000-0000-0000-000000000003';
+:as_sales_a
 select tst.ok(tst.cnt('select 1 from public.catalog_items where unit_cost_cents is not null or markup_bps is not null') = 0, 'T99 sales sees no cost in catalog_items');
 :as_super
 select tst.ok(not exists (select 1 from public.catalog_items where unit_cost_cents is not null or vendor_tax_bps is not null or markup_bps is not null),
@@ -8092,6 +8123,18 @@ select tst.ok((select margin_pct is null from public.estimate_version_costs wher
 select tst.blocked($q$update public.estimate_version_costs set margin_pct = '1'$q$, 'T100 the office writes the margin table directly');
 :as_sales_a
 select tst.ok(tst.cnt('select 1 from public.estimate_version_costs') = 0, 'T100 sales without view_costs reads no margin');
+-- company B «insert or nothing» with A's version id: no margin of A changes (AFTER INSERT fires only for a new row)
+:as_owner_b
+select tst.blocked($q$insert into public.estimate_versions (id, company_id, estimate_id, version_no, totals)
+  values ('a1000000-0000-4000-8000-000000000002', 'cb000000-0000-0000-0000-000000000000', 'a1000000-0000-4000-8000-000000000001', 9, '{"marginPct": "99"}')
+  on conflict (id) do nothing$q$, 'T100 company B inserts with A''s version id');
+:as_office_a
+select tst.ok((select margin_pct is null from public.estimate_version_costs where version_id = 'a1000000-0000-4000-8000-000000000002'), 'T100 B''s insert left A''s margin');
+-- the margin is a number as the engine writes it, nothing else
+select tst.fails($q$update public.estimate_versions set totals = '{"total": 1, "marginPct": "lots"}' where id = 'a1000000-0000-4000-8000-000000000002'$q$, 'T100 a margin that is not a number');
+-- P4: the retired lead cost columns take no value again
+select tst.fails($q$update public.leads set cost_cents = 100 where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T99 leads.cost_cents is retired');
+select tst.fails($q$update public.lead_sources set default_cost_cents = 100 where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T99 lead_sources.default_cost_cents is retired');
 -- a sent version stays locked (t40 is on again after the migration)
 :as_owner_a
 update public.estimate_versions set locked_at = now() where id = 'a1000000-0000-4000-8000-000000000002';

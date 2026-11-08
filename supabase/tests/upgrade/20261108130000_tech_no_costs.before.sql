@@ -12,7 +12,8 @@ insert into public.estimates (id, company_id, number, customer_id, property_id, 
   ('c1300000-0000-4000-8000-0000000000e1', 'c1300000-0000-4000-8000-000000000001', 'T99-1', 'c1300000-0000-4000-8000-0000000000c1', 'c1300000-0000-4000-8000-0000000000d1', 'T99');
 insert into public.estimate_versions (id, company_id, estimate_id, version_no, totals, calc_inputs) values
   ('c1300000-0000-4000-8000-0000000000f1', 'c1300000-0000-4000-8000-000000000001', 'c1300000-0000-4000-8000-0000000000e1', 1,
-   '{"total": 100000, "deposit": 10000, "marginPct": "41.2"}', '{"options":[]}'),
+   '{"total": 100000, "deposit": 10000, "marginPct": "41.2"}',
+   '{"options":[{"id":"o1","name":"A","lines":[{"id":"l1","name":"Bracket","unitPriceCents":1213,"unitCostCents":1000,"quantity":"2"}]}]}'),
   ('c1300000-0000-4000-8000-0000000000f2', 'c1300000-0000-4000-8000-000000000001', 'c1300000-0000-4000-8000-0000000000e1', 2,
    '{"total": 90000, "deposit": 9000, "marginPct": "38.5"}', '{"options":[]}');
 update public.estimate_versions set locked_at = now(), sent_at = now() where id = 'c1300000-0000-4000-8000-0000000000f2';
@@ -21,3 +22,6 @@ select 'c1300000-0000-4000-8000-0000000000b1', 'c1300000-0000-4000-8000-00000000
   from public.lead_sources s where s.company_id = 'c1300000-0000-4000-8000-000000000001' order by position, name limit 1;
 insert into public.lead_costs (lead_id, company_id, cost_cents) values ('c1300000-0000-4000-8000-0000000000b1', 'c1300000-0000-4000-8000-000000000001', 4500);
 update public.lead_sources set default_cost_cents = 3000 where company_id = 'c1300000-0000-4000-8000-000000000001' and name = 'Thumbtack';
+-- a draft with tax for a client made tax exempt after it (t17 refuses its next write — the migration must not trip on it)
+update public.estimate_versions set tax_enabled = true, tax_rate_bps = 950 where id = 'c1300000-0000-4000-8000-0000000000f1';
+update public.customers set tax_exempt = true where id = 'c1300000-0000-4000-8000-0000000000c1';

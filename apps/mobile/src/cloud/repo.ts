@@ -75,6 +75,16 @@ export async function pages<T = Row>(build: () => unknown, order: Order[], cap =
   return out;
 }
 const byId: Order[] = [{ col: "id" }];
+/**
+ * A table the server does not have yet (a PR preview on an older database): [] — the caller reads the old place.
+ * Any other failure (no network, 5xx) fails the load: «no rows» from a dropped read would look like «no cost», and the
+ * next save would write that emptiness back (security check of 19 §9, M2).
+ */
+const orNoTable = (e: unknown): Row[] => {
+  const code = (e as { code?: string } | null)?.code;
+  if (code === "PGRST205" || code === "42P01") return [];
+  throw e;
+};
 const key = (...cols: string[]): Order[] => cols.map((col) => ({ col }));
 
 const activityRowsOf = (companyId: string, cols: string) =>
@@ -114,9 +124,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("estimate_line_costs", "line_item_id, unit_cost_cents", key("line_item_id")).catch(() => [] as Row[]),
       q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
       // 19 §9: the price list's costs and the estimates' margins — only who sees costs gets rows (RLS); a server before
-      // the migration has no such tables: the old columns (catalog_items, totals.marginPct) are read instead
-      every<Row>("catalog_item_costs", "item_id, unit_cost_cents, vendor_tax_bps, markup_bps", key("item_id")).catch(() => [] as Row[]),
-      every<Row>("estimate_version_costs", "version_id, margin_pct", key("version_id")).catch(() => [] as Row[]),
+      // the migration has no such tables: the old columns (catalog_items, totals.marginPct) are read instead; any other
+      // failure fails the load (orNoTable)
+      every<Row>("catalog_item_costs", "item_id, unit_cost_cents, vendor_tax_bps, markup_bps", key("item_id")).catch(orNoTable),
+      every<Row>("estimate_version_costs", "version_id, margin_pct", key("version_id")).catch(orNoTable),
     ]);
   // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
   const signatureRows = await every<Row>("member_signatures", "id, user_id, svg, name, title, created_at, revoked_at").catch(() => [] as Row[]);

@@ -10,6 +10,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 let rows: Record<string, Record<string, unknown>[]> = {};
 /** tables a read of which answers with an error (no such table before the migration) */
 let missing = new Set<string>();
+/** tables a read of which fails like a dropped connection */
+let dropped = new Set<string>();
 const writes: { table: string; row: unknown; opts: unknown }[] = [];
 const writeErr: Record<string, { code: string }> = {};
 function builder(table: string) {
@@ -17,7 +19,9 @@ function builder(table: string) {
   for (const m of ["select", "eq", "is", "order", "limit", "in", "not", "range", "gte"]) b[m] = () => b;
   b.then = (ok: (r: unknown) => unknown, bad?: (e: unknown) => unknown) =>
     Promise.resolve(
-      missing.has(table)
+      dropped.has(table)
+        ? { data: null, error: { message: "TypeError: Failed to fetch", code: "" }, status: 0 }
+        : missing.has(table)
         ? { data: null, error: { message: `relation "public.${table}" does not exist`, code: "PGRST205" }, status: 404 }
         : { data: rows[table] ?? [], error: null },
     ).then(ok, bad);
@@ -44,6 +48,7 @@ const base = (role: string) => ({
 afterEach(() => {
   rows = {};
   missing = new Set();
+  dropped = new Set();
   writes.length = 0;
   for (const k of Object.keys(writeErr)) delete writeErr[k];
 });
@@ -79,6 +84,13 @@ describe("unit:techNoCosts — read (loadCompanyDB)", () => {
     const db = await loadCompanyDB("co-1", "u-me");
     expect(db.catalog[0]).toMatchObject({ costCents: 1000, vendorTaxBps: 1025, markupBps: 1000 });
     expect(db.estimates[0]!.marginPct).toBe("41.2");
+  });
+  it("a dropped read of a side table fails the load — never «no cost» that the next save would write back (M2)", async () => {
+    rows = { ...base("office"), catalog_items: [{ id: "i1", kind: "material", name: "B (test)", unit: "ea", unit_price_cents: 1 }] };
+    dropped = new Set(["catalog_item_costs"]);
+    await expect(loadCompanyDB("co-1", "u-me")).rejects.toBeTruthy();
+    dropped = new Set(["estimate_version_costs"]);
+    await expect(loadCompanyDB("co-1", "u-me")).rejects.toBeTruthy();
   });
   it("the tech: the server gives no side rows and blank columns — no cost, no margin on the phone", async () => {
     rows = {

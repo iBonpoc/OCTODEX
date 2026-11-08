@@ -18,8 +18,14 @@ begin
      or (select locked_at is null or calc_inputs <> '{"options":[]}'::jsonb from public.estimate_versions where id = 'c1300000-0000-4000-8000-0000000000f2') then
     raise exception 'FAILED: T100 upgrade — margins moved to estimate_version_costs, totals without marginPct, the sent version kept';
   end if;
-  if exists (select 1 from pg_trigger where tgname = 't40_version_lock' and tgenabled <> 'O') then
-    raise exception 'FAILED: T100 upgrade — t40_version_lock is on again';
+  if exists (select 1 from pg_trigger t where t.tgrelid = 'public.estimate_versions'::regclass and not t.tgisinternal and t.tgenabled <> 'O') then
+    raise exception 'FAILED: T100 upgrade — every trigger of estimate_versions is on again';
+  end if;
+  -- the open draft lost the cost in its document (M1), the rest of the line is there; its tax snapshot untouched
+  if (select calc_inputs from public.estimate_versions where id = 'c1300000-0000-4000-8000-0000000000f1')
+       <> '{"options":[{"id":"o1","name":"A","lines":[{"id":"l1","name":"Bracket","unitPriceCents":1213,"quantity":"2"}]}]}'::jsonb
+     or not (select tax_enabled from public.estimate_versions where id = 'c1300000-0000-4000-8000-0000000000f1') then
+    raise exception 'FAILED: T100 upgrade — an open document loses only unitCostCents';
   end if;
   begin
     update public.estimate_versions set totals = '{"total": 1}' where id = 'c1300000-0000-4000-8000-0000000000f2';
