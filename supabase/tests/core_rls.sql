@@ -126,9 +126,8 @@ grant execute on all functions in schema tst to authenticated, anon;
 -- SEED
 -- =============================================================================
 :as_super
--- the fixtures below lock versions written by hand (lines, no document); the lock check (migration 20261108190000)
--- is off for them and on again right before T107, which tests it
-alter table public.estimate_versions disable trigger t50_lock_lines_match;
+-- the lock check (migration 20261108190000) stays on for every test (review #415 №1): the fixtures below lock versions
+-- written by hand with no document, which it does not check — as the old quick estimate
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a0000000-0000-0000-0000-000000000001', 'owner@a.test',  '{"full_name":"Owner A","locale":"ru"}'),
   ('a0000000-0000-0000-0000-000000000002', 'office@a.test', '{"full_name":"Dispatcher A"}'),
@@ -8700,8 +8699,6 @@ select tst.ok(not exists (select 1 from pg_trigger where tgname = 't40_version_l
 -- ---------------------------------------------------------------- T107: a version is locked only when its lines match its document (Н1, spec 33 П23.9)
 -- The page /p/ draws app.client_doc(calc_inputs); the server's sums come from estimate_line_items. send_estimate
 -- locks a version only when, per option, the client-visible lines with a non-zero amount are the same on both sides.
-:as_super
-alter table public.estimate_versions enable trigger t50_lock_lines_match;
 :as_office_a
 insert into public.estimates (id, company_id, customer_id, property_id, title)
   values ('a1070000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T107 lock match');
@@ -8748,6 +8745,10 @@ update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{optio
 -- security-check В2: no document (no options array) but paid lines — the page would show nothing
 update public.estimate_versions set calc_inputs = '{"note": "hi"}' where id = 'a1070000-0000-4000-8000-000000000002';
 select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 no document, paid lines: not sent');
+-- security-check of the review fix: «drawing» does not open the skip — only a version with no calc_inputs at all
+update public.estimate_versions set source = 'drawing' where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 source drawing, a document with no options, paid lines: not sent');
+update public.estimate_versions set source = 'scratch' where id = 'a1070000-0000-4000-8000-000000000002';
 update public.estimate_versions set calc_inputs = $j${"options":[
    {"id":"a1070000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
      {"id":"a1070000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
@@ -8798,6 +8799,42 @@ select tst.ok((select locked_at is not null from public.estimate_versions where 
 :as_super
 select tst.ok(not has_function_privilege('authenticated', 'app.version_lines_mismatch(uuid)', 'execute')
               and not has_function_privilege('anon', 'app.version_lines_mismatch(uuid)', 'execute'), 'T107 the check is not callable from the API');
+-- review #415 №2: a match exactly as saveEstimate writes it — a pct discount (Math.round(0.05 × 10000) = 500), the tax on
+-- with the material group taxed, a pct deposit {"kind":"pct","bps":1000} → sent
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1070000-0000-4000-8000-000000000101', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T107 as saveEstimate');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, tax_rate_bps, deposit_rule, calc_inputs)
+  values ('a1070000-0000-4000-8000-000000000102', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000101', 1, true, 825, '{"kind":"pct","bps":1000}', $j${"options":[
+   {"id":"a1070000-0000-4000-8000-0000000001a1","name":"A","recommended":true,"lines":[
+     {"id":"a1070000-0000-4000-8000-0000000001b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
+     {"id":"a1070000-0000-4000-8000-0000000001b2","name":"Gutter","group":"material","quantity":"2","unit":"ft","unitPriceCents":2500}]}],
+ "settings":{"tax":{"enabled":true,"rateBps":825,"groups":{"service":false,"labor":false,"material":true}},"deposit":{"kind":"pct","bps":1000},"discount":{"kind":"pct","value":"0.05"}}}$j$);
+update public.estimates set current_version_id = 'a1070000-0000-4000-8000-000000000102' where id = 'a1070000-0000-4000-8000-000000000101';
+insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended, discount_mode, discount_value)
+  values ('a1070000-0000-4000-8000-0000000001a1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000102', 'A', 0, true, 'pct', 500);
+insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents, taxable) values
+  ('a1070000-0000-4000-8000-0000000001b1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000001a1', 'labor', 'Install', 1, 10000, false),
+  ('a1070000-0000-4000-8000-0000000001b2', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000001a1', 'material', 'Gutter', 2, 2500, true);
+select tst.ok(public.send_estimate('a1070000-0000-4000-8000-000000000101', 'tok_t107b_0123456789abcdef') = 'tok_t107b_0123456789abcdef', 'T107 discount, tax and deposit as saveEstimate writes them: sent');
+-- review #415 №1: the old quick estimate exactly as estimate.add writes it — no document, paid lines, a pct deposit —
+-- is not checked: sent and signed on site with the check on
+insert into public.estimates (id, company_id, customer_id, property_id, title, created_via)
+  values ('a1070000-0000-4000-8000-000000000201', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T107 quick', 'drawing');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, source, engine_version, totals, deposit_rule, contract_type)
+  values ('a1070000-0000-4000-8000-000000000202', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000201', 1, 'drawing', '0.1.0',
+          '{"total":15000,"deposit":1500,"marginPct":null}', '{"kind":"pct","value":"0.1","contractType":"ca_hic"}', 'ca_home_improvement');
+insert into public.estimate_options (id, company_id, version_id, name, is_recommended)
+  values ('a1070000-0000-4000-8000-0000000002a1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000202', 'Quick', true);
+insert into public.estimate_line_items (company_id, option_id, position, name, quantity, unit_price_cents, is_optional, origin)
+  values ('ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000002a1', 0, 'Gutters', 1, 15000, false, 'assembly');
+update public.estimates set current_version_id = 'a1070000-0000-4000-8000-000000000202' where id = 'a1070000-0000-4000-8000-000000000201';
+:as_owner_a
+select tst.ok(public.send_estimate('a1070000-0000-4000-8000-000000000201') is not null, 'T107 a quick estimate with no document: sent');
+select tst.ok(public.sign_estimate_on_site('a1070000-0000-4000-8000-000000000201', 'Walk-in Client', 'M0 0 L2 2') = 'awaiting_countersign',
+  'T107 a quick estimate with no document: the client signs on site');
+-- security-check В2 stays: a scratch version with a document of no options and paid lines is not sent (above)
+:as_super
 \echo 'T107 a version is locked only when its lines match its document ok'
 
 -- ---------------------------------------------------------------- T108: portal_accept with ids of hidden add-ons (Н4а, spec 33 П23.9)

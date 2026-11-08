@@ -12,7 +12,10 @@
 --     does not move a sum and is not compared (blank rows the app skips, quantity-0 lines client_doc hides);
 --   * the money settings, as ops.ts writes them from the document: the discount of every option, the tax (on/off,
 --     rate) and the deposit rule of the version;
---   * a version with no document (no options array) and paid lines does not match: the page would show nothing.
+--   * a version with no document (calc_inputs null — the old quick estimate, estimate.add never writes one) is not
+--     checked, as before this migration (review #415 №1): it has nothing to compare, and its
+--     on-site signature must not be refused with no way to save it again. A document (any source) with no
+--     options and paid lines does not match: the page would show nothing.
 -- Different → 22023 (hint estimate_lines_mismatch: the app's card «Смета не отправлена»), nothing is locked or sent:
 -- saving the estimate again writes both sides from one document. Not checked: a lock without a JWT (a migration, the
 -- service role fixing data); versions locked before.
@@ -123,6 +126,11 @@ declare m record;
 begin
   -- no JWT (a migration, the service role fixing data by hand) is not checked: the check guards a member's send
   if auth.uid() is null then
+    return null;
+  end if;
+  -- no document: nothing to compare (the old quick estimate; review #415 №1)
+  -- (any document, of any source, without options and with paid lines still does not match: security-check В2)
+  if new.calc_inputs is null then
     return null;
   end if;
   select * into m from app.version_lines_mismatch(new.id) limit 1;

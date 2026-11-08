@@ -10,7 +10,7 @@ import { dayKeyIn } from "./zone";
 import { jobAwaitingClose } from "@/features/jobDone";
 import { goneId } from "./team";
 import type { DictKey } from "@/i18n";
-import { REJECT_REASONS, type RejectedOp } from "@/data/outboxRejected";
+import { rejectReasonKey, type RejectedOp } from "@/data/outboxRejected";
 import { canOpen } from "@/nav/roles";
 
 export type AttentionKind = "lead" | "overdue" | "unassigned" | "estimate" | "late" | "schedule" | "leadIdle" | "leadNoStep" | "leadBack"
@@ -73,7 +73,7 @@ export const rejectedLabel = (r: Pick<RejectedOp, "what" | "labelKey">): DictKey
 /** what to do about a refused change: «Открыть» → «Подключить» for who may open where it leads, else «ask the owner» */
 export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: RejectedOp["kind"]; reason?: RejectedOp["reason"] }, role: Role): DictKey =>
   // a refusal we can explain: its own words (outboxRejected REJECT_REASONS)
-  r.reason ? REJECT_REASONS[r.reason] :
+  r.reason ? rejectReasonKey(r.reason, r.kind) :
   // settings changed by someone else first: not «the module is off» — read again, make the change again (review #374 №3)
   r.kind === "module.saveSettings" ? "sync.rejected.settingsHint" : r.what !== "module" ? "sync.rejected.hint" : canOpen(role, r.href) ? "sync.rejected.moduleHint" : "sync.rejected.moduleHintAsk";
 /** «Открыть» on a refused change: only where this role may go (a module's card for a tech: nowhere — review M5a №3) */

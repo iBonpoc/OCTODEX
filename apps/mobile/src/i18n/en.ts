@@ -268,6 +268,7 @@ export const en: Dict = {
   // Сметы: refusals we can explain (outboxRejected REJECT_REASONS)
   "att.rejected.estimate": "Estimate not sent",
   "sync.stuck.reason.estimateLines": "The estimate lines on the server did not match its document, so the server did not send it to the client. The estimate is a draft again: open it, save it and send it again.",
+  "sync.stuck.reason.estimateLinesSigned": "The estimate's lines on the server did not match its document: the server did not accept the signature, and the client's signature was not saved. Open the estimate, save it and take the client's signature again.",
   "sync.stuck.retry": "Retry now",
   "sync.stuck.discard": "Discard change…",
   "sync.stuck.sure": "Discard this change? It will not reach the server; the phone shows the server's data again.",
