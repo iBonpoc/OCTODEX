@@ -8,9 +8,10 @@
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
 import { supplierToRow } from "@/features/suppliers";
+import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
 import { realJob } from "./inspectionBridge";
 import { discountBps, ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
-import type { EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
+import type { PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
@@ -50,6 +51,10 @@ export type Op =
   | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
   /** spec 36: a supplier made, changed, archived or restored (the whole row) */
   | { k: "supplier.save"; supplier: Supplier }
+  /** spec 37: a purchase order made or changed (header, its lines, the lines taken out) */
+  | { k: "po.save"; order: PurchaseOrder; removedLineIds: string[] }
+  /** spec 37: what came, line by line (public.po_receive) */
+  | { k: "po.receive"; id: string; lines: { id: string; received: string }[] }
   /** the company's photo rules, whole (owner, admin) */
   | { k: "company.visitSettings"; settings: VisitSettings }
   | { k: "visit.sign"; visitId: string; svg: string }
@@ -555,6 +560,12 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     }
     case "est.template.save":
       return saveEstimateTemplate(op.template, c);
+    case "po.save":
+      return savePurchaseOrder(op, c);
+    case "po.receive": {
+      const { error, status } = await supabase.rpc("po_receive", { p_po_id: op.id, p_lines: op.lines.map((l) => ({ id: l.id, received: Number(l.received) })) });
+      return run(Promise.resolve({ error, status }));
+    }
     case "supplier.save":
       return run(supabase.from("suppliers").upsert(supplierToRow(op.supplier, c), { onConflict: "id" }));
     case "chk.template.save":
@@ -1254,5 +1265,27 @@ export async function sendVisitPoint(p: { visitId: string; lat: number; lng: num
     return /location sharing is off/.test(error.message) ? "off" : "error";
   } catch {
     return "error";
+  }
+}
+
+/**
+ * spec 37: an order → database. The header first (the lines point to it), then the lines as they are, the lines taken
+ * out (deleted_at; the app has no DELETE), and the expected costs — only for who sees costs (42501 for the others:
+ * the order itself is saved). A server before the migration has no table: the whole op is a «no» (the store does not
+ * send it there: purchaseOrdersLegacy).
+ */
+async function savePurchaseOrder(op: Extract<Op, { k: "po.save" }>, c: string) {
+  const o = op.order;
+  await run(supabase.from("purchase_orders").upsert(poToRow(o, c), { onConflict: "id" }));
+  if (o.lines.length) {
+    await run(supabase.from("purchase_order_lines").upsert(o.lines.map((l) => poLineToRow(l, o.id, c)), { onConflict: "id" }));
+  }
+  if (op.removedLineIds.length) {
+    await run(supabase.from("purchase_order_lines").update({ deleted_at: new Date().toISOString() }).in("id", op.removedLineIds).eq("company_id", c));
+  }
+  const costs = o.lines.filter((l) => l.costCents !== undefined).map((l) => ({ line_id: l.id, company_id: c, unit_cost_cents: l.costCents }));
+  if (costs.length) {
+    const r = await supabase.from("purchase_order_line_costs").upsert(costs, { onConflict: "line_id" });
+    if (r.error && !["42501", "42P01", "PGRST205"].includes(r.error.code ?? "")) await run(Promise.resolve(r));
   }
 }

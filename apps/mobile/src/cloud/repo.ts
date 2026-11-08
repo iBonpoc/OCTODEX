@@ -12,6 +12,7 @@ import type { DbRole } from "./auth";
 import { supabase } from "./client";
 import { legacyForEstimate } from "./legacyTotals";
 import { historyFromRow, supplierFromRow } from "@/features/suppliers";
+import { posFromRows } from "@/features/purchaseOrderRows";
 import type { CostHistoryEntry } from "@/data/types";
 
 type Row = Record<string, unknown>;
@@ -214,6 +215,16 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // costs is not read here: the item and the supplier screens read their own newest rows when opened (loadCostHistory;
   // a company-wide cap would drop the old history of a big price list — director's check of #459 Н4). A server
   // before the migration has no table: no suppliers, nothing written
+  // spec 37 (migration 20261110090000): purchase orders — the office all, a tech those of his jobs (RLS), costs only
+  // who sees them. A server before the migration has no table: no orders, nothing written
+  const poRead = await Promise.all([
+    live<Row>("purchase_orders"),
+    live<Row>("purchase_order_lines", "id, po_id, position, catalog_item_id, name, supplier_sku, note, bom_qty, qty, unit, received_qty, check_pack"),
+    every<Row>("purchase_order_line_costs", "line_id, unit_cost_cents", key("line_id")).catch(orNoTable),
+  ]).then((r) => r as [Row[], Row[], Row[]] | null, (e) => {
+    if (isMissingTable(e)) return null;
+    throw e;
+  });
   const supplierRows = await live<Row>("suppliers", "id, name, contact_name, phone, email, account_number, address, payment_terms, terms_note, purchase_tax_bps, notes, is_active")
     .then((r) => r as Row[] | null, (e) => {
       if (isMissingTable(e)) return null;
@@ -715,6 +726,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     ...(chkByVisit ? {} : { checklistLegacy: true }),
     moduleData,
     suppliers: (supplierRows ?? []).map(supplierFromRow),
+    purchaseOrders: poRead ? posFromRows(poRead[0], poRead[1], poRead[2]) : [],
+    ...(poRead ? {} : { purchaseOrdersLegacy: true }),
     costHistory: [],
     ...(supplierRows ? {} : { suppliersLegacy: true }),
     notes: noteRows.map((r) => ({

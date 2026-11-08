@@ -1,6 +1,6 @@
 # 37. Заказ поставщику (шаг 22, SUP2)
 
-> Этап 0, черновик 08.11.2026, «Лиды и клиенты» №16. Кода нет. Решение руководителя 08.11: ядро заказа — это направление, 2 PR; в ядре только **слот** модуля (S11g) и его вызов; реализация для Gutters и перенос `purchaseQty` из `gutterParts` — модуль («Правки Gutters», личный чат основателя). Основатель В1–В3 (спека 36 §10) — по умолчанию: в бету, без авто-PO и RFQ; sales поставщиков не видит.
+> Этап 0 принят руководителем 08.11.2026 (вариант Б, 2 PR; T155–T159, e2e 198 и 205, миграция 20261110090000). SUP2-а собран «Лиды и клиенты» №16. Решение руководителя 08.11: ядро заказа — это направление, 2 PR; в ядре только **слот** модуля (S11g) и его вызов; реализация для Gutters и перенос `purchaseQty` из `gutterParts` — модуль («Правки Gutters», личный чат основателя). Основатель В1–В3 (спека 36 §10) — по умолчанию: в бету, без авто-PO и RFQ; sales поставщиков не видит.
 > Опоры: PRD 11 (весь), PRD 04 §7.1, спека 36 (§3, §4 №15–19, §5), спека 33 П2.1 К3, П16.6 (C3: `purchase_unit`, `pack_size`), `docs/specs/33-gutters-parts.md` стр. 166, 180; карта §4 S11b, S11g, §5 PurchaseOrder; модель §9 PurchaseOrder, PurchaseOrderLine; `app.company_numbering` (`doc_type purchase_order` уже разрешён, `20261104000000_core.sql:157`).
 
 ## 1. Проверка сделанного
@@ -60,6 +60,7 @@
 - `purchase_orders`: `id`, `company_id`, `number` (сервер, `PO-NNNN`), `supplier_id` (null = не выбран; отправить нельзя), `job_id` (null = на склад), `status`, `revision`, `fulfillment` (`delivery`/`pickup`), `deliver_to` (текст, по умолчанию адрес работы), `needed_on` (дата), `note`, `print_prices bool`, `sent_at`, `received_at`, стандартные колонки. Снимок поставщика при отправке (`supplier_name`, `supplier_email`, `supplier_phone`, `supplier_address`) — мастер видит, у кого забирать, не читая `suppliers`.
 - `purchase_order_lines`: `id`, `company_id`, `po_id`, `position`, `catalog_item_id`, `name`, `supplier_sku`, `note`, `bom_qty` (в единицах расчёта, текст-десятичное), `qty` (упаковки), `unit`, `received_qty`, `check_pack bool`.
 - `purchase_order_line_costs`: `line_id`, `company_id`, `unit_cost_cents` (за упаковку, без налога) — только `can_view_costs`.
+- Строку убирают через `deleted_at` (у приложения нет DELETE — сторож T52); строки заказа `partially_received` / `received` / `cancelled` не правятся (`t25_po_line_lock`), `received_qty` меняет только `po_receive`. `id` заказа, строки и строки себестоимости не меняются (`t12`).
 - Номер: `tg_assign_number('purchase_order', 'PO')` (функция ядра, без правки общего файла). Переходы — строки `app.status_transitions` (`entity_type = 'purchase_order'`), страж — как у других сущностей.
 - RLS: чтение — owner/admin/office всех; мастер — заказы своих работ (`app.is_job_assignee`), без цен; sales — нет (В3). Запись — owner/admin/office; мастер — только `public.po_receive(po_id, lines jsonb)` (security definer: мастер работы или офис; `received_qty` 0..∞, статус `partially_received`/`received` по строкам).
 
@@ -76,11 +77,12 @@
 ## 8. Тесты
 | Что | Тест |
 |---|---|
-| RLS заказов: офис всё; мастер — своей работы без цен; sales, чужая компания — нет; цены строк только `can_view_costs` | db: T (следующие свободные — выдаст руководитель) |
-| Переходы статуса (страж), `po_receive` (частично → полностью; мастер чужой работы — нет), номер `PO-` | db |
+| RLS заказов: офис всё; мастер — своей работы без цен; sales, чужая компания — нет; цены строк только `can_view_costs` | db: T155 (RLS), T158 (себестоимость строк) |
+| Переходы статуса (страж), `po_receive` (частично → полностью; мастер чужой работы — нет), номер `PO-` | db: T156, T157, T159 (правило 18) |
 | Строки из работы: материалы утверждённого варианта + дополнения; работа без сметы; сложение по позиции; упаковки; без `pack_size`; слот модуля заменяет строку ядра | unit `purchaseOrders.test.ts`, engine `purchase.test.ts` |
-| Стык S11b: работа → «Заказ поставщику» → черновик по поставщику → «Отправить» → мастер отмечает получение → `received`; мастер не видит цены | e2e **198-purchase-order** (6 видов) |
-| Слот S11g: тестовый модуль в unit-тесте реестра | unit `registry.test.ts` (общий файл — с сообщением) |
+| Стык S11b: работа → «Заказ поставщику» → черновик по поставщику → «Отправить» | e2e **198-purchase-order** (6 видов) |
+| Мастер: заказ своей работы без цен, «Получено» → `received` | e2e **205-purchase-order-tech** (6 видов) |
+| Слот S11g: тестовый модуль в реестре | unit `purchaseOrders.test.ts` |
 | Облако: заказ, номер с сервера, получение мастером | e2e/cloud 198 |
 
 ## 9. Волны и вопросы
