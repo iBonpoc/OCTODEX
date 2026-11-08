@@ -10930,6 +10930,11 @@ select tst.ok(tst.cnt($q$select 1 from public.suppliers where id = '51430000-000
 update public.suppliers set contact_name = 'Pat', is_active = false where id = '51430000-0000-4000-8000-000000000001';
 select tst.ok((select contact_name = 'Pat' and not is_active from public.suppliers where id = '51430000-0000-4000-8000-000000000001'), 'T143 the office changes and archives it');
 update public.suppliers set is_active = true where id = '51430000-0000-4000-8000-000000000001';
+-- the app saves with an upsert of every column (ops.ts supplier.save)
+insert into public.suppliers (id, company_id, name, phone, is_active) values
+  ('51430000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T143 Supply (test)', '555-0101', true)
+  on conflict (id) do update set id = excluded.id, company_id = excluded.company_id, name = excluded.name, phone = excluded.phone, is_active = excluded.is_active;
+select tst.ok((select phone = '555-0101' from public.suppliers where id = '51430000-0000-4000-8000-000000000001'), 'T143 the app''s upsert changes a supplier');
 select tst.blocked($q$delete from public.suppliers where id = '51430000-0000-4000-8000-000000000001'$q$, 'T143 nobody deletes a supplier (archive only)');
 :as_tech_a
 select tst.ok(tst.cnt($q$select 1 from public.suppliers$q$) = 0, 'T143 the tech reads no supplier');
@@ -10942,6 +10947,8 @@ select tst.fails($q$insert into public.suppliers (company_id, name) values ('ca0
 select tst.ok(tst.cnt($q$select 1 from public.suppliers where id = '51430000-0000-4000-8000-000000000001'$q$) = 0, 'T143 company B does not see A''s supplier');
 select tst.fails($q$insert into public.suppliers (company_id, name) values ('ca000000-0000-0000-0000-000000000000', 'B into A')$q$, 'T143 company B makes none in A');
 select tst.blocked($q$update public.suppliers set name = 'x' where id = '51430000-0000-4000-8000-000000000001'$q$, 'T143 company B changes none of A''s');
+select tst.fails($q$insert into public.suppliers (id, company_id, name) values ('51430000-0000-4000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'steal')
+  on conflict (id) do update set company_id = excluded.company_id, name = excluded.name$q$, 'T143 company B''s upsert onto A''s id is refused');
 :as_owner_a
 select tst.fails($q$insert into public.suppliers (company_id, name) values ('ca000000-0000-0000-0000-000000000000', '  ')$q$, 'T143 a blank name');
 select tst.fails($q$insert into public.suppliers (company_id, name) values ('ca000000-0000-0000-0000-000000000000', E'bad‮name')$q$, 'T143 a bidirectional override in the name');

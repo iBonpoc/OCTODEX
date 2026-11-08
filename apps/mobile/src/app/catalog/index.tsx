@@ -16,6 +16,7 @@ import { T } from "@/ui/primitives";
 import { useDevice } from "@/theme/ThemeProvider";
 import { space } from "@octo/design-tokens";
 import { catalogItemEconomics } from "@/features/estimateDoc";
+import { supplierName } from "@/features/suppliers";
 
 const KINDS: (CatalogKind | "all")[] = ["all", "service", "labor", "material", "kit"];
 const KIND_ICON: Record<CatalogKind, IconKey> = { service: "route", labor: "clock", material: "box", kit: "checklist" };
@@ -56,7 +57,8 @@ export default function Catalog() {
         edge={canEdit && loss ? "bad" : null}
         tags={[t(kindLabel(it.kind)), ...(it.placeholder ? [t("cat.placeholder")] : [])]}
         facts={{
-          supplier: it.vendor ? [it.vendor, tax].filter(Boolean).join(" · ") : undefined,
+          // spec 36: the supplier's name from the list, else the old text
+          supplier: supplierName(db, it) ? [supplierName(db, it), tax].filter(Boolean).join(" · ") : undefined,
           lines: it.kind === "kit" && it.components?.length ? t("card.kitItems", { n: it.components.length }) : undefined,
           desc: it.description,
         }}

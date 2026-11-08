@@ -14,7 +14,9 @@ import { Labeled, MoneyField, PctField, QtyField } from "@/features/fields";
 import { Button, ChoiceChips, IconButton, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, Divider, RowView, Screen } from "@/ui/surfaces";
+import { Card, Divider, ListRow, RowView, Screen } from "@/ui/surfaces";
+import { canSeeSuppliers, historyOf, pickSupplier, supplierOf } from "@/features/suppliers";
+import { CostHistory, SupplierPicker } from "@/features/SupplierParts";
 
 const KINDS: CatalogKind[] = ["service", "labor", "material", "kit"];
 
@@ -32,6 +34,7 @@ export default function CatalogItemScreen() {
     () => found ?? { id: uid(), kind: kind0 && KINDS.includes(kind0) ? kind0 : "service", name: "", unit: "ea", priceCents: 0 },
   );
   const [pick, setPick] = useState(false);
+  const [pickSup, setPickSup] = useState(false);
   const set = (p: Partial<CatalogItem>) => setIt((x) => ({ ...x, ...p, placeholder: false }));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/catalog"));
   // 19 §9: who does not get our costs (sales without view_costs) edits a material's price as it is — counting it from
@@ -40,6 +43,9 @@ export default function CatalogItemScreen() {
   const isMat = countsFromCost(it, noCosts);
   const price = editPrice(it, store.db.catalog, noCosts);
   const ok = editOk(it, noCosts);
+  // spec 36: who sees suppliers picks one (the server reads none for sales and the tech)
+  const supPick = canSeeSuppliers(store.role) && !store.db.suppliersLegacy;
+  const sup = supplierOf(store.db, it.supplierId);
 
   const save = () => {
     const clean = editClean(it, store.db.catalog, noCosts);
@@ -81,10 +87,28 @@ export default function CatalogItemScreen() {
 
       {isMat ? (
         <Card>
-          <TextField type="company" value={it.vendor ?? ""} onChangeText={(v) => set({ vendor: v })} placeholder={t("cat.vendor")} />
+          {/* spec 36 (S0c): the main supplier from the company's list — owner, admin, office; others keep the old text */}
+          {supPick ? (
+            <View testID="catalog-supplier">
+              <ListRow
+                title={sup ? (sup.active ? sup.name : t("sup.inArchive", { name: sup.name })) : t("sup.pick")}
+                subtitle={sup ? t("sup.pick") : it.vendor?.trim() ? t("sup.oldVendor", { name: it.vendor.trim() }) : t("sup.noneSet")}
+                onPress={() => setPickSup(true)}
+              />
+            </View>
+          ) : (
+            <TextField type="company" value={it.vendor ?? ""} onChangeText={(v) => set({ vendor: v })} placeholder={t("cat.vendor")} />
+          )}
+          {supPick && sup ? (
+            <View testID="catalog-sku">
+              <TextField type="identifier" value={it.supplierSku ?? ""} onChangeText={(v) => set({ supplierSku: v })} placeholder={t("sup.sku")} />
+            </View>
+          ) : null}
           <RowView style={{ alignItems: "flex-end" }}>
             <Labeled label={t("cat.cost")}>
-              <MoneyField cents={it.costCents ?? 0} onChange={(c) => set({ costCents: c })} />
+              <View testID="catalog-cost">
+                <MoneyField cents={it.costCents ?? 0} onChange={(c) => set({ costCents: c })} />
+              </View>
             </Labeled>
             <Labeled label={t("cat.vendorTax")}>
               <PctField bps={it.vendorTaxBps ?? 0} onChange={(b) => set({ vendorTaxBps: Math.min(b, 10000) })} />
@@ -101,6 +125,8 @@ export default function CatalogItemScreen() {
           </T>
         </Card>
       ) : null}
+
+      {isMat && found && !noCosts ? <CostHistory entries={historyOf(store.db, { itemId: it.id }, 5)} testID="catalog-history" /> : null}
 
       {it.kind === "kit" ? (
         <Card>
@@ -134,8 +160,22 @@ export default function CatalogItemScreen() {
           {t("cat.need")}
         </T>
       ) : null}
-      <Button label={t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
+      <View testID="catalog-save">
+        <Button label={t("ue.save")} icon="check" full disabled={!ok} onPress={save} />
+      </View>
       {found ? <Button label={t("cat.remove")} icon="trash" variant="ghost" full onPress={remove} /> : null}
+      <SupplierPicker
+        visible={pickSup}
+        onClose={() => setPickSup(false)}
+        onPick={(s) => {
+          setIt((x) => ({ ...pickSupplier(x, s), placeholder: false }));
+          setPickSup(false);
+        }}
+        onNew={() => {
+          setPickSup(false);
+          router.push("/suppliers/new");
+        }}
+      />
       <CatalogPicker
         visible={pick}
         exclude={["kit"]}

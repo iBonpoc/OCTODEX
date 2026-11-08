@@ -52,8 +52,10 @@ grant select on public.suppliers to authenticated;
 grant insert (id, company_id, name, contact_name, phone, email, account_number, address, payment_terms, terms_note,
               purchase_tax_bps, notes, is_active, created_at_device, origin_device_id)
   on public.suppliers to authenticated;
-grant update (name, contact_name, phone, email, account_number, address, payment_terms, terms_note, purchase_tax_bps,
-              notes, is_active)
+-- update of the key columns too: the app saves with an upsert (ON CONFLICT DO UPDATE sets every column it sends);
+-- t11 keeps a row in its company, the policies keep it to owner/admin/office (T143, as catalog_item_costs in #383)
+grant update (id, company_id, name, contact_name, phone, email, account_number, address, payment_terms, terms_note,
+              purchase_tax_bps, notes, is_active)
   on public.suppliers to authenticated;
 create policy suppliers_select on public.suppliers for select to authenticated
   using (app.has_role(company_id, array['owner', 'admin', 'office']));

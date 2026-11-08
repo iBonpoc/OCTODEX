@@ -45,9 +45,9 @@ exports.run = async (h) => {
   await p.getByTestId("catalog-supplier").locator("visible=true").first().getByText("Zed Supply (test)").waitFor({ timeout: 5000 });
   await field("catalog-sku").fill("ZB-1");
   await h.expectText(/Цена в смете: \$12\.13/, "the item counts with the copied tax: $10 + 10.25% + 10%");
-  // a new cost: $11 → $11 + 10.25% + 10% = $13.37
+  // a new cost: $11 → $11 + 10.25% = $12.13, + 10% = $13.34 (the engine rounds each step)
   await field("catalog-cost").fill("11");
-  await h.expectText(/Цена в смете: \$13\.37/, "the new cost counts");
+  await h.expectText(/Цена в смете: \$13\.34/, "the new cost counts");
   await tap("catalog-save");
   db = await dbWhen((d) => d.catalog.find((x) => x.id === ITEM)?.supplierId === zed.id && d.catalog.find((x) => x.id === ITEM)?.costCents === 1100);
   const item = db.catalog.find((x) => x.id === ITEM);
@@ -60,7 +60,7 @@ exports.run = async (h) => {
   await h.sheet().getByPlaceholder(/Начните писать/).fill("railing bracket");
   await h.sheet().getByText("Railing bracket", { exact: true }).click();
   await h.sheet().getByRole("button", { name: "Готово" }).click();
-  await h.expectText(/Сумма \| \$13\.37/, "a new estimate line counts with the supplier's tax");
+  await h.expectText(/Сумма \| \$13\.34/, "a new estimate line counts with the supplier's tax");
   await h.go(`/catalog/${ITEM}`);
   await p.getByTestId("catalog-history").locator("visible=true").first().waitFor({ timeout: 5000 });
   h.expect(/\$12\.13/.test(await p.getByTestId("sup-hist-0").locator("visible=true").first().innerText()), "«История цен» on the item: $11 + 10.25%");
