@@ -538,7 +538,8 @@ export interface CustomFieldValue {
 }
 
 /** History line: contact attempts, status changes, assignment, edits. Notes, estimates and visits join the timeline from their own tables. */
-export type ActivityKind = "call" | "sms" | "email" | "marketplace" | "reply" | "status" | "assigned" | "edited";
+/** intake — a repeat request of the same person from outside (docs/specs/34; the server writes it, unconfirmed) */
+export type ActivityKind = "call" | "sms" | "email" | "marketplace" | "reply" | "status" | "assigned" | "edited" | "intake";
 export interface Activity {
   id: ID;
   subjectType: "lead" | "customer" | "job" | "estimate";

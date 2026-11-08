@@ -27,7 +27,7 @@ export function NoticeWatcher() {
   const text = useNoticeText();
   const seen = useRef<Set<string> | null>(null);
   const path = usePathname();
-  const onClientPage = path.startsWith("/p/");
+  const onClientPage = path.startsWith("/p/") || path.startsWith("/f/"); // a homeowner's pages: no team toasts
   useEffect(() => {
     const ids = db.notices.map((n) => n.id);
     if (!seen.current) {

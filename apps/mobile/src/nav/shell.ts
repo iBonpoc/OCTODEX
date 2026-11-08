@@ -16,7 +16,7 @@ export function sideNavWidth(device: Device, open: boolean, inset = 0): number {
 export const contentWidth = (windowW: number, device: Device, open: boolean, inset = 0) => windowW - sideNavWidth(device, open, inset);
 
 /** pages outside the app: the client page and sign-in have no staff menu (13а §8) */
-export const isAppPath = (path: string) => !/^\/(p|auth)(\/|$)/.test(path);
+export const isAppPath = (path: string) => !/^\/(p|f|auth)(\/|$)/.test(path); // f — the request page (docs/specs/34)
 
 export type Insets = { top: number; bottom: number; left: number; right: number };
 

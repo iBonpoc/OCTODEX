@@ -254,6 +254,8 @@ export function leadTimeline(db: DB, l: Lead, viewer?: string, deletedWord = "")
     else if (a.kind === "reply") out.push({ ...base, icon: "check", key: "tl.reply" });
     else if (a.kind === "assigned") out.push({ ...base, icon: "user", key: "tl.assigned", params: { name: memberName(db, a.meta?.to as string | undefined, deletedWord) || "—" } });
     else if (a.kind === "edited") out.push({ ...base, icon: "pencil", key: "tl.edited" });
+    // the same person asked again from the form / a webhook (spec 34): their words, marked unconfirmed — anyone may type a phone
+    else if (a.kind === "intake") out.push({ ...base, icon: "inbox", key: "tl.intake" });
     else if (a.kind === "status") {
       const to = (a.meta?.to ?? "") as LeadStatus;
       const reason = a.meta?.reason;
