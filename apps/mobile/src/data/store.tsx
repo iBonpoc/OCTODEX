@@ -10,7 +10,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
 import { useAuth } from "@/cloud/auth";
-import { appRoles, loadCompanyDB } from "@/cloud/repo";
+import { appRoles, loadCompanyDB, loadCompanyModule } from "@/cloud/repo";
 import { effectiveRole } from "@/nav/roles";
 import { applyOp, renewSession, sendVisitPoint, type Op, type OutboxItem } from "@/cloud/ops";
 import { callNext, callOp, leadTouchNext, leadTouchOp, messageNext, messageOp, type LeadTouch } from "@/features/comms/contactEvents";
@@ -539,6 +539,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     setOutbox(outboxRef.current);
     opPause.current.set(item.id, now + (stuck ? STUCK_RETRY_MS : backoffMs(fails)));
   };
+  /** modules whose settings the phone must read again before it saves them (a conflict, review #374 №1) */
+  const settingsStale = useRef(new Set<string>());
+  /** ops dropped on a conflict: their «Отменить» does nothing (review #374 №2) */
+  const deadOps = useRef(new Set<string>());
+  /** read one module's row again and take the server's settings and version; until then its settings are not saved */
+  const rereadSettings = async (mod: string, cid: string | undefined) => {
+    settingsStale.current.add(mod);
+    if (!cid) return;
+    const row = await loadCompanyModule(cid, mod).catch(() => null);
+    const cur = dbRef.current;
+    // no answer, or another company signed in meanwhile: the next full read clears it
+    if (!row || !cur.company || whoRef.current?.companyId !== cid) return;
+    dbRef.current = { ...cur, company: { ...cur.company, modules: { ...cur.company.modules, [mod]: row } } };
+    setDb(dbRef.current);
+    settingsStale.current.delete(mod);
+  };
   const refresh = useCallback(async () => {
     if (modeRef.current !== "cloud" || !company || !auth.userId || !onlineRef.current) return;
     // send pending changes first, then reload — an op the server keeps refusing «for now» (stuck) and what waits for it
@@ -552,7 +568,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       // signed out, another company or the device wiped while it loaded: the answer is not for this store (19 §6.12)
       if (stale(gen) || modeRef.current !== "cloud" || cacheKeyRef.current !== `octo.cloud.v1.${company.companyId}`) return;
       // a module whose read failed keeps the phone's copy of its data (spec 33 П21.2 №4)
-      if (!pendingLive()) setDb(keepModuleData(next, dbRef.current));
+      if (!pendingLive()) {
+        setDb(keepModuleData(next, dbRef.current));
+        // the whole company read again: every module's settings are the server's now
+        settingsStale.current.clear();
+      }
       setSyncError(null);
       answered();
     } catch (e) {
@@ -710,10 +730,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             const mod = item.op.module;
             const { kept, gone } = dropSettingsOps(outboxRef.current, mod, w);
             outboxRef.current = kept;
-            for (const g of gone) opPause.current.delete(g.id);
+            for (const g of gone) {
+              opPause.current.delete(g.id);
+              // their «Отменить» would put back the phone's copy from before them — settings and a version the server
+              // does not have (review #374 №2): it does nothing now
+              deadOps.current.add(g.id);
+            }
             dropped = true;
             setRejected((prev) => settingsRejected(prev, mod, gone.length, msg, Date.now(), w));
             setOutbox(outboxRef.current);
+            // the phone's settings and version of this module are not the server's: no new save until this module is read
+            // again — now, not after the whole queue (a live op in it holds the company's reload, review #374 №1)
+            void rereadSettings(mod, w?.companyId);
             continue;
           }
           if (item.tries + 1 >= MAX_TRIES) {
@@ -790,6 +818,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         setQueue((q) => [...q, { id: qid!, label, at: new Date().toISOString() }]);
       }
       return () => {
+        // dropped by the server as built on a lost base: nothing to take back (review #374 №2)
+        if (oid && deadOps.current.has(oid)) return;
         dbRef.current = prev;
         setDb(prev);
         if (qid) setQueue((q) => q.filter((x) => x.id !== qid));
@@ -1220,7 +1250,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       saveModuleSettings: (key, settings) => {
         const c = dbRef.current.company;
         const cur = c?.modules?.[key];
-        if (!c || !cur || !moduleActive(c, key)) return null;
+        // after a conflict, not until this module's settings are read again (review #374 №1)
+        if (!c || !cur || !moduleActive(c, key) || settingsStale.current.has(key)) return null;
         return mutate(
           "module.saveSettings",
           (d) => (d.company ? { ...d, company: { ...d.company, modules: { ...d.company.modules, [key]: { ...cur, settings, rowVersion: cur.rowVersion + 1 } } } } : d),
