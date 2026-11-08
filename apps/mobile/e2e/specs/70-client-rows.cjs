@@ -27,7 +27,7 @@ exports.run = async (h) => {
   h.expect(p.url().includes("/client/c1?s=jobs"), `«Работы» opens the jobs (${p.url()})`);
   for (const j of jobsOfSarah) await h.expectText(new RegExp(j.number), `job ${j.number} in the list`);
   await h.shot("jobs");
-  await p.getByRole("button", { name: new RegExp(`^${jobsOfSarah[0].number}`) }).first().click();
+  await p.getByTestId(`client-job-${jobsOfSarah[0].id}`).first().click();
   await p.waitForTimeout(600);
   h.expect(p.url().includes(`/job/${jobsOfSarah[0].id}`), `a job card opens the job (${p.url()})`);
 
@@ -38,7 +38,7 @@ exports.run = async (h) => {
   h.expect(/Адрес для счетов\s*Как у объекта/.test(await rowText()), "billing: same as the property");
   await row("Лиды");
   await h.expectText(new RegExp(lindaLeads[0].number), "lead in the list");
-  await p.getByRole("button", { name: new RegExp(`^${lindaLeads[0].number}`) }).first().click();
+  await p.getByTestId(`client-lead-${lindaLeads[0].id}`).first().click();
   await p.waitForTimeout(600);
   h.expect(p.url().includes(`/lead/${lindaLeads[0].id}`), `a lead card opens the lead (${p.url()})`);
   await h.go("/client/c3");
