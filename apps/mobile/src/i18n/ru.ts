@@ -2392,6 +2392,7 @@ export const ru = {
   "mod.gutters.draw.hint.line": "Проведите пальцем по краю крыши — получится желоб",
   "mod.gutters.draw.hint.ds": "Нажмите на желоб, где водосток",
   "mod.gutters.draw.hint.select": "Нажмите на желоб или водосток; тяните конец желоба, чтобы изменить",
+  "mod.gutters.draw.nextDs": "Дальше: поставьте водостоки на желоба",
   "mod.gutters.draw.fit": "Весь рисунок",
   "mod.gutters.draw.test": "тестовые цены",
   "mod.gutters.draw.summary": "Желоб: {ft} ft · водостоков: {ds}",
@@ -2458,6 +2459,8 @@ export const ru = {
   "mod.gutters.set.paletteFull": "В палитре не больше {n} цветов",
   // module M7c: rules, use, rare downspout fields, corners (spec 33 П22)
   "mod.gutters.attr.more": "Ещё: высота, смещения, переход, верх",
+  "mod.gutters.attr.moreRun": "Ещё: профиль, материал, крепление, хомуты",
+  "mod.gutters.attr.moreDs": "Ещё: форма, материал, низ, стена, высота",
   "mod.gutters.attr.height": "Своя высота",
   "mod.gutters.attr.heightHint": "0 — по этажу (высота этажа из настроек)",
   "mod.gutters.attr.offsets": "Смещение",

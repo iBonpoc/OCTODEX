@@ -44,7 +44,24 @@ exports.run = async (h) => {
   await h.expectText(/В архиве/, "archived section");
   db = await h.db();
   h.expect(!!db.serviceCategories.find((c) => c.id === "cat-electrical")?.archivedAt, "archived, not deleted");
-  await h.click("Вернуть");
+  // B4: while an active direction has the same name, the archived card has no «Вернуть» and says why
+  await p.getByPlaceholder("Например, мойка под давлением").fill("Электрика");
+  await h.click("Добавить");
+  const arch = p.getByTestId("dir-archived-cat-electrical").locator("visible=true");
+  await arch.first().waitFor({ timeout: 5000 });
+  await arch.getByText(/Такое направление уже есть/).first().waitFor({ timeout: 3000 });
+  h.expect((await arch.getByRole("button", { name: "Вернуть", exact: true }).count()) === 0, "no «Вернуть» while the name is taken");
+  // the twin goes to the archive: «Вернуть» is back
+  db = await h.db();
+  const twin = db.serviceCategories.find((c) => c.name === "Электрика" && !c.archivedAt);
+  h.expect(!!twin, "the new «Электрика» is active");
+  await p.getByTestId(`dir-${twin.id}`).locator("visible=true").first().click();
+  await p.waitForTimeout(300);
+  await h.sheet().getByRole("button", { name: "В архив", exact: true }).click();
+  await p.waitForTimeout(350);
+  await arch.getByRole("button", { name: "Вернуть", exact: true }).first().waitFor({ timeout: 3000 });
+  await arch.getByRole("button", { name: "Вернуть", exact: true }).first().click();
+  await p.waitForTimeout(350);
   db = await h.db();
   h.expect(!db.serviceCategories.find((c) => c.id === "cat-electrical")?.archivedAt, "brought back");
 

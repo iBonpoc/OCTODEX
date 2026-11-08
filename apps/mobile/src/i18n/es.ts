@@ -2392,6 +2392,7 @@ export const es: Dict = {
   "mod.gutters.draw.hint.line": "Deslice el dedo por el borde del techo para dibujar una canaleta",
   "mod.gutters.draw.hint.ds": "Toque la canaleta donde va el bajante",
   "mod.gutters.draw.hint.select": "Toque una canaleta o un bajante; arrastre un extremo para cambiarlo",
+  "mod.gutters.draw.nextDs": "Siguiente: ponga los bajantes en las canaletas",
   "mod.gutters.draw.fit": "Todo el dibujo",
   "mod.gutters.draw.test": "precios de prueba",
   "mod.gutters.draw.summary": "Canaleta: {ft} ft · bajantes: {ds}",
@@ -2458,6 +2459,8 @@ export const es: Dict = {
   "mod.gutters.set.paletteFull": "La paleta admite hasta {n} colores",
   // module M7c: rules, use, rare downspout fields, corners (spec 33 П22)
   "mod.gutters.attr.more": "Más: altura, desvíos, reducción, parte superior",
+  "mod.gutters.attr.moreRun": "Más: perfil, material, montaje, ganchos",
+  "mod.gutters.attr.moreDs": "Más: forma, material, salida, pared, altura",
   "mod.gutters.attr.height": "Altura propia",
   "mod.gutters.attr.heightHint": "0: según el piso (altura del piso en ajustes)",
   "mod.gutters.attr.offsets": "Desvío",

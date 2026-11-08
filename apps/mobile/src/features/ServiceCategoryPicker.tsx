@@ -13,7 +13,8 @@ import { activeCategories, categoryLabel, choosable, nameTaken } from "@/feature
 import { Button, ChoiceChips, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, CardList, Divider, Empty, ItemCard, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, Empty, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
 
 /** "Direction: Plumbing ›" — hidden while the company has no directions; read-only when the only one is already set */
 export function ServiceCategoryRow({ value, onChange, readOnly }: { value?: ID; onChange: (id: ID | undefined) => void; readOnly?: boolean }) {
@@ -70,11 +71,12 @@ export function ServiceCategoryEditor() {
   return (
     <>
       {active.length ? (
-        <CardList>
+        // Settings → directions: a list of the company's objects (not a picker in a sheet) — compact cards (06 «Серия B», B4)
+        <CardGrid>
           {active.map((c) => (
-            <ItemCard key={c.id} title={label(c)} subtitle={c.seedKey && !c.name ? t("dir.preset") : t("dir.own")} onPress={() => setEditing(c)} />
+            <ListCard key={c.id} density="compact" testID={`dir-${c.id}`} lead={{ kind: "icon", icon: "toolbox" }} title={label(c)} when={c.seedKey && !c.name ? t("dir.preset") : t("dir.own")} onPress={() => setEditing(c)} />
           ))}
-        </CardList>
+        </CardGrid>
       ) : (
         <Empty icon="wrench" title={t("dir.empty")} />
       )}
@@ -117,24 +119,23 @@ export function ServiceCategoryEditor() {
       {archived.length ? (
         <>
           <SectionTitle title={t("dir.archivedList")} />
-          <CardList>
-            {archived.map((c) => (
-              <ItemCard
-                key={c.id}
-                title={label(c)}
-                subtitle={t("dir.archived")}
-                right={
-                  <Button
-                    label={t("dir.restore")}
-                    size="sm"
-                    variant="ghost"
-                    disabled={nameTaken(list, label(c), c.id, t) || (!!c.seedKey && active.some((x) => x.seedKey === c.seedKey))}
-                    onPress={() => toast.show(t("dir.restored"), store.saveServiceCategory({ id: c.id, archivedAt: undefined }).undo)}
-                  />
-                }
-              />
-            ))}
-          </CardList>
+          <CardGrid>
+            {archived.map((c) => {
+              // a card's action cannot be greyed out: when the name is taken again, no «Вернуть» and the card says why
+              const blocked = nameTaken(list, label(c), c.id, t) || (!!c.seedKey && active.some((x) => x.seedKey === c.seedKey));
+              return (
+                <ListCard
+                  key={c.id}
+                  density="compact"
+                  testID={`dir-archived-${c.id}`}
+                  lead={{ kind: "icon", icon: "toolbox" }}
+                  title={label(c)}
+                  when={blocked ? `${t("dir.archived")} · ${t("dir.taken")}` : t("dir.archived")}
+                  action={blocked ? undefined : { label: t("dir.restore"), onPress: () => toast.show(t("dir.restored"), store.saveServiceCategory({ id: c.id, archivedAt: undefined }).undo) }}
+                />
+              );
+            })}
+          </CardGrid>
         </>
       ) : null}
       <EditSheet c={editing} active={active} onClose={() => setEditing(null)} />

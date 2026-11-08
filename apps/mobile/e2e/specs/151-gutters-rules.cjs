@@ -14,6 +14,13 @@ exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
+  // 390: what is changed seldom sits under «Ещё» (spec 33 П20.9) — open it; 820/1280 show every field
+  const more = async () => {
+    if (await tid("attr-more").count()) {
+      await tid("attr-more").getByRole("button").click();
+      await tid("attr-more-open").waitFor({ timeout: 5000 });
+    }
+  };
   const waitFor = async (ok, what, tries = 40) => {
     let v = await ok();
     for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
@@ -79,6 +86,7 @@ exports.run = async (h) => {
   await waitFor(async () => (await svg().locator("line:not([id^=halo])").count()) === 2, "two runs");
   // the new run is picked: its corner
   await openAttrs();
+  await more();
   await tid("attr-corner-0").waitFor({ timeout: 5000 });
   h.expect((await chosenAt("attr-corner-0")) === 0, "the corner follows the company («Как у компании»)");
   const m0 = await money();
@@ -134,6 +142,7 @@ exports.run = async (h) => {
   await p.mouse.click(mid[0], mid[1]);
   await waitFor(async () => /Желоб/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "a run picked");
   await openAttrs();
+  await more();
   await tid("attr-corner-0").waitFor({ timeout: 5000 });
   h.expect((await chosenAt("attr-corner-0")) === 1, "after a reload: the corner is field cut");
 
