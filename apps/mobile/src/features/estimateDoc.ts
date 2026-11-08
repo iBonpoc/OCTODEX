@@ -4,7 +4,6 @@
 import {
   activeLines,
   catalogPrice,
-  dec,
   marginPctOf,
   partsCost,
   computeCustomOption,
@@ -144,14 +143,11 @@ export function clientDoc(doc: EstimateDoc): EstimateDoc {
   };
 }
 
-/** quantity is exactly 0 (a blank or broken quantity is not: the editor shows it) */
+/** quantity is a plain decimal zero ("0", "-0", "0.", "00", "0.00", " .0 ") — the same pattern as the server's app.client_doc
+ *  (migration 20261108170000), so the demo page, the PDF and the real /p/ agree; a blank, broken or "0e5" quantity is not */
+const ZERO_QTY = /^\s*[+-]?(0+(\.0*)?|\.0+)\s*$/;
 export function zeroQty(l: Pick<CustomLine, "quantity">): boolean {
-  try {
-    const q = typeof l.quantity === "string" ? l.quantity.trim() : l.quantity;
-    return q !== "" && dec(q).isZero();
-  } catch {
-    return false;
-  }
+  return ZERO_QTY.test(String(l.quantity));
 }
 
 /**

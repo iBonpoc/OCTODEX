@@ -56,8 +56,8 @@ describe("sendIssues", () => {
 
 describe("zeroQty and the client's copy", () => {
   it("zeroQty: only an exact zero", () => {
-    expect([0, "0", "0.00", " 0 "].map((q) => zeroQty({ quantity: q as never }))).toEqual([true, true, true, true]);
-    expect(["", "1", "0.01", "x"].map((q) => zeroQty({ quantity: q }))).toEqual([false, false, false, false]);
+    expect([0, "0", "0.00", " 0 ", "-0", "+0", "0.", "00", ".0"].map((q) => zeroQty({ quantity: q as never })).every(Boolean)).toBe(true);
+    expect(["", "1", "0.01", "x", "0.10", "010", "0e5", "10.0"].map((q) => zeroQty({ quantity: q })).some(Boolean)).toBe(false);
   });
   it("clientDoc drops a quantity-0 line in every option (demo /p/, PDF) — never a $0 row for the client", () => {
     const c = clientDoc(docOf([line("a"), line("z", { quantity: "0" })], [line("z2", { quantity: 0 as never, optional: true }), line("b")]));
