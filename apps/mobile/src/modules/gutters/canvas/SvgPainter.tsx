@@ -63,7 +63,7 @@ const CornerMark = memo(function CornerMark({ k, color, fill }: { k: SceneCorner
 
 const Label = memo(function Label({ l, bg, ink }: { l: SceneLabel; bg: string; ink: string }) {
   return (
-    <G>
+    <G id={`lbl-${l.id}`}>
       <Rect x={l.x - l.w / 2} y={l.y - l.h / 2} width={l.w} height={l.h} rx={radius.chip} fill={bg} />
       <SvgText x={l.x} y={l.y + FS * 0.35} fontSize={FS} fontFamily={font.families.medium} fill={ink} textAnchor="middle">
         {l.text}
