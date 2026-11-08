@@ -5,6 +5,7 @@
  */
 import { nearestRun, projectOnRun, runLengthIn, snapDirection, snapPoint, type Drawing, type DrawnDownspout, type DrawnRun, type P } from "../geometry";
 import type { Story } from "./scene";
+import { changeDs, changeRun, type DsAttrs } from "./attrs";
 
 /** shorter than this is a slip of the finger, not a line */
 export const MIN_RUN_IN = 12;
@@ -91,6 +92,44 @@ export function setStory(d: Drawing, id: string, story: Story): Drawing {
   const r = d.runs.find((x) => x.id === id);
   if (!r || r.attrs.story === story) return d;
   return { ...d, runs: d.runs.map((x) => (x.id === id ? { ...x, attrs: { ...x.attrs, story } } : x)) };
+}
+
+/** a run's attributes changed in the panel (П21.8): the same drawing back when nothing changes */
+export function setRunAttrs(d: Drawing, id: string, patch: Partial<DrawnRun["attrs"]>): Drawing {
+  const r = d.runs.find((x) => x.id === id);
+  if (!r) return d;
+  const attrs = changeRun(r.attrs, patch);
+  return attrs === r.attrs ? d : { ...d, runs: d.runs.map((x) => (x.id === id ? { ...x, attrs } : x)) };
+}
+
+/** a downspout's attributes changed in the panel */
+export function setDsAttrs(d: Drawing, id: string, patch: Partial<DsAttrs>): Drawing {
+  const s = d.downspouts.find((x) => x.id === id);
+  if (!s) return d;
+  const { id: _id, runId, atIn, ...was } = s;
+  const attrs = changeDs(was, patch);
+  return attrs === was ? d : { ...d, downspouts: d.downspouts.map((x) => (x.id === id ? { ...attrs, id, runId, atIn } : x)) };
+}
+
+/**
+ * The tape: the typed length wins over the drawn one (confidence `taped`); null puts the drawn length back.
+ * The drawing does not move — its ends hold the corners; labels and the estimate take the typed length.
+ * A downspout stays where it is drawn: its distance along the run scales with the new length.
+ */
+export function setLength(d: Drawing, id: string, lengthIn: number | null): Drawing {
+  const r = d.runs.find((x) => x.id === id);
+  if (!r) return d;
+  const want = lengthIn === null ? undefined : Math.round(lengthIn);
+  if (r.lengthIn === want) return d;
+  const { lengthIn: _was, ...rest } = r;
+  const next: DrawnRun = want === undefined ? rest : { ...rest, lengthIn: want };
+  const was = runLengthIn(r) || 1;
+  const L = runLengthIn(next);
+  return {
+    ...d,
+    runs: d.runs.map((x) => (x.id === id ? next : x)),
+    downspouts: d.downspouts.map((s) => (s.runId === id ? { ...s, atIn: Math.min(L, Math.round((s.atIn * L) / was)) } : s)),
+  };
 }
 
 /** «Отменить» after a delete: put back what the delete took (a run and its downspouts), keep everything drawn since */
