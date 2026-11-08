@@ -884,6 +884,16 @@ export interface VisitPoint {
   at: string;
 }
 
+/** an online payment Stripe has not settled yet (payments.status = pending) — read-only, from the server */
+export interface PendingPayment {
+  id: string;
+  invoiceId: string;
+  amountCents: number;
+  method: PaymentMethod;
+  /** when it was started (received_at) */
+  at: string;
+}
+
 export interface DB {
   me: ID;
   members: Member[];
@@ -939,6 +949,9 @@ export interface DB {
   company: Company | null;
   notes: Note[];
   payments: Payment[];
+  /** online payments on their way (ACH «pending», step 20в): NOT money yet — never in payments, sums or balances; only shown
+   *  as «ACH processing» on the invoice. Filled by the cloud load; absent in demo and old saved data. */
+  pendingPayments?: PendingPayment[];
   /** employees' saved signatures (wave E2a); absent in old saved data */
   memberSignatures?: MemberSignature[];
   /** spec 33 П21: each add-on module's own data by module key (its shape is the module's: ModuleDef.load reads it,
