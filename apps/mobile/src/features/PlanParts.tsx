@@ -10,7 +10,7 @@ import { todayKey, type DayKey } from "@/features/calendar";
 import { lateAfterOf, scheduleSettingsOf } from "@/features/scheduleSettings";
 import { visitStatus } from "@/features/visits";
 import { AssignSheet } from "@/features/sheets";
-import { collapseEmpty, groupByDay, itemTimes, type DayLoad, type PlanItem } from "@/features/planFeed";
+import { collapseEmpty, groupByDay, itemTimes, timeLead, type DayLoad, type PlanItem } from "@/features/planFeed";
 import { overlapSigns } from "@/features/listSigns";
 import { formatDayKey } from "@/features/zone";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
@@ -174,8 +174,9 @@ export function UnassignedSoon() {
               key={v.id}
               title={client || "—"}
               // 24 §B: the day in words goes under the name, the hour to the left block
-              when={dd === 0 ? t("plan5.today") : t("plan5.tomorrow")}
-              lead={timeLead(v.allDay ? t("plan5.allDay") : time(v.start))}
+              when={[dd === 0 ? t("plan5.today") : t("plan5.tomorrow"), v.allDay ? t("plan5.allDay") : null].filter(Boolean).join(" · ")}
+              lead={v.allDay ? { kind: "icon", icon: "calendar" } : timeLead(time(v.start))}
+              // «Весь день» goes under the name with the day: «Завтра · Весь день»
               // the visit's own status: «Не назначен» (warn) — the same chip as in the Feed
               status={{ tone: visitStatus(v, db.members, Date.now(), lateAfterOf(db)).status, label: t(visitStatus(v, db.members, Date.now(), lateAfterOf(db)).label) }}
               tags={[v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job")]}
@@ -316,7 +317,9 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
   const names = x.people.map((id) => memberName(db, id, t)).filter(Boolean).join(", ");
   // the hour goes to the left block, the whole span «9:00 AM – 11:00 AM» under the name (recipe C, 06 §3)
   const { when, until } = itemTimes(x, time, t("plan5.allDay"));
-  const lead = timeLead(x.allDay ? t("plan5.allDay") : time(x.start));
+  // «Весь день» and the carried-over part of a span (it began on an earlier day) have no hour of this day: a calendar
+  // icon on the left, the words («Весь день» / «– 2:00 AM») under the name
+  const lead: CardLead = x.allDay || x.at === "" ? { kind: "icon", icon: "calendar" } : timeLead(time(x.start));
   const span = until ? `${when} ${until}` : when;
   if (x.kind === "visit") {
     const v = x.visit;
@@ -381,11 +384,6 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
   );
 }
 
-/** the left block of recipe C: «9:00» over «AM»; «Весь день» has no hour */
-function timeLead(hm: string): CardLead {
-  const [top, bottom] = hm.split(" ");
-  return { kind: "time", top: top ?? hm, bottom: bottom ?? "" };
-}
 
 /** desktop: a row-card with columns (06 §4); phone and tablet: the regular card in one column — the Feed is a timeline */
 function usePlanDensity(): Density {

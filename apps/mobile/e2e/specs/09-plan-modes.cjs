@@ -35,7 +35,8 @@ exports.run = async (h) => {
   const techNames = db.members.filter((m) => m.id !== db.me && m.roles.includes("tech")).map((m) => m.name);
   let seen = 0;
   // the card's «who» fact: «Ivan Sokolov» or «Ivan Sokolov, Dmitry Orlov» (ListCard, 10а)
-  for (const name of techNames) seen += await p.getByText(new RegExp(`(^|, )${name}(,|$)`)).locator("visible=true").count();
+  // inside the Week's cards only (a «Мастер» filter chip names a person too)
+  for (const name of techNames) seen += await p.getByTestId("plan-feed").getByText(new RegExp(`(^|, )${name}(,|$)`)).locator("visible=true").count();
   h.expect(seen > 0, "the office sees the techs' names on the Week (the pattern below is not blind)");
   await h.shot("plan-week");
 
@@ -64,7 +65,7 @@ exports.run = async (h) => {
   const others = db.members.filter((m) => m.id !== db.me && m.roles.includes("tech")).map((m) => m.name);
   for (const name of others) {
     // the card's «who» fact — the same pattern as the office's control above
-    const visible = await p.getByText(new RegExp(`(^|, )${name}(,|$)`)).locator("visible=true").count();
+    const visible = await p.getByTestId("plan-feed").getByText(new RegExp(`(^|, )${name}(,|$)`)).locator("visible=true").count();
     h.expect(visible === 0, `tech does not see ${name}'s visits`);
   }
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("director")));
