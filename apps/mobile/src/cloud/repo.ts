@@ -457,6 +457,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       title: (i.title as string | null) ?? undefined,
       sentAt: (i.sent_at as string | null) ?? undefined,
       subtotalCents: i.subtotal_cents == null ? undefined : n(i.subtotal_cents),
+      taxCents: n(i.tax_cents) || undefined,
+      taxMode: (["included_in_price", "added_on_top", "tax_inclusive_display", "exempt"] as const).find((m) => m === i.tax_mode),
     }));
 
   const mappedLeads: Lead[] = leads.map((l) => ({

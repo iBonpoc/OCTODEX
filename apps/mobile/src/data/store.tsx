@@ -6,6 +6,7 @@
  * Every mutation returns `undo` for the 5-second "Undo" toast (DS rule 10). In cloud mode an op is sent
  * only after that window, so Undo simply drops it from the outbox.
  */
+import { applyRefund, type RefundError } from "@/features/payments/refund";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
@@ -288,6 +289,10 @@ interface StoreCtx {
   payDeposit: (id: ID, method: PaymentMethod, fromClient?: boolean) => Undo;
   /** any amount up to the invoice balance; every payment is a receipt */
   recordPayment: (invoiceId: ID, amountCents: number, method: PaymentMethod, reference?: string, fromClient?: boolean) => Undo;
+  /** 20д: the DEMO's refund only (features/payments/refund.ts applyRefund — the database's rules); in the cloud it does
+   *  nothing and says so: there the server refunds (cloud/refund.ts), then refresh(). No undo — money that left is gone;
+   *  the sheet asks first (rule 5). null — done, else our word why not. */
+  refundPaymentDemo: (paymentId: ID, amountCents: number) => RefundError | null;
   /** progress (by stage) or final balance invoice for a job */
   issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo;
   /** create or update a universal estimate (draft) */
@@ -1687,6 +1692,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         return inv ? recordPayment(id, inv.totalCents - inv.paidCents, method) : () => {};
       },
       recordPayment: (invoiceId, amountCents, method, reference, fromClient) => recordPayment(invoiceId, amountCents, method, reference, fromClient),
+      refundPaymentDemo: (paymentId, amountCents) => {
+        const r = applyRefund(dbRef.current, paymentId, amountCents, { mode: modeRef.current, appRole: role });
+        if (!r.ok) return r.error;
+        mutate("payment.refundDemo", (d) => ({ ...d, payments: r.payments, invoices: r.invoices }));   // no op: never sent anywhere
+        return null;
+      },
       issueInvoice: (jobId, kind, amountCents, title) => {
         const d0 = dbRef.current;
         const job = d0.jobs.find((j) => j.id === jobId);
