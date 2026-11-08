@@ -11,14 +11,14 @@ import { ScrollView, View } from "react-native";
 import { component, space } from "@octo/design-tokens";
 import type { DictKey } from "@/i18n";
 import { useI18n } from "@/i18n";
-import { Button, ChoiceChips, StatusChip, Stepper, TextField } from "@/ui/controls";
+import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_SHAPES, ELBOW_STYLES, elbowsOf, hangerKitsFor, MILL_ONLY, MOUNTS, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_SHAPES, ELBOW_STYLES, smallerSizes, MAX_DS_HEIGHT_FT, OFFSETS_IN, elbowsOf, hangerKitsFor, MILL_ONLY, MOUNTS, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { ftIn } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
-import { drawnLengthIn, type DrawnDownspout, type DrawnRun } from "../geometry";
+import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
 const k = (s: string) => `mod.gutters.attr.${s}` as DictKey;
 const inch = (s: string) => `${s}″`;
@@ -29,6 +29,16 @@ const elbow = (s: string) => (/^\d+$/.test(s) ? `${s}°` : s);
 export function useColorLabel() {
   const { t } = useI18n();
   return (c: string) => ((COLORS as readonly string[]).includes(c) ? t(k(`c.${c}`)) : c);
+}
+
+/** a switch with its words beside it (the core's Toggle carries the words for screen readers only) */
+function Switch({ label, on, onChange, testID }: { label: string; on: boolean; onChange: (v: boolean) => void; testID: string }) {
+  return (
+    <RowView style={{ gap: space[3], justifyContent: "space-between" }}>
+      <T v="body" style={{ flex: 1 }}>{label}</T>
+      <View testID={testID}><Toggle on={on} onChange={onChange} label={label} /></View>
+    </RowView>
+  );
 }
 
 function Field({ label, children, testID }: { label: string; children: React.ReactNode; testID?: string }) {
@@ -113,7 +123,32 @@ function Stock<A extends { material: string; gauge?: string; finish?: "mill" | "
   );
 }
 
-export function RunAttrsView({ run, onAttrs, onLength, ch = MODULE_CHOICES }: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices }) {
+/** a corner of the picked run and how it is made (M7c): stored on the run, else the company's default */
+export interface RunCorner { found: FoundCorner; method: CornerChoice["method"]; own: boolean; /** the company's method */ def: CornerChoice["method"] }
+
+function Corners({ corners, onCorner }: { corners: RunCorner[]; onCorner: (f: FoundCorner, m: CornerChoice["method"] | null) => void }) {
+  const { t } = useI18n();
+  if (!corners.length) return null;
+  return (
+    <Field label={t(k("corners"))} testID="attr-corners">
+      {corners.map((c, i) => (
+        <View key={c.found.id} style={{ gap: space[1] }} testID={`attr-corner-${i}`}>
+          <T v="caption">{t(k("cornerN"), { n: i + 1, kind: t(k(`ck.${c.found.kind}`)) })}</T>
+          {/* «Как у компании» — the company's method, followed when it changes; a method picked here stays (review M7c №5) */}
+          <ChoiceChips
+            items={[{ key: "default" as const, label: t(k("cmDefault"), { m: t(k(`cm.${c.def}`)) }) }, ...(["cut", "strip", "prefab"] as const).map((m) => ({ key: m, label: t(k(`cm.${m}`)) }))]}
+            value={c.own ? c.method : "default"}
+            onChange={(m) => onCorner(c.found, m === "default" ? null : m)}
+          />
+        </View>
+      ))}
+    </Field>
+  );
+}
+
+export function RunAttrsView({
+  run, onAttrs, onLength, ch = MODULE_CHOICES, corners = [], onCorner,
+}: { run: DrawnRun; onAttrs: (p: Partial<RunAttrs>) => void; onLength: (lengthIn: number | null) => void; ch?: Choices; corners?: RunCorner[]; onCorner?: (f: FoundCorner, m: CornerChoice["method"] | null) => void }) {
   const { t } = useI18n();
   const a = run.attrs;
   const profiles = withCurrent(ch.offer.profiles, a.profile);
@@ -136,6 +171,7 @@ export function RunAttrsView({ run, onAttrs, onLength, ch = MODULE_CHOICES }: { 
       <Stock a={a} set={onAttrs} ch={ch} />
       <Pick label={t(k("mount"))} testID="attr-mount" items={MOUNTS.map((m) => ({ key: m, label: t(k(`mt.${m}`)) }))} value={a.mount ?? "fascia"} onChange={(mount) => onAttrs({ mount })} />
       <Pick label={t(k("hanger"))} testID="attr-hanger" offered={hangerKitsFor(a.profile, ch)} items={kits.map((id) => ({ key: id, label: t(k(`k.${id}`)) }))} value={a.hanger} onChange={(hanger) => onAttrs({ hanger })} />
+      {onCorner ? <Corners corners={corners} onCorner={onCorner} /> : null}
     </>
   );
 }
@@ -162,7 +198,43 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES }: { ds: DrawnDow
       <Pick label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)) }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
       <Pick label={t(k("wall"))} testID="attr-wall" items={WALLS.map((x) => ({ key: x, label: t(k(`w.${x}`)) }))} value={w.wall} onChange={(wall) => onAttrs({ wall })} />
       <Pick label={t(k("wallKit"))} testID="attr-wall-kit" offered={wallKitsFor(ds.shape, w.wall, ch)} items={wallKits.map((id) => ({ key: id, label: t(k(`wk.${id}`)) }))} value={w.kit} onChange={(kit) => onAttrs({ wall: kit })} />
+      <DsMore ds={ds} onAttrs={onAttrs} />
     </>
+  );
+}
+
+/**
+ * The rare fields of a downspout behind «Ещё» (M7c, debt of M5c №9): its own height, offsets, a size change on the way
+ * down, what sits on top, a rain-barrel diverter, an outlet screen. Open by itself when one of them is set.
+ */
+function DsMore({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
+  const { t } = useI18n();
+  const set = !!(ds.heightIn || ds.offsets?.length || ds.reducers?.length || ds.head || ds.funnel || ds.diverter || ds.outletScreen);
+  const [open, setOpen] = useState(set);
+  useEffect(() => setOpen(set), [ds.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  const off = ds.offsets?.[0];
+  const offLen = String(off?.lengthIn ?? OFFSETS_IN[0]) as `${(typeof OFFSETS_IN)[number]}`;
+  const head = ds.head ?? (ds.funnel ? "funnel" : "none");
+  const smaller = smallerSizes(ds.shape, ds.size);
+  if (!open) return <View testID="attr-more"><Button label={t(k("more"))} size="sm" variant="ghost" onPress={() => setOpen(true)} /></View>;
+  return (
+    <View style={{ gap: space[4] }} testID="attr-more-open">
+      <View testID="attr-height">
+        <Stepper label={t(k("height"))} unit={t(k("ft"))} value={Math.round((ds.heightIn ?? 0) / 12)} min={0} max={MAX_DS_HEIGHT_FT} onChange={(ft) => onAttrs({ heightIn: ft ? ft * 12 : undefined })} />
+        <T v="caption" tone="mut">{t(k("heightHint"))}</T>
+      </View>
+      {/* the count makes offsets; the length is picked only once there are some (review M7c №6) */}
+      <View testID="attr-offset-qty">
+        <Stepper label={t(k("offsetQty"))} value={off?.qty ?? 0} min={0} max={8} onChange={(qty) => onAttrs({ offsets: qty ? [{ lengthIn: Number(offLen), qty }] : undefined })} />
+      </View>
+      {off?.qty ? (
+        <Pick label={t(k("offsets"))} testID="attr-offset-len" items={OFFSETS_IN.map((n) => ({ key: String(n) as typeof offLen, label: inch(String(n)) }))} value={offLen} onChange={(v) => onAttrs({ offsets: [{ lengthIn: Number(v), qty: off.qty }] })} />
+      ) : null}
+      <Pick label={t(k("reducer"))} testID="attr-reducer" items={[{ key: "", label: t(k("reducerNone")) }, ...smaller.map((s) => ({ key: s, label: dsSize(s) }))]} value={ds.reducers?.[0]?.to ?? ""} onChange={(to) => onAttrs({ reducers: to ? [{ to, qty: 1 }] : undefined })} />
+      <Pick label={t(k("head"))} testID="attr-head" items={DS_HEADS.map((h) => ({ key: h, label: t(k(`h.${h}`)) }))} value={head} onChange={(h) => onAttrs({ head: h === "none" ? undefined : h, funnel: undefined })} />
+      <Switch testID="attr-diverter" on={!!ds.diverter} onChange={(v) => onAttrs({ diverter: v || undefined })} label={t(k("diverter"))} />
+      <Switch testID="attr-outlet-screen" on={!!ds.outletScreen} onChange={(v) => onAttrs({ outletScreen: v || undefined })} label={t(k("outletScreen"))} />
+    </View>
   );
 }
 
