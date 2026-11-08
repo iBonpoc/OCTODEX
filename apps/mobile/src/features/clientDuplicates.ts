@@ -43,8 +43,12 @@ export const isLiveClient = (c: Customer) => c.status !== "archived" && !c.merge
 const notDup = (a: Customer, b: Customer) => !!a.notDuplicateIds?.includes(b.id) || !!b.notDuplicateIds?.includes(a.id);
 
 /** Every live client's possible duplicates, by client id (both sides of a pair). */
+/** a phone / email / address shared by more cards than this is an office's or a manager's (a property manager's email on
+ *  200 clients): not a sign of a duplicate, and 199 «Не дубль» taps would be the only way out */
+export const CROWD = 5;
 export function clientDuplicates(db: Pick<DB, "customers" | "properties">): Map<ID, ClientDup[]> {
   const live = db.customers.filter(isLiveClient);
+  const liveIds = new Set(live.map((c) => c.id));
   const byKey = new Map<string, Set<ID>>();
   const put = (k: string, id: ID) => {
     if (!k) return;
@@ -58,10 +62,10 @@ export function clientDuplicates(db: Pick<DB, "customers" | "properties">): Map<
       for (const x of p.emails) put(emailKey(x.address) && `e:${emailKey(x.address)}`, c.id);
     }
   }
-  for (const p of db.properties) if (live.some((c) => c.id === p.customerId)) put(addressKey(p) && `a:${addressKey(p)}`, p.customerId);
+  for (const p of db.properties) if (liveIds.has(p.customerId)) put(addressKey(p) && `a:${addressKey(p)}`, p.customerId);
   const pairs = new Map<string, Set<DupReason>>();
   for (const [k, ids] of byKey) {
-    if (ids.size < 2) continue;
+    if (ids.size < 2 || ids.size > CROWD) continue;
     const reason: DupReason = k[0] === "p" ? "phone" : k[0] === "e" ? "email" : "address";
     const list = [...ids];
     for (let i = 0; i < list.length; i++)
@@ -88,6 +92,8 @@ export const duplicatesOf = (db: Pick<DB, "customers" | "properties">, id: ID): 
 
 /** Only the owner / admin merge (server: merge_customers); the office may say «not a duplicate». */
 export const canMergeClients = (role: Role) => role === "director";
+/** who sees «Возможный дубль» at all (the list's mark and the card's block — one rule): the owner / admin and the office */
+export const canSeeClientDups = (role: Role) => role === "director" || role === "dispatcher";
 export const canMarkNotDuplicate = (role: Role) => role === "director" || role === "dispatcher";
 
 /** Which card stays by default: the older one (its number and its links in old messages stay). */
@@ -144,7 +150,7 @@ export function mergeCustomersDb(db: DB, keepId: ID, dropId: ID): DB {
     billing: a.billing ?? b.billing,
     sourceId: a.sourceId || b.sourceId,
     tagIds: [...new Set([...(a.tagIds ?? []), ...(b.tagIds ?? [])])],
-    status: dns ? "do_not_service" : a.status === "archived" ? "active" : a.status,
+    status: dns ? "do_not_service" : a.status === "archived" && b.status !== "archived" ? "active" : a.status,
     statusReason: dns ? dns.statusReason : a.statusReason,
     notDuplicateIds: [...new Set([...(a.notDuplicateIds ?? []), ...(b.notDuplicateIds ?? [])])].filter((x) => x !== a.id && x !== b.id),
   };
@@ -179,7 +185,18 @@ export function mergeCustomersDb(db: DB, keepId: ID, dropId: ID): DB {
     files: db.files?.map(move),
     sources: db.sources.map(move),
     tasks: db.tasks.map(subj),
-    activities: db.activities.map(subj),
+    activities: db.activities.map((x) => {
+      const m = subj(x);
+      return m.contactId && gone.has(m.contactId) ? { ...m, contactId: gone.get(m.contactId) } : m;
+    }),
+    // own fields: B's value only where the kept card has none (the value itself stays with B, as on the server)
+    customFieldValues: db.customFieldValues && [
+      ...db.customFieldValues,
+      ...db.customFieldValues
+        .filter((v) => v.entityId === dropId && !db.customFieldValues!.some((w) => w.entityId === keepId && w.fieldId === v.fieldId))
+        .filter((v) => db.customFields?.some((f) => f.id === v.fieldId && f.entity === "customer" && !f.archivedAt))
+        .map((v) => ({ ...v, id: `${v.id}-${keepId}`, entityId: keepId })),
+    ],
     notes: db.notes.map(subj),
   };
 }

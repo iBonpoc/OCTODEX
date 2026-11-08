@@ -2969,6 +2969,9 @@ export const en: Dict = {
   "opay.how": "Fees and payouts are in the Stripe dashboard. After Stripe's form come back here: the state updates by itself.",
   "opay.refresh": "Refresh",
   // step 17 C3 «Лиды и клиенты»: duplicate clients and the merge (docs/specs/04 §13)
+  "att.rejected.merge": "Clients not merged on the server",
+  "clientDup.rej.inFlight": "A payment or refund of the other card is in progress. The cards are two again — merge them once it settles.",
+  "clientDup.rej.merged": "One of the cards is already merged into another. The cards are shown as on the server — check whether a merge is still needed.",
   "clientDup.sign": "Possible duplicate",
   "clientDup.title": "Possible duplicate: {name}",
   "clientDup.why.phone": "same phone",
@@ -2986,7 +2989,7 @@ export const en: Dict = {
   "clientDup.n.payments": "payments {n}",
   "clientDup.n.none": "only the card itself",
   "clientDup.fill": "The kept card’s fields stay; empty ones are filled from the other. Tags from both. Document numbers and amounts do not change.",
-  "clientDup.noService": "One card is “Do not service” — the mark stays.",
+  "clientDup.noService": "One card is “Do not service” — the kept card gets the mark, and its open estimate links stop working.",
   "clientDup.merge": "Merge",
   "clientDup.confirm": "“{name}” cannot be brought back in the app — only through support. You can undo for 5 seconds.",
   "clientDup.confirmYes": "Yes, merge",

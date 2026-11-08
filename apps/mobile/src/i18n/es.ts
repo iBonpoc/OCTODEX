@@ -2969,6 +2969,9 @@ export const es: Dict = {
   "opay.how": "Las comisiones y los depósitos están en el panel de Stripe. Después del formulario de Stripe vuelva aquí: el estado se actualiza solo.",
   "opay.refresh": "Actualizar",
   // step 17 C3 «Лиды и клиенты»: duplicate clients and the merge (docs/specs/04 §13)
+  "att.rejected.merge": "Clientes no unidos en el servidor",
+  "clientDup.rej.inFlight": "Hay un pago o reembolso en curso de la otra ficha. Las fichas vuelven a ser dos: únalas cuando termine.",
+  "clientDup.rej.merged": "Una de las fichas ya está unida a otra. Las fichas se muestran como en el servidor: revise si aún hace falta unirlas.",
   "clientDup.sign": "Posible duplicado",
   "clientDup.title": "Posible duplicado: {name}",
   "clientDup.why.phone": "mismo teléfono",
@@ -2986,7 +2989,7 @@ export const es: Dict = {
   "clientDup.n.payments": "pagos {n}",
   "clientDup.n.none": "solo la ficha",
   "clientDup.fill": "Los campos de la ficha principal se quedan; los vacíos se toman de la otra. Etiquetas de ambas. Números y montos no cambian.",
-  "clientDup.noService": "Una ficha tiene «No atender»: la marca se queda.",
+  "clientDup.noService": "Una ficha tiene «No atender»: la marca pasa a la principal y sus enlaces de presupuestos dejan de abrirse.",
   "clientDup.merge": "Unir",
   "clientDup.confirm": "«{name}» no se podrá recuperar en la app, solo con soporte. Puede deshacer durante 5 segundos.",
   "clientDup.confirmYes": "Sí, unir",

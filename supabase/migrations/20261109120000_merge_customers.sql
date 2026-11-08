@@ -19,6 +19,8 @@ create table if not exists app.customer_merge_runs (
   at         timestamptz not null default now()
 );
 revoke all on app.customer_merge_runs from public, anon, authenticated;
+alter table app.customer_merge_runs enable row level security;
+alter table app.customer_merge_runs force row level security;
 
 -- true only inside merge_customers of this transaction, for exactly the pair it moves
 create or replace function app.merging_customer(p_old uuid, p_new uuid)
@@ -49,7 +51,8 @@ begin
   end if;
 
   -- the client merge (merge_customers): only customer_id B → A, only inside that function (S3d)
-  if new.customer_id is distinct from old.customer_id and current_user not in ('authenticated', 'anon') then
+  if new.customer_id is distinct from old.customer_id and current_user not in ('authenticated', 'anon')
+     and new.status is not distinct from old.status and new.deleted_at is not distinct from old.deleted_at then
     v_merge := app.merging_customer(old.customer_id, new.customer_id);
   end if;
 
@@ -126,7 +129,8 @@ begin
     raise exception 'only a signature moves an estimate to % (portal_accept / sign_estimate_on_site / countersign_estimate)', new.status
       using errcode = '42501';
   end if;
-  if tg_op = 'UPDATE' and new.customer_id is distinct from old.customer_id and current_user not in ('authenticated', 'anon') then
+  if tg_op = 'UPDATE' and new.customer_id is distinct from old.customer_id and current_user not in ('authenticated', 'anon')
+     and new.status is not distinct from old.status then
     -- the client merge (merge_customers, S3d): a signed estimate moves to the kept client and nothing else changes
     v_merge := app.merging_customer(old.customer_id, new.customer_id);
   end if;
@@ -175,7 +179,11 @@ begin
   else
     -- the client merge (merge_customers, S3d): moving B's open work onto a kept client marked «do not service» is not
     -- «new work» — the same jobs and estimates, now under one card (the mark stays and keeps stopping new ones)
+    -- (only the client changes: the status, the link and the deletion are read through jsonb — jobs have no token)
     if tg_op = 'UPDATE' and new.customer_id is distinct from old.customer_id
+       and (to_jsonb(new) -> 'status') is not distinct from (to_jsonb(old) -> 'status')
+       and (to_jsonb(new) -> 'public_token') is not distinct from (to_jsonb(old) -> 'public_token')
+       and new.deleted_at is not distinct from old.deleted_at
        and app.merging_customer(old.customer_id, new.customer_id) then
       return new;
     end if;
@@ -223,8 +231,9 @@ begin
   end if;
   loop
     exit when new.customer_id is null or v_n >= 10;
+    -- for key share: a merge of this client in flight is waited for, and its result is read (no row lands on B)
     select c.merged_into_customer_id into v_to from public.customers c
-     where c.id = new.customer_id and c.company_id = new.company_id;
+     where c.id = new.customer_id and c.company_id = new.company_id for key share;
     exit when v_to is null;
     new.customer_id := v_to;
     v_n := v_n + 1;
@@ -251,8 +260,10 @@ begin
   loop
     exit when v_n >= 10;
     select c.merged_into_customer_id into v_to from public.customers c
-     where c.id = new.subject_id and c.company_id = new.company_id;
+     where c.id = new.subject_id and c.company_id = new.company_id for key share;
     exit when v_to is null;
+    -- written by the merge itself about B (its status trace): B's own history, it stays on B
+    exit when app.merging_customer(new.subject_id, v_to);
     new.subject_id := v_to;
     v_n := v_n + 1;
   end loop;
@@ -288,6 +299,33 @@ create or replace trigger t01_follow_merged_subject before insert or update of s
 create or replace trigger t01_follow_merged_subject before insert or update of subject_id on public.tasks
   for each row execute function app.tg_follow_merged_subject();
 
+/* ---------- merged_into is written only by the merge ---------- */
+-- Before this step the column did nothing; now the follow triggers act on it: a person (office, sales) must not set it
+-- and send another client's rows somewhere else. A merged card stays archived (an old phone's status is ignored).
+create or replace function app.tg_customer_merge_guard()
+returns trigger language plpgsql set search_path = '' as $$
+begin
+  if (tg_op = 'INSERT' and new.merged_into_customer_id is not null)
+     or (tg_op = 'UPDATE' and new.merged_into_customer_id is distinct from old.merged_into_customer_id) then
+    -- (two statements: a person has no right to call app.merging_customer at all)
+    if current_user in ('authenticated', 'anon') then
+      raise exception 'a card is merged only by merge_customers' using errcode = '42501';
+    end if;
+    if not app.merging_customer(new.id, new.merged_into_customer_id) then
+      raise exception 'a card is merged only by merge_customers' using errcode = '42501';
+    end if;
+  end if;
+  if tg_op = 'UPDATE' and old.merged_into_customer_id is not null and new.merged_into_customer_id is not null then
+    new.status := old.status;
+    new.do_not_service_reason := old.do_not_service_reason;
+  end if;
+  return new;
+end;
+$$;
+revoke all on function app.tg_customer_merge_guard() from public, anon, authenticated;
+create or replace trigger t02_customer_merge_guard before insert or update on public.customers
+  for each row execute function app.tg_customer_merge_guard();
+
 /* ---------- the merge ---------- */
 
 create or replace function public.merge_customers(p_keep uuid, p_drop uuid)
@@ -309,25 +347,31 @@ begin
   if p_keep is null or p_drop is null or p_keep = p_drop then
     raise exception 'merge_same_client' using errcode = '22023';
   end if;
-  -- both rows locked in one order: two merges of the same pair never interleave
-  perform 1 from public.customers where id in (p_keep, p_drop) order by id for update;
+  -- another company's client, an unknown one, or not owner / admin: the same refusal (nothing is told about the rows);
+  -- checked before any lock, so a stranger cannot hold or time another company's rows
   select * into a from public.customers where id = p_keep;
   select * into b from public.customers where id = p_drop;
-  -- another company's client, an unknown one, or not owner / admin: the same refusal (nothing is told about the rows)
   if a.id is null or b.id is null or a.company_id <> b.company_id
      or not app.has_role(a.company_id, array['owner', 'admin']) then
     raise exception 'not allowed' using errcode = '42501';
   end if;
+  -- both rows locked in one order: two merges of the same pair never interleave; then read again
+  perform 1 from public.customers where id in (p_keep, p_drop) order by id for update;
+  select * into a from public.customers where id = p_keep;
+  select * into b from public.customers where id = p_drop;
   -- a repeat of the same merge (the queue sent it twice): nothing more to do
   if b.merged_into_customer_id = a.id then
     return jsonb_build_object('kept', a.id, 'merged', b.id, 'repeat', true);
   end if;
   if a.merged_into_customer_id is not null or b.merged_into_customer_id is not null
      or a.deleted_at is not null or b.deleted_at is not null then
-    raise exception 'merge_already_merged' using errcode = '22023';
+    raise exception 'merge_already_merged' using errcode = '22023', hint = 'merge_already_merged';
   end if;
   -- money on its way (a card or bank payment, a refund): merge after it settles
-  select exists (select 1 from public.payment_attempts x where x.customer_id = b.id and x.status in ('open', 'processing'))
+  -- an attempt left open on the page (the client opened /p/ and went away) blocks only for a day; a bank payment
+  -- on its way (processing) and a pending payment block until they settle
+  select exists (select 1 from public.payment_attempts x where x.customer_id = b.id
+                  and (x.status = 'processing' or (x.status = 'open' and x.updated_at > now() - interval '1 day')))
       or exists (select 1 from public.payments x where x.customer_id = b.id and x.status = 'pending')
     into v_inflight;
   if not v_inflight and to_regclass('public.refunds') is not null then
@@ -335,7 +379,8 @@ begin
                              where p.customer_id = $1 and f.status = ''pending'')' into v_inflight using b.id;
   end if;
   if v_inflight then
-    raise exception 'merge_payment_in_flight' using errcode = '55000';
+    -- 22023 + hint (not 55000: PostgREST answers that with 500, and the phone would retry it as «the server is down»)
+    raise exception 'merge_payment_in_flight' using errcode = '22023', hint = 'merge_payment_in_flight';
   end if;
 
   insert into app.customer_merge_runs (drop_id, keep_id) values (b.id, a.id) returning id into v_run;
@@ -475,3 +520,22 @@ end;
 $$;
 revoke all on function public.merge_customers(uuid, uuid) from public, anon;
 grant execute on function public.merge_customers(uuid, uuid) to authenticated;
+
+-- «Не дубль» (the office: owner, admin, office): adds one id to the card's list — two people marking different pairs on
+-- the same card do not overwrite each other. A repeat changes nothing.
+create or replace function public.mark_not_duplicate(p_id uuid, p_other uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare v_company uuid;
+begin
+  select company_id into v_company from public.customers where id = p_id;
+  if v_company is null or p_other is null or p_other = p_id
+     or not exists (select 1 from public.customers where id = p_other and company_id = v_company)
+     or not app.has_role(v_company, array['owner', 'admin', 'office']) then
+    raise exception 'not allowed' using errcode = '42501';
+  end if;
+  update public.customers set not_duplicate_ids = array(select distinct x from unnest(not_duplicate_ids || p_other) x)
+   where id = p_id and not (p_other = any (not_duplicate_ids));
+end;
+$$;
+revoke all on function public.mark_not_duplicate(uuid, uuid) from public, anon;
+grant execute on function public.mark_not_duplicate(uuid, uuid) to authenticated;

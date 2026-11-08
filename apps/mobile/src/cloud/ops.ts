@@ -202,8 +202,8 @@ export type Op =
   | { k: "customer.status"; id: string; status: CustomerStatus; reason?: string }
   /** step 17 C3 (docs/specs/04 §13): everything of dropId moves to keepId (public.merge_customers; a repeat changes nothing) */
   | { k: "customer.merge"; keepId: string; dropId: string }
-  /** «not a duplicate»: the whole list of the card (customers.not_duplicate_ids) */
-  | { k: "customer.notDup"; id: string; notDuplicateIds: string[] }
+  /** «not a duplicate»: one more id on the card's list (public.mark_not_duplicate; never the whole list — two devices) */
+  | { k: "customer.notDup"; id: string; otherId: string }
   | { k: "tag.save"; tag: Tag }
   | { k: "serviceCategory.save"; category: ServiceCategory; isNew: boolean }
   | { k: "job.category"; id: string; serviceCategoryId: string | null }
@@ -856,7 +856,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "customer.merge":
       return run(supabase.rpc("merge_customers", { p_keep: op.keepId, p_drop: op.dropId }));
     case "customer.notDup":
-      return run(supabase.from("customers").update({ not_duplicate_ids: op.notDuplicateIds }).eq("id", op.id));
+      return run(supabase.rpc("mark_not_duplicate", { p_id: op.id, p_other: op.otherId }));
     case "serviceCategory.save": {
       // seed_key is set once; afterwards only name, position and archive change (column grants, migration 20261105250000)
       const x = op.category;

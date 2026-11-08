@@ -19,7 +19,7 @@ export const REJECTED_KEEP_MS = 30 * 24 * 3600_000;
 
 /** module: a batch of an add-on module's changes the server refused because the module is not active (spec 33 П21.1);
  *  estimate: a send the server refused for a known reason (REJECT_REASONS) */
-export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate";
+export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "module" | "estimate" | "merge";
 /**
  * The server's refusals we can explain: its hint (a code we chose in a migration) → our own words. Only these: the
  * server's text is never shown (review #259). estimate_lines_mismatch — the lock check of a version (migration
@@ -27,6 +27,9 @@ export type RejectedWhat = "deposit" | "invoice" | "payment" | "expense" | "modu
  */
 export const REJECT_REASONS = {
   estimate_lines_mismatch: "sync.stuck.reason.estimateLines",
+  // step 17 C3 (migration 20261109120000): the merge of two clients
+  merge_payment_in_flight: "clientDup.rej.inFlight",
+  merge_already_merged: "clientDup.rej.merged",
 } as const;
 export type RejectReason = keyof typeof REJECT_REASONS;
 /** a refused signature (estimate.sign, estimate.approve): the client's signature was not kept — take it again (review #415 №4) */
@@ -68,6 +71,8 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   // (estimate.sign sends first: a quick estimate signed on site — the client's signature is not lost silently, review №1)
   // estimate.approve (the client signs on site / by link) sends first too (review #415 №3)
   if ((op.k === "estimate.send" || op.k === "estimate.sign" || op.k === "estimate.approve") && reason === "estimate_lines_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, reason };
+  // a merge of two clients the phone showed as done (step 17 C3): never back silently — the kept card, and why
+  if (op.k === "customer.merge") return { ...base, what: "merge", href: `/client/${op.keepId}`, ...(reason ? { reason } : {}) };
   if (!isMoneyOp(item, MONEY_KINDS)) return null;
   switch (op.k) {
     case "estimate.deposit": return { ...base, what: "deposit", href: `/estimate/${op.id}`, amountCents: op.depositCents };

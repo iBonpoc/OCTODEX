@@ -1,9 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { router } from "expo-router";
 import { statusIcon } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import type { Customer } from "@/data/types";
-import { canMarkNotDuplicate, canMergeClients, defaultKeep, duplicatesOf, mergeSummary, type ClientDup } from "@/features/clientDuplicates";
+import { canMarkNotDuplicate, canMergeClients, canSeeClientDups, defaultKeep, duplicatesOf, mergeSummary, type ClientDup } from "@/features/clientDuplicates";
 import { statusOf } from "@/features/clients";
 import { useI18n, type DictKey } from "@/i18n";
 import { Button, ChoiceChips } from "@/ui/controls";
@@ -21,8 +21,7 @@ export function ClientDupCards({ c }: { c: Customer }) {
   const { db, role } = useStore();
   const { t } = useI18n();
   const [open, setOpen] = useState<ClientDup | null>(null);
-  if (role === "tech" || role === "sales") return null;
-  const dups = duplicatesOf(db, c.id);
+  const dups = useMemo(() => (canSeeClientDups(role) ? duplicatesOf(db, c.id) : []), [role, db.customers, db.properties, c.id]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!dups.length) return null;
   return (
     <>

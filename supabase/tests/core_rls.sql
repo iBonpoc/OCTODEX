@@ -9965,6 +9965,9 @@ insert into public.customer_tags (company_id, customer_id, tag_id) values
   ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000e1'),
   ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000e1'),
   ('ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000e2');
+insert into public.leads (id, company_id, source_id, customer_id, contact_name) values
+  ('c1340000-0000-4000-8000-0000000000f1', 'ca000000-0000-0000-0000-000000000000',
+   (select id from public.lead_sources where company_id = 'ca000000-0000-0000-0000-000000000000' order by id limit 1), 'c1340000-0000-4000-8000-0000000000b1', 'T134 lead');
 -- the second client is «do not service» (marked after its open work, as in life)
 update public.customers set status = 'do_not_service', do_not_service_reason = 'T134 unpaid' where id = 'c1340000-0000-4000-8000-0000000000b1';
 create table tst.t134 (k text primary key, n bigint, t text);
@@ -9996,6 +9999,10 @@ select tst.fails($q$update public.payments set customer_id = 'c1340000-0000-4000
 select tst.fails($q$update public.estimates set customer_id = 'c1340000-0000-4000-8000-0000000000a1' where id = 'c1340000-0000-4000-8000-0000000000b6'$q$, 'T134 the flag alone does not move a signed estimate');
 select tst.fails($q$insert into app.customer_merge_runs (drop_id, keep_id) values ('c1340000-0000-4000-8000-0000000000b1', 'c1340000-0000-4000-8000-0000000000a1')$q$, 'T134 a person cannot write a merge mark');
 select set_config('app.merging_customer', '', false);
+-- merged_into is written only by the merge: no person (not even the owner) points a card at another directly
+:as_owner_a
+select tst.fails_like($q$update public.customers set merged_into_customer_id = 'c1340000-0000-4000-8000-0000000000a1' where id = 'c1340000-0000-4000-8000-0000000000c1'$q$, '%merged only by merge_customers%', 'T134 the owner cannot set merged_into directly');
+select tst.fails_like($q$insert into public.customers (company_id, display_name, merged_into_customer_id) values ('ca000000-0000-0000-0000-000000000000', 'T134 fake', 'c1340000-0000-4000-8000-0000000000a1')$q$, '%merged only by merge_customers%', 'T134 nobody makes a merged card directly');
 -- money on its way: merge after it settles
 :as_super
 insert into public.payment_attempts (id, company_id, invoice_id, customer_id, amount_cents, attempt_no, idempotency_key, stripe_account_id) values
@@ -10003,7 +10010,15 @@ insert into public.payment_attempts (id, company_id, invoice_id, customer_id, am
 :as_owner_a
 select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1')$q$, 'merge_payment_in_flight', 'T134 not while a card payment is open');
 :as_super
-update public.payment_attempts set status = 'canceled' where id = 'c1340000-0000-4000-8000-0000000000b9';
+-- left open on the page for more than a day: it does not block for ever
+update public.payment_attempts set updated_at = now() - interval '2 days' where id = 'c1340000-0000-4000-8000-0000000000b9';
+-- a pending payment blocks
+insert into public.payments (id, company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('c1340000-0000-4000-8000-0000000000ba', 'ca000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b7', 'c1340000-0000-4000-8000-0000000000b1', 'ach', 1000, 'pending', 't134-pending');
+:as_owner_a
+select tst.fails_like($q$select public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1')$q$, 'merge_payment_in_flight', 'T134 not while a bank payment is pending');
+:as_super
+update public.payments set status = 'failed' where id = 'c1340000-0000-4000-8000-0000000000ba';
 
 -- the merge
 :as_owner_a
@@ -10042,6 +10057,13 @@ select tst.ok(exists (select 1 from public.audit_log where entity_type = 'custom
                         and after -> 'moved' -> 'invoices' ? 'c1340000-0000-4000-8000-0000000000b7')
           and not exists (select 1 from app.customer_merge_runs),
   'T134 the audit row lists what moved (support can undo it); no merge mark is left');
+select tst.ok((select customer_id = 'c1340000-0000-4000-8000-0000000000a1' from public.leads where id = 'c1340000-0000-4000-8000-0000000000f1')
+          and (select customer_id = 'c1340000-0000-4000-8000-0000000000a1' from public.payment_attempts where id = 'c1340000-0000-4000-8000-0000000000b9'),
+  'T134 the lead and the payment attempt moved too');
+select tst.ok(exists (select 1 from public.activities where subject_id = 'c1340000-0000-4000-8000-0000000000b1' and meta ->> 'action' = 'do_not_service_lifted')
+          and not exists (select 1 from public.activities where subject_id = 'c1340000-0000-4000-8000-0000000000a1' and meta ->> 'action' = 'do_not_service_lifted')
+          and exists (select 1 from public.activities where subject_id = 'c1340000-0000-4000-8000-0000000000a1' and meta ->> 'action' = 'do_not_service_set'),
+  'T134 the kept card''s history says «do not service» set, not lifted (B''s own archive line stays on B)');
 -- the same merge again (the queue sent it twice): no error, nothing moves twice
 :as_owner_a
 select tst.ok((public.merge_customers('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000b1') ->> 'repeat')::boolean, 'T134 a repeat changes nothing');
@@ -10062,6 +10084,24 @@ select tst.ok((select customer_id = 'c1340000-0000-4000-8000-0000000000a1' from 
           and exists (select 1 from public.notes where body = 'T134 late note' and subject_id = 'c1340000-0000-4000-8000-0000000000a1')
           and (select customer_id = 'c1340000-0000-4000-8000-0000000000a1' and not is_primary from public.contacts where id = 'c1340000-0000-4000-8000-0000000000d2'),
   'T134 an old phone''s rows for the merged card land on the kept one');
+-- the merged card stays archived whatever an old phone sends
+:as_owner_a
+update public.customers set status = 'active' where id = 'c1340000-0000-4000-8000-0000000000b1';
+:as_super
+select tst.ok((select status = 'archived' and merged_into_customer_id = 'c1340000-0000-4000-8000-0000000000a1' from public.customers where id = 'c1340000-0000-4000-8000-0000000000b1'), 'T134 the merged card stays archived');
+-- another company cannot use the redirect: its row for A's merged card is refused, not moved
+:as_owner_b
+select tst.fails($q$insert into public.properties (company_id, customer_id, address_line1, address_city) values ('cb000000-0000-0000-0000-000000000000', 'c1340000-0000-4000-8000-0000000000b1', '1 Other Co', 'LA')$q$, 'T134 another company''s row for a merged card is refused');
+-- «Не дубль»: one id added by the office, a repeat changes nothing, sales and another company — no
+:as_owner_a
+select public.mark_not_duplicate('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000c1');
+select public.mark_not_duplicate('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000c1');
+:as_sales_a
+select tst.fails_like($q$select public.mark_not_duplicate('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000c1')$q$, 'not allowed', 'T134 sales do not mark «not a duplicate»');
+:as_owner_b
+select tst.fails_like($q$select public.mark_not_duplicate('c1340000-0000-4000-8000-0000000000a1', 'c1340000-0000-4000-8000-0000000000c1')$q$, 'not allowed', 'T134 another company does not mark');
+:as_super
+select tst.ok((select not_duplicate_ids = array['c1340000-0000-4000-8000-0000000000c1']::uuid[] from public.customers where id = 'c1340000-0000-4000-8000-0000000000a1'), 'T134 «not a duplicate»: one id, once');
 \echo 'T134 client merge ok'
 
 \echo 'ALL TESTS PASSED'

@@ -3,11 +3,13 @@ import { describe, expect, it } from "vitest";
 import { makeSeed } from "../src/data/seed";
 import type { Customer, DB, Lead } from "../src/data/types";
 import {
-  addressKey, canMarkNotDuplicate, canMergeClients, clientDuplicates, defaultKeep, duplicatesOf, markNotDuplicateDb,
+  addressKey, canMarkNotDuplicate, canMergeClients, canSeeClientDups, clientDuplicates, CROWD, defaultKeep, duplicatesOf, markNotDuplicateDb,
   mergeCustomersDb, mergedTarget, mergeSummary,
 } from "../src/features/clientDuplicates";
 import { findDuplicates, leadDuplicatesFor } from "../src/features/leads";
 import { peopleOf } from "../src/data/people";
+import { visibleClients } from "../src/features/clients";
+import { rejectedOf } from "../src/data/outboxRejected";
 
 const base = makeSeed();
 const twin = (over: Partial<Customer> = {}): Customer => ({ id: "cx", number: "CLT-0099", name: "Sarah M.", phone: "+1 626 555 0142", sourceId: "src-yelp", balanceCents: 0, ...over });
@@ -41,6 +43,18 @@ describe("what is a duplicate", () => {
     expect(duplicatesOf(withTwin({ mergedIntoId: "c1" }), "c1")).toEqual([]);
     expect(duplicatesOf(withTwin({ notDuplicateIds: ["c1"] }), "c1")).toEqual([]);
     expect(duplicatesOf(markNotDuplicateDb(withTwin(), "c1", "cx"), "cx")).toEqual([]);
+  });
+  it("a phone shared by more than CROWD cards (an office's, a manager's) is not a sign of a duplicate", () => {
+    const many: Customer[] = Array.from({ length: CROWD + 1 }, (_, i) => twin({ id: `m${i}`, number: `CLT-1${i}`, phone: "(213) 555-0001" }));
+    expect(clientDuplicates({ ...base, customers: [...many, ...base.customers] }).size).toBe(0);
+    expect(clientDuplicates({ ...base, customers: [...many.slice(0, CROWD), ...base.customers] }).get("m0")!.length).toBe(CROWD - 1);
+  });
+  it("the list's mark and the card's block — one rule: the owner / admin and the office, not sales or a tech", () => {
+    expect([canSeeClientDups("director"), canSeeClientDups("dispatcher"), canSeeClientDups("sales"), canSeeClientDups("tech")]).toEqual([true, true, false, false]);
+  });
+  it("a merged card is not in the clients list, for anyone", () => {
+    const db = withTwin({ mergedIntoId: "c1", status: "archived" });
+    expect(visibleClients(db, "director").some((c) => c.id === "cx")).toBe(false);
   });
   it("only the owner / admin merge; the office may say «not a duplicate»; a tech and sales — neither", () => {
     expect([canMergeClients("director"), canMergeClients("dispatcher"), canMergeClients("sales"), canMergeClients("tech")]).toEqual([true, false, false, false]);
@@ -93,6 +107,28 @@ describe("the merge", () => {
     expect(kept.billing?.line1).toBe("1 Billing Rd");
     expect(kept.sourceId).toBe("src-google"); // the kept one's own value stays
   });
+  it("leads, jobs, tasks and history move; a property's person and a call point at the kept person", () => {
+    const lead = { ...base.leads[0]!, id: "lx", customerId: "cx" };
+    const sarahMain = peopleOf(base.customers.find((c) => c.id === "c1")!)[0]!;
+    const twinPerson = { id: "tp", name: "Sarah M", role: "main" as const, phones: [{ number: "626.555.0142", label: "mobile" as const }], emails: [] };
+    const d0: DB = {
+      ...withTwin({ people: [twinPerson] }),
+      leads: [lead, ...base.leads],
+      tasks: [{ id: "tx", subjectType: "customer", subjectId: "cx", title: "call" } as DB["tasks"][number], ...base.tasks],
+      activities: [{ id: "ax", subjectType: "customer", subjectId: "cx", kind: "call", at: new Date().toISOString(), actorId: "m-alex", contactId: "tp" } as DB["activities"][number], ...base.activities],
+      properties: [{ ...base.properties[0]!, id: "ppx", customerId: "cx", contactIds: ["tp"] }, ...base.properties],
+    };
+    const d1 = mergeCustomersDb(d0, "c1", "cx");
+    expect(d1.leads.find((l) => l.id === "lx")!.customerId).toBe("c1");
+    expect(d1.tasks.find((x) => x.id === "tx")!.subjectId).toBe("c1");
+    expect(d1.activities.find((x) => x.id === "ax")).toMatchObject({ subjectId: "c1", contactId: sarahMain.id });
+    expect(d1.properties.find((x) => x.id === "ppx")).toMatchObject({ customerId: "c1", contactIds: [sarahMain.id] });
+  });
+  it("an archived kept card becomes active only when the other was not archived (as on the server)", () => {
+    expect(mergeCustomersDb(withTwin({ status: "archived" }), "cx", "c1").customers.find((c) => c.id === "cx")!.status).toBe("active");
+    const both = { ...withTwin({ status: "archived" }), customers: withTwin({ status: "archived" }).customers.map((c) => (c.id === "c1" ? { ...c, status: "archived" as const } : c)) };
+    expect(mergeCustomersDb(both, "cx", "c1").customers.find((c) => c.id === "cx")!.status).toBe("archived");
+  });
   it("«do not service» of either stays on the kept card, with its reason", () => {
     expect(kept).toMatchObject({ status: "do_not_service", statusReason: "unpaid" });
   });
@@ -105,6 +141,15 @@ describe("the merge", () => {
   });
   it("a new lead with the phone finds the kept card, not the merged one", () => {
     expect(findDuplicates(after, { phone: "(626) 555-0142" }).customers.map((c) => c.id)).toEqual(["c1"]);
+  });
+});
+
+describe("a merge the server refused", () => {
+  const item = () => ({ id: "o1", op: { k: "customer.merge" as const, keepId: "c1", dropId: "cx" }, at: new Date().toISOString(), tries: 4 });
+  it("is never dropped silently: a card that opens the kept client, with the reason in our words", () => {
+    expect(rejectedOf(item(), "x", Date.now(), null, "merge_payment_in_flight")).toMatchObject({ what: "merge", href: "/client/c1", reason: "merge_payment_in_flight" });
+    expect(rejectedOf(item(), "x", Date.now(), null, "merge_already_merged")?.reason).toBe("merge_already_merged");
+    expect(rejectedOf(item(), "x", Date.now(), null)).toMatchObject({ what: "merge", href: "/client/c1" });
   });
 });
 

@@ -1880,11 +1880,14 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, status, statusReason: status === "do_not_service" ? reason : undefined } : c)) }),
           { k: "customer.status", id, status, reason: status === "do_not_service" ? reason : undefined },
         ),
-      mergeCustomers: (keepId, dropId) => mutate("customer.merge", (d) => mergeCustomersDb(d, keepId, dropId), { k: "customer.merge", keepId, dropId }),
+      // a repeat (a double tap, the pair already merged / marked) queues nothing: a second op would outlive its «Отменить»
+      mergeCustomers: (keepId, dropId) => {
+        if (mergeCustomersDb(dbRef.current, keepId, dropId) === dbRef.current) return () => {};
+        return mutate("customer.merge", (d) => mergeCustomersDb(d, keepId, dropId), { k: "customer.merge", keepId, dropId });
+      },
       markNotDuplicate: (aId, bId) => {
-        const next = markNotDuplicateDb(dbRef.current, aId, bId);
-        const ids = next.customers.find((c) => c.id === aId)?.notDuplicateIds ?? [];
-        return mutate("customer.notDup", () => next, { k: "customer.notDup", id: aId, notDuplicateIds: ids });
+        if (markNotDuplicateDb(dbRef.current, aId, bId) === dbRef.current) return () => {};
+        return mutate("customer.notDup", (d) => markNotDuplicateDb(d, aId, bId), { k: "customer.notDup", id: aId, otherId: bId });
       },
       saveServiceCategory: (cat) => {
         const id = cat.id ?? uid();

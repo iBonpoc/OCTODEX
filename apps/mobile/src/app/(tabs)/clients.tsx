@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
@@ -13,7 +13,7 @@ import { CardList, Empty, ListRow, Screen } from "@/ui/surfaces";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { CardGrid, ListCard, ListCardHeader, StatusPicker } from "@/ui/listCard";
-import { clientDuplicates } from "@/features/clientDuplicates";
+import { canSeeClientDups, clientDuplicates } from "@/features/clientDuplicates";
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
 import { ListPanel } from "@/ui/listPanel";
@@ -44,7 +44,11 @@ export default function Clients() {
   const tagIds = keptTags.filter((id) => db.tags.some((x) => x.id === id && x.active));
   const owes = (id: string) => clientMoneyOf(db, id).owesCents > 0;
   // step 17 C3 (docs/specs/04 §13): possible duplicates — the office's mark; found on the phone, without the network
-  const dups = office ? clientDuplicates(db) : new Map<string, unknown[]>();
+  const dups = useMemo(
+    () => (canSeeClientDups(role) ? clientDuplicates(db) : new Map<string, unknown[]>()),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only the clients and their properties decide
+    [role, db.customers, db.properties],
+  );
   const openEst = (id: string) => db.estimates.some((e) => e.customerId === id && e.status === "sent");
   const pass: Record<Filter, (c: (typeof db.customers)[number]) => boolean> = {
     all: (c) => statusOf(c) === "active" || statusOf(c) === "do_not_service",
