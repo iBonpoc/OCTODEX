@@ -78,6 +78,7 @@ const CREATES: Creates = {
   "chk.item.set": none, "chk.item.add": (o) => [o.item.id], "chk.item.remove": none, "chk.item.edit": none, "chk.visit.review": none, "chk.visit.mins": none,
   "chk.template.save": (o) => [o.template.id], "est.template.save": (o) => [o.template.id], "company.visitSettings": none,
   "supplier.save": (o) => [o.supplier.id],
+  "po.save": (o) => [o.order.id, ...o.order.lines.map((l) => l.id)], "po.receive": none,
   "visit.pay": (o) => [o.invoiceId, o.paymentId], "lead.reply": none,
   "lead.book": (o) => [o.customerId, o.contactId, o.propertyId, o.jobId, o.visitId],
   "visit.notified": none, "visit.inspection": (o) => [o.visitId], "visit.cancel": none, "visit.reschedule": none,

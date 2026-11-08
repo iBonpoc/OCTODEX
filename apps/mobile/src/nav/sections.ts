@@ -22,6 +22,7 @@ export type SectionId =
   | "invoices"
   | "catalog"
   | "suppliers"
+  | "purchase-orders"
   | "payments"
   | "reports"
   | "money"
@@ -69,6 +70,8 @@ export const SECTIONS: readonly Section[] = [
   { id: "catalog", label: "nav.catalog", icon: "note", group: "docs" },
   // spec 36: owner, admin, office — the account number is not for the tech or sales
   { id: "suppliers", label: "nav.suppliers", icon: "truck", group: "docs", roles: PLANNERS },
+  // spec 37: owner, admin, office; the tech sees the orders of his jobs on the job
+  { id: "purchase-orders", label: "nav.purchaseOrders", icon: "box", group: "docs", roles: PLANNERS },
   // owner, admin, office (13 §4): not the technician, not sales
   { id: "payments", label: "mny.payments.title", icon: "dollar", group: "money", roles: PLANNERS },
   { id: "reports", label: "rpt.title", icon: "chart", group: "money", roles: PLANNERS },

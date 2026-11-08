@@ -167,6 +167,12 @@ export interface ModuleDef {
   leadCreated?: (x: { ref: string; leadId: string }, store: ModuleStore) => (() => void) | null | undefined;
   /** its words on an open (draft / sent) estimate; `data` — DB.moduleData[key]. Pure: called on every render */
   estimateNotes?: (e: import("@/data/types").Estimate, db: import("@/data/types").DB, data: unknown) => ModuleNote[];
+  /**
+   * S11g (docs/specs/37 §3): what this trade adds to a job's supplier order — parts bought but not on the client's
+   * estimate, its own quantities. A line for an item the core also has REPLACES the core's; `packed` — already in packs.
+   * Pure; `data` — DB.moduleData[key]. The core makes the order; the module never knows the supplier.
+   */
+  purchaseLines?: (job: import("@/data/types").Job, db: import("@/data/types").DB, data: unknown) => import("@/features/purchaseOrders").ModulePurchaseLine[];
   /** starter checklist templates the office may add (optional; a module without them adds none) */
   checklistTemplates?: StarterChecklist[];
   /** starter estimate templates the office may add (optional; docs/specs/07 §12) */
@@ -271,6 +277,19 @@ export function placeActions(place: ModulePlace, company: Pick<Company, "modules
 export function estimateNotes(db: import("@/data/types").DB, e: import("@/data/types").Estimate, now = Date.now()): (ModuleNote & { module: string })[] {
   if (e.status !== "draft" && e.status !== "sent") return [];
   return activeModules(db.company, now).flatMap((d) => (d.estimateNotes?.(e, db, db.moduleData?.[d.key]) ?? []).map((n) => ({ ...n, module: d.key })));
+}
+
+/** S11g: the lines every active module adds to a job's supplier order (a module that fails adds none) */
+export function modulePurchaseLines(db: import("@/data/types").DB, jobId: string, now = Date.now()): import("@/features/purchaseOrders").ModulePurchaseLine[] {
+  const job = db.jobs.find((j) => j.id === jobId);
+  if (!job) return [];
+  return activeModules(db.company, now).flatMap((d) => {
+    try {
+      return d.purchaseLines?.(job, db, db.moduleData?.[d.key]) ?? [];
+    } catch {
+      return [];
+    }
+  });
 }
 
 /**
