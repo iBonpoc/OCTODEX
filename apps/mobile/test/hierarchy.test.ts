@@ -83,6 +83,12 @@ describe("navigation hierarchy: back = one level up", () => {
     const lead = db.leads[0]!;
     expect(navContext("/estimate/new", { leadId: lead.id }, db, "director").up?.href).toBe(`/lead/${lead.id}`);
     expect(navContext("/estimate/new", { customerId: db.customers[0]!.id }, db, "director").up?.href).toBe(`/client/${db.customers[0]!.id}`);
+    // estimate templates (spec 07 §12): the list under «Сметы»; the builder editing a template — under the list
+    expect(navContext("/estimate/templates", {}, db, "director")).toMatchObject({ section: "estimates", kind: "est.tpl.title", up: { href: "/estimates" } });
+    expect(navContext("/estimate/new", { editTemplate: "t1" }, db, "director")).toMatchObject({ kind: "est.tpl.editTitle", up: { href: "/estimate/templates" } });
+    // only where the builder opens the template mode: not for a tech (a plain new estimate), not over an estimate
+    expect(navContext("/estimate/new", { editTemplate: "t1" }, db, "tech").kind).toBe("ue.newTitle");
+    expect(navContext("/estimate/new", { editTemplate: "t1", id: "e1" }, db, "director").kind).toBe("ue.newTitle");
   });
   it("☰ roots (Jobs, Payments, Money, Team, Catalog, Company, Settings, Estimates) have ☰, not «back»; Catalog → item, Company → section", () => {
     for (const p of ["/jobs", "/calls", "/tasks", "/help", "/payments", "/money", "/team", "/catalog", "/company", "/settings", "/estimates"]) {

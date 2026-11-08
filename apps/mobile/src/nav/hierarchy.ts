@@ -68,6 +68,10 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       // «Моя подпись» lives under «Мои настройки», it is not an estimate with the id «signature» (LOG п.15)
       // «Моя подпись для договоров» is a row of «Профиль и аккаунт» (spec 26): back goes there
       if (id === "signature") return { section: "settings", kind: "est.sig.title", up: { href: "/settings/profile", label: K("fix.settings.profile") } };
+      // estimate templates (spec 07 §11, §12): the list, and the builder editing one (?editTemplate=) — under the list
+      if (id === "templates") return { section: "estimates", kind: "est.tpl.title", up: estList };
+      // the template mode only where new.tsx opens it: the office (canEditTemplates), not over an estimate or a template given
+      if (id === "new" && one(params.editTemplate) && (role === "director" || role === "dispatcher") && !one(params.id) && !one(params.template)) return { section: "estimates", kind: "est.tpl.editTitle", up: { href: "/estimate/templates", label: K("est.tpl.title") } };
       if (id === "new") {
         const lid = one(params.leadId);
         const cid = one(params.customerId);
