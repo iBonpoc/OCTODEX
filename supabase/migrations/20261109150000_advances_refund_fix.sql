@@ -20,7 +20,12 @@ begin
   if exists (select 1 from public.companies c where c.id = new.company_id and c.closed_at is not null) then
     raise exception 'the company is closed' using errcode = '42501';
   end if;
-  select * into inv from public.invoices where id = new.invoice_id for update;
+  -- an advance is Stripe's money kept without an invoice (stripe_apply_intent); a payment recorded by hand without an
+  -- invoice is not one (security review of this PR №3)
+  if not app.refund_is_stripe(new) then
+    raise exception 'advance_not_applicable' using errcode = 'check_violation';
+  end if;
+  select * into inv from public.invoices where id = new.invoice_id and deleted_at is null for update;
   if inv.id is null or inv.company_id <> new.company_id or inv.customer_id <> new.customer_id then
     raise exception 'advance_other_client' using errcode = 'check_violation';
   end if;
@@ -68,7 +73,10 @@ begin
   if p.id is null or not app.refund_role_ok(v_user, p.company_id) then
     raise exception 'only owner/admin can apply an advance' using errcode = '42501';   -- no such payment looks the same
   end if;
-  if p.invoice_id is not null and p.invoice_id = p_invoice_id then
+  if p_invoice_id is null then
+    raise exception 'advance_other_client' using errcode = 'check_violation';   -- no invoice, no «paid» notice
+  end if;
+  if p.invoice_id is not null and p.invoice_id = p_invoice_id and app.refund_is_stripe(p) then
     select * into inv from public.invoices where id = p.invoice_id;
     return jsonb_build_object('payment_id', p.id, 'invoice_id', inv.id, 'paid_cents', inv.paid_cents,
                               'balance_cents', greatest(inv.total_cents - inv.paid_cents, 0), 'repeat', true);
@@ -113,24 +121,37 @@ returns bigint language sql stable security definer set search_path = '' as $$
 $$;
 revoke all on function app.refund_counted(uuid) from public, anon, authenticated;
 
--- a counted refund failed: its amount comes off refunded_cents, never below what the other rows prove; once per row
--- (the callers see the row change to failed / canceled). The owner is asked to look (needs_review), the reason is kept.
-create or replace function app.refund_unwind(p_refund_id uuid)
+-- once per refund row: the row that already gave its money back (two events at once, a webhook and stripe-refund's answer
+-- together — reviews of this PR) never takes it off a second time. Only the steps below write it; the app does not read it.
+alter table public.refunds add column unwound_at timestamptz;
+
+-- a counted refund failed: its amount comes off refunded_cents, never below what the other rows prove; once per row (the
+-- row is locked and marked). p_counted: the row was in the money before (succeeded, or pending with its id), or it is a
+-- Stripe-made refund (dashboard) whose charge.refunded may have raised the money before its row came — then only what the
+-- rows do not explain comes off. The owner is asked to look (needs_review), the reason is kept.
+create or replace function app.refund_unwind(p_refund_id uuid, p_counted boolean default true)
 returns text language plpgsql security definer set search_path = '' as $$
 declare
   r     public.refunds;
   p     public.payments;
   v_new bigint;
 begin
-  select * into r from public.refunds where id = p_refund_id;
+  select * into r from public.refunds where id = p_refund_id for update;
   select * into p from public.payments where id = r.payment_id for update;
-  if r.id is null or p.id is null or r.status not in ('failed', 'canceled') then
+  if r.id is null or p.id is null or r.status not in ('failed', 'canceled') or r.unwound_at is not null or not p_counted then
     return 'stale';
   end if;
+  update public.refunds set unwound_at = now() where id = r.id;
   v_new := greatest(app.refund_counted(p.id), p.refunded_cents - r.amount_cents, 0);
   if v_new >= p.refunded_cents then
     update public.payments set needs_review = true where id = p.id;
     return 'stale';
+  end if;
+  -- a voided invoice takes no money back (its guard refuses any change): the money stays marked for the owner, the
+  -- event is applied all the same — never a webhook stuck on 500 for days (review of this PR №1)
+  if exists (select 1 from public.invoices i where i.id = p.invoice_id and i.status = 'void') then
+    update public.payments set needs_review = true where id = p.id;
+    return 'invoice_void';
   end if;
   perform set_config('app.status_reason', 'refund_failed', true);   -- status_events: why the payment came back
   update public.payments
@@ -142,7 +163,47 @@ begin
   return null;
 end;
 $$;
-revoke all on function app.refund_unwind(uuid) from public, anon, authenticated;
+revoke all on function app.refund_unwind(uuid, boolean) from public, anon, authenticated;
+
+-- ---- 4а. The invoice's recalculation (create or replace of 20261106080000's, its recalc mark kept): a voided invoice is never written (its guard refuses
+-- any change, so any update of its payment — needs_review of a failed refund too — used to fail the whole Stripe event
+-- with 500 for days, review of this PR №1), and an update that changes nothing is not made.
+create or replace function app.recalc_invoice_payment(p_invoice_id uuid)
+returns void language plpgsql security definer set search_path = '' as $$
+declare
+  v_paid      bigint;
+  v_refunded  boolean;
+begin
+  if p_invoice_id is null then return; end if;
+  select coalesce(sum(p.amount_cents - p.refunded_cents) filter (where p.status in ('succeeded', 'partially_refunded', 'refunded')), 0),
+         coalesce(bool_or(p.refunded_cents > 0), false)
+    into v_paid, v_refunded
+    from public.payments p where p.invoice_id = p_invoice_id;
+
+  perform set_config('app.invoice_recalc', 'on', true);
+  begin
+    update public.invoices i
+       set paid_cents = v_paid,
+           payment_status = case
+             when v_paid > 0 and v_paid >= i.total_cents then 'paid'
+             when v_paid > 0 then 'partially_paid'
+             when v_refunded then 'refunded'
+             else 'unpaid' end
+     where i.id = p_invoice_id
+       and i.status <> 'void'                                  -- 20д debts: a voided invoice is never written
+       and (i.paid_cents, i.payment_status) is distinct from (v_paid, case
+             when v_paid > 0 and v_paid >= i.total_cents then 'paid'
+             when v_paid > 0 then 'partially_paid'
+             when v_refunded then 'refunded'
+             else 'unpaid' end);
+  exception when others then
+    perform set_config('app.invoice_recalc', '', true);   -- a caught error must not leave the mark on
+    raise;
+  end;
+  perform set_config('app.invoice_recalc', '', true);
+end;
+$$;
+revoke all on function app.recalc_invoice_payment(uuid) from public, anon, authenticated;
 
 -- ---- 5. charge.refunded after a failure: amount_refunded no longer decides (create or replace of 20а's) -------------
 create or replace function app.stripe_apply_refunded(p_payment_id uuid, p_refunded bigint)
@@ -352,7 +413,7 @@ begin
 
   -- 20д debts: the row of this Stripe refund as it was before the event (counted = succeeded, or pending with its id)
   if v_refund and o ->> 'id' ~ '^(re|pyr)_[A-Za-z0-9]{1,64}$' then
-    select * into v_was from public.refunds where stripe_refund_id = o ->> 'id';
+    select * into v_was from public.refunds where stripe_refund_id = o ->> 'id' for update;   -- the second event waits
   end if;
 
   -- 20д: Stripe may tell about our refund before stripe-refund keeps its answer. The row is found by its id in metadata —
@@ -384,9 +445,12 @@ begin
   -- money follows the rows (a refund made in Stripe's dashboard after a failure — charge.refunded no longer decides).
   if v_refund and v_r = 'processed' and o ->> 'id' ~ '^(re|pyr)_[A-Za-z0-9]{1,64}$' then
     select * into v_now from public.refunds where stripe_refund_id = o ->> 'id';
-    if v_was.id is not null and (v_was.status = 'succeeded' or v_was.status = 'pending')
-       and v_now.status in ('failed', 'canceled') then
-      perform app.refund_unwind(v_now.id);
+    if v_now.status in ('failed', 'canceled') then
+      -- counted before this event, or Stripe's own refund met first as failed (refund.created late): its money may be in
+      -- refunded_cents through charge.refunded — once per row, never below what the rows prove
+      perform app.refund_unwind(v_now.id, (v_was.id is not null and v_was.status in ('succeeded', 'pending'))
+                                          or (v_was.id is null and v_now.idempotency_key like 'stripe:%'));
+      perform app.refund_sync_money(v_now.payment_id);
     elsif v_now.id is not null then
       perform app.refund_sync_money(v_now.payment_id);
     end if;

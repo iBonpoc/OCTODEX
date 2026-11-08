@@ -24,11 +24,19 @@ const DEMO = { mode: "demo" as const, appRole: "director" };
 beforeEach(() => rpc.mockReset());
 
 describe("unit:advance — from the cloud's rows", () => {
-  const row = (o: Record<string, unknown>) => ({ id: "p", customer_id: "c1", method: "card", status: "succeeded", amount_cents: 5000, refunded_cents: 0, received_at: "2026-11-08T18:00:00Z", fee_cents: 0, ...o });
+  const row = (o: Record<string, unknown>) => ({ id: "p", customer_id: "c1", method: "card", status: "succeeded", amount_cents: 5000, refunded_cents: 0, received_at: "2026-11-08T18:00:00Z", fee_cents: 0, idempotency_key: `stripe:pi_${String(o.id ?? "p")}`, ...o });
   it("a payment without an invoice is an advance, not a payment; Stripe's fee comes along", () => {
     const r = paymentsFromRows([row({ id: "p1", invoice_id: "i1", fee_cents: 175 }), row({ id: "a1", invoice_id: null, needs_review: true })]);
     expect(r.payments.map((x) => [x.id, x.invoiceId, x.feeCents])).toEqual([["p1", "i1", 175]]);
     expect(r.advances.map((x) => [x.id, x.invoiceId, x.needsReview, x.feeCents])).toEqual([["a1", null, true, undefined]]);
+  });
+  it("a payment recorded by hand without an invoice is not an advance (only Stripe's money kept by the server)", () => {
+    const r = paymentsFromRows([row({ id: "h1", invoice_id: null, method: "cash", idempotency_key: "rec-1" })]);
+    expect([r.payments.length, r.advances.length]).toEqual([0, 0]);
+  });
+  it("a pending refund row (even one Stripe accepted) — refundOpen: no apply meanwhile, as t41", () => {
+    const a = paymentsFromRows([row({ id: "a1", invoice_id: null, refunded_cents: 1000, status: "partially_refunded" })], [{ payment_id: "a1", amount_cents: 1000, status: "pending" }]).advances[0]!;
+    expect([a.refundOpen, a.refundPendingCents, applicable(a)]).toEqual([true, undefined, false]);
   });
   it("not money yet or no money left — in neither list (pending ACH, failed, fully refunded)", () => {
     const r = paymentsFromRows([row({ id: "a1", invoice_id: null, status: "pending" }), row({ id: "a2", invoice_id: null, status: "failed" }),

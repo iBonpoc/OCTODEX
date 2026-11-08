@@ -106,6 +106,7 @@ export function AdvanceSheet({
             <T v="body">{t(`mny.adv.err.${err}` as DictKey)}</T>
           </View>
         ) : null}
+        <View testID="advance-do">
         <Button
           label={busy ? t("mny.adv.busy") : t("mny.adv.do", { amount: money(advance.amountCents) })}
           icon="check"
@@ -113,6 +114,7 @@ export function AdvanceSheet({
           disabled={!chosen || busy || !online}
           onPress={confirm}
         />
+        </View>
       </View>
     </Sheet>
   );

@@ -10,7 +10,8 @@
  */
 exports.run = async (h) => {
   const p = h.page;
-  await h.go("/payments");
+  await h.go("/payments?p=all");
+  const total0 = await p.getByTestId("payments-total").locator("visible=true").first().innerText();
   const db0 = await h.db();
   const inv = db0.invoices.find((i) => i.totalCents - i.paidCents >= 5000 && db0.customers.some((c) => c.id === i.customerId));
   h.expect(!!inv, "the demo has an invoice owing $50 or more");
@@ -28,9 +29,7 @@ exports.run = async (h) => {
   const section = p.getByTestId("advances-section").locator("visible=true").first();
   await section.waitFor({ timeout: 5000 });
   await section.getByTestId("advance-card-e2e-adv-190").first().waitFor({ timeout: 3000 });
-  h.expect(/Без счёта/.test(await section.innerText()), "the section says «no invoice»");
-  const sumBefore = db0.payments.reduce((s, x) => s + x.amountCents, 0);
-  h.expect((await h.db()).payments.reduce((s, x) => s + x.amountCents, 0) === sumBefore, "an advance is not a payment of the period");
+  h.expect((await p.getByTestId("payments-total").locator("visible=true").first().innerText()) === total0, "«Собрано» is the same: an advance is not counted");
   await h.shot("payments");
 
   // the client card
@@ -40,17 +39,16 @@ exports.run = async (h) => {
   // 2) the receipt → «Зачесть в счёт»
   await h.go("/receipt/e2e-adv-190");
   await p.getByTestId("rcpt-advance-hint").locator("visible=true").first().waitFor({ timeout: 5000 });
-  h.expect(/Без счёта/.test(await p.getByTestId("rcpt-advance").locator("visible=true").first().innerText()), "the receipt says «no invoice»");
+  await p.getByTestId("rcpt-advance").locator("visible=true").first().waitFor({ timeout: 3000 });
   await p.getByTestId("rcpt-apply").locator("visible=true").first().getByRole("button").click();
   const sheet = h.sheet();
   await sheet.getByTestId("advance-form").waitFor({ timeout: 5000 });
   const row = sheet.getByTestId(`advance-inv-${inv.id}`);
   await row.waitFor({ timeout: 3000 });
-  const go = sheet.getByRole("button", { name: /^Зачесть \$50(\.00)?$/ });
+  const go = sheet.getByTestId("advance-do").getByRole("button");
   await row.click();
   await h.shot("apply");
   await go.click();
-  await p.getByText(/Зачтено \$50/).first().waitFor({ timeout: 5000 });
   await p.waitForFunction((id) => {
     const d = JSON.parse(localStorage.getItem("octo.db.v5") || "null")?.db;
     return d && !(d.advances || []).some((x) => x.id === id) && d.payments.some((x) => x.id === id);

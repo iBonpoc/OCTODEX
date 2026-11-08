@@ -104,6 +104,14 @@ describe("CSV", () => {
       '﻿Client,Owed\r\n"Kim, David",1840.00\r\n"Say ""hi""",-25.00\r\n\'=HYPERLINK(1),3\r\n',
     );
   });
+  it("a cell that only starts like a negative number is still a formula (CSV injection); a tab / CR start too", () => {
+    const one = (v: string | number) => toCsv(["x"], [[v]]).split("\r\n")[1];
+    expect(one("-1+cmd|' /C calc'!A0")).toBe("'-1+cmd|' /C calc'!A0");
+    expect(one("-2e3")).toBe("'-2e3");
+    expect(one("\t=1+1")).toBe("'\t=1+1");
+    expect(one("@SUM(A1)")).toBe("'@SUM(A1)");
+    expect([one("-12.50"), one("-7"), one("40"), one(-3), one("Kim")]).toEqual(["-12.50", "-7", "40", "-3", "Kim"]);
+  });
 });
 
 describe("5. «По направлениям» (18 §11)", () => {

@@ -54,7 +54,9 @@ export default function Payments() {
   const v = { ...found, items: found.items.filter((x) => matchPayment(db, x, q)) };
   const all = paymentsIn(db, p);
   // spec 35 §4г: the clients' advances (no invoice) — their own section, outside the period's sum while they are «to check»
-  const advances = ADVANCES_COLLECTED ? [] : (db.advances ?? []).filter((x) => matchPayment(db, { ...x, invoiceId: "" }, q));
+  // the same period, method and search as the list (paymentsIn over the advances alone)
+  const advIds = new Set(paymentsIn({ payments: (db.advances ?? []).map((x) => ({ ...x, invoiceId: "" })) }, p, method).items.map((x) => x.id));
+  const advances = ADVANCES_COLLECTED ? [] : (db.advances ?? []).filter((x) => advIds.has(x.id) && matchPayment(db, { ...x, invoiceId: "" }, q));
   const advanceCard = (x: Advance) => {
     const c = db.customers.find((y) => y.id === x.customerId);
     return (
@@ -138,10 +140,12 @@ export default function Payments() {
           <CardList>{advances.map(advanceCard)}</CardList>
         </View>
       ) : null}
-      <Card>
-        <T v="caption" tone="mut">{t("mny.collected", { n: all.items.length })}</T>
-        <T v="display" tabular>{money(all.totalCents)}</T>
-      </Card>
+      <View testID="payments-total">
+        <Card>
+          <T v="caption" tone="mut">{t("mny.collected", { n: all.items.length })}</T>
+          <T v="display" tabular>{money(all.totalCents)}</T>
+        </Card>
+      </View>
       {v.items.length === 0 ? (
         <Empty icon="wallet" title={t("mny.payments.empty")} />
       ) : device === "tablet" ? (

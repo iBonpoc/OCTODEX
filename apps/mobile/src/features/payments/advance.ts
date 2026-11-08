@@ -44,9 +44,10 @@ export function advanceTargets(db: Pick<DB, "invoices" | "pendingPayments">, a: 
   };
 }
 
-/** an advance can be applied now: nothing of it is on its way back (a refund in progress) and it still brings money */
-export const applicable = (a: Pick<Advance, "amountCents" | "refundPendingCents">): boolean =>
-  a.amountCents > 0 && !a.refundPendingCents && refundable(a) === a.amountCents;
+/** an advance can be applied now: no refund of it is still pending (the server waits for its end, t41 — an ACH refund
+ *  Stripe accepted is pending for days too) and it still brings money */
+export const applicable = (a: Pick<Advance, "amountCents" | "refundPendingCents" | "refundOpen">): boolean =>
+  a.amountCents > 0 && !a.refundOpen && !a.refundPendingCents && refundable(a) === a.amountCents;
 
 /**
  * The demo's apply — the same rules as the database (T135): owner/admin, the same client, the whole advance ≤ what the

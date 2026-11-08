@@ -769,6 +769,7 @@ export async function loadCompanyModule(companyId: string, key: string): Promise
  */
 export function paymentsFromRows(rows: Row[], refundRows: Row[] = []): { payments: Payment[]; advances: Advance[] } {
   const held = new Map<string, number>();
+  const open = new Set(refundRows.filter((r) => s(r.status) === "pending").map((r) => s(r.payment_id)));
   for (const r of refundRows) {
     if (!["pending", "succeeded"].includes(s(r.status))) continue;
     held.set(s(r.payment_id), (held.get(s(r.payment_id)) ?? 0) + n(r.amount_cents));
@@ -786,12 +787,15 @@ export function paymentsFromRows(rows: Row[], refundRows: Row[] = []): { payment
       needsReview: p.needs_review === true || undefined,
       feeCents: n(p.fee_cents) > 0 ? n(p.fee_cents) : undefined,
       refundPendingCents: pending > 0 ? pending : undefined,
+      refundOpen: open.has(s(p.id)) || undefined,
     };
   };
   const newest = <T extends { at: string }>(a: T, b: T) => b.at.localeCompare(a.at);
   return {
     payments: shown.filter((p) => p.invoice_id).map((p) => ({ ...base(p), invoiceId: s(p.invoice_id) })).sort(newest),
-    advances: shown.filter((p) => !p.invoice_id).map((p) => ({ ...base(p), invoiceId: null })).sort(newest),
+    // an advance is Stripe's money kept without an invoice (key «stripe:pi_…»); a payment recorded by hand without an
+    // invoice is not one (security review of spec 35 §4г) — it stays out, as before
+    advances: shown.filter((p) => !p.invoice_id && s(p.idempotency_key).startsWith("stripe:")).map((p) => ({ ...base(p), invoiceId: null })).sort(newest),
   };
 }
 

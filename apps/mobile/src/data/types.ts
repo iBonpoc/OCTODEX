@@ -827,6 +827,8 @@ export interface Payment {
   feeCents?: number;
   /** refunds on their way that are not in refundedCents yet (as app.refund_available): not refundable twice (spec 35 §4г) */
   refundPendingCents?: number;
+  /** a refund row of it is still «pending» (at Stripe or on its way there): an advance is not applied meanwhile (t41) */
+  refundOpen?: boolean;
 }
 /** the client's advance (spec 35 §4г): a payment without an invoice (an online payment above the balance, kept for the owner
  *  to refund or apply to an invoice). Not in payments, sums or balances until it is applied (moneyLists.ADVANCES_COLLECTED). */
