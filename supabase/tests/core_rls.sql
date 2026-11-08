@@ -11266,4 +11266,127 @@ select tst.ok(not has_function_privilege('authenticated', 'app.tg_cost_history()
 -- the move on a database with data: upgrade/20261110000000_suppliers.after.sql
 \echo 'T146 doors ok'
 
+-- ---------------------------------------------------------------- T155: purchase orders — who reads and writes (spec 37 §5)
+-- owner / admin / office everything; the tech the orders of his own job (no costs); sales, another company — nothing
+:as_owner_a
+insert into public.suppliers (id, company_id, name) values ('51550000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'T155 Supply (test)');
+-- an order of the tech's job (e1a…01) and one of another tech's job (e1a…02)
+insert into public.purchase_orders (id, company_id, supplier_id, job_id) values
+  ('51550000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '51550000-0000-4000-8000-0000000000a1', 'e1a00000-0000-0000-0000-000000000001'),
+  ('51550000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', '51550000-0000-4000-8000-0000000000a1', 'e1a00000-0000-0000-0000-000000000002');
+insert into public.purchase_order_lines (id, company_id, po_id, position, name, qty, unit, bom_qty) values
+  ('51550000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', '51550000-0000-4000-8000-000000000001', 0, 'Bracket (test)', 2, 'box', '65'),
+  ('51550000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', '51550000-0000-4000-8000-000000000001', 1, 'Screws (test)', 1, 'bag', null),
+  ('51550000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', '51550000-0000-4000-8000-000000000002', 0, 'Other (test)', 1, 'ea', null);
+insert into public.purchase_order_line_costs (line_id, company_id, unit_cost_cents) values
+  ('51550000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 4200);
+select tst.ok((select number like 'PO-%' and status = 'draft' from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001'),
+  'T155 the server gives the number PO-…, a new order is a draft');
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.purchase_orders where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 2
+          and tst.cnt($q$select 1 from public.purchase_order_line_costs where line_id = '51550000-0000-4000-8000-0000000000b1'$q$) = 1,
+  'T155 the office reads the orders and their costs');
+update public.purchase_orders set note = 'gate 1234', deliver_to = '1 Main St' where id = '51550000-0000-4000-8000-000000000001';
+select tst.ok((select note = 'gate 1234' from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001'), 'T155 the office edits an order');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.purchase_orders$q$) = 1
+          and tst.cnt($q$select 1 from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001'$q$) = 1,
+  'T155 the tech reads only the order of his own job');
+select tst.ok(tst.cnt($q$select 1 from public.purchase_order_lines$q$) = 2, 'T155 …and its lines');
+select tst.ok(tst.cnt($q$select 1 from public.purchase_order_line_costs$q$) = 0, 'T155 …never the costs');
+select tst.blocked($q$update public.purchase_orders set note = 'x' where id = '51550000-0000-4000-8000-000000000001'$q$, 'T155 the tech does not edit an order');
+select tst.blocked($q$update public.purchase_order_lines set received_qty = 2 where id = '51550000-0000-4000-8000-0000000000b1'$q$, 'T155 …nor a line (only po_receive)');
+select tst.fails($q$insert into public.purchase_orders (company_id) values ('ca000000-0000-0000-0000-000000000000')$q$, 'T155 the tech makes no order');
+:as_sales_a
+select tst.ok(tst.cnt($q$select 1 from public.purchase_orders$q$) = 0 and tst.cnt($q$select 1 from public.purchase_order_lines$q$) = 0, 'T155 sales reads none');
+select tst.fails($q$insert into public.purchase_orders (company_id) values ('ca000000-0000-0000-0000-000000000000')$q$, 'T155 sales makes none');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.purchase_orders where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0, 'T155 company B reads none of A''s');
+select tst.blocked($q$update public.purchase_orders set note = 'x' where id = '51550000-0000-4000-8000-000000000001'$q$, 'T155 company B changes none');
+select tst.fails($q$insert into public.purchase_orders (company_id, supplier_id) values ('cb000000-0000-0000-0000-000000000000', '51550000-0000-4000-8000-0000000000a1')$q$,
+  'T155 B''s order cannot point at A''s supplier');
+select tst.fails($q$insert into public.purchase_order_lines (company_id, po_id, name, qty) values ('cb000000-0000-0000-0000-000000000000', '51550000-0000-4000-8000-000000000001', 'x', 1)$q$,
+  'T155 B''s line cannot join A''s order');
+\echo 'T155 purchase orders: office all, the tech his own without costs ok'
+
+-- ---------------------------------------------------------------- T156: the statuses of an order (map §5)
+:as_owner_a
+select tst.fails($q$update public.purchase_orders set status = 'received' where id = '51550000-0000-4000-8000-000000000002'$q$, 'T156 draft → received is not a move');
+update public.purchase_orders set status = 'sent', revision = 1, sent_at = now(), supplier_name = 'T155 Supply (test)' where id = '51550000-0000-4000-8000-000000000001';
+select tst.ok((select status = 'sent' from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001'), 'T156 draft → sent');
+select tst.ok(tst.cnt($q$select 1 from public.status_events where entity_type = 'purchase_order' and entity_id = '51550000-0000-4000-8000-000000000001' and to_status = 'sent'$q$) = 1,
+  'T156 the move is in status_events');
+select tst.fails($q$update public.purchase_orders set number = 'HACK-1' where id = '51550000-0000-4000-8000-000000000001'$q$, 'T156 the number is not the app''s to change');
+:as_super
+update public.purchase_orders set number = 'HACK-1' where id = '51550000-0000-4000-8000-000000000001';
+select tst.ok((select number like 'PO-%' from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001'), 'T156 …even a direct write keeps the server''s number');
+:as_owner_a
+update public.purchase_orders set id = '51550000-0000-4000-8000-0000000000ff' where id = '51550000-0000-4000-8000-000000000001';
+select tst.ok(tst.cnt($q$select 1 from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001'$q$) = 1, 'T156 the id cannot be changed');
+update public.purchase_orders set status = 'cancelled' where id = '51550000-0000-4000-8000-000000000002';
+select tst.fails($q$update public.purchase_orders set status = 'draft' where id = '51550000-0000-4000-8000-000000000002'$q$, 'T156 a cancelled order stays cancelled');
+select tst.fails($q$insert into public.purchase_order_lines (company_id, po_id, name, qty) values ('ca000000-0000-0000-0000-000000000000', '51550000-0000-4000-8000-000000000002', 'late', 1)$q$,
+  'T156 a cancelled order takes no lines');
+select tst.blocked($q$delete from public.purchase_orders where id = '51550000-0000-4000-8000-000000000002'$q$, 'T156 an order is not deleted (cancelled)');
+\echo 'T156 statuses of an order ok'
+
+-- ---------------------------------------------------------------- T157: po_receive — what came (spec 37 §5)
+:as_tech2_a
+select tst.fails($q$select public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b1","received":2}]')$q$,
+  'T157 a tech of another job cannot mark it');
+:as_sales_a
+select tst.fails($q$select public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b1","received":2}]')$q$,
+  'T157 sales cannot mark it');
+:as_tech_a
+select tst.ok(public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b1","received":2}]') = 'partially_received',
+  'T157 the tech of the job: one of two lines came → partially received');
+select tst.ok(public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b1","received":2}]') = 'partially_received',
+  'T157 the same call again changes nothing (the quantity as it is, not added)');
+select tst.fails($q$select public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b2","received":-1}]')$q$, 'T157 a negative quantity');
+select tst.ok(public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b2","received":1}]') = 'received',
+  'T157 everything came → received');
+:as_super
+select tst.ok((select status = 'received' and received_at is not null from public.purchase_orders where id = '51550000-0000-4000-8000-000000000001')
+          and (select received_qty = 2 from public.purchase_order_lines where id = '51550000-0000-4000-8000-0000000000b1'),
+  'T157 the order and its lines say so');
+:as_office_a
+select tst.fails($q$update public.purchase_order_lines set qty = 5 where id = '51550000-0000-4000-8000-0000000000b1'$q$, 'T157 a received order''s lines are not edited');
+select tst.ok(public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b2","received":0}]') = 'partially_received',
+  'T157 the office takes a wrong tick back → partially received');
+-- a line of another order in the list is ignored
+select public.po_receive('51550000-0000-4000-8000-000000000001', '[{"id":"51550000-0000-4000-8000-0000000000b3","received":1}]');
+:as_super
+select tst.ok((select received_qty = 0 from public.purchase_order_lines where id = '51550000-0000-4000-8000-0000000000b3'), 'T157 a line of another order is not touched');
+:as_owner_a
+select tst.fails($q$select public.po_receive('51550000-0000-4000-8000-000000000002', '[]')$q$, 'T157 a cancelled order receives nothing');
+\echo 'T157 po_receive ok'
+
+-- ---------------------------------------------------------------- T158: costs of the lines — only who sees costs
+:as_super
+update public.memberships set permissions_override = '{"view_costs": true}'::jsonb
+ where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.purchase_order_line_costs$q$) = 0, 'T158 the tech never reads the costs, even with view_costs');
+select tst.fails($q$insert into public.purchase_order_line_costs (line_id, company_id, unit_cost_cents) values ('51550000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 1)$q$,
+  'T158 …nor writes them');
+:as_super
+update public.memberships set permissions_override = permissions_override - 'view_costs'
+ where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_owner_a
+update public.purchase_order_line_costs set line_id = '51550000-0000-4000-8000-0000000000b2' where line_id = '51550000-0000-4000-8000-0000000000b1';
+select tst.ok(tst.cnt($q$select 1 from public.purchase_order_line_costs where line_id = '51550000-0000-4000-8000-0000000000b1'$q$) = 1, 'T158 a cost row keeps its line');
+\echo 'T158 line costs ok'
+
+-- ---------------------------------------------------------------- T159: who calls the new functions (rule 18)
+select tst.ok(has_function_privilege('authenticated', 'public.po_receive(uuid, jsonb)', 'execute')
+          and not has_function_privilege('anon', 'public.po_receive(uuid, jsonb)', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_po_line_lock()', 'execute')
+          and not has_function_privilege('authenticated', 'app.tg_keep_line_id()', 'execute')
+          and not has_function_privilege('anon', 'app.can_read_po(uuid, uuid)', 'execute')
+          and not has_table_privilege('authenticated', 'public.purchase_orders', 'delete')
+          and not has_column_privilege('authenticated', 'public.purchase_order_lines', 'received_qty', 'update')
+          and not has_column_privilege('authenticated', 'public.purchase_orders', 'number', 'update'),
+  'T159 po_receive — the app; the triggers nobody''s; no delete of an order; received_qty only through po_receive');
+\echo 'T159 doors ok'
+
 \echo 'ALL TESTS PASSED'
