@@ -37,6 +37,7 @@ import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
 import { docForSave, newToken, storedDoc, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
+import { markNotDuplicateDb, mergeCustomersDb } from "@/features/clientDuplicates";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
 import { backoffMs, classify, isModuleInactive, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
@@ -303,6 +304,11 @@ interface StoreCtx {
   saveCustomerPeople: (id: ID, people: Person[]) => Undo;
   setCustomerTags: (id: ID, tagIds: ID[]) => Undo;
   setCustomerStatus: (id: ID, status: CustomerStatus, reason?: string) => Undo;
+  /** step 17 C3 (docs/specs/04 §13): dropId's people, properties, leads, documents and money move to keepId; dropId is
+   *  archived and merged. Owner / admin only (server: public.merge_customers). «Отменить» works until the op is sent. */
+  mergeCustomers: (keepId: ID, dropId: ID) => Undo;
+  /** «Не дубль»: the pair is not shown as a possible duplicate again (customers.not_duplicate_ids of aId) */
+  markNotDuplicate: (aId: ID, bId: ID) => Undo;
   /** add or edit a company tag (hiding = active: false; a tag is never deleted) */
   saveTag: (t: Omit<Tag, "id" | "position"> & { id?: ID; position?: number }) => { id: ID; undo: Undo };
   /** directions of the business (docs/specs/11-trade.md): add, rename, reorder, archive / bring back — never delete */
@@ -1874,6 +1880,12 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           (d) => ({ ...d, customers: d.customers.map((c) => (c.id === id ? { ...c, status, statusReason: status === "do_not_service" ? reason : undefined } : c)) }),
           { k: "customer.status", id, status, reason: status === "do_not_service" ? reason : undefined },
         ),
+      mergeCustomers: (keepId, dropId) => mutate("customer.merge", (d) => mergeCustomersDb(d, keepId, dropId), { k: "customer.merge", keepId, dropId }),
+      markNotDuplicate: (aId, bId) => {
+        const next = markNotDuplicateDb(dbRef.current, aId, bId);
+        const ids = next.customers.find((c) => c.id === aId)?.notDuplicateIds ?? [];
+        return mutate("customer.notDup", () => next, { k: "customer.notDup", id: aId, notDuplicateIds: ids });
+      },
       saveServiceCategory: (cat) => {
         const id = cat.id ?? uid();
         const list = dbRef.current.serviceCategories;

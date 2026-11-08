@@ -2968,6 +2968,27 @@ export const ru = {
   "opay.dueHint": "Откройте «Продолжить в Stripe»",
   "opay.how": "Комиссии и выплаты — в кабинете Stripe. После формы Stripe вернитесь сюда: состояние обновится само.",
   "opay.refresh": "Обновить",
+  // step 17 C3 «Лиды и клиенты»: duplicate clients and the merge (docs/specs/04 §13)
+  "clientDup.sign": "Возможный дубль",
+  "clientDup.title": "Возможный дубль: {name}",
+  "clientDup.why.phone": "тот же телефон",
+  "clientDup.why.email": "та же почта",
+  "clientDup.why.address": "тот же адрес",
+  "clientDup.sheetTitle": "Дубль клиента",
+  "clientDup.keep": "Какая карточка остаётся",
+  "clientDup.moves": "В «{name}» перейдут: людей {people}, объектов {properties}, лидов {leads}, смет {estimates}, работ {jobs}, счетов {invoices}, оплат {payments}",
+  "clientDup.fill": "Поля основной карточки останутся, пустые возьмутся из второй. Метки — обе. Номера документов и суммы не меняются.",
+  "clientDup.noService": "У одной из карточек «Не обслуживаем» — пометка останется.",
+  "clientDup.merge": "Слить",
+  "clientDup.confirm": "Карточку «{name}» нельзя будет вернуть из приложения — только через поддержку. «Отменить» доступно 5 секунд.",
+  "clientDup.confirmYes": "Да, слить",
+  "clientDup.notDup": "Не дубль",
+  "clientDup.open": "Открыть «{name}»",
+  "clientDup.done": "Слито в «{name}»",
+  "clientDup.notDupDone": "Не дубль: {name}",
+  "clientDup.onlyOwner": "Слить может владелец или администратор",
+  "clientDup.merged": "Карточка слита",
+  "clientDup.mergedHint": "Всё перешло в «{name}»",
 } as const;
 
 export type DictKey = keyof typeof ru;
