@@ -11,7 +11,7 @@ import { portalFromEstimate } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
-import { issueCount, isUniversal, mainOption, newToken, SEND_ISSUE_KINDS, sendIssues, type SendIssues } from "@/features/estimateDoc";
+import { issueCount, isUniversal, mainOption, newToken, SEND_ISSUE_KINDS, uid, sendIssues, type SendIssues } from "@/features/estimateDoc";
 import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
@@ -19,7 +19,8 @@ import { beforeSend, clientLink, copyText, estimateMessage, openEmail, openSms }
 import { canServe } from "@/features/clients";
 import { estimateNotes, type ModuleNote } from "@/modules/registry";
 import { docLanguageFor } from "@/data/people";
-import { Button, Segmented, StatusChip } from "@/ui/controls";
+import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
+import { canEditEstimateTemplates, ESTIMATE_TEMPLATE_NAME_MAX, toTemplateDoc } from "@/features/estimateTemplate";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
@@ -39,6 +40,7 @@ export default function EstimateScreen() {
   const [method, setMethod] = useState<PaymentMethod>("card");
   const [sendOpen, setSendOpen] = useState(send === "1");
   const [pdfOpen, setPdfOpen] = useState(false);
+  const [tplOpen, setTplOpen] = useState(false);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const e = db.estimates.find((x) => x.id === id);
   if (!e)
@@ -130,6 +132,10 @@ export default function EstimateScreen() {
             {(e.status === "draft" || e.status === "sent") && canServe(db, e.customerId) ? <View testID="est-send"><Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /></View> : null}
             {e.token ? <Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /> : null}
             <View testID="est-pdf"><Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={() => pdf()} /></View>
+            {/* E3 (spec 07 §11): any status; the director and the office (the server refuses others — never queued) */}
+            {e.doc && canEditEstimateTemplates(store.role) && !db.estimateTemplatesMissing ? (
+              <View testID="est-save-template"><Button label={t("est.tpl.saveAs")} icon="copy" variant="ghost" onPress={() => setTplOpen(true)} /></View>
+            ) : null}
             {/* E2b: only an unsigned link can be revoked (the signed client keeps their copy); director and office */}
             {e.token && !e.linkRevokedAt && (e.status === "sent" || e.status === "draft") && canManageLink(store.db, store.db.me) ? (
               <Button label={t("est.revoke.button")} icon="close" variant="ghost" onPress={() => toast.show(t("est.revoke.done"), store.revokeEstimateLink(e.id))} />
@@ -186,6 +192,7 @@ export default function EstimateScreen() {
       ) : null}
 
       {universal ? <SendSheet e={e} visible={sendOpen} onClose={() => setSendOpen(false)} /> : null}
+      {universal && tplOpen ? <SaveTemplateSheet e={e} onClose={() => setTplOpen(false)} /> : null}
       {pdfIssues ? (
         <Sheet visible={pdfOpen} onClose={() => setPdfOpen(false)} title={t("ue.pdf")}>
           <SendCheck
@@ -644,5 +651,33 @@ function DeclinedCard({ e }: { e: Estimate }) {
         </T>
       ) : null}
     </Card>
+  );
+}
+
+/** «Сохранить как шаблон» (spec 07 §7.1, §11): a name, then the estimate without client, property, lead or signatures */
+function SaveTemplateSheet({ e, onClose }: { e: Estimate; onClose: () => void }) {
+  const store = useStore();
+  const { t } = useI18n();
+  const toast = useToast();
+  const [name, setName] = useState(e.title);
+  const save = () => {
+    if (!e.doc) return;
+    const seeCosts = store.db.costsVisible ?? store.role !== "tech";
+    const undo = store.saveEstimateTemplate({ id: uid(), name, doc: toTemplateDoc(e.doc, seeCosts) });
+    toast.show(store.online ? t("est.tpl.saved", { name: name.trim() }) : t("offline.queued"), undo);
+    onClose();
+  };
+  return (
+    <Sheet visible onClose={onClose} title={t("est.tpl.saveAs")}>
+      <View testID="est-tpl-save-sheet" style={{ gap: space[3] }}>
+        <T v="caption" tone="mut">{t("est.tpl.saveHint")}</T>
+        <View testID="est-tpl-save-name">
+          <TextField type="text" label={t("est.tpl.name")} value={name} onChangeText={(v) => setName(v.slice(0, ESTIMATE_TEMPLATE_NAME_MAX))} />
+        </View>
+        <View testID="est-tpl-save">
+          <Button label={t("est.tpl.saveAs")} icon="copy" full onPress={save} />
+        </View>
+      </View>
+    </Sheet>
   );
 }
