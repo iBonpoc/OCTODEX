@@ -40,6 +40,8 @@ export function classify(e: unknown): Failure {
 /** the hint of a refused module.op whose module is not active on the server (cloud/ops.ts; spec 33 П21.1) */
 export const MODULE_INACTIVE = "module_inactive";
 export const isModuleInactive = (e: unknown) => field(e, "hint") === MODULE_INACTIVE;
+/** «someone else changed it first» (module_save_settings: 40001 + hint row_version_conflict) */
+export const isRowConflict = (e: unknown) => field(e, "hint") === "row_version_conflict";
 export const isNetworkError = (e: unknown) => classify(e) === "network";
 /**
  * The server's «not now» that may be this op's alone (docs/specs/23 §3): an internal error (500 / XX000), a statement
