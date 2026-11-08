@@ -10,10 +10,11 @@ export function neighbor(ids: readonly string[], cur: string | undefined, dir: 1
   return ids[Math.min(ids.length - 1, Math.max(0, i + dir))];
 }
 
-/** the panel is shown only on the desktop and only for an id that is in the list now */
-export function panelId(open: string | string[] | undefined, ids: readonly string[], desktop: boolean): string | undefined {
+/** the panel is shown only on the desktop and for a card this person may open — also one the list's filter hides now:
+ *  an action in the panel (signed, paid) or a link to a closed card must not close it (review #426) */
+export function panelId(open: string | string[] | undefined, desktop: boolean, known: (id: string) => boolean): string | undefined {
   const id = Array.isArray(open) ? open[0] : open;
-  return desktop && id && ids.includes(id) ? id : undefined;
+  return desktop && id && known(id) ? id : undefined;
 }
 
 /** the key that moves the panel, or nothing: a field is typed in, a sheet or menu is open, a modifier is held;

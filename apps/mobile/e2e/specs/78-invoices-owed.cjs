@@ -62,6 +62,8 @@ exports.run = async (h) => {
 
   // a card opens the invoice
   await cards.first().click();
+  // 1280: the tap opens the panel beside the list; «Открыть» — the invoice's own screen (spec 06 «Панель 1280»)
+  if (h.layout.width >= 1280) await p.getByTestId("list-panel-open").locator("visible=true").click();
   await p.waitForTimeout(600);
   h.expect(/\/invoice\/[^/?]+/.test(p.url()), `card opens the invoice (${p.url()})`);
 

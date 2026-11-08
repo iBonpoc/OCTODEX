@@ -4,7 +4,10 @@ import { router, useLocalSearchParams } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n, type DictKey } from "@/i18n";
-import { INV_COLUMNS, InvoiceListCard } from "@/features/listCards";
+import { INV_COLUMNS, INV_COLUMNS_PANEL, InvoiceListCard } from "@/features/listCards";
+import { InvoiceCardBody } from "@/features/invoice/InvoiceCard";
+import { useListPanel } from "@/nav/listPanel";
+import { ListPanel } from "@/ui/listPanel";
 import { asInvoiceFilter, canSeeInvoiceList, INVOICE_FILTERS, invoiceList, type InvoiceFilter, type OwedGroup } from "@/features/moneyLists";
 import { useDevice } from "@/theme/ThemeProvider";
 import { FilterBar } from "@/ui/filterBar";
@@ -43,6 +46,10 @@ export default function Invoices() {
   const [kept, setKept] = usePersistentState<InvoiceFilter>(`${filterStoreKey("invoices")}.status`, "owed");
   const f = fParam ? asInvoiceFilter(fParam) : asInvoiceFilter(kept);
   const [q, setQ] = useState("");
+  // computed before the role check (hooks): the visible rows in their order on screen
+  const clientP = customer ? db.customers.find((c) => c.id === customer) : undefined;
+  const qShown = q.trim() ? invoiceList({ invoices: db.invoices.filter((i) => matchInvoice(db, i, q)) }, f, { customerId: clientP?.id }) : invoiceList(db, f, { customerId: clientP?.id });
+  const panel = useListPanel(canSeeInvoiceList(role) ? qShown.groups.flatMap((g) => g.items.map((i) => i.id)) : [], (id) => `/invoice/${id}`, (id) => canSeeInvoiceList(role) && db.invoices.some((i) => i.id === id));
   const back = () => (router.canGoBack() ? router.back() : router.replace("/more"));
   if (!canSeeInvoiceList(role))
     return (
@@ -53,7 +60,7 @@ export default function Invoices() {
   const client = customer ? db.customers.find((c) => c.id === customer) : undefined;
   const v = invoiceList(db, f, { customerId: client?.id });
   // the search narrows the groups; the chips and «Должны всего» count the whole list
-  const shown = q.trim() ? invoiceList({ invoices: db.invoices.filter((i) => matchInvoice(db, i, q)) }, f, { customerId: client?.id }) : v;
+  const shown = qShown;
   // the filter lives in the address: «back» and a shared link keep it
   const go = (x: InvoiceFilter, c: string | undefined = client?.id) => router.setParams({ f: x, customer: c ?? "" });
   // «Клиент» (spec 31, one rule): one at a time, in the sheet with a search at 10+; picked — a chip «Клиент: X ✕» under the row.
@@ -70,6 +77,9 @@ export default function Invoices() {
     options: payers.map(({ c, n }) => ({ key: c.id, label: c.name, count: n, on: client?.id === c.id })),
     onToggle: (id: string) => go(f, client?.id === id ? "" : id),
   };
+  // 1280: the open invoice beside the list, `/invoice?open=<id>` (spec 06 «Панель 1280»); the rows in the groups' order
+  const openInv = panel.openId ? db.invoices.find((i) => i.id === panel.openId) : undefined;
+  const row = (i: (typeof db.invoices)[number]) => ({ selected: i.id === panel.openId, open: () => panel.open(i.id), narrow: !!panel.openId });
   const pick = (x: InvoiceFilter) => {
     setKept(x);
     go(x);
@@ -78,6 +88,13 @@ export default function Invoices() {
     <Screen
       title={t("nav.invoices")}
       back={back}
+      aside={
+        openInv ? (
+          <ListPanel title={`${t("inv.title")} ${openInv.number ?? ""}`.trim()} subtitle={db.customers.find((c) => c.id === openInv.customerId)?.name} onOpen={panel.full} onClose={panel.close}>
+            <InvoiceCardBody key={openInv.id} inv={openInv} />
+          </ListPanel>
+        ) : undefined
+      }
       subtitle={`${t("mny.owedTotal")} ${money(v.owedCents)}`}
       help={t("mny.invoices.help")}
       hintKey="invoices"
@@ -95,14 +112,14 @@ export default function Invoices() {
         <Empty icon="invoice" title={t(EMPTY[f])} />
       ) : (
         <>
-          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={INV_COLUMNS} value={t("card.val.toPay")} /> : null}
+          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={panel.openId ? INV_COLUMNS_PANEL : INV_COLUMNS} value={t("card.val.toPay")} /> : null}
           {shown.groups.map(({ g, items, cents }) => (
             <View key={g} style={{ gap: space[2] }}>
               <T v="caption" w="semibold" tone="mut">{`${t(GROUP[g])} · ${items.length} · ${money(cents)}`}</T>
               {device === "tablet" ? (
-                <CardGrid>{items.map((i) => <InvoiceListCard key={i.id} i={i} density="rich" />)}</CardGrid>
+                <CardGrid>{items.map((i) => <InvoiceListCard key={i.id} i={i} density="rich" panel={row(i)} />)}</CardGrid>
               ) : (
-                <CardList>{items.map((i) => <InvoiceListCard key={i.id} i={i} density={device === "desktop" ? "row" : "rich"} />)}</CardList>
+                <CardList>{items.map((i) => <InvoiceListCard key={i.id} i={i} density={device === "desktop" ? "row" : "rich"} panel={row(i)} />)}</CardList>
               )}
             </View>
           ))}
