@@ -155,6 +155,15 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       every<Row>("catalog_item_costs", "item_id, unit_cost_cents, vendor_tax_bps, markup_bps", key("item_id")).catch(orNoTable),
       every<Row>("estimate_version_costs", "version_id, margin_pct", key("version_id")).catch(orNoTable),
     ]);
+  // spec 35 §4е (step 2): the client links are not in the estimate row any more — the office side gets them here, a tech
+  // gets none. A server before that migration has no such function (PGRST202): the row's public_token, as before; any
+  // other failure fails the load (a list without links would make the office's next send add a needless one)
+  const linkOf = await pages<Row>(() => supabase.rpc("estimate_links", { p_company_id: companyId }), key("estimate_id"))
+    .then((rows) => new Map(rows.map((r) => [String(r.estimate_id), String(r.token)])))
+    .catch((e: unknown) => {
+      if ((e as { code?: string } | null)?.code === "PGRST202") return null;
+      throw e;
+    });
   // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
   // spec 35 §4г: refunds on their way (staff only by RLS; a server before 20а has no table — nothing on its way)
   const refundRows = await every<Row>("refunds", "id, payment_id, amount_cents, status, created_at").catch(() => [] as Row[]);
@@ -455,7 +464,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       signature: (appr?.signature_svg as string | null) ?? undefined,
       doc: withCosts(ver?.calc_inputs),
       templateId: (ver?.template_id as string | null) ?? undefined,
-      token: (e.public_token as string | null) ?? undefined,
+      token: linkOf ? linkOf.get(s(e.id)) : ((e.public_token as string | null) ?? undefined),
       number: s(e.number) || undefined,
       viewedAt: (e.last_viewed_at as string | null) ?? undefined,
       approval:

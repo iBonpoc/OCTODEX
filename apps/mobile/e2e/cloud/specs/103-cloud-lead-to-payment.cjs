@@ -54,9 +54,20 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   const [est] = await waitRows(
     admin,
     `estimates?company_id=eq.${A}&lead_id=eq.${leadId}&select=id,number,status,public_token,customer_id`,
-    (r) => r.length === 1 && r[0].status === "sent" && !!r[0].public_token,
+    (r) => r.length === 1 && r[0].status === "sent",
     "the sent estimate",
   );
+  // the client link is not in the row (spec 35 §4е, step 2): the office reads it through estimate_links, as the app does
+  h.expect(est.public_token === null, "the estimate row carries no client link");
+  const owner = await (await fetch(`${seed.url}/auth/v1/token?grant_type=password`, {
+    method: "POST", headers: { apikey: seed.anonKey, "content-type": "application/json" }, body: JSON.stringify({ email: a1.email, password: a1.password }),
+  })).json();
+  const linkRows = await (await fetch(`${seed.url}/rest/v1/rpc/estimate_links`, {
+    method: "POST", headers: { apikey: seed.anonKey, authorization: `Bearer ${owner.access_token}`, "content-type": "application/json" },
+    body: JSON.stringify({ p_company_id: A }),
+  })).json();
+  const link = (linkRows.find?.((x) => x.estimate_id === est.id) ?? {}).token;
+  h.expect(typeof link === "string" && link.length >= 20, `the office gets the client link (${JSON.stringify(linkRows).slice(0, 200)})`);
   h.expect(/^EST-\d{4,}$/.test(est.number ?? ""), `S0: the server numbered the estimate (${est.number})`);
   const [l2] = await waitRows(admin, `leads?id=eq.${leadId}&select=status,customer_id`, (r) => r[0]?.status === "estimate_sent", "lead → estimate sent");
   h.expect(l2.customer_id === est.customer_id, "S3: the lead's client is the estimate's client");
@@ -67,7 +78,7 @@ exports.run = async (h, { seed, admin, browser, BASE }) => {
   const cp = await ctx.newPage();
   const clientErrors = [];
   cp.on("pageerror", (e) => clientErrors.push(e.message));
-  await cp.goto(`${BASE}/p/${est.public_token}`);
+  await cp.goto(`${BASE}/p/${link}`);
   await cp.waitForTimeout(1500);
   const ch = helpers(cp, BASE, path.join(__dirname, "../../out"), "cloud-103-client");
   const body = async () => (await cp.locator("body").innerText()).split("\n").join(" | ");
