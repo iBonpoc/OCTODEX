@@ -4,7 +4,7 @@
  * attached to a photo item). Skipped («Пропустить», `na`) is NOT done: the tech went on, the item stays «not done» in the
  * history, on the visit's card and in «Требует внимания».
  */
-import type { ChecklistItem, ChecklistItemKind, ChecklistTemplate, ChecklistVisitKind, DB, ID, Visit, VisitSettings } from "@/data/types";
+import type { ChecklistItem, ChecklistItemKind, ChecklistTemplate, ChecklistVisitKind, DB, ID, Photo, Role, TemplateItem, Visit, VisitSettings } from "@/data/types";
 
 export const VISIT_SETTINGS_DEFAULT: VisitSettings = { photosBeforeRequired: true, photosAfterRequired: true, minPhotosBefore: 1, minPhotosAfter: 1 };
 const MIN_PHOTOS = 1;
@@ -14,10 +14,18 @@ const MAX_PHOTOS = 20;
 export const itemKind = (i: ChecklistItem): ChecklistItemKind => i.kind ?? "check";
 /** … and as required: the app held the signature until every one was ticked (docs/specs/08 §11.2 №5) */
 export const itemRequired = (i: ChecklistItem): boolean => i.required ?? true;
-/** done: ticked, or a photo item with a photo; a skipped item is not done */
-export const itemDone = (i: ChecklistItem): boolean => !i.na && (i.done || (itemKind(i) === "photo" && (i.photoIds?.length ?? 0) > 0));
+/**
+ * done: a tick is ticked; a photo item has a photo — a LIVE photo of the visit when its photos are given (a photo removed
+ * later takes the item back to «not done»; the server's `done` of a photo item is not trusted). Skipped is not done.
+ */
+export function itemDone(i: ChecklistItem, photos?: readonly Photo[]): boolean {
+  if (i.na && !i.done && itemKind(i) === "check") return false;
+  if (itemKind(i) === "check") return i.done;
+  const ids = i.photoIds ?? [];
+  return photos ? ids.some((id) => photos.some((p) => p.id === id)) : ids.length > 0;
+}
 /** skipped («Пропустить») */
-export const itemSkipped = (i: ChecklistItem): boolean => !!i.na && !i.done;
+export const itemSkipped = (i: ChecklistItem, photos?: readonly Photo[]): boolean => !!i.na && !itemDone(i, photos);
 
 const validCount = (v: unknown): v is number => typeof v === "number" && Number.isInteger(v) && v >= MIN_PHOTOS && v <= MAX_PHOTOS;
 
@@ -38,7 +46,7 @@ export const checklistKindOf = (v: Pick<Visit, "kind" | "jobId">): ChecklistVisi
 
 /** the photo minimums of a visit: the company's, raised (never lowered) by the templates its items came from */
 export function photoMinimums(visit: Pick<Visit, "checklist">, settings: VisitSettings, templates: ChecklistTemplate[] = []): { before: number; after: number } {
-  const used = new Set(visit.checklist.map((i) => i.templateId).filter((x): x is ID => !!x));
+  const used = new Set((visit.checklist ?? []).map((i) => i.templateId).filter((x): x is ID => !!x));
   let before = settings.minPhotosBefore;
   let after = settings.minPhotosAfter;
   for (const t of templates) {
@@ -58,10 +66,11 @@ export interface Missing {
 function missingOf(visit: Visit, settings: VisitSettings, templates: ChecklistTemplate[], countSkipped: boolean): Missing {
   const inspection = checklistKindOf(visit) === "inspection";
   const min = photoMinimums(visit, settings, templates);
-  const before = visit.photos.filter((p) => p.kind === "before").length;
-  const after = visit.photos.filter((p) => p.kind === "after").length;
+  const photos = visit.photos ?? [];
+  const before = photos.filter((p) => p.kind === "before").length;
+  const after = photos.filter((p) => p.kind === "after").length;
   return {
-    items: visit.checklist.filter((i) => itemRequired(i) && !itemDone(i) && (countSkipped || !itemSkipped(i))).map((i) => i.id),
+    items: (visit.checklist ?? []).filter((i) => itemRequired(i) && !itemDone(i, photos) && (countSkipped || !itemSkipped(i, photos))).map((i) => i.id),
     photosBefore: settings.photosBeforeRequired ? Math.max(0, min.before - before) : 0,
     // an inspection has no «after»: it ends on site with «Готово» (§11.5 №25)
     photosAfter: !inspection && settings.photosAfterRequired ? Math.max(0, min.after - after) : 0,
@@ -73,7 +82,10 @@ function missingOf(visit: Visit, settings: VisitSettings, templates: ChecklistTe
  * - warnBeforeWork: on_site → working, photos «before» short (a job visit).
  * - warnBeforeSign: working → signed, required items not done and not skipped, or photos «after» short. For an
  *   inspection it is the one check before «Готово»: items and photos «before».
- * Skipped items do not warn again: «Пропустить» lets the tech go on.
+ * Skipped items do not warn again: «Пропустить» lets the tech go on. Short photos are not stored as skipped: after
+ * «Пропустить» in the sheet the screen goes on for this one step (it does not ask again on the same press).
+ * Photo minimums from templates are known where the templates are read (the office); the tech's phone uses the
+ * company's — the snapshot of the minimums comes with CH2 (docs/specs/08 §11.7).
  */
 export function checklistGate(visit: Visit, settings: VisitSettings, templates: ChecklistTemplate[] = []): { warnBeforeWork: boolean; warnBeforeSign: boolean; missing: Missing } {
   const missing = missingOf(visit, settings, templates, false);
@@ -138,3 +150,58 @@ export function checklistFor(
 
 /** the photo stage of a photo item by the visit's step (§11.5 №27): before work — «before», then «after» */
 export const photoStageOf = (v: Pick<Visit, "step">): "before" | "after" => (v.step === "working" || v.step === "signed" || v.step === "paid" ? "after" : "before");
+
+/* ---- who may do what (docs/specs/08 §8, §11.6; the server checks the same — a refusal would hold the queue) ---- */
+
+/** the office of the checklist: the director (owner, admin) and the dispatcher (office); sales only reads */
+const office = (r: Role) => r === "director" || r === "dispatcher";
+/** the visit is closed for the tech: signed, finished (inspection «Готово», completed), closed without payment */
+export const visitClosed = (v: Pick<Visit, "step" | "closed" | "signature">): boolean =>
+  !!v.signature || v.step === "signed" || v.step === "paid" || v.step === "done" || !!v.closed;
+/** tick (done = true) / untick: once the visit is closed a tech only finishes what was left */
+export const canTick = (role: Role, v: Pick<Visit, "step" | "closed" | "signature">, done: boolean): boolean =>
+  office(role) || (role === "tech" && (done || !visitClosed(v)));
+/** «Пропустить»: not on a closed visit for a tech */
+export const canSkip = (role: Role, v: Pick<Visit, "step" | "closed" | "signature">): boolean => office(role) || (role === "tech" && !visitClosed(v));
+/** a photo on a photo item: the tech may send a missing photo later (§8) */
+export const canAttachPhoto = (role: Role): boolean => office(role) || role === "tech";
+/** a new item: the office any; a tech only optional, not on a closed visit */
+export const canAddItem = (role: Role, v: Pick<Visit, "step" | "closed" | "signature">, required: boolean): boolean =>
+  office(role) || (role === "tech" && !required && !visitClosed(v));
+/** remove: a required item — the director; an optional — the office; a tech — only his own optional, before the close */
+export function canRemoveItem(role: Role, me: ID, v: Pick<Visit, "step" | "closed" | "signature">, i: ChecklistItem): boolean {
+  if (role === "director") return true;
+  if (role === "dispatcher") return !itemRequired(i);
+  return role === "tech" && !itemRequired(i) && i.addedBy === me && !visitClosed(v);
+}
+/** «Просмотрено»: the office */
+export const canReview = (role: Role): boolean => office(role);
+/** templates: the office (founder В2) */
+export const canEditTemplates = (role: Role): boolean => office(role);
+/** the company's photo rules: the director (companies: owner, admin) */
+export const canEditVisitSettings = (role: Role): boolean => role === "director";
+
+/* ---- text as the server takes it (no control characters — a new line is one; lengths of the columns) ---- */
+export const LABEL_MAX = 300;
+export const TEMPLATE_NAME_MAX = 120;
+export const PHOTOS_PER_ITEM_MAX = 20;
+/** control characters (new lines, tabs) → a space; spaces trimmed; cut to `max` */
+export const cleanText = (s: string | undefined, max: number = LABEL_MAX): string =>
+  (s ?? "").replace(/[\u0000-\u001f\u007f-\u009f]+/g, " ").trim().slice(0, max).trim();
+
+/** a template as the server takes it, or null when it would be refused (no name) */
+export function cleanTemplate(t: ChecklistTemplate): ChecklistTemplate | null {
+  const name = cleanText(t.name, TEMPLATE_NAME_MAX);
+  if (!name) return null;
+  const seen = new Set<ID>();
+  const items: TemplateItem[] = [];
+  for (const i of t.items) {
+    const label = cleanText(i.label);
+    if (!label || seen.has(i.id)) continue;
+    seen.add(i.id);
+    const hint = cleanText(i.hint);
+    items.push({ id: i.id, label, kind: i.kind, required: i.required, ...(hint ? { hint } : {}) });
+  }
+  return { ...t, name, items: items.slice(0, 100) };
+}
+

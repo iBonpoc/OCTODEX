@@ -909,6 +909,8 @@ export interface DB {
   serviceCategories: ServiceCategory[];
   /** step 14 (docs/specs/08): the company's checklist templates (absent in old saved data → []; a tech reads none) */
   checklistTemplates?: ChecklistTemplate[];
+  /** the server has no visit_checklist_items yet (before migration 20261108140000): the store sends the old whole list */
+  checklistLegacy?: boolean;
   tasks: Task[];
   activities: Activity[];
   customers: Customer[];

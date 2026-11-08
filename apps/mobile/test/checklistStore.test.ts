@@ -69,6 +69,10 @@ type Value = {
   removeVisitItem: (visitId: string, itemId: string) => () => void;
   reviewVisitMissed: (visitId: string) => () => void;
   setVisitSettings: (patch: object) => () => void;
+  saveChecklistTemplate: (t: object) => () => void;
+  removePhoto: (visitId: string, photoId: string) => () => void;
+  setRole: (r: string) => void;
+  queue: unknown[];
 };
 type P = { children: null };
 const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
@@ -96,11 +100,11 @@ function company(): DB {
 }
 const visitOf = (r: Root<P>) => valueOf(r).db.visits.find((v) => v.id === VISIT)!;
 
-async function signedIn(): Promise<Root<P>> {
+async function signedIn(over: Partial<DB> = {}): Promise<Root<P>> {
   Object.assign(auth, { session: {}, userId: "u1", company: { companyId: "c1", role: "owner", companyName: "Co" } });
   const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
   await settle();
-  server.loads.splice(0).forEach((d) => d.resolve(company()));
+  server.loads.splice(0).forEach((d) => d.resolve({ ...company(), ...over }));
   await settle();
   expect(valueOf(r).mode).toBe("cloud");
   return r;
@@ -158,7 +162,7 @@ describe("unit:checklistStore — a photo item (the order of the queue)", () => 
     await settle();
     await tick();
     expect(server.sends.map((s) => s.op.k)).toEqual(["photo.add", "chk.item.set"]);
-    expect(server.sends[1]!.op).toMatchObject({ itemIds: [PHOTO_ITEM], done: true, photoIds: [photo.id] });
+    expect(server.sends[1]!.op).toMatchObject({ itemIds: [PHOTO_ITEM], done: true, addPhotoId: photo.id });
   });
   it("«Отменить» takes off both the photo and the item's tick", async () => {
     const r = await signedIn();
@@ -210,5 +214,88 @@ describe("unit:checklistStore — skip, add, remove, «Просмотрено»,
     expect(valueOf(r).db.company?.visitSettings).toEqual({ photosBeforeRequired: true, photosAfterRequired: true, minPhotosBefore: 1, minPhotosAfter: 3 });
     await tick();
     expect(server.sends[0]!.op).toMatchObject({ k: "company.visitSettings", settings: { minPhotosAfter: 3, photosBeforeRequired: true } });
+  });
+});
+
+describe("unit:checklistStore — transitions of an item", () => {
+  it("a tick takes a skip off; a skip takes a tick off", async () => {
+    const r = await signedIn();
+    valueOf(r).checkItem(VISIT, ITEM, true);
+    valueOf(r).skipItems(VISIT, [ITEM]);
+    await settle();
+    expect(visitOf(r).checklist[0]).toMatchObject({ done: false });
+    expect(visitOf(r).checklist[0]!.na).toBeDefined();
+    valueOf(r).checkItem(VISIT, ITEM, true);
+    await settle();
+    expect(visitOf(r).checklist[0]).toMatchObject({ done: true });
+    expect(visitOf(r).checklist[0]!.na).toBeUndefined();
+  });
+  it("a photo removed takes it off the item (the item is «not done» again); a photo item is not ticked by hand", async () => {
+    const r = await signedIn();
+    valueOf(r).checkItem(VISIT, PHOTO_ITEM, true);
+    await settle();
+    expect(visitOf(r).checklist[1]!.done).toBe(false);
+    valueOf(r).attachItemPhoto(VISIT, PHOTO_ITEM);
+    await settle();
+    const photo = visitOf(r).photos.at(-1)!;
+    valueOf(r).removePhoto(VISIT, photo.id);
+    await settle();
+    expect(visitOf(r).checklist[1]!.photoIds).toEqual([]);
+  });
+});
+
+describe("unit:checklistStore — what the server would refuse is not queued (it would hold the queue)", () => {
+  it("a tech on a signed visit: no untick, no skip, no new item; a tick still goes", async () => {
+    const r = await signedIn();
+    valueOf(r).setRole("tech");
+    await settle();
+    // the client signed with the first item ticked
+    valueOf(r).checkItem(VISIT, ITEM, true);
+    await settle();
+    // the visit as the server read it back after the signature (the step itself is another test's)
+    Object.assign(visitOf(r), { step: "signed", signature: "M0 0" });
+    valueOf(r).checkItem(VISIT, ITEM, false);
+    valueOf(r).skipItems(VISIT, [PHOTO_ITEM]);
+    valueOf(r).addCheckItem(VISIT, "late");
+    await settle();
+    expect(visitOf(r).checklist.map((c) => [c.done, !!c.na])).toEqual([[true, false], [false, false]]);
+    await tick();
+    expect(server.sends.map((x) => x.op.k)).toEqual(["chk.item.set"]);
+  });
+  it("a template without a name is not sent; a new one is added, a changed one replaced", async () => {
+    const r = await signedIn();
+    const t = { id: "00000000-0000-4000-8000-0000000000b1", name: " Every visit ", items: [{ id: "00000000-0000-4000-8000-0000000000c1", label: "Scope", kind: "check", required: true }], appliesTo: { everyVisit: true, visitKinds: [], catalogItemIds: [] } };
+    valueOf(r).saveChecklistTemplate({ ...t, name: " " });
+    valueOf(r).saveChecklistTemplate(t);
+    valueOf(r).saveChecklistTemplate({ ...t, name: "Every visit v2" });
+    await settle();
+    expect(valueOf(r).db.checklistTemplates!.map((x) => x.name)).toEqual(["Every visit v2"]);
+    await tick();
+    expect(server.sends.map((x) => [x.op.k, (x.op.template as { name: string }).name])).toEqual([["chk.template.save", "Every visit"]]);
+  });
+});
+
+describe("unit:checklistStore — a server before the checklist migration (rule 16)", () => {
+  it("a tick goes as the old whole list; «Просмотрено» stays on the phone", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistLegacy: true });
+    valueOf(r).checkItem(VISIT, ITEM, true);
+    valueOf(r).reviewVisitMissed(VISIT);
+    await settle();
+    expect(visitOf(r).checklistReviewedAt).toBeDefined();
+    await tick();
+    expect(server.sends.map((x) => x.op.k)).toEqual(["visit.checklist"]);
+    expect(server.sends[0]!.op.checklist).toEqual([{ id: ITEM, label: "Confirm scope", done: true }, { id: PHOTO_ITEM, label: "Photo of the area", done: false }]);
+  });
+});
+
+describe("unit:checklistStore — offline in the demo (no cloud)", () => {
+  it("a tick is local at once and waits in the queue", async () => {
+    const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+    await settle();
+    expect(valueOf(r).mode).toBe("demo");
+    const v = valueOf(r).db.visits.find((x) => x.checklist.length)!;
+    valueOf(r).checkItem(v.id, v.checklist[0]!.id, !v.checklist[0]!.done);
+    await settle();
+    expect(valueOf(r).db.visits.find((x) => x.id === v.id)!.checklist[0]!.done).toBe(!v.checklist[0]!.done);
   });
 });

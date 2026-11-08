@@ -98,7 +98,7 @@ import {
   type NaReason,
   type VisitSettings,
 } from "./types";
-import { photoStageOf, visitSettingsOf } from "@/features/checklist";
+import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitSettings, canRemoveItem, canReview, canSkip, canTick, cleanTemplate, cleanText, itemKind, PHOTOS_PER_ITEM_MAX, photoStageOf, visitSettingsOf } from "@/features/checklist";
 
 type Undo = () => void;
 /** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
@@ -1034,23 +1034,39 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       v ? { k: "photo.add", id, visitId, jobId: v.jobId, stage: kind, uri } : undefined,
     );
   };
+  /**
+   * a checklist change: locally at once; to the server one row's op — or, on a server before the checklist migration
+   * (db.checklistLegacy), the old whole list (rule 16). `legacy: false` — nothing the old server could keep.
+   */
+  const chkMutate = (label: string, visitId: ID, fn: (d: DB) => DB, op: Op, legacy = true): Undo => {
+    if (!dbRef.current.checklistLegacy) return mutate(label, fn, op);
+    const list = fn(dbRef.current).visits.find((v) => v.id === visitId)?.checklist ?? [];
+    return mutate(label, fn, legacy ? { k: "visit.checklist", visitId, checklist: list.map((c) => ({ id: c.id, label: c.label, done: c.done })) } : undefined);
+  };
+  const visitOf = (visitId: ID) => dbRef.current.visits.find((x) => x.id === visitId);
+  const noop: Undo = () => {};
   const checkItemFn = (visitId: ID, itemId: ID, done: boolean): Undo => {
+    const v = visitOf(visitId);
+    const item = v?.checklist.find((c) => c.id === itemId);
+    // a photo item is done by its photo, not by a tick; the server would refuse what the role may not (it holds the queue)
+    if (!v || !item || itemKind(item) === "photo" || !canTick(role, v, done)) return noop;
     const at = new Date().toISOString();
     const me = dbRef.current.me;
-    return mutate(
+    return chkMutate(
       "check.toggle",
+      visitId,
       (d) => patchItems(d, visitId, [itemId], (c) => (done ? { ...c, done: true, doneBy: me, doneAt: at, na: undefined } : { ...c, done: false, doneBy: undefined, doneAt: undefined })),
       { k: "chk.item.set", visitId, itemIds: [itemId], done, at },
     );
   };
   const addVisitItemFn = (visitId: ID, label: string, required: boolean, kind: ChecklistItemKind = "check"): Undo => {
-    const v = dbRef.current.visits.find((x) => x.id === visitId);
-    const text = label.trim();
-    if (!v || !text) return () => {};
+    const v = visitOf(visitId);
+    const text = cleanText(label);
+    if (!v || !text || !canAddItem(role, v, required) || v.checklist.length >= 200) return noop;
     const id = uid();
     const position = Math.max(-1, ...v.checklist.map((c, i) => c.position ?? i)) + 1;
     const item: ChecklistItem = { id, label: text, done: false, kind, required, addedBy: dbRef.current.me, position };
-    return mutate("check.add", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist: [...x.checklist, item] })), {
+    return chkMutate("check.add", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist: [...x.checklist, item] })), {
       k: "chk.item.add", item: { id, visitId, position, label: text, kind, required },
     });
   };
@@ -1110,30 +1126,37 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       },
       checkItem: checkItemFn,
       skipItems: (visitId, itemIds, reason, text) => {
+        const v = visitOf(visitId);
+        if (!v || !canSkip(role, v)) return noop;
+        const ids = itemIds.filter((id) => v.checklist.some((c) => c.id === id));
+        if (!ids.length) return noop;
         const at = new Date().toISOString();
         const me = dbRef.current.me;
-        const note = text?.trim() || undefined;
-        return mutate(
+        const note = cleanText(text) || undefined;
+        return chkMutate(
           "check.skip",
-          (d) => patchItems(d, visitId, itemIds, (c) => ({ ...c, done: false, doneBy: undefined, doneAt: undefined, na: { ...(reason ? { reason } : {}), ...(note ? { text: note } : {}), by: me, at } })),
-          { k: "chk.item.set", visitId, itemIds, done: false, skipped: true, naReason: reason ?? null, naText: note ?? null, at },
+          visitId,
+          (d) => patchItems(d, visitId, ids, (c) => ({ ...c, done: false, doneBy: undefined, doneAt: undefined, na: { ...(reason ? { reason } : {}), ...(note ? { text: note } : {}), by: me, at } })),
+          { k: "chk.item.set", visitId, itemIds: ids, done: false, skipped: true, naReason: reason ?? null, naText: note ?? null, at },
         );
       },
       attachItemPhoto: (visitId, itemId, uri) => {
-        const v = dbRef.current.visits.find((x) => x.id === visitId);
+        const v = visitOf(visitId);
         const item = v?.checklist.find((c) => c.id === itemId);
-        if (!v || !item) return () => {};
+        if (!v || !item || !canAttachPhoto(role) || (item.photoIds?.length ?? 0) >= PHOTOS_PER_ITEM_MAX) return noop;
         // the photo first: the server takes only a photo of this visit on an item, so the item's op waits behind it
         const undoPhoto = addPhotoFn(visitId, photoStageOf(v), uri);
-        const photoId = dbRef.current.visits.find((x) => x.id === visitId)?.photos.at(-1)?.id;
+        const photoId = visitOf(visitId)?.photos.at(-1)?.id;
         if (!photoId) return undoPhoto;
         const at = new Date().toISOString();
         const me = dbRef.current.me;
-        const photoIds = [...(item.photoIds ?? []), photoId];
-        const undoItem = mutate(
+        const undoItem = chkMutate(
           "check.photo",
-          (d) => patchItems(d, visitId, [itemId], (c) => ({ ...c, photoIds, done: true, doneBy: c.done ? c.doneBy : me, doneAt: c.done ? c.doneAt : at, na: undefined })),
-          { k: "chk.item.set", visitId, itemIds: [itemId], done: true, photoIds, at },
+          visitId,
+          (d) => patchItems(d, visitId, [itemId], (c) => ({ ...c, photoIds: [...(c.photoIds ?? []), photoId], done: true, doneBy: c.done ? c.doneBy : me, doneAt: c.done ? c.doneAt : at, na: undefined })),
+          { k: "chk.item.set", visitId, itemIds: [itemId], done: true, addPhotoId: photoId, at },
+          // the old server has no photos of items: the photo itself went
+          false,
         );
         return () => {
           undoItem();
@@ -1141,15 +1164,22 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         };
       },
       addVisitItem: addVisitItemFn,
-      removeVisitItem: (visitId, itemId) =>
-        mutate("check.remove", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist: x.checklist.filter((c) => c.id !== itemId) })), { k: "chk.item.remove", id: itemId, visitId }),
+      removeVisitItem: (visitId, itemId) => {
+        const v = visitOf(visitId);
+        const item = v?.checklist.find((c) => c.id === itemId);
+        if (!v || !item || !canRemoveItem(role, dbRef.current.me, v, item)) return noop;
+        return chkMutate("check.remove", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist: x.checklist.filter((c) => c.id !== itemId) })), { k: "chk.item.remove", id: itemId, visitId });
+      },
       reviewVisitMissed: (visitId) => {
+        if (!visitOf(visitId) || !canReview(role)) return noop;
         const at = new Date().toISOString();
         const me = dbRef.current.me;
-        return mutate("check.review", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: at, checklistReviewedBy: me })), { k: "chk.visit.review", visitId, at });
+        return chkMutate("check.review", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: at, checklistReviewedBy: me })), { k: "chk.visit.review", visitId, at }, false);
       },
       saveChecklistTemplate: (t) => {
-        const clean: ChecklistTemplate = { ...t, name: t.name.trim(), items: t.items.map((i) => ({ ...i, label: i.label.trim() })).filter((i) => i.label) };
+        const clean = cleanTemplate(t);
+        // no name: the server would refuse it; the old server has no templates
+        if (!clean || !canEditTemplates(role) || dbRef.current.checklistLegacy) return noop;
         return mutate(
           "checklist.template",
           (d) => {
@@ -1160,11 +1190,21 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         );
       },
       setVisitSettings: (patch) => {
-        const settings = { ...visitSettingsOf(dbRef.current.company), ...patch };
+        if (!canEditVisitSettings(role) || dbRef.current.checklistLegacy) return noop;
+        const settings = visitSettingsOf({ visitSettings: { ...visitSettingsOf(dbRef.current.company), ...patch } });
         return mutate("company.visitSettings", (d) => (d.company ? { ...d, company: { ...d.company, visitSettings: settings } } : d), { k: "company.visitSettings", settings });
       },
+      // a photo removed leaves its items too: a photo item without a live photo is «not done» again (itemDone)
       removePhoto: (visitId, photoId) =>
-        mutate("photo.remove", (d) => patchVisit(d, visitId, (x) => ({ ...x, photos: x.photos.filter((p) => p.id !== photoId) })), { k: "photo.remove", id: photoId }),
+        mutate(
+          "photo.remove",
+          (d) => patchVisit(d, visitId, (x) => ({
+            ...x,
+            photos: x.photos.filter((p) => p.id !== photoId),
+            checklist: x.checklist.map((c) => (c.photoIds?.includes(photoId) ? { ...c, photoIds: c.photoIds.filter((p) => p !== photoId) } : c)),
+          })),
+          { k: "photo.remove", id: photoId },
+        ),
       addCheckItem: (visitId, label) => addVisitItemFn(visitId, label, false),
       signVisit: (visitId, path) =>
         mutate("visit.sign", (d) => patchVisit(d, visitId, (v) => ({ ...v, signature: path, step: "signed" })), { k: "visit.sign", visitId, svg: path }),

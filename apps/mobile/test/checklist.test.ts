@@ -1,6 +1,7 @@
 /** unit:checklistGate, unit:checklistFor (docs/specs/08 §4, §5, §10.1; step 14 CH1b): warnings, never a lock. */
 import { describe, expect, it } from "vitest";
 import {
+  canAddItem, canAttachPhoto, canEditTemplates, canEditVisitSettings, canRemoveItem, canReview, canSkip, canTick, cleanTemplate, cleanText, visitClosed,
   checklistFor, checklistGate, checklistKindOf, itemDone, itemKind, itemRequired, itemSkipped, missedCount, photoMinimums, photoStageOf,
   VISIT_SETTINGS_DEFAULT, visitMissed, visitSettings, visitSettingsOf,
 } from "../src/features/checklist";
@@ -139,5 +140,63 @@ describe("unit:checklistGate — the stage of an item's photo (§11.5 №27)", (
     expect(photoStageOf({ step: "on_site" })).toBe("before");
     expect(photoStageOf({ step: "working" })).toBe("after");
     expect(photoStageOf({ step: "signed" })).toBe("after");
+  });
+});
+
+describe("unit:checklistGate — a photo item is done by a LIVE photo of the visit", () => {
+  it("a removed photo takes the item back to «not done»", () => {
+    const it = item("p", { kind: "photo", photoIds: ["ph1"], done: true });
+    expect(itemDone(it, [{ id: "ph1", kind: "after" }])).toBe(true);
+    expect(itemDone(it, [])).toBe(false);
+    const v = visit({ step: "signed", checklist: [it], photos: photos(1, 1) });
+    expect(visitMissed(v, S).items).toEqual(["p"]);
+  });
+});
+
+describe("unit:checklistRights — who may do what (the server checks the same, §8, §11.6)", () => {
+  const open = visit({ step: "working" });
+  const signed = visit({ step: "signed", signature: "M0 0" });
+  const done = visit({ step: "on_site", closed: true });
+  it("a closed visit: signed, paid, done or closed without payment", () => {
+    expect([open, signed, done, visit({ step: "done" })].map(visitClosed)).toEqual([false, true, true, true]);
+  });
+  it("a tick: the tech ticks always, unticks only before the close; sales never", () => {
+    expect([canTick("tech", open, false), canTick("tech", signed, true), canTick("tech", signed, false), canTick("tech", done, false)]).toEqual([true, true, false, false]);
+    expect([canTick("dispatcher", signed, false), canTick("director", signed, false), canTick("sales", open, true)]).toEqual([true, true, false]);
+  });
+  it("skip and add: not by a tech on a closed visit; a tech adds only optional ones", () => {
+    expect([canSkip("tech", open), canSkip("tech", signed), canSkip("sales", open), canSkip("dispatcher", signed)]).toEqual([true, false, false, true]);
+    expect([canAddItem("tech", open, false), canAddItem("tech", open, true), canAddItem("tech", signed, false), canAddItem("dispatcher", open, true), canAddItem("sales", open, false)])
+      .toEqual([true, false, false, true, false]);
+    expect([canAttachPhoto("tech"), canAttachPhoto("sales")]).toEqual([true, false]);
+  });
+  it("remove: a required — the director; an optional — the office; a tech — his own optional before the close", () => {
+    const req = item("r");
+    const mine = item("m", { required: false, addedBy: "t1" });
+    const theirs = item("o", { required: false, addedBy: "x" });
+    expect([canRemoveItem("director", "d", open, req), canRemoveItem("dispatcher", "o", open, req), canRemoveItem("dispatcher", "o", open, theirs)]).toEqual([true, false, true]);
+    expect([canRemoveItem("tech", "t1", open, mine), canRemoveItem("tech", "t1", open, theirs), canRemoveItem("tech", "t1", signed, mine), canRemoveItem("tech", "t1", open, req)]).toEqual([true, false, false, false]);
+    expect(canRemoveItem("sales", "s", open, theirs)).toBe(false);
+  });
+  it("«Просмотрено» and templates — the office; photo rules — the director", () => {
+    expect([canReview("dispatcher"), canReview("tech"), canReview("sales")]).toEqual([true, false, false]);
+    expect([canEditTemplates("dispatcher"), canEditTemplates("sales"), canEditVisitSettings("director"), canEditVisitSettings("dispatcher")]).toEqual([true, false, true, false]);
+  });
+});
+
+describe("unit:checklistText — text as the server takes it", () => {
+  it("a new line or a tab is a space; trimmed; cut to the column", () => {
+    expect(cleanText(" wet\nroof\t ")).toBe("wet roof");
+    expect(cleanText("x".repeat(301))).toHaveLength(300);
+    expect(cleanText(undefined)).toBe("");
+  });
+  it("a template: no name — not sent; empty and repeated items left out; the name cut to 120", () => {
+    const base = tpl("t1");
+    expect(cleanTemplate({ ...base, name: "  " })).toBeNull();
+    const t = cleanTemplate({ ...base, name: "n".repeat(130), items: [
+      { id: "a", label: " A\n1 ", kind: "check", required: true, hint: " " }, { id: "a", label: "dup", kind: "check", required: true }, { id: "b", label: "  ", kind: "photo", required: false },
+    ] })!;
+    expect(t.name).toHaveLength(120);
+    expect(t.items).toEqual([{ id: "a", label: "A 1", kind: "check", required: true }]);
   });
 });

@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 type Call = { table: string; how: "update" | "upsert"; row: Record<string, unknown>; eq: [string, unknown][]; in?: [string, unknown[]]; opts?: unknown };
 const calls: Call[] = [];
+/** what the server has in photo_ids of the item read before a photo is added */
+const server = { photoIds: null as string[] | null };
 vi.mock("../src/cloud/client", () => ({
   supabase: {
     from: (table: string) => {
@@ -20,6 +22,10 @@ vi.mock("../src/cloud/client", () => ({
         return q;
       };
       return {
+        select: () => {
+          const q = { eq: () => q, maybeSingle: () => Promise.resolve({ data: server.photoIds ? { photo_ids: server.photoIds } : null, error: null }) };
+          return q;
+        },
         update: (row: Record<string, unknown>) => done("update", row),
         upsert: (row: Record<string, unknown>, opts?: unknown) => done("upsert", row, opts),
       };
@@ -29,7 +35,10 @@ vi.mock("../src/cloud/client", () => ({
 import { applyOp, chkItemPatch } from "../src/cloud/ops";
 import { createdBy } from "../src/data/outboxDeps";
 
-beforeEach(() => void calls.splice(0));
+beforeEach(() => {
+  calls.splice(0);
+  server.photoIds = null;
+});
 const AT = "2026-11-08T18:00:00.000Z";
 
 describe("ops: chk.item.set — one visit's rows, an update", () => {
@@ -45,8 +54,16 @@ describe("ops: chk.item.set — one visit's rows, an update", () => {
     expect(calls[0]!.row).toEqual({ done: false, skipped: true, na_at: AT, na_reason: "unsafe", na_text: "wet roof" });
     expect(calls[0]!.in).toEqual(["id", ["i1", "i2"]]);
   });
-  it("a photo on an item: the photo ids and the tick", () => {
-    expect(chkItemPatch({ k: "chk.item.set", visitId: "v1", itemIds: ["i1"], done: true, photoIds: ["p1", "p2"], at: AT })).toEqual({ done: true, done_at: AT, photo_ids: ["p1", "p2"] });
+  it("a photo on an item: added to what the server has (another person's photo stays), a retry adds nothing twice", async () => {
+    server.photoIds = ["p-other"];
+    await applyOp({ k: "chk.item.set", visitId: "v1", itemIds: ["i1"], done: true, addPhotoId: "p1", at: AT }, "co", "u");
+    expect(calls[0]!.row).toEqual({ done: true, done_at: AT, photo_ids: ["p-other", "p1"] });
+    server.photoIds = ["p-other", "p1"];
+    await applyOp({ k: "chk.item.set", visitId: "v1", itemIds: ["i1"], done: true, addPhotoId: "p1", at: AT }, "co", "u");
+    expect(calls[1]!.row.photo_ids).toEqual(["p-other", "p1"]);
+  });
+  it("a note with a new line is sent as the server takes it (no control characters)", () => {
+    expect(chkItemPatch({ k: "chk.item.set", visitId: "v1", itemIds: ["i1"], skipped: true, naText: "wet\nroof", at: AT }).na_text).toBe("wet roof");
   });
   it("no items: nothing sent", async () => {
     await applyOp({ k: "chk.item.set", visitId: "v1", itemIds: [], done: true, at: AT }, "co", "u");

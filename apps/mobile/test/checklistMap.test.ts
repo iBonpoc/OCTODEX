@@ -1,6 +1,6 @@
 /** unit:checklistMap (step 14 CH1b, docs/specs/08 §11.3): the rows of the checklist tables → the app; rule 16 fallback. */
 import { describe, expect, it } from "vitest";
-import { checklistOf, itemFromDb, itemsByVisit, templateFromDb, visitSettingsFromDb } from "../src/cloud/checklistMap";
+import { checklistOf, isMissingTable, itemFromDb, itemsByVisit, templateFromDb, visitSettingsFromDb } from "../src/cloud/checklistMap";
 
 const row = (over: Record<string, unknown> = {}) => ({
   id: "i1", visit_id: "v1", position: 0, label: "Confirm scope", kind: "check", required: true, hint: null, template_id: null, template_name: null,
@@ -56,5 +56,12 @@ describe("unit:checklistMap — a template and the photo settings", () => {
     expect(visitSettingsFromDb({ minPhotosBefore: 2 })).toEqual({ minPhotosBefore: 2 });
     expect(visitSettingsFromDb(null)).toBeUndefined();
     expect(visitSettingsFromDb([1])).toBeUndefined();
+  });
+});
+
+describe("unit:checklistMap — the old array only when the server has no table (rule 16)", () => {
+  it("no table: PGRST205 / 42P01 / 404; a timeout or a 500 is not that", () => {
+    expect([{ code: "PGRST205" }, { code: "42P01" }, { status: 404 }].map(isMissingTable)).toEqual([true, true, true]);
+    expect([{ status: 500 }, { code: "57014" }, new Error("network"), null].map(isMissingTable)).toEqual([false, false, false, false]);
   });
 });

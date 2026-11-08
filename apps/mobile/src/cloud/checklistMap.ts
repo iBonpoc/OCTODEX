@@ -88,3 +88,14 @@ export function templateFromDb(r: Row): ChecklistTemplate {
 /** companies.visit_settings as stored (features/checklist.ts visitSettingsOf fills the gaps); not an object → none */
 export const visitSettingsFromDb = (v: unknown): Partial<VisitSettings> | undefined =>
   v && typeof v === "object" && !Array.isArray(v) ? (v as Partial<VisitSettings>) : undefined;
+
+/**
+ * the server has no such table (a server before the migration): PostgREST «PGRST205» / Postgres «42P01», 404. Only then
+ * the old array is read; any other error (a timeout, a 500) fails the read like every other one — the phone keeps its
+ * copy rather than showing the mirror's poorer items (no kind, no skips, every item required)
+ */
+export function isMissingTable(e: unknown): boolean {
+  const x = e as { code?: unknown; status?: unknown } | null;
+  return x?.code === "PGRST205" || x?.code === "42P01" || x?.status === 404;
+}
+

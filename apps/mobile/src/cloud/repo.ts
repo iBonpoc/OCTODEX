@@ -3,7 +3,7 @@
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
 import { companyFromDb } from "./companyMap";
-import { checklistOf, itemsByVisit, templateFromDb, visitSettingsFromDb } from "./checklistMap";
+import { checklistOf, isMissingTable, itemsByVisit, templateFromDb, visitSettingsFromDb } from "./checklistMap";
 import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
@@ -142,8 +142,14 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // the visits keep their old visits.checklist arrays (null), no templates (a tech reads none either: RLS)
   const [chkRows, templateRows] = await Promise.all([
     live<Row>("visit_checklist_items", "id, visit_id, position, label, kind, required, hint, template_id, template_name, done, done_by, done_at, skipped, na_reason, na_text, na_by, na_at, photo_ids, created_by, created_at")
-      .then((r) => r as Row[] | null, () => null),
-    live<Row>("checklist_templates").catch(() => [] as Row[]),
+      .then((r) => r as Row[] | null, (e) => {
+        if (isMissingTable(e)) return null;
+        throw e;
+      }),
+    live<Row>("checklist_templates").catch((e) => {
+      if (isMissingTable(e)) return [] as Row[];
+      throw e;
+    }),
   ]);
   const chkByVisit = chkRows ? itemsByVisit(chkRows) : null;
   // wave 7б-2 (migration 20261106210000): the company flag, who shares, the last points of open visits. Each read on its
@@ -629,6 +635,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         }
       : null,
     checklistTemplates: templateRows.map(templateFromDb),
+    // a server before the checklist migration: the store writes the old whole list (rule 16)
+    ...(chkByVisit ? {} : { checklistLegacy: true }),
     moduleData,
     notes: noteRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Note["subjectType"], subjectId: s(r.subject_id), body: s(r.body),
