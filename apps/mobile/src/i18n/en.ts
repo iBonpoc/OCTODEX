@@ -583,6 +583,12 @@ export const en: Dict = {
   "ue.price": "Price, $",
   "ue.addon": "Add-on — the client decides",
   "ue.addonChip": "add-on",
+  // C4 (spec 33 П23.7): marks of a line a module wrote
+  "ue.src.module": "From measurement",
+  "ue.src.noPrice": "No price",
+  "ue.src.testPrice": "Test price",
+  "ue.src.gone": "Not in measurement",
+  "ue.src.hint": "The measurement wrote this line. «Update estimate» recounts its quantity, price and name until you change them; what you change stays as it is.",
   "ue.removeLine": "Remove line",
   "ue.lineRemoved": "Line removed",
   "ue.doneLine": "Done",

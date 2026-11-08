@@ -9,7 +9,8 @@ import { lineTotal, type CustomLine, type LineGroup } from "@octo/estimating-eng
 import { useStore } from "@/data/store";
 import type { CatalogItem } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
-import { linesFromCatalog, newLine } from "./estimateDoc";
+import { lineMarks, linesFromCatalog, newLine } from "./estimateDoc";
+import { LineMarks } from "./LineMarks";
 import { itemPrice, kindLabel } from "./estimatePickers";
 import { Labeled, MoneyField, QtyField } from "./fields";
 import { Button, ChoiceChips, IconButton, TextField, Toggle } from "@/ui/controls";
@@ -88,6 +89,14 @@ export function LineSheet({
         </View>
       ) : (
         <ScrollView style={{ maxHeight: component.sheetFormMax }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space[3] }}>
+          {lineMarks(draft).length ? (
+            <View testID="ue-line-source-hint" style={{ gap: space[2] }}>
+              <LineMarks marks={lineMarks(draft)} lineId={draft.id} />
+              <T v="caption" tone="mut">
+                {t("ue.src.hint")}
+              </T>
+            </View>
+          ) : null}
           <TextField type="title" value={draft.name} onChangeText={(v) => set({ name: v })} placeholder={t("ue.lineName")} />
           <TextField type="note" value={draft.description ?? ""} onChangeText={(v) => set({ description: v || undefined })} placeholder={t("ue.lineDesc")} />
           <RowView style={{ alignItems: "flex-end" }}>
