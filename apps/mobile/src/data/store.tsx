@@ -780,7 +780,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             // silently: it stays as «не записано на сервере» until the person says «Понятно» (docs/specs/23 §3)
             outboxRef.current = outboxRef.current.filter((x) => x.id !== item.id);
             dropped = true;
-            const rej = rejectedOf(item, msg, Date.now(), w);
+            const rej = rejectedOf(item, msg, Date.now(), w, (e as { hint?: unknown } | null)?.hint);
             if (rej) setRejected((prev) => [...freshRejected(prev, Date.now()).filter((x) => x.id !== rej.id), rej]);
           } else {
             outboxRef.current = outboxRef.current.map((x) => (x.id === item.id ? { ...x, tries: item.tries + 1, error: msg } : x));

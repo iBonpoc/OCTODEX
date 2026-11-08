@@ -8,7 +8,7 @@
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
 import { realJob } from "./inspectionBridge";
-import { ENGINE_VERSION, jobLineQty } from "@octo/estimating-engine";
+import { ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
 import type { BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
@@ -1072,6 +1072,14 @@ function catalogCostCols(op: Extract<Op, { k: "catalog.save" }>): Record<string,
  * options and line items mirrored from the doc (same ids), costs in the restricted side table.
  * The doc without costs is kept in estimate_versions.calc_inputs for the app and the client page.
  */
+/** A line's quantity as estimate_line_items keeps it; a text that is not a number goes as before (the server says no). */
+const storedQty = (q: DecLike): string | number => {
+  try {
+    return jobLineQty(q);
+  } catch {
+    return Number(q as string);
+  }
+};
 async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) {
   await run(
     ins("estimates", { id: op.id, company_id: c, customer_id: op.customerId, property_id: op.propertyId, lead_id: op.leadId ?? null, title: op.title, created_via: "manual", number: "" }),
@@ -1137,7 +1145,8 @@ async function saveEstimate(op: Extract<Op, { k: "estimate.save" }>, c: string) 
       .map((l, i) => ({
         id: l.id, company_id: c, option_id: o.id, position: i, line_group: l.group, catalog_item_id: null,
         origin: l.catalogItemId ? "catalog" : "manual", name: l.name.trim() || "—", description: l.description ?? null,
-        quantity: Number(l.quantity), unit: l.unit || "ea", unit_price_cents: l.unitPriceCents,
+        // the stored quantity (numeric(14,4)) — the same the engine counts (Н1): the lock check finds no difference
+        quantity: storedQty(l.quantity), unit: l.unit || "ea", unit_price_cents: l.unitPriceCents,
         taxable: taxOn && !!s.tax.groups[l.group], is_optional: !!l.optional,
       })),
   );

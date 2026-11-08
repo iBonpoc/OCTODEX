@@ -265,6 +265,10 @@ export const es: Dict = {
   "sync.rejected.moduleHint": "El complemento está desactivado o su prueba terminó, y el servidor no aceptó estos cambios. Para guardar de nuevo, active el complemento: «Abrir» → «Activar».",
   "sync.rejected.moduleHintAsk": "El complemento está desactivado o su prueba terminó, y el servidor no aceptó estos cambios. Pida al dueño de la empresa que active el complemento.",
   "sync.rejected.settingsHint": "Mientras editaba, otra persona cambió los ajustes. La app los volvió a leer del servidor: ábralos y vuelva a hacer sus cambios.",
+  // Сметы: refusals we can explain (outboxRejected REJECT_REASONS)
+  "att.rejected.estimate": "Presupuesto no enviado",
+  "sync.stuck.reason.estimateLines": "Las líneas del presupuesto en el servidor no coincidían con su documento, así que el servidor no lo envió al cliente. El presupuesto vuelve a ser borrador: ábralo, guárdelo y envíelo de nuevo.",
+  "sync.stuck.reason.estimateLinesSigned": "Las líneas del presupuesto en el servidor no coincidieron con su documento: el servidor no aceptó la firma y la firma del cliente no se guardó. Abra el presupuesto, guárdelo y tome la firma del cliente de nuevo.",
   "sync.stuck.retry": "Reintentar ahora",
   "sync.stuck.discard": "Descartar cambio…",
   "sync.stuck.sure": "¿Descartar este cambio? No llegará al servidor; el teléfono vuelve a mostrar los datos del servidor.",

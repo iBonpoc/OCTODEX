@@ -47,4 +47,10 @@ describe("unit:portalClosed — a company closed by its owner (S22a)", () => {
     expect(isCompanyClosed({ message: "company closed" })).toBe(true);
     expect(isCompanyClosed(null)).toBe(false);
   });
+  it("security-check #415: a document with no option is «link not valid», never a crash on mainOption", () => {
+    expect(fromRaw({ ...(closed as object), doc: { options: [] } } as never).doc).toBeNull();
+    expect(fromRaw({ ...(closed as object), doc: { note: "x" } } as never).doc).toBeNull();
+    const one = { options: [{ id: "o", name: "A", lines: [] }], settings: {} };
+    expect(fromRaw({ ...(closed as object), doc: one } as never).doc).toEqual(one);
+  });
 });
