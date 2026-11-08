@@ -194,8 +194,9 @@ create or replace function app.import_close_stale(p_company uuid)
 returns void language plpgsql security definer set search_path = '' as $$
 declare j public.import_jobs;
 begin
-  for j in update public.import_jobs set status = 'applied', applied_at = now(), undo_until = now() + interval '30 days',
-                  counts = app.import_counts(id)
+  -- the 30 days count from the day it fell silent, not from whenever it is noticed
+  for j in update public.import_jobs set status = 'applied', applied_at = last_batch_at + interval '24 hours',
+                  undo_until = last_batch_at + interval '24 hours' + interval '30 days', counts = app.import_counts(id)
             where company_id = p_company and status = 'applying' and last_batch_at < now() - interval '24 hours'
         returning * loop
     update public.import_rows set name = null where job_id = j.id and name is not null;
@@ -268,7 +269,8 @@ begin
      or not app.has_role(j.company_id, array['owner', 'admin', 'office']) then
     raise exception 'not allowed' using errcode = '42501';
   end if;
-  if j.status <> 'applying' then raise exception 'import_closed' using errcode = 'P0001'; end if;
+  -- silent for a day = closed (app.import_close_stale writes it at the next start): no batch goes into it
+  if j.status <> 'applying' or j.last_batch_at < now() - interval '24 hours' then raise exception 'import_closed' using errcode = 'P0001'; end if;
 
   -- the company's keys once per batch, only when a new row comes (a repeated batch reads nothing); + the cards this
   -- batch adds, as it adds them. The caller's own temp table of that name is dropped first (pg_temp is not searched).
@@ -276,7 +278,7 @@ begin
 
   for r in select * from jsonb_array_elements(p_rows) loop
     if jsonb_typeof(r) <> 'object' then raise exception 'import_bad_row' using errcode = 'P0001'; end if;
-    if jsonb_typeof(r -> 'line') <> 'number' or (r ->> 'line') !~ '^[0-9]{1,4}$' then raise exception 'import_bad_line' using errcode = 'P0001'; end if;
+    if jsonb_typeof(r -> 'line') is distinct from 'number' or coalesce(r ->> 'line', '') !~ '^[0-9]{1,4}$' then raise exception 'import_bad_line' using errcode = 'P0001'; end if;
     v_line := (r ->> 'line')::int;
     if v_line < 2 or v_line > j.total_rows + 1 then raise exception 'import_bad_line' using errcode = 'P0001'; end if;
     v_name := app.import_cell(r, 'name'); v_first := app.import_cell(r, 'first_name'); v_last := app.import_cell(r, 'last_name');
@@ -414,7 +416,11 @@ begin
     raise exception 'not allowed' using errcode = '42501';
   end if;
   if j.status = 'undone' then return app.import_state(j); end if;
-  if j.status = 'applied' and j.undo_until < v_now then raise exception 'import_undo_expired' using errcode = 'P0001'; end if;
+  -- an applied import: its own date; an open one silent for a day is closed since then (the same 30 days)
+  if (j.status = 'applied' and j.undo_until < v_now)
+     or (j.status = 'applying' and j.last_batch_at + interval '24 hours' + interval '30 days' < v_now) then
+    raise exception 'import_undo_expired' using errcode = 'P0001';
+  end if;
 
   drop table if exists pg_temp.import_undo;
   create temp table import_undo on commit drop as
@@ -454,10 +460,22 @@ begin
     execute format('insert into pg_temp.import_kept select u.customer_id from pg_temp.import_undo u
                      where exists (select 1 from %s x where x.%I = u.%I)', f.tbl, f.col, f.via);
   end loop;
-  -- links without a foreign key: tasks, notes, the feed, own fields — on the card, its person or its property
+  -- links without a foreign key: every column merge_customers moves (it is the list of «what belongs to a card»),
+  -- tasks, notes, the feed, own fields — on the card, its person or its property
   insert into pg_temp.import_kept
   select u.customer_id from pg_temp.import_undo u
-   where exists (select 1 from public.activities a where a.company_id = j.company_id and a.subject_id in (u.customer_id, u.contact_id, u.property_id))
+   where exists (select 1 from public.leads l where l.customer_id = u.customer_id or l.referred_by_customer_id = u.customer_id)
+      or exists (select 1 from public.estimates e where e.customer_id = u.customer_id)
+      or exists (select 1 from public.jobs w where w.customer_id = u.customer_id)
+      or exists (select 1 from public.invoices i where i.customer_id = u.customer_id)
+      or exists (select 1 from public.payments x where x.customer_id = u.customer_id)
+      or exists (select 1 from public.payment_attempts x where x.customer_id = u.customer_id)
+      or exists (select 1 from public.expenses x where x.customer_id = u.customer_id)
+      or exists (select 1 from public.files fl where fl.customer_id = u.customer_id)
+      or exists (select 1 from public.lead_sources x where x.customer_id = u.customer_id)
+      or exists (select 1 from public.customer_tags x where x.customer_id = u.customer_id)
+      or exists (select 1 from public.customers m where m.merged_into_customer_id = u.customer_id)
+      or exists (select 1 from public.activities a where a.company_id = j.company_id and a.subject_id in (u.customer_id, u.contact_id, u.property_id))
       or exists (select 1 from public.notes n where n.company_id = j.company_id and n.subject_id in (u.customer_id, u.contact_id, u.property_id))
       or exists (select 1 from public.tasks t where t.company_id = j.company_id and t.subject_id in (u.customer_id, u.contact_id, u.property_id))
       or exists (select 1 from public.custom_field_values v where v.entity_id in (u.customer_id, u.contact_id, u.property_id));

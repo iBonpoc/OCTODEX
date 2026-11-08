@@ -10506,6 +10506,7 @@ select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000
 select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$,
                         (select jsonb_agg(jsonb_build_object('line', 2, 'name', 'x')) from generate_series(1, 251))), '%import_too_big%', 'T138 more than 250 rows in a batch — refused');
 select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":2.5,"name":"T138 Half","phone":"909 138 0008"}]')$q$, '%import_bad_line%', 'T138 a line that is not a whole number — import_bad_line');
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"name":"T138 No Line","phone":"909 138 0008"}]')$q$, '%import_bad_line%', 'T138 a row without a line — import_bad_line, no row data in the answer (director №1)');
 select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', '[{"line":1e12,"name":"T138 Huge","phone":"909 138 0008"}]')$q$, '%import_bad_line%', 'T138 a huge line — import_bad_line, not a raw error');
 select tst.fails_like(format($q$select public.import_customers('f1380000-0000-4000-8000-000000000001', %L)$q$,
                         jsonb_build_array(jsonb_build_object('line', 5, 'name', repeat('x', 201)))), '%import_too_big%', 'T138 a cell over 200 characters — refused');
@@ -10566,6 +10567,26 @@ select tst.ok((select j ->> 'status' = 'undone' and (j -> 'counts' ->> 'undone')
                  from (select public.undo_customer_import('f1380000-0000-4000-8000-000000000007') j) x), 'T138 undo keeps a card whose property has a gate code (any row pointing to its person or property)');
 :as_super
 select tst.ok((select c.deleted_at is null and p.deleted_at is null from public.customers c join public.properties p on p.customer_id = c.id where c.display_name = 'T138 Gate'), 'T138 …card and property are there');
+-- a card that referred a lead (leads.referred_by_customer_id has no foreign key — merge_customers counts it, so does undo; director №3)
+:as_office_a
+select public.import_customers_start('ca000000-0000-0000-0000-000000000000', 'f1380000-0000-4000-8000-000000000008', 'ref.csv', repeat('8', 64), 1, '1a000000-0000-0000-0000-000000000001') is not null as t138_s8 \gset
+select public.import_customers('f1380000-0000-4000-8000-000000000008', '[{"line":2,"name":"T138 Referrer","phone":"909 138 0011"}]') is not null as t138_b8 \gset
+select public.import_customers_finish('f1380000-0000-4000-8000-000000000008') is not null as t138_f8 \gset
+:as_super
+insert into public.leads (company_id, contact_name, phone, source_id, referred_by_customer_id)
+select 'ca000000-0000-0000-0000-000000000000', 'T138 Referred', '909 138 0012', '1a000000-0000-0000-0000-000000000001', id from public.customers where display_name = 'T138 Referrer';
+:as_office_a
+select tst.ok((select (j -> 'counts' ->> 'kept')::int = 1 from (select public.undo_customer_import('f1380000-0000-4000-8000-000000000008') j) x), 'T138 undo keeps a card a lead was referred by');
+:as_super
+select tst.ok((select deleted_at is null from public.customers where display_name = 'T138 Referrer'), 'T138 …the referrer card is there');
+-- an import left open for 60 days: no batch into it, no undo (the 30 days count from its last batch; director №2)
+insert into public.import_jobs (id, company_id, file_name, file_sha256, total_rows, lead_source_id, created_by, last_batch_at, created_at)
+values ('f1380000-0000-4000-8000-00000000000a', 'ca000000-0000-0000-0000-000000000000', 'old.csv', repeat('a', 64), 5, '1a000000-0000-0000-0000-000000000001', 'a0000000-0000-0000-0000-000000000002', now() - interval '60 days', now() - interval '60 days');
+:as_office_a
+select tst.fails_like($q$select public.import_customers('f1380000-0000-4000-8000-00000000000a', '[{"line":2,"name":"T138 Late","phone":"909 138 0013"}]')$q$, '%import_closed%', 'T138 no batch into an import silent for a day');
+select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-00000000000a')$q$, '%import_undo_expired%', 'T138 no undo of an import silent for 60 days');
+:as_super
+delete from public.import_jobs where id = 'f1380000-0000-4000-8000-00000000000a';
 :as_tech_a
 select tst.fails_like($q$select public.undo_customer_import('f1380000-0000-4000-8000-000000000001')$q$, '%not allowed%', 'T138 a tech does not undo');
 :as_owner_b

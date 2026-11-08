@@ -34,7 +34,8 @@ export function addressKey(p: { address: string; unit?: string; city?: string; p
   const street = words(p.address);
   if (!/\d/.test(street)) return "";
   const zip = p.place?.zip?.trim().slice(0, 5) || (p.city ?? "").match(/\b\d{5}\b/)?.[0] || "";
-  const where = zip || words(p.place?.city ?? (p.city ?? "").split(",")[0]);
+  // the city before a comma («Pasadena, CA» = «Pasadena»), the same as app.address_key on the server (db T139)
+  const where = zip || words((p.place?.city ?? p.city ?? "").split(",")[0]);
   if (!where) return "";
   return [street, words(p.unit), where].join("|");
 }
