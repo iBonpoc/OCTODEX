@@ -25,7 +25,7 @@ export async function listEndpoints(companyId: string): Promise<IntakeEndpoint[]
 export async function listEvents(companyId: string): Promise<IntakeEvent[]> {
   const { data, error } = await supabase
     .from("intake_events")
-    .select("id, endpoint_id, received_at, status, reason, lead_id, payload")
+    .select("id, endpoint_id, received_at, status, reason, lead_id, name:payload->>name, phone:payload->>phone, email:payload->>email, message:payload->>message")
     .eq("company_id", companyId).order("received_at", { ascending: false }).limit(50);
   if (error) throw new Error(error.message);
   return (data ?? []).map((r) => eventFromRow(r as Record<string, unknown>));

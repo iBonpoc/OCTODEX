@@ -12,8 +12,7 @@ exports.run = async (h) => {
   await h.go("/company/leads");
   await p.getByTestId("intake-entry").locator("visible=true").first().waitFor({ timeout: 5000 });
   await p.getByTestId("intake-entry").locator("visible=true").first().click();
-  await p.waitForTimeout(600);
-  h.expect(new URL(p.url()).pathname === "/company/intake", `the card opens the intake screen (${p.url()})`);
+  await p.waitForURL(/\/company\/intake$/, { timeout: 5000 });
   await p.getByTestId("intake-cloud-only").locator("visible=true").first().waitFor({ timeout: 5000 });
   await h.expectText(/Приём заявок работает в облачном аккаунте/, "the demo says where it works");
   const text = await h.text();

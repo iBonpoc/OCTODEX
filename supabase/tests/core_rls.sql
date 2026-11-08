@@ -8959,5 +8959,21 @@ select tst.fails($q$select public.intake_submit('webhook', 'x', 'k', 'x', null, 
 :as_owner_a
 select tst.fails($q$select public.intake_form('x')$q$, 'T120 a member cannot read a form''s info directly');
 \echo 'T120 lead intake doors: service_role only ok'
+-- T120 (cont., review #422 №4): the office decides held requests but changes no way in; sales sees no journal
+:as_super
+update public.memberships set role = 'office' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_office_a
+do $$ begin
+  perform tst.fails($q$select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => true)$q$, 'T120 the office switches no form');
+  perform tst.fails($q$select public.intake_endpoint_rotate((select id from tst.intake_tok where k = 'hook'))$q$, 'T120 the office makes no new key');
+end $$;
+:as_sales_a
+do $$ begin
+  perform tst.ok(tst.cnt('select id from public.intake_events') = 0, 'T120 sales reads no journal');
+  perform tst.fails($q$select public.intake_event_decide((select id from tst.intake_tok where k = 'flood'), true)$q$, 'T120 sales decides nothing');
+end $$;
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000002' and company_id = 'ca000000-0000-0000-0000-000000000000';
+\echo 'T120 office and sales rights on intake ok'
 
 \echo 'ALL TESTS PASSED'

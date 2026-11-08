@@ -15,7 +15,10 @@ describe("intake settings", () => {
     expect(readiness({ ipSecret: true }, form(false))).toBe("off");
     expect(readiness({ ipSecret: true }, form(true))).toBe("on");
     expect(readiness(null, form(true))).toBe("unknown");
-    expect(readiness(undefined, form(true))).toBe("unknown");
+    expect(readiness(undefined, form(true))).toBe("checking"); // before the answer: not «no connection»
+    // the office reads no ways in: never «no form» for them, but a missing secret is still said
+    expect(readiness({ ipSecret: true }, undefined, false)).toBe("notMine");
+    expect(readiness({ ipSecret: false }, undefined, false)).toBe("noSecret");
     expect(READINESS_TONE.noSecret).toBe("bad");
     expect(READINESS_TONE.on).toBe("ok");
   });
@@ -31,9 +34,9 @@ describe("intake settings", () => {
     expect(heldFirst([ev("a", "accepted", "2026-11-08T10:00Z"), ev("b", "held", "2026-11-07T10:00Z"), ev("c", "accepted", "2026-11-08T11:00Z")]).map((e) => e.id)).toEqual(["b", "c", "a"]);
   });
   it("rows: the person from the kept fields; a cleared payload is just no name", () => {
-    expect(eventFromRow({ id: 1, endpoint_id: "e", received_at: "t", status: "held", reason: "ip_limit", payload: { name: "Ann", phone: "626", utm: {} } }))
+    expect(eventFromRow({ id: 1, endpoint_id: "e", received_at: "t", status: "held", reason: "ip_limit", name: "Ann", phone: "626" }))
       .toMatchObject({ id: "1", status: "held", reason: "ip_limit", name: "Ann", phone: "626", email: undefined });
-    expect(eventFromRow({ id: 2, endpoint_id: "e", received_at: "t", status: "accepted", payload: null }).name).toBeUndefined();
+    expect(eventFromRow({ id: 2, endpoint_id: "e", received_at: "t", status: "accepted", name: null }).name).toBeUndefined();
     expect(endpointFromRow({ id: "x", kind: "webhook", token_hint: "beef", source_id: "s", enabled: true, sms_consent_enabled: false, captcha_required: false, daily_limit: 50 }))
       .toEqual({ id: "x", kind: "webhook", publicToken: undefined, tokenHint: "beef", sourceId: "s", enabled: true, smsConsent: false, captcha: false, dailyLimit: 50, rotatedAt: undefined });
   });

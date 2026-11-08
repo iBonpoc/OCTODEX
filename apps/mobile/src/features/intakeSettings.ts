@@ -42,19 +42,21 @@ export function siteSnippet(link: string, label: string): string {
   return `<a href="${esc(link)}" target="_blank" rel="noopener">${esc(label)}</a>`;
 }
 
-export type Readiness = "unknown" | "noSecret" | "none" | "off" | "on";
+export type Readiness = "checking" | "unknown" | "noSecret" | "none" | "off" | "on" | "notMine";
 /**
  * One line on top of the screen (the director's rule 08.11: a form without the IP secret is never silently «on»):
  * unknown — the function did not answer (offline); noSecret — the operator has not set INTAKE_IP_SECRET, the form takes
  * nothing; none — no form yet; off — switched off; on — takes requests.
  */
-export function readiness(status: { ipSecret: boolean } | null | undefined, form: IntakeEndpoint | undefined): Readiness {
+export function readiness(status: { ipSecret: boolean } | null | undefined, form: IntakeEndpoint | undefined, director = true): Readiness {
+  if (status === undefined) return "checking"; // the function has not answered yet — not «no connection»
   if (!status) return "unknown";
   if (!status.ipSecret) return "noSecret";
+  if (!director) return "notMine"; // the office does not read the ways in (owner / admin only): never «no form»
   if (!form) return "none";
   return form.enabled ? "on" : "off";
 }
-export const READINESS_TONE: Record<Readiness, StatusName> = { unknown: "neutral", noSecret: "bad", none: "neutral", off: "warn", on: "ok" };
+export const READINESS_TONE: Record<Readiness, StatusName> = { checking: "neutral", unknown: "neutral", noSecret: "bad", none: "neutral", off: "warn", on: "ok", notMine: "neutral" };
 
 /** held requests first (they wait for a decision), newest first */
 export const heldFirst = (events: IntakeEvent[]) =>
@@ -62,12 +64,12 @@ export const heldFirst = (events: IntakeEvent[]) =>
 
 /** the person of a request, from its kept fields (the database clears them after 30 / 90 days) */
 export function eventFromRow(r: Record<string, unknown>): IntakeEvent {
-  const p = (r.payload ?? {}) as Record<string, unknown>;
+  // only the four fields the screen shows are read (name:payload->>name …): no address or utm in the office's memory
   const s = (v: unknown) => (typeof v === "string" && v ? v : undefined);
   return {
     id: String(r.id), endpointId: String(r.endpoint_id), at: String(r.received_at),
     status: r.status as IntakeEvent["status"], reason: s(r.reason), leadId: s(r.lead_id),
-    name: s(p.name), phone: s(p.phone), email: s(p.email), message: s(p.message),
+    name: s(r.name), phone: s(r.phone), email: s(r.email), message: s(r.message),
   };
 }
 export function endpointFromRow(r: Record<string, unknown>): IntakeEndpoint {

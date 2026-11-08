@@ -5,8 +5,8 @@
  * The director changes the ways in (owner / admin); the office reads the journal and decides held requests (T112).
  * The top line says in words whether the form takes requests — never silently «on» without INTAKE_IP_SECRET (director 08.11).
  */
-import { useCallback, useEffect, useState } from "react";
-import { Platform, View } from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { View } from "react-native";
 import { router } from "expo-router";
 import { space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
@@ -17,7 +17,7 @@ import { fetchIntakeStatus } from "@/cloud/intake";
 import { createEndpoint, decideEvent, listEndpoints, listEvents, rotateEndpoint, setEndpoint } from "@/cloud/intakeSettings";
 import { formLink, heldFirst, readiness, READINESS_TONE, siteSnippet, type IntakeEndpoint, type IntakeEvent } from "@/features/intakeSettings";
 import { copyText, shareText } from "@/features/sendEstimate";
-import { Button, ChoiceChips, StatusChip, Toggle } from "@/ui/controls";
+import { Button, ChoiceChips, ReadOnly, StatusChip, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
 import { Card, CardList, Empty, Screen, SectionTitle } from "@/ui/surfaces";
@@ -40,7 +40,10 @@ export default function CompanyIntake() {
   const [shownKey, setShownKey] = useState<string | null>(null);
   const [ask, setAsk] = useState<IntakeEndpoint | null>(null);
   const [held, setHeld] = useState<IntakeEvent | null>(null);
-  const origin = Platform.OS === "web" && typeof window !== "undefined" ? window.location.origin : WEB_APP_URL;
+  // always the production site: a link made on a PR preview would die with the preview (security-check #422 №1)
+  const origin = WEB_APP_URL;
+  const latch = useRef(false);
+  const [loadFailed, setLoadFailed] = useState(false);
 
   const load = useCallback(async () => {
     if (!cloud || !companyId) return;
@@ -49,9 +52,10 @@ export default function CompanyIntake() {
       const [e, ev] = await Promise.all([director ? listEndpoints(companyId) : Promise.resolve([]), listEvents(companyId)]);
       setEps(e);
       setEvents(ev);
+      setLoadFailed(false);
     } catch {
-      setEps([]);
-      toast.show(t("intake.set.loadFailed"));
+      // never offer «Создать» on a failed read: a second form / key would be made (review #422 №1)
+      setLoadFailed(true);
     }
   }, [cloud, companyId, director]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
@@ -70,17 +74,21 @@ export default function CompanyIntake() {
   const sources = store.db.sources.filter((s) => s.active !== false);
   const form = eps?.find((e) => e.kind === "form");
   const hook = eps?.find((e) => e.kind === "webhook");
-  const ready = readiness(status, form);
+  const ready = readiness(status, form, director);
   const link = form?.publicToken ? formLink(origin, form.publicToken) : "";
-  const run = async (fn: () => Promise<void>) => {
+  const run = async (fn: () => Promise<void>, done?: string) => {
     if (!store.online) return toast.show(t("intake.set.needOnline"));
+    if (latch.current) return; // a double tap runs once (review #422 №3)
+    latch.current = true;
     setBusy(true);
     try {
       await fn();
       await load();
+      if (done) toast.show(done);
     } catch {
       toast.show(t("intake.set.failed"));
     } finally {
+      latch.current = false;
       setBusy(false);
     }
   };
@@ -96,15 +104,28 @@ export default function CompanyIntake() {
           </View>
         </Card>
 
-        {director ? (
+        {director && (eps === null || loadFailed) ? (
+          <Card>
+            <View testID="intake-loading">
+              {loadFailed ? (
+                <Empty icon="alert" title={t("intake.set.loadFailed")} action={<Button label={t("intake.retry")} variant="secondary" onPress={() => load()} />} />
+              ) : (
+                <Empty icon="clock" title={t("portal.loading")} />
+              )}
+            </View>
+          </Card>
+        ) : null}
+        {director && eps !== null && !loadFailed ? (
           <>
             <SectionTitle title={t("intake.set.form")} />
             <Card>
               {form ? (
                 <View testID="intake-form-card" style={{ gap: space[3] }}>
                   <T v="body" numberOfLines={2}>{link}</T>
-                  <Toggle label={t("intake.set.enabled")} on={form.enabled} onChange={(on) => run(() => setEndpoint(form.id, { enabled: on }))} />
-                  <Toggle label={t("intake.set.smsBox")} on={form.smsConsent} onChange={(on) => run(() => setEndpoint(form.id, { smsConsent: on }))} />
+                  <ReadOnly value={busy}>
+                    <Toggle label={t("intake.set.enabled")} on={form.enabled} onChange={(on) => run(() => setEndpoint(form.id, { enabled: on }))} />
+                    <Toggle label={t("intake.set.smsBox")} on={form.smsConsent} onChange={(on) => run(() => setEndpoint(form.id, { smsConsent: on }))} />
+                  </ReadOnly>
                   <Button label={t("intake.set.copyLink")} icon="copy" variant="secondary" full onPress={() => copyText(link).then(() => toast.show(t("intake.set.copied")))} />
                   <Button label={t("intake.set.share")} icon="send" variant="secondary" full onPress={() => shareText(t("intake.set.shareText"), link)} />
                   <Button label={t("intake.set.copyCode")} icon="copy" variant="secondary" full
@@ -129,7 +150,9 @@ export default function CompanyIntake() {
                 {hook ? (
                   <>
                     <T v="body">{t("intake.set.keyEnds", { hint: hook.tokenHint })}</T>
-                    <Toggle label={t("intake.set.enabled")} on={hook.enabled} onChange={(on) => run(() => setEndpoint(hook.id, { enabled: on }))} />
+                    <ReadOnly value={busy}>
+                      <Toggle label={t("intake.set.enabled")} on={hook.enabled} onChange={(on) => run(() => setEndpoint(hook.id, { enabled: on }))} />
+                    </ReadOnly>
                     <Button label={t("intake.set.newKey")} variant="ghost" onPress={() => setAsk(hook)} disabled={busy} />
                   </>
                 ) : (
@@ -162,11 +185,13 @@ export default function CompanyIntake() {
         )}
       </CardList>
 
-      <Sheet visible={!!shownKey} onClose={() => setShownKey(null)} title={t("intake.set.keyTitle")}>
+      {/* closed only by «Готово»: a tap beside it would lose the key for good (security-check #422 №2) */}
+      <Sheet visible={!!shownKey} onClose={() => {}} title={t("intake.set.keyTitle")}>
         <View testID="intake-key-sheet" style={{ gap: space[3] }}>
           <T v="caption" tone="mut">{t("intake.set.keyOnce")}</T>
           <T v="body" tabular>{shownKey ?? ""}</T>
           <Button label={t("intake.set.copyKey")} icon="copy" full onPress={() => shownKey && copyText(shownKey).then(() => toast.show(t("intake.set.copied")))} />
+          <Button label={t("intake.set.keyDone")} variant="secondary" full onPress={() => setShownKey(null)} />
         </View>
       </Sheet>
 
@@ -189,7 +214,7 @@ export default function CompanyIntake() {
         <View testID="intake-held-sheet" style={{ gap: space[3] }}>
           <T v="caption" tone="mut">{t(`intake.set.reason.${held?.reason ?? "other"}` as DictKey)}</T>
           {[held?.name, held?.phone, held?.email, held?.message].filter(Boolean).map((x, i) => <T key={i} v="body">{x}</T>)}
-          <Button label={t("intake.set.accept")} full disabled={busy} onPress={() => { const e = held; setHeld(null); if (e) run(async () => void (await decideEvent(e.id, true))); }} />
+          <Button label={t("intake.set.accept")} full disabled={busy} onPress={() => { const e = held; setHeld(null); if (e) run(async () => void (await decideEvent(e.id, true)), t("intake.set.accepted")); }} />
           <Button label={t("intake.set.reject")} variant="secondary" full disabled={busy} onPress={() => { const e = held; setHeld(null); if (e) run(async () => void (await decideEvent(e.id, false))); }} />
         </View>
       </Sheet>
