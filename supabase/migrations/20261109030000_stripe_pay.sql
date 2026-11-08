@@ -70,6 +70,21 @@ $$;
 revoke all on function public.stripe_pay_set_intent(uuid, text) from public, anon, authenticated;
 grant execute on function public.stripe_pay_set_intent(uuid, text) to service_role;
 
+-- stripe-pay cancelled this intent itself (an older attempt of the invoice): close its attempt now, not when the webhook
+-- comes — else the invoice answers «retry later» until then (director's review 20в). Only an attempt still open / failed.
+create or replace function public.stripe_pay_close_attempt(p_intent_id text)
+returns void language plpgsql security definer set search_path = '' as $$
+begin
+  if p_intent_id is null or p_intent_id !~ '^pi_[A-Za-z0-9]{1,64}$' then
+    raise exception 'not a PaymentIntent' using errcode = '22023';
+  end if;
+  update public.payment_attempts set status = 'canceled', updated_at = now()
+   where stripe_payment_intent_id = p_intent_id and status in ('open', 'failed');
+end;
+$$;
+revoke all on function public.stripe_pay_close_attempt(text) from public, anon, authenticated;
+grant execute on function public.stripe_pay_close_attempt(text) to service_role;
+
 -- the wrapper of 20261107070000 plus two fields; a closed company still gets only its language
 create or replace function public.portal_estimate(p_token text)
 returns jsonb language plpgsql security definer set search_path = '' as $$

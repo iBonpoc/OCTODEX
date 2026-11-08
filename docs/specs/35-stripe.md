@@ -65,8 +65,9 @@
 - `public.stripe_pay_open(token, invoice)` (service_role): токен `/p/` → смета → работа → **этот** счёт, ссылка открыта, компания не закрыта — только потом `app.payment_attempt_open` на весь онлайн-остаток (ACH в пути не просим снова). IDOR закрыт в базе. `public.stripe_pay_set_intent`. `portal_estimate` += `online_pay`, `pending` (ACH в пути по счетам). T131.
 - Edge `stripe-pay` (verify_jwt = false): CORS — одна константа `ALLOWED_ORIGINS` (сейчас `https://octodex.expo.app`; позже gorix.app), чужой Origin → 403. Попытка с PaymentIntent → читаем его: можно платить — тот же client_secret; processing — «в обработке»; canceled — «позже» (вебхук закроет попытку). Новый PI — direct charge, `Stripe-Account`, Idempotency-Key = ключ попытки, metadata attempt/company/invoice, `payment_method_types` ACH первым от $1,000. `application_fee_amount` нет до В3. Секреты: `STRIPE_SECRET_KEY`, `STRIPE_PUBLISHABLE_KEY` (pk_test_).
 - `/p/`: Payment Element (только `@stripe/stripe-js` 10.1.0, без react-stripe-js), только web; имитация — только если `online_pay` нет и компания демо. После подтверждения — «Платёж в обработке»; ACH в пути — «ACH в обработке: $…». Экран счёта (InvoiceCard) — то же по `db.pendingPayments` (#435). e2e 183.
-- Старые PaymentIntent того же счёта (другая сумма, старая вкладка, неудачная попытка) `stripe-pay` отменяет до выдачи нового (`stale_intents`), чтобы одно и то же не списали дважды.
-- Долг: лимит запросов к `stripe-pay` по токену и IP (как в lead-intake) и Radar — до live.
+- Старые PaymentIntent того же счёта (другая сумма, старая вкладка, неудачная попытка) `stripe-pay` отменяет до выдачи нового (`stale_intents`) и сразу закрывает их попытки (`public.stripe_pay_close_attempt`). Если отмена не прошла, старый PI перечитывается: processing / succeeded → «в обработке», новый не выдаётся (вкладка A оплатила, вебхука нет — вкладка B второй раз не платит); всё ещё можно оплатить → 502, двух оплачиваемых PI на счёт не бывает.
+- CORS — только вежливость браузера, не защита: ключ — токен `/p/`.
+- **Обязательно до live:** лимит частоты `stripe-pay` по токену и IP (как в lead-intake) и Radar.
 
 ## 5. План PR
 | PR | Что | Тесты |
