@@ -32,7 +32,6 @@ begin
        or new.method is distinct from old.method
        or new.currency is distinct from old.currency
        or new.invoice_id is distinct from old.invoice_id and old.invoice_id is not null
-       or new.customer_id is distinct from old.customer_id
        or new.visit_id is distinct from old.visit_id
        or new.idempotency_key is distinct from old.idempotency_key
        or new.received_by is distinct from old.received_by
@@ -40,16 +39,28 @@ begin
        or new.receipt_number is distinct from old.receipt_number and old.receipt_number is not null then
       raise exception 'payment % is immutable except status (use void/refund)', old.id using errcode = '42501';
     end if;
+    -- the client of a payment changes only when two client cards are merged (public.merge_customers, «Лиды и клиенты»,
+    -- migration 20261109120000 brings app.merging_customer); until then — and for a person ever — refused as before
+    if new.customer_id is distinct from old.customer_id then
+      if not app.merging_customer(old.customer_id, new.customer_id) then
+        raise exception 'payment % is immutable except status (use void/refund)', old.id using errcode = '42501';
+      end if;
+    end if;
     if auth.uid() is not null and (new.stripe_payment_intent_id is distinct from old.stripe_payment_intent_id
        or new.stripe_charge_id is distinct from old.stripe_charge_id or new.dispute_status is distinct from old.dispute_status
        or new.fee_cents is distinct from old.fee_cents or new.platform_fee_cents is distinct from old.platform_fee_cents) then
       raise exception 'Stripe fields are written by Stripe' using errcode = '42501';
     end if;
-    -- 20д: a refund is a refunds row with its tax part — only through public.refund_record (it opens this door for its own
-    -- update); a person's direct update of refunded_cents or a refund status is refused
-    if auth.uid() is not null and coalesce(current_setting('app.refund_door', true), '') <> 'on'
+    -- 20д: a refund is a refunds row with its tax part. A person cannot write refunds rows (only the doors do), so a person's
+    -- change of refunded_cents or of a refund status must equal what the refunds rows say — public.refund_record writes its
+    -- row first; a direct UPDATE has none. (Inside this SECURITY DEFINER trigger current_user is the owner, and a setting
+    -- can be set by anyone: neither tells a door from a person.) Stripe's own changes come without a person (service_role).
+    if auth.uid() is not null
        and (new.refunded_cents is distinct from old.refunded_cents
-            or (new.status in ('partially_refunded', 'refunded') and new.status is distinct from old.status)) then
+            or (new.status in ('partially_refunded', 'refunded') and new.status is distinct from old.status))
+       and (case when new.status = 'refunded' then new.amount_cents else new.refunded_cents end)
+           is distinct from (select coalesce(sum(r.amount_cents), 0) from public.refunds r
+                              where r.payment_id = new.id and r.status = 'succeeded') then
       raise exception 'refunds go through refund_record' using errcode = '42501';
     end if;
     if new.refunded_cents < old.refunded_cents then
@@ -226,12 +237,10 @@ begin
           p.method, v_tax, p_amount_cents - v_tax)
   returning * into r;
   -- as the person: tg_payment_guard checks owner/admin once more; the invoice's balance is recalculated by its trigger
-  perform set_config('app.refund_door', 'on', true);
   update public.payments
      set refunded_cents = p.refunded_cents + p_amount_cents,
          status = case when p.refunded_cents + p_amount_cents >= p.amount_cents then 'refunded' else 'partially_refunded' end
    where id = p.id;
-  perform set_config('app.refund_door', 'off', true);
   return app.refund_json(r);
 end;
 $$;
