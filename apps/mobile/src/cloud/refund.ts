@@ -33,7 +33,12 @@ export async function refundRecord(a: RefundAsk): Promise<RefundAnswer> {
       p_payment_id: a.paymentId, p_amount_cents: a.amountCents, p_reason_kind: a.reasonKind, p_reason: a.reason, p_key: a.key,
     });
     // no SQLSTATE = no answer from the database (the network, a gateway): the refund may have been kept — the same key again
-    if (error) return { ok: false, error: !error.code ? "retry_later" : error.code === "42501" ? "not_allowed" : refundError(error.message) };
+    if (error) {
+      if (!error.code) return { ok: false, error: "retry_later" };
+      // 42501 is also «the company is closed» (refund_guard): its own words, not «only the owner» (spec 35 §4г)
+      if (error.code === "42501") return { ok: false, error: /company is closed/.test(error.message ?? "") ? "company_closed" : "not_allowed" };
+      return { ok: false, error: refundError(error.message) };
+    }
     return fromRow(data as Record<string, unknown>) ?? { ok: false, error: "failed" };
   } catch {
     return { ok: false, error: "retry_later" };
@@ -54,7 +59,7 @@ export async function refundStripe(a: RefundAsk): Promise<RefundAnswer> {
       signal: ctl.signal,
     });
     const body = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-    if (res.status === 403) return { ok: false, error: "not_allowed" };
+    if (res.status === 403) return { ok: false, error: body?.error === "company_closed" ? "company_closed" : "not_allowed" };
     if (body?.error) return { ok: false, error: refundError(body.error) };
     if (res.status >= 500 || !body) return { ok: false, error: "retry_later" };   // a gateway, a crash: the row may wait — same key
     return fromRow(body?.refund as Record<string, unknown>) ?? { ok: false, error: "failed" };

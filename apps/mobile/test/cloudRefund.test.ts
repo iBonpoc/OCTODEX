@@ -33,6 +33,10 @@ describe("unit:cloudRefund — a record (refund_record)", () => {
     expect(await refundRecord(ASK)).toEqual({ ok: false, error: "refund_above_available" });
     rpc.mockResolvedValue({ data: null, error: { code: "42501", message: "only owner/admin can refund" } });
     expect(await refundRecord(ASK)).toEqual({ ok: false, error: "not_allowed" });
+    // spec 35 §4г: 42501 «the company is closed» — its own words, a final no
+    rpc.mockResolvedValue({ data: null, error: { code: "42501", message: "the company is closed" } });
+    expect(await refundRecord(ASK)).toEqual({ ok: false, error: "company_closed" });
+    expect(FINAL_REFUSALS).toContain("company_closed");
   });
   it("no answer (no SQLSTATE: the network) or a throw → «later», never a final no", async () => {
     rpc.mockResolvedValue({ data: null, error: { code: "", message: "TypeError: Failed to fetch" } });
@@ -58,6 +62,8 @@ describe("unit:cloudRefund — through Stripe (the edge function)", () => {
     expect(await refundStripe(ASK)).toEqual({ ok: false, error: "stripe_refused" });
     fetchAnswer(403, { error: "not_allowed" });
     expect(await refundStripe(ASK)).toEqual({ ok: false, error: "not_allowed" });
+    fetchAnswer(403, { error: "company_closed" });
+    expect(await refundStripe(ASK)).toEqual({ ok: false, error: "company_closed" });
   });
   it("a gateway (5xx without JSON), a crash or a timeout → «later» with the same key", async () => {
     fetchAnswer(502, undefined);

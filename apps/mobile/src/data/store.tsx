@@ -7,6 +7,7 @@
  * only after that window, so Undo simply drops it from the outbox.
  */
 import { applyRefund, type RefundError } from "@/features/payments/refund";
+import { applyAdvance, type AdvanceError } from "@/features/payments/advance";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import * as Crypto from "expo-crypto";
 import { motion } from "@octo/design-tokens";
@@ -293,6 +294,9 @@ interface StoreCtx {
    *  nothing and says so: there the server refunds (cloud/refund.ts), then refresh(). No undo — money that left is gone;
    *  the sheet asks first (rule 5). null — done, else our word why not. */
   refundPaymentDemo: (paymentId: ID, amountCents: number) => RefundError | null;
+  /** spec 35 §4г: the DEMO's apply of a client's advance to an invoice (features/payments/advance.ts applyAdvance — the
+   *  database's rules); in the cloud the server applies (cloud/advance.ts), then refresh(). null — done, else our word. */
+  applyAdvanceDemo: (advanceId: ID, invoiceId: ID) => AdvanceError | null;
   /** progress (by stage) or final balance invoice for a job */
   issueInvoice: (jobId: ID, kind: "progress" | "final", amountCents: number, title: string) => Undo;
   /** create or update a universal estimate (draft) */
@@ -1695,7 +1699,13 @@ export function StoreProvider({ children }: { children: ReactNode }) {
       refundPaymentDemo: (paymentId, amountCents) => {
         const r = applyRefund(dbRef.current, paymentId, amountCents, { mode: modeRef.current, appRole: role });
         if (!r.ok) return r.error;
-        mutate("payment.refundDemo", (d) => ({ ...d, payments: r.payments, invoices: r.invoices }));   // no op: never sent anywhere
+        mutate("payment.refundDemo", (d) => ({ ...d, payments: r.payments, invoices: r.invoices, advances: r.advances }));   // no op: never sent anywhere
+        return null;
+      },
+      applyAdvanceDemo: (advanceId, invoiceId) => {
+        const r = applyAdvance(dbRef.current, advanceId, invoiceId, { mode: modeRef.current, appRole: role });
+        if (!r.ok) return r.error;
+        mutate("payment.advanceDemo", (d) => ({ ...d, payments: r.payments, invoices: r.invoices, advances: r.advances }));   // no op
         return null;
       },
       issueInvoice: (jobId, kind, amountCents, title) => {

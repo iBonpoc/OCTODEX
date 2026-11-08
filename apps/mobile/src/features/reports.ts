@@ -112,8 +112,9 @@ export function categoryReport(
 export function toCsv(header: readonly string[], rows: readonly (readonly (string | number)[])[]): string {
   const cell = (v: string | number) => {
     const s = String(v);
-    // a formula injection guard: a cell starting with = + - @ is read as text
-    const safe = /^[=+\-@]/.test(s) && !/^-\d/.test(s) ? `'${s}` : s;
+    // a formula injection guard: a cell starting with = + - @ (or a tab / CR) is read as text — except a plain number
+    // («-12.50» stays a number; «-1+cmd|' /C calc'!A0» does not: only /^-?\d+(\.\d+)?$/ is a number)
+    const safe = typeof v === "number" || /^-?\d+(\.\d+)?$/.test(s) || !/^[=+\-@\t\r]/.test(s) ? s : `'${s}`;
     return /[",\n\r]/.test(safe) ? `"${safe.replace(/"/g, '""')}"` : safe;
   };
   return "﻿" + [header, ...rows].map((r) => r.map(cell).join(",")).join("\r\n") + "\r\n";

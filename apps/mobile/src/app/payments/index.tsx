@@ -1,7 +1,10 @@
 import { useState } from "react";
+import { View } from "react-native";
+import { space } from "@octo/design-tokens";
 import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
-import type { DB, Payment, PaymentMethod } from "@/data/types";
+import type { Advance, DB, Payment, PaymentMethod } from "@/data/types";
+import { ADVANCES_COLLECTED } from "@/features/payments/collected";
 import { useI18n, type DictKey } from "@/i18n";
 import { asPaymentPeriod, canSeePayments, PAYMENT_PERIODS, paymentsIn, type PaymentPeriod } from "@/features/moneyLists";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -50,6 +53,34 @@ export default function Payments() {
   // the search: the client, the receipt RCT-…, the invoice INV-…
   const v = { ...found, items: found.items.filter((x) => matchPayment(db, x, q)) };
   const all = paymentsIn(db, p);
+  // spec 35 §4г: the clients' advances (no invoice) — their own section, outside the period's sum while they are «to check»
+  // the same period, method and search as the list (paymentsIn over the advances alone)
+  const advIds = new Set(paymentsIn({ payments: (db.advances ?? []).map((x) => ({ ...x, invoiceId: "" })) }, p, method).items.map((x) => x.id));
+  const advances = ADVANCES_COLLECTED ? [] : (db.advances ?? []).filter((x) => advIds.has(x.id) && matchPayment(db, { ...x, invoiceId: "" }, q));
+  const advanceCard = (x: Advance) => {
+    const c = db.customers.find((y) => y.id === x.customerId);
+    return (
+      <ListCard
+        key={x.id}
+        testID={`advance-card-${x.id}`}
+        title={c?.name ?? "—"}
+        when={day(x.at)}
+        lead={{ kind: "icon", icon: "wallet" }}
+        value={`+${moneyWhole(x.amountCents)}`}
+        valueLabel={t("mny.adv.label")}
+        status={{ tone: "warn", label: t("mny.adv.chip") }}
+        tags={x.refundedCents ? [t("mny.refunded", { amount: money(x.refundedCents) })] : undefined}
+        facts={{
+          receipt: x.receiptNumber,
+          method: [t(`pay.${x.method}` as DictKey), x.reference].filter(Boolean).join(" · "),
+          links: t("mny.adv.noInvoice"),
+        }}
+        density={device === "desktop" ? "row" : "rich"}
+        columns={COLUMNS}
+        onPress={() => router.push(`/receipt/${x.id}`)}
+      />
+    );
+  };
   const card = (x: Payment) => {
     const c = db.customers.find((y) => y.id === x.customerId);
     const inv = db.invoices.find((i) => i.id === x.invoiceId);
@@ -103,10 +134,18 @@ export default function Payments() {
         }
         onReset={() => router.setParams({ m: "" })}
       />
-      <Card>
-        <T v="caption" tone="mut">{t("mny.collected", { n: all.items.length })}</T>
-        <T v="display" tabular>{money(all.totalCents)}</T>
-      </Card>
+      {advances.length ? (
+        <View testID="advances-section" style={{ gap: space[2] }}>
+          <T v="caption" tone="mut">{`${t("mny.adv.section")} · ${t("mny.adv.notCounted")}`}</T>
+          <CardList>{advances.map(advanceCard)}</CardList>
+        </View>
+      ) : null}
+      <View testID="payments-total">
+        <Card>
+          <T v="caption" tone="mut">{t("mny.collected", { n: all.items.length })}</T>
+          <T v="display" tabular>{money(all.totalCents)}</T>
+        </Card>
+      </View>
       {v.items.length === 0 ? (
         <Empty icon="wallet" title={t("mny.payments.empty")} />
       ) : device === "tablet" ? (
