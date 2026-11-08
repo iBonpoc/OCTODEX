@@ -20,7 +20,7 @@ create table app.estimate_tokens (
   token       text primary key check (char_length(token) between 20 and 128 and token ~ '^[A-Za-z0-9_-]+$'),
   estimate_id uuid not null,
   company_id  uuid not null,
-  created_at  timestamptz not null default now(),
+  created_at  timestamptz not null default clock_timestamp(),   -- the order of links even inside one transaction
   foreign key (company_id, estimate_id) references public.estimates (company_id, id)
 );
 create index estimate_tokens_estimate_idx on app.estimate_tokens (estimate_id, created_at desc);
@@ -121,6 +121,9 @@ begin
     perform app.estimate_tokens_revoke(r.id);
     v_token := encode(extensions.gen_random_bytes(24), 'hex');
     insert into app.estimate_tokens (token, estimate_id, company_id) values (v_token, r.id, r.company_id);
+    -- written down: the estimate's history says its link was issued anew and why (the office sends the new one)
+    insert into public.activities (company_id, subject_type, subject_id, kind, body, meta)
+    values (r.company_id, 'estimate', r.id, 'edited', 'link reissued', jsonb_build_object('action', 'link_reissued', 'why', 'tech_link_step2'));
   end loop;
 end;
 $$;
@@ -483,10 +486,20 @@ begin
   v_token := app.estimate_current_token(e.id);
   -- the phone's own token (an older app shows and copies the link it made itself): kept as one more live link of this
   -- estimate, so what the office already sent works (spec 35 §4е, step 2); a new estimate's first link is the same
-  if p_token is not null and length(p_token) >= 20 and p_token ~ '^[A-Za-z0-9_-]+$' and p_token is distinct from v_token
-     and (select count(*) from app.estimate_tokens k where k.estimate_id = e.id) < 5   -- no endless pile of links
+  if p_token is not null and length(p_token) between 20 and 128 and p_token ~ '^[A-Za-z0-9_-]+$' and p_token is distinct from v_token
      and not exists (select 1 from public.revoked_link_tokens r where r.token_hash = encode(sha256(convert_to(p_token, 'UTF8')), 'hex'))
      and not exists (select 1 from app.estimate_tokens k where k.token = p_token) then
+    -- no endless pile: at most 5 live links — the OLDEST one ends (its hash kept: «no longer valid»), the new one always
+    -- works (an older app sends the link it made; the client must never get a dead one — director's check of #464)
+    if (select count(*) from app.estimate_tokens k where k.estimate_id = e.id) >= 5 then
+      with old as (
+        delete from app.estimate_tokens k
+         where k.token = (select x.token from app.estimate_tokens x where x.estimate_id = e.id order by x.created_at, x.token limit 1)
+        returning k.token, k.company_id, k.estimate_id)
+      insert into public.revoked_link_tokens (token_hash, company_id, estimate_id)
+      select encode(sha256(convert_to(old.token, 'UTF8')), 'hex'), old.company_id, old.estimate_id from old
+      on conflict (token_hash) do nothing;
+    end if;
     insert into app.estimate_tokens (token, estimate_id, company_id) values (p_token, e.id, e.company_id);
     v_token := p_token;                          -- the newest: the one the office sees (estimate_link, estimate_links)
     update public.estimates set link_revoked_at = null where id = e.id;

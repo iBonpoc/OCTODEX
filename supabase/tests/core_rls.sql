@@ -11331,10 +11331,20 @@ select tst.ok(:'t147_second' = 'T147secondPhoneOwnToken0123456789ab'
           and public.estimate_link('e1470000-0000-4000-8000-000000000001') = :'t147_second'
           and (select token from public.estimate_links('ca000000-0000-0000-0000-000000000000') where estimate_id = 'e1470000-0000-4000-8000-000000000001') = :'t147_second',
   'T147 send, estimate_link and estimate_links give the same, newest link');
--- no endless pile: at most 5 live links of one estimate
+-- no endless pile: at most 5 live links — an older app sending a 6th time ends the OLDEST, its new link always works
+-- (director's check of #464: the 6th SMS went out with a dead link)
 select public.send_estimate('e1470000-0000-4000-8000-000000000001', 'T147pile' || g || 'x0123456789abcdefghij') from generate_series(1, 6) g;
 :as_super
 select tst.ok((select count(*) from app.estimate_tokens where estimate_id = 'e1470000-0000-4000-8000-000000000001') = 5, 'T147 at most 5 live links per estimate');
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok(public.portal_estimate('T147pile6x0123456789abcdefghij') is not null, 'T147 the 6th link of an older app opens the page');
+select tst.ok(public.portal_estimate(:'t147_first') is null, 'T147 …the oldest one ended («no longer valid»)');
+:as_owner_a
+select tst.ok(public.estimate_link('e1470000-0000-4000-8000-000000000001') = 'T147pile6x0123456789abcdefghij', 'T147 …and it is the link the office sees');
+-- a phone's token longer than a link may be: the server makes its own, the send does not fail
+select tst.ok(length(public.send_estimate('e1470000-0000-4000-8000-000000000001', repeat('L', 129))) between 20 and 128, 'T147 a 129-character token: the send goes on');
+:as_super
+select tst.ok(not exists (select 1 from app.estimate_tokens where token = repeat('L', 129)), 'T147 …and it is not kept');
 :as_tech_a
 select tst.fails_like($q$select public.send_estimate('e1470000-0000-4000-8000-000000000001', 'T147aTechAddsHisOwnLink012345678')$q$, '%only the office%', 'T147 a tech cannot add a link of his own');
 select tst.fails_like($q$select public.estimate_link('e1470000-0000-4000-8000-000000000001')$q$, '%only the office%', 'T147 …nor read one through estimate_link');

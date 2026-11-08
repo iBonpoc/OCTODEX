@@ -70,7 +70,7 @@
 -    return e.public_token;                                -- signed or closed: nothing to send, keep the link
 +    return app.estimate_current_token(e.id);              -- signed or closed: nothing to send, keep the link
    end if;
-@@ -24,12 +24,16 @@
+@@ -24,12 +24,26 @@
    end if;
 -  v_token := e.public_token;
 -  if v_token is null then
@@ -80,15 +80,24 @@
 -      v_token := p_token;
 -    else
 -      v_token := encode(extensions.gen_random_bytes(24), 'hex');
--    end if;
--    update public.estimates set public_token = v_token, link_revoked_at = null where id = e.id;
 +  v_token := app.estimate_current_token(e.id);
 +  -- the phone's own token (an older app shows and copies the link it made itself): kept as one more live link of this
 +  -- estimate, so what the office already sent works (spec 35 §4е, step 2); a new estimate's first link is the same
-+  if p_token is not null and length(p_token) >= 20 and p_token ~ '^[A-Za-z0-9_-]+$' and p_token is distinct from v_token
-+     and (select count(*) from app.estimate_tokens k where k.estimate_id = e.id) < 5   -- no endless pile of links
++  if p_token is not null and length(p_token) between 20 and 128 and p_token ~ '^[A-Za-z0-9_-]+$' and p_token is distinct from v_token
 +     and not exists (select 1 from public.revoked_link_tokens r where r.token_hash = encode(sha256(convert_to(p_token, 'UTF8')), 'hex'))
 +     and not exists (select 1 from app.estimate_tokens k where k.token = p_token) then
++    -- no endless pile: at most 5 live links — the OLDEST one ends (its hash kept: «no longer valid»), the new one always
++    -- works (an older app sends the link it made; the client must never get a dead one — director's check of #464)
++    if (select count(*) from app.estimate_tokens k where k.estimate_id = e.id) >= 5 then
++      with old as (
++        delete from app.estimate_tokens k
++         where k.token = (select x.token from app.estimate_tokens x where x.estimate_id = e.id order by x.created_at, x.token limit 1)
++        returning k.token, k.company_id, k.estimate_id)
++      insert into public.revoked_link_tokens (token_hash, company_id, estimate_id)
++      select encode(sha256(convert_to(old.token, 'UTF8')), 'hex'), old.company_id, old.estimate_id from old
++      on conflict (token_hash) do nothing;
+     end if;
+-    update public.estimates set public_token = v_token, link_revoked_at = null where id = e.id;
 +    insert into app.estimate_tokens (token, estimate_id, company_id) values (p_token, e.id, e.company_id);
 +    v_token := p_token;                          -- the newest: the one the office sees (estimate_link, estimate_links)
 +    update public.estimates set link_revoked_at = null where id = e.id;
@@ -97,7 +106,7 @@
 +    insert into app.estimate_tokens (token, estimate_id, company_id) values (v_token, e.id, e.company_id);
 +    update public.estimates set link_revoked_at = null where id = e.id;
    end if;
-@@ -38,2 +42,2 @@
+@@ -38,2 +52,2 @@
  end;
 -$$+$$;
 --- public.revoke_estimate_link (last version)

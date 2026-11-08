@@ -17,12 +17,18 @@ begin
      or app.estimate_current_token('cf147300-0000-0000-0000-000000000002') is null then
     raise exception 'UPGRADE 147: the open link the tech could read is not issued anew';
   end if;
+  if (select count(*) from public.activities where subject_id in ('cf147300-0000-0000-0000-000000000002', 'cf147300-0000-0000-0000-000000000003', 'cf147300-0000-0000-0000-000000000004')
+        and meta ->> 'action' = 'link_reissued' and meta ->> 'why' = 'tech_link_step2') <> 3
+     or exists (select 1 from public.activities where subject_id = 'cf147300-0000-0000-0000-000000000001' and meta ->> 'why' = 'tech_link_step2') then
+    raise exception 'UPGRADE 147: each reissued link is written in its estimate''s history (and only those)';
+  end if;
   if public.portal_estimate('tok_upg147_techopen_012345678') is not null
      or public.portal_estimate(app.estimate_current_token('cf147300-0000-0000-0000-000000000002')) is null then
     raise exception 'UPGRADE 147: the old link still opens the page, or the new one does not';
   end if;
 end $$;
 delete from app.estimate_tokens where company_id = 'cf147000-0000-0000-0000-000000000001';
+delete from public.activities where company_id = 'cf147000-0000-0000-0000-000000000001';
 delete from public.revoked_link_tokens where company_id = 'cf147000-0000-0000-0000-000000000001';
 -- clean up: the main tests count users
 delete from public.memberships where user_id = 'cf147000-0000-0000-0000-0000000000aa';
