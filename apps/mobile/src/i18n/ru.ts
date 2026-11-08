@@ -1003,6 +1003,7 @@ export const ru = {
   "pay.cash": "Наличные",
   "pay.check": "Чек",
   "pay.zelle": "Zelle",
+  "pay.ach": "Банк (ACH)",
   "board.open": "Открытые",
   "board.noEstimates": "Смет нет",
   "sales.title": "Продажи",

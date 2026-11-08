@@ -66,19 +66,20 @@ exports.run = async (h) => {
   await p.keyboard.press("ArrowDown");
   await p.waitForTimeout(300);
   h.expect(await openIs(h, id0), `↓ outside the rows does not move the panel (${p.url()})`);
-  // the open client falls out of the filter: the panel closes and the address drops ?open=, «Все» does not bring it back
+  // the open client falls out of the filter (or an action in the panel moves it out): the panel stays — it is the
+  // card the person works with; «Все» marks its row again (review #426)
   const owing = (c) => db.invoices.some((i) => i.customerId === c.id && !i.void && i.totalCents > i.paidCents);
   const quiet = db.customers.find((c) => names.some((n) => n.startsWith(c.name)) && !owing(c));
   h.expect(quiet, "a client who owes nothing is in the list");
-  {
-    await cards.filter({ has: p.getByText(quiet.name, { exact: true }) }).first().click();
-    h.expect(await openIs(h, quiet.id), `the quiet client is open (${p.url()})`);
-    await p.getByText(/^Должны · \d+$/).last().click();
-    h.expect(await openIs(h, ""), `out of the filter → the panel closes (${p.url()})`);
-    await p.getByText(/^Все · \d+$/).last().click();
-    await p.waitForTimeout(300);
-    h.expect((await panel(h).count()) === 0, "back to «Все»: the panel stays closed");
-  }
+  await cards.filter({ has: p.getByText(quiet.name, { exact: true }) }).first().click();
+  h.expect(await openIs(h, quiet.id), `the quiet client is open (${p.url()})`);
+  await p.getByText(/^Должны · \d+$/).last().click();
+  await p.waitForTimeout(400);
+  h.expect(await openIs(h, quiet.id), `out of the filter → the panel stays (${p.url()})`);
+  await panel(h).getByText(quiet.name, { exact: true }).first().waitFor();
+  await p.getByText(/^Все · \d+$/).last().click();
+  await cards.filter({ has: p.getByText(quiet.name, { exact: true }) }).first().waitFor();
+  h.expect((await cards.filter({ has: p.getByText(quiet.name, { exact: true }) }).first().getAttribute("aria-current")) === "true", "back to «Все»: its row is marked again");
   await p.keyboard.press("Escape");
   // «✕» closes too
   await cards.nth(1).click();
