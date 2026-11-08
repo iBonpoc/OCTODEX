@@ -31,7 +31,7 @@ export function CornerSketch({ d, f, cut, w }: { d: Drawing; f: FoundCorner; cut
     });
     const pts = [f.at, ...legs.map((l) => l.far)];
     const xs = pts.map((p) => p[0]), ys = pts.map((p) => p[1]);
-    const pad = space[8];
+    const pad = space[8] + space[4];
     const k = Math.min((w - 2 * pad) / Math.max(1, Math.max(...xs) - Math.min(...xs)), (SKETCH_H - 2 * pad) / Math.max(1, Math.max(...ys) - Math.min(...ys)));
     const cx = (Math.max(...xs) + Math.min(...xs)) / 2, cy = (Math.max(...ys) + Math.min(...ys)) / 2;
     const S = (p: P): [number, number] => [w / 2 + (p[0] - cx) * k, SKETCH_H / 2 - (p[1] - cy) * k];
