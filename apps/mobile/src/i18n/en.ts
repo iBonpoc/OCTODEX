@@ -3099,6 +3099,9 @@ export const en: Dict = {
   "pay.online.err.nothing": "There is nothing to pay on this invoice.",
   "pay.online.err.retry": "That didn't work. Please try again in a minute.",
   "pay.online.err.busy": "Too many tries. Please try again in {n} min.",
+  // spec 35 §4д п.10 («Деньги и отчёты» №7)
+  "est.rej.signatureLost": "The client's signature was not saved on the server",
+  "est.signOnSite.afterSend": "The client can sign on site once the office has sent the estimate.",
   "portal.offline": "No connection. Check the internet and reload the page.",
   "portal.failed": "That didn't work. Please try again.",
   "pay.online.wait": "We'll confirm the payment shortly. You don't need to pay again.",

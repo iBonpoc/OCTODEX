@@ -80,7 +80,10 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   switch (op.k) {
     case "estimate.deposit": return { ...base, what: "deposit", href: `/estimate/${op.id}`, amountCents: op.depositCents };
     // the client's approval / the company's countersign that makes the deposit invoice: the estimate it was about
-    case "estimate.approve": case "estimate.countersign": return { ...base, what: "deposit", href: `/estimate/${op.id}` };
+    // the client's signature on site / by link that the server did not keep: say it is the signature, not «a deposit» —
+    // the client has to sign again (spec 35 §4д п.10: a tech's on-site signature was dropped this way)
+    case "estimate.approve": return { ...base, what: "deposit", href: `/estimate/${op.id}`, labelKey: "est.rej.signatureLost" };
+    case "estimate.countersign": return { ...base, what: "deposit", href: `/estimate/${op.id}` };
     case "invoice.issue": return { ...base, what: "invoice", href: `/job/${op.jobId}`, amountCents: op.totalCents };
     case "invoice.pay": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents };
     case "payment.record": return { ...base, what: "payment", href: `/invoice/${op.invoiceId}`, amountCents: op.amountCents };

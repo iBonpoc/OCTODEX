@@ -765,6 +765,22 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
     case "estimate.save":
       return saveEstimate(op, c);
     case "estimate.approve": {
+      if (op.channel === "on_site") {
+        // the client signs on an employee's device (spec 35 §4д п.10). The office sends first, as before (a draft gets its
+        // locked version; lines that changed are refused by send). A tech may not send — the office did: that refusal is
+        // not the end. Then the signature by the estimate's id: no token, the server checks who holds the device.
+        try {
+          await applyOp({ k: "estimate.send", id: op.id, token: op.token }, c, userId);
+        } catch (e) {
+          if (!(e instanceof PermanentError && e.code === "42501")) throw e;
+        }
+        const { error, status } = await supabase.rpc("accept_on_site", {
+          p_estimate_id: op.id, p_option_id: op.optionId, p_addon_ids: op.addonIds, p_signer: op.signer, p_svg: op.svg, p_consent: true,
+          p_job_id: op.jobId, p_invoice_id: op.invoiceId ?? null,
+        });
+        // a server without the door yet (PostgREST «no such function»): the old way — by the token, as before
+        if (error?.code !== "PGRST202") return run(Promise.resolve({ error, status }));
+      }
       await applyOp({ k: "estimate.send", id: op.id, token: op.token }, c, userId);
       const { error, status } = await supabase.rpc("portal_accept", {
         p_token: op.token, p_option_id: op.optionId, p_addon_ids: op.addonIds, p_signer: op.signer, p_svg: op.svg, p_consent: true,

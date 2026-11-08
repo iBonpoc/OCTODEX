@@ -3099,6 +3099,9 @@ export const es: Dict = {
   "pay.online.err.nothing": "No hay nada que pagar en esta factura.",
   "pay.online.err.retry": "No funcionó. Inténtelo de nuevo en un minuto.",
   "pay.online.err.busy": "Demasiados intentos. Inténtelo de nuevo en {n} min.",
+  // spec 35 §4д п.10 («Деньги и отчёты» №7)
+  "est.rej.signatureLost": "La firma del cliente no se guardó en el servidor",
+  "est.signOnSite.afterSend": "El cliente puede firmar en el lugar cuando la oficina haya enviado el presupuesto.",
   "portal.offline": "Sin conexión. Revise internet y vuelva a cargar la página.",
   "portal.failed": "No funcionó. Inténtelo de nuevo.",
   "pay.online.wait": "Confirmaremos el pago en breve. No necesita pagar de nuevo.",
