@@ -28,7 +28,7 @@ export interface DrawnDownspout extends Omit<MeasuredDownspout, "runId"> {
 }
 
 export interface CornerChoice {
-  method: "cut" | "prefab";
+  method: "cut" | "strip" | "prefab";
   splashGuard?: boolean;
 }
 
@@ -194,8 +194,9 @@ export function toMeasurement(d: Drawing, defaultCorner: CornerChoice = { method
   const corners: MeasuredCorner[] = found.map((f) => {
     const first = byId.get(f.runs[0].id)!;
     const choice = d.corners?.[f.id] ?? defaultCorner;
-    const { profile, size, material, color, story } = first.attrs;
-    return { id: f.id, kind: f.kind, method: choice.method, splashGuard: choice.splashGuard, profile, size, material, color, story };
+    // the corner is made of the first run's stock: gauge and finish too, or the coil splits into two lines
+    const { profile, size, material, gauge, finish, color, story } = first.attrs;
+    return { id: f.id, kind: f.kind, method: choice.method, splashGuard: choice.splashGuard, profile, size, material, gauge, finish, color, story };
   });
   const downspouts: MeasuredDownspout[] = d.downspouts.filter((x) => byId.has(x.runId)).map(({ atIn: _at, ...x }) => x);
   return { runs, corners, downspouts };
