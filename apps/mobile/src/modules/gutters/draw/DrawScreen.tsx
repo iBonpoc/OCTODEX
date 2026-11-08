@@ -36,7 +36,8 @@ import { forgetOldDraft, loadToolbarPlace, saveToolbarPlace, TOOLBAR_PLACES, typ
 import { makeModuleStore } from "../canvas/moduleStore";
 import { gutterData, measurementOf, photosOf } from "../data";
 import { makeSaver } from "../canvas/draftStore";
-import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, fromElements, toElements, type MeasurementRow } from "../canvas/model";
+import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
+import { choicesFor, newDsAttrs, newRunAttrs } from "../settings";
 import { buildScene, fitView, storyOf, toPlan, toScreen, type Story, type View as PlanView } from "../canvas/scene";
 import { LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { TEST_RATES } from "../canvas/testRates";
@@ -71,6 +72,9 @@ export default function DrawScreen() {
   const ins = useSafeAreaInsets();
   const access = moduleState(store.db.company?.modules?.gutters).access;
   const canSave = access === "trial" || access === "paid";
+  // what the company installs, its palette and defaults (settings M7b): new elements and the attribute panel
+  const settings = store.db.company?.modules?.gutters?.settings;
+  const ch = useMemo(() => choicesFor(settings), [settings]);
 
   const [drawing, setDrawing] = useState<Drawing>(EMPTY);
   const [hist, setHist] = useState<History>({ past: [], future: [] });
@@ -90,8 +94,8 @@ export default function DrawScreen() {
   const live = useLive();
 
   // the latest values for gesture callbacks and the delayed save
-  const cur = useRef({ drawing, view, tool, story, selected, m, canSave });
-  cur.current = { drawing, view, tool, story, selected, m, canSave };
+  const cur = useRef({ drawing, view, tool, story, selected, m, canSave, ch });
+  cur.current = { drawing, view, tool, story, selected, m, canSave, ch };
   // the store of this render for the save that runs later (module.op through the core's queue)
   const storeRef = useRef(store);
   storeRef.current = store;
@@ -214,7 +218,7 @@ export default function DrawScreen() {
       // the final point is the lift itself; a cancelled stroke (a second finger came) keeps nothing
       const d = cur.current.drawing;
       const id = Crypto.randomUUID();
-      const next = finishStroke(g, d, plan(e.x, e.y), tolIn(), e.canceled, { id, attrs: { ...DEFAULT_RUN_ATTRS, story: cur.current.story } });
+      const next = finishStroke(g, d, plan(e.x, e.y), tolIn(), e.canceled, { id, attrs: newRunAttrs(cur.current.ch, cur.current.story) });
       if (g.kind === "end") {
         if (e.canceled) setDrawing(g.before);
         else commit(next, g.before);
@@ -234,7 +238,7 @@ export default function DrawScreen() {
       const p = plan(e.x, e.y);
       if (tl === "ds") {
         const id = Crypto.randomUUID();
-        const next = addDownspout(d, id, p, tolIn() * 1.5, DEFAULT_DS_ATTRS);
+        const next = addDownspout(d, id, p, tolIn() * 1.5, newDsAttrs(cur.current.ch));
         if (next !== d) {
           commit(next);
           setSelected(id);
@@ -283,11 +287,11 @@ export default function DrawScreen() {
     const id = cur.current.selected;
     if (!id) return;
     if (p.story !== undefined) setStoryN(storyOf(p.story));
-    commit(setRunAttrs(cur.current.drawing, id, p));
+    commit(setRunAttrs(cur.current.drawing, id, p, cur.current.ch));
   };
   const onDsAttrs = (p: Partial<DsAttrs>) => {
     const id = cur.current.selected;
-    if (id) commit(setDsAttrs(cur.current.drawing, id, p));
+    if (id) commit(setDsAttrs(cur.current.drawing, id, p, cur.current.ch));
   };
   const onLength = (lengthIn: number | null) => {
     const id = cur.current.selected;
@@ -305,7 +309,7 @@ export default function DrawScreen() {
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
-      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} />}
+      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} />}
       {elPhotos}
     </>
   );
