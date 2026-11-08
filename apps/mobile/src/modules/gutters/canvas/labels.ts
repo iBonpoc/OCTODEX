@@ -13,6 +13,8 @@ export interface LabelWant {
   h: number;
   /** higher goes first */
   priority: number;
+  /** a point drawn as a marker: keep the label this far off it (the downspout's mark, П20.8) */
+  pad?: number;
 }
 export interface PlacedLabel {
   id: string;
@@ -36,7 +38,8 @@ export function candidates(l: LabelWant, gap: number): [number, number][] {
   const L = Math.hypot(dx, dy);
   // the normal of the line (a point: straight up); the label's half-extent along the normal keeps it off the line
   const [nx, ny] = L > 0 ? [-dy / L, dx / L] : [0, -1];
-  const reach = Math.abs(nx) * (l.w / 2) + Math.abs(ny) * (l.h / 2) + gap;
+  const pad = l.pad ?? 0;
+  const reach = Math.abs(nx) * (l.w / 2) + Math.abs(ny) * (l.h / 2) + gap + pad;
   const out: [number, number][] = [];
   const along = L > 0 ? [0.5, 0.3, 0.7, 0.15, 0.85] : [0.5];
   for (const t of along) {
@@ -44,13 +47,14 @@ export function candidates(l: LabelWant, gap: number): [number, number][] {
     const cy = ay + dy * t;
     out.push([cx + nx * reach, cy + ny * reach], [cx - nx * reach, cy - ny * reach]);
   }
-  if (L === 0) out.push([ax + l.w / 2 + gap * 2, ay], [ax - l.w / 2 - gap * 2, ay], [ax, ay + l.h + gap]);
+  if (L === 0) out.push([ax + l.w / 2 + gap * 2 + pad, ay], [ax - l.w / 2 - gap * 2 - pad, ay], [ax, ay + l.h + gap + pad]);
   return out;
 }
 
 /** Greedy placement; a uniform grid keeps it near-linear (150 labels well under a frame). */
-/** `keepAll` (the speed bench only): a label with no free place still goes to its first place — the worst load */
-export function layoutLabels(want: readonly LabelWant[], viewport: { w: number; h: number }, gap: number, keepAll = false): PlacedLabel[] {
+/** `keepAll` (the speed bench only): a label with no free place still goes to its first place — the worst load;
+ *  `marks` — drawn points no label may cover (a downspout's mark, spec 33 П20.8) */
+export function layoutLabels(want: readonly LabelWant[], viewport: { w: number; h: number }, gap: number, keepAll = false, marks: readonly { at: [number, number]; r: number }[] = []): PlacedLabel[] {
   const cell = 64;
   const grid = new Map<number, Box[]>();
   const keys = (b: Box) => {
@@ -61,14 +65,18 @@ export function layoutLabels(want: readonly LabelWant[], viewport: { w: number; 
   };
   const free = (b: Box) => keys(b).every((k) => !(grid.get(k) ?? []).some((q) => overlaps(b, q)));
   const inside = (b: Box) => b.x0 >= 0 && b.y0 >= 0 && b.x1 <= viewport.w && b.y1 <= viewport.h;
+  // a mark is avoided where there is room; a label with no room but over a mark still shows (a length is never lost)
+  const markBoxes = marks.map((m) => boxOf(m.at[0], m.at[1], m.r * 2, m.r * 2));
+  const offMarks = (b: Box) => !markBoxes.some((q) => overlaps(b, q));
   const order = [...want].sort((p, q) => q.priority - p.priority || (p.id < q.id ? -1 : 1));
   const out: PlacedLabel[] = [];
   for (const l of order) {
     const cs = candidates(l, gap);
-    const at = cs.find(([x, y]) => {
+    const ok = (x: number, y: number) => {
       const b = boxOf(x, y, l.w, l.h);
       return inside(b) && free(b);
-    }) ?? (keepAll ? cs[0] : undefined);
+    };
+    const at = cs.find(([x, y]) => ok(x, y) && offMarks(boxOf(x, y, l.w, l.h))) ?? cs.find(([x, y]) => ok(x, y)) ?? (keepAll ? cs[0] : undefined);
     if (!at) continue;
     const b = boxOf(at[0], at[1], l.w, l.h);
     for (const k of keys(b)) (grid.get(k) ?? grid.set(k, []).get(k)!).push(b);

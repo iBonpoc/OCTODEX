@@ -3,7 +3,7 @@
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
 import { companyFromDb } from "./companyMap";
-import { checklistOf, isMissingTable, itemsByVisit, templateFromDb, visitSettingsFromDb } from "./checklistMap";
+import { checklistOf, isMissingTable, itemsByVisit, photoMinsFromDb, templateFromDb, visitSettingsFromDb } from "./checklistMap";
 import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
@@ -353,6 +353,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         checklist: checklistOf(s(v.id), v.checklist, chkByVisit),
         checklistReviewedAt: (v.checklist_reviewed_at as string | null) ?? undefined,
         checklistReviewedBy: (v.checklist_reviewed_by as string | null) ?? undefined,
+        photoMins: photoMinsFromDb(v.checklist_min_photos_before, v.checklist_min_photos_after),
         photos: files
           .filter((f) => f.visit_id === v.id && f.kind === "photo")
           .map((f) => ({ id: s(f.id), kind: f.stage === "after" ? "after" : "before", uri: undefined })),

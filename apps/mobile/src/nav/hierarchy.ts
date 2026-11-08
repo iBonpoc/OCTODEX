@@ -132,6 +132,9 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       return id ? { section: "catalog", kind: "cat.item", up: { href: "/catalog", label: K("cat.title") } } : { section: "catalog" };
     case "company":
       // the last crumb is the section itself («Адрес и часовой пояс», «Расписание»), not «Настройки компании» again
+      // checklist templates (docs/specs/08 §7): the list under «Компания», a template under the list
+      if (id === "checklists") return { section: "company", kind: "chk2.title", up: { href: "/company", label: K("co.title") } };
+      if (id === "checklist") return { section: "company", kind: "chk2.template", up: { href: "/company/checklists", label: K("chk2.title") } };
       return id
         ? { section: "company", kind: SETUP_STEPS.includes(id as SetupStep) ? stepTitle(id as SetupStep) : id === "schedule" ? "schs.title" : id === "leads" ? "co.leads.title" : id === "modules" ? "mod.title" : "co.title", up: { href: "/company", label: K("co.title") } }
         : { section: "company" };

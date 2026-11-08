@@ -65,3 +65,13 @@ describe("unit:checklistMap — the old array only when the server has no table 
     expect([{ status: 500 }, { code: "57014" }, new Error("network"), null].map(isMissingTable)).toEqual([false, false, false, false]);
   });
 });
+
+describe("unit:checklistMap — the visit's photo minimums (migration 20261108150000)", () => {
+  it("1..20 each; none, out of range or a server without the columns → the company's", async () => {
+    const { photoMinsFromDb } = await import("../src/cloud/checklistMap");
+    expect(photoMinsFromDb(2, null)).toEqual({ before: 2 });
+    expect(photoMinsFromDb(null, 3)).toEqual({ after: 3 });
+    expect(photoMinsFromDb(0, 21)).toBeUndefined();
+    expect(photoMinsFromDb(undefined, undefined)).toBeUndefined();
+  });
+});

@@ -95,10 +95,11 @@ import {
   type ChecklistItem,
   type ChecklistItemKind,
   type ChecklistTemplate,
+  type ChecklistVisitKind,
   type NaReason,
   type VisitSettings,
 } from "./types";
-import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitSettings, canRemoveItem, canReview, canSkip, canTick, cleanTemplate, cleanText, itemKind, PHOTOS_PER_ITEM_MAX, photoStageOf, visitSettingsOf } from "@/features/checklist";
+import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitSettings, canRemoveItem, canReview, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, jobServices, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, visitSettingsOf } from "@/features/checklist";
 
 type Undo = () => void;
 /** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
@@ -1071,6 +1072,36 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     });
   };
 
+  /**
+   * The snapshot of the company's templates for a new visit (S4, S9; docs/specs/08 §5, §11.7 №7): items and the photo
+   * minimums of their templates. Only the office makes it (a tech does not book; the server would refuse the items).
+   */
+  const snapshotFor = (kind: ChecklistVisitKind, services: ID[]): { items: ChecklistItem[]; mins?: { before?: number; after?: number } } => {
+    const d0 = dbRef.current;
+    if (!canEditTemplates(role)) return { items: [] };
+    const templates = d0.checklistTemplates ?? [];
+    // 200 items per visit is the server's limit (54000): more would be refused and hold the queue
+    const items = checklistFor({ kind, catalogItemIds: services }, templates, () => uid()).slice(0, 200).map((c) => ({ ...c, addedBy: d0.me }));
+    return { items, mins: snapshotPhotoMins(items, templates) };
+  };
+  /** the snapshot's ops after the op that makes the visit: each item waits for the visit (outboxDeps refs) */
+  const snapshotOps = (visitId: ID, snap: { items: ChecklistItem[]; mins?: { before?: number; after?: number } }): Undo => {
+    if (snap.items.length === 0) return noop;
+    const same = (d: DB) => d;
+    if (dbRef.current.checklistLegacy) {
+      // an old server: the list goes as the old whole array; the minimums stay on the phone
+      return mutate("check.snapshot", same, { k: "visit.checklist", visitId, checklist: snap.items.map((c) => ({ id: c.id, label: c.label, done: false })) });
+    }
+    const undos = snap.items.map((c) =>
+      mutate("check.add", same, {
+        k: "chk.item.add",
+        item: { id: c.id, visitId, position: c.position ?? 0, label: c.label, kind: itemKind(c), required: c.required ?? true, ...(c.hint ? { hint: c.hint } : {}), ...(c.templateId ? { templateId: c.templateId, templateName: c.templateName } : {}) },
+      }),
+    );
+    if (snap.mins) undos.push(mutate("check.mins", same, { k: "chk.visit.mins", visitId, before: snap.mins.before ?? null, after: snap.mins.after ?? null }));
+    return () => [...undos].reverse().forEach((u) => u());
+  };
+
   const value = useMemo<StoreCtx>(
     () => ({
       db,
@@ -1460,7 +1491,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         if (!target) return () => {};
         const ids = { visitId: at.visitId ?? uid() };
         const now = new Date().toISOString();
-        const undoVisit = mutate(
+        const snap = snapshotFor("inspection", []);
+        const undoVisit0 = mutate(
           "lead.book",
           (d) => ({
             ...d,
@@ -1472,7 +1504,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
               {
                 id: ids.visitId, leadId: id, propertyId: target.propertyId, kind: "inspection", techId: peopleOf(at)[0] ?? null, assigneeIds: peopleOf(at), start: at.start, durationMin: at.durationMin, step: "scheduled",
                 // the note for the tech is its own field (visits.notes, wave П3b); the lead's message stays the scope
-                note: at.note?.trim() || undefined, scope: [l.message].filter((x): x is string => !!x), checklist: [], photos: [], amountDueCents: 0,
+                note: at.note?.trim() || undefined, scope: [l.message].filter((x): x is string => !!x), checklist: snap.items, photos: [], amountDueCents: 0,
+                ...(snap.mins ? { photoMins: snap.mins } : {}),
               },
             ],
           }),
@@ -1481,6 +1514,11 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             techId: peopleOf(at)[0] ?? null, assigneeIds: peopleOf(at), note: at.note?.trim() || undefined, scope: [l.message].filter((x): x is string => !!x),
           },
         );
+        const undoSnap = snapshotOps(ids.visitId, snap);
+        const undoVisit = () => {
+          undoSnap();
+          undoVisit0();
+        };
         return () => {
           undoVisit();
           target.undo();
@@ -1510,15 +1548,26 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const people = peopleOf(at);
         const scope: string[] = [];
         const note = at.note?.trim() || undefined;
-        const undo = mutate(
+        const snap = snapshotFor("inspection", []);
+        const undo0 = mutate(
           "visit.inspection",
           (d) => ({
             ...d,
-            visits: [...d.visits, { id, propertyId, kind: "inspection", techId: people[0] ?? null, assigneeIds: people, start: at.start, durationMin: at.durationMin, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: 0 }],
+            visits: [
+              ...d.visits,
+              { id, propertyId, kind: "inspection", techId: people[0] ?? null, assigneeIds: people, start: at.start, durationMin: at.durationMin, step: "scheduled", note, scope, checklist: snap.items, photos: [], amountDueCents: 0, ...(snap.mins ? { photoMins: snap.mins } : {}) },
+            ],
           }),
           { k: "visit.inspection", propertyId, visitId: id, start: at.start, durationMin: at.durationMin, techId: people[0] ?? null, assigneeIds: people, note, scope },
         );
-        return { id, undo };
+        const undoSnap = snapshotOps(id, snap);
+        return {
+          id,
+          undo: () => {
+            undoSnap();
+            undo0();
+          },
+        };
       },
       markNotified: (visitId) => {
         const at = new Date().toISOString();
@@ -1932,7 +1981,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         const paidDeposit = e?.depositPaidAt ? e.depositCents ?? 0 : 0;
         const due = Math.max(0, job.amountCents - paidDeposit);
         const end = new Date(new Date(sch.start).getTime() + sch.durationMin * 60_000).toISOString();
-        return mutate(
+        const snap = snapshotFor("work", jobServices(opt, e?.approval?.addonIds ?? [], (d0.jobLines ?? []).filter((l) => l.jobId === jobId)));
+        const undo0 = mutate(
           "job.schedule",
           (d) => ({
             ...d,
@@ -1940,12 +1990,17 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             jobs: d.jobs.map((j) => (j.id === jobId ? { ...j, status: jobStatusAfterSchedule(j.status) } : j)),
             visits: [
               ...d.visits,
-              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, allDay: sch.allDay ? true : undefined, step: "scheduled", note, scope, checklist: [], photos: [], amountDueCents: due },
+              { id: visitId, jobId, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), start: sch.start, durationMin: sch.durationMin, allDay: sch.allDay ? true : undefined, step: "scheduled", note, scope, checklist: snap.items, photos: [], amountDueCents: due, ...(snap.mins ? { photoMins: snap.mins } : {}) },
             ],
             notices: d.notices.map((n) => (n.jobId === jobId ? { ...n, read: true } : n)),
           }),
           { k: "job.schedule", jobId, visitId, start: sch.start, end, techId: peopleOf(sch)[0] ?? null, assigneeIds: peopleOf(sch), note, scope, allDay: !!sch.allDay },
         );
+        const undoSnap = snapshotOps(visitId, snap);
+        return () => {
+          undoSnap();
+          undo0();
+        };
       },
       saveCompany: (patch) => {
         const cur = dbRef.current.company;

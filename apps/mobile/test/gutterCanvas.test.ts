@@ -96,3 +96,45 @@ describe("speed numbers (§9 thresholds)", () => {
     expect(t).toBe("iPhone 11 · iOS 18\npan: 58 fps (≥ 55) — прошло · n=240\ntap: 120 ms (< 100) — не прошло · n=20");
   });
 });
+
+describe("a downspout's label stays off its mark (spec 33 П20.8)", () => {
+  it("a point label with pad: its box does not touch the mark's circle", () => {
+    const r = 12;
+    const want: LabelWant[] = [{ id: "ds", a: [200, 300], b: [200, 300], w: 30, h: 16, priority: 1, pad: r }];
+    const [l] = layoutLabels(want, { w: 390, h: 700 }, 4);
+    // the nearest point of the label's box to the mark's centre is farther than the radius
+    const nx = Math.max(l!.x - l!.w / 2, Math.min(200, l!.x + l!.w / 2));
+    const ny = Math.max(l!.y - l!.h / 2, Math.min(300, l!.y + l!.h / 2));
+    expect(Math.hypot(nx - 200, ny - 300)).toBeGreaterThan(r);
+  });
+  it("buildScene passes dsPad to the downspout's label; «В1» is its text", () => {
+    const d = { runs: [{ id: "r", a: [0, 0] as [number, number], b: [240, 0] as [number, number], attrs: { story: 1 } }], downspouts: [{ id: "s", runId: "r", atIn: 120 }] };
+    const s = buildScene(d as never, { ...opts(), view: { k: 1, ox: 50, oy: 300 }, dsPad: 12, dsText: (n) => `В${n}` });
+    const l = s.labels.find((x) => x.kind === "ds")!;
+    expect(l.text).toBe("В1");
+    expect(Math.abs(l.y - s.ds[0]!.at[1])).toBeGreaterThan(12);
+  });
+});
+
+describe("no label covers a downspout's mark (spec 33 П20.8)", () => {
+  it("a run's length label moves off the mark in its middle", () => {
+    const d = { runs: [{ id: "r", a: [0, 0] as [number, number], b: [240, 0] as [number, number], attrs: { story: 1 } }], downspouts: [{ id: "s", runId: "r", atIn: 120 }] };
+    const s = buildScene(d as never, { ...opts(), view: { k: 1, ox: 50, oy: 300 }, dsPad: 12 });
+    const [mx, my] = s.ds[0]!.at;
+    for (const l of s.labels) {
+      const nx = Math.max(l.x - l.w / 2, Math.min(mx, l.x + l.w / 2));
+      const ny = Math.max(l.y - l.h / 2, Math.min(my, l.y + l.h / 2));
+      expect(Math.hypot(nx - mx, ny - my), l.text).toBeGreaterThan(12);
+    }
+  });
+  it("a short run with a mark in its middle still shows its length (no room off the mark)", () => {
+    const d = { runs: [{ id: "r", a: [0, 0] as [number, number], b: [110, 0] as [number, number], attrs: { story: 1 } }], downspouts: [{ id: "s", runId: "r", atIn: 55 }] };
+    const s = buildScene(d as never, { ...opts(), view: { k: 1, ox: 50, oy: 300 }, dsPad: 12 });
+    expect(s.labels.some((l) => l.kind === "len")).toBe(true);
+  });
+  it("the bench path (keepAll) with marks: every label still placed", () => {
+    const want: LabelWant[] = Array.from({ length: 20 }, (_, i) => ({ id: `l${i}`, a: [100, 100] as [number, number], b: [100, 100] as [number, number], w: 30, h: 14, priority: i }));
+    const out = layoutLabels(want, { w: 200, h: 200 }, 4, true, [{ at: [100, 100], r: 12 }]);
+    expect(out).toHaveLength(20);
+  });
+});

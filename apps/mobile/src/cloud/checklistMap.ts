@@ -99,3 +99,11 @@ export function isMissingTable(e: unknown): boolean {
   return x?.code === "PGRST205" || x?.code === "42P01" || x?.status === 404;
 }
 
+
+/** visits.checklist_min_photos_before/_after (migration 20261108150000): none — the company's minimums; a server before
+ *  the migration has no such columns (undefined) — the same */
+export function photoMinsFromDb(before: unknown, after: unknown): { before?: number; after?: number } | undefined {
+  const b = count(before);
+  const a = count(after);
+  return b || a ? { ...(b ? { before: b } : {}), ...(a ? { after: a } : {}) } : undefined;
+}

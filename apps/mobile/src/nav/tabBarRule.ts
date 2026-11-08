@@ -16,6 +16,8 @@ export const NO_TAB_BAR = [
   "catalog/[id]",
   "client/edit", "client/import",
   "company/[section]", "company/schedule",
+  // a checklist template is a form («Сохранить»): a tab would drop what is not saved
+  "company/checklist/[id]",
   "estimate/new", "estimate/signature",
   "expense/new",
   "job/new", "job/schedule",
@@ -36,6 +38,7 @@ export const WITH_TAB_BAR = [
   // a settings page saved from its sheet at once (no form to lose)
   "company/leads",
   "company/modules",
+  "company/checklists",
   "estimate/[id]", "estimates", "figures/[metric]", "help",
   "invoice", "invoice/[id]", "job/[id]", "jobs", "lead/[id]", "leads",
   "messages", "messages/[key]", "money", "more", "notifications", "payments", "plan", "property/[id]",

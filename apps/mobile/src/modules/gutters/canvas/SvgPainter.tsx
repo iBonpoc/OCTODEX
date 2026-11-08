@@ -4,7 +4,7 @@
  * (founder О3 — storeys by colour on the canvas only, always with «эт N»), labels in ink on the overlay colour.
  */
 import { memo } from "react";
-import Svg, { Circle, G, Line, Rect, Text as SvgText } from "react-native-svg";
+import Svg, { Circle, G, Line, Path, Rect, Text as SvgText } from "react-native-svg";
 import { drawing, font, radius } from "@octo/design-tokens";
 import { useTheme } from "@/theme/ThemeProvider";
 import type { Scene, SceneDs, SceneLabel, SceneRun } from "./scene";
@@ -21,8 +21,19 @@ const RunLine = memo(function RunLine({ r, color, halo }: { r: SceneRun; color: 
   );
 });
 
-const DsDot = memo(function DsDot({ d, color, ring }: { d: SceneDs; color: string; ring: string }) {
-  return <Circle cx={d.at[0]} cy={d.at[1]} r={drawing.dsR} fill={color} stroke={ring} strokeWidth={d.selected ? drawing.runW : drawing.runW / 2} />;
+/** a downspout's mark (spec 33 П20.8): a disc of its storey's colour with an arrow down in the background's colour — the water goes down here;
+ *  a plain dot was missed. Picked: a thick ring (one circle — e2e counts circles) */
+export const DS_MARK_R = drawing.dsR + drawing.nodeR;
+const DsMark = memo(function DsMark({ d, color, fill, halo }: { d: SceneDs; color: string; fill: string; halo: string }) {
+  const [x, y] = d.at;
+  const r = DS_MARK_R;
+  const a = r / 2;
+  return (
+    <G>
+      <Circle cx={x} cy={y} r={r} fill={color} stroke={d.selected ? halo : fill} strokeWidth={d.selected ? drawing.labelGap : drawing.runW / 2} />
+      <Path d={`M${x} ${y - a}V${y + a}M${x - a / 1.4} ${y + a / 3}L${x} ${y + a}L${x + a / 1.4} ${y + a / 3}`} stroke={fill} strokeWidth={drawing.runW / 2} strokeLinecap="round" strokeLinejoin="round" fill="none" />
+    </G>
+  );
 });
 
 const Label = memo(function Label({ l, bg, ink }: { l: SceneLabel; bg: string; ink: string }) {
@@ -47,7 +58,7 @@ export function SvgPainter({ scene, w, h, testID }: { scene: Scene; w: number; h
         <RunLine key={r.id} r={r} color={story[r.story - 1]!} halo={c.drawing.node} />
       ))}
       {scene.ds.map((d) => (
-        <DsDot key={d.id} d={d} color={story[d.story - 1]!} ring={c.drawing.node} />
+        <DsMark key={d.id} d={d} color={story[d.story - 1]!} fill={c.bg} halo={c.drawing.node} />
       ))}
       {scene.labels.map((l) => (
         <Label key={l.id} l={l} bg={c.ov} ink={c.ink} />
