@@ -1,6 +1,7 @@
 /** Холст замера Gutters M4b (docs/specs/33-gutters-canvas.md П20.4): правка пальцем, «назад», строки как в П19. */
 import { describe, expect, it } from "vitest";
-import { addDownspout, addRun, endAt, hitTest, moveEnd, MIN_RUN_IN, pushHistory, redo, removeElement, setStory, startAt, undo, type History } from "../src/modules/gutters/canvas/edit";
+import { addDownspout, addRun, endAt, finishStroke, hitTest, moveEnd, MIN_RUN_IN, pushHistory, redo, removeElement, restoreRemoved, setStory, startAt, undo, type History } from "../src/modules/gutters/canvas/edit";
+import { makeLocalStore, makeSaver, type KV } from "../src/modules/gutters/canvas/draftStore";
 import { applyChange, DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, diffElements, fromElements, toElements } from "../src/modules/gutters/canvas/model";
 import type { Drawing } from "../src/modules/gutters/geometry";
 import { toMeasurement } from "../src/modules/gutters/geometry";
@@ -124,5 +125,91 @@ describe("rows in the shape of the database (П19)", () => {
     const m = toMeasurement(d);
     expect(m.runs).toHaveLength(2);
     expect(m.corners).toHaveLength(1);
+  });
+});
+
+describe("review #362: a finished stroke", () => {
+  const nr = { id: "n", attrs: DEFAULT_RUN_ATTRS };
+  it("a cancelled line (a second finger came for the zoom) adds nothing", () => {
+    const d = L(empty);
+    expect(finishStroke({ kind: "line", a: [0, 240] }, d, [300, 240], 18, true, nr)).toBe(d);
+    expect(finishStroke({ kind: "line", a: [0, 240] }, d, [300, 240], 18, false, nr).runs).toHaveLength(3);
+  });
+  it("a cancelled end drag goes back; a finished one ends at the lift point (it snaps there)", () => {
+    const d = line(L(empty), "r3", [0, 240], [200, 240]);
+    const g = { kind: "end" as const, id: "r3", end: 1 as const, before: d };
+    expect(finishStroke(g, moveEnd(d, "r3", 1, [300, 240], 18), [470, 236], 18, true, nr)).toBe(d);
+    // the last frame drawn was at 300; the lift at 470 snaps to r2's end (480, 240)
+    expect(finishStroke(g, moveEnd(d, "r3", 1, [300, 240], 18), [470, 236], 18, false, nr).runs.find((r) => r.id === "r3")!.b).toEqual([480, 240]);
+  });
+});
+
+describe("review #362: «Отменить» after a delete keeps what was drawn since", () => {
+  it("the deleted run and its downspout come back, the new run stays", () => {
+    const before = addDownspout(L(empty), "d1", [120, 0], 36, DEFAULT_DS_ATTRS);
+    const after = line(removeElement(before, "r1"), "r9", [0, 300], [300, 300]);
+    const back = restoreRemoved(after, before, "r1");
+    expect(back.runs.map((r) => r.id).sort()).toEqual(["r1", "r2", "r9"]);
+    expect(back.downspouts.map((s) => s.id)).toEqual(["d1"]);
+  });
+  it("a deleted downspout comes back alone; nothing to restore → the same drawing", () => {
+    const before = addDownspout(L(empty), "d1", [120, 0], 36, DEFAULT_DS_ATTRS);
+    expect(restoreRemoved(removeElement(before, "d1"), before, "d1").downspouts).toHaveLength(1);
+    expect(restoreRemoved(before, before, "d1")).toBe(before);
+  });
+  it("a downspout whose run is gone since stays out", () => {
+    const before = addDownspout(L(empty), "d1", [120, 0], 36, DEFAULT_DS_ATTRS);
+    const cur = removeElement(removeElement(before, "d1"), "r1");
+    expect(restoreRemoved(cur, before, "d1").downspouts).toHaveLength(0);
+  });
+});
+
+describe("review #362: the storey button makes no empty «назад» step", () => {
+  it("the same storey → the same drawing", () => {
+    const d = L(empty);
+    expect(setStory(d, "r1", 1)).toBe(d);
+    expect(setStory(d, "nope", 2)).toBe(d);
+  });
+});
+
+describe("review #362: the phone's draft store", () => {
+  const m = { id: "m1", label: null, status: "draft" as const, propertyId: null, leadId: null };
+  const rows = (d: Drawing) => toElements(d, "m1");
+  /** a storage whose reads and writes finish in a given order */
+  function slowKV(): KV & { data: Map<string, string>; fail: boolean } {
+    const data = new Map<string, string>();
+    let n = 0;
+    const kv = {
+      data,
+      fail: false,
+      getItem: async (k: string) => {
+        await new Promise((r) => setTimeout(r, 5 - (n++ % 3)));
+        return data.get(k) ?? null;
+      },
+      setItem: async (k: string, v: string) => {
+        await new Promise((r) => setTimeout(r, 1 + (n++ % 4)));
+        if (kv.fail) throw new Error("disk full");
+        data.set(k, v);
+      },
+    };
+    return kv;
+  }
+  it("two saves at once do not lose the first one's change (they run in a row)", async () => {
+    const kv = slowKV();
+    const st = makeLocalStore(kv);
+    const d1 = L(empty);
+    const d2 = line(empty, "r9", [0, 300], [300, 300]);
+    await Promise.all([st.save(m, { save: rows(d1), remove: [] }), st.save(m, { save: rows(d2), remove: [] })]);
+    expect((await st.load())!.elements.map((e) => e.id).sort()).toEqual(["r1", "r2", "r9"]);
+  });
+  it("a failed write is sent again on the next save", async () => {
+    const kv = slowKV();
+    const saver = makeSaver(makeLocalStore(kv));
+    kv.fail = true;
+    expect(await saver.flush(m, rows(L(empty)))).toBe("failed");
+    kv.fail = false;
+    expect(await saver.flush(m, rows(L(empty)))).toBe("saved");
+    expect(fromElements((await makeLocalStore(kv).load())!.elements)).toEqual(L(empty));
+    expect(await saver.flush(m, rows(L(empty)))).toBe("nothing");
   });
 });

@@ -26,10 +26,11 @@ import { Press, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { RowView } from "@/ui/surfaces";
 import { CanvasView, useLive } from "../canvas/CanvasView";
-import { addDownspout, addRun, endAt, hitTest, moveEnd, pushHistory, redo, removeElement, setStory, startAt, undo, type History } from "../canvas/edit";
+import { addDownspout, endAt, finishStroke, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import { ftIn } from "../canvas/format";
 import { loadToolbarPlace, localStore, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
-import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, diffElements, fromElements, toElements, type ElementRow, type MeasurementRow } from "../canvas/model";
+import { makeSaver } from "../canvas/draftStore";
+import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { buildScene, fitView, storyOf, toPlan, toScreen, type Story, type View as PlanView } from "../canvas/scene";
 import { LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { TEST_RATES } from "../canvas/testRates";
@@ -79,7 +80,7 @@ export default function DrawScreen() {
   // the latest values for gesture callbacks and the delayed save
   const cur = useRef({ drawing, view, tool, story, selected, m, canSave });
   cur.current = { drawing, view, tool, story, selected, m, canSave };
-  const saved = useRef<ElementRow[]>([]);
+  const saver = useRef(makeSaver(localStore)).current;
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -88,7 +89,7 @@ export default function DrawScreen() {
       if (!on) return;
       setM(v?.m ?? { id: Crypto.randomUUID(), label: null, status: "draft", propertyId: null, leadId: null });
       if (v) {
-        saved.current = v.elements;
+        saver.seed(v.elements);
         setDrawing(fromElements(v.elements));
       }
     });
@@ -103,20 +104,21 @@ export default function DrawScreen() {
     if (!view && m && size.w > 0 && size.h > 0) setView(fit(drawing, size));
   }, [view, m, size, drawing, fit]);
 
+  const later = useRef<() => void>(() => {});
   const flush = useCallback(() => {
     const { drawing: d, m: mm, canSave: ok } = cur.current;
     if (!mm || !ok) return;
-    const rows = toElements(d, mm.id);
-    const ch = diffElements(saved.current, rows);
-    if (!ch.save.length && !ch.remove.length) return;
-    saved.current = rows;
-    void localStore.save(mm, ch).then(() => setSavedOnce(true));
-  }, []);
+    void saver.flush(mm, toElements(d, mm.id)).then((r) => {
+      if (r === "saved") setSavedOnce(true);
+      // the write failed: its change is still unsent — try again a bit later
+      else if (r === "failed") later.current();
+    });
+  }, [saver]);
   // a gesture ended: write 1 s later (the queue gets one write per gesture, not per movement — П14.2 №5)
-  const later = useCallback(() => {
+  later.current = () => {
     if (timer.current) clearTimeout(timer.current);
     timer.current = setTimeout(flush, SAVE_AFTER_MS);
-  }, [flush]);
+  };
   useEffect(() => () => {
     if (timer.current) clearTimeout(timer.current);
     flush();
@@ -128,16 +130,16 @@ export default function DrawScreen() {
       if (next === prev) return;
       setHist((h) => pushHistory(h, prev));
       setDrawing(next);
-      later();
+      later.current();
     },
-    [later],
+    [],
   );
 
   const tolIn = () => FINGER / (cur.current.view?.k ?? 1);
   const plan = (x: number, y: number): P => (cur.current.view ? toPlan(cur.current.view, [x, y]) : [0, 0]);
 
   // one finger: draw a run, or drag an end of the picked run
-  const dragRef = useRef<{ kind: "line"; a: P } | { kind: "end"; id: string; end: 0 | 1; before: Drawing } | null>(null);
+  const dragRef = useRef<Stroke | null>(null);
   // where the finger touched down: the pan activates only after it has moved a little
   const downAt = useRef<[number, number]>([0, 0]);
   const pan = usePanGesture({
@@ -170,25 +172,24 @@ export default function DrawScreen() {
       if (g.kind === "line") setGhost({ a: g.a, b: endAt(d, g.a, p, tolIn()) });
       else setDrawing(moveEnd(g.before, g.id, g.end, p, tolIn()));
     },
-    onDeactivate: () => {
+    onDeactivate: (e) => {
       const g = dragRef.current;
       dragRef.current = null;
+      setGhost(null);
       if (!g) return;
+      // the final point is the lift itself; a cancelled stroke (a second finger came) keeps nothing
+      const d = cur.current.drawing;
+      const id = Crypto.randomUUID();
+      const next = finishStroke(g, d, plan(e.x, e.y), tolIn(), e.canceled, { id, attrs: { ...DEFAULT_RUN_ATTRS, story: cur.current.story } });
       if (g.kind === "end") {
-        commit(cur.current.drawing, g.before);
+        if (e.canceled) setDrawing(g.before);
+        else commit(next, g.before);
         return;
       }
-      setGhost((gh) => {
-        if (gh) {
-          const id = Crypto.randomUUID();
-          const next = addRun(cur.current.drawing, id, gh.a, gh.b, { ...DEFAULT_RUN_ATTRS, story: cur.current.story });
-          if (next !== cur.current.drawing) {
-            commit(next);
-            setSelected(id);
-          }
-        }
-        return null;
-      });
+      if (next !== d) {
+        commit(next, d);
+        setSelected(id);
+      }
     },
   });
   // a tap: the downspout tool puts one on the nearest run; otherwise pick what is under the finger
@@ -249,21 +250,23 @@ export default function DrawScreen() {
     setHist(u.h);
     setDrawing(u.d);
     setSelected(null);
-    later();
+    later.current();
   };
   const doRedo = () => {
     const r = redo(hist, drawing);
     if (!r) return;
     setHist(r.h);
     setDrawing(r.d);
-    later();
+    later.current();
   };
   const doDelete = () => {
     if (!selected) return;
     const before = drawing;
     commit(removeElement(drawing, selected));
     setSelected(null);
-    toast.show(t("mod.gutters.draw.deleted"), () => commit(before, cur.current.drawing));
+    const gone = selected;
+    // «Отменить» puts back what was deleted and keeps what was drawn since
+    toast.show(t("mod.gutters.draw.deleted"), () => commit(restoreRemoved(cur.current.drawing, before, gone), cur.current.drawing));
   };
   const nextStory = () => {
     const n = ((story % 4) + 1) as Story;

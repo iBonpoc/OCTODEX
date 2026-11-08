@@ -86,8 +86,37 @@ export function removeElement(d: Drawing, id: string): Drawing {
   return { ...d, downspouts: d.downspouts.filter((s) => s.id !== id) };
 }
 
+/** the same drawing back when nothing changes (no empty «назад» step) */
 export function setStory(d: Drawing, id: string, story: Story): Drawing {
-  return { ...d, runs: d.runs.map((r) => (r.id === id ? { ...r, attrs: { ...r.attrs, story } } : r)) };
+  const r = d.runs.find((x) => x.id === id);
+  if (!r || r.attrs.story === story) return d;
+  return { ...d, runs: d.runs.map((x) => (x.id === id ? { ...x, attrs: { ...x.attrs, story } } : x)) };
+}
+
+/** «Отменить» after a delete: put back what the delete took (a run and its downspouts), keep everything drawn since */
+export function restoreRemoved(cur: Drawing, before: Drawing, removedId: string): Drawing {
+  const run = before.runs.find((r) => r.id === removedId);
+  const back = { runs: run ? [run] : [], downspouts: before.downspouts.filter((s) => s.id === removedId || (run && s.runId === run.id)) };
+  const haveR = new Set(cur.runs.map((r) => r.id));
+  const haveD = new Set(cur.downspouts.map((s) => s.id));
+  const runs = back.runs.filter((r) => !haveR.has(r.id));
+  const ids = new Set([...cur.runs, ...runs].map((r) => r.id));
+  const downspouts = back.downspouts.filter((s) => !haveD.has(s.id) && ids.has(s.runId));
+  return runs.length || downspouts.length ? { ...cur, runs: [...cur.runs, ...runs], downspouts: [...cur.downspouts, ...downspouts] } : cur;
+}
+
+/** a one-finger stroke in progress */
+export type Stroke = { kind: "line"; a: P } | { kind: "end"; id: string; end: 0 | 1; before: Drawing };
+
+/**
+ * The finger lifted (or the stroke was cancelled — a second finger came for the zoom): the drawing to keep.
+ * The final point comes from the lift event itself, not from the last frame drawn. Cancelled: a line is dropped,
+ * a dragged end goes back.
+ */
+export function finishStroke(g: Stroke, d: Drawing, p: P, tolIn: number, canceled: boolean, newRun: { id: string; attrs: DrawnRun["attrs"] }): Drawing {
+  if (g.kind === "end") return canceled ? g.before : moveEnd(g.before, g.id, g.end, p, tolIn);
+  if (canceled) return d;
+  return addRun(d, newRun.id, g.a, endAt(d, g.a, p, tolIn), newRun.attrs);
 }
 
 /** the own «назад» of the canvas (П14.2 №5): snapshots, at most `max` back */
