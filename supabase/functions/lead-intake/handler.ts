@@ -34,7 +34,10 @@ export interface IntakeCall {
   checks: Checks;
 }
 export interface Checks {
-  bot: "true" | "false";
+  /** trap — the hidden field is filled (refused); time — only the fill time looks wrong (held for a person); false */
+  bot: "trap" | "time" | "false";
+  /** HMAC of the IPv6 /48 (a second, higher limit); absent for IPv4 */
+  net?: string;
   captcha: "ok" | "fail" | "none";
   consent: "true" | "false";
   consent_version?: string;
@@ -68,7 +71,7 @@ export interface IntakeDeps {
   hmac: ((s: string) => Promise<string>) | null;
   /** origins the page may post from: the production site and the PR previews */
   allowedOrigin: (origin: string) => boolean;
-  /** the request headers that hold the client's IP, in order (cf-connecting-ip, then x-forwarded-for); see clientIp */
+  /** the request headers trusted for the client's IP, in order — in production only cf-connecting-ip (index.ts) */
   ipHeaders: string[];
   now: () => number;
   wait: (ms: number) => Promise<void>;
@@ -113,8 +116,9 @@ export function cors(origin: string): Record<string, string> {
 function field(v: unknown, max: number): string | undefined {
   if (typeof v === "number" && Number.isFinite(v)) v = String(v);
   if (typeof v !== "string") return undefined;
-  // eslint-disable-next-line no-control-regex
-  const s = v.replace(/[\u0000-\u001f\u007f]+/g, " ").trim().slice(0, max);
+  // control (C0, DEL, C1), bidi overrides and zero-width characters out: a name never flips or hides the text around it
+  // eslint-disable-next-line no-control-regex, no-misleading-character-class
+  const s = v.replace(/[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2069\ufeff]+/g, " ").replace(/ {2,}/g, " ").trim().slice(0, max);
   return s || undefined;
 }
 /** only the known fields, each a short string; utm only its known keys */
@@ -147,7 +151,8 @@ export function canonical(p: Payload): string {
 }
 /**
  * The client's IP. cf-connecting-ip is set by Cloudflare in front of Supabase (a forged one is refused there); without it,
- * the LAST address of x-forwarded-for — the gateway appends the real one, the first can be anything the client wrote.
+ * the LAST address of a list header. Production trusts cf-connecting-ip only (index.ts): x-forwarded-for may carry what
+ * the client wrote, if a gateway passes it on.
  */
 export function clientIp(req: Req, headers: string[]): string | null {
   for (const h of headers) {
@@ -160,14 +165,25 @@ export function clientIp(req: Req, headers: string[]): string | null {
   return null;
 }
 
+/** IPv4 written as IPv6 (::ffff:a.b.c.d) is the IPv4 address */
+const v4mapped = (ip: string) => /^::ffff:(\d{1,3}(\.\d{1,3}){3})$/i.exec(ip)?.[1];
 /** an IPv6 client owns a whole /64: the limit counts the network, not one of its addresses */
 export function ipKey(ip: string): string {
+  const v4 = v4mapped(ip);
+  if (v4) return v4;
   if (!ip.includes(":")) return ip;
   const [head, tail] = ip.split("::");
   const a = head ? head.split(":") : [];
   const b = tail !== undefined ? (tail ? tail.split(":") : []) : [];
   const full = tail !== undefined ? [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill("0"), ...b] : a;
   return `${full.slice(0, 4).map((x) => (x || "0").toLowerCase().replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+
+/** the /48 of an IPv6 address (a site), for the second limit; null for IPv4 */
+export function netKey(ip: string): string | null {
+  const k = ipKey(ip);
+  if (!k.endsWith("::/64")) return null;
+  return `${k.split(":").slice(0, 3).join(":")}::/48`;
 }
 
 async function readBody(req: Req): Promise<Record<string, unknown> | null> {
@@ -250,10 +266,19 @@ export async function handleIntake(req: Req, d: IntakeDeps): Promise<Res> {
     return json(503, { ok: false, code: "busy" }, pageCors);
   }
   const ip = clientIp(req, d.ipHeaders);
+  if (!ip) {
+    // no trusted header: the request is held (no_ip), and the log names which headers came, never their values
+    const seen = ["cf-connecting-ip", "x-forwarded-for", "x-real-ip", "forwarded"].filter((n) => req.header(n) !== null);
+    d.log?.(`intake: no trusted ip header (${d.ipHeaders.join(",")}); came: ${seen.join(",") || "none"}`);
+  }
   const ipHash = ip ? await d.hmac(ipKey(ip)) : null;
+  const net = ip ? netKey(ip) : null;
+  const netHash = net ? await d.hmac(net) : undefined;
   // how long the page was open, measured by the page itself (its clock against itself: a phone's wrong time changes nothing)
   const filled = typeof body.filled_ms === "number" && Number.isFinite(body.filled_ms) ? body.filled_ms : -1;
-  const bot = (typeof body.website === "string" && body.website.trim() !== "") || filled < MIN_FILL_MS || filled > MAX_FILL_MS;
+  const trap = typeof body.website === "string" && body.website.trim() !== "";
+  // only the trap refuses; a wrong fill time is held for a person (director's check of #421)
+  const bot: Checks["bot"] = trap ? "trap" : filled < MIN_FILL_MS || filled > MAX_FILL_MS ? "time" : "false";
   let captcha: Checks["captcha"] = "none";
   const ct = typeof body.captcha === "string" ? body.captcha.slice(0, 2048) : "";
   if (ct && d.verifyCaptcha) {
@@ -272,10 +297,10 @@ export async function handleIntake(req: Req, d: IntakeDeps): Promise<Res> {
   try {
     const r = await d.submit({
       kind: "form", tokenHash: await d.sha256(t), eventKey, payloadHash, ipHash, payload,
-      checks: { bot: bot ? "true" : "false", captcha, consent: consent ? "true" : "false", ...(consent ? { consent_version: CONSENT_VERSION } : {}) },
+      checks: { bot, captcha, consent: consent ? "true" : "false", ...(netHash ? { net: netHash } : {}), ...(consent ? { consent_version: CONSENT_VERSION } : {}) },
     });
     // the outcome only (no field, no IP): a forgotten secret (no_ip) or captcha shows in the function's logs
-    if (r?.status && r.status !== "accepted" && r.status !== "merged") d.log?.(`intake: form ${r.status}${bot ? " bot" : ""}${ipHash ? "" : " no-ip"}`);
+    if (r?.status && r.status !== "accepted" && r.status !== "merged") d.log?.(`intake: form ${r.status}${bot !== "false" ? ` bot:${bot}` : ""}${ipHash ? "" : " no-ip"}`);
   } catch {
     d.log?.("intake: form submit failed");
     await d.wait(Math.max(0, MIN_ANSWER_MS - (d.now() - started)));
