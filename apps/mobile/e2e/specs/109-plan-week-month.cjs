@@ -118,7 +118,8 @@ exports.run = async (h) => {
   await h.clickText("Неделя"); await p.waitForTimeout(300);
   // ListCard (10а): the job number is a fact of its own, whole (06 §0: no «…»)
   const feedText = await p.getByTestId("plan-feed").locator("visible=true").first().innerText();
-  h.expect(/JOB-\d+/.test(feedText), "at least one card carries a job number");
+  // the number is on the 1280 row-card; a phone / tablet card keeps to where and who (an overview of the day)
+  if (h.layout.width >= 1280) h.expect(/JOB-\d+/.test(feedText), "at least one card carries a job number");
   h.expect(!feedText.includes("…"), "no «…» on the Week's cards");
 
 };

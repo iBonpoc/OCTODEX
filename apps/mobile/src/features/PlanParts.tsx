@@ -312,6 +312,7 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
   const { db, role } = useStore();
   const { t, time, money } = useI18n();
   const density = usePlanDensity();
+  const wide = density === "row";
   const names = x.people.map((id) => memberName(db, id, t)).filter(Boolean).join(", ");
   // the hour goes to the left block, the whole span «9:00 AM – 11:00 AM» under the name (recipe C, 06 §3)
   const { when, until } = itemTimes(x, time, t("plan5.allDay"));
@@ -339,8 +340,10 @@ function FeedCard({ x, onEvent }: { x: PlanItem; onEvent?: (e: CalendarEvent) =>
         status={{ tone: st.status, label: late ? t("st.late") : t(st.label) }}
         signs={overlapSigns(db, v).map((o) => ({ tone: o.tone, label: t(o.key, o.params) }))}
         tags={[...(late ? [late] : []), v.kind === "inspection" ? t("plan.kind.inspection") : t("plan.kind.job")]}
-        facts={{ num: job?.number, addr, work: job?.title, by: names || t("plan.unassigned") }}
-        contact={{ phone: customer?.phone, addr }}
+        // the Feed is an overview of the day: on a phone and a tablet only what 06 §5 asks of a visit (where, who), ~4 visits
+        // a screen; the job, its number and the call / route buttons — on the 1280 row-card and on the visit's screen
+        facts={wide ? { num: job?.number, addr, work: job?.title, by: names || t("plan.unassigned") } : { addr, by: names || t("plan.unassigned") }}
+        contact={wide ? { phone: customer?.phone, addr } : undefined}
         density={density}
         columns={PLAN_COLUMNS}
         onPress={() => router.push(`/visit/${v.id}`)}

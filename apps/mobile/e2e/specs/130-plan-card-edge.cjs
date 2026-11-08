@@ -52,6 +52,9 @@ exports.run = async (h) => {
   const want = ["10:00", "PM", ids.site, "На месте", "$123", ...(h.layout.width >= 1280 ? [] : ["к оплате"])];
   for (const s of want) h.expect(siteText.includes(s), `visit card shows «${s}»: ${JSON.stringify(ids)} ${siteText.replace(/\n/g, " | ").slice(0, 300)}`);
   h.expect(!siteText.includes("…"), "no «…» on the card");
+  // phone / tablet: an overview — where and who, no job number and no call buttons; 1280: all of it in columns
+  const wide = h.layout.width >= 1280;
+  h.expect((await site.getByRole("button", { name: /Позвонить|Call/ }).count() > 0) === wide, `call button only on the 1280 row-card (${h.layout.width})`);
   h.expect(!/Накладка/.test(siteText), "the control is clean: no overlap sign");
   h.expect(!(await edgeOf(site)), "info (on site): no coloured edge");
 
