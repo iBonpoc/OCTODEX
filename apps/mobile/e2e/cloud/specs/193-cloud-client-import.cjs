@@ -13,7 +13,9 @@ exports.run = async (h, { seed, admin }) => {
   const a1 = seed.users.a1;
   await signIn(h, a1);
   const tag = `C193 ${Date.now().toString(36)}`;
-  const rows = Array.from({ length: 300 }, (_, i) => `${tag} ${String(i).padStart(3, "0")},(909) 193-${String(1000 + i)},,${i + 1} Cloud Way,Pasadena`);
+  // phones of this run only (a second run on the same database must not find the first run's clients)
+  const exch = 200 + (Date.now() % 700);
+  const rows = Array.from({ length: 300 }, (_, i) => `${tag} ${String(i).padStart(3, "0")},(909) ${exch}-${String(1000 + i)},,${exch}${i + 1} Cloud Way,Pasadena`);
   const CSV = ["Name,Phone,Email,Address,City", ...rows].join("\r\n");
 
   let calls = 0;
