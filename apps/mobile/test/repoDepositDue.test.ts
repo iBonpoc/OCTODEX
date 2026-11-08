@@ -19,7 +19,7 @@ function builder(table: string) {
   return b;
 }
 vi.mock("../src/cloud/client", () => ({
-  supabase: { from: (t: string) => builder(t), rpc: () => Promise.resolve({ data: null, error: null }) },
+  supabase: { from: (t: string) => builder(t), rpc: (fn: string) => (fn === "estimate_links" ? builder(fn) : Promise.resolve({ data: null, error: null })) },
 }));
 import { loadCompanyDB } from "../src/cloud/repo";
 

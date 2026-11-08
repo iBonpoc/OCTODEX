@@ -12,6 +12,7 @@ import type { DbRole } from "./auth";
 import { supabase } from "./client";
 import { legacyForEstimate } from "./legacyTotals";
 import { historyFromRow, supplierFromRow } from "@/features/suppliers";
+import { posFromRows } from "@/features/purchaseOrderRows";
 import type { CostHistoryEntry } from "@/data/types";
 
 type Row = Record<string, unknown>;
@@ -91,6 +92,7 @@ export function estimateTemplateFromDb(r: Row, costs: Row[], uses: Row[]): Estim
     ...(r.module_key ? { module: String(r.module_key) } : {}),
     uses: used.length, ...(used.length ? { lastUsedAt: used[used.length - 1] } : {}),
     ...(r.archived_at ? { archivedAt: String(r.archived_at) } : {}),
+    ...(typeof r.row_version === "number" ? { rowVersion: r.row_version } : {}),
   };
 }
 
@@ -155,6 +157,15 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       every<Row>("catalog_item_costs", "item_id, unit_cost_cents, vendor_tax_bps, markup_bps", key("item_id")).catch(orNoTable),
       every<Row>("estimate_version_costs", "version_id, margin_pct", key("version_id")).catch(orNoTable),
     ]);
+  // spec 35 §4е (step 2): the client links are not in the estimate row any more — the office side gets them here, a tech
+  // gets none. A server before that migration has no such function (PGRST202): the row's public_token, as before; any
+  // other failure fails the load (a list without links would make the office's next send add a needless one)
+  const linkOf = await pages<Row>(() => supabase.rpc("estimate_links", { p_company_id: companyId }), key("estimate_id"))
+    .then((rows) => new Map(rows.map((r) => [String(r.estimate_id), String(r.token)])))
+    .catch((e: unknown) => {
+      if ((e as { code?: string } | null)?.code === "PGRST202") return null;
+      throw e;
+    });
   // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
   // spec 35 §4г: refunds on their way (staff only by RLS; a server before 20а has no table — nothing on its way)
   const refundRows = await every<Row>("refunds", "id, payment_id, amount_cents, status, created_at").catch(() => [] as Row[]);
@@ -197,7 +208,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // E3 (migration 20261108230000): templates, their costs (only who sees costs gets rows), their uses. A server before
   // the migration: no templates, and the store saves none (estimateTemplatesMissing)
   const [etRows, etCosts, etUses] = await Promise.all([
-    live<Row>("estimate_templates", "id, name, doc, module_key, archived_at").then((r) => r as Row[] | null, (e) => {
+    live<Row>("estimate_templates", "id, name, doc, module_key, archived_at, row_version").then((r) => r as Row[] | null, (e) => {
       if (isMissingTable(e)) return null;
       throw e;
     }),
@@ -214,6 +225,16 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // costs is not read here: the item and the supplier screens read their own newest rows when opened (loadCostHistory;
   // a company-wide cap would drop the old history of a big price list — director's check of #459 Н4). A server
   // before the migration has no table: no suppliers, nothing written
+  // spec 37 (migration 20261110090000): purchase orders — the office all, a tech those of his jobs (RLS), costs only
+  // who sees them. A server before the migration has no table: no orders, nothing written
+  const poRead = await Promise.all([
+    live<Row>("purchase_orders"),
+    live<Row>("purchase_order_lines", "id, po_id, position, catalog_item_id, name, supplier_sku, note, bom_qty, qty, unit, received_qty, check_pack"),
+    every<Row>("purchase_order_line_costs", "line_id, unit_cost_cents", key("line_id")).catch(orNoTable),
+  ]).then((r) => r as [Row[], Row[], Row[]] | null, (e) => {
+    if (isMissingTable(e)) return null;
+    throw e;
+  });
   const supplierRows = await live<Row>("suppliers", "id, name, contact_name, phone, email, account_number, address, payment_terms, terms_note, purchase_tax_bps, notes, is_active")
     .then((r) => r as Row[] | null, (e) => {
       if (isMissingTable(e)) return null;
@@ -455,7 +476,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       signature: (appr?.signature_svg as string | null) ?? undefined,
       doc: withCosts(ver?.calc_inputs),
       templateId: (ver?.template_id as string | null) ?? undefined,
-      token: (e.public_token as string | null) ?? undefined,
+      token: linkOf ? linkOf.get(s(e.id)) : ((e.public_token as string | null) ?? undefined),
       number: s(e.number) || undefined,
       viewedAt: (e.last_viewed_at as string | null) ?? undefined,
       approval:
@@ -715,6 +736,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     ...(chkByVisit ? {} : { checklistLegacy: true }),
     moduleData,
     suppliers: (supplierRows ?? []).map(supplierFromRow),
+    purchaseOrders: poRead ? posFromRows(poRead[0], poRead[1], poRead[2]) : [],
+    ...(poRead ? {} : { purchaseOrdersLegacy: true }),
     costHistory: [],
     ...(supplierRows ? {} : { suppliersLegacy: true }),
     notes: noteRows.map((r) => ({

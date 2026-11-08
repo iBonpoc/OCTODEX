@@ -324,6 +324,9 @@ export interface EstimateTemplate {
   uses?: number;
   lastUsedAt?: string;
   archivedAt?: string;
+  /** the server's row_version as this phone knows it (moved +1 by its own saves); the builder's edit is checked against it
+   *  (docs/specs/07 §12.7) — absent: not known yet, no check */
+  rowVersion?: number;
 }
 
 /** the company's photo rules for visits (docs/specs/08 §3.3; server: companies.visit_settings) */
@@ -716,6 +719,55 @@ export interface Supplier {
   notes?: string;
   active: boolean;
 }
+/** spec 37 (SUP2): a purchase order to a supplier — draft → sent → partially_received → received; cancelled */
+export type PoStatus = "draft" | "sent" | "partially_received" | "received" | "cancelled";
+export interface PurchaseOrderLine {
+  id: ID;
+  position: number;
+  catalogItemId?: ID;
+  name: string;
+  supplierSku?: string;
+  /** a module's words (colour, width) */
+  note?: string;
+  /** the quantity in the item's own unit (from the job), decimal text */
+  bomQty?: string;
+  /** packs of the purchase unit to buy, decimal text */
+  qty: string;
+  unit: string;
+  receivedQty: string;
+  /** no pack size on the item: «check the pack size» */
+  checkPack: boolean;
+  /** our expected cost a pack without tax — only who sees costs (purchase_order_line_costs) */
+  costCents?: number;
+}
+export interface PurchaseOrder {
+  id: ID;
+  /** PO-0001, the server's; absent until it reaches the server */
+  number?: string;
+  supplierId?: ID;
+  /** null / absent = for stock */
+  jobId?: ID;
+  status: PoStatus;
+  revision: number;
+  fulfillment: "delivery" | "pickup";
+  deliverTo?: string;
+  /** YYYY-MM-DD */
+  neededOn?: string;
+  note?: string;
+  printPrices: boolean;
+  /** the supplier as it was when sent (the tech reads no suppliers) */
+  supplierName?: string;
+  supplierPhone?: string;
+  supplierEmail?: string;
+  supplierAddress?: string;
+  sentAt?: string;
+  receivedAt?: string;
+  createdAt: string;
+  /** the server's row_version as this phone knows it (po_receive refuses a stale marking — director's check of #461 №3) */
+  rowVersion?: number;
+  lines: PurchaseOrderLine[];
+}
+
 /** one change of an item's purchase cost or supplier tax (server: catalog_cost_history, only who sees costs) */
 export interface CostHistoryEntry {
   id: ID;
@@ -1021,6 +1073,10 @@ export interface DB {
   suppliers?: Supplier[];
   /** spec 36: the history of the items' costs, newest first (only who sees costs; absent → []) */
   costHistory?: CostHistoryEntry[];
+  /** spec 37: purchase orders (the office all; a tech those of his jobs, without costs; absent → []) */
+  purchaseOrders?: PurchaseOrder[];
+  /** the server has no purchase_orders yet (before 20261110090000): orders are not written */
+  purchaseOrdersLegacy?: boolean;
   /** the server has no suppliers table yet (before 20261110000000): suppliers are not written */
   suppliersLegacy?: boolean;
   /**

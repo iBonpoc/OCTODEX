@@ -8,7 +8,7 @@
  *    a lead typed meanwhile does not wait for it and reaches the server; «Повторить сейчас» with the server well again
  *    sends it; another stuck change is discarded with «Отменить изменение…» → «Да, отменить» (rule 5).
  */
-const { signIn, waitRows } = require("../signIn.cjs");
+const { signIn, waitRows, seedOutbox } = require("../signIn.cjs");
 
 const uuid = () => "xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g, () => Math.floor(Math.random() * 16).toString(16));
 
@@ -57,15 +57,12 @@ exports.run = async (h, { seed, admin }) => {
   const owner = { userId: a1.userId, companyId: A };
   const since = new Date(Date.now() - 11 * 60_000).toISOString();
   const at = new Date(Date.now() - 60_000).toISOString();
-  await p.evaluate(
-    ([items]) => localStorage.setItem("octo.outbox.v1", JSON.stringify(items)),
-    [[
+  await seedOutbox(h, [
       { id: "q-stuck", op: { k: "calendarEvent.remove", id: stuckId }, at, tries: 0, owner, fails: 2, failSince: since },
       // money: its confirmation warns (review #259 круг 3, п.5). Already stuck: an expense is not its own kind, it waits
       // behind q-stuck and is never tried in this test — so it comes stuck from an earlier run
       { id: "q-gone", op: { k: "expense.add", id: goneId, jobId: null, vendor: "Nightly 114", category: "materials", amountCents: 1234 }, at, tries: 0, owner, fails: 3, failSince: since, stuck: true },
-    ]],
-  );
+    ]);
   const timeout = async (route) => {
     if (route.request().method() === "GET" || !/calendar_events|expenses/.test(route.request().url())) return route.continue();
     return route.fulfill({ status: 500, contentType: "application/json", body: JSON.stringify({ code: "57014", message: "canceling statement due to statement timeout" }) });

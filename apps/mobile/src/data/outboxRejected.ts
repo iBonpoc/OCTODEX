@@ -32,6 +32,12 @@ export const REJECT_REASONS = {
   merge_already_merged: "clientDup.rej.merged",
   // an old phone's people / tags for a card merged meanwhile (save_customer_people, set_customer_tags)
   customer_merged: "clientDup.rej.cardMerged",
+  // spec 37 (migration 20261110090000): purchase orders
+  po_receiving: "po.rej.receiving",
+  po_cancelled: "po.rej.cancelled",
+  po_stale: "po.rej.stale",
+  po_received_office: "po.rej.officeOnly",
+  po_not_open: "po.rej.notOpen",
 } as const;
 export type RejectReason = keyof typeof REJECT_REASONS;
 /** a refused signature (estimate.sign, estimate.approve): the client's signature was not kept — take it again (review #415 №4) */
@@ -136,6 +142,24 @@ export function dropSettingsOps(items: readonly OwnedItem[], module: string, who
   const mine = new Set(mineOf(items, who).map((x) => x.id));
   const isGone = (x: OwnedItem) => mine.has(x.id) && x.op.k === "module.saveSettings" && x.op.module === module;
   return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/**
+ * An estimate template's edit refused as «someone changed it first» (row_version_conflict, spec 07 §12.7): it and every
+ * later waiting save or removal of the same template go — each was built on this one's version, and sending it now
+ * would quietly overwrite the other phone's change (the lesson of review #372 №1).
+ */
+export function dropTemplateOps(items: readonly OwnedItem[], templateId: string, who: Owner | null): { kept: OwnedItem[]; gone: OwnedItem[] } {
+  const mine = new Set(mineOf(items, who).map((x) => x.id));
+  const isGone = (x: OwnedItem) =>
+    mine.has(x.id) && x.op.k === "est.template.save" && x.op.template.id === templateId;
+  return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/** the card «the template was not saved: changed on another phone» — it opens «Шаблоны смет» (spec 07 §12.7) */
+export function templateRejected(item: OwnedItem, error: string, now: number, who: Owner | null): RejectedOp {
+  const owner = item.owner ?? who ?? undefined;
+  return { id: item.id, ...(owner ? { owner } : {}), kind: item.op.k, what: "estimate", href: "/estimate/templates", labelKey: "est.tpl.rejConflict", error, at: new Date(now).toISOString() };
 }
 
 /** the one card «settings not saved: someone else changed them» per module and person; a later batch adds to its count */

@@ -23,6 +23,7 @@ const LISTS: Record<string, string[]> = {
   tasks: ["app/tasks.tsx"],
   catalog: ["app/catalog/index.tsx"],
   suppliers: ["app/suppliers/index.tsx"],
+  "purchase-orders": ["app/purchase-orders/index.tsx"],
   payments: ["app/payments/index.tsx"],
   plan: ["app/(tabs)/plan.tsx"],
   calls: ["app/calls.tsx", "features/comms/CommsScreen.tsx"],

@@ -8,9 +8,11 @@
 import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
 import { supplierToRow } from "@/features/suppliers";
+import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
+import { linesEditable as poLinesEditable } from "@/features/purchaseOrders";
 import { realJob } from "./inspectionBridge";
 import { discountBps, ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
-import type { EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
+import type { PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
 import { COMPANY_STORED_COLUMNS, companyToDb, contactToDb, licenseToDb } from "./companyMap";
 import { supabase } from "./client";
 import { expenseCategoryToDb, pages } from "./repo";
@@ -45,12 +47,22 @@ export type Op =
   | { k: "chk.visit.mins"; visitId: string; before: number | null; after: number | null }
   /** an estimate template, whole (owner, admin, office; docs/specs/07 §11); archive = archivedAt */
   /** ifNew: a module's starter (fixed id) — inserted once, never updated over the office's edits (spec 07 §12 №6) */
-  | { k: "est.template.save"; template: EstimateTemplate; ifNew?: boolean }
+  | {
+      k: "est.template.save"; template: EstimateTemplate; ifNew?: boolean;
+      /** the builder's edit (spec 07 §12.7): saved only over this row_version, else «someone changed it first» */
+      baseRowVersion?: number;
+      /** lines whose cost was wiped (who sees costs): sent as unitCostCents null — the server clears it (T124) */
+      clearCosts?: string[];
+    }
   /** a checklist template, whole (owner, admin, office) */
   /** ifNew: a module's starter (fixed id) — inserted once, never over the office's edits (another phone added it first) */
   | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
   /** spec 36: a supplier made, changed, archived or restored (the whole row) */
   | { k: "supplier.save"; supplier: Supplier }
+  /** spec 37: a purchase order made or changed (header, its lines, the lines taken out) */
+  | { k: "po.save"; order: PurchaseOrder; removedLineIds: string[] }
+  /** spec 37: what came, line by line (public.po_receive) */
+  | { k: "po.receive"; id: string; lines: { id: string; received: string }[]; rowVersion?: number }
   /** the company's photo rules, whole (owner, admin) */
   | { k: "company.visitSettings"; settings: VisitSettings }
   | { k: "visit.sign"; visitId: string; svg: string }
@@ -377,21 +389,35 @@ export function templateToDb(t: ChecklistTemplate, companyId: string): Record<st
 
 /** an estimate template → its row (server estimate_templates). The doc carries unitCostCents only for who sees costs
  *  (toTemplateDoc): the server moves them to estimate_template_line_costs and keeps a line's cost when the key is absent. */
-export function estimateTemplateToDb(t: EstimateTemplate, companyId: string): Record<string, unknown> {
-  const doc = t.costs
-    ? { ...t.doc, options: t.doc.options.map((o) => ({ ...o, lines: o.lines.map((l) => (t.costs![l.id] !== undefined ? { ...l, unitCostCents: t.costs![l.id] } : l)) })) }
+export function estimateTemplateToDb(t: EstimateTemplate, companyId: string, clearCosts: readonly string[] = []): Record<string, unknown> {
+  const wipe = new Set(clearCosts);
+  const doc = t.costs || wipe.size
+    ? {
+        ...t.doc,
+        options: t.doc.options.map((o) => ({
+          ...o,
+          lines: o.lines.map((l) => (t.costs?.[l.id] !== undefined ? { ...l, unitCostCents: t.costs[l.id] } : wipe.has(l.id) ? { ...l, unitCostCents: null } : l)),
+        })),
+      }
     : t.doc;
   return { id: t.id, company_id: companyId, name: cleanText(t.name, TEMPLATE_NAME_MAX), doc, module_key: t.module ?? null, archived_at: t.archivedAt ?? null };
 }
-async function saveEstimateTemplate(t: EstimateTemplate, c: string, ifNew = false) {
+async function saveEstimateTemplate(t: EstimateTemplate, c: string, o: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] } = {}) {
   // module_key only on insert (no update grant, an upsert would send it in the update too): insert if new (a retry or
   // another phone's insert does nothing), then the update of what may change
-  const row = estimateTemplateToDb(t, c);
+  const row = estimateTemplateToDb(t, c, o.clearCosts);
   const { module_key: _m, id: _id, company_id: _c, ...upd } = row;
   await run(ins("estimate_templates", row));
   // a starter: the insert only — another phone added it first and the office may have edited it since
-  if (ifNew) return;
-  return run(supabase.from("estimate_templates").update(upd).eq("id", t.id));
+  if (o.ifNew) return;
+  if (o.baseRowVersion !== undefined) {
+    // the builder's edit: over the version it was opened on, or nothing — then «someone changed it first» (never a retry)
+    const { data, error, status } = await supabase.from("estimate_templates").update(upd).eq("id", t.id).eq("company_id", c).eq("row_version", o.baseRowVersion).select("id");
+    if (error) return run(Promise.resolve({ error, status }));
+    if (!data?.length) throw new PermanentError("the template was changed on another phone", 409, "40001", "row_version_conflict");
+    return;
+  }
+  return run(supabase.from("estimate_templates").update(upd).eq("id", t.id).eq("company_id", c));
 }
 
 /** Insert by client-made id; a retry after a partial failure does not duplicate rows (ON CONFLICT DO NOTHING). */
@@ -557,7 +583,16 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(Promise.resolve(r));
     }
     case "est.template.save":
-      return saveEstimateTemplate(op.template, c, !!op.ifNew);
+      return saveEstimateTemplate(op.template, c, { ifNew: op.ifNew, baseRowVersion: op.baseRowVersion, clearCosts: op.clearCosts });
+    case "po.save":
+      return savePurchaseOrder(op, c);
+    case "po.receive": {
+      const { error, status } = await supabase.rpc("po_receive", {
+        p_po_id: op.id, p_lines: op.lines.map((l) => ({ id: l.id, received: Number(l.received) })),
+        ...(op.rowVersion !== undefined ? { p_row_version: op.rowVersion } : {}),
+      });
+      return run(Promise.resolve({ error, status }));
+    }
     case "supplier.save":
       return run(supabase.from("suppliers").upsert(supplierToRow(op.supplier, c), { onConflict: "id" }));
     case "chk.template.save":
@@ -1257,5 +1292,34 @@ export async function sendVisitPoint(p: { visitId: string; lat: number; lng: num
     return /location sharing is off/.test(error.message) ? "off" : "error";
   } catch {
     return "error";
+  }
+}
+
+/**
+ * spec 37: an order → database. The header first (the lines point to it), then the lines as they are, the lines taken
+ * out (deleted_at; the app has no DELETE), and the expected costs — only for who sees costs (42501 for the others:
+ * the order itself is saved). A server before the migration has no table: the whole op is a «no» (the store does not
+ * send it there: purchaseOrdersLegacy).
+ */
+async function savePurchaseOrder(op: Extract<Op, { k: "po.save" }>, c: string) {
+  const o = op.order;
+  // made as a draft if new (the server makes every new order a draft, t26), then changed to what the phone has: an
+  // upsert would carry the forced draft into the update (EXCLUDED holds what BEFORE INSERT made)
+  const row = poToRow(o, c);
+  await run(supabase.from("purchase_orders").upsert(row, { onConflict: "id", ignoreDuplicates: true }));
+  const { id: _id, company_id: _c, ...patch } = row;
+  await run(supabase.from("purchase_orders").update(patch).eq("id", o.id).eq("company_id", c));
+  // a closed order's lines are not sent (the server keeps them as they are anyway — review SUP2-а №1)
+  if (!poLinesEditable(o)) return;
+  if (o.lines.length) {
+    await run(supabase.from("purchase_order_lines").upsert(o.lines.map((l) => poLineToRow(l, o.id, c)), { onConflict: "id" }));
+  }
+  if (op.removedLineIds.length) {
+    await run(supabase.from("purchase_order_lines").update({ deleted_at: new Date().toISOString() }).in("id", op.removedLineIds).eq("company_id", c));
+  }
+  const costs = o.lines.filter((l) => l.costCents !== undefined).map((l) => ({ line_id: l.id, company_id: c, unit_cost_cents: l.costCents }));
+  if (costs.length) {
+    const r = await supabase.from("purchase_order_line_costs").upsert(costs, { onConflict: "line_id" });
+    if (r.error && !["42501", "42P01", "PGRST205"].includes(r.error.code ?? "")) await run(Promise.resolve(r));
   }
 }

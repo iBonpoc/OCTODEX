@@ -29,11 +29,11 @@ describe("bottom tabs: the same 5 for every role (13 v2 §2.1, variant Б)", () 
 
 describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, §4)", () => {
   it("owner/admin «Ещё»: everything but the tabs", () => {
-    expect(menu("director")).toEqual(["leads", "jobs", "calls", "tasks", "estimates", "invoices", "catalog", "suppliers", "payments", "reports", "money", "team", "company", "settings", "help"]);
+    expect(menu("director")).toEqual(["leads", "jobs", "calls", "tasks", "estimates", "invoices", "catalog", "suppliers", "purchase-orders", "payments", "reports", "money", "team", "company", "settings", "help"]);
   });
   it("the side menu: the tabs too, but never «Ещё» itself", () => {
     const side = menuGroups("director", true).flatMap((g) => g.items.map((i) => i.id));
-    expect(side).toEqual(["home", "messages", "plan", "leads", "jobs", "clients", "calls", "tasks", "estimates", "invoices", "catalog", "suppliers", "payments", "reports", "money", "team", "company", "settings", "help"]);
+    expect(side).toEqual(["home", "messages", "plan", "leads", "jobs", "clients", "calls", "tasks", "estimates", "invoices", "catalog", "suppliers", "purchase-orders", "payments", "reports", "money", "team", "company", "settings", "help"]);
     expect(side).not.toContain("more");
   });
   it("office: no Team; Company settings to read (spec 26 §3: only the director changes them)", () => {
@@ -48,7 +48,7 @@ describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, �
   });
   it("sales: no Payments/Reports (Money), Team, Company settings", () => {
     const m = menu("sales");
-    for (const id of ["money", "payments", "reports", "team", "company", "suppliers"]) expect(m, id).not.toContain(id);
+    for (const id of ["money", "payments", "reports", "team", "company", "suppliers", "purchase-orders"]) expect(m, id).not.toContain(id);
     expect(m).toContain("invoices");
     expect(m).toContain("leads");
   });
@@ -56,7 +56,7 @@ describe("«Ещё» (phone) and the side menu (820/1280) by rights (13 §2.3, �
     const m = menu("tech");
     expect(m).toContain("leads");
     expect(sectionHref("leads", "tech")).toBe("/leads?tab=leads");
-    for (const id of ["invoices", "payments", "reports", "money", "team", "company", "suppliers"]) expect(m, id).not.toContain(id);
+    for (const id of ["invoices", "payments", "reports", "money", "team", "company", "suppliers", "purchase-orders"]) expect(m, id).not.toContain(id);
     expect(m).toContain("estimates");
     expect(sectionHref("estimates", "tech")).toBe("/estimates");
   });
