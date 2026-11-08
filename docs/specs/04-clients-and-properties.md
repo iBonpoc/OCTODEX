@@ -453,7 +453,7 @@
 ### 14.8 Файлы и порядок PR
 - **PR 1 (база):** миграция `20261109180000_import_customers.sql` (таблицы, RLS, `app.email_key`, `app.address_key`, `app.customer_keys`, 4 функции), `supabase/tests/core_rls.sql` T138–T139 + `run.sh` (копия `matchKeys.json`), `apps/mobile/test/fixtures/matchKeys.json`, `test/matchKeys.test.ts`.
 - **PR 2 (приложение, на PR 1):** `features/client/csvImport.ts` (`classifyImportRow`, пакеты, лимиты), новый `features/client/importRun.ts` (пакеты, продолжение, облако / демо), `app/client/import.tsx`, `cloud/` — вызов rpc в новом `cloud/importCustomers.ts` (не в очереди, `ops.ts` не трогаю), `i18n/*` блок `clientImport.*`, e2e 192, облачная 193, правка e2e 75.
-- **PR 3 (экран «Импорты»):** `app/client/imports.tsx` (в `SCREENS` спеки 08, крошка в `nav/hierarchy.ts`), чтение `import_jobs`, e2e 194 на 6 видах.
+- **PR 3 (экран «Импорты»):** `app/client/imports.tsx` (в `SCREENS` спеки 08, крошка в `nav/hierarchy.ts`), чтение `import_jobs`, e2e 194 на 6 видах. Сделано: карточка на импорт (файл, дата, счёт строк, статус «Идёт / Загружен / Отменён»); у открытого — «Продолжить» (ведёт на импорт: выбрать тот же файл), у загруженного ≤ 30 дней — «Отменить импорт» → подтверждение (что останется) → тост «снято N, оставлено K»; правило кнопок — `importActions` (как сервер: сутки без пакетов — закрыт, 30 дней от последнего пакета). Демо — импорты с момента открытия приложения. Облачная e2e 193 проверяет настоящую отмену на сервере.
 - PRD 04 §7.7.1 / §7.7.3 и PRD 03 §«Дубли» — по оспариванию №2, 3, 5 (в PR 1).
 - В PR 2 — строка «было/стало»: импорт видят owner/admin/office (было: все, кроме мастера). Каждая высокая находка §14.9 (1–3) — тест в T138, падавший до правки.
 

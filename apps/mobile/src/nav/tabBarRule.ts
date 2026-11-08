@@ -36,7 +36,7 @@ export const NO_TAB_BAR = [
 /** lists, cards, sections of «Ещё», settings pages: the bar stays */
 export const WITH_TAB_BAR = [
   "index", "inbox",
-  "calls", "catalog", "client/[id]", "clients", "company",
+  "calls", "catalog", "client/[id]", "client/imports", "clients", "company",
   // a settings page saved from its sheet at once (no form to lose)
   "company/leads",
   "company/intake",
