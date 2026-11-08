@@ -6,6 +6,7 @@
  *   panel when nothing is picked) — with the measurement, without an element;
  * - removing a photo → «Отменить» brings it back; a reload keeps both;
  * - past the trial (founder О2: a draft opens for reading): both photos are shown, no «Добавить фото», no «Удалить».
+ * - web: a photo picked before a reload (a dead blob:) is never loaded — the tile shows the picture sign (CI 08.11).
  * Finds things by testID; waits on what it checks.
  */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
@@ -91,13 +92,22 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Отменить" }).last().click();
   await waitFor(async () => (await photos()).some((f) => f.id === ownId), "«Отменить» brings it back");
 
-  // a reload keeps both
+  // a reload keeps both. On the web a picked photo is a blob: of this page — dead after a reload: the screen must not
+  // try to load it (an empty preview and «ERR_FILE_NOT_FOUND», CI 08.11 #378/#380). Every image the page asks for is
+  // recorded, so the check never depends on whether the browser got round to logging the failure.
+  await p.addInitScript(() => {
+    const seen = (window.__imgSrc = []);
+    const d = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, "src");
+    Object.defineProperty(HTMLImageElement.prototype, "src", { ...d, set(v) { seen.push(String(v)); d.set.call(this, v); } });
+  });
   await p.waitForTimeout(1300);
   await p.reload();
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await waitFor(async () => (await photos()).filter((f) => f.measurementId === m.id).length === 2, "after a reload: both photos");
   if (!wide) await tid("draw-photos-open").getByRole("button").click();
   await waitFor(async () => (await tid("draw-photos").count()) === 1 && /Фото замера · 1/.test(await tid("draw-photos").innerText()), "after a reload: the measurement shows its photo");
+  await p.waitForTimeout(500);
+  h.expect((await p.evaluate(() => (window.__imgSrc || []).filter((u) => u.startsWith("blob:")).length)) === 0, "after a reload: no dead blob: of the last page is loaded");
 
   // past the trial: the photos are shown, read only (M5e)
   await p.waitForTimeout(600); // the phone's copy is written with a pause: let it land before editing it

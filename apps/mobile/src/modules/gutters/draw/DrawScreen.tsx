@@ -40,7 +40,9 @@ import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
 import { buildScene, fitView, storyOf, toPlan, toScreen, type Story, type View as PlanView } from "../canvas/scene";
 import { LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
-import { listPreview } from "../prices";
+import { listPreview, partName } from "../prices";
+import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate } from "../estimateLink";
+import { tFor } from "@/i18n/translate";
 import { cornerChoiceOf, findCorners, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 
 type Tool = "line" | "ds" | "select";
@@ -68,7 +70,7 @@ export default function DrawScreen() {
   const { wide } = useDevice();
   const toast = useToast();
   const store = useStore();
-  const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string }>();
+  const params = useLocalSearchParams<{ m?: string; lead?: string; property?: string; estimate?: string }>();
   const ins = useSafeAreaInsets();
   const access = moduleState(store.db.company?.modules?.gutters).access;
   const canSave = access === "trial" || access === "paid";
@@ -117,8 +119,11 @@ export default function DrawScreen() {
     void mstore.load().then((v) => {
       if (!on) return;
       if (v) {
-        saver.seed(v.elements);
-        setDrawing(fromElements(v.elements));
+        const d = fromElements(v.elements);
+        // «saved» is what the screen would write for this drawing: only a real change is sent — opening the canvas
+        // never turns a ready measurement into a draft (review M8b №7, e2e 154)
+        saver.seed(toElements(d, mid));
+        setDrawing(d);
       }
       // a new one from a lead or a property is linked to it (S4g); from home — a draft without either (S1b)
       const one = (x: string | string[] | undefined) => (typeof x === "string" && x ? x : null);
@@ -274,10 +279,11 @@ export default function DrawScreen() {
 
   // M7d (spec 33 П22.10): a part with an item in the company's price list takes its price, the rest the test rate
   const catalog = store.db.catalog;
+  const parts = useMemo(() => (drawing.runs.length ? computeGutterParts(toMeasurement(drawing, { method: rules.corner }), rules.over).parts : []), [drawing, rules]);
   const preview = useMemo(() => {
-    if (!drawing.runs.length) return { totalCents: 0, unpriced: 0, gutterFt: "0", listed: 0, test: true };
-    return listPreview(computeGutterParts(toMeasurement(drawing, { method: rules.corner }), rules.over).parts, catalog);
-  }, [drawing, rules, catalog]);
+    if (!parts.length) return { totalCents: 0, unpriced: 0, gutterFt: "0", listed: 0, test: true };
+    return listPreview(parts, catalog);
+  }, [parts, catalog]);
 
   const sel = selected ? drawing.runs.find((r) => r.id === selected) ?? drawing.downspouts.find((s) => s.id === selected) : undefined;
   const selText = !sel
@@ -380,6 +386,72 @@ export default function DrawScreen() {
     if (router.canGoBack()) router.back();
     else router.replace("/company/modules");
   };
+
+  // M8b (spec 33 П23.8, S5g): «Смета» / «Обновить смета» / «Открыть смету» — through the core's store
+  const action = canSave && inStore ? estimateAction(store.db, inStore, drawing.runs.length > 0) : ({ kind: "none" } as const);
+  /** one press at a time; after a made estimate the screen is left — the flag stays (a second press of an old render
+   *  would make a second estimate, review M8b №2) */
+  const busy = useRef(false);
+  const doEstimate = async () => {
+    const mm = cur.current.m;
+    if (!mm || busy.current) return;
+    busy.current = true;
+    let left = false;
+    try {
+      // the drawing first: the revision and the lines are of what is on the screen, and a change made a second ago
+      // turns «Открыть смету» into «Обновить смету» (review M8b №7)
+      if (timer.current) clearTimeout(timer.current);
+      const flushed = await saver.flush(mm, toElements(cur.current.drawing, mm.id));
+      const db = storeRef.current.db;
+      const est = estimateOfMeasurement(db, mm.id);
+      const signed = !!est && (est.status === "approved" || est.status === "awaiting_countersign");
+      // a signed one only opens; «Открыть смету» opens unless the drawing has just changed
+      if (est && (signed || (action.kind === "open" && flushed !== "saved"))) {
+        left = true;
+        router.push(`/estimate/${est.id}`);
+        return;
+      }
+      const now = gutterData(db).measurements.find((x) => x.id === mm.id) ?? mm;
+      // lines go to the client: a part without an item is named in the CLIENT's language (rule 7)
+      const tc = tFor(clientLangOf(db, now));
+      const r = makeEstimate(storeRef.current, {
+        m: now,
+        elements: toElements(cur.current.drawing, mm.id),
+        parts,
+        catalog: db.catalog,
+        name: (p) => partName(tc, p),
+        fallbackTitle: tc("mod.gutters.title"),
+      });
+      if (!r.ok) {
+        toast.show(t(r.reason === "noClient" ? "mod.gutters.est.noClient" : r.reason === "signed" ? "mod.gutters.est.signed" : "mod.gutters.est.off"));
+        return;
+      }
+      left = true;
+      toast.show(t(r.updated ? "mod.gutters.est.updated" : "mod.gutters.est.made"), r.undo);
+      router.push(`/estimate/new?id=${encodeURIComponent(r.estimateId)}`);
+    } finally {
+      if (!left) busy.current = false;
+    }
+  };
+  // «Смета из замера» in the lead (place lead): the canvas opens and does what the button does, once
+  const autoEstimate = useRef(params.estimate === "1");
+  useEffect(() => {
+    if (!autoEstimate.current || !inStore || !drawing.runs.length) return;
+    autoEstimate.current = false;
+    if (action.kind === "make" || action.kind === "update" || action.kind === "open") void doEstimate();
+  });
+  const estimateButton =
+    action.kind === "make" || action.kind === "update" || action.kind === "open" ? (
+      <View testID={`draw-estimate-${action.kind === "open" && action.signed ? "signed" : action.kind}`}>
+        <Button
+          label={t(action.kind === "make" ? "mod.gutters.est.make" : action.kind === "update" ? "mod.gutters.est.update" : action.signed ? "mod.gutters.est.signed" : "mod.gutters.est.open")}
+          icon={action.kind === "open" ? "chevronRight" : "plus"}
+          size="sm"
+          variant={action.kind === "open" ? "secondary" : "primary"}
+          onPress={() => void doEstimate()}
+        />
+      </View>
+    ) : null;
 
   const side = place !== "bottom";
   const tools = (
@@ -499,6 +571,7 @@ export default function DrawScreen() {
             </View>
             {preview.test ? <View testID="draw-test-prices"><StatusChip status="info" label={t("mod.gutters.draw.test")} soft /></View> : null}
           </RowView>
+          {estimateButton}
           <RowView style={{ justifyContent: "space-between" }}>
             <T v="caption" tone="mut" tabular>{t("mod.gutters.draw.summary", { ft: Math.round(Number(preview.gutterFt)), ds: drawing.downspouts.length })}</T>
             {preview.unpriced ? <StatusChip status="warn" label={t("mod.gutters.draw.noPrice", { n: preview.unpriced })} soft /> : null}

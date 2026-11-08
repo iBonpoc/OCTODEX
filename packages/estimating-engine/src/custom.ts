@@ -10,6 +10,27 @@ import { computeOption, type Discount, type Line, type OptionTotals } from "./es
 export type LineGroup = "service" | "labor" | "material";
 export const LINE_GROUPS: LineGroup[] = ["service", "labor", "material"];
 
+/**
+ * What a module wrote into a line (docs/specs/33-gutters-estimate.md П23.7, C4) — the company's, never the client's:
+ * kept in the stored document (calc_inputs), dropped by the app's clientDoc and by the server's page (app.client_doc).
+ * The core reads only these fields; a module adds its own by extending the type — never a cost, markup or supplier
+ * (the tech reads calc_inputs; review C4 security F1).
+ */
+export interface LineSource {
+  /** the module's key (gutters, roofing…) */
+  module: string;
+  /** the module's key of the line: one line per key */
+  key: string;
+  /** the client price per unit the module wrote, cents */
+  priceCents?: number;
+  /** no price yet: 0 until someone sets it */
+  noPrice?: true;
+  /** the module took a TEST price (rule 9) */
+  testPrice?: true;
+  /** no longer in the module's data, kept because someone changed it by hand */
+  gone?: true;
+}
+
 export interface CustomLine {
   id: string;
   name: string;
@@ -24,6 +45,8 @@ export interface CustomLine {
   /** Add-on the client may tick in the portal. */
   optional?: boolean;
   selected?: boolean;
+  /** written by a module (never sent to the client) */
+  source?: LineSource;
 }
 
 export interface CustomOption {

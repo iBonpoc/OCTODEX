@@ -13,7 +13,8 @@
  */
 import { computeGutterParts, gutterPreview, type MeasurementInput, type PartQty, type PreviewRates } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
-import { catalogMatch } from "@/features/catalogMatch";
+import { attributesLine, catalogMatch } from "@/features/catalogMatch";
+import type { DictKey } from "@/i18n";
 import { catalogUnitPrice } from "@/features/estimateDoc";
 import { TEST_RATES } from "./canvas/testRates";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "./settings";
@@ -176,4 +177,21 @@ export function listPreview(parts: readonly PartQty[], catalog: readonly Catalog
   });
   const client = parts.filter((p) => p.use !== "purchase").length;
   return { ...r, test: test || r.listed < client };
+}
+
+/**
+ * A part's name when the price list has no item for it (PricesScreen «создать», the estimate's line with «нет цены»):
+ * `t` — the app's translator on the page, the CLIENT's language for an estimate line (rule 7). Pure.
+ */
+export function partName(t: (key: DictKey, params?: Record<string, string | number>) => string, p: PartQty): string {
+  const k = (s: string) => `mod.gutters.pr.${s}` as DictKey;
+  if (p.kind === "labor") {
+    const w = p.attrs.work ?? "";
+    const word = WORK_WORDS.has(w) ? t(k(`w.${w}`)) : w;
+    return p.attrs.story ? `${word} · ${t("mod.gutters.story", { n: p.attrs.story })}` : word;
+  }
+  const { part, ...rest } = matchAttrs(p);
+  const word = part && PART_WORDS.has(part) ? t(k(`p.${part}`)) : part ?? p.key;
+  const line = attributesLine(rest);
+  return line ? `${word} · ${line}` : word;
 }

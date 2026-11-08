@@ -6,13 +6,13 @@
  * company's item's (M7d, whole cents); no item → price 0 and `noPrice` (never a silent $0 — the screen says «нет цены»).
  *
  * Each module line carries `source` — what the module wrote: its key, section, quantity, price, name and unit. It is
- * the company's, not the client's: the core's clientDoc must drop it before anything leaves for the client (C4, П23.5). «Обновить
+ * the company's, not the client's: the core's clientDoc drops it before anything leaves the app for the client, the stored document keeps it and the server's page cuts it (C4, П23.7). «Обновить
  * смету» (resyncLines) tells a hand change by comparing the line with its `source`, not by a flag: an older app
  * version that knows nothing of `source` keeps it on edits (lines are spread) and its hand changes are still seen.
  * A line without `source` (typed by hand, or re-picked from the price list on an old phone) is the person's own: never
  * changed, never removed; a part whose price-list item such a line already uses is not added again.
  */
-import { dec, type CustomLine, type PartQty } from "@octo/estimating-engine";
+import { dec, type CustomLine, type LineSource as CoreLineSource, type PartQty } from "@octo/estimating-engine";
 import type { CatalogItem } from "@/data/types";
 import { catalogUnitCost, catalogUnitPrice } from "@/features/estimateDoc";
 import { findItem, matchKey } from "./prices";
@@ -26,7 +26,7 @@ export const sectionAt = (s: string) => {
 };
 
 /** what the module wrote into a line (П23.1): the base for telling a hand change at the next update */
-export interface LineSource {
+export interface LineSource extends CoreLineSource {
   module: "gutters";
   /** matchKey of the part: one line per price-list item */
   key: string;
@@ -45,8 +45,12 @@ export interface LineSource {
   gone?: true;
   /** the measurement revision the line was made from (M8b) */
   revisionId?: string;
+  /** the measurement the line was made from (M8b): «Обновить смету» of that measurement finds its lines by it */
+  measurementId?: string;
+  /** when «Смета» / «Обновить смету» wrote it (ISO): the measurement's newest estimate is the one written last (review M8b №3) */
+  at?: string;
 }
-export type ModuleLine = CustomLine & { source?: LineSource };
+export type ModuleLine = Omit<CustomLine, "source"> & { source?: LineSource };
 
 const isOurs = (l: ModuleLine): l is ModuleLine & { source: LineSource } => !!l.source && l.source.module === "gutters" && typeof l.source.key === "string";
 
@@ -60,7 +64,7 @@ export const billQty = (q: string, unit: string) => (unit === "ft" ? dec(q).toDe
  * The module's lines for the parts of one measurement: one per item (the same item's parts add up — end caps left and
  * right), in section order. `name(p)` — the part's name in the app's language when no item has one; `uid()` — new ids.
  */
-export function linesFromParts(parts: readonly PartQty[], catalog: readonly CatalogItem[], name: (p: PartQty) => string, uid: () => string, revisionId?: string): ModuleLine[] {
+export function linesFromParts(parts: readonly PartQty[], catalog: readonly CatalogItem[], name: (p: PartQty) => string, uid: () => string, revisionId?: string, measurementId?: string, at?: string): ModuleLine[] {
   const byKey = new Map<string, { part: PartQty; qty: ReturnType<typeof dec> }>();
   for (const p of parts) {
     if (p.use === "purchase") continue; // the supplier order's (stage 2), never the client's price
@@ -92,7 +96,7 @@ export function linesFromParts(parts: readonly PartQty[], catalog: readonly Cata
       ...(it ? { catalogItemId: it.id } : {}),
       source: {
         module: "gutters", key, section: part.section, qty: quantity, priceCents, name: lineName, unit: part.unit,
-        ...(noPrice ? { noPrice: true as const } : {}), ...(it?.placeholder ? { testPrice: true as const } : {}), ...(revisionId ? { revisionId } : {}),
+        ...(noPrice ? { noPrice: true as const } : {}), ...(it?.placeholder ? { testPrice: true as const } : {}), ...(revisionId ? { revisionId } : {}), ...(measurementId ? { measurementId } : {}), ...(at ? { at } : {}),
       },
     };
   });
@@ -126,14 +130,17 @@ const touched = (l: ModuleLine & { source: LineSource }) => Object.values(handCh
  * - a second module line of one part (a copy): the person's, as it is;
  * - a new part: before the first module line of a later section (else after the module's last line, else at the end) —
  *   unless an own line already uses its price-list item.
+ * `other` — lines that belong to something else (another measurement's, M8b): left as they are, where they are, and
+ * they neither block nor place a new line (review M8b №5).
  */
-export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLine[]): ModuleLine[] {
+export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLine[], other: (l: ModuleLine) => boolean = () => false): ModuleLine[] {
   const nextByKey = new Map(next.filter(isOurs).map((l) => [l.source.key, l]));
-  const ownItems = new Set(old.filter((l) => !isOurs(l) && l.catalogItemId).map((l) => l.catalogItemId!));
+  const ownItems = new Set(old.filter((l) => !isOurs(l) && !other(l) && l.catalogItemId).map((l) => l.catalogItemId!));
+  const mine = (l: ModuleLine): l is ModuleLine & { source: LineSource } => isOurs(l) && !other(l);
   const seen = new Set<string>();
   const out: ModuleLine[] = [];
   for (const l of old) {
-    if (!isOurs(l)) {
+    if (!mine(l)) {
       out.push(l);
       continue;
     }
@@ -172,11 +179,11 @@ export function resyncLines(old: readonly ModuleLine[], next: readonly ModuleLin
     if (n.catalogItemId && ownItems.has(n.catalogItemId)) continue;
     const at = sectionAt(n.source.section);
     // before the first module line of a later section; else after the module's last line; else at the end (review №10)
-    const later = out.findIndex((l) => isOurs(l) && sectionAt(l.source.section) > at);
+    const later = out.findIndex((l) => mine(l) && sectionAt(l.source.section) > at);
     let pos = later;
     if (later < 0) {
       pos = out.length;
-      for (let i = out.length - 1; i >= 0; i--) if (isOurs(out[i]!)) { pos = i + 1; break; }
+      for (let i = out.length - 1; i >= 0; i--) if (mine(out[i]!)) { pos = i + 1; break; }
     }
     out.splice(pos, 0, n);
   }

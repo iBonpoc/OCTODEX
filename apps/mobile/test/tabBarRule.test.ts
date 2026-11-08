@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest";
 import fs from "node:fs";
 import path from "node:path";
-import { NO_TAB_BAR, WITH_TAB_BAR, appStackRoutes, formsAbove, goAction, tabLeave, tabRouteKey, showsTabBar } from "../src/nav/tabBarRule";
+import { NO_TAB_BAR, NOT_A_FORM, WITH_TAB_BAR, appStackRoutes, formsAbove, goAction, tabLeave, tabRouteKey, showsTabBar } from "../src/nav/tabBarRule";
 
 const APP = path.resolve(__dirname, "../src/app");
 function routes(dir = APP, base = ""): string[] {
@@ -47,6 +47,11 @@ describe("unit:tabBarRule — the bottom bar on the phone", () => {
     expect(formsAbove(["estimate/new", "client/[id]"])).toEqual(["estimate/new"]);
     // only above the last copy of the tabs
     expect(formsAbove(["lead/new", "(tabs)", "client/[id]"])).toEqual([]);
+    // a module's screen saves on its own: the canvas under «Модули» («Подключить», founder 08.11) is not a form
+    expect(formsAbove(["(tabs)", "company/modules", "module/[key]/[screen]", "company/modules"])).toEqual([]);
+    expect(formsAbove(["(tabs)", "module/[key]/[screen]", "estimate/new", "client/[id]"])).toEqual(["estimate/new"]);
+    // still without the bar: «not a form» never brings it back
+    for (const r of NOT_A_FORM) expect(showsTabBar(r)).toBe(false);
   });
   it("a tab on the tabs switches the tab, over a card closes it (e2e 134: role change from settings, TestFlight 288)", () => {
     expect(tabLeave(["(tabs)"])).toBe("navigate");

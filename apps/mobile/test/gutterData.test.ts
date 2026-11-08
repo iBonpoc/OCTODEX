@@ -257,10 +257,28 @@ describe("review M5a: fixes", () => {
     s.db = withGutterData(s.db, putMeasurement({ ...opened, leadId: "l9", label: "Front" }));
     await st.save(opened, { save: [E], remove: [] });
     expect(sent.map((x) => x.kind)).toEqual([K.eSave]); // the measurement is not written back
-    // the phone changes the status: the row it sends keeps the server's lead and label
+    // the phone changes its property: the row it sends keeps the server's lead and label
     sent.length = 0;
-    await st.save({ ...opened, status: "ready" }, { save: [], remove: [] });
-    expect(sent).toEqual([{ kind: K.mSave, payload: { m: { id: "m1", label: "Front", status: "ready", propertyId: null, leadId: "l9" } } }]);
+    await st.save({ ...opened, propertyId: "p7" }, { save: [], remove: [] });
+    expect(sent).toEqual([{ kind: K.mSave, payload: { m: { id: "m1", label: "Front", status: "draft", propertyId: "p7", leadId: "l9" } } }]);
+  });
+  it("M8b: the status is the store's — a stale screen never sets it back; a change of the drawing after «Смета» makes it a draft", async () => {
+    const { makeModuleStore } = await import("../src/modules/gutters/canvas/moduleStore");
+    const { s, sent } = harness();
+    s.db = withGutterData(s.db, putMeasurement({ ...M }));
+    const st = makeModuleStore(() => s as never, "m1");
+    const opened = (await st.load())!.m; // a draft on the screen
+    // «Смета» made it ready meanwhile
+    s.db = withGutterData(s.db, putMeasurement({ ...opened, status: "ready" }));
+    await st.save(opened, { save: [], remove: [] });
+    expect(sent).toEqual([]); // the screen's old «draft» is not written
+    await st.save(opened, { save: [E], remove: [] });
+    expect(sent.map((x) => [x.kind, (x.payload.m as { status?: string } | undefined)?.status])).toEqual([[K.mSave, "draft"], [K.eSave, undefined]]);
+    // already a draft: a next change of the drawing writes no row
+    s.db = withGutterData(s.db, putMeasurement({ ...opened, status: "draft" }));
+    sent.length = 0;
+    await st.save(opened, { save: [], remove: ["e1"] });
+    expect(sent.map((x) => x.kind)).toEqual([K.eRemove]);
   });
   it("№4: the store lost the measurement (its waiting changes were dropped) — the next save sends it whole with every element", async () => {
     const { makeModuleStore } = await import("../src/modules/gutters/canvas/moduleStore");
@@ -285,6 +303,15 @@ describe("unit:gutterData — M5b: places and «Сделать заявкой» 
     const data = { gutters: g([{ leadId: "l1", updatedAt: "2026-11-01" }, { leadId: "l1", updatedAt: "2026-11-05" }, { leadId: "l2", updatedAt: "2026-11-09" }]) };
     expect(placeActions("lead", on, ctx, undefined, data)).toEqual([expect.objectContaining({ labelKey: "mod.gutters.measureOpen", href: "/module/gutters/draw?m=m1" })]);
     expect(placeActions("lead", on, { role: "director" }, undefined, data)).toEqual([]);
+  });
+  it("M8b: something drawn on the lead's measurement → also «Смета из замера» (the canvas makes or updates it)", async () => {
+    const { placeActions } = await import("../src/modules/registry");
+    const ctx = { role: "sales" as const, leadId: "l1" };
+    const data = { gutters: { ...g([{ leadId: "l1" }]), elements: [{ ...E, measurementId: "m0" }] } };
+    expect(placeActions("lead", on, ctx, undefined, data).map((a) => [a.labelKey, a.href])).toEqual([
+      ["mod.gutters.measureOpen", "/module/gutters/draw?m=m0"],
+      ["mod.gutters.est.fromLead", "/module/gutters/draw?m=m0&estimate=1"],
+    ]);
   });
   it("property: its own measurements; home: «Замерить здесь» — a new draft; nothing while the module is not active", async () => {
     const { placeActions } = await import("../src/modules/registry");
