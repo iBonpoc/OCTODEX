@@ -88,7 +88,7 @@ begin
                            from (select p.invoice_id, sum(p.amount_cents) as cents
                                    from public.payments p join public.invoices i on i.id = p.invoice_id
                                    join public.jobs j on j.id = i.job_id
-                                  where j.estimate_id = v_id and p.status = 'pending'
+                                  where j.estimate_id = v_id and p.status = 'pending' and p.deleted_at is null
                                   group by p.invoice_id) x), '{}'::jsonb));
 end;
 $$;

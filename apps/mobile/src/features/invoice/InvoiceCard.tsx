@@ -45,6 +45,8 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
   const job = findJob(db, inv.jobId);
   const balance = invoiceBalance(inv).owesCents;
   const pays = db.payments.filter((p) => p.invoiceId === inv.id);
+  // 20в: ACH on its way (Stripe has not settled it): shown, never counted as paid
+  const pendingCents = (db.pendingPayments ?? []).filter((p) => p.invoiceId === inv.id).reduce((a, p) => a + p.amountCents, 0);
   const chip = invoiceChip(inv);
   const company = companyForPortal(db, store.companyName ?? "OCTODEX");
   const msg = () => invoiceMessage(db, inv, company, docLanguageFor(db, { customerId: inv.customerId }));
@@ -94,6 +96,11 @@ export function InvoiceCardBody({ inv }: { inv: Invoice }) {
             {money(inv.paidCents)}
           </T>
         </RowView>
+        {pendingCents > 0 ? (
+          <View testID="invoice-ach-pending">
+            <StatusChip status="info" label={t("pay.online.pending", { amount: money(pendingCents) })} />
+          </View>
+        ) : null}
         <Divider />
         <RowView style={{ justifyContent: "space-between" }}>
           <T v="title">{t("inv.balance")}</T>
