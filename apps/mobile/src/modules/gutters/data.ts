@@ -9,6 +9,8 @@
  *   photo.add         {f}   a photo of the measurement or of one element: a files row (measurement_id, element_id) and
  *                           the bytes through the core's upload (spec П21.10); no key; `made` = the file id
  *   photo.remove      {id}  deleted_at of that files row; no key
+ *   revision.add      {r}   a snapshot when «Смета» / «Обновить смету» is pressed (M8b, П23.8): insert or nothing (a replay
+ *                           adds nothing); the number is the server's (trigger t03, T98) — the phone sends 1
  * The photos live in the core's DB.files (one list of files), the measurement only names them.
  * Pure but for `guttersOps` (the supabase client).
  */
@@ -19,7 +21,7 @@ import type { ModuleOpHandler, ModuleRead, ModuleStore } from "../registry";
 import type { ElementRow, MeasurementRow } from "./canvas/model";
 
 export const KEY = "gutters";
-export const K = { mSave: "measurement.save", mRemove: "measurement.remove", eSave: "element.save", eRemove: "element.remove", pAdd: "photo.add", pRemove: "photo.remove" } as const;
+export const K = { mSave: "measurement.save", mRemove: "measurement.remove", eSave: "element.save", eRemove: "element.remove", pAdd: "photo.add", pRemove: "photo.remove", rAdd: "revision.add" } as const;
 
 export interface GutterData {
   measurements: MeasurementRow[];
@@ -195,6 +197,18 @@ export const guttersOps: ModuleOpHandler = async (op, { companyId, run }) => {
       const id = str(p.id);
       if (!id) throw bad("photo.remove without an id");
       return run(supabase.from("files").update({ deleted_at: now }).eq("id", id).eq("company_id", companyId));
+    }
+    case K.rAdd: {
+      const r = isObj(p.r) ? p.r : null;
+      const id = r && str(r.id);
+      const mid = r && str(r.measurementId);
+      if (!r || !id || !mid || !Array.isArray(r.elements) || !Array.isArray(r.parts)) throw bad("revision.add without a revision");
+      return run(
+        supabase.from("gutter_measurement_revisions").upsert(
+          { id, company_id: companyId, measurement_id: mid, revision: 1, elements: r.elements, parts: r.parts, engine_version: str(r.engineVersion) ?? "unknown" },
+          { onConflict: "id", ignoreDuplicates: true },
+        ),
+      );
     }
     default:
       throw bad(`unknown change ${op.kind}`);

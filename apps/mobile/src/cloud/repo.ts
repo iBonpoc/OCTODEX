@@ -3,6 +3,7 @@
  * Tables follow docs/04-domain-model.md v0.3.1 (supabase/migrations). RLS decides what each role sees.
  */
 import { companyFromDb } from "./companyMap";
+import { checklistOf, isMissingTable, itemsByVisit, templateFromDb, visitSettingsFromDb } from "./checklistMap";
 import { companyModulesFromRows, loadModuleData } from "@/modules/registry";
 import { customerStatus, estimateStatus, jobDbCancelled, jobStatus, leadStatus, visitDbStatus } from "./statusMap";
 import { peopleByCustomer } from "@/data/people";
@@ -159,6 +160,20 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const companyModules = companyModulesFromRows(moduleRows);
   // spec 33 П21: each module reads its own tables (the core knows no trade); a failed read keeps the phone's copy
   const moduleData = await loadModuleData(companyModules, { live: (table, cols) => live<Row>(table, cols) });
+  // step 14 (migration 20261108140000): the items of visits as rows, the templates. A server before it has no table:
+  // the visits keep their old visits.checklist arrays (null), no templates (a tech reads none either: RLS)
+  const [chkRows, templateRows] = await Promise.all([
+    live<Row>("visit_checklist_items", "id, visit_id, position, label, kind, required, hint, template_id, template_name, done, done_by, done_at, skipped, na_reason, na_text, na_by, na_at, photo_ids, created_by, created_at")
+      .then((r) => r as Row[] | null, (e) => {
+        if (isMissingTable(e)) return null;
+        throw e;
+      }),
+    live<Row>("checklist_templates").catch((e) => {
+      if (isMissingTable(e)) return [] as Row[];
+      throw e;
+    }),
+  ]);
+  const chkByVisit = chkRows ? itemsByVisit(chkRows) : null;
   // wave 7б-2 (migration 20261106210000): the company flag, who shares, the last points of open visits. Each read on its
   // own: before the migration (or if a read fails) the location stays off and the rest of the company still loads.
   const [locAllowed, shareRows, pointRows] = await Promise.all([
@@ -335,7 +350,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         durationMin: dur,
         step: visitStep(v),
         scope: (v.scope as string[] | null) ?? [],
-        checklist: (v.checklist as Visit["checklist"] | null) ?? [],
+        checklist: checklistOf(s(v.id), v.checklist, chkByVisit),
+        checklistReviewedAt: (v.checklist_reviewed_at as string | null) ?? undefined,
+        checklistReviewedBy: (v.checklist_reviewed_by as string | null) ?? undefined,
         photos: files
           .filter((f) => f.visit_id === v.id && f.kind === "photo")
           .map((f) => ({ id: s(f.id), kind: f.stage === "after" ? "after" : "before", uri: undefined })),
@@ -636,7 +653,15 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         receivedBy: (p.received_by as string | null) ?? undefined, refundedCents: n(p.refunded_cents) || undefined,
       }))
       .sort((a, b) => b.at.localeCompare(a.at)),
-    company: companyRows[0] ? { ...companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows), modules: companyModules } : null,
+    company: companyRows[0]
+      ? {
+          ...companyFromDb(companyRows[0], (secrets[0]?.ein as string | null) ?? undefined, licenseRows, contactRows), modules: companyModules,
+          visitSettings: visitSettingsFromDb(companyRows[0].visit_settings), checklistSince: (companyRows[0].checklist_since as string | null) ?? undefined,
+        }
+      : null,
+    checklistTemplates: templateRows.map(templateFromDb),
+    // a server before the checklist migration: the store writes the old whole list (rule 16)
+    ...(chkByVisit ? {} : { checklistLegacy: true }),
     moduleData,
     notes: noteRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Note["subjectType"], subjectId: s(r.subject_id), body: s(r.body),

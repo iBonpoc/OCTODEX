@@ -34,7 +34,7 @@ import { statusAfterManualWin } from "@/features/clientRows";
 import { inheritCategory } from "@/features/serviceCategories";
 import { rescheduled, canCancel, canReschedule, hasPlannedInspection, jobRollsBack, leadRollsBack, stepChange, withAssignees } from "@/features/schedule";
 import { cityLine, splitGateCodes, withGateCodes } from "@/features/properties";
-import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
+import { newToken, storedDoc, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
@@ -92,7 +92,13 @@ import {
   ServiceCategory,
   CancelReason,
   JobLineItem,
+  type ChecklistItem,
+  type ChecklistItemKind,
+  type ChecklistTemplate,
+  type NaReason,
+  type VisitSettings,
 } from "./types";
+import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitSettings, canRemoveItem, canReview, canSkip, canTick, cleanTemplate, cleanText, itemKind, PHOTOS_PER_ITEM_MAX, photoStageOf, visitSettingsOf } from "@/features/checklist";
 
 type Undo = () => void;
 /** an undo that may be refused (the job lines' rules): false = refused, nothing changed */
@@ -172,8 +178,25 @@ interface StoreCtx {
   addPhoto: (visitId: ID, kind: "before" | "after", uri?: string) => Undo;
   toggleCheck: (visitId: ID, itemId: ID) => Undo;
   removePhoto: (visitId: ID, photoId: ID) => Undo;
-  /** extra checklist item added on site by the tech */
+  /** extra checklist item added on site by the tech (always optional, docs/specs/08 §11.2 №9) */
   addCheckItem: (visitId: ID, label: string) => Undo;
+  /* step 14 (docs/specs/08 §10.1): one row per item — a tick and an office edit never overwrite each other */
+  /** tick / untick one item (a tick takes a skip off) */
+  checkItem: (visitId: ID, itemId: ID, done: boolean) => Undo;
+  /** «Пропустить»: the items stay «not done» (not a tick); the reason is optional */
+  skipItems: (visitId: ID, itemIds: ID[], reason?: NaReason, text?: string) => Undo;
+  /** a photo for a photo item: into the visit's photos (stage by the step) and onto the item, which is then done */
+  attachItemPhoto: (visitId: ID, itemId: ID, uri?: string) => Undo;
+  /** the office: an item of a visit (required or not) */
+  addVisitItem: (visitId: ID, label: string, required: boolean, kind?: ChecklistItemKind) => Undo;
+  /** the office (a required one — the director); a tech — only his own optional item. The server checks */
+  removeVisitItem: (visitId: ID, itemId: ID) => Undo;
+  /** «Просмотрено» on the «not done» card */
+  reviewVisitMissed: (visitId: ID) => Undo;
+  /** a checklist template, whole (new or changed; archive = archivedAt) */
+  saveChecklistTemplate: (t: ChecklistTemplate) => Undo;
+  /** the company's photo rules (owner, admin) */
+  setVisitSettings: (patch: Partial<VisitSettings>) => Undo;
   signVisit: (visitId: ID, path: string) => Undo;
   payVisit: (visitId: ID, method: PaymentMethod) => Undo;
   /** "I replied" (no call/SMS from the app): stops the reply timer */
@@ -837,6 +860,8 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     ...d,
     visits: d.visits.map((v) => (v.id === id ? fn(v) : v)),
   });
+  const patchItems = (d: DB, visitId: ID, itemIds: ID[], fn: (c: ChecklistItem) => ChecklistItem): DB =>
+    patchVisit(d, visitId, (v) => ({ ...v, checklist: v.checklist.map((c) => (itemIds.includes(c.id) ? fn(c) : c)) }));
   const customerOfJob = (d: DB, jobId: ID) => {
     const job = findJob(d, jobId);
     return job?.customerId ?? d.properties.find((p) => p.id === job?.propertyId)?.customerId ?? "";
@@ -1000,6 +1025,52 @@ export function StoreProvider({ children }: { children: ReactNode }) {
     );
   };
 
+  const addPhotoFn = (visitId: ID, kind: "before" | "after", uri?: string): Undo => {
+    const id = uid();
+    const v = dbRef.current.visits.find((x) => x.id === visitId);
+    return mutate(
+      "photo.add",
+      (d) => patchVisit(d, visitId, (x) => ({ ...x, photos: [...x.photos, { id, kind, uri }] })),
+      v ? { k: "photo.add", id, visitId, jobId: v.jobId, stage: kind, uri } : undefined,
+    );
+  };
+  /**
+   * a checklist change: locally at once; to the server one row's op — or, on a server before the checklist migration
+   * (db.checklistLegacy), the old whole list (rule 16). `legacy: false` — nothing the old server could keep.
+   */
+  const chkMutate = (label: string, visitId: ID, fn: (d: DB) => DB, op: Op, legacy = true): Undo => {
+    if (!dbRef.current.checklistLegacy) return mutate(label, fn, op);
+    const list = fn(dbRef.current).visits.find((v) => v.id === visitId)?.checklist ?? [];
+    return mutate(label, fn, legacy ? { k: "visit.checklist", visitId, checklist: list.map((c) => ({ id: c.id, label: c.label, done: c.done })) } : undefined);
+  };
+  const visitOf = (visitId: ID) => dbRef.current.visits.find((x) => x.id === visitId);
+  const noop: Undo = () => {};
+  const checkItemFn = (visitId: ID, itemId: ID, done: boolean): Undo => {
+    const v = visitOf(visitId);
+    const item = v?.checklist.find((c) => c.id === itemId);
+    // a photo item is done by its photo, not by a tick; the server would refuse what the role may not (it holds the queue)
+    if (!v || !item || itemKind(item) === "photo" || !canTick(role, v, done)) return noop;
+    const at = new Date().toISOString();
+    const me = dbRef.current.me;
+    return chkMutate(
+      "check.toggle",
+      visitId,
+      (d) => patchItems(d, visitId, [itemId], (c) => (done ? { ...c, done: true, doneBy: me, doneAt: at, na: undefined } : { ...c, done: false, doneBy: undefined, doneAt: undefined })),
+      { k: "chk.item.set", visitId, itemIds: [itemId], done, at },
+    );
+  };
+  const addVisitItemFn = (visitId: ID, label: string, required: boolean, kind: ChecklistItemKind = "check"): Undo => {
+    const v = visitOf(visitId);
+    const text = cleanText(label);
+    if (!v || !text || !canAddItem(role, v, required) || v.checklist.length >= 200) return noop;
+    const id = uid();
+    const position = Math.max(-1, ...v.checklist.map((c, i) => c.position ?? i)) + 1;
+    const item: ChecklistItem = { id, label: text, done: false, kind, required, addedBy: dbRef.current.me, position };
+    return chkMutate("check.add", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist: [...x.checklist, item] })), {
+      k: "chk.item.add", item: { id, visitId, position, label: text, kind, required },
+    });
+  };
+
   const value = useMemo<StoreCtx>(
     () => ({
       db,
@@ -1048,27 +1119,93 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           { k: "visit.step", visitId: id, to: step, ...(at ? { at } : {}) },
         );
       },
-      addPhoto: (visitId, kind, uri) => {
-        const id = uid();
-        const v = dbRef.current.visits.find((x) => x.id === visitId);
-        return mutate(
-          "photo.add",
-          (d) => patchVisit(d, visitId, (x) => ({ ...x, photos: [...x.photos, { id, kind, uri }] })),
-          v ? { k: "photo.add", id, visitId, jobId: v.jobId, stage: kind, uri } : undefined,
+      addPhoto: addPhotoFn,
+      toggleCheck: (visitId, itemId) => {
+        const item = dbRef.current.visits.find((x) => x.id === visitId)?.checklist.find((c) => c.id === itemId);
+        return checkItemFn(visitId, itemId, !item?.done);
+      },
+      checkItem: checkItemFn,
+      skipItems: (visitId, itemIds, reason, text) => {
+        const v = visitOf(visitId);
+        if (!v || !canSkip(role, v)) return noop;
+        const ids = itemIds.filter((id) => v.checklist.some((c) => c.id === id));
+        if (!ids.length) return noop;
+        const at = new Date().toISOString();
+        const me = dbRef.current.me;
+        const note = cleanText(text) || undefined;
+        return chkMutate(
+          "check.skip",
+          visitId,
+          (d) => patchItems(d, visitId, ids, (c) => ({ ...c, done: false, doneBy: undefined, doneAt: undefined, na: { ...(reason ? { reason } : {}), ...(note ? { text: note } : {}), by: me, at } })),
+          { k: "chk.item.set", visitId, itemIds: ids, done: false, skipped: true, naReason: reason ?? null, naText: note ?? null, at },
         );
       },
-      toggleCheck: (visitId, itemId) => {
-        const v = dbRef.current.visits.find((x) => x.id === visitId);
-        const checklist = (v?.checklist ?? []).map((c) => (c.id === itemId ? { ...c, done: !c.done } : c));
-        return mutate("check.toggle", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist })), { k: "visit.checklist", visitId, checklist });
+      attachItemPhoto: (visitId, itemId, uri) => {
+        const v = visitOf(visitId);
+        const item = v?.checklist.find((c) => c.id === itemId);
+        if (!v || !item || !canAttachPhoto(role) || (item.photoIds?.length ?? 0) >= PHOTOS_PER_ITEM_MAX) return noop;
+        // the photo first: the server takes only a photo of this visit on an item, so the item's op waits behind it
+        const undoPhoto = addPhotoFn(visitId, photoStageOf(v), uri);
+        const photoId = visitOf(visitId)?.photos.at(-1)?.id;
+        if (!photoId) return undoPhoto;
+        const at = new Date().toISOString();
+        const me = dbRef.current.me;
+        const undoItem = chkMutate(
+          "check.photo",
+          visitId,
+          (d) => patchItems(d, visitId, [itemId], (c) => ({ ...c, photoIds: [...(c.photoIds ?? []), photoId], done: true, doneBy: c.done ? c.doneBy : me, doneAt: c.done ? c.doneAt : at, na: undefined })),
+          { k: "chk.item.set", visitId, itemIds: [itemId], done: true, addPhotoId: photoId, at },
+          // the old server has no photos of items: the photo itself went
+          false,
+        );
+        return () => {
+          undoItem();
+          undoPhoto();
+        };
       },
+      addVisitItem: addVisitItemFn,
+      removeVisitItem: (visitId, itemId) => {
+        const v = visitOf(visitId);
+        const item = v?.checklist.find((c) => c.id === itemId);
+        if (!v || !item || !canRemoveItem(role, dbRef.current.me, v, item)) return noop;
+        return chkMutate("check.remove", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist: x.checklist.filter((c) => c.id !== itemId) })), { k: "chk.item.remove", id: itemId, visitId });
+      },
+      reviewVisitMissed: (visitId) => {
+        if (!visitOf(visitId) || !canReview(role)) return noop;
+        const at = new Date().toISOString();
+        const me = dbRef.current.me;
+        return chkMutate("check.review", visitId, (d) => patchVisit(d, visitId, (x) => ({ ...x, checklistReviewedAt: at, checklistReviewedBy: me })), { k: "chk.visit.review", visitId, at }, false);
+      },
+      saveChecklistTemplate: (t) => {
+        const clean = cleanTemplate(t);
+        // no name: the server would refuse it; the old server has no templates
+        if (!clean || !canEditTemplates(role) || dbRef.current.checklistLegacy) return noop;
+        return mutate(
+          "checklist.template",
+          (d) => {
+            const list = d.checklistTemplates ?? [];
+            return { ...d, checklistTemplates: list.some((x) => x.id === clean.id) ? list.map((x) => (x.id === clean.id ? clean : x)) : [...list, clean] };
+          },
+          { k: "chk.template.save", template: clean },
+        );
+      },
+      setVisitSettings: (patch) => {
+        if (!canEditVisitSettings(role) || dbRef.current.checklistLegacy) return noop;
+        const settings = visitSettingsOf({ visitSettings: { ...visitSettingsOf(dbRef.current.company), ...patch } });
+        return mutate("company.visitSettings", (d) => (d.company ? { ...d, company: { ...d.company, visitSettings: settings } } : d), { k: "company.visitSettings", settings });
+      },
+      // a photo removed leaves its items too: a photo item without a live photo is «not done» again (itemDone)
       removePhoto: (visitId, photoId) =>
-        mutate("photo.remove", (d) => patchVisit(d, visitId, (x) => ({ ...x, photos: x.photos.filter((p) => p.id !== photoId) })), { k: "photo.remove", id: photoId }),
-      addCheckItem: (visitId, label) => {
-        const v = dbRef.current.visits.find((x) => x.id === visitId);
-        const checklist = [...(v?.checklist ?? []), { id: uid(), label, done: false }];
-        return mutate("check.add", (d) => patchVisit(d, visitId, (x) => ({ ...x, checklist })), { k: "visit.checklist", visitId, checklist });
-      },
+        mutate(
+          "photo.remove",
+          (d) => patchVisit(d, visitId, (x) => ({
+            ...x,
+            photos: x.photos.filter((p) => p.id !== photoId),
+            checklist: x.checklist.map((c) => (c.photoIds?.includes(photoId) ? { ...c, photoIds: c.photoIds.filter((p) => p !== photoId) } : c)),
+          })),
+          { k: "photo.remove", id: photoId },
+        ),
+      addCheckItem: (visitId, label) => addVisitItemFn(visitId, label, false),
       signVisit: (visitId, path) =>
         mutate("visit.sign", (d) => patchVisit(d, visitId, (v) => ({ ...v, signature: path, step: "signed" })), { k: "visit.sign", visitId, svg: path }),
       payVisit: (visitId, method) => {
@@ -1504,7 +1641,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             };
             return { ...d, estimates: prev ? d.estimates.map((e) => (e.id === id ? next : e)) : [...d.estimates, next] };
           },
-          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, title, doc: clientDoc(doc), costs: costsOf(doc), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
+          { k: "estimate.save", id, versionId, customerId, propertyId, leadId: leadId0 ?? prev?.leadId, title, doc: storedDoc(doc), costs: costsOf(doc), totalCents: sum.totalCents, depositCents: sum.depositCents, marginPct: sum.marginPct },
         );
       },
       approveEstimate: (id, a) => {

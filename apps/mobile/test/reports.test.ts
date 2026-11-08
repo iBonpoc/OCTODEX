@@ -4,7 +4,7 @@ import { makeSeed } from "../src/data/seed";
 import type { DB, Invoice } from "../src/data/types";
 import { setZone } from "../src/features/zone";
 import { periodNumbers } from "../src/features/metrics";
-import { canExportCsv, canSeeReports, collectedReport, invoiceSource, owedReport, REPEAT, salesReport, sourcesReport, toCsv, UNKNOWN } from "../src/features/reports";
+import { canExportCsv, canSeeReports, categoryReport, collectedReport, NO_CATEGORY, invoiceSource, owedReport, REPEAT, salesReport, sourcesReport, toCsv, UNKNOWN } from "../src/features/reports";
 
 afterEach(() => setZone("America/Los_Angeles"));
 const NOW = Date.parse("2026-11-06T00:30:00Z"); // the 5th in LA
@@ -103,5 +103,66 @@ describe("CSV", () => {
     expect(toCsv(["Client", "Owed"], [["Kim, David", "1840.00"], ['Say "hi"', "-25.00"], ["=HYPERLINK(1)", 3]])).toBe(
       '﻿Client,Owed\r\n"Kim, David",1840.00\r\n"Say ""hi""",-25.00\r\n\'=HYPERLINK(1),3\r\n',
     );
+  });
+});
+
+describe("5. «По направлениям» (18 §11)", () => {
+  // the 5th of November in LA = today; 00:30Z on the 6th is still the 5th there
+  const TODAY = "2026-11-05";
+  const base = (): Pick<DB, "leads" | "estimates" | "jobs" | "invoices" | "serviceCategories"> => ({
+    serviceCategories: [
+      { id: "roof", seedKey: "roofing", position: 0 },
+      { id: "old", name: "Old", position: 1, archivedAt: "2026-10-01T00:00:00Z" },
+    ],
+    leads: [
+      { id: "l1", serviceCategoryId: "roof", status: "won", receivedAt: "2026-11-06T00:30:00Z" } as DB["leads"][number],
+      { id: "l2", serviceCategoryId: "roof", status: "new", receivedAt: "2026-11-05T08:00:00Z" } as DB["leads"][number],
+      // the 4th in LA: outside «today»
+      { id: "l3", serviceCategoryId: "roof", status: "won", receivedAt: "2026-11-05T06:59:00Z" } as DB["leads"][number],
+      // a direction the company does not have → «none»
+      { id: "l4", serviceCategoryId: "gone", status: "new", receivedAt: "2026-11-05T10:00:00Z" } as DB["leads"][number],
+    ],
+    estimates: [
+      { id: "e1", serviceCategoryId: "old", status: "approved", sentAt: "2026-11-05T09:00:00Z", approvedAt: "2026-11-05T10:00:00Z", totalCents: 50000 } as DB["estimates"][number],
+      { id: "e2", status: "sent", sentAt: "2026-11-05T09:00:00Z", totalCents: 70000 } as DB["estimates"][number],
+    ],
+    jobs: [
+      // the job's own direction, not its estimate's (spec 11 §1)
+      { id: "j1", serviceCategoryId: "roof", estimateId: "e1" } as DB["jobs"][number],
+      { id: "j2" } as DB["jobs"][number],
+    ],
+    invoices: [
+      { id: "i1", customerId: "c", jobId: "j1", totalCents: 10825, subtotalCents: 10000, paidCents: 0, dueDate: TODAY, sentAt: "2026-11-05T12:00:00Z" },
+      { id: "i2", customerId: "c", jobId: "j1", totalCents: 5000, paidCents: 0, dueDate: TODAY, sentAt: "2026-11-05T13:00:00Z" },
+      { id: "i3", customerId: "c", jobId: "j2", totalCents: 9000, paidCents: 0, dueDate: TODAY, sentAt: "2026-11-05T13:00:00Z" },
+      // a draft is not revenue
+      { id: "i4", customerId: "c", jobId: "j1", totalCents: 99999, paidCents: 0, dueDate: TODAY },
+    ],
+  });
+  it("today in the company's zone: leads, estimates, revenue through the job; «none» last", () => {
+    setZone("America/Los_Angeles");
+    const r = categoryReport(base(), "today", TODAY);
+    expect(r.rows.map((x) => x.key)).toEqual(["roof", "old", NO_CATEGORY]);
+    expect(r.rows[0]).toMatchObject({ leads: 2, won: 1, wonPct: 50, jobs: 1, invoices: 2, revenueCents: 15000, avgCents: 15000 });
+    // archived direction keeps its estimate
+    expect(r.rows[1]).toMatchObject({ sent: 1, signed: 1, signedCents: 50000, revenueCents: 0 });
+    expect(r.rows[2]).toMatchObject({ leads: 1, sent: 1, signed: 0, jobs: 1, revenueCents: 9000 });
+    expect(r.total).toMatchObject({ leads: 3, revenueCents: 24000, jobs: 2, avgCents: 12000 });
+  });
+  it("all time takes the lead of the 4th too; the revenue total = «Источник лида → выручка»", () => {
+    const db = base();
+    const r = categoryReport(db, "all", TODAY);
+    expect(r.total.leads).toBe(4);
+    const src = sourcesReport({ ...db, customers: [] }, "all", TODAY);
+    expect(r.total.revenueCents).toBe(src.totalCents);
+  });
+  it("seed: totals match «Продажи» and «Источник» for every period", () => {
+    const db = makeSeed();
+    for (const p of ["today", "week", "month", "all"] as const) {
+      const r = categoryReport(db, p);
+      const s = salesReport(db, p);
+      expect([r.total.sent, r.total.signed, r.total.signedCents]).toEqual([s.sent, s.signed, s.signedCents]);
+      expect(r.total.revenueCents).toBe(sourcesReport(db, p).totalCents);
+    }
   });
 });

@@ -13,6 +13,7 @@ import {
   type CustomSettings,
   type CustomTotals,
   type LineGroup,
+  type LineSource,
 } from "@octo/estimating-engine";
 import type { CatalogItem, Estimate, EstimateDoc } from "@/data/types";
 import { taxModeFor } from "@octo/estimating-engine";
@@ -130,13 +131,74 @@ export const withAddons = (o: CustomOption, addonIds: string[]): CustomOption =>
   lines: o.lines.map((l) => (l.optional ? { ...l, selected: addonIds.includes(l.id) } : l)),
 });
 
-/** Remove costs before anything leaves for the client (portal, PDF, calc_inputs in the database). */
+/**
+ * Remove costs and what a module wrote (`source`: its price, name, «test price») before anything leaves for the client
+ * from the app (the page /p/ on this device, PDF, letters). The server cuts the same on its side (app.client_doc).
+ */
 export function clientDoc(doc: EstimateDoc): EstimateDoc {
+  return {
+    ...doc,
+    // a line with quantity 0 bills nothing and is how a part is left out (spec 33 П23.8а №4, П23.9): never shown as a $0 row
+    options: doc.options.map((o) => ({ ...o, lines: o.lines.filter((l) => !zeroQty(l)).map(({ unitCostCents: _c, source: _s, ...l }) => l) })),
+  };
+}
+
+/** quantity is a plain decimal zero ("0", "-0", "0.", "00", "0.00", " .0 ") — the same pattern as the server's app.client_doc
+ *  (migration 20261108170000), so the demo page, the PDF and the real /p/ agree; a blank, broken or "0e5" quantity is not */
+const ZERO_QTY = /^\s*[+-]?(0+(\.0*)?|\.0+)\s*$/;
+export function zeroQty(l: Pick<CustomLine, "quantity">): boolean {
+  return ZERO_QTY.test(String(l.quantity));
+}
+
+/**
+ * The document kept in estimate_versions.calc_inputs: without costs (they live in estimate_line_costs, hidden from the
+ * tech) but WITH `source` — «Обновить смету» needs it after a reload and on another phone (C4, spec 33 П23.7). The
+ * client page never gets it: app.client_doc (20261106180000) passes only the listed fields of a line (core_rls T60, T97).
+ */
+export function storedDoc(doc: EstimateDoc): EstimateDoc {
   return {
     ...doc,
     options: doc.options.map((o) => ({ ...o, lines: o.lines.map(({ unitCostCents: _c, ...l }) => l) })),
   };
 }
+
+const isSource = (v: unknown): v is LineSource =>
+  !!v && typeof v === "object" && !Array.isArray(v) && typeof (v as LineSource).module === "string" && typeof (v as LineSource).key === "string";
+
+/** The marks of a line on the company's estimate screen (C4): from a module; no price yet; a test price still there;
+ *  no longer in the module's data. The same words the check before sending uses (C5). */
+export type LineMark = "module" | "noPrice" | "testPrice" | "gone";
+export function lineMarks(l: CustomLine): LineMark[] {
+  const s = l.source;
+  if (!isSource(s)) return [];
+  const out: LineMark[] = ["module"];
+  if (s.gone) out.push("gone");
+  if (s.noPrice && l.unitPriceCents === 0) out.push("noPrice");
+  // a $0 TEST price is both: the card says what the check before sending will (review C4 №2)
+  if (s.testPrice && l.unitPriceCents === s.priceCents) out.push("testPrice");
+  return out;
+}
+
+/**
+ * The check before sending (C5, spec 33 П23.9): lines of EVERY option and add-on (the client sees them all) that still
+ * have no price, a test price, or are no longer in the module's data. Reads only the core flags (lineMarks) — the core
+ * never asks a module. A line with quantity 0 never reaches the client, so it never stops a send.
+ */
+export type SendIssueKind = "noPrice" | "testPrice" | "gone";
+export const SEND_ISSUE_KINDS: SendIssueKind[] = ["noPrice", "testPrice", "gone"];
+export type SendIssueLine = { lineId: string; optionId: string; name: string };
+export type SendIssues = Record<SendIssueKind, SendIssueLine[]>;
+export function sendIssues(doc: EstimateDoc): SendIssues {
+  const out: SendIssues = { noPrice: [], testPrice: [], gone: [] };
+  for (const o of doc.options)
+    for (const l of activeLines(o.lines)) {
+      if (zeroQty(l)) continue;
+      const marks = lineMarks(l);
+      for (const k of SEND_ISSUE_KINDS) if (marks.includes(k)) out[k].push({ lineId: l.id, optionId: o.id, name: l.name.trim() || "—" });
+    }
+  return out;
+}
+export const issueCount = (i: SendIssues) => SEND_ISSUE_KINDS.reduce((n, k) => n + i[k].length, 0);
 
 /** Summary fields kept on Estimate for lists (total, deposit, visible lines of the main option). */
 export function summarize(doc: EstimateDoc, approved?: { optionId: string; addonIds: string[] }) {

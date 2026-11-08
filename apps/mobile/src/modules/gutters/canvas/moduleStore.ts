@@ -54,12 +54,17 @@ export function makeModuleStore(get: () => StoreLike, id: string, now = () => ne
         for (const e of rows ?? ch.save) if (!removed.has(e.id)) send(K.eSave, { e: e as ElementRow & Record<string, unknown> }, (d) => withGutterData(d, putElement(e)), e.id);
         return;
       }
-      const from = base ?? own(was);
-      const changed = (Object.keys(mine) as (keyof MeasurementRow)[]).filter((k) => mine[k] !== from[k]);
+      // the status is the store's (M8b): «Смета» makes it ready, a change of the drawing after it makes it a draft
+      // again — what the screen holds may be older than either
+      const drawingChanged = ch.save.length > 0 || ch.remove.length > 0;
+      const status: MeasurementRow["status"] = drawingChanged ? "draft" : was.status;
+      const from = { ...(base ?? own(was)), status: was.status };
+      const mineNow = { ...mine, status };
+      const changed = (Object.keys(mineNow) as (keyof MeasurementRow)[]).filter((k) => mineNow[k] !== from[k]);
       if (changed.length) {
-        const row = { ...own(was), ...Object.fromEntries(changed.map((k) => [k, mine[k]])) } as MeasurementRow;
+        const row = { ...own(was), ...Object.fromEntries(changed.map((k) => [k, mineNow[k]])) } as MeasurementRow;
         if (!same(row, was)) putM(row);
-        base = mine;
+        base = mineNow;
       }
       for (const e of ch.save) send(K.eSave, { e: e as ElementRow & Record<string, unknown> }, (d) => withGutterData(d, putElement(e)), e.id);
       for (const x of ch.remove) send(K.eRemove, { id: x }, (d) => withGutterData(d, dropElement(x)));
