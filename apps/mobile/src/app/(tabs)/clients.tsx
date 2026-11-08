@@ -220,6 +220,7 @@ export default function Clients() {
       ) : null}
       <Sheet visible={more} onClose={() => setMore(false)} title={t("clients.title")}>
         <ListRow title={t("client.import.menu")} onPress={() => { setMore(false); router.push("/client/import"); }} />
+        <ListRow title={t("client.imports.menu")} onPress={() => { setMore(false); router.push("/client/imports"); }} />
       </Sheet>
     </Screen>
   );

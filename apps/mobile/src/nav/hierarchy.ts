@@ -104,6 +104,8 @@ export function navContext(pathname: string, params: P, db: DB, role: Role, opts
       }
       // wave 4b-2 (13 §3.16): the import is under Clients, not a client card
       if (id === "import") return { section: "clients", kind: "client.import.title", up: { href: "/clients", label: K("tab.clients") } };
+      // step 17 C3 (04 §14.4): the imports of clients are under Clients too
+      if (id === "imports") return { section: "clients", kind: "client.imports.title", up: { href: "/clients", label: K("tab.clients") } };
       // wave 4 (13 §3.3): a row's list of the client (/client/<id>?s=jobs) sits under its client
       if (one(params.s)) return { section: "clients", kind: "client.card", up: toClient(id) };
       return { section: "clients", kind: "client.card", up: { href: "/clients", label: K("tab.clients") } };

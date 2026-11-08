@@ -46,6 +46,7 @@ describe("navigation hierarchy: back = one level up", () => {
     expect(navContext("/client/edit", {}, db, "director")).toMatchObject({ kind: "clients.new", up: { href: "/clients" } });
     // wave 4b-2: the CSV import is under Clients, not a client called «import»
     expect(navContext("/client/import", {}, db, "director")).toMatchObject({ section: "clients", kind: "client.import.title", up: { href: "/clients" } });
+    expect(navContext("/client/imports", {}, db, "director")).toMatchObject({ section: "clients", kind: "client.imports.title", up: { href: "/clients" } });
     const v = db.visits.find((x) => x.jobId === job.id)!;
     expect(navContext(`/visit/${v.id}`, {}, db, "dispatcher").up?.href).toBe(`/job/${job.id}`);
     expect(navContext(`/visit/${v.id}`, {}, db, "tech")).toMatchObject({ section: "home", up: { href: "/visits" } });
