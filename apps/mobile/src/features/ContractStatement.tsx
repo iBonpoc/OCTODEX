@@ -7,10 +7,11 @@ import { isOverdue, useStore } from "@/data/store";
 import type { Invoice } from "@/data/types";
 import { useI18n, type DictKey } from "@/i18n";
 import { MoneyField, PctField } from "./fields";
-import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
+import { Button, Segmented, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { Card, CardList, Divider, ItemCard, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { Card, Divider, ListRow, RowView, SectionTitle } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
 
 export function invoiceChip(i: Invoice): { s: "ok" | "info" | "warn" | "bad"; l: DictKey } {
   if (i.paidCents >= i.totalCents) return { s: "ok", l: "money.paid" };
@@ -68,21 +69,25 @@ export function ContractStatement({ jobId }: { jobId: string }) {
         ) : null}
       </Card>
       {invoices.length ? (
-        <CardList>
-          {invoices.map((i, n) => {
+        <CardGrid>
+          {invoices.map((i) => {
             const chip = invoiceChip(i);
             return (
-              <View key={i.id}>
-                <ItemCard
-                  title={`${i.number ? `${i.number} · ` : ""}${i.title || t(`inv.kind.${i.kind ?? "final"}` as DictKey)}`}
-                  subtitle={`${money(i.totalCents)} · ${t("money.due", { date: day(i.dueDate) })}${i.paidCents > 0 && i.paidCents < i.totalCents ? ` · ${t("inv.paidPart", { amount: money(i.paidCents) })}` : ""}`}
-                  right={<StatusChip status={chip.s} label={t(chip.l)} />}
-                  onPress={() => router.push(`/invoice/${i.id}`)}
-                />
-              </View>
+              // the contract's invoices (06 «Серия B», B4): what it is for, number · due · paid part, total on the right, status chip
+              <ListCard
+                key={i.id}
+                density="compact"
+                testID={`statement-invoice-${i.id}`}
+                lead={{ kind: "icon", icon: "invoice" }}
+                title={i.title || t(`inv.kind.${i.kind ?? "final"}` as DictKey)}
+                when={[i.number, t("money.due", { date: day(i.dueDate) }), i.paidCents > 0 && i.paidCents < i.totalCents ? t("inv.paidPart", { amount: money(i.paidCents) }) : undefined].filter(Boolean).join(" · ")}
+                value={money(i.totalCents)}
+                status={{ tone: chip.s, label: t(chip.l) }}
+                onPress={() => router.push(`/invoice/${i.id}`)}
+              />
             );
           })}
-        </CardList>
+        </CardGrid>
       ) : null}
       {st.toInvoice > 0 ? (
         <RowView style={{ flexWrap: "wrap" }}>

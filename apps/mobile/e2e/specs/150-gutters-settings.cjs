@@ -19,6 +19,13 @@ exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
+  // 390: what is changed seldom sits under «Ещё» (spec 33 П20.9) — open it; 820/1280 show every field
+  const more = async () => {
+    if (await tid("attr-more").count()) {
+      await tid("attr-more").getByRole("button").click();
+      await tid("attr-more-open").waitFor({ timeout: 5000 });
+    }
+  };
   const waitFor = async (ok, what, tries = 40) => {
     let v = await ok();
     for (let i = 0; i < tries && !v; i++) { await p.waitForTimeout(150); v = await ok(); }
@@ -93,6 +100,7 @@ exports.run = async (h) => {
   await waitFor(async () => (((await db()).moduleData?.gutters?.elements) || []).some((e) => e.kind === "run" && e.attrs.color === pal[4]), "a new run has the company's colour");
   if (!wide) await tid("draw-props").getByRole("button").click();
   await tid("attr-panel").waitFor({ timeout: 5000 });
+  await more();
   h.expect((await radios("attr-profile").count()) === 4, "the panel offers 4 profiles (no Box)");
   h.expect((await radios("attr-color").count()) === 8, "the panel offers the palette's 8 colours");
   await h.shot("canvas");

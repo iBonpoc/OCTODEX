@@ -15,7 +15,8 @@ import { canEditTemplates, canEditVisitSettings, visitSettings } from "@/feature
 import { Button, ReadOnly, StatusChip, Stepper, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, CardList, Empty, ItemCard, RowView, Screen } from "@/ui/surfaces";
+import { Card, Empty, RowView, Screen } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
 
 export default function CompanyChecklists() {
   const store = useStore();
@@ -45,10 +46,12 @@ export default function CompanyChecklists() {
   };
   const card = (x: ChecklistTemplate) => (
     <View key={x.id} testID={`chk-tpl-${x.id}`}>
-      <ItemCard
+      <ListCard
+        density="compact"
+        lead={{ kind: "icon", icon: "checklist" }}
         title={x.name}
-        subtitle={`${t("chk2.items", { n: x.items.length, m: x.items.filter((i) => i.required).length })} · ${when(x)}`}
-        right={x.archivedAt ? <StatusChip status="neutral" label={t("chk2.archived")} /> : x.module ? <StatusChip status="info" label={t("chk2.module", { m: x.module })} soft /> : null}
+        when={`${t("chk2.items", { n: x.items.length, m: x.items.filter((i) => i.required).length })} · ${when(x)}`}
+        status={x.archivedAt ? { tone: "neutral", label: t("chk2.archived") } : x.module ? { tone: "info", label: t("chk2.module", { m: x.module }) } : undefined}
         onPress={() => router.push(`/company/checklist/${x.id}`)}
       />
     </View>
@@ -64,11 +67,11 @@ export default function CompanyChecklists() {
       {live.length === 0 ? (
         <Empty icon="checklist" title={t("chk2.empty")} />
       ) : (
-        <CardList>{live.map(card)}</CardList>
+        <CardGrid>{live.map(card)}</CardGrid>
       )}
       {archived.length ? (
         showArchived ? (
-          <CardList>{archived.map(card)}</CardList>
+          <CardGrid>{archived.map(card)}</CardGrid>
         ) : (
           <Button label={t("chk2.showArchived", { n: archived.length })} variant="ghost" onPress={() => setShowArchived(true)} />
         )
