@@ -85,7 +85,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const live = <T,>(table: string, cols = "*", order = byId) =>
     pages<T>(() => supabase.from(table).select(cols).eq("company_id", companyId).is("deleted_at", null), order);
   const every = <T,>(table: string, cols: string, order = byId) => pages<T>(() => supabase.from(table).select(cols).eq("company_id", companyId), order);
-  const [mems, sources, customers, contacts, properties, jobs, visits, assignees, leads, estimates, versions, options, lines, approvals, invoices, payments, files, expenses, catalogRows, lineCosts, notifications] =
+  const [mems, sources, customers, contacts, properties, jobs, visits, assignees, leads, estimates, versions, options, lines, approvals, invoices, payments, files, expenses, catalogRows, lineCosts, notifications, itemCosts, versionCosts] =
     await Promise.all([
       pages<Row>(() => supabase.from("memberships").select("user_id, role, status, can_sign_contracts, title, his_registration_number, users!memberships_user_id_fkey(full_name, email)").eq("company_id", companyId).in("status", ["active", "disabled"]).is("deleted_at", null), byId),
       live<Row>("lead_sources", "id, name, kind, phone, email, customer_id, note, is_active, is_system, position"),
@@ -113,6 +113,10 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       // Costs are visible only to owner/admin/office: for others the query returns nothing.
       live<Row>("estimate_line_costs", "line_item_id, unit_cost_cents", key("line_item_id")).catch(() => [] as Row[]),
       q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
+      // 19 §9: the price list's costs and the estimates' margins — only who sees costs gets rows (RLS); a server before
+      // the migration has no such tables: the old columns (catalog_items, totals.marginPct) are read instead
+      every<Row>("catalog_item_costs", "item_id, unit_cost_cents, vendor_tax_bps, markup_bps", key("item_id")).catch(() => [] as Row[]),
+      every<Row>("estimate_version_costs", "version_id, margin_pct", key("version_id")).catch(() => [] as Row[]),
     ]);
   // E2b-2: employees' saved signatures (RLS: your own, and the owner / admin see the team's)
   const signatureRows = await every<Row>("member_signatures", "id, user_id, svg, name, title, created_at, revoked_at").catch(() => [] as Row[]);
@@ -224,6 +228,8 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     contactsOfLead.set(s(r.lead_id), list);
   }
   const costOf = new Map(lineCosts.map((r) => [s(r.line_item_id), n(r.unit_cost_cents)]));
+  // the side table's row wins over the item's own (blank since 20261108130000) columns
+  const itemCostOf = new Map(itemCosts.map((r) => [s(r.item_id), { unit_cost_cents: r.unit_cost_cents, vendor_tax_bps: r.vendor_tax_bps, markup_bps: r.markup_bps }]));
   const withCosts = (doc: unknown): EstimateDoc | undefined => {
     const d = doc as EstimateDoc | null;
     if (!d || !Array.isArray(d.options) || !d.settings) return undefined;
@@ -335,6 +341,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     }));
 
   const versionOf = new Map(versions.map((v) => [s(v.id), v]));
+  const marginOf = new Map(versionCosts.map((r) => [s(r.version_id), (r.margin_pct as string | null) ?? null]));
   const mappedEstimates: Estimate[] = estimates.map((e) => {
     const ver = versionOf.get(s(e.current_version_id));
     const totals = (ver?.totals ?? {}) as { total?: number; deposit?: number; marginPct?: string | null };
@@ -358,7 +365,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       // approved = both signed: the moment the company signed (a legacy contract signed before E2a: the client's moment)
       approvedAt: e.status === "approved" ? ((csig?.signed_at ?? appr?.signed_at) as string | null) ?? undefined : undefined,
       depositCents: sel?.deposit !== undefined ? n(sel.deposit) : totals.deposit,
-      marginPct: totals.marginPct ?? null,
+      marginPct: marginOf.has(s(ver?.id)) ? marginOf.get(s(ver?.id)) ?? null : totals.marginPct ?? null,
       signature: (appr?.signature_svg as string | null) ?? undefined,
       doc: withCosts(ver?.calc_inputs),
       token: (e.public_token as string | null) ?? undefined,
@@ -619,6 +626,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     })),
     catalog: catalogRows
       .filter((r) => r.is_active !== false)
+      .map((r): Row => ({ ...r, ...itemCostOf.get(s(r.id)) }))
       .map((r) => ({
         id: s(r.id),
         kind: s(r.kind) as CatalogItem["kind"],

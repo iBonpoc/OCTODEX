@@ -851,7 +851,17 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
           op.onlyNew ? { onConflict: "id", ignoreDuplicates: true } : { onConflict: "id" },
         ),
       );
-      if (!op.onlyNew) return;
+      if (!op.onlyNew) {
+        // 19 §9: the server moves a cost sent above into catalog_item_costs, but a null there means «not sent» (old
+        // phones); this row sets exactly what the item has, so a cost can be cleared. No right to see costs (42501,
+        // sales) or a server before the migration (no table) — the item itself is saved.
+        const r = await supabase.from("catalog_item_costs").upsert(
+          { item_id: it.id, company_id: c, unit_cost_cents: it.costCents ?? null, vendor_tax_bps: it.vendorTaxBps ?? null, markup_bps: it.markupBps ?? null },
+          { onConflict: "item_id" },
+        );
+        if (r.error && !["42501", "42P01", "PGRST205"].includes(r.error.code ?? "")) await run(Promise.resolve(r));
+        return;
+      }
       // «nothing» is not «done» (security check #377): the row with this id must now be this company's
       const { data: row } = await read(supabase.from("catalog_items").select("id, deleted_at").eq("id", it.id).eq("company_id", c).maybeSingle());
       // not visible: the id is another company's row (RLS hides it) — the item was never made; the server's «no»
