@@ -1,0 +1,214 @@
+/**
+ * Step 14 CH1b (docs/specs/08 §10.1, §11.3): the checklist mutations of the store. Locally at once (offline); in the
+ * cloud a tick is one row's update (chk.item.set), never the whole list; a photo item's photo goes out FIRST — the
+ * server takes only a photo of the visit on an item (migration 20261108140000), so the item's op waits behind it.
+ * React's hooks: test/support/miniReact.ts; the server (repo, ops), the sign-in and AsyncStorage are stand-ins.
+ */
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("react", () => import("./support/miniReact"));
+vi.mock("react/jsx-runtime", () => import("./support/miniReact"));
+vi.mock("react/jsx-dev-runtime", () => import("./support/miniReact"));
+vi.mock("expo-crypto", () => ({ randomUUID: () => globalThis.crypto.randomUUID() }));
+const storage = new Map<string, string>();
+vi.mock("@react-native-async-storage/async-storage", () => ({
+  default: {
+    getItem: async (k: string) => storage.get(k) ?? null,
+    setItem: async (k: string, v: string) => void storage.set(k, v),
+    getAllKeys: async () => [...storage.keys()],
+    multiRemove: async (ks: string[]) => ks.forEach((k) => storage.delete(k)),
+    removeItem: async (k: string) => void storage.delete(k),
+  },
+}));
+vi.mock("@/cloud/client", () => ({ supabase: {} }));
+const auth = { ready: true, session: null as object | null, company: null as object | null, userId: null as string | null };
+vi.mock("@/cloud/auth", () => ({ useAuth: () => auth }));
+type Deferred<T> = { promise: Promise<T>; resolve: (v: T) => void };
+const deferred = <T,>(): Deferred<T> => {
+  let resolve!: (v: T) => void;
+  const promise = new Promise<T>((a) => (resolve = a));
+  return { promise, resolve };
+};
+const server = { loads: [] as Deferred<unknown>[], sends: [] as { op: { k: string } & Record<string, unknown>; d: Deferred<void> }[] };
+vi.mock("@/cloud/repo", async (orig) => ({
+  ...(await orig<object>()),
+  loadCompanyDB: () => {
+    const d = deferred<unknown>();
+    server.loads.push(d);
+    return d.promise;
+  },
+}));
+vi.mock("@/cloud/ops", async (orig) => ({
+  ...(await orig<object>()),
+  applyOp: (op: { k: string }) => {
+    const d = deferred<void>();
+    server.sends.push({ op: op as { k: string } & Record<string, unknown>, d });
+    return d.promise;
+  },
+  renewSession: async () => {},
+  sendVisitPoint: () => new Promise(() => {}),
+}));
+vi.mock("@/cloud/outboxTiming", () => ({ SEND_AFTER_MS: 0, readyToSend: () => true }));
+vi.mock("@/data/appActive", () => ({ onAppActive: () => () => {}, onAppLeave: () => () => {} }));
+vi.mock("@/data/outboxRetry", async (orig) => ({ ...(await orig<object>()), backoffMs: () => 0 }));
+
+import { render, settle, type Root } from "./support/miniReact";
+import { StoreProvider } from "../src/data/store";
+import { makeSeed } from "../src/data/seed";
+import type { DB, Visit } from "../src/data/types";
+
+type Value = {
+  db: DB;
+  mode: string;
+  checkItem: (visitId: string, itemId: string, done: boolean) => () => void;
+  toggleCheck: (visitId: string, itemId: string) => () => void;
+  skipItems: (visitId: string, itemIds: string[], reason?: string, text?: string) => () => void;
+  attachItemPhoto: (visitId: string, itemId: string, uri?: string) => () => void;
+  addCheckItem: (visitId: string, label: string) => () => void;
+  addVisitItem: (visitId: string, label: string, required: boolean) => () => void;
+  removeVisitItem: (visitId: string, itemId: string) => () => void;
+  reviewVisitMissed: (visitId: string) => () => void;
+  setVisitSettings: (patch: object) => () => void;
+};
+type P = { children: null };
+const valueOf = (r: Root<P>) => (r.out as { props: { value: Value } }).props.value;
+const wait = (ms: number) => new Promise((res) => setTimeout(res, ms));
+const tick = async () => {
+  await wait(1700); // the outbox tick
+  await settle();
+};
+let root: Root<P> | null = null;
+
+const VISIT = "00000000-0000-4000-8000-0000000000f1";
+const ITEM = "00000000-0000-4000-8000-0000000000a1";
+const PHOTO_ITEM = "00000000-0000-4000-8000-0000000000a2";
+function company(): DB {
+  const db = makeSeed();
+  const v0 = db.visits[0]!;
+  const v: Visit = {
+    ...v0, id: VISIT, step: "working", photos: [],
+    checklist: [
+      { id: ITEM, label: "Confirm scope", done: false, kind: "check", required: true },
+      { id: PHOTO_ITEM, label: "Photo of the area", done: false, kind: "photo", required: true },
+    ],
+  };
+  return { ...db, me: "u1", visits: [v, ...db.visits.slice(1)] };
+}
+const visitOf = (r: Root<P>) => valueOf(r).db.visits.find((v) => v.id === VISIT)!;
+
+async function signedIn(): Promise<Root<P>> {
+  Object.assign(auth, { session: {}, userId: "u1", company: { companyId: "c1", role: "owner", companyName: "Co" } });
+  const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
+  await settle();
+  server.loads.splice(0).forEach((d) => d.resolve(company()));
+  await settle();
+  expect(valueOf(r).mode).toBe("cloud");
+  return r;
+}
+
+beforeEach(() => {
+  storage.clear();
+  server.loads.length = 0;
+  server.sends.length = 0;
+  Object.assign(auth, { session: null, userId: null, company: null });
+});
+afterEach(() => {
+  root?.unmount();
+  root = null;
+});
+
+describe("unit:checklistStore — a tick", () => {
+  it("at once on the phone; to the server one row's update, not the whole list", async () => {
+    const r = await signedIn();
+    valueOf(r).checkItem(VISIT, ITEM, true);
+    await settle();
+    expect(visitOf(r).checklist[0]).toMatchObject({ done: true, doneBy: "u1" });
+    await tick();
+    expect(server.sends.map((s) => s.op.k)).toEqual(["chk.item.set"]);
+    expect(server.sends[0]!.op).toMatchObject({ visitId: VISIT, itemIds: [ITEM], done: true });
+  });
+  it("«Отменить» takes the tick back before it is sent", async () => {
+    const r = await signedIn();
+    const undo = valueOf(r).toggleCheck(VISIT, ITEM);
+    await settle();
+    expect(visitOf(r).checklist[0]!.done).toBe(true);
+    undo();
+    await settle();
+    expect(visitOf(r).checklist[0]!.done).toBe(false);
+    await tick();
+    expect(server.sends).toEqual([]);
+  });
+});
+
+describe("unit:checklistStore — a photo item (the order of the queue)", () => {
+  it("photo.add goes first; the item's op waits for it and carries the photo's id", { timeout: 15_000 }, async () => {
+    const r = await signedIn();
+    valueOf(r).attachItemPhoto(VISIT, PHOTO_ITEM, "file:///p.jpg");
+    await settle();
+    const v = visitOf(r);
+    const photo = v.photos.at(-1)!;
+    expect(photo.kind).toBe("after"); // the visit is at work: «after» (§11.5 №27)
+    expect(v.checklist[1]).toMatchObject({ done: true, photoIds: [photo.id] });
+    await tick();
+    // only the photo is out; the item's op waits while the photo has not reached the server
+    expect(server.sends.map((s) => s.op.k)).toEqual(["photo.add"]);
+    await tick();
+    expect(server.sends.map((s) => s.op.k)).toEqual(["photo.add"]);
+    server.sends[0]!.d.resolve();
+    await settle();
+    await tick();
+    expect(server.sends.map((s) => s.op.k)).toEqual(["photo.add", "chk.item.set"]);
+    expect(server.sends[1]!.op).toMatchObject({ itemIds: [PHOTO_ITEM], done: true, photoIds: [photo.id] });
+  });
+  it("«Отменить» takes off both the photo and the item's tick", async () => {
+    const r = await signedIn();
+    const undo = valueOf(r).attachItemPhoto(VISIT, PHOTO_ITEM);
+    await settle();
+    undo();
+    await settle();
+    expect(visitOf(r).photos).toEqual([]);
+    expect(visitOf(r).checklist[1]).toMatchObject({ done: false });
+    expect(visitOf(r).checklist[1]!.photoIds).toBeUndefined();
+  });
+});
+
+describe("unit:checklistStore — skip, add, remove, «Просмотрено», photo rules", () => {
+  it("«Пропустить» marks the items skipped (not done) in one op", async () => {
+    const r = await signedIn();
+    valueOf(r).skipItems(VISIT, [ITEM, PHOTO_ITEM], "unsafe", " wet ");
+    await settle();
+    expect(visitOf(r).checklist.map((c) => [c.done, c.na?.reason, c.na?.text])).toEqual([[false, "unsafe", "wet"], [false, "unsafe", "wet"]]);
+    await tick();
+    expect(server.sends[0]!.op).toMatchObject({ k: "chk.item.set", itemIds: [ITEM, PHOTO_ITEM], skipped: true, naReason: "unsafe", naText: "wet" });
+  });
+  it("a tech's own item on site: optional, his, an insert of one row", async () => {
+    const r = await signedIn();
+    valueOf(r).addCheckItem(VISIT, "  Dog in the yard ");
+    await settle();
+    const added = visitOf(r).checklist.at(-1)!;
+    expect(added).toMatchObject({ label: "Dog in the yard", required: false, kind: "check", addedBy: "u1", position: 2 });
+    await tick();
+    expect(server.sends[0]!.op).toMatchObject({ k: "chk.item.add", item: { id: added.id, visitId: VISIT, required: false, position: 2 } });
+  });
+  it("a removal is one row's (soft); «Просмотрено» is the visit's", { timeout: 15_000 }, async () => {
+    const r = await signedIn();
+    valueOf(r).removeVisitItem(VISIT, ITEM);
+    valueOf(r).reviewVisitMissed(VISIT);
+    await settle();
+    expect(visitOf(r).checklist.map((c) => c.id)).toEqual([PHOTO_ITEM]);
+    expect(visitOf(r).checklistReviewedBy).toBe("u1");
+    await tick();
+    server.sends[0]?.d.resolve();
+    await settle();
+    await tick();
+    expect(server.sends.map((s) => s.op.k)).toEqual(["chk.item.remove", "chk.visit.review"]);
+  });
+  it("photo rules: the whole settings, with the defaults filled", async () => {
+    const r = await signedIn();
+    valueOf(r).setVisitSettings({ minPhotosAfter: 3 });
+    await settle();
+    expect(valueOf(r).db.company?.visitSettings).toEqual({ photosBeforeRequired: true, photosAfterRequired: true, minPhotosBefore: 1, minPhotosAfter: 3 });
+    await tick();
+    expect(server.sends[0]!.op).toMatchObject({ k: "company.visitSettings", settings: { minPhotosAfter: 3, photosBeforeRequired: true } });
+  });
+});
