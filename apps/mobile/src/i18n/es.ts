@@ -2785,4 +2785,9 @@ export const es: Dict = {
   "chk2.needItem": "Agregue al menos un punto",
   "chk2.notFound": "Plantilla no encontrada",
   "chk2.module": "Módulo: {m}",
+  // «Шаблоны чек-листов» CH2b: «Не сделано» in «Требует внимания» (docs/specs/08 §8)
+  "chk2b.att.missed": "{name} · visita {date}: {n} sin hacer",
+  "chk2b.att.chip": "Sin hacer",
+  "chk2b.reviewed": "Revisado",
+  "chk2b.reviewedToast": "Marcado como revisado",
 };

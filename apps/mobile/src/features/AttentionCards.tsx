@@ -15,12 +15,14 @@ import { attentionPeople, subjectOf } from "./attentionPeople";
 import { AssignSheet, ReplySheet } from "./sheets";
 import { Button } from "@/ui/controls";
 import { ListCard } from "@/ui/listCard";
+import { useToast } from "@/ui/overlays";
 
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 
 export function useAttentionVerbs() {
-  const { db } = useStore();
+  const { db, online, reviewVisitMissed } = useStore();
   const { t } = useI18n();
+  const toast = useToast();
   const [reply, setReply] = useState<string | null>(null);
   const [assign, setAssign] = useState<string | null>(null);
   /** the verb of a reason, only where an action already exists; otherwise the row itself opens the record */
@@ -37,6 +39,9 @@ export function useAttentionVerbs() {
         const phone = v ? visitContext(db, v).customer?.phone?.replace(/[^\d+]/g, "") : undefined;
         return phone ? { label: t("visit.call"), onPress: () => void Linking.openURL(`tel:${phone}`).catch(() => undefined) } : undefined;
       }
+      // «Просмотрено» (docs/specs/08 §8): the card goes, the items stay «not done» in the visit's history; «Отменить» 5 s
+      case "visitMissed":
+        return { label: t("chk2b.reviewed"), onPress: () => toast.show(online ? t("chk2b.reviewedToast") : t("offline.queued"), reviewVisitMissed(it.refId)) };
       default:
         return undefined;
     }
