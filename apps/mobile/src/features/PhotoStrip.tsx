@@ -12,7 +12,7 @@ import { Sheet } from "@/ui/overlays";
 const THUMB = component.photoThumb;
 
 /** Before/after photos. Camera on a phone; library/file picker on web. Tap a photo to view it or delete it. */
-export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]; onAdd: (uri?: string) => void; onRemove?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
+export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]; /** none: the photos are only shown (no «Добавить фото» tile) */ onAdd?: (uri?: string) => void; onRemove?: (id: string) => void; /** the viewer's title when the photos are not a visit's before / after (a module's measurement) */ title?: string }) {
   const { c } = useTheme();
   const { t } = useI18n();
   const [open, setOpen] = useState<Photo | null>(null);
@@ -23,32 +23,34 @@ export function PhotoStrip({ photos, onAdd, onRemove, title }: { photos: Photo[]
         ? await ImagePicker.launchCameraAsync({ quality: 0.7 }).catch(() => null)
         : await ImagePicker.launchImageLibraryAsync({ mediaTypes: ["images"], quality: 0.7 }).catch(() => null);
     if (!res || res.canceled) return;
-    onAdd(res.assets[0]?.uri);
+    onAdd?.(res.assets[0]?.uri);
   };
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space[2] }}>
-      <Press
-        onPress={pick}
-        accessibilityRole="button"
-        accessibilityLabel={t("visit.addPhoto")}
-        style={{
-          width: THUMB,
-          height: THUMB,
-          borderRadius: radius.inner,
-          borderWidth: 1,
-          borderStyle: "dashed",
-          borderColor: c.bd,
-          backgroundColor: c.in,
-          alignItems: "center",
-          justifyContent: "center",
-          gap: component.photoGap,
-        }}
-      >
-        <Icon name="camera" s={size.iconMd} />
-        <T v="micro" tone="mut">
-          {t("visit.addPhoto")}
-        </T>
-      </Press>
+      {onAdd ? (
+        <Press
+          onPress={pick}
+          accessibilityRole="button"
+          accessibilityLabel={t("visit.addPhoto")}
+          style={{
+            width: THUMB,
+            height: THUMB,
+            borderRadius: radius.inner,
+            borderWidth: 1,
+            borderStyle: "dashed",
+            borderColor: c.bd,
+            backgroundColor: c.in,
+            alignItems: "center",
+            justifyContent: "center",
+            gap: component.photoGap,
+          }}
+        >
+          <Icon name="camera" s={size.iconMd} />
+          <T v="micro" tone="mut">
+            {t("visit.addPhoto")}
+          </T>
+        </Press>
+      ) : null}
       {photos.map((p, i) => (
         <Press
           key={p.id}

@@ -29,12 +29,6 @@ const LINES: Record<string, string[]> = {
 /** dictionary keys that may carry the word besides mod.gutters.* */
 const KEYS = new Set([
   "trade.gutters", // the direction preset above
-  // old module screens without routes (src/modules/gutters/DrawingScreen.tsx, QuickEstimateScreen.tsx): to mod.gutters.* with M5
-  "draw.modeGutter",
-  "draw.hintGutter",
-  "draw.total",
-  "est.length",
-  "est.empty",
 ]);
 
 function files(dir: string): string[] {

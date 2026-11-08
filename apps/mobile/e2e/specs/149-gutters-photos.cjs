@@ -4,7 +4,8 @@
  * - the trial on: a drawn run, once saved → its attributes have «Фото элемента»: a photo goes to DB.files with the
  *   measurement and the run; the measurement's own photos (390: «Фото» in the top bar → a sheet; 820/1280: the side
  *   panel when nothing is picked) — with the measurement, without an element;
- * - removing a photo → «Отменить» brings it back; a reload keeps both.
+ * - removing a photo → «Отменить» brings it back; a reload keeps both;
+ * - past the trial (founder О2: a draft opens for reading): both photos are shown, no «Добавить фото», no «Удалить».
  * Finds things by testID; waits on what it checks.
  */
 const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==", "base64");
@@ -97,4 +98,22 @@ exports.run = async (h) => {
   await waitFor(async () => (await photos()).filter((f) => f.measurementId === m.id).length === 2, "after a reload: both photos");
   if (!wide) await tid("draw-photos-open").getByRole("button").click();
   await waitFor(async () => (await tid("draw-photos").count()) === 1 && /Фото замера · 1/.test(await tid("draw-photos").innerText()), "after a reload: the measurement shows its photo");
+
+  // past the trial: the photos are shown, read only (M5e)
+  await p.waitForTimeout(600); // the phone's copy is written with a pause: let it land before editing it
+  await p.evaluate(() => {
+    const raw = JSON.parse(localStorage.getItem("octo.db.v5"));
+    raw.db.company.modules.gutters.trialEndsAt = new Date(Date.now() - 86_400_000).toISOString();
+    localStorage.setItem("octo.db.v5", JSON.stringify(raw));
+  });
+  await h.go(`/module/gutters/draw?m=${m.id}`);
+  await tid("draw-not-saved").waitFor({ timeout: 8000 });
+  if (!wide) await tid("draw-photos-open").getByRole("button").click();
+  await tid("draw-photos").waitFor({ timeout: 5000 });
+  h.expect(/Фото замера · 1/.test(await tid("draw-photos").innerText()), "past the trial: the measurement's photo is shown");
+  h.expect((await tid("draw-photos").getByRole("button", { name: "Добавить фото" }).count()) === 0, "…and nothing can be added");
+  await tid("draw-photos").getByRole("button", { name: "Фото 1" }).click();
+  await p.waitForTimeout(400);
+  h.expect((await p.getByRole("button", { name: "Удалить фото" }).count()) === 0, "…nor removed");
+  await h.shot("read-only");
 };
