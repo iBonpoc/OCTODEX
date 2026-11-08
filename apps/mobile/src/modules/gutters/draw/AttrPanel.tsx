@@ -14,7 +14,7 @@ import { useI18n } from "@/i18n";
 import { Button, ChoiceChips, StatusChip, Stepper, TextField, Toggle } from "@/ui/controls";
 import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
-import { COLORS, DS_HEADS, DS_SHAPES, ELBOW_STYLES, smallerSizes, MAX_DS_HEIGHT_FT, OFFSETS_IN, elbowsOf, hangerKitsFor, MILL_ONLY, MOUNTS, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
+import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
 import { ftIn } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
@@ -247,9 +247,23 @@ export function RunAttrsView({
   );
 }
 
+/** elbows (founder 08.11): a count for every style of the shape — «A 2 шт, B 1 шт» */
+function Elbows({ ds, onAttrs }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void }) {
+  const { t } = useI18n();
+  const counts = elbowCounts(ds);
+  return (
+    <Field label={t(k("elbows"))} testID="attr-elbow-qty">
+      {Object.entries(counts).map(([style, qty]) => (
+        <View key={style} testID={`attr-elbow-${style}`}>
+          <Stepper label={elbow(style)} value={qty} min={0} max={12} onChange={(n) => onAttrs({ elbows: withElbowQty(ds, style, n) })} />
+        </View>
+      ))}
+    </Field>
+  );
+}
+
 export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact }: { ds: DrawnDownspout; onAttrs: (p: Partial<DsAttrs>) => void; ch?: Choices; compact?: boolean }) {
   const { t } = useI18n();
-  const e = elbowsOf(ds);
   const w = wallOf(ds.shape, ds.wall);
   const sizes = withCurrent(ch.offer.dsSizes[ds.shape], ds.size);
   const styles = withCurrent(ch.offer.dsStyles, ds.dsStyle ?? "plain");
@@ -262,14 +276,11 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact }: { ds:
         <>
       <Pick label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
           <Stock a={ds} set={onAttrs} ch={ch} part="color" />
-      <View testID="attr-elbow-qty">
-        <Stepper label={t(k("elbowQty"))} value={e.qty} min={0} max={12} onChange={(qty) => onAttrs({ elbows: [{ style: e.style, qty }] })} />
-      </View>
+      <Elbows ds={ds} onAttrs={onAttrs} />
           <More open0={rareSet(ds)} id={ds.id} label={t(k("moreDs"))}>
       <Pick label={t(k("shape"))} testID="attr-shape" items={DS_SHAPES.map((s) => ({ key: s, label: t(k(`sh.${s}`)) }))} value={ds.shape} onChange={(shape) => onAttrs({ shape })} />
       <Pick label={t(k("dsStyle"))} testID="attr-ds-style" offered={ch.offer.dsStyles} items={styles.map((s) => ({ key: s, label: t(k(`st.${s}`)) }))} value={ds.dsStyle ?? "plain"} onChange={(dsStyle) => onAttrs({ dsStyle: dsStyle as DsAttrs["dsStyle"] })} />
             <Stock a={ds} set={onAttrs} ch={ch} part="rest" />
-      <Pick label={t(k("elbows"))} testID="attr-elbows" items={ELBOW_STYLES[ds.shape].map((s) => ({ key: s, label: elbow(s) }))} value={e.style} onChange={(style) => onAttrs({ elbows: [{ style, qty: e.qty }] })} />
       <Pick label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)) }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
       <Pick label={t(k("wall"))} testID="attr-wall" items={WALLS.map((x) => ({ key: x, label: t(k(`w.${x}`)) }))} value={w.wall} onChange={(wall) => onAttrs({ wall })} />
       <Pick label={t(k("wallKit"))} testID="attr-wall-kit" offered={wallKitsFor(ds.shape, w.wall, ch)} items={wallKits.map((id) => ({ key: id, label: t(k(`wk.${id}`)) }))} value={w.kit} onChange={(kit) => onAttrs({ wall: kit })} />
@@ -282,10 +293,7 @@ export function DsAttrsView({ ds, onAttrs, ch = MODULE_CHOICES, compact }: { ds:
       <Pick label={t(k("size"))} testID="attr-ds-size" offered={ch.offer.dsSizes[ds.shape]} items={sizes.map((s) => ({ key: s, label: dsSize(s) }))} value={ds.size} onChange={(size) => onAttrs({ size })} />
       <Pick label={t(k("dsStyle"))} testID="attr-ds-style" offered={ch.offer.dsStyles} items={styles.map((s) => ({ key: s, label: t(k(`st.${s}`)) }))} value={ds.dsStyle ?? "plain"} onChange={(dsStyle) => onAttrs({ dsStyle: dsStyle as DsAttrs["dsStyle"] })} />
       <Stock a={ds} set={onAttrs} ch={ch} />
-      <Pick label={t(k("elbows"))} testID="attr-elbows" items={ELBOW_STYLES[ds.shape].map((s) => ({ key: s, label: elbow(s) }))} value={e.style} onChange={(style) => onAttrs({ elbows: [{ style, qty: e.qty }] })} />
-      <View testID="attr-elbow-qty">
-        <Stepper label={t(k("elbowQty"))} value={e.qty} min={0} max={12} onChange={(qty) => onAttrs({ elbows: [{ style: e.style, qty }] })} />
-      </View>
+      <Elbows ds={ds} onAttrs={onAttrs} />
       <Pick label={t(k("bottom"))} testID="attr-bottom" offered={ch.offer.bottoms} items={bottoms.map((b) => ({ key: b, label: t(k(`b.${b}`)) }))} value={ds.bottom.kind} onChange={(kind) => onAttrs({ bottom: { ...ds.bottom, kind } })} />
       <Pick label={t(k("wall"))} testID="attr-wall" items={WALLS.map((x) => ({ key: x, label: t(k(`w.${x}`)) }))} value={w.wall} onChange={(wall) => onAttrs({ wall })} />
       <Pick label={t(k("wallKit"))} testID="attr-wall-kit" offered={wallKitsFor(ds.shape, w.wall, ch)} items={wallKits.map((id) => ({ key: id, label: t(k(`wk.${id}`)) }))} value={w.kit} onChange={(kit) => onAttrs({ wall: kit })} />

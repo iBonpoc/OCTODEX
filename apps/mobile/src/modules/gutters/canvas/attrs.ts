@@ -195,6 +195,42 @@ export function elbowsOf(a: Pick<DsAttrs, "shape" | "elbows">): { style: string;
   return e ? { style: e.style, qty: a.elbows!.reduce((s, x) => s + x.qty, 0) } : { style: ELBOW_STYLES[shape][0]!, qty: DEFAULT_ELBOWS };
 }
 
+/** elbows by style (founder 08.11: «A 2 шт, B 1 шт»): every style of the shape, 0 where none; unset — the engine's default */
+export function elbowCounts(a: Pick<DsAttrs, "shape" | "elbows">): Record<string, number> {
+  const shape = a.shape === "round" ? "round" : "rect";
+  const out: Record<string, number> = Object.fromEntries(ELBOW_STYLES[shape].map((s) => [s, 0]));
+  if (!a.elbows) out[ELBOW_STYLES[shape][0]!] = DEFAULT_ELBOWS;
+  else for (const e of a.elbows) if (e.style in out) out[e.style] = (out[e.style] ?? 0) + e.qty;
+  return out;
+}
+
+/** one style's count changed: the list the engine reads (styles with 0 left out; all 0 — one style at 0, not the default) */
+export function withElbowQty(a: Pick<DsAttrs, "shape" | "elbows">, style: string, qty: number): NonNullable<DsAttrs["elbows"]> {
+  const n = { ...elbowCounts(a), [style]: Math.max(0, Math.round(qty)) };
+  const list = Object.entries(n).filter(([, q]) => q > 0).map(([s, q]) => ({ style: s, qty: q }));
+  return list.length ? list : [{ style, qty: 0 }];
+}
+
+const SUP = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+const sup = (n: number) => String(n).split("").map((d) => SUP[Number(d)] ?? d).join("");
+
+/**
+ * The fittings of a downspout in one short word over its mark (founder 08.11): rect elbows by letter, one per piece
+ * (A 2 + B 1 → «AAB»); round ones by angle with the count small on top («45°²»); an offset — «O» and its inches small
+ * on top («O⁴»), one per piece. Nothing — "".
+ */
+export function dsCode(a: Pick<DsAttrs, "shape" | "elbows" | "offsets">): string {
+  const counts = elbowCounts(a);
+  const round = a.shape === "round";
+  let s = "";
+  for (const [style, q] of Object.entries(counts)) {
+    if (q <= 0) continue;
+    s += round ? `${style}°${q > 1 ? sup(q) : ""}` : style.repeat(q);
+  }
+  for (const o of a.offsets ?? []) if (o.qty > 0) s += `O${sup(o.lengthIn)}`.repeat(o.qty);
+  return s;
+}
+
 const same = (a: object, b: object) => JSON.stringify(sorted(a)) === JSON.stringify(sorted(b));
 const sorted = (o: object) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined).sort(([x], [y]) => (x < y ? -1 : 1)));
 
