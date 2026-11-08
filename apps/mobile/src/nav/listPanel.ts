@@ -8,9 +8,9 @@ import { useCallback, useEffect, useRef } from "react";
 import { Platform } from "react-native";
 import { router, useFocusEffect, useLocalSearchParams } from "expo-router";
 import { useDevice } from "@/theme/ThemeProvider";
-import { neighbor, panelId, panelKey } from "./listPanelRule";
+import { isOutside, neighbor, panelId, panelKey } from "./listPanelRule";
 
-export { neighbor, panelId, panelKey } from "./listPanelRule";
+export { isOutside, neighbor, panelId, panelKey } from "./listPanelRule";
 
 /** ↑/↓/Esc on the web while the list screen is in focus and a panel is open */
 export function usePanelKeys(on: boolean, act: (k: "up" | "down" | "close") => void) {
@@ -85,7 +85,7 @@ export function useListPanel(ids: readonly string[], href: (id: string) => strin
     desktop,
     openId,
     /** the open card is not among the rows now (out of the filter or the search): the panel says so */
-    outside: !!openId && !ids.includes(openId),
+    outside: isOutside(ids, openId),
     open: (id: string) => (desktop ? setOpen(id) : router.push(href(id))),
     close: () => setOpen(undefined),
     full: () => {

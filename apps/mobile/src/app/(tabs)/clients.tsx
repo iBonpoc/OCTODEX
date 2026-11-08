@@ -133,7 +133,11 @@ export default function Clients() {
             actions={
               office || canServe(db, openC.id) ? (
                 <>
-                  {office ? <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${openC.id}`)} /> : null}
+                  {office ? (
+                    <View testID="list-panel-edit">
+                      <Button label={t("ue.edit")} icon="pencil" variant="ghost" size="sm" onPress={() => router.push(`/client/edit?id=${openC.id}`)} />
+                    </View>
+                  ) : null}
                   {canServe(db, openC.id) ? <Fab placement="header" set="client" ctx={{ customerId: openC.id }} /> : null}
                 </>
               ) : undefined

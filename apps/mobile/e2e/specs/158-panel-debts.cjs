@@ -51,10 +51,18 @@ exports.run = async (h) => {
   await cards.first().waitFor();
   const n = await cards.count();
   h.expect(n >= 4, `enough clients to pass the edge (${n})`);
+  const last = cards.nth(n - 1);
+  const lb0 = await last.boundingBox();
+  h.expect(lb0 && lb0.y + lb0.height > 420, `before ↓ the last row is past the edge (${JSON.stringify(lb0)})`);
+  const ids = await cards.evaluateAll((els) => els.map((e) => e.getAttribute("aria-label") ?? ""));
+  const idOf = (label) => db.customers.find((c) => label.startsWith(c.name))?.id;
   await cards.first().click();
   await panel(h).waitFor();
-  for (let i = 1; i < n; i++) await p.keyboard.press("ArrowDown");
-  const last = cards.nth(n - 1);
+  // one step at a time: each ↓ waits for its own address
+  for (let i = 1; i < n; i++) {
+    await p.keyboard.press("ArrowDown");
+    h.expect(await openIs(h, idOf(ids[i])), `↓ ${i} → ${ids[i].slice(0, 30)}`);
+  }
   await p.waitForFunction(() => {
     const r = [...document.querySelectorAll('[data-testid="list-card"][aria-current="true"]')].find((x) => x.offsetParent !== null);
     if (!r) return false;
@@ -83,7 +91,7 @@ exports.run = async (h) => {
   await panel(h).getByTestId("list-panel-outside").waitFor({ state: "detached" });
   h.expect(await openIs(h, quiet.id), "the same client stays open");
 
-  await panel(h).getByRole("button", { name: /^Изменить/ }).first().click();
+  await panel(h).getByTestId("list-panel-edit").getByRole("button").first().click();
   await p.waitForURL(new RegExp(`/client/edit\\?id=${quiet.id}`));
 
   // the technician: no «Изменить» in the panel (as on the screen)
@@ -92,5 +100,5 @@ exports.run = async (h) => {
   const techCards = p.locator('[data-testid="list-card"]:visible');
   await techCards.first().click();
   await panel(h).waitFor();
-  h.expect((await panel(h).getByRole("button", { name: /^Изменить/ }).count()) === 0, "technician: no «Изменить» in the panel");
+  h.expect((await panel(h).getByTestId("list-panel-edit").count()) === 0, "technician: no «Изменить» in the panel");
 };
