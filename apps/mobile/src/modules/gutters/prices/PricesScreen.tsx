@@ -16,6 +16,7 @@ import type { PartQty } from "@octo/estimating-engine";
 import { useStore } from "@/data/store";
 import type { CatalogItem } from "@/data/types";
 import { attributesLine } from "@/features/catalogMatch";
+import { catalogUnitPrice } from "@/features/estimateDoc";
 import { useI18n, type DictKey } from "@/i18n";
 import { moduleState } from "@/modules/registry";
 import { useDevice } from "@/theme/ThemeProvider";
@@ -91,7 +92,7 @@ export default function GutterPricesScreen() {
           testID={`gpr-${it.placeholder ? "test" : "found"}-${row.part.key}`}
           title={title}
           lead={{ kind: "icon", icon: row.part.kind === "labor" ? "clock" : "box" }}
-          value={`${money(it.priceCents)} / ${unit}`}
+          value={`${money(catalogUnitPrice(it))} / ${unit}`}
           status={it.placeholder ? { tone: "warn", label: t(k("testPrice")) } : { tone: "ok", label: t(k("found")) }}
           edge={null}
           onPress={ro ? undefined : () => router.push(`/catalog/${it.id}`)}
@@ -182,7 +183,7 @@ export default function GutterPricesScreen() {
           {binds.length ? (
             binds.map((it) => (
               <View key={it.id} testID={`gpr-bind-${it.id}`}>
-                <ListRow title={it.name} subtitle={`${money(it.priceCents)} / ${it.unit}`} onPress={() => bindFor && bind(it, bindFor)} />
+                <ListRow title={it.name} subtitle={`${money(catalogUnitPrice(it))} / ${it.unit}`} onPress={() => bindFor && bind(it, bindFor)} />
               </View>
             ))
           ) : (
