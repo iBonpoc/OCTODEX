@@ -9845,4 +9845,43 @@ update public.memberships set permissions_override = permissions_override - 'vie
  where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T124 money in a template: whole cents, kept exactly ok'
 
+-- ---------------------------------------------------------------- T130: connecting Stripe — the doors of the Edge Function (docs/specs/35, 20b)
+:as_super
+select tst.ok(not has_function_privilege('authenticated', 'public.stripe_connect_target(uuid,uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.stripe_account_save(uuid,jsonb)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.stripe_connect_target(uuid,uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'public.stripe_account_save(uuid,jsonb)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.stripe_connect_target(uuid,uuid)', 'EXECUTE')
+          and has_function_privilege('service_role', 'public.stripe_account_save(uuid,jsonb)', 'EXECUTE'),
+  'T130 only the Edge Function (service_role) asks who may connect and saves the account');
+:as_service
+select tst.ok((public.stripe_connect_target('a0000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000') ->> 'allowed')::boolean
+          and public.stripe_connect_target('a0000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000') ->> 'account_id' = 'acct_T126A',
+  'T130 the owner may connect; the company''s account is known');
+select tst.ok(not (public.stripe_connect_target('a0000000-0000-0000-0000-000000000003', 'ca000000-0000-0000-0000-000000000000') ->> 'allowed')::boolean
+          and not (public.stripe_connect_target('a0000000-0000-0000-0000-000000000005', 'ca000000-0000-0000-0000-000000000000') ->> 'allowed')::boolean
+          and not (public.stripe_connect_target('b0000000-0000-0000-0000-000000000001', 'ca000000-0000-0000-0000-000000000000') ->> 'allowed')::boolean,
+  'T130 a tech, sales and another company''s owner may not');
+:as_super
+update public.memberships set role = 'admin' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_service
+select tst.ok(not (public.stripe_connect_target('a0000000-0000-0000-0000-000000000005', 'ca000000-0000-0000-0000-000000000000') ->> 'allowed')::boolean,
+  'T130 an admin does not connect: the Stripe account and its payouts belong to whoever fills the form');
+:as_super
+update public.memberships set role = 'sales' where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok(public.stripe_connect_target('a0000000-0000-0000-0000-000000000001', 'cf000000-0000-4000-8000-000000000000') is null, 'T130 an unknown company: nothing');
+select tst.ok((public.stripe_account_save('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126A","charges_enabled":true,"payouts_enabled":false,"requirements":{"currently_due":["a","b"]}}') ->> 'requirements_due')::int = 2,
+  'T130 the saved state comes back');
+select tst.fails($q$select public.stripe_account_save('ca000000-0000-0000-0000-000000000000', '{"id":"acct_Else"}')$q$, 'T130 the save keeps the company''s one account');
+:as_super
+alter table public.companies disable trigger t06_company_closed_guard;
+update public.companies set closed_at = now() where id = 'cb000000-0000-0000-0000-000000000000';
+:as_service
+select tst.fails($q$select public.stripe_account_save('cb000000-0000-0000-0000-000000000000', '{"id":"acct_T126B"}')$q$, 'T130 a closed company connects nothing');
+select tst.ok((public.stripe_connect_target('b0000000-0000-0000-0000-000000000001', 'cb000000-0000-0000-0000-000000000000') ->> 'closed')::boolean, 'T130 the Edge Function sees a closed company');
+:as_super
+update public.companies set closed_at = null where id = 'cb000000-0000-0000-0000-000000000000';
+alter table public.companies enable trigger t06_company_closed_guard;
+\echo 'T130 Stripe connect doors ok'
+
 \echo 'ALL TESTS PASSED'
