@@ -8712,8 +8712,8 @@ update public.estimate_versions set totals = '{"total": 30000, "deposit": 0, "ma
 delete from public.estimate_line_items where option_id = 'a1060000-0000-4000-8000-0000000000a1';
 insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
   ('a1060000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a1', 'Gutter (test)', 12, 1000);
--- his app has no costs: it sends marginPct null
-update public.estimate_versions set totals = '{"total": 12000, "deposit": 0, "marginPct": null}' where id = 'a1060000-0000-4000-8000-000000000002';
+-- his app has no costs: it sends marginPct null; first a save that keeps the total (a note, a title)
+update public.estimate_versions set totals = '{"total": 30000, "deposit": 0, "marginPct": null}' where id = 'a1060000-0000-4000-8000-000000000002';
 select tst.ok(tst.cnt('select 1 from public.estimate_line_costs') = 0, 'T106 the tech still reads no cost');
 -- the tech removes the whole second option (its lines first, as the app does)
 delete from public.estimate_line_items where option_id = 'a1060000-0000-4000-8000-0000000000a2';
@@ -8727,6 +8727,12 @@ select tst.ok((select margin_pct = '40.0' from public.estimate_version_costs whe
   'T106 the tech''s null margin does not erase the office''s');
 select tst.ok((select not totals ? 'marginPct' from public.estimate_versions where id = 'a1060000-0000-4000-8000-000000000002'),
   'T106 the tech''s margin key is taken out of totals all the same');
+-- the tech changes the money: the old margin is no longer true — not counted (null), never a wrong number
+:as_tech_a
+update public.estimate_versions set totals = '{"total": 12000, "deposit": 0, "marginPct": null}' where id = 'a1060000-0000-4000-8000-000000000002';
+:as_office_a
+select tst.ok((select margin_pct is null from public.estimate_version_costs where version_id = 'a1060000-0000-4000-8000-000000000002'),
+  'T106 the tech changed the total: the margin is «not counted», not the old 40.0');
 -- the option and its line come back (an op resent later, an undo): the cost comes back with the same line id
 :as_tech_a
 insert into public.estimate_options (id, company_id, version_id, name, position) values
@@ -8742,6 +8748,14 @@ insert into public.estimate_line_items (id, company_id, option_id, name, quantit
   ('a1060000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a2', 'Guard (test)', 5, 2000);
 select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b3'$q$) = 0,
   'T106 the office deletes and inserts: no cost comes back by itself');
+-- review №1: a cost the tech's delete kept aside does not come back on the office's insert (the office cleared it)
+:as_tech_a
+delete from public.estimate_line_items where id = 'a1060000-0000-4000-8000-0000000000b1';
+:as_office_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('a1060000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a1', 'Gutter (test)', 12, 1000);
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b1'$q$) = 0,
+  'T106 the office''s insert takes no kept cost back (a cost it cleared stays cleared)');
 -- the office's margin still works
 update public.estimate_versions set totals = '{"total": 12000, "deposit": 0, "marginPct": "38.5"}' where id = 'a1060000-0000-4000-8000-000000000002';
 select tst.ok((select margin_pct = '38.5' from public.estimate_version_costs where version_id = 'a1060000-0000-4000-8000-000000000002'), 'T106 the office sets the margin');
@@ -8752,6 +8766,21 @@ select tst.blocked('select * from public.estimate_line_costs_kept', 'T106 the te
 :as_super
 select tst.ok((select count(*) = 1 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000b2'),
   'T106 the cost of the removed line waits aside (30 days)');
+select tst.ok(not exists (select 1 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000b1'),
+  'T106 the office''s insert dropped what was kept for its line');
+select tst.ok((select count(*) = 3 from pg_trigger where tgenabled = 'O'
+                and tgname in ('t35_cost_keep', 't95_cost_restore', 't45_margin_move')), 'T106 the three triggers are on');
+-- another company: a cost kept for B under some id never goes to A's line with that id (the tech's restore path)
+insert into public.estimate_line_costs_kept (line_item_id, company_id, unit_cost_cents, currency)
+  values ('a1060000-0000-4000-8000-0000000000c1', 'cb000000-0000-0000-0000-000000000000', 777, 'USD');
+:as_tech_a
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
+  ('a1060000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a1', 'Downspout (test)', 1, 100);
+:as_super
+select tst.ok(not exists (select 1 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000c1')
+              and exists (select 1 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000c1'
+                            and company_id = 'cb000000-0000-0000-0000-000000000000'),
+  'T106 a cost kept for another company never reaches A''s line with the same id; B''s row stays');
 select tst.ok(not has_table_privilege('anon', 'public.estimate_line_costs_kept', 'select')
               and not has_table_privilege('authenticated', 'public.estimate_line_costs_kept', 'select'), 'T106 no grant on estimate_line_costs_kept');
 \echo 'T106 a tech''s edit of a draft keeps the office''s costs and margin ok'

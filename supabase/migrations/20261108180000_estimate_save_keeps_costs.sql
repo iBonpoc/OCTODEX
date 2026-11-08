@@ -55,12 +55,19 @@ begin
 end;
 $$;
 
--- AFTER INSERT of a line: a cost kept for this id (same company) goes back to it. The line's own company only: a line
--- id sent by another company finds nothing. A cost already there (the office wrote it) wins.
+-- AFTER INSERT of a line by who does not see costs: a cost kept for this id (same company) goes back to it. The
+-- line's own company only: a line id sent by another company finds nothing. The office's insert takes nothing back
+-- (it sends its own costs; one it cleared must stay cleared, review №1) and drops what was kept for that id.
+-- A cost already there wins.
 create or replace function app.tg_line_cost_restore()
 returns trigger language plpgsql security definer set search_path = '' as $$
 declare k public.estimate_line_costs_kept;
 begin
+  delete from public.estimate_line_costs_kept where kept_at < now() - interval '30 days';
+  if auth.uid() is null or app.can_view_costs(new.company_id) then
+    delete from public.estimate_line_costs_kept where line_item_id = new.id and company_id = new.company_id;
+    return null;
+  end if;
   delete from public.estimate_line_costs_kept
    where line_item_id = new.id and company_id = new.company_id
   returning * into k;
@@ -83,7 +90,8 @@ create trigger t95_cost_restore after insert on public.estimate_line_items
 
 -- ---- the margin: only who sees costs sets it --------------------------------------------------
 -- Same as 20261108130000 except the margin is written only by who sees costs (or a migration, no JWT); the key is
--- taken out of totals in any case.
+-- taken out of totals in any case. Who does not see costs keeps the margin while the total stays, and makes it
+-- «not counted» (null) when the total changes.
 create or replace function app.tg_version_margin_move()
 returns trigger language plpgsql security definer set search_path = '' as $$
 begin
@@ -93,6 +101,10 @@ begin
       insert into public.estimate_version_costs as k (version_id, company_id, margin_pct)
       values (old.id, new.company_id, new.totals ->> 'marginPct')
       on conflict (version_id) do update set margin_pct = excluded.margin_pct, updated_at = now();
+    elsif (old.totals -> 'total') is distinct from (new.totals -> 'total') then
+      -- the tech changed the money: the office's margin is no longer true — «not counted» until the office saves
+      -- (a wrong number about money is worse than none, review №2)
+      update public.estimate_version_costs set margin_pct = null, updated_at = now() where version_id = old.id;
     end if;
     new.totals := new.totals - 'marginPct';
   end if;
