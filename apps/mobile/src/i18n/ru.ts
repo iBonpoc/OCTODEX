@@ -2315,6 +2315,7 @@ export const ru = {
   "mod.resumed": "Модуль снова включён",
   "mod.pay": "Подключить",
   "mod.paySoon": "Оплата — скоро",
+  "mod.settingsConflict": "Настройки модуля не сохранены: их уже изменил другой человек ({count} изм.)",
   "mod.disable": "Отключить",
   "mod.disabled": "Модуль отключён. Данные остались",
   "mod.gutters.title": "Водостоки (Gutters)",

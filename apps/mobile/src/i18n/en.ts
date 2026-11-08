@@ -2315,6 +2315,7 @@ export const en: Dict = {
   "mod.resumed": "Module on again",
   "mod.pay": "Turn on",
   "mod.paySoon": "Payment — coming soon",
+  "mod.settingsConflict": "Module settings not saved: someone else changed them first ({count} changes)",
   "mod.disable": "Turn off",
   "mod.disabled": "Module off. Your data stays",
   "mod.gutters.title": "Gutters",

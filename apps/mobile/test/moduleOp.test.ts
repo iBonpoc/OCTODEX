@@ -287,7 +287,7 @@ describe("unit:moduleOp — the store (C2c, rule 5, rule 6, О2)", () => {
       { k: "module.op", module: "op_demo", kind: "element.save", payload: { y: 1 }, coalesceKey: "el-2" },
     ]);
   });
-  it("cloud: a settings conflict is a try — after MAX_TRIES it leaves the queue and the truth is read again (Б2)", async () => {
+  it("cloud: a settings conflict drops this write and the later ones built on it at once, with one card; the truth is read again (review #372 №1)", async () => {
     signIn("u1", "c1");
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
     await settle();
@@ -299,23 +299,34 @@ describe("unit:moduleOp — the store (C2c, rule 5, rule 6, О2)", () => {
     await settle();
     server.sends.at(-1)!.d.resolve();
     await settle();
-    server.loads.splice(0).forEach((d) => d.resolve({ ...makeSeed(), company: { ...makeSeed().company!, modules: { op_demo: { enabled: true, trialEndsAt: new Date(Date.now() + DAY).toISOString(), settings: {}, rowVersion: 1 } } } }));
+    // the phone read version 3; meanwhile someone else saved (the server is at 4)
+    server.loads.splice(0).forEach((d) => d.resolve({ ...makeSeed(), company: { ...makeSeed().company!, modules: { op_demo: { enabled: true, trialEndsAt: new Date(Date.now() + DAY).toISOString(), settings: {}, rowVersion: 3 } } } }));
+    await settle();
+    valueOf(r).setOnline(false);
+    await settle();
+    const save = (valueOf(r) as unknown as { saveModuleSettings: (k: string, s: object) => unknown }).saveModuleSettings;
+    save("op_demo", { a: 1 }); // E1: base 3
+    await settle();
+    (valueOf(r) as unknown as { saveModuleSettings: (k: string, s: object) => unknown }).saveModuleSettings("op_demo", { a: 1, b: 2 }); // E2: base 4 — built on E1
+    await settle();
+    const before = server.sends.length;
+    valueOf(r).setOnline(true);
     await settle();
     const { PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
-    (valueOf(r) as unknown as { saveModuleSettings: (k: string, s: object) => unknown }).saveModuleSettings("op_demo", { a: 1 });
-    await settle();
-    let tries = 0;
     for (let i = 0; i < MAX_TRIES + 3 && valueOf(r).queue.length; i++) {
+      const last = server.sends.at(-1)!;
+      if (server.sends.length > before && (last.op as { k: string }).k === "module.saveSettings" && (last.op as { baseRowVersion: number }).baseRowVersion === 3)
+        last.d.reject(new PermanentError("module settings changed by someone else", 409, "40001", "row_version_conflict"));
+      else if (server.sends.length > before) last.d.resolve(); // E2 accepted — the other person's change lost
+      await settle();
       appActive.cb?.();
       await settle();
-      const last = server.sends.at(-1)!;
-      if ((last.op as { k: string }).k !== "module.saveSettings") continue;
-      tries += 1;
-      last.d.reject(new PermanentError("module settings changed by someone else", 409, "40001", "row_version_conflict"));
-      await settle();
     }
-    expect(tries).toBe(MAX_TRIES);
+    const sent = server.sends.slice(before).map((x) => x.op as { k: string; baseRowVersion?: number });
+    expect(sent.filter((x) => x.k === "module.saveSettings").map((x) => x.baseRowVersion)).toEqual([3]); // E2 never goes
     expect(valueOf(r).queue).toEqual([]);
+    const cards = (valueOf(r) as unknown as { rejectedOps: { labelKey?: string; count?: number }[] }).rejectedOps;
+    expect(cards.some((c) => c.labelKey === "mod.settingsConflict" && c.count === 2)).toBe(true);
     expect(server.loads.length).toBeGreaterThan(0); // the truth is read again
   });
   it("cloud: the op on its way to the server is never changed — the next move waits behind it", async () => {

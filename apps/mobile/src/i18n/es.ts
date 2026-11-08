@@ -2315,6 +2315,7 @@ export const es: Dict = {
   "mod.resumed": "Módulo activado de nuevo",
   "mod.pay": "Activar",
   "mod.paySoon": "Pago — próximamente",
+  "mod.settingsConflict": "Ajustes del módulo no guardados: otra persona los cambió antes ({count} cambios)",
   "mod.disable": "Desactivar",
   "mod.disabled": "Módulo desactivado. Sus datos se quedan",
   "mod.gutters.title": "Canaletas (Gutters)",

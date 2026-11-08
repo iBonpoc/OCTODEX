@@ -38,10 +38,10 @@ import { clientDoc, newToken, summarize } from "@/features/estimateDoc";
 import { canCountersign, canEditMember, canGrantSign, canManageLink, clientSigned, companyDeclined, companySigned, reopened, savedSignature, validUntilFor } from "@/features/estimateSign";
 import { acceptPayment } from "@octo/estimating-engine";
 import { deviceGeneration, flushAllWriters, onDeviceForgotten, todayKey, usePersistentState } from "./persist";
-import { backoffMs, classify, isModuleInactive, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
+import { backoffMs, classify, isModuleInactive, isRowConflict, isStuck, MAX_TRIES, maybeOpOnly, needsSignIn, STUCK_RETRY_MS } from "./outboxRetry";
 import { dependentsOf, isMoneyOp, madeOnQueue, nextToSend, waitingFor } from "./outboxDeps";
 import { leavingSummary, MONEY_KINDS } from "./syncLink";
-import { dropModuleOps, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, type RejectedOp } from "./outboxRejected";
+import { dropModuleOps, dropSettingsOps, freshRejected, moduleRejected, REJECTED_KEY, rejectedMine, rejectedOf, rejectedOthers, settingsRejected, type RejectedOp } from "./outboxRejected";
 import type { DictKey } from "@/i18n";
 import { onAppActive, onAppLeave } from "./appActive";
 import { adoptLegacy, mineOf, OUTBOX_KEY, othersOf, sameOwner, unsentOf, type OwnedItem } from "./outboxOwner";
@@ -657,7 +657,7 @@ export function StoreProvider({ children }: { children: ReactNode }) {
           // the server's error that may be this op's alone (500, a timeout) is told by its card «Не отправлено» in our own
           // words — not again as the server's English text in «Ошибка синхронизации» (cloud e2e 114)
           // module_inactive is told by its own card in our words, not as the server's English text (review M5a)
-          if (!maybeOpOnly(e) && !isModuleInactive(e)) setSyncError(msg);
+          if (!maybeOpOnly(e) && !isModuleInactive(e) && !isRowConflict(e)) setSyncError(msg);
           // no answer, or the server's «not now» (5xx, 429, an expired sign-in…): not a try — the op stays as it is,
           // the next send waits longer (review #244)
           if (classify(e) !== "refusal") {
@@ -701,6 +701,18 @@ export function StoreProvider({ children }: { children: ReactNode }) {
             }
             dropped = true;
             setRejected((prev) => moduleRejected(prev, mod, gone.length, msg, Date.now(), w, moduleDef(mod)?.rejectedKey));
+            setOutbox(outboxRef.current);
+            continue;
+          }
+          // the module's settings changed by someone else first: this write and the later ones built on it go now, with
+          // one card; the truth is read again (review #372 №1: a later write must not overwrite the other change)
+          if (item.op.k === "module.saveSettings" && isRowConflict(e)) {
+            const mod = item.op.module;
+            const { kept, gone } = dropSettingsOps(outboxRef.current, mod, w);
+            outboxRef.current = kept;
+            for (const g of gone) opPause.current.delete(g.id);
+            dropped = true;
+            setRejected((prev) => settingsRejected(prev, mod, gone.length, msg, Date.now(), w));
             setOutbox(outboxRef.current);
             continue;
           }
