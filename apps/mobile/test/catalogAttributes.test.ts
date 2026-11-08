@@ -7,6 +7,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const rpcCalls: { kind: "rpc" | "from"; name: string; args?: unknown }[] = [];
+const rowAfter: { value: { id: string; deleted_at: string | null } | null } = { value: { id: "i0", deleted_at: null } };
 vi.mock("react", () => import("./support/miniReact"));
 vi.mock("react/jsx-runtime", () => import("./support/miniReact"));
 vi.mock("react/jsx-dev-runtime", () => import("./support/miniReact"));
@@ -23,7 +24,20 @@ vi.mock("@react-native-async-storage/async-storage", () => ({
 }));
 vi.mock("@/cloud/client", () => ({
   supabase: {
-    from: (t: string) => ({ upsert: (row: unknown, opts: unknown) => { rpcCalls.push({ kind: "from", name: t, args: { row, opts } }); return Promise.resolve({ error: null }); } }),
+    from: (t: string) => {
+      const filters: [string, unknown][] = [];
+      const chain = {
+        eq: (k: string, v: unknown) => { filters.push([k, v]); return chain; },
+        // the row read back after an onlyNew insert (security check #377): what this company sees under that id
+        maybeSingle: () => { rpcCalls.push({ kind: "from", name: `${t}.read`, args: { filters } }); return Promise.resolve({ data: rowAfter.value, error: null }); },
+        then: (ok: (v: unknown) => unknown) => Promise.resolve({ error: null }).then(ok),
+      };
+      return {
+        upsert: (row: unknown, opts: unknown) => { rpcCalls.push({ kind: "from", name: t, args: { row, opts } }); return Promise.resolve({ error: null }); },
+        select: () => chain,
+        update: (patch: unknown) => { rpcCalls.push({ kind: "from", name: `${t}.update`, args: { patch, filters } }); return chain; },
+      };
+    },
     rpc: (name: string, args: unknown) => { rpcCalls.push({ kind: "rpc", name, args }); return Promise.resolve({ data: null, error: null }); },
   },
 }));
@@ -161,10 +175,32 @@ describe("unit:catalogAttributes — write (catalog.save)", () => {
 describe("unit:catalogAttributes — onlyNew: a module's items with a fixed id, never twice (spec 33 П22.10, T96)", () => {
   it("the op inserts or does nothing (ON CONFLICT DO NOTHING); a plain save stays an upsert that overwrites", async () => {
     const { applyOp } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    rowAfter.value = { id: "i0", deleted_at: null };
+    rpcCalls.length = 0;
     await applyOp({ k: "catalog.save", item: it0({}), onlyNew: true }, "co-1", "u-1");
-    expect((rpcCalls.at(-1)!.args as { opts: object }).opts).toEqual({ onConflict: "id", ignoreDuplicates: true });
+    expect((rpcCalls[0]!.args as { opts: object }).opts).toEqual({ onConflict: "id", ignoreDuplicates: true });
+    // read back by id AND company; our live row → done, nothing else
+    expect(rpcCalls.map((x) => x.name)).toEqual(["catalog_items", "catalog_items.read"]);
+    expect((rpcCalls[1]!.args as { filters: unknown }).filters).toEqual([["id", "i0"], ["company_id", "co-1"]]);
+    rpcCalls.length = 0;
     await applyOp({ k: "catalog.save", item: it0({}) }, "co-1", "u-1");
-    expect((rpcCalls.at(-1)!.args as { opts: object }).opts).toEqual({ onConflict: "id" });
+    expect(rpcCalls.map((x) => [x.name, (x.args as { opts?: object }).opts])).toEqual([["catalog_items", { onConflict: "id" }]]);
+  });
+  it("security check #377: the id is not ours (another company's row, RLS hides it) → a refusal «id taken», never a quiet success", async () => {
+    const { applyOp, PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    rowAfter.value = null;
+    await expect(applyOp({ k: "catalog.save", item: it0({}), onlyNew: true }, "co-1", "u-1")).rejects.toBeInstanceOf(PermanentError);
+    await expect(applyOp({ k: "catalog.save", item: it0({}), onlyNew: true }, "co-1", "u-1")).rejects.toMatchObject({ hint: "id_taken" });
+    rowAfter.value = { id: "i0", deleted_at: null };
+  });
+  it("security check #377: our own row deleted before → back (deleted_at null, active), its price and properties untouched", async () => {
+    const { applyOp } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
+    rowAfter.value = { id: "i0", deleted_at: "2026-11-01T00:00:00Z" };
+    rpcCalls.length = 0;
+    await applyOp({ k: "catalog.save", item: it0({ priceCents: 1 }), onlyNew: true }, "co-1", "u-1");
+    const upd = rpcCalls.find((x) => x.name === "catalog_items.update")!;
+    expect((upd.args as { patch: object }).patch).toEqual({ deleted_at: null, is_active: true });
+    rowAfter.value = { id: "i0", deleted_at: null };
   });
   it("cloud: an id on the phone already is left as it is — no op, its price stays; the new ones go with onlyNew; «Отменить» takes them out", async () => {
     signIn("u1", "c1");

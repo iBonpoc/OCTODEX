@@ -7973,12 +7973,28 @@ do $$ begin
   perform tst.fails($q$insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price)
     values ('96000000-0000-5000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'labor', 'x', 'ft', 1, true) on conflict (id) do nothing$q$, 'T96 tech: an existing id is still refused');
 end $$;
--- another company with the same id: refused, A's row untouched
+-- company B writes a row into A: refused (WITH CHECK)
 :as_owner_b
 do $$ begin
   perform tst.fails($q$insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents)
     values ('96000000-0000-5000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'labor', 'x', 'ft', 1) on conflict (id) do nothing$q$, 'T96 company B writes into A');
 end $$;
+-- company B with A's id in its own list: the id is global — the insert «succeeds» with no row, and B sees nothing under it.
+-- That silence is what the app reads back after onlyNew (ops.ts catalog.save: no own row → PermanentError «id_taken»).
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents)
+  values ('96000000-0000-5000-8000-000000000001', 'cb000000-0000-0000-0000-000000000000', 'labor', 'B squats', 'ft', 1) on conflict (id) do nothing;
+select tst.ok(tst.cnt($q$select 1 from public.catalog_items where id = '96000000-0000-5000-8000-000000000001' and company_id = 'cb000000-0000-0000-0000-000000000000'$q$) = 0,
+  'T96 B with A''s id: no row of B — the read-back finds nothing (the app says «id taken»)');
+-- our own row deleted before: «insert or nothing» does nothing; the app reads it back deleted and brings it back as it was
+:as_office_a
+update public.catalog_items set deleted_at = now(), is_active = false where id = '96000000-0000-5000-8000-000000000001';
+insert into public.catalog_items (id, company_id, kind, name, unit, unit_price_cents, is_placeholder_price)
+  values ('96000000-0000-5000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'labor', 'Install (test)', 'ft', 300, true) on conflict (id) do nothing;
+select tst.ok((select deleted_at is not null from public.catalog_items where id = '96000000-0000-5000-8000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000'),
+  'T96 the read-back sees our own deleted row');
+update public.catalog_items set deleted_at = null, is_active = true where id = '96000000-0000-5000-8000-000000000001' and company_id = 'ca000000-0000-0000-0000-000000000000';
+select tst.ok((select deleted_at is null and is_active and unit_price_cents = 455 and not is_placeholder_price from public.catalog_items where id = '96000000-0000-5000-8000-000000000001'),
+  'T96 the deleted item is back with the owner''s price, not the test one');
 :as_super
 select tst.ok(tst.cnt($q$select 1 from public.catalog_items where id::text like '96000000-0000-5000-8000-00000000000%'$q$) = 1, 'T96 only the one item exists');
 select tst.ok((select unit_price_cents = 455 from public.catalog_items where id = '96000000-0000-5000-8000-000000000001'), 'T96 still the owner''s price');
