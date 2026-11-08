@@ -45,7 +45,7 @@ import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
-import { cornerChoiceOf, findCorners, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
+import { cornerChoiceOf, cornerCut, findCorners, runEnds, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 
 type Tool = "line" | "ds" | "select";
 /** a finger's reach on the glass, whatever the zoom: half the 44 pt touch target */
@@ -395,6 +395,7 @@ export default function DrawScreen() {
   };
   const quick = quickRun ? drawing.runs.find((r) => r.id === quickRun) : undefined;
   const corner = cornerSheet ? findCorners(drawing).find((f) => f.id === cornerSheet) : undefined;
+  const cut = corner ? cornerCut(drawing, corner) : null;
   const cornerKind = (kind: "in" | "out") => {
     if (corner && corner.kind !== kind && corner.kind !== "bay") commit(flipFace(cur.current.drawing, corner.runs[0].id));
     setCornerSheet(null);
@@ -755,6 +756,29 @@ export default function DrawScreen() {
               />
             </View>
             <T v="caption" tone="mut">{t("mod.gutters.draw.cornerNote")}</T>
+            {/* the cut (founder 08.11): each run along the wall and along the face, to 1/8″ */}
+            {cut ? (
+              <View testID="corner-cut" style={{ gap: space[2] }}>
+                <RowView style={{ justifyContent: "space-between" }}>
+                  <T v="body" w="semibold">{t("mod.gutters.draw.cutTitle")}</T>
+                  <View testID="corner-cut-angle"><T v="caption" tone="mut">{t("mod.gutters.draw.cutAngle", { deg: cut.angleDeg })}</T></View>
+                </RowView>
+                {cut.runs.map((r) => (
+                  <View key={r.id} testID={`corner-cut-${r.id}`} style={{ gap: space[1], padding: space[3], borderRadius: radius.card, borderWidth: 1, borderColor: c.bd }}>
+                    <T v="caption" w="semibold">{t("mod.gutters.draw.cutRun", { n: drawing.runs.findIndex((x) => x.id === r.id) + 1 })}</T>
+                    <RowView style={{ justifyContent: "space-between" }}>
+                      <T v="caption" tone="mut">{t("mod.gutters.draw.cutBack")}</T>
+                      <View testID="cut-back"><T v="body" tabular>{ftIn(r.backIn)}</T></View>
+                    </RowView>
+                    <RowView style={{ justifyContent: "space-between" }}>
+                      <T v="caption" tone="mut">{t("mod.gutters.draw.cutFront")}</T>
+                      <View testID="cut-front"><T v="body" w="semibold" tabular>{ftIn(r.frontIn)}</T></View>
+                    </RowView>
+                  </View>
+                ))}
+                <T v="caption" tone="mut">{t("mod.gutters.draw.cutNote", { off: cut.runs[0]!.offsetIn })}</T>
+              </View>
+            ) : null}
           </View>
         ) : null}
       </Sheet>

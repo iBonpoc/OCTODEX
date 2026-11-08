@@ -120,7 +120,7 @@ export function setDsAttrs(d: Drawing, id: string, patch: Partial<DsAttrs>, ch?:
 export function setLength(d: Drawing, id: string, lengthIn: number | null): Drawing {
   const r = d.runs.find((x) => x.id === id);
   if (!r) return d;
-  const want = lengthIn === null ? undefined : Math.round(lengthIn);
+  const want = lengthIn === null ? undefined : Math.round(lengthIn * 8) / 8;
   if (r.lengthIn === want) return d;
   const { lengthIn: _was, ...rest } = r;
   if (want === undefined) return { ...d, runs: d.runs.map((x) => (x.id === id ? rest : x)) };

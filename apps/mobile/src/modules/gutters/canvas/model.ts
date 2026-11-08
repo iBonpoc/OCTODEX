@@ -53,7 +53,7 @@ export function toElements(d: Drawing, measurementId: string): ElementRow[] {
     id: r.id,
     measurementId,
     kind: "run",
-    geom: { a: pt(r.a), b: pt(r.b), ...(r.lengthIn !== undefined ? { lengthIn: int(r.lengthIn) } : {}), ...(r.houseSide ? { houseSide: r.houseSide } : {}), ...(r.noCap ? { noCap: r.noCap } : {}) },
+    geom: { a: pt(r.a), b: pt(r.b), ...(r.lengthIn !== undefined ? { lengthIn: Math.round(r.lengthIn * 8) / 8 } : {}), ...(r.houseSide ? { houseSide: r.houseSide } : {}), ...(r.noCap ? { noCap: r.noCap } : {}) },
     attrs: { ...r.attrs },
     confidence: r.lengthIn !== undefined ? "taped" : "drawn",
   }));

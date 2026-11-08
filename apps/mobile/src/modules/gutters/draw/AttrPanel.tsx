@@ -16,7 +16,7 @@ import { T } from "@/ui/primitives";
 import { RowView } from "@/ui/surfaces";
 import { COLORS, DS_HEADS, DS_SHAPES, smallerSizes, elbowCounts, withElbowQty, MAX_DS_HEIGHT_FT, OFFSETS_IN, hangerKitsFor, MILL_ONLY, MOUNTS, tapeIn, wallKitsFor, wallOf, WALLS, withCurrent, type DsAttrs, type RunAttrs } from "../canvas/attrs";
 import { MODULE_CHOICES, type Choices } from "../settings";
-import { ftIn } from "../canvas/format";
+import { eighthLabel, ftIn } from "../canvas/format";
 import { storyOf } from "../canvas/scene";
 import { drawnLengthIn, type CornerChoice, type DrawnDownspout, type DrawnRun, type FoundCorner } from "../geometry";
 
@@ -62,21 +62,37 @@ function Pick<K extends string>({ label, testID, items, value, onChange, offered
   );
 }
 
+/** 1/8″ of the tape (founder 08.11): 0, ⅛ … ⅞ */
+function Eighths({ value, onChange, testID }: { value: number; onChange: (k: number) => void; testID: string }) {
+  return (
+    <View testID={testID}>
+      <ChoiceChips items={[0, 1, 2, 3, 4, 5, 6, 7].map((n) => ({ key: String(n), label: eighthLabel(n) }))} value={String(value)} onChange={(v) => onChange(Number(v))} />
+    </View>
+  );
+}
+const split = (n: number) => {
+  const e = Math.round(n * 8);
+  return { ft: Math.floor(e / 96), inch: Math.floor((e % 96) / 8), eighths: e % 8 };
+};
+
 /** the tape: feet and inches; «Применить» sets the length, «По рисунку» puts the drawn one back */
 function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | null) => void }) {
   const { t } = useI18n();
   const cur = run.lengthIn ?? drawnLengthIn(run);
-  const [ft, setFt] = useState(String(Math.floor(cur / 12)));
-  const [inc, setInc] = useState(String(cur % 12));
+  const [ft, setFt] = useState(String(split(cur).ft));
+  const [inc, setInc] = useState(String(split(cur).inch));
+  const [e8, setE8] = useState(split(cur).eighths);
   const [bad, setBad] = useState(false);
   // another run picked, «Назад», or a dragged end: the fields show the length it has now
   useEffect(() => {
-    setFt(String(Math.floor(cur / 12)));
-    setInc(String(cur % 12));
+    const x = split(cur);
+    setFt(String(x.ft));
+    setInc(String(x.inch));
+    setE8(x.eighths);
     setBad(false);
   }, [run.id, cur]);
   const apply = () => {
-    const n = tapeIn(ft, inc);
+    const n = tapeIn(ft, inc, e8);
     setBad(n === null);
     if (n !== null) onLength(n);
   };
@@ -95,6 +111,7 @@ function Tape({ run, onLength }: { run: DrawnRun; onLength: (lengthIn: number | 
         <View testID="attr-length-apply"><Button label={t(k("apply"))} size="sm" variant="secondary" onPress={apply} /></View>
         {taped ? <View testID="attr-length-reset"><Button label={t(k("reset"))} size="sm" variant="ghost" onPress={() => onLength(null)} /></View> : null}
       </RowView>
+      <Eighths value={e8} onChange={setE8} testID="attr-length-frac" />
       {bad ? <View testID="attr-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
     </Field>
   );
@@ -109,10 +126,11 @@ export function QuickLength({ run, onLength, onDone }: { run: DrawnRun; onLength
   const drawn = drawnLengthIn(run);
   const [ft, setFt] = useState("");
   const [inc, setInc] = useState("");
+  const [e8, setE8] = useState(0);
   const [bad, setBad] = useState(false);
   const apply = () => {
-    if (ft.trim() === "" && inc.trim() === "") return onDone();
-    const n = tapeIn(ft, inc);
+    if (ft.trim() === "" && inc.trim() === "" && !e8) return onDone();
+    const n = tapeIn(ft, inc, e8);
     setBad(n === null);
     if (n === null) return;
     onLength(n);
@@ -131,6 +149,7 @@ export function QuickLength({ run, onLength, onDone }: { run: DrawnRun; onLength
         </View>
         <T v="body" tone="mut">{t(k("in"))}</T>
       </RowView>
+      <Eighths value={e8} onChange={setE8} testID="quick-length-frac" />
       <T v="caption" tone="mut">{t(k("quickDrawn"), { len: ftIn(drawn) })}</T>
       {bad ? <View testID="quick-length-bad"><StatusChip status="warn" label={t(k("badLength"))} soft /></View> : null}
       <RowView style={{ gap: space[2], justifyContent: "flex-end" }}>

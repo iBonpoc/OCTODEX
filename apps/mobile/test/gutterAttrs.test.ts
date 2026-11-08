@@ -100,11 +100,11 @@ describe("changeDs: зависимые поля", () => {
 });
 
 describe("tapeIn: фут + дюймы", () => {
-  it("целые дюймы", () => {
+  it("дюймы и восьмые (основатель 08.11: до 1/8″)", () => {
     expect(tapeIn("25", "6")).toBe(306);
     expect(tapeIn("25", "")).toBe(300);
     expect(tapeIn("", "9")).toBe(9);
-    expect(tapeIn("3", "5.5")).toBe(42);
+    expect(tapeIn("3", "5.5")).toBe(41.5);
   });
   it("непригодное — null", () => {
     for (const [f, i] of [["", ""], ["0", "0"], ["-1", "0"], ["2", "12"], ["x", "1"], ["2.5", "0"], ["501", "0"]]) expect(tapeIn(f!, i!)).toBeNull();
