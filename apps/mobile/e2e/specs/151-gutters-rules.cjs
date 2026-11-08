@@ -1,5 +1,5 @@
 /**
- * e2e 151 — правила и расходники компании, углы, редкие поля даунспота (docs/specs/33-gutters-settings.md П22 M7c). Every view.
+ * e2e 151 — правила и расходники компании, углы, редкие поля водостока (docs/specs/33-gutters-settings.md П22 M7c). Every view.
  * - director, the trial on, «Настройки»: story height 10 → 11 ft, corners by default «Готовый угол», waste 5 → 6 % — saved;
  * - the canvas: an L of two runs → the corner of the picked run is «Готовый угол» (the company's), «Вырезать на месте»
  *   on it → the $ follows, both runs keep the method; a downspout: «Ещё» → «Leader head» and «Отвод в бочку» → the $
@@ -132,7 +132,7 @@ exports.run = async (h) => {
     return [r.x + (n("x1") + n("x2")) / 2, r.y + (n("y1") + n("y2")) / 2];
   });
   await p.mouse.click(mid[0], mid[1]);
-  await waitFor(async () => /Линия/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "a run picked");
+  await waitFor(async () => /Желоб/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "a run picked");
   await openAttrs();
   await tid("attr-corner-0").waitFor({ timeout: 5000 });
   h.expect((await chosenAt("attr-corner-0")) === 1, "after a reload: the corner is field cut");

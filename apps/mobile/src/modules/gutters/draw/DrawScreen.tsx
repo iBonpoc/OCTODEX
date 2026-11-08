@@ -23,9 +23,9 @@ import { useI18n } from "@/i18n";
 import { moduleState } from "@/modules/registry";
 import { useDevice, useTheme } from "@/theme/ThemeProvider";
 import { Button, IconButton, StatusChip } from "@/ui/controls";
-import { Press, T } from "@/ui/primitives";
+import { Icon, Press, T, type IconKey } from "@/ui/primitives";
 import { Sheet, useToast } from "@/ui/overlays";
-import { RowView } from "@/ui/surfaces";
+import { ListRow, RowView } from "@/ui/surfaces";
 import { CanvasView, useLive } from "../canvas/CanvasView";
 import { addDownspout, endAt, finishStroke, hitTest, moveEnd, pushHistory, redo, removeElement, restoreRemoved, setCornerMethod, setDsAttrs, setLength, setRunAttrs, setStory, startAt, undo, type History, type Stroke } from "../canvas/edit";
 import type { DsAttrs, RunAttrs } from "../canvas/attrs";
@@ -39,7 +39,7 @@ import { makeSaver } from "../canvas/draftStore";
 import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
 import { buildScene, fitView, storyOf, toPlan, toScreen, type Story, type View as PlanView } from "../canvas/scene";
-import { LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
+import { DS_MARK_R, LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
 import { listPreview, partName } from "../prices";
 import { clientLangOf, estimateAction, estimateOfMeasurement, makeEstimate } from "../estimateLink";
 import { tFor } from "@/i18n/translate";
@@ -51,15 +51,17 @@ const FINGER = sizes.hitMin / 2;
 const SAVE_AFTER_MS = 1000;
 const EMPTY: Drawing = { runs: [], downspouts: [] };
 
-/** a storey button: «эт N» with its colour on the canvas toolbar (the О3 exception lives only on this screen) */
-function StoryButton({ n, onPress, label }: { n: Story; onPress: () => void; label: string }) {
+/** one cell of the canvas toolbar (spec 33 П20.8): a 36 circle (44 to touch, rule 3) and its word under it — a picture
+ *  alone was read wrong (founder's walk-through 08.11). `body` replaces the icon (the storey: «Эт N» in its colour) */
+function ToolCell({ icon, body, label, a11y, active, onPress, ring, grow }: { icon?: IconKey; body?: string; label: string; a11y?: string; active?: boolean; onPress: () => void; ring?: string; grow?: boolean }) {
   const { c } = useTheme();
   const s = component.dockBtn;
   return (
-    <Press onPress={onPress} visibleHeight={s} accessibilityRole="button" accessibilityLabel={label} testID="draw-story">
-      <View style={{ width: s, height: s, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: c.surf2, borderWidth: dt.runW / 2, borderColor: c.drawing.story[n - 1] }}>
-        <T v="caption" w="semibold">{`${n}`}</T>
+    <Press onPress={onPress} accessibilityRole="button" accessibilityLabel={a11y ?? label} accessibilityState={{ selected: !!active }} containerStyle={grow ? { flex: 1 } : undefined} style={{ alignItems: "center", gap: space[1], minWidth: sizes.hitMin }}>
+      <View style={{ minWidth: s, height: s, paddingHorizontal: body ? space[2] : 0, borderRadius: radius.pill, alignItems: "center", justifyContent: "center", backgroundColor: active ? c.acc : c.surf2, borderWidth: ring ? dt.runW / 2 : active ? 0 : 1, borderColor: ring ?? c.bd }}>
+        {body ? <T v="caption" w="semibold">{body}</T> : icon ? <Icon name={icon} s={sizes.iconMd} color={active ? c.onAcc : c.ink} /> : null}
       </View>
+      <T v="micro" w={active ? "semibold" : undefined} tone={active ? "ink" : "mut"} numberOfLines={1}>{label}</T>
     </Press>
   );
 }
@@ -95,6 +97,10 @@ export default function DrawScreen() {
   const [sheet, setSheet] = useState(false);
   /** 390: the sheet of the measurement's photos */
   const [photoSheet, setPhotoSheet] = useState(false);
+  /** «Ещё»: «Вернуть» and where the toolbar sits — rare, off the main row (П20.8) */
+  const [moreSheet, setMoreSheet] = useState(false);
+  /** the hint of the tool just picked; gone after the first thing done with it (П20.8) */
+  const [hint, setHint] = useState<Tool | null>(null);
   const live = useLive();
 
   // the latest values for gesture callbacks and the delayed save
@@ -173,6 +179,7 @@ export default function DrawScreen() {
   const commit = useCallback(
     (next: Drawing, prev = cur.current.drawing) => {
       if (next === prev) return;
+      setHint(null);
       setHist((h) => pushHistory(h, prev));
       setDrawing(next);
       later.current();
@@ -253,6 +260,7 @@ export default function DrawScreen() {
         return;
       }
       const h = hitTest(d, p, tolIn());
+      if (h) setHint(null);
       setSelected(h ? h.id : null);
     },
   });
@@ -270,6 +278,7 @@ export default function DrawScreen() {
             selected,
             // О3: the colour is never the only sign — every run's label says its storey
             lenWithStory: true,
+            dsPad: DS_MARK_R,
             dsText: (n) => t("mod.gutters.ds", { n }),
             storyText: (n) => t("mod.gutters.story", { n }),
           })
@@ -366,10 +375,14 @@ export default function DrawScreen() {
     setStoryN(n);
     if (selected && drawing.runs.some((r) => r.id === selected)) commit(setStory(drawing, selected, n));
   };
-  const movePlace = () => {
-    const p = TOOLBAR_PLACES[(TOOLBAR_PLACES.indexOf(place) + 1) % TOOLBAR_PLACES.length]!;
+  const pickPlace = (p: ToolbarPlace) => {
     setPlace(p);
+    setMoreSheet(false);
     void saveToolbarPlace(p);
+  };
+  const pick = (tl: Tool) => {
+    setTool(tl);
+    setHint(tl);
   };
   // the measurement as the store has it now (a lead linked by «Сделать заявкой» or by the office shows at once)
   const inStore = m ? gutterData(store.db).measurements.find((x) => x.id === m.id) : undefined;
@@ -454,18 +467,19 @@ export default function DrawScreen() {
     ) : null;
 
   const side = place !== "bottom";
+  /** 390 at the bottom: the row takes the width, six cells share it */
+  const grow = !side && !wide;
   const tools = (
-    <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", gap: space[2], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
-      <View testID="draw-tool-line"><IconButton icon="pencil" label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => setTool("line")} /></View>
-      <View testID="draw-tool-ds"><IconButton icon="pin" label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => setTool("ds")} /></View>
-      <View testID="draw-tool-select"><IconButton icon="navigate" label={t("mod.gutters.draw.select")} active={tool === "select"} onPress={() => setTool("select")} /></View>
-      <StoryButton n={story} onPress={nextStory} label={t("mod.gutters.draw.story", { n: story })} />
-      <View testID="draw-undo"><IconButton icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} /></View>
-      <View testID="draw-redo"><IconButton icon="repeat" label={t("mod.gutters.draw.redo")} onPress={doRedo} /></View>
-      <View testID="draw-delete"><IconButton icon="trash" label={t("mod.gutters.draw.delete")} onPress={doDelete} /></View>
-      <View testID="draw-place"><IconButton icon="sliders" label={t("mod.gutters.draw.place")} onPress={movePlace} /></View>
+    <View testID="draw-toolbar" style={{ flexDirection: side ? "column" : "row", alignSelf: grow ? "stretch" : undefined, gap: space[1], alignItems: "center", padding: space[2], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+      <View testID="draw-tool-line" style={grow ? { flex: 1 } : undefined}><ToolCell icon="pencil" label={t("mod.gutters.draw.line")} active={tool === "line"} onPress={() => pick("line")} grow={grow} /></View>
+      <View testID="draw-tool-ds" style={grow ? { flex: 1 } : undefined}><ToolCell icon="downspout" label={t("mod.gutters.draw.downspout")} active={tool === "ds"} onPress={() => pick("ds")} grow={grow} /></View>
+      <View testID="draw-tool-select" style={grow ? { flex: 1 } : undefined}><ToolCell icon="cursor" label={t("mod.gutters.draw.select")} active={tool === "select"} onPress={() => pick("select")} grow={grow} /></View>
+      <View testID="draw-story" style={grow ? { flex: 1 } : undefined}><ToolCell body={t("mod.gutters.draw.storyShort", { n: story })} ring={c.drawing.story[story - 1]} label={t("mod.gutters.draw.storyCell")} a11y={t("mod.gutters.draw.story", { n: story })} onPress={nextStory} grow={grow} /></View>
+      <View testID="draw-undo" style={grow ? { flex: 1 } : undefined}><ToolCell icon="undo" label={t("mod.gutters.draw.undo")} onPress={doUndo} grow={grow} /></View>
+      <View testID="draw-more" style={grow ? { flex: 1 } : undefined}><ToolCell icon="more" label={t("mod.gutters.draw.more")} onPress={() => setMoreSheet(true)} grow={grow} /></View>
     </View>
   );
+  const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
   const gA = ghost && view ? toScreen(view, ghost.a) : null;
@@ -551,12 +565,20 @@ export default function DrawScreen() {
 
       {/* bottom: the toolbar (bottom / right hand / left hand) and the $ — always at the bottom */}
       <View pointerEvents="box-none" style={{ position: "absolute", left: 0, right: 0, bottom: 0, paddingLeft: ins.left + space[3], paddingRight: ins.right + space[3] + panelSide, paddingBottom: ins.bottom + space[3], gap: space[2] }}>
-        <View pointerEvents="box-none" style={{ alignItems: place === "bottom" ? "center" : place === "right" ? "flex-end" : "flex-start" }}>{tools}</View>
+        {hintText ? (
+          <View pointerEvents="none" testID="draw-hint" style={{ alignSelf: "center", paddingVertical: space[2], paddingHorizontal: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
+            <T v="caption" w="semibold" center>{hintText}</T>
+          </View>
+        ) : null}
+        <View pointerEvents="box-none" style={{ alignItems: place === "bottom" ? (grow ? "stretch" : "center") : place === "right" ? "flex-end" : "flex-start" }}>{tools}</View>
         <View testID="draw-total" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[1] }}>
           {selText ? (
             <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
               <View testID="draw-selected" style={{ flex: 1 }}>
                 <T v="caption" w="semibold">{selText}</T>
+              </View>
+              <View testID="draw-delete">
+                <Button label={t("mod.gutters.draw.delete")} icon="trash" size="sm" variant="ghost" onPress={doDelete} />
               </View>
               {!wide ? (
                 <View testID="draw-props">
@@ -601,6 +623,19 @@ export default function DrawScreen() {
       ) : null}
       <Sheet visible={!wide && sheet && !!attrs} onClose={() => setSheet(false)}>
         <AttrBody>{attrs}</AttrBody>
+      </Sheet>
+      <Sheet visible={moreSheet} onClose={() => setMoreSheet(false)}>
+        <View testID="draw-more-sheet" style={{ gap: space[2] }}>
+          <View testID="draw-redo">
+            <ListRow title={t("mod.gutters.draw.redo")} left={<Icon name="redo" s={sizes.iconMd} color={c.ink} />} onPress={() => { setMoreSheet(false); doRedo(); }} />
+          </View>
+          <T v="caption" tone="mut">{t("mod.gutters.draw.placeTitle")}</T>
+          {TOOLBAR_PLACES.map((p) => (
+            <View key={p} testID={`draw-place-${p}`}>
+              <ListRow title={t(`mod.gutters.draw.place.${p}`)} left={<Icon name={p === place ? "check" : "sliders"} s={sizes.iconMd} color={p === place ? c.ink : c.mut} />} onPress={() => pickPlace(p)} />
+            </View>
+          ))}
+        </View>
       </Sheet>
       <Sheet visible={!wide && photoSheet && !!mPhotos} onClose={() => setPhotoSheet(false)}>
         {mPhotos}
