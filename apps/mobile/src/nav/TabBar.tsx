@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { router, useGlobalSearchParams, usePathname, useRootNavigationState, useSegments, type Href } from "expo-router";
 import { View, type LayoutChangeEvent } from "react-native";
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withTiming } from "react-native-reanimated";
@@ -14,6 +14,7 @@ import { useKeyboardHeight } from "@/ui/keyboard";
 import { appStackRoutes, formsAbove, showsTabBar, tabLeave } from "./tabBarRule";
 import { setNavState } from "./go";
 import { useTabBarHidden } from "./tabBarHide";
+import { deviceTabSurface, liquidGlassView } from "./tabGlass";
 import { useAuth } from "@/cloud/auth";
 import { gateFreePath } from "@/features/legal";
 import { activeSection } from "./hierarchy";
@@ -84,9 +85,11 @@ export function TabBar() {
 function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: (id: SectionId) => void }) {
   const { role } = useStore();
   const { t } = useI18n();
-  const { c } = useTheme();
+  const { c, name } = useTheme();
   const { wide } = useDevice();
   const nav = useNavInsets();
+  // iOS 26: the system liquid glass; Android, web, older iOS, an old build: the --ov + blur panel as before (tabGlass.ts)
+  const liquid = deviceTabSurface() === "liquid";
   const reduce = useReducedMotion();
   /** on a phone the floating bar would sit on top of the keyboard and cover the field: hide it while typing */
   const kb = useKeyboardHeight();
@@ -157,6 +160,16 @@ function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: 
   };
 
   const ordered = items.map(renderItem);
+  const shape = {
+    borderRadius: radius.pill,
+    height: wide ? component.button.md + space[2] * 2 : size.tabbarH,
+    padding: space[2],
+    flexDirection: "row" as const,
+    alignItems: "center" as const,
+    gap: wide ? space[1] : 0,
+    width: wide ? undefined : ("100%" as const),
+    maxWidth: wide ? undefined : 480,
+  };
 
   // 820/1280: the side menu instead; phone: hidden while typing
   if (wide || kb > 0) return null;
@@ -175,19 +188,7 @@ function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: 
           paddingRight: nav.right,
         }}
       >
-        <Glass
-          strong
-          style={{
-            borderRadius: radius.pill,
-            height: wide ? component.button.md + space[2] * 2 : size.tabbarH,
-            padding: space[2],
-            flexDirection: "row",
-            alignItems: "center",
-            gap: wide ? space[1] : 0,
-            width: wide ? undefined : "100%",
-            maxWidth: wide ? undefined : 480,
-          }}
-        >
+        <Surface liquid={liquid} scheme={name} style={shape}>
           <View key={`${role}-${wide}`} testID="tab-bar" role="tablist" style={{ flexDirection: "row", alignItems: "center", flex: wide ? undefined : 1, gap: wide ? space[1] : 0 }}>
             <Animated.View
               pointerEvents="none"
@@ -195,8 +196,25 @@ function NavPill({ current, onGo: go }: { current: SectionId | undefined; onGo: 
             />
             {ordered}
           </View>
-        </Glass>
+        </Surface>
       </View>
     </>
+  );
+}
+
+/** the bar's pill: GlassView (no tint — the system glass follows the app's theme) or the old Glass panel */
+function Surface({ liquid, scheme, style, children }: { liquid: boolean; scheme: "light" | "dark"; style: object; children: ReactNode }) {
+  if (!liquid) {
+    return (
+      <Glass strong style={style}>
+        {children}
+      </Glass>
+    );
+  }
+  const GlassView = liquidGlassView();
+  return (
+    <GlassView testID="tab-glass" glassEffectStyle="regular" colorScheme={scheme} style={[{ overflow: "hidden" }, style]}>
+      {children}
+    </GlassView>
   );
 }
