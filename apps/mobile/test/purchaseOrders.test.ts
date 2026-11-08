@@ -77,6 +77,17 @@ describe("unit:purchaseOrders — what a job needs", () => {
     // an item without a supplier → the group without one (pick it in the order)
     expect(g.find((x) => !x.supplierId)!.lines[0]).toMatchObject({ catalogItemId: "loose", qty: "7", checkPack: true });
   });
+  it("two module lines of one item are summed, their notes kept (review SUP2-а №4)", () => {
+    const all = draftsForJob(company(), "jP", [
+      { catalogItemId: "screw", qty: "10", note: "front" },
+      { catalogItemId: "screw", qty: "5.5", note: "back" },
+    ], false).flatMap((g) => g.lines);
+    expect(all.find((l) => l.catalogItemId === "screw")).toMatchObject({ qty: "16", bomQty: "15.5", note: "front, back" });
+  });
+  it("a bad quantity of one line leaves it out, the rest of the order is made (review SUP2-а №6)", () => {
+    const all = draftsForJob(company(), "jP", [{ catalogItemId: "screw", qty: "-3" }, { catalogItemId: "loose", qty: "" }], false).flatMap((g) => g.lines);
+    expect(all.map((l) => l.catalogItemId).sort()).toEqual(["hanger", "paint", "screw"]);
+  });
   it("an open draft of the job and supplier is found (not doubled)", () => {
     const o = { id: "o1", jobId: "jP", supplierId: "s1", status: "draft", revision: 0, fulfillment: "delivery", printPrices: false, createdAt: "t", lines: [] } as PurchaseOrder;
     const db = { ...company(), purchaseOrders: [o] };
@@ -97,11 +108,13 @@ describe("unit:purchaseOrders — statuses and rights (map §5)", () => {
     expect(linesEditable({ status: "sent" })).toBe(true);
     expect(linesEditable({ status: "partially_received" })).toBe(false);
   });
-  it("after receiving: all → received; some → partially; a tick taken back from received → partially", () => {
+  it("after receiving (as po_receive): all → received; some → partially; every tick taken back → sent again", () => {
     expect(statusAfterReceive(o("sent", [["2", "2"], ["1", "1"]]))).toBe("received");
     expect(statusAfterReceive(o("sent", [["2", "2"], ["1", "0"]]))).toBe("partially_received");
+    expect(statusAfterReceive(o("received", [["2", "1"], ["1", "1"]]))).toBe("partially_received");
     expect(statusAfterReceive(o("sent", [["2", "0"]]))).toBe("sent");
-    expect(statusAfterReceive(o("received", [["2", "0"]]))).toBe("partially_received");
+    expect(statusAfterReceive(o("received", [["2", "0"]]))).toBe("sent");
+    expect(statusAfterReceive(o("partially_received", [["2", "0"]]))).toBe("sent");
   });
   it("who: the office edits; the tech receives; sales neither", () => {
     expect(canEditOrders("director") && canEditOrders("dispatcher")).toBe(true);

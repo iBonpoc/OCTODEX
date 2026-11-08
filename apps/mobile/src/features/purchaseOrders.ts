@@ -50,7 +50,13 @@ export function jobMaterialNeeds(db: DB, jobId: ID): { catalogItemId: ID; qty: s
     if (!it || it.kind !== "material") continue;
     by.set(it.id, [...(by.get(it.id) ?? []), r.qty]);
   }
-  return [...by.entries()].map(([catalogItemId, qs]) => ({ catalogItemId, qty: sumQty(qs) }));
+  return [...by.entries()].flatMap(([catalogItemId, qs]) => {
+    try {
+      return [{ catalogItemId, qty: sumQty(qs) }];
+    } catch {
+      return [];
+    }
+  });
 }
 
 /** a draft order per supplier («none» — items without a supplier: pick one in the order) */
@@ -70,14 +76,31 @@ export function draftsForJob(db: DB, jobId: ID, moduleLines: ModulePurchaseLine[
     const item = db.catalog.find((c) => c.id === n.catalogItemId)!;
     needs.set(item.id, { item, qty: n.qty });
   }
+  // a module's lines replace the core's for an item; several lines of the module for one item are summed (review SUP2-а №4)
+  const fromModule = new Set<ID>();
   for (const m of moduleLines) {
     const item = db.catalog.find((c) => c.id === m.catalogItemId);
-    if (!item) continue;
-    needs.set(item.id, { item, qty: m.qty, ...(m.packed ? { packed: m.qty } : {}), ...(m.note ? { note: m.note } : {}) });
+    // a module's bad quantity never replaces the core's line
+    if (!item || !/^\d+(\.\d+)?$/.test(String(m.qty).trim())) continue;
+    const had = fromModule.has(item.id) ? needs.get(item.id) : undefined;
+    try {
+      const qty = had ? sumQty([had.packed ?? had.qty, m.qty]) : sumQty([m.qty]);
+      const note = [had?.note, m.note].filter(Boolean).join(", ");
+      needs.set(item.id, { item, qty, ...(m.packed ? { packed: qty } : {}), ...(note ? { note } : {}) });
+      fromModule.add(item.id);
+    } catch {
+      // a bad quantity of a module: the line is left out, the rest of the order is made
+    }
   }
   const groups = new Map<string, DraftGroup>();
   for (const n of [...needs.values()].sort((a, b) => a.item.name.localeCompare(b.item.name))) {
-    const p = n.packed !== undefined ? { packs: n.packed, checkPack: false } : purchasePacks(n.qty, n.item.packSize ?? null);
+    let p: { packs: string; checkPack: boolean };
+    try {
+      p = n.packed !== undefined ? { packs: n.packed, checkPack: false } : purchasePacks(n.qty, n.item.packSize ?? null);
+    } catch {
+      // a bad quantity (negative, empty) of one line does not stop the whole order (review SUP2-а №6)
+      continue;
+    }
     if (p.packs === "0") continue;
     const key = n.item.supplierId || "";
     const g = groups.get(key) ?? { ...(key ? { supplierId: key } : {}), lines: [] };
@@ -114,13 +137,14 @@ export const linesEditable = (o: Pick<PurchaseOrder, "status">) => o.status === 
 
 /**
  * The status after marking what came (as public.po_receive): every line has its qty → received; something came →
- * partially_received; nothing and it was received → partially_received; else as it was.
+ * partially_received; nothing → sent.
  */
 export function statusAfterReceive(o: Pick<PurchaseOrder, "status" | "lines">): PoStatus {
   const ls = o.lines;
   if (ls.length && ls.every((l) => Number(l.receivedQty) >= Number(l.qty))) return "received";
   if (ls.some((l) => Number(l.receivedQty) > 0)) return "partially_received";
-  return o.status === "received" ? "partially_received" : o.status;
+  // every tick taken back (the undo of a marking): sent again — as public.po_receive
+  return o.status === "draft" || o.status === "cancelled" ? o.status : "sent";
 }
 
 /** the orders of a job, newest first */

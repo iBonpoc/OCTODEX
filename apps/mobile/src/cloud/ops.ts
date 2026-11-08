@@ -9,6 +9,7 @@ import { companyToday } from "@/features/zone";
 import { cleanText, TEMPLATE_NAME_MAX } from "@/features/checklist";
 import { supplierToRow } from "@/features/suppliers";
 import { poLineToRow, poToRow } from "@/features/purchaseOrderRows";
+import { linesEditable as poLinesEditable } from "@/features/purchaseOrders";
 import { realJob } from "./inspectionBridge";
 import { discountBps, ENGINE_VERSION, jobLineQty, type DecLike } from "@octo/estimating-engine";
 import type { PurchaseOrder, EstimateTemplate, BillingAddress, CalendarEvent, ChecklistItemKind, ChecklistTemplate, NaReason, VisitSettings, MemberPrefs, PushGroup, CustomField, CustomFieldValue, JobLineItem, JobType, CallOutcome, CatalogItem, Company, CompanyContact, CompanyLicense, CustomerStatus, EstimateDoc, ExpenseCategory, PaymentMethod, Person, CancelReason, Property, ServiceCategory, Tag, VisitStep, Supplier } from "@/data/types";
@@ -1276,7 +1277,14 @@ export async function sendVisitPoint(p: { visitId: string; lat: number; lng: num
  */
 async function savePurchaseOrder(op: Extract<Op, { k: "po.save" }>, c: string) {
   const o = op.order;
-  await run(supabase.from("purchase_orders").upsert(poToRow(o, c), { onConflict: "id" }));
+  // made as a draft if new (the server makes every new order a draft, t26), then changed to what the phone has: an
+  // upsert would carry the forced draft into the update (EXCLUDED holds what BEFORE INSERT made)
+  const row = poToRow(o, c);
+  await run(supabase.from("purchase_orders").upsert(row, { onConflict: "id", ignoreDuplicates: true }));
+  const { id: _id, company_id: _c, ...patch } = row;
+  await run(supabase.from("purchase_orders").update(patch).eq("id", o.id).eq("company_id", c));
+  // a closed order's lines are not sent (the server keeps them as they are anyway — review SUP2-а №1)
+  if (!poLinesEditable(o)) return;
   if (o.lines.length) {
     await run(supabase.from("purchase_order_lines").upsert(o.lines.map((l) => poLineToRow(l, o.id, c)), { onConflict: "id" }));
   }
