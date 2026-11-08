@@ -93,6 +93,28 @@ export function dropModuleOps(items: readonly OwnedItem[], module: string, who: 
   return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
 }
 
+/**
+ * A module's settings refused as «changed by someone else first» (row_version_conflict): this write and every later
+ * waiting settings write of the module go. Each later one was built on this one's base (the phone counts the version up
+ * for its own writes), so sending it after the refusal would quietly overwrite the other person's change (review #372 №1).
+ */
+export function dropSettingsOps(items: readonly OwnedItem[], module: string, who: Owner | null): { kept: OwnedItem[]; gone: OwnedItem[] } {
+  const mine = new Set(mineOf(items, who).map((x) => x.id));
+  const isGone = (x: OwnedItem) => mine.has(x.id) && x.op.k === "module.saveSettings" && x.op.module === module;
+  return { kept: items.filter((x) => !isGone(x)), gone: items.filter(isGone) };
+}
+
+/** the one card «settings not saved: someone else changed them» per module and person; a later batch adds to its count */
+export function settingsRejected(prev: readonly RejectedOp[], module: string, count: number, error: string, now: number, who: Owner | null): RejectedOp[] {
+  const id = `settings.${module}.${who?.userId ?? ""}.${who?.companyId ?? ""}`;
+  const was = prev.find((x) => x.id === id && sameOwner(x.owner ?? null, who));
+  const rec: RejectedOp = {
+    id, ...(who ? { owner: who } : {}), kind: "module.saveSettings", what: "module", href: "/company/modules", module, count: (was?.count ?? 0) + count,
+    labelKey: "mod.settingsConflict", error, at: new Date(now).toISOString(),
+  };
+  return [...freshRejected(prev, now).filter((x) => x.id !== id), rec];
+}
+
 /** the one card «not saved: the trial is over» per module and person; a later batch adds to its count */
 export function moduleRejected(prev: readonly RejectedOp[], module: string, count: number, error: string, now: number, who: Owner | null, labelKey?: string): RejectedOp[] {
   const id = `module.${module}.${who?.userId ?? ""}.${who?.companyId ?? ""}`;
