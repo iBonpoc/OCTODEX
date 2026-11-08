@@ -6,6 +6,7 @@ import {
   DEFAULT_JOINTS,
   DEFAULT_WALL_KITS,
   DEFAULT_WALL_KIT_BY_WALL,
+  WOOD_SCREW,
   type GuardKit,
   type GutterMount,
   type HangerKit,
@@ -191,6 +192,16 @@ export interface GutterRules {
   dsJoin: "rivet" | "screw";
   /** sealant points per tube (PRD 06: 8 joints a tube) */
   jointsPerSealantTube: number;
+  /** sealant in the joint's color (painted stock: one line per color; mill: plain sealant) — spec П18.15. Off by default:
+   *  an item priced as plain «sealant» keeps its price until the company turns this on */
+  sealantByColor: boolean;
+  /** a length attribute of a kit part by gutter size, inches: { spike: { "5": "7" } } (spec П18.15). Empty by default:
+   *  an item priced without a length keeps its price until the company turns lengths on (DEFAULT_SPIKE_LENGTH_IN) */
+  kitLengthIn: Record<string, Record<string, string>>;
+  /** the wood screw of the kits: its size and a washer (spec П18.15) */
+  woodScrew: { screw: string; washer: boolean };
+  /** the masonry anchor of the kits: "masonry" (any) or a size */
+  anchor: string;
   /** soldered metals take solder instead of sealant */
   solderedMaterials: string[];
   solderPointsPerLb: number;
@@ -231,6 +242,10 @@ export const DEFAULT_GUTTER_RULES: GutterRules = {
   joints: DEFAULT_JOINTS,
   dsJoin: "rivet",
   jointsPerSealantTube: 8,
+  sealantByColor: false,
+  kitLengthIn: {},
+  woodScrew: { screw: WOOD_SCREW, washer: false },
+  anchor: "masonry",
   solderedMaterials: ["copper"],
   solderPointsPerLb: 10,
   touchUpPaint: true,
@@ -269,7 +284,16 @@ export function resolveGutterRules(over?: GutterRulesOverride): GutterRules {
     guardKits: { ...d.guardKits, ...o.guardKits },
     joints,
     coilBlankIn: { ...d.coilBlankIn, ...o.coilBlankIn },
+    // only text lengths (a number would break the key); a copy, never the caller's object (review V1 №4, №7)
+    kitLengthIn: Object.fromEntries(
+      Object.entries({ ...d.kitLengthIn, ...o.kitLengthIn }).map(([part, t]) => [part, Object.fromEntries(Object.entries(t ?? {}).filter(([, v]) => typeof v === "string" && v.trim() !== ""))]),
+    ),
+    woodScrew: { ...d.woodScrew, ...o.woodScrew },
   };
+  r.woodScrew = { ...r.woodScrew, washer: r.woodScrew.washer === true };
+  if (typeof r.sealantByColor !== "boolean") r.sealantByColor = d.sealantByColor;
+  if (typeof r.woodScrew.screw !== "string" || !r.woodScrew.screw.trim()) r.woodScrew = { ...r.woodScrew, screw: d.woodScrew.screw };
+  if (typeof r.anchor !== "string" || !r.anchor.trim()) r.anchor = d.anchor;
   for (const k of POSITIVE) if (!okPos(r[k])) (r as unknown as Record<string, unknown>)[k] = d[k];
   if (!Number.isInteger(r.hangerExtraPerRun) || r.hangerExtraPerRun < 0) r.hangerExtraPerRun = 0;
   if (!Number.isInteger(r.dsExtensionIn) || r.dsExtensionIn < 0) r.dsExtensionIn = 0;
@@ -346,9 +370,18 @@ const CONSUMABLE_PARTS = new Set(["screw", "anchor"]);
 interface KitCtx { gutter?: GutterStock; ds?: { shape: string; size: string; material: string }; kitId?: string }
 
 /** a kit part's attributes and key: part + attribute values in key-name order */
-function kitPart(p: KitPart, ctx: KitCtx) {
+/** the company's fastener choices (spec П18.15): the kits' wood screw and anchor, a part's length by gutter size */
+function companyAttrs(p: KitPart, ctx: KitCtx, rules: Pick<GutterRules, "woodScrew" | "anchor" | "kitLengthIn">): Record<string, string> {
+  if (p.part === "screw" && p.attrs?.screw === WOOD_SCREW)
+    return { ...p.attrs, screw: rules.woodScrew.screw, ...(rules.woodScrew.washer ? { washer: "washer" } : {}) };
+  if (p.part === "anchor" && p.attrs?.anchor === "masonry") return { ...p.attrs, anchor: rules.anchor };
+  const len = ctx.gutter ? rules.kitLengthIn[p.part]?.[ctx.gutter.size] : undefined;
+  return len ? { ...(p.attrs ?? {}), lengthIn: len } : { ...(p.attrs ?? {}) };
+}
+
+function kitPart(p: KitPart, ctx: KitCtx, rules: Pick<GutterRules, "woodScrew" | "anchor" | "kitLengthIn">) {
   const attrs: Record<string, string> = {
-    ...(p.attrs ?? {}),
+    ...companyAttrs(p, ctx, rules),
     ...(p.byKit && ctx.kitId ? { [p.part]: ctx.kitId } : {}),
     ...(p.bySize && ctx.gutter ? { profile: ctx.gutter.profile, size: ctx.gutter.size, metal: metalOf(ctx.gutter.material) } : {}),
     ...(p.byDs && ctx.ds ? { shape: ctx.ds.shape, size: ctx.ds.size, metal: metalOf(ctx.ds.material) } : {}),
@@ -443,7 +476,7 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
   const waste = dec(1).add(dec(rules.wastePct));
 
   /* joints: rivets by metal and color, sealant or solder points, touch-up colors */
-  let sealantPts = 0;
+  const sealantPts = new Map<string, number>();
   let solderPts = 0;
   const paintColors = new Set<string>();
   const joint = (kind: JointKind, s: { material: string; finish?: string; color?: string }, n = 1) => {
@@ -458,13 +491,16 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
       acc.add({ key: `rivet.42.${metal}.${finish}.${color}`, section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "rivet", rivet: "42", material: metal, finish, ...(color !== "-" ? { color } : {}) } }, j.rivets * n);
     }
     if (rules.solderedMaterials.includes(s.material)) solderPts += j.sealant * n;
-    else sealantPts += j.sealant * n;
+    else if (j.sealant > 0) {
+      const sc = rules.sealantByColor ? color : "-";
+      sealantPts.set(sc, (sealantPts.get(sc) ?? 0) + j.sealant * n);
+    }
     if (j.paint && finish === "painted" && s.color) paintColors.add(s.color);
   };
 
   const kitParts = (parts: KitPart[], section: GutterSection, n: DecLike, ctx: KitCtx, strips?: Map<string, { attrs: Record<string, string>; inches: Dec }>, dsId?: string) => {
     for (const p of parts) {
-      const { key, attrs } = kitPart(p, ctx);
+      const { key, attrs } = kitPart(p, ctx, rules);
       if (p.stripInBySize) {
         const per = ctx.ds ? p.stripInBySize[ctx.ds.size] : undefined;
         if (per === undefined || !strips) {
@@ -701,7 +737,10 @@ export function computeGutterParts(input: MeasurementInput, over?: GutterRulesOv
   }
 
   // consumables
-  if (sealantPts > 0) acc.add({ key: "sealant", section: "consumables", unit: "ea", use: "both", kind: "material", attrs: { part: "sealant" } }, Math.ceil(sealantPts / rules.jointsPerSealantTube));
+  // a tube is one color: tubes by color (mill / unpainted joints: plain sealant, the key of older versions)
+  for (const [c, pts] of [...sealantPts].sort(([a], [b]) => a.localeCompare(b)))
+    if (pts > 0)
+      acc.add({ key: c === "-" ? "sealant" : `sealant.${seg(c)}`, section: "consumables", unit: "ea", use: "both", kind: "material", attrs: { part: "sealant", ...(c !== "-" ? { color: c } : {}) } }, Math.ceil(pts / rules.jointsPerSealantTube));
   if (solderPts > 0) {
     acc.add({ key: "solder", section: "consumables", unit: "lb", use: "purchase", kind: "material", attrs: { part: "solder" } }, Math.ceil(solderPts / rules.solderPointsPerLb));
     acc.add({ key: "flux", section: "consumables", unit: "ea", use: "purchase", kind: "material", attrs: { part: "flux" } }, 1);
