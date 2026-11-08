@@ -126,6 +126,9 @@ grant execute on all functions in schema tst to authenticated, anon;
 -- SEED
 -- =============================================================================
 :as_super
+-- the fixtures below lock versions written by hand (lines, no document); the lock check (migration 20261108190000)
+-- is off for them and on again right before T107, which tests it
+alter table public.estimate_versions disable trigger t50_lock_lines_match;
 insert into auth.users (id, email, raw_user_meta_data) values
   ('a0000000-0000-0000-0000-000000000001', 'owner@a.test',  '{"full_name":"Owner A","locale":"ru"}'),
   ('a0000000-0000-0000-0000-000000000002', 'office@a.test', '{"full_name":"Dispatcher A"}'),
@@ -515,11 +518,13 @@ end $$;
 -- =============================================================================
 -- T6. Отправленная версия сметы неизменяема; доступ к ролям
 -- =============================================================================
+-- the fixture version has lines and no document: locked as setup (no JWT — the lock check of T107 guards a member's send)
+:as_super
+update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000001';
 :as_owner_a
 do $$ begin
   perform tst.fails($q$insert into public.estimate_line_items (company_id, option_id, name, unit_price_cents, client_visible)
                        values ('ca000000-0000-0000-0000-000000000000', '0e3a0000-0000-0000-0000-000000000001', 'BOM', 100, false)$q$, 'BOM line with price');
-  update public.estimate_versions set locked_at = now(), sent_at = now() where id = '0e2a0000-0000-0000-0000-000000000001';
   perform tst.fails($q$update public.estimate_versions set intro_text = 'changed' where id = '0e2a0000-0000-0000-0000-000000000001'$q$, 'edit locked version');
   perform tst.fails($q$update public.estimate_line_items set unit_price_cents = 1 where id = '0e4a0000-0000-0000-0000-000000000001'$q$, 'edit line of locked version');
   perform tst.fails($q$delete from public.estimate_line_items where id = '0e4a0000-0000-0000-0000-000000000001'$q$, 'delete line of locked version');
@@ -592,7 +597,9 @@ do $$ begin
      '{"options":[{"id":"0e3a0000-0000-0000-0000-000000000010","name":"Standard","recommended":true,"lines":[
         {"id":"0e4a0000-0000-0000-0000-000000000011","name":"Install railing","group":"labor","quantity":"1","unit":"ea","unitPriceCents":25000},
         {"id":"0e4a0000-0000-0000-0000-000000000012","name":"Bracket","group":"material","quantity":"12","unit":"ea","unitPriceCents":1213},
-        {"id":"0e4a0000-0000-0000-0000-000000000013","name":"Deep clean","group":"service","quantity":"1","unit":"ea","unitPriceCents":9000,"optional":true}]}]}');
+        {"id":"0e4a0000-0000-0000-0000-000000000013","name":"Deep clean","group":"service","quantity":"1","unit":"ea","unitPriceCents":9000,"optional":true}]}],
+      "settings":{"discount":{"kind":"fixed","cents":1000},"tax":{"enabled":true,"rateBps":950,"groups":{"service":false,"labor":false,"material":true}},
+                  "deposit":{"kind":"pct","bps":1000}}}');
   update public.estimates set current_version_id = '0e2a0000-0000-0000-0000-000000000010' where id = '0e1a0000-0000-0000-0000-000000000010';
   insert into public.estimate_options (id, company_id, version_id, name, is_recommended, discount_mode, discount_value) values
     ('0e3a0000-0000-0000-0000-000000000010', 'ca000000-0000-0000-0000-000000000000', '0e2a0000-0000-0000-0000-000000000010', 'Standard', true, 'fixed', 1000);
@@ -8693,11 +8700,13 @@ select tst.ok(not exists (select 1 from pg_trigger where tgname = 't40_version_l
 -- ---------------------------------------------------------------- T107: a version is locked only when its lines match its document (Н1, spec 33 П23.9)
 -- The page /p/ draws app.client_doc(calc_inputs); the server's sums come from estimate_line_items. send_estimate
 -- locks a version only when, per option, the client-visible lines with a non-zero amount are the same on both sides.
+:as_super
+alter table public.estimate_versions enable trigger t50_lock_lines_match;
 :as_office_a
 insert into public.estimates (id, company_id, customer_id, property_id, title)
   values ('a1070000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T107 lock match');
-insert into public.estimate_versions (id, company_id, estimate_id, version_no, calc_inputs)
-  values ('a1070000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000001', 1, $j${"options":[
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, deposit_rule, calc_inputs)
+  values ('a1070000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000001', 1, false, '{"kind":"none"}', $j${"options":[
    {"id":"a1070000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
      {"id":"a1070000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
      {"id":"a1070000-0000-4000-8000-0000000000b2","name":"Guards","group":"material","quantity":"1","unit":"ea","unitPriceCents":5000,"optional":true},
@@ -8709,25 +8718,74 @@ insert into public.estimate_versions (id, company_id, estimate_id, version_no, c
 update public.estimates set current_version_id = 'a1070000-0000-4000-8000-000000000002' where id = 'a1070000-0000-4000-8000-000000000001';
 insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended) values
   ('a1070000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000002', 'A', 0, true), ('a1070000-0000-4000-8000-0000000000a2', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000002', 'B', 1, false);
-insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, is_optional, client_visible) values
-  ('a1070000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Install', 1, 10001, false, true),   -- one cent apart from the document
-  ('a1070000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Guards', 1, 5000, true, true),
-  ('a1070000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Hanger (BOM)', 40, 0, true, false),
-  ('a1070000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Left out', 0, 7000, true, true),
-  ('a1070000-0000-4000-8000-0000000000b5', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a2', 'Other add-on', 1, 3000, true, true);
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, is_optional, client_visible, taxable) values
+  ('a1070000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Install', 1, 10001, false, true, false),   -- one cent apart from the document
+  ('a1070000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Guards', 1, 5000, true, true, false),
+  ('a1070000-0000-4000-8000-0000000000b3', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Hanger (BOM)', 40, 0, true, false, false),
+  ('a1070000-0000-4000-8000-0000000000b4', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Left out', 0, 7000, true, true, false),
+  ('a1070000-0000-4000-8000-0000000000b5', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a2', 'Other add-on', 1, 3000, true, true, false);
 select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a line one cent apart: not sent');
 select tst.ok((select locked_at is null from public.estimate_versions where id = 'a1070000-0000-4000-8000-000000000002')
               and (select status = 'draft' from public.estimates where id = 'a1070000-0000-4000-8000-000000000001'), 'T107 nothing locked, still a draft');
 update public.estimate_line_items set unit_price_cents = 10000 where id = 'a1070000-0000-4000-8000-0000000000b1';
 -- a line the client would pay for but never see
-insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
-  ('a1070000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Not on the page', 1, 100);
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, taxable) values
+  ('a1070000-0000-4000-8000-0000000000b9', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-0000000000a1', 'Not on the page', 1, 100, false);
 select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a line missing from the document: not sent');
 delete from public.estimate_line_items where id = 'a1070000-0000-4000-8000-0000000000b9';
 -- an add-on on one side, a plain line on the other
 update public.estimate_line_items set is_optional = false where id = 'a1070000-0000-4000-8000-0000000000b2';
 select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 add-on vs plain line: not sent');
 update public.estimate_line_items set is_optional = true where id = 'a1070000-0000-4000-8000-0000000000b2';
+-- security-check В1: an option id twice in the document (the page shows «Basic» $100 and «Premium» $900 under one id,
+-- the server sums both) — and a line twice in one option
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options}', (calc_inputs -> 'options') || jsonb_build_array(calc_inputs #> '{options,0}')) where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 an option id twice: not sent');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options}', (calc_inputs -> 'options') - 2) where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines}', (calc_inputs #> '{options,0,lines}') || jsonb_build_array(calc_inputs #> '{options,0,lines,0}')) where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a line twice in the document: not sent');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines}', (calc_inputs #> '{options,0,lines}') - 4) where id = 'a1070000-0000-4000-8000-000000000002';
+-- security-check В2: no document (no options array) but paid lines — the page would show nothing
+update public.estimate_versions set calc_inputs = '{"note": "hi"}' where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 no document, paid lines: not sent');
+update public.estimate_versions set calc_inputs = $j${"options":[
+   {"id":"a1070000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
+     {"id":"a1070000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"1","unit":"ea","unitPriceCents":10000},
+     {"id":"a1070000-0000-4000-8000-0000000000b2","name":"Guards","group":"material","quantity":"1","unit":"ea","unitPriceCents":5000,"optional":true},
+     {"id":"a1070000-0000-4000-8000-0000000000b3","name":"Hanger (BOM)","group":"material","quantity":"40","unit":"ea","unitPriceCents":0,"optional":true,"clientVisible":false},
+     {"id":"a1070000-0000-4000-8000-0000000000b4","name":"Left out","group":"material","quantity":"0","unit":"ea","unitPriceCents":7000,"optional":true}]},
+   {"id":"a1070000-0000-4000-8000-0000000000a2","name":"B","lines":[
+     {"id":"a1070000-0000-4000-8000-0000000000b5","name":"Other add-on","group":"service","quantity":"1","unit":"ea","unitPriceCents":3000,"optional":true}]}],
+ "settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"},"discount":null}}$j$ where id = 'a1070000-0000-4000-8000-000000000002';
+-- security-check С1: the discount, the tax and the deposit as the document says
+update public.estimate_options set discount_mode = 'pct', discount_value = 5000 where id = 'a1070000-0000-4000-8000-0000000000a1';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%(discount)%', 'T107 a discount the document does not have: not sent');
+update public.estimate_options set discount_mode = null, discount_value = null where id = 'a1070000-0000-4000-8000-0000000000a1';
+update public.estimate_versions set tax_enabled = true, tax_rate_bps = 2000 where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%(tax)%', 'T107 a tax the document does not have: not sent');
+update public.estimate_versions set tax_enabled = false where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_versions set deposit_rule = '{"kind":"pct","bps":10000}' where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%(deposit)%', 'T107 a deposit the document does not have: not sent');
+update public.estimate_versions set deposit_rule = '{"kind":"none"}' where id = 'a1070000-0000-4000-8000-000000000002';
+-- a quantity that is not a number: the page cannot count it — never matches
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"one"') where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a quantity that is not a number: not sent');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"1"') where id = 'a1070000-0000-4000-8000-000000000002';
+-- a huge price: never matches, the same refusal (not «bigint out of range»)
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,unitPriceCents}', '1e300') where id = 'a1070000-0000-4000-8000-000000000002';
+select tst.fails_like($q$select public.send_estimate('a1070000-0000-4000-8000-000000000001', 'tok_t107_0123456789abcdef')$q$, '%do not match%', 'T107 a huge price: the same refusal');
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,unitPriceCents}', '10000') where id = 'a1070000-0000-4000-8000-000000000002';
+-- review №4: «1e-7» (decimal.js writes a tiny quantity so) is a number: $0 on both sides, it matches
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,1,lines,0,quantity}', '"1e-7"') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 0.0000001 where id = 'a1070000-0000-4000-8000-0000000000b5';
+:as_super
+select tst.ok(tst.cnt($q$select 1 from app.version_lines_mismatch('a1070000-0000-4000-8000-000000000002')$q$) = 0, 'T107 a quantity of 1e-7: $0 both sides, it matches');
+:as_office_a
+update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,1,lines,0,quantity}', '"1"') where id = 'a1070000-0000-4000-8000-000000000002';
+update public.estimate_line_items set quantity = 1 where id = 'a1070000-0000-4000-8000-0000000000b5';
+-- security-check С3: a member cannot make a version that is locked from the start
+select tst.fails_like($q$insert into public.estimate_versions (id, company_id, estimate_id, version_no, locked_at)
+  values ('a1070000-0000-4000-8000-0000000000c9', 'ca000000-0000-0000-0000-000000000000', 'a1070000-0000-4000-8000-000000000001', 7, now())$q$, '%cannot be locked%', 'T107 a version born locked');
 -- a quantity with 5 decimals: both sides count the stored 1.2346 (the engine too, custom.test.ts) → $123.46
 update public.estimate_versions set calc_inputs = jsonb_set(calc_inputs, '{options,0,lines,0,quantity}', '"1.23455"') where id = 'a1070000-0000-4000-8000-000000000002';
 update public.estimate_line_items set quantity = 1.23455 where id = 'a1070000-0000-4000-8000-0000000000b1';

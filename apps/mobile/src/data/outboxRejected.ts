@@ -61,7 +61,8 @@ export function rejectedOf(item: OwnedItem, error: string, now: number, who: Own
   const base = { id: item.id, ...(owner ? { owner } : {}), kind: op.k, error, at: new Date(now).toISOString() };
   // a send refused for a reason we can explain: the estimate is back to a draft on the server, the card says why
   const reason = rejectReasonOf(hint);
-  if (op.k === "estimate.send" && reason === "estimate_lines_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, reason };
+  // (estimate.sign sends first: a quick estimate signed on site — the client's signature is not lost silently, review №1)
+  if ((op.k === "estimate.send" || op.k === "estimate.sign") && reason === "estimate_lines_mismatch") return { ...base, what: "estimate", href: `/estimate/${op.id}`, reason };
   if (!isMoneyOp(item, MONEY_KINDS)) return null;
   switch (op.k) {
     case "estimate.deposit": return { ...base, what: "deposit", href: `/estimate/${op.id}`, amountCents: op.depositCents };

@@ -41,6 +41,10 @@ describe("unit:rejectReasons — a refusal we can explain", () => {
     const att = buildAttention(makeSeed(), "director", NOW, { rejected: [r] }).find((x) => x.kind === "rejected")!;
     expect(att).toMatchObject({ label: "att.rejected.estimate", hint: "sync.stuck.reason.estimateLines", href: "/estimate/e1" });
   });
+  it("a quick estimate signed on site sends first: its refusal is the same card", () => {
+    const sign = { ...send, op: { k: "estimate.sign", id: "e2", signer: "Ann", svg: "M0 0" } as unknown as Op };
+    expect(rejectedOf(sign, SERVER_TEXT, NOW, me, "estimate_lines_mismatch")).toMatchObject({ what: "estimate", href: "/estimate/e2", kind: "estimate.sign" });
+  });
   it("a refused send without a known code: as before, not kept (not money)", () => {
     expect(rejectedOf(send, SERVER_TEXT, NOW, me)).toBeNull();
     expect(rejectedOf(send, SERVER_TEXT, NOW, me, "something_else")).toBeNull();
