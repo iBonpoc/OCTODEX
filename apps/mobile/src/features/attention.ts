@@ -10,7 +10,7 @@ import { dayKeyIn } from "./zone";
 import { jobAwaitingClose } from "@/features/jobDone";
 import { goneId } from "./team";
 import type { DictKey } from "@/i18n";
-import type { RejectedOp } from "@/data/outboxRejected";
+import { rejectReasonKey, type RejectedOp } from "@/data/outboxRejected";
 import { canOpen } from "@/nav/roles";
 import { canReview, missedCount, visitMissed, visitSettings } from "./checklist";
 
@@ -75,7 +75,9 @@ const SUBJECT_PATH: Record<Task["subjectType"], string> = { lead: "/lead", custo
 export const rejectedLabel = (r: Pick<RejectedOp, "what" | "labelKey">): DictKey => (r.labelKey ?? `att.rejected.${r.what}`) as DictKey;
 
 /** what to do about a refused change: «Открыть» → «Подключить» for who may open where it leads, else «ask the owner» */
-export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: RejectedOp["kind"] }, role: Role): DictKey =>
+export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: RejectedOp["kind"]; reason?: RejectedOp["reason"] }, role: Role): DictKey =>
+  // a refusal we can explain: its own words (outboxRejected REJECT_REASONS)
+  r.reason ? rejectReasonKey(r.reason, r.kind) :
   // settings changed by someone else first: not «the module is off» — read again, make the change again (review #374 №3)
   r.kind === "module.saveSettings" ? "sync.rejected.settingsHint" : r.what !== "module" ? "sync.rejected.hint" : canOpen(role, r.href) ? "sync.rejected.moduleHint" : "sync.rejected.moduleHintAsk";
 /** «Открыть» on a refused change: only where this role may go (a module's card for a tech: nowhere — review M5a №3) */
@@ -90,7 +92,7 @@ export function buildAttention(db: DB, role: Role = "director", now: number = Da
   for (const r of extra.rejected ?? []) {
     out.push({
       id: `rej-${r.id}`, kind: "rejected", refId: r.id, name: "", label: rejectedLabel(r), params: r.what === "module" ? { count: r.count ?? 0 } : {}, chip: "att.rejectedChip",
-      status: "bad", amountCents: r.amountCents, score: REJECTED_SCORE, href: r.href, ...(r.what === "module" ? { hint: rejectedHint(r, role) } : {}),
+      status: "bad", amountCents: r.amountCents, score: REJECTED_SCORE, href: r.href, ...(r.what === "module" || r.reason ? { hint: rejectedHint(r, role) } : {}),
     });
   }
   // Leads by "whose turn" (docs/14-leads-spec.md §3.2, §7.4): reply · remind · lost or wait? · no step · back from snooze.

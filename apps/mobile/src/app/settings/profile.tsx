@@ -1,6 +1,7 @@
 import { View } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
+import { syncErrorKey } from "@/data/syncErrorText";
 import { useAuth } from "@/cloud/auth";
 import type { Role } from "@/data/types";
 import { useI18n } from "@/i18n";
@@ -42,7 +43,7 @@ export default function Profile() {
             {/* a status is an icon + a word (rule 2), not coloured text alone (review #289) */}
             <StatusChip
               status={syncError ? "bad" : queue.length ? "warn" : "ok"}
-              label={syncError ? t("account.error", { msg: syncError }) : queue.length ? t("account.pending", { n: queue.length }) : t("account.synced")}
+              label={syncError ? t(syncErrorKey(syncError)) : queue.length ? t("account.pending", { n: queue.length }) : t("account.synced")}
               soft
             />
             <RowView style={{ flexWrap: "wrap" }}>

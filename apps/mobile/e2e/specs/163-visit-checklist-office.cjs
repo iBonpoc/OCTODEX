@@ -38,8 +38,10 @@ exports.run = async (h) => {
   await p.getByTestId("chk-from-template").last().getByRole("button").click();
   await h.sheet().getByText("Добавлен").waitFor();
   h.expect((await h.sheet().getByRole("button", { name: "Every job visit" }).count()) === 0, "an added template is not pressed again");
-  await p.keyboard.press("Escape");
-  await h.sheet().waitFor({ state: "detached" }).catch(() => {});
+  // close by its own button and wait for it: Escape may not reach the sheet, and a swallowed wait hid that (CHECKS §9 п.3, сборка #419)
+  await h.sheet().getByRole("button", { name: "Закрыть", exact: true }).last().click();
+  await p.getByTestId("chk-edit-1").last().getByRole("button", { name: /^Изменить/ }).waitFor({ state: "visible" });
+  await h.sheet().waitFor({ state: "detached", timeout: 5000 });
 
   // the text of an item (a new line pasted is cleaned) and «Обязательный» off — the director
   await p.getByTestId("chk-edit-1").last().getByRole("button", { name: /^Изменить/ }).click();
