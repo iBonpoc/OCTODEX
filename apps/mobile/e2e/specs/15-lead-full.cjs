@@ -71,6 +71,19 @@ exports.run = async (h) => {
   await p.getByRole("button", { name: "Отметить выполненной" }).first().click();
   await p.waitForTimeout(300);
   h.expect(!!(await h.db()).tasks.find((x) => x.id === task.id).doneAt, "task done");
+  // B3 (recipe E): «Отменить» in the toast takes it back (armed after toastArmMs), the tick of a done task reopens it
+  await p.waitForTimeout(400);
+  await h.click("Отменить"); await p.waitForTimeout(400);
+  h.expect(!(await h.db()).tasks.find((x) => x.id === task.id).doneAt, "«Отменить» reopened the task");
+  await p.getByTestId(`lead-task-${task.id}`).locator("visible=true").getByRole("button", { name: "Отметить выполненной" }).click();
+  await p.waitForTimeout(300);
+  h.expect(!!(await h.db()).tasks.find((x) => x.id === task.id).doneAt, "done again by its tick");
+  await p.getByTestId(`lead-task-${task.id}`).locator("visible=true").getByRole("button", { name: "Вернуть в работу" }).click();
+  await p.waitForTimeout(300);
+  h.expect(!(await h.db()).tasks.find((x) => x.id === task.id).doneAt, "the tick of a done task reopens it");
+  await p.getByTestId(`lead-task-${task.id}`).locator("visible=true").getByRole("button", { name: "Отметить выполненной" }).click();
+  await p.waitForTimeout(300);
+  h.expect(!!(await h.db()).tasks.find((x) => x.id === task.id).doneAt, "task done");
 
   // edit the contact: email + second phone (people sheet, L2 part 2)
   await h.clickText("Обзор");

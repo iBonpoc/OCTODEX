@@ -2,18 +2,19 @@ import { useState } from "react";
 import { View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Clipboard from "expo-clipboard";
-import { space } from "@octo/design-tokens";
+import { space, statusIcon } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
 import { Labeled } from "@/features/fields";
 import { findDuplicates, phoneKey } from "@/features/leads";
 import { statusOf } from "@/features/clients";
 import { SourceField } from "@/features/lead/SourcePicker";
-import { Button, StatusChip, TextField } from "@/ui/controls";
+import { Button, TextField } from "@/ui/controls";
 import { formatPhoneUS } from "@/ui/inputFormat";
 import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
-import { Card, CardList, ItemCard, RowView, Screen } from "@/ui/surfaces";
+import { Card, RowView, Screen } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
 import { moduleDef } from "@/modules/registry";
 
 /**
@@ -86,19 +87,49 @@ export default function NewLead() {
           <T v="heading" tone="warn">
             ⚠ {t("lead.dupTitle")}
           </T>
-          <CardList>
-            {dup.customers.map((c) => (
-              statusOf(c) === "do_not_service" ? (
-                // the lead is still saved (04 §4): the mark is a warning, the decision is the director's
-                <ItemCard key={c.id} status="bad" title={t("lead.noService", { name: c.name })} subtitle={t("lead.noServiceHint")} right={<StatusChip status="bad" label={t("client.st.doNotService")} />} onPress={() => router.push(`/client/${c.id}`)} />
-              ) : (
-                <ItemCard key={c.id} status="warn" title={c.name} subtitle={t("lead.dupClient")} onPress={() => router.push(`/client/${c.id}`)} />
-              )
-            ))}
-            {dup.leads.map((l) => (
-              <ItemCard key={l.id} status="warn" title={l.name} subtitle={t("lead.dupLead", { date: day(l.receivedAt) })} onPress={() => router.push(`/lead/${l.id}`)} />
-            ))}
-          </CardList>
+          {/* the clients / leads found — related objects: compact cards (06 «Серия B», B3) */}
+          <CardGrid>
+            {[
+              ...dup.customers.map((c) => (
+                statusOf(c) === "do_not_service" ? (
+                  // the lead is still saved (04 §4): the mark is a warning, the decision is the director's
+                  <ListCard
+                    key={c.id}
+                    density="compact"
+                    testID={`new-lead-noservice-${c.id}`}
+                    lead={{ kind: "icon", icon: statusIcon.bad, tone: "bad" }}
+                    title={t("lead.noService", { name: c.name })}
+                    when={t("lead.noServiceHint")}
+                    status={{ tone: "bad", label: t("client.st.doNotService") }}
+                    onPress={() => router.push(`/client/${c.id}`)}
+                  />
+                ) : (
+                  <ListCard
+                    key={c.id}
+                    density="compact"
+                    testID={`new-lead-dup-client-${c.id}`}
+                    lead={{ kind: "icon", icon: statusIcon.warn, tone: "warn" }}
+                    title={c.name}
+                    when={t("lead.dupClient")}
+                    edge="warn"
+                    onPress={() => router.push(`/client/${c.id}`)}
+                  />
+                )
+              )),
+              ...dup.leads.map((l) => (
+                <ListCard
+                  key={l.id}
+                  density="compact"
+                  testID={`new-lead-dup-lead-${l.id}`}
+                  lead={{ kind: "icon", icon: statusIcon.warn, tone: "warn" }}
+                  title={l.name}
+                  when={t("lead.dupLead", { date: day(l.receivedAt) })}
+                  edge="warn"
+                  onPress={() => router.push(`/lead/${l.id}`)}
+                />
+              )),
+            ]}
+          </CardGrid>
         </View>
       ) : null}
 
