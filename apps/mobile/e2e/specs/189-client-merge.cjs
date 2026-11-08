@@ -12,6 +12,12 @@ const TWIN2 = "c-e2e-189b";
 
 exports.run = async (h) => {
   const p = h.page;
+  // the store writes the phone's copy a moment after the change: wait for what is checked, not for seconds
+  const dbWhen = async (ok) => {
+    let db = await h.db();
+    for (let i = 0; i < 40 && !ok(db); i++) { await p.waitForTimeout(150); db = await h.db(); }
+    return db;
+  };
   await h.go("/clients");
   await p.evaluate((twin) => {
     const k = "octo.db.v5";
@@ -36,14 +42,14 @@ exports.run = async (h) => {
   await dup.click();
   const sheet = h.sheet();
   await sheet.getByRole("button", { name: "Слить", exact: true }).waitFor({ timeout: 5000 });
-  h.expect(/В «Sarah Mitchell» перейдут: людей 1, объектов 1/.test(await sheet.innerText()), "the sheet: the older card stays, what moves");
+  h.expect(/В «Sarah Mitchell» перейдут: людей 1, объектов 1$/m.test(await sheet.innerText()), "the sheet: the older card stays, what moves");
   await h.shot("sheet");
   await sheet.getByRole("button", { name: "Слить", exact: true }).click();
   await sheet.getByRole("button", { name: "Да, слить" }).waitFor({ timeout: 5000 });
   h.expect(/нельзя будет вернуть из приложения/.test(await sheet.innerText()), "the confirmation says it is final after the undo");
   await sheet.getByRole("button", { name: "Да, слить" }).click();
   await h.expectText(/Слито в «Sarah Mitchell»/, "the toast");
-  let db = await h.db();
+  let db = await dbWhen((d) => d.customers.find((c) => c.id === TWIN)?.mergedIntoId);
   let twin = db.customers.find((c) => c.id === TWIN);
   h.expect(twin.mergedIntoId === "c1" && twin.status === "archived", "the twin is archived and merged into Sarah");
   h.expect(db.properties.find((x) => x.id === "p-e2e-189").customerId === "c1", "the twin's property is Sarah's");
@@ -53,7 +59,7 @@ exports.run = async (h) => {
   // «Отменить»: both as they were
   await p.getByRole("button", { name: "Отменить" }).last().click();
   await p.getByTestId(`client-dup-${TWIN}`).locator("visible=true").first().waitFor({ timeout: 5000 });
-  db = await h.db();
+  db = await dbWhen((d) => !d.customers.find((c) => c.id === TWIN)?.mergedIntoId);
   twin = db.customers.find((c) => c.id === TWIN);
   h.expect(!twin.mergedIntoId && twin.status !== "archived", "undo: the twin is a client again");
   h.expect(db.properties.find((x) => x.id === "p-e2e-189").customerId === TWIN, "undo: its property is its own again");
@@ -63,6 +69,7 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: "Слить", exact: true }).click();
   await h.sheet().getByRole("button", { name: "Да, слить" }).click();
   await h.expectText(/Слито в «Sarah Mitchell»/, "merged again");
+  await dbWhen((d) => d.customers.find((c) => c.id === TWIN)?.mergedIntoId);
   await h.go("/clients");
   await p.getByTestId("list-card").filter({ hasText: "Sarah Mitchell" }).locator("visible=true").first().waitFor({ timeout: 5000 });
   h.expect((await p.getByTestId("list-card").filter({ hasText: "Sarah M." }).filter({ hasNotText: "Mitchell" }).count()) === 0, "the merged card is not in the list");
@@ -89,6 +96,6 @@ exports.run = async (h) => {
   await h.sheet().getByRole("button", { name: "Не дубль" }).click();
   await h.expectText(/Не дубль: S\. Mitchell/, "the toast");
   h.expect((await p.getByTestId(`client-dup-${TWIN2}`).count()) === 0, "the pair is not shown");
-  db = await h.db();
+  db = await dbWhen((d) => (d.customers.find((c) => c.id === "c1").notDuplicateIds || []).length > 0);
   h.expect((db.customers.find((c) => c.id === "c1").notDuplicateIds || []).includes(TWIN2), "kept on Sarah's card");
 };

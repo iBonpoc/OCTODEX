@@ -56,6 +56,11 @@ function MergeSheet({ here, other, onClose }: { here: Customer; other: Customer;
   const kept = keep === here.id ? here : other;
   const drop = keep === here.id ? other : here;
   const s = mergeSummary(db, drop.id);
+  // only what is there: «людей 1, объектов 1», not a row of zeros
+  const what = (Object.keys(s) as (keyof typeof s)[])
+    .filter((k) => s[k] > 0)
+    .map((k) => t(`clientDup.n.${k}` as DictKey, { n: s[k] }))
+    .join(", ");
   const dns = statusOf(here) === "do_not_service" || statusOf(other) === "do_not_service";
   const merge = () => {
     const undo = store.mergeCustomers(kept.id, drop.id);
@@ -79,7 +84,7 @@ function MergeSheet({ here, other, onClose }: { here: Customer; other: Customer;
         onChange={setKeep}
         items={[here, other].map((x) => ({ key: x.id, label: [x.name, x.number].filter(Boolean).join(" · ") }))}
       />
-      <T v="body">{t("clientDup.moves", { name: kept.name, ...s })}</T>
+      <T v="body">{t("clientDup.moves", { name: kept.name, what: what || t("clientDup.n.none") })}</T>
       <T v="caption" tone="mut">
         {t("clientDup.fill")}
       </T>
