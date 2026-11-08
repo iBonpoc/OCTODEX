@@ -41,12 +41,19 @@ const server = {
   sends: [] as { op: unknown; companyId: string; userId: string; d: Deferred<void> }[],
   points: [] as Deferred<string>[],
   renewed: 0,
+  /** one module's row read again after a settings conflict (review #374 №1) */
+  moduleReads: [] as { key: string; d: Deferred<unknown> }[],
 };
 vi.mock("@/cloud/repo", async (orig) => ({
   ...(await orig<object>()),
   loadCompanyDB: () => {
     const d = deferred<unknown>();
     server.loads.push(d);
+    return d.promise;
+  },
+  loadCompanyModule: (_c: string, key: string) => {
+    const d = deferred<unknown>();
+    server.moduleReads.push({ key, d });
     return d.promise;
   },
 }));
@@ -287,7 +294,7 @@ describe("unit:moduleOp — the store (C2c, rule 5, rule 6, О2)", () => {
       { k: "module.op", module: "op_demo", kind: "element.save", payload: { y: 1 }, coalesceKey: "el-2" },
     ]);
   });
-  it("cloud: a settings conflict is a try — after MAX_TRIES it leaves the queue and the truth is read again (Б2)", async () => {
+  it("cloud: a settings conflict drops this write and the later ones built on it at once, with one card; the module is read again, then the next save has the server's base (review #372 №1, #374)", async () => {
     signIn("u1", "c1");
     const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
     await settle();
@@ -299,24 +306,54 @@ describe("unit:moduleOp — the store (C2c, rule 5, rule 6, О2)", () => {
     await settle();
     server.sends.at(-1)!.d.resolve();
     await settle();
-    server.loads.splice(0).forEach((d) => d.resolve({ ...makeSeed(), company: { ...makeSeed().company!, modules: { op_demo: { enabled: true, trialEndsAt: new Date(Date.now() + DAY).toISOString(), settings: {}, rowVersion: 1 } } } }));
+    const mod = (rowVersion: number, settings: object = {}) => ({ enabled: true, trialEndsAt: new Date(Date.now() + DAY).toISOString(), settings, rowVersion });
+    // the phone read version 3; meanwhile someone else saved (the server is at 4)
+    server.loads.splice(0).forEach((d) => d.resolve({ ...makeSeed(), company: { ...makeSeed().company!, modules: { op_demo: mod(3) } } }));
+    await settle();
+    valueOf(r).setOnline(false);
+    await settle();
+    type S = { saveModuleSettings: (k: string, s: object) => (() => void) | null; rejectedOps: { labelKey?: string; count?: number; kind?: string }[] };
+    const v = () => valueOf(r) as unknown as S & ReturnType<typeof valueOf>;
+    v().saveModuleSettings("op_demo", { a: 1 }); // E1: base 3
+    await settle();
+    const undoE2 = v().saveModuleSettings("op_demo", { a: 1, b: 2 })!; // E2: base 4 — built on E1
+    await settle();
+    // a live change of the core waits behind them: it holds the company's full reload (review #374 №1)
+    (valueOf(r) as unknown as { saveCompany: (p: object) => unknown }).saveCompany({ name: "Busy Co" });
+    await settle();
+    const before = server.sends.length;
+    valueOf(r).setOnline(true);
     await settle();
     const { PermanentError } = await vi.importActual<typeof import("../src/cloud/ops")>("../src/cloud/ops");
-    (valueOf(r) as unknown as { saveModuleSettings: (k: string, s: object) => unknown }).saveModuleSettings("op_demo", { a: 1 });
+    // E1 refused as a conflict
+    server.sends.at(-1)!.d.reject(new PermanentError("module settings changed by someone else", 409, "40001", "row_version_conflict"));
     await settle();
-    let tries = 0;
-    for (let i = 0; i < MAX_TRIES + 3 && valueOf(r).queue.length; i++) {
+    const sentSettings = () => server.sends.slice(before).map((x) => x.op as { k: string; baseRowVersion?: number }).filter((x) => x.k === "module.saveSettings");
+    expect(sentSettings().map((x) => x.baseRowVersion)).toEqual([3]); // E2 never goes
+    expect(v().queue.some((x) => x.label === "module.saveSettings")).toBe(false);
+    expect(v().rejectedOps.some((c) => c.labelKey === "mod.settingsConflict" && c.count === 2 && c.kind === "module.saveSettings")).toBe(true);
+    // «Отменить» of a dropped write does nothing: no settings or version the server does not have (review #374 №2)
+    const was = v().db.company!.modules!.op_demo;
+    undoE2();
+    await settle();
+    expect(v().db.company!.modules!.op_demo).toBe(was);
+    // the module is read again at once, not after the queue; before it answers, no new settings write
+    expect(server.moduleReads.map((x) => x.key)).toEqual(["op_demo"]);
+    expect(v().saveModuleSettings("op_demo", { c: 3 })).toBeNull();
+    server.moduleReads[0]!.d.resolve(mod(4, { other: "B" }));
+    await settle();
+    expect(v().db.company!.modules!.op_demo).toMatchObject({ rowVersion: 4, settings: { other: "B" } });
+    // the next save has the server's base
+    expect(v().saveModuleSettings("op_demo", { other: "B", c: 3 })).not.toBeNull();
+    await settle();
+    for (let i = 0; i < 6 && sentSettings().length < 2; i++) {
+      const last = server.sends.at(-1)!;
+      if ((last.op as { k: string }).k !== "module.saveSettings") last.d.resolve();
+      await settle();
       appActive.cb?.();
       await settle();
-      const last = server.sends.at(-1)!;
-      if ((last.op as { k: string }).k !== "module.saveSettings") continue;
-      tries += 1;
-      last.d.reject(new PermanentError("module settings changed by someone else", 409, "40001", "row_version_conflict"));
-      await settle();
     }
-    expect(tries).toBe(MAX_TRIES);
-    expect(valueOf(r).queue).toEqual([]);
-    expect(server.loads.length).toBeGreaterThan(0); // the truth is read again
+    expect(sentSettings().map((x) => x.baseRowVersion)).toEqual([3, 4]);
   });
   it("cloud: the op on its way to the server is never changed — the next move waits behind it", async () => {
     signIn("u1", "c1");

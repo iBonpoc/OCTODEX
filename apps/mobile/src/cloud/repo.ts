@@ -685,3 +685,19 @@ export function catalogExtrasFromRow(r: Row): Pick<CatalogItem, "attributes" | "
   if (r.pack_size !== null && r.pack_size !== undefined && Number(r.pack_size) > 0) out.packSize = String(Number(r.pack_size));
   return out;
 }
+
+/**
+ * One module's row as the server has it now (review #374 №1): after a settings conflict the phone reads this module
+ * again at once — not the whole company, which waits for the queue. null — no row or no answer.
+ */
+export async function loadCompanyModule(companyId: string, key: string): Promise<import("@/modules/registry").CompanyModule | null> {
+  const { data, error } = await supabase
+    .from("company_modules")
+    .select("module_key, enabled, trial_ends_at, paid_until, settings, row_version")
+    .eq("company_id", companyId)
+    .eq("module_key", key)
+    .maybeSingle();
+  if (error || !data) return null;
+  const { companyModulesFromRows } = await import("@/modules/registry");
+  return companyModulesFromRows([data as Record<string, unknown>])[key] ?? null;
+}
