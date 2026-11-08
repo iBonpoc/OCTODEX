@@ -339,7 +339,7 @@ export default function DrawScreen() {
   const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
-      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} />}
+      {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} ch={ch} corners={runCorners} onCorner={onCorner} compact={!wide} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} ch={ch} compact={!wide} />}
       {elPhotos}
     </>
   );
@@ -481,6 +481,7 @@ export default function DrawScreen() {
       <View testID="draw-more" style={grow ? { flex: 1 } : undefined}><ToolCell icon="more" label={t("mod.gutters.draw.more")} onPress={() => setMoreSheet(true)} grow={grow} /></View>
     </View>
   );
+  const nextDs = drawing.runs.length > 0 && drawing.downspouts.length === 0 && tool !== "ds" && !ghost;
   const hintText = hint && !(hint === "line" && !drawing.runs.length) ? t(`mod.gutters.draw.hint.${hint}`) : null;
 
   const ghostLen = ghost ? Math.round(Math.hypot(ghost.b[0] - ghost.a[0], ghost.b[1] - ghost.a[1])) : 0;
@@ -575,19 +576,31 @@ export default function DrawScreen() {
         <View pointerEvents="box-none" style={{ alignItems: place === "bottom" ? (grow ? "stretch" : "center") : place === "right" ? "flex-end" : "flex-start" }}>{tools}</View>
         <View testID="draw-total" style={{ padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd, gap: space[1] }}>
           {selText ? (
-            <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
-              <View testID="draw-selected" style={{ flex: 1 }}>
+            // 390: the words on their own line, the buttons under them (a narrow row broke «эт / 1», П20.9)
+            <View style={{ flexDirection: wide ? "row" : "column", alignItems: wide ? "center" : "stretch", justifyContent: "space-between", gap: space[2] }}>
+              <View testID="draw-selected" style={wide ? { flex: 1 } : undefined}>
                 <T v="caption" w="semibold">{selText}</T>
               </View>
-              <View testID="draw-delete">
-                <Button label={t("mod.gutters.draw.delete")} icon="trash" size="sm" variant="ghost" onPress={doDelete} />
-              </View>
-              {!wide ? (
-                <View testID="draw-props">
-                  <Button label={t("mod.gutters.attr.props")} icon="ruler" size="sm" variant="secondary" onPress={() => setSheet(true)} />
+              <RowView style={{ gap: space[2], justifyContent: wide ? "flex-end" : "space-between" }}>
+                <View testID="draw-delete">
+                  <Button label={t("mod.gutters.draw.delete")} icon="trash" size="sm" variant="ghost" onPress={doDelete} />
                 </View>
-              ) : null}
-            </RowView>
+                {!wide ? (
+                  <View testID="draw-props">
+                    <Button label={t("mod.gutters.attr.props")} icon="ruler" size="sm" variant="secondary" onPress={() => setSheet(true)} />
+                  </View>
+                ) : null}
+              </RowView>
+            </View>
+          ) : null}
+          {/* what next (П20.9): gutters drawn, no downspout yet → put them; then the «Смета» button is the next step */}
+          {nextDs ? (
+            <View testID="draw-next">
+              <RowView style={{ justifyContent: "space-between", gap: space[2] }}>
+                <T v="caption" tone="mut" style={{ flex: 1 }}>{t("mod.gutters.draw.nextDs")}</T>
+                <Button label={t("mod.gutters.draw.downspout")} icon="downspout" size="sm" variant="secondary" onPress={() => pick("ds")} />
+              </RowView>
+            </View>
           ) : null}
           <RowView style={{ justifyContent: "space-between" }}>
             <View testID="draw-money">

@@ -15,6 +15,13 @@ exports.run = async (h) => {
   const p = h.page;
   const wide = h.layout.width > 390;
   const tid = (id) => p.getByTestId(id).locator("visible=true");
+  // 390: what is changed seldom sits under «Ещё» (spec 33 П20.9) — open it; 820/1280 show every field
+  const more = async () => {
+    if (await tid("attr-more").count()) {
+      await tid("attr-more").getByRole("button").click();
+      await tid("attr-more-open").waitFor({ timeout: 5000 });
+    }
+  };
   const svg = () => p.getByTestId("draw-svg").first();
   const labels = () => svg().locator("text").evaluateAll((ts) => ts.map((t) => t.textContent || ""));
   const money = async () => Number((await tid("draw-money").innerText()).replace(/[^\d.]/g, ""));
@@ -73,6 +80,14 @@ exports.run = async (h) => {
 
   // the run
   await openAttrs();
+  if (!wide) {
+    // 390 (П20.9): storey, size, colour and the tape on top; the rest under «Ещё»
+    for (const id of ["attr-story", "attr-size", "attr-color", "attr-length"]) h.expect((await tid(id).count()) === 1, `390: ${id} on top`);
+    h.expect((await tid("attr-profile").count()) === 0 && (await tid("attr-hanger").count()) === 0, "390: profile and hangers under «Ещё»");
+    h.expect(/профиль/.test(await tid("attr-more").innerText()), "«Ещё» says what is in it");
+    await h.shot("props");
+  }
+  await more();
   h.expect(/нарисовано/.test(await tid("attr-confidence").innerText()), "a drawn length says «нарисовано»");
   h.expect((await chosen("attr-profile")) === "K", "K-style by default");
   const m0 = await money();
@@ -116,6 +131,7 @@ exports.run = async (h) => {
   await p.mouse.click(b.x + b.width * 0.25, y + 3);
   await waitFor(async () => (await svg().locator("circle").count()) === 1, "a downspout");
   await openAttrs();
+  await more();
   h.expect((await chosen("attr-shape")) === "Прямоугольный", "rectangular by default");
   await choose("attr-shape", "Круглый");
   await waitFor(async () => (await chosen("attr-ds-size")) === "3″", "round: the size follows (3″)");
@@ -141,6 +157,7 @@ exports.run = async (h) => {
   await p.mouse.click(at[0], at[1]);
   await waitFor(async () => /Желоб/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
   await openAttrs();
+  await more();
   h.expect(/рулетка/.test(await tid("attr-confidence").innerText()), "after a reload: «рулетка»");
   h.expect((await chosen("attr-profile")) === "Полукруглый" && (await chosen("attr-color")) === "Коричневый", "after a reload: profile and colour");
 };
