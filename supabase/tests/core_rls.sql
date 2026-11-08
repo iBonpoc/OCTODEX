@@ -10920,4 +10920,74 @@ select tst.ok((select count(*) = 3 from app.status_transitions where entity_type
   'T137 the payment moves back exist (only the unwind makes them: T136)');
 \echo 'T137 doors ok'
 
+-- ======================================================================================================================
+-- T142 — the tech and the client link, step 1 (spec 35 §4д п.10, migration 20261109220000)
+-- ======================================================================================================================
+:as_super
+update public.memberships set can_sign_contracts = true where user_id = 'a0000000-0000-0000-0000-000000000003'
+   and company_id = 'ca000000-0000-0000-0000-000000000000';
+-- estimates: 1 — made by the tech, sent by the office; 2 — the same, for the old path; 3 — a draft; 4 — not his
+create function tst.t142_estimate(p_n int, p_by uuid) returns void language plpgsql as $$
+declare e uuid := ('e1420000-0000-4000-8000-00000000000' || p_n)::uuid; v uuid := ('e1420000-0000-4000-8000-0000000000a' || p_n)::uuid;
+        o uuid := ('e1420000-0000-4000-8000-0000000000b' || p_n)::uuid;
+begin
+  insert into public.estimates (id, company_id, customer_id, property_id, title, created_by) values
+    (e, 'ca000000-0000-0000-0000-000000000000', 'c3700000-0000-4000-8000-000000000001', 'd3700000-0000-4000-8000-000000000001', 'T142 ' || p_n, p_by);
+  insert into public.estimate_versions (id, company_id, estimate_id, version_no, deposit_rule) values (v, 'ca000000-0000-0000-0000-000000000000', e, 1, '{"kind":"none"}');
+  update public.estimates set current_version_id = v where id = e;
+  insert into public.estimate_options (id, company_id, version_id, name) values (o, 'ca000000-0000-0000-0000-000000000000', v, 'Only');
+  insert into public.estimate_line_items (id, company_id, option_id, line_group, name, quantity, unit_price_cents) values
+    (gen_random_uuid(), 'ca000000-0000-0000-0000-000000000000', o, 'labor', 'Work', 1, 40000);
+end $$;
+select tst.t142_estimate(1, 'a0000000-0000-0000-0000-000000000003'), tst.t142_estimate(2, 'a0000000-0000-0000-0000-000000000003'),
+       tst.t142_estimate(3, 'a0000000-0000-0000-0000-000000000003'), tst.t142_estimate(4, 'a0000000-0000-0000-0000-000000000001');
+:as_owner_a
+select public.send_estimate('e1420000-0000-4000-8000-000000000001', 'T142tokenOneSentByTheOffice0123456789ab');
+select public.send_estimate('e1420000-0000-4000-8000-000000000002', 'T142tokenTwoSentByTheOffice0123456789ab');
+select public.send_estimate('e1420000-0000-4000-8000-000000000004', 'T142tokenFourSentByTheOffice012345678ab');
+select tst.ok(public.estimate_link('e1420000-0000-4000-8000-000000000001') = 'T142tokenOneSentByTheOffice0123456789ab', 'T142 the director gets the client link through its door');
+:as_office_a
+select tst.ok(public.estimate_link('e1420000-0000-4000-8000-000000000001') is not null, 'T142 …the office too');
+:as_tech_a
+-- the bug in main: the app's on-site path sends the estimate again first — a tech is refused there, the op was dropped
+select tst.fails_like($q$select public.send_estimate('e1420000-0000-4000-8000-000000000001', 'T142tokenOneSentByTheOffice0123456789ab')$q$, '%only the office%',
+  'T142 (why it was broken) a tech cannot send an estimate');
+select tst.fails_like($q$select public.estimate_link('e1420000-0000-4000-8000-000000000001')$q$, '%only the office%', 'T142 a tech does not get the client link through the door');
+-- the fix: the client signs on the tech's device by the estimate's id, no token
+select tst.ok((public.accept_on_site('e1420000-0000-4000-8000-000000000001', 'e1420000-0000-4000-8000-0000000000b1', null, 'Ann Client', 'M0 0 L1 1', true) ->> 'status') = 'awaiting_countersign',
+  'T142 the client signs on the tech''s device without a token');
+select tst.ok((public.accept_on_site('e1420000-0000-4000-8000-000000000001', 'e1420000-0000-4000-8000-0000000000b1', null, 'Ann Client', 'M0 0 L1 1', true) ->> 'result') = 'repeat',
+  'T142 a repeat (no network) changes nothing');
+select tst.fails_like($q$select public.accept_on_site('e1420000-0000-4000-8000-000000000003', 'e1420000-0000-4000-8000-0000000000b3', null, 'Ann', 'M0 0 L1 1', true)$q$, '%not sent yet%', 'T142 a draft is not signed on site');
+select tst.fails_like($q$select public.accept_on_site('e1420000-0000-4000-8000-000000000004', 'e1420000-0000-4000-8000-0000000000b4', null, 'Ann', 'M0 0 L1 1', true)$q$, '%not found%', 'T142 an estimate the tech does not see: «not found»');
+select tst.fails_like($q$select public.accept_on_site('e1420000-0000-4000-8000-000000000002', 'e1420000-0000-4000-8000-0000000000b2', null, 'Ann', 'M0 0 L1 1', false)$q$, '%consent%', 'T142 the same guards: no E-SIGN consent, no signature');
+:as_super
+select tst.ok((select a.channel = 'on_site' and a.signer_user_id = 'a0000000-0000-0000-0000-000000000003' and a.selection ->> 'total' = '40000'
+                 from public.estimate_approvals a where a.estimate_id = 'e1420000-0000-4000-8000-000000000001'),
+  'T142 …recorded as on site, on the tech''s device, with the server''s total');
+select tst.ok((select count(*) = 1 from public.estimate_approvals where estimate_id = 'e1420000-0000-4000-8000-000000000001'), 'T142 …once');
+update public.memberships set can_sign_contracts = false where user_id = 'a0000000-0000-0000-0000-000000000003' and company_id = 'ca000000-0000-0000-0000-000000000000';
+:as_tech_a
+select tst.fails_like($q$select public.accept_on_site('e1420000-0000-4000-8000-000000000002', 'e1420000-0000-4000-8000-0000000000b2', null, 'Ann', 'M0 0 L1 1', true)$q$, '%may sign contracts%', 'T142 without the right to sign contracts: refused, as on the page');
+:as_owner_b
+select tst.fails_like($q$select public.accept_on_site('e1420000-0000-4000-8000-000000000002', 'e1420000-0000-4000-8000-0000000000b2', null, 'Ann', 'M0 0 L1 1', true)$q$, '%not found%', 'T142 another company: «not found»');
+select tst.fails($q$select public.estimate_link('e1420000-0000-4000-8000-000000000002')$q$, 'T142 …and no link');
+reset role;
+set role anon;
+select tst.ok(not has_function_privilege('anon', 'public.accept_on_site(uuid, uuid, uuid[], text, text, boolean, uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'public.estimate_link(uuid)', 'EXECUTE'), 'T142 nobody without an account calls the new doors');
+-- rule 16: the old path still works — the client on the page, and an old app on site by the token
+select tst.ok((public.portal_accept('T142tokenTwoSentByTheOffice0123456789ab', 'e1420000-0000-4000-8000-0000000000b2', null, 'Ann Client', 'M0 0 L1 1', true) ->> 'status') is not null,
+  'T142 the client still signs on the page by the link');
+:as_super
+select tst.ok((select status = 'awaiting_countersign' from public.estimates where id = 'e1420000-0000-4000-8000-000000000002'), 'T142 …signed');
+select tst.ok(not has_function_privilege('authenticated', 'app.estimate_client_accept(uuid, uuid, uuid[], text, text, boolean, text, uuid, uuid)', 'EXECUTE'), 'T142 the shared body is not a door');
+:as_owner_a
+select tst.ok((public.portal_accept('T142tokenFourSentByTheOffice012345678ab', 'e1420000-0000-4000-8000-0000000000b4', null, 'Bob Client', 'M0 0 L1 1', true, 'on_site') ->> 'status') is not null,
+  'T142 an old app on site (portal_accept by the token) keeps working');
+:as_super
+select tst.ok((select channel = 'on_site' and signer_user_id = 'a0000000-0000-0000-0000-000000000001' from public.estimate_approvals where estimate_id = 'e1420000-0000-4000-8000-000000000004'), 'T142 …on site, on the director''s device');
+drop function tst.t142_estimate(int, uuid);
+\echo 'T142 tech and client link ok'
+
 \echo 'ALL TESTS PASSED'
