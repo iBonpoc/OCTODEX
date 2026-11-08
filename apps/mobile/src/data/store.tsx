@@ -54,6 +54,7 @@ import { companyToday, setZone } from "@/features/zone";
 import { eventProblems } from "@/features/planFeed";
 import { enabledLocally, keepModuleData, moduleActive, moduleDef } from "@/modules/registry";
 import { cleanCatalogItem } from "@/features/catalogExtras";
+import { canSeeSuppliers, cleanSupplier, cleanSupplierLink, itemsWithOtherTax, localHistoryEntry } from "@/features/suppliers";
 import { coalesceAt, coalesced } from "./outboxCoalesce";
 import {
   type CalendarEvent,
@@ -101,6 +102,7 @@ import {
   type ChecklistVisitKind,
   type NaReason,
   type VisitSettings,
+  type Supplier,
 } from "./types";
 import { canAddItem, canAttachPhoto, canEditTemplates, canEditVisitItems, canEditVisitSettings, canRemoveItem, canReview, canSetRequired, canSkip, canTick, checklistFor, cleanTemplate, cleanText, itemKind, itemRequired, itemsFromTemplate, jobServices, moveItem, PHOTOS_PER_ITEM_MAX, photoStageOf, snapshotPhotoMins, visitSettingsOf } from "@/features/checklist";
 
@@ -364,6 +366,12 @@ interface StoreCtx {
   updateMember: (id: ID, patch: { title?: string; hisNumber?: string; canSignContracts?: boolean }) => Undo;
   saveCatalogItem: (it: CatalogItem) => Undo;
   removeCatalogItem: (id: ID) => Undo;
+  /** spec 36: make or change a supplier (owner / admin / office); null name — nothing */
+  saveSupplier: (x: Supplier) => Undo;
+  /** spec 36: archive or bring back a supplier («Отменить» 5 s) */
+  setSupplierActive: (id: ID, active: boolean) => Undo;
+  /** spec 36: the supplier's purchase tax into its items that have another one (new estimate lines follow) */
+  applySupplierTax: (id: ID) => Undo;
   /** several items at once with one «Отменить» («create the items now», docs/specs/33 П16, core K1): each goes as its own
    *  catalog.save through the queue; «Отменить» takes them all back. onlyNew (spec 33 П22.10): an item whose id is on the
    *  phone already is left as it is (no op), and the server inserts only an id it does not have (ON CONFLICT DO NOTHING) */
@@ -2036,14 +2044,60 @@ export function StoreProvider({ children }: { children: ReactNode }) {
         ),
       // the server's rules for properties first (features/catalogExtras.ts): a bad one never loses the whole save
       saveCatalogItem: (it0) => {
-        const it = cleanCatalogItem(it0);
+        const it = cleanSupplierLink(cleanCatalogItem(it0));
+        const prev = dbRef.current.catalog.find((x) => x.id === it.id);
         // 19 §9: only the cost fields changed here go to the server — a phone without costs never erases them
-        const costs = catalogCostChange(dbRef.current.catalog.find((x) => x.id === it.id), it);
+        const costs = catalogCostChange(prev, it);
+        // spec 36: the phone's own history row, shown at once (the server writes its own; the next read replaces the list)
+        const hist = dbRef.current.costsVisible === false ? null : localHistoryEntry(prev, it, uid(), new Date().toISOString());
         return mutate(
           "catalog.save",
-          (d) => ({ ...d, catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it] }),
+          (d) => ({
+            ...d,
+            catalog: d.catalog.some((x) => x.id === it.id) ? d.catalog.map((x) => (x.id === it.id ? it : x)) : [...d.catalog, it],
+            ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}),
+          }),
           { k: "catalog.save", item: it, costs },
         );
+      },
+      saveSupplier: (x0) => {
+        const x = cleanSupplier(x0);
+        if (!x || !canSeeSuppliers(role) || dbRef.current.suppliersLegacy) return noop;
+        return mutate(
+          "supplier.save",
+          (d) => {
+            const list = d.suppliers ?? [];
+            return { ...d, suppliers: list.some((y) => y.id === x.id) ? list.map((y) => (y.id === x.id ? x : y)) : [...list, x] };
+          },
+          { k: "supplier.save", supplier: x },
+        );
+      },
+      setSupplierActive: (id, active) => {
+        const x = (dbRef.current.suppliers ?? []).find((y) => y.id === id);
+        if (!x || !canSeeSuppliers(role) || dbRef.current.suppliersLegacy) return noop;
+        const next = { ...x, active };
+        mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? next : y)) }), { k: "supplier.save", supplier: next });
+        // «Отменить» (rule 5): the op may already be on the server — a reverse op, the last one wins
+        return () =>
+          void mutate("supplier.save", (d) => ({ ...d, suppliers: (d.suppliers ?? []).map((y) => (y.id === id ? x : y)) }), { k: "supplier.save", supplier: x });
+      },
+      applySupplierTax: (id) => {
+        const d0 = dbRef.current;
+        const x = (d0.suppliers ?? []).find((y) => y.id === id);
+        if (!x || x.taxBps === undefined || !canSeeSuppliers(role) || d0.costsVisible === false) return noop;
+        const items = itemsWithOtherTax(d0, x).map((it) => ({ ...it, vendorTaxBps: x.taxBps }));
+        if (!items.length) return noop;
+        const at = new Date().toISOString();
+        const undos = items.map((it) => {
+          const prev = dbRef.current.catalog.find((c) => c.id === it.id);
+          const hist = localHistoryEntry(prev, it, uid(), at);
+          return mutate(
+            "catalog.save",
+            (d) => ({ ...d, catalog: d.catalog.map((c) => (c.id === it.id ? it : c)), ...(hist ? { costHistory: [hist, ...(d.costHistory ?? [])] } : {}) }),
+            { k: "catalog.save", item: it, costs: catalogCostChange(prev, it) },
+          );
+        });
+        return () => [...undos].reverse().forEach((u) => u());
       },
       saveCatalogItems: (items, opts) => {
         const onlyNew = !!opts?.onlyNew;

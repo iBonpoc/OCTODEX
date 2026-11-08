@@ -2,7 +2,7 @@
  * Test data (placeholder prices — founder rule: real prices are never typed into seeds).
  * All times are relative to "now" so the demo always looks like a live day in Los Angeles.
  */
-import { JOB_TYPE_SEED_KEYS, MEMBER_PREFS_DEFAULT, type DB, type ChecklistItem, type ChecklistTemplate, type CatalogItem, type Company, type EstimateDoc, type JobType, type ServiceCategory, type Source, type Tag } from "./types";
+import { JOB_TYPE_SEED_KEYS, MEMBER_PREFS_DEFAULT, type DB, type ChecklistItem, type ChecklistTemplate, type CatalogItem, type Company, type EstimateDoc, type JobType, type ServiceCategory, type Source, type Supplier, type Tag } from "./types";
 import { DEFAULT_SETTINGS, summarize } from "@/features/estimateDoc";
 import { addDays } from "@/features/calendar";
 import { checklistFor } from "@/features/checklist";
@@ -12,8 +12,15 @@ import { DEMO_ZONE, demoToday, wallToInstant } from "@/features/zone";
 const S = (id: string, name: string, unit: string, priceCents: number, kind: "service" | "labor" = "service"): CatalogItem => ({
   id, kind, name, unit, priceCents, placeholder: true,
 });
+/** test suppliers (spec 36): names only, no real terms or accounts */
+export const SEED_SUPPLIERS: Supplier[] = [
+  { id: "sup-hd", name: "Home Depot", phone: "(555) 010-0100", terms: "cod", taxBps: 1025, active: true },
+  { id: "sup-sw", name: "Sherwin-Williams", phone: "(555) 010-0200", terms: "net_30", taxBps: 950, active: true },
+];
+const supplierOf = (vendor: string) => SEED_SUPPLIERS.find((x) => x.name === vendor)?.id;
 const MAT = (id: string, name: string, unit: string, costCents: number, vendor: string, vendorTaxBps: number, markupBps: number): CatalogItem => ({
   id, kind: "material", name, unit, priceCents: 0, costCents, vendor, vendorTaxBps, markupBps, placeholder: true,
+  ...(supplierOf(vendor) ? { supplierId: supplierOf(vendor) } : {}),
 });
 export const SEED_CATALOG: CatalogItem[] = [
   // handyman
@@ -283,6 +290,8 @@ export function makeSeed(): DB {
       })(),
     ],
     catalog: SEED_CATALOG,
+    suppliers: SEED_SUPPLIERS,
+    costHistory: [],
     notices: [],
     company: DEMO_COMPANY,
     notes: [

@@ -11,6 +11,7 @@ import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type Catal
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
 import { legacyForEstimate } from "./legacyTotals";
+import { historyFromRow, supplierFromRow } from "@/features/suppliers";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -178,6 +179,23 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     }),
   ]);
   const chkByVisit = chkRows ? itemsByVisit(chkRows) : null;
+  // spec 36 (migration 20261110000000): suppliers (owner / admin / office by RLS; others read none) and the history of
+  // costs (only who sees costs; the newest 2000). A server before it has no tables: no suppliers, nothing written
+  const [supplierRows, historyRows] = await Promise.all([
+    live<Row>("suppliers", "id, name, contact_name, phone, email, account_number, address, payment_terms, terms_note, purchase_tax_bps, notes, is_active")
+      .then((r) => r as Row[] | null, (e) => {
+        if (isMissingTable(e)) return null;
+        throw e;
+      }),
+    pages<Row>(
+      () => supabase.from("catalog_cost_history").select("id, item_id, supplier_id, unit_cost_cents, vendor_tax_bps, source, at").eq("company_id", companyId),
+      [{ col: "at", asc: false }, { col: "id", asc: false }],
+      2000,
+    ).catch((e) => {
+      if (isMissingTable(e)) return [] as Row[];
+      throw e;
+    }),
+  ]);
   // wave 7б-2 (migration 20261106210000): the company flag, who shares, the last points of open visits. Each read on its
   // own: before the migration (or if a read fails) the location stays off and the rest of the company still loads.
   const [locAllowed, shareRows, pointRows] = await Promise.all([
@@ -670,6 +688,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
     // a server before the checklist migration: the store writes the old whole list (rule 16)
     ...(chkByVisit ? {} : { checklistLegacy: true }),
     moduleData,
+    suppliers: (supplierRows ?? []).map(supplierFromRow),
+    costHistory: historyRows.map(historyFromRow),
+    ...(supplierRows ? {} : { suppliersLegacy: true }),
     notes: noteRows.map((r) => ({
       id: s(r.id), subjectType: s(r.subject_type) as Note["subjectType"], subjectId: s(r.subject_id), body: s(r.body),
       visibility: r.visibility === "private" ? "private" : "team", pinned: !!r.pinned, authorId: s(r.created_by), at: s(r.created_at),
@@ -693,6 +714,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         placeholder: !!r.is_placeholder_price,
         // C3 (docs/specs/33 П16): empty before the migration and for items without properties
         ...catalogExtrasFromRow(r),
+        // spec 36: absent before the migration and for items without a supplier
+        ...(typeof r.supplier_id === "string" ? { supplierId: r.supplier_id } : {}),
+        ...(typeof r.supplier_sku === "string" ? { supplierSku: r.supplier_sku } : {}),
       })),
     memberSignatures: signatureRows.map((r) => ({
       id: s(r.id), userId: s(r.user_id), svg: s(r.svg), name: s(r.name), title: (r.title as string | null) ?? undefined,
