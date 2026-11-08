@@ -1,8 +1,9 @@
 -- spec 33 П23.9 (C5, debt 2): a line with quantity 0 is how a contractor leaves a part out (П23.8а №4). The app's
--- clientDoc already drops it (demo /p/, PDF); the real client page reads app.client_doc — the same rule here, so the
--- client never sees a $0 row. Read-time only: calc_inputs, the signature fingerprint (sha256 of calc_inputs) and the
+-- clientDoc drops it too (demo /p/, PDF; PR #394, the same pattern in zeroQty); the real client page reads
+-- app.client_doc — the same rule here, so the client never sees a $0 row. Signed versions too: only the view changes,
+-- the fingerprint keeps every line. Read-time only: calc_inputs, the signature fingerprint (sha256 of calc_inputs) and the
 -- server's totals (app.estimate_option_totals) are untouched; a quantity-0 line bills nothing, so totals do not move.
--- Same signature, same whitelist — rule 16 not touched. Zero = the text of a plain decimal zero ("0", "0.00", " .0 ").
+-- Same signature, same whitelist — rule 16 not touched. Zero = the text of a plain decimal zero ("0", "-0", "0.", "00", "0.00", " .0 "); "0e5" is not (the app agrees).
 
 revoke all on function app.client_doc(jsonb) from public, anon, authenticated;
 
@@ -28,7 +29,7 @@ returns jsonb language sql immutable set search_path = '' as $$
                           and jsonb_typeof(l.value -> 'quantity') in ('string', 'number')
                           and jsonb_typeof(l.value -> 'unitPriceCents') = 'number'
                           -- quantity 0: the part is left out (spec 33 П23.9)
-                          and (l.value ->> 'quantity') !~ '^\s*[+-]?(0+(\.0*)?|\.0+)\s*$'), '[]'::jsonb))
+                          and (l.value ->> 'quantity') !~ '^[[:space:]]*[+-]?(0+([.]0*)?|[.]0+)[[:space:]]*$'), '[]'::jsonb))
                   order by o.ordinality)
            from jsonb_array_elements(case when jsonb_typeof(p -> 'options') = 'array' then p -> 'options' else '[]'::jsonb end)
                 with ordinality o

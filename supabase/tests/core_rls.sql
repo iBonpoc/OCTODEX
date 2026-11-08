@@ -8172,6 +8172,13 @@ begin
       {"id": "z4", "name": "Offset", "group": "material", "quantity": " .0 ", "unit": "ea", "unitPriceCents": 500},
       {"id": "small", "name": "Sealant", "group": "material", "quantity": "0.01", "unit": "ea", "unitPriceCents": 800},
       {"id": "ten", "name": "Hanger", "group": "material", "quantity": "10.0", "unit": "ea", "unitPriceCents": 300},
+      {"id": "z5", "name": "Strap", "group": "material", "quantity": "-0", "unit": "ea", "unitPriceCents": 100},
+      {"id": "z6", "name": "Wedge", "group": "material", "quantity": "+0", "unit": "ea", "unitPriceCents": 100},
+      {"id": "z7", "name": "Rivet", "group": "material", "quantity": "0.", "unit": "ea", "unitPriceCents": 100},
+      {"id": "z8", "name": "Screw", "group": "material", "quantity": "00", "unit": "ea", "unitPriceCents": 100},
+      {"id": "dime", "name": "Caulk", "group": "material", "quantity": "0.10", "unit": "ea", "unitPriceCents": 100},
+      {"id": "lead0", "name": "Ferrule", "group": "material", "quantity": "010", "unit": "ea", "unitPriceCents": 100},
+      {"id": "exp", "name": "Paint", "group": "material", "quantity": "0e5", "unit": "ea", "unitPriceCents": 100},
       {"id": "addz", "name": "Splash block", "group": "material", "quantity": "0", "unit": "ea", "unitPriceCents": 2500, "optional": true}
     ]}],
     "settings": {"tax": {"enabled": false, "rateBps": 0, "groups": {}}, "deposit": {"kind": "none"}, "discount": null}
@@ -8184,11 +8191,11 @@ do $$
 declare d jsonb := public.portal_estimate('tok_t105zero_0123456789ab') -> 'doc';
 begin
   perform tst.ok((select array_agg(l ->> 'id' order by o) from jsonb_array_elements(d -> 'options' -> 0 -> 'lines') with ordinality x(l, o))
-                 = array['keep', 'small', 'ten'], 'T105 quantity-0 lines (any spelling, add-ons too) are not on the page: ' || d::text);
+                 = array['keep', 'small', 'ten', 'dime', 'lead0', 'exp'], 'T105 quantity-0 lines (any spelling, add-ons too) are not on the page: ' || d::text);
 end $$;
 :as_super
 select tst.ok(jsonb_array_length((select calc_inputs -> 'options' -> 0 -> 'lines' from public.estimate_versions v
-                 join public.estimates e on e.current_version_id = v.id where e.title = 'T105 zero lines')) = 8, 'T105 the stored document keeps every line');
+                 join public.estimates e on e.current_version_id = v.id where e.title = 'T105 zero lines')) = 15, 'T105 the stored document keeps every line');
 select tst.ok(app.client_doc('{"options":[{"id":"o","lines":[{"id":"a","name":"A","group":"labor","quantity":"0","unitPriceCents":1}]}]}'::jsonb)
                 -> 'options' -> 0 -> 'lines' = '[]'::jsonb, 'T105 an option of only quantity-0 lines has no lines');
 select tst.ok(not has_function_privilege('anon', 'app.client_doc(jsonb)', 'execute')
