@@ -133,6 +133,13 @@ describe("history", () => {
     expect(tl[0]!.params).toMatchObject({ reason: "lead.reason.not_profitable" });
     expect(tl.some((e) => e.body === "secret")).toBe(false); // someone else's private note
   });
+  it("a repeat request from outside (kind intake, spec 34) is its own line with the person's words", () => {
+    const d = db([{ id: "L", receivedAt: ago(100) }]);
+    d.leads[0]!.id = "L";
+    d.activities = [{ id: "i1", subjectType: "lead", subjectId: "L", kind: "intake", direction: "in", body: "also the downspouts", at: ago(10), actorId: "", meta: { unconfirmed: "1" } }];
+    const tl = leadTimeline(d, d.leads[0]!, "m-alex");
+    expect(tl[0]).toMatchObject({ key: "tl.intake", icon: "inbox", body: "also the downspouts" });
+  });
 });
 
 describe("lead fields → database columns", () => {
