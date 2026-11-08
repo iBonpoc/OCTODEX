@@ -1,5 +1,5 @@
 /**
- * e2e 196 — a tech signs the client on site, against a real Supabase (docs/specs/35-stripe.md §4д п.10; story map S8 «Подпись клиента», on site).
+ * e2e 206 (cloud) — a tech signs the client on site, against a real Supabase (docs/specs/35-stripe.md §4д п.10; story map S8 «Подпись клиента», on site).
  * The bug it guards: the app's «estimate.approve» sent the estimate first (send_estimate — the office only), the tech was
  * refused 42501, the queue dropped the op: the client's signature never reached the server. Now the signature goes by the
  * estimate's id (accept_on_site), no token.
