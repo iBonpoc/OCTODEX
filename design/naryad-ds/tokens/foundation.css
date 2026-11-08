@@ -14,7 +14,8 @@
  --dur-fast:160ms;--dur-base:220ms;--dur-slow:350ms;--dur-chart:900ms;
  --ease-out:cubic-bezier(.2,.8,.2,1);--ease-spring:cubic-bezier(.3,1.25,.5,1);
  --scrim:rgba(0,0,0,.42);--scrim-strong:rgba(0,0,0,.5);--shadow-pop:0 20px 60px rgba(0,0,0,.45);--shadow-fab:0 8px 20px rgba(0,0,0,.35);--shadow-sheet:0 -10px 40px rgba(0,0,0,.4);
- --draw-water:#8FA2FF;--draw-power:#FFA03C;--draw-drain:#A9AEBA;--draw-note:#FF6B6B;--st-neu:#C9CDD6;
+ --draw-water:#8FA2FF;--draw-power:#FFA03C;--draw-drain:#A9AEBA;--draw-note:#FF6B6B;
+ --draw-run-w:4px;--draw-run-w-sel:6px;--draw-ds-r:7px;--draw-node-r:5px;--draw-label-gap:4px;--st-neu:#C9CDD6;
  --shadow-sm:0 2px 8px rgba(0,0,0,.25);--shadow-md:0 6px 16px rgba(0,0,0,.35);--shadow-lg:0 30px 80px rgba(0,0,0,.35);--scrim-crop:rgba(0,0,0,.55);--veil:rgba(0,0,0,.18);--veil-strong:rgba(0,0,0,.3);--crop-line:rgba(255,255,255,.35);
  --on-fill-btn-bg:rgba(255,255,255,.35);--on-fill-btn-bd:rgba(0,0,0,.35);
  --shadow-knob:0 2px 6px rgba(0,0,0,.25);--shadow-thumb:0 4px 10px rgba(0,0,0,.3);--shadow-drop:0 6px 10px rgba(0,0,0,.35);--pulse-a:rgba(255,107,107,.55);--pulse-b:rgba(255,107,107,0);--on-scrim:#FFFFFF;
