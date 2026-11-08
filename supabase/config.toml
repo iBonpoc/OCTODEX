@@ -14,6 +14,11 @@ verify_jwt = true
 [functions.send-push]
 verify_jwt = false
 
+# Приём заявок (docs/specs/34 §3): a homeowner's browser (the page /f/<token>) and Zapier have no JWT. The form is found
+# by its token's hash, a webhook by its key (Authorization: Bearer gxk_…) — both in the database, never by the body.
+[functions.lead-intake]
+verify_jwt = false
+
 # LOCAL stack only (supabase start — the nightly cloud scenarios, docs/specs/21 §7). release.yml runs `db push`,
 # never `config push`, so nothing below reaches the hosted project.
 [auth]

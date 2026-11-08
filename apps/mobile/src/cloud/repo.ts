@@ -10,6 +10,7 @@ import { peopleByCustomer } from "@/data/people";
 import { PROPERTY_KINDS, PUSH_GROUPS, type PushGroup, type PushPrefs, type CatalogItem, type DB, type Note, type Payment, type Estimate, type EstimateDoc, type Notice, type Expense, type ExpenseCategory, type Invoice, type Job, type JobType, type JobLineItem, type CalendarEvent, type MemberPrefs, type LocationState, type VisitPoint, type CustomField, type CustomFieldValue, type FileItem, type BillingAddress, type Lead, type Property, type Source, type Task, type Activity, type Member, type Role, type Visit, type VisitStep, type CancelledVisit, type CancelReason } from "@/data/types";
 import type { DbRole } from "./auth";
 import { supabase } from "./client";
+import { legacyForEstimate } from "./legacyTotals";
 
 type Row = Record<string, unknown>;
 const s = (v: unknown) => (v == null ? "" : String(v));
@@ -115,9 +116,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       live<Row>("visit_assignees", "visit_id, user_id, created_at"),
       live<Row>("leads"),
       live<Row>("estimates"),
-      live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs"),
-      live<Row>("estimate_options", "id, version_id, name"),
-      live<Row>("estimate_line_items", "id, option_id, name, quantity, line_total_cents, is_optional, client_visible, position"),
+      live<Row>("estimate_versions", "id, estimate_id, totals, sent_at, locked_at, calc_inputs, tax_enabled, tax_rate_bps, deposit_rule"),
+      live<Row>("estimate_options", "id, version_id, name, position, created_at, discount_mode, discount_value"),
+      live<Row>("estimate_line_items", "id, option_id, name, quantity, line_total_cents, is_optional, client_visible, position, taxable"),
       every<Row>("estimate_approvals", "estimate_id, option_id, signer_name, channel, selection, signature_svg, signed_at, party, signer_user_id, signer_title, signer_his, method"),
       live<Row>("invoices"),
       live<Row>("payments"),
@@ -382,8 +383,13 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   const mappedEstimates: Estimate[] = estimates.map((e) => {
     const ver = versionOf.get(s(e.current_version_id));
     const totals = (ver?.totals ?? {}) as { total?: number; deposit?: number; marginPct?: string | null };
-    const opt = options.find((o) => o.version_id === e.current_version_id);
+    // the first option as the server signs it (sign_estimate_on_site: order by position, created_at)
+    const opt = options
+      .filter((o) => o.version_id === e.current_version_id)
+      .sort((a, b) => n(a.position) - n(b.position) || s(a.created_at).localeCompare(s(b.created_at)))[0];
     const appr = approvals.filter((a) => a.estimate_id === e.id && a.party !== "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
+    // the old quick estimate (no document), not signed yet: what the client will sign (legacyForEstimate)
+    const legacy = legacyForEstimate(e, { versionOf, options, lines, signed: !!appr });
     // E2a: the company's signature (an employee in their own name)
     const csig = approvals.filter((a) => a.estimate_id === e.id && a.party === "contractor").sort((a, b) => s(b.signed_at).localeCompare(s(a.signed_at)))[0];
     const sel = (appr?.selection ?? null) as { addon_ids?: string[]; total?: number; deposit?: number } | null;
@@ -396,12 +402,12 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
       propertyId: s(e.property_id),
       title: s(e.title) || s(e.number),
       leadId: (e.lead_id as string | null) ?? undefined,
-      totalCents: sel?.total !== undefined ? n(sel.total) : n(totals.total),
+      totalCents: sel?.total !== undefined ? n(sel.total) : legacy ? legacy.totalCents : n(totals.total),
       status: estimateStatus[s(e.status)] ?? "draft",
       sentAt: (ver?.sent_at as string | null) ?? undefined,
       // approved = both signed: the moment the company signed (a legacy contract signed before E2a: the client's moment)
       approvedAt: e.status === "approved" ? ((csig?.signed_at ?? appr?.signed_at) as string | null) ?? undefined : undefined,
-      depositCents: sel?.deposit !== undefined ? n(sel.deposit) : totals.deposit,
+      depositCents: sel?.deposit !== undefined ? n(sel.deposit) : legacy ? legacy.depositCents : totals.deposit,
       marginPct: marginOf.has(s(ver?.id)) ? marginOf.get(s(ver?.id)) ?? null : totals.marginPct ?? null,
       signature: (appr?.signature_svg as string | null) ?? undefined,
       doc: withCosts(ver?.calc_inputs),

@@ -39,6 +39,7 @@ const EXCEPTIONS: Record<string, { pattern: string; count: number; why: string }
 
 /** list screens with no filter at all, and why (director 07.11: «экраны без фильтров — исключение со списком в стороже») */
 const NO_FILTER: Record<string, string> = {
+  "company/intake": "«Приём заявок»: the last 50 requests of the journal, held ones first — nothing to narrow",
   "company/checklists": "«Чек-листы»: a handful of the company’s templates, nothing to narrow",
   team: "«Команда»: a handful of people, nothing to narrow",
   today: "«Требует внимания»: what needs a hand now, already chosen; its period switch is the figures', not a list's",

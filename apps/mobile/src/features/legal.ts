@@ -80,7 +80,7 @@ export function platformTag(os: string): "ios" | "android" | "web" {
 }
 
 /** the «Условия изменились» gate stays off these: signing in, the documents themselves, help, the client page */
-const GATE_FREE = ["/auth", "/legal", "/help", "/p"];
+const GATE_FREE = ["/auth", "/legal", "/help", "/p", "/f"]; // /f — the request page of a company (docs/specs/34)
 export const gateFreePath = (path: string) => GATE_FREE.some((p) => path === p || path.startsWith(`${p}/`));
 
 /** «November 6, 2026» — the edition of a document (a calendar date, US format in every language, rule 7) */

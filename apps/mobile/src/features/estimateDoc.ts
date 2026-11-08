@@ -231,6 +231,33 @@ export function marginView(e: { marginPct?: string | null; doc?: EstimateDoc; ap
   return pct ? { kind: "pct", pct } : null;
 }
 
+/**
+ * Fresh ids for options/lines when a sent estimate is edited (the sent version stays immutable in the database);
+ * `from`: new line id → the sent line it was copied from — the server copies its cost for who cannot write costs
+ * (debt 4 of «Сметы» №1, migration 20261108200000, core_rls T110–T111). Pure: test/reIdDoc.test.ts.
+ */
+export function reIdDoc(doc: EstimateDoc, newId: () => string): { doc: EstimateDoc; from: Record<string, string> } {
+  const from: Record<string, string> = {};
+  const options = doc.options.map((o) => ({
+    ...o,
+    id: newId(),
+    lines: o.lines.map((l) => {
+      const id = newId();
+      from[id] = l.id;
+      return { ...l, id };
+    }),
+  }));
+  return { doc: { ...doc, options }, from };
+}
+
+/** What saveEstimate stores and sends: a sent (not draft) estimate gets new ids and the map to its sent lines; a new
+ *  estimate or a draft keeps its ids and sends no map (director's review #420 №2). Pure: test/reIdDoc.test.ts. */
+export function docForSave(prevStatus: string | undefined, doc: EstimateDoc, newId: () => string): { doc: EstimateDoc; linesFrom?: Record<string, string> } {
+  if (!prevStatus || prevStatus === "draft") return { doc };
+  const r = reIdDoc(doc, newId);
+  return { doc: r.doc, linesFrom: r.from };
+}
+
 /** Summary fields kept on Estimate for lists (total, deposit, visible lines of the main option). */
 export function summarize(doc: EstimateDoc, approved?: { optionId: string; addonIds: string[] }) {
   const base = (approved && doc.options.find((o) => o.id === approved.optionId)) || mainOption(doc);
