@@ -91,7 +91,7 @@ describe("dialThenAsk", () => {
 });
 
 describe("call buttons go through dialThenAsk (no sheet under the dialer)", () => {
-  const files = ["src/app/client/[id].tsx", "src/features/client/ClientSections.tsx", "src/features/lead/LeadParts.tsx"];
+  const files = ["src/features/client/ClientCard.tsx", "src/features/client/ClientSections.tsx", "src/features/lead/LeadParts.tsx"];
   it.each(files)("%s", (f) => {
     const src = readFileSync(join(__dirname, "..", f), "utf8");
     expect(src).not.toMatch(/openURL\(`tel:/);

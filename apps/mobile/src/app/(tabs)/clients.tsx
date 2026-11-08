@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { View } from "react-native";
-import { router } from "expo-router";
+import { router, useLocalSearchParams } from "expo-router";
 import { useStore } from "@/data/store";
 import { canMarkNoService, clientHistory, clientMoneyOf, clientOverdueOf, clientStatusChip, matchClient, statusOf, tagLabel, tagsOf, visibleClients } from "@/features/clients";
 import { canChangeStatus, pickerOptions } from "@/features/statusMoves";
@@ -15,6 +15,9 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { CardGrid, ListCard, ListCardHeader, StatusPicker } from "@/ui/listCard";
 import type { FactKey } from "@/ui/listCardLayout";
 import { useDevice } from "@/theme/ThemeProvider";
+import { ListPanel } from "@/ui/listPanel";
+import { focusSelectedRow, neighbor, panelId, usePanelKeys } from "@/nav/listPanel";
+import { ClientCardBody } from "@/features/client/ClientCard";
 import { space } from "@octo/design-tokens";
 import type { Customer, CustomerStatus } from "@/data/types";
 
@@ -23,6 +26,8 @@ type Filter = "all" | "owes" | "estimate" | "prospect" | "archived";
 const initials = (n: string) => n.split(/\s+/).map((p) => p[0]).slice(0, 2).join("").toUpperCase();
 /** desktop row columns (docs/specs/06-list-cards.md §5 «Клиенты») */
 const COLUMNS: FactKey[] = ["phone", "addr", "last"];
+/** with the panel open the row keeps one column of details (06 §4) */
+const COLUMNS_PANEL: FactKey[] = ["phone"];
 
 /** Client list (each client a card): search by name, phone or address; filters; new client by hand. */
 export default function Clients() {
@@ -55,6 +60,28 @@ export default function Clients() {
     .filter((c) => tagIds.length === 0 || (c.tagIds ?? []).some((x) => tagIds.includes(x)))
     .sort((a, b) => a.name.localeCompare(b.name));
   const { device } = useDevice();
+  const desktop = device === "desktop";
+  // 1280: the open card beside the list, `/clients?open=<id>` (spec 06 «Панель 1280», nav/listPanel.ts)
+  const { open: openParam } = useLocalSearchParams<{ open?: string }>();
+  const ids = list.map((c) => c.id);
+  const openId = panelId(openParam, ids, desktop);
+  const openC = openId ? list.find((c) => c.id === openId) : undefined;
+  const setOpen = (id: string | undefined) => router.setParams({ open: id });
+  usePanelKeys(!!openId, (k) => setOpen(k === "close" ? undefined : neighbor(ids, openId, k === "down" ? 1 : -1)));
+  // a link with ?open= opened on a narrower window: the card's own screen, once, as a tap there; the list under it
+  // is left clean, so «back» does not bounce into the card again (review #425). Turning the tablet later only hides the panel.
+  useEffect(() => {
+    const id = typeof openParam === "string" ? openParam : undefined;
+    if (desktop || !id || !clients.some((c) => c.id === id)) return;
+    router.setParams({ open: undefined });
+    router.push(`/client/${id}`);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  // 1280: the open client fell out of the list (a filter, the archive): the panel closes and the address says so
+  const stale = desktop && typeof openParam === "string" && openParam !== "" && !openId;
+  useEffect(() => {
+    if (stale) router.setParams({ open: undefined });
+  }, [stale]);
   const toast = useToast();
   const store = useStore();
   const [picking, setPicking] = useState<Customer | null>(null);
@@ -99,9 +126,10 @@ export default function Clients() {
           last: last ? [t(last.title), last.detail, day(last.at)].filter(Boolean).join(" · ") : undefined,
         }}
         contact={{ phone: c.phone, email: c.email, addr }}
-        density={device === "desktop" ? "row" : "rich"}
-        columns={COLUMNS}
-        onPress={() => router.push(`/client/${c.id}`)}
+        density={desktop ? "row" : "rich"}
+        columns={openId ? COLUMNS_PANEL : COLUMNS}
+        selected={c.id === openId}
+        onPress={() => (desktop ? setOpen(c.id) : router.push(`/client/${c.id}`))}
       />
     );
   };
@@ -113,6 +141,13 @@ export default function Clients() {
       subtitle={t("clients.count", { n: count("all") })}
       fab="clients"
       right={office ? <IconButton icon="more" label={t("lead.more")} onPress={() => setMore(true)} /> : undefined}
+      aside={
+        openC ? (
+          <ListPanel title={openC.name} onOpen={() => { focusSelectedRow(); router.push(`/client/${openC.id}`); }} onClose={() => setOpen(undefined)}>
+            <ClientCardBody key={openC.id} c={openC} />
+          </ListPanel>
+        ) : undefined
+      }
     >
       {/* spec 31 (variant Б): the search and «Фильтр» in one row, one lane of statuses, the tags in the sheet */}
       <FilterBar<Filter>
@@ -144,7 +179,7 @@ export default function Clients() {
         <CardGrid>{list.map(card)}</CardGrid>
       ) : (
         <>
-          {device === "desktop" ? <ListCardHeader title={t("card.fact.client")} columns={COLUMNS} value={office ? t("fix.client.balance") : undefined} /> : null}
+          {desktop ? <ListCardHeader title={t("card.fact.client")} columns={openId ? COLUMNS_PANEL : COLUMNS} value={office ? t("fix.client.balance") : undefined} /> : null}
           {groups.map(([letter, cs]) => (
           <View key={letter} style={{ gap: space[2] }}>
             <T v="caption" w="semibold" tone="mut">{letter}</T>

@@ -9178,7 +9178,7 @@ select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form
 :as_service
 select tst.ok(tst.intake('form', 'form', 'day116', '{"phone":"(818) 555-0194"}', '9.9.9.5') ->> 'status' = 'held', 'T116 over the form''s day limit — held');
 select tst.ok(tst.intake('webhook', 'hook', 'day116-hook', '{"phone":"(818) 555-0193"}') ->> 'status' = 'accepted', 'T116 the form''s spam does not hold the webhook''s leads');
-select tst.ok(tst.intake('form', 'form', 'noip116', '{"phone":"(818) 555-0192"}') ->> 'status' = 'rejected', 'T116 a form request without an IP is refused');
+select tst.ok(tst.intake('form', 'form', 'noip116', '{"phone":"(818) 555-0192"}') ->> 'status' = 'held', 'T116 a form request without a trusted IP is held, not refused (§3д)');
 select tst.ok(tst.intake('form', 'form', 'junk116', '{"phone":"(818) 555-0191"}', '9.9.9.4', '{"bot":"maybe","consent":"yes"}') ->> 'status' = 'held',
   'T116 junk in the checks is not an error');
 :as_owner_a
@@ -9662,5 +9662,222 @@ select tst.ok(tst.cnt($q$select 1 from public.estimate_template_line_costs where
 update public.memberships set permissions_override = permissions_override - 'view_costs'
  where user_id = 'a0000000-0000-0000-0000-000000000005' and company_id = 'ca000000-0000-0000-0000-000000000000';
 \echo 'T124 money in a template: whole cents, kept exactly ok'
+-- ---------------------------------------------------------------- T125: no request is lost silently (docs/specs/34 §3д; director's check of #421)
+:as_owner_a
+select public.intake_endpoint_set((select id from tst.intake_tok where k = 'form'), p_enabled => true, p_daily_limit => 1000);
+:as_service
+select tst.ok(tst.intake('form', 'form', 'time122', '{"phone":"(310) 555-0122"}', '5.5.5.1', '{"bot":"time"}') ->> 'status' = 'held', 'T125 a «bot» by the fill time only is held');
+select tst.ok(tst.intake('form', 'form', 'trap122', '{"phone":"(310) 555-0123"}', '5.5.5.2', '{"bot":"trap"}') ->> 'status' = 'rejected', 'T125 the trap field refuses');
+:as_super
+select tst.ok((select payload is not null and reason = 'too_fast' from public.intake_events where event_key = 'time122'), 'T125 the held one keeps its fields for a person');
+select tst.ok((select payload is null and reason = 'bot' from public.intake_events where event_key = 'trap122'), 'T125 the trapped one keeps nothing');
+-- a changed link: its requests are held 30 days, its page still opens; a link changed twice ago is unknown
+:as_super
+insert into tst.intake_tok (k, token) select 'form-old', token from tst.intake_tok where k = 'form';
+:as_owner_a
+update tst.intake_tok set token = (select public.intake_endpoint_rotate(id) ->> 'token') where k = 'form';
+:as_service
+select tst.ok(tst.intake('form', 'form-old', 'old122', '{"phone":"(310) 555-0124"}', '5.5.5.3') ->> 'status' = 'held', 'T125 a request by the old link is held, not dropped');
+select tst.ok(app.intake_form_info(encode(sha256(convert_to((select token from tst.intake_tok where k = 'form-old'), 'UTF8')), 'hex')) ->> 'company' is not null,
+  'T125 the old link''s page still opens (≤ 30 days)');
+select tst.ok(tst.intake('form', 'form', 'new122', '{"phone":"(310) 555-0125"}', '5.5.5.4') ->> 'status' = 'accepted', 'T125 the new link works');
+:as_super
+select tst.ok((select reason = 'old_link' and payload is not null from public.intake_events where event_key = 'old122'), 'T125 old_link with its fields');
+update public.intake_endpoints set prev_rotated_at = now() - interval '31 days' where id = (select id from tst.intake_tok where k = 'form');
+:as_service
+select tst.ok(tst.intake('form', 'form-old', 'old122b', '{"phone":"(310) 555-0126"}', '5.5.5.5') ->> 'status' = 'unknown', 'T125 past 30 days the old link is gone');
+-- the IPv6 /48: a second, higher limit (20 an hour per company)
+do $$ declare i int; n text := repeat('4', 64); begin
+  for i in 1..20 loop
+    perform tst.intake('form', 'form', 'net122-' || i, jsonb_build_object('phone', '(310) 555-02' || (10 + i)), 'v6-' || i, jsonb_build_object('net', n));
+  end loop;
+  perform tst.ok(tst.intake('form', 'form', 'net122-21', '{"phone":"(310) 555-0299"}', 'v6-21', jsonb_build_object('net', n)) ->> 'status' = 'held', 'T125 the 21st from one /48 an hour is held');
+  perform tst.ok(tst.intake('form', 'form', 'net122-x', '{"phone":"(310) 555-0298"}', 'v6-x', jsonb_build_object('net', 'junk')) ->> 'status' = 'accepted', 'T125 a malformed net hash is ignored');
+end $$;
+:as_super
+select tst.ok((select reason = 'net_limit' from public.intake_events where event_key = 'net122-21'), 'T125 net_limit in the journal');
+\echo 'T125 no request is lost silently: held by time, no IP, an old link; the /48 limit ok'
+-- ---------------------------------------------------------------- T126–T129: Stripe online payments, the database (docs/specs/35 §4)
+:as_super
+insert into public.customers (id, company_id, display_name) values ('c1260000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T126 Client');
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('11260000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'T126-1', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T126 card', 10000, 10000, now()),
+  ('11260000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'T126-2', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T126 ach', 5000, 5000, now()),
+  ('11260000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'T126-3', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T126 race', 3000, 3000, now()),
+  ('11260000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'T126-4', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'draft', 'T126 draft', 3000, 3000, null);
+create table tst.pa (k text primary key, id uuid, key text);
+grant all on tst.pa to service_role;
+-- T126 rights: nobody but service_role writes; staff read their company's state, no account id, no keys
+select tst.ok(not has_function_privilege('authenticated', 'app.stripe_event_apply(jsonb,text)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.stripe_event_apply(jsonb,text)', 'EXECUTE')
+          and has_function_privilege('service_role', 'app.stripe_event_apply(jsonb,text)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.payment_attempt_open(uuid,bigint)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.stripe_account_sync(uuid,jsonb)', 'EXECUTE')
+          and not has_function_privilege('service_role', 'app.stripe_apply_intent(text,text,boolean,jsonb,text)', 'EXECUTE'),
+  'T126 the Stripe functions run only for service_role, their steps for nobody (rule 18)');
+select tst.ok(not has_table_privilege('authenticated', 'app.stripe_events', 'SELECT')
+          and not has_column_privilege('authenticated', 'public.stripe_accounts', 'account_id', 'SELECT')
+          and not has_column_privilege('authenticated', 'public.payment_attempts', 'idempotency_key', 'SELECT')
+          and not has_table_privilege('authenticated', 'public.stripe_accounts', 'INSERT')
+          and not has_table_privilege('authenticated', 'public.payment_attempts', 'UPDATE')
+          and not has_table_privilege('authenticated', 'public.refunds', 'INSERT'),
+  'T126 the app reads no account id, no key, no event journal and writes nothing');
+:as_service
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 1000)$q$, 'T126 no attempt while Stripe is not connected');
+select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126A","charges_enabled":false,"requirements":{"currently_due":["external_account"]}}');
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 1000)$q$, 'T126 no attempt until Stripe allows charges');
+select tst.fails($q$select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_Other"}')$q$, 'T126 a company keeps its one Stripe account');
+select app.stripe_account_sync('cb000000-0000-0000-0000-000000000000', '{"id":"acct_T126B","charges_enabled":true}');
+select tst.fails($q$select app.stripe_account_sync('ca000000-0000-0000-0000-000000000000', '{"id":"acct_T126B"}')$q$, 'T126 an account of another company is not taken');
+-- account.updated from Stripe opens payments
+select tst.ok(app.stripe_event_apply('{"id":"evt_T126acc","type":"account.updated","account":"acct_T126A","data":{"object":{"id":"acct_T126A","charges_enabled":true,"payouts_enabled":true,"details_submitted":true,"requirements":{"currently_due":[]}}}}') = 'processed', 'T126 account.updated is applied');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T126accB","type":"account.updated","account":"acct_T126A","data":{"object":{"id":"acct_T126B","charges_enabled":false}}}') = 'ignored', 'T126 an event of one account does not change another');
+:as_owner_a
+select tst.ok((select charges_enabled and payouts_enabled and requirements_due = 0 from public.stripe_accounts where company_id = 'ca000000-0000-0000-0000-000000000000'), 'T126 the owner sees that payments are on');
+select tst.fails($q$update public.stripe_accounts set charges_enabled = true where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T126 the owner does not switch Stripe on by hand');
+:as_tech_a
+select tst.ok((select count(*) from public.stripe_accounts) = 0, 'T126 a tech does not see the Stripe state');
+:as_owner_b
+select tst.ok((select count(*) from public.stripe_accounts) = 1 and (select count(*) from public.payment_attempts) = 0, 'T126 company B sees only its own');
+:as_super
+select tst.ok((select charges_enabled = true from public.stripe_accounts where company_id = 'cb000000-0000-0000-0000-000000000000'), 'T126 B''s account stays as it was');
+
+-- T129 attempts: one key per invoice + amount; the amount is 1…balance; only a sent invoice
+:as_service
+insert into tst.pa select 'a1', id, idempotency_key from app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 10000);
+select tst.ok((select id from app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 10000)) = (select id from tst.pa where k = 'a1'), 'T129 a double tap gets the same attempt and key');
+select tst.ok((select attempt_no = 1 from app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 4000)), 'T129 another amount is its own attempt');
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 10001)$q$, 'T129 not above the balance');
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000001', 0)$q$, 'T129 not zero');
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000004', 1000)$q$, 'T129 not a draft invoice');
+select app.payment_attempt_set_intent((select id from tst.pa where k = 'a1'), 'pi_T126a');
+select tst.fails($q$select app.payment_attempt_set_intent((select id from tst.pa where k = 'a1'), 'pi_T126other')$q$, 'T129 an attempt keeps its one PaymentIntent');
+
+-- T127 the same event twice: one payment, one receipt, one notification
+select tst.ok(app.stripe_event_apply('{"id":"evt_T127s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T126a","amount":10000,"amount_received":10000,"application_fee_amount":50,"latest_charge":"ch_T126a","payment_method_types":["card"]}}}') = 'processed', 'T127 succeeded is applied');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T127s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T126a","amount":10000,"amount_received":10000}}}') = 'duplicate', 'T127 the repeat is a duplicate');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T127s2","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T126a","amount":10000,"amount_received":10000}}}') = 'ignored', 'T127 the same intent in a new event changes nothing');
+:as_super
+select tst.ok((select count(*) = 1 from public.payments where stripe_payment_intent_id = 'pi_T126a')
+          and (select method = 'card' and status = 'succeeded' and amount_cents = 10000 and platform_fee_cents = 50 and receipt_number is not null
+                      and stripe_charge_id = 'ch_T126a' and not needs_review from public.payments where stripe_payment_intent_id = 'pi_T126a'),
+  'T127 one card payment with a receipt number and our fee');
+select tst.ok((select paid_cents = 10000 and payment_status = 'paid' from public.invoices where id = '11260000-0000-4000-8000-000000000001'), 'T127 the invoice is paid');
+select tst.ok((select count(*) = 1 from public.notifications where invoice_id = '11260000-0000-4000-8000-000000000001' and kind = 'invoice.paid'), 'T127 the contractor is told once');
+select tst.ok((select status = 'succeeded' and payment_id is not null from public.payment_attempts where stripe_payment_intent_id = 'pi_T126a'), 'T127 the attempt is closed');
+:as_service
+select tst.fails($q$select app.stripe_event_apply('{"id":"nope","type":"x","data":{"object":{}}}')$q$, 'T127 not a Stripe event is refused');
+
+-- T128 ACH: pending, the order of events, refunds only grow, disputes
+insert into tst.pa select 'a2', id, idempotency_key from app.payment_attempt_open('11260000-0000-4000-8000-000000000002', 5000);
+select app.payment_attempt_set_intent((select id from tst.pa where k = 'a2'), 'pi_T128');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128p","type":"payment_intent.processing","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128","amount":5000}}}') = 'processed', 'T128 processing is applied');
+:as_super
+select tst.ok((select method = 'ach' and status = 'pending' and receipt_number is null from public.payments where stripe_payment_intent_id = 'pi_T128')
+          and (select paid_cents = 0 and payment_status = 'unpaid' from public.invoices where id = '11260000-0000-4000-8000-000000000002'),
+  'T128 ACH on its way: pending, the invoice is not paid yet');
+:as_service
+select tst.fails($q$select app.payment_attempt_open('11260000-0000-4000-8000-000000000002', 1000)$q$, 'T128 no second online payment over money already on its way');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128s","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128","amount":5000,"amount_received":5000}}}') = 'processed', 'T128 succeeded after processing');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128p2","type":"payment_intent.processing","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128","amount":5000}}}') = 'ignored', 'T128 a late processing does not take the payment back');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128f","type":"payment_intent.payment_failed","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128","amount":5000}}}') = 'ignored', 'T128 a late failure does not undo a succeeded payment');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128r1","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T128","payment_intent":"pi_T128","amount_refunded":2000}}}') = 'processed', 'T128 a partial refund');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128r0","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T128","payment_intent":"pi_T128","amount_refunded":1000}}}') = 'ignored', 'T128 an older refund event does not lower the refunded sum');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128r9","type":"charge.refunded","account":"acct_T126B","data":{"object":{"id":"ch_T128","payment_intent":"pi_T128","amount_refunded":5000}}}') = 'ignored', 'T128 another account does not refund our payment');
+:as_super
+select tst.ok((select status = 'partially_refunded' and refunded_cents = 2000 and receipt_number is not null from public.payments where stripe_payment_intent_id = 'pi_T128')
+          and (select paid_cents = 3000 and payment_status = 'partially_paid' from public.invoices where id = '11260000-0000-4000-8000-000000000002'),
+  'T128 refunded 2000 of 5000: the invoice owes 2000 again');
+:as_service
+select app.stripe_event_apply('{"id":"evt_T128rr","type":"refund.updated","account":"acct_T126A","data":{"object":{"id":"re_T128","payment_intent":"pi_T128","amount":2000,"status":"succeeded","reason":"requested_by_customer"}}}');
+select app.stripe_event_apply('{"id":"evt_T128rr0","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T128","payment_intent":"pi_T128","amount":2000,"status":"pending"}}}');
+select app.stripe_event_apply('{"id":"evt_T128bd","type":"refund.created","account":"acct_T126A","data":{"object":{"id":"re_T128b","payment_intent":"pi_T128","amount":1000,"status":"succeeded","billing_details":{"name":"Kim","email":"kim@x.test"}}}}');
+select app.stripe_event_apply('{"id":"evt_T128bf","type":"refund.failed","account":"acct_T126A","data":{"object":{"id":"re_T128b","payment_intent":"pi_T128","amount":1000,"status":"failed"}}}');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128r2","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_T128","payment_intent":"pi_T128","amount_refunded":5000}}}') = 'processed', 'T128 the rest refunded');
+select app.stripe_event_apply('{"id":"evt_T128d1","type":"charge.dispute.created","account":"acct_T126A","data":{"object":{"id":"dp_T128","payment_intent":"pi_T128","status":"needs_response"}}}');
+select app.stripe_event_apply('{"id":"evt_T128d2","type":"charge.dispute.closed","account":"acct_T126A","data":{"object":{"id":"dp_T128","payment_intent":"pi_T128","status":"won"}}}');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T128d3","type":"charge.dispute.created","account":"acct_T126A","data":{"object":{"id":"dp_T128","payment_intent":"pi_T128"}}}') = 'ignored', 'T128 a late dispute event does not reopen a closed one');
+:as_super
+select tst.ok((select status = 'refunded' and refunded_cents = 5000 and dispute_status = 'won' from public.payments where stripe_payment_intent_id = 'pi_T128')
+          and (select paid_cents = 0 and payment_status = 'refunded' from public.invoices where id = '11260000-0000-4000-8000-000000000002'),
+  'T128 fully refunded; the dispute won');
+select tst.ok((select count(*) = 1 and bool_and(status = 'succeeded' and amount_cents = 2000) from public.refunds where stripe_refund_id = 're_T128'),
+  'T128 one refund row; a late «pending» does not take back «succeeded»');
+select tst.ok((select payload -> 'data' -> 'object' ? 'id' and not (payload -> 'data' -> 'object' ? 'billing_details') from app.stripe_events where event_id = 'evt_T128bd'),
+  'T128 the journal keeps no billing details of the client');
+select tst.ok((select status = 'failed' from public.refunds where stripe_refund_id = 're_T128b')
+          and (select needs_review from public.payments where stripe_payment_intent_id = 'pi_T128'),
+  'T128 an ACH refund that failed after «succeeded» is failed, and the payment goes to the owner');
+:as_owner_a
+select tst.ok((select count(*) from public.refunds where amount_cents = 2000 and status = 'succeeded') = 1, 'T128 the owner sees the refund');
+:as_tech_a
+select tst.ok((select count(*) from public.refunds) = 0 and (select count(*) from public.payment_attempts) = 0, 'T128 a tech sees no refunds and no attempts');
+
+-- T128 (cont.): ACH on its way, a cash payment meanwhile — the money is kept, the overpaid invoice goes to the owner
+:as_super
+insert into public.invoices (id, company_id, number, customer_id, kind, status, title, subtotal_cents, total_cents, sent_at) values
+  ('11260000-0000-4000-8000-000000000005', 'ca000000-0000-0000-0000-000000000000', 'T126-5', 'c1260000-0000-4000-8000-000000000001', 'standalone', 'sent', 'T126 race ach', 2000, 2000, now());
+:as_service
+insert into tst.pa select 'a5', id, idempotency_key from app.payment_attempt_open('11260000-0000-4000-8000-000000000005', 2000);
+select app.payment_attempt_set_intent((select id from tst.pa where k = 'a5'), 'pi_T128race');
+select app.stripe_event_apply('{"id":"evt_T128rp","type":"payment_intent.processing","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128race","amount":2000}}}');
+:as_owner_a
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', '11260000-0000-4000-8000-000000000005', 'c1260000-0000-4000-8000-000000000001', 'cash', 2000, 'succeeded', 't128-cash');
+:as_service
+select app.stripe_event_apply('{"id":"evt_T128rs","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T128race","amount":2000,"amount_received":2000}}}');
+:as_super
+select tst.ok((select status = 'succeeded' and needs_review from public.payments where stripe_payment_intent_id = 'pi_T128race')
+          and (select paid_cents = 4000 from public.invoices where id = '11260000-0000-4000-8000-000000000005'),
+  'T128 ACH + cash on the same balance: both kept, the ACH payment marked for the owner');
+
+-- T129 (cont.): another account, the intent id from metadata, money above the balance, a failure opens the next attempt
+:as_service
+insert into tst.pa select 'a3', id, idempotency_key from app.payment_attempt_open('11260000-0000-4000-8000-000000000003', 3000);
+select tst.ok(app.stripe_event_apply(jsonb_build_object('id', 'evt_T129x', 'type', 'payment_intent.succeeded', 'account', 'acct_T126B',
+  'data', jsonb_build_object('object', jsonb_build_object('currency', 'usd', 'id', 'pi_T129evil', 'amount', 3000, 'amount_received', 3000,
+  'metadata', jsonb_build_object('attempt_id', (select id from tst.pa where k = 'a3')))))) = 'ignored', 'T129 an event of another account with our attempt in its metadata makes no payment');
+select tst.ok(app.stripe_event_apply(jsonb_build_object('id', 'evt_T129m', 'type', 'payment_intent.succeeded', 'account', 'acct_T126A', 'livemode', true,
+  'data', jsonb_build_object('object', jsonb_build_object('currency', 'usd', 'id', 'pi_T129', 'amount', 3000, 'amount_received', 3000,
+  'metadata', jsonb_build_object('attempt_id', (select id from tst.pa where k = 'a3')))))) = 'ignored'
+          and app.stripe_event_apply(jsonb_build_object('id', 'evt_T129c', 'type', 'payment_intent.succeeded', 'account', 'acct_T126A',
+  'data', jsonb_build_object('object', jsonb_build_object('currency', 'eur', 'id', 'pi_T129', 'amount', 3000, 'amount_received', 3000,
+  'metadata', jsonb_build_object('attempt_id', (select id from tst.pa where k = 'a3')))))) = 'ignored'
+          and app.stripe_event_apply('{"id":"evt_T129p","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T129","amount":3000,"amount_received":3000,"metadata":{"attempt_id":"------------------------------------"}}}}') = 'ignored',
+  'T129 a live event for a test account, another currency, a broken attempt id: ignored, never an error');
+:as_super
+select tst.ok((select stripe_payment_intent_id is null from public.payment_attempts where id = (select id from tst.pa where k = 'a3')), 'T129 the ignored events did not take the attempt');
+:as_owner_a
+insert into public.payments (company_id, invoice_id, customer_id, method, amount_cents, status, idempotency_key) values
+  ('ca000000-0000-0000-0000-000000000000', '11260000-0000-4000-8000-000000000003', 'c1260000-0000-4000-8000-000000000001', 'cash', 1000, 'succeeded', 't129-cash');
+:as_service
+select tst.ok(app.stripe_event_apply(jsonb_build_object('id', 'evt_T129s', 'type', 'payment_intent.succeeded', 'account', 'acct_T126A',
+  'data', jsonb_build_object('object', jsonb_build_object('currency', 'usd', 'id', 'pi_T129', 'amount', 3000, 'amount_received', 3000,
+  'metadata', jsonb_build_object('attempt_id', (select id from tst.pa where k = 'a3')))))) = 'processed', 'T129 the attempt is found by its metadata');
+:as_super
+select tst.ok((select stripe_payment_intent_id = 'pi_T129' from public.payment_attempts where id = (select id from tst.pa where k = 'a3')), 'T129 the intent id is written from the event');
+select tst.ok((select invoice_id is null and needs_review and status = 'succeeded' and amount_cents = 3000 from public.payments where stripe_payment_intent_id = 'pi_T129')
+          and (select paid_cents = 1000 from public.invoices where id = '11260000-0000-4000-8000-000000000003'),
+  'T129 money above the balance is kept as the client''s, for review, and does not overpay the invoice');
+:as_service
+insert into tst.pa select 'a4', id, idempotency_key from app.payment_attempt_open('11260000-0000-4000-8000-000000000003', 2000);
+select app.payment_attempt_set_intent((select id from tst.pa where k = 'a4'), 'pi_T129f');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T129f","type":"payment_intent.payment_failed","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T129f","amount":2000}}}') = 'processed', 'T129 a failure is applied');
+select tst.ok((select attempt_no = 2 and id <> (select id from tst.pa where k = 'a4') from app.payment_attempt_open('11260000-0000-4000-8000-000000000003', 2000)), 'T129 after a failure the next attempt has a new number and key');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T129fp","type":"payment_intent.processing","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T129f","amount":2000}}}') = 'ignored', 'T129 processing after a failure (out of order) makes no endless pending');
+select tst.fails($q$select app.stripe_event_apply('{"id":"evt_T129early","type":"charge.refunded","account":"acct_T126A","data":{"object":{"id":"ch_x","payment_intent":"pi_T129f","amount_refunded":100}}}')$q$, 'T129 a refund of our intent before its payment: an error, so Stripe sends it again');
+select tst.ok(app.stripe_event_apply('{"id":"evt_T129u","type":"payment_intent.succeeded","account":"acct_T126A","data":{"object":{"currency":"usd","id":"pi_T129none","amount":100,"amount_received":100}}}') = 'ignored'
+          and app.stripe_event_apply('{"id":"evt_T129t","type":"customer.created","account":"acct_T126A","data":{"object":{"id":"cus_1"}}}') = 'ignored',
+  'T129 an unknown intent and an unknown type are ignored');
+:as_super
+select tst.ok((select count(*) = 0 from public.payments where stripe_payment_intent_id = 'pi_T129f')
+          and (select status = 'failed' from public.payment_attempts where id = (select id from tst.pa where k = 'a4'))
+          and (select string_agg(status || ':' || coalesce(reason, ''), ',' order by event_id) from app.stripe_events where event_id in ('evt_T129t', 'evt_T129u', 'evt_T129x'))
+              = 'ignored:type,ignored:unknown_intent,ignored:wrong_account',
+  'T129 a card failure makes no payment; the journal keeps why an event was ignored');
+select tst.ok(not exists (select 1 from app.stripe_events where event_id = 'evt_T129early'), 'T129 the retried event is not in the journal yet');
+select tst.ok((select count(*) = 0 from public.notifications where invoice_id = '11260000-0000-4000-8000-000000000003'), 'T129 money kept for review does not tell «the invoice is paid»');
+drop table tst.pa;
+\echo 'T126–T129 Stripe: rights, repeats, order, refunds, attempts ok'
 
 \echo 'ALL TESTS PASSED'
