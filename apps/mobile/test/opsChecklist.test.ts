@@ -100,6 +100,10 @@ describe("ops: the other checklist ops", () => {
     await applyOp({ k: "chk.visit.review", visitId: "v1", at: null }, "co", "u");
     expect(calls.map((c) => [c.table, c.row])).toEqual([["visits", { checklist_reviewed_at: AT }], ["visits", { checklist_reviewed_at: null }]]);
   });
+  it("chk.template.save ifNew (a module's starter): inserted once, never over the office's edits", async () => {
+    await applyOp({ k: "chk.template.save", ifNew: true, template: { id: "t1", name: "Start", items: [], appliesTo: { everyVisit: false, visitKinds: [], catalogItemIds: [] }, module: "fakemod" } }, "co", "u");
+    expect(calls[0]).toMatchObject({ table: "checklist_templates", how: "upsert", opts: { onConflict: "id", ignoreDuplicates: true } });
+  });
   it("chk.template.save: the whole template, trimmed", async () => {
     await applyOp({
       k: "chk.template.save",

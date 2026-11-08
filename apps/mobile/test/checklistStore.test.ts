@@ -75,7 +75,7 @@ type Value = {
   moveVisitItem: (visitId: string, itemId: string, dir: -1 | 1) => () => void;
   addVisitTemplate: (visitId: string, templateId: string) => () => void;
   setVisitSettings: (patch: object) => () => void;
-  saveChecklistTemplate: (t: object) => () => void;
+  saveChecklistTemplate: (t: object, opts?: { ifNew?: boolean }) => () => void;
   removePhoto: (visitId: string, photoId: string) => () => void;
   setRole: (r: string) => void;
   queue: unknown[];
@@ -510,5 +510,19 @@ describe("unit:checklistOfficeStore — the office edits a visit before it start
     await drain();
     expect(server.sends.map((x) => x.op.k)).toEqual(["visit.checklist", "visit.checklist"]);
     expect((server.sends[1]!.op.checklist as { label: string }[]).map((c) => c.label)).toEqual(["Scope", "Photo of the area", "Measure the run", "Photo of the roof"]);
+  });
+});
+
+describe("unit:checklistStarters — a module's starter in the store (§11.11)", () => {
+  it("ifNew: sent once with ifNew; a second add of the same id — nothing (no doubles, no overwrite)", { timeout: 15_000 }, async () => {
+    const r = await signedIn();
+    const t = { id: "00000000-0000-4000-8000-0000000000f9", name: "Start", module: "fakemod", items: [{ id: "00000000-0000-4000-8000-0000000000fa", label: "One", kind: "check", required: true }], appliesTo: { everyVisit: false, visitKinds: [], catalogItemIds: [] } };
+    valueOf(r).saveChecklistTemplate(t, { ifNew: true });
+    await settle();
+    valueOf(r).saveChecklistTemplate({ ...t, name: "Again" }, { ifNew: true });
+    await settle();
+    expect(valueOf(r).db.checklistTemplates!.filter((x) => x.id === t.id).map((x) => x.name)).toEqual(["Start"]);
+    await tick();
+    expect(server.sends.map((x) => [x.op.k, x.op.ifNew])).toEqual([["chk.template.save", true]]);
   });
 });

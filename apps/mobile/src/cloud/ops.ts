@@ -43,7 +43,8 @@ export type Op =
   /** the photo minimums of the visit's templates, with the snapshot (S4, S9; docs/specs/08 §11.7 №7); null — the company's */
   | { k: "chk.visit.mins"; visitId: string; before: number | null; after: number | null }
   /** a checklist template, whole (owner, admin, office) */
-  | { k: "chk.template.save"; template: ChecklistTemplate }
+  /** ifNew: a module's starter (fixed id) — inserted once, never over the office's edits (another phone added it first) */
+  | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
   /** the company's photo rules, whole (owner, admin) */
   | { k: "company.visitSettings"; settings: VisitSettings }
   | { k: "visit.sign"; visitId: string; svg: string }
@@ -522,7 +523,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(Promise.resolve(r));
     }
     case "chk.template.save":
-      return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id" }));
+      return run(supabase.from("checklist_templates").upsert(templateToDb(op.template, c), { onConflict: "id", ...(op.ifNew ? { ignoreDuplicates: true } : {}) }));
     case "company.visitSettings":
       return run(supabase.from("companies").update({ visit_settings: op.settings }).eq("id", c));
     case "visit.sign":
