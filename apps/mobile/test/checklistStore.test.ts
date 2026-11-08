@@ -71,6 +71,9 @@ type Value = {
   addVisitItem: (visitId: string, label: string, required: boolean) => () => void;
   removeVisitItem: (visitId: string, itemId: string) => () => void;
   reviewVisitMissed: (visitId: string) => () => void;
+  editVisitItem: (visitId: string, itemId: string, patch: { label?: string; required?: boolean }) => () => void;
+  moveVisitItem: (visitId: string, itemId: string, dir: -1 | 1) => () => void;
+  addVisitTemplate: (visitId: string, templateId: string) => () => void;
   setVisitSettings: (patch: object) => () => void;
   saveChecklistTemplate: (t: object) => () => void;
   removePhoto: (visitId: string, photoId: string) => () => void;
@@ -103,8 +106,8 @@ function company(): DB {
 }
 const visitOf = (r: Root<P>) => valueOf(r).db.visits.find((v) => v.id === VISIT)!;
 
-async function signedIn(over: Partial<DB> = {}): Promise<Root<P>> {
-  Object.assign(auth, { session: {}, userId: "u1", company: { companyId: "c1", role: "owner", companyName: "Co" } });
+async function signedIn(over: Partial<DB> = {}, role = "owner"): Promise<Root<P>> {
+  Object.assign(auth, { session: {}, userId: "u1", company: { companyId: "c1", role, companyName: "Co" } });
   const r = (root = render(StoreProvider as (p: P) => unknown, { children: null }));
   await settle();
   server.loads.splice(0).forEach((d) => d.resolve({ ...company(), ...over }));
@@ -279,12 +282,12 @@ describe("unit:checklistStore — what the server would refuse is not queued (it
 });
 
 describe("unit:checklistStore — a server before the checklist migration (rule 16)", () => {
-  it("a tick goes as the old whole list; «Просмотрено» stays on the phone", { timeout: 15_000 }, async () => {
+  it("a tick goes as the old whole list; no «Просмотрено» (nothing the server keeps)", { timeout: 15_000 }, async () => {
     const r = await signedIn({ checklistLegacy: true });
     valueOf(r).checkItem(VISIT, ITEM, true);
     valueOf(r).reviewVisitMissed(VISIT);
     await settle();
-    expect(visitOf(r).checklistReviewedAt).toBeDefined();
+    expect(visitOf(r).checklistReviewedAt).toBeUndefined();
     await tick();
     expect(server.sends.map((x) => x.op.k)).toEqual(["visit.checklist"]);
     expect(server.sends[0]!.op.checklist).toEqual([{ id: ITEM, label: "Confirm scope", done: true }, { id: PHOTO_ITEM, label: "Photo of the area", done: false }]);
@@ -379,5 +382,133 @@ describe("unit:checklistStore — the snapshot of templates in a new visit (S4, 
     valueOf(r).scheduleJob("j2", { start: new Date().toISOString(), durationMin: 60, techId: null });
     await drain();
     expect(server.sends.map((x) => x.op.k)).toEqual(["job.schedule", "visit.checklist"]);
+  });
+});
+
+describe("unit:checklistStore — «Просмотрено» and «Отменить» after it was sent (CH2b, rule 5)", () => {
+  it("«Отменить» after the op went to the server sends the reverse op", { timeout: 15_000 }, async () => {
+    const r = await signedIn();
+    const undo = valueOf(r).reviewVisitMissed(VISIT);
+    await tick();
+    server.sends.forEach((s) => s.d.resolve());
+    await settle();
+    undo();
+    await settle();
+    expect(visitOf(r).checklistReviewedAt).toBeUndefined();
+    await tick();
+    expect(server.sends.map((x) => [x.op.k, x.op.at === null])).toEqual([["chk.visit.review", false], ["chk.visit.review", true]]);
+  });
+});
+
+describe("unit:checklistOfficeStore — the office edits a visit before it starts (§7.4, CH3)", () => {
+  const TPL = {
+    id: "00000000-0000-4000-8000-0000000000e1", name: "Inspection",
+    items: [
+      { id: "00000000-0000-4000-8000-0000000000e2", label: "Measure the run", kind: "check" as const, required: true },
+      { id: "00000000-0000-4000-8000-0000000000e3", label: "Photo of the roof", kind: "photo" as const, required: false },
+    ],
+    appliesTo: { everyVisit: false, visitKinds: ["inspection" as const], catalogItemIds: [] }, minPhotosBefore: 2,
+  };
+  const drain = async () => {
+    for (let i = 0; i < 6; i++) {
+      await tick();
+      server.sends.forEach((s) => s.d.resolve());
+    }
+  };
+  const scheduled = (r: Root<P>) => Object.assign(visitOf(r), { step: "scheduled" });
+  it("text (cleaned) and «Обязательный» — one row's update with only what changed", { timeout: 15_000 }, async () => {
+    const r = await signedIn();
+    scheduled(r);
+    valueOf(r).editVisitItem(VISIT, ITEM, { label: " Confirm\nscope with the client " });
+    valueOf(r).editVisitItem(VISIT, ITEM, { label: "  " });
+    valueOf(r).editVisitItem(VISIT, ITEM, { required: false });
+    await settle();
+    expect(visitOf(r).checklist[0]).toMatchObject({ label: "Confirm scope with the client", required: false });
+    await drain();
+    expect(server.sends.map((x) => x.op)).toEqual([
+      { k: "chk.item.edit", id: ITEM, visitId: VISIT, label: "Confirm scope with the client" },
+      { k: "chk.item.edit", id: ITEM, visitId: VISIT, required: false },
+    ]);
+  });
+  it("the dispatcher makes an item required, never optional; a started visit — nothing", { timeout: 15_000 }, async () => {
+    const r = await signedIn();
+    scheduled(r);
+    valueOf(r).setRole("dispatcher");
+    await settle();
+    valueOf(r).editVisitItem(VISIT, ITEM, { required: false });
+    valueOf(r).setRole("director");
+    await settle();
+    Object.assign(visitOf(r), { step: "on_site" });
+    valueOf(r).editVisitItem(VISIT, ITEM, { label: "late" });
+    valueOf(r).moveVisitItem(VISIT, ITEM, 1);
+    await drain();
+    expect(server.sends).toEqual([]);
+    expect(visitOf(r).checklist[0]).toMatchObject({ label: "Confirm scope", required: true });
+  });
+  it("«Ниже»: the two items swap — one op each; «Отменить» takes both back", { timeout: 15_000 }, async () => {
+    const r = await signedIn();
+    scheduled(r);
+    const undo = valueOf(r).moveVisitItem(VISIT, ITEM, 1);
+    await settle();
+    expect(visitOf(r).checklist.map((c) => c.id)).toEqual([PHOTO_ITEM, ITEM]);
+    undo();
+    await settle();
+    expect(visitOf(r).checklist.map((c) => c.id)).toEqual([ITEM, PHOTO_ITEM]);
+    valueOf(r).moveVisitItem(VISIT, ITEM, 1);
+    await drain();
+    expect(server.sends.map((x) => [x.op.id, x.op.position])).toEqual([[PHOTO_ITEM, 0], [ITEM, 1]]);
+  });
+  it("«Добавить из шаблона» (an inspection sales booked — no snapshot): each item, then the raised minimum; twice — nothing", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistTemplates: [TPL] });
+    scheduled(r);
+    valueOf(r).addVisitTemplate(VISIT, TPL.id);
+    valueOf(r).addVisitTemplate(VISIT, TPL.id);
+    await settle();
+    const v = visitOf(r);
+    expect(v.checklist.map((c) => [c.label, c.templateName, c.position])).toEqual([
+      ["Confirm scope", undefined, undefined], ["Photo of the area", undefined, undefined], ["Measure the run", "Inspection", 2], ["Photo of the roof", "Inspection", 3],
+    ]);
+    expect(v.photoMins).toEqual({ before: 2 });
+    await drain();
+    expect(server.sends.map((x) => x.op.k)).toEqual(["chk.item.add", "chk.item.add", "chk.visit.mins"]);
+    expect(server.sends[0]!.op.item).toMatchObject({ visitId: VISIT, label: "Measure the run", templateId: TPL.id, templateName: "Inspection", required: true });
+    expect(server.sends[2]!.op).toMatchObject({ before: 2, after: null });
+  });
+  it("«Отменить» takes the template's items back", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistTemplates: [TPL] });
+    scheduled(r);
+    const undo = valueOf(r).addVisitTemplate(VISIT, TPL.id);
+    await settle();
+    undo();
+    await drain();
+    expect(visitOf(r).checklist).toHaveLength(2);
+    expect(server.sends).toEqual([]);
+  });
+  it("sales (books inspections) neither edits nor adds a template: the server would refuse it", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistTemplates: [TPL] }, "sales");
+    scheduled(r);
+    valueOf(r).editVisitItem(VISIT, ITEM, { label: "sales" });
+    valueOf(r).addVisitTemplate(VISIT, TPL.id);
+    valueOf(r).moveVisitItem(VISIT, ITEM, 1);
+    await drain();
+    expect(visitOf(r).checklist.map((c) => c.label)).toEqual(["Confirm scope", "Photo of the area"]);
+    expect(server.sends).toEqual([]);
+  });
+  it("an old server: «Ниже» goes as the old whole list in the new order", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistLegacy: true });
+    scheduled(r);
+    valueOf(r).moveVisitItem(VISIT, ITEM, 1);
+    await drain();
+    expect(server.sends.map((x) => x.op.k)).toEqual(["visit.checklist"]);
+    expect((server.sends[0]!.op.checklist as { id: string }[]).map((c) => c.id)).toEqual([PHOTO_ITEM, ITEM]);
+  });
+  it("an old server: the edit and the template go as the old whole list", { timeout: 15_000 }, async () => {
+    const r = await signedIn({ checklistTemplates: [TPL], checklistLegacy: true });
+    scheduled(r);
+    valueOf(r).editVisitItem(VISIT, ITEM, { label: "Scope" });
+    valueOf(r).addVisitTemplate(VISIT, TPL.id);
+    await drain();
+    expect(server.sends.map((x) => x.op.k)).toEqual(["visit.checklist", "visit.checklist"]);
+    expect((server.sends[1]!.op.checklist as { label: string }[]).map((c) => c.label)).toEqual(["Scope", "Photo of the area", "Measure the run", "Photo of the roof"]);
   });
 });

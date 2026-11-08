@@ -128,8 +128,9 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
         .catch(() => live<Row>("files", "id, visit_id, job_id, stage, storage_key, kind, created_at")),
       live<Row>("expenses"),
       live<Row>("catalog_items"),
-      // Costs are visible only to owner/admin/office: for others the query returns nothing.
-      live<Row>("estimate_line_costs", "line_item_id, unit_cost_cents", key("line_item_id")).catch(() => [] as Row[]),
+      // Costs are visible only to owner/admin/office: for others the query returns nothing; a failed read fails the load
+      // (orNoTable): «no rows» would show the office its estimates without cost
+      live<Row>("estimate_line_costs", "line_item_id, unit_cost_cents", key("line_item_id")).catch(orNoTable),
       q<Row>(supabase.from("notifications").select("*").eq("company_id", companyId).order("created_at", { ascending: false }).limit(50)).catch(() => [] as Row[]),
       // 19 §9: the price list's costs and the estimates' margins — only who sees costs gets rows (RLS); a server before
       // the migration has no such tables: the old columns (catalog_items, totals.marginPct) are read instead; any other

@@ -11,12 +11,13 @@ import { portalFromEstimate } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
-import { isUniversal, mainOption, newToken, SEND_ISSUE_KINDS, type SendIssues } from "@/features/estimateDoc";
+import { issueCount, isUniversal, mainOption, newToken, SEND_ISSUE_KINDS, sendIssues, type SendIssues } from "@/features/estimateDoc";
 import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
 import { beforeSend, clientLink, copyText, estimateMessage, openEmail, openSms } from "@/features/sendEstimate";
 import { canServe } from "@/features/clients";
+import { estimateNotes, type ModuleNote } from "@/modules/registry";
 import { docLanguageFor } from "@/data/people";
 import { Button, Segmented, StatusChip } from "@/ui/controls";
 import { T } from "@/ui/primitives";
@@ -37,6 +38,7 @@ export default function EstimateScreen() {
   const toast = useToast();
   const [method, setMethod] = useState<PaymentMethod>("card");
   const [sendOpen, setSendOpen] = useState(send === "1");
+  const [pdfOpen, setPdfOpen] = useState(false);
   const back = () => (router.canGoBack() ? router.back() : router.replace("/"));
   const e = db.estimates.find((x) => x.id === id);
   if (!e)
@@ -52,7 +54,13 @@ export default function EstimateScreen() {
   const universal = isUniversal(e);
   const job = db.jobs.find((j) => j.estimateId === e.id);
 
-  const pdf = () => {
+  // C5 for the PDF (spec 33 П23.10): an unsigned estimate's PDF goes to the client by hand — the same check as «Отправить»
+  const pdfIssues = (e.status === "draft" || e.status === "sent") && e.doc ? sendIssues(e.doc) : null;
+  // C5b (spec 33 П23.11): the modules' words on an open estimate (e.g. «the measurement changed after it»)
+  const notes = estimateNotes(db, e);
+  const pdf = (checked = false) => {
+    if (!checked && pdfIssues && (issueCount(pdfIssues) > 0 || notes.length > 0)) return setPdfOpen(true);
+    setPdfOpen(false);
     const p = portalFromEstimate(db, e, store.companyName ?? "OCTODEX");
     saveEstimatePdf(estimateHtml(p, { lang: p.lang }), estimateFileName(p)).catch((err) =>
       toast.show(t("portal.error", { msg: String(err?.message ?? err) })),
@@ -103,6 +111,10 @@ export default function EstimateScreen() {
         ) : null}
       </Card>
 
+      {notes.map((n) => (
+        <ModuleNoteCard key={`${n.module}-${n.id}`} n={n} />
+      ))}
+
       {/* T2 (S16): the direction of the business; read-only once the client signed — the job keeps its own */}
       <ServiceCategoryRow
         value={e.serviceCategoryId}
@@ -117,7 +129,7 @@ export default function EstimateScreen() {
             {isEstimateEditable(e.status) && e.status !== "awaiting_countersign" ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
             {(e.status === "draft" || e.status === "sent") && canServe(db, e.customerId) ? <View testID="est-send"><Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /></View> : null}
             {e.token ? <Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /> : null}
-            <Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={pdf} />
+            <View testID="est-pdf"><Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={() => pdf()} /></View>
             {/* E2b: only an unsigned link can be revoked (the signed client keeps their copy); director and office */}
             {e.token && !e.linkRevokedAt && (e.status === "sent" || e.status === "draft") && canManageLink(store.db, store.db.me) ? (
               <Button label={t("est.revoke.button")} icon="close" variant="ghost" onPress={() => toast.show(t("est.revoke.done"), store.revokeEstimateLink(e.id))} />
@@ -174,6 +186,24 @@ export default function EstimateScreen() {
       ) : null}
 
       {universal ? <SendSheet e={e} visible={sendOpen} onClose={() => setSendOpen(false)} /> : null}
+      {pdfIssues ? (
+        <Sheet visible={pdfOpen} onClose={() => setPdfOpen(false)} title={t("ue.pdf")}>
+          <SendCheck
+            id="pdf-check"
+            issues={pdfIssues}
+            canForce={pdfIssues.noPrice.length === 0}
+            optionName={optionNameOf(e.doc)}
+            onEdit={() => {
+              setPdfOpen(false);
+              router.push(`/estimate/new?id=${e.id}`);
+            }}
+            onForce={() => pdf(true)}
+            notes={notes}
+            forceLabel="ue.check.forcePdf"
+            titles={["ue.check.pdfReview", "ue.check.pdfBlocked"]}
+          />
+        </Sheet>
+      ) : null}
     </Screen>
   );
 }
@@ -225,7 +255,8 @@ function OnSiteSign({ e }: { e: Estimate }) {
   // C5 (spec 33 П23.9): the client signs on site what they would get by link — the same check first (review C5 №2)
   const [force, setForce] = useState(false);
   const check = beforeSend(store.db, e, { force });
-  const issues = !check.ok && check.reason === "lines" ? check : null;
+  const notes = estimateNotes(store.db, e);
+  const issues = linesOrNotes(check, notes, force);
   return (
     <>
       <EstimateView doc={doc} optionId={optionId} onOption={setOptionId} addonIds={addonIds} onAddons={setAddonIds} />
@@ -235,6 +266,7 @@ function OnSiteSign({ e }: { e: Estimate }) {
           <SendCheck
             id="sign-check"
             issues={issues.issues}
+            notes={notes}
             canForce={issues.canForce}
             optionName={optionNameOf(doc)}
             onEdit={isEstimateEditable(e.status) ? () => router.push(`/estimate/new?id=${e.id}`) : undefined}
@@ -274,7 +306,8 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
   // C5 (spec 33 П23.9): «Всё равно отправить» for a test price / a line not in the measurement; never for «нет цены»
   const [force, setForce] = useState(false);
   const check = beforeSend(store.db, e, { force });
-  const issues = !check.ok && check.reason === "lines" ? check : null;
+  const notes = estimateNotes(store.db, e);
+  const issues = linesOrNotes(check, notes, force);
   const close = () => {
     setForce(false);
     onClose();
@@ -283,6 +316,7 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
     // «do not service» sends nothing; a taxed draft of a client who became «Без налога» is re-saved first (04 §12)
     const pre = beforeSend(store.db, e, { force });
     if (!pre.ok) return pre.reason === "no_service" ? toast.show(t("client.noServiceHint")) : undefined;
+    if (notes.length && !force) return;
     if (pre.resave) store.saveEstimate({ id: e.id, customerId: e.customerId, propertyId: e.propertyId, title: e.title, doc: pre.resave, leadId: e.leadId });
     const token = e.token ?? newToken();
     const undo = store.sendEstimate(e.id, token);
@@ -308,6 +342,7 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
           <SendCheck
             id="send-check"
             issues={issues.issues}
+            notes={notes}
             canForce={issues.canForce}
             optionName={optionNameOf(e.doc)}
             onEdit={
@@ -347,6 +382,35 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
   );
 }
 
+const NO_ISSUES: SendIssues = { noPrice: [], testPrice: [], gone: [] };
+/** what the check shows: the lines' issues (C5), else the modules' words until «Всё равно» (C5b, spec 33 П23.11) */
+function linesOrNotes(check: ReturnType<typeof beforeSend>, notes: readonly ModuleNote[], force: boolean): { issues: SendIssues; canForce: boolean } | null {
+  if (!check.ok) return check.reason === "lines" ? check : null;
+  return notes.length && !force ? { issues: NO_ISSUES, canForce: true } : null;
+}
+
+/** C5b: a module's word on the estimate — warn, icon + word (rule 2), the module's way out (e.g. «Обновить из замера») */
+function ModuleNoteCard({ n }: { n: ModuleNote & { module: string } }) {
+  const { t } = useI18n();
+  return (
+    <Card status="warn">
+      <View testID={`module-${n.module}-${n.id}`} style={{ gap: space[2] }}>
+        <View style={{ flexDirection: "row" }}>
+          <StatusChip status="warn" label={t(n.labelKey)} />
+        </View>
+        <T v="caption" tone="mut">
+          {t(n.hintKey)}
+        </T>
+        {n.action ? (
+          <View testID={`module-${n.module}-${n.action.id}`} style={{ flexDirection: "row" }}>
+            <Button label={t(n.action.labelKey)} icon={n.action.icon} variant="secondary" onPress={() => router.push(n.action!.href as never)} />
+          </View>
+        ) : null}
+      </View>
+    </Card>
+  );
+}
+
 const CHECK_WORD = { noPrice: "ue.src.noPrice", testPrice: "ue.src.testPrice", gone: "ue.src.gone" } as const;
 
 /** C5: what stops a send — by kind, icon + word + count and the lines' names (rule 2); a way out in one tap. */
@@ -358,12 +422,12 @@ const optionNameOf = (doc: Estimate["doc"]) => (id: string) => {
   return opts[i]?.name.trim() || `#${i + 1}`;
 };
 
-function SendCheck({ id, issues, canForce, optionName, onEdit, onForce }: { id: "send-check" | "sign-check"; issues: SendIssues; canForce: boolean; optionName: (id: string) => string; onEdit?: () => void; onForce: () => void }) {
+function SendCheck({ id, issues, canForce, optionName, onEdit, onForce, notes = [], forceLabel = "ue.check.force", titles = ["ue.check.review", "ue.check.blocked"] }: { id: "send-check" | "sign-check" | "pdf-check"; issues: SendIssues; canForce: boolean; optionName: (id: string) => string; onEdit?: () => void; onForce: () => void; notes?: readonly ModuleNote[]; forceLabel?: DictKey; titles?: [DictKey, DictKey] }) {
   const { t } = useI18n();
   return (
     <View testID={id} style={{ gap: space[2] }}>
       <View testID={`${id}-${canForce ? "review" : "blocked"}`}>
-        <T v="heading">{t(canForce ? "ue.check.review" : "ue.check.blocked")}</T>
+        <T v="heading">{t(canForce ? titles[0] : titles[1])}</T>
       </View>
       {SEND_ISSUE_KINDS.filter((k) => issues[k].length).map((k) => (
         <View key={k} testID={`${id}-${k}`} style={{ gap: space[1] }}>
@@ -375,8 +439,18 @@ function SendCheck({ id, issues, canForce, optionName, onEdit, onForce }: { id: 
           </T>
         </View>
       ))}
+      {notes.map((n) => (
+        <View key={`${"module" in n ? String(n.module) : ""}-${n.id}`} testID={`${id}-module`} style={{ gap: space[1] }}>
+          <View style={{ flexDirection: "row" }}>
+            <StatusChip status="warn" label={t(n.labelKey)} />
+          </View>
+          <T v="caption" tone="mut">
+            {t(n.hintKey)}
+          </T>
+        </View>
+      ))}
       <T v="caption" tone="mut">
-        {t(canForce ? "ue.check.forceHint" : "ue.check.noPriceHint")}
+        {t(!canForce ? "ue.check.noPriceHint" : issueCount(issues) > 0 ? "ue.check.forceHint" : "ue.check.moduleHint")}
       </T>
       <RowView style={{ flexWrap: "wrap" }}>
         {onEdit ? (
@@ -386,7 +460,7 @@ function SendCheck({ id, issues, canForce, optionName, onEdit, onForce }: { id: 
         ) : null}
         {canForce ? (
           <View testID={`${id}-force`}>
-            <Button label={t("ue.check.force")} icon="send" variant="secondary" onPress={onForce} />
+            <Button label={t(forceLabel)} icon={forceLabel === "ue.check.force" ? "send" : "invoice"} variant="secondary" onPress={onForce} />
           </View>
         ) : null}
       </RowView>
