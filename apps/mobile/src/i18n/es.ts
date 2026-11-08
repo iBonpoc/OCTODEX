@@ -2799,4 +2799,6 @@ export const es: Dict = {
   "intake.error": "No se pudo enviar. Revise la conexión e inténtelo de nuevo.",
   "intake.notFound": "Este formulario de solicitud no está disponible.",
   "intake.privacy": "Su solicitud va a {company}. OCTODEX la procesa en su nombre y no la vende.",
+  "intake.retry": "Intentar de nuevo",
+  "intake.hp": "Deje este campo vacío",
 };

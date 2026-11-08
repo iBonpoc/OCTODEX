@@ -9,7 +9,8 @@ import {
   attribution, browserLang, canSend, fetchIntakeForm, newNonce, submitIntake, type IntakeFields, type IntakeForm,
 } from "@/cloud/intake";
 import { Button, ChoiceChips, TextField, Toggle } from "@/ui/controls";
-import { T } from "@/ui/primitives";
+import { Icon, T } from "@/ui/primitives";
+import { useTheme } from "@/theme/ThemeProvider";
 import { Card, CardList, Empty, RowView, Screen } from "@/ui/surfaces";
 
 /**
@@ -24,17 +25,20 @@ export default function IntakePage() {
   const [form, setForm] = useState<IntakeForm | null | undefined>(undefined);
   const [failed, setFailed] = useState(false);
   const [lang, setLang] = useState<DocLang | null>(params.lang === "en" || params.lang === "es" || params.lang === "ru" ? params.lang : browserLang());
+  const [attempt, setAttempt] = useState(0);
   useEffect(() => {
+    setFailed(false);
     fetchIntakeForm(token)
-      .then(setForm)
+      // a form that requires a captcha cannot be sent from here yet (no widget until В3): «not available», not a lost request
+      .then((f) => setForm(f && !f.captcha ? f : null))
       .catch(() => setFailed(true));
-  }, [token]);
+  }, [token, attempt]);
   const back = router.canGoBack() ? () => router.back() : undefined;
   if (!form) {
     // before the company is known: the browser's language (the parent's t would be the app's)
     return (
       <I18nOverride lang={lang ?? "en"}>
-        <IntakeState loading={form === undefined && !failed} failed={failed} back={back} />
+        <IntakeState loading={form === undefined && !failed} failed={failed} back={back} retry={() => setAttempt((n) => n + 1)} />
       </I18nOverride>
     );
   }
@@ -45,12 +49,18 @@ export default function IntakePage() {
   );
 }
 
-function IntakeState({ loading, failed, back }: { loading: boolean; failed: boolean; back?: () => void }) {
+function IntakeState({ loading, failed, back, retry }: { loading: boolean; failed: boolean; back?: () => void; retry: () => void }) {
   const { t } = useI18n();
   return (
     <Screen title={t("intake.title")} back={back}>
       <View testID="intake-state">
-        {loading ? <Empty icon="clock" title={t("portal.loading")} /> : <Empty icon="alert" title={failed ? t("intake.error") : t("intake.notFound")} />}
+        {loading ? (
+          <Empty icon="clock" title={t("portal.loading")} />
+        ) : failed ? (
+          <Empty icon="alert" title={t("intake.error")} action={<Button label={t("intake.retry")} onPress={retry} variant="secondary" />} />
+        ) : (
+          <Empty icon="alert" title={t("intake.notFound")} />
+        )}
       </View>
     </Screen>
   );
@@ -63,7 +73,11 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
   search: Record<string, string | string[] | undefined>;
 }) {
   const { t } = useI18n();
-  const opened = useRef(Date.now());
+  const { c } = useTheme();
+  // how long the page has been open, by this device's monotonic clock (a wrong phone time changes nothing)
+  const clock = () => (typeof performance !== "undefined" ? performance.now() : Date.now());
+  const opened = useRef(clock());
+  const sending = useRef(false);
   const nonce = useRef(newNonce());
   const [f, setF] = useState(EMPTY);
   const [categoryId, setCategoryId] = useState<string>("");
@@ -85,17 +99,19 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
 
   const ready = canSend(f);
   const send = async () => {
-    if (!ready || busy) return;
+    if (!ready || sending.current) return; // a double tap sends once
+    sending.current = true;
     setBusy(true);
     setError(null);
     const fields: IntakeFields = { ...f, categoryId: categoryId || undefined, language: lang, consent: form.smsConsent && consent };
     const referrer = typeof document !== "undefined" ? document.referrer : undefined;
     try {
-      await submitIntake(token, fields, { openedAt: opened.current, nonce: nonce.current, utm: attribution(search, referrer) });
+      await submitIntake(token, fields, { filledMs: Math.round(clock() - opened.current), nonce: nonce.current, utm: attribution(search, referrer) });
       setSent(true);
     } catch {
       setError(t("intake.error")); // the same nonce on a retry: the server takes it as one request
     } finally {
+      sending.current = false;
       setBusy(false);
     }
   };
@@ -133,8 +149,9 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
             ) : null}
             <View testID="intake-message"><TextField type="note" value={f.message} onChangeText={set("message")} placeholder={t("intake.message")} label={t("intake.message")} /></View>
             {/* people never see this field; a bot fills every field it finds */}
-            <View style={{ position: "absolute", width: 1, height: 1, overflow: "hidden", opacity: 0 }} aria-hidden importantForAccessibility="no-hide-descendants">
-              <View testID="intake-website"><TextField type="text" value={f.website} onChangeText={set("website")} label="website" /></View>
+            {/* display none: no Tab stop and no autofill for a person; a bot that posts every field still fills it */}
+            <View style={{ display: "none" }} aria-hidden importantForAccessibility="no-hide-descendants">
+              <View testID="intake-website"><TextField type="text" value={f.website} onChangeText={set("website")} label={t("intake.hp")} /></View>
             </View>
           </View>
         </Card>
@@ -148,7 +165,12 @@ function IntakeBody({ token, form, lang, setLang, back, search }: {
           </Card>
         ) : null}
         {!ready ? <T v="caption" tone="mut">{t("intake.needContact")}</T> : null}
-        {error ? <View testID="intake-error"><T v="caption" tone="mut">{error}</T></View> : null}
+        {error ? (
+          <View testID="intake-error" style={{ flexDirection: "row", alignItems: "center", gap: space[2] }}>
+            <Icon name="alert" color={c.status.bad.text} />
+            <View style={{ flex: 1 }}><T v="caption" tone="bad">{error}</T></View>
+          </View>
+        ) : null}
         <View testID="intake-send">
           <Button label={busy ? t("intake.sending") : t("intake.send")} onPress={send} disabled={!ready || busy} full />
         </View>

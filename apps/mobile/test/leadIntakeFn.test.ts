@@ -9,7 +9,7 @@ import { createHash, createHmac } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
-  CONSENT_VERSION, MAX_BODY, MIN_ANSWER_MS, MIN_FILL_MS, canonical, cleanPayload, clientIp, handleIntake,
+  CONSENT_VERSION, MAX_BODY, MAX_FILL_MS, ipKey, MIN_ANSWER_MS, MIN_FILL_MS, canonical, cleanPayload, clientIp, handleIntake,
   type IntakeCall, type IntakeDeps, type Req,
 } from "../../../supabase/functions/lead-intake/handler";
 
@@ -31,7 +31,7 @@ function req(o: { method?: string; url?: string; headers?: Record<string, string
   };
 }
 const form = (extra: Record<string, unknown> = {}) => ({
-  t: FORM, name: "Ann Lee", phone: "(626) 555-0113", message: "Clean gutters", opened_at: NOW - 10_000,
+  t: FORM, name: "Ann Lee", phone: "(626) 555-0113", message: "Clean gutters", filled_ms: 10_000,
   nonce: "0b6c8d2e-1f3a-4b5c-8d7e-9f0a1b2c3d4e", ...extra,
 });
 
@@ -53,7 +53,6 @@ function deps(o: { status?: string; throws?: boolean; captcha?: { success: boole
     sha256: async (s) => sha(s),
     hmac: async (s) => createHmac("sha256", "secret").update(s).digest("hex"),
     allowedOrigin: (x) => /^https:\/\/octodex(--[a-z0-9-]+)?\.expo\.app$/.test(x),
-    captchaHosts: ["octodex.expo.app"],
     ipHeaders: ["cf-connecting-ip", "x-forwarded-for"],
     now: () => NOW,
     wait: async (ms) => {
@@ -112,7 +111,7 @@ describe("lead-intake: the page's request", () => {
     expect((await handleIntake(req({ headers: { origin: "https://octodex--abc123.expo.app" }, body: form() }), prev.d)).status).toBe(200);
   });
   it("a honeypot, a fill faster than 3 s or no opening time — a bot (kept for the limits, never a lead)", async () => {
-    for (const extra of [{ website: "http://spam" }, { opened_at: NOW - (MIN_FILL_MS - 1) }, { opened_at: undefined }]) {
+    for (const extra of [{ website: "http://spam" }, { filled_ms: MIN_FILL_MS - 1 }, { filled_ms: undefined }, { filled_ms: -5 }, { filled_ms: MAX_FILL_MS + 1 }]) {
       const { d, calls } = deps();
       await handleIntake(req({ body: form(extra) }), d);
       expect(calls[0].checks.bot, JSON.stringify(extra)).toBe("true");
@@ -124,6 +123,8 @@ describe("lead-intake: the page's request", () => {
       [{ captcha: { success: false } }, { captcha: "tok" }, "fail"],
       [{ captcha: { success: true, hostname: "evil.example" } }, { captcha: "tok" }, "fail"],
       [{ captcha: { success: true, hostname: "octodex.expo.app", action: "other" } }, { captcha: "tok" }, "fail"],
+      [{ captcha: { success: true } }, { captcha: "tok" }, "fail"], // no hostname / action — not ours
+      [{ captcha: { success: true, hostname: "octodex--pr421.expo.app", action: "lead" } }, { captcha: "tok" }, "ok"], // a PR preview
       [{ captcha: "throw" }, { captcha: "tok" }, "fail"],
       [{}, {}, "none"],
     ];
@@ -176,11 +177,25 @@ describe("lead-intake: the client's IP", () => {
     expect(clientIp(r({ "x-forwarded-for": "junk<script>" }), ["cf-connecting-ip", "x-forwarded-for"])).toBeNull();
     expect(clientIp(r({}), ["cf-connecting-ip", "x-forwarded-for"])).toBeNull();
   });
-  it("no secret for the HMAC — no IP is passed (the database then refuses the page's request)", async () => {
-    const { d, calls } = deps();
+  it("no secret for the HMAC — «busy» and a log line, never «sent» (the database would refuse every request)", async () => {
+    const { d, calls, logs } = deps();
     d.hmac = null;
+    const r = await handleIntake(req({ body: form() }), d);
+    expect(r.status).toBe(503);
+    expect(calls).toHaveLength(0);
+    expect(logs.join(" ")).toMatch(/no ip secret/);
+  });
+  it("an IPv6 client is counted by its /64 network; IPv4 as is", () => {
+    expect(ipKey("2001:db8:aa:bb:1:2:3:4")).toBe(ipKey("2001:0DB8:aa:bb:ffff::1"));
+    expect(ipKey("2001:db8::1")).toBe("2001:db8:0:0::/64");
+    expect(ipKey("2001:db8:aa:bc::1")).not.toBe(ipKey("2001:db8:aa:bb::1"));
+    expect(ipKey("203.0.113.7")).toBe("203.0.113.7");
+  });
+  it("a phone whose clock is 10 minutes ahead is still a person (the fill time is the page's own)", async () => {
+    const { d, calls } = deps();
+    d.now = () => NOW - 10 * 60_000;
     await handleIntake(req({ body: form() }), d);
-    expect(calls[0].ipHash).toBeNull();
+    expect(calls[0].checks.bot).toBe("false");
   });
 });
 
@@ -195,6 +210,20 @@ describe("lead-intake: the page reads its form", () => {
       bodies.add(`${r.status} ${r.body}`);
     }
     expect([...bodies]).toEqual(['200 {"ok":true,"form":null}']);
+  });
+  it("a GET without our origin → 403; ?status=1 says whether the secrets are set (names only)", async () => {
+    const { d } = deps();
+    expect((await handleIntake(req({ method: "GET", url: `https://x/?t=${FORM}`, headers: { origin: "" } }), d)).status).toBe(403);
+    const st = await handleIntake(req({ method: "GET", url: "https://x/?status=1" }), d);
+    expect(JSON.parse(st.body)).toEqual({ ok: true, ipSecret: true, captchaSecret: true });
+    d.hmac = null;
+    d.verifyCaptcha = null;
+    expect(JSON.parse((await handleIntake(req({ method: "GET", url: "https://x/?status=1" }), d)).body)).toEqual({ ok: true, ipSecret: false, captchaSecret: false });
+  });
+  it("a refused request is logged by its outcome only", async () => {
+    const { d, logs } = deps({ status: "rejected" });
+    await handleIntake(req({ body: form({ website: "x" }) }), d);
+    expect(logs).toEqual(["intake: form rejected bot"]);
   });
   it("OPTIONS: CORS only for our origins", async () => {
     const { d } = deps();
@@ -226,6 +255,11 @@ describe("lead-intake: the webhook", () => {
       expect([401, 403]).toContain(r.status);
       expect(calls).toHaveLength(0);
     }
+  });
+  it("a long event id is cut to fit the database's key (≤ 200 with its prefix)", async () => {
+    const { d, calls } = deps();
+    await handleIntake(hook({ body: { phone: "1", event_id: "z".repeat(500) } }), d);
+    expect(calls[0].eventKey.length).toBe(200);
   });
   it("invalid → 422, a database failure → 503", async () => {
     expect((await handleIntake(hook(), deps({ status: "invalid" }).d)).status).toBe(422);

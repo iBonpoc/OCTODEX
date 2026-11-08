@@ -11,11 +11,12 @@ exports.run = async (h) => {
   const posts = [];
   let failNext = false;
   let smsConsent = true;
+  let captcha = false;
   await p.route("**/functions/v1/lead-intake*", async (route) => {
     const r = route.request();
     if (r.method() === "GET") {
       const t = new URL(r.url()).searchParams.get("t");
-      const form = t === TOKEN ? { company: "Sunset Gutters", language: "en", captcha: false, sms_consent: smsConsent, categories: [
+      const form = t === TOKEN ? { company: "Sunset Gutters", language: "en", captcha, sms_consent: smsConsent, categories: [
         { id: "0b000000-0000-4000-8000-000000000001", key: "gutters" }, { id: "0b000000-0000-4000-8000-000000000002", name: "Window cleaning" }] } : null;
       return route.fulfill({ status: 200, contentType: "application/json", body: JSON.stringify({ ok: true, form }) });
     }
@@ -73,9 +74,24 @@ exports.run = async (h) => {
   h.expect(b.consent === true, "the consent the person ticked");
   h.expect(b.website === "", "the hidden field is empty");
   h.expect(b.category_id === "0b000000-0000-4000-8000-000000000002", "the kind of work chosen");
-  h.expect(typeof b.opened_at === "number" && b.opened_at <= Date.now(), "when the page was opened (the server checks the fill time)");
+  h.expect(typeof b.filled_ms === "number" && b.filled_ms > 0, "how long the page was open, by the page's own clock (the server checks it)");
+  h.expect(!("opened_at" in b), "no device time is sent");
   h.expect(b.utm && b.utm.utm_source === "gbp" && b.utm.utm_campaign === "fall", "where the visitor came from");
   h.expect(!("cost_cents" in b) && !("provider" in b) && !("event_key" in b), "a page sends no price, provider or event key");
+
+  // a double tap sends once
+  posts.length = 0;
+  await h.go(`/f/${TOKEN}`);
+  await input("intake-email").fill("ann@example.com");
+  await send().dblclick();
+  await h.expectText(/Request sent/, "sent after a double tap");
+  h.expect(posts.length === 1, `a double tap sends once: ${posts.length}`);
+
+  // a form that requires a captcha: no widget here yet (В3) — «not available», never a lost request
+  captcha = true;
+  await h.go(`/f/${TOKEN}`);
+  await h.expectText(/This request form is not available/, "a captcha form is not offered without its widget");
+  captcha = false;
 
   // a company without the SMS box; ?lang=ru
   smsConsent = false;

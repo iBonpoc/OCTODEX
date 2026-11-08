@@ -49,7 +49,6 @@ Deno.serve(async (req: Request) => {
       sha256: async (s) => hex(await crypto.subtle.digest("SHA-256", enc.encode(s))),
       hmac: hmacKey ? async (s) => hex(await crypto.subtle.sign("HMAC", await hmacKey, enc.encode(s))) : null,
       allowedOrigin: (o) => ORIGIN.test(o),
-      captchaHosts: ["octodex.expo.app"],
       ipHeaders: ["cf-connecting-ip", "x-forwarded-for"],
       now: () => Date.now(),
       wait: (ms) => new Promise((r) => setTimeout(r, ms)),

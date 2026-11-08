@@ -2799,4 +2799,6 @@ export const en: Dict = {
   "intake.error": "Could not send. Check the connection and try again.",
   "intake.notFound": "This request form is not available.",
   "intake.privacy": "Your request goes to {company}. OCTODEX processes it on their behalf and does not sell it.",
+  "intake.retry": "Try again",
+  "intake.hp": "Leave this field empty",
 };

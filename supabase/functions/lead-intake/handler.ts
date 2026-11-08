@@ -68,8 +68,6 @@ export interface IntakeDeps {
   hmac: ((s: string) => Promise<string>) | null;
   /** origins the page may post from: the production site and the PR previews */
   allowedOrigin: (origin: string) => boolean;
-  /** hostnames Turnstile must report (the page's own) */
-  captchaHosts: string[];
   /** the request headers that hold the client's IP, in order (cf-connecting-ip, then x-forwarded-for); see clientIp */
   ipHeaders: string[];
   now: () => number;
@@ -80,9 +78,11 @@ export interface IntakeDeps {
 /** the body is cut here before anything is parsed (the database refuses more than 16 KB of fields) */
 export const MAX_BODY = 16 * 1024;
 /** every answer to the page comes after at least this long, so time tells nothing either */
-export const MIN_ANSWER_MS = 300;
+export const MIN_ANSWER_MS = 800; // above the time of making a lead under the company's lock
 /** a person needs at least this long to fill the form (the page sends when it was opened) */
 export const MIN_FILL_MS = 3000;
+/** a page open longer than a day is not a person filling a form now */
+export const MAX_FILL_MS = 24 * 60 * 60 * 1000;
 /** the version of the SMS consent text on the page (kept with the consent record; change it with the text) */
 export const CONSENT_VERSION = "sms-v1";
 
@@ -160,11 +160,21 @@ export function clientIp(req: Req, headers: string[]): string | null {
   return null;
 }
 
+/** an IPv6 client owns a whole /64: the limit counts the network, not one of its addresses */
+export function ipKey(ip: string): string {
+  if (!ip.includes(":")) return ip;
+  const [head, tail] = ip.split("::");
+  const a = head ? head.split(":") : [];
+  const b = tail !== undefined ? (tail ? tail.split(":") : []) : [];
+  const full = tail !== undefined ? [...a, ...Array(Math.max(0, 8 - a.length - b.length)).fill("0"), ...b] : a;
+  return `${full.slice(0, 4).map((x) => (x || "0").toLowerCase().replace(/^0+(?=.)/, "")).join(":")}::/64`;
+}
+
 async function readBody(req: Req): Promise<Record<string, unknown> | null> {
   const len = Number(req.header("content-length") ?? "0");
   if (len > MAX_BODY) return null;
   const raw = await req.text();
-  if (raw.length > MAX_BODY) return null;
+  if (new TextEncoder().encode(raw).length > MAX_BODY) return null; // bytes, not characters
   try {
     const v = JSON.parse(raw);
     return v && typeof v === "object" && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
@@ -185,7 +195,10 @@ export async function handleIntake(req: Req, d: IntakeDeps): Promise<Res> {
   // ---- the page reads what to show ------------------------------------------------------------------------
   if (req.method === "GET") {
     if (!pageCors) return json(403, { ok: false, code: "origin" });
-    const t = new URL(req.url).searchParams.get("t") ?? "";
+    const q = new URL(req.url).searchParams;
+    // the settings screen asks whether the operator set the secrets (names only, never values): a form is off without them
+    if (q.get("status") === "1") return json(200, { ok: true, ipSecret: !!d.hmac, captchaSecret: !!d.verifyCaptcha }, pageCors);
+    const t = q.get("t") ?? "";
     let info: Record<string, unknown> = {};
     if (FORM_TOKEN.test(t)) {
       try {
@@ -206,7 +219,7 @@ export async function handleIntake(req: Req, d: IntakeDeps): Promise<Res> {
     if (!body) return json(400, { ok: false, code: "bad_request" });
     const payload = cleanPayload(body, "webhook");
     const payloadHash = await d.sha256(canonical(payload));
-    const given = field(body.event_id, 200);
+    const given = field(body.event_id, 198); // + «e:» = the database's 200
     try {
       const r = await d.submit({
         kind: "webhook", tokenHash: await d.sha256(bearer), eventKey: given ? `e:${given}` : `h:${payloadHash}`, payloadHash,
@@ -230,16 +243,23 @@ export async function handleIntake(req: Req, d: IntakeDeps): Promise<Res> {
   const t = typeof body?.t === "string" ? body.t : "";
   if (!body || !FORM_TOKEN.test(t)) return json(400, { ok: false, code: "bad_request" }, pageCors);
   const payload = cleanPayload(body, "form");
+  // no secret for the IP: the database would refuse every request (no_ip) — say «busy» and log it, never «sent»
+  if (!d.hmac) {
+    d.log?.("intake: no ip secret (INTAKE_IP_SECRET) — form requests refused");
+    await d.wait(MIN_ANSWER_MS);
+    return json(503, { ok: false, code: "busy" }, pageCors);
+  }
   const ip = clientIp(req, d.ipHeaders);
-  const ipHash = ip && d.hmac ? await d.hmac(ip) : null;
-  const openedAt = typeof body.opened_at === "number" ? body.opened_at : 0;
-  const bot = (typeof body.website === "string" && body.website.trim() !== "") || !openedAt || started - openedAt < MIN_FILL_MS;
+  const ipHash = ip ? await d.hmac(ipKey(ip)) : null;
+  // how long the page was open, measured by the page itself (its clock against itself: a phone's wrong time changes nothing)
+  const filled = typeof body.filled_ms === "number" && Number.isFinite(body.filled_ms) ? body.filled_ms : -1;
+  const bot = (typeof body.website === "string" && body.website.trim() !== "") || filled < MIN_FILL_MS || filled > MAX_FILL_MS;
   let captcha: Checks["captcha"] = "none";
   const ct = typeof body.captcha === "string" ? body.captcha.slice(0, 2048) : "";
   if (ct && d.verifyCaptcha) {
     try {
       const v = await d.verifyCaptcha(ct, ip);
-      captcha = v.success && (!v.hostname || d.captchaHosts.includes(v.hostname)) && (!v.action || v.action === "lead") ? "ok" : "fail";
+      captcha = v.success && !!v.hostname && d.allowedOrigin(`https://${v.hostname}`) && v.action === "lead" ? "ok" : "fail";
     } catch {
       captcha = "fail";
     }
@@ -248,12 +268,14 @@ export async function handleIntake(req: Req, d: IntakeDeps): Promise<Res> {
   const payloadHash = await d.sha256(canonical(payload));
   // the key is built here, never taken from the page: the page's nonce only tells a retry of the same send apart
   const nonce = typeof body.nonce === "string" && UUID.test(body.nonce) ? body.nonce.toLowerCase() : "";
-  const eventKey = `f:${await d.sha256(`${payloadHash}|${nonce || ct || String(openedAt)}`)}`;
+  const eventKey = `f:${await d.sha256(`${payloadHash}|${nonce || ct || String(filled)}`)}`;
   try {
-    await d.submit({
+    const r = await d.submit({
       kind: "form", tokenHash: await d.sha256(t), eventKey, payloadHash, ipHash, payload,
       checks: { bot: bot ? "true" : "false", captcha, consent: consent ? "true" : "false", ...(consent ? { consent_version: CONSENT_VERSION } : {}) },
     });
+    // the outcome only (no field, no IP): a forgotten secret (no_ip) or captcha shows in the function's logs
+    if (r?.status && r.status !== "accepted" && r.status !== "merged") d.log?.(`intake: form ${r.status}${bot ? " bot" : ""}${ipHash ? "" : " no-ip"}`);
   } catch {
     d.log?.("intake: form submit failed");
     await d.wait(Math.max(0, MIN_ANSWER_MS - (d.now() - started)));

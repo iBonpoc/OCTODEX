@@ -14,6 +14,8 @@ export interface IntakeForm {
   company: string;
   language: DocLang;
   smsConsent: boolean;
+  /** the company requires a captcha — the page has no widget yet (В3): it shows «not available» rather than lose requests */
+  captcha: boolean;
   categories: { id: string; key?: string; name?: string }[];
 }
 export interface IntakeFields {
@@ -43,7 +45,7 @@ export async function fetchIntakeForm(token: string): Promise<IntakeForm | null>
   const f = ((await r.json()) as { form?: Record<string, unknown> | null }).form;
   if (!f || typeof f.company !== "string") return null;
   const cats = Array.isArray(f.categories) ? (f.categories as { id: string; key?: string; name?: string }[]) : [];
-  return { company: f.company, language: lang(f.language), smsConsent: f.sms_consent === true, categories: cats.filter((c) => typeof c?.id === "string") };
+  return { company: f.company, language: lang(f.language), smsConsent: f.sms_consent === true, captcha: f.captcha === true, categories: cats.filter((c) => typeof c?.id === "string") };
 }
 
 /** the browser's language, if it is one of the client languages */
@@ -60,16 +62,32 @@ export function attribution(search: Record<string, string | string[] | undefined
     const s = Array.isArray(v) ? v[0] : v;
     if (s) out[k] = String(s).slice(0, 200);
   }
-  if (referrer) out.referrer = referrer.slice(0, 200);
+  // the site that sent the visitor: its address without the query (a contractor's page may carry a person's data there)
+  if (referrer) {
+    try {
+      const u = new URL(referrer);
+      out.referrer = `${u.origin}${u.pathname}`.slice(0, 200);
+    } catch {
+      /* not an address */
+    }
+  }
   return out;
 }
 
+/** is the function ready to take a page's requests (the operator set INTAKE_IP_SECRET; TURNSTILE_SECRET for a captcha) */
+export async function fetchIntakeStatus(): Promise<{ ipSecret: boolean; captchaSecret: boolean } | null> {
+  const r = await fetch(`${INTAKE_URL}?status=1`, { headers });
+  if (!r.ok) return null;
+  const a = (await r.json()) as { ipSecret?: boolean; captchaSecret?: boolean };
+  return { ipSecret: a.ipSecret === true, captchaSecret: a.captchaSecret === true };
+}
+
 /** a request; the same nonce for a retry of the same send (the server then knows it is one request) */
-export async function submitIntake(token: string, f: IntakeFields, o: { openedAt: number; nonce: string; utm: Record<string, string> }): Promise<void> {
+export async function submitIntake(token: string, f: IntakeFields, o: { filledMs: number; nonce: string; utm: Record<string, string> }): Promise<void> {
   const body = {
     t: token, name: f.name, phone: f.phone, email: f.email, address: f.address, city: f.city, state: f.state, zip: f.zip,
     category_id: f.categoryId, message: f.message, language: f.language, consent: f.consent, website: f.website,
-    opened_at: o.openedAt, nonce: o.nonce, utm: o.utm,
+    filled_ms: o.filledMs, nonce: o.nonce, utm: o.utm,
   };
   const r = await fetch(INTAKE_URL, { method: "POST", headers, body: JSON.stringify(body) });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);

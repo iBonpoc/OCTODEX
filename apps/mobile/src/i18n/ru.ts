@@ -2799,6 +2799,8 @@ export const ru = {
   "intake.error": "Не удалось отправить. Проверьте связь и попробуйте ещё раз.",
   "intake.notFound": "Эта форма заявки недоступна.",
   "intake.privacy": "Заявку получает {company}. OCTODEX обрабатывает её по поручению компании и не продаёт.",
+  "intake.retry": "Повторить",
+  "intake.hp": "Оставьте это поле пустым",
 } as const;
 
 export type DictKey = keyof typeof ru;
