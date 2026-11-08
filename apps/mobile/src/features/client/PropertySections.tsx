@@ -5,7 +5,6 @@
  */
 import { visitWhen } from "@/features/schedule";
 import { useState } from "react";
-import { Linking } from "react-native";
 import { router } from "expo-router";
 import { useStore } from "@/data/store";
 import type { Property } from "@/data/types";
@@ -18,9 +17,10 @@ import { leadStatusView } from "@/features/leads";
 import { NotesBlock } from "@/features/NotesBlock";
 import { TasksBlock } from "@/features/lead/LeadParts";
 import { PropertyPeopleSheet } from "@/features/client/PropertySheets";
-import { Button, IconButton, StatusChip } from "@/ui/controls";
-import { Icon, T } from "@/ui/primitives";
-import { CardList, Empty, ItemCard } from "@/ui/surfaces";
+import { Button } from "@/ui/controls";
+import { T } from "@/ui/primitives";
+import { Empty } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
 import { memberName } from "@/features/team";
 
 /** the row's name: shared with the client card where the word is the same */
@@ -44,21 +44,24 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
         <>
           {office ? <Button label={t("prop.people")} icon="users" variant="secondary" onPress={() => setPeople(true)} /> : null}
           {r.people.length ? (
-            <CardList>
+            <CardGrid>
               {r.people.map((x) => {
                 const ph = x.phones.find((y) => y.primary) ?? x.phones[0];
-                const tel = (ph?.number ?? "").replace(/[^\d+]/g, "");
                 return (
-                  <ItemCard
+                  // a person of the property: role and phone under the name, the call button stays (not a compact card)
+                  <ListCard
                     key={x.id}
+                    density="regular"
+                    testID={`property-person-${x.id}`}
+                    lead={{ kind: "icon", icon: "user" }}
                     title={x.name || "—"}
-                    subtitle={[t(`person.role.${x.role}` as DictKey), ph?.number].filter(Boolean).join(" · ")}
-                    left={<Icon name="user" />}
-                    right={tel ? <IconButton icon="phone" label={`${t("client.call")}: ${x.name}`} onPress={() => Linking.openURL(`tel:${tel}`)} /> : undefined}
+                    when={t(`person.role.${x.role}` as DictKey)}
+                    facts={{ phone: ph?.number }}
+                    contact={{ phone: ph?.number }}
                   />
                 );
               })}
-            </CardList>
+            </CardGrid>
           ) : (
             <Empty icon="users" title={t("prop.noPeople")} hint={office ? t("prop.peopleHint") : undefined} />
           )}
@@ -70,98 +73,111 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
       return r.leads.length === 0 ? (
         <Empty icon="inbox" title={t("client.empty.leads")} />
       ) : (
-        <CardList>
+        <CardGrid>
           {r.leads.map((l) => {
             const v = leadStatusView[l.status];
             return (
-              <ItemCard
+              <ListCard
                 key={l.id}
-                title={[l.number, l.service ?? l.name].filter(Boolean).join(" · ")}
-                subtitle={day(l.receivedAt)}
-                right={<StatusChip status={v.status} label={t(v.label)} />}
+                density="compact"
+                testID={`property-lead-${l.id}`}
+                lead={{ kind: "icon", icon: "inbox" }}
+                title={l.service ?? l.name ?? l.number ?? ""}
+                when={[l.number, day(l.receivedAt)].filter(Boolean).join(" · ")}
+                status={{ tone: v.status, label: t(v.label) }}
                 onPress={() => router.push(`/lead/${l.id}`)}
               />
             );
           })}
-        </CardList>
+        </CardGrid>
       );
 
     case "jobs":
       return r.jobs.length === 0 ? (
         <Empty icon="wrench" title={t("client.empty.jobs")} />
       ) : (
-        <CardList>
+        <CardGrid>
           {r.jobs.map((j) => {
             const v = jobStatusView[j.status];
             return (
-              <ItemCard
+              <ListCard
                 key={j.id}
-                title={[j.number, j.title].filter(Boolean).join(" · ")}
-                subtitle={office ? money(j.amountCents) : undefined}
-                left={<Icon name="wrench" />}
-                right={<StatusChip status={v.status} label={t(v.label)} />}
+                density="compact"
+                testID={`property-job-${j.id}`}
+                lead={{ kind: "icon", icon: "wrench" }}
+                title={j.title || j.number || ""}
+                when={j.title ? j.number : undefined}
+                value={office ? money(j.amountCents) : undefined}
+                status={{ tone: v.status, label: t(v.label) }}
                 onPress={() => router.push(`/job/${j.id}`)}
               />
             );
           })}
-        </CardList>
+        </CardGrid>
       );
 
     case "estimates":
       return r.estimates.length === 0 ? (
         <Empty icon="invoice" title={t("client.empty.estimates")} />
       ) : (
-        <CardList>
+        <CardGrid>
           {r.estimates.map((e) => (
-            <ItemCard
+            <ListCard
               key={e.id}
-              title={[e.number, e.title].filter(Boolean).join(" · ")}
-              subtitle={office ? money(e.totalCents) : undefined}
-              left={<Icon name="invoice" />}
-              right={<StatusChip status={estView[e.status].s} label={t(estView[e.status].l)} />}
+              density="compact"
+              testID={`property-estimate-${e.id}`}
+              lead={{ kind: "icon", icon: "invoice" }}
+              title={e.title || e.number || ""}
+              when={e.title ? e.number : undefined}
+              value={office ? money(e.totalCents) : undefined}
+              status={{ tone: estView[e.status].s, label: t(estView[e.status].l) }}
               onPress={() => router.push(`/estimate/${e.id}`)}
             />
           ))}
-        </CardList>
+        </CardGrid>
       );
 
     case "invoices":
       return r.invoices.length === 0 ? (
         <Empty icon="wallet" title={t("client.empty.invoices")} />
       ) : (
-        <CardList>
+        <CardGrid>
           {r.invoices.map((i) => {
             const ch = invoiceChip(i);
             return (
-              <ItemCard
+              <ListCard
                 key={i.id}
-                title={i.number ?? t("inv.title")}
-                subtitle={money(i.totalCents)}
-                left={<Icon name="wallet" />}
-                status={ch.s === "bad" ? "bad" : undefined}
-                right={<StatusChip status={ch.s} label={t(ch.l)} />}
+                density="compact"
+                testID={`property-invoice-${i.id}`}
+                lead={{ kind: "icon", icon: "wallet" }}
+                title={i.title || i.number || t("inv.title")}
+                when={i.title ? i.number : undefined}
+                value={money(i.totalCents)}
+                status={{ tone: ch.s, label: t(ch.l) }}
                 onPress={() => router.push(`/invoice/${i.id}`)}
               />
             );
           })}
-        </CardList>
+        </CardGrid>
       );
 
     case "visits":
       return r.visits.length === 0 ? (
         <Empty icon="calendar" title={t("prop.noVisits")} />
       ) : (
-        <CardList>
+        <CardGrid>
           {r.visits.map((v) => (
-            <ItemCard
+            <ListCard
               key={v.id}
-              title={`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"), false)}`}
-              subtitle={[v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : t("prop.h.visit"), memberName(db, v.techId, t)].filter(Boolean).join(" · ")}
-              left={<Icon name="calendar" />}
+              density="compact"
+              testID={`property-visit-${v.id}`}
+              lead={{ kind: "icon", icon: "calendar" }}
+              title={(v.jobId ? db.jobs.find((j) => j.id === v.jobId)?.title : undefined) ?? t("prop.h.visit")}
+              when={[day(v.start), visitWhen(v, time, t("plan5.allDay"), false), memberName(db, v.techId, t)].filter(Boolean).join(" · ")}
               onPress={() => router.push(`/visit/${v.id}`)}
             />
           ))}
-        </CardList>
+        </CardGrid>
       );
 
     case "tasks":
@@ -172,47 +188,50 @@ export function PropertySection({ p, s }: { p: Property; s: PropertyRow }) {
 
     case "files":
       return r.photos.length ? (
-        <CardList>
+        <CardGrid>
           {r.photos.map(({ visit, photo }) => (
-            <ItemCard
+            <ListCard
               key={photo.id}
+              density="compact"
+              lead={{ kind: "icon", icon: "image" }}
               title={photo.kind === "after" ? t("prop.photoAfter") : t("prop.photoBefore")}
-              subtitle={`${day(visit.start)} · ${visitWhen(visit, time, t("plan5.allDay"), false)}`}
-              left={<Icon name="image" />}
+              when={`${day(visit.start)} · ${visitWhen(visit, time, t("plan5.allDay"), false)}`}
               onPress={() => router.push(`/visit/${visit.id}`)}
             />
           ))}
-        </CardList>
+        </CardGrid>
       ) : (
         <Empty icon="image" title={t("prop.noFiles")} />
       );
 
     case "history":
       return r.history.length ? (
-        <CardList>
+        <CardGrid>
           {r.history.map((h) =>
             h.kind === "visit" ? (
-              <ItemCard
+              <ListCard
                 key={`v${h.visit.id}`}
-                title={`${day(h.at)} · ${time(h.at)}`}
-                subtitle={[t("prop.h.visit"), memberName(db, h.visit.techId, t)].filter(Boolean).join(" · ")}
-                left={<Icon name="calendar" />}
+                density="compact"
+                lead={{ kind: "icon", icon: "calendar" }}
+                title={t("prop.h.visit")}
+                when={[day(h.at), time(h.at), memberName(db, h.visit.techId, t)].filter(Boolean).join(" · ")}
                 onPress={() => router.push(`/visit/${h.visit.id}`)}
               />
             ) : h.kind === "estimate" ? (
-              <ItemCard
+              <ListCard
                 key={`e${h.estimate.id}`}
-                title={[h.estimate.number, h.estimate.title].filter(Boolean).join(" · ")}
-                subtitle={`${t("prop.h.estimate")} · ${day(h.at)}`}
-                left={<Icon name="invoice" />}
-                right={<StatusChip status={estView[h.estimate.status].s} label={t(estView[h.estimate.status].l)} />}
+                density="compact"
+                lead={{ kind: "icon", icon: "invoice" }}
+                title={h.estimate.title || h.estimate.number || t("prop.h.estimate")}
+                when={[t("prop.h.estimate"), h.estimate.title ? h.estimate.number : null, day(h.at)].filter(Boolean).join(" · ")}
+                status={{ tone: estView[h.estimate.status].s, label: t(estView[h.estimate.status].l) }}
                 onPress={() => router.push(`/estimate/${h.estimate.id}`)}
               />
             ) : (
-              <ItemCard key={`n${h.note.id}`} title={h.note.body} subtitle={`${t("prop.h.note")} · ${day(h.at)}`} left={<Icon name="note" />} />
+              <ListCard key={`n${h.note.id}`} density="compact" lead={{ kind: "icon", icon: "note" }} title={h.note.body} when={`${t("prop.h.note")} · ${day(h.at)}`} />
             ),
           )}
-        </CardList>
+        </CardGrid>
       ) : (
         <Empty icon="clock" title={t("prop.noHistory")} />
       );

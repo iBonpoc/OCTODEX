@@ -35,7 +35,7 @@ exports.run = async (h) => {
 
   // jobs → a job
   await row("Работы");
-  await p.getByRole("button", { name: new RegExp(`^${jobs[0].number}`) }).first().click();
+  await p.getByTestId(`property-job-${jobs[0].id}`).first().click();
   await p.waitForTimeout(600);
   h.expect(p.url().includes(`/job/${jobs[0].id}`), `a job card opens the job (${p.url()})`);
 
@@ -60,4 +60,8 @@ exports.run = async (h) => {
   h.expect(!/Лиды/.test(txt) && !/Счета/.test(txt), `tech: no leads or invoices rows (${txt})`);
   const mine = visits.filter((v) => v.techId === db0.me || (v.assigneeIds ?? []).includes(db0.me)).length;
   h.expect((await rowCount("Выезды")) === String(mine), `tech: only his visits (${mine})`);
+  // the property's jobs: the cards are there, the sums are not (value only for the office)
+  await h.go("/property/p1?s=jobs");
+  await p.locator('[data-testid^="property-job-"]').locator("visible=true").first().waitFor({ timeout: 5000 });
+  h.expect(!/\$\d/.test(await h.text()), "tech: no sums on the property's job cards");
 };
