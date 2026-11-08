@@ -7520,5 +7520,231 @@ select tst.ok((select attributes->>'color' = 'white' from public.catalog_items w
 select tst.ok(not has_table_privilege('anon', 'public.catalog_items', 'SELECT'), 'T91 anon reads nothing');
 update public.memberships set status = 'disabled' where user_id in ('a9100000-0000-4000-8000-000000000001', 'a9100000-0000-4000-8000-000000000002');
 \echo 'T91 catalog item properties: shape checked on the server, staff writes, old phones never clear them ok'
+-- ---------------------------------------------------------------- T92: gutter measurements — who reads and writes, same company, sizes (docs/specs/33 S4g, П11, П19)
+:as_super
+insert into auth.users (id, email, raw_user_meta_data) values
+  ('a9200000-0000-4000-8000-000000000001', 'sales92@a.test', '{"full_name":"Sid Sales"}'),
+  ('a9200000-0000-4000-8000-000000000002', 'sub92@a.test', '{"full_name":"Sue Sub"}'),
+  ('a9200000-0000-4000-8000-000000000003', 'tech92@a.test', '{"full_name":"Ted Tech"}');
+insert into public.memberships (company_id, user_id, role, status) values
+  ('ca000000-0000-0000-0000-000000000000', 'a9200000-0000-4000-8000-000000000001', 'sales', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a9200000-0000-4000-8000-000000000002', 'subcontractor', 'active'),
+  ('ca000000-0000-0000-0000-000000000000', 'a9200000-0000-4000-8000-000000000003', 'tech', 'active');
+insert into public.leads (id, company_id, source_id, contact_name, phone) values
+  ('19200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T92 Lead', '+13235550192'),
+  ('19200000-0000-4000-8000-000000000002', 'cb000000-0000-0000-0000-000000000000', '1b000000-0000-0000-0000-000000000001', 'T92 B Lead', '+13235550193'),
+  ('19200000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', '1a000000-0000-0000-0000-000000000001', 'T92 Other Lead', '+13235550194');
+\set as_sales92 'reset role; set request.jwt.claim.sub = ''a9200000-0000-4000-8000-000000000001''; set role authenticated;'
+\set as_sub92   'reset role; set request.jwt.claim.sub = ''a9200000-0000-4000-8000-000000000002''; set role authenticated;'
+\set as_tech92  'reset role; set request.jwt.claim.sub = ''a9200000-0000-4000-8000-000000000003''; set role authenticated;'
+-- the module is off: nobody saves a measurement yet (founder О2: only an active module saves)
+:as_owner_a
+select tst.blocked($q$insert into public.gutter_measurements (id, company_id) values ('9e920000-0000-4000-8000-000000000009', 'ca000000-0000-0000-0000-000000000000')$q$,
+          'T92 the module is off: no measurement is saved');
+select public.module_enable('ca000000-0000-0000-0000-000000000000', 'gutters');
+-- owner: a measurement on a property and a lead of the company; created_by is the caller, whatever is sent
+insert into public.gutter_measurements (id, company_id, property_id, lead_id, label, created_by) values
+  ('9e920000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'd1a00000-0000-0000-0000-000000000001',
+   '19200000-0000-4000-8000-000000000001', 'Front and back', 'a9200000-0000-4000-8000-000000000003');
+select tst.ok((select created_by = 'a0000000-0000-0000-0000-000000000001' and row_version = 1 and status = 'draft' and revision = 0
+                 from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000001'), 'T92 the owner measures; the author cannot be forged');
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'd1b00000-0000-0000-0000-000000000001')$q$,
+          '%cannot be linked%', 'T92 another company''s property is refused');
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, lead_id) values ('ca000000-0000-0000-0000-000000000000', '19200000-0000-4000-8000-000000000002')$q$,
+          '%cannot be linked%', 'T92 another company''s lead is refused');
+select tst.fails_like($q$update public.gutter_measurements set property_id = 'd1b00000-0000-0000-0000-000000000001' where id = '9e920000-0000-4000-8000-000000000001'$q$,
+          '%cannot be linked%', 'T92 …also on update');
+select tst.fails($q$insert into public.gutter_measurements (company_id, status) values ('ca000000-0000-0000-0000-000000000000', 'sent')$q$, 'T92 only draft / ready');
+select tst.fails($q$insert into public.gutter_measurements (company_id, label) values ('ca000000-0000-0000-0000-000000000000', repeat('x', 121))$q$, 'T92 a label up to 120');
+-- a draft «measure here» without a lead or a property
+insert into public.gutter_measurements (id, company_id) values ('9e920000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000');
+-- a tech sees only his own, his leads' and his visits' measurements (like leads and properties, П11)
+:as_tech92
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0,
+          'T92 a tech does not see the office''s measurements on a lead that is not his');
+select tst.blocked($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run')$q$,
+          'T92 …nor draws on them');
+insert into public.gutter_measurements (id, company_id, label) values ('9e920000-0000-4000-8000-000000000003', 'ca000000-0000-0000-0000-000000000000', 'Ted''s own');
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000003'$q$) = 1, 'T92 a tech measures on his own');
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, lead_id) values ('ca000000-0000-0000-0000-000000000000', '19200000-0000-4000-8000-000000000003')$q$,
+          'this lead or property cannot be linked', 'T92 a tech does not hang a measurement on a lead he does not see');
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, lead_id) values ('ca000000-0000-0000-0000-000000000000', gen_random_uuid())$q$,
+          'this lead or property cannot be linked', 'T92 …the same answer as for a lead that does not exist (no probing)');
+select tst.fails_like($q$update public.gutter_measurements set lead_id = '19200000-0000-4000-8000-000000000003' where id = '9e920000-0000-4000-8000-000000000003'$q$,
+          'this lead or property cannot be linked', 'T92 …nor moves his own onto it');
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'd1a00000-0000-0000-0000-000000000001')$q$,
+          'this lead or property cannot be linked', 'T92 a tech does not hang a measurement on a property of no visit of his');
+select tst.fails_like($q$update public.gutter_measurements set property_id = 'd1a00000-0000-0000-0000-000000000001' where id = '9e920000-0000-4000-8000-000000000003'$q$,
+          'this lead or property cannot be linked', 'T92 …nor moves his own onto it');
+:as_tech_a
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000003'$q$) = 0, 'T92 another tech does not see it');
+:as_super
+update public.leads set assigned_to = 'a9200000-0000-4000-8000-000000000003' where id = '19200000-0000-4000-8000-000000000001';
+-- the property of his visit: he sees the office's measurement on it and draws
+insert into public.visits (id, company_id, property_id, starts_at, ends_at) values
+  ('f9200000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'd1a00000-0000-0000-0000-000000000002', now(), now() + interval '2 hours');
+insert into public.visit_assignees (company_id, visit_id, user_id) values
+  ('ca000000-0000-0000-0000-000000000000', 'f9200000-0000-4000-8000-000000000001', 'a9200000-0000-4000-8000-000000000003');
+:as_owner_a
+insert into public.gutter_measurements (id, company_id, property_id) values ('9e920000-0000-4000-8000-000000000004', 'ca000000-0000-0000-0000-000000000000', 'd1a00000-0000-0000-0000-000000000002');
+insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values
+  ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000002', 1, '[]', 'x');
+:as_tech92
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000004'$q$) = 1, 'T92 a tech sees the measurement on the property of his visit');
+insert into public.gutter_measurement_elements (company_id, measurement_id, kind) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000004', 'point');
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurement_elements where measurement_id = '9e920000-0000-4000-8000-000000000004'$q$) = 1, 'T92 …and draws on it');
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurement_revisions where measurement_id = '9e920000-0000-4000-8000-000000000002'$q$) = 0,
+          'T92 a tech does not see revisions of a measurement he does not see');
+:as_super
+-- the lead is his now: he sees the measurement on it and draws
+:as_tech92
+insert into public.gutter_measurement_elements (id, company_id, measurement_id, kind, geom, attrs) values
+  ('9e920000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run',
+   '{"a":[0,360],"b":[480,360]}', '{"profile":"k","size":"6","material":"aluminum","gauge":".032","story":1,"hanger":"hidden"}');
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 3,
+          'T92 a tech sees his own, the one on his lead and the one on his visit''s property, not the office''s draft');
+-- he edits the one on his lead although its property is not of his visits; a full rewrite from the queue passes
+update public.gutter_measurements set label = 'Front, back (Ted)' where id = '9e920000-0000-4000-8000-000000000001';
+insert into public.gutter_measurements (id, company_id, property_id, lead_id, label) values
+  ('9e920000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'd1a00000-0000-0000-0000-000000000001', '19200000-0000-4000-8000-000000000001', 'Front and back')
+  on conflict (id) do update set property_id = excluded.property_id, lead_id = excluded.lead_id, label = excluded.label;
+select tst.ok((select label = 'Front and back' from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000001'),
+          'T92 a tech edits the measurement on his lead (its property is not his); the queue''s full rewrite passes');
+-- an element upsert as the queue sends it (full write of one element): the second time it updates, row_version + 1
+insert into public.gutter_measurement_elements (id, company_id, measurement_id, kind, geom, confidence) values
+  ('9e920000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run', '{"a":[0,360],"b":[492,360]}', 'taped')
+  on conflict (id) do update set geom = excluded.geom, confidence = excluded.confidence;
+select tst.ok((select row_version = 2 and confidence = 'taped' and updated_by = 'a9200000-0000-4000-8000-000000000003'
+                 from public.gutter_measurement_elements where id = '9e920000-0000-4000-8000-0000000000e1'), 'T92 the same element written again is an update, version + 1');
+:as_sales92
+insert into public.gutter_measurement_elements (company_id, measurement_id, kind, geom, attrs) values
+  ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'downspout', '{"runId":"9e920000-0000-4000-8000-0000000000e1","atIn":480}', '{"shape":"rect","size":"3x4"}');
+:as_office_a
+insert into public.gutter_measurement_elements (company_id, measurement_id, kind, geom) values
+  ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'point', '{"p":[0,0]}');
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurement_elements where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$) = 3,
+          'T92 tech, sales and office draw on one measurement');
+-- shapes and sizes
+select tst.fails($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'house')$q$, 'T92 only known element kinds');
+select tst.fails($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind, confidence) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run', 'guess')$q$, 'T92 confidence: auto / drawn / taped');
+select tst.fails($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind, geom) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run', '[1,2]')$q$, 'T92 geometry is an object');
+select tst.fails($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind, attrs) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run', jsonb_build_object('x', repeat('a', 9000)))$q$, 'T92 attributes up to 8 KB');
+select tst.fails($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind, geom) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run', jsonb_build_object('x', repeat('a', 2100)))$q$, 'T92 geometry up to 2 KB');
+-- no deletes: removal is deleted_at; the row and its history stay
+select tst.blocked($q$delete from public.gutter_measurement_elements where id = '9e920000-0000-4000-8000-0000000000e1'$q$, 'T92 elements are not deleted');
+select tst.blocked($q$delete from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000002'$q$, 'T92 measurements are not deleted');
+update public.gutter_measurements set deleted_at = now() where id = '9e920000-0000-4000-8000-000000000002';
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000002' and deleted_at is not null$q$) = 1,
+          'T92 removing is deleted_at (undo and offline sync see it)');
+update public.gutter_measurements set deleted_at = null where id = '9e920000-0000-4000-8000-000000000002';
+-- a row never moves to another company; an element never sits under another company's measurement
+select tst.fails($q$update public.gutter_measurements set company_id = 'cb000000-0000-0000-0000-000000000000' where id = '9e920000-0000-4000-8000-000000000001'$q$, 'T92 company_id is immutable');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0
+          and tst.cnt($q$select 1 from public.gutter_measurement_elements where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 0,
+          'T92 another company sees nothing');
+select tst.blocked($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind) values ('cb000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run')$q$,
+          'T92 another company cannot hang an element on A''s measurement');
+select tst.blocked($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 'run')$q$,
+          'T92 another company cannot write into A');
+select tst.blocked($q$update public.gutter_measurement_elements set geom = '{}' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T92 another company cannot change A''s elements');
+select tst.blocked($q$update public.gutter_measurements set label = 'x' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T92 another company cannot change A''s measurements');
+-- no probing: A's real property and a random id give the same answer to a stranger
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, property_id) values ('ca000000-0000-0000-0000-000000000000', 'd1a00000-0000-0000-0000-000000000001')$q$,
+          'not allowed', 'T92 a stranger with A''s real property id…');
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, property_id) values ('ca000000-0000-0000-0000-000000000000', gen_random_uuid())$q$,
+          'not allowed', 'T92 …gets the same answer as with a random id');
+select tst.fails_like($q$insert into public.gutter_measurements (company_id, lead_id) values ('ca000000-0000-0000-0000-000000000000', '19200000-0000-4000-8000-000000000001')$q$,
+          'not allowed', 'T92 …and with A''s real lead id');
+-- a subcontractor: nothing (П11)
+:as_sub92
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements$q$) = 0 and tst.cnt($q$select 1 from public.gutter_measurement_elements$q$) = 0
+          and tst.cnt($q$select 1 from public.gutter_measurement_revisions$q$) = 0, 'T92 a subcontractor sees no measurements');
+select tst.blocked($q$insert into public.gutter_measurements (company_id) values ('ca000000-0000-0000-0000-000000000000')$q$, 'T92 a subcontractor does not measure');
+select tst.blocked($q$update public.gutter_measurement_elements set geom = '{}' where company_id = 'ca000000-0000-0000-0000-000000000000'$q$, 'T92 a subcontractor does not draw');
+-- rights (rule 18, T52)
+:as_super
+select tst.ok(not has_table_privilege('anon', 'public.gutter_measurements', 'SELECT')
+          and not has_table_privilege('anon', 'public.gutter_measurement_elements', 'SELECT')
+          and not has_table_privilege('anon', 'public.gutter_measurement_revisions', 'SELECT')
+          and not has_table_privilege('authenticated', 'public.gutter_measurements', 'DELETE')
+          and not has_table_privilege('authenticated', 'public.gutter_measurement_elements', 'DELETE')
+          and not has_table_privilege('authenticated', 'public.gutter_measurement_revisions', 'UPDATE')
+          and not has_table_privilege('authenticated', 'public.gutter_measurement_revisions', 'DELETE')
+          and not has_function_privilege('anon', 'app.gutter_sees(uuid, uuid, uuid, uuid)', 'EXECUTE')
+          and not has_function_privilege('anon', 'app.gutter_sees_measurement(uuid)', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.tg_gutter_measurement_refs()', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.tg_gutter_revision_frozen()', 'EXECUTE')
+          and not has_function_privilege('authenticated', 'app.tg_gutter_limits()', 'EXECUTE'),
+          'T92 rights: anon nothing; no deletes; revisions never updated; trigger functions not callable');
+select tst.ok((select bool_and(relrowsecurity and relforcerowsecurity) from pg_class
+                where oid in ('public.gutter_measurements'::regclass, 'public.gutter_measurement_elements'::regclass, 'public.gutter_measurement_revisions'::regclass)),
+          'T92 RLS on and forced on all three tables');
+\echo 'T92 gutter measurements: staff and techs write, subcontractors and other companies nothing, same company, no deletes ok'
+
+-- ---------------------------------------------------------------- T93: gutter measurements after the trial; revisions never change (founder О2, spec 33 §4)
+:as_tech92
+insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, parts, engine_version) values
+  ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 1, '[{"kind":"run"}]', '[{"key":"gutter.k.6","qty":"40"}]', 'gutterParts@358');
+update public.gutter_measurements set revision = 1, status = 'ready' where id = '9e920000-0000-4000-8000-000000000001';
+select tst.ok((select revision = 1 and status = 'ready' from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000001'),
+          'T93 «Make estimate»: a revision and the measurement is ready');
+select tst.fails($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 1, '[]', 'x')$q$,
+          'T93 one revision number once');
+select tst.fails($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 2, '{}', 'x')$q$,
+          'T93 the snapshot is an array of elements');
+select tst.fails($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 2, jsonb_build_array(repeat('a', 600000)), 'x')$q$,
+          'T93 a snapshot up to 512 KB');
+select tst.blocked($q$update public.gutter_measurement_revisions set parts = '[]' where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$, 'T93 the app cannot change a revision');
+-- limits per measurement: 1000 elements, 100 revisions (no loop fills the database)
+insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version)
+select 'ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000003', g, '[]', 'x' from generate_series(1, 100) g;
+select tst.fails_like($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000003', 101, '[]', 'x')$q$,
+          '%at most 100 revisions%', 'T93 at most 100 revisions a measurement');
+insert into public.gutter_measurement_elements (company_id, measurement_id, kind)
+select 'ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000003', 'point' from generate_series(1, 1000);
+select tst.fails_like($q$insert into public.gutter_measurement_elements (company_id, measurement_id, kind) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000003', 'point')$q$,
+          '%at most 1000 elements%', 'T93 at most 1000 elements a measurement');
+:as_super
+select tst.fails_like($q$update public.gutter_measurement_revisions set parts = '[]' where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$,
+          '%never changes%', 'T93 …nor can the server');
+-- the trial is over, not paid: reading stays, writing stops — on the server, not only in the app
+update public.company_modules set trial_ends_at = now() - interval '1 minute', paid_until = null
+ where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
+:as_owner_a
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000'$q$) = 4
+          and tst.cnt($q$select 1 from public.gutter_measurement_elements where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$) = 3
+          and tst.cnt($q$select 1 from public.gutter_measurement_revisions where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$) = 1,
+          'T93 after the trial old drafts and revisions still open');
+select tst.blocked($q$insert into public.gutter_measurements (company_id) values ('ca000000-0000-0000-0000-000000000000')$q$, 'T93 after the trial no new measurement');
+select tst.blocked($q$update public.gutter_measurement_elements set geom = '{"a":[0,0],"b":[1,1]}' where measurement_id = '9e920000-0000-4000-8000-000000000001'$q$,
+          'T93 after the trial an edit is not saved');
+select tst.blocked($q$update public.gutter_measurements set label = 'after' where id = '9e920000-0000-4000-8000-000000000001'$q$, 'T93 …nor a renamed measurement');
+select tst.blocked($q$insert into public.gutter_measurement_revisions (company_id, measurement_id, revision, elements, engine_version) values ('ca000000-0000-0000-0000-000000000000', '9e920000-0000-4000-8000-000000000001', 2, '[]', 'x')$q$,
+          'T93 …nor a new revision');
+-- paid: writing again
+:as_super
+update public.company_modules set paid_until = now() + interval '30 days' where company_id = 'ca000000-0000-0000-0000-000000000000' and module_key = 'gutters';
+:as_tech92
+update public.gutter_measurement_elements set confidence = 'taped' where measurement_id = '9e920000-0000-4000-8000-000000000001' and kind = 'downspout';
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurement_elements where kind = 'downspout' and confidence = 'taped'$q$) = 1, 'T93 paid: edits are saved again');
+-- the lead is taken from him: his own measurement stays, the one on that lead is gone from his phone
+:as_super
+update public.leads set assigned_to = null where id = '19200000-0000-4000-8000-000000000001';
+:as_tech92
+select tst.ok(tst.cnt($q$select 1 from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000001'$q$) = 0
+          and tst.cnt($q$select 1 from public.gutter_measurements where id = '9e920000-0000-4000-8000-000000000003'$q$) = 1,
+          'T93 the lead taken from a tech: the measurement on it is gone, his own stays');
+-- clean up
+:as_super
+delete from public.visit_assignees where visit_id = 'f9200000-0000-4000-8000-000000000001';
+update public.visits set deleted_at = now() where id = 'f9200000-0000-4000-8000-000000000001';
+delete from public.gutter_measurement_revisions where company_id = 'ca000000-0000-0000-0000-000000000000';
+delete from public.gutter_measurement_elements where company_id = 'ca000000-0000-0000-0000-000000000000';
+delete from public.gutter_measurements where company_id = 'ca000000-0000-0000-0000-000000000000';
+delete from public.company_modules where company_id = 'ca000000-0000-0000-0000-000000000000';
+update public.leads set deleted_at = now() where id::text like '19200000-%';
+update public.memberships set status = 'disabled' where user_id::text like 'a9200000-%';
+\echo 'T93 gutter measurements after the trial: read yes, write no; revisions never change ok'
 
 \echo 'ALL TESTS PASSED'
