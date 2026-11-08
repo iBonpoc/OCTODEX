@@ -4,6 +4,7 @@
 import {
   activeLines,
   catalogPrice,
+  dec,
   marginPctOf,
   partsCost,
   computeCustomOption,
@@ -138,8 +139,19 @@ export const withAddons = (o: CustomOption, addonIds: string[]): CustomOption =>
 export function clientDoc(doc: EstimateDoc): EstimateDoc {
   return {
     ...doc,
-    options: doc.options.map((o) => ({ ...o, lines: o.lines.map(({ unitCostCents: _c, source: _s, ...l }) => l) })),
+    // a line with quantity 0 bills nothing and is how a part is left out (spec 33 П23.8а №4, П23.9): never shown as a $0 row
+    options: doc.options.map((o) => ({ ...o, lines: o.lines.filter((l) => !zeroQty(l)).map(({ unitCostCents: _c, source: _s, ...l }) => l) })),
   };
+}
+
+/** quantity is exactly 0 (a blank or broken quantity is not: the editor shows it) */
+export function zeroQty(l: Pick<CustomLine, "quantity">): boolean {
+  try {
+    const q = typeof l.quantity === "string" ? l.quantity.trim() : l.quantity;
+    return q !== "" && dec(q).isZero();
+  } catch {
+    return false;
+  }
 }
 
 /**
@@ -170,6 +182,27 @@ export function lineMarks(l: CustomLine): LineMark[] {
   if (s.testPrice && l.unitPriceCents === s.priceCents) out.push("testPrice");
   return out;
 }
+
+/**
+ * The check before sending (C5, spec 33 П23.9): lines of EVERY option and add-on (the client sees them all) that still
+ * have no price, a test price, or are no longer in the module's data. Reads only the core flags (lineMarks) — the core
+ * never asks a module. A line with quantity 0 never reaches the client, so it never stops a send.
+ */
+export type SendIssueKind = "noPrice" | "testPrice" | "gone";
+export const SEND_ISSUE_KINDS: SendIssueKind[] = ["noPrice", "testPrice", "gone"];
+export type SendIssueLine = { lineId: string; optionId: string; name: string };
+export type SendIssues = Record<SendIssueKind, SendIssueLine[]>;
+export function sendIssues(doc: EstimateDoc): SendIssues {
+  const out: SendIssues = { noPrice: [], testPrice: [], gone: [] };
+  for (const o of doc.options)
+    for (const l of activeLines(o.lines)) {
+      if (zeroQty(l)) continue;
+      const marks = lineMarks(l);
+      for (const k of SEND_ISSUE_KINDS) if (marks.includes(k)) out[k].push({ lineId: l.id, optionId: o.id, name: l.name.trim() || "—" });
+    }
+  return out;
+}
+export const issueCount = (i: SendIssues) => SEND_ISSUE_KINDS.reduce((n, k) => n + i[k].length, 0);
 
 /** Summary fields kept on Estimate for lists (total, deposit, visible lines of the main option). */
 export function summarize(doc: EstimateDoc, approved?: { optionId: string; addonIds: string[] }) {

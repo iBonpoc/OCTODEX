@@ -11,7 +11,7 @@ import { portalFromEstimate } from "@/cloud/portal";
 import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
-import { isUniversal, mainOption, newToken } from "@/features/estimateDoc";
+import { isUniversal, mainOption, newToken, SEND_ISSUE_KINDS, type SendIssues } from "@/features/estimateDoc";
 import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
@@ -256,10 +256,18 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
   const company = store.companyName ?? "OCTODEX";
   /** to the client in the client's language (rule 7), whatever the app language is */
   const msg = (url: string) => estimateMessage(docLanguageFor(store.db, { customerId: e.customerId, leadId: e.leadId }), { company, name: customer?.name ?? "", totalCents: e.totalCents, number: e.number, link: url });
+  // C5 (spec 33 П23.9): «Всё равно отправить» for a test price / a line not in the measurement; never for «нет цены»
+  const [force, setForce] = useState(false);
+  const check = beforeSend(store.db, e, { force });
+  const issues = !check.ok && check.reason === "lines" ? check : null;
+  const close = () => {
+    setForce(false);
+    onClose();
+  };
   const go = async (how: "sms" | "email" | "copy") => {
     // «do not service» sends nothing; a taxed draft of a client who became «Без налога» is re-saved first (04 §12)
-    const pre = beforeSend(store.db, e);
-    if (!pre.ok) return toast.show(t("client.noServiceHint"));
+    const pre = beforeSend(store.db, e, { force });
+    if (!pre.ok) return pre.reason === "no_service" ? toast.show(t("client.noServiceHint")) : undefined;
     if (pre.resave) store.saveEstimate({ id: e.id, customerId: e.customerId, propertyId: e.propertyId, title: e.title, doc: pre.resave, leadId: e.leadId });
     const token = e.token ?? newToken();
     const undo = store.sendEstimate(e.id, token);
@@ -274,17 +282,36 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
     }
   };
   return (
-    <Sheet visible={visible} onClose={onClose} title={t("ue.send")}>
+    <Sheet visible={visible} onClose={close} title={t("ue.send")}>
       <View style={{ gap: space[3] }}>
         <T v="body">{customer?.name}</T>
         <T v="caption" tone="mut">
           {[customer?.phone, customer?.email].filter(Boolean).join(" · ")}
         </T>
+        {issues ? (
+          <SendCheck
+            issues={issues.issues}
+            canForce={issues.canForce}
+            multi={(e.doc?.options.length ?? 0) > 1}
+            optionName={(id) => e.doc?.options.find((o) => o.id === id)?.name ?? ""}
+            onEdit={
+              isEstimateEditable(e.status)
+                ? () => {
+                    close();
+                    router.push(`/estimate/new?id=${e.id}`);
+                  }
+                : undefined
+            }
+            onForce={() => setForce(true)}
+          />
+        ) : null}
+        <View testID="send-buttons">
         <RowView style={{ flexWrap: "wrap" }}>
-          <Button label={t("ue.sendSms")} icon="message" onPress={() => go("sms")} disabled={!customer?.phone} />
-          <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => go("email")} disabled={!customer?.email} />
-          <Button label={t("ue.copyLink")} icon="note" variant="secondary" onPress={() => go("copy")} />
+          <Button label={t("ue.sendSms")} icon="message" onPress={() => go("sms")} disabled={!!issues || !customer?.phone} />
+          <Button label={t("ue.sendEmail")} icon="send" variant="secondary" onPress={() => go("email")} disabled={!!issues || !customer?.email} />
+          <Button label={t("ue.copyLink")} icon="note" variant="secondary" onPress={() => go("copy")} disabled={!!issues} />
         </RowView>
+        </View>
         <Divider />
         <T v="caption" tone="mut">
           {t("ue.sendNote")}
@@ -301,6 +328,46 @@ function SendSheet({ e, visible, onClose }: { e: Estimate; visible: boolean; onC
         ) : null}
       </View>
     </Sheet>
+  );
+}
+
+const CHECK_WORD = { noPrice: "ue.src.noPrice", testPrice: "ue.src.testPrice", gone: "ue.src.gone" } as const;
+
+/** C5: what stops a send — by kind, icon + word + count and the lines' names (rule 2); a way out in one tap. */
+function SendCheck({ issues, canForce, multi, optionName, onEdit, onForce }: { issues: SendIssues; canForce: boolean; multi: boolean; optionName: (id: string) => string; onEdit?: () => void; onForce: () => void }) {
+  const { t } = useI18n();
+  return (
+    <View testID="send-check" style={{ gap: space[2] }}>
+      <T v="heading">
+        {t(canForce ? "ue.check.review" : "ue.check.blocked")}
+      </T>
+      {SEND_ISSUE_KINDS.filter((k) => issues[k].length).map((k) => (
+        <View key={k} testID={`send-check-${k}`} style={{ gap: space[1] }}>
+          <View style={{ flexDirection: "row" }}>
+            <StatusChip status={k === "noPrice" ? "bad" : "warn"} label={`${t(CHECK_WORD[k])} · ${issues[k].length}`} />
+          </View>
+          <T v="caption" tone="mut">
+            {issues[k].map((l) => (multi ? `${l.name} (${optionName(l.optionId)})` : l.name)).join(", ")}
+          </T>
+        </View>
+      ))}
+      <T v="caption" tone="mut">
+        {t(canForce ? "ue.check.forceHint" : "ue.check.noPriceHint")}
+      </T>
+      <RowView style={{ flexWrap: "wrap" }}>
+        {onEdit ? (
+          <View testID="send-check-edit">
+            <Button label={t("ue.check.edit")} icon="pencil" variant="secondary" onPress={onEdit} />
+          </View>
+        ) : null}
+        {canForce ? (
+          <View testID="send-check-force">
+            <Button label={t("ue.check.force")} icon="send" variant="secondary" onPress={onForce} />
+          </View>
+        ) : null}
+      </RowView>
+      <Divider />
+    </View>
   );
 }
 

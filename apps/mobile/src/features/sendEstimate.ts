@@ -9,7 +9,7 @@ import { tFor, type DocLang } from "@/i18n/translate";
 import { docMoney } from "./docPdf";
 import { mailtoHref, smsHref } from "./contactLinks";
 import { canServe } from "./clients";
-import { exemptDoc } from "./estimateDoc";
+import { exemptDoc, issueCount, sendIssues, type SendIssues } from "./estimateDoc";
 import type { DB, Estimate, EstimateDoc } from "@/data/types";
 
 export function clientLink(token: string): string {
@@ -62,15 +62,26 @@ export async function sendSignedCopy(_estimateId: string): Promise<{ sent: false
 }
 
 /**
- * Before «Отправить» (docs/specs/04 §12):
+ * Before «Отправить» (docs/specs/04 §12, 33 П23.9):
  * - a «do not service» client gets nothing new — not even an old draft (the server refuses too, db T44);
+ * - lines the client must not get as they are (C5): «нет цены» stops the send until a price is set; a test price or a
+ *   line no longer in the measurement — only with `force` (the person pressed «Всё равно отправить»). App-only on
+ *   purpose: the flags are the app's own, the server cannot tell a meant $0, and a refused queued send would be lost;
  * - a draft saved WITH tax for a client who became «Без налога» later is saved again without tax first, otherwise the
  *   server refuses to lock the taxed version (22023) and the send is dropped from the queue (wave 4a, exemptDoc).
  * Only a draft is re-saved: a sent version is locked and never changes.
  */
-export type BeforeSend = { ok: false; reason: "no_service" } | { ok: true; resave?: EstimateDoc };
-export function beforeSend(db: Pick<DB, "customers">, e: Pick<Estimate, "customerId" | "status" | "doc">): BeforeSend {
+export type BeforeSend =
+  | { ok: false; reason: "no_service" }
+  | { ok: false; reason: "lines"; issues: SendIssues; canForce: boolean }
+  | { ok: true; resave?: EstimateDoc };
+export function beforeSend(db: Pick<DB, "customers">, e: Pick<Estimate, "customerId" | "status" | "doc">, opts: { force?: boolean } = {}): BeforeSend {
   if (!canServe(db, e.customerId)) return { ok: false, reason: "no_service" };
+  if (e.doc) {
+    const issues = sendIssues(e.doc);
+    const canForce = issues.noPrice.length === 0;
+    if (!canForce || (!opts.force && issueCount(issues) > 0)) return { ok: false, reason: "lines", issues, canForce };
+  }
   if (e.status !== "draft" || !e.doc) return { ok: true };
   const c = db.customers.find((x) => x.id === e.customerId);
   const doc = exemptDoc(e.doc, c?.taxExempt);
