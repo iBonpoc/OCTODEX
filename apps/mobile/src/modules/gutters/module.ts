@@ -3,7 +3,7 @@
  * Add-on $30 a month a company, 7-day trial (founder О1, О2, 07.11.2026). Places (spec 33 П21 M5b): «Замер» on a lead and a property, «Замерить здесь» in the home «＋».
  * Screens (spec 33-gutters-canvas П20.3–П20.4): /module/gutters/draw — the measuring canvas (M4b: one draft on the phone;
  * the entry from a lead and a property is M5), /module/gutters/bench — the canvas speed check, /module/gutters/settings —
- * the company's settings (M7b, spec 33 П22).
+ * the company's settings (M7b, spec 33 П22), /module/gutters/prices — labor prices and the price list's items (M7d, П22.10).
  */
 import { moduleHref, type ModuleDef } from "../registry";
 import { asGutterData, guttersOps, latestFor, linkLead, loadGutters } from "./data";
@@ -33,7 +33,13 @@ const gutters: ModuleDef = {
     // the canvas draws even when off: it says at once that nothing will be saved (§6, founder О2)
     // «Настройки» (M7b, spec 33 П22): the director changes them, the office reads them; a tech or a seller never needs the page
     settings: (ctx) => [
-      ...(ctx.role === "director" || ctx.role === "dispatcher" ? [{ id: "settings", labelKey: "mod.gutters.set.action" as const, icon: "sliders" as const, href: moduleHref("gutters", "settings") }] : []),
+      ...(ctx.role === "director" || ctx.role === "dispatcher"
+        ? [
+            { id: "settings", labelKey: "mod.gutters.set.action" as const, icon: "sliders" as const, href: moduleHref("gutters", "settings") },
+            // «Цены и прайс» (M7d, spec 33 П22.10): labor prices and the parts' items of the company's price list
+            { id: "prices", labelKey: "mod.gutters.pr.action" as const, icon: "box" as const, href: moduleHref("gutters", "prices") },
+          ]
+        : []),
       { id: "draw", labelKey: "mod.gutters.draw.action", icon: "pencil", href: draw },
       { id: "bench", labelKey: "mod.gutters.bench.action", icon: "clock", href: moduleHref("gutters", "bench") },
     ],
@@ -47,6 +53,7 @@ const gutters: ModuleDef = {
     draw: () => require("./draw/DrawScreen").default,
     bench: () => require("./bench/BenchScreen").default,
     settings: () => require("./settings/SettingsScreen").default,
+    prices: () => require("./prices/PricesScreen").default,
   },
 };
 export default gutters;

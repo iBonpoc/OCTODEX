@@ -53,7 +53,7 @@ export type PriceRow = { key: string; part: PartQty };
 
 /** the labor lines a gutter job has (spec П22.10 №1): install by storey (ft), a downspout by storey (each), the rest */
 export const LABOR_STORIES = ["1", "2", "3", "4"] as const;
-const labor = (key: string, unit: string, attrs: Record<string, string>): PartQty => ({ key, section: "labor", qty: "1", unit, use: "estimate", kind: "labor", attrs });
+const labor = (key: string, unit: PartQty["unit"], attrs: Record<string, string>): PartQty => ({ key, section: "labor", qty: "1", unit, use: "estimate", kind: "labor", attrs });
 export const LABOR_PARTS: readonly PartQty[] = [
   ...LABOR_STORIES.map((s) => labor(`labor.install.story${s}`, "ft", { work: "install", story: s })),
   ...LABOR_STORIES.map((s) => labor(`labor.downspout.story${s}`, "ea", { work: "downspout", story: s })),
@@ -135,6 +135,8 @@ export function missingItems(companyId: string, rows: readonly PriceRow[], catal
       name: name(part).slice(0, 200),
       unit: part.unit,
       priceCents: testPriceCents(part),
+      // a material's price is cost × tax × markup in the core's editor (catalog/[id]): cost = the price, no tax, no markup
+      ...(part.kind === "labor" ? {} : { costCents: testPriceCents(part), vendorTaxBps: 0, markupBps: 0 }),
       placeholder: true,
       attributes: matchAttrs(part),
     });

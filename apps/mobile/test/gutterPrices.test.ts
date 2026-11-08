@@ -83,6 +83,9 @@ describe("создать позиции сразу — тестовые цены
     const inst = made.find((x) => x.attributes?.work === "install" && x.attributes.story === "1")!;
     expect(inst).toMatchObject({ kind: "labor", unit: "ft", priceCents: TEST_RATES["labor.ft"] });
     expect(testPriceCents({ section: "nope" as never, unit: "ea" })).toBe(0);
+    // a material opens in the core's editor with the same price (cost × no tax × no markup)
+    const gut = made.find((x) => x.attributes?.part === "gutter")!;
+    expect(gut).toMatchObject({ kind: "material", unit: "ft", priceCents: TEST_RATES["gutter.ft"], costCents: TEST_RATES["gutter.ft"], vendorTaxBps: 0, markupBps: 0 });
   });
   it("второе нажатие: всё найдено — ничего; найдено частично — только недостающие", () => {
     const made = missingItems(C, rows, [], name);

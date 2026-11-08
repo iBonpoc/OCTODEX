@@ -4,7 +4,7 @@
  * 45° steps — from an end it continues the gutter), puts a downspout on a run, or («Выбрать») picks and drags an end;
  * two fingers move and zoom. The toolbar (36 visible,
  * 44 to touch — rule 3) sits at the bottom, under the right hand or under the left; the $ is always at the bottom —
- * a preview from the engine with TEST rates (rule 9), the estimate is M8. Storeys by colour + «эт N» (founder О3).
+ * a preview from the engine: the company's price list where it has the part (M7d), else TEST rates (rule 9); the estimate is M8. Storeys by colour + «эт N» (founder О3).
  * Saved 1 s after a gesture ends through the core's queue (module.op, spec 33 П21 M5a; tables П19), offline too;
  * `?m=<id>` opens a measurement, none — a new one; a module that is off or past its
  * trial draws but saves nothing, and says so before the work starts (§6, founder О2). Delete → «Отменить» 5 s (rule 5).
@@ -16,7 +16,7 @@ import * as Crypto from "expo-crypto";
 import Svg, { Line } from "react-native-svg";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GestureDetector, usePanGesture, useSimultaneousGestures, useTapGesture } from "react-native-gesture-handler";
-import { computeGutterParts, gutterPreview } from "@octo/estimating-engine";
+import { computeGutterParts } from "@octo/estimating-engine";
 import { component, drawing as dt, radius, size as sizes, space } from "@octo/design-tokens";
 import { useStore } from "@/data/store";
 import { useI18n } from "@/i18n";
@@ -40,7 +40,7 @@ import { fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { choicesFor, newDsAttrs, newRunAttrs, readRules, toRulesOverride } from "../settings";
 import { buildScene, fitView, storyOf, toPlan, toScreen, type Story, type View as PlanView } from "../canvas/scene";
 import { LABEL_FONT, SvgPainter } from "../canvas/SvgPainter";
-import { TEST_RATES } from "../canvas/testRates";
+import { listPreview } from "../prices";
 import { cornerChoiceOf, findCorners, runLengthIn, toMeasurement, type CornerChoice, type Drawing, type FoundCorner, type P } from "../geometry";
 
 type Tool = "line" | "ds" | "select";
@@ -272,10 +272,12 @@ export default function DrawScreen() {
     [drawing, view, size, selected, t],
   );
 
+  // M7d (spec 33 П22.10): a part with an item in the company's price list takes its price, the rest the test rate
+  const catalog = store.db.catalog;
   const preview = useMemo(() => {
-    if (!drawing.runs.length) return { totalCents: 0, unpriced: 0, gutterFt: "0" };
-    return gutterPreview(computeGutterParts(toMeasurement(drawing, { method: rules.corner }), rules.over).parts, TEST_RATES);
-  }, [drawing, rules]);
+    if (!drawing.runs.length) return { totalCents: 0, unpriced: 0, gutterFt: "0", listed: 0, test: true };
+    return listPreview(computeGutterParts(toMeasurement(drawing, { method: rules.corner }), rules.over).parts, catalog);
+  }, [drawing, rules, catalog]);
 
   const sel = selected ? drawing.runs.find((r) => r.id === selected) ?? drawing.downspouts.find((s) => s.id === selected) : undefined;
   const selText = !sel
@@ -495,7 +497,7 @@ export default function DrawScreen() {
             <View testID="draw-money">
               <T v="title" w="bold" tabular>{money(preview.totalCents)}</T>
             </View>
-            <StatusChip status="info" label={t("mod.gutters.draw.test")} soft />
+            {preview.test ? <View testID="draw-test-prices"><StatusChip status="info" label={t("mod.gutters.draw.test")} soft /></View> : null}
           </RowView>
           <RowView style={{ justifyContent: "space-between" }}>
             <T v="caption" tone="mut" tabular>{t("mod.gutters.draw.summary", { ft: Math.round(Number(preview.gutterFt)), ds: drawing.downspouts.length })}</T>
