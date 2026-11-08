@@ -1982,6 +1982,7 @@ export const ru = {
   "client.imports.s.open": "Идёт",
   "client.imports.s.applied": "Загружен",
   "client.imports.s.undone": "Отменён",
+  "client.imports.addedLabel": "добавлено",
   "client.imports.counts": "добавлено {n}, возможных дублей {k}, пропущено {m}",
   "client.imports.undoneN": "снято {n}, оставлено {k}",
   "client.imports.undo": "Отменить импорт",

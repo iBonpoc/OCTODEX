@@ -94,6 +94,8 @@ export default function Imports() {
                 testID={`import-job-${j.id}`}
                 lead={{ kind: "icon", icon: "note" }}
                 title={j.fileName}
+                value={String((c.added ?? 0) + (c.dup_added ?? 0))}
+                valueLabel={t("client.imports.addedLabel")}
                 when={[
                   day(j.createdAt),
                   t("client.imports.counts", { n: c.added ?? 0, k: c.dup_added ?? 0, m: c.skipped ?? 0 }),

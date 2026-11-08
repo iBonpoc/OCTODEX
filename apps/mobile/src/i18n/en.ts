@@ -1983,6 +1983,7 @@ export const en: Dict = {
   "client.imports.s.open": "Running",
   "client.imports.s.applied": "Imported",
   "client.imports.s.undone": "Undone",
+  "client.imports.addedLabel": "added",
   "client.imports.counts": "added {n}, possible duplicates {k}, skipped {m}",
   "client.imports.undoneN": "removed {n}, kept {k}",
   "client.imports.undo": "Undo import",

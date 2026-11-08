@@ -1983,6 +1983,7 @@ export const es: Dict = {
   "client.imports.s.open": "En curso",
   "client.imports.s.applied": "Importada",
   "client.imports.s.undone": "Deshecha",
+  "client.imports.addedLabel": "agregados",
   "client.imports.counts": "agregados {n}, posibles duplicados {k}, omitidos {m}",
   "client.imports.undoneN": "quitados {n}, conservados {k}",
   "client.imports.undo": "Deshacer importación",
