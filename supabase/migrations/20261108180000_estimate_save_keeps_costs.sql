@@ -16,6 +16,8 @@
 create table public.estimate_line_costs_kept (
   line_item_id              uuid primary key,
   company_id                uuid not null references public.companies (id) on delete cascade,
+  -- the version the line was in: the cost comes back only to a line of the same version (never another estimate)
+  version_id                uuid not null,
   unit_cost_cents           bigint not null,
   unit_material_cost_cents  bigint,
   purchase_tax_bps          int,
@@ -40,16 +42,20 @@ returns trigger language plpgsql security definer set search_path = '' as $$
 begin
   if auth.uid() is not null and not app.can_view_costs(old.company_id) then
     delete from public.estimate_line_costs_kept where kept_at < now() - interval '30 days';
-    insert into public.estimate_line_costs_kept as k (line_item_id, company_id, unit_cost_cents, unit_material_cost_cents,
-                                                     purchase_tax_bps, markup_bps, line_cost_cents, currency)
-    select c.line_item_id, c.company_id, c.unit_cost_cents, c.unit_material_cost_cents,
+    insert into public.estimate_line_costs_kept as k (line_item_id, company_id, version_id, unit_cost_cents,
+                                                     unit_material_cost_cents, purchase_tax_bps, markup_bps, line_cost_cents, currency)
+    select c.line_item_id, c.company_id, eo.version_id, c.unit_cost_cents, c.unit_material_cost_cents,
            c.purchase_tax_bps, c.markup_bps, c.line_cost_cents, c.currency
       from public.estimate_line_costs c
+      join public.estimate_options eo on eo.id = old.option_id and eo.company_id = old.company_id
      where c.line_item_id = old.id and c.company_id = old.company_id and c.deleted_at is null
     on conflict (line_item_id) do update
-      set unit_cost_cents = excluded.unit_cost_cents, unit_material_cost_cents = excluded.unit_material_cost_cents,
+      set version_id = excluded.version_id, unit_cost_cents = excluded.unit_cost_cents, unit_material_cost_cents = excluded.unit_material_cost_cents,
           purchase_tax_bps = excluded.purchase_tax_bps, markup_bps = excluded.markup_bps,
-          line_cost_cents = excluded.line_cost_cents, currency = excluded.currency, kept_at = now();
+          line_cost_cents = excluded.line_cost_cents, currency = excluded.currency, kept_at = now()
+      -- a row kept for another company is never overwritten (security-check: the line id is free once deleted,
+      -- another company may reuse it and must not plant a cost for A)
+      where k.company_id = excluded.company_id;
   end if;
   return old;
 end;
@@ -70,8 +76,10 @@ begin
   end if;
   delete from public.estimate_line_costs_kept
    where line_item_id = new.id and company_id = new.company_id
+     and version_id = (select eo.version_id from public.estimate_options eo where eo.id = new.option_id)
   returning * into k;
   if found then
+    -- created_by becomes the tech (t10 stamps the writer); the figure is the office's — the residual of §9.1
     insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents, unit_material_cost_cents,
                                             purchase_tax_bps, markup_bps, line_cost_cents, currency)
     values (k.line_item_id, k.company_id, k.unit_cost_cents, k.unit_material_cost_cents,

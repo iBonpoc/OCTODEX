@@ -8771,8 +8771,8 @@ select tst.ok(not exists (select 1 from public.estimate_line_costs_kept where li
 select tst.ok((select count(*) = 3 from pg_trigger where tgenabled = 'O'
                 and tgname in ('t35_cost_keep', 't95_cost_restore', 't45_margin_move')), 'T106 the three triggers are on');
 -- another company: a cost kept for B under some id never goes to A's line with that id (the tech's restore path)
-insert into public.estimate_line_costs_kept (line_item_id, company_id, unit_cost_cents, currency)
-  values ('a1060000-0000-4000-8000-0000000000c1', 'cb000000-0000-0000-0000-000000000000', 777, 'USD');
+insert into public.estimate_line_costs_kept (line_item_id, company_id, version_id, unit_cost_cents, currency)
+  values ('a1060000-0000-4000-8000-0000000000c1', 'cb000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-000000000002', 777, 'USD');
 :as_tech_a
 insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents) values
   ('a1060000-0000-4000-8000-0000000000c1', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000a1', 'Downspout (test)', 1, 100);
@@ -8781,6 +8781,51 @@ select tst.ok(not exists (select 1 from public.estimate_line_costs where line_it
               and exists (select 1 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000c1'
                             and company_id = 'cb000000-0000-0000-0000-000000000000'),
   'T106 a cost kept for another company never reaches A''s line with the same id; B''s row stays');
+-- security-check: a row kept for A is never overwritten by another company's delete under the same (freed) id
+:as_super
+insert into public.estimate_line_costs_kept (line_item_id, company_id, version_id, unit_cost_cents, currency)
+  values ('a1060000-0000-4000-8000-0000000000c2', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-000000000002', 12000, 'USD');
+-- B's own line with that id and a cost of 1 (written directly: the trigger under test is the delete)
+insert into public.customers (id, company_id, display_name) values ('a1060000-0000-4000-8000-0000000000d1', 'cb000000-0000-0000-0000-000000000000', 'T106 B');
+insert into public.properties (id, company_id, customer_id, address_line1, address_city) values ('a1060000-0000-4000-8000-0000000000d2', 'cb000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000d1', '1 B St', 'Pasadena');
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1060000-0000-4000-8000-0000000000d3', 'cb000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000d1', 'a1060000-0000-4000-8000-0000000000d2', 'T106 B');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no)
+  values ('a1060000-0000-4000-8000-0000000000d4', 'cb000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000d3', 1);
+insert into public.estimate_options (id, company_id, version_id, name)
+  values ('a1060000-0000-4000-8000-0000000000d5', 'cb000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000d4', 'B');
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents)
+  values ('a1060000-0000-4000-8000-0000000000c2', 'cb000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000d5', 'B line', 1, 100);
+insert into public.estimate_line_costs (line_item_id, company_id, unit_cost_cents)
+  values ('a1060000-0000-4000-8000-0000000000c2', 'cb000000-0000-0000-0000-000000000000', 1);
+-- B's member who does not see costs deletes it (as a JWT of someone without costs in B: A's tech is not a member of B)
+set request.jwt.claim.sub = 'a0000000-0000-0000-0000-000000000003';
+delete from public.estimate_line_items where id = 'a1060000-0000-4000-8000-0000000000c2';
+reset request.jwt.claim.sub;
+select tst.ok((select unit_cost_cents = 12000 and company_id = 'ca000000-0000-0000-0000-000000000000'
+                 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000c2'),
+  'T106 another company''s delete under the same id does not overwrite A''s kept cost');
+-- security-check low №1: a kept cost goes back only to a line of the same version, never to another estimate
+:as_tech_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1060000-0000-4000-8000-0000000000e1', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T106 other draft');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no)
+  values ('a1060000-0000-4000-8000-0000000000e2', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000e1', 1);
+insert into public.estimate_options (id, company_id, version_id, name)
+  values ('a1060000-0000-4000-8000-0000000000e3', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000e2', 'Other');
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents)
+  values ('a1060000-0000-4000-8000-0000000000b2', 'ca000000-0000-0000-0000-000000000000', 'a1060000-0000-4000-8000-0000000000e3', 'Labor (test)', 1, 20000);
+:as_office_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_line_costs where line_item_id = 'a1060000-0000-4000-8000-0000000000b2'$q$) = 0,
+  'T106 the tech moves a line to another estimate: its cost does not go with it');
+-- a locked version: the tech's delete fails and keeps nothing
+:as_owner_a
+update public.estimate_versions set locked_at = now() where id = 'a1060000-0000-4000-8000-000000000002';
+:as_tech_a
+select tst.fails($q$delete from public.estimate_line_items where id = 'a1060000-0000-4000-8000-0000000000c1'$q$, 'T106 the tech deletes a line of a locked version');
+:as_super
+select tst.ok(not exists (select 1 from public.estimate_line_costs_kept where line_item_id = 'a1060000-0000-4000-8000-0000000000c1'
+                            and company_id = 'ca000000-0000-0000-0000-000000000000'), 'T106 a failed delete keeps nothing');
 select tst.ok(not has_table_privilege('anon', 'public.estimate_line_costs_kept', 'select')
               and not has_table_privilege('authenticated', 'public.estimate_line_costs_kept', 'select'), 'T106 no grant on estimate_line_costs_kept');
 \echo 'T106 a tech''s edit of a draft keeps the office''s costs and margin ok'
