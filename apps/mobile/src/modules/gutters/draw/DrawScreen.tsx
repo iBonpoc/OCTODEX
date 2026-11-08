@@ -34,7 +34,7 @@ import { MeasurePhotos } from "./Photos";
 import { ftIn } from "../canvas/format";
 import { forgetOldDraft, loadToolbarPlace, saveToolbarPlace, TOOLBAR_PLACES, type ToolbarPlace } from "../canvas/localStore";
 import { makeModuleStore } from "../canvas/moduleStore";
-import { gutterData, measurementOf } from "../data";
+import { gutterData, measurementOf, photosOf } from "../data";
 import { makeSaver } from "../canvas/draftStore";
 import { DEFAULT_DS_ATTRS, DEFAULT_RUN_ATTRS, fromElements, toElements, type MeasurementRow } from "../canvas/model";
 import { buildScene, fitView, storyOf, toPlan, toScreen, type Story, type View as PlanView } from "../canvas/scene";
@@ -293,12 +293,16 @@ export default function DrawScreen() {
     const id = cur.current.selected;
     if (id) commit(setLength(cur.current.drawing, id, lengthIn));
   };
-  // photos (П21.10): only of what the server has (a files row points at the measurement and its element — FK), and
-  // only while the module saves (founder О2)
+  // photos (П21.10): only of what the server has (a files row points at the measurement and its element — FK). The
+  // module does not save (off, past the trial — founder О2): the photos it has are shown, nothing is added (M5e)
   const stored = gutterData(store.db);
   const mStored = !!m && stored.measurements.some((x) => x.id === m.id);
-  const elPhotos = sel && m && canSave && stored.elements.some((e) => e.id === sel.id) ? <MeasurePhotos measurementId={m.id} elementId={sel.id} testID="attr-photos" onRemoved={() => setSheet(false)} /> : null;
-  const mPhotos = m && canSave && mStored ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} /> : null;
+  const has = (elementId?: string) => !!m && photosOf(store.db, m.id, elementId).length > 0;
+  const elPhotos =
+    sel && m && stored.elements.some((e) => e.id === sel.id) && (canSave || has(sel.id)) ? (
+      <MeasurePhotos measurementId={m.id} elementId={sel.id} testID="attr-photos" onRemoved={() => setSheet(false)} readOnly={!canSave} />
+    ) : null;
+  const mPhotos = m && mStored && (canSave || has()) ? <MeasurePhotos measurementId={m.id} testID="draw-photos" onRemoved={() => setPhotoSheet(false)} readOnly={!canSave} /> : null;
   const attrs = !sel ? null : (
     <>
       {"a" in sel ? <RunAttrsView run={sel} onAttrs={onRunAttrs} onLength={onLength} /> : <DsAttrsView ds={sel} onAttrs={onDsAttrs} />}
@@ -430,9 +434,15 @@ export default function DrawScreen() {
           <View testID="draw-not-saved" style={{ gap: space[2], padding: space[3], borderRadius: radius.card, backgroundColor: c.ov, borderWidth: 1, borderColor: c.bd }}>
             <StatusChip status="warn" label={t("mod.gutters.draw.notSaved")} />
             <T v="caption">{t(access === "expired" ? "mod.gutters.draw.expired" : "mod.gutters.draw.off")}</T>
-            <View style={{ alignSelf: "flex-start" }}>
+            <RowView style={{ flexWrap: "wrap", gap: space[2] }}>
               <Button label={t("mod.gutters.draw.connect")} variant="secondary" onPress={() => router.push("/company/modules")} />
-            </View>
+              {/* past the trial a draft opens for reading — its photos too (founder О2) */}
+              {mPhotos && !wide ? (
+                <View testID="draw-photos-open">
+                  <Button label={t("mod.gutters.photo.open")} icon="camera" size="sm" variant="ghost" onPress={() => setPhotoSheet(true)} />
+                </View>
+              ) : null}
+            </RowView>
           </View>
         )}
       </View>

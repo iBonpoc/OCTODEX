@@ -1,8 +1,9 @@
 /**
  * Photos of a measurement or of one drawn element (docs/specs/33-gutters-screens.md П21.10 M5d). The core's photo strip
  * (camera on a phone, a file on the web); a photo goes through the module's queue (photo.add → files.measurement_id /
- * element_id) and is on the phone at once. Removing → «Отменить» 5 s (rule 5). Shown only while the module saves
- * (founder О2: after the trial nothing is added); a photo from the server shows as an icon, like a visit's photo.
+ * element_id) and is on the phone at once. Removing → «Отменить» 5 s (rule 5). `readOnly` — the module does not save
+ * (founder О2: after the trial drafts open for reading): the photos are shown, nothing is added or removed. A photo
+ * from the server shows as an icon, like a visit's photo.
  */
 import { View } from "react-native";
 import * as Crypto from "expo-crypto";
@@ -14,7 +15,7 @@ import { T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { addPhoto, photosOf, removePhoto } from "../data";
 
-export function MeasurePhotos({ measurementId, elementId, testID, onRemoved }: { measurementId: string; elementId?: string; testID: string; /** a sheet that holds the strip closes: the toast with «Отменить» is under it otherwise */ onRemoved?: () => void }) {
+export function MeasurePhotos({ measurementId, elementId, testID, onRemoved, readOnly }: { measurementId: string; elementId?: string; testID: string; readOnly?: boolean; /** a sheet that holds the strip closes: the toast with «Отменить» is under it otherwise */ onRemoved?: () => void }) {
   const store = useStore();
   const toast = useToast();
   const { t } = useI18n();
@@ -31,7 +32,7 @@ export function MeasurePhotos({ measurementId, elementId, testID, onRemoved }: {
   return (
     <View style={{ gap: space[2] }} testID={testID}>
       <T v="caption" tone="mut" w="semibold">{`${title} · ${photos.length}`}</T>
-      <PhotoStrip photos={photos} onAdd={add} onRemove={remove} title={title} />
+      <PhotoStrip photos={photos} onAdd={readOnly ? undefined : add} onRemove={readOnly ? undefined : remove} title={title} />
     </View>
   );
 }
