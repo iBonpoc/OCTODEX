@@ -16,7 +16,7 @@ export function LineMarks({ marks, lineId }: { marks: LineMark[]; lineId: string
   return (
     <View testID={`ue-line-marks-${lineId}`} style={{ flexDirection: "row", flexWrap: "wrap", gap: space[1] }}>
       {marks.map((m) => (
-        <View key={m} testID={`ue-line-mark-${m}`}>
+        <View key={m} testID={`ue-line-mark-${m}-${lineId}`}>
           <StatusChip status={m === "module" ? "neutral" : "warn"} label={t(KEY[m])} soft={m === "module"} />
         </View>
       ))}

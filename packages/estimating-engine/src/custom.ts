@@ -13,7 +13,8 @@ export const LINE_GROUPS: LineGroup[] = ["service", "labor", "material"];
 /**
  * What a module wrote into a line (docs/specs/33-gutters-estimate.md П23.7, C4) — the company's, never the client's:
  * kept in the stored document (calc_inputs), dropped by the app's clientDoc and by the server's page (app.client_doc).
- * The core reads only these fields; the rest belongs to the module.
+ * The core reads only these fields; a module adds its own by extending the type — never a cost, markup or supplier
+ * (the tech reads calc_inputs; review C4 security F1).
  */
 export interface LineSource {
   /** the module's key (gutters, roofing…) */
@@ -28,7 +29,6 @@ export interface LineSource {
   testPrice?: true;
   /** no longer in the module's data, kept because someone changed it by hand */
   gone?: true;
-  [k: string]: unknown;
 }
 
 export interface CustomLine {

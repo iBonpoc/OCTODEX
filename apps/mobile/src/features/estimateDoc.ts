@@ -166,7 +166,8 @@ export function lineMarks(l: CustomLine): LineMark[] {
   const out: LineMark[] = ["module"];
   if (s.gone) out.push("gone");
   if (s.noPrice && l.unitPriceCents === 0) out.push("noPrice");
-  else if (s.testPrice && l.unitPriceCents === s.priceCents) out.push("testPrice");
+  // a $0 TEST price is both: the card says what the check before sending will (review C4 №2)
+  if (s.testPrice && l.unitPriceCents === s.priceCents) out.push("testPrice");
   return out;
 }
 

@@ -89,7 +89,7 @@ export function LineSheet({
         </View>
       ) : (
         <ScrollView style={{ maxHeight: component.sheetFormMax }} keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: space[3] }}>
-          {draft.source ? (
+          {lineMarks(draft).length ? (
             <View testID="ue-line-source-hint" style={{ gap: space[2] }}>
               <LineMarks marks={lineMarks(draft)} lineId={draft.id} />
               <T v="caption" tone="mut">

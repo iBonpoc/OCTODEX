@@ -40,7 +40,7 @@ const roundTrip = (doc: EstimateDoc) => JSON.parse(JSON.stringify(storedDoc(doc)
 const noCost = (d: EstimateDoc) => d.options[0]!.lines.map(({ unitCostCents: _c, ...l }) => l);
 
 describe("C4: source строки модуля", () => {
-  it("clientDoc снимает source и себестоимость — в calc_inputs (его отдаёт /p/) их нет", () => {
+  it("clientDoc (всё, что уходит клиенту из приложения) снимает source и себестоимость", () => {
     const doc = docOf([...linesFromParts(parts, list(), name, uid), own]);
     expect(JSON.stringify(doc)).toContain('"source"');
     const c = JSON.stringify(clientDoc(doc));
@@ -70,6 +70,18 @@ describe("C4: source строки модуля", () => {
     expect(out.filter((l) => l.id === "own1")).toHaveLength(1);
   });
 
+  it("в source только слова модуля и цена продажи — ни себестоимости, ни наценки, ни поставщика (её читает мастер)", () => {
+    const priced = list(1000).map((it) => (it.kind === "material" ? { ...it, costCents: 400, vendorTaxBps: 1000, markupBps: 5000 } : it));
+    const lines = linesFromParts(parts, priced, name, uid, "rev1");
+    const allowed = new Set(["module", "key", "section", "qty", "priceCents", "name", "unit", "noPrice", "testPrice", "gone", "revisionId"]);
+    for (const l of lines) {
+      for (const k of Object.keys(l.source!)) expect(allowed.has(k), k).toBe(true);
+      expect(l.source!.priceCents).toBe(l.unitPriceCents); // the sell price, the line's own
+      if (l.unitCostCents !== undefined) expect(l.source!.priceCents).not.toBe(l.unitCostCents);
+      expect(JSON.stringify(l.source)).not.toMatch(/cost|markup|vendor|supplier/i);
+    }
+  });
+
   it("битый source не даёт пометок (строка как своя)", () => {
     expect(lineMarks({ ...own, source: { module: 1 } as never })).toEqual([]);
     expect(lineMarks({ ...own, source: "x" as never })).toEqual([]);
@@ -86,15 +98,6 @@ describe("C4: source строки модуля", () => {
       expect(out).not.toContain("SECRET-MODULE-NAME");
       expect(out).not.toMatch(/testPrice|noPrice|"section"|revisionId/);
     }
-  });
-
-  it("страница клиента в демо (/p/) — без source", () => {
-    const db = makeSeed();
-    const e = db.estimates.find((x) => x.doc?.options?.length)!;
-    const withModule = { ...e, doc: docOf([...linesFromParts(parts, list(0, true), name, uid), own]) };
-    const p = portalFromEstimate(db, withModule, "Co");
-    expect(JSON.stringify(p.doc)).not.toContain('"source"');
-    expect(JSON.stringify(p.doc)).not.toContain("testPrice");
   });
 });
 
@@ -114,6 +117,11 @@ describe("C4: пометки строки (lineMarks)", () => {
     const tp = { ...l!, source: { ...src, testPrice: true as const } } as CustomLine;
     expect(lineMarks(tp)).toEqual(["module", "testPrice"]);
     expect(lineMarks({ ...tp, unitPriceCents: src.priceCents + 1 })).toEqual(["module"]);
+  });
+  it("тестовая $0 — и «Нет цены», и «Тестовая цена» (то же, что скажет проверка перед отправкой)", () => {
+    const both = linesFromParts(parts, list(0, true), name, uid)[0] as CustomLine;
+    expect(lineMarks(both)).toEqual(["module", "noPrice", "testPrice"]);
+    expect(lineMarks({ ...both, unitPriceCents: 700 })).toEqual(["module"]);
   });
   it("«Нет в замере» — у пропавшей правленой строки", () => {
     expect(lineMarks({ ...l!, source: { ...src, gone: true as const } } as CustomLine)).toEqual(["module", "gone"]);

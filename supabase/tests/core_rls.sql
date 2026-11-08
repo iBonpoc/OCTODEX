@@ -8047,6 +8047,21 @@ select tst.ok(not exists (select 1 from public.estimate_versions v join public.e
                             jsonb_array_elements(v.calc_inputs -> 'options' -> 0 -> 'lines') l, jsonb_object_keys(coalesce(l -> 'source', '{}')) k
                            where e.title = 'T97 module lines' and k !~ '^(module|key|section|qty|priceCents|name|unit|noPrice|testPrice|gone|revisionId)$'),
               'T97 the source has only the module''s words: no cost, markup or supplier field');
+:as_tech2_a
+select tst.ok(tst.cnt($q$select 1 from public.estimate_versions v join public.estimates e on e.id = v.estimate_id where e.title = 'T97 module lines'$q$) = 0,
+              'T97 another tech (not the author, not assigned) reads nothing');
+:as_owner_b
+select tst.ok(tst.cnt($q$select 1 from public.estimate_versions v join public.estimates e on e.id = v.estimate_id where e.title = 'T97 module lines'$q$) = 0,
+              'T97 another company reads nothing');
+-- a sent (locked) version is read through sent_version_id: cut the same way
+:as_super
+update public.estimate_versions set locked_at = now(), sent_at = now() where id = (select current_version_id from public.estimates where title = 'T97 module lines');
+update public.estimates set status = 'sent', sent_version_id = current_version_id where title = 'T97 module lines';
+reset role; reset request.jwt.claim.sub; set role anon;
+select tst.ok((public.portal_estimate('tok_t97src_0123456789abcd') -> 'doc')::text !~* '(source|testPrice|noPrice|revisionId|gutters)'
+              and jsonb_array_length(public.portal_estimate('tok_t97src_0123456789abcd') -> 'doc' -> 'options' -> 0 -> 'lines') = 3,
+              'T97 the sent version is cut the same way');
+:as_super
 \echo 'T97 module line sources: kept for the company, never on the client page ok'
 
 \echo 'ALL TESTS PASSED'
