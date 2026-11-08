@@ -593,6 +593,7 @@ export const es: Dict = {
   "ue.check.review": "Revise antes de enviar",
   "ue.check.noPriceHint": "Ponga un precio, o el cliente recibirá una línea de $0. Si la pieza no hace falta, cantidad 0.",
   "ue.check.forceHint": "El precio de prueba y la línea fuera de la medición llegan al cliente tal como están.",
+  "ue.check.moduleHint": "El estimado llega al cliente tal como está.",
   "ue.check.edit": "Editar estimado",
   "ue.check.force": "Enviar de todos modos",
   "ue.check.forcePdf": "Descargar PDF de todos modos",
@@ -2713,6 +2714,9 @@ export const es: Dict = {
   // M8b (spec 33 П23.8): «Смета» from the measurement
   "mod.gutters.est.make": "Estimado",
   "mod.gutters.est.update": "Actualizar estimado",
+  "mod.gutters.est.stale": "La medición cambió después del estimado",
+  "mod.gutters.est.staleHint": "El dibujo se editó después de hacer este estimado: tiene las cantidades anteriores.",
+  "mod.gutters.est.staleUpdate": "Actualizar desde la medición",
   "mod.gutters.est.open": "Abrir estimado",
   "mod.gutters.est.signed": "Estimado firmado",
   "mod.gutters.est.made": "Estimado hecho con la medición",

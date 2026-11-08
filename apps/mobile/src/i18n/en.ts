@@ -593,6 +593,7 @@ export const en: Dict = {
   "ue.check.review": "Check before sending",
   "ue.check.noPriceHint": "Set a price, or the client gets a $0 line. Part not needed — set the quantity to 0.",
   "ue.check.forceHint": "The test price and the line not in the measurement go to the client as they are.",
+  "ue.check.moduleHint": "The estimate goes to the client as it is.",
   "ue.check.edit": "Edit estimate",
   "ue.check.force": "Send anyway",
   "ue.check.forcePdf": "Download PDF anyway",
@@ -2713,6 +2714,9 @@ export const en: Dict = {
   // M8b (spec 33 П23.8): «Смета» from the measurement
   "mod.gutters.est.make": "Estimate",
   "mod.gutters.est.update": "Update estimate",
+  "mod.gutters.est.stale": "Measurement changed after the estimate",
+  "mod.gutters.est.staleHint": "The drawing was edited after this estimate was made: it has the old quantities.",
+  "mod.gutters.est.staleUpdate": "Update from measurement",
   "mod.gutters.est.open": "Open estimate",
   "mod.gutters.est.signed": "Estimate signed",
   "mod.gutters.est.made": "Estimate made from the measurement",
