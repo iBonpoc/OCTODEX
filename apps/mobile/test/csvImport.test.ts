@@ -1,14 +1,15 @@
 /** Import clients from CSV (13 §3.16, 15-flows §1.13, 04 §12.5): parsing, the columns, duplicates, the limit. */
 import { describe, expect, it } from "vitest";
-import { cleanPhone, CsvError, guessMapping, IMPORT_MAX_CELL, IMPORT_MAX_PARSED, IMPORT_MAX_ROWS, parseCsv, planImport, rowsOf, type ImportRow } from "../src/features/client/csvImport";
-import type { Customer } from "../src/data/types";
+import { batchesOf, cleanPhone, CsvError, guessMapping, IMPORT_BATCH, IMPORT_MAX_BYTES, IMPORT_MAX_CELL, IMPORT_MAX_PARSED, IMPORT_MAX_ROWS, importCell, parseCsv, planImport, rowsOf, type ImportRow } from "../src/features/client/csvImport";
+import type { Customer, Property } from "../src/data/types";
 
 describe("parseCsv", () => {
   it("quotes, commas and line breaks inside quotes, doubled quotes, CRLF, BOM, empty lines", () => {
     const t = '﻿Name,Address,Note\r\n"Kim, David","12 ""Oak"" St\nApt 2",x\r\n\r\nAnn,1 Elm,\n';
     expect(parseCsv(t)).toEqual([
       ["Name", "Address", "Note"],
-      ["Kim, David", '12 "Oak" St\nApt 2', "x"],
+      // a line break inside a cell is a space (the server stores the same, app.import_cell)
+      ["Kim, David", '12 "Oak" St Apt 2', "x"],
       ["Ann", "1 Elm", ""],
     ]);
   });
@@ -132,5 +133,46 @@ describe("review #199: a match with an archived or «do not service» client say
     ] as Customer[] };
     const p = planImport(db, [row({ name: "x", phone: "3105550001" }), row({ name: "y", phone: "3105550002" }), row({ name: "z", phone: "3105550003" })]);
     expect(p.skip.map((s) => [s.who, s.whoStatus])).toEqual([["Old", "archived"], ["Banned", "do_not_service"], ["Fine", undefined]]);
+  });
+});
+
+// docs/specs/04 §14: the server import — the same rule as public.import_customers (examples: test/matchKeys.test.ts)
+describe("server import (§14)", () => {
+  const card = (id: string, x: Partial<Customer> = {}): Customer => ({ id, name: id, phone: "", sourceId: "s", balanceCents: 0, ...x });
+  const prop = (customerId: string, address: string, zip: string): Property => ({ id: `p-${customerId}`, customerId, address, city: "Pasadena", stories: 1, place: { city: "Pasadena", zip } });
+  it("the founder's limits: 5,000 rows, 10 MB; batches of 250", () => {
+    expect(IMPORT_MAX_ROWS).toBe(5000);
+    expect(IMPORT_MAX_BYTES).toBe(10 * 1024 * 1024);
+    const rows = Array.from({ length: 5003 }, (_, i) => row({ line: i + 2, name: `N${i}`, phone: `310${String(i).padStart(7, "0")}` }));
+    const b = batchesOf(rows);
+    expect(b).toHaveLength(Math.ceil(5000 / IMPORT_BATCH));
+    expect(b.flat()).toHaveLength(5000);
+    expect(b[0]![0]).toEqual({ line: 2, name: "N0", first_name: "", last_name: "", company: "", phone: "3100000000", email: "", address: "", city: "" });
+    // after a break: from the first line the server has not got
+    expect(batchesOf(rows, 252)[0]![0]!.line).toBe(252);
+  });
+  it("only the address of a live card — added as a possible duplicate, never merged; an archived card's address is not a sign", () => {
+    const db = { customers: [card("Anna"), card("Old", { status: "archived" })], properties: [prop("Anna", "123 Main Street", "91101"), prop("Old", "9 Elm St", "91101")] };
+    const p = planImport(db, [row({ line: 2, name: "Eva", phone: "6265550505", address: "123 main st.", city: "Pasadena, CA 91101" }), row({ line: 3, name: "Fred", phone: "6265550606", address: "9 Elm Street", city: "91101" })]);
+    expect(p.dupAdd.map((d) => [d.row.name, d.who])).toEqual([["Eva", "Anna"]]);
+    expect(p.add.map((r) => r.name)).toEqual(["Fred"]);
+  });
+  it("an address shared by more than CROWD cards is a manager's, not a duplicate; a second row of the file with the same address is", () => {
+    const many = Array.from({ length: 6 }, (_, i) => card(`m${i}`));
+    const p = planImport({ customers: many, properties: many.map((c) => prop(c.id, "1 Office Plaza", "91101")) }, [row({ name: "Tenant", phone: "6265550001", address: "1 Office Plaza", city: "91101" })]);
+    expect(p.dupAdd).toHaveLength(0);
+    const q = planImport({ customers: [] }, [row({ line: 2, name: "Ann", phone: "6265550001", address: "5 Oak Ave", city: "91101" }), row({ line: 3, name: "Bob", phone: "6265550002", address: "5 Oak Avenue", city: "91101" })]);
+    expect(q.dupAdd.map((d) => [d.row.name, d.who])).toEqual([["Bob", "Ann"]]);
+  });
+  it("a merged card is not a client any more; the oldest card (CLT number) is the one named", () => {
+    const db = { customers: [card("Newer", { number: "CLT-0009", phone: "6265550101" }), card("Older", { number: "CLT-0002", phone: "6265550101" }), card("Gone", { phone: "6265550202", mergedIntoId: "Older" })] };
+    const p = planImport(db, [row({ name: "x", phone: "626 555 0101" }), row({ line: 3, name: "y", phone: "626 555 0202" })]);
+    expect(p.skip.map((s) => s.who)).toEqual(["Older"]);
+    expect(p.add.map((r) => r.name)).toEqual(["y"]);
+  });
+  it("cells as the server cleans them: a line break is a space, invisible characters go, a no-break space is no name", () => {
+    expect(importCell("12 Oak\nApt 2")).toBe("12 Oak Apt 2");
+    expect(importCell("\u200bAnn\u202e ")).toBe("Ann");
+    expect(importCell("\u00a0")).toBe("");
   });
 });

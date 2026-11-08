@@ -2,8 +2,9 @@
  * Wave 4b-2 «Импорт из CSV» (docs/specs/13-app-structure.md §3.16, 15-flows §1.13, 04 §12.5): Клиенты → «…» →
  * «Импорт из CSV» → file → columns guessed from the headers (changeable) → «Добавим N, пропустим M» with every skipped
  * row and why (a client already there by phone or email, a repeat in the file, no way to reach them) → import →
- * the clients are `active` in the list (once, even on a double tap); «Отменить» takes the whole import back with
- * the properties; without the network the import button is off. The tech has no import.
+ * the result on the screen (04 §14, the server's answers; demo — the same rule on the phone) → the clients are
+ * `active` in the list (once, even on a double tap); «Отменить» takes the whole import back with the properties;
+ * without the network the import button is off. The tech and sales have no import (04 §14.4).
  */
 const CSV = [
   "First Name,Last Name,Company,Mobile Phone,Email,Street Address,City",
@@ -41,10 +42,12 @@ exports.run = async (h) => {
 
   // a double tap imports once (review #199): two clicks in the same moment
   await p.getByRole("button", { name: "Импортировать (2)" }).evaluate((el) => { el.click(); el.click(); });
-  await p.waitForTimeout(800);
-  h.expect(/\/clients$/.test(p.url()), `back to the clients (${p.url()})`);
+  await p.getByTestId("import-result").locator("visible=true").first().waitFor({ timeout: 5000 });
+  await h.expectText(/Готово: добавлено 2, возможных дублей 0, пропущено 3/, "the result on the screen");
   await h.expectText(/Добавлено 2, пропущено 3/, "the toast says what happened");
+  // the store writes the phone's copy a moment after the change: wait for what is checked (CHECKS §9)
   let db = await h.db();
+  for (let i = 0; i < 40 && db.customers.length < before + 2; i++) { await p.waitForTimeout(150); db = await h.db(); }
   const ann = db.customers.find((c) => c.name === "Ann Lee");
   const ray = db.customers.find((c) => c.name === "Ray Roofing, LLC");
   h.expect(db.customers.length === before + 2, `two clients added (${db.customers.length - before})`);
@@ -53,11 +56,15 @@ exports.run = async (h) => {
   h.expect(ray && ray.status === "active" && ray.email === "bob@ray.test" && ray.companyName === "Ray Roofing, LLC", "the company with an email only");
   const annProp = db.properties.find((x) => x.customerId === ann.id);
   h.expect(annProp && annProp.address === "7 Palm Ave" && annProp.city === "", `Ann's property, the city column was off (${annProp && annProp.city})`);
+  await p.getByRole("button", { name: "К клиентам" }).click(); await p.waitForTimeout(600);
+  h.expect(/\/clients$/.test(p.url()), `«К клиентам» (${p.url()})`);
   await h.expectText(/Ann Lee/, "Ann in the list");
 
   // «Отменить» takes the whole import back
-  await p.getByRole("button", { name: "Отменить" }).last().click(); await p.waitForTimeout(600);
+  await p.getByRole("button", { name: "Отменить" }).last().click();
+  await h.expectText(/Импорт отменён: снято клиентов 2/, "the toast says the import was undone");
   db = await h.db();
+  for (let i = 0; i < 40 && db.customers.length !== before; i++) { await p.waitForTimeout(150); db = await h.db(); }
   h.expect(db.customers.length === before && !db.customers.some((c) => c.name === "Ann Lee"), "undo: the import is gone");
   h.expect(!db.properties.some((x) => x.customerId === ann.id || x.customerId === ray.id), "undo: their properties are gone too");
   const queued = await p.evaluate(() => JSON.parse(localStorage.getItem("octo.queue.v1") || "[]"));
@@ -78,6 +85,13 @@ exports.run = async (h) => {
   await p.waitForTimeout(800);
   await h.expectText(/Нужна сеть/, "offline: says the network is needed");
   h.expect(await p.getByRole("button", { name: "Импортировать (2)" }).isDisabled(), "offline: the import button is off");
+
+  // sales: no «…» any more (was: everyone but the tech; 04 §14.4)
+  await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("sales")));
+  await h.go("/clients");
+  h.expect((await p.getByRole("button", { name: "Ещё действия" }).count()) === 0, "sales: no «…» on the clients");
+  await h.go("/client/import");
+  h.expect((await p.getByRole("button", { name: "Выбрать файл CSV" }).count()) === 0, "sales: the import does not open");
 
   // the tech: no «…», no import by address
   await p.evaluate(() => localStorage.setItem("octo.role.v1", JSON.stringify("tech")));

@@ -155,10 +155,10 @@ begin
   if jsonb_typeof(p_row -> p_key) not in ('string', 'null') and p_row ? p_key then
     raise exception 'import_bad_row' using errcode = 'P0001';
   end if;
-  -- control, bidi and zero-width characters out (U+061C, U+200B–U+200F, U+202A–U+202E, U+2066–U+2069, U+FEFF);
+  -- a control character (a line break in a cell) is a space; bidi and zero-width characters out (U+061C, U+200B–U+200F, U+202A–U+202E, U+2066–U+2069, U+FEFF);
   -- then spaces at the ends, the no-break and line / paragraph separators too (JS trim() on the phone)
-  v := regexp_replace(coalesce(p_row ->> p_key, ''),
-         '[[:cntrl:]' || chr(1564) || chr(8203) || '-' || chr(8207) || chr(8234) || '-' || chr(8238) || chr(8294) || '-' || chr(8297) || chr(65279) || ']', '', 'g');
+  v := regexp_replace(regexp_replace(coalesce(p_row ->> p_key, ''), '[[:cntrl:]]', ' ', 'g'),
+         '[' || chr(1564) || chr(8203) || '-' || chr(8207) || chr(8234) || '-' || chr(8238) || chr(8294) || '-' || chr(8297) || chr(65279) || ']', '', 'g');
   v := regexp_replace(v, '^[[:space:]' || chr(160) || chr(8232) || chr(8233) || chr(8239) || chr(12288) || ']+|[[:space:]' || chr(160) || chr(8232) || chr(8233) || chr(8239) || chr(12288) || ']+$', '', 'g');
   if char_length(v) > 200 then raise exception 'import_too_big' using errcode = 'P0001'; end if;
   return v;
