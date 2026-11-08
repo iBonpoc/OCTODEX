@@ -2682,4 +2682,17 @@ export const en: Dict = {
   "mod.gutters.est.fromLead": "Estimate from measurement",
   "mod.gutters.est.noClient": "No client for the estimate: make the measurement a lead or open it from a property",
   "mod.gutters.est.off": "The module is off: the estimate would not be saved",
+  // step 14 (docs/specs/08 §7.3): the checklist on the visit screen
+  "chk.left": "Required left: {n}",
+  "chk.optional": "optional",
+  "chk.skipped": "Skipped",
+  "chk.photoItem": "Photo for the item",
+  "chk.sheetTitle": "Not filled in: {n}",
+  "chk.sheetHint": "Go back and fill it in, or skip — skipped items stay «not done» in the visit's history.",
+  "chk.noBefore": "No photos before work",
+  "chk.needBefore": "Photos before work: {n} more",
+  "chk.needAfter": "Photos after work: {n} more",
+  "chk.fill": "Fill in",
+  "chk.skip": "Skip",
+  "chk.skippedToast": "Skipped: {n}",
 };

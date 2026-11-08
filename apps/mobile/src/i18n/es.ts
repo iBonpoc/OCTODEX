@@ -2682,4 +2682,17 @@ export const es: Dict = {
   "mod.gutters.est.fromLead": "Estimado de la medición",
   "mod.gutters.est.noClient": "No hay cliente para el estimado: convierta la medición en prospecto o ábrala desde una propiedad",
   "mod.gutters.est.off": "El módulo está apagado: el estimado no se guardaría",
+  // step 14 (docs/specs/08 §7.3): the checklist on the visit screen
+  "chk.left": "Obligatorios pendientes: {n}",
+  "chk.optional": "opcional",
+  "chk.skipped": "Omitido",
+  "chk.photoItem": "Foto del punto",
+  "chk.sheetTitle": "Sin completar: {n}",
+  "chk.sheetHint": "Puede volver y completarlo u omitirlo: lo omitido queda «no hecho» en el historial de la visita.",
+  "chk.noBefore": "No hay fotos antes del trabajo",
+  "chk.needBefore": "Fotos antes del trabajo: faltan {n}",
+  "chk.needAfter": "Fotos después del trabajo: faltan {n}",
+  "chk.fill": "Completar",
+  "chk.skip": "Omitir",
+  "chk.skippedToast": "Omitidos: {n}",
 };

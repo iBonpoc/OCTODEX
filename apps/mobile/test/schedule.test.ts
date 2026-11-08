@@ -51,6 +51,10 @@ describe("visit: what can happen to it", () => {
     for (const step of ["on_site", "working", "signed", "paid", "done"] as const) expect(lateKind(V({ start: min(40), step }), [], NOW)).toBeNull();
     expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: true }] }), [], NOW)).toBeNull();
     expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: false }] }), [], NOW)).toBe("not_left");
+    // step 14 (docs/specs/08 §11.5 №28): a skip or a photo on an item says the tech is there too
+    expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: false, na: { at: "2026-11-08T10:00:00Z" } }] }), [], NOW)).toBeNull();
+    expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: false, kind: "photo", photoIds: ["p1"] }] }), [], NOW)).toBeNull();
+    expect(lateKind(V({ start: min(40), checklist: [{ id: "c", label: "x", done: false, photoIds: [] }] }), [], NOW)).toBe("not_left");
     expect(lateKind(V({ start: min(40), techId: null, assigneeIds: [] }), [], NOW)).toBeNull(); // nobody on it: «Не назначено»
     expect(lateKind(V({ start: min(40), techId: null, assigneeIds: ["m2"] }), [], NOW)).toBe("not_left");
     expect(lateKind(V({ start: min(40), closed: true }), [], NOW)).toBeNull();

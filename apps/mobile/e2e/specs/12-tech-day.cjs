@@ -72,6 +72,9 @@ exports.run = async (h) => {
   for (let i = 0; i < 20; i++) await p.mouse.move(bb.x + 30 + i * 10, bb.y + 60 - Math.sin(i / 2) * 25);
   await p.mouse.up();
   await h.click("Подтвердить подпись");
+  // no photos after work: a warning, not a lock (docs/specs/08 §4) — «Пропустить» goes on to the payment
+  await p.getByTestId("chk-missing").last().waitFor();
+  await p.getByTestId("chk-skip").last().click();
   await h.clickText("Наличные");
   await h.click("Записать оплату");
   db = await h.db();

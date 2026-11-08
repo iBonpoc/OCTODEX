@@ -104,7 +104,7 @@ export type LateKind = "en_route" | "not_left";
 /**
  * П3c, one rule for the list sign, the "Needs attention" item and the office notice: the start + lateAfterMin has passed,
  * someone is on the visit, and nobody is on site yet. «On the way» does not clear it (founder, 05.11); only «on site»
- * (and any later step), a closed visit or the first ticked checklist item do. Computed, never stored.
+ * (and any later step), a closed visit or the first action on a checklist item (tick, skip, photo) do. Computed, never stored.
  */
 export function lateKind(
   v: Pick<Visit, "start" | "step" | "closed" | "checklist" | "techId" | "assigneeIds"> & { allDay?: boolean },
@@ -116,7 +116,8 @@ export function lateKind(
   // a whole-day visit has no start hour to be late for (17-job §11.1)
   if (v.allDay) return null;
   // nobody who can come: «Не назначено», not «опаздывает» (S22)
-  if (!liveAssignees(v, members).length || v.checklist?.some((c) => c.done)) return null;
+  // any action of the tech on an item says he is there: a tick, a skip or a photo (docs/specs/08 §11.5 №28)
+  if (!liveAssignees(v, members).length || v.checklist?.some((c) => c.done || !!c.na || (c.photoIds?.length ?? 0) > 0)) return null;
   const t = new Date(v.start).getTime();
   if (Number.isNaN(t) || now < t + lateAfterMin * 60_000) return null;
   return v.step === "en_route" ? "en_route" : "not_left";

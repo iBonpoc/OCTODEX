@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Linking, View } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
 import * as Haptics from "expo-haptics";
-import { space, component, size } from "@octo/design-tokens";
+import { space, size } from "@octo/design-tokens";
 import { jobProfit, useStore, visitContext } from "@/data/store";
 import { canSeeProfit } from "@/nav/roles";
 import type { PaymentMethod } from "@/data/types";
@@ -22,9 +22,11 @@ import { useTheme } from "@/theme/ThemeProvider";
 import { STEP_LABELS, stepIndex, visitStatus } from "@/features/visits";
 import { SignaturePad } from "@/features/SignaturePad";
 import { PhotoStrip } from "@/features/PhotoStrip";
+import { checklistGate, visitSettings } from "@/features/checklist";
+import { ChecklistCard, MissingSheet } from "@/features/VisitChecklist";
 import { OfficeLocation, TechLocation, useConsentQuestion } from "@/features/LocationParts";
-import { Button, IconButton, Segmented, StatusChip, Steps, TextField } from "@/ui/controls";
-import { Icon, Press, T } from "@/ui/primitives";
+import { Button, IconButton, Segmented, StatusChip, Steps } from "@/ui/controls";
+import { Icon, T } from "@/ui/primitives";
 import { useToast } from "@/ui/overlays";
 import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
 
@@ -39,7 +41,8 @@ export default function VisitScreen() {
   const { c } = useTheme();
   const toast = useToast();
   const [method, setMethod] = useState<PaymentMethod>("card");
-  const [extra, setExtra] = useState("");
+  // the «Не заполнено» sheet before the next step (docs/specs/08 §4): which step asks, and the signature it holds
+  const [ask, setAsk] = useState<null | { step: "work" } | { step: "done" } | { step: "sign"; path: string }>(null);
   const [calling, setCalling] = useState<CallPreset | null>(null);
   const [writing, setWriting] = useState<MessagePreset | null>(null);
   // «Сообщить клиенту об отмене?» (docs/specs/03 §13): asked here, because the cancelled visit leaves `visits`
@@ -68,7 +71,7 @@ export default function VisitScreen() {
   const idx = stepIndex(v.step);
   const before = v.photos.filter((p) => p.kind === "before");
   const after = v.photos.filter((p) => p.kind === "after");
-  const left = v.checklist.filter((x) => !x.done).length;
+  const gate = checklistGate(v, visitSettings(db), db.checklistTemplates ?? []);
   const queuedHint = () => (store.online ? undefined : t("offline.queued"));
   // «Перенести / Отменить»: the office only (owner / admin / office ↔ director / dispatcher), like cancel_visit on the server
   const office = canPlan([store.role]);
@@ -79,11 +82,22 @@ export default function VisitScreen() {
     toast.show(queuedHint() ?? msg, undo);
   };
   const removePhoto = (photoId: string) => toast.show(queuedHint() ?? t("photo.deleted"), store.removePhoto(v.id, photoId));
-  const addItem = () => {
-    const label = extra.trim();
-    if (!label) return;
-    toast.show(queuedHint() ?? t("check.added"), store.addCheckItem(v.id, label));
-    setExtra("");
+  const sign = (path: string) => {
+    haptic();
+    toast.show(queuedHint() ?? t("toast.step", { step: t("step.pay") }), store.signVisit(v.id, path));
+  };
+  // a warning, never a lock (founder 05.11): «Пропустить» marks what is left skipped and the step goes on
+  const goWork = () => (gate.warnBeforeWork ? setAsk({ step: "work" }) : advance(t("toast.step", { step: t("step.working") })));
+  const goDone = () => (gate.warnBeforeSign ? setAsk({ step: "done" }) : advance(t("toast.step", { step: t("st.done") })));
+  const goSign = (path: string) => (gate.warnBeforeSign ? setAsk({ step: "sign", path }) : sign(path));
+  const skipAndGo = () => {
+    const a = ask;
+    setAsk(null);
+    if (!a) return;
+    if (a.step !== "work" && gate.missing.items.length) store.skipItems(v.id, gate.missing.items);
+    if (a.step === "work") advance(t("toast.step", { step: t("step.working") }));
+    else if (a.step === "done") advance(t("toast.step", { step: t("st.done") }));
+    else sign(a.path);
   };
   const isInspection = v.kind === "inspection" || (!v.jobId && !!v.leadId);
   const makeEstimate = () => {
@@ -190,6 +204,9 @@ export default function VisitScreen() {
         <Button label={t("step.on_site")} icon="pin" full onPress={() => advance(t("toast.step", { step: t("step.on_site") }))} />
       ) : null}
 
+      {/* an inspection with a checklist (В6): ticked on site, checked before «Готово» */}
+      {v.step === "on_site" && isInspection && v.checklist.length ? <ChecklistCard v={v} missing={gate.missing} /> : null}
+
       {v.step === "on_site" || v.step === "working" ? (
         <Card>
           <T v="heading">{t("visit.photosBefore")}</T>
@@ -200,21 +217,16 @@ export default function VisitScreen() {
           />
           {v.step === "on_site" && v.kind === "inspection" ? (
             // an inspection ends on site with "Done": no work, signature or payment (S10, docs/specs/03 §4.1)
-            <Button label={t("st.done")} icon="check" full onPress={() => advance(t("toast.step", { step: t("st.done") }))} />
+            <Button label={t("st.done")} icon="check" full onPress={goDone} />
           ) : null}
           {v.step === "on_site" && v.kind !== "inspection" ? (
             <>
-              {before.length === 0 ? (
+              {gate.missing.photosBefore > 0 ? (
                 <T v="caption" tone="warn">
-                  {t("visit.needPhotos")}
+                  {t("chk.needBefore", { n: gate.missing.photosBefore })}
                 </T>
               ) : null}
-              <Button
-                label={t("visit.next", { step: t("step.working") })}
-                full
-                disabled={before.length === 0}
-                onPress={() => advance(t("toast.step", { step: t("step.working") }))}
-              />
+              <Button label={t("visit.next", { step: t("step.working") })} full onPress={goWork} />
             </>
           ) : null}
         </Card>
@@ -222,74 +234,19 @@ export default function VisitScreen() {
 
       {v.step === "working" ? (
         <>
-            <Card>
-              <RowView style={{ justifyContent: "space-between" }}>
-                <T v="heading">{t("visit.checklist")}</T>
-                <T v="caption" tone={left ? "mut" : "ok"}>
-                  {left ? t("visit.checklistLeft", { n: left }) : "✓"}
-                </T>
-              </RowView>
-              {v.checklist.map((item) => (
-                <Press
-                  key={item.id}
-                  onPress={() => {
-                    Haptics.selectionAsync().catch(() => {});
-                    store.toggleCheck(v.id, item.id);
-                  }}
-                  accessibilityRole="checkbox"
-                  accessibilityState={{ checked: item.done }}
-                  accessibilityLabel={item.label}
-                  style={{ flexDirection: "row", alignItems: "center", gap: space[3], minHeight: size.hitMin }}
-                >
-                  <View
-                    style={{
-                      width: component.checkbox.size,
-                      height: component.checkbox.size,
-                      borderRadius: component.checkbox.radius,
-                      borderWidth: component.checkbox.border,
-                      borderColor: item.done ? c.status.ok.fill : c.bd,
-                      backgroundColor: item.done ? c.status.ok.fill : "transparent",
-                      alignItems: "center",
-                      justifyContent: "center",
-                    }}
-                  >
-                    {item.done ? <Icon name="check" s={size.iconSm} color={c.status.ok.on} /> : null}
-                  </View>
-                  <T v="body" tone={item.done ? "mut" : "ink"} style={{ flex: 1, textDecorationLine: item.done ? "line-through" : "none" }}>
-                    {item.label}
-                  </T>
-                </Press>
-              ))}
-              <RowView>
-                <View style={{ flex: 1 }}>
-                  <TextField type="text" value={extra} onChangeText={setExtra} placeholder={t("check.addPlaceholder")} icon="plus" />
-                </View>
-                <Button label={t("check.add")} size="sm" variant="secondary" disabled={!extra.trim()} onPress={addItem} />
-              </RowView>
-            </Card>
+          {v.checklist.length ? <ChecklistCard v={v} missing={gate.missing} /> : null}
           <Card>
             <T v="heading">{t("visit.photosAfter")}</T>
             <PhotoStrip photos={after} onAdd={(uri) => toast.show(queuedHint() ?? t("toast.photo"), store.addPhoto(v.id, "after", uri))} onRemove={removePhoto} />
+            {gate.missing.photosAfter > 0 ? (
+              <T v="caption" tone="warn">
+                {t("chk.needAfter", { n: gate.missing.photosAfter })}
+              </T>
+            ) : null}
           </Card>
-          {left > 0 ? (
-            <T v="caption" tone="warn">
-              {t("visit.needChecklist")}
-            </T>
-          ) : null}
           <SectionTitle title={t("step.sign")} />
           <Card>
-            {left > 0 ? (
-              <T v="body" tone="mut">
-                {t("visit.needChecklist")}
-              </T>
-            ) : (
-              <SignaturePad
-                onConfirm={(path) => {
-                  haptic();
-                  toast.show(queuedHint() ?? t("toast.step", { step: t("step.pay") }), store.signVisit(v.id, path));
-                }}
-              />
-            )}
+            <SignaturePad onConfirm={goSign} />
           </Card>
         </>
       ) : null}
@@ -369,6 +326,7 @@ export default function VisitScreen() {
         </Card>
       ) : null}
       {job ? <NotesBlock subjectType="job" subjectId={job.id} /> : v.leadId ? <NotesBlock subjectType="lead" subjectId={v.leadId} /> : null}
+      <MissingSheet v={v} missing={gate.missing} open={!!ask} step={ask?.step ?? "sign"} onFill={() => setAsk(null)} onSkip={skipAndGo} />
       <CallSheet preset={calling} onClose={() => setCalling(null)} />
       <MessageSheet preset={writing} onClose={() => setWriting(null)} />
     </Screen>
