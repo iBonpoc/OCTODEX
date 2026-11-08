@@ -46,6 +46,13 @@ export function hisWarning(d: Pick<DB, "members" | "company">, userId: ID): bool
 const CLOSED_LEAD = ["won", "lost", "declined"];
 
 /** Who may revoke a client link or reopen a client-signed estimate: director and office (server: owner / admin / office). */
+/** Who sees the client's page of an estimate («Open as client»): the office side — director, dispatcher, sales (the server's
+ *  estimate_link: owner, admin, office, sales). A tech never: with the link anyone can sign as the client (spec 35 §4д п.10). */
+export function canSeeClientLink(d: Pick<DB, "members">, userId: ID): boolean {
+  const m = d.members.find((x) => x.id === userId);
+  return !!m && m.roles.some((r) => r === "director" || r === "dispatcher" || r === "sales");
+}
+
 export function canManageLink(d: Pick<DB, "members">, userId: ID): boolean {
   const m = d.members.find((x) => x.id === userId);
   return !!m && (m.roles.includes("director") || m.roles.includes("dispatcher"));

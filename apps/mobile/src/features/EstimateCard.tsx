@@ -25,7 +25,7 @@ import { Sheet, useToast } from "@/ui/overlays";
 import { Card, Divider, RowView, SectionTitle } from "@/ui/surfaces";
 import { canChangeEstimateCategory, estimateStatusView, isEstimateEditable } from "@/features/estimateStatus";
 import { ServiceCategoryRow } from "@/features/ServiceCategoryPicker";
-import { canCountersign, canManageLink, hisWarning, mySignature } from "@/features/estimateSign";
+import { canCountersign, canManageLink, canSeeClientLink, hisWarning, mySignature } from "@/features/estimateSign";
 import { EstimateReasonSheet } from "@/features/EstimateReasonSheet";
 
 
@@ -136,7 +136,8 @@ export function EstimateCardBody({ e, openSend }: { e: Estimate; openSend?: bool
             {/* a client-signed estimate changes only through «don't sign — change it» (with a reason) */}
             {isEstimateEditable(e.status) && e.status !== "awaiting_countersign" ? <Button label={t("ue.edit")} icon="pencil" variant="secondary" onPress={() => router.push(`/estimate/new?id=${e.id}`)} /> : null}
             {(e.status === "draft" || e.status === "sent") && canServe(db, e.customerId) ? <View testID="est-send"><Button label={t("ue.send")} icon="send" onPress={() => setSendOpen(true)} /></View> : null}
-            {e.token ? <Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /> : null}
+            {/* the client's page only for the office side: a tech with the link could sign as the client (spec 35 §4д п.10) */}
+            {e.token && canSeeClientLink(store.db, store.db.me) ? <Button label={t("ue.openClient")} icon="user" variant="secondary" onPress={() => router.push(`/p/${e.token}`)} /> : null}
             <View testID="est-pdf"><Button label={t("ue.pdf")} icon="invoice" variant="secondary" onPress={() => pdf()} /></View>
             {/* E2b: only an unsigned link can be revoked (the signed client keeps their copy); director and office */}
             {e.token && !e.linkRevokedAt && (e.status === "sent" || e.status === "draft") && canManageLink(store.db, store.db.me) ? (
