@@ -324,6 +324,9 @@ export interface EstimateTemplate {
   uses?: number;
   lastUsedAt?: string;
   archivedAt?: string;
+  /** the server's row_version as this phone knows it (moved +1 by its own saves); the builder's edit is checked against it
+   *  (docs/specs/07 §12.7) — absent: not known yet, no check */
+  rowVersion?: number;
 }
 
 /** the company's photo rules for visits (docs/specs/08 §3.3; server: companies.visit_settings) */

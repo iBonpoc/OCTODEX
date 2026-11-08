@@ -92,6 +92,7 @@ export function estimateTemplateFromDb(r: Row, costs: Row[], uses: Row[]): Estim
     ...(r.module_key ? { module: String(r.module_key) } : {}),
     uses: used.length, ...(used.length ? { lastUsedAt: used[used.length - 1] } : {}),
     ...(r.archived_at ? { archivedAt: String(r.archived_at) } : {}),
+    ...(typeof r.row_version === "number" ? { rowVersion: r.row_version } : {}),
   };
 }
 
@@ -207,7 +208,7 @@ export async function loadCompanyDB(companyId: string, userId: string): Promise<
   // E3 (migration 20261108230000): templates, their costs (only who sees costs gets rows), their uses. A server before
   // the migration: no templates, and the store saves none (estimateTemplatesMissing)
   const [etRows, etCosts, etUses] = await Promise.all([
-    live<Row>("estimate_templates", "id, name, doc, module_key, archived_at").then((r) => r as Row[] | null, (e) => {
+    live<Row>("estimate_templates", "id, name, doc, module_key, archived_at, row_version").then((r) => r as Row[] | null, (e) => {
       if (isMissingTable(e)) return null;
       throw e;
     }),

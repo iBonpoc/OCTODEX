@@ -2983,6 +2983,8 @@ export const es: Dict = {
   "est.tpl.saveTemplate": "Guardar plantilla",
   "est.tpl.editHint": "La plantilla no tiene cliente. Las líneas del catálogo toman el precio actual del catálogo en un presupuesto nuevo.",
   "est.tpl.editArchived": "La plantilla se archivó mientras la editaba. Restáurela e inténtelo de nuevo",
+  "est.tpl.editConflict": "La plantilla se cambió en otro teléfono mientras la editaba. Ábrala de nuevo",
+  "est.tpl.rejConflict": "La plantilla no se guardó: se cambió en otro teléfono. Ábrala de nuevo y repita el cambio",
   // step 14 CH3b: starter checklist templates of a module
   "mod.gutters.chk.pre": "Antes de instalar",
   "mod.gutters.chk.pre1": "Revisar la tabla fascia por podredumbre",

@@ -4,13 +4,13 @@
 
 Открытые PR (07.11 06:55): #259 «Лиды» №10 (ждёт облачную e2e 114), #263 (после #259), #270 чат правок главная (круг 2 сделан), #261 чат правок reducedMotion. В main миграции до `20261107090000`; выдано 100000 («Уведомления» №2, P3).
 
-## Чаты-исполнители (08.11 ~09:50 UTC, руководитель №5; решение основателя 08.11: 3 рабочих чата + руководитель, личные чаты не в счёт)
+## Чаты-исполнители (ПАУЗА с 08.11 ~21:30 UTC по слову основателя — все чаты остановлены; руководитель №5)
 | Чат | id | Направление | Состояние |
 |---|---|---|---|
 | Руководитель №5 | `session_015CqH6AYWnjNhg5RZy2re5D` | CLAUDE.md, docs/ai/*, 10-build-plan §0, 15-story-map | план, приёмка, вливание сборками |
-| Лиды и клиенты №16 | `session_015CqH6AAZCH8R2mnXF6hkgw` | suppliers, purchase_orders, features/suppliers*, purchaseOrders*, спеки 36–37, миграции 20261110000000/090000 | SUP1 влит (#459); SUP2 заказ поставщику (#461 + экраны) |
-| Сметы №4 | `session_015CqH66Dtm64udddMKuajiu` | estimate/**, estimateTemplate.ts, registry.ts (слот estimateTemplates) | E3c влит (#462); долги §12.6 (T149, e2e 200) |
-| Деньги и отчёты №7 | `session_015CqH67RW2jTTsHS1vVMLef` | (уходит после #464) | сдал #454, #457, #464 |
+| Лиды и клиенты №16 | `session_015CqH6AAZCH8R2mnXF6hkgw` | (пауза; после влития #466 — архив) | SUP1 влит; SUP2 #461+#465 в сборке #466 |
+| Сметы №4 | `session_015CqH66Dtm64udddMKuajiu` | (пауза; после влития #467 — архив) | #462 влит; #467 открыт |
+| Деньги и отчёты №7 | `session_015CqH67RW2jTTsHS1vVMLef` | (пауза; после влития #466 — архив) | #454, #457 влиты; #464 в сборке #466 |
 | Правки Gutters (личный чат основателя) | `session_015CqH66K82f6Sc1E161JFM2` | src/modules/gutters/** (кроме registry/module/estimateLink без согласования), e2e 168–174 | правки основателя; архив только по его слову |
 | Бренд (личный чат основателя) | `session_015CqH69WWiSwHTpW9sTb2km` | бренд GoRix | архив только по слову основателя |
 
@@ -184,6 +184,28 @@
 - #464: ссылки в app.estimate_tokens, public_token всегда null, estimate_links для офиса, перевыпуск видимого мастеру (история link_reissued), ≤5 ссылок — шестая гасит старую. 20261110030000, T147, upgrade, облачная 103.
 - Дальше: шаг 3 — удалить estimates.public_token (спека 35 §4е «К шагу 3»: переписать tg_estimate_send_and_guard, tg_no_service_guard, пересоздать t44, убрать t02); до live — INTAKE_IP_SECRET, cf-connecting-ip, функции только через Cloudflare, pg_cron pay-security-purge, Radar; вопрос основателю — подпись мастера на неотправленной смете.
 - Уроки: create or replace функции, которую меняет неслитый PR, затирает его правки — брать тело из последней версии (и из открытой сборки); column revoke ломает select * старых сборок — переносить в отдельную таблицу; облачные спеки локально, 114 зависит от порядка; в тестах базы — tst.set_token / tst.est_of.
+
+### Памятка Лиды и клиенты №16 (session_015CqH6AAZCH8R2mnXF6hkgw, 08.11) — архив
+- #459 (в #460) SUP1 поставщики: спека 36, миграция 20261110000000 (suppliers только owner/admin/office; catalog_items.supplier_id/supplier_sku; catalog_cost_history — триггер, читает can_view_costs; t20_supplier_guard, t96_supplier_renamed, t12_keep_id/_item_id); экраны /suppliers, /suppliers/[id], история цен по открытию (loadCostHistory). T143–T146, e2e 196, облачная 196-cloud-suppliers.
+- #461+#465 (в #466) SUP2 заказ поставщику: спека 37, миграция 20261110090000 (purchase_orders/_lines/_line_costs; tg_po_number + уникальный индекс; t26/t25 по current_user; po_receive(p_po_id, p_lines, p_row_version)); движок purchase.ts; слот ModuleDef.purchaseLines (после estimateNotes); /purchase-orders, /purchase-order/[id], JobOrdersBlock, poPdf (en). T155–T159, e2e 198, 205, облачная 198.
+- Долги: Gutters purchaseLines/purchaseQty (спека 37 §3); vendor — правило 16 шаг 2; позже филиалы, «цена старше 180 дней», авто-PO, RFQ, expenses.purchase_order_id, излишек при получении, «Назад» с несохранёнными правками.
+- SUP3 импорт прайса (спека 36 §10, PRD 04 CAT-US-09/15–17, §7.7): ключ supplier_sku в рамках supplier_id, затем имя; цены в catalog_item_costs с set_config('app.cost_source','import_file', true); отмена через журнал цен; образец — import_customers.
+- Ловушки: upsert всеми колонками → grant update id, company_id (ловит облачная); BEFORE INSERT + upsert → EXCLUDED уже изменён триггером (insert ignoreDuplicates + update); отказ в очереди её останавливает — hint из REJECT_REASONS (RU/EN/ES, rejectReasons.test); current_user в security definer — владелец: страж invoker, чтение служебных — definer (app.po_move_ok); T52 — DELETE запрещён, deleted_at; новый экран → SCREENS, tabBarRule, filterGuard, sections.test, hierarchy, routeRoles; облачные: dockerd → npx supabase@3.0.0 start -x … → db reset → scripts/cloud-seed.mjs → node e2e/cloud/cloud.cjs seed.json (206 нужна DB_URL); формы следуют за стором, пока не тронуты.
+
+### Памятка Сметы №4 (session_015CqH66Dtm64udddMKuajiu, 08.11) — архив
+- #462 (в #463) E3c: слот ModuleDef.estimateTemplates, «Шаблоны модулей», копия, «Изменить строки» (/estimate/new?editTemplate=), имя модуля в метке; T148, e2e 199. #467: row_version при правке шаблона (dropTemplateOps + est.tpl.rejConflict), null для стёртой себестоимости, крошки, company_id; T149; без обратных записей — «Отменить» в окне SEND_AFTER_MS.
+- Дальше: Gutters заполняет estimateTemplates по §12.3 + e2e раздела; долг §12.7 — постоянный id стартового может занять чужая компания (как CH3b) → проверка «строка своей компании» после вставки (id_taken); сквозной e2e конфликта двух телефонов — облачной спекой.
+- Номера: e2e 200–204 свободны; T до T149.
+
+### Памятка Правки Gutters (личный чат основателя, session_015CqH66K82f6Sc1E161JFM2) — пауза 08.11
+- Кода, веток и PR нет. Основатель спросил, как открывать модуль Gutters: включается в настройках компании; входы — «+» на главной → «Замерить здесь», «Замер» в лиде и объекте; своего места со всеми замерами нет.
+- Предложена вкладка «Замеры» в нижнем меню (список + «Новый замер», только при включённом модуле) — ждёт ответа основателя; заденет src/nav/* и слот ModuleDef — согласовать с руководителем.
+- Отложено: modules/gutters/photoUri.ts → features/photoUri.ts (#440). Ждут модуля: слоты estimateTemplates (спека 07 §12.3) и purchaseLines (спека 37 §3). e2e 168–174 свободны.
+
+### Памятка Пауза 08.11 ~21:30 UTC (слово основателя через руководителя №4)
+- «Сметы» №4: #467 head 5ea1d14b (estimates4/e3c-followups), после влития — архив.
+- «Лиды и клиенты» №16: #465 head 32788d6 (в сборке #466); дальше SUP3 новым чатом.
+- «Деньги и отчёты» №7: #464 head 400a3ef (в сборке #466); после влития — архив.
 
 ## Памятки-передачи 07.11 (руководитель №4)
 ### Памятка «Лиды и клиенты» №10 (session_015CqH6A7brPRZCibvSZzhLd, архив 07.11; дела у №11 `session_015CqH6AXexfSJUxpzdXPpY4`)

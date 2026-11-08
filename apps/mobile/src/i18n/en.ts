@@ -2983,6 +2983,8 @@ export const en: Dict = {
   "est.tpl.saveTemplate": "Save template",
   "est.tpl.editHint": "A template has no client. Catalog lines take the catalog's current price in a new estimate.",
   "est.tpl.editArchived": "The template was archived while you edited it. Restore it and try again",
+  "est.tpl.editConflict": "The template was changed on another phone while you edited it. Open it again",
+  "est.tpl.rejConflict": "Estimate template not saved: it was changed on another phone. Open it again and redo the change",
   // step 14 CH3b: starter checklist templates of a module
   "mod.gutters.chk.pre": "Before install",
   "mod.gutters.chk.pre1": "Check the fascia board for rot",

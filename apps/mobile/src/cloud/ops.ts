@@ -47,7 +47,13 @@ export type Op =
   | { k: "chk.visit.mins"; visitId: string; before: number | null; after: number | null }
   /** an estimate template, whole (owner, admin, office; docs/specs/07 §11); archive = archivedAt */
   /** ifNew: a module's starter (fixed id) — inserted once, never updated over the office's edits (spec 07 §12 №6) */
-  | { k: "est.template.save"; template: EstimateTemplate; ifNew?: boolean }
+  | {
+      k: "est.template.save"; template: EstimateTemplate; ifNew?: boolean;
+      /** the builder's edit (spec 07 §12.7): saved only over this row_version, else «someone changed it first» */
+      baseRowVersion?: number;
+      /** lines whose cost was wiped (who sees costs): sent as unitCostCents null — the server clears it (T124) */
+      clearCosts?: string[];
+    }
   /** a checklist template, whole (owner, admin, office) */
   /** ifNew: a module's starter (fixed id) — inserted once, never over the office's edits (another phone added it first) */
   | { k: "chk.template.save"; template: ChecklistTemplate; ifNew?: boolean }
@@ -383,21 +389,35 @@ export function templateToDb(t: ChecklistTemplate, companyId: string): Record<st
 
 /** an estimate template → its row (server estimate_templates). The doc carries unitCostCents only for who sees costs
  *  (toTemplateDoc): the server moves them to estimate_template_line_costs and keeps a line's cost when the key is absent. */
-export function estimateTemplateToDb(t: EstimateTemplate, companyId: string): Record<string, unknown> {
-  const doc = t.costs
-    ? { ...t.doc, options: t.doc.options.map((o) => ({ ...o, lines: o.lines.map((l) => (t.costs![l.id] !== undefined ? { ...l, unitCostCents: t.costs![l.id] } : l)) })) }
+export function estimateTemplateToDb(t: EstimateTemplate, companyId: string, clearCosts: readonly string[] = []): Record<string, unknown> {
+  const wipe = new Set(clearCosts);
+  const doc = t.costs || wipe.size
+    ? {
+        ...t.doc,
+        options: t.doc.options.map((o) => ({
+          ...o,
+          lines: o.lines.map((l) => (t.costs?.[l.id] !== undefined ? { ...l, unitCostCents: t.costs[l.id] } : wipe.has(l.id) ? { ...l, unitCostCents: null } : l)),
+        })),
+      }
     : t.doc;
   return { id: t.id, company_id: companyId, name: cleanText(t.name, TEMPLATE_NAME_MAX), doc, module_key: t.module ?? null, archived_at: t.archivedAt ?? null };
 }
-async function saveEstimateTemplate(t: EstimateTemplate, c: string, ifNew = false) {
+async function saveEstimateTemplate(t: EstimateTemplate, c: string, o: { ifNew?: boolean; baseRowVersion?: number; clearCosts?: string[] } = {}) {
   // module_key only on insert (no update grant, an upsert would send it in the update too): insert if new (a retry or
   // another phone's insert does nothing), then the update of what may change
-  const row = estimateTemplateToDb(t, c);
+  const row = estimateTemplateToDb(t, c, o.clearCosts);
   const { module_key: _m, id: _id, company_id: _c, ...upd } = row;
   await run(ins("estimate_templates", row));
   // a starter: the insert only — another phone added it first and the office may have edited it since
-  if (ifNew) return;
-  return run(supabase.from("estimate_templates").update(upd).eq("id", t.id));
+  if (o.ifNew) return;
+  if (o.baseRowVersion !== undefined) {
+    // the builder's edit: over the version it was opened on, or nothing — then «someone changed it first» (never a retry)
+    const { data, error, status } = await supabase.from("estimate_templates").update(upd).eq("id", t.id).eq("company_id", c).eq("row_version", o.baseRowVersion).select("id");
+    if (error) return run(Promise.resolve({ error, status }));
+    if (!data?.length) throw new PermanentError("the template was changed on another phone", 409, "40001", "row_version_conflict");
+    return;
+  }
+  return run(supabase.from("estimate_templates").update(upd).eq("id", t.id).eq("company_id", c));
 }
 
 /** Insert by client-made id; a retry after a partial failure does not duplicate rows (ON CONFLICT DO NOTHING). */
@@ -563,7 +583,7 @@ export async function applyOp(op: Op, companyId: string, userId: string): Promis
       return run(Promise.resolve(r));
     }
     case "est.template.save":
-      return saveEstimateTemplate(op.template, c, !!op.ifNew);
+      return saveEstimateTemplate(op.template, c, { ifNew: op.ifNew, baseRowVersion: op.baseRowVersion, clearCosts: op.clearCosts });
     case "po.save":
       return savePurchaseOrder(op, c);
     case "po.receive": {

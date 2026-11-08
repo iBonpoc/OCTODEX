@@ -6,15 +6,30 @@
  */
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const writes: { table: string; kind: string; row?: unknown; opts?: unknown }[] = [];
+const writes: { table: string; kind: string; row?: unknown; opts?: unknown; filters: unknown[][] }[] = [];
+/** what an update … select("id") gives back: the rows it changed (0 — row_version moved on the server) */
+const updated = { rows: [{ id: "x" }] as unknown[] };
 const chain = (table: string): Record<string, unknown> => {
-  const c: Record<string, unknown> = { then: (r: (v: unknown) => unknown, j?: (e: unknown) => unknown) => Promise.resolve({ data: null, error: null }).then(r, j) };
+  let w: (typeof writes)[number] | undefined;
+  let selected = false;
+  const c: Record<string, unknown> = {
+    then: (r: (v: unknown) => unknown, j?: (e: unknown) => unknown) => Promise.resolve({ data: selected ? updated.rows : null, error: null }).then(r, j),
+  };
   for (const k of ["insert", "upsert", "update", "delete"])
     c[k] = (row?: unknown, opts?: unknown) => {
-      writes.push({ table, kind: k, row, opts });
+      w = { table, kind: k, row, opts, filters: [] };
+      writes.push(w);
       return c;
     };
-  for (const k of ["select", "eq", "in", "is", "order", "limit"]) c[k] = () => c;
+  for (const k of ["eq", "in", "is", "not", "order", "limit"])
+    c[k] = (...a: unknown[]) => {
+      w?.filters.push([k, ...a]);
+      return c;
+    };
+  c.select = () => {
+    selected = true;
+    return c;
+  };
   return c;
 };
 vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => chain(t), rpc: () => Promise.resolve({ data: null, error: null }) } }));
@@ -22,11 +37,14 @@ vi.mock("../src/cloud/client", () => ({ supabase: { from: (t: string) => chain(t
 import { computeCustomOption } from "@octo/estimating-engine";
 import type { CatalogItem, EstimateTemplate } from "@/data/types";
 import {
-  copyTemplate, editedTemplate, estimateStartersToAdd, fromTemplate, starterEstimateId, starterEstimateTemplate, starterItem, templateForEdit, validTemplateDoc,
+  clearedCosts, copyTemplate, editedTemplate, estimateStartersToAdd, fromTemplate, starterEstimateId, starterEstimateTemplate, starterItem, templateForEdit, validTemplateDoc,
 } from "@/features/estimateTemplate";
 import { starterTemplateId } from "@/features/checklist";
 import { registerModule, type ModuleDef, type StarterEstimate } from "../src/modules/registry";
-import { applyOp } from "../src/cloud/ops";
+import { applyOp, estimateTemplateToDb, type Op } from "../src/cloud/ops";
+import { dropTemplateOps, templateRejected } from "../src/data/outboxRejected";
+import type { OwnedItem } from "../src/data/outboxOwner";
+import { estimateTemplateFromDb } from "../src/cloud/repo";
 
 // test prices («тестовые», rule 9)
 const catalog: CatalogItem[] = [
@@ -54,7 +72,10 @@ const app = (k: string) => `app:${k}`;
 const docT = (k: string) => `doc:${k}`;
 const ctx = (over: Partial<Parameters<typeof starterEstimateTemplate>[2]> = {}) => ({ id: "fixed", catalog, tApp: app, tDoc: docT, depositBps: 1000, costsVisible: true, ...over });
 
-beforeEach(() => void (writes.length = 0));
+beforeEach(() => {
+  writes.length = 0;
+  updated.rows = [{ id: "x" }];
+});
 
 describe("unit:estimateStarters", () => {
   it("the registry: a module without the slot, a good starter, a bad one refused", () => {
@@ -182,5 +203,54 @@ describe("unit:estimateStarters", () => {
     await applyOp({ k: "est.template.save", template: tpl }, "c1", "u1");
     expect(writes.map((w) => w.kind)).toEqual(["upsert", "update"]);
     expect(writes[1]!.row).not.toHaveProperty("module_key");
+  });
+});
+
+describe("unit:estimateTemplateFollowups (§12.7)", () => {
+  const tpl = (): EstimateTemplate => ({ ...starterEstimateTemplate("fakemod", S, ctx())!, rowVersion: 4 });
+
+  it("the builder's edit goes over its row_version; a moved one is «someone changed it first», never retried", async () => {
+    await applyOp({ k: "est.template.save", template: tpl(), baseRowVersion: 4 }, "c1", "u1");
+    expect(writes.map((w) => w.kind)).toEqual(["upsert", "update"]);
+    expect(writes[1]!.filters).toEqual([["eq", "id", "fixed"], ["eq", "company_id", "c1"], ["eq", "row_version", 4]]);
+    expect(writes[1]!.row).not.toHaveProperty("row_version");
+    updated.rows = [];
+    await expect(applyOp({ k: "est.template.save", template: tpl(), baseRowVersion: 4 }, "c1", "u1")).rejects.toMatchObject({ name: "PermanentError", hint: "row_version_conflict" });
+  });
+
+  it("a wiped cost goes as null (the server clears it); a kept one as its number; nothing else gets the key", () => {
+    const x = tpl();
+    const [l1, l2, l3] = x.doc.options[0]!.lines;
+    const doc = templateForEdit(x, true);
+    doc.options[0]!.lines = doc.options[0]!.lines.map((l) => (l.id === l1!.id ? { ...l, unitCostCents: undefined } : l));
+    expect(clearedCosts(x, doc, true)).toEqual([l1!.id]);
+    expect(clearedCosts(x, doc, false)).toEqual([]);
+    const next = editedTemplate(x, doc, true)!;
+    const lines = (estimateTemplateToDb(next, "c1", [l1!.id]).doc as { options: { lines: Record<string, unknown>[] }[] }).options[0]!.lines;
+    expect(lines[0]!.unitCostCents).toBeNull();
+    expect(lines[1]!.unitCostCents).toBe(1000);
+    expect(lines[2]).not.toHaveProperty("unitCostCents");
+    expect(l2 && l3).toBeTruthy();
+  });
+
+  it("a conflict: this save and the later ones of the same template leave the queue (never sent over the other change), one card", () => {
+    const who = { userId: "u1", companyId: "c1" };
+    const item = (id: string, op: Op): OwnedItem => ({ id, op, at: "2026-11-08T20:00:00.000Z", tries: 0, owner: who });
+    const x = tpl();
+    const items = [
+      item("a", { k: "est.template.save", template: x, baseRowVersion: 4 }),
+      item("b", { k: "est.template.save", template: { ...x, name: "other" } }),
+      item("c", { k: "est.template.save", template: { ...x, id: "another" } }),
+    ];
+    const { kept, gone } = dropTemplateOps(items, x.id, who);
+    expect(gone.map((g) => g.id)).toEqual(["a", "b"]);
+    expect(kept.map((g) => g.id)).toEqual(["c"]);
+    const card = templateRejected(items[0]!, "changed", Date.parse("2026-11-08T20:00:00Z"), who);
+    expect(card).toMatchObject({ id: "a", what: "estimate", href: "/estimate/templates", labelKey: "est.tpl.rejConflict", owner: who });
+  });
+
+  it("the phone reads row_version", () => {
+    expect(estimateTemplateFromDb({ id: "t", name: "n", doc: tpl().doc, row_version: 7 }, [], []).rowVersion).toBe(7);
+    expect(estimateTemplateFromDb({ id: "t", name: "n", doc: tpl().doc }, [], []).rowVersion).toBeUndefined();
   });
 });
