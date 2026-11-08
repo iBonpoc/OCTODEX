@@ -2977,7 +2977,7 @@ export const ru = {
   "est.tpl.starterNoPrice": "Шаблон добавлен. Нет в каталоге: {n} — цена 0, проверьте",
   "est.tpl.copy": "Копировать",
   "est.tpl.copyName": "{name} (копия)",
-  "est.tpl.copied": "Копия «{name}» сохранена",
+  "est.tpl.copied": "Сохранено: «{name}»",
   "est.tpl.editLines": "Изменить строки",
   "est.tpl.editTitle": "Шаблон сметы",
   "est.tpl.saveTemplate": "Сохранить шаблон",

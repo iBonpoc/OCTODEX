@@ -2977,7 +2977,7 @@ export const es: Dict = {
   "est.tpl.starterNoPrice": "Plantilla añadida. No está en el catálogo: {n} — precio 0, revíselo",
   "est.tpl.copy": "Copiar",
   "est.tpl.copyName": "{name} (copia)",
-  "est.tpl.copied": "Copia «{name}» guardada",
+  "est.tpl.copied": "Guardado: «{name}»",
   "est.tpl.editLines": "Editar líneas",
   "est.tpl.editTitle": "Plantilla de presupuesto",
   "est.tpl.saveTemplate": "Guardar plantilla",

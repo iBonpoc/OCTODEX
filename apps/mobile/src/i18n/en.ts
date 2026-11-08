@@ -2977,7 +2977,7 @@ export const en: Dict = {
   "est.tpl.starterNoPrice": "Template added. Not in the catalog: {n} — price 0, check it",
   "est.tpl.copy": "Copy",
   "est.tpl.copyName": "{name} (copy)",
-  "est.tpl.copied": "Copy “{name}” saved",
+  "est.tpl.copied": "Saved: “{name}”",
   "est.tpl.editLines": "Edit lines",
   "est.tpl.editTitle": "Estimate template",
   "est.tpl.saveTemplate": "Save template",
