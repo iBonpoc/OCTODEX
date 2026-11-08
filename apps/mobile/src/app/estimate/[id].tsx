@@ -12,6 +12,7 @@ import { EstimateView } from "@/features/EstimateView";
 import { SignBlock } from "@/features/SignBlock";
 import { SignaturePad, SignaturePreview } from "@/features/SignaturePad";
 import { issueCount, isUniversal, mainOption, newToken, SEND_ISSUE_KINDS, sendIssues, type SendIssues } from "@/features/estimateDoc";
+import { isUniversal, mainOption, marginView, newToken, SEND_ISSUE_KINDS, type SendIssues } from "@/features/estimateDoc";
 import { hasValidCslb } from "@/features/companySetup";
 import { ContractStatement } from "@/features/ContractStatement";
 import { estimateFileName, estimateHtml, saveEstimatePdf } from "@/features/estimatePdf";
@@ -52,6 +53,9 @@ export default function EstimateScreen() {
   const st = estimateStatusView(e.status);
   const q = (msg: string) => (store.online ? msg : t("offline.queued"));
   const universal = isUniversal(e);
+  // the office: the margin, or why it is not counted (debt 5); who may not see costs (a tech, sales without view_costs —
+  // the server's app.can_view_costs, db.costsVisible) never sees it: their lines come without costs (review PR-A №1)
+  const margin = store.role === "tech" || db.costsVisible === false ? null : marginView(e);
   const job = db.jobs.find((j) => j.estimateId === e.id);
 
   // C5 for the PDF (spec 33 П23.10): an unsigned estimate's PDF goes to the client by hand — the same check as «Отправить»
@@ -85,10 +89,17 @@ export default function EstimateScreen() {
           {money(e.totalCents)}
         </T>
         <RowView style={{ flexWrap: "wrap" }}>
-          {e.marginPct && store.role !== "tech" ? (
-            <T v="caption" tone="mut">
-              {t("est.margin", { p: e.marginPct })}
-            </T>
+          {margin?.kind === "pct" ? (
+            <View testID="est-margin">
+              <T v="caption" tone="mut">
+                {t("est.margin", { p: margin.pct })}
+              </T>
+            </View>
+          ) : null}
+          {margin?.kind === "missing" ? (
+            <View testID="est-margin-missing">
+              <StatusChip status="warn" soft label={t("est.marginMissing", { n: margin.lines })} />
+            </View>
           ) : null}
           {e.depositCents ? (
             <T v="caption" tone="mut">

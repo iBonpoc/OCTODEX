@@ -406,6 +406,8 @@ export const en: Dict = {
   "more.data": "Data",
   "today.techs": "Technicians",
   "est.margin": "Margin {p}%",
+  // «Сметы» №2: the office sees why the margin is not counted (debt 5)
+  "est.marginMissing": "Margin not counted · lines without a cost: {n}",
   "est.deposit": "Deposit {amount}",
   "est.lines": "Line items",
   "est.optional": "optional",
@@ -569,7 +571,9 @@ export const en: Dict = {
   "account.noCompany": "Signed in, no company yet.",
   "account.synced": "Everything is saved to the database",
   "account.pending": "Waiting to send: {n}",
-  "account.error": "Sync error: {msg}",
+  // «Сметы» №2: the sync error in our own words (debt 2) — the server's text is never shown
+  "account.syncErr.network": "No connection to the server",
+  "account.syncErr.general": "Sync error",
   "account.refresh": "Refresh data",
   "account.emptyHint": "The company is empty. Add a lead with “+” and it appears in the Inbox.",
   "ue.title": "Estimate",

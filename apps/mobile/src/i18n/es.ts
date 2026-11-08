@@ -406,6 +406,8 @@ export const es: Dict = {
   "more.data": "Datos",
   "today.techs": "Técnicos",
   "est.margin": "Margen {p}%",
+  // «Сметы» №2: the office sees why the margin is not counted (debt 5)
+  "est.marginMissing": "Margen sin calcular · líneas sin costo: {n}",
   "est.deposit": "Depósito {amount}",
   "est.lines": "Partidas",
   "est.optional": "opcional",
@@ -569,7 +571,9 @@ export const es: Dict = {
   "account.noCompany": "Con cuenta, sin empresa aún.",
   "account.synced": "Todo guardado en la base",
   "account.pending": "Pendientes: {n}",
-  "account.error": "Error de sincronización: {msg}",
+  // «Сметы» №2: the sync error in our own words (debt 2) — the server's text is never shown
+  "account.syncErr.network": "Sin conexión con el servidor",
+  "account.syncErr.general": "Error de sincronización",
   "account.refresh": "Actualizar datos",
   "account.emptyHint": "La empresa está vacía. Agregue un cliente con “+”.",
   "ue.title": "Presupuesto",

@@ -9025,4 +9025,28 @@ select tst.ok((select (selection ->> 'total')::bigint = 12346 from public.estima
   'T108 the signed selection keeps $123.46');
 \echo 'T108 portal_accept: hidden add-on ids do not move the total ok'
 
+-- ---------------------------------------------------------------- T109: a percent discount longer than 4 digits (debt 3 of «Сметы» №1)
+-- The app writes round(fraction × 10000) bps (engine discountBps), the server counts floor(sub × bps / 10000 + 0.5),
+-- the lock check rounds the document's fraction the same way: 0.123456 → 1235 bps. The engine's numbers:
+-- packages/estimating-engine/test/estimate.test.ts T4b (3 × $333.33 − 12.35% = $876.49).
+:as_office_a
+insert into public.estimates (id, company_id, customer_id, property_id, title)
+  values ('a1090000-0000-4000-8000-000000000001', 'ca000000-0000-0000-0000-000000000000', 'c1a00000-0000-0000-0000-000000000001', 'd1a00000-0000-0000-0000-000000000001', 'T109 discount bps');
+insert into public.estimate_versions (id, company_id, estimate_id, version_no, tax_enabled, deposit_rule, calc_inputs)
+  values ('a1090000-0000-4000-8000-000000000002', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-000000000001', 1, false, '{"kind":"none"}', $j${"options":[
+   {"id":"a1090000-0000-4000-8000-0000000000a1","name":"A","recommended":true,"lines":[
+     {"id":"a1090000-0000-4000-8000-0000000000b1","name":"Install","group":"labor","quantity":"3","unit":"ea","unitPriceCents":33333}]}],
+ "settings":{"tax":{"enabled":false,"rateBps":0,"groups":{}},"deposit":{"kind":"none"},"discount":{"kind":"pct","value":"0.123456"}}}$j$);
+update public.estimates set current_version_id = 'a1090000-0000-4000-8000-000000000002' where id = 'a1090000-0000-4000-8000-000000000001';
+insert into public.estimate_options (id, company_id, version_id, name, position, is_recommended, discount_mode, discount_value)
+  values ('a1090000-0000-4000-8000-0000000000a1', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-000000000002', 'A', 0, true, 'pct', 1234);   -- truncated, not rounded
+insert into public.estimate_line_items (id, company_id, option_id, name, quantity, unit_price_cents, taxable)
+  values ('a1090000-0000-4000-8000-0000000000b1', 'ca000000-0000-0000-0000-000000000000', 'a1090000-0000-4000-8000-0000000000a1', 'Install', 3, 33333, false);
+select tst.fails_like($q$select public.send_estimate('a1090000-0000-4000-8000-000000000001', 'tok_t109_0123456789abcdef')$q$, '%(discount)%', 'T109 1234 bps for 0.123456: not sent, the discount differs');
+update public.estimate_options set discount_value = 1235 where id = 'a1090000-0000-4000-8000-0000000000a1';
+select tst.ok(public.send_estimate('a1090000-0000-4000-8000-000000000001', 'tok_t109_0123456789abcdef') = 'tok_t109_0123456789abcdef', 'T109 1235 bps (the engine''s discountBps): sent');
+:as_super
+select tst.ok((select total = 87649 from app.estimate_option_totals('a1090000-0000-4000-8000-000000000002', 'a1090000-0000-4000-8000-0000000000a1', null)), 'T109 the server''s total = the engine''s $876.49');
+\echo 'T109 a percent discount counts whole bps on both sides ok'
+
 \echo 'ALL TESTS PASSED'

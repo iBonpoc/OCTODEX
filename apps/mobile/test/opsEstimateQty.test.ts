@@ -44,4 +44,16 @@ describe("unit:opsEstimateQty — the stored quantity (Н1)", () => {
     const ins = writes.find((w) => w.table === "estimate_line_items" && w.kind === "insert")!.row as { id: string; quantity: unknown }[];
     expect(ins.map((r) => [r.id, r.quantity])).toEqual([["l1", "1.2346"], ["l2", "2"], ["l3", "1.5"], ["l4", NaN]]);
   });
+  it("debt 3: a percent discount is written as the engine's whole bps — 0.00015 → 2 (Math.round of the float gave 1)", async () => {
+    for (const [value, bps] of [["0.00015", 2], ["0.123456", 1235], ["0.05", 500]] as const) {
+      writes.length = 0;
+      const doc = {
+        options: [{ id: "o1", name: "A", lines: [{ id: "l1", name: "l1", group: "labor", quantity: "1", unit: "ea", unitPriceCents: 1000 }] }],
+        settings: { tax: { enabled: false, rateBps: 0, groups: {} }, deposit: { kind: "none" }, discount: { kind: "pct", value } },
+      };
+      await applyOp({ k: "estimate.save", id: "e-1", versionId: "v-new", customerId: "c-1", propertyId: "p-1", title: "T", doc, costs: {}, totalCents: 0, depositCents: 0, marginPct: null } as unknown as Op, "co-1", "u-1");
+      const opts = writes.find((w) => w.table === "estimate_options" && w.kind === "insert")!.row as { discount_mode: string; discount_value: number }[];
+      expect(opts[0]).toMatchObject({ discount_mode: "pct", discount_value: bps });
+    }
+  });
 });

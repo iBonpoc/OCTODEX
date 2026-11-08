@@ -14,7 +14,7 @@ import { SIG_BOX, fitSignature } from "./signaturePath";
 import type { DictKey } from "@/i18n";
 import { tFor } from "@/i18n/translate";
 import type { PortalData } from "@/cloud/portal";
-import { optionTotals, withAddons } from "./estimateDoc";
+import { optionTotals, shownQty, withAddons } from "./estimateDoc";
 import { docDay, docMoney, docPage, docTime, esc, type DocOpts } from "./docPdf";
 
 export interface EstimatePdfOpts extends DocOpts {
@@ -42,7 +42,7 @@ export function estimateHtml(p: PortalData, opts: EstimatePdfOpts): string {
         const l = act[i]!;
         return `<tr${l.optional && !l.selected ? ' class="opt"' : ""}><td>${esc(l.name)}${l.optional ? ` <span class="mut">(${esc(t("ue.addonChip"))})</span>` : ""}${
           l.description ? `<div class="mut">${esc(l.description)}</div>` : ""
-        }</td><td class="r">${esc(String(l.quantity))} ${esc(l.unit)}</td>${unit ? `<td class="r">${money(l.unitPriceCents)}</td>` : ""}<td class="r">${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
+        }</td><td class="r">${esc(shownQty(l.quantity))} ${esc(l.unit)}</td>${unit ? `<td class="r">${money(l.unitPriceCents)}</td>` : ""}<td class="r">${money(tot.lineTotals[i] ?? 0)}</td></tr>`;
       };
       const groups = LINE_GROUPS.map((g) => {
         const idx = act.map((l, i) => (l.group === g ? i : -1)).filter((i) => i >= 0);

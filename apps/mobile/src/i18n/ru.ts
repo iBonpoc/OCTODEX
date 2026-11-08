@@ -405,6 +405,8 @@ export const ru = {
   "more.data": "Данные",
   "today.techs": "Мастера",
   "est.margin": "Маржа {p}%",
+  // «Сметы» №2: the office sees why the margin is not counted (debt 5)
+  "est.marginMissing": "Маржа не посчитана · строк без себестоимости: {n}",
   "est.deposit": "Депозит {amount}",
   "est.lines": "Позиции",
   "est.optional": "по желанию",
@@ -568,7 +570,9 @@ export const ru = {
   "account.noCompany": "Аккаунт есть, компании ещё нет.",
   "account.synced": "Всё отправлено в базу",
   "account.pending": "Ждут отправки: {n}",
-  "account.error": "Ошибка синхронизации: {msg}",
+  // «Сметы» №2: the sync error in our own words (debt 2) — the server's text is never shown
+  "account.syncErr.network": "Нет связи с сервером",
+  "account.syncErr.general": "Ошибка синхронизации",
   "account.refresh": "Обновить данные",
   "account.emptyHint": "Компания пустая. Добавьте лид через «+» — он появится во «Входящих».",
   "ue.title": "Смета",
