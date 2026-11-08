@@ -107,8 +107,9 @@ exports.run = async (h) => {
   await closeAttrs();
   await tid("draw-undo").getByRole("button").click();
   await waitFor(async () => (await labels()).every((t) => !/^25′ 6″/.test(t)), "«Назад»: the drawn length again");
+  await tid("draw-more").getByRole("button").click();
   await tid("draw-redo").getByRole("button").click();
-  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "«Вперёд»: the tape again");
+  await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "«Ещё» → «Вернуть»: the tape again");
 
   // a downspout on the run
   await tid("draw-tool-ds").getByRole("button").click();
@@ -131,14 +132,14 @@ exports.run = async (h) => {
   await p.reload();
   await tid("draw-surface").waitFor({ timeout: 8000 });
   await waitFor(async () => (await labels()).some((t) => /^25′ 6″/.test(t)), "after a reload: the taped length");
-  // the reload fits the drawing anew: tap the run where it is drawn now («Линия» tool: a tap picks)
+  // the reload fits the drawing anew: tap the run where it is drawn now («Желоб» tool: a tap picks)
   const at = await svg().locator("line:not([id^=halo])").first().evaluate((l) => {
     const r = l.ownerSVGElement.getBoundingClientRect();
     const n = (k) => Number(l.getAttribute(k));
     return [r.x + (n("x1") * 3 + n("x2")) / 4, r.y + (n("y1") * 3 + n("y2")) / 4];
   });
   await p.mouse.click(at[0], at[1]);
-  await waitFor(async () => /Линия/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
+  await waitFor(async () => /Желоб/.test((await tid("draw-selected").count()) ? await tid("draw-selected").innerText() : ""), "the run picked");
   await openAttrs();
   h.expect(/рулетка/.test(await tid("attr-confidence").innerText()), "after a reload: «рулетка»");
   h.expect((await chosen("attr-profile")) === "Полукруглый" && (await chosen("attr-color")) === "Коричневый", "after a reload: profile and colour");
