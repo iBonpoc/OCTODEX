@@ -71,8 +71,9 @@ const SUBJECT_PATH: Record<Task["subjectType"], string> = { lead: "/lead", custo
 export const rejectedLabel = (r: Pick<RejectedOp, "what" | "labelKey">): DictKey => (r.labelKey ?? `att.rejected.${r.what}`) as DictKey;
 
 /** what to do about a refused change: «Открыть» → «Подключить» for who may open where it leads, else «ask the owner» */
-export const rejectedHint = (r: Pick<RejectedOp, "what" | "href">, role: Role): DictKey =>
-  r.what !== "module" ? "sync.rejected.hint" : canOpen(role, r.href) ? "sync.rejected.moduleHint" : "sync.rejected.moduleHintAsk";
+export const rejectedHint = (r: Pick<RejectedOp, "what" | "href"> & { kind?: RejectedOp["kind"] }, role: Role): DictKey =>
+  // settings changed by someone else first: not «the module is off» — read again, make the change again (review #374 №3)
+  r.kind === "module.saveSettings" ? "sync.rejected.settingsHint" : r.what !== "module" ? "sync.rejected.hint" : canOpen(role, r.href) ? "sync.rejected.moduleHint" : "sync.rejected.moduleHintAsk";
 /** «Открыть» on a refused change: only where this role may go (a module's card for a tech: nowhere — review M5a №3) */
 export const rejectedOpens = (r: Pick<RejectedOp, "href">, role: Role) => canOpen(role, r.href);
 
