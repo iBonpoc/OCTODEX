@@ -28,7 +28,8 @@ import { useToast } from "@/ui/overlays";
 import { visitStatus } from "@/features/visits";
 import { Button, Segmented, StatusChip, TextField } from "@/ui/controls";
 import { T } from "@/ui/primitives";
-import { Card, CardList, Empty, ItemCard, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { Card, Empty, RowView, Screen, SectionTitle } from "@/ui/surfaces";
+import { CardGrid, ListCard } from "@/ui/listCard";
 import { memberLabel, memberName } from "@/features/team";
 
 type Tab = "details" | "money" | "history";
@@ -205,22 +206,25 @@ export default function JobScreen() {
         </T>
       ) : null}
       {visits.length ? (
-        <CardList>
+        <CardGrid>
           {visits.map((v) => {
             const vs = visitStatus(v, db.members, Date.now(), lateAfterOf(db));
             const tech = db.members.find((m) => m.id === v.techId);
             return (
-              <ItemCard
+              // the job's own visits (06 «Серия B», B4): when — the title, who · how long under it, the visit's status chip
+              <ListCard
                 key={v.id}
-                status={vs.status}
+                density="compact"
+                testID={`job-visit-${v.id}`}
+                lead={{ kind: "icon", icon: "calendar" }}
                 title={`${day(v.start)} · ${visitWhen(v, time, t("plan5.allDay"), false)}`}
-                subtitle={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : `${v.durationMin} ${t("sch.min")}`].filter(Boolean).join(" · ")}
-                right={<StatusChip status={vs.status} label={t(vs.label)} />}
+                when={[memberLabel(tech, t) ?? t("sch.noTech"), v.allDay ? undefined : `${v.durationMin} ${t("sch.min")}`].filter(Boolean).join(" · ")}
+                status={{ tone: vs.status, label: t(vs.label) }}
                 onPress={() => router.push(`/visit/${v.id}`)}
               />
             );
           })}
-        </CardList>
+        </CardGrid>
       ) : (
         <T v="caption" tone="mut">
           {t("job3.noVisit")}
@@ -259,11 +263,19 @@ export default function JobScreen() {
       <View style={{ gap: space[2] }}>
         <SectionTitle title={t("jobs.costs")} right={<Button label={t("quick.receipt")} icon="plus" size="sm" variant="ghost" onPress={() => router.push("/expense/new")} />} />
         {expenses.length ? (
-          <CardList>
+          <CardGrid>
             {expenses.map((x) => (
-              <ItemCard key={x.id} title={x.vendor} subtitle={`${t(`exp.cat.${x.category}`)} · ${day(x.at)}`} right={<T v="body" tabular>{money(x.amountCents)}</T>} />
+              <ListCard
+                key={x.id}
+                density="compact"
+                testID={`job-expense-${x.id}`}
+                lead={{ kind: "icon", icon: "wallet" }}
+                title={x.vendor}
+                when={`${t(`exp.cat.${x.category}` as DictKey)} · ${day(x.at)}`}
+                value={money(x.amountCents)}
+              />
             ))}
-          </CardList>
+          </CardGrid>
         ) : null}
         <Card>
           <RowView style={{ justifyContent: "space-between" }}>
@@ -298,11 +310,21 @@ export default function JobScreen() {
         </RowView>
       </Card>
       {invoices.length ? (
-        <CardList>
+        <CardGrid>
           {invoices.map((i) => (
-            <ItemCard key={i.id} title={i.number ?? t("inv.title")} subtitle={i.title} right={<T v="body" tabular>{money(Math.max(0, i.totalCents - i.paidCents))}</T>} onPress={() => router.push(`/invoice/${i.id}`)} />
+            // the tech's view: what is still to collect on each invoice of his job (13 §3.4), no totals or profit
+            <ListCard
+              key={i.id}
+              density="compact"
+              testID={`job-invoice-${i.id}`}
+              lead={{ kind: "icon", icon: "invoice" }}
+              title={i.title || i.number || t("inv.title")}
+              when={i.title ? i.number : undefined}
+              value={money(Math.max(0, i.totalCents - i.paidCents))}
+              onPress={() => router.push(`/invoice/${i.id}`)}
+            />
           ))}
-        </CardList>
+        </CardGrid>
       ) : null}
       {/* the technician reads the job's own lines (what to do), changes nothing (server: app.is_staff) */}
       <JobLinesBlock job={j} />
@@ -324,17 +346,20 @@ export default function JobScreen() {
         ]}
       />
       {items.length ? (
-        <CardList>
+        <CardGrid>
           {items.map((e) => (
-            <ItemCard
+            // as the client's history (B1): the event, under it date · reason · detail, the sum only where jobHistory gave one (not to the tech)
+            <ListCard
               key={e.id}
+              density="compact"
+              lead={{ kind: "icon", icon: e.icon }}
               title={t(e.title)}
-              subtitle={[day(e.at), e.reason ? t(e.reason) : undefined, e.detail].filter(Boolean).join(" · ")}
-              right={e.cents !== undefined ? <T v="body" tabular>{money(e.cents)}</T> : undefined}
+              when={[day(e.at), e.reason ? t(e.reason) : undefined, e.detail].filter(Boolean).join(" · ")}
+              value={e.cents !== undefined ? money(e.cents) : undefined}
               onPress={e.href ? () => router.push(e.href as never) : undefined}
             />
           ))}
-        </CardList>
+        </CardGrid>
       ) : (
         <Empty icon="history" title={t("job3.h.empty")} />
       )}
